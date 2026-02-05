@@ -30,7 +30,7 @@ export async function getSessionUserOrg() {
 
   const userId = session?.user?.id
   if (!userId) {
-    const headerStore = headers()
+    const headerStore = await headers()
     const authHeader = headerStore.get('authorization') || ''
     const match = authHeader.match(/^Bearer (.+)$/i)
     if (!match?.[1]) return { error: 'Not authenticated' } as const
