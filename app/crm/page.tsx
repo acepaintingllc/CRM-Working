@@ -1,5 +1,7 @@
 'use client'
 
+import { authedFetch } from '@/lib/auth/authedFetch'
+
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
@@ -8,7 +10,7 @@ export default function CRMHome() {
 
   useEffect(() => {
     const load = async () => {
-      const res = await fetch('/api/jobs', { cache: 'no-store' })
+      const res = await authedFetch('/api/jobs', { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         setCounts(null)

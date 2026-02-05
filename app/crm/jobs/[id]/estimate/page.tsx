@@ -1,5 +1,7 @@
 'use client'
 
+import { authedFetch } from '@/lib/auth/authedFetch'
+
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -34,7 +36,7 @@ export default function JobEstimatePage() {
   useEffect(() => {
     if (!id || typeof id !== 'string') return
     const load = async () => {
-      const res = await fetch(`/api/jobs/${id}`, { cache: 'no-store' })
+      const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         setError(payload?.error ?? res.statusText)
@@ -59,7 +61,7 @@ export default function JobEstimatePage() {
     const iso = new Date(estimateLocal).toISOString()
     setSaving(true)
     setError(null)
-    const res = await fetch(`/api/jobs/${id}`, {
+    const res = await authedFetch(`/api/jobs/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ estimate_date: iso, status: 'estimate_scheduled' }),

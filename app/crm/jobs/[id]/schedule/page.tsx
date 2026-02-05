@@ -1,5 +1,7 @@
 'use client'
 
+import { authedFetch } from '@/lib/auth/authedFetch'
+
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -51,7 +53,7 @@ export default function JobSchedulePage() {
     const load = async () => {
       setLoading(true)
       setError(null)
-      const res = await fetch(`/api/jobs/${id}/schedules`, { cache: 'no-store' })
+      const res = await authedFetch(`/api/jobs/${id}/schedules`, { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         setError(payload?.error ?? res.statusText)
@@ -89,7 +91,7 @@ export default function JobSchedulePage() {
     }
     setSaving(true)
     setError(null)
-    const res = await fetch(`/api/jobs/${id}/schedules`, {
+    const res = await authedFetch(`/api/jobs/${id}/schedules`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ start_at: startIso, end_at: endIso, notes: notes.trim() || null }),
@@ -108,7 +110,7 @@ export default function JobSchedulePage() {
     if (!id || typeof id !== 'string') return
     const ok = window.confirm('Delete this scheduled block?')
     if (!ok) return
-    const res = await fetch(`/api/jobs/${id}/schedules/${scheduleId}`, { method: 'DELETE' })
+    const res = await authedFetch(`/api/jobs/${id}/schedules/${scheduleId}`, { method: 'DELETE' })
     const payload = await res.json().catch(() => null)
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)
@@ -128,7 +130,7 @@ export default function JobSchedulePage() {
     }
     setAddingCalendar(true)
     setError(null)
-    const res = await fetch(`/api/jobs/${id}/schedules/add-to-calendar`, { method: 'POST' })
+    const res = await authedFetch(`/api/jobs/${id}/schedules/add-to-calendar`, { method: 'POST' })
     const payload = await res.json().catch(() => null)
     setAddingCalendar(false)
     if (!res.ok) {

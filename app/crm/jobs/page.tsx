@@ -1,5 +1,7 @@
 'use client'
 
+import { authedFetch } from '@/lib/auth/authedFetch'
+
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -53,7 +55,7 @@ export default function JobsPage() {
     setLoading(true)
     setError(null)
 
-    const res = await fetch('/api/jobs', { cache: 'no-store' })
+    const res = await authedFetch('/api/jobs', { cache: 'no-store' })
     const payload = await res.json().catch(() => null)
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)
@@ -71,7 +73,7 @@ export default function JobsPage() {
   }, [])
 
   const patchJob = async (id: string, patch: any) => {
-    const res = await fetch(`/api/jobs/${id}`, {
+    const res = await authedFetch(`/api/jobs/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -93,7 +95,7 @@ export default function JobsPage() {
     endIso: string
   }) => {
     setError(null)
-    const res = await fetch('/api/google-calendar/create-event', {
+    const res = await authedFetch('/api/google-calendar/create-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

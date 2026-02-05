@@ -1,5 +1,7 @@
 'use client'
 
+import { authedFetch } from '@/lib/auth/authedFetch'
+
 import { useEffect, useMemo, useState } from 'react'
 
 type Stage =
@@ -47,7 +49,7 @@ export default function EmailTemplatesPage() {
 
   useEffect(() => {
     const load = async () => {
-      const res = await fetch('/api/email-templates', { cache: 'no-store' })
+      const res = await authedFetch('/api/email-templates', { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         setSaved(payload?.error ?? 'Failed to load templates')
@@ -72,7 +74,7 @@ export default function EmailTemplatesPage() {
   }, [templates, active, storageKey])
 
   const save = async () => {
-    const res = await fetch('/api/email-templates', {
+    const res = await authedFetch('/api/email-templates', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: active, subject, body }),

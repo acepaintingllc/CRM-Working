@@ -1,5 +1,7 @@
 'use client'
 
+import { authedFetch } from '@/lib/auth/authedFetch'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -91,7 +93,7 @@ export default function CustomerDetailPage() {
     setLoading(true)
     setMessage(null)
 
-    const response = await fetch(`/api/customers/${id}`, { cache: 'no-store' })
+    const response = await authedFetch(`/api/customers/${id}`, { cache: 'no-store' })
     const payload = await response.json().catch(() => null)
 
     if (!response.ok) {
@@ -109,7 +111,7 @@ export default function CustomerDetailPage() {
     setListLoading(true)
     setListError(null)
 
-    const response = await fetch('/api/customers', { cache: 'no-store' })
+    const response = await authedFetch('/api/customers', { cache: 'no-store' })
     const payload = await response.json().catch(() => null)
 
     if (!response.ok) {
@@ -348,7 +350,7 @@ export default function CustomerDetailPage() {
                       const ok = window.confirm('Delete this customer? This cannot be undone.')
                       if (!ok) return
                       setDeleting(true)
-                      const res = await fetch(`/api/customers/${id}`, { method: 'DELETE' })
+                      const res = await authedFetch(`/api/customers/${id}`, { method: 'DELETE' })
                       const payload = await res.json().catch(() => null)
                       setDeleting(false)
                       if (!res.ok) {

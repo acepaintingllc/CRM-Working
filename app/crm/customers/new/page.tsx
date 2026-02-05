@@ -1,5 +1,6 @@
 "use client";
 
+import { authedFetch } from '@/lib/auth/authedFetch'
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getActiveOrgId } from "@/lib/org/getActiveOrgId";
@@ -33,7 +34,7 @@ export default function NewCustomerPage() {
 
       const street = [address1.trim(), address2.trim()].filter(Boolean).join(" ");
 
-      const res = await fetch("/api/customers", {
+      const res = await authedFetch("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

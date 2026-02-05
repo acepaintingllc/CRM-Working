@@ -1,5 +1,6 @@
 "use client";
 
+import { authedFetch } from '@/lib/auth/authedFetch'
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getActiveOrgId } from "@/lib/org/getActiveOrgId";
@@ -28,7 +29,7 @@ export default function CustomersPage() {
 
         await getActiveOrgId();
 
-        const res = await fetch("/api/customers", { cache: "no-store" });
+        const res = await authedFetch("/api/customers", { cache: "no-store" });
         const payload = await res.json().catch(() => null);
         if (!res.ok) throw new Error(payload?.error ?? "Failed to load customers.");
         if (!alive) return;

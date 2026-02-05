@@ -1,5 +1,7 @@
 'use client'
 
+import { authedFetch } from '@/lib/auth/authedFetch'
+
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
@@ -38,7 +40,7 @@ export default function CalendarPage() {
     setLoading(true)
     setError(null)
 
-    const statusRes = await fetch('/api/google-calendar/status', { cache: 'no-store' })
+    const statusRes = await authedFetch('/api/google-calendar/status', { cache: 'no-store' })
     const statusPayload = await statusRes.json().catch(() => null)
     if (!statusRes.ok) {
       setError(statusPayload?.error ?? statusRes.statusText)
@@ -59,7 +61,7 @@ export default function CalendarPage() {
       return
     }
 
-    const calRes = await fetch('/api/google-calendar/calendars', { cache: 'no-store' })
+    const calRes = await authedFetch('/api/google-calendar/calendars', { cache: 'no-store' })
     const calPayload = await calRes.json().catch(() => null)
     if (!calRes.ok) {
       setError(calPayload?.error ?? calRes.statusText)
@@ -120,7 +122,7 @@ export default function CalendarPage() {
   const disconnect = async () => {
     setLoading(true)
     setError(null)
-    const res = await fetch('/api/google-calendar/disconnect', { method: 'POST' })
+    const res = await authedFetch('/api/google-calendar/disconnect', { method: 'POST' })
     const payload = await res.json().catch(() => null)
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)

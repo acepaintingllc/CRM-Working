@@ -1,5 +1,6 @@
 "use client";
 
+import { authedFetch } from '@/lib/auth/authedFetch'
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -53,7 +54,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        await fetch("/api/bootstrap-org", {
+        await authedFetch("/api/bootstrap-org", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: data.session.user.id }),

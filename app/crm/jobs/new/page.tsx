@@ -1,5 +1,7 @@
 'use client'
 
+import { authedFetch } from '@/lib/auth/authedFetch'
+
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -102,7 +104,7 @@ export default function NewJobPage() {
       setLoading(true)
       setError(null)
 
-      const res = await fetch('/api/customers', { cache: 'no-store' })
+      const res = await authedFetch('/api/customers', { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         setError(payload?.error ?? res.statusText)
@@ -164,7 +166,7 @@ export default function NewJobPage() {
     startIso: string
     endIso: string
   }) => {
-    const res = await fetch('/api/google-calendar/create-event', {
+    const res = await authedFetch('/api/google-calendar/create-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -215,7 +217,7 @@ export default function NewJobPage() {
     setComposeStage(stage)
     setComposeLoading(true)
     setError(null)
-    const res = await fetch('/api/email-templates', { cache: 'no-store' })
+    const res = await authedFetch('/api/email-templates', { cache: 'no-store' })
     const payload = await res.json().catch(() => null)
     setComposeLoading(false)
     if (!res.ok) {
@@ -231,7 +233,7 @@ export default function NewJobPage() {
   }
 
   const sendStageEmail = async (jobId: string, stage: string, subject?: string, body?: string) => {
-    const res = await fetch(`/api/jobs/${jobId}/send-stage`, {
+    const res = await authedFetch(`/api/jobs/${jobId}/send-stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage, subject, body }),
@@ -281,7 +283,7 @@ export default function NewJobPage() {
     setSaving(true)
     try {
       // 1) Create job in DB
-      const res = await fetch('/api/jobs', {
+      const res = await authedFetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
