@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabaseBrowser } from "@/lib/supabase/client";
+import { getActiveOrgId } from "@/lib/org/getActiveOrgId";
 
 type OrgContextValue = {
   orgId: string | null;
@@ -29,44 +29,20 @@ export function CustomersOrgProvider({ children }: { children: React.ReactNode }
     setLoading(true);
     setError(null);
 
-    const { data: sessionData, error: sessionErr } = await supabaseBrowser.auth.getSession();
-
-    if (sessionErr) {
-      setError(sessionErr.message);
+    try {
+      const id = await getActiveOrgId();
+      setOrgId(id);
       setLoading(false);
-      return;
-    }
-
-    const user = sessionData.session?.user;
-    if (!user) {
-      router.replace("/login");
-      return;
-    }
-
-    const { data, error: memErr } = await supabaseBrowser
-      .from("org_members")
-      .select("org_id")
-      .eq("user_id", user.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (memErr) {
-      setError(memErr.message);
-      setLoading(false);
-      return;
-    }
-
-    const id = data?.org_id ?? null;
-
-    if (!id) {
-      setError("No org membership found. Visit /crm once, then come back.");
+    } catch (e: any) {
+      const message = e?.message ?? "Failed to load org membership.";
+      if (message === "Not signed in.") {
+        router.replace("/login");
+        return;
+      }
+      setError(message);
       setOrgId(null);
       setLoading(false);
-      return;
     }
-
-    setOrgId(id);
-    setLoading(false);
   };
 
   useEffect(() => {

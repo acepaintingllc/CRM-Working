@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabaseBrowser } from '@/lib/supabase/client'
+import { getActiveOrgId } from '@/lib/org/getActiveOrgId'
 
 type OrgContextValue = {
   orgId: string | null
@@ -44,30 +45,16 @@ export function CustomersOrgProvider({ children }: { children: React.ReactNode }
       return
     }
 
-    // Fetch membership once for this section
-    const { data: rows, error: memErr } = await supabase
-      .from('org_members')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .limit(1)
-
-    if (memErr) {
-      setError(memErr.message)
+    try {
+      const id = await getActiveOrgId()
+      setOrgId(id)
       setLoading(false)
-      return
-    }
-
-    const id = rows?.[0]?.org_id ?? null
-    if (!id) {
-      // If you expect bootstrap to always create membership, this should never happen.
-      setError('No org membership found. Visit /crm to bootstrap your org.')
+    } catch (e: any) {
+      const message = e?.message ?? 'Failed to load org membership.'
+      setError(message)
       setOrgId(null)
       setLoading(false)
-      return
     }
-
-    setOrgId(id)
-    setLoading(false)
   }
 
   useEffect(() => {
