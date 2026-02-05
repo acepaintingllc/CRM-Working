@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+}
+
+.crm-shell {
+  padding: 24px;
+}
+
+.crm-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.crm-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crm-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.crm-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crm-row-body {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.crm-calendar {
+  overflow-x: auto;
+}
+
+.crm-calendar-grid {
+  min-width: 720px;
+}
+
+@media (max-width: 720px) {
+  .crm-shell {
+    padding: 12px !important;
+  }
+
+  .crm-card {
+    padding: 12px !important;
+  }
+
+  .crm-topbar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .crm-nav a {
+    flex: 1 1 calc(50% - 6px);
+    text-align: center;
+  }
+
+  .crm-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .crm-actions > * {
+    width: 100%;
+    text-align: center;
+  }
+
+  .crm-row-body {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .crm-split {
+    flex-direction: column !important;
+  }
+
+  .crm-columns {
+    grid-template-columns: 1fr !important;
+  }
+
+  .crm-calendar-grid {
+    min-width: 640px;
+  }
+
+  .crm-calendar-header {
+    padding: 6px !important;
+    font-size: 11px !important;
+  }
+
+  .crm-calendar-cell {
+    min-height: 90px !important;
+    padding: 6px !important;
+  }
+}
