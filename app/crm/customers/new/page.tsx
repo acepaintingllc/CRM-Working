@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabaseBrowser } from "@/lib/supabase/client";
 import { getActiveOrgId } from "@/lib/org/getActiveOrgId";
 
 export default function NewCustomerPage() {
@@ -30,21 +29,26 @@ export default function NewCustomerPage() {
 
     try {
       setSaving(true);
-      const orgId = await getActiveOrgId();
+      await getActiveOrgId();
 
-      const { error } = await supabaseBrowser.from("customers").insert({
-        org_id: orgId,
-        name: name.trim(),
-        phone: phone.trim() || null,
-        email: email.trim() || null,
-        address_line1: address1.trim() || null,
-        address_line2: address2.trim() || null,
-        city: city.trim() || null,
-        state: state.trim() || null,
-        postal_code: postal.trim() || null,
+      const street = [address1.trim(), address2.trim()].filter(Boolean).join(" ");
+
+      const res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          phone: phone.trim() || null,
+          email: email.trim() || null,
+          street: street || null,
+          city: city.trim() || null,
+          state: state.trim() || null,
+          zip: postal.trim() || null,
+        }),
       });
 
-      if (error) throw error;
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(payload?.error ?? "Failed to create customer.");
 
       router.push("/crm/customers");
       router.refresh();

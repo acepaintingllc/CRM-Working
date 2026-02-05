@@ -25,38 +25,7 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <Link
-            href="/crm/customers"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              background: "white",
-              border: "1px solid #e5e7eb",
-              textDecoration: "none",
-              color: "#111",
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-          >
-            List
-          </Link>
-
-          <Link
-            href="/crm/customers/new"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              background: "#111",
-              color: "white",
-              textDecoration: "none",
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-          >
-            + Add
-          </Link>
-        </div>
+        <div style={{ display: "flex", gap: 8 }} />
       </div>
 
       {error && (
