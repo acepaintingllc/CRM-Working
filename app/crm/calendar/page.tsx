@@ -65,7 +65,6 @@ export default function CalendarPage() {
       setError(calPayload?.error ?? calRes.statusText)
       setCalendars([])
       setSelectedCalendarIds([])
-      setEvents([])
       setLoading(false)
       return
     }
