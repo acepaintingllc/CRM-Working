@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { authedFetch } from '@/lib/auth/authedFetch'
 
 type JobDetail = {
   id: string
@@ -66,7 +67,7 @@ export default function JobDetailPage() {
       setLoading(true)
       setError(null)
       setNotice(null)
-      const res = await fetch(`/api/jobs/${id}`, { cache: 'no-store' })
+      const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         setError(payload?.error ?? res.statusText)
@@ -76,7 +77,7 @@ export default function JobDetailPage() {
       }
       setJob(payload?.job ?? null)
       setEstimateFile(null)
-      const fileRes = await fetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' })
+      const fileRes = await authedFetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' })
       const filePayload = await fileRes.json().catch(() => null)
       if (fileRes.ok && filePayload?.file) {
         setEstimateFile({
@@ -120,7 +121,7 @@ export default function JobDetailPage() {
 
   const patchJob = async (patch: Record<string, unknown>) => {
     if (!id || typeof id !== 'string') return
-    const res = await fetch(`/api/jobs/${id}`, {
+    const res = await authedFetch(`/api/jobs/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -141,7 +142,7 @@ export default function JobDetailPage() {
     setError(null)
     setNotice(null)
 
-    const res = await fetch(`/api/jobs/${id}/estimate-sheet`, { method: 'POST' })
+    const res = await authedFetch(`/api/jobs/${id}/estimate-sheet`, { method: 'POST' })
     const payload = await res.json().catch(() => null)
     setCreatingEstimateSheet(false)
 
@@ -164,7 +165,7 @@ export default function JobDetailPage() {
     if (!ok) return
     setDeleting(true)
     setError(null)
-    const res = await fetch(`/api/jobs/${id}`, { method: 'DELETE' })
+    const res = await authedFetch(`/api/jobs/${id}`, { method: 'DELETE' })
     const payload = await res.json().catch(() => null)
     setDeleting(false)
     if (!res.ok) {
@@ -178,7 +179,7 @@ export default function JobDetailPage() {
     setComposeStage(stage)
     setComposeLoading(true)
     setError(null)
-    const res = await fetch('/api/email-templates', { cache: 'no-store' })
+    const res = await authedFetch('/api/email-templates', { cache: 'no-store' })
     const payload = await res.json().catch(() => null)
     setComposeLoading(false)
     if (!res.ok) {
@@ -204,7 +205,7 @@ export default function JobDetailPage() {
       form.set('subject', composeSubject)
       form.set('body', composeBody)
       if (manualFile) form.set('file', manualFile)
-      const res = await fetch(`/api/jobs/${id}/send-estimate`, { method: 'POST', body: form })
+      const res = await authedFetch(`/api/jobs/${id}/send-estimate`, { method: 'POST', body: form })
       const payload = await res.json().catch(() => null)
       setSendingStage(null)
       if (!res.ok) {
@@ -215,7 +216,7 @@ export default function JobDetailPage() {
       return
     }
 
-    const res = await fetch(`/api/jobs/${id}/send-stage`, {
+    const res = await authedFetch(`/api/jobs/${id}/send-stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: composeStage, subject: composeSubject, body: composeBody }),
