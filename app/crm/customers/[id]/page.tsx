@@ -30,6 +30,8 @@ type CustomerTimelineEvent = {
   body: string
   created_at: string | null
   created_by: string | null
+  link_path: string | null
+  link_label: string | null
 }
 
 export default function CustomerDetailPage() {
@@ -504,13 +506,51 @@ export default function CustomerDetailPage() {
                       background: 'white',
                     }}
                   >
-                    <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 700 }}>
-                      {event.type.toUpperCase()}
-                    </div>
                     {event.title && (
                       <div style={{ marginTop: 4, fontWeight: 700 }}>{event.title}</div>
                     )}
                     <div style={{ marginTop: 6, fontSize: 14, whiteSpace: 'pre-wrap' }}>{event.body}</div>
+                    {event.link_path && (
+                      <div style={{ marginTop: 8 }}>
+                        {event.link_path.startsWith('/api/') || event.link_path.startsWith('http') ? (
+                          <a
+                            href={event.link_path}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              padding: '6px 10px',
+                              borderRadius: 10,
+                              border: '1px solid #d1d5db',
+                              background: '#fff',
+                              color: '#111',
+                              textDecoration: 'none',
+                              fontWeight: 700,
+                              fontSize: 12,
+                            }}
+                          >
+                            {event.link_label ?? 'Open'}
+                          </a>
+                        ) : (
+                          <Link
+                            href={event.link_path}
+                            style={{
+                              display: 'inline-flex',
+                              padding: '6px 10px',
+                              borderRadius: 10,
+                              border: '1px solid #d1d5db',
+                              background: '#fff',
+                              color: '#111',
+                              textDecoration: 'none',
+                              fontWeight: 700,
+                              fontSize: 12,
+                            }}
+                          >
+                            {event.link_label ?? 'Open'}
+                          </Link>
+                        )}
+                      </div>
+                    )}
                     <div style={{ marginTop: 6, fontSize: 12, color: '#9ca3af' }}>
                       {event.created_at ? new Date(event.created_at).toLocaleString() : 'Unknown time'}
                     </div>

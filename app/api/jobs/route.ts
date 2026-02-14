@@ -22,6 +22,12 @@ type CustomerRow = {
   address?: string | null
 }
 
+type JobScheduleRow = {
+  job_id: string
+  start_at: string | null
+  end_at: string | null
+}
+
 function detailMeta(error: Partial<ErrorLike>) {
   return {
     details: typeof error.details === 'string' ? error.details : null,
@@ -62,6 +68,9 @@ export async function GET() {
   }
 
   const rows = (data ?? []) as JobRow[]
+  const jobIds = rows
+    .map((r) => asString(r.id))
+    .filter((v): v is string => Boolean(v))
   const customerIds = Array.from(new Set(rows.map((r) => r.customer_id).filter(Boolean)))
 
   const customerById = new Map<string, { name: string | null; address: string | null }>()
@@ -79,8 +88,36 @@ export async function GET() {
     }
   }
 
+  const scheduleByJob = new Map<string, { minStart: string | null; maxEnd: string | null }>()
+  if (jobIds.length) {
+    const { data: schedules, error: schedErr } = await supabaseAdmin
+      .from('job_schedules')
+      .select('job_id, start_at, end_at')
+      .eq('org_id', orgId)
+      .in('job_id', jobIds)
+
+    if (schedErr) return NextResponse.json({ error: schedErr.message }, { status: 500 })
+
+    for (const row of (schedules ?? []) as JobScheduleRow[]) {
+      const current = scheduleByJob.get(row.job_id) ?? { minStart: null, maxEnd: null }
+      if (row.start_at && (!current.minStart || row.start_at < current.minStart)) {
+        current.minStart = row.start_at
+      }
+      if (row.end_at && (!current.maxEnd || row.end_at > current.maxEnd)) {
+        current.maxEnd = row.end_at
+      }
+      scheduleByJob.set(row.job_id, current)
+    }
+  }
+
   const jobs = rows.map((row) => {
     const customer = row.customer_id ? customerById.get(row.customer_id) : undefined
+    const id = asString(row.id)
+    const scheduleRange = id ? scheduleByJob.get(id) : undefined
+    const rowScheduledDate = asString(row.scheduled_date)
+    const rowScheduledEndDate = asString(row.scheduled_end_date)
+    const scheduledDate = rowScheduledDate ?? scheduleRange?.minStart ?? null
+    const scheduledEndDate = rowScheduledEndDate ?? scheduleRange?.maxEnd ?? null
     return {
       ...row,
       // Be defensive if older rows/schemas exist.
@@ -88,6 +125,8 @@ export async function GET() {
       status: row.status ?? 'estimate_scheduled',
       customer_name: customer?.name ?? null,
       customer_address: customer?.address ?? null,
+      scheduled_date: scheduledDate,
+      scheduled_end_date: scheduledEndDate,
     }
   })
 

@@ -16,9 +16,11 @@ type Job = {
   title: string
   description: string | null
   status: JobStatus
+  created_at?: string | null
   estimate_date: string | null
   estimate_sent_at: string | null
   scheduled_date: string | null
+  scheduled_end_date?: string | null
   completed_at: string | null
 }
 
@@ -38,6 +40,8 @@ export default function JobsPage() {
   const [completedQuery, setCompletedQuery] = useState('')
   const [showAllCompleted, setShowAllCompleted] = useState(false)
   const [showLost, setShowLost] = useState(false)
+  const [showEmptyStages, setShowEmptyStages] = useState(false)
+  const [compactActions, setCompactActions] = useState(false)
   const [creatingEstimateSheetId, setCreatingEstimateSheetId] = useState<string | null>(null)
 
   const grouped = useMemo(() => {
@@ -71,6 +75,14 @@ export default function JobsPage() {
 
   useEffect(() => {
     void load()
+  }, [])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 900px)')
+    const apply = () => setCompactActions(media.matches)
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
   }, [])
 
   const patchJob = async (id: string, patch: Record<string, unknown>) => {
@@ -118,6 +130,24 @@ export default function JobsPage() {
     }
   }
 
+  const formatRange = (start: string | null | undefined, end: string | null | undefined) => {
+    if (start && end) return `${formatDate(start)} - ${formatDate(end)}`
+    if (start) return formatDate(start)
+    if (end) return formatDate(end)
+    return null
+  }
+
+  const activityForJob = (job: Job) => {
+    const items: { label: string; at: string }[] = []
+    if (job.completed_at) items.push({ label: 'Completed', at: job.completed_at })
+    if (job.scheduled_date) items.push({ label: 'Scheduled', at: job.scheduled_date })
+    if (job.estimate_sent_at) items.push({ label: 'Estimate sent', at: job.estimate_sent_at })
+    if (job.estimate_date) items.push({ label: 'Estimate set', at: job.estimate_date })
+    if (job.created_at) items.push({ label: 'Job created', at: job.created_at })
+    items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    return items.slice(0, 2)
+  }
+
   const filteredCompleted = useMemo(() => {
     const q = completedQuery.trim().toLowerCase()
     let list = grouped.completed
@@ -145,8 +175,13 @@ export default function JobsPage() {
       fn()
     }
 
+  const columnCount = (status: JobStatus) => grouped[status].length
+  const visibleColumns = columns
+    .filter((col) => (col.key === 'lost' ? showLost : true))
+    .filter((col) => showEmptyStages || columnCount(col.key) > 0)
+
   return (
-    <div className="crm-page" style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div className="crm-page" style={{ maxWidth: 'min(96vw, 2000px)', margin: '0 auto' }}>
       <div className="crm-topbar">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Jobs</h1>
@@ -156,6 +191,17 @@ export default function JobsPage() {
         </div>
 
         <div className="crm-actions" style={{ alignItems: 'center' }}>
+          <button
+            onClick={() => setShowEmptyStages((prev) => !prev)}
+            style={{
+              ...actionButton,
+              background: showEmptyStages ? '#111' : 'white',
+              color: showEmptyStages ? 'white' : '#111',
+              border: showEmptyStages ? '1px solid #111' : '1px solid #e5e7eb',
+            }}
+          >
+            {showEmptyStages ? 'Hide empty stages' : 'Show empty stages'}
+          </button>
           <button
             onClick={() => setShowLost((prev) => !prev)}
             style={{ ...actionButton, background: showLost ? '#111' : 'white', color: showLost ? 'white' : '#111', border: showLost ? '1px solid #111' : '1px solid #e5e7eb' }}
@@ -183,10 +229,38 @@ export default function JobsPage() {
       {loading ? (
         <div style={{ marginTop: 12, color: '#6b7280' }}>Loading...</div>
       ) : (
-        <div className="crm-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 12 }}>
-          {columns.filter((col) => (col.key === 'lost' ? showLost : true)).map((col) => (
+        <div
+          className="crm-columns"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${Math.max(1, visibleColumns.length)}, minmax(280px, 1fr))`,
+            gap: 12,
+            marginTop: 12,
+          }}
+        >
+          {visibleColumns.map((col) => (
             <div key={col.key} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-              <div style={{ fontWeight: 800, marginBottom: 10 }}>{col.title}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontWeight: 800 }}>{col.title}</div>
+                <div
+                  style={{
+                    minWidth: 24,
+                    height: 24,
+                    borderRadius: 999,
+                    border: '1px solid #d1d5db',
+                    background: '#fff',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: '#374151',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 8px',
+                  }}
+                >
+                  {columnCount(col.key)}
+                </div>
+              </div>
               <div style={{ display: 'grid', gap: 10 }}>
                 {col.key === 'completed' && (
                   <div style={{ display: 'grid', gap: 8 }}>
@@ -214,7 +288,23 @@ export default function JobsPage() {
                   </div>
                 )}
                 {(col.key === 'completed' ? filteredCompleted : grouped[col.key]).length === 0 && (
-                  <div style={{ fontSize: 13, color: '#9ca3af' }}>No jobs</div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: '#6b7280',
+                      border: '1px dashed #d1d5db',
+                      borderRadius: 10,
+                      padding: 10,
+                      background: '#fff',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>No jobs in this stage</div>
+                    <div style={{ marginTop: 4, fontSize: 12 }}>
+                      {col.key === 'estimate_scheduled'
+                        ? 'New jobs will appear here after creation.'
+                        : 'Jobs move here automatically as status changes.'}
+                    </div>
+                  </div>
                 )}
                 {(col.key === 'completed' ? filteredCompleted : grouped[col.key]).map((job) => (
                   <div
@@ -228,7 +318,7 @@ export default function JobsPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    <div style={{ fontWeight: 800 }}>{job.title}</div>
+                    <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.15 }}>{job.title}</div>
                     <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
                       {job.customer_name ? job.customer_name : `Customer: ${job.customer_id}`}
                     </div>
@@ -240,107 +330,251 @@ export default function JobsPage() {
                     )}
 
                     <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
-                      {job.estimate_date && <div>Estimate: {formatDate(job.estimate_date)}</div>}
-                      {job.scheduled_date && <div>Scheduled: {formatDate(job.scheduled_date)}</div>}
-                      {job.completed_at && <div>Completed: {formatDate(job.completed_at)}</div>}
+                      {job.status === 'scheduled' ? (
+                        <>
+                          {formatRange(job.scheduled_date, job.scheduled_end_date) && (
+                            <div>Scheduled: {formatRange(job.scheduled_date, job.scheduled_end_date)}</div>
+                          )}
+                          {job.completed_at && <div>Completed: {formatDate(job.completed_at)}</div>}
+                        </>
+                      ) : (
+                        <>
+                          {job.estimate_date && <div>Estimate: {formatDate(job.estimate_date)}</div>}
+                          {job.scheduled_date && <div>Scheduled: {formatDate(job.scheduled_date)}</div>}
+                          {job.completed_at && <div>Completed: {formatDate(job.completed_at)}</div>}
+                        </>
+                      )}
                     </div>
+                    {!compactActions && activityForJob(job).length > 0 && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          paddingTop: 8,
+                          borderTop: '1px dashed #e5e7eb',
+                          fontSize: 11,
+                          color: '#6b7280',
+                          display: 'grid',
+                          gap: 4,
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, color: '#374151' }}>Recent activity</div>
+                        {activityForJob(job).map((item, idx) => (
+                          <div key={`${job.id}-act-${idx}`}>
+                            {item.label}: {formatDate(item.at)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
                       {job.status === 'estimate_scheduled' && (
                         <>
-                          <Link
-                            href={`/crm/jobs/${job.id}/simple-estimate`}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                          >
-                            Build simple estimate
-                          </Link>
-                          <button
-                            onClick={stop(() => void createEstimateSheet(job.id))}
-                            disabled={creatingEstimateSheetId === job.id}
-                            style={smallButton}
-                          >
-                            {creatingEstimateSheetId === job.id
-                              ? 'Creating estimate sheet...'
-                              : 'Create estimate sheet'}
-                          </button>
-                          <button
-                            onClick={stop(() => {
-                              router.push(`/crm/jobs/${job.id}?compose=estimate_sent`)
-                            })}
-                            style={smallButton}
-                          >
-                            Review &amp; send estimate
-                          </button>
-                          <button
-                            onClick={stop(() => void patchJob(job.id, { estimate_sent_at: nowIso() }))}
-                            style={smallButton}
-                          >
-                            Mark estimate sent
-                          </button>
-                          <Link
-                            href={`/crm/jobs/${job.id}/estimate`}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                          >
-                            Set estimate date
-                          </Link>
+                          {compactActions ? (
+                            <details onClick={(e) => e.stopPropagation()}>
+                              <summary style={smallButton}>More</summary>
+                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                                <button
+                                  onClick={stop(() => {
+                                    router.push(`/crm/jobs/${job.id}?compose=estimate_sent`)
+                                  })}
+                                  style={smallButton}
+                                >
+                                  Review &amp; send estimate
+                                </button>
+                                <button
+                                  onClick={stop(() => void patchJob(job.id, { estimate_sent_at: nowIso() }))}
+                                  style={smallButton}
+                                >
+                                  Mark estimate sent
+                                </button>
+                                <Link
+                                  href={`/crm/jobs/${job.id}/simple-estimate`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                                >
+                                  Build simple estimate
+                                </Link>
+                                <button
+                                  onClick={stop(() => void createEstimateSheet(job.id))}
+                                  disabled={creatingEstimateSheetId === job.id}
+                                  style={smallButton}
+                                >
+                                  {creatingEstimateSheetId === job.id
+                                    ? 'Creating estimate sheet...'
+                                    : 'Create estimate sheet'}
+                                </button>
+                                <Link
+                                  href={`/crm/jobs/${job.id}/estimate`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                                >
+                                  Set estimate date
+                                </Link>
+                              </div>
+                            </details>
+                          ) : (
+                            <>
+                              <button
+                                onClick={stop(() => {
+                                  router.push(`/crm/jobs/${job.id}?compose=estimate_sent`)
+                                })}
+                                style={smallButton}
+                              >
+                                Review &amp; send estimate
+                              </button>
+                              <button
+                                onClick={stop(() => void patchJob(job.id, { estimate_sent_at: nowIso() }))}
+                                style={smallButton}
+                              >
+                                Mark estimate sent
+                              </button>
+                              <Link
+                                href={`/crm/jobs/${job.id}/simple-estimate`}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                              >
+                                Build simple estimate
+                              </Link>
+                              <button
+                                onClick={stop(() => void createEstimateSheet(job.id))}
+                                disabled={creatingEstimateSheetId === job.id}
+                                style={smallButton}
+                              >
+                                {creatingEstimateSheetId === job.id
+                                  ? 'Creating estimate sheet...'
+                                  : 'Create estimate sheet'}
+                              </button>
+                              <Link
+                                href={`/crm/jobs/${job.id}/estimate`}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                              >
+                                Set estimate date
+                              </Link>
+                            </>
+                          )}
                         </>
                       )}
 
                       {job.status === 'estimate_sent' && (
                         <>
-                          <Link
-                            href={`/crm/jobs/${job.id}/schedule`}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                          >
-                            Schedule job
-                          </Link>
-                          <button
-                            onClick={stop(async () => {
-                              router.push(`/crm/jobs/${job.id}?compose=follow_up`)
-                            })}
-                            style={smallButton}
-                          >
-                            Send follow up
-                          </button>
-                          <button
-                            onClick={stop(() => {
-                              const ok = window.confirm('Mark this job as lost?')
-                              if (!ok) return
-                              void patchJob(job.id, { status: 'lost' })
-                            })}
-                            style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
-                          >
-                            Mark lost
-                          </button>
+                          {compactActions ? (
+                            <details onClick={(e) => e.stopPropagation()}>
+                              <summary style={smallButton}>More</summary>
+                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                                <Link
+                                  href={`/crm/jobs/${job.id}/schedule`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                                >
+                                  Schedule job
+                                </Link>
+                                <button
+                                  onClick={stop(async () => {
+                                    router.push(`/crm/jobs/${job.id}?compose=follow_up`)
+                                  })}
+                                  style={smallButton}
+                                >
+                                  Send follow up
+                                </button>
+                                <button
+                                  onClick={stop(() => {
+                                    const ok = window.confirm('Mark this job as lost?')
+                                    if (!ok) return
+                                    void patchJob(job.id, { status: 'lost' })
+                                  })}
+                                  style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
+                                >
+                                  Mark lost
+                                </button>
+                              </div>
+                            </details>
+                          ) : (
+                            <>
+                              <Link
+                                href={`/crm/jobs/${job.id}/schedule`}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                              >
+                                Schedule job
+                              </Link>
+                              <button
+                                onClick={stop(async () => {
+                                  router.push(`/crm/jobs/${job.id}?compose=follow_up`)
+                                })}
+                                style={smallButton}
+                              >
+                                Send follow up
+                              </button>
+                              <button
+                                onClick={stop(() => {
+                                  const ok = window.confirm('Mark this job as lost?')
+                                  if (!ok) return
+                                  void patchJob(job.id, { status: 'lost' })
+                                })}
+                                style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
+                              >
+                                Mark lost
+                              </button>
+                            </>
+                          )}
                         </>
                       )}
 
                       {job.status === 'scheduled' && (
                         <>
-                          <button
-                            onClick={stop(() => {
-                              router.push(`/crm/jobs/${job.id}?compose=scheduled`)
-                            })}
-                            style={smallButton}
-                          >
-                            Edit & send scheduled email
-                          </button>
-                          <button
-                            onClick={stop(() => void patchJob(job.id, { completed_at: nowIso() }))}
-                            style={smallButton}
-                          >
-                            Mark completed
-                          </button>
-                          <Link
-                            href={`/crm/jobs/${job.id}/schedule`}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                          >
-                            Change scheduled date
-                          </Link>
+                          {compactActions ? (
+                            <details onClick={(e) => e.stopPropagation()}>
+                              <summary style={smallButton}>More</summary>
+                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                                <button
+                                  onClick={stop(() => {
+                                    router.push(`/crm/jobs/${job.id}?compose=scheduled`)
+                                  })}
+                                  style={smallButton}
+                                >
+                                  Edit & send scheduled email
+                                </button>
+                                <button
+                                  onClick={stop(() => void patchJob(job.id, { completed_at: nowIso() }))}
+                                  style={smallButton}
+                                >
+                                  Mark completed
+                                </button>
+                                <Link
+                                  href={`/crm/jobs/${job.id}/schedule`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                                >
+                                  Change scheduled date
+                                </Link>
+                              </div>
+                            </details>
+                          ) : (
+                            <>
+                              <button
+                                onClick={stop(() => {
+                                  router.push(`/crm/jobs/${job.id}?compose=scheduled`)
+                                })}
+                                style={smallButton}
+                              >
+                                Edit & send scheduled email
+                              </button>
+                              <button
+                                onClick={stop(() => void patchJob(job.id, { completed_at: nowIso() }))}
+                                style={smallButton}
+                              >
+                                Mark completed
+                              </button>
+                              <Link
+                                href={`/crm/jobs/${job.id}/schedule`}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                              >
+                                Change scheduled date
+                              </Link>
+                            </>
+                          )}
                         </>
                       )}
                     </div>

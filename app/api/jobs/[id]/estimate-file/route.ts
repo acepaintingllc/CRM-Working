@@ -55,5 +55,11 @@ export async function GET(
     return NextResponse.json({ error: result.error }, { status: 400 })
   }
 
+  const url = new URL(request.url)
+  const shouldRedirect = url.searchParams.get('redirect') === '1'
+  if (shouldRedirect && result.file.webViewLink) {
+    return NextResponse.redirect(result.file.webViewLink)
+  }
+
   return NextResponse.json({ file: result.file })
 }
