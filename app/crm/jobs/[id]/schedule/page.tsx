@@ -15,6 +15,12 @@ type ScheduleRow = {
   calendar_added_at: string | null
 }
 
+type CalendarAddResult = {
+  scheduleId: string
+  eventId?: string | null
+  skipped?: boolean
+}
+
 function pad2(n: number) {
   return String(n).padStart(2, '0')
 }
@@ -35,7 +41,7 @@ function next8amLocalValue() {
 
 export default function JobSchedulePage() {
   const params = useParams()
-  const rawId = (params as any)?.id
+  const rawId = (params as { id?: string } | null | undefined)?.id
   const id = Array.isArray(rawId) ? rawId[0] : rawId
 
   const [rows, setRows] = useState<ScheduleRow[]>([])
@@ -140,7 +146,7 @@ export default function JobSchedulePage() {
     if (payload?.events) {
       setRows((prev) =>
         prev.map((row) => {
-          const found = payload.events.find((e: any) => e.scheduleId === row.id)
+          const found = (payload.events as CalendarAddResult[]).find((e) => e.scheduleId === row.id)
           if (!found || found.skipped) return row
           return { ...row, calendar_event_id: found.eventId ?? row.calendar_event_id, calendar_added_at: new Date().toISOString() }
         })
@@ -273,22 +279,30 @@ export default function JobSchedulePage() {
         )}
         {!loading && sorted.length > 0 && (
           <div style={{ marginTop: 10 }}>
-            <button
-              onClick={() => void addToCalendar()}
-              disabled={addingCalendar}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: 'none',
-                background: '#111',
-                color: 'white',
-                fontWeight: 800,
-                cursor: 'pointer',
-                opacity: addingCalendar ? 0.7 : 1,
-              }}
-            >
-              {addingCalendar ? 'Adding to calendar...' : 'Add scheduled blocks to Google Calendar'}
-            </button>
+            <div className="crm-actions">
+              <button
+                onClick={() => void addToCalendar()}
+                disabled={addingCalendar}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: '#111',
+                  color: 'white',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  opacity: addingCalendar ? 0.7 : 1,
+                }}
+              >
+                {addingCalendar ? 'Adding to calendar...' : 'Add scheduled blocks to Google Calendar'}
+              </button>
+              <Link
+                href={`/crm/jobs/${id}?compose=scheduled`}
+                style={{ ...actionButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+              >
+                Edit & send scheduled email
+              </Link>
+            </div>
           </div>
         )}
       </div>

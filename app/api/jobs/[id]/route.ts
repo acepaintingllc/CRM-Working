@@ -4,7 +4,26 @@ import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-function nextStatusForPatch(current: string, patch: any) {
+type JobPatch = {
+  completed_at?: string | null
+  scheduled_date?: string | null
+  estimate_sent_at?: string | null
+  estimate_date?: string | null
+}
+
+type JobRecord = {
+  id: string
+  status: string
+  scheduled_date?: string | null
+  scheduled_end_date?: string | null
+  customer_id?: string | null
+  [key: string]: unknown
+}
+
+type ScheduleRecord = { start_at: string | null; end_at: string | null }
+type CustomerRecord = { name: string | null; address: string | null; email?: string | null; phone?: string | null }
+
+function nextStatusForPatch(current: string, patch: JobPatch) {
   if (patch?.completed_at) return 'completed'
   if (patch?.scheduled_date) return 'scheduled'
   if (patch?.estimate_sent_at) return 'estimate_sent'
@@ -24,7 +43,7 @@ export async function PATCH(
 
   const { orgId } = session
   const params = await Promise.resolve(context.params)
-  const id = (params as any)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string' || !uuid.test(id)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
@@ -34,7 +53,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Missing body' }, { status: 400 })
   }
 
-  const allowed: Record<string, any> = {}
+  const allowed: Record<string, unknown> = {}
   for (const key of [
     'title',
     'description',
@@ -60,7 +79,7 @@ export async function PATCH(
 
   // Auto-move if dates/flags are set, unless caller explicitly sets status.
   if (!('status' in allowed)) {
-    allowed.status = nextStatusForPatch(existing.status, allowed)
+    allowed.status = nextStatusForPatch(existing.status, allowed as JobPatch)
   }
 
   const { data, error } = await supabaseAdmin
@@ -88,7 +107,7 @@ export async function GET(
 
   const { orgId } = session
   const params = await Promise.resolve(context.params)
-  const id = (params as any)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string' || !uuid.test(id)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
@@ -103,7 +122,8 @@ export async function GET(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
 
-  if (!(job as any).scheduled_date || !(job as any).scheduled_end_date) {
+  const mutableJob = job as JobRecord
+  if (!mutableJob.scheduled_date || !mutableJob.scheduled_end_date) {
     const { data: schedules } = await supabaseAdmin
       .from('job_schedules')
       .select('start_at, end_at')
@@ -112,8 +132,8 @@ export async function GET(
       .order('start_at', { ascending: true })
 
     if (schedules && schedules.length > 0) {
-      const starts = schedules.map((s: any) => s.start_at).filter(Boolean).sort()
-      const ends = schedules.map((s: any) => s.end_at).filter(Boolean).sort()
+      const starts = (schedules as ScheduleRecord[]).map((s) => s.start_at).filter(Boolean).sort()
+      const ends = (schedules as ScheduleRecord[]).map((s) => s.end_at).filter(Boolean).sort()
       const scheduled_date = starts.length > 0 ? starts[0] : null
       const scheduled_end_date = ends.length > 0 ? ends[ends.length - 1] : null
 
@@ -126,29 +146,29 @@ export async function GET(
         .maybeSingle()
 
       if (updated) {
-        ;(job as any).scheduled_date = (updated as any).scheduled_date
-        ;(job as any).scheduled_end_date = (updated as any).scheduled_end_date
+        mutableJob.scheduled_date = (updated as JobRecord).scheduled_date ?? null
+        mutableJob.scheduled_end_date = (updated as JobRecord).scheduled_end_date ?? null
       } else {
-        ;(job as any).scheduled_date = scheduled_date
-        ;(job as any).scheduled_end_date = scheduled_end_date
+        mutableJob.scheduled_date = scheduled_date
+        mutableJob.scheduled_end_date = scheduled_end_date
       }
     }
   }
 
   let customer: { name: string | null; address: string | null; email?: string | null; phone?: string | null } | null = null
-  if ((job as any).customer_id) {
+  if (mutableJob.customer_id) {
     const { data: customerRow } = await supabaseAdmin
       .from('customers')
       .select('id, name, address, email, phone')
       .eq('org_id', orgId)
-      .eq('id', (job as any).customer_id)
+      .eq('id', mutableJob.customer_id)
       .maybeSingle()
     if (customerRow) {
       customer = {
-        name: (customerRow as any).name ?? null,
-        address: (customerRow as any).address ?? null,
-        email: (customerRow as any).email ?? null,
-        phone: (customerRow as any).phone ?? null,
+        name: (customerRow as CustomerRecord).name ?? null,
+        address: (customerRow as CustomerRecord).address ?? null,
+        email: (customerRow as CustomerRecord).email ?? null,
+        phone: (customerRow as CustomerRecord).phone ?? null,
       }
     }
   }
@@ -176,7 +196,7 @@ export async function DELETE(
 
   const { orgId } = session
   const params = await Promise.resolve(context.params)
-  const id = (params as any)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string' || !uuid.test(id)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }

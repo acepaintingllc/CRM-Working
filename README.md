@@ -1,5 +1,3 @@
-# CRM-Working
-
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
@@ -21,6 +19,50 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Quality Checks
+
+Run these before merging:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Or run the full gate in one command:
+
+```bash
+npm run check
+```
+
+## Google Estimate Sheets
+
+To enable “Create estimate sheet” (copies a Google Sheets template and autofills customer/job fields), set:
+
+- `GOOGLE_SHEETS_ESTIMATE_TEMPLATE_ID` (Spreadsheet file ID from `/d/<ID>/edit`)
+- `GOOGLE_DRIVE_ESTIMATE_SHEETS_FOLDER_ID` (Destination folder for new sheet copies)
+  - If unset, the app falls back to `GOOGLE_DRIVE_ESTIMATES_FOLDER_ID`.
+
+### Template setup (named ranges)
+
+In your template spreadsheet, keep labels like “Customer Name” as normal text. The app fills **cells that have Named ranges**:
+
+- `customer_name` (required)
+- `customer_address` (required)
+
+Optional (filled only if you create these named ranges):
+
+- `customer_email`, `customer_phone`
+- `job_title`, `job_description`, `estimate_date`, `job_id`
+- `customer_street`, `customer_city`, `customer_state`, `customer_zip`
+
+To create a named range: select the value cell (e.g. `B4`) → **Data → Named ranges** → name it (e.g. `customer_name`).
+
+If you previously connected Google before these scopes were added, go to `/crm/calendar` and:
+
+1) Disconnect  
+2) Connect Google again
 
 ## Learn More
 

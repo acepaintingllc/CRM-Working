@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken } from '@/lib/server/googleCalendar'
 
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
 export async function GET(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
@@ -14,7 +18,7 @@ export async function GET(
 
   const { orgId, userId } = session
   const params = await Promise.resolve(context.params)
-  const id = (params as any)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Invalid file id' }, { status: 400 })
   }
@@ -31,17 +35,20 @@ export async function GET(
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${access.accessToken}` },
   })
-  const json: any = await res.json().catch(() => null)
+  const json: unknown = await res.json().catch(() => null)
+  const obj = asRecord(json)
   if (!res.ok) {
-    const msg = json?.error?.message ?? 'Failed to fetch file info'
+    const err = asRecord(obj?.error)
+    const msg =
+      (typeof err?.message === 'string' ? err.message : null) ?? 'Failed to fetch file info'
     return NextResponse.json({ error: msg }, { status: 400 })
   }
 
   return NextResponse.json({
     file: {
-      id: json?.id as string,
-      name: json?.name as string,
-      webViewLink: (json?.webViewLink as string | null) ?? null,
+      id: typeof obj?.id === 'string' ? obj.id : '',
+      name: typeof obj?.name === 'string' ? obj.name : '',
+      webViewLink: typeof obj?.webViewLink === 'string' ? obj.webViewLink : null,
     },
   })
 }

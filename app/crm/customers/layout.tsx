@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { CustomersOrgProvider, useOrg } from "./customers-orgproviders";
 
 function CustomersShell({ children }: { children: React.ReactNode }) {

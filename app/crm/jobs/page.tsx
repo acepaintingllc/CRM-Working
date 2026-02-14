@@ -38,6 +38,7 @@ export default function JobsPage() {
   const [completedQuery, setCompletedQuery] = useState('')
   const [showAllCompleted, setShowAllCompleted] = useState(false)
   const [showLost, setShowLost] = useState(false)
+  const [creatingEstimateSheetId, setCreatingEstimateSheetId] = useState<string | null>(null)
 
   const grouped = useMemo(() => {
     const map: Record<JobStatus, Job[]> = {
@@ -72,7 +73,7 @@ export default function JobsPage() {
     void load()
   }, [])
 
-  const patchJob = async (id: string, patch: any) => {
+  const patchJob = async (id: string, patch: Record<string, unknown>) => {
     const res = await authedFetch(`/api/jobs/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -87,32 +88,23 @@ export default function JobsPage() {
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...payload.job } : j)))
   }
 
-  const addToGoogleCalendar = async (args: {
-    summary: string
-    description?: string | null
-    location?: string | null
-    startIso: string
-    endIso: string
-  }) => {
+  const createEstimateSheet = async (id: string) => {
+    setCreatingEstimateSheetId(id)
     setError(null)
-    const res = await authedFetch('/api/google-calendar/create-event', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        summary: args.summary,
-        description: args.description ?? undefined,
-        location: args.location ?? undefined,
-        calendar_name: "Austin's work",
-        start: args.startIso,
-        end: args.endIso,
-      }),
-    })
+
+    const res = await authedFetch(`/api/jobs/${id}/estimate-sheet`, { method: 'POST' })
     const payload = await res.json().catch(() => null)
+    setCreatingEstimateSheetId((prev) => (prev === id ? null : prev))
+
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)
-      return null
+      return
     }
-    return payload?.event ?? null
+
+    const url = payload?.sheet?.webViewLink ?? payload?.sheet?.editUrl ?? null
+    if (typeof url === 'string' && url) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
   }
 
   const nowIso = () => new Date().toISOString()
@@ -124,11 +116,6 @@ export default function JobsPage() {
     } catch {
       return iso
     }
-  }
-
-  const addHours = (startIso: string, hours: number) => {
-    const start = new Date(startIso)
-    return new Date(start.getTime() + hours * 60 * 60 * 1000).toISOString()
   }
 
   const filteredCompleted = useMemo(() => {
@@ -261,6 +248,22 @@ export default function JobsPage() {
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
                       {job.status === 'estimate_scheduled' && (
                         <>
+                          <Link
+                            href={`/crm/jobs/${job.id}/simple-estimate`}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                          >
+                            Build simple estimate
+                          </Link>
+                          <button
+                            onClick={stop(() => void createEstimateSheet(job.id))}
+                            disabled={creatingEstimateSheetId === job.id}
+                            style={smallButton}
+                          >
+                            {creatingEstimateSheetId === job.id
+                              ? 'Creating estimate sheet...'
+                              : 'Create estimate sheet'}
+                          </button>
                           <button
                             onClick={stop(() => {
                               router.push(`/crm/jobs/${job.id}?compose=estimate_sent`)

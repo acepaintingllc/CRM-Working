@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   }
 
   // Build payload based on columns that exist in your schema (avoid cache errors).
-  const payload: Record<string, any> = {
+  const payload: Record<string, unknown> = {
     org_id: orgId,
     name: body.name,
     email: body.email ?? null,
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const insertOnce = async (p: Record<string, any>) =>
+  const insertOnce = async (p: Record<string, unknown>) =>
     supabaseAdmin.from('customers').insert(p).select('*').single()
 
   let { data, error } = await insertOnce(payload)
@@ -114,8 +114,8 @@ export async function POST(request: Request) {
     delete payload[m[1]]
 
     const retry = await insertOnce(payload)
-    data = retry.data as any
-    error = retry.error as any
+    data = retry.data
+    error = retry.error
   }
 
   if (error) {

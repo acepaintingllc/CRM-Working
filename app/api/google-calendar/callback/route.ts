@@ -3,6 +3,16 @@ import { cookies } from 'next/headers'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getGoogleOAuthConfig, getTokenRow, upsertTokenRow } from '@/lib/server/googleCalendar'
 
+type TokenResponse = {
+  error_description?: unknown
+  error?: unknown
+  expires_in?: unknown
+  access_token?: unknown
+  refresh_token?: unknown
+  scope?: unknown
+  token_type?: unknown
+}
+
 export async function GET(request: Request) {
   const { origin, searchParams } = new URL(request.url)
   const code = searchParams.get('code')
@@ -46,25 +56,36 @@ export async function GET(request: Request) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),
   })
-  const json: any = await res.json().catch(() => null)
+  const json: TokenResponse = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const msg = json?.error_description ?? json?.error ?? 'token_exchange_failed'
+    const msg =
+      typeof json.error_description === 'string'
+        ? json.error_description
+        : typeof json.error === 'string'
+          ? json.error
+          : 'token_exchange_failed'
     return NextResponse.redirect(`${origin}${nextPath}?error=${encodeURIComponent(msg)}`)
   }
 
   const existing = await getTokenRow(orgId, userId).catch(() => null)
 
-  const expiresAt = json?.expires_in
+  const expiresAt = json.expires_in != null
     ? new Date(Date.now() + Number(json.expires_in) * 1000).toISOString()
     : null
+
+  const accessToken = typeof json.access_token === 'string' ? json.access_token : null
+  if (!accessToken) {
+    return NextResponse.redirect(`${origin}${nextPath}?error=${encodeURIComponent('token_exchange_failed')}`)
+  }
 
   await upsertTokenRow({
     orgId,
     userId,
-    access_token: json.access_token,
-    refresh_token: json.refresh_token ?? existing?.refresh_token ?? null,
-    scope: json.scope ?? null,
-    token_type: json.token_type ?? null,
+    access_token: accessToken,
+    refresh_token:
+      typeof json.refresh_token === 'string' ? json.refresh_token : existing?.refresh_token ?? null,
+    scope: typeof json.scope === 'string' ? json.scope : null,
+    token_type: typeof json.token_type === 'string' ? json.token_type : null,
     expires_at: expiresAt,
   })
 

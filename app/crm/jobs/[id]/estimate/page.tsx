@@ -26,7 +26,7 @@ function next8amLocalValue() {
 
 export default function JobEstimatePage() {
   const params = useParams()
-  const rawId = (params as any)?.id
+  const rawId = (params as { id?: string } | null | undefined)?.id
   const id = Array.isArray(rawId) ? rawId[0] : rawId
 
   const [estimateLocal, setEstimateLocal] = useState('')

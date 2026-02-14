@@ -9,6 +9,10 @@ function base64UrlEncode(value: Buffer | string) {
     .replace(/=+$/, '')
 }
 
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
 export async function sendGmailMessage(params: {
   origin: string
   orgId: string
@@ -57,11 +61,14 @@ export async function sendGmailMessage(params: {
     body: JSON.stringify({ raw: base64UrlEncode(raw) }),
   })
 
-  const json: any = await res.json().catch(() => null)
+  const json: unknown = await res.json().catch(() => null)
   if (!res.ok) {
-    const msg = json?.error?.message ?? 'Failed to send email'
+    const obj = asRecord(json)
+    const err = asRecord(obj?.error)
+    const msg = (typeof err?.message === 'string' ? err.message : null) ?? 'Failed to send email'
     return { error: msg } as const
   }
 
-  return { messageId: json?.id as string } as const
+  const obj = asRecord(json)
+  return { messageId: typeof obj?.id === 'string' ? obj.id : '' } as const
 }

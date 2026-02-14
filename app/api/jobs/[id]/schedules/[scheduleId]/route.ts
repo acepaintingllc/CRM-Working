@@ -17,8 +17,8 @@ export async function DELETE(
 
   const { orgId, userId } = session
   const params = await Promise.resolve(context.params)
-  const jobId = (params as any)?.id
-  const scheduleId = (params as any)?.scheduleId
+  const jobId = (params as { id?: string } | null | undefined)?.id
+  const scheduleId = (params as { scheduleId?: string } | null | undefined)?.scheduleId
 
   if (!jobId || typeof jobId !== 'string' || !uuid.test(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
@@ -58,7 +58,7 @@ export async function DELETE(
     })
 
     if (!res.ok && res.status !== 404) {
-      const json: any = await res.json().catch(() => null)
+      const json: Unsafe = await res.json().catch(() => null)
       return NextResponse.json({ error: json?.error?.message ?? 'Failed to delete calendar event' }, { status: 400 })
     }
   }

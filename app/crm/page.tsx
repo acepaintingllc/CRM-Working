@@ -2,11 +2,30 @@
 
 import { authedFetch } from '@/lib/auth/authedFetch'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+
+type DashboardJob = {
+  id: string
+  status: string | null
+  title: string | null
+  customer_name: string | null
+  customer_address: string | null
+}
+
+type DashboardCustomer = {
+  id: string
+  name: string | null
+  email: string | null
+  phone: string | null
+  address: string | null
+}
 
 export default function CRMHome() {
   const [counts, setCounts] = useState<{ won: number; lost: number; total: number; winRate: number } | null>(null)
+  const [jobs, setJobs] = useState<DashboardJob[]>([])
+  const [customers, setCustomers] = useState<DashboardCustomer[]>([])
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -16,15 +35,49 @@ export default function CRMHome() {
         setCounts(null)
         return
       }
-      const jobs = payload?.jobs ?? []
-      const won = jobs.filter((j: any) => j.status === 'completed').length
-      const lost = jobs.filter((j: any) => j.status === 'lost').length
+      const jobs = (payload?.jobs ?? []) as DashboardJob[]
+      setJobs(jobs)
+      const won = jobs.filter((j) => j.status === 'completed').length
+      const lost = jobs.filter((j) => j.status === 'lost').length
       const total = won + lost
       const winRate = total > 0 ? Math.round((won / total) * 100) : 0
       setCounts({ won, lost, total, winRate })
     }
     void load()
   }, [])
+
+  useEffect(() => {
+    const loadCustomers = async () => {
+      const res = await authedFetch('/api/customers', { cache: 'no-store' })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        setCustomers([])
+        return
+      }
+      setCustomers((payload?.customers ?? []) as DashboardCustomer[])
+    }
+    void loadCustomers()
+  }, [])
+
+  const searchResults = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return { customers: [], jobs: [] }
+
+    const customerMatches = customers.filter((c) => {
+      const hay = `${c.name ?? ''} ${c.email ?? ''} ${c.phone ?? ''} ${c.address ?? ''}`.toLowerCase()
+      return hay.includes(q)
+    })
+
+    const jobMatches = jobs.filter((j) => {
+      const hay = `${j.title ?? ''} ${j.customer_name ?? ''} ${j.customer_address ?? ''}`.toLowerCase()
+      return hay.includes(q)
+    })
+
+    return {
+      customers: customerMatches.slice(0, 5),
+      jobs: jobMatches.slice(0, 5),
+    }
+  }, [customers, jobs, search])
 
   return (
     <div
@@ -77,6 +130,93 @@ export default function CRMHome() {
               <div style={statLabel}>Estimates lost</div>
               <div style={statValue}>{counts.lost}</div>
               <div style={statSub}>Marked lost</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="crm-card" style={{ borderRadius: 16, padding: 20, display: 'grid', gap: 10 }}>
+        <div style={{ fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', color: '#6b7280', fontWeight: 800 }}>
+          Global search
+        </div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search customers or jobs..."
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: '10px 12px',
+            fontSize: 14,
+            outline: 'none',
+          }}
+        />
+        {search.trim() === '' && (
+          <div style={{ fontSize: 12, color: '#6b7280' }}>Type to search across customers and jobs.</div>
+        )}
+
+        {search.trim() !== '' && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#6b7280', textTransform: 'uppercase' }}>
+                Customers
+              </div>
+              {searchResults.customers.length === 0 && (
+                <div style={{ fontSize: 13, color: '#6b7280' }}>No customer matches.</div>
+              )}
+              {searchResults.customers.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/crm/customers/${c.id}`}
+                  style={{
+                    display: 'block',
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid #e5e7eb',
+                    textDecoration: 'none',
+                    color: '#111',
+                    marginTop: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>{c.name}</div>
+                  {(c.email || c.phone) && (
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>
+                      {[c.email, c.phone].filter(Boolean).join(' | ')}
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#6b7280', textTransform: 'uppercase' }}>
+                Jobs
+              </div>
+              {searchResults.jobs.length === 0 && (
+                <div style={{ fontSize: 13, color: '#6b7280' }}>No job matches.</div>
+              )}
+              {searchResults.jobs.map((j) => (
+                <Link
+                  key={j.id}
+                  href={`/crm/jobs/${j.id}`}
+                  style={{
+                    display: 'block',
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid #e5e7eb',
+                    textDecoration: 'none',
+                    color: '#111',
+                    marginTop: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>{j.title ?? 'Untitled job'}</div>
+                  {(j.customer_name || j.customer_address) && (
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>
+                      {[j.customer_name, j.customer_address].filter(Boolean).join(' | ')}
+                    </div>
+                  )}
+                </Link>
+              ))}
             </div>
           </div>
         )}

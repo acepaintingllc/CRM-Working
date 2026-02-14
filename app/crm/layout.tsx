@@ -3,8 +3,9 @@
 import { authedFetch } from '@/lib/auth/authedFetch'
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import * as Supa from "@/lib/supabase/client";
+import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function CrmLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -27,24 +28,14 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
     let alive = true;
 
     (async () => {
-      // Supports both patterns:
-      // - export const supabaseBrowser = createClient(...)
-      // - export const supabaseBrowser = () => createClient(...)
-      const candidate =
-        (Supa as any).supabaseBrowser ??
-        (Supa as any).default;
-
-      const sb: any = typeof candidate === "function" ? candidate() : candidate;
-
-      if (!sb?.auth?.getSession) {
+      if (!supabaseBrowser?.auth?.getSession) {
         console.error("[CRM LAYOUT] Supabase client not initialized correctly.", {
-          exports: Object.keys(Supa),
-          sb,
+          hasClient: Boolean(supabaseBrowser),
         });
         return;
       }
 
-      const { data, error } = await sb.auth.getSession();
+      const { data, error } = await supabaseBrowser.auth.getSession();
       if (!alive) return;
 
       if (error || !data?.session) {
@@ -110,10 +101,13 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                 boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
               }}
             >
-              <img
+              <Image
                 src={logoSrc}
                 alt="ACE Painting"
                 onError={() => setLogoError(true)}
+                width={34}
+                height={34}
+                unoptimized
                 style={{ width: 34, height: 34, objectFit: "contain" }}
               />
             </span>

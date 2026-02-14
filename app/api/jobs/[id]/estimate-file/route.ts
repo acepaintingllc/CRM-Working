@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { findLatestEstimateFile } from '@/lib/server/googleDrive'
 
+type JobRecord = { customer_id: string | null }
+
 export async function GET(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
@@ -14,7 +16,7 @@ export async function GET(
 
   const { orgId, userId } = session
   const params = await Promise.resolve(context.params)
-  const id = (params as any)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
@@ -29,11 +31,12 @@ export async function GET(
   if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 })
   if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
 
+  const jobRow = job as JobRecord
   const { data: customer } = await supabaseAdmin
     .from('customers')
     .select('address')
     .eq('org_id', orgId)
-    .eq('id', (job as any).customer_id)
+    .eq('id', jobRow.customer_id)
     .maybeSingle()
 
   if (!customer?.address) {

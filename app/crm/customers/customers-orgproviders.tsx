@@ -33,8 +33,8 @@ export function CustomersOrgProvider({ children }: { children: React.ReactNode }
       const id = await getActiveOrgId();
       setOrgId(id);
       setLoading(false);
-    } catch (e: any) {
-      const message = e?.message ?? "Failed to load org membership.";
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Failed to load org membership.";
       if (message === "Not signed in.") {
         router.replace("/login");
         return;

@@ -20,11 +20,12 @@ export async function GET(request: Request) {
   try {
     const calendars = await listCalendars(token.accessToken)
     return NextResponse.json({ calendars })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to list calendars'
     return NextResponse.json(
       {
         error:
-          (e?.message ?? 'Failed to list calendars') +
+          message +
           '. If you just enabled Calendar, disconnect and reconnect Google to grant the new scope.',
       },
       { status: 500 }

@@ -35,9 +35,9 @@ export default function CustomersPage() {
         if (!alive) return;
 
         setRows((payload?.customers ?? []) as Customer[]);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!alive) return;
-        setErr(e?.message ?? "Failed to load customers.");
+        setErr(e instanceof Error ? e.message : "Failed to load customers.");
       } finally {
         if (!alive) return;
         setLoading(false);

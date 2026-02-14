@@ -16,6 +16,12 @@ type CustomerOption = {
   phone: string | null
 }
 
+type EmailTemplate = {
+  stage: string
+  subject: string | null
+  body: string | null
+}
+
 function addHours(startIso: string, hours: number) {
   const d = new Date(startIso)
   return new Date(d.getTime() + hours * 60 * 60 * 1000).toISOString()
@@ -133,7 +139,6 @@ export default function NewJobPage() {
   useEffect(() => {
     const cName = selectedCustomer?.name ?? 'Customer'
     const loc = selectedCustomer?.address ?? ''
-    const t = title.trim() || 'Job'
 
     setEstimateSummary(`Estimate: ${cName}`)
     setScheduledSummary(`Job - ${cName}`)
@@ -224,7 +229,8 @@ export default function NewJobPage() {
       setError(payload?.error ?? res.statusText)
       return
     }
-    const row = (payload?.templates ?? []).find((t: any) => t.stage === stage)
+    const templates = (payload?.templates ?? []) as EmailTemplate[]
+    const row = templates.find((t) => t.stage === stage)
     const estimateIso = estimateDateLocal ? toIsoFromDateTimeLocal(estimateDateLocal) : null
     const scheduledIso = scheduledDateLocal ? toIsoFromDateTimeLocal(scheduledDateLocal) : null
     const vars = buildTemplateVars(estimateIso, scheduledIso)
@@ -297,7 +303,7 @@ export default function NewJobPage() {
         }),
       })
       const text = await res.text()
-      let payload: any = null
+      let payload: { error?: string; details?: string; hint?: string; code?: string; job?: { id?: string } } | null = null
       try {
         payload = text ? JSON.parse(text) : null
       } catch {
@@ -347,8 +353,8 @@ export default function NewJobPage() {
       }
 
       router.push('/crm/jobs')
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to create job')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create job')
       setSaving(false)
       setSendingStage(null)
       return
@@ -465,7 +471,7 @@ export default function NewJobPage() {
                     style={inputStyle}
                   />
                   <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
-                    Defaults to 8:00 AM. Creates a 1 hour estimate event in "Austin's work" if enabled.
+                    Defaults to 8:00 AM. Creates a 1 hour estimate event in Austin&apos;s work if enabled.
                   </div>
                 </div>
               ) : status === 'scheduled' ? (
@@ -478,7 +484,7 @@ export default function NewJobPage() {
                     style={inputStyle}
                   />
                   <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
-                    Defaults to 8:00 AM. Creates an 8 hour scheduled event in "Austin's work" if enabled.
+                    Defaults to 8:00 AM. Creates an 8 hour scheduled event in Austin&apos;s work if enabled.
                   </div>
                 </div>
               ) : (

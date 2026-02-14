@@ -17,7 +17,7 @@ export async function POST(
 
   const { orgId, userId } = session
   const params = await Promise.resolve(context.params)
-  const jobId = (params as any)?.id
+  const jobId = (params as { id?: string } | null | undefined)?.id
   if (!jobId || typeof jobId !== 'string' || !uuid.test(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
@@ -41,7 +41,7 @@ export async function POST(
     .from('customers')
     .select('name, address')
     .eq('org_id', orgId)
-    .eq('id', (job as any).customer_id)
+    .eq('id', (job as Unsafe).customer_id)
     .maybeSingle()
 
   const { data: schedules, error: schedErr } = await supabaseAdmin
@@ -61,7 +61,7 @@ export async function POST(
     calendarName: "Austin's work",
   })
 
-  const results: any[] = []
+  const results: Unsafe[] = []
   const starts: string[] = []
   const ends: string[] = []
   for (const block of schedules) {
@@ -89,7 +89,7 @@ export async function POST(
       }),
     })
 
-    const json: any = await res.json().catch(() => null)
+    const json: Unsafe = await res.json().catch(() => null)
     if (!res.ok) {
       return NextResponse.json({ error: json?.error?.message ?? 'Failed to add calendar event' }, { status: 400 })
     }

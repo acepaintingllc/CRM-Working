@@ -29,6 +29,16 @@ function withAliases(vars: Record<string, string | null | undefined>) {
   }
 }
 
+type JobRecord = {
+  customer_id: string | null
+  title: string | null
+  estimate_date: string | null
+  scheduled_date: string | null
+}
+
+type ScheduleRow = { start_at: string | null; end_at: string | null }
+type ErrorLike = { message?: unknown; stack?: unknown }
+
 export async function POST(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
@@ -42,7 +52,7 @@ export async function POST(
 
     const { orgId, userId } = session
     const params = await Promise.resolve(context.params)
-    const id = (params as any)?.id
+    const id = (params as { id?: string } | null | undefined)?.id
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
     }
@@ -57,11 +67,12 @@ export async function POST(
     if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 })
     if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
 
+    const jobRow = job as JobRecord
     const { data: customer } = await supabaseAdmin
       .from('customers')
       .select('id, name, email, phone, address')
       .eq('org_id', orgId)
-      .eq('id', (job as any).customer_id)
+      .eq('id', jobRow.customer_id)
       .maybeSingle()
 
     if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
@@ -123,7 +134,7 @@ export async function POST(
       attachment = {
         filename: fileResult.file.name,
         data: download.buffer,
-        link: (fileResult.file as any).webViewLink ?? null,
+        link: fileResult.file.webViewLink ?? null,
       }
     }
 
@@ -135,9 +146,10 @@ export async function POST(
       .order('start_at', { ascending: true })
 
     const scheduledBlocks = (scheduleRows ?? [])
-      .map((row: any) => {
-        if (!row?.start_at || !row?.end_at) return null
-        return `${new Date(row.start_at).toLocaleString()} - ${new Date(row.end_at).toLocaleString()}`
+      .map((row) => {
+        const r = row as ScheduleRow
+        if (!r.start_at || !r.end_at) return null
+        return `${new Date(r.start_at).toLocaleString()} - ${new Date(r.end_at).toLocaleString()}`
       })
       .filter(Boolean)
       .join('\n')
@@ -147,12 +159,12 @@ export async function POST(
       customerEmail: customer.email ?? '',
       customerPhone: customer.phone ?? '',
       customerAddress: customer.address ?? '',
-      jobTitle: (job as any).title ?? '',
-      estimateDate: (job as any).estimate_date
-        ? new Date((job as any).estimate_date).toLocaleString()
+      jobTitle: jobRow.title ?? '',
+      estimateDate: jobRow.estimate_date
+        ? new Date(jobRow.estimate_date).toLocaleString()
         : '',
-      scheduledDate: (job as any).scheduled_date
-        ? new Date((job as any).scheduled_date).toLocaleString()
+      scheduledDate: jobRow.scheduled_date
+        ? new Date(jobRow.scheduled_date).toLocaleString()
         : '',
       scheduledBlocks,
       estimateFileName: attachment.filename ?? '',
@@ -196,12 +208,13 @@ export async function POST(
         webViewLink: attachment.link ?? null,
       },
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const err = e as ErrorLike
     console.error('send-estimate failed', e)
     return NextResponse.json(
       {
-        error: e?.message ?? 'Unhandled error sending estimate',
-        details: e?.stack ?? null,
+        error: typeof err.message === 'string' ? err.message : 'Unhandled error sending estimate',
+        details: typeof err.stack === 'string' ? err.stack : null,
       },
       { status: 500 }
     )

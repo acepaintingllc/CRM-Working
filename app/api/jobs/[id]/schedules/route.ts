@@ -16,7 +16,7 @@ export async function GET(
 
   const { orgId } = session
   const params = await Promise.resolve(context.params)
-  const jobId = (params as any)?.id
+  const jobId = (params as { id?: string } | null | undefined)?.id
   if (!jobId || typeof jobId !== 'string' || !uuid.test(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
@@ -44,7 +44,7 @@ export async function POST(
 
   const { orgId } = session
   const params = await Promise.resolve(context.params)
-  const jobId = (params as any)?.id
+  const jobId = (params as { id?: string } | null | undefined)?.id
   if (!jobId || typeof jobId !== 'string' || !uuid.test(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
@@ -78,11 +78,37 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  await supabaseAdmin
+  const { data: allRows, error: allRowsErr } = await supabaseAdmin
+    .from('job_schedules')
+    .select('start_at, end_at')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+
+  if (allRowsErr) return NextResponse.json({ error: allRowsErr.message }, { status: 500 })
+
+  const starts = (allRows ?? [])
+    .map((r) => r.start_at)
+    .filter((v): v is string => typeof v === 'string')
+    .sort()
+  const ends = (allRows ?? [])
+    .map((r) => r.end_at)
+    .filter((v): v is string => typeof v === 'string')
+    .sort()
+
+  const scheduledDate = starts[0] ?? body.start_at
+  const scheduledEndDate = ends[ends.length - 1] ?? body.end_at
+
+  const { error: updateErr } = await supabaseAdmin
     .from('jobs')
-    .update({ status: 'scheduled', scheduled_date: body.start_at, scheduled_end_date: body.end_at })
+    .update({
+      status: 'scheduled',
+      scheduled_date: scheduledDate,
+      scheduled_end_date: scheduledEndDate,
+    })
     .eq('org_id', orgId)
     .eq('id', jobId)
+
+  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
   return NextResponse.json({ ok: true, schedule: data })
 }

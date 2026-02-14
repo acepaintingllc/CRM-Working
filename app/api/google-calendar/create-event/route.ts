@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken, resolveCalendarId } from '@/lib/server/googleCalendar'
 
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
 export async function POST(request: Request) {
   const session = await getSessionUserOrg()
   if ('error' in session) {
@@ -54,17 +58,22 @@ export async function POST(request: Request) {
       body: JSON.stringify(payload),
     }
   )
-  const json: any = await res.json().catch(() => null)
+  const json: unknown = await res.json().catch(() => null)
+  const obj = asRecord(json)
   if (!res.ok) {
-    const msg = json?.error?.message ?? json?.error_description ?? 'Failed to create event'
+    const err = asRecord(obj?.error)
+    const msg =
+      (typeof err?.message === 'string' ? err.message : null) ??
+      (typeof obj?.error_description === 'string' ? obj.error_description : null) ??
+      'Failed to create event'
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 
   return NextResponse.json({
     ok: true,
     event: {
-      id: json.id,
-      htmlLink: json.htmlLink ?? null,
+      id: typeof obj?.id === 'string' ? obj.id : '',
+      htmlLink: typeof obj?.htmlLink === 'string' ? obj.htmlLink : null,
     },
   })
 }

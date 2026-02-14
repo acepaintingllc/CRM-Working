@@ -13,28 +13,12 @@ type CalendarInfo = {
   foregroundColor: string | null
 }
 
-type CalendarEvent = {
-  id: string
-  calendarId: string
-  summary: string | null
-  start: string | null
-  end: string | null
-  htmlLink: string | null
-}
-
 export default function CalendarPage() {
   const searchParams = useSearchParams()
   const [connected, setConnected] = useState<boolean | null>(null)
-  const [calendars, setCalendars] = useState<CalendarInfo[]>([])
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const calendarById = useMemo(() => {
-    const map = new Map<string, CalendarInfo>()
-    for (const c of calendars) map.set(c.id, c)
-    return map
-  }, [calendars])
 
   const loadStatusAndCalendars = async () => {
     setLoading(true)
@@ -45,7 +29,6 @@ export default function CalendarPage() {
     if (!statusRes.ok) {
       setError(statusPayload?.error ?? statusRes.statusText)
       setConnected(false)
-      setCalendars([])
       setSelectedCalendarIds([])
       setLoading(false)
       return
@@ -55,7 +38,6 @@ export default function CalendarPage() {
     setConnected(isConnected)
 
     if (!isConnected) {
-      setCalendars([])
       setSelectedCalendarIds([])
       setLoading(false)
       return
@@ -65,14 +47,12 @@ export default function CalendarPage() {
     const calPayload = await calRes.json().catch(() => null)
     if (!calRes.ok) {
       setError(calPayload?.error ?? calRes.statusText)
-      setCalendars([])
       setSelectedCalendarIds([])
       setLoading(false)
       return
     }
 
     const list: CalendarInfo[] = calPayload?.calendars ?? []
-    setCalendars(list)
 
     // Keep selection stable (localStorage), default to "Austin's work" + primary.
     const stored = (() => {
@@ -100,13 +80,11 @@ export default function CalendarPage() {
 
   useEffect(() => {
     void loadStatusAndCalendars()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     const err = searchParams.get('error')
     if (err) setError(err)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   useEffect(() => {
@@ -195,7 +173,7 @@ export default function CalendarPage() {
 
       {!connected ? (
         <div style={{ marginTop: 12, color: '#6b7280' }}>
-          Not connected. Click "Connect Google" to link your calendar.
+          Not connected. Click &quot;Connect Google&quot; to link your calendar.
         </div>
       ) : (
         <>

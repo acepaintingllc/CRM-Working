@@ -8,6 +8,31 @@ type TokenRow = {
   token_type: string | null
 }
 
+type GoogleCalendarListItem = {
+  id?: unknown
+  summary?: unknown
+  summaryOverride?: unknown
+  primary?: unknown
+  backgroundColor?: unknown
+  foregroundColor?: unknown
+  selected?: unknown
+}
+
+type GoogleOAuthTokenResponse = {
+  access_token?: unknown
+  refresh_token?: unknown
+  expires_in?: unknown
+  scope?: unknown
+  token_type?: unknown
+  error?: unknown
+  error_description?: unknown
+  items?: unknown
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
 function requireEnv(name: string) {
   const value = process.env[name]
   if (!value) throw new Error(`Missing env var: ${name}`)
@@ -30,19 +55,28 @@ export async function listCalendars(accessToken: string) {
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  const json: any = await res.json().catch(() => null)
+  const json: GoogleOAuthTokenResponse = await res.json().catch(() => ({}))
   if (!res.ok) {
+    const err = asRecord(json.error)
     const msg =
-      json?.error?.message ?? json?.error_description ?? 'Failed to list calendars'
+      (typeof err?.message === 'string' ? err.message : null) ??
+      (typeof json.error_description === 'string' ? json.error_description : null) ??
+      'Failed to list calendars'
     throw new Error(msg)
   }
 
-  const items = (json?.items ?? []).map((c: any) => ({
-    id: c.id as string,
-    summary: (c.summary ?? c.summaryOverride ?? null) as string | null,
+  const rawItems = Array.isArray(json.items) ? (json.items as GoogleCalendarListItem[]) : []
+  const items = rawItems.map((c) => ({
+    id: typeof c.id === 'string' ? c.id : '',
+    summary:
+      typeof c.summary === 'string'
+        ? c.summary
+        : typeof c.summaryOverride === 'string'
+          ? c.summaryOverride
+          : null,
     primary: Boolean(c.primary),
-    backgroundColor: (c.backgroundColor ?? null) as string | null,
-    foregroundColor: (c.foregroundColor ?? null) as string | null,
+    backgroundColor: typeof c.backgroundColor === 'string' ? c.backgroundColor : null,
+    foregroundColor: typeof c.foregroundColor === 'string' ? c.foregroundColor : null,
     selected: Boolean(c.selected),
   }))
 
@@ -84,7 +118,7 @@ export async function getTokenRow(orgId: string, userId: string) {
     .maybeSingle()
 
   if (error) throw error
-  return (data as any as TokenRow) ?? null
+  return (data as TokenRow | null) ?? null
 }
 
 export async function upsertTokenRow(params: {
@@ -151,27 +185,37 @@ export async function refreshAccessToken(params: {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),
   })
-  const json: any = await res.json().catch(() => null)
+  const json: GoogleOAuthTokenResponse = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(json?.error_description ?? json?.error ?? 'Failed to refresh token')
+    const err =
+      typeof json.error_description === 'string'
+        ? json.error_description
+        : typeof json.error === 'string'
+          ? json.error
+          : 'Failed to refresh token'
+    throw new Error(err)
   }
 
-  const expiresAt = json?.expires_in
-    ? new Date(Date.now() + Number(json.expires_in) * 1000).toISOString()
+  const expiresAt =
+    json.expires_in != null
+      ? new Date(Date.now() + Number(json.expires_in) * 1000).toISOString()
     : null
+
+  const accessToken = typeof json.access_token === 'string' ? json.access_token : null
+  if (!accessToken) throw new Error('Google token response missing access_token')
 
   await upsertTokenRow({
     orgId: params.orgId,
     userId: params.userId,
-    access_token: json.access_token,
+    access_token: accessToken,
     // keep refresh token unchanged on refresh flows
     refresh_token: params.refreshToken,
-    scope: json.scope ?? null,
-    token_type: json.token_type ?? null,
+    scope: typeof json.scope === 'string' ? json.scope : null,
+    token_type: typeof json.token_type === 'string' ? json.token_type : null,
     expires_at: expiresAt,
   })
 
-  return json.access_token as string
+  return accessToken
 }
 
 export async function getValidAccessToken(params: {

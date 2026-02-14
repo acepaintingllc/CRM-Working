@@ -23,9 +23,18 @@ type CustomerListItem = {
   address: string | null
 }
 
+type CustomerTimelineEvent = {
+  id: string
+  type: string
+  title: string | null
+  body: string
+  created_at: string | null
+  created_by: string | null
+}
+
 export default function CustomerDetailPage() {
   const params = useParams()
-  const rawId = (params as any)?.id
+  const rawId = (params as { id?: string } | null | undefined)?.id
   const id = Array.isArray(rawId) ? rawId[0] : rawId
 
   const router = useRouter()
@@ -62,6 +71,12 @@ export default function CustomerDetailPage() {
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [listCustomers, setListCustomers] = useState<CustomerListItem[]>([])
+
+  const [timelineLoading, setTimelineLoading] = useState(false)
+  const [timelineError, setTimelineError] = useState<string | null>(null)
+  const [timelineEvents, setTimelineEvents] = useState<CustomerTimelineEvent[]>([])
+  const [noteBody, setNoteBody] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
 
   const copy = async (label: string, value: string | null) => {
     if (!value) return
@@ -125,6 +140,30 @@ export default function CustomerDetailPage() {
     setListLoading(false)
   }, [])
 
+  const loadTimeline = useCallback(async () => {
+    if (typeof id !== 'string' || !id) {
+      setTimelineEvents([])
+      setTimelineLoading(false)
+      return
+    }
+
+    setTimelineLoading(true)
+    setTimelineError(null)
+
+    const response = await authedFetch(`/api/customers/${id}/timeline`, { cache: 'no-store' })
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      setTimelineError(payload?.error ?? response.statusText)
+      setTimelineEvents([])
+      setTimelineLoading(false)
+      return
+    }
+
+    setTimelineEvents(payload?.events ?? [])
+    setTimelineLoading(false)
+  }, [id])
+
   useEffect(() => {
     void loadCustomer()
   }, [loadCustomer])
@@ -134,13 +173,18 @@ export default function CustomerDetailPage() {
   }, [loadList])
 
   useEffect(() => {
+    void loadTimeline()
+  }, [loadTimeline])
+
+  useEffect(() => {
     const handler = () => {
       void loadCustomer()
       void loadList()
+      void loadTimeline()
     }
     window.addEventListener('customers:refresh', handler)
     return () => window.removeEventListener('customers:refresh', handler)
-  }, [loadCustomer, loadList])
+  }, [loadCustomer, loadList, loadTimeline])
 
   const filteredList = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -155,6 +199,7 @@ export default function CustomerDetailPage() {
   }, [hasEmail, hasPhone, listCustomers, query])
 
   const listQueryString = searchParams.toString()
+  const detailPathWithQuery = `${pathname}${listQueryString ? `?${listQueryString}` : ''}`
 
   const renderRow = (label: string, value: string | null | undefined) => (
     <div style={{ marginTop: 12 }}>
@@ -344,6 +389,12 @@ export default function CustomerDetailPage() {
                   >
                     Create job
                   </Link>
+                  <Link
+                    href={`/crm/customers/${customer.id}/edit?returnTo=${encodeURIComponent(detailPathWithQuery)}`}
+                    style={{ ...actionButton, textDecoration: 'none' }}
+                  >
+                    Edit
+                  </Link>
                   <button
                     onClick={async () => {
                       if (!id || typeof id !== 'string') return
@@ -375,6 +426,97 @@ export default function CustomerDetailPage() {
                 )}
               </>
             )}
+          </div>
+
+          <div className="crm-card" style={{ borderRadius: 12, padding: 20, marginTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800 }}>Timeline</div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>Notes and key moments.</div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <textarea
+                value={noteBody}
+                onChange={(e) => setNoteBody(e.target.value)}
+                placeholder="Add a note about this customer..."
+                rows={3}
+                style={{
+                  width: '100%',
+                  borderRadius: 10,
+                  border: '1px solid #d1d5db',
+                  padding: '10px 12px',
+                  fontSize: 14,
+                }}
+              />
+              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={async () => {
+                    if (!noteBody.trim() || !id || typeof id !== 'string') return
+                    setNoteSaving(true)
+                    const res = await authedFetch(`/api/customers/${id}/timeline`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ body: noteBody.trim() }),
+                    })
+                    const payload = await res.json().catch(() => null)
+                    setNoteSaving(false)
+                    if (!res.ok) {
+                      setTimelineError(payload?.error ?? res.statusText)
+                      return
+                    }
+                    setNoteBody('')
+                    void loadTimeline()
+                  }}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    background: '#111',
+                    color: 'white',
+                    border: '1px solid #111',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                  disabled={noteSaving}
+                >
+                  {noteSaving ? 'Saving...' : 'Add note'}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              {timelineLoading && <div style={{ color: '#6b7280' }}>Loading timeline...</div>}
+              {!timelineLoading && timelineError && <div style={{ color: '#b91c1c' }}>{timelineError}</div>}
+              {!timelineLoading && !timelineError && timelineEvents.length === 0 && (
+                <div style={{ color: '#6b7280' }}>No timeline events yet.</div>
+              )}
+              {!timelineLoading &&
+                !timelineError &&
+                timelineEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    style={{
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 10,
+                      padding: '10px 12px',
+                      marginTop: 10,
+                      background: 'white',
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 700 }}>
+                      {event.type.toUpperCase()}
+                    </div>
+                    {event.title && (
+                      <div style={{ marginTop: 4, fontWeight: 700 }}>{event.title}</div>
+                    )}
+                    <div style={{ marginTop: 6, fontSize: 14, whiteSpace: 'pre-wrap' }}>{event.body}</div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: '#9ca3af' }}>
+                      {event.created_at ? new Date(event.created_at).toLocaleString() : 'Unknown time'}
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
 
           <Link

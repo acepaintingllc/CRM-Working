@@ -1,6 +1,39 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 
+type ErrorLike = {
+  message: string
+  details?: unknown
+  hint?: unknown
+  code?: unknown
+  stack?: unknown
+}
+
+type JobRow = {
+  customer_id?: string | null
+  title?: string | null
+  status?: string | null
+  [key: string]: unknown
+}
+
+type CustomerRow = {
+  id: string
+  name?: string | null
+  address?: string | null
+}
+
+function detailMeta(error: Partial<ErrorLike>) {
+  return {
+    details: typeof error.details === 'string' ? error.details : null,
+    hint: typeof error.hint === 'string' ? error.hint : null,
+    code: typeof error.code === 'string' ? error.code : null,
+  }
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' ? value : null
+}
+
 export async function GET() {
   const session = await getSessionUserOrg()
   if ('error' in session) {
@@ -22,18 +55,16 @@ export async function GET() {
     return NextResponse.json(
       {
         error: error.message,
-        details: (error as any).details ?? null,
-        hint: (error as any).hint ?? null,
-        code: (error as any).code ?? null,
+        ...detailMeta(error as Partial<ErrorLike>),
       },
       { status: 500 }
     )
   }
 
-  const rows: any[] = data ?? []
+  const rows = (data ?? []) as JobRow[]
   const customerIds = Array.from(new Set(rows.map((r) => r.customer_id).filter(Boolean)))
 
-  let customerById = new Map<string, { name: string | null; address: string | null }>()
+  const customerById = new Map<string, { name: string | null; address: string | null }>()
   if (customerIds.length) {
     const { data: customers, error: cErr } = await supabaseAdmin
       .from('customers')
@@ -43,12 +74,12 @@ export async function GET() {
 
     if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 })
 
-    for (const c of customers ?? []) {
-      customerById.set(c.id, { name: (c as any).name ?? null, address: (c as any).address ?? null })
+    for (const c of (customers ?? []) as CustomerRow[]) {
+      customerById.set(c.id, { name: c.name ?? null, address: c.address ?? null })
     }
   }
 
-  const jobs = rows.map((row: any) => {
+  const jobs = rows.map((row) => {
     const customer = row.customer_id ? customerById.get(row.customer_id) : undefined
     return {
       ...row,
@@ -72,23 +103,28 @@ export async function POST(request: Request) {
     }
 
     const { orgId } = session
-    const body = await request.json().catch(() => null)
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
 
-    if (!body?.customer_id || !body?.title) {
+    const customerId = asString(body.customer_id)
+    const title = asString(body.title)
+    if (!customerId || !title) {
       return NextResponse.json(
         { error: 'Missing customer_id or title' },
         { status: 400 }
       )
     }
 
-    const status = (body.status as string) || 'estimate_scheduled'
+    const status = asString(body.status) || 'estimate_scheduled'
 
     // Build payload defensively. If a column doesn't exist yet in the DB (schema still evolving),
     // including it (even as null) will cause PostgREST errors. Only send provided non-null fields.
-    const insertPayload: Record<string, any> = {
+    const insertPayload: Record<string, unknown> = {
       org_id: orgId,
-      customer_id: body.customer_id,
-      title: String(body.title),
+      customer_id: customerId,
+      title,
       description: body.description ? String(body.description) : null,
       status,
     }
@@ -104,7 +140,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const insertOnce = async (payload: Record<string, any>) => {
+    const insertOnce = async (payload: Record<string, unknown>) => {
       return supabaseAdmin
         .from('jobs')
         .insert(payload)
@@ -125,7 +161,7 @@ export async function POST(request: Request) {
       const missingCustomerId = msg.includes('customer_id') && msg.includes('does not exist')
 
       if (needsPropertyId || missingCustomerId) {
-        const retryPayload: Record<string, any> = { ...insertPayload }
+        const retryPayload: Record<string, unknown> = { ...insertPayload }
         // Some schemas require both customer_id and property_id. If customer_id doesn't exist,
         // we must omit it. Otherwise, keep it and also set property_id.
         if (missingCustomerId) {
@@ -140,12 +176,12 @@ export async function POST(request: Request) {
             .from('properties')
             .select('id')
             .eq('org_id', orgId)
-            .eq('customer_id', body.customer_id)
+            .eq('customer_id', customerId)
             .limit(1)
             .maybeSingle()
 
           if (!lookup.error && lookup.data?.id) {
-            propertyId = lookup.data.id as any
+            propertyId = String(lookup.data.id)
           }
         } catch {
           // ignore and attempt insert
@@ -157,10 +193,11 @@ export async function POST(request: Request) {
             .from('customers')
             .select('id, name, address')
             .eq('org_id', orgId)
-            .eq('id', body.customer_id)
+            .eq('id', customerId)
             .maybeSingle()
 
-          const addr = ((customer as any)?.address ?? '') as string
+          const customerRow = (customer ?? null) as { name?: string | null; address?: string | null } | null
+          const addr = customerRow?.address ?? ''
           const parts = addr.split(',').map((p) => p.trim()).filter(Boolean)
           const street = parts[0] ?? 'Unknown'
           const city = parts[1] ?? 'Unknown'
@@ -168,16 +205,16 @@ export async function POST(request: Request) {
           const stateMatch = stateZip.match(/([A-Za-z]{2})/)
           const zipMatch = stateZip.match(/(\d{5})(?:-\d{4})?/)
 
-          const base: Record<string, any> = {
+          const base: Record<string, unknown> = {
             org_id: orgId,
-            customer_id: body.customer_id,
-            name: (customer as any)?.name ?? 'Property',
+            customer_id: customerId,
+            name: customerRow?.name ?? 'Property',
             street,
             city,
             state: stateMatch?.[1] ?? 'NA',
             zip: zipMatch?.[1] ?? '00000',
           }
-          if (!(base as any).full_address) {
+          if (!base.full_address) {
             const fullAddress = [street, city, [base.state, base.zip].join(' ').trim()]
               .filter(Boolean)
               .join(', ')
@@ -187,7 +224,7 @@ export async function POST(request: Request) {
           }
 
           // Retry loop that strips unknown columns if your properties schema differs.
-          let propPayload: Record<string, any> = { ...base }
+          const propPayload: Record<string, unknown> = { ...base }
           for (let i = 0; i < 6; i++) {
             const created = await supabaseAdmin
               .from('properties')
@@ -196,7 +233,8 @@ export async function POST(request: Request) {
               .single()
 
             if (!created.error) {
-              propertyId = (created.data as any).id
+              propertyId = String((created.data as { id?: string | null } | null)?.id ?? '')
+              if (!propertyId) propertyId = null
               break
             }
 
@@ -212,9 +250,7 @@ export async function POST(request: Request) {
             return NextResponse.json(
               {
                 error: created.error.message,
-                details: (created.error as any).details ?? null,
-                hint: (created.error as any).hint ?? null,
-                code: (created.error as any).code ?? null,
+                ...detailMeta(created.error as Partial<ErrorLike>),
               },
               { status: 500 }
             )
@@ -226,8 +262,8 @@ export async function POST(request: Request) {
         }
 
         const retry = await insertOnce(retryPayload)
-        data = retry.data as any
-        error = retry.error as any
+        data = retry.data
+        error = retry.error
       }
     }
 
@@ -235,20 +271,19 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: error.message,
-          details: (error as any).details ?? null,
-          hint: (error as any).hint ?? null,
-          code: (error as any).code ?? null,
+          ...detailMeta(error as Partial<ErrorLike>),
         },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ ok: true, job: data })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const err = e as Partial<ErrorLike>
     return NextResponse.json(
       {
-        error: e?.message ?? 'Unhandled error creating job',
-        details: e?.stack ?? null,
+        error: typeof err.message === 'string' ? err.message : 'Unhandled error creating job',
+        details: typeof err.stack === 'string' ? err.stack : null,
       },
       { status: 500 }
     )

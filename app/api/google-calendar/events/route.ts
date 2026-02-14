@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken } from '@/lib/server/googleCalendar'
 
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
 function monthRange(month: string) {
   // month: YYYY-MM
   const [y, m] = month.split('-').map((v) => Number(v))
@@ -52,31 +56,46 @@ export async function GET(request: Request) {
     const res = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${token.accessToken}` },
     })
-    const json: any = await res.json().catch(() => null)
+    const json: unknown = await res.json().catch(() => null)
+    const obj = asRecord(json)
     if (!res.ok) {
-      const msg = json?.error?.message ?? json?.error_description ?? 'Failed to fetch events'
+      const err = asRecord(obj?.error)
+      const msg =
+        (typeof err?.message === 'string' ? err.message : null) ??
+        (typeof obj?.error_description === 'string' ? obj.error_description : null) ??
+        'Failed to fetch events'
       throw new Error(msg)
     }
 
-    return (json?.items ?? []).map((e: any) => ({
-      id: e.id,
+    const items = Array.isArray(obj?.items) ? obj.items : []
+    return items.map((entry) => {
+      const e = asRecord(entry)
+      const start = asRecord(e?.start)
+      const end = asRecord(e?.end)
+      return {
+      id: typeof e?.id === 'string' ? e.id : '',
       calendarId,
-      summary: e.summary ?? null,
-      start: e.start?.dateTime ?? e.start?.date ?? null,
-      end: e.end?.dateTime ?? e.end?.date ?? null,
-      htmlLink: e.htmlLink ?? null,
-    }))
+      summary: typeof e?.summary === 'string' ? e.summary : null,
+      start:
+        (typeof start?.dateTime === 'string' ? start.dateTime : null) ??
+        (typeof start?.date === 'string' ? start.date : null),
+      end:
+        (typeof end?.dateTime === 'string' ? end.dateTime : null) ??
+        (typeof end?.date === 'string' ? end.date : null),
+      htmlLink: typeof e?.htmlLink === 'string' ? e.htmlLink : null,
+    }})
   }
 
   try {
     const lists = await Promise.all(calendarIds.map((id) => fetchOne(id)))
     const events = lists.flat()
     return NextResponse.json({ events, timeMin, timeMax: timeMax ?? null })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to fetch events'
     return NextResponse.json(
       {
         error:
-          (e?.message ?? 'Failed to fetch events') +
+          message +
           '. If you just enabled Calendar, disconnect and reconnect Google to grant the new scope.',
       },
       { status: 500 }

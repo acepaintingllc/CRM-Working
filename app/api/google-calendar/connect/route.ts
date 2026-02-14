@@ -17,9 +17,10 @@ export async function GET(request: Request) {
   let redirectUri: string
   try {
     ;({ clientId, redirectUri } = getGoogleOAuthConfig(origin))
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Missing Google OAuth env vars'
     const url = new URL(next, origin)
-    url.searchParams.set('error', e?.message ?? 'Missing Google OAuth env vars')
+    url.searchParams.set('error', message)
     return NextResponse.redirect(url.toString())
   }
 
@@ -32,14 +33,16 @@ export async function GET(request: Request) {
   authUrl.searchParams.set('access_type', 'offline')
   authUrl.searchParams.set('prompt', 'consent')
   authUrl.searchParams.set('include_granted_scopes', 'true')
-  // Calendar + Drive (estimate PDFs) + Gmail send.
+  // Calendar + Drive (estimate PDFs + estimate sheets) + Sheets write + Gmail send + Apps Script run.
   // Using broad scopes to avoid "insufficient authentication scopes" errors.
   authUrl.searchParams.set(
     'scope',
     [
       'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/script.projects',
     ].join(' ')
   )
   authUrl.searchParams.set('state', state)

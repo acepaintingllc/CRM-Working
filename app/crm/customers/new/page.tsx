@@ -53,8 +53,8 @@ export default function NewCustomerPage() {
 
       router.push("/crm/customers");
       router.refresh();
-    } catch (e: any) {
-      setErr(e?.message ?? "Failed to create customer.");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed to create customer.");
     } finally {
       setSaving(false);
     }

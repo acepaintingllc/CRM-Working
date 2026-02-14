@@ -14,9 +14,10 @@ export async function POST() {
   try {
     await deleteTokenRow(orgId, userId)
     return NextResponse.json({ ok: true })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to disconnect'
     return NextResponse.json(
-      { error: e?.message ?? 'Failed to disconnect' },
+      { error: message },
       { status: 500 }
     )
   }

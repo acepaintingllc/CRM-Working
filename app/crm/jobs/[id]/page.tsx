@@ -1,7 +1,5 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -24,9 +22,15 @@ type JobDetail = {
   created_at?: string | null
 }
 
+type EmailTemplate = {
+  stage: string
+  subject: string | null
+  body: string | null
+}
+
 export default function JobDetailPage() {
   const params = useParams()
-  const rawId = (params as any)?.id
+  const rawId = (params as { id?: string } | null | undefined)?.id
   const id = Array.isArray(rawId) ? rawId[0] : rawId
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -35,7 +39,6 @@ export default function JobDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [sending, setSending] = useState(false)
   const [estimateFile, setEstimateFile] = useState<{
     id: string
     name: string
@@ -48,6 +51,7 @@ export default function JobDetailPage() {
   const [composeBody, setComposeBody] = useState('')
   const [composeLoading, setComposeLoading] = useState(false)
   const [sendingStage, setSendingStage] = useState<string | null>(null)
+  const [creatingEstimateSheet, setCreatingEstimateSheet] = useState(false)
 
   useEffect(() => {
     if (typeof id !== 'string' || !id) {
@@ -62,7 +66,7 @@ export default function JobDetailPage() {
       setLoading(true)
       setError(null)
       setNotice(null)
-      const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
+      const res = await fetch(`/api/jobs/${id}`, { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         setError(payload?.error ?? res.statusText)
@@ -72,7 +76,7 @@ export default function JobDetailPage() {
       }
       setJob(payload?.job ?? null)
       setEstimateFile(null)
-      const fileRes = await authedFetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' })
+      const fileRes = await fetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' })
       const filePayload = await fileRes.json().catch(() => null)
       if (fileRes.ok && filePayload?.file) {
         setEstimateFile({
@@ -114,9 +118,9 @@ export default function JobDetailPage() {
     window.setTimeout(() => setNotice(null), 1200)
   }
 
-  const patchJob = async (patch: Record<string, any>) => {
+  const patchJob = async (patch: Record<string, unknown>) => {
     if (!id || typeof id !== 'string') return
-    const res = await authedFetch(`/api/jobs/${id}`, {
+    const res = await fetch(`/api/jobs/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -131,66 +135,27 @@ export default function JobDetailPage() {
 
   const nowIso = () => new Date().toISOString()
 
-  const sendEstimate = async () => {
+  const createEstimateSheet = async () => {
     if (!id || typeof id !== 'string') return
-    setSending(true)
+    setCreatingEstimateSheet(true)
     setError(null)
     setNotice(null)
-    const res = manualFile
-      ? await authedFetch(`/api/jobs/${id}/send-estimate`, {
-          method: 'POST',
-          body: (() => {
-            const form = new FormData()
-            form.set('file', manualFile)
-            return form
-          })(),
-        })
-      : await authedFetch(`/api/jobs/${id}/send-estimate`, { method: 'POST' })
-    const payload = await res.json().catch(() => null)
-    setSending(false)
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
-      return
-    }
-    setNotice('Estimate email sent')
-    setJob((prev) =>
-      prev ? { ...prev, estimate_sent_at: new Date().toISOString(), status: 'estimate_sent' } : prev
-    )
-    if (payload?.estimateFile?.id) {
-      if (payload.estimateFile.webViewLink) {
-        setEstimateFile(payload.estimateFile)
-      } else if (!manualFile) {
-        const fileRes = await authedFetch(`/api/google-drive/files/${payload.estimateFile.id}`)
-        const filePayload = await fileRes.json().catch(() => null)
-        if (fileRes.ok && filePayload?.file) {
-          setEstimateFile(filePayload.file)
-        } else {
-          setEstimateFile({
-            id: payload.estimateFile.id,
-            name: payload.estimateFile.name,
-            webViewLink: null,
-          })
-        }
-      }
-    }
-  }
 
-  const sendStageEmail = async (stage: string) => {
-    if (!id || typeof id !== 'string') return
-    setSendingStage(stage)
-    setError(null)
-    const res = await authedFetch(`/api/jobs/${id}/send-stage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage }),
-    })
+    const res = await fetch(`/api/jobs/${id}/estimate-sheet`, { method: 'POST' })
     const payload = await res.json().catch(() => null)
-    setSendingStage(null)
+    setCreatingEstimateSheet(false)
+
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)
       return
     }
-    setNotice('Stage email sent')
+
+    const url = payload?.sheet?.webViewLink ?? payload?.sheet?.editUrl ?? null
+    if (typeof url === 'string' && url) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+    setNotice('Estimate sheet created')
+    window.setTimeout(() => setNotice(null), 2000)
   }
 
   const deleteJob = async () => {
@@ -199,7 +164,7 @@ export default function JobDetailPage() {
     if (!ok) return
     setDeleting(true)
     setError(null)
-    const res = await authedFetch(`/api/jobs/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/jobs/${id}`, { method: 'DELETE' })
     const payload = await res.json().catch(() => null)
     setDeleting(false)
     if (!res.ok) {
@@ -213,14 +178,15 @@ export default function JobDetailPage() {
     setComposeStage(stage)
     setComposeLoading(true)
     setError(null)
-    const res = await authedFetch('/api/email-templates', { cache: 'no-store' })
+    const res = await fetch('/api/email-templates', { cache: 'no-store' })
     const payload = await res.json().catch(() => null)
     setComposeLoading(false)
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)
       return
     }
-    const row = (payload?.templates ?? []).find((t: any) => t.stage === stage)
+    const templates = (payload?.templates ?? []) as EmailTemplate[]
+    const row = templates.find((t) => t.stage === stage)
     const subject = applyTemplate(row?.subject ?? '')
     const body = applyTemplate(row?.body ?? '')
     setComposeSubject(subject)
@@ -238,7 +204,7 @@ export default function JobDetailPage() {
       form.set('subject', composeSubject)
       form.set('body', composeBody)
       if (manualFile) form.set('file', manualFile)
-      const res = await authedFetch(`/api/jobs/${id}/send-estimate`, { method: 'POST', body: form })
+      const res = await fetch(`/api/jobs/${id}/send-estimate`, { method: 'POST', body: form })
       const payload = await res.json().catch(() => null)
       setSendingStage(null)
       if (!res.ok) {
@@ -249,7 +215,7 @@ export default function JobDetailPage() {
       return
     }
 
-    const res = await authedFetch(`/api/jobs/${id}/send-stage`, {
+    const res = await fetch(`/api/jobs/${id}/send-stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: composeStage, subject: composeSubject, body: composeBody }),
@@ -259,6 +225,9 @@ export default function JobDetailPage() {
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)
       return
+    }
+    if (composeStage === 'scheduled') {
+      setJob((prev) => (prev ? { ...prev, status: 'scheduled' } : prev))
     }
     setNotice('Email sent')
   }
@@ -351,6 +320,8 @@ export default function JobDetailPage() {
       </div>
     </div>
   )
+
+  const canSendScheduledEmail = Boolean(job?.scheduled_date || job?.scheduled_end_date)
 
   return (
     <div className="crm-page" style={{ maxWidth: 900, margin: '0 auto', paddingTop: 12 }}>
@@ -518,42 +489,71 @@ export default function JobDetailPage() {
             <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
               <div className="crm-actions" style={{ gap: 8, alignItems: 'center' }}>
               {job.status === 'estimate_scheduled' && (
-                <button
-                  onClick={() => void openComposer('estimate_scheduled')}
-                  style={smallButton}
-                >
-                  Edit & send estimate scheduled
-                </button>
+                <>
+                  <Link
+                    href={`/crm/jobs/${id}/simple-estimate`}
+                    style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                  >
+                    Build simple estimate
+                  </Link>
+                  <button
+                    onClick={() => void createEstimateSheet()}
+                    disabled={creatingEstimateSheet}
+                    style={smallButton}
+                  >
+                    {creatingEstimateSheet ? 'Creating estimate sheet...' : 'Create estimate sheet'}
+                  </button>
+                  <button
+                    onClick={() => void openComposer('estimate_scheduled')}
+                    style={smallButton}
+                  >
+                    Edit & send estimate scheduled
+                  </button>
+                </>
               )}
-                <button onClick={() => void openComposer('estimate_sent')} style={smallButton}>
-                  Edit & send estimate
-                </button>
-                <label style={{ ...smallButton, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] ?? null
-                      setManualFile(file)
-                    }}
-                  />
-                  Upload estimate PDF
-                </label>
-                {manualFile && (
+                {job.status !== 'scheduled' && (
                   <>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{manualFile.name}</div>
-                    <button onClick={() => setManualFile(null)} style={{ ...smallButton, background: '#fff' }}>
-                      Clear upload
+                    <button onClick={() => void openComposer('estimate_sent')} style={smallButton}>
+                      Edit & send estimate
                     </button>
+                    <label style={{ ...smallButton, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] ?? null
+                          setManualFile(file)
+                        }}
+                      />
+                      Upload estimate PDF
+                    </label>
+                    {manualFile && (
+                      <>
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>{manualFile.name}</div>
+                        <button onClick={() => setManualFile(null)} style={{ ...smallButton, background: '#fff' }}>
+                          Clear upload
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
-                <Link
-                  href={`/crm/jobs/${id}/schedule`}
-                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                >
-                  Schedule job
-                </Link>
+                {job.status !== 'estimate_scheduled' && (
+                  <Link
+                    href={`/crm/jobs/${id}/schedule`}
+                    style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                  >
+                    Schedule job
+                  </Link>
+                )}
+                {canSendScheduledEmail && (
+                  <button
+                    onClick={() => void openComposer('scheduled')}
+                    style={smallButton}
+                  >
+                    Edit & send scheduled email
+                  </button>
+                )}
               {job.status === 'estimate_scheduled' && (
                 <>
                   <button
@@ -587,12 +587,6 @@ export default function JobDetailPage() {
                     style={smallButton}
                   >
                     Mark completed
-                  </button>
-                  <button
-                    onClick={() => void openComposer('scheduled')}
-                    style={smallButton}
-                  >
-                    Edit & send scheduled
                   </button>
                 </>
               )}
