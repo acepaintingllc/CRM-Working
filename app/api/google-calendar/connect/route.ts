@@ -13,14 +13,15 @@ function safeNextPath(value: string | null, fallback: string) {
 }
 
 export async function GET(request: Request) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const origin = new URL(request.url).origin
-    return NextResponse.redirect(`${origin}/login`)
-  }
-
   const { origin, searchParams } = new URL(request.url)
   const next = safeNextPath(searchParams.get('next'), '/crm/calendar')
+  const session = await getSessionUserOrg()
+  if ('error' in session) {
+    const loginUrl = new URL('/login', origin)
+    loginUrl.searchParams.set('next', `/api/google-calendar/connect?next=${encodeURIComponent(next)}`)
+    return NextResponse.redirect(loginUrl.toString())
+  }
+
   const secure = origin.startsWith('https://')
 
   let clientId: string
