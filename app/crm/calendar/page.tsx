@@ -95,7 +95,28 @@ export default function CalendarPage() {
     }
   }, [selectedCalendarIds])
 
-  const connectHref = '/api/google-calendar/connect?next=/crm/calendar'
+  const connect = async () => {
+    setLoading(true)
+    setError(null)
+    const res = await authedFetch('/api/google-calendar/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ next: '/crm/calendar' }),
+    })
+    const payload = await res.json().catch(() => null)
+    if (!res.ok) {
+      setError(payload?.error ?? res.statusText)
+      setLoading(false)
+      return
+    }
+    const url = typeof payload?.url === 'string' ? payload.url : null
+    if (!url) {
+      setError('Failed to start Google connection')
+      setLoading(false)
+      return
+    }
+    window.location.href = url
+  }
 
   const disconnect = async () => {
     setLoading(true)
@@ -138,20 +159,17 @@ export default function CalendarPage() {
               Disconnect
             </button>
           ) : (
-            <a
-              href={connectHref}
+            <button
+              onClick={() => void connect()}
               style={{
                 ...button,
                 background: '#111',
                 color: 'white',
                 border: '1px solid #111',
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
               }}
             >
               Connect Google
-            </a>
+            </button>
           )}
         </div>
       </div>
