@@ -12,15 +12,14 @@ function safeNextPath(value: string | null, fallback: string) {
   return next
 }
 
-export async function GET(request: Request) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const origin = new URL(request.url).origin
-    return NextResponse.redirect(`${origin}/login`)
-  }
-
-  const { origin, searchParams } = new URL(request.url)
-  const next = safeNextPath(searchParams.get('next'), '/crm/calendar')
+function buildConnectResponse(params: {
+  origin: string
+  next: string
+  userId: string
+  orgId: string
+  asJson: boolean
+}) {
+  const { origin, next, userId, orgId, asJson } = params
   const secure = origin.startsWith('https://')
 
   let clientId: string
@@ -29,9 +28,12 @@ export async function GET(request: Request) {
     ;({ clientId, redirectUri } = getGoogleOAuthConfig(origin))
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Missing Google OAuth env vars'
-    const url = new URL(next, origin)
-    url.searchParams.set('error', message)
-    return NextResponse.redirect(url.toString())
+    if (asJson) {
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
+    const errorUrl = new URL(next, origin)
+    errorUrl.searchParams.set('error', message)
+    return NextResponse.redirect(errorUrl.toString())
   }
 
   const state = randomBytes(16).toString('hex')
@@ -57,7 +59,9 @@ export async function GET(request: Request) {
   )
   authUrl.searchParams.set('state', state)
 
-  const res = NextResponse.redirect(authUrl.toString())
+  const res = asJson
+    ? NextResponse.json({ url: authUrl.toString() })
+    : NextResponse.redirect(authUrl.toString())
   res.cookies.set('gc_state', state, {
     httpOnly: true,
     sameSite: 'lax',
@@ -72,14 +76,14 @@ export async function GET(request: Request) {
     secure,
     maxAge: 10 * 60,
   })
-  res.cookies.set('gc_uid', session.userId, {
+  res.cookies.set('gc_uid', userId, {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
     secure,
     maxAge: 10 * 60,
   })
-  res.cookies.set('gc_oid', session.orgId, {
+  res.cookies.set('gc_oid', orgId, {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
@@ -87,4 +91,41 @@ export async function GET(request: Request) {
     maxAge: 10 * 60,
   })
   return res
+}
+
+export async function GET(request: Request) {
+  const { origin, searchParams } = new URL(request.url)
+  const next = safeNextPath(searchParams.get('next'), '/crm/calendar')
+  const session = await getSessionUserOrg()
+  if ('error' in session) {
+    const loginUrl = new URL('/login', origin)
+    loginUrl.searchParams.set('next', `/api/google-calendar/connect?next=${encodeURIComponent(next)}`)
+    return NextResponse.redirect(loginUrl.toString())
+  }
+
+  return buildConnectResponse({
+    origin,
+    next,
+    userId: session.userId,
+    orgId: session.orgId,
+    asJson: false,
+  })
+}
+
+export async function POST(request: Request) {
+  const { origin } = new URL(request.url)
+  const body = await request.json().catch(() => null)
+  const next = safeNextPath(typeof body?.next === 'string' ? body.next : null, '/crm/calendar')
+  const session = await getSessionUserOrg()
+  if ('error' in session) {
+    return NextResponse.json({ error: session.error }, { status: 401 })
+  }
+
+  return buildConnectResponse({
+    origin,
+    next,
+    userId: session.userId,
+    orgId: session.orgId,
+    asJson: true,
+  })
 }

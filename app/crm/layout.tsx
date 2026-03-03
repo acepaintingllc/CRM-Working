@@ -46,7 +46,12 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const { data, error } = await supabaseBrowser.auth.getSession();
+      let { data, error } = await supabaseBrowser.auth.getSession();
+      if (!data?.session) {
+        const refreshed = await supabaseBrowser.auth.refreshSession();
+        data = refreshed.data;
+        error = refreshed.error;
+      }
       if (!alive) return;
 
       if (error || !data?.session) {
