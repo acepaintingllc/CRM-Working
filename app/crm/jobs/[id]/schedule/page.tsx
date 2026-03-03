@@ -5,6 +5,8 @@ import { authedFetch } from '@/lib/auth/authedFetch'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import type { LucideIcon } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, CalendarClock, Mail, Trash2 } from 'lucide-react'
 
 type ScheduleRow = {
   id: string
@@ -37,6 +39,18 @@ function next8amLocalValue() {
   if (now.getHours() >= 8) next.setDate(next.getDate() + 1)
   next.setHours(8, 0, 0, 0)
   return toLocalInputValue(next)
+}
+
+const iconSizeSm = 16
+const iconSizeMd = 18
+
+function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <Icon size={size} aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  )
 }
 
 export default function JobSchedulePage() {
@@ -165,7 +179,7 @@ export default function JobSchedulePage() {
         </div>
         <div className="crm-actions">
           <Link href={`/crm/jobs/${id}`} style={{ ...actionButton, textDecoration: 'none' }}>
-            Back to job
+            {iconLabel(ArrowLeft, 'Back to job', iconSizeMd)}
           </Link>
         </div>
       </div>
@@ -219,7 +233,9 @@ export default function JobSchedulePage() {
               opacity: saving ? 0.6 : 1,
             }}
           >
-            {saving ? 'Saving...' : 'Add scheduled block'}
+            {saving
+              ? iconLabel(CalendarClock, 'Saving...')
+              : iconLabel(CalendarClock, 'Add scheduled block')}
           </button>
         </div>
       </div>
@@ -271,7 +287,7 @@ export default function JobSchedulePage() {
                     height: 'fit-content',
                   }}
                 >
-                  Delete
+                  {iconLabel(Trash2, 'Delete')}
                 </button>
               </div>
             ))}
@@ -294,13 +310,15 @@ export default function JobSchedulePage() {
                   opacity: addingCalendar ? 0.7 : 1,
                 }}
               >
-                {addingCalendar ? 'Adding to calendar...' : 'Add scheduled blocks to Google Calendar'}
+                {addingCalendar
+                  ? iconLabel(CalendarCheck, 'Adding to calendar...')
+                  : iconLabel(CalendarCheck, 'Add scheduled blocks to Google Calendar')}
               </button>
               <Link
                 href={`/crm/jobs/${id}?compose=scheduled`}
                 style={{ ...actionButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
               >
-                Edit & send scheduled email
+                {iconLabel(Mail, 'Edit & send scheduled email')}
               </Link>
             </div>
           </div>
@@ -326,6 +344,9 @@ const actionButton: React.CSSProperties = {
   color: '#111',
   fontWeight: 800,
   fontSize: 14,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
 }
 
 const label: React.CSSProperties = {

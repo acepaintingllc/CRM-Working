@@ -3,6 +3,15 @@ import { randomBytes } from 'crypto'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getGoogleOAuthConfig } from '@/lib/server/googleCalendar'
 
+function safeNextPath(value: string | null, fallback: string) {
+  const next = (value ?? '').trim()
+  if (!next) return fallback
+  if (!next.startsWith('/')) return fallback
+  if (next.startsWith('//')) return fallback
+  if (next.startsWith('/\\')) return fallback
+  return next
+}
+
 export async function GET(request: Request) {
   const session = await getSessionUserOrg()
   if ('error' in session) {
@@ -11,7 +20,8 @@ export async function GET(request: Request) {
   }
 
   const { origin, searchParams } = new URL(request.url)
-  const next = searchParams.get('next') ?? '/crm/calendar'
+  const next = safeNextPath(searchParams.get('next'), '/crm/calendar')
+  const secure = origin.startsWith('https://')
 
   let clientId: string
   let redirectUri: string
@@ -48,7 +58,19 @@ export async function GET(request: Request) {
   authUrl.searchParams.set('state', state)
 
   const res = NextResponse.redirect(authUrl.toString())
-  res.cookies.set('gc_state', state, { httpOnly: true, sameSite: 'lax', path: '/' })
-  res.cookies.set('gc_next', next, { httpOnly: true, sameSite: 'lax', path: '/' })
+  res.cookies.set('gc_state', state, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure,
+    maxAge: 10 * 60,
+  })
+  res.cookies.set('gc_next', encodeURIComponent(next), {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure,
+    maxAge: 10 * 60,
+  })
   return res
 }

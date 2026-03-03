@@ -3,6 +3,15 @@ import { cookies } from 'next/headers'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getGoogleOAuthConfig, getTokenRow, upsertTokenRow } from '@/lib/server/googleCalendar'
 
+function safeNextPath(value: string | null, fallback: string) {
+  const next = (value ?? '').trim()
+  if (!next) return fallback
+  if (!next.startsWith('/')) return fallback
+  if (next.startsWith('//')) return fallback
+  if (next.startsWith('/\\')) return fallback
+  return next
+}
+
 type TokenResponse = {
   error_description?: unknown
   error?: unknown
@@ -18,11 +27,20 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
   const state = searchParams.get('state')
   const oauthError = searchParams.get('error')
+  const secure = origin.startsWith('https://')
 
   const cookieStore = await cookies()
   const cookieState = cookieStore.get('gc_state')?.value ?? null
   const cookieNext = cookieStore.get('gc_next')?.value ?? null
-  const nextPath = cookieNext ? decodeURIComponent(cookieNext) : '/crm/calendar'
+  let decodedNext: string | null = null
+  if (cookieNext) {
+    try {
+      decodedNext = decodeURIComponent(cookieNext)
+    } catch {
+      decodedNext = null
+    }
+  }
+  const nextPath = safeNextPath(decodedNext, '/crm/calendar')
 
   if (oauthError) {
     return NextResponse.redirect(`${origin}${nextPath}?error=${encodeURIComponent(oauthError)}`)
@@ -90,7 +108,7 @@ export async function GET(request: Request) {
   })
 
   const response = NextResponse.redirect(`${origin}${nextPath}`)
-  response.cookies.set('gc_state', '', { path: '/', maxAge: 0 })
-  response.cookies.set('gc_next', '', { path: '/', maxAge: 0 })
+  response.cookies.set('gc_state', '', { path: '/', maxAge: 0, secure, sameSite: 'lax' })
+  response.cookies.set('gc_next', '', { path: '/', maxAge: 0, secure, sameSite: 'lax' })
   return response
 }

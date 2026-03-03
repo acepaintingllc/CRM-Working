@@ -1,11 +1,12 @@
 "use client";
 
 import { CustomersOrgProvider, useOrg } from "./customers-orgproviders";
+import { RefreshCw, Users } from "lucide-react";
 
 function CustomersShell({ children }: { children: React.ReactNode }) {
   const { loading, error, orgId, refresh } = useOrg();
 
-  const showChildren = !!orgId; // ✅ only render pages when orgId is real
+  const showChildren = !!orgId;
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -18,9 +19,20 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
         }}
       >
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>Customers</div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 800,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Users size={18} aria-hidden="true" />
+            <span>Customers</span>
+          </div>
           <div style={{ fontSize: 12, color: "#6b7280" }}>
-            {loading ? "Loading org…" : orgId ? `Org: ${orgId}` : "Org: —"}
+            {loading ? "Loading org..." : orgId ? `Org: ${orgId}` : "Org: -"}
           </div>
         </div>
 
@@ -39,9 +51,7 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
             fontSize: 14,
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>
-            Customers section error
-          </div>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Customers section error</div>
           <div style={{ marginBottom: 10 }}>{error}</div>
           <button
             onClick={() => void refresh()}
@@ -53,9 +63,13 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
               border: "none",
               cursor: "pointer",
               fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            Retry
+            <RefreshCw size={16} aria-hidden="true" />
+            <span>Retry</span>
           </button>
         </div>
       )}
@@ -70,7 +84,7 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
             color: "#6b7280",
           }}
         >
-          {loading ? "Loading…" : "Org not ready. Hit Retry above."}
+          {loading ? "Loading..." : "Org not ready. Hit Retry above."}
         </div>
       ) : (
         children

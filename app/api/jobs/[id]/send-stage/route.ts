@@ -41,6 +41,44 @@ type JobRecord = {
 
 type ScheduleRow = { start_at: string | null; end_at: string | null }
 
+function missingJobsColumnFromError(message: string) {
+  const byCache = message.match(/Could not find the '([a-zA-Z0-9_]+)' column of 'jobs' in the schema cache/i)
+  if (byCache?.[1]) return byCache[1]
+  const byRelation = message.match(/column "([a-zA-Z0-9_]+)" of relation "jobs" does not exist/i)
+  if (byRelation?.[1]) return byRelation[1]
+  return null
+}
+
+async function updateJobCompat(
+  orgId: string,
+  jobId: string,
+  payload: Record<string, unknown>
+) {
+  const patch = { ...payload }
+  for (let i = 0; i < 6; i++) {
+    const attempt = await supabaseAdmin
+      .from('jobs')
+      .update(patch)
+      .eq('org_id', orgId)
+      .eq('id', jobId)
+      .select('*')
+      .single()
+    if (!attempt.error) return attempt
+
+    const missingColumn = missingJobsColumnFromError(attempt.error.message ?? '')
+    if (!missingColumn || !(missingColumn in patch)) return attempt
+    delete patch[missingColumn]
+  }
+
+  return supabaseAdmin
+    .from('jobs')
+    .update(payload)
+    .eq('org_id', orgId)
+    .eq('id', jobId)
+    .select('*')
+    .single()
+}
+
 export async function POST(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
@@ -187,19 +225,20 @@ export async function POST(
       .filter((v): v is string => typeof v === 'string')
       .sort()
 
-    const { error: updateErr } = await supabaseAdmin
-      .from('jobs')
-      .update({
-        status: 'scheduled',
-        scheduled_date: starts[0] ?? jobRow.scheduled_date ?? null,
-        scheduled_end_date: ends[ends.length - 1] ?? null,
-      })
-      .eq('org_id', orgId)
-      .eq('id', id)
+    const { data: updatedJob, error: updateErr } = await updateJobCompat(orgId, id, {
+      status: 'scheduled',
+      scheduled_date: starts[0] ?? jobRow.scheduled_date ?? null,
+      scheduled_end_date: ends[ends.length - 1] ?? null,
+      scheduled_email_sent_at: new Date().toISOString(),
+    })
 
     if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 })
+      return NextResponse.json({
+        ok: true,
+        warning: `Email sent, but failed to sync scheduled status: ${updateErr.message}`,
+      })
     }
+    return NextResponse.json({ ok: true, job: updatedJob })
   }
 
   return NextResponse.json({ ok: true })

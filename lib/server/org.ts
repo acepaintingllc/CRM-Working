@@ -22,13 +22,13 @@ async function getOrgIdForUser(userId: string) {
 export async function getSessionUserOrg() {
   const supabase = await createSupabaseServerClient()
   const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession()
+    data: { user: cookieUser },
+    error: cookieUserErr,
+  } = await supabase.auth.getUser()
 
-  if (sessionError) return { error: sessionError.message } as const
+  if (cookieUserErr && !cookieUser) return { error: cookieUserErr.message } as const
 
-  const userId = session?.user?.id
+  let userId = cookieUser?.id ?? null
   if (!userId) {
     const headerStore = await headers()
     const authHeader = headerStore.get('authorization') || ''
@@ -37,11 +37,7 @@ export async function getSessionUserOrg() {
 
     const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(match[1])
     if (userErr || !userData?.user) return { error: 'Not authenticated' } as const
-
-    const orgId = await getOrgIdForUser(userData.user.id)
-    if (!orgId) return { error: 'No org membership found' } as const
-
-    return { userId: userData.user.id, orgId } as const
+    userId = userData.user.id
   }
 
   const orgId = await getOrgIdForUser(userId)

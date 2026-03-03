@@ -23,6 +23,38 @@ type JobRecord = {
 type ScheduleRecord = { start_at: string | null; end_at: string | null }
 type CustomerRecord = { name: string | null; address: string | null; email?: string | null; phone?: string | null }
 
+function isMissingJobsColumnError(message: string, column: string) {
+  return (
+    message.includes(`Could not find the '${column}' column of 'jobs' in the schema cache`) ||
+    message.includes(`column "${column}" of relation "jobs" does not exist`)
+  )
+}
+
+async function updateJobCompat(orgId: string, id: string, patch: Record<string, unknown>) {
+  const first = await supabaseAdmin
+    .from('jobs')
+    .update(patch)
+    .eq('org_id', orgId)
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (!first.error) return first
+  if (!('scheduled_end_date' in patch)) return first
+  if (!isMissingJobsColumnError(first.error.message ?? '', 'scheduled_end_date')) return first
+
+  const retryPatch = { ...patch }
+  delete retryPatch.scheduled_end_date
+
+  return supabaseAdmin
+    .from('jobs')
+    .update(retryPatch)
+    .eq('org_id', orgId)
+    .eq('id', id)
+    .select('*')
+    .single()
+}
+
 function nextStatusForPatch(current: string, patch: JobPatch) {
   if (patch?.completed_at) return 'completed'
   if (patch?.scheduled_date) return 'scheduled'
@@ -82,14 +114,7 @@ export async function PATCH(
     allowed.status = nextStatusForPatch(existing.status, allowed as JobPatch)
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('jobs')
-    .update(allowed)
-    .eq('org_id', orgId)
-    .eq('id', id)
-    // Use "*" to avoid schema-cache failures when columns are still being added/migrated.
-    .select('*')
-    .single()
+  const { data, error } = await updateJobCompat(orgId, id, allowed)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, job: data })
@@ -137,13 +162,10 @@ export async function GET(
       const scheduled_date = starts.length > 0 ? starts[0] : null
       const scheduled_end_date = ends.length > 0 ? ends[ends.length - 1] : null
 
-      const { data: updated } = await supabaseAdmin
-        .from('jobs')
-        .update({ scheduled_date, scheduled_end_date })
-        .eq('org_id', orgId)
-        .eq('id', id)
-        .select('*')
-        .maybeSingle()
+      const { data: updated } = await updateJobCompat(orgId, id, {
+        scheduled_date,
+        scheduled_end_date,
+      })
 
       if (updated) {
         mutableJob.scheduled_date = (updated as JobRecord).scheduled_date ?? null
