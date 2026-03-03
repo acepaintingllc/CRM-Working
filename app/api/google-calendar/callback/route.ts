@@ -32,6 +32,8 @@ export async function GET(request: Request) {
   const cookieStore = await cookies()
   const cookieState = cookieStore.get('gc_state')?.value ?? null
   const cookieNext = cookieStore.get('gc_next')?.value ?? null
+  const cookieUserId = cookieStore.get('gc_uid')?.value ?? null
+  const cookieOrgId = cookieStore.get('gc_oid')?.value ?? null
   let decodedNext: string | null = null
   if (cookieNext) {
     try {
@@ -55,11 +57,11 @@ export async function GET(request: Request) {
   }
 
   const session = await getSessionUserOrg()
-  if ('error' in session) {
+  const orgId = 'error' in session ? cookieOrgId : session.orgId
+  const userId = 'error' in session ? cookieUserId : session.userId
+  if (!orgId || !userId) {
     return NextResponse.redirect(`${origin}/login`)
   }
-
-  const { orgId, userId } = session
   const { clientId, clientSecret, redirectUri } = getGoogleOAuthConfig(origin)
 
   const form = new URLSearchParams()
@@ -110,5 +112,7 @@ export async function GET(request: Request) {
   const response = NextResponse.redirect(`${origin}${nextPath}`)
   response.cookies.set('gc_state', '', { path: '/', maxAge: 0, secure, sameSite: 'lax' })
   response.cookies.set('gc_next', '', { path: '/', maxAge: 0, secure, sameSite: 'lax' })
+  response.cookies.set('gc_uid', '', { path: '/', maxAge: 0, secure, sameSite: 'lax' })
+  response.cookies.set('gc_oid', '', { path: '/', maxAge: 0, secure, sameSite: 'lax' })
   return response
 }
