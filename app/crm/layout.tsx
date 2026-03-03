@@ -56,7 +56,16 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        await authedFetch("/api/bootstrap-org", { method: "POST" });
+        const bootstrapRes = await authedFetch("/api/bootstrap-org", { method: "POST" });
+        if (bootstrapRes.status === 401) {
+          const next = encodeURIComponent(pathname || "/crm");
+          router.replace(`/login?next=${next}`);
+          return;
+        }
+        if (!bootstrapRes.ok) {
+          const payload = await bootstrapRes.json().catch(() => null);
+          console.error("[CRM LAYOUT] Failed to bootstrap org membership.", payload?.error ?? bootstrapRes.statusText);
+        }
       } catch (e) {
         console.error("[CRM LAYOUT] Failed to bootstrap org membership.", e);
       }

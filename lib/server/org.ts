@@ -26,18 +26,21 @@ export async function getSessionUserOrg() {
     error: cookieUserErr,
   } = await supabase.auth.getUser()
 
-  if (cookieUserErr && !cookieUser) return { error: cookieUserErr.message } as const
-
   let userId = cookieUser?.id ?? null
   if (!userId) {
     const headerStore = await headers()
     const authHeader = headerStore.get('authorization') || ''
     const match = authHeader.match(/^Bearer (.+)$/i)
-    if (!match?.[1]) return { error: 'Not authenticated' } as const
+    if (match?.[1]) {
+      const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(match[1])
+      if (userErr || !userData?.user) return { error: 'Not authenticated' } as const
+      userId = userData.user.id
+    }
+  }
 
-    const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(match[1])
-    if (userErr || !userData?.user) return { error: 'Not authenticated' } as const
-    userId = userData.user.id
+  if (!userId) {
+    if (cookieUserErr) return { error: cookieUserErr.message } as const
+    return { error: 'Not authenticated' } as const
   }
 
   const orgId = await getOrgIdForUser(userId)

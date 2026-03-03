@@ -72,5 +72,19 @@ export async function GET(request: Request) {
     secure,
     maxAge: 10 * 60,
   })
+  res.cookies.set('gc_uid', session.userId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure,
+    maxAge: 10 * 60,
+  })
+  res.cookies.set('gc_oid', session.orgId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure,
+    maxAge: 10 * 60,
+  })
   return res
 }
