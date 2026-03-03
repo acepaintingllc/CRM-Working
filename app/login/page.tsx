@@ -1,7 +1,6 @@
 'use client'
 
 import { supabaseBrowser } from '@/lib/supabase/client'
-import { useSearchParams } from 'next/navigation'
 
 function safeNextPath(value: string | null, fallback: string) {
   const next = (value ?? '').trim()
@@ -14,10 +13,10 @@ function safeNextPath(value: string | null, fallback: string) {
 
 export default function LoginPage() {
   const supabase = supabaseBrowser
-  const searchParams = useSearchParams()
 
   const signInWithGoogle = async () => {
-    const next = safeNextPath(searchParams.get('next'), '/crm')
+    const params = new URLSearchParams(window.location.search)
+    const next = safeNextPath(params.get('next'), '/crm')
     const redirectTo = `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`
     await supabase.auth.signInWithOAuth({
       provider: 'google',
