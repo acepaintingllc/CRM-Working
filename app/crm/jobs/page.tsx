@@ -5,6 +5,18 @@ import { authedFetch } from '@/lib/auth/authedFetch'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import type { LucideIcon } from 'lucide-react'
+import {
+  CalendarCheck,
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  Mail,
+  Plus,
+  RefreshCw,
+  Send,
+  XCircle,
+} from 'lucide-react'
 
 type JobStatus = 'estimate_scheduled' | 'estimate_sent' | 'scheduled' | 'completed' | 'lost'
 
@@ -21,6 +33,7 @@ type Job = {
   estimate_sent_at: string | null
   scheduled_date: string | null
   scheduled_end_date?: string | null
+  scheduled_email_sent_at?: string | null
   completed_at: string | null
 }
 
@@ -32,6 +45,18 @@ const columns: { key: JobStatus; title: string }[] = [
   { key: 'lost', title: 'Lost' },
 ]
 
+const iconSizeSm = 16
+const iconSizeMd = 18
+
+function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Icon size={size} aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  )
+}
+
 export default function JobsPage() {
   const router = useRouter()
   const [jobs, setJobs] = useState<Job[]>([])
@@ -42,7 +67,6 @@ export default function JobsPage() {
   const [showLost, setShowLost] = useState(false)
   const [showEmptyStages, setShowEmptyStages] = useState(false)
   const [compactActions, setCompactActions] = useState(false)
-  const [creatingEstimateSheetId, setCreatingEstimateSheetId] = useState<string | null>(null)
 
   const grouped = useMemo(() => {
     const map: Record<JobStatus, Job[]> = {
@@ -100,25 +124,6 @@ export default function JobsPage() {
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...payload.job } : j)))
   }
 
-  const createEstimateSheet = async (id: string) => {
-    setCreatingEstimateSheetId(id)
-    setError(null)
-
-    const res = await authedFetch(`/api/jobs/${id}/estimate-sheet`, { method: 'POST' })
-    const payload = await res.json().catch(() => null)
-    setCreatingEstimateSheetId((prev) => (prev === id ? null : prev))
-
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
-      return
-    }
-
-    const url = payload?.sheet?.webViewLink ?? payload?.sheet?.editUrl ?? null
-    if (typeof url === 'string' && url) {
-      window.open(url, '_blank', 'noopener,noreferrer')
-    }
-  }
-
   const nowIso = () => new Date().toISOString()
 
   const formatDate = (iso: string | null) => {
@@ -140,6 +145,7 @@ export default function JobsPage() {
   const activityForJob = (job: Job) => {
     const items: { label: string; at: string }[] = []
     if (job.completed_at) items.push({ label: 'Completed', at: job.completed_at })
+    if (job.scheduled_email_sent_at) items.push({ label: 'Confirmation email sent', at: job.scheduled_email_sent_at })
     if (job.scheduled_date) items.push({ label: 'Scheduled', at: job.scheduled_date })
     if (job.estimate_sent_at) items.push({ label: 'Estimate sent', at: job.estimate_sent_at })
     if (job.estimate_date) items.push({ label: 'Estimate set', at: job.estimate_date })
@@ -181,101 +187,91 @@ export default function JobsPage() {
     .filter((col) => showEmptyStages || columnCount(col.key) > 0)
 
   return (
-    <div className="crm-page" style={{ maxWidth: 'min(96vw, 2000px)', margin: '0 auto' }}>
-      <div className="crm-topbar">
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Jobs</h1>
-          <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
-            Jobs move automatically when you set dates or mark things sent/completed.
+    <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
+      <div className="mx-auto max-w-[2000px] px-4 md:px-6">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="m-0 text-2xl font-bold text-gray-900">Jobs</h1>
+            <div className="mt-1 text-sm text-gray-600">
+              Track every job through your pipeline from estimate to completion.
+            </div>
           </div>
-        </div>
 
-        <div className="crm-actions" style={{ alignItems: 'center' }}>
+          <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowEmptyStages((prev) => !prev)}
-            style={{
-              ...actionButton,
-              background: showEmptyStages ? '#111' : 'white',
-              color: showEmptyStages ? 'white' : '#111',
-              border: showEmptyStages ? '1px solid #111' : '1px solid #e5e7eb',
-            }}
+            aria-label={showEmptyStages ? 'Hide empty stages' : 'Show empty stages'}
+            className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
+              showEmptyStages
+                ? 'border-black bg-black text-white'
+                : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+            }`}
           >
-            {showEmptyStages ? 'Hide empty stages' : 'Show empty stages'}
+            {iconLabel(ChevronDown, showEmptyStages ? 'Hide empty stages' : 'Show empty stages', iconSizeMd)}
           </button>
           <button
             onClick={() => setShowLost((prev) => !prev)}
-            style={{ ...actionButton, background: showLost ? '#111' : 'white', color: showLost ? 'white' : '#111', border: showLost ? '1px solid #111' : '1px solid #e5e7eb' }}
+            aria-label={showLost ? 'Hide lost jobs' : 'Show lost jobs'}
+            className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
+              showLost
+                ? 'border-black bg-black text-white'
+                : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+            }`}
           >
-            {showLost ? 'Hide lost' : 'Show lost'}
+            {iconLabel(XCircle, showLost ? 'Hide lost' : 'Show lost', iconSizeMd)}
           </button>
           <button
             onClick={() => void load()}
-            style={{ ...actionButton, background: 'white' }}
+            aria-label="Refresh jobs"
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
           >
-            Refresh
+            {iconLabel(RefreshCw, 'Refresh', iconSizeMd)}
           </button>
-          <Link href="/crm/jobs/new" style={{ ...actionButton, background: '#111', color: 'white', border: '1px solid #111', textDecoration: 'none' }}>
-            + Add job
+          <Link
+            href="/crm/jobs/new"
+            aria-label="Add job"
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-black bg-black px-3 text-sm font-semibold text-white no-underline transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-black/80"
+          >
+            {iconLabel(Plus, 'Add job', iconSizeMd)}
           </Link>
         </div>
       </div>
 
       {error && (
-        <div style={{ marginTop: 12, background: '#fff', border: '1px solid #fecaca', borderRadius: 12, padding: 12, color: '#991b1b' }}>
+        <div className="mt-3 rounded-xl border border-red-200 bg-white p-3 text-red-800 shadow-sm">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div style={{ marginTop: 12, color: '#6b7280' }}>Loading...</div>
+        <div className="mt-3 text-gray-600">Loading...</div>
       ) : (
-        <div
-          className="crm-columns"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${Math.max(1, visibleColumns.length)}, minmax(280px, 1fr))`,
-            gap: 12,
-            marginTop: 12,
-          }}
-        >
+        <div className={`mt-3 pb-2 ${compactActions ? 'overflow-x-auto' : ''}`}>
+          <div
+            className={`grid gap-3 ${compactActions ? 'min-w-max' : ''}`}
+            style={{
+              gridTemplateColumns: compactActions
+                ? `repeat(${Math.max(1, visibleColumns.length)}, minmax(200px, 1fr))`
+                : `repeat(${Math.max(1, visibleColumns.length)}, minmax(0, 1fr))`,
+            }}
+          >
           {visibleColumns.map((col) => (
-            <div key={col.key} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ fontWeight: 800 }}>{col.title}</div>
-                <div
-                  style={{
-                    minWidth: 24,
-                    height: 24,
-                    borderRadius: 999,
-                    border: '1px solid #d1d5db',
-                    background: '#fff',
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: '#374151',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '0 8px',
-                  }}
-                >
+            <div key={col.key} className="rounded-2xl border border-gray-200 bg-white/90 p-2.5 shadow-sm backdrop-blur">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-sm font-extrabold text-gray-900">{col.title}</div>
+                <div className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-gray-300 bg-white px-2 text-xs font-extrabold text-gray-700">
                   {columnCount(col.key)}
                 </div>
               </div>
-              <div style={{ display: 'grid', gap: 10 }}>
+              <div className="grid gap-2">
                 {col.key === 'completed' && (
-                  <div style={{ display: 'grid', gap: 8 }}>
+                  <div className="grid gap-2">
                     <input
                       type="search"
                       placeholder="Search completed..."
                       value={completedQuery}
                       onChange={(e) => setCompletedQuery(e.target.value)}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: 10,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        background: 'white',
-                      }}
+                      className="h-9 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none ring-black/70 placeholder:text-gray-400 focus:ring-2"
                     />
                     {!completedQuery && grouped.completed.length > 5 && (
                       <button
@@ -288,18 +284,9 @@ export default function JobsPage() {
                   </div>
                 )}
                 {(col.key === 'completed' ? filteredCompleted : grouped[col.key]).length === 0 && (
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: '#6b7280',
-                      border: '1px dashed #d1d5db',
-                      borderRadius: 10,
-                      padding: 10,
-                      background: '#fff',
-                    }}
-                  >
-                    <div style={{ fontWeight: 700 }}>No jobs in this stage</div>
-                    <div style={{ marginTop: 4, fontSize: 12 }}>
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-white p-3 text-sm text-gray-500">
+                    <div className="font-semibold text-gray-700">No jobs in this stage</div>
+                    <div className="mt-1 text-xs">
                       {col.key === 'estimate_scheduled'
                         ? 'New jobs will appear here after creation.'
                         : 'Jobs move here automatically as status changes.'}
@@ -310,26 +297,20 @@ export default function JobsPage() {
                   <div
                     key={job.id}
                     onClick={() => router.push(`/crm/jobs/${job.id}`)}
-                    style={{
-                      background: 'white',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 12,
-                      padding: 12,
-                      cursor: 'pointer',
-                    }}
+                    className="cursor-pointer rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
                   >
-                    <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.15 }}>{job.title}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                    <div className="text-base leading-tight font-extrabold text-gray-900 break-words">{job.title}</div>
+                    <div className="mt-0.5 text-xs text-gray-500">
                       {job.customer_name ? job.customer_name : `Customer: ${job.customer_id}`}
                     </div>
 
                     {job.description && (
-                      <div style={{ fontSize: 13, color: '#374151', marginTop: 8 }}>
+                      <div className="mt-1.5 text-xs text-gray-700">
                         {job.description}
                       </div>
                     )}
 
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
+                    <div className="mt-1.5 text-xs leading-4.5 text-gray-500">
                       {job.status === 'scheduled' ? (
                         <>
                           {formatRange(job.scheduled_date, job.scheduled_end_date) && (
@@ -346,18 +327,8 @@ export default function JobsPage() {
                       )}
                     </div>
                     {!compactActions && activityForJob(job).length > 0 && (
-                      <div
-                        style={{
-                          marginTop: 10,
-                          paddingTop: 8,
-                          borderTop: '1px dashed #e5e7eb',
-                          fontSize: 11,
-                          color: '#6b7280',
-                          display: 'grid',
-                          gap: 4,
-                        }}
-                      >
-                        <div style={{ fontWeight: 800, color: '#374151' }}>Recent activity</div>
+                      <div className="mt-2 grid gap-1 border-t border-dashed border-gray-200 pt-1.5 text-[11px] text-gray-500">
+                        <div className="font-bold text-gray-700">Recent activity</div>
                         {activityForJob(job).map((item, idx) => (
                           <div key={`${job.id}-act-${idx}`}>
                             {item.label}: {formatDate(item.at)}
@@ -366,12 +337,12 @@ export default function JobsPage() {
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {job.status === 'estimate_scheduled' && (
                         <>
                           {compactActions ? (
                             <details onClick={(e) => e.stopPropagation()}>
-                              <summary style={smallButton}>More</summary>
+                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
                               <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
                                 <button
                                   onClick={stop(() => {
@@ -379,36 +350,20 @@ export default function JobsPage() {
                                   })}
                                   style={smallButton}
                                 >
-                                  Review &amp; send estimate
+                                  {iconLabel(Send, 'Review & send estimate')}
                                 </button>
                                 <button
                                   onClick={stop(() => void patchJob(job.id, { estimate_sent_at: nowIso() }))}
                                   style={smallButton}
                                 >
-                                  Mark estimate sent
-                                </button>
-                                <Link
-                                  href={`/crm/jobs/${job.id}/simple-estimate`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                                >
-                                  Build simple estimate
-                                </Link>
-                                <button
-                                  onClick={stop(() => void createEstimateSheet(job.id))}
-                                  disabled={creatingEstimateSheetId === job.id}
-                                  style={smallButton}
-                                >
-                                  {creatingEstimateSheetId === job.id
-                                    ? 'Creating estimate sheet...'
-                                    : 'Create estimate sheet'}
+                                  {iconLabel(Send, 'Mark estimate sent')}
                                 </button>
                                 <Link
                                   href={`/crm/jobs/${job.id}/estimate`}
                                   onClick={(e) => e.stopPropagation()}
                                   style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
                                 >
-                                  Set estimate date
+                                  {iconLabel(CalendarClock, 'Set estimate date')}
                                 </Link>
                               </div>
                             </details>
@@ -420,36 +375,20 @@ export default function JobsPage() {
                                 })}
                                 style={smallButton}
                               >
-                                Review &amp; send estimate
+                                {iconLabel(Send, 'Review & send estimate')}
                               </button>
                               <button
                                 onClick={stop(() => void patchJob(job.id, { estimate_sent_at: nowIso() }))}
                                 style={smallButton}
                               >
-                                Mark estimate sent
-                              </button>
-                              <Link
-                                href={`/crm/jobs/${job.id}/simple-estimate`}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                              >
-                                Build simple estimate
-                              </Link>
-                              <button
-                                onClick={stop(() => void createEstimateSheet(job.id))}
-                                disabled={creatingEstimateSheetId === job.id}
-                                style={smallButton}
-                              >
-                                {creatingEstimateSheetId === job.id
-                                  ? 'Creating estimate sheet...'
-                                  : 'Create estimate sheet'}
+                                {iconLabel(Send, 'Mark estimate sent')}
                               </button>
                               <Link
                                 href={`/crm/jobs/${job.id}/estimate`}
                                 onClick={(e) => e.stopPropagation()}
                                 style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
                               >
-                                Set estimate date
+                                {iconLabel(CalendarClock, 'Set estimate date')}
                               </Link>
                             </>
                           )}
@@ -460,14 +399,14 @@ export default function JobsPage() {
                         <>
                           {compactActions ? (
                             <details onClick={(e) => e.stopPropagation()}>
-                              <summary style={smallButton}>More</summary>
+                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
                               <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
                                 <Link
                                   href={`/crm/jobs/${job.id}/schedule`}
                                   onClick={(e) => e.stopPropagation()}
                                   style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
                                 >
-                                  Schedule job
+                                  {iconLabel(CalendarCheck, 'Schedule job')}
                                 </Link>
                                 <button
                                   onClick={stop(async () => {
@@ -475,7 +414,7 @@ export default function JobsPage() {
                                   })}
                                   style={smallButton}
                                 >
-                                  Send follow up
+                                  {iconLabel(Mail, 'Send follow up')}
                                 </button>
                                 <button
                                   onClick={stop(() => {
@@ -483,9 +422,9 @@ export default function JobsPage() {
                                     if (!ok) return
                                     void patchJob(job.id, { status: 'lost' })
                                   })}
-                                  style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
+                                  style={{ ...smallButton, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}
                                 >
-                                  Mark lost
+                                  {iconLabel(XCircle, 'Mark lost')}
                                 </button>
                               </div>
                             </details>
@@ -496,7 +435,7 @@ export default function JobsPage() {
                                 onClick={(e) => e.stopPropagation()}
                                 style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
                               >
-                                Schedule job
+                                {iconLabel(CalendarCheck, 'Schedule job')}
                               </Link>
                               <button
                                 onClick={stop(async () => {
@@ -504,7 +443,7 @@ export default function JobsPage() {
                                 })}
                                 style={smallButton}
                               >
-                                Send follow up
+                                {iconLabel(Mail, 'Send follow up')}
                               </button>
                               <button
                                 onClick={stop(() => {
@@ -512,9 +451,9 @@ export default function JobsPage() {
                                   if (!ok) return
                                   void patchJob(job.id, { status: 'lost' })
                                 })}
-                                style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
+                                style={{ ...smallButton, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}
                               >
-                                Mark lost
+                                {iconLabel(XCircle, 'Mark lost')}
                               </button>
                             </>
                           )}
@@ -525,7 +464,7 @@ export default function JobsPage() {
                         <>
                           {compactActions ? (
                             <details onClick={(e) => e.stopPropagation()}>
-                              <summary style={smallButton}>More</summary>
+                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
                               <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
                                 <button
                                   onClick={stop(() => {
@@ -533,20 +472,20 @@ export default function JobsPage() {
                                   })}
                                   style={smallButton}
                                 >
-                                  Edit & send scheduled email
+                                  {iconLabel(Mail, 'Edit & send scheduled email')}
                                 </button>
                                 <button
                                   onClick={stop(() => void patchJob(job.id, { completed_at: nowIso() }))}
                                   style={smallButton}
                                 >
-                                  Mark completed
+                                  {iconLabel(CheckCircle2, 'Mark completed')}
                                 </button>
                                 <Link
                                   href={`/crm/jobs/${job.id}/schedule`}
                                   onClick={(e) => e.stopPropagation()}
                                   style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
                                 >
-                                  Change scheduled date
+                                  {iconLabel(CalendarCheck, 'Change scheduled date')}
                                 </Link>
                               </div>
                             </details>
@@ -558,20 +497,20 @@ export default function JobsPage() {
                                 })}
                                 style={smallButton}
                               >
-                                Edit & send scheduled email
+                                {iconLabel(Mail, 'Edit & send scheduled email')}
                               </button>
                               <button
                                 onClick={stop(() => void patchJob(job.id, { completed_at: nowIso() }))}
                                 style={smallButton}
                               >
-                                Mark completed
+                                {iconLabel(CheckCircle2, 'Mark completed')}
                               </button>
                               <Link
                                 href={`/crm/jobs/${job.id}/schedule`}
                                 onClick={(e) => e.stopPropagation()}
                                 style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
                               >
-                                Change scheduled date
+                                {iconLabel(CalendarCheck, 'Change scheduled date')}
                               </Link>
                             </>
                           )}
@@ -583,21 +522,12 @@ export default function JobsPage() {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
+      </div>
     </div>
   )
-}
-
-const actionButton: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid #e5e7eb',
-  background: 'white',
-  color: '#111',
-  fontWeight: 800,
-  fontSize: 14,
-  cursor: 'pointer',
 }
 
 const smallButton: React.CSSProperties = {
@@ -605,8 +535,11 @@ const smallButton: React.CSSProperties = {
   borderRadius: 10,
   border: '1px solid #d1d5db',
   background: 'white',
-  color: '#111',
+  color: '#1f2937',
   fontWeight: 700,
   fontSize: 12,
   cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
 }

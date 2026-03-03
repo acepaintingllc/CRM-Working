@@ -3,7 +3,7 @@
 import { authedFetch } from '@/lib/auth/authedFetch'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { CSSProperties, useEffect, useMemo, useState } from 'react'
+import { CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeft,
@@ -201,16 +201,31 @@ type RoomDraft = {
   trim_topcoats: string
   trim_prep_override: string
   doors_prep_override: string
+  baseboard_primer_mode: string
+  baseboard_spot_prime_pct: string
+  baseboard_prep_override: string
   baseboard_type_id: string
   baseboard_lf: string
   baseboard_auto: 'Y' | 'N'
+  crown_primer_mode: string
+  crown_spot_prime_pct: string
+  crown_prep_override: string
   crown_type_id: string
   crown_lf: string
   crown_auto: 'Y' | 'N'
+  window_casing_primer_mode: string
+  window_casing_spot_prime_pct: string
+  window_casing_prep_override: string
   window_casing_type_id: string
   window_count: string
+  door_casing_primer_mode: string
+  door_casing_spot_prime_pct: string
+  door_casing_prep_override: string
   door_casing_type_id: string
   door_casing_count: string
+  door_primer_mode: string
+  door_spot_prime_pct: string
+  door_prep_override: string
   door_type_id: string
   door_paint_count: string
   door_sides: string
@@ -266,7 +281,7 @@ type PreJobDraft = {
 type PreJobTaskDraft = {
   id: string
   mode: 'template' | 'manual'
-  rollup_scope: 'Walls' | 'Ceilings' | 'Trim' | 'Other'
+  rollup_scope: 'Walls' | 'Ceilings' | 'Trim'
   task_template_id: string
   task_name: string
   manual_task_name: string
@@ -300,6 +315,7 @@ type TrimItemDraft = {
   coats?: string
   auto_calc?: 'Y' | 'N'
   primer_mode?: string
+  spot_prime_pct?: string
   prep_level_override?: string
   door_sides?: string
   notes: string
@@ -313,6 +329,7 @@ type ExtraTrimDraft = {
   coats: string
   auto_calc: 'Y' | 'N'
   primer_mode: string
+  spot_prime_pct: string
   prep_level_override: string
   door_sides: string
   notes: string
@@ -371,6 +388,17 @@ function toNumString(v: unknown) {
 
 function toYN(v: unknown, fallback: 'Y' | 'N' = 'N'): 'Y' | 'N' {
   return String(v ?? '').toUpperCase() === 'Y' ? 'Y' : fallback
+}
+
+function normalizePrimerMode(value: unknown): '' | 'Spot' | 'Full' {
+  const v = toText(value).trim().toLowerCase()
+  if (v === 'spot') return 'Spot'
+  if (v === 'full' || v === 'yes' || v === 'y') return 'Full'
+  return ''
+}
+
+function primerModeEnabled(value: unknown) {
+  return normalizePrimerMode(value) !== ''
 }
 
 function normalizeColorId(v: string) {
@@ -503,10 +531,9 @@ function normalizeJobSettings(row: Record<string, unknown> | null): JobSettingsD
     ceiling_paint_id: toText(row?.ceiling_paint_id),
     trim_paint_id: toText(row?.trim_paint_id),
     primer_id: fallbackPrimerId,
-    walls_primer_id: toText(row?.walls_primer_id || row?.wall_primer_product_id) || fallbackPrimerId,
-    ceiling_primer_id:
-      toText(row?.ceiling_primer_id || row?.ceiling_primer_product_id) || fallbackPrimerId,
-    trim_primer_id: toText(row?.trim_primer_id || row?.trim_primer_product_id) || fallbackPrimerId,
+    walls_primer_id: toText(row?.walls_primer_id || row?.wall_primer_product_id),
+    ceiling_primer_id: toText(row?.ceiling_primer_id || row?.ceiling_primer_product_id),
+    trim_primer_id: toText(row?.trim_primer_id || row?.trim_primer_product_id),
     override_labor_rate: toNumString(row?.override_labor_rate),
     override_markup: toNumString(row?.override_markup),
     rounding_increment_hours: toNumString(row?.rounding_increment_hours),
@@ -582,20 +609,35 @@ function normalizeRoom(row: Record<string, unknown>, catalogs: EstimateCatalogsP
     ceiling_prep_override: toText(row.ceiling_prep_override),
     ceiling_height_surcharge: toNumString(row.ceiling_height_surcharge),
     trim_include: trimInclude,
-    trim_primer: toText(row.trim_primer),
+    trim_primer: normalizePrimerMode(row.trim_primer),
     trim_topcoats: toNumString(row.trim_topcoats) || (trimInclude === 'Y' ? '2' : ''),
     trim_prep_override: toText(row.trim_prep_override),
     doors_prep_override: toText(row.doors_prep_override || row.trim_prep_override),
+    baseboard_primer_mode: '',
+    baseboard_spot_prime_pct: '',
+    baseboard_prep_override: '',
     baseboard_type_id: baseboardTypeId,
     baseboard_lf: toNumString(row.baseboard_lf),
     baseboard_auto: toYN(row.baseboard_auto, toYN(row.auto_calc_trim_perimeter, 'N')),
+    crown_primer_mode: '',
+    crown_spot_prime_pct: '',
+    crown_prep_override: '',
     crown_type_id: crownTypeId,
     crown_lf: toNumString(row.crown_lf),
     crown_auto: toYN(row.crown_auto, toYN(row.auto_calc_trim_perimeter, 'N')),
+    window_casing_primer_mode: '',
+    window_casing_spot_prime_pct: '',
+    window_casing_prep_override: '',
     window_casing_type_id: windowTypeId,
     window_count: toNumString(row.window_count),
+    door_casing_primer_mode: '',
+    door_casing_spot_prime_pct: '',
+    door_casing_prep_override: '',
     door_casing_type_id: doorCasingTypeId,
     door_casing_count: toNumString(row.door_casing_count ?? legacyDoorCount),
+    door_primer_mode: '',
+    door_spot_prime_pct: '',
+    door_prep_override: '',
     door_type_id: doorTypeId,
     door_paint_count: toNumString(row.door_paint_count ?? legacyDoorCount),
     door_sides: toNumString(row.door_sides) || (doorTypeId ? '1' : ''),
@@ -655,11 +697,11 @@ function normalizePreJob(row: Record<string, unknown>): PreJobDraft {
   return {
     id: toText(row.id) || undefined,
     trip_num: toNumString(row.trip_num),
-    rollup_scope: toText(row.rollup_scope || row.category || 'Other'),
+    rollup_scope: toText(row.rollup_scope || row.category || 'Walls'),
     task_template_id: toText(row.task_template_id),
     task_name: toText(row.task_name || row.task_label || row.task),
     manual_task_name: toText(row.manual_task_name || row.man_trip_name),
-    qty: toNumString(row.qty),
+    qty: toNumString(row.qty ?? row.man_qty),
     hours_each: toNumString(row.hours_each ?? row.man_hours_each),
     extra_supplies: toNumString(row.extra_supplies),
     notes: toText(row.notes),
@@ -676,7 +718,7 @@ function toTripScope(value: string): PreJobTaskDraft['rollup_scope'] {
   if (v === 'walls') return 'Walls'
   if (v === 'ceilings' || v === 'ceiling') return 'Ceilings'
   if (v === 'trim') return 'Trim'
-  return 'Other'
+  return 'Walls'
 }
 
 function groupPreJobTrips(
@@ -776,16 +818,19 @@ function buildTrimItemsFromRooms(
       coats = room.trim_topcoats || '',
       autoCalc: 'Y' | 'N' = 'N',
       primerMode = room.trim_primer || '',
+      spotPrimePct = '',
       prepLevelOverride = room.trim_prep_override || ''
     ) => {
       if (!ok || !trimMenuId || qty <= 0) return
+      const normalizedPrimerMode = normalizePrimerMode(primerMode)
       rows.push({
         room_id: room.room_id,
         trim_menu_id: trimMenuId,
         qty: String(qty),
         coats,
         auto_calc: autoCalc,
-        primer_mode: primerMode,
+        primer_mode: normalizedPrimerMode,
+        spot_prime_pct: normalizedPrimerMode === 'Spot' ? spotPrimePct : '',
         prep_level_override: prepLevelOverride,
         door_sides: doorSides,
         notes,
@@ -801,11 +846,47 @@ function buildTrimItemsFromRooms(
       '',
       '',
       room.trim_topcoats || '',
-      baseboardAutoCalc
+      baseboardAutoCalc,
+      room.baseboard_primer_mode || room.trim_primer || '',
+      room.baseboard_spot_prime_pct || '',
+      room.baseboard_prep_override || room.trim_prep_override || ''
     )
-    pushIf(!!room.crown_type_id, room.crown_type_id, crownLf, '', '', room.trim_topcoats || '', crownAutoCalc)
-    pushIf(!!room.window_casing_type_id, room.window_casing_type_id, windowCount)
-    pushIf(!!room.door_casing_type_id, room.door_casing_type_id, doorCasingCount)
+    pushIf(
+      !!room.crown_type_id,
+      room.crown_type_id,
+      crownLf,
+      '',
+      '',
+      room.trim_topcoats || '',
+      crownAutoCalc,
+      room.crown_primer_mode || room.trim_primer || '',
+      room.crown_spot_prime_pct || '',
+      room.crown_prep_override || room.trim_prep_override || ''
+    )
+    pushIf(
+      !!room.window_casing_type_id,
+      room.window_casing_type_id,
+      windowCount,
+      '',
+      '',
+      room.trim_topcoats || '',
+      'N',
+      room.window_casing_primer_mode || room.trim_primer || '',
+      room.window_casing_spot_prime_pct || '',
+      room.window_casing_prep_override || room.trim_prep_override || ''
+    )
+    pushIf(
+      !!room.door_casing_type_id,
+      room.door_casing_type_id,
+      doorCasingCount,
+      '',
+      '',
+      room.trim_topcoats || '',
+      'N',
+      room.door_casing_primer_mode || room.trim_primer || '',
+      room.door_casing_spot_prime_pct || '',
+      room.door_casing_prep_override || room.trim_prep_override || ''
+    )
     pushIf(
       !!room.door_type_id,
       room.door_type_id,
@@ -814,8 +895,9 @@ function buildTrimItemsFromRooms(
       room.door_sides || '1',
       room.trim_topcoats || '',
       'N',
-      room.trim_primer || '',
-      room.doors_prep_override || room.trim_prep_override || ''
+      room.door_primer_mode || room.trim_primer || '',
+      room.door_spot_prime_pct || '',
+      room.door_prep_override || room.doors_prep_override || room.trim_prep_override || ''
     )
     const doorExtras = extraDoorRows[room.room_id] ?? []
     doorExtras.forEach((extra) => {
@@ -829,7 +911,12 @@ function buildTrimItemsFromRooms(
         extra.coats || room.trim_topcoats || '',
         extra.auto_calc || 'N',
         extra.primer_mode || room.trim_primer || '',
-        extra.prep_level_override || room.doors_prep_override || room.trim_prep_override || ''
+        extra.spot_prime_pct || '',
+        extra.prep_level_override ||
+          room.door_prep_override ||
+          room.doors_prep_override ||
+          room.trim_prep_override ||
+          ''
       )
     })
     const doorCasingExtras = extraDoorCasingRows[room.room_id] ?? []
@@ -844,7 +931,11 @@ function buildTrimItemsFromRooms(
         extra.coats || room.trim_topcoats || '',
         extra.auto_calc || 'N',
         extra.primer_mode || room.trim_primer || '',
-        extra.prep_level_override || room.trim_prep_override || ''
+        extra.spot_prime_pct || '',
+        extra.prep_level_override ||
+          room.door_casing_prep_override ||
+          room.trim_prep_override ||
+          ''
       )
     })
     const windowCasingExtras = extraWindowCasingRows[room.room_id] ?? []
@@ -859,7 +950,11 @@ function buildTrimItemsFromRooms(
         extra.coats || room.trim_topcoats || '',
         extra.auto_calc || 'N',
         extra.primer_mode || room.trim_primer || '',
-        extra.prep_level_override || room.trim_prep_override || ''
+        extra.spot_prime_pct || '',
+        extra.prep_level_override ||
+          room.window_casing_prep_override ||
+          room.trim_prep_override ||
+          ''
       )
     })
   })
@@ -1026,8 +1121,16 @@ export default function EstimateEditorPage() {
       const trimMenuId = toText(row.trim_menu_id)
       if (!roomId || !trimMenuId) return
       const room = normalizedRooms.find((r) => r.room_id === roomId)
+      const primerMode = normalizePrimerMode(row.primer_mode)
+      const spotPrimePct = toNumString(row.spot_prime_pct)
+      const prepLevelOverride = toText(row.prep_level_override)
       if (doorTrimMenuIds.has(trimMenuId)) {
-        if (room?.door_type_id && room.door_type_id === trimMenuId) return
+        if (room?.door_type_id && room.door_type_id === trimMenuId) {
+          room.door_primer_mode = primerMode
+          room.door_spot_prime_pct = spotPrimePct
+          room.door_prep_override = prepLevelOverride
+          return
+        }
         if (!extrasDoorsByRoom[roomId]) extrasDoorsByRoom[roomId] = []
         extrasDoorsByRoom[roomId].push({
           local_id: `${roomId}-door-${trimMenuId}-${idx}`,
@@ -1036,15 +1139,21 @@ export default function EstimateEditorPage() {
           qty: toNumString(row.qty),
           coats: toNumString(row.coats),
           auto_calc: toYN(row.auto_calc, 'N'),
-          primer_mode: toText(row.primer_mode) || 'None',
-          prep_level_override: toText(row.prep_level_override),
+          primer_mode: primerMode,
+          spot_prime_pct: spotPrimePct,
+          prep_level_override: prepLevelOverride,
           door_sides: toNumString(row.door_sides) || '1',
           notes: toText(row.notes),
         })
         return
       }
       if (doorCasingTrimMenuIds.has(trimMenuId)) {
-        if (room?.door_casing_type_id && room.door_casing_type_id === trimMenuId) return
+        if (room?.door_casing_type_id && room.door_casing_type_id === trimMenuId) {
+          room.door_casing_primer_mode = primerMode
+          room.door_casing_spot_prime_pct = spotPrimePct
+          room.door_casing_prep_override = prepLevelOverride
+          return
+        }
         if (!extrasDoorCasingByRoom[roomId]) extrasDoorCasingByRoom[roomId] = []
         extrasDoorCasingByRoom[roomId].push({
           local_id: `${roomId}-door-casing-${trimMenuId}-${idx}`,
@@ -1053,15 +1162,21 @@ export default function EstimateEditorPage() {
           qty: toNumString(row.qty),
           coats: toNumString(row.coats),
           auto_calc: toYN(row.auto_calc, 'N'),
-          primer_mode: toText(row.primer_mode) || 'None',
-          prep_level_override: toText(row.prep_level_override),
+          primer_mode: primerMode,
+          spot_prime_pct: spotPrimePct,
+          prep_level_override: prepLevelOverride,
           door_sides: '',
           notes: toText(row.notes),
         })
         return
       }
       if (windowCasingTrimMenuIds.has(trimMenuId)) {
-        if (room?.window_casing_type_id && room.window_casing_type_id === trimMenuId) return
+        if (room?.window_casing_type_id && room.window_casing_type_id === trimMenuId) {
+          room.window_casing_primer_mode = primerMode
+          room.window_casing_spot_prime_pct = spotPrimePct
+          room.window_casing_prep_override = prepLevelOverride
+          return
+        }
         if (!extrasWindowCasingByRoom[roomId]) extrasWindowCasingByRoom[roomId] = []
         extrasWindowCasingByRoom[roomId].push({
           local_id: `${roomId}-window-casing-${trimMenuId}-${idx}`,
@@ -1070,11 +1185,24 @@ export default function EstimateEditorPage() {
           qty: toNumString(row.qty),
           coats: toNumString(row.coats),
           auto_calc: toYN(row.auto_calc, 'N'),
-          primer_mode: toText(row.primer_mode) || 'None',
-          prep_level_override: toText(row.prep_level_override),
+          primer_mode: primerMode,
+          spot_prime_pct: spotPrimePct,
+          prep_level_override: prepLevelOverride,
           door_sides: '',
           notes: toText(row.notes),
         })
+        return
+      }
+      if (room?.baseboard_type_id && room.baseboard_type_id === trimMenuId) {
+        room.baseboard_primer_mode = primerMode
+        room.baseboard_spot_prime_pct = spotPrimePct
+        room.baseboard_prep_override = prepLevelOverride
+        return
+      }
+      if (room?.crown_type_id && room.crown_type_id === trimMenuId) {
+        room.crown_primer_mode = primerMode
+        room.crown_spot_prime_pct = spotPrimePct
+        room.crown_prep_override = prepLevelOverride
       }
     })
     const hasCeilingsInRooms = normalizedRooms.some((r) => r.ceiling_include === 'Y')
@@ -1189,27 +1317,15 @@ export default function EstimateEditorPage() {
         })()
       )
     )
-    setAddSegmentRoom(
-      normalizedSegments[0]?.room_id ||
-        estimatePayload.inputs.rooms
-          .map((row) => toText(row.room_id))
-          .find(Boolean) ||
-        ''
-    )
-    setAddCeilingSegmentRoom(
-      normalizedCeilingSegments[0]?.room_id ||
-        estimatePayload.inputs.rooms
-          .map((row) => toText(row.room_id))
-          .find(Boolean) ||
-        ''
-    )
+    setAddSegmentRoom('')
+    setAddCeilingSegmentRoom('')
 
     setLoading(false)
     setLoadedOnce(true)
   }
 
   useEffect(() => {
-    void load()
+    void load(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId])
 
@@ -1261,6 +1377,29 @@ export default function EstimateEditorPage() {
     () => buildTrimItemsFromRooms(rooms, extraDoorRows, extraDoorCasingRows, extraWindowCasingRows),
     [rooms, extraDoorRows, extraDoorCasingRows, extraWindowCasingRows]
   )
+  const buildJobsettingsForSave = useCallback(() => {
+    const saveNeedsWallsPrimer = rooms.some((r) => {
+      if (r.walls_include !== 'Y') return false
+      const upper = r.walls_primer.trim().toUpperCase()
+      return !!upper && upper !== 'NONE'
+    })
+    const saveNeedsCeilingPrimer = rooms.some((r) => {
+      if (r.ceiling_include !== 'Y') return false
+      const upper = r.ceiling_primer.trim().toUpperCase()
+      return !!upper && upper !== 'NONE'
+    })
+    const saveNeedsTrimPrimer = generatedTrimItems.some((row) => primerModeEnabled(row.primer_mode))
+    const wallsPrimerId = saveNeedsWallsPrimer ? jobsettings.walls_primer_id : ''
+    const ceilingPrimerId = saveNeedsCeilingPrimer ? jobsettings.ceiling_primer_id : ''
+    const trimPrimerId = saveNeedsTrimPrimer ? jobsettings.trim_primer_id : ''
+    return {
+      ...jobsettings,
+      walls_primer_id: wallsPrimerId,
+      ceiling_primer_id: ceilingPrimerId,
+      trim_primer_id: trimPrimerId,
+      primer_id: wallsPrimerId || ceilingPrimerId || trimPrimerId || jobsettings.primer_id,
+    }
+  }, [generatedTrimItems, jobsettings, rooms])
 
   useEffect(() => {
     if (!loadedOnce || !estimate) return
@@ -1271,7 +1410,7 @@ export default function EstimateEditorPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          jobsettings,
+          jobsettings: buildJobsettingsForSave(),
           rooms,
           segments,
           ceiling_segments: ceilingSegments,
@@ -1305,6 +1444,7 @@ export default function EstimateEditorPage() {
     rollersDraft,
     prejobTrips,
     preJobTemplateTaskById,
+    buildJobsettingsForSave,
   ])
 
   const outputs = (estimate?.latest_output_json?.output_app ?? {}) as OutputApp
@@ -1340,14 +1480,8 @@ export default function EstimateEditorPage() {
     const upper = r.ceiling_primer.trim().toUpperCase()
     return !!upper && upper !== 'NONE'
   })
-  const needsTrimPrimerProduct = rooms.some((r) => {
-    if (r.trim_include !== 'Y') return false
-    const upper = r.trim_primer.trim().toUpperCase()
-    return !!upper && upper !== 'NONE'
-  })
-  const needsTrimPrimer = rooms.some(
-    (r) => r.trim_include === 'Y' && r.trim_primer.trim().toUpperCase() !== 'NONE' && r.trim_primer.trim() !== ''
-  )
+  const needsTrimPrimerProduct = generatedTrimItems.some((row) => primerModeEnabled(row.primer_mode))
+  const needsTrimPrimer = needsTrimPrimerProduct
   const showSegments = useMemo(
     () =>
       rooms.some((r) => r.mode === 'SEG') ||
@@ -1514,11 +1648,11 @@ export default function EstimateEditorPage() {
       ceilingheight_in: '',
       ceilingsqft_override: '',
       baseexclude_in: '',
-      walls_include: 'Y',
+      walls_include: 'N',
       walls_primer: '',
-      walls_topcoats: '2',
-      walls_prep_override: jobsettings.default_walls_prep_level,
-      walls_prep_level: jobsettings.default_walls_prep_level,
+      walls_topcoats: '',
+      walls_prep_override: '',
+      walls_prep_level: '',
       wall_sqft_override: '',
       openings_sqft: '',
       walls_notes: '',
@@ -1533,16 +1667,31 @@ export default function EstimateEditorPage() {
       trim_topcoats: '',
       trim_prep_override: jobsettings.default_trim_prep_level,
       doors_prep_override: jobsettings.default_trim_prep_level,
+      baseboard_primer_mode: '',
+      baseboard_spot_prime_pct: '',
+      baseboard_prep_override: '',
       baseboard_type_id: '',
       baseboard_lf: '',
       baseboard_auto: 'N',
+      crown_primer_mode: '',
+      crown_spot_prime_pct: '',
+      crown_prep_override: '',
       crown_type_id: '',
       crown_lf: '',
       crown_auto: 'N',
+      window_casing_primer_mode: '',
+      window_casing_spot_prime_pct: '',
+      window_casing_prep_override: '',
       window_casing_type_id: '',
       window_count: '',
+      door_casing_primer_mode: '',
+      door_casing_spot_prime_pct: '',
+      door_casing_prep_override: '',
       door_casing_type_id: '',
       door_casing_count: '',
+      door_primer_mode: '',
+      door_spot_prime_pct: '',
+      door_prep_override: '',
       door_type_id: '',
       door_paint_count: '',
       door_sides: '',
@@ -1617,6 +1766,21 @@ export default function EstimateEditorPage() {
           next.baseboard_type_id = ''
           next.baseboard_lf = ''
           next.baseboard_auto = 'N'
+          next.baseboard_primer_mode = ''
+          next.baseboard_spot_prime_pct = ''
+          next.baseboard_prep_override = ''
+          next.crown_primer_mode = ''
+          next.crown_spot_prime_pct = ''
+          next.crown_prep_override = ''
+          next.window_casing_primer_mode = ''
+          next.window_casing_spot_prime_pct = ''
+          next.window_casing_prep_override = ''
+          next.door_casing_primer_mode = ''
+          next.door_casing_spot_prime_pct = ''
+          next.door_casing_prep_override = ''
+          next.door_primer_mode = ''
+          next.door_spot_prime_pct = ''
+          next.door_prep_override = ''
           next.window_casing_type_id = ''
           next.window_count = ''
           next.door_casing_type_id = ''
@@ -1744,7 +1908,8 @@ export default function EstimateEditorPage() {
           qty: '',
           coats: '',
           auto_calc: 'N',
-          primer_mode: 'None',
+          primer_mode: '',
+          spot_prime_pct: '',
           prep_level_override: '',
           door_sides: '1',
           notes: '',
@@ -1782,7 +1947,8 @@ export default function EstimateEditorPage() {
           qty: '',
           coats: '',
           auto_calc: 'N',
-          primer_mode: 'None',
+          primer_mode: '',
+          spot_prime_pct: '',
           prep_level_override: '',
           door_sides: '',
           notes: '',
@@ -1820,7 +1986,8 @@ export default function EstimateEditorPage() {
           qty: '',
           coats: '',
           auto_calc: 'N',
-          primer_mode: 'None',
+          primer_mode: '',
+          spot_prime_pct: '',
           prep_level_override: '',
           door_sides: '',
           notes: '',
@@ -2113,7 +2280,7 @@ export default function EstimateEditorPage() {
           {
             id: `task-${Date.now()}-0`,
             mode: 'template',
-            rollup_scope: 'Other',
+            rollup_scope: 'Walls',
             task_template_id: '',
             task_name: '',
             manual_task_name: '',
@@ -2152,7 +2319,7 @@ export default function EstimateEditorPage() {
                 {
                   id: `task-${Date.now()}-${trip.tasks.length}`,
                   mode: 'template',
-                  rollup_scope: 'Other',
+                  rollup_scope: 'Walls',
                   task_template_id: '',
                   task_name: '',
                   manual_task_name: '',
@@ -2210,6 +2377,10 @@ export default function EstimateEditorPage() {
   const clientValidationIssues = () => {
     const issues: string[] = []
     rooms.forEach((room) => {
+      const trimPerimeterAutoCalc =
+        room.trim_include === 'Y' &&
+        room.mode === 'RECT' &&
+        (room.baseboard_auto === 'Y' || room.crown_auto === 'Y')
       if (room.walls_include === 'Y') {
         if (!room.wall_color_id) issues.push(`${room.room_id}: wall color is required when Walls=Include`)
         if (room.mode === 'RECT' && !room.wallheight_in) {
@@ -2291,6 +2462,22 @@ export default function EstimateEditorPage() {
           issues.push(`${room.room_id}: ceiling sqft needs dimensions/segments or an override`)
         }
       }
+      if (trimPerimeterAutoCalc && (!room.length_in || !room.width_in)) {
+        issues.push(
+          `${room.room_id}: length and width are required when trim auto-calc perimeter is enabled`
+        )
+      }
+    })
+    generatedTrimItems.forEach((row, idx) => {
+      if (normalizePrimerMode(row.primer_mode) !== 'Spot') return
+      const pct = Number(row.spot_prime_pct || '')
+      if (!Number.isFinite(pct) || pct <= 0) {
+        const trimId = (row.trim_menu_id || '').trim()
+        const roomId = (row.room_id || '').trim()
+        issues.push(
+          `${roomId || 'Room'} ${trimId ? `(${trimId}) ` : ''}trim item ${idx + 1}: Spot % is required and must be greater than 0 when Primer Mode is Spot`
+        )
+      }
     })
     if (hasTrim) {
       if (!jobsettings.trim_paint_qty || !jobsettings.trim_paint_uom) {
@@ -2330,7 +2517,7 @@ export default function EstimateEditorPage() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        jobsettings,
+        jobsettings: buildJobsettingsForSave(),
         rooms,
         segments,
         trim_items: generatedTrimItems,
@@ -2563,12 +2750,18 @@ export default function EstimateEditorPage() {
               </div>
             </div>
 
-            <button onClick={addRoom} style={btnGhost}>
+            <button onClick={addRoom} style={{ ...btnPrimary, justifySelf: 'start', padding: '10px 16px' }}>
               {iconLabel(Plus, 'Add Room', 14)}
             </button>
 
             {rooms.map((room, index) => {
-              const needsRectDims = room.mode === 'RECT'
+              const trimPerimeterAutoCalc =
+                room.trim_include === 'Y' &&
+                room.mode === 'RECT' &&
+                (room.baseboard_auto === 'Y' || room.crown_auto === 'Y')
+              const needsRectDims =
+                room.mode === 'RECT' &&
+                (room.walls_include === 'Y' || room.ceiling_include === 'Y' || trimPerimeterAutoCalc)
               const needsRectCeilingDims = room.ceiling_include === 'Y' && room.mode === 'RECT'
               const roomWarnings: string[] = []
               const baseboardSelected = !!room.baseboard_type_id
@@ -2674,24 +2867,27 @@ export default function EstimateEditorPage() {
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <label style={chipLabel}>
                       Walls
-                      <select value={room.walls_include} onChange={(e) => updateRoom(index, { walls_include: e.target.value as 'Y' | 'N' })} style={inputStyle}>
-                        <option value="Y">Include</option>
-                        <option value="N">Skip</option>
-                      </select>
+                      <input
+                        type="checkbox"
+                        checked={room.walls_include === 'Y'}
+                        onChange={(e) => updateRoom(index, { walls_include: e.target.checked ? 'Y' : 'N' })}
+                      />
                     </label>
                     <label style={chipLabel}>
                       Ceilings
-                      <select value={room.ceiling_include} onChange={(e) => updateRoom(index, { ceiling_include: e.target.value as 'Y' | 'N' })} style={inputStyle}>
-                        <option value="Y">Include</option>
-                        <option value="N">Skip</option>
-                      </select>
+                      <input
+                        type="checkbox"
+                        checked={room.ceiling_include === 'Y'}
+                        onChange={(e) => updateRoom(index, { ceiling_include: e.target.checked ? 'Y' : 'N' })}
+                      />
                     </label>
                     <label style={chipLabel}>
                       Trim
-                      <select value={room.trim_include} onChange={(e) => updateRoom(index, { trim_include: e.target.value as 'Y' | 'N' })} style={inputStyle}>
-                        <option value="Y">Include</option>
-                        <option value="N">Skip</option>
-                      </select>
+                      <input
+                        type="checkbox"
+                        checked={room.trim_include === 'Y'}
+                        onChange={(e) => updateRoom(index, { trim_include: e.target.checked ? 'Y' : 'N' })}
+                      />
                     </label>
                   </div>
 
@@ -2820,24 +3016,6 @@ export default function EstimateEditorPage() {
                         </select>
                       </label>
                       <label style={{ display: 'grid', gap: 4 }}>
-                        <div style={labelStyle}>Ceiling Prep Level</div>
-                        <select
-                          value={room.ceiling_prep_level || ''}
-                          onChange={(e) =>
-                            updateRoom(index, {
-                              ceiling_prep_level: e.target.value,
-                              ceiling_prep_override: e.target.value,
-                            })
-                          }
-                          style={inputStyle}
-                        >
-                          <option value="">Use sheet default</option>
-                          <option value="Light">Light</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Heavy">Heavy</option>
-                        </select>
-                      </label>
-                      <label style={{ display: 'grid', gap: 4 }}>
                         <div style={labelStyle}>Ceiling Prep Override</div>
                         <select
                           value={room.ceiling_prep_override || ''}
@@ -2887,14 +3065,15 @@ export default function EstimateEditorPage() {
                       {roomScopesOpen[room.room_id]?.trim && (
                         <div style={{ display: 'grid', gap: 8, alignItems: 'start', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
                       <label style={{ display: 'grid', gap: 4 }}>
-                        <div style={labelStyle}>Trim Primer</div>
+                        <div style={labelStyle}>Default Primer Mode</div>
                         <select
-                          value={room.trim_primer || 'None'}
+                          value={room.trim_primer || ''}
                           onChange={(e) => updateRoom(index, { trim_primer: e.target.value })}
                           style={inputStyle}
                         >
-                          <option value="None">None</option>
-                          <option value="Yes">Yes</option>
+                          <option value="">None</option>
+                          <option value="Spot">Spot</option>
+                          <option value="Full">Full</option>
                         </select>
                       </label>
                       <label style={{ display: 'grid', gap: 4 }}>
@@ -3007,6 +3186,54 @@ export default function EstimateEditorPage() {
                             />
                             Auto-calc from perimeter
                           </label>
+                          <details style={{ gridColumn: '1 / -1' }}>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Primer Mode</div>
+                                <select
+                                  value={room.baseboard_primer_mode || ''}
+                                  onChange={(e) =>
+                                    updateRoom(index, {
+                                      baseboard_primer_mode: e.target.value,
+                                      baseboard_spot_prime_pct: e.target.value === 'Spot' ? room.baseboard_spot_prime_pct : '',
+                                    })
+                                  }
+                                  style={inputStyle}
+                                  disabled={!room.baseboard_type_id}
+                                >
+                                  <option value="">Default ({room.trim_primer || 'None'})</option>
+                                  <option value="Spot">Spot</option>
+                                  <option value="Full">Full</option>
+                                </select>
+                              </label>
+                              {(room.baseboard_primer_mode || room.trim_primer) === 'Spot' && (
+                                <label style={{ display: 'grid', gap: 4 }}>
+                                  <div style={labelStyle}>Spot %</div>
+                                  <input
+                                    value={room.baseboard_spot_prime_pct}
+                                    onChange={(e) => updateRoom(index, { baseboard_spot_prime_pct: e.target.value })}
+                                    style={inputStyle}
+                                    disabled={!room.baseboard_type_id}
+                                  />
+                                </label>
+                              )}
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Prep Override</div>
+                                <select
+                                  value={room.baseboard_prep_override || ''}
+                                  onChange={(e) => updateRoom(index, { baseboard_prep_override: e.target.value })}
+                                  style={inputStyle}
+                                  disabled={!room.baseboard_type_id}
+                                >
+                                  <option value="">Default ({room.trim_prep_override || 'None'})</option>
+                                  <option value="Light">Light</option>
+                                  <option value="Medium">Medium</option>
+                                  <option value="Heavy">Heavy</option>
+                                </select>
+                              </label>
+                            </div>
+                          </details>
                         </div>
                         )}
 
@@ -3047,37 +3274,136 @@ export default function EstimateEditorPage() {
                             />
                             Auto-calc from perimeter
                           </label>
+                          <details style={{ gridColumn: '1 / -1' }}>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Primer Mode</div>
+                                <select
+                                  value={room.crown_primer_mode || ''}
+                                  onChange={(e) =>
+                                    updateRoom(index, {
+                                      crown_primer_mode: e.target.value,
+                                      crown_spot_prime_pct: e.target.value === 'Spot' ? room.crown_spot_prime_pct : '',
+                                    })
+                                  }
+                                  style={inputStyle}
+                                  disabled={!room.crown_type_id}
+                                >
+                                  <option value="">Default ({room.trim_primer || 'None'})</option>
+                                  <option value="Spot">Spot</option>
+                                  <option value="Full">Full</option>
+                                </select>
+                              </label>
+                              {(room.crown_primer_mode || room.trim_primer) === 'Spot' && (
+                                <label style={{ display: 'grid', gap: 4 }}>
+                                  <div style={labelStyle}>Spot %</div>
+                                  <input
+                                    value={room.crown_spot_prime_pct}
+                                    onChange={(e) => updateRoom(index, { crown_spot_prime_pct: e.target.value })}
+                                    style={inputStyle}
+                                    disabled={!room.crown_type_id}
+                                  />
+                                </label>
+                              )}
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Prep Override</div>
+                                <select
+                                  value={room.crown_prep_override || ''}
+                                  onChange={(e) => updateRoom(index, { crown_prep_override: e.target.value })}
+                                  style={inputStyle}
+                                  disabled={!room.crown_type_id}
+                                >
+                                  <option value="">Default ({room.trim_prep_override || 'None'})</option>
+                                  <option value="Light">Light</option>
+                                  <option value="Medium">Medium</option>
+                                  <option value="Heavy">Heavy</option>
+                                </select>
+                              </label>
+                            </div>
+                          </details>
                         </div>
                         )}
 
                         {windowCasingSelected && (
                         <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
                           <div style={{ ...labelStyle, color: '#111' }}>Window Casing</div>
-                          <label style={{ display: 'grid', gap: 4 }}>
-                            <div style={labelStyle}>Type</div>
-                            <select
-                              value={room.window_casing_type_id}
-                              onChange={(e) => updateRoom(index, { window_casing_type_id: e.target.value })}
-                              style={inputStyle}
-                              disabled={!room.window_casing_type_id}
-                            >
-                              <option value="">Select type</option>
-                              {windowCasingOptions.map((option) => (
-                                <option key={option.id} value={option.id}>
-                                  {trimOptionLabel(option)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label style={{ display: 'grid', gap: 4 }}>
-                            <div style={labelStyle}>Qty (EA)</div>
-                            <input
-                              value={room.window_count}
-                              onChange={(e) => updateRoom(index, { window_count: e.target.value })}
-                              style={inputStyle}
-                              disabled={!room.window_casing_type_id}
-                            />
-                          </label>
+                          <div style={{ display: 'grid', gap: 6, gridTemplateColumns: '1fr 120px', alignItems: 'end' }}>
+                            <label style={{ display: 'grid', gap: 4 }}>
+                              <div style={labelStyle}>Type</div>
+                              <select
+                                value={room.window_casing_type_id}
+                                onChange={(e) => updateRoom(index, { window_casing_type_id: e.target.value })}
+                                style={inputStyle}
+                                disabled={!room.window_casing_type_id}
+                              >
+                                <option value="">Select type</option>
+                                {windowCasingOptions.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {trimOptionLabel(option)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label style={{ display: 'grid', gap: 4 }}>
+                              <div style={labelStyle}>Qty (EA)</div>
+                              <input
+                                value={room.window_count}
+                                onChange={(e) => updateRoom(index, { window_count: e.target.value })}
+                                style={inputStyle}
+                                disabled={!room.window_casing_type_id}
+                              />
+                            </label>
+                          </div>
+                          <details style={{ gridColumn: '1 / -1' }}>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Primer Mode</div>
+                                <select
+                                  value={room.window_casing_primer_mode || ''}
+                                  onChange={(e) =>
+                                    updateRoom(index, {
+                                      window_casing_primer_mode: e.target.value,
+                                      window_casing_spot_prime_pct:
+                                        e.target.value === 'Spot' ? room.window_casing_spot_prime_pct : '',
+                                    })
+                                  }
+                                  style={inputStyle}
+                                  disabled={!room.window_casing_type_id}
+                                >
+                                  <option value="">Default ({room.trim_primer || 'None'})</option>
+                                  <option value="Spot">Spot</option>
+                                  <option value="Full">Full</option>
+                                </select>
+                              </label>
+                              {(room.window_casing_primer_mode || room.trim_primer) === 'Spot' && (
+                                <label style={{ display: 'grid', gap: 4 }}>
+                                  <div style={labelStyle}>Spot %</div>
+                                  <input
+                                    value={room.window_casing_spot_prime_pct}
+                                    onChange={(e) => updateRoom(index, { window_casing_spot_prime_pct: e.target.value })}
+                                    style={inputStyle}
+                                    disabled={!room.window_casing_type_id}
+                                  />
+                                </label>
+                              )}
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Prep Override</div>
+                                <select
+                                  value={room.window_casing_prep_override || ''}
+                                  onChange={(e) => updateRoom(index, { window_casing_prep_override: e.target.value })}
+                                  style={inputStyle}
+                                  disabled={!room.window_casing_type_id}
+                                >
+                                  <option value="">Default ({room.trim_prep_override || 'None'})</option>
+                                  <option value="Light">Light</option>
+                                  <option value="Medium">Medium</option>
+                                  <option value="Heavy">Heavy</option>
+                                </select>
+                              </label>
+                            </div>
+                          </details>
                           <div style={{ display: 'grid', gap: 6 }}>
                             {windowCasingExtras.map((extra, extraIndex) => (
                               <div key={extra.local_id} style={{ display: 'grid', gap: 6, gridTemplateColumns: '1fr 120px auto', alignItems: 'end' }}>
@@ -3122,31 +3448,82 @@ export default function EstimateEditorPage() {
                         {doorCasingSelected && (
                         <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
                           <div style={{ ...labelStyle, color: '#111' }}>Door Casing</div>
-                          <label style={{ display: 'grid', gap: 4 }}>
-                            <div style={labelStyle}>Type</div>
-                            <select
-                              value={room.door_casing_type_id}
-                              onChange={(e) => updateRoom(index, { door_casing_type_id: e.target.value })}
-                              style={inputStyle}
-                              disabled={!room.door_casing_type_id}
-                            >
-                              <option value="">Select type</option>
-                              {doorCasingOptions.map((option) => (
-                                <option key={option.id} value={option.id}>
-                                  {trimOptionLabel(option)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label style={{ display: 'grid', gap: 4 }}>
-                            <div style={labelStyle}>Qty (EA)</div>
-                            <input
-                              value={room.door_casing_count}
-                              onChange={(e) => updateRoom(index, { door_casing_count: e.target.value })}
-                              style={inputStyle}
-                              disabled={!room.door_casing_type_id}
-                            />
-                          </label>
+                          <div style={{ display: 'grid', gap: 6, gridTemplateColumns: '1fr 120px', alignItems: 'end' }}>
+                            <label style={{ display: 'grid', gap: 4 }}>
+                              <div style={labelStyle}>Type</div>
+                              <select
+                                value={room.door_casing_type_id}
+                                onChange={(e) => updateRoom(index, { door_casing_type_id: e.target.value })}
+                                style={inputStyle}
+                                disabled={!room.door_casing_type_id}
+                              >
+                                <option value="">Select type</option>
+                                {doorCasingOptions.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {trimOptionLabel(option)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label style={{ display: 'grid', gap: 4 }}>
+                              <div style={labelStyle}>Qty (EA)</div>
+                              <input
+                                value={room.door_casing_count}
+                                onChange={(e) => updateRoom(index, { door_casing_count: e.target.value })}
+                                style={inputStyle}
+                                disabled={!room.door_casing_type_id}
+                              />
+                            </label>
+                          </div>
+                          <details style={{ gridColumn: '1 / -1' }}>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Primer Mode</div>
+                                <select
+                                  value={room.door_casing_primer_mode || ''}
+                                  onChange={(e) =>
+                                    updateRoom(index, {
+                                      door_casing_primer_mode: e.target.value,
+                                      door_casing_spot_prime_pct:
+                                        e.target.value === 'Spot' ? room.door_casing_spot_prime_pct : '',
+                                    })
+                                  }
+                                  style={inputStyle}
+                                  disabled={!room.door_casing_type_id}
+                                >
+                                  <option value="">Default ({room.trim_primer || 'None'})</option>
+                                  <option value="Spot">Spot</option>
+                                  <option value="Full">Full</option>
+                                </select>
+                              </label>
+                              {(room.door_casing_primer_mode || room.trim_primer) === 'Spot' && (
+                                <label style={{ display: 'grid', gap: 4 }}>
+                                  <div style={labelStyle}>Spot %</div>
+                                  <input
+                                    value={room.door_casing_spot_prime_pct}
+                                    onChange={(e) => updateRoom(index, { door_casing_spot_prime_pct: e.target.value })}
+                                    style={inputStyle}
+                                    disabled={!room.door_casing_type_id}
+                                  />
+                                </label>
+                              )}
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Prep Override</div>
+                                <select
+                                  value={room.door_casing_prep_override || ''}
+                                  onChange={(e) => updateRoom(index, { door_casing_prep_override: e.target.value })}
+                                  style={inputStyle}
+                                  disabled={!room.door_casing_type_id}
+                                >
+                                  <option value="">Default ({room.trim_prep_override || 'None'})</option>
+                                  <option value="Light">Light</option>
+                                  <option value="Medium">Medium</option>
+                                  <option value="Heavy">Heavy</option>
+                                </select>
+                              </label>
+                            </div>
+                          </details>
                           <div style={{ display: 'grid', gap: 6 }}>
                             {doorCasingExtras.map((extra, extraIndex) => (
                               <div key={extra.local_id} style={{ display: 'grid', gap: 6, gridTemplateColumns: '1fr 120px auto', alignItems: 'end' }}>
@@ -3191,52 +3568,102 @@ export default function EstimateEditorPage() {
                         {doorsSelected && (
                         <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
                           <div style={{ ...labelStyle, color: '#111' }}>Doors</div>
-                          <label style={{ display: 'grid', gap: 4 }}>
-                            <div style={labelStyle}>Type</div>
-                            <select
-                              value={room.door_type_id}
-                              onChange={(e) => updateRoom(index, { door_type_id: e.target.value })}
-                              style={inputStyle}
-                              disabled={!room.door_type_id}
-                            >
-                              <option value="">Select type</option>
-                              {doorTypeOptions.map((option) => (
-                                <option key={option.id} value={option.id}>
-                                  {trimOptionLabel(option)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label style={{ display: 'grid', gap: 4 }}>
-                            <div style={labelStyle}>Qty (EA)</div>
-                            <input
-                              value={room.door_paint_count}
-                              onChange={(e) => updateRoom(index, { door_paint_count: e.target.value })}
-                              style={inputStyle}
-                              disabled={!room.door_type_id}
-                            />
-                          </label>
-                          <label style={{ display: 'grid', gap: 4 }}>
-                            <div style={labelStyle}>Door Coverage</div>
-                            <select
-                              value={room.door_sides || '1'}
-                              onChange={(e) => updateRoom(index, { door_sides: e.target.value })}
-                              style={inputStyle}
-                              disabled={!room.door_type_id}
-                            >
-                              <option value="0.5">0.5 (one side)</option>
-                              <option value="1">1.0 (whole door)</option>
-                            </select>
-                          </label>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'end', flexWrap: 'wrap' }}>
+                            <label style={{ display: 'grid', gap: 4, flex: '1 1 260px', minWidth: 220 }}>
+                              <div style={labelStyle}>Type</div>
+                              <select
+                                value={room.door_type_id}
+                                onChange={(e) => updateRoom(index, { door_type_id: e.target.value })}
+                                style={{ ...inputStyle, width: 'fit-content', minWidth: 220, maxWidth: '100%' }}
+                                disabled={!room.door_type_id}
+                              >
+                                <option value="">Select type</option>
+                                {doorTypeOptions.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {trimOptionLabel(option)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label style={{ display: 'grid', gap: 4, flex: '0 0 120px' }}>
+                              <div style={labelStyle}>Qty (EA)</div>
+                              <input
+                                value={room.door_paint_count}
+                                onChange={(e) => updateRoom(index, { door_paint_count: e.target.value })}
+                                style={inputStyle}
+                                disabled={!room.door_type_id}
+                              />
+                            </label>
+                            <label style={{ display: 'grid', gap: 4, flex: '0 0 150px' }}>
+                              <div style={labelStyle}>Door Coverage</div>
+                              <select
+                                value={room.door_sides || '1'}
+                                onChange={(e) => updateRoom(index, { door_sides: e.target.value })}
+                                style={{ ...inputStyle, width: 'fit-content', minWidth: 180, maxWidth: '100%' }}
+                                disabled={!room.door_type_id}
+                              >
+                                <option value="0.5">0.5 (one side)</option>
+                                <option value="1">1.0 (whole door)</option>
+                              </select>
+                            </label>
+                          </div>
+                          <details style={{ gridColumn: '1 / -1' }}>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Primer Mode</div>
+                                <select
+                                  value={room.door_primer_mode || ''}
+                                  onChange={(e) =>
+                                    updateRoom(index, {
+                                      door_primer_mode: e.target.value,
+                                      door_spot_prime_pct: e.target.value === 'Spot' ? room.door_spot_prime_pct : '',
+                                    })
+                                  }
+                                  style={inputStyle}
+                                  disabled={!room.door_type_id}
+                                >
+                                  <option value="">Default ({room.trim_primer || 'None'})</option>
+                                  <option value="Spot">Spot</option>
+                                  <option value="Full">Full</option>
+                                </select>
+                              </label>
+                              {(room.door_primer_mode || room.trim_primer) === 'Spot' && (
+                                <label style={{ display: 'grid', gap: 4 }}>
+                                  <div style={labelStyle}>Spot %</div>
+                                  <input
+                                    value={room.door_spot_prime_pct}
+                                    onChange={(e) => updateRoom(index, { door_spot_prime_pct: e.target.value })}
+                                    style={inputStyle}
+                                    disabled={!room.door_type_id}
+                                  />
+                                </label>
+                              )}
+                              <label style={{ display: 'grid', gap: 4 }}>
+                                <div style={labelStyle}>Prep Override</div>
+                                <select
+                                  value={room.door_prep_override || room.doors_prep_override || ''}
+                                  onChange={(e) => updateRoom(index, { door_prep_override: e.target.value })}
+                                  style={inputStyle}
+                                  disabled={!room.door_type_id}
+                                >
+                                  <option value="">Default ({room.doors_prep_override || room.trim_prep_override || 'None'})</option>
+                                  <option value="Light">Light</option>
+                                  <option value="Medium">Medium</option>
+                                  <option value="Heavy">Heavy</option>
+                                </select>
+                              </label>
+                            </div>
+                          </details>
                           <div style={{ display: 'grid', gap: 6 }}>
                             {doorExtras.map((extra, extraIndex) => (
-                              <div key={extra.local_id} style={{ display: 'grid', gap: 6, gridTemplateColumns: '1fr 120px 150px auto', alignItems: 'end' }}>
-                                <label style={{ display: 'grid', gap: 4 }}>
+                              <div key={extra.local_id} style={{ display: 'flex', gap: 6, alignItems: 'end', flexWrap: 'wrap' }}>
+                                <label style={{ display: 'grid', gap: 4, flex: '1 1 260px', minWidth: 220 }}>
                                   <div style={labelStyle}>Door Type {extraIndex + 2}</div>
                                   <select
                                     value={extra.trim_menu_id}
                                     onChange={(e) => updateDoorTypeRow(room.room_id, extra.local_id, { trim_menu_id: e.target.value })}
-                                    style={inputStyle}
+                                    style={{ ...inputStyle, width: 'fit-content', minWidth: 220, maxWidth: '100%' }}
                                   >
                                     <option value="">Select</option>
                                     {doorTypeOptions.map((option) => (
@@ -3246,7 +3673,7 @@ export default function EstimateEditorPage() {
                                     ))}
                                   </select>
                                 </label>
-                                <label style={{ display: 'grid', gap: 4 }}>
+                                <label style={{ display: 'grid', gap: 4, flex: '0 0 120px' }}>
                                   <div style={labelStyle}>Qty (EA)</div>
                                   <input
                                     value={extra.qty}
@@ -3255,7 +3682,7 @@ export default function EstimateEditorPage() {
                                     disabled={!extra.trim_menu_id}
                                   />
                                 </label>
-                                <label style={{ display: 'grid', gap: 4 }}>
+                                <label style={{ display: 'grid', gap: 4, flex: '0 0 150px' }}>
                                   <div style={labelStyle}>Door Coverage</div>
                                   <select
                                     value={extra.door_sides || '1'}
@@ -3267,9 +3694,61 @@ export default function EstimateEditorPage() {
                                     <option value="1">1.0</option>
                                   </select>
                                 </label>
-                                <button onClick={() => removeDoorTypeRow(room.room_id, extra.local_id)} style={btnDanger}>
+                                <button onClick={() => removeDoorTypeRow(room.room_id, extra.local_id)} style={{ ...btnDanger, flex: '0 0 auto' }}>
                                   Remove
                                 </button>
+                                <details style={{ gridColumn: '1 / -1' }}>
+                                  <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                                  <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+                                    <label style={{ display: 'grid', gap: 4 }}>
+                                      <div style={labelStyle}>Primer Mode</div>
+                                      <select
+                                        value={extra.primer_mode || ''}
+                                        onChange={(e) =>
+                                          updateDoorTypeRow(room.room_id, extra.local_id, {
+                                            primer_mode: e.target.value,
+                                            spot_prime_pct: e.target.value === 'Spot' ? extra.spot_prime_pct : '',
+                                          })
+                                        }
+                                        style={inputStyle}
+                                        disabled={!extra.trim_menu_id}
+                                      >
+                                        <option value="">Default ({room.door_primer_mode || room.trim_primer || 'None'})</option>
+                                        <option value="Spot">Spot</option>
+                                        <option value="Full">Full</option>
+                                      </select>
+                                    </label>
+                                    {(extra.primer_mode || room.door_primer_mode || room.trim_primer) === 'Spot' && (
+                                      <label style={{ display: 'grid', gap: 4 }}>
+                                        <div style={labelStyle}>Spot %</div>
+                                        <input
+                                          value={extra.spot_prime_pct}
+                                          onChange={(e) =>
+                                            updateDoorTypeRow(room.room_id, extra.local_id, { spot_prime_pct: e.target.value })
+                                          }
+                                          style={inputStyle}
+                                          disabled={!extra.trim_menu_id}
+                                        />
+                                      </label>
+                                    )}
+                                    <label style={{ display: 'grid', gap: 4 }}>
+                                      <div style={labelStyle}>Prep Override</div>
+                                      <select
+                                        value={extra.prep_level_override || ''}
+                                        onChange={(e) =>
+                                          updateDoorTypeRow(room.room_id, extra.local_id, { prep_level_override: e.target.value })
+                                        }
+                                        style={inputStyle}
+                                        disabled={!extra.trim_menu_id}
+                                      >
+                                        <option value="">Default ({room.door_prep_override || room.doors_prep_override || room.trim_prep_override || 'None'})</option>
+                                        <option value="Light">Light</option>
+                                        <option value="Medium">Medium</option>
+                                        <option value="Heavy">Heavy</option>
+                                      </select>
+                                    </label>
+                                  </div>
+                                </details>
                               </div>
                             ))}
                             {doorsSelected && (
@@ -3282,7 +3761,7 @@ export default function EstimateEditorPage() {
                         )}
                       </div>
 
-                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#6b7280' }}>
+                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#6b7280', overflowWrap: 'anywhere' }}>
                         Trim items map to sheet Trim Menu IDs from Constants: {generatedTrimItems
                           .filter((item) => item.room_id === room.room_id)
                           .map((item) => item.trim_menu_id)
@@ -3306,7 +3785,17 @@ export default function EstimateEditorPage() {
               If a room is set to Segmented, add segments here; wall sqft will be calculated from segments and height.
             </div>
             <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 10, display: 'grid', gap: 10 }}>
-              <button type="button" style={{ ...btnGhost, justifySelf: 'start' }} onClick={() => setWallSegmentsOpen((v) => !v)}>
+              <button
+                type="button"
+                style={{ ...btnGhost, justifySelf: 'start' }}
+                onClick={() =>
+                  setWallSegmentsOpen((v) => {
+                    const next = !v
+                    if (next) setAddSegmentRoom('')
+                    return next
+                  })
+                }
+              >
                 {wallSegmentsOpen ? 'Hide Wall Segments' : 'Show Wall Segments'}
               </button>
               {wallSegmentsOpen && (
@@ -3470,7 +3959,17 @@ export default function EstimateEditorPage() {
             </div>
 
             <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 10, display: 'grid', gap: 10 }}>
-              <button type="button" style={{ ...btnGhost, justifySelf: 'start' }} onClick={() => setCeilingSegmentsOpen((v) => !v)}>
+              <button
+                type="button"
+                style={{ ...btnGhost, justifySelf: 'start' }}
+                onClick={() =>
+                  setCeilingSegmentsOpen((v) => {
+                    const next = !v
+                    if (next) setAddCeilingSegmentRoom('')
+                    return next
+                  })
+                }
+              >
                 {ceilingSegmentsOpen ? 'Hide Ceiling Segments' : 'Show Ceiling Segments'}
               </button>
               {ceilingSegmentsOpen && (
@@ -3788,7 +4287,6 @@ export default function EstimateEditorPage() {
                               <option value="Walls">Walls</option>
                               <option value="Ceilings">Ceilings</option>
                               <option value="Trim">Trim</option>
-                              <option value="Other">Other</option>
                             </select>
                           </label>
                         )}
@@ -4190,8 +4688,9 @@ const roomCardStyle: CSSProperties = {
 }
 
 const chipLabel: CSSProperties = {
-  display: 'grid',
-  gap: 4,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
   fontSize: 12,
   minWidth: 130,
 }

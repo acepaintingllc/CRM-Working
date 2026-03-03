@@ -460,34 +460,36 @@ export async function PUT(
 
     if (Array.isArray(body.prejob)) {
       const rows = body.prejob
-        .map((row: Unsafe, idx: number) => ({
-          id: asText(row.id) || undefined,
-          org_id: orgId,
-          estimate_id: id,
-          job_id: estimate.job_id,
-          position: idx,
-          category: asText(row.category || row.rollup_scope) || null,
-          trip_name: asText(row.trip_name || row.manual_task_name || row.man_trip_name) || null,
-          trip_num: asNullableNumber(row.trip_num),
-          rollup_scope: asText(row.rollup_scope || row.category) || null,
-          man_trip_name:
-            asText(row.task_template_id)
-              ? null
-              : asText(row.manual_task_name || row.man_trip_name || row.trip_name) || null,
-          man_qty: asNullableNumber(row.man_qty ?? row.qty),
-          man_hours_each: asNullableNumber(row.man_hours_each ?? row.hours_each),
-          task:
-            asText(
-              row.task_name || row.task_label || row.manual_task_name || row.man_trip_name || row.trip_name || row.task
-            ) || null,
-          qty: asNullableNumber(row.qty),
-          hours_each: asNullableNumber(row.hours_each),
-          laborrate: asNullableNumber(row.laborrate ?? row.man_hours_each),
-          markup: asNullableNumber(row.markup),
-          extra_supplies: asNullableNumber(row.extra_supplies),
-          notes: asText(row.notes) || null,
-          active: toYN(row.active, 'Y'),
-        }))
+        .map((row: Unsafe, idx: number) => {
+          const hasTemplateTask = !!asText(row.task_template_id)
+          const quantity = asNullableNumber(row.qty ?? row.man_qty)
+          return {
+            id: asText(row.id) || undefined,
+            org_id: orgId,
+            estimate_id: id,
+            job_id: estimate.job_id,
+            position: idx,
+            category: asText(row.category || row.rollup_scope) || null,
+            trip_name: asText(row.trip_name || row.manual_task_name || row.man_trip_name) || null,
+            trip_num: asNullableNumber(row.trip_num),
+            rollup_scope: asText(row.rollup_scope || row.category) || null,
+            man_trip_name:
+              hasTemplateTask ? null : asText(row.manual_task_name || row.man_trip_name || row.trip_name) || null,
+            man_qty: hasTemplateTask ? null : quantity,
+            man_hours_each: asNullableNumber(row.man_hours_each ?? row.hours_each),
+            task:
+              asText(
+                row.task_name || row.task_label || row.manual_task_name || row.man_trip_name || row.trip_name || row.task
+              ) || null,
+            qty: hasTemplateTask ? quantity : null,
+            hours_each: asNullableNumber(row.hours_each),
+            laborrate: asNullableNumber(row.laborrate ?? row.man_hours_each),
+            markup: asNullableNumber(row.markup),
+            extra_supplies: asNullableNumber(row.extra_supplies),
+            notes: asText(row.notes) || null,
+            active: toYN(row.active, 'Y'),
+          }
+        })
         .filter((row: { task: string | null; man_trip_name: string | null; trip_name: string | null }) => !!(row.task || row.man_trip_name || row.trip_name))
       await softReplaceRows({ table: 'estimate_prejob', orgId, estimateId: id, rows })
     }
@@ -505,6 +507,7 @@ export async function PUT(
           coats: asNullableNumber(row.coats),
           auto_calc: toYN(row.auto_calc, 'N'),
           primer_mode: asText(row.primer_mode) || null,
+          spot_prime_pct: asNullableNumber(row.spot_prime_pct),
           prep_level_override: asText(row.prep_level_override) || null,
           door_sides: asNullableNumber(row.door_sides),
           notes: asText(row.notes) || null,

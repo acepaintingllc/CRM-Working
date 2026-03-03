@@ -198,6 +198,37 @@ export async function downloadDriveFile(params: {
   return { buffer } as const
 }
 
+export async function exportDriveFile(params: {
+  origin: string
+  orgId: string
+  userId: string
+  fileId: string
+  mimeType: string
+}) {
+  const access = await getValidAccessToken({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+  })
+  if ('error' in access) return { error: access.error } as const
+
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${params.fileId}/export`)
+  url.searchParams.set('mimeType', params.mimeType)
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${access.accessToken}` },
+  })
+
+  if (!res.ok) {
+    const json: unknown = await res.json().catch(() => null)
+    const msg = readGoogleErrorMessage(json) ?? 'Failed to export Drive file'
+    return { error: msg } as const
+  }
+
+  const buffer = Buffer.from(await res.arrayBuffer())
+  return { buffer } as const
+}
+
 export async function copyDriveFile(params: {
   origin: string
   orgId: string

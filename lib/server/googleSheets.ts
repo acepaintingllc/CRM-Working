@@ -18,6 +18,20 @@ type RangeUpdate = {
   values: SheetsCell[][]
 }
 
+async function getAccess(params: {
+  origin: string
+  orgId: string
+  userId: string
+}) {
+  const access = await getValidAccessToken({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+  })
+  if ('error' in access) return { ok: false, error: access.error } as const
+  return { ok: true, accessToken: access.accessToken } as const
+}
+
 export async function writeRangeValues(params: {
   origin: string
   orgId: string
@@ -25,12 +39,8 @@ export async function writeRangeValues(params: {
   spreadsheetId: string
   updates: RangeUpdate[]
 }) {
-  const access = await getValidAccessToken({
-    origin: params.origin,
-    orgId: params.orgId,
-    userId: params.userId,
-  })
-  if ('error' in access) return { error: access.error } as const
+  const access = await getAccess(params)
+  if (!access.ok) return { error: access.error } as const
 
   const url = new URL(
     `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(params.spreadsheetId)}/values:batchUpdate`
@@ -86,12 +96,18 @@ export async function readNamedRangeValues(params: {
   spreadsheetId: string
   range: string
 }) {
-  const access = await getValidAccessToken({
-    origin: params.origin,
-    orgId: params.orgId,
-    userId: params.userId,
-  })
-  if ('error' in access) return { error: access.error } as const
+  return readRangeValues(params)
+}
+
+export async function readRangeValues(params: {
+  origin: string
+  orgId: string
+  userId: string
+  spreadsheetId: string
+  range: string
+}) {
+  const access = await getAccess(params)
+  if (!access.ok) return { error: access.error } as const
 
   const url = new URL(
     `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(params.spreadsheetId)}/values/${encodeURIComponent(params.range)}`
@@ -113,4 +129,36 @@ export async function readNamedRangeValues(params: {
     .filter((row) => row.length > 0)
 
   return { values } as const
+}
+
+export async function clearRanges(params: {
+  origin: string
+  orgId: string
+  userId: string
+  spreadsheetId: string
+  ranges: string[]
+}) {
+  const access = await getAccess(params)
+  if (!access.ok) return { error: access.error } as const
+
+  const url = new URL(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(params.spreadsheetId)}/values:batchClear`
+  )
+
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${access.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ranges: params.ranges }),
+  })
+
+  const json: unknown = await res.json().catch(() => null)
+  if (!res.ok) {
+    const msg = readGoogleErrorMessage(json) ?? 'Failed to clear sheet ranges'
+    return { error: msg, status: res.status } as const
+  }
+
+  return { ok: true } as const
 }

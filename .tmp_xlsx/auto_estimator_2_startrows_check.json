@@ -1,0 +1,66 @@
+﻿[
+    {
+        "sheet":  "INPUT_Doors",
+        "headerRow":  3,
+        "startRow":  4,
+        "matchedHeaders":  5,
+        "minStartRow":  4,
+        "effectiveStartRow":  4
+    },
+    {
+        "sheet":  "INPUT_JobSettings",
+        "headerRow":  5,
+        "startRow":  6,
+        "matchedHeaders":  17,
+        "minStartRow":  6,
+        "effectiveStartRow":  6
+    },
+    {
+        "sheet":  "INPUT_Openings",
+        "headerRow":  3,
+        "startRow":  4,
+        "matchedHeaders":  4,
+        "minStartRow":  4,
+        "effectiveStartRow":  4
+    },
+    {
+        "sheet":  "INPUT_PreJobTrips",
+        "headerRow":  3,
+        "startRow":  4,
+        "matchedHeaders":  3,
+        "minStartRow":  4,
+        "effectiveStartRow":  4
+    },
+    {
+        "sheet":  "INPUT_Rollers",
+        "headerRow":  3,
+        "startRow":  4,
+        "matchedHeaders":  8,
+        "minStartRow":  4,
+        "effectiveStartRow":  4
+    },
+    {
+        "sheet":  "INPUT_Rooms",
+        "headerRow":  3,
+        "startRow":  4,
+        "matchedHeaders":  3,
+        "minStartRow":  4,
+        "effectiveStartRow":  4
+    },
+    {
+        "sheet":  "INPUT_Segments",
+        "headerRow":  3,
+        "startRow":  4,
+        "matchedHeaders":  4,
+        "minStartRow":  4,
+        "effectiveStartRow":  4
+    },
+    {
+        "sheet":  "INPUT_TrimLines",
+        "headerRow":  5,
+        "startRow":  6,
+        "matchedHeaders":  9,
+        "minStartRow":  6,
+        "effectiveStartRow":  6
+    }
+]

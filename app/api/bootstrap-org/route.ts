@@ -10,20 +10,31 @@ export function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null)
-  const user_id = body?.user_id
-
-  if (!user_id) {
-    return NextResponse.json(
-      { error: 'Missing user_id' },
-      { status: 400 }
-    )
+  const authHeader = req.headers.get('authorization') || ''
+  const match = authHeader.match(/^Bearer (.+)$/i)
+  if (!match?.[1]) {
+    return NextResponse.json({ error: 'Missing bearer token' }, { status: 401 })
   }
+
+  const token = match[1]
+  const body = await req.json().catch(() => null)
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
   )
+
+  const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token)
+  if (userErr || !userData?.user) {
+    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  }
+
+  const user_id = userData.user.id
+  const claimedUserId = body?.user_id
+  if (claimedUserId && claimedUserId !== user_id) {
+    return NextResponse.json({ error: 'user_id does not match token' }, { status: 403 })
+  }
 
   // Check if membership already exists
   const { data: existingRows, error: existingErr } = await supabaseAdmin

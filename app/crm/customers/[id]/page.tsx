@@ -5,6 +5,23 @@ import { authedFetch } from '@/lib/auth/authedFetch'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import {
+  ArrowLeft,
+  BriefcaseBusiness,
+  CalendarClock,
+  Circle,
+  Copy,
+  ExternalLink,
+  Filter,
+  Mail,
+  MapPin,
+  NotebookPen,
+  Pencil,
+  Phone,
+  Search,
+  Trash2,
+  User,
+} from 'lucide-react'
 
 type CustomerDetail = {
   id: string
@@ -204,38 +221,57 @@ export default function CustomerDetailPage() {
   const detailPathWithQuery = `${pathname}${listQueryString ? `?${listQueryString}` : ''}`
 
   const renderRow = (label: string, value: string | null | undefined) => (
-    <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 12, textTransform: 'uppercase', color: '#9ca3af' }}>
-        {label}
-      </div>
-      <div className="crm-row-body" style={{ marginTop: 2 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, flex: '1 1 auto' }}>
-          {value ?? '-'}
-        </div>
+    <div className="mt-3.5">
+      <div className="text-xs uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="mt-0.5 flex items-center">
+        <div className="flex-1 text-base font-semibold text-gray-900">{value ?? '-'}</div>
       </div>
     </div>
   )
 
+  const actionButtonClass =
+    'inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70'
+  const filterButtonClass =
+    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-extrabold transition focus:outline-none focus:ring-2 focus:ring-black/70'
+  const smallActionChipClass =
+    'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-800 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70'
+
+  const timelineVisual = (event: CustomerTimelineEvent) => {
+    const combined = `${event.type} ${event.title ?? ''} ${event.link_label ?? ''}`.toLowerCase()
+    if (combined.includes('note')) {
+      return { icon: NotebookPen, nodeClass: 'bg-white text-gray-700 border-gray-300' }
+    }
+    if (combined.includes('estimate') && combined.includes('sched')) {
+      return { icon: CalendarClock, nodeClass: 'bg-white text-gray-700 border-gray-300' }
+    }
+    if (combined.includes('job')) {
+      return { icon: BriefcaseBusiness, nodeClass: 'bg-white text-gray-700 border-gray-300' }
+    }
+    return { icon: Circle, nodeClass: 'bg-white text-gray-500 border-gray-300' }
+  }
+
   return (
-    <div className="crm-page" style={{ maxWidth: 1100, margin: '0 auto', paddingTop: 12 }}>
-      <div className="crm-split" style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 260px', minWidth: 220, maxWidth: 320 }}>
-          <div className="crm-card" style={{ borderRadius: 12, padding: 12 }}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Customers</div>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => updateParams({ q: e.target.value || null })}
-              placeholder="Search customers"
-              style={{
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: '1px solid #d1d5db',
-                fontSize: 14,
-                width: '100%',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+    <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
+      <div className="mx-auto max-w-6xl px-4 md:px-6">
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="w-full min-w-[220px] flex-1 md:max-w-[320px]">
+            <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+              <div className="mb-2 text-sm font-black text-gray-900">Customers</div>
+              <div className="relative">
+                <Search
+                  size={15}
+                  aria-hidden="true"
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => updateParams({ q: e.target.value || null })}
+                  placeholder="Search customers"
+                  className="h-10 w-full rounded-xl border border-gray-300 pl-8 pr-3 text-sm text-gray-900 outline-none ring-black/70 transition placeholder:text-gray-400 focus:ring-2"
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
               <button
                 onClick={() => {
                   const next = new Set(hasSet)
@@ -243,14 +279,14 @@ export default function CustomerDetailPage() {
                   else next.add('email')
                   updateParams({ has: next.size ? Array.from(next).join(',') : null })
                 }}
-                style={{
-                  ...filterButton,
-                  background: hasEmail ? '#111' : 'white',
-                  border: hasEmail ? '1px solid #111' : '1px solid #e5e7eb',
-                  color: hasEmail ? 'white' : '#111',
-                }}
+                className={`${filterButtonClass} ${
+                  hasEmail
+                    ? 'border-black bg-black text-white'
+                    : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+                }`}
               >
-                Has email
+                <Mail size={13} aria-hidden="true" />
+                <span>Has email</span>
               </button>
               <button
                 onClick={() => {
@@ -259,38 +295,37 @@ export default function CustomerDetailPage() {
                   else next.add('phone')
                   updateParams({ has: next.size ? Array.from(next).join(',') : null })
                 }}
-                style={{
-                  ...filterButton,
-                  background: hasPhone ? '#111' : 'white',
-                  border: hasPhone ? '1px solid #111' : '1px solid #e5e7eb',
-                  color: hasPhone ? 'white' : '#111',
-                }}
+                className={`${filterButtonClass} ${
+                  hasPhone
+                    ? 'border-black bg-black text-white'
+                    : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+                }`}
               >
-                Has phone
+                <Phone size={13} aria-hidden="true" />
+                <span>Has phone</span>
               </button>
               {(query || hasSet.size) && (
                 <button
                   onClick={() => updateParams({ q: null, has: null })}
-                  style={{ ...filterButton, background: '#f9fafb', border: '1px solid #e5e7eb' }}
+                  className={`${filterButtonClass} border-gray-300 bg-gray-50 text-gray-800 hover:bg-gray-100`}
                 >
-                  Clear
+                  <Filter size={13} aria-hidden="true" />
+                  <span>Clear</span>
                 </button>
               )}
             </div>
 
-            <div style={{ marginTop: 10, fontSize: 12, color: '#6b7280' }}>
+            <div className="mt-2 text-xs text-gray-500">
               {listCustomers.length === 0
                 ? 'No customers yet'
                 : `Showing ${filteredList.length} of ${listCustomers.length}`}
             </div>
 
-            <div style={{ marginTop: 10 }}>
-              {listLoading && <div style={{ fontSize: 13, color: '#6b7280' }}>Loading...</div>}
-              {!listLoading && listError && (
-                <div style={{ fontSize: 13, color: '#b91c1c' }}>{listError}</div>
-              )}
+            <div className="mt-2">
+              {listLoading && <div className="text-sm text-gray-500">Loading...</div>}
+              {!listLoading && listError && <div className="text-sm text-red-700">{listError}</div>}
               {!listLoading && !listError && filteredList.length === 0 && (
-                <div style={{ fontSize: 13, color: '#6b7280' }}>No matches.</div>
+                <div className="text-sm text-gray-500">No matches.</div>
               )}
               {!listLoading &&
                 !listError &&
@@ -300,23 +335,20 @@ export default function CustomerDetailPage() {
                     <Link
                       key={c.id}
                       href={`/crm/customers/${c.id}${listQueryString ? `?${listQueryString}` : ''}`}
-                      style={{
-                        display: 'block',
-                        padding: '8px 10px',
-                        borderRadius: 10,
-                        textDecoration: 'none',
-                        color: active ? 'white' : '#111',
-                        background: active ? '#111' : 'white',
-                        border: active ? '1px solid #111' : '1px solid #e5e7eb',
-                        marginTop: 8,
-                        fontWeight: 700,
-                        fontSize: 13,
-                      }}
+                      className={`mt-2 block rounded-xl border px-3 py-2 text-sm transition ${
+                        active
+                          ? 'border-black bg-black text-white'
+                          : 'border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
                     >
-                      <div>{c.name}</div>
+                      <div className="inline-flex items-center gap-1.5 font-bold">
+                        <User size={13} aria-hidden="true" />
+                        <span>{c.name}</span>
+                      </div>
                       {(c.email || c.phone) && (
-                        <div style={{ fontSize: 11, color: active ? '#e5e7eb' : '#6b7280', marginTop: 2 }}>
-                          {[c.email, c.phone].filter(Boolean).join(' | ')}
+                        <div className={`mt-0.5 text-xs leading-4 ${active ? 'text-gray-200' : 'text-gray-500'}`}>
+                          {c.email && <div className="break-all">{c.email}</div>}
+                          {c.phone && <div>{c.phone}</div>}
                         </div>
                       )}
                     </Link>
@@ -326,53 +358,52 @@ export default function CustomerDetailPage() {
           </div>
         </div>
 
-        <div style={{ flex: '3 1 480px', minWidth: 280 }}>
-          <div className="crm-topbar" style={{ marginBottom: 20 }}>
+        <div className="min-w-[280px] flex-[3_1_480px]">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Customer details</h1>
-              <p style={{ margin: 0, color: '#6b7280' }}>Customer profile and contact info.</p>
+              <h1 className="m-0 text-2xl font-bold text-gray-900">Customer details</h1>
+              <p className="m-0 text-sm text-gray-500">Customer profile and contact info.</p>
             </div>
             <button
               onClick={() => router.back()}
-              style={{
-                border: '1px solid #d1d5db',
-                borderRadius: 10,
-                background: 'white',
-                padding: '6px 12px',
-                cursor: 'pointer',
-              }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
             >
-              Back
+              <ArrowLeft size={16} aria-hidden="true" />
+              <span>Back</span>
             </button>
           </div>
 
-          <div className="crm-card" style={{ borderRadius: 12, padding: 20 }}>
-            {loading && <div style={{ color: '#6b7280' }}>Loading customer...</div>}
-            {!loading && message && <div style={{ color: '#b91c1c' }}>{message}</div>}
-            {!loading && !message && !customer && <div style={{ color: '#6b7280' }}>Customer not found.</div>}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            {loading && <div className="text-gray-500">Loading customer...</div>}
+            {!loading && message && <div className="text-red-700">{message}</div>}
+            {!loading && !message && !customer && <div className="text-gray-500">Customer not found.</div>}
 
             {!loading && customer && (
               <>
-                <div style={{ fontSize: 24, fontWeight: 700 }}>{customer.name}</div>
-                <div className="crm-actions" style={{ marginTop: 10 }}>
+                <div className="text-2xl font-bold text-gray-900">{customer.name}</div>
+                <div className="mt-3 flex flex-wrap gap-2">
                   {customer.email && (
-                    <a href={`mailto:${customer.email}`} style={actionButton}>
-                      Email
+                    <a href={`mailto:${customer.email}`} className={actionButtonClass}>
+                      <Mail size={16} aria-hidden="true" />
+                      <span>Email</span>
                     </a>
                   )}
                   {customer.phone && (
-                    <a href={`tel:${customer.phone}`} style={actionButton}>
-                      Call
+                    <a href={`tel:${customer.phone}`} className={actionButtonClass}>
+                      <Phone size={16} aria-hidden="true" />
+                      <span>Call</span>
                     </a>
                   )}
                   {customer.email && (
-                    <button onClick={() => void copy('Email', customer.email)} style={actionButton}>
-                      Copy email
+                    <button onClick={() => void copy('Email', customer.email)} className={actionButtonClass}>
+                      <Copy size={16} aria-hidden="true" />
+                      <span>Copy email</span>
                     </button>
                   )}
                   {customer.phone && (
-                    <button onClick={() => void copy('Phone', customer.phone)} style={actionButton}>
-                      Copy phone
+                    <button onClick={() => void copy('Phone', customer.phone)} className={actionButtonClass}>
+                      <Copy size={16} aria-hidden="true" />
+                      <span>Copy phone</span>
                     </button>
                   )}
                   {customer.address && (
@@ -380,22 +411,25 @@ export default function CustomerDetailPage() {
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.address)}`}
                       target="_blank"
                       rel="noreferrer"
-                      style={{ ...actionButton, textDecoration: 'none' }}
+                      className={actionButtonClass}
                     >
-                      Map
+                      <MapPin size={16} aria-hidden="true" />
+                      <span>Map</span>
                     </a>
                   )}
                   <Link
                     href={`/crm/jobs/new?customerId=${customer.id}`}
-                    style={{ ...actionButton, textDecoration: 'none' }}
+                    className={actionButtonClass}
                   >
-                    Create job
+                    <BriefcaseBusiness size={16} aria-hidden="true" />
+                    <span>Create job</span>
                   </Link>
                   <Link
                     href={`/crm/customers/${customer.id}/edit?returnTo=${encodeURIComponent(detailPathWithQuery)}`}
-                    style={{ ...actionButton, textDecoration: 'none' }}
+                    className={actionButtonClass}
                   >
-                    Edit
+                    <Pencil size={16} aria-hidden="true" />
+                    <span>Edit</span>
                   </Link>
                   <button
                     onClick={async () => {
@@ -412,10 +446,11 @@ export default function CustomerDetailPage() {
                       }
                       router.push('/crm/customers')
                     }}
-                style={{ ...actionButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-400"
                     disabled={deleting}
                   >
-                    {deleting ? 'Deleting...' : 'Delete'}
+                    <Trash2 size={16} aria-hidden="true" />
+                    <span>{deleting ? 'Deleting...' : 'Delete'}</span>
                   </button>
                 </div>
 
@@ -430,29 +465,24 @@ export default function CustomerDetailPage() {
             )}
           </div>
 
-          <div className="crm-card" style={{ borderRadius: 12, padding: 20, marginTop: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
               <div>
-                <div style={{ fontSize: 18, fontWeight: 800 }}>Timeline</div>
-                <div style={{ fontSize: 12, color: '#6b7280' }}>Notes and key moments.</div>
+                <div className="text-lg font-extrabold text-gray-900">Timeline</div>
+                <div className="text-xs text-gray-500">Notes and key moments.</div>
               </div>
             </div>
 
-            <div style={{ marginTop: 12 }}>
+            <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <div className="mb-2 text-sm font-semibold text-gray-800">Add a note</div>
               <textarea
                 value={noteBody}
                 onChange={(e) => setNoteBody(e.target.value)}
                 placeholder="Add a note about this customer..."
                 rows={3}
-                style={{
-                  width: '100%',
-                  borderRadius: 10,
-                  border: '1px solid #d1d5db',
-                  padding: '10px 12px',
-                  fontSize: 14,
-                }}
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-black/70 transition placeholder:text-gray-400 focus:ring-2"
               />
-              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+              <div className="mt-2 flex justify-end">
                 <button
                   onClick={async () => {
                     if (!noteBody.trim() || !id || typeof id !== 'string') return
@@ -471,129 +501,81 @@ export default function CustomerDetailPage() {
                     setNoteBody('')
                     void loadTimeline()
                   }}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: 10,
-                    background: '#111',
-                    color: 'white',
-                    border: '1px solid #111',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-black bg-black px-3 text-sm font-semibold text-white transition hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-black/80"
                   disabled={noteSaving}
+                  aria-label={noteSaving ? 'Saving note' : 'Add note'}
                 >
-                  {noteSaving ? 'Saving...' : 'Add note'}
+                  <NotebookPen size={16} aria-hidden="true" />
+                  <span>{noteSaving ? 'Saving...' : 'Add note'}</span>
                 </button>
               </div>
             </div>
 
-            <div style={{ marginTop: 14 }}>
-              {timelineLoading && <div style={{ color: '#6b7280' }}>Loading timeline...</div>}
-              {!timelineLoading && timelineError && <div style={{ color: '#b91c1c' }}>{timelineError}</div>}
+            <div className="relative mt-4 pl-8">
+              <div className="absolute bottom-0 left-3 top-0 w-px bg-gray-200" aria-hidden="true" />
+              {timelineLoading && <div className="text-gray-500">Loading timeline...</div>}
+              {!timelineLoading && timelineError && <div className="text-red-700">{timelineError}</div>}
               {!timelineLoading && !timelineError && timelineEvents.length === 0 && (
-                <div style={{ color: '#6b7280' }}>No timeline events yet.</div>
+                <div className="text-gray-500">No timeline events yet.</div>
               )}
               {!timelineLoading &&
                 !timelineError &&
-                timelineEvents.map((event) => (
-                  <div
-                    key={event.id}
-                    style={{
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 10,
-                      padding: '10px 12px',
-                      marginTop: 10,
-                      background: 'white',
-                    }}
-                  >
-                    {event.title && (
-                      <div style={{ marginTop: 4, fontWeight: 700 }}>{event.title}</div>
-                    )}
-                    <div style={{ marginTop: 6, fontSize: 14, whiteSpace: 'pre-wrap' }}>{event.body}</div>
-                    {event.link_path && (
-                      <div style={{ marginTop: 8 }}>
-                        {event.link_path.startsWith('/api/') || event.link_path.startsWith('http') ? (
-                          <a
-                            href={event.link_path}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              display: 'inline-flex',
-                              padding: '6px 10px',
-                              borderRadius: 10,
-                              border: '1px solid #d1d5db',
-                              background: '#fff',
-                              color: '#111',
-                              textDecoration: 'none',
-                              fontWeight: 700,
-                              fontSize: 12,
-                            }}
-                          >
-                            {event.link_label ?? 'Open'}
-                          </a>
-                        ) : (
-                          <Link
-                            href={event.link_path}
-                            style={{
-                              display: 'inline-flex',
-                              padding: '6px 10px',
-                              borderRadius: 10,
-                              border: '1px solid #d1d5db',
-                              background: '#fff',
-                              color: '#111',
-                              textDecoration: 'none',
-                              fontWeight: 700,
-                              fontSize: 12,
-                            }}
-                          >
-                            {event.link_label ?? 'Open'}
-                          </Link>
-                        )}
+                timelineEvents.map((event) => {
+                  const visual = timelineVisual(event)
+                  const EventIcon = visual.icon
+                  return (
+                    <div key={event.id} className="relative mb-3 last:mb-0">
+                      <div
+                        className={`absolute left-[-23px] top-3 inline-flex h-5 w-5 items-center justify-center rounded-full border ${visual.nodeClass}`}
+                        aria-hidden="true"
+                      >
+                        <EventIcon size={12} />
                       </div>
-                    )}
-                    <div style={{ marginTop: 6, fontSize: 12, color: '#9ca3af' }}>
-                      {event.created_at ? new Date(event.created_at).toLocaleString() : 'Unknown time'}
+                      <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                        {event.title && (
+                          <div className="font-semibold text-gray-900">{event.title}</div>
+                        )}
+                        <div className="mt-1 text-sm whitespace-pre-wrap text-gray-700">{event.body}</div>
+                        {event.link_path && (
+                          <div className="mt-2">
+                            {event.link_path.startsWith('/api/') || event.link_path.startsWith('http') ? (
+                              <a
+                                href={event.link_path}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={smallActionChipClass}
+                              >
+                                <ExternalLink size={14} aria-hidden="true" />
+                                <span>{event.link_label ?? 'Open'}</span>
+                              </a>
+                            ) : (
+                              <Link href={event.link_path} className={smallActionChipClass}>
+                                <ExternalLink size={14} aria-hidden="true" />
+                                <span>{event.link_label ?? 'Open'}</span>
+                              </Link>
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-1.5 text-xs text-gray-400">
+                          {event.created_at ? new Date(event.created_at).toLocaleString() : 'Unknown time'}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
             </div>
           </div>
 
           <Link
             href="/crm/customers"
-            style={{
-              display: 'inline-flex',
-              marginTop: 16,
-              padding: '10px 14px',
-              borderRadius: 10,
-              background: '#111',
-              color: 'white',
-              textDecoration: 'none',
-              fontWeight: 700,
-            }}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-black bg-black px-3 py-2 text-sm font-semibold text-white transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-black/80"
           >
-            Back to customers
+            <ArrowLeft size={16} aria-hidden="true" />
+            <span>Back to customers</span>
           </Link>
         </div>
       </div>
     </div>
+    </div>
   )
-}
-
-const actionButton: React.CSSProperties = {
-  border: '1px solid #d1d5db',
-  borderRadius: 10,
-  background: 'white',
-  padding: '6px 10px',
-  cursor: 'pointer',
-  fontWeight: 700,
-  fontSize: 13,
-}
-
-const filterButton: React.CSSProperties = {
-  padding: '6px 10px',
-  borderRadius: 999,
-  fontSize: 11,
-  fontWeight: 800,
-  cursor: 'pointer',
 }

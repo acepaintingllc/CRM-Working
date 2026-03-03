@@ -112,6 +112,14 @@ function firstCell(values: string[][]) {
   return typeof cell === 'string' ? cell : ''
 }
 
+function parseCurrencyLikeNumber(value: string) {
+  const normalized = value.replace(/[^0-9.-]/g, '')
+  if (!normalized) return null
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed)) return null
+  return parsed
+}
+
 export async function POST(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
@@ -738,6 +746,18 @@ export async function POST(
     if (row.range === 'wall_total_paint_cost') summary.wall_total_paint_cost = row.value
     if (row.range === 'estimate_total') summary.estimate_total = row.value
     if (row.missing) summary.missingRanges.push(row.range)
+  }
+
+  const estimateTotalAmount = parseCurrencyLikeNumber(summary.estimate_total)
+  if (estimateTotalAmount != null) {
+    const { error: updateJobErr } = await supabaseAdmin
+      .from('jobs')
+      .update({ estimate_total_amount: estimateTotalAmount })
+      .eq('org_id', orgId)
+      .eq('id', id)
+    if (updateJobErr && !String(updateJobErr.message ?? '').includes('estimate_total_amount')) {
+      return NextResponse.json({ error: updateJobErr.message }, { status: 500 })
+    }
   }
 
   const editUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(copied.file.id)}/edit`

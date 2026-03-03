@@ -1,4 +1,5 @@
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { authedFetch } from "@/lib/auth/authedFetch";
 
 async function fetchOrgMembership(token: string) {
   const res = await fetch("/api/bootstrap-org/api/me", {
@@ -22,10 +23,8 @@ export async function getActiveOrgId(): Promise<string> {
   let membership = await fetchOrgMembership(token);
 
   if (!membership?.org_id) {
-    const bootRes = await fetch("/api/bootstrap-org", {
+    const bootRes = await authedFetch("/api/bootstrap-org", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId }),
     });
     const bootPayload = await bootRes.json().catch(() => null);
     if (!bootRes.ok) {

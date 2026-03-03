@@ -3,6 +3,7 @@
 import { authedFetch } from '@/lib/auth/authedFetch'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { ArrowLeft, Save, UserRoundCog, X } from 'lucide-react'
 
 function safeReturnPath(value: string | null, id: string | undefined) {
   if (!value) return id ? `/crm/customers/${id}` : '/crm/customers'
@@ -25,10 +26,10 @@ export default function EditCustomerPage() {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const [name, setName] = useState("")
-  const [phone, setPhone] = useState("")
-  const [email, setEmail] = useState("")
-  const [address, setAddress] = useState("")
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [address, setAddress] = useState('')
 
   useEffect(() => {
     let ignore = false
@@ -109,7 +110,20 @@ export default function EditCustomerPage() {
 
   return (
     <div className="p-6 max-w-xl space-y-4">
-      <h1 className="text-xl font-semibold">Edit customer</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold inline-flex items-center gap-2">
+          <UserRoundCog size={20} aria-hidden="true" />
+          <span>Edit customer</span>
+        </h1>
+        <button
+          type="button"
+          onClick={() => router.push(returnPath)}
+          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm inline-flex items-center gap-2"
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+          <span>Back</span>
+        </button>
+      </div>
 
       {err && <div className="text-red-600">{err}</div>}
       {loading && <div className="text-sm text-gray-600">Loading customer...</div>}
@@ -141,16 +155,18 @@ export default function EditCustomerPage() {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-md bg-black text-white px-3 py-2 text-sm disabled:opacity-50"
+              className="rounded-md bg-black text-white px-3 py-2 text-sm disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {saving ? "Saving..." : "Save changes"}
+              <Save size={16} aria-hidden="true" />
+              <span>{saving ? 'Saving...' : 'Save changes'}</span>
             </button>
             <button
               type="button"
               onClick={() => router.push(returnPath)}
-              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm inline-flex items-center gap-2"
             >
-              Cancel
+              <X size={16} aria-hidden="true" />
+              <span>Cancel</span>
             </button>
           </div>
         </form>

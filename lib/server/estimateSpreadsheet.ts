@@ -29,6 +29,7 @@ type SheetConfig = {
   optional?: boolean
   startRowOffset?: number
   minStartRow?: number
+  fixedStartRow?: number
   requiredValueHeaders?: string[]
   validateRows?: (rows: Record<string, unknown>[]) => MissingInput[]
 }
@@ -288,13 +289,14 @@ async function replaceRowsByColumns(params: {
   writableHeaders: string[]
   rows: Record<string, unknown>[]
 }) {
-  const endRow = params.map.startRow + 1000
+  const startRow = params.sheetName === 'INPUT_TrimLines' ? Math.max(params.map.startRow, 6) : params.map.startRow
+  const endRow = startRow + 1000
   const clearTargets = params.writableHeaders
     .map((header) => ({ header, idx: getHeaderIndex(params.map, header) }))
     .filter((entry) => entry.idx != null)
     .map((header) => {
       const col = columnLetterFromIndex(header.idx!)
-      return `${params.sheetName}!${col}${params.map.startRow}:${col}${endRow}`
+      return `${params.sheetName}!${col}${startRow}:${col}${endRow}`
     })
 
   if (clearTargets.length) {
@@ -317,7 +319,7 @@ async function replaceRowsByColumns(params: {
     .map((header) => {
       const col = columnLetterFromIndex(header.idx!)
       return {
-        range: `${params.sheetName}!${col}${params.map.startRow}:${col}${params.map.startRow + params.rows.length - 1}`,
+        range: `${params.sheetName}!${col}${startRow}:${col}${startRow + params.rows.length - 1}`,
         values: params.rows.map((row) => [toSheetCell(row[header.header])]),
       }
     })
@@ -346,14 +348,15 @@ async function softDeleteAndAppendRows(params: {
   jobId: string
   rows: Record<string, unknown>[]
 }) {
+  const startRow = params.sheetName === 'INPUT_TrimLines' ? Math.max(params.map.startRow, 6) : params.map.startRow
   const activeIdx = getHeaderIndex(params.map, 'Active?') ?? getHeaderIndex(params.map, 'Active')
   const jobIdx = getHeaderIndex(params.map, 'JobID')
   if (activeIdx == null || jobIdx == null) {
     throw new Error(`Missing sheet/tab/header: ${params.sheetName} requires JobID and Active/Active?`)
   }
 
-  const endRow = params.map.startRow + 1000
-  const readRange = `${params.sheetName}!A${params.map.startRow}:${columnLetterFromIndex(
+  const endRow = startRow + 1000
+  const readRange = `${params.sheetName}!A${startRow}:${columnLetterFromIndex(
     Math.max(activeIdx, jobIdx)
   )}${endRow}`
   const existing = await readRangeValues({
@@ -370,7 +373,7 @@ async function softDeleteAndAppendRows(params: {
   const activeCol = columnLetterFromIndex(activeIdx)
   const deactivate = existing.values
     .map((row: string[], idx: number) => {
-      const rowNo = params.map.startRow + idx
+      const rowNo = startRow + idx
       const rowJob = asText(valueAt(row, jobIdx))
       const rowActive = asText(valueAt(row, activeIdx)).toUpperCase()
       if (rowJob !== params.jobId) return null
@@ -393,7 +396,7 @@ async function softDeleteAndAppendRows(params: {
   }
 
   if (!params.rows.length) return
-  const appendStart = params.map.startRow + existing.values.length
+  const appendStart = startRow + existing.values.length
   const updates = params.writableHeaders
     .map((header) => ({ header, idx: getHeaderIndex(params.map, header) }))
     .filter((entry) => entry.idx != null)
@@ -521,9 +524,9 @@ function mapJobSettingsRow(row: Unsafe, jobId: string) {
       CeilingPaintProductID: asText(row.ceiling_paint_id),
       TrimPaintProductID: asText(row.trim_paint_id),
       PrimerProductID: primerFallback,
-      Wall_PrimerProductID: asText(row.walls_primer_id) || primerFallback,
-      Ceiling_PrimerProductID: asText(row.ceiling_primer_id) || primerFallback,
-      Trim_PrimerProductID: asText(row.trim_primer_id) || primerFallback,
+      Wall_PrimerProductID: asText(row.walls_primer_id),
+      Ceiling_PrimerProductID: asText(row.ceiling_primer_id),
+      Trim_PrimerProductID: asText(row.trim_primer_id),
       LaborRateOverride_perHr: asNumberish(row.override_labor_rate),
       MarkupOverride_multiplier: asNumberish(row.override_markup),
       RoundingIncrement_hours: asNumberish(row.rounding_increment_hours),
@@ -754,18 +757,20 @@ function mapPreJobRow(row: Unsafe, jobId: string) {
   }
 }
 
-function hasPrimerUsageInRooms(rooms: Unsafe[]) {
+function hasPrimerUsageInRooms(rooms: Unsafe[], trimLines: Unsafe[]) {
   const isPrimerModeEnabled = (value: unknown) => {
     const raw = asText(value).toLowerCase()
     if (!raw) return false
     return !['none', 'n', 'no', 'false', '0'].includes(raw)
   }
-  return rooms.some(
+  const roomPrimerUsage = rooms.some(
     (row) =>
       isPrimerModeEnabled(row.walls_primer) ||
       isPrimerModeEnabled(row.ceiling_primer) ||
       isPrimerModeEnabled(row.trim_primer)
   )
+  const trimPrimerUsage = trimLines.some((row) => isPrimerModeEnabled(row.primer_mode))
+  return roomPrimerUsage || trimPrimerUsage
 }
 
 function mapTrimLineRow(row: Unsafe, jobId: string) {
@@ -775,6 +780,7 @@ function mapTrimLineRow(row: Unsafe, jobId: string) {
   const coats = asNumberish(row.coats)
   const autoCalc = toYN(row.auto_calc, 'N')
   const primerMode = asText(row.primer_mode)
+  const spotPrimePct = asNumberish(row.spot_prime_pct)
   const prepLevel = asText(row.prep_level_override)
   return {
     JobID: jobId,
@@ -786,6 +792,7 @@ function mapTrimLineRow(row: Unsafe, jobId: string) {
     Qty: asNumberish(row.qty),
     Quantity: asNumberish(row.qty),
     PrimerMode: primerMode,
+    SpotPrimePct: spotPrimePct,
     Coats: coats,
     PrepLevelOverride: prepLevel,
     AutoCalc: autoCalc,
@@ -808,9 +815,23 @@ function inferTrimCategoryFromId(trimId: string) {
   return 'other'
 }
 
+function isDoorTrimRow(row: Unsafe, knownDoorTypeIds: Set<string>) {
+  const byIdCategory = inferTrimCategoryFromId(asText(row.trim_menu_id || row.trim_item_id)) === 'door'
+  if (byIdCategory) return true
+  const trimId = asText(row.trim_menu_id || row.trim_item_id)
+  if (trimId && knownDoorTypeIds.has(trimId)) return true
+  const sides = asNumberish(row.door_sides)
+  const sidesNum = Number(sides)
+  return Number.isFinite(sidesNum) && sidesNum > 0
+}
+
 function mapDoorRow(row: Unsafe, jobId: string) {
   const trimItemId = asText(row.trim_menu_id || row.trim_item_id)
   const sides = asNumberish(row.door_sides)
+  const primerMode = asText(row.primer_mode)
+  const spotPrimePct = asNumberish(row.spot_prime_pct)
+  const coats = asNumberish(row.coats)
+  const prepLevel = asText(row.prep_level_override)
   return {
     JobID: jobId,
     RoomID: asText(row.room_id),
@@ -819,6 +840,12 @@ function mapDoorRow(row: Unsafe, jobId: string) {
     ItemID: trimItemId,
     Qty: asNumberish(row.qty),
     Quantity: asNumberish(row.qty),
+    PrimerMode: primerMode,
+    'PrimerMode (blank/Spot/Full)': primerMode,
+    SpotPrimePct: spotPrimePct,
+    'SpotPrimePct (0-100)': spotPrimePct,
+    Coats: coats,
+    PrepLevelOverride: prepLevel,
     Sides: sides,
     'Sides (0.5/1)': sides,
     Notes: asText(row.notes),
@@ -829,6 +856,8 @@ function mapDoorRow(row: Unsafe, jobId: string) {
 
 function mapOpeningRow(row: Unsafe, jobId: string) {
   const trimItemId = asText(row.trim_menu_id || row.trim_item_id)
+  const primerMode = asText(row.primer_mode)
+  const spotPrimePct = asNumberish(row.spot_prime_pct)
   return {
     JobID: jobId,
     RoomID: asText(row.room_id),
@@ -837,6 +866,8 @@ function mapOpeningRow(row: Unsafe, jobId: string) {
     ItemID: trimItemId,
     Qty: asNumberish(row.qty),
     Quantity: asNumberish(row.qty),
+    PrimerMode: primerMode,
+    SpotPrimePct: spotPrimePct,
     Notes: asText(row.notes),
     'Active?': toYN(row.active, 'Y'),
     Active: toYN(row.active, 'Y'),
@@ -879,7 +910,7 @@ async function writeInputTabs(params: {
     }
   })
 
-  const hasPrimerUsage = hasPrimerUsageInRooms(params.rooms)
+  const hasPrimerUsage = hasPrimerUsageInRooms(params.rooms, params.trimLines)
   const jobSettingsForSheet =
     params.jobSettings && !hasPrimerUsage
       ? {
@@ -1207,6 +1238,7 @@ async function writeInputTabs(params: {
         'Qty',
         'Quantity',
         'PrimerMode',
+        'SpotPrimePct',
         'Coats',
         'PrepLevelOverride',
         'AutoCalc',
@@ -1215,9 +1247,10 @@ async function writeInputTabs(params: {
         'Active?',
         'Active',
       ],
-      softDelete: true,
+      softDelete: false,
       optional: true,
       minStartRow: 6,
+      fixedStartRow: 6,
     },
     {
       sheetName: 'INPUT_Doors',
@@ -1230,6 +1263,12 @@ async function writeInputTabs(params: {
         'ItemID',
         'Qty',
         'Quantity',
+        'PrimerMode',
+        'PrimerMode (blank/Spot/Full)',
+        'SpotPrimePct',
+        'SpotPrimePct (0-100)',
+        'Coats',
+        'PrepLevelOverride',
         'Sides',
         'Sides (0.5/1)',
         'Notes',
@@ -1251,6 +1290,8 @@ async function writeInputTabs(params: {
         'ItemID',
         'Qty',
         'Quantity',
+        'PrimerMode',
+        'SpotPrimePct',
         'Notes',
         'Active?',
         'Active',
@@ -1261,8 +1302,17 @@ async function writeInputTabs(params: {
     },
   ]
 
+  const knownDoorTypeIds = new Set(
+    params.rooms
+      .map((row: Unsafe) => asText(row.door_type_id))
+      .filter(Boolean)
+  )
+
+  const trimLineRows = params.trimLines
+    .filter((row: Unsafe) => !isDoorTrimRow(row, knownDoorTypeIds))
+    .map((row: Unsafe) => mapTrimLineRow(row, params.jobId))
   const trimDoorRows = params.trimLines
-    .filter((row: Unsafe) => inferTrimCategoryFromId(asText(row.trim_menu_id || row.trim_item_id)) === 'door')
+    .filter((row: Unsafe) => isDoorTrimRow(row, knownDoorTypeIds))
     .map((row: Unsafe) => mapDoorRow(row, params.jobId))
   const trimOpeningRows = params.trimLines
     .filter((row: Unsafe) => {
@@ -1304,7 +1354,7 @@ async function writeInputTabs(params: {
     ),
     INPUT_Rollers: params.rollers.map((row: Unsafe) => mapRollerRow(row, params.jobId)),
     INPUT_PreJobTrips: params.prejob.map((row: Unsafe) => mapPreJobRow(row, params.jobId)),
-    INPUT_TrimLines: params.trimLines.map((row: Unsafe) => mapTrimLineRow(row, params.jobId)),
+    INPUT_TrimLines: trimLineRows,
     INPUT_Doors: trimDoorRows,
     INPUT_Openings: trimOpeningRows,
   }
@@ -1335,6 +1385,9 @@ async function writeInputTabs(params: {
         typeof config.minStartRow === 'number'
           ? { ...mapWithOffset, startRow: Math.max(mapWithOffset.startRow, config.minStartRow) }
           : mapWithOffset
+      if (typeof config.fixedStartRow === 'number') {
+        map = { ...map, startRow: config.fixedStartRow }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
       if (config.optional && message.toLowerCase().includes('missing sheet/tab/header')) {

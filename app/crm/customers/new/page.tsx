@@ -4,6 +4,8 @@ import { authedFetch } from '@/lib/auth/authedFetch'
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getActiveOrgId } from "@/lib/org/getActiveOrgId";
+import { ArrowLeft, Plus, UserPlus } from "lucide-react";
+import Link from "next/link";
 
 export default function NewCustomerPage() {
   const router = useRouter();
@@ -62,7 +64,19 @@ export default function NewCustomerPage() {
 
   return (
     <div className="p-6 max-w-xl space-y-4">
-      <h1 className="text-xl font-semibold">New customer</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold inline-flex items-center gap-2">
+          <UserPlus size={20} aria-hidden="true" />
+          <span>New customer</span>
+        </h1>
+        <Link
+          href="/crm/customers"
+          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm inline-flex items-center gap-2"
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+          <span>Back</span>
+        </Link>
+      </div>
 
       {err && <div className="text-red-600">{err}</div>}
 
@@ -111,9 +125,10 @@ export default function NewCustomerPage() {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-md bg-black text-white px-3 py-2 text-sm disabled:opacity-50"
+          className="rounded-md bg-black text-white px-3 py-2 text-sm disabled:opacity-50 inline-flex items-center gap-2"
         >
-          {saving ? "Saving…" : "Create customer"}
+          <Plus size={16} aria-hidden="true" />
+          <span>{saving ? "Saving..." : "Create customer"}</span>
         </button>
       </form>
     </div>

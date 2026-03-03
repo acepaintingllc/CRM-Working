@@ -344,6 +344,7 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
     findTable(constants, 'COLOR CODES')?.rows ??
     []
   const trimRows = findTable(constants, 'CAT_TrimItems')?.rows ?? []
+  const doorTypeRows = findTable(constants, 'CAT_DoorTypes')?.rows ?? []
   const preJobPrimary = findTable(constants, 'CAT_PreJobTrips')
   const preJobTasksTable =
     findTable(constants, 'PRE-JOB TASKS') ??
@@ -440,6 +441,31 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
     }))
     .filter((row) => row.id && row.active === 'Y')
 
+  const doorMenuItems: TrimItem[] = doorTypeRows
+    .map((row) => ({
+      id: asText(rowByHeader(row, ['DoorTypeID', 'ID'])),
+      label:
+        asText(rowByHeader(row, ['DisplayName', 'Name', 'Label'])) ||
+        asText(rowByHeader(row, ['DoorTypeID', 'ID'])),
+      unit: asText(rowByHeader(row, ['Unit', 'UOM'])) || null,
+      notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
+      default_qty: asMaybeNumber(rowByHeader(row, ['DefaultQty', 'QtyDefault'])),
+      active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
+      is_active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y') === 'Y',
+      category: 'door',
+      size:
+        asText(rowByHeader(row, ['Variant', 'Size', 'Type'])) ||
+        inferTrimSize(asText(rowByHeader(row, ['DisplayName', 'Name', 'Label']))),
+    }))
+    .filter((row) => row.id && row.active === 'Y')
+
+  const mergedTrimMenuItems = Array.from(
+    new Map<string, TrimItem>([
+      ...trimMenuItems.map((item) => [item.id, item] as const),
+      ...doorMenuItems.map((item) => [item.id, item] as const),
+    ]).values()
+  )
+
   const preJobTrips: PreJobTrip[] = preJobRows
     .map((row) => {
       const rollupScope =
@@ -511,8 +537,8 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
     wall_complexity_types: wallComplexityTypes,
     color_codes: colorCodes,
     roller_covers: rollerCovers,
-    trim_items: trimMenuItems,
-    trim_menu_items: trimMenuItems,
+    trim_items: mergedTrimMenuItems,
+    trim_menu_items: mergedTrimMenuItems,
     prejob_trips: preJobTrips,
     supplies_rates: suppliesRates,
   }
