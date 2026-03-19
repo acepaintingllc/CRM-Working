@@ -4,16 +4,6 @@ import { supabaseAdmin } from '@/lib/server/org'
 
 const FALLBACK_TEMPLATE_ID = '1zufQIEtGqP8wZoPjg203TG2HkYS9iSdvBImHC6Ok3Rs'
 const WORKBOOK_BUCKET = 'estimate-workbooks'
-const REQUIRED_OUTPUT_KEYS = [
-  'FinalTotal',
-  'MainTotal',
-  'PreJobTotal',
-  'WallsTotal',
-  'CeilingsTotal',
-  'TrimTotal',
-  'RollerCoversTotal',
-] as const
-
 type HeaderMap = {
   headerRow: number
   startRow: number
@@ -1319,9 +1309,7 @@ async function writeInputTabs(params: {
       .filter(Boolean)
   )
 
-  const trimLineRows = params.trimLines
-    .filter((row: Unsafe) => !isDoorTrimRow(row, knownDoorTypeIds))
-    .map((row: Unsafe) => mapTrimLineRow(row, params.jobId))
+  const trimLineRows = params.trimLines.map((row: Unsafe) => mapTrimLineRow(row, params.jobId))
   const trimDoorRows = params.trimLines
     .filter((row: Unsafe) => isDoorTrimRow(row, knownDoorTypeIds))
     .map((row: Unsafe) => mapDoorRow(row, params.jobId))
@@ -1498,7 +1486,14 @@ async function readOutputs(params: {
       spreadsheetId: params.spreadsheetId,
       range: 'OUTPUT_App!A3:B30',
     })
-    if ('error' in read) throw new Error(`Workbook read/write error: ${read.error}`)
+    if ('error' in read) {
+      const message = String(read.error ?? '')
+      if (message.toLowerCase().includes('missing sheet/tab/header')) {
+        outputRows = []
+        break
+      }
+      throw new Error(`Workbook read/write error: ${read.error}`)
+    }
     outputRows = read.values
     if (outputRows.some((row: string[]) => asText(row[0]) === 'FinalTotal')) break
     await new Promise((resolve) => setTimeout(resolve, 500))
@@ -1510,11 +1505,6 @@ async function readOutputs(params: {
     if (!key) continue
     outputApp[key] = parseMaybeNumber(asText(row[1]))
   }
-  const missing = REQUIRED_OUTPUT_KEYS.filter((k) => !(k in outputApp))
-  if (missing.length) {
-    throw new Error(`Recalc error: OUTPUT_App missing keys: ${missing.join(', ')}`)
-  }
-
   const colorRead = await readRangeValues({
     origin: params.origin,
     orgId: params.orgId,
