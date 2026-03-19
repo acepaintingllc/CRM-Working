@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { recalculateEstimateSpreadsheet } from '@/lib/server/estimateSpreadsheet'
 import { getSessionUserOrg } from '@/lib/server/org'
 
+type RouteBodyValue = Record<string, unknown>
+
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -16,7 +18,7 @@ export async function POST(
   }
 
   const params = await Promise.resolve(context.params)
-  const id = (params as { id?: Unsafe } | null | undefined)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string' || !uuid.test(id)) {
     return NextResponse.json({ error: 'Invalid estimate id' }, { status: 400 })
   }
@@ -27,6 +29,17 @@ export async function POST(
       url.searchParams.get('new_sheet') === '1' ||
       url.searchParams.get('newSheet') === '1' ||
       url.searchParams.get('force_new_sheet') === '1'
+    const body = (await request.json().catch(() => null)) as
+      | {
+          jobsettings?: RouteBodyValue | null
+          rooms?: RouteBodyValue[]
+          segments?: RouteBodyValue[]
+          ceiling_segments?: RouteBodyValue[]
+          rollers?: RouteBodyValue[]
+          prejob?: RouteBodyValue[]
+          trim_items?: RouteBodyValue[]
+        }
+      | null
 
     const latestOutput = await recalculateEstimateSpreadsheet({
       origin: new URL(request.url).origin,
@@ -34,6 +47,17 @@ export async function POST(
       userId: session.userId,
       estimateId: id,
       forceNewSheet,
+      overrides: body
+        ? {
+            jobSettings: body.jobsettings ?? undefined,
+            rooms: body.rooms ?? undefined,
+            segments: body.segments ?? undefined,
+            ceilingSegments: body.ceiling_segments ?? undefined,
+            rollers: body.rollers ?? undefined,
+            prejob: body.prejob ?? undefined,
+            trimLines: body.trim_items ?? undefined,
+          }
+        : undefined,
     })
     return NextResponse.json({ ok: true, latest_output_json: latestOutput })
   } catch (error) {
