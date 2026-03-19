@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { recalculateEstimateSpreadsheet } from '@/lib/server/estimateSpreadsheet'
 import { getSessionUserOrg } from '@/lib/server/org'
 
+type RouteBodyValue = Record<string, unknown>
+
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -29,13 +31,13 @@ export async function POST(
       url.searchParams.get('force_new_sheet') === '1'
     const body = (await request.json().catch(() => null)) as
       | {
-          jobsettings?: Unsafe | null
-          rooms?: Unsafe[]
-          segments?: Unsafe[]
-          ceiling_segments?: Unsafe[]
-          rollers?: Unsafe[]
-          prejob?: Unsafe[]
-          trim_items?: Unsafe[]
+          jobsettings?: RouteBodyValue | null
+          rooms?: RouteBodyValue[]
+          segments?: RouteBodyValue[]
+          ceiling_segments?: RouteBodyValue[]
+          rollers?: RouteBodyValue[]
+          prejob?: RouteBodyValue[]
+          trim_items?: RouteBodyValue[]
         }
       | null
 
