@@ -565,7 +565,7 @@ async function readSchemaVersion(params: {
   return schema
 }
 
-function mapJobSettingsRow(row: Unsafe, jobId: string) {
+function mapJobSettingsRow(row: Unsafe | null, jobId: string) {
   if (!row) return []
   const primerFallback = asText(
     row.primer_id || row.walls_primer_id || row.ceiling_primer_id || row.trim_primer_id
@@ -1415,18 +1415,6 @@ async function writeInputTabs(params: {
     INPUT_Doors: trimDoorRows,
     INPUT_Openings: trimOpeningRows,
   }
-
-  console.log(
-    '[estimateSpreadsheet] writeInputTabs row counts',
-    JSON.stringify({
-      spreadsheetId: params.spreadsheetId,
-      jobId: params.jobId,
-      INPUT_TrimLines: trimLineRows.length,
-      INPUT_Doors: trimDoorRows.length,
-      INPUT_Openings: trimOpeningRows.length,
-      trimPreview: trimLineRows.slice(0, 10),
-    })
-  )
 
   const prepared: {
     config: SheetConfig

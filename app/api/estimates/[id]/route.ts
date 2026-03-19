@@ -515,20 +515,6 @@ export async function PUT(
           sort_order: Number.isFinite(Number(row.sort_order)) ? Number(row.sort_order) : idx,
         }))
         .filter((row: { trim_menu_id: string; qty: number | null }) => row.trim_menu_id && (row.qty ?? 0) > 0)
-      console.log(
-        '[estimates PUT] trim_items payload',
-        JSON.stringify({
-          estimateId: id,
-          count: rows.length,
-          roomIds: Array.from(new Set(rows.map((row) => row.room_id).filter(Boolean))),
-          preview: rows.slice(0, 12).map((row) => ({
-            room_id: row.room_id,
-            trim_menu_id: row.trim_menu_id,
-            qty: row.qty,
-            sort_order: row.sort_order,
-          })),
-        })
-      )
       await softReplaceRows({ table: 'estimate_trim_items', orgId, estimateId: id, rows })
     }
 
