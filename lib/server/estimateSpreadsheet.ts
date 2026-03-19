@@ -803,15 +803,26 @@ function mapTrimLineRow(row: Unsafe, jobId: string) {
   }
 }
 
+function normalizeTrimCategoryKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
 function inferTrimCategoryFromId(trimId: string) {
   const key = trimId.toLowerCase()
-  if (key.includes('window') && key.includes('casing')) return 'window_casing'
-  if (key.includes('door') && key.includes('casing')) return 'door_casing'
+  const normalized = normalizeTrimCategoryKey(trimId)
+  if (
+    (normalized.includes('window') || normalized.includes('win')) &&
+    normalized.includes('casing')
+  ) {
+    return 'window_casing'
+  }
+  if (normalized.includes('door') && normalized.includes('casing')) return 'door_casing'
   if (key.includes('baseboard') || key.includes('base_board') || key.includes('base board')) {
     return 'baseboard'
   }
+  if (normalized.includes('basebrd')) return 'baseboard'
   if (key.includes('crown')) return 'crown'
-  if (key.includes('door')) return 'door'
+  if (normalized.includes('door') || normalized.startsWith('dr')) return 'door'
   return 'other'
 }
 
