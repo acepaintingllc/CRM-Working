@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/server/org'
 
 const FALLBACK_TEMPLATE_ID = '1zufQIEtGqP8wZoPjg203TG2HkYS9iSdvBImHC6Ok3Rs'
 const WORKBOOK_BUCKET = 'estimate-workbooks'
+type Unsafe = Record<string, unknown>
 type HeaderMap = {
   headerRow: number
   startRow: number
@@ -85,6 +86,38 @@ function columnLetterFromIndex(index: number) {
     n = Math.floor((n - 1) / 26)
   }
   return out
+}
+
+async function loadActiveTrimItemsEventually(params: {
+  orgId: string
+  estimateId: string
+  trimRoomCount: number
+}) {
+  let lastError: string | null = null
+  let lastData: Unsafe[] = []
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await supabaseAdmin
+      .from('estimate_trim_items')
+      .select('*')
+      .eq('org_id', params.orgId)
+      .eq('estimate_id', params.estimateId)
+      .order('sort_order', { ascending: true })
+
+    if (result.error) {
+      lastError = result.error.message
+      break
+    }
+
+    lastData = (result.data ?? []).filter((row) => toYN(row.active, 'Y') === 'Y')
+    if (params.trimRoomCount <= 1 || lastData.length >= params.trimRoomCount || attempt === 7) {
+      return { data: lastData, error: null as string | null }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 300))
+  }
+
+  return { data: lastData, error: lastError }
 }
 
 function parseMaybeNumber(value: string | null | undefined) {
@@ -281,6 +314,10 @@ async function replaceRowsByColumns(params: {
 }) {
   const startRow = params.sheetName === 'INPUT_TrimLines' ? Math.max(params.map.startRow, 6) : params.map.startRow
   const endRow = startRow + 1000
+  const writableColumns = params.writableHeaders
+    .map((header) => ({ header, idx: getHeaderIndex(params.map, header) }))
+    .filter((entry) => entry.idx != null)
+
   const clearTargets = params.writableHeaders
     .map((header) => ({ header, idx: getHeaderIndex(params.map, header) }))
     .filter((entry) => entry.idx != null)
@@ -303,16 +340,42 @@ async function replaceRowsByColumns(params: {
   }
 
   if (!params.rows.length) return
-  const updates = params.writableHeaders
-    .map((header) => ({ header, idx: getHeaderIndex(params.map, header) }))
-    .filter((entry) => entry.idx != null)
-    .map((header) => {
-      const col = columnLetterFromIndex(header.idx!)
-      return {
-        range: `${params.sheetName}!${col}${startRow}:${col}${startRow + params.rows.length - 1}`,
-        values: params.rows.map((row) => [toSheetCell(row[header.header])]),
+  if (params.sheetName === 'INPUT_TrimLines' && writableColumns.length) {
+    const sortedColumns = [...writableColumns].sort((a, b) => a.idx! - b.idx!)
+    const firstCol = sortedColumns[0].idx!
+    const lastCol = sortedColumns[sortedColumns.length - 1].idx!
+    const matrix = params.rows.map((row) => {
+      const values = new Array(lastCol - firstCol + 1).fill('')
+      for (const column of sortedColumns) {
+        values[column.idx! - firstCol] = toSheetCell(row[column.header])
       }
+      return values
     })
+    const writeResult = await writeRangeValues({
+      origin: params.origin,
+      orgId: params.orgId,
+      userId: params.userId,
+      spreadsheetId: params.spreadsheetId,
+      updates: [
+        {
+          range: `${params.sheetName}!${columnLetterFromIndex(firstCol)}${startRow}:${columnLetterFromIndex(lastCol)}${startRow + params.rows.length - 1}`,
+          values: matrix,
+        },
+      ],
+    })
+    if ('error' in writeResult) {
+      throw new Error(`Workbook read/write error: ${writeResult.error}`)
+    }
+    return
+  }
+
+  const updates = writableColumns.map((header) => {
+    const col = columnLetterFromIndex(header.idx!)
+    return {
+      range: `${params.sheetName}!${col}${startRow}:${col}${startRow + params.rows.length - 1}`,
+      values: params.rows.map((row) => [toSheetCell(row[header.header])]),
+    }
+  })
   if (!updates.length) return
 
   const writeResult = await writeRangeValues({
@@ -1228,7 +1291,7 @@ async function writeInputTabs(params: {
     },
     {
       sheetName: 'INPUT_TrimLines',
-      requiredHeaders: [],
+      requiredHeaders: ['JobID', 'RoomID', 'TrimMenuID', 'Qty', 'Active?'],
       writableHeaders: [
         'JobID',
         'RoomID',
@@ -1313,12 +1376,7 @@ async function writeInputTabs(params: {
   const trimDoorRows = params.trimLines
     .filter((row: Unsafe) => isDoorTrimRow(row, knownDoorTypeIds))
     .map((row: Unsafe) => mapDoorRow(row, params.jobId))
-  const trimOpeningRows = params.trimLines
-    .filter((row: Unsafe) => {
-      const category = inferTrimCategoryFromId(asText(row.trim_menu_id || row.trim_item_id))
-      return category === 'window_casing' || category === 'door_casing'
-    })
-    .map((row: Unsafe) => mapOpeningRow(row, params.jobId))
+  const trimOpeningRows: Record<string, unknown>[] = []
 
   const wallsRows = params.rooms
     .filter((row: Unsafe) => toYN(row.walls_include, 'N') === 'Y')
@@ -1357,6 +1415,18 @@ async function writeInputTabs(params: {
     INPUT_Doors: trimDoorRows,
     INPUT_Openings: trimOpeningRows,
   }
+
+  console.log(
+    '[estimateSpreadsheet] writeInputTabs row counts',
+    JSON.stringify({
+      spreadsheetId: params.spreadsheetId,
+      jobId: params.jobId,
+      INPUT_TrimLines: trimLineRows.length,
+      INPUT_Doors: trimDoorRows.length,
+      INPUT_Openings: trimOpeningRows.length,
+      trimPreview: trimLineRows.slice(0, 10),
+    })
+  )
 
   const prepared: {
     config: SheetConfig
@@ -1488,7 +1558,11 @@ async function readOutputs(params: {
     })
     if ('error' in read) {
       const message = String(read.error ?? '')
-      if (message.toLowerCase().includes('missing sheet/tab/header')) {
+      const normalized = message.toLowerCase()
+      if (
+        normalized.includes('missing sheet/tab/header') ||
+        normalized.includes('unable to parse range: output_app!a3:b30')
+      ) {
         outputRows = []
         break
       }
@@ -1605,6 +1679,15 @@ export async function recalculateEstimateSpreadsheet(params: {
   userId: string
   estimateId: string
   forceNewSheet?: boolean
+  overrides?: {
+    jobSettings?: Unsafe | null
+    rooms?: Unsafe[]
+    segments?: Unsafe[]
+    ceilingSegments?: Unsafe[]
+    rollers?: Unsafe[]
+    prejob?: Unsafe[]
+    trimLines?: Unsafe[]
+  }
 }) {
   const estimateRes = await supabaseAdmin
     .from('estimates')
@@ -1641,49 +1724,56 @@ export async function recalculateEstimateSpreadsheet(params: {
     )
   }
 
-  const [jobSettings, rooms, segments, ceilingSegments, rollers, prejob, trimLines] = await Promise.all([
-    supabaseAdmin
-      .from('estimate_jobsettings')
-      .select('*')
-      .eq('org_id', params.orgId)
-      .eq('estimate_id', params.estimateId)
-      .maybeSingle(),
-    supabaseAdmin
-      .from('estimate_rooms')
-      .select('*')
-      .eq('org_id', params.orgId)
-      .eq('estimate_id', params.estimateId)
-      .order('position', { ascending: true }),
-    supabaseAdmin
-      .from('estimate_segments')
-      .select('*')
-      .eq('org_id', params.orgId)
-      .eq('estimate_id', params.estimateId)
-      .order('position', { ascending: true }),
-    supabaseAdmin
-      .from('estimate_ceiling_segments')
-      .select('*')
-      .eq('org_id', params.orgId)
-      .eq('estimate_id', params.estimateId)
-      .order('position', { ascending: true }),
-    supabaseAdmin
-      .from('estimate_rollers')
-      .select('*')
-      .eq('org_id', params.orgId)
-      .eq('estimate_id', params.estimateId)
-      .order('position', { ascending: true }),
-    supabaseAdmin
-      .from('estimate_prejob')
-      .select('*')
-      .eq('org_id', params.orgId)
-      .eq('estimate_id', params.estimateId)
-      .order('position', { ascending: true }),
-    supabaseAdmin
-      .from('estimate_trim_items')
-      .select('*')
-      .eq('org_id', params.orgId)
-      .eq('estimate_id', params.estimateId)
-      .order('sort_order', { ascending: true }),
+  const overrideInputs = params.overrides
+  const [jobSettings, rooms, segments, ceilingSegments, rollers, prejob] = await Promise.all([
+    overrideInputs?.jobSettings !== undefined
+      ? Promise.resolve({ data: overrideInputs.jobSettings, error: null })
+      : supabaseAdmin
+          .from('estimate_jobsettings')
+          .select('*')
+          .eq('org_id', params.orgId)
+          .eq('estimate_id', params.estimateId)
+          .maybeSingle(),
+    overrideInputs?.rooms
+      ? Promise.resolve({ data: overrideInputs.rooms, error: null })
+      : supabaseAdmin
+          .from('estimate_rooms')
+          .select('*')
+          .eq('org_id', params.orgId)
+          .eq('estimate_id', params.estimateId)
+          .order('position', { ascending: true }),
+    overrideInputs?.segments
+      ? Promise.resolve({ data: overrideInputs.segments, error: null })
+      : supabaseAdmin
+          .from('estimate_segments')
+          .select('*')
+          .eq('org_id', params.orgId)
+          .eq('estimate_id', params.estimateId)
+          .order('position', { ascending: true }),
+    overrideInputs?.ceilingSegments
+      ? Promise.resolve({ data: overrideInputs.ceilingSegments, error: null })
+      : supabaseAdmin
+          .from('estimate_ceiling_segments')
+          .select('*')
+          .eq('org_id', params.orgId)
+          .eq('estimate_id', params.estimateId)
+          .order('position', { ascending: true }),
+    overrideInputs?.rollers
+      ? Promise.resolve({ data: overrideInputs.rollers, error: null })
+      : supabaseAdmin
+          .from('estimate_rollers')
+          .select('*')
+          .eq('org_id', params.orgId)
+          .eq('estimate_id', params.estimateId)
+          .order('position', { ascending: true }),
+    overrideInputs?.prejob
+      ? Promise.resolve({ data: overrideInputs.prejob, error: null })
+      : supabaseAdmin
+          .from('estimate_prejob')
+          .select('*')
+          .eq('org_id', params.orgId)
+          .eq('estimate_id', params.estimateId)
+          .order('position', { ascending: true }),
   ])
 
   if (jobSettings.error) throw new Error(`Workbook read/write error: ${jobSettings.error.message}`)
@@ -1692,7 +1782,14 @@ export async function recalculateEstimateSpreadsheet(params: {
   if (ceilingSegments.error) throw new Error(`Workbook read/write error: ${ceilingSegments.error.message}`)
   if (rollers.error) throw new Error(`Workbook read/write error: ${rollers.error.message}`)
   if (prejob.error) throw new Error(`Workbook read/write error: ${prejob.error.message}`)
-  if (trimLines.error) throw new Error(`Workbook read/write error: ${trimLines.error.message}`)
+  const trimLines = overrideInputs?.trimLines
+    ? { data: overrideInputs.trimLines, error: null as string | null }
+    : await loadActiveTrimItemsEventually({
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        trimRoomCount: (rooms.data ?? []).filter((row) => toYN(row.trim_include, 'N') === 'Y').length,
+      })
+  if (trimLines.error) throw new Error(`Workbook read/write error: ${trimLines.error}`)
 
   await writeInputTabs({
     origin: params.origin,
@@ -1706,7 +1803,7 @@ export async function recalculateEstimateSpreadsheet(params: {
     ceilingSegments: (ceilingSegments.data ?? []).filter((r) => toYN(r.active, 'Y') === 'Y'),
     rollers: (rollers.data ?? []).filter((r) => toYN(r.active, 'Y') === 'Y'),
     prejob: (prejob.data ?? []).filter((r) => toYN(r.active, 'Y') === 'Y'),
-    trimLines: (trimLines.data ?? []).filter((r) => toYN(r.active, 'Y') === 'Y'),
+    trimLines: trimLines.data ?? [],
   })
 
   await writeActiveJobIdToJobControl({

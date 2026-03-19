@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { recalculateEstimateSpreadsheet } from '@/lib/server/estimateSpreadsheet'
 import { getSessionUserOrg } from '@/lib/server/org'
 
+type Unsafe = Record<string, unknown>
+
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -27,6 +29,17 @@ export async function POST(
       url.searchParams.get('new_sheet') === '1' ||
       url.searchParams.get('newSheet') === '1' ||
       url.searchParams.get('force_new_sheet') === '1'
+    const body = (await request.json().catch(() => null)) as
+      | {
+          jobsettings?: Unsafe | null
+          rooms?: Unsafe[]
+          segments?: Unsafe[]
+          ceiling_segments?: Unsafe[]
+          rollers?: Unsafe[]
+          prejob?: Unsafe[]
+          trim_items?: Unsafe[]
+        }
+      | null
 
     const latestOutput = await recalculateEstimateSpreadsheet({
       origin: new URL(request.url).origin,
@@ -34,6 +47,17 @@ export async function POST(
       userId: session.userId,
       estimateId: id,
       forceNewSheet,
+      overrides: body
+        ? {
+            jobSettings: body.jobsettings ?? undefined,
+            rooms: body.rooms ?? undefined,
+            segments: body.segments ?? undefined,
+            ceilingSegments: body.ceiling_segments ?? undefined,
+            rollers: body.rollers ?? undefined,
+            prejob: body.prejob ?? undefined,
+            trimLines: body.trim_items ?? undefined,
+          }
+        : undefined,
     })
     return NextResponse.json({ ok: true, latest_output_json: latestOutput })
   } catch (error) {

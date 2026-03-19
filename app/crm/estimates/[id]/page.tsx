@@ -3,7 +3,7 @@
 import { authedFetch } from '@/lib/auth/authedFetch'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeft,
@@ -1045,6 +1045,7 @@ export default function EstimateEditorPage() {
   const [wallSegmentsOpen, setWallSegmentsOpen] = useState(true)
   const [ceilingSegmentsOpen, setCeilingSegmentsOpen] = useState(true)
   const [advancedAdjustmentsOpen, setAdvancedAdjustmentsOpen] = useState(false)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = async (forceRefresh = false) => {
     if (!estimateId) return
@@ -1404,7 +1405,11 @@ export default function EstimateEditorPage() {
   useEffect(() => {
     if (!loadedOnce || !estimate) return
     if (dirtyTick < 1) return
-    const timer = setTimeout(async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+    autoSaveTimerRef.current = setTimeout(async () => {
+      autoSaveTimerRef.current = null
       setSaving(true)
       const res = await authedFetch(`/api/estimates/${estimate.id}`, {
         method: 'PUT',
@@ -1431,7 +1436,12 @@ export default function EstimateEditorPage() {
       setNotice(`Saved ${new Date().toLocaleTimeString()}`)
       setTimeout(() => setNotice(null), 1200)
     }, 650)
-    return () => clearTimeout(timer)
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+        autoSaveTimerRef.current = null
+      }
+    }
   }, [
     dirtyTick,
     loadedOnce,
@@ -2501,6 +2511,10 @@ export default function EstimateEditorPage() {
 
   const runRecalc = async (createNewSheet = false) => {
     if (!estimate) return
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
     setRecalculating(true)
     setError(null)
     setMissingInputs([])
@@ -2534,11 +2548,24 @@ export default function EstimateEditorPage() {
       setRecalculating(false)
       return
     }
-
     const recalcPath = createNewSheet
       ? `/api/estimates/${estimate.id}/recalculate?new_sheet=1`
       : `/api/estimates/${estimate.id}/recalculate`
-    const res = await authedFetch(recalcPath, { method: 'POST' })
+    const res = await authedFetch(recalcPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jobsettings: buildJobsettingsForSave(),
+        rooms,
+        segments,
+        ceiling_segments: ceilingSegments,
+        trim_items: generatedTrimItems,
+        rollers: rollersDraft.filter(
+          (row) => row.scope === 'Wall' || rooms.some((room) => room.ceiling_include === 'Y')
+        ),
+        prejob: flattenPreJobTrips(prejobTrips, preJobTemplateTaskById),
+      }),
+    })
     const body = await res.json().catch(() => null)
     setRecalculating(false)
     if (!res.ok) {
