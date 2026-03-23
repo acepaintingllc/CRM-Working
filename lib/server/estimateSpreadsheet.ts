@@ -174,6 +174,33 @@ function findSummaryMetricValue(values: string[][], labelNeedles: string[]) {
   return null
 }
 
+function findSummaryColAValue(values: string[][], labelNeedles: string[]) {
+  const normalizedNeedles = labelNeedles.map((label) => normalizeSummaryLabel(label))
+  for (let rowIndex = values.length - 1; rowIndex >= 0; rowIndex -= 1) {
+    const row = values[rowIndex] ?? []
+    const normalizedA = normalizeSummaryLabel(row[0])
+    if (!normalizedA) continue
+    const matches = normalizedNeedles.some(
+      (needle) => normalizedA === needle || normalizedA.includes(needle)
+    )
+    if (!matches) continue
+    const parsed = parseMaybeNumber(asText(row[1]))
+    if (parsed != null) return parsed
+  }
+  return null
+}
+
+function findSummarySectionRow(values: string[][], sectionTitle: string) {
+  const needle = normalizeSummaryLabel(sectionTitle)
+  for (let rowIndex = 0; rowIndex < values.length; rowIndex += 1) {
+    const row = values[rowIndex] ?? []
+    const normalizedA = normalizeSummaryLabel(row[0])
+    if (!normalizedA) continue
+    if (normalizedA.includes(needle)) return rowIndex
+  }
+  return -1
+}
+
 function normalizeHeader(value: string | null | undefined) {
   return String(value ?? '')
     .toLowerCase()
@@ -1692,21 +1719,57 @@ async function readOutputs(params: {
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
 
-  const wallsTotal = findSummaryMetricValue(summaryRows, ['Walls Total with prejob trips'])
-  const ceilingsTotal = findSummaryMetricValue(summaryRows, ['Ceilings Total with prejob trips'])
-  const trimOnlyTotal = findSummaryMetricValue(summaryRows, ['Trim Total with prejob trips'])
-  const doorsTotal = findSummaryMetricValue(summaryRows, ['Doors Total with prejob trips'])
+  const scopeSectionRow = findSummarySectionRow(
+    summaryRows,
+    'Per Scope Rounded Totals with Prejob trips'
+  )
+  let wallsTotal: string | number | null = null
+  let ceilingsTotal: string | number | null = null
+  let trimOnlyTotal: string | number | null = null
+  let doorsTotal: string | number | null = null
+
+  if (scopeSectionRow >= 0) {
+    for (let rowIndex = scopeSectionRow + 1; rowIndex <= scopeSectionRow + 20; rowIndex += 1) {
+      const row = summaryRows[rowIndex] ?? []
+      const label = normalizeSummaryLabel(row[0])
+      if (!label) continue
+      const value = parseMaybeNumber(asText(row[1]))
+      if (value == null) continue
+      if (label === 'walls') wallsTotal = value
+      if (label === 'ceiling' || label === 'ceilings') ceilingsTotal = value
+      if (label === 'trim') trimOnlyTotal = value
+      if (label === 'door' || label === 'doors') doorsTotal = value
+    }
+  }
+
+  if (wallsTotal == null) {
+    wallsTotal = findSummaryMetricValue(summaryRows, ['Walls Total with prejob trips'])
+  }
+  if (ceilingsTotal == null) {
+    ceilingsTotal = findSummaryMetricValue(summaryRows, ['Ceilings Total with prejob trips'])
+  }
+  if (trimOnlyTotal == null) {
+    trimOnlyTotal = findSummaryMetricValue(summaryRows, ['Trim Total with prejob trips'])
+  }
+  if (doorsTotal == null) {
+    doorsTotal = findSummaryMetricValue(summaryRows, ['Doors Total with prejob trips'])
+  }
+
   const trimTotal =
     typeof trimOnlyTotal === 'number' && typeof doorsTotal === 'number'
       ? trimOnlyTotal + doorsTotal
       : trimOnlyTotal ?? doorsTotal
 
   const outputApp: Record<string, string | number | null> = {
-    FinalTotal: findSummaryMetricValue(summaryRows, ['Final Job Total']),
+    FinalTotal:
+      findSummaryColAValue(summaryRows, ['Final Job Total $', 'Final Job Total']) ??
+      findSummaryMetricValue(summaryRows, ['Final Job Total']),
     WallsTotal: wallsTotal,
     CeilingsTotal: ceilingsTotal,
     TrimTotal: trimTotal,
-    PreJobTotal: findSummaryMetricValue(summaryRows, ['PreJob Total $', 'PreJob Total']),
+    PreJobTotal:
+      findSummaryColAValue(summaryRows, ['PreJob Total $', 'PreJob Total']) ??
+      findSummaryMetricValue(summaryRows, ['PreJob Total $', 'PreJob Total']),
   }
 
   const colorRead = await readRangeValues({
