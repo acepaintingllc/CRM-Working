@@ -1,14 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 
-type ErrorLike = {
-  message: string
-  details?: unknown
-  hint?: unknown
-  code?: unknown
-  stack?: unknown
-}
-
 type JobRow = {
   customer_id?: string | null
   title?: string | null
@@ -26,14 +18,6 @@ type JobScheduleRow = {
   job_id: string
   start_at: string | null
   end_at: string | null
-}
-
-function detailMeta(error: Partial<ErrorLike>) {
-  return {
-    details: typeof error.details === 'string' ? error.details : null,
-    hint: typeof error.hint === 'string' ? error.hint : null,
-    code: typeof error.code === 'string' ? error.code : null,
-  }
 }
 
 function asString(value: unknown) {
@@ -58,13 +42,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    return NextResponse.json(
-      {
-        error: error.message,
-        ...detailMeta(error as Partial<ErrorLike>),
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Unable to load jobs.' }, { status: 500 })
   }
 
   const rows = (data ?? []) as JobRow[]
@@ -286,13 +264,7 @@ export async function POST(request: Request) {
               continue
             }
 
-            return NextResponse.json(
-              {
-                error: created.error.message,
-                ...detailMeta(created.error as Partial<ErrorLike>),
-              },
-              { status: 500 }
-            )
+            return NextResponse.json({ error: 'Unable to create property for job.' }, { status: 500 })
           }
         }
 
@@ -307,24 +279,11 @@ export async function POST(request: Request) {
     }
 
     if (error) {
-      return NextResponse.json(
-        {
-          error: error.message,
-          ...detailMeta(error as Partial<ErrorLike>),
-        },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Unable to create job.' }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true, job: data })
   } catch (e: unknown) {
-    const err = e as Partial<ErrorLike>
-    return NextResponse.json(
-      {
-        error: typeof err.message === 'string' ? err.message : 'Unhandled error creating job',
-        details: typeof err.stack === 'string' ? err.stack : null,
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Unable to create job.' }, { status: 500 })
   }
 }

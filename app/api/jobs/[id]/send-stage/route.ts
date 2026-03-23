@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { sendGmailMessage } from '@/lib/server/googleMail'
 import { downloadDriveFile, findLatestEstimateFile } from '@/lib/server/googleDrive'
+import { checkLocalRateLimit } from '@/lib/server/rateLimit'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -104,6 +105,15 @@ export async function POST(
     return NextResponse.json({ error: 'Missing stage' }, { status: 400 })
   }
 
+  const rate = checkLocalRateLimit({
+    key: `send-stage:${orgId}:${userId}:${id}:${stage}`,
+    max: 6,
+    windowMs: 10 * 60 * 1000,
+  })
+  if (!rate.ok) {
+    return NextResponse.json({ error: 'Too many send attempts. Please wait and retry.' }, { status: 429 })
+  }
+
   const { data: job, error: jobErr } = await supabaseAdmin
     .from('jobs')
     .select('*')
@@ -111,7 +121,7 @@ export async function POST(
     .eq('id', id)
     .maybeSingle()
 
-  if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 })
+  if (jobErr) return NextResponse.json({ error: 'Unable to load job.' }, { status: 500 })
   if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
 
   const jobRow = job as JobRecord
@@ -194,7 +204,7 @@ export async function POST(
     })
     if ('error' in fileResult) {
       console.warn('[send-stage] no-match', { jobId: id, stage, reason: fileResult.error })
-      return NextResponse.json({ error: fileResult.error }, { status: 400 })
+      return NextResponse.json({ error: 'No matching estimate in Drive folder.' }, { status: 400 })
     }
     console.info('[send-stage] selected', {
       jobId: id,
@@ -211,7 +221,7 @@ export async function POST(
       fileId: fileResult.file.id,
     })
     if ('error' in download) {
-      return NextResponse.json({ error: download.error }, { status: 400 })
+      return NextResponse.json({ error: 'Unable to read estimate file from Drive.' }, { status: 400 })
     }
     attachment = {
       id: fileResult.file.id,
@@ -235,7 +245,7 @@ export async function POST(
   })
 
   if ('error' in send) {
-    return NextResponse.json({ error: send.error }, { status: 400 })
+    return NextResponse.json({ error: 'Unable to send email.' }, { status: 400 })
   }
 
   if (stage === 'scheduled') {

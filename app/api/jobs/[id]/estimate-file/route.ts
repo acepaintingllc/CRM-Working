@@ -28,7 +28,7 @@ export async function GET(
     .eq('id', id)
     .maybeSingle()
 
-  if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 })
+  if (jobErr) return NextResponse.json({ error: 'Unable to load job.' }, { status: 500 })
   if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
 
   const jobRow = job as JobRecord
@@ -39,9 +39,7 @@ export async function GET(
     .eq('id', jobRow.customer_id)
     .maybeSingle()
 
-  if (!customer?.address) {
-    return NextResponse.json({ error: 'Customer address missing' }, { status: 400 })
-  }
+  if (!customer?.address) return NextResponse.json({ error: 'Customer address missing.' }, { status: 400 })
 
   const origin = new URL(request.url).origin
   const result = await findLatestEstimateFile({

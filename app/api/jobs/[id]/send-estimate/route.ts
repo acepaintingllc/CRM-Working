@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { downloadDriveFile, findLatestEstimateFile } from '@/lib/server/googleDrive'
 import { sendGmailMessage } from '@/lib/server/googleMail'
+import { checkLocalRateLimit } from '@/lib/server/rateLimit'
 
 function applyTemplate(template: string, vars: Record<string, string | null | undefined>) {
   let output = template
@@ -37,7 +38,6 @@ type JobRecord = {
 }
 
 type ScheduleRow = { start_at: string | null; end_at: string | null }
-type ErrorLike = { message?: unknown; stack?: unknown }
 
 export async function POST(
   request: Request,
@@ -57,6 +57,15 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
     }
 
+    const rate = checkLocalRateLimit({
+      key: `send-estimate:${orgId}:${userId}:${id}`,
+      max: 5,
+      windowMs: 10 * 60 * 1000,
+    })
+    if (!rate.ok) {
+      return NextResponse.json({ error: 'Too many send attempts. Please wait and retry.' }, { status: 429 })
+    }
+
     const { data: job, error: jobErr } = await supabaseAdmin
       .from('jobs')
       .select('*')
@@ -64,7 +73,7 @@ export async function POST(
       .eq('id', id)
       .maybeSingle()
 
-    if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 })
+    if (jobErr) return NextResponse.json({ error: 'Unable to load job.' }, { status: 500 })
     if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
 
     const jobRow = job as JobRecord
@@ -125,7 +134,7 @@ export async function POST(
 
       if ('error' in fileResult) {
         console.warn('[send-estimate] no-match', { jobId: id, reason: fileResult.error })
-        return NextResponse.json({ error: fileResult.error }, { status: 400 })
+        return NextResponse.json({ error: 'No matching estimate in Drive folder.' }, { status: 400 })
       }
       console.info('[send-estimate] selected', {
         jobId: id,
@@ -143,7 +152,7 @@ export async function POST(
       })
 
       if ('error' in download) {
-        return NextResponse.json({ error: download.error }, { status: 400 })
+        return NextResponse.json({ error: 'Unable to read estimate file from Drive.' }, { status: 400 })
       }
 
       attachment = {
@@ -208,7 +217,7 @@ export async function POST(
     })
 
     if ('error' in send) {
-      return NextResponse.json({ error: send.error }, { status: 400 })
+      return NextResponse.json({ error: 'Unable to send email.' }, { status: 400 })
     }
 
     await supabaseAdmin
@@ -229,14 +238,7 @@ export async function POST(
       },
     })
   } catch (e: unknown) {
-    const err = e as ErrorLike
     console.error('send-estimate failed', e)
-    return NextResponse.json(
-      {
-        error: typeof err.message === 'string' ? err.message : 'Unhandled error sending estimate',
-        details: typeof err.stack === 'string' ? err.stack : null,
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Unable to send estimate email.' }, { status: 500 })
   }
 }
