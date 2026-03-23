@@ -176,11 +176,10 @@ function findJobControlTargets(values: string[][]) {
       const normalized = normalizeHeader(row[colIndex])
       if (!normalized) continue
 
-      if (!targets.has('activeJobId') && keyLabels.activeJobId.has(normalized)) {
-        targets.set('activeJobId', { row: rowIndex + 1, col: colIndex + 2 })
-      }
-
       if (colIndex !== 0) continue
+      if (!targets.has('activeJobId') && keyLabels.activeJobId.has(normalized)) {
+        targets.set('activeJobId', { row: rowIndex + 1, col: 2 })
+      }
       if (!targets.has('customerName') && keyLabels.customerName.has(normalized)) {
         targets.set('customerName', { row: rowIndex + 1, col: 2 })
       }
@@ -221,6 +220,7 @@ function buildJobControlUpdates(params: {
   }
 
   // Legacy fixed cells for older workbook templates.
+  setUpdate(`${params.sheetName}!B3`, params.values.activeJobId)
   setUpdate(`${params.sheetName}!B4`, params.values.customerName)
   setUpdate(`${params.sheetName}!B5`, params.values.customerAddress)
   setUpdate(`${params.sheetName}!B6`, params.values.estimateDate)
