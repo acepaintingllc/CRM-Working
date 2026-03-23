@@ -21,10 +21,34 @@ function normalizeStreet(value: string) {
   return value.toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+function normalizeSpaces(value: string) {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
 function extractStreet(address: string | null | undefined) {
   if (!address) return ''
   const first = address.split(',')[0] ?? ''
   return normalizeStreet(first)
+}
+
+function extractStreetRaw(address: string | null | undefined) {
+  if (!address) return ''
+  const first = address.split(',')[0] ?? ''
+  return normalizeSpaces(first)
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function parseEstimateFileName(name: string) {
+  const m = /^Estimate-(.+)-v(\d+)(?:\.pdf)?$/i.exec(name)
+  if (!m) return null
+  const rawStreet = normalizeSpaces(m[1] ?? '')
+  const normalizedStreet = normalizeStreet(rawStreet)
+  const version = Number(m[2])
+  if (!rawStreet || Number.isNaN(version)) return null
+  return { rawStreet, normalizedStreet, version }
 }
 
 export async function findLatestEstimateFile(params: {
@@ -41,6 +65,7 @@ export async function findLatestEstimateFile(params: {
   })
   if ('error' in access) return { error: access.error } as const
 
+  const rawStreet = extractStreetRaw(params.address)
   const street = extractStreet(params.address)
   if (!street) return { error: 'Customer address missing or invalid.' } as const
 
@@ -82,22 +107,65 @@ export async function findLatestEstimateFile(params: {
       }
     })
     .filter(Boolean) as { id: string; name: string; webViewLink?: string | null }[]
-  const matches = files
+  const parsed = files
     .map((f) => {
-      const m = /^Estimate-(.+)-v(\d+)(?:\.pdf)?$/i.exec(f.name ?? '')
-      if (!m) return null
-      const streetPart = normalizeStreet(m[1])
-      if (streetPart !== street) return null
-      return { id: f.id, name: f.name, version: Number(m[2]), webViewLink: f.webViewLink ?? null }
+      const parsedName = parseEstimateFileName(f.name ?? '')
+      if (!parsedName) return null
+      return {
+        id: f.id,
+        name: f.name,
+        webViewLink: f.webViewLink ?? null,
+        ...parsedName,
+      }
     })
-    .filter(Boolean) as { id: string; name: string; version: number; webViewLink?: string | null }[]
+    .filter(Boolean) as {
+    id: string
+    name: string
+    rawStreet: string
+    normalizedStreet: string
+    version: number
+    webViewLink?: string | null
+  }[]
 
-  if (!matches.length) {
-    return { error: `No estimate PDF found for '${street}'.` } as const
+  const exactStreetPattern = new RegExp(
+    `^Estimate-${escapeRegex(rawStreet)}-v(\\d+)(?:\\.pdf)?$`,
+    'i'
+  )
+  const exactMatches = parsed.filter(
+    (f) => exactStreetPattern.test(f.name) && f.normalizedStreet === street
+  )
+  const normalizedMatches = parsed.filter((f) => f.normalizedStreet === street)
+
+  const chooseHighestVersion = <T extends { version: number }>(rows: T[]) =>
+    rows.slice().sort((a, b) => b.version - a.version)[0] ?? null
+
+  const exact = chooseHighestVersion(exactMatches)
+  if (exact) {
+    return {
+      file: {
+        id: exact.id,
+        name: exact.name,
+        version: exact.version,
+        matchMode: 'exact' as const,
+        webViewLink: exact.webViewLink ?? null,
+      },
+    } as const
   }
 
-  matches.sort((a, b) => b.version - a.version)
-  return { file: matches[0] } as const
+  const normalized = chooseHighestVersion(normalizedMatches)
+  if (normalized) {
+    return {
+      file: {
+        id: normalized.id,
+        name: normalized.name,
+        version: normalized.version,
+        matchMode: 'normalized' as const,
+        webViewLink: normalized.webViewLink ?? null,
+      },
+    } as const
+  }
+
+  return { error: 'No matching estimate PDF found in Drive folder.' } as const
 }
 
 export function getStreetFromAddress(address: string | null | undefined) {
@@ -105,12 +173,9 @@ export function getStreetFromAddress(address: string | null | undefined) {
 }
 
 export function parseEstimateVersionFromName(name: string | null | undefined) {
-  const m = /^Estimate-(.+)-v(\d+)(?:\.pdf)?$/i.exec(name ?? '')
-  if (!m) return null
-  const streetPart = normalizeStreet(m[1])
-  const version = Number(m[2])
-  if (!streetPart || Number.isNaN(version)) return null
-  return { street: streetPart, version }
+  const parsed = parseEstimateFileName(name ?? '')
+  if (!parsed) return null
+  return { street: parsed.normalizedStreet, version: parsed.version }
 }
 
 export async function listEstimatePdfFiles(params: {

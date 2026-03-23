@@ -173,8 +173,18 @@ export async function POST(
   const subject = subjectOverride ?? applyTemplate(template.subject ?? '', vars)
   const bodyText = bodyOverride ?? applyTemplate(template.body ?? '', vars)
 
-  let attachment: { filename: string; contentType: string; data: Buffer } | null = null
-  if (stage === 'follow_up') {
+  let attachment:
+    | {
+        id: string
+        filename: string
+        contentType: string
+        data: Buffer
+        webViewLink?: string | null
+        version?: number | null
+        matchMode?: string | null
+      }
+    | null = null
+  if (stage === 'follow_up' || stage === 'estimate_sent') {
     const origin = new URL(request.url).origin
     const fileResult = await findLatestEstimateFile({
       origin,
@@ -183,8 +193,17 @@ export async function POST(
       address: customer.address,
     })
     if ('error' in fileResult) {
+      console.warn('[send-stage] no-match', { jobId: id, stage, reason: fileResult.error })
       return NextResponse.json({ error: fileResult.error }, { status: 400 })
     }
+    console.info('[send-stage] selected', {
+      jobId: id,
+      stage,
+      fileId: fileResult.file.id,
+      fileName: fileResult.file.name,
+      version: fileResult.file.version ?? null,
+      matchMode: fileResult.file.matchMode ?? null,
+    })
     const download = await downloadDriveFile({
       origin,
       orgId,
@@ -195,9 +214,13 @@ export async function POST(
       return NextResponse.json({ error: download.error }, { status: 400 })
     }
     attachment = {
+      id: fileResult.file.id,
       filename: fileResult.file.name,
       contentType: 'application/pdf',
       data: download.buffer,
+      webViewLink: fileResult.file.webViewLink ?? null,
+      version: fileResult.file.version ?? null,
+      matchMode: fileResult.file.matchMode ?? null,
     }
   }
 
@@ -241,5 +264,16 @@ export async function POST(
     return NextResponse.json({ ok: true, job: updatedJob })
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({
+    ok: true,
+    estimateFile: attachment
+      ? {
+          id: attachment.id,
+          name: attachment.filename,
+          webViewLink: attachment.webViewLink ?? null,
+          version: attachment.version ?? null,
+          matchMode: attachment.matchMode ?? null,
+        }
+      : null,
+  })
 }

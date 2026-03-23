@@ -55,6 +55,14 @@ type EmailTemplate = {
   body: string | null
 }
 
+type EstimateDriveFile = {
+  id: string
+  name: string
+  version?: number
+  matchMode?: 'exact' | 'normalized' | 'manual' | string
+  webViewLink?: string | null
+}
+
 const iconSizeSm = 16
 const iconSizeMd = 18
 
@@ -85,6 +93,8 @@ export default function JobDetailPage() {
   const [composeLoading, setComposeLoading] = useState(false)
   const [sendingStage, setSendingStage] = useState<string | null>(null)
   const [timelineOpen, setTimelineOpen] = useState(true)
+  const [estimateFile, setEstimateFile] = useState<EstimateDriveFile | null>(null)
+  const [estimateFileError, setEstimateFileError] = useState<string | null>(null)
 
   useEffect(() => {
     if (typeof id !== 'string' || !id) {
@@ -99,6 +109,8 @@ export default function JobDetailPage() {
       setLoading(true)
       setError(null)
       setNotice(null)
+      setEstimateFile(null)
+      setEstimateFileError(null)
       const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
@@ -108,6 +120,19 @@ export default function JobDetailPage() {
         return
       }
       setJob(payload?.job ?? null)
+
+      const estimateRes = await authedFetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' })
+      const estimatePayload = await estimateRes.json().catch(() => null)
+      if (estimateRes.ok && estimatePayload?.file) {
+        setEstimateFile(estimatePayload.file as EstimateDriveFile)
+      } else {
+        setEstimateFile(null)
+        setEstimateFileError(
+          typeof estimatePayload?.error === 'string'
+            ? estimatePayload.error
+            : 'No matching estimate in Drive folder'
+        )
+      }
       setLoading(false)
     }
 
@@ -416,6 +441,7 @@ export default function JobDetailPage() {
   )
 
   const canSendScheduledEmail = Boolean(job?.scheduled_date || job?.scheduled_end_date)
+  const hasSendableEstimate = Boolean(estimateFile?.id)
   const linkedEstimateHref =
     job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
       ? `/crm/estimates/${job.linked_estimate_id}`
@@ -529,6 +555,27 @@ export default function JobDetailPage() {
                     </button>
                   ) : null
                 )}
+                {renderRow(
+                  'Latest Estimate',
+                  estimateFile
+                    ? `${estimateFile.name}${estimateFile.version ? ` (v${estimateFile.version})` : ''}`
+                    : estimateFileError ?? 'No matching estimate in Drive folder',
+                  estimateFile?.webViewLink ? (
+                    <a
+                      href={estimateFile.webViewLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        ...actionButton,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      {iconLabel(FileText, 'Preview')}
+                    </a>
+                  ) : null
+                )}
                 {renderRow('Notes', job.description)}
                 <div className="mt-5 grid gap-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -544,7 +591,26 @@ export default function JobDetailPage() {
               )}
                 {job.status !== 'scheduled' && (
                   <>
-                    <button onClick={() => void openComposer('estimate_sent')} style={smallButton}>
+                    <button
+                      onClick={() => {
+                        if (!hasSendableEstimate) {
+                          setError('No matching estimate in Drive folder. Add one before sending.')
+                          return
+                        }
+                        void openComposer('estimate_sent')
+                      }}
+                      style={{
+                        ...smallButton,
+                        opacity: hasSendableEstimate ? 1 : 0.55,
+                        cursor: hasSendableEstimate ? 'pointer' : 'not-allowed',
+                      }}
+                      disabled={!hasSendableEstimate}
+                      title={
+                        hasSendableEstimate
+                          ? 'Send latest estimate'
+                          : 'No matching estimate in Drive folder'
+                      }
+                    >
                       {iconLabel(Send, 'Edit & send estimate')}
                     </button>
                   </>
