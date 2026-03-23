@@ -4588,17 +4588,13 @@ export default function EstimateEditorPage() {
                 </div>
               )}
             </div>
-            <div style={{ color: '#6b7280', fontSize: 12 }}>
-              Totals come from cached `OUTPUT_App` values in `latest_output_json`. Click Recalculate to refresh.
-            </div>
             <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
               {[
                 ['FinalTotal', 'Final Total'],
                 ['WallsTotal', 'Walls Total'],
                 ['CeilingsTotal', 'Ceilings Total'],
-                ['TrimTotal', 'Trim Total'],
+                ['TrimTotal', 'TRIM & DOORS TOTAL'],
                 ['PreJobTotal', 'Pre-Job Total'],
-                ['RollerCoversTotal', 'Roller Covers Total'],
               ].map(([key, label]) => (
                 <div key={key} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12 }}>
                   <div style={{ fontSize: 12, color: '#6b7280', textTransform: 'uppercase', fontWeight: 800 }}>{label}</div>

@@ -1,19 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/customers/api'
 
-type ErrorLike = {
-  details?: unknown
-  hint?: unknown
-  code?: unknown
-}
-
-function detailMeta(error: ErrorLike) {
-  return {
-    details: typeof error.details === 'string' ? error.details : null,
-    hint: typeof error.hint === 'string' ? error.hint : null,
-    code: typeof error.code === 'string' ? error.code : null,
-  }
-}
 
 export async function GET(
   request: Request,
@@ -95,15 +82,7 @@ export async function DELETE(
     .eq('org_id', orgId)
     .eq('id', id)
 
-  if (error) {
-    return NextResponse.json(
-      {
-        error: error.message,
-        ...detailMeta(error),
-      },
-      { status: 500 }
-    )
-  }
+  if (error) return NextResponse.json({ error: 'Unable to delete customer' }, { status: 500 })
 
   return NextResponse.json({ ok: true })
 }

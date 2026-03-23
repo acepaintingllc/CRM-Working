@@ -128,6 +128,52 @@ function parseMaybeNumber(value: string | null | undefined) {
   return Number.isFinite(n) ? n : raw
 }
 
+function normalizeSummaryLabel(value: string | null | undefined) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
+function findSummaryMetricValue(values: string[][], labelNeedles: string[]) {
+  const normalizedNeedles = labelNeedles.map((label) => normalizeSummaryLabel(label))
+  const tryParse = (raw: unknown) => parseMaybeNumber(asText(raw))
+  const tryNumber = (raw: unknown) => {
+    const parsed = tryParse(raw)
+    return typeof parsed === 'number' ? parsed : null
+  }
+
+  for (let rowIndex = 0; rowIndex < values.length; rowIndex += 1) {
+    const row = values[rowIndex] ?? []
+    for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
+      const normalizedCell = normalizeSummaryLabel(row[colIndex])
+      if (!normalizedCell) continue
+      const matches = normalizedNeedles.some((needle) => normalizedCell.includes(needle))
+      if (!matches) continue
+
+      const nearbyCandidates: unknown[] = [
+        row[colIndex + 1],
+        row[colIndex + 2],
+        values[rowIndex + 1]?.[colIndex],
+        values[rowIndex + 1]?.[colIndex + 1],
+        values[rowIndex + 1]?.[colIndex + 2],
+        row[colIndex - 1],
+      ]
+
+      for (const candidate of nearbyCandidates) {
+        const n = tryNumber(candidate)
+        if (n != null) return n
+      }
+
+      for (const candidate of nearbyCandidates) {
+        const parsed = tryParse(candidate)
+        if (parsed != null) return parsed
+      }
+    }
+  }
+
+  return null
+}
+
 function normalizeHeader(value: string | null | undefined) {
   return String(value ?? '')
     .toLowerCase()
@@ -1628,38 +1674,41 @@ async function readOutputs(params: {
   userId: string
   spreadsheetId: string
 }) {
-  let outputRows: string[][] = []
+  let summaryRows: string[][] = []
   for (let i = 0; i < 6; i += 1) {
     const read = await readRangeValues({
       origin: params.origin,
       orgId: params.orgId,
       userId: params.userId,
       spreadsheetId: params.spreadsheetId,
-      range: 'OUTPUT_App!A3:B30',
+      range: 'Summary!A1:Z250',
     })
     if ('error' in read) {
-      const message = String(read.error ?? '')
-      const normalized = message.toLowerCase()
-      if (
-        normalized.includes('missing sheet/tab/header') ||
-        normalized.includes('unable to parse range: output_app!a3:b30')
-      ) {
-        outputRows = []
-        break
-      }
       throw new Error(`Workbook read/write error: ${read.error}`)
     }
-    outputRows = read.values
-    if (outputRows.some((row: string[]) => asText(row[0]) === 'FinalTotal')) break
+    summaryRows = read.values
+    const finalTotal = findSummaryMetricValue(summaryRows, ['Final Job Total'])
+    if (finalTotal != null) break
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
 
-  const outputApp: Record<string, string | number | null> = {}
-  for (const row of outputRows) {
-    const key = asText(row[0])
-    if (!key) continue
-    outputApp[key] = parseMaybeNumber(asText(row[1]))
+  const wallsTotal = findSummaryMetricValue(summaryRows, ['Walls Total with prejob trips'])
+  const ceilingsTotal = findSummaryMetricValue(summaryRows, ['Ceilings Total with prejob trips'])
+  const trimOnlyTotal = findSummaryMetricValue(summaryRows, ['Trim Total with prejob trips'])
+  const doorsTotal = findSummaryMetricValue(summaryRows, ['Doors Total with prejob trips'])
+  const trimTotal =
+    typeof trimOnlyTotal === 'number' && typeof doorsTotal === 'number'
+      ? trimOnlyTotal + doorsTotal
+      : trimOnlyTotal ?? doorsTotal
+
+  const outputApp: Record<string, string | number | null> = {
+    FinalTotal: findSummaryMetricValue(summaryRows, ['Final Job Total']),
+    WallsTotal: wallsTotal,
+    CeilingsTotal: ceilingsTotal,
+    TrimTotal: trimTotal,
+    PreJobTotal: findSummaryMetricValue(summaryRows, ['PreJob Total $', 'PreJob Total']),
   }
+
   const colorRead = await readRangeValues({
     origin: params.origin,
     orgId: params.orgId,
