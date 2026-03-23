@@ -442,6 +442,12 @@ export default function JobDetailPage() {
 
   const canSendScheduledEmail = Boolean(job?.scheduled_date || job?.scheduled_end_date)
   const hasSendableEstimate = Boolean(estimateFile?.id)
+  const composeNeedsEstimateAttachment =
+    composeStage === 'estimate_sent' || composeStage === 'follow_up'
+  const composeCanSend =
+    composeStage != null &&
+    sendingStage !== composeStage &&
+    (!composeNeedsEstimateAttachment || hasSendableEstimate)
   const linkedEstimateHref =
     job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
       ? `/crm/estimates/${job.linked_estimate_id}`
@@ -733,11 +739,31 @@ export default function JobDetailPage() {
                       onChange={(e) => setComposeBody(e.target.value)}
                       style={{ ...inputStyle, height: 160, resize: 'vertical', padding: '10px' }}
                     />
+                    {composeNeedsEstimateAttachment && (
+                      <div
+                        className={`rounded-lg border px-2.5 py-2 text-xs font-semibold ${
+                          hasSendableEstimate
+                            ? 'border-green-200 bg-green-50 text-green-800'
+                            : 'border-amber-200 bg-amber-50 text-amber-800'
+                        }`}
+                      >
+                        {hasSendableEstimate
+                          ? `Estimate attachment ready: ${estimateFile?.name ?? ''}`
+                          : 'No matching estimate file found in Drive. Sending is disabled.'}
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => void sendComposed()}
-                        disabled={sendingStage === composeStage}
-                        style={{ ...smallButton, background: '#111', color: 'white', border: '1px solid #111' }}
+                        disabled={!composeCanSend}
+                        style={{
+                          ...smallButton,
+                          background: '#111',
+                          color: 'white',
+                          border: '1px solid #111',
+                          opacity: composeCanSend ? 1 : 0.55,
+                          cursor: composeCanSend ? 'pointer' : 'not-allowed',
+                        }}
                       >
                         {sendingStage === composeStage
                           ? iconLabel(Send, 'Sending...')
