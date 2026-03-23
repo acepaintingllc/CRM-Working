@@ -18,7 +18,13 @@ import {
   XCircle,
 } from 'lucide-react'
 
-type JobStatus = 'estimate_scheduled' | 'estimate_sent' | 'scheduled' | 'completed' | 'lost'
+type JobStatus =
+  | 'estimate_scheduled'
+  | 'estimate_sent'
+  | 'follow_up'
+  | 'scheduled'
+  | 'completed'
+  | 'lost'
 
 type Job = {
   id: string
@@ -40,6 +46,7 @@ type Job = {
 const columns: { key: JobStatus; title: string }[] = [
   { key: 'estimate_scheduled', title: 'Estimate scheduled' },
   { key: 'estimate_sent', title: 'Estimate sent' },
+  { key: 'follow_up', title: 'Follow up' },
   { key: 'scheduled', title: 'Scheduled' },
   { key: 'completed', title: 'Completed' },
   { key: 'lost', title: 'Lost' },
@@ -72,6 +79,7 @@ export default function JobsPage() {
     const map: Record<JobStatus, Job[]> = {
       estimate_scheduled: [],
       estimate_sent: [],
+      follow_up: [],
       scheduled: [],
       completed: [],
       lost: [],
@@ -396,6 +404,83 @@ export default function JobsPage() {
                       )}
 
                       {job.status === 'estimate_sent' && (
+                        <>
+                          {compactActions ? (
+                            <details onClick={(e) => e.stopPropagation()}>
+                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
+                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                                <button
+                                  onClick={stop(() => void patchJob(job.id, { status: 'follow_up' }))}
+                                  style={smallButton}
+                                >
+                                  {iconLabel(Mail, 'Move to follow up')}
+                                </button>
+                                <Link
+                                  href={`/crm/jobs/${job.id}/schedule`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                                >
+                                  {iconLabel(CalendarCheck, 'Schedule job')}
+                                </Link>
+                                <button
+                                  onClick={stop(async () => {
+                                    router.push(`/crm/jobs/${job.id}?compose=follow_up`)
+                                  })}
+                                  style={smallButton}
+                                >
+                                  {iconLabel(Mail, 'Send follow up')}
+                                </button>
+                                <button
+                                  onClick={stop(() => {
+                                    const ok = window.confirm('Mark this job as lost?')
+                                    if (!ok) return
+                                    void patchJob(job.id, { status: 'lost' })
+                                  })}
+                                  style={{ ...smallButton, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}
+                                >
+                                  {iconLabel(XCircle, 'Mark lost')}
+                                </button>
+                              </div>
+                            </details>
+                          ) : (
+                            <>
+                              <button
+                                onClick={stop(() => void patchJob(job.id, { status: 'follow_up' }))}
+                                style={smallButton}
+                              >
+                                {iconLabel(Mail, 'Move to follow up')}
+                              </button>
+                              <Link
+                                href={`/crm/jobs/${job.id}/schedule`}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                              >
+                                {iconLabel(CalendarCheck, 'Schedule job')}
+                              </Link>
+                              <button
+                                onClick={stop(async () => {
+                                  router.push(`/crm/jobs/${job.id}?compose=follow_up`)
+                                })}
+                                style={smallButton}
+                              >
+                                {iconLabel(Mail, 'Send follow up')}
+                              </button>
+                              <button
+                                onClick={stop(() => {
+                                  const ok = window.confirm('Mark this job as lost?')
+                                  if (!ok) return
+                                  void patchJob(job.id, { status: 'lost' })
+                                })}
+                                style={{ ...smallButton, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}
+                              >
+                                {iconLabel(XCircle, 'Mark lost')}
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      {job.status === 'follow_up' && (
                         <>
                           {compactActions ? (
                             <details onClick={(e) => e.stopPropagation()}>

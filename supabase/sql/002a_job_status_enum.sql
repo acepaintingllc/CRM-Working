@@ -7,6 +7,7 @@ begin
     create type public.job_status as enum (
       'estimate_scheduled',
       'estimate_sent',
+      'follow_up',
       'scheduled',
       'completed'
     );
@@ -16,6 +17,7 @@ $$;
 
 alter type public.job_status add value if not exists 'estimate_scheduled';
 alter type public.job_status add value if not exists 'estimate_sent';
+alter type public.job_status add value if not exists 'follow_up';
 alter type public.job_status add value if not exists 'scheduled';
 alter type public.job_status add value if not exists 'completed';
 

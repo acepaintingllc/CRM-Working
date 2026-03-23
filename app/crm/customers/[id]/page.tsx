@@ -254,7 +254,7 @@ export default function CustomerDetailPage() {
     <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         <div className="flex flex-wrap items-start gap-4">
-          <div className="w-full min-w-[220px] flex-1 md:max-w-[320px]">
+          <div className="hidden w-full min-w-[220px] flex-1 md:block md:max-w-[320px]">
             <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
               <div className="mb-2 text-sm font-black text-gray-900">Customers</div>
               <div className="relative">
@@ -358,11 +358,11 @@ export default function CustomerDetailPage() {
           </div>
         </div>
 
-        <div className="min-w-[280px] flex-[3_1_480px]">
+        <div className="w-full min-w-0 flex-[3_1_480px]">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h1 className="m-0 text-2xl font-bold text-gray-900">Customer details</h1>
-              <p className="m-0 text-sm text-gray-500">Customer profile and contact info.</p>
+              <p className="m-0 text-sm text-gray-500">Customer profile and quick actions.</p>
             </div>
             <button
               onClick={() => router.back()}
@@ -456,7 +456,6 @@ export default function CustomerDetailPage() {
 
                 {renderRow('Email', customer.email)}
                 {renderRow('Phone', customer.phone)}
-                {renderRow('Address', customer.address)}
                 {renderRow(
                   'Created',
                   customer.created_at ? new Date(customer.created_at).toLocaleString() : null
