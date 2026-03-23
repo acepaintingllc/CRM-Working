@@ -52,8 +52,16 @@ export async function GET(
   })
 
   if ('error' in result) {
-    return NextResponse.json({ error: result.error }, { status: 400 })
+    console.warn('[estimate-file] no-match', { jobId: id, reason: result.error })
+    return NextResponse.json({ error: result.error }, { status: 404 })
   }
+  console.info('[estimate-file] selected', {
+    jobId: id,
+    fileId: result.file.id,
+    fileName: result.file.name,
+    version: result.file.version ?? null,
+    matchMode: result.file.matchMode ?? null,
+  })
 
   const url = new URL(request.url)
   const shouldRedirect = url.searchParams.get('redirect') === '1'

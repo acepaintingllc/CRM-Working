@@ -91,7 +91,7 @@ export async function POST(
 
     const origin = new URL(request.url).origin
     const contentType = request.headers.get('content-type') ?? ''
-    let attachment: { filename: string; data: Buffer; link?: string | null } | null = null
+    let attachment: { id?: string | null; filename: string; data: Buffer; link?: string | null; version?: number | null; matchMode?: string | null } | null = null
     let subjectOverride: string | null = null
     let bodyOverride: string | null = null
 
@@ -104,7 +104,14 @@ export async function POST(
       if (typeof bodyField === 'string') bodyOverride = bodyField
       if (file && file instanceof File) {
         const buffer = Buffer.from(await file.arrayBuffer())
-        attachment = { filename: file.name, data: buffer, link: null }
+        attachment = {
+          id: null,
+          filename: file.name,
+          data: buffer,
+          link: null,
+          version: null,
+          matchMode: 'manual',
+        }
       }
     }
 
@@ -117,8 +124,16 @@ export async function POST(
       })
 
       if ('error' in fileResult) {
+        console.warn('[send-estimate] no-match', { jobId: id, reason: fileResult.error })
         return NextResponse.json({ error: fileResult.error }, { status: 400 })
       }
+      console.info('[send-estimate] selected', {
+        jobId: id,
+        fileId: fileResult.file.id,
+        fileName: fileResult.file.name,
+        version: fileResult.file.version ?? null,
+        matchMode: fileResult.file.matchMode ?? null,
+      })
 
       const download = await downloadDriveFile({
         origin,
@@ -132,9 +147,12 @@ export async function POST(
       }
 
       attachment = {
+        id: fileResult.file.id,
         filename: fileResult.file.name,
         data: download.buffer,
         link: fileResult.file.webViewLink ?? null,
+        version: fileResult.file.version ?? null,
+        matchMode: fileResult.file.matchMode ?? null,
       }
     }
 
@@ -203,9 +221,11 @@ export async function POST(
       ok: true,
       messageId: send.messageId,
       estimateFile: {
-        id: attachment.filename,
+        id: attachment.id ?? attachment.filename,
         name: attachment.filename,
         webViewLink: attachment.link ?? null,
+        version: attachment.version ?? null,
+        matchMode: attachment.matchMode ?? null,
       },
     })
   } catch (e: unknown) {

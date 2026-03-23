@@ -571,8 +571,34 @@ async function ensureSpreadsheetForEstimate(params: {
     )
   }
 
+  const jobMetaRes = await supabaseAdmin
+    .from('jobs')
+    .select('id, customer_id')
+    .eq('org_id', params.orgId)
+    .eq('id', params.jobId)
+    .maybeSingle()
+  if (jobMetaRes.error) {
+    throw new Error(`Workbook read/write error: ${jobMetaRes.error.message}`)
+  }
+
+  const customerName = asText(jobMetaRes.data?.customer_id)
+    ? await (async () => {
+        const customerRes = await supabaseAdmin
+          .from('customers')
+          .select('name')
+          .eq('org_id', params.orgId)
+          .eq('id', asText(jobMetaRes.data?.customer_id))
+          .maybeSingle()
+        if (customerRes.error) {
+          throw new Error(`Workbook read/write error: ${customerRes.error.message}`)
+        }
+        return asText(customerRes.data?.name)
+      })()
+    : ''
+
   const today = new Date().toISOString().slice(0, 10)
-  const fileName = sanitizeDriveName(`Estimate Workbook - ${params.jobId} - ${today}`).slice(0, 120)
+  const nameBase = customerName || params.jobId
+  const fileName = sanitizeDriveName(`Estimate Workbook - ${nameBase} - ${today}`).slice(0, 120)
   const copied = await copyDriveFile({
     origin: params.origin,
     orgId: params.orgId,
