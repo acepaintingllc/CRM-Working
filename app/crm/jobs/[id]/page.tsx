@@ -458,6 +458,7 @@ export default function JobDetailPage() {
               >
                 <option value="estimate_scheduled">Estimate scheduled</option>
                 <option value="estimate_sent">Estimate sent</option>
+                <option value="follow_up">Follow up</option>
                 <option value="scheduled">Scheduled</option>
                 <option value="completed">Completed</option>
                 <option value="lost">Lost</option>
@@ -571,6 +572,34 @@ export default function JobDetailPage() {
                     style={smallButton}
                   >
                     {iconLabel(Mail, 'Edit & send follow up')}
+                  </button>
+                  <button
+                    onClick={() => void patchJob({ status: 'follow_up' })}
+                    style={smallButton}
+                  >
+                    {iconLabel(Mail, 'Move to follow up')}
+                  </button>
+                  <button
+                    onClick={() => void patchJob({ status: 'lost' })}
+                    style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
+                  >
+                    {iconLabel(XCircle, 'Mark lost')}
+                  </button>
+                </>
+              )}
+              {job.status === 'follow_up' && (
+                <>
+                  <button
+                    onClick={() => void openComposer('follow_up')}
+                    style={smallButton}
+                  >
+                    {iconLabel(Mail, 'Edit & send follow up')}
+                  </button>
+                  <button
+                    onClick={() => router.push(`/crm/jobs/${id}/schedule`)}
+                    style={smallButton}
+                  >
+                    {iconLabel(CalendarCheck, 'Schedule job')}
                   </button>
                   <button
                     onClick={() => void patchJob({ status: 'lost' })}

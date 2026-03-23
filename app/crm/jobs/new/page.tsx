@@ -6,7 +6,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-type JobStatus = 'estimate_scheduled' | 'estimate_sent' | 'scheduled' | 'completed' | 'lost'
+type JobStatus =
+  | 'estimate_scheduled'
+  | 'estimate_sent'
+  | 'follow_up'
+  | 'scheduled'
+  | 'completed'
+  | 'lost'
 
 type CustomerOption = {
   id: string
@@ -387,6 +393,7 @@ export default function NewJobPage() {
               <select value={status} onChange={(e) => setStatus(e.target.value as JobStatus)} style={inputStyle}>
                 <option value="estimate_scheduled">Estimate scheduled</option>
                 <option value="estimate_sent">Estimate sent</option>
+                <option value="follow_up">Follow up</option>
                 <option value="scheduled">Scheduled</option>
                 <option value="completed">Completed</option>
                 <option value="lost">Lost</option>

@@ -36,14 +36,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'user_id does not match token' }, { status: 403 })
   }
 
-  // Check if membership already exists
-  const { data: existingRows, error: existingErr } = await supabaseAdmin
-  .from('org_members')
-  .select('org_id, role')
-  .eq('user_id', user_id)
-  .limit(1)
-
-const existing = existingRows?.[0] ?? null
+  // Check if membership already exists.
+  const { data: existing, error: existingErr } = await supabaseAdmin
+    .from('org_members')
+    .select('org_id, role')
+    .eq('user_id', user_id)
+    .limit(1)
+    .maybeSingle()
 
 
   if (existingErr) {
