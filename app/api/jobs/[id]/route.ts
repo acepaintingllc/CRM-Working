@@ -22,6 +22,13 @@ type JobRecord = {
 
 type ScheduleRecord = { start_at: string | null; end_at: string | null }
 type CustomerRecord = { name: string | null; address: string | null; email?: string | null; phone?: string | null }
+type LinkedEstimateRecord = {
+  id: string
+  status: string | null
+  sheet_file_path: string | null
+  updated_at: string | null
+  created_at: string | null
+}
 
 function isMissingJobsColumnError(message: string, column: string) {
   return (
@@ -195,6 +202,18 @@ export async function GET(
     }
   }
 
+  const { data: linkedEstimateRows, error: linkedEstimatesErr } = await supabaseAdmin
+    .from('estimates')
+    .select('id, status, sheet_file_path, updated_at, created_at')
+    .eq('org_id', orgId)
+    .eq('job_id', id)
+    .order('updated_at', { ascending: false })
+  if (linkedEstimatesErr) {
+    return NextResponse.json({ error: linkedEstimatesErr.message }, { status: 500 })
+  }
+
+  const linkedEstimates = (linkedEstimateRows ?? []) as LinkedEstimateRecord[]
+
   return NextResponse.json({
     job: {
       ...job,
@@ -202,6 +221,8 @@ export async function GET(
       customer_address: customer?.address ?? null,
       customer_email: customer?.email ?? null,
       customer_phone: customer?.phone ?? null,
+      linked_estimates: linkedEstimates,
+      linked_estimate_id: linkedEstimates[0]?.id ?? null,
     },
   })
 }

@@ -39,6 +39,14 @@ type JobDetail = {
   scheduled_email_sent_at?: string | null
   completed_at: string | null
   created_at?: string | null
+  linked_estimate_id?: string | null
+  linked_estimates?: Array<{
+    id: string
+    status: string | null
+    sheet_file_path: string | null
+    updated_at: string | null
+    created_at: string | null
+  }>
 }
 
 type EmailTemplate = {
@@ -408,6 +416,14 @@ export default function JobDetailPage() {
   )
 
   const canSendScheduledEmail = Boolean(job?.scheduled_date || job?.scheduled_end_date)
+  const linkedEstimateHref =
+    job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
+      ? `/crm/estimates/${job.linked_estimate_id}`
+      : `/crm/jobs/${id}/estimate`
+  const linkedEstimateLabel =
+    job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
+      ? 'Open linked estimate'
+      : 'Open estimate'
 
   return (
     <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
@@ -534,10 +550,10 @@ export default function JobDetailPage() {
                   </>
                 )}
                 <Link
-                  href={`/crm/jobs/${id}/estimate`}
+                  href={linkedEstimateHref}
                   style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
                 >
-                  {iconLabel(FileText, 'Open estimate')}
+                  {iconLabel(FileText, linkedEstimateLabel)}
                 </Link>
                 {job.status !== 'estimate_scheduled' && (
                   <Link

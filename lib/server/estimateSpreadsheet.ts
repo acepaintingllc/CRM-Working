@@ -151,37 +151,95 @@ function valueAt(row: string[], index: number) {
   return row[index] ?? ''
 }
 
-function findActiveJobControlTarget(values: string[][]) {
-  const keyLabels = new Set([
-    'activejobid',
-    'activejob',
-    'jobidactive',
-    'currentjobid',
-    'selectedjobid',
-  ])
+type JobControlTargetKey = 'activeJobId' | 'customerName' | 'customerAddress' | 'estimateDate'
+type JobControlValueMap = Partial<Record<JobControlTargetKey, string | null | undefined>>
+
+function findJobControlTargets(values: string[][]) {
+  const targets = new Map<JobControlTargetKey, { row: number; col: number }>()
+  const keyLabels = {
+    activeJobId: new Set([
+      'activejobid',
+      'activejob',
+      'jobidactive',
+      'currentjobid',
+      'selectedjobid',
+      'jobid',
+    ]),
+    customerName: new Set(['customername']),
+    customerAddress: new Set(['customeraddress']),
+    estimateDate: new Set(['estimatedate']),
+  } as const
 
   for (let rowIndex = 0; rowIndex < values.length; rowIndex += 1) {
     const row = values[rowIndex] ?? []
     for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
       const normalized = normalizeHeader(row[colIndex])
-      if (keyLabels.has(normalized)) {
-        return { row: rowIndex + 2, col: colIndex + 2 }
+      if (!normalized) continue
+
+      if (!targets.has('activeJobId') && keyLabels.activeJobId.has(normalized)) {
+        targets.set('activeJobId', { row: rowIndex + 1, col: colIndex + 2 })
       }
-      if (colIndex === 0 && normalized === 'jobid') {
-        return { row: rowIndex + 2, col: 2 }
+
+      if (colIndex !== 0) continue
+      if (!targets.has('customerName') && keyLabels.customerName.has(normalized)) {
+        targets.set('customerName', { row: rowIndex + 1, col: 2 })
+      }
+      if (!targets.has('customerAddress') && keyLabels.customerAddress.has(normalized)) {
+        targets.set('customerAddress', { row: rowIndex + 1, col: 2 })
+      }
+      if (!targets.has('estimateDate') && keyLabels.estimateDate.has(normalized)) {
+        targets.set('estimateDate', { row: rowIndex + 1, col: 2 })
       }
     }
   }
 
-  return null
+  return targets
 }
 
-async function writeActiveJobIdToJobControl(params: {
+function buildJobControlUpdates(params: {
+  sheetName: string
+  targets: Map<JobControlTargetKey, { row: number; col: number }>
+  values: JobControlValueMap
+}) {
+  const updatesByRange = new Map<string, string>()
+  const setUpdate = (range: string, value: string | null | undefined) => {
+    if (value === undefined) return
+    updatesByRange.set(range, asText(value))
+  }
+  const toA1 = (row: number, col: number) => `${columnLetterFromIndex(col - 1)}${row}`
+
+  const keyOrder: JobControlTargetKey[] = [
+    'activeJobId',
+    'customerName',
+    'customerAddress',
+    'estimateDate',
+  ]
+  for (const key of keyOrder) {
+    const target = params.targets.get(key)
+    if (!target) continue
+    setUpdate(`${params.sheetName}!${toA1(target.row, target.col)}`, params.values[key])
+  }
+
+  // Legacy fixed cells for older workbook templates.
+  setUpdate(`${params.sheetName}!B4`, params.values.customerName)
+  setUpdate(`${params.sheetName}!B5`, params.values.customerAddress)
+  setUpdate(`${params.sheetName}!B6`, params.values.estimateDate)
+
+  return Array.from(updatesByRange.entries()).map(([range, value]) => ({
+    range,
+    values: [[value]],
+  }))
+}
+
+async function writeJobControlMetadata(params: {
   origin: string
   orgId: string
   userId: string
   spreadsheetId: string
   jobId: string
+  customerName?: string | null
+  customerAddress?: string | null
+  estimateDate?: string | null
 }) {
   const candidateSheets = [
     'Job Control',
@@ -202,16 +260,25 @@ async function writeActiveJobIdToJobControl(params: {
     })
     if ('error' in read) continue
 
-    const target = findActiveJobControlTarget(read.values)
-    if (!target) continue
+    const targets = findJobControlTargets(read.values)
+    const updates = buildJobControlUpdates({
+      sheetName,
+      targets,
+      values: {
+        activeJobId: params.jobId,
+        customerName: params.customerName,
+        customerAddress: params.customerAddress,
+        estimateDate: params.estimateDate,
+      },
+    })
+    if (updates.length === 0) continue
 
-    const col = columnLetterFromIndex(target.col - 1)
     const write = await writeRangeValues({
       origin: params.origin,
       orgId: params.orgId,
       userId: params.userId,
       spreadsheetId: params.spreadsheetId,
-      updates: [{ range: `${sheetName}!${col}${target.row}`, values: [[params.jobId]] }],
+      updates,
     })
     if ('error' in write) {
       throw new Error(`Workbook read/write error: ${write.error}`)
@@ -1679,7 +1746,7 @@ export async function recalculateEstimateSpreadsheet(params: {
 }) {
   const estimateRes = await supabaseAdmin
     .from('estimates')
-    .select('id, org_id, job_id, sheet_schema_version, sheet_file_path')
+    .select('id, org_id, job_id, customer_id, sheet_schema_version, sheet_file_path')
     .eq('org_id', params.orgId)
     .eq('id', params.estimateId)
     .maybeSingle()
@@ -1711,6 +1778,25 @@ export async function recalculateEstimateSpreadsheet(params: {
       `Schema version mismatch: expected '${estimate.sheet_schema_version}', found '${schemaVersion}' in Constants!SchemaVersion`
     )
   }
+
+  const jobRes = await supabaseAdmin
+    .from('jobs')
+    .select('id, customer_id, estimate_date')
+    .eq('org_id', params.orgId)
+    .eq('id', estimate.job_id)
+    .maybeSingle()
+  if (jobRes.error) throw new Error(`Workbook read/write error: ${jobRes.error.message}`)
+
+  const effectiveCustomerId = asText(jobRes.data?.customer_id) || asText(estimate.customer_id)
+  const customerRes = effectiveCustomerId
+    ? await supabaseAdmin
+        .from('customers')
+        .select('id, name, address')
+        .eq('org_id', params.orgId)
+        .eq('id', effectiveCustomerId)
+        .maybeSingle()
+    : { data: null, error: null as null | { message: string } }
+  if (customerRes.error) throw new Error(`Workbook read/write error: ${customerRes.error.message}`)
 
   const overrideInputs = params.overrides
   const [jobSettings, rooms, segments, ceilingSegments, rollers, prejob] = await Promise.all([
@@ -1794,12 +1880,15 @@ export async function recalculateEstimateSpreadsheet(params: {
     trimLines: trimLines.data ?? [],
   })
 
-  await writeActiveJobIdToJobControl({
+  await writeJobControlMetadata({
     origin: params.origin,
     orgId: params.orgId,
     userId: params.userId,
     spreadsheetId: sheet.spreadsheetId,
     jobId: estimate.job_id,
+    customerName: asText(customerRes.data?.name),
+    customerAddress: asText(customerRes.data?.address),
+    estimateDate: asText(jobRes.data?.estimate_date),
   })
 
   const outputs = await readOutputs({
