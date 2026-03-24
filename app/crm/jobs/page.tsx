@@ -71,6 +71,7 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null)
   const [completedQuery, setCompletedQuery] = useState('')
   const [showAllCompleted, setShowAllCompleted] = useState(false)
+  const [showCompleted, setShowCompleted] = useState(false)
   const [showLost, setShowLost] = useState(false)
   const [showEmptyStages, setShowEmptyStages] = useState(false)
   const [compactActions, setCompactActions] = useState(false)
@@ -191,7 +192,7 @@ export default function JobsPage() {
 
   const columnCount = (status: JobStatus) => grouped[status].length
   const visibleColumns = columns
-    .filter((col) => (col.key === 'lost' ? showLost : true))
+    .filter((col) => (col.key === 'completed' ? showCompleted : col.key === 'lost' ? showLost : true))
     .filter((col) => showEmptyStages || columnCount(col.key) > 0)
 
   return (
@@ -216,6 +217,17 @@ export default function JobsPage() {
             }`}
           >
             {iconLabel(ChevronDown, showEmptyStages ? 'Hide empty stages' : 'Show empty stages', iconSizeMd)}
+          </button>
+          <button
+            onClick={() => setShowCompleted((prev) => !prev)}
+            aria-label={showCompleted ? 'Hide completed jobs' : 'Show completed jobs'}
+            className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
+              showCompleted
+                ? 'border-black bg-black text-white'
+                : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            {iconLabel(CheckCircle2, showCompleted ? 'Hide completed' : 'Show completed', iconSizeMd)}
           </button>
           <button
             onClick={() => setShowLost((prev) => !prev)}

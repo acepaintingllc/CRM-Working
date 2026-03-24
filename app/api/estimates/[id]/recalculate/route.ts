@@ -38,6 +38,7 @@ export async function POST(
           rollers?: RouteBodyValue[]
           prejob?: RouteBodyValue[]
           trim_items?: RouteBodyValue[]
+          other?: RouteBodyValue[]
         }
       | null
 
@@ -56,6 +57,7 @@ export async function POST(
             rollers: body.rollers ?? undefined,
             prejob: body.prejob ?? undefined,
             trimLines: body.trim_items ?? undefined,
+            other: body.other ?? undefined,
           }
         : undefined,
     })

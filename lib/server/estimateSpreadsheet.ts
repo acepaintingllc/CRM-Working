@@ -976,6 +976,32 @@ function mapPreJobRow(row: Unsafe, jobId: string) {
   }
 }
 
+function toOtherRollupScope(value: unknown): 'Walls' | 'Ceilings' | 'Trim' {
+  const raw = asText(value).toLowerCase()
+  if (raw === 'ceilings' || raw === 'ceiling') return 'Ceilings'
+  if (raw === 'trim') return 'Trim'
+  return 'Walls'
+}
+
+function mapOtherRow(row: Unsafe, jobId: string, lineNum: number) {
+  const clientDescription = asText(
+    row.client_description ?? row.clientDescription ?? row.ClientDescription
+  )
+  return {
+    JobID: jobId,
+    LineNum: lineNum,
+    RollupScope: toOtherRollupScope(row.rollup_scope ?? row.rollupScope ?? row.RollupScope),
+    Location: asText(row.location ?? row.Location),
+    ClientDescription: clientDescription,
+    Qty: asNumberish(row.qty ?? row.Qty),
+    UOM: asText(row.uom ?? row.UOM),
+    LaborHrs_Each: asNumberish(row.labor_hrs_each ?? row.laborHrsEach ?? row.LaborHrs_Each),
+    'Materials$_Each': asNumberish(row.materials_each ?? row.materialsEach ?? row['Materials$_Each']),
+    Notes: asText(row.notes ?? row.Notes),
+    'Active?': toYN(row.active ?? row['Active?'] ?? row.Active, 'Y'),
+  }
+}
+
 function hasPrimerUsageInRooms(rooms: Unsafe[], trimLines: Unsafe[]) {
   const isPrimerModeEnabled = (value: unknown) => {
     const raw = asText(value).toLowerCase()
@@ -1116,6 +1142,7 @@ async function writeInputTabs(params: {
   ceilingSegments: Unsafe[]
   rollers: Unsafe[]
   prejob: Unsafe[]
+  other: Unsafe[]
   trimLines: Unsafe[]
 }) {
   // Some workbook templates read wall complexity from room rows rather than segment rows.
@@ -1456,6 +1483,77 @@ async function writeInputTabs(params: {
         }),
     },
     {
+      sheetName: 'INPUT_Other',
+      requiredHeaders: ['JobID', 'LineNum', 'RollupScope', 'ClientDescription', 'Qty', 'Active?'],
+      writableHeaders: [
+        'JobID',
+        'LineNum',
+        'RollupScope',
+        'Location',
+        'ClientDescription',
+        'Qty',
+        'UOM',
+        'LaborHrs_Each',
+        'Materials$_Each',
+        'Notes',
+        'Active?',
+      ],
+      softDelete: true,
+      optional: true,
+      minStartRow: 4,
+      validateRows: (rows) =>
+        rows.flatMap((row, idx) => {
+          const issues: MissingInput[] = []
+          const rollupScope = asText(row.RollupScope)
+          if (!rollupScope) {
+            issues.push({
+              tab: 'INPUT_Other',
+              header: 'RollupScope',
+              message: `Other row ${idx + 1}: RollupScope is required`,
+            })
+          }
+          if (!['walls', 'ceilings', 'trim'].includes(rollupScope.toLowerCase())) {
+            issues.push({
+              tab: 'INPUT_Other',
+              header: 'RollupScope',
+              message: `Other row ${idx + 1}: RollupScope must be Walls, Ceilings, or Trim`,
+            })
+          }
+          if (!asText(row.ClientDescription)) {
+            issues.push({
+              tab: 'INPUT_Other',
+              header: 'ClientDescription',
+              message: `Other row ${idx + 1}: ClientDescription is required`,
+            })
+          }
+          const qty = Number(row.Qty)
+          if (!Number.isFinite(qty) || qty <= 0) {
+            issues.push({
+              tab: 'INPUT_Other',
+              header: 'Qty',
+              message: `Other row ${idx + 1}: Qty must be numeric and greater than 0`,
+            })
+          }
+          const labor = Number(row.LaborHrs_Each)
+          if (!Number.isFinite(labor) || labor < 0) {
+            issues.push({
+              tab: 'INPUT_Other',
+              header: 'LaborHrs_Each',
+              message: `Other row ${idx + 1}: LaborHrs_Each must be numeric and >= 0`,
+            })
+          }
+          const materials = Number(row['Materials$_Each'])
+          if (!Number.isFinite(materials) || materials < 0) {
+            issues.push({
+              tab: 'INPUT_Other',
+              header: 'Materials$_Each',
+              message: `Other row ${idx + 1}: Materials$_Each must be numeric and >= 0`,
+            })
+          }
+          return issues
+        }),
+    },
+    {
       sheetName: 'INPUT_TrimLines',
       requiredHeaders: ['JobID', 'RoomID', 'TrimMenuID', 'Qty', 'Active?'],
       writableHeaders: [
@@ -1577,6 +1675,7 @@ async function writeInputTabs(params: {
     ),
     INPUT_Rollers: params.rollers.map((row: Unsafe) => mapRollerRow(row, params.jobId)),
     INPUT_PreJobTrips: params.prejob.map((row: Unsafe) => mapPreJobRow(row, params.jobId)),
+    INPUT_Other: params.other.map((row: Unsafe, idx: number) => mapOtherRow(row, params.jobId, idx + 1)),
     INPUT_TrimLines: trimLineRows,
     INPUT_Doors: trimDoorRows,
     INPUT_Openings: trimOpeningRows,
@@ -1879,6 +1978,7 @@ export async function recalculateEstimateSpreadsheet(params: {
     ceilingSegments?: Unsafe[]
     rollers?: Unsafe[]
     prejob?: Unsafe[]
+    other?: Unsafe[]
     trimLines?: Unsafe[]
   }
 }) {
@@ -1937,7 +2037,7 @@ export async function recalculateEstimateSpreadsheet(params: {
   if (customerRes.error) throw new Error(`Workbook read/write error: ${customerRes.error.message}`)
 
   const overrideInputs = params.overrides
-  const [jobSettings, rooms, segments, ceilingSegments, rollers, prejob] = await Promise.all([
+  const [jobSettings, rooms, segments, ceilingSegments, rollers, prejob, other] = await Promise.all([
     overrideInputs?.jobSettings !== undefined
       ? Promise.resolve({ data: overrideInputs.jobSettings, error: null })
       : supabaseAdmin
@@ -1986,6 +2086,14 @@ export async function recalculateEstimateSpreadsheet(params: {
           .eq('org_id', params.orgId)
           .eq('estimate_id', params.estimateId)
           .order('position', { ascending: true }),
+    overrideInputs?.other
+      ? Promise.resolve({ data: overrideInputs.other, error: null })
+      : supabaseAdmin
+          .from('estimate_other')
+          .select('*')
+          .eq('org_id', params.orgId)
+          .eq('estimate_id', params.estimateId)
+          .order('position', { ascending: true }),
   ])
 
   if (jobSettings.error) throw new Error(`Workbook read/write error: ${jobSettings.error.message}`)
@@ -1994,6 +2102,7 @@ export async function recalculateEstimateSpreadsheet(params: {
   if (ceilingSegments.error) throw new Error(`Workbook read/write error: ${ceilingSegments.error.message}`)
   if (rollers.error) throw new Error(`Workbook read/write error: ${rollers.error.message}`)
   if (prejob.error) throw new Error(`Workbook read/write error: ${prejob.error.message}`)
+  if (other.error) throw new Error(`Workbook read/write error: ${other.error.message}`)
   const trimLines = overrideInputs?.trimLines
     ? { data: overrideInputs.trimLines, error: null as string | null }
     : await loadActiveTrimItemsEventually({
@@ -2015,6 +2124,7 @@ export async function recalculateEstimateSpreadsheet(params: {
     ceilingSegments: (ceilingSegments.data ?? []).filter((r) => toYN(r.active, 'Y') === 'Y'),
     rollers: (rollers.data ?? []).filter((r) => toYN(r.active, 'Y') === 'Y'),
     prejob: (prejob.data ?? []).filter((r) => toYN(r.active, 'Y') === 'Y'),
+    other: (other.data ?? []).filter((r) => toYN(r.active, 'Y') === 'Y'),
     trimLines: trimLines.data ?? [],
   })
 

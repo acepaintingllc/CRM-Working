@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 
+type Unsafe = Record<string, unknown>
+
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -30,6 +32,21 @@ function toWallsCalcMethod(value: unknown): 'REGULAR' | 'PANEL' {
   return asText(value).toUpperCase() === 'PANEL' ? 'PANEL' : 'REGULAR'
 }
 
+function pickValue(row: Unsafe, keys: string[]) {
+  for (const key of keys) {
+    if (key in row) return row[key]
+  }
+  return undefined
+}
+
+function toOtherRollupScope(value: unknown): 'Walls' | 'Ceilings' | 'Trim' | null {
+  const raw = asText(value).toLowerCase()
+  if (raw === 'walls' || raw === 'wall') return 'Walls'
+  if (raw === 'ceilings' || raw === 'ceiling') return 'Ceilings'
+  if (raw === 'trim') return 'Trim'
+  return null
+}
+
 function nextRoomId(used: Set<string>, startAt: number) {
   let n = Math.max(1, startAt)
   while (used.has(`R${String(n).padStart(3, '0')}`)) {
@@ -57,6 +74,7 @@ async function softReplaceRows(params: {
     | 'estimate_rollers'
     | 'estimate_prejob'
     | 'estimate_trim_items'
+    | 'estimate_other'
   orgId: string
   estimateId: string
   rows: Record<string, unknown>[]
@@ -99,7 +117,7 @@ export async function GET(
   const { orgId } = session
 
   const params = await Promise.resolve(context.params)
-  const id = (params as { id?: Unsafe } | null | undefined)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string' || !uuid.test(id)) {
     return NextResponse.json({ error: 'Invalid estimate id' }, { status: 400 })
   }
@@ -110,7 +128,7 @@ export async function GET(
     return NextResponse.json({ error: estimateRes.error }, { status })
   }
 
-  const [jobsettings, rooms, segments, ceilingSegments, rollers, prejob, trimItems] = await Promise.all([
+  const [jobsettings, rooms, segments, ceilingSegments, rollers, prejob, trimItems, other] = await Promise.all([
     supabaseAdmin
       .from('estimate_jobsettings')
       .select('*')
@@ -158,6 +176,13 @@ export async function GET(
       .eq('estimate_id', id)
       .eq('active', 'Y')
       .order('sort_order', { ascending: true }),
+    supabaseAdmin
+      .from('estimate_other')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('estimate_id', id)
+      .eq('active', 'Y')
+      .order('position', { ascending: true }),
   ])
 
   if (jobsettings.error) return NextResponse.json({ error: jobsettings.error.message }, { status: 500 })
@@ -167,6 +192,7 @@ export async function GET(
   if (rollers.error) return NextResponse.json({ error: rollers.error.message }, { status: 500 })
   if (prejob.error) return NextResponse.json({ error: prejob.error.message }, { status: 500 })
   if (trimItems.error) return NextResponse.json({ error: trimItems.error.message }, { status: 500 })
+  if (other.error) return NextResponse.json({ error: other.error.message }, { status: 500 })
 
   return NextResponse.json({
     estimate: estimateRes.estimate,
@@ -178,6 +204,7 @@ export async function GET(
       rollers: rollers.data ?? [],
       prejob: prejob.data ?? [],
       trim_items: trimItems.data ?? [],
+      other: other.data ?? [],
     },
   })
 }
@@ -194,7 +221,7 @@ export async function PUT(
   const { orgId } = session
 
   const params = await Promise.resolve(context.params)
-  const id = (params as { id?: Unsafe } | null | undefined)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string' || !uuid.test(id)) {
     return NextResponse.json({ error: 'Invalid estimate id' }, { status: 400 })
   }
@@ -518,6 +545,57 @@ export async function PUT(
       await softReplaceRows({ table: 'estimate_trim_items', orgId, estimateId: id, rows })
     }
 
+    if (Array.isArray(body.other)) {
+      const rows = body.other.map((row: Unsafe, idx: number) => {
+        const rollupScope = toOtherRollupScope(
+          pickValue(row, ['rollup_scope', 'rollupScope', 'RollupScope'])
+        )
+        if (!rollupScope) {
+          throw new Error(`Other row ${idx + 1}: RollupScope must be Walls, Ceilings, or Trim`)
+        }
+        const clientDescription = asText(
+          pickValue(row, ['client_description', 'clientDescription', 'ClientDescription'])
+        )
+        if (!clientDescription) {
+          throw new Error(`Other row ${idx + 1}: ClientDescription is required`)
+        }
+        const qtyRaw = pickValue(row, ['qty', 'Qty'])
+        const qty = qtyRaw == null || qtyRaw === '' ? 1 : asNullableNumber(qtyRaw)
+        if (qty == null || qty <= 0) {
+          throw new Error(`Other row ${idx + 1}: Qty must be numeric and greater than 0`)
+        }
+        const laborHrsEach = asNullableNumber(
+          pickValue(row, ['labor_hrs_each', 'laborHrsEach', 'LaborHrs_Each'])
+        )
+        if (laborHrsEach == null || laborHrsEach < 0) {
+          throw new Error(`Other row ${idx + 1}: LaborHrs_Each must be numeric and >= 0`)
+        }
+        const materialsEach = asNullableNumber(
+          pickValue(row, ['materials_each', 'materialsEach', 'Materials$_Each'])
+        )
+        if (materialsEach == null || materialsEach < 0) {
+          throw new Error(`Other row ${idx + 1}: Materials$_Each must be numeric and >= 0`)
+        }
+        return {
+          id: asText(row.id) || undefined,
+          org_id: orgId,
+          estimate_id: id,
+          job_id: estimate.job_id,
+          position: idx,
+          rollup_scope: rollupScope,
+          location: asText(pickValue(row, ['location', 'Location'])) || null,
+          client_description: clientDescription,
+          qty,
+          uom: asText(pickValue(row, ['uom', 'UOM'])) || null,
+          labor_hrs_each: laborHrsEach,
+          materials_each: materialsEach,
+          notes: asText(pickValue(row, ['notes', 'Notes'])) || null,
+          active: toYN(pickValue(row, ['active', 'Active?', 'Active']), 'Y'),
+        }
+      })
+      await softReplaceRows({ table: 'estimate_other', orgId, estimateId: id, rows })
+    }
+
     return NextResponse.json({ ok: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed saving estimate inputs'
@@ -537,7 +615,7 @@ export async function DELETE(
   const { orgId } = session
 
   const params = await Promise.resolve(context.params)
-  const id = (params as { id?: Unsafe } | null | undefined)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string' || !uuid.test(id)) {
     return NextResponse.json({ error: 'Invalid estimate id' }, { status: 400 })
   }

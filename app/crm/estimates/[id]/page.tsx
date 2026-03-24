@@ -41,6 +41,7 @@ type EstimatePayload = {
     rollers: Record<string, unknown>[]
     prejob: Record<string, unknown>[]
     trim_items?: Record<string, unknown>[]
+    other?: Record<string, unknown>[]
   }
 }
 
@@ -297,6 +298,22 @@ type PreJobTripDraft = {
   tasks: PreJobTaskDraft[]
 }
 
+type OtherRollupScope = 'Walls' | 'Ceilings' | 'Trim'
+
+type OtherItemDraft = {
+  local_id: string
+  id?: string
+  rollup_scope: OtherRollupScope
+  location: string
+  client_description: string
+  qty: string
+  uom: string
+  labor_hrs_each: string
+  materials_each: string
+  notes: string
+  active: 'Y' | 'N'
+}
+
 type RollerDraft = {
   id?: string
   scope: 'Wall' | 'Ceiling'
@@ -335,13 +352,14 @@ type ExtraTrimDraft = {
   notes: string
 }
 
-const tabs = ['Job Settings', 'Rooms', 'Segments', 'Rollers', 'PreJob Trips', 'Summary & Final Adjustments'] as const
+const tabs = ['Job Settings', 'Rooms', 'Segments', 'Rollers', 'PreJob Trips', 'Other', 'Summary & Final Adjustments'] as const
 const tabIcons: Record<(typeof tabs)[number], LucideIcon> = {
   'Job Settings': SettingsIcon,
   Rooms: Building2,
   Segments: Shapes,
   Rollers: FileStack,
   'PreJob Trips': FileText,
+  Other: FileStack,
   'Summary & Final Adjustments': Calculator,
 }
 
@@ -791,6 +809,44 @@ function flattenPreJobTrips(
   )
 }
 
+function toOtherScope(value: unknown): OtherRollupScope {
+  const raw = toText(value).trim().toLowerCase()
+  if (raw === 'ceilings' || raw === 'ceiling') return 'Ceilings'
+  if (raw === 'trim') return 'Trim'
+  return 'Walls'
+}
+
+function normalizeOtherItem(row: Record<string, unknown>, idx: number): OtherItemDraft {
+  return {
+    local_id: toText(row.id) || `other-${idx}-${Date.now()}`,
+    id: toText(row.id) || undefined,
+    rollup_scope: toOtherScope(row.rollup_scope),
+    location: toText(row.location),
+    client_description: toText(row.client_description),
+    qty: toNumString(row.qty) || '1',
+    uom: toText(row.uom),
+    labor_hrs_each: toNumString(row.labor_hrs_each) || '0',
+    materials_each: toNumString(row.materials_each) || '0',
+    notes: toText(row.notes),
+    active: toYN(row.active, 'Y'),
+  }
+}
+
+function toOtherRowsForSave(items: OtherItemDraft[]) {
+  return items.map((item) => ({
+    id: item.id,
+    rollup_scope: item.rollup_scope,
+    location: item.location,
+    client_description: item.client_description,
+    qty: item.qty || '1',
+    uom: item.uom,
+    labor_hrs_each: item.labor_hrs_each || '0',
+    materials_each: item.materials_each || '0',
+    notes: item.notes,
+    active: item.active,
+  }))
+}
+
 function buildTrimItemsFromRooms(
   rooms: RoomDraft[],
   extraDoorRows: Record<string, ExtraTrimDraft[]>,
@@ -1034,6 +1090,7 @@ export default function EstimateEditorPage() {
   const [segments, setSegments] = useState<SegmentDraft[]>([])
   const [ceilingSegments, setCeilingSegments] = useState<CeilingSegmentDraft[]>([])
   const [prejobTrips, setPrejobTrips] = useState<PreJobTripDraft[]>([])
+  const [otherItems, setOtherItems] = useState<OtherItemDraft[]>([])
   const [rollersDraft, setRollersDraft] = useState<RollerDraft[]>([])
   const [extraDoorRows, setExtraDoorRows] = useState<Record<string, ExtraTrimDraft[]>>({})
   const [extraDoorCasingRows, setExtraDoorCasingRows] = useState<Record<string, ExtraTrimDraft[]>>({})
@@ -1295,6 +1352,9 @@ export default function EstimateEditorPage() {
         templateIdByLabel
       )
     )
+    setOtherItems(
+      (estimatePayload.inputs.other ?? []).map((row, idx) => normalizeOtherItem(row, idx))
+    )
     setRollersDraft(
       buildRollersFromEngine(
         engine,
@@ -1333,6 +1393,21 @@ export default function EstimateEditorPage() {
   const queueSave = () => {
     if (!loadedOnce) return
     setDirtyTick((v) => v + 1)
+  }
+
+  const clearOtherValidationErrors = () => {
+    setError((prev) => {
+      if (!prev) return prev
+      const lower = prev.toLowerCase()
+      if (lower.includes('other row') || lower.includes('clientdescription')) return null
+      return prev
+    })
+    setMissingInputs((prev) =>
+      prev.filter((item) => {
+        const combined = `${item.tab} ${item.header} ${item.message}`.toLowerCase()
+        return !(item.tab === 'INPUT_Other' || combined.includes('other row') || combined.includes('clientdescription'))
+      })
+    )
   }
 
   const trimMenuOptions = (
@@ -1424,6 +1499,7 @@ export default function EstimateEditorPage() {
             (row) => row.scope === 'Wall' || rooms.some((room) => room.ceiling_include === 'Y')
           ),
           prejob: flattenPreJobTrips(prejobTrips, preJobTemplateTaskById),
+          other: toOtherRowsForSave(otherItems),
         }),
       })
       const payload = await res.json().catch(() => null)
@@ -1453,6 +1529,7 @@ export default function EstimateEditorPage() {
     generatedTrimItems,
     rollersDraft,
     prejobTrips,
+    otherItems,
     preJobTemplateTaskById,
     buildJobsettingsForSave,
   ])
@@ -2384,6 +2461,51 @@ export default function EstimateEditorPage() {
     queueSave()
   }
 
+  const addOtherItem = () => {
+    clearOtherValidationErrors()
+    setOtherItems((prev) => [
+      ...prev,
+      {
+        local_id: `other-${Date.now()}-${prev.length}`,
+        rollup_scope: 'Walls',
+        location: '',
+        client_description: '',
+        qty: '1',
+        uom: 'EA',
+        labor_hrs_each: '0',
+        materials_each: '0',
+        notes: '',
+        active: 'Y',
+      },
+    ])
+    queueSave()
+  }
+
+  const updateOtherItem = (index: number, patch: Partial<OtherItemDraft>) => {
+    clearOtherValidationErrors()
+    setOtherItems((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)))
+    queueSave()
+  }
+
+  const removeOtherItem = (index: number) => {
+    clearOtherValidationErrors()
+    setOtherItems((prev) => prev.filter((_, i) => i !== index))
+    queueSave()
+  }
+
+  const moveOtherItem = (index: number, direction: -1 | 1) => {
+    clearOtherValidationErrors()
+    setOtherItems((prev) => {
+      const nextIndex = index + direction
+      if (nextIndex < 0 || nextIndex >= prev.length) return prev
+      const copy = [...prev]
+      const [item] = copy.splice(index, 1)
+      copy.splice(nextIndex, 0, item)
+      return copy
+    })
+    queueSave()
+  }
+
   const clientValidationIssues = () => {
     const issues: string[] = []
     rooms.forEach((room) => {
@@ -2506,6 +2628,27 @@ export default function EstimateEditorPage() {
     if (needsTrimPrimerProduct && !jobsettings.trim_primer_id) {
       issues.push('Trim primer product is required on Summary when trim primer mode is enabled')
     }
+    otherItems.forEach((item, idx) => {
+      if (item.active !== 'Y') return
+      if (!['Walls', 'Ceilings', 'Trim'].includes(item.rollup_scope)) {
+        issues.push(`Other row ${idx + 1}: Rollup Scope must be Walls, Ceilings, or Trim`)
+      }
+      if (!item.client_description.trim()) {
+        issues.push(`Other row ${idx + 1}: Client Description is required`)
+      }
+      const qty = Number(item.qty)
+      if (!Number.isFinite(qty) || qty <= 0) {
+        issues.push(`Other row ${idx + 1}: Qty must be numeric and greater than 0`)
+      }
+      const labor = Number(item.labor_hrs_each)
+      if (!Number.isFinite(labor) || labor < 0) {
+        issues.push(`Other row ${idx + 1}: Labor Hrs Each must be numeric and >= 0`)
+      }
+      const materials = Number(item.materials_each)
+      if (!Number.isFinite(materials) || materials < 0) {
+        issues.push(`Other row ${idx + 1}: Materials $ Each must be numeric and >= 0`)
+      }
+    })
     return issues
   }
 
@@ -2539,6 +2682,7 @@ export default function EstimateEditorPage() {
           (row) => row.scope === 'Wall' || rooms.some((room) => room.ceiling_include === 'Y')
         ),
         prejob: flattenPreJobTrips(prejobTrips, preJobTemplateTaskById),
+        other: toOtherRowsForSave(otherItems),
       }),
     })
     if (!saveRes.ok) {
@@ -2564,6 +2708,7 @@ export default function EstimateEditorPage() {
           (row) => row.scope === 'Wall' || rooms.some((room) => room.ceiling_include === 'Y')
         ),
         prejob: flattenPreJobTrips(prejobTrips, preJobTemplateTaskById),
+        other: toOtherRowsForSave(otherItems),
       }),
     })
     const body = await res.json().catch(() => null)
@@ -4409,6 +4554,127 @@ export default function EstimateEditorPage() {
             ))}
             <button onClick={addPrejobTrip} style={btnGhost}>
               {iconLabel(Plus, 'Add Pre-Job Trip', 14)}
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'Other' && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {otherItems.length === 0 && (
+              <div style={{ fontSize: 12, color: '#6b7280' }}>
+                No custom rows yet. Add an item for manual custom work.
+              </div>
+            )}
+            {otherItems.map((item, index) => (
+              <div key={item.local_id} style={roomCardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Line {index + 1}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      style={btnGhost}
+                      onClick={() => moveOtherItem(index, -1)}
+                      disabled={index === 0}
+                    >
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      style={btnGhost}
+                      onClick={() => moveOtherItem(index, 1)}
+                      disabled={index === otherItems.length - 1}
+                    >
+                      Down
+                    </button>
+                    <button type="button" style={btnDanger} onClick={() => removeOtherItem(index)}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div style={labelStyle}>Rollup Scope</div>
+                    <select
+                      value={item.rollup_scope}
+                      onChange={(e) =>
+                        updateOtherItem(index, { rollup_scope: e.target.value as OtherRollupScope })
+                      }
+                      style={inputStyle}
+                    >
+                      <option value="Walls">Walls</option>
+                      <option value="Ceilings">Ceilings</option>
+                      <option value="Trim">Trim</option>
+                    </select>
+                  </label>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div style={labelStyle}>Location</div>
+                    <input
+                      value={item.location}
+                      onChange={(e) => updateOtherItem(index, { location: e.target.value })}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, gridColumn: '1 / -1' }}>
+                    <div style={labelStyle}>Client Description</div>
+                    <input
+                      value={item.client_description}
+                      onChange={(e) => updateOtherItem(index, { client_description: e.target.value })}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div style={labelStyle}>Qty</div>
+                    <input
+                      value={item.qty}
+                      onChange={(e) => updateOtherItem(index, { qty: e.target.value })}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div style={labelStyle}>UOM</div>
+                    <input
+                      value={item.uom}
+                      onChange={(e) => updateOtherItem(index, { uom: e.target.value })}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div style={labelStyle}>Labor Hrs Each</div>
+                    <input
+                      value={item.labor_hrs_each}
+                      onChange={(e) => updateOtherItem(index, { labor_hrs_each: e.target.value })}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div style={labelStyle}>Materials $ Each</div>
+                    <input
+                      value={item.materials_each}
+                      onChange={(e) => updateOtherItem(index, { materials_each: e.target.value })}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, gridColumn: '1 / -1' }}>
+                    <div style={labelStyle}>Notes</div>
+                    <input
+                      value={item.notes}
+                      onChange={(e) => updateOtherItem(index, { notes: e.target.value })}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={item.active === 'Y'}
+                      onChange={(e) => updateOtherItem(index, { active: e.target.checked ? 'Y' : 'N' })}
+                    />
+                    Active
+                  </label>
+                </div>
+              </div>
+            ))}
+            <button onClick={addOtherItem} style={btnGhost}>
+              {iconLabel(Plus, 'Add Other Item', 14)}
             </button>
           </div>
         )}

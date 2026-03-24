@@ -248,6 +248,41 @@ export async function POST(
     return NextResponse.json({ error: 'Unable to send email.' }, { status: 400 })
   }
 
+  if (stage === 'estimate_sent') {
+    const { data: updatedJob, error: updateErr } = await updateJobCompat(orgId, id, {
+      status: 'estimate_sent',
+      estimate_sent_at: new Date().toISOString(),
+    })
+    if (updateErr) {
+      return NextResponse.json({
+        ok: true,
+        warning: `Email sent, but failed to sync estimate status: ${updateErr.message}`,
+        estimateFile: attachment
+          ? {
+              id: attachment.id,
+              name: attachment.filename,
+              webViewLink: attachment.webViewLink ?? null,
+              version: attachment.version ?? null,
+              matchMode: attachment.matchMode ?? null,
+            }
+          : null,
+      })
+    }
+    return NextResponse.json({
+      ok: true,
+      job: updatedJob,
+      estimateFile: attachment
+        ? {
+            id: attachment.id,
+            name: attachment.filename,
+            webViewLink: attachment.webViewLink ?? null,
+            version: attachment.version ?? null,
+            matchMode: attachment.matchMode ?? null,
+          }
+        : null,
+    })
+  }
+
   if (stage === 'scheduled') {
     const starts = (scheduleRows ?? [])
       .map((row) => (row as ScheduleRow).start_at)
