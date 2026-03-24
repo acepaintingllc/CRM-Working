@@ -177,13 +177,15 @@ export default function EstimatesPage() {
           <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm text-gray-600 shadow-sm">
             Loading...
           </div>
-        ) : activeEstimates.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-600 shadow-sm">
-            No active estimates.
-          </div>
         ) : (
           <div className="grid gap-3">
-            {activeEstimates.map((row) => renderEstimateCard(row))}
+            {activeEstimates.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-600 shadow-sm">
+                No active estimates.
+              </div>
+            ) : (
+              activeEstimates.map((row) => renderEstimateCard(row))
+            )}
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
               <button
                 onClick={() => setShowSent((prev) => !prev)}
