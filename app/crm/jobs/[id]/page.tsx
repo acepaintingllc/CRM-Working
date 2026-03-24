@@ -272,6 +272,18 @@ export default function JobDetailPage() {
       setError(payload?.error ?? res.statusText)
       return
     }
+    if (composeStage === 'estimate_sent') {
+      setJob((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...(payload?.job ?? {}),
+              status: 'estimate_sent',
+              estimate_sent_at: payload?.job?.estimate_sent_at ?? new Date().toISOString(),
+            }
+          : prev
+      )
+    }
     if (composeStage === 'scheduled') {
       setJob((prev) =>
         prev

@@ -30,7 +30,7 @@ export async function GET() {
     jobIds.length
       ? supabaseAdmin
           .from('jobs')
-          .select('id, title')
+          .select('id, title, status, estimate_sent_at')
           .eq('org_id', orgId)
           .in('id', jobIds)
       : Promise.resolve({ data: [], error: null }),
@@ -48,13 +48,25 @@ export async function GET() {
     return NextResponse.json({ error: customersRes.error.message }, { status: 500 })
   }
 
-  const jobs = new Map((jobsRes.data ?? []).map((j) => [j.id, j.title]))
+  const jobs = new Map(
+    (jobsRes.data ?? []).map((j) => [
+      j.id,
+      {
+        title: j.title ?? null,
+        status: j.status ?? null,
+        estimate_sent_at: j.estimate_sent_at ?? null,
+      },
+    ])
+  )
   const customers = new Map((customersRes.data ?? []).map((c) => [c.id, c.name]))
 
   return NextResponse.json({
     estimates: (estimates ?? []).map((row) => ({
       ...row,
-      job_title: jobs.get(row.job_id) ?? null,
+      job_title: jobs.get(row.job_id)?.title ?? null,
+      job_status: jobs.get(row.job_id)?.status ?? null,
+      job_estimate_sent_at: jobs.get(row.job_id)?.estimate_sent_at ?? null,
+      is_sent_estimate: Boolean(jobs.get(row.job_id)?.estimate_sent_at),
       customer_name: customers.get(row.customer_id) ?? null,
     })),
   })
