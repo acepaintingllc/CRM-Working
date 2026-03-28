@@ -769,6 +769,8 @@ function mapRoomRow(row: Unsafe, jobId: string) {
   const complexityType = asText(
     row.wall_complexity_type_id || row.wallcomplexitytypeid || row.complexitytypeid || 'STANDARD'
   ).toUpperCase()
+  const wallsInclude = toYN(row.walls_include, 'N')
+  const wallColorId = wallsInclude === 'Y' ? asText(row.wall_color_id).toUpperCase() : ''
   return {
     JobID: jobId,
     RoomID: asText(row.room_id),
@@ -780,7 +782,7 @@ function mapRoomRow(row: Unsafe, jobId: string) {
     CeilingHeight_in: asNumberish(row.ceilingheight_in),
     'CeilingSqft_override (SEG optional)': asNumberish(row.ceilingsqft_override),
     'BaseExclude_in (RECT)': asNumberish(row.baseexclude_in),
-    'Walls Include': toYN(row.walls_include, 'N'),
+    'Walls Include': wallsInclude,
     WallComplexityTypeID: complexityType,
     ComplexityTypeID: complexityType,
     'Walls Primer': asText(row.walls_primer),
@@ -802,7 +804,7 @@ function mapRoomRow(row: Unsafe, jobId: string) {
     'Paint Window Casing?': toYN(row.paint_window_casing, 'N'),
     'Paint Door Casing?': toYN(row.paint_door_casing, 'N'),
     'Paint Doors?': toYN(row.paint_doors, 'N'),
-    'WallColorID (A/B/C...)': asText(row.wall_color_id).toUpperCase(),
+    'WallColorID (A/B/C...)': wallColorId,
     CeilingTypeID: asText(row.ceiling_type_id),
   }
 }
@@ -1799,6 +1801,7 @@ async function readOutputs(params: {
   orgId: string
   userId: string
   spreadsheetId: string
+  rooms: Unsafe[]
 }) {
   let summaryRows: string[][] = []
   for (let i = 0; i < 6; i += 1) {
@@ -1884,7 +1887,8 @@ async function readOutputs(params: {
   const idx = new Map<string, number>()
   header.forEach((h: string, i: number) => idx.set(asText(h), i))
 
-  const wallColors = colorRead.values.slice(1).flatMap((row: string[]) => {
+  const hasWallsSelected = params.rooms.some((room) => toYN(room.walls_include, 'N') === 'Y')
+  const wallColors = hasWallsSelected ? colorRead.values.slice(1).flatMap((row: string[]) => {
     const wallColorId = asText(valueAt(row, idx.get('WallColorID') ?? 0))
     if (!wallColorId) return []
     return [
@@ -1902,7 +1906,7 @@ async function readOutputs(params: {
         ),
       },
     ]
-  })
+  }) : []
 
   const ceilingSource = colorRead.values[1] ?? []
   const ceilingRoller = {
@@ -2144,6 +2148,7 @@ export async function recalculateEstimateSpreadsheet(params: {
     orgId: params.orgId,
     userId: params.userId,
     spreadsheetId: sheet.spreadsheetId,
+    rooms: rooms.data ?? [],
   })
 
   const exported = await exportDriveFile({
