@@ -283,7 +283,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ ok: true, job: data })
-  } catch (e: unknown) {
+  } catch {
     return NextResponse.json({ error: 'Unable to create job.' }, { status: 500 })
   }
 }

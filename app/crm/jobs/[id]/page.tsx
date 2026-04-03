@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import StageEmailModal, {
+  stageEmailActionLabel,
+  type StageEmailStage,
+  type StageEmailSentResult,
+} from '@/app/crm/jobs/_components/StageEmailModal'
+import JobCompletionCloseoutModal, {
+  type PaintLogRow,
+} from '@/app/crm/jobs/_components/JobCompletionCloseoutModal'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeft,
@@ -18,7 +26,6 @@ import {
   MapPin,
   Send,
   Trash2,
-  X,
   XCircle,
 } from 'lucide-react'
 
@@ -38,8 +45,10 @@ type JobDetail = {
   scheduled_end_date: string | null
   scheduled_email_sent_at?: string | null
   completed_at: string | null
+  completed_email_sent_at?: string | null
   created_at?: string | null
   linked_estimate_id?: string | null
+  closeout_notes?: string | null
   linked_estimates?: Array<{
     id: string
     status: string | null
@@ -49,10 +58,12 @@ type JobDetail = {
   }>
 }
 
-type EmailTemplate = {
-  stage: string
-  subject: string | null
-  body: string | null
+type JobPhoto = {
+  id: string
+  phase: 'before' | 'after'
+  url: string
+  caption: string | null
+  created_at: string
 }
 
 type EstimateDriveFile = {
@@ -75,6 +86,19 @@ function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
   )
 }
 
+function asStageEmailStage(value: string | null): StageEmailStage | null {
+  if (
+    value === 'estimate_scheduled' ||
+    value === 'estimate_sent' ||
+    value === 'follow_up' ||
+    value === 'scheduled' ||
+    value === 'completed'
+  ) {
+    return value
+  }
+  return null
+}
+
 export default function JobDetailPage() {
   const params = useParams()
   const rawId = (params as { id?: string } | null | undefined)?.id
@@ -87,14 +111,13 @@ export default function JobDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [composeStage, setComposeStage] = useState<string | null>(null)
-  const [composeSubject, setComposeSubject] = useState('')
-  const [composeBody, setComposeBody] = useState('')
-  const [composeLoading, setComposeLoading] = useState(false)
-  const [sendingStage, setSendingStage] = useState<string | null>(null)
+  const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
+  const [closeoutOpen, setCloseoutOpen] = useState(false)
   const [timelineOpen, setTimelineOpen] = useState(true)
   const [estimateFile, setEstimateFile] = useState<EstimateDriveFile | null>(null)
   const [estimateFileError, setEstimateFileError] = useState<string | null>(null)
+  const [paintLogs, setPaintLogs] = useState<PaintLogRow[]>([])
+  const [afterPhotos, setAfterPhotos] = useState<JobPhoto[]>([])
 
   useEffect(() => {
     if (typeof id !== 'string' || !id) {
@@ -111,6 +134,8 @@ export default function JobDetailPage() {
       setNotice(null)
       setEstimateFile(null)
       setEstimateFileError(null)
+      setPaintLogs([])
+      setAfterPhotos([])
       const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
@@ -121,8 +146,16 @@ export default function JobDetailPage() {
       }
       setJob(payload?.job ?? null)
 
-      const estimateRes = await authedFetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' })
+      const [estimateRes, paintLogsRes, photosRes] = await Promise.all([
+        authedFetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' }),
+        authedFetch(`/api/jobs/${id}/paint-logs`, { cache: 'no-store' }),
+        authedFetch(`/api/jobs/${id}/photos`, { cache: 'no-store' }),
+      ])
+
       const estimatePayload = await estimateRes.json().catch(() => null)
+      const paintLogsPayload = await paintLogsRes.json().catch(() => null)
+      const photosPayload = await photosRes.json().catch(() => null)
+
       if (estimateRes.ok && estimatePayload?.file) {
         setEstimateFile(estimatePayload.file as EstimateDriveFile)
       } else {
@@ -133,6 +166,27 @@ export default function JobDetailPage() {
             : 'No matching estimate in Drive folder'
         )
       }
+
+      if (paintLogsRes.ok && Array.isArray(paintLogsPayload?.rows)) {
+        setPaintLogs((paintLogsPayload.rows as PaintLogRow[]).map((row) => ({
+          id: row.id,
+          sort_order: row.sort_order,
+          where_used: row.where_used ?? '',
+          paint_product: row.paint_product ?? '',
+          sheen: row.sheen ?? '',
+          color: row.color ?? '',
+          notes: row.notes ?? '',
+        })))
+      } else {
+        setPaintLogs([])
+      }
+
+      if (photosRes.ok && Array.isArray(photosPayload?.photos)) {
+        const rows = photosPayload.photos as JobPhoto[]
+        setAfterPhotos(rows.filter((row) => row.phase === 'after'))
+      } else {
+        setAfterPhotos([])
+      }
       setLoading(false)
     }
 
@@ -140,14 +194,17 @@ export default function JobDetailPage() {
   }, [id])
 
   useEffect(() => {
-    const stage = searchParams.get('compose')
+    const stage = asStageEmailStage(searchParams.get('compose'))
     if (!stage) return
     if (loading) return
     if (!job) return
-    if (composeStage === stage) return
-    void openComposer(stage)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, loading, job, composeStage])
+    if (stage === 'completed') {
+      setCloseoutOpen(true)
+      return
+    }
+    if (emailStage === stage) return
+    setEmailStage(stage)
+  }, [searchParams, loading, job, emailStage])
 
   const copy = async (label: string, value: string | null | undefined) => {
     if (!value) return
@@ -178,9 +235,37 @@ export default function JobDetailPage() {
     const payload = await res.json().catch(() => null)
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)
-      return
+      return null
     }
     setJob((prev) => (prev ? { ...prev, ...payload.job } : prev))
+    return (payload?.job ?? null) as Partial<JobDetail> | null
+  }
+
+  const refreshCloseoutData = async () => {
+    if (!id || typeof id !== 'string') return
+    const [paintRes, photosRes] = await Promise.all([
+      authedFetch(`/api/jobs/${id}/paint-logs`, { cache: 'no-store' }),
+      authedFetch(`/api/jobs/${id}/photos`, { cache: 'no-store' }),
+    ])
+    const paintPayload = await paintRes.json().catch(() => null)
+    const photosPayload = await photosRes.json().catch(() => null)
+
+    if (paintRes.ok && Array.isArray(paintPayload?.rows)) {
+      setPaintLogs((paintPayload.rows as PaintLogRow[]).map((row) => ({
+        id: row.id,
+        sort_order: row.sort_order,
+        where_used: row.where_used ?? '',
+        paint_product: row.paint_product ?? '',
+        sheen: row.sheen ?? '',
+        color: row.color ?? '',
+        notes: row.notes ?? '',
+      })))
+    }
+
+    if (photosRes.ok && Array.isArray(photosPayload?.photos)) {
+      const rows = photosPayload.photos as JobPhoto[]
+      setAfterPhotos(rows.filter((row) => row.phase === 'after'))
+    }
   }
 
   const nowIso = () => new Date().toISOString()
@@ -201,144 +286,64 @@ export default function JobDetailPage() {
     router.push('/crm/jobs')
   }
 
-  const loadScheduledBlocks = async () => {
-    if (!id || typeof id !== 'string') return ''
-    const res = await authedFetch(`/api/jobs/${id}/schedules`, { cache: 'no-store' })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) return ''
-    const rows = (payload?.schedules ?? []) as Array<{ start_at?: string | null; end_at?: string | null }>
-    return rows
-      .map((row) => {
-        if (!row?.start_at || !row?.end_at) return null
-        return `${formatDate(row.start_at)} - ${formatDate(row.end_at)}`
-      })
-      .filter((v): v is string => Boolean(v))
-      .join('\n')
-  }
-
-  const fetchJobForTemplate = async () => {
-    if (!id || typeof id !== 'string') return job
-    const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok || !payload?.job) return job
-    const fresh = payload.job as JobDetail
-    setJob(fresh)
-    return fresh
-  }
-
-  const openComposer = async (stage: string) => {
-    setComposeStage(stage)
-    setComposeLoading(true)
+  const openStageEmail = (stage: StageEmailStage) => {
     setError(null)
-    try {
-      const [templatesRes, templateJob, scheduleBlocks] = await Promise.all([
-        authedFetch('/api/email-templates', { cache: 'no-store' }),
-        fetchJobForTemplate(),
-        stage === 'scheduled' ? loadScheduledBlocks() : Promise.resolve(''),
-      ])
-      const payload = await templatesRes.json().catch(() => null)
-      if (!templatesRes.ok) {
-        setComposeLoading(false)
-        setError(payload?.error ?? templatesRes.statusText)
-        return
-      }
-      const templates = (payload?.templates ?? []) as EmailTemplate[]
-      const row = templates.find((t) => t.stage === stage)
-      const subject = applyTemplate(row?.subject ?? '', templateJob, scheduleBlocks)
-      const body = applyTemplate(row?.body ?? '', templateJob, scheduleBlocks)
-      setComposeSubject(subject)
-      setComposeBody(body)
-      setComposeLoading(false)
-    } catch {
-      setComposeLoading(false)
-      setError('Failed to load email template')
+    setEmailStage(stage)
+  }
+
+  const openCloseout = () => {
+    setError(null)
+    setCloseoutOpen(true)
+  }
+
+  const closeStageEmail = () => {
+    setEmailStage(null)
+    if (searchParams.get('compose') && id && typeof id === 'string') {
+      router.replace(`/crm/jobs/${id}`)
     }
   }
 
-  const sendComposed = async () => {
-    if (!composeStage) return
-    if (!id || typeof id !== 'string') return
-    setSendingStage(composeStage)
-    setError(null)
+  const closeCloseout = () => {
+    setCloseoutOpen(false)
+    if (searchParams.get('compose') && id && typeof id === 'string') {
+      router.replace(`/crm/jobs/${id}`)
+    }
+  }
 
-    const res = await authedFetch(`/api/jobs/${id}/send-stage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: composeStage, subject: composeSubject, body: composeBody }),
-    })
-    const payload = await res.json().catch(() => null)
-    setSendingStage(null)
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
+  const handleStageEmailSent = (result: StageEmailSentResult) => {
+    setError(null)
+    if (result.job) {
+      const patch = result.job as Partial<JobDetail>
+      setJob((prev) => (prev ? { ...prev, ...patch } : prev))
+    }
+    setNotice(result.warning ?? 'Email sent')
+  }
+
+  const markCompletedAndPrompt = async () => {
+    if (!job) return
+    const updated = await patchJob({ completed_at: nowIso() })
+    if (updated) {
+      setNotice(null)
+      openCloseout()
+    }
+  }
+
+  const handleCloseoutSaved = async (result: { job?: Partial<JobDetail> | null; notice?: string | null }) => {
+    setError(null)
+    if (result.job) {
+      setJob((prev) => (prev ? { ...prev, ...(result.job as Partial<JobDetail>) } : prev))
+    }
+    if (result.notice) setNotice(result.notice)
+    await refreshCloseoutData()
+  }
+
+  const handleStatusChange = async (nextStatus: string) => {
+    if (!job || nextStatus === job.status) return
+    if (nextStatus === 'completed') {
+      await markCompletedAndPrompt()
       return
     }
-    if (composeStage === 'estimate_sent') {
-      setJob((prev) =>
-        prev
-          ? {
-              ...prev,
-              ...(payload?.job ?? {}),
-              status: 'estimate_sent',
-              estimate_sent_at: payload?.job?.estimate_sent_at ?? new Date().toISOString(),
-            }
-          : prev
-      )
-    }
-    if (composeStage === 'scheduled') {
-      setJob((prev) =>
-        prev
-          ? {
-              ...prev,
-              ...(payload?.job ?? {}),
-              status: 'scheduled',
-              scheduled_email_sent_at:
-                payload?.job?.scheduled_email_sent_at ?? new Date().toISOString(),
-            }
-          : prev
-      )
-    }
-    setNotice(payload?.warning ?? 'Email sent')
-  }
-
-  const applyTemplate = (
-    value: string,
-    sourceJob?: JobDetail | null,
-    scheduledBlocksOverride?: string
-  ) => {
-    const baseJob = sourceJob ?? job
-    const scheduledBlocksValue =
-      scheduledBlocksOverride ||
-      (baseJob?.scheduled_date || baseJob?.scheduled_end_date
-        ? formatRange(baseJob?.scheduled_date, baseJob?.scheduled_end_date)
-        : '')
-    const vars: Record<string, string> = {
-      customerName: baseJob?.customer_name ?? '',
-      customerEmail: baseJob?.customer_email ?? '',
-      customerPhone: baseJob?.customer_phone ?? '',
-      customerAddress: baseJob?.customer_address ?? '',
-      jobTitle: baseJob?.title ?? '',
-      estimateDate: baseJob?.estimate_date ? formatDate(baseJob?.estimate_date) : '',
-      scheduledDate: baseJob?.scheduled_date ? formatDate(baseJob?.scheduled_date) : '',
-      scheduledBlocks: scheduledBlocksValue,
-      estimateFileName: '',
-      estimateFileLink: '',
-      reviewLink: process.env.NEXT_PUBLIC_REVIEW_LINK ?? 'https://g.page/r/CXTTS4mREhqcEBM/review',
-      customer_name: baseJob?.customer_name ?? '',
-      customer_email: baseJob?.customer_email ?? '',
-      customer_phone: baseJob?.customer_phone ?? '',
-      customer_address: baseJob?.customer_address ?? '',
-      job_title: baseJob?.title ?? '',
-      estimate_date: baseJob?.estimate_date ? formatDate(baseJob?.estimate_date) : '',
-      scheduled_date: baseJob?.scheduled_date ? formatDate(baseJob?.scheduled_date) : '',
-      scheduled_blocks: scheduledBlocksValue,
-      estimate_file_name: '',
-      estimate_file_link: '',
-      review_link: process.env.NEXT_PUBLIC_REVIEW_LINK ?? 'https://g.page/r/CXTTS4mREhqcEBM/review',
-    }
-    return Object.entries(vars).reduce(
-      (acc, [key, val]) => acc.replaceAll(`{{${key}}}`, val ?? ''),
-      value
-    )
+    await patchJob({ status: nextStatus })
   }
 
   const formatDate = (iso: string | null | undefined) => {
@@ -421,6 +426,13 @@ export default function JobDetailPage() {
           at: job.completed_at ?? null,
           order: 5,
         },
+        {
+          key: 'completed_email_sent_at',
+          label: 'Review email sent',
+          value: formatDate(job.completed_email_sent_at),
+          at: job.completed_email_sent_at ?? null,
+          order: 6,
+        },
       ].sort((a, b) => {
         if (a.at && b.at) return b.at.localeCompare(a.at)
         if (a.at) return -1
@@ -435,6 +447,7 @@ export default function JobDetailPage() {
     if (key === 'scheduled_range') return CalendarCheck
     if (key === 'scheduled_email_sent_at') return Mail
     if (key === 'completed_at') return CheckCircle2
+    if (key === 'completed_email_sent_at') return Mail
     return Circle
   }
 
@@ -452,14 +465,8 @@ export default function JobDetailPage() {
     </div>
   )
 
-  const canSendScheduledEmail = Boolean(job?.scheduled_date || job?.scheduled_end_date)
-  const hasSendableEstimate = Boolean(estimateFile?.id)
-  const composeNeedsEstimateAttachment =
-    composeStage === 'estimate_sent' || composeStage === 'follow_up'
-  const composeCanSend =
-    composeStage != null &&
-    sendingStage !== composeStage &&
-    (!composeNeedsEstimateAttachment || hasSendableEstimate)
+  const canSendScheduledEmail =
+    Boolean(job?.scheduled_date || job?.scheduled_end_date) && job?.status !== 'completed'
   const linkedEstimateHref =
     job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
       ? `/crm/estimates/${job.linked_estimate_id}`
@@ -513,7 +520,7 @@ export default function JobDetailPage() {
               </div>
               <select
                 value={job.status}
-                onChange={(e) => void patchJob({ status: e.target.value })}
+                onChange={(e) => void handleStatusChange(e.target.value)}
                 className="h-9 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 outline-none ring-black/70 focus:ring-2"
               >
                 <option value="estimate_scheduled">Estimate scheduled</option>
@@ -595,203 +602,172 @@ export default function JobDetailPage() {
                   ) : null
                 )}
                 {renderRow('Notes', job.description)}
-                <div className="mt-5 grid gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-              {job.status === 'estimate_scheduled' && (
-                <>
-                  <button
-                    onClick={() => void openComposer('estimate_scheduled')}
-                    style={{ ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }}
-                  >
-                    {iconLabel(Mail, 'Edit & send estimate scheduled')}
-                  </button>
-                </>
-              )}
-                {job.status !== 'scheduled' && (
-                  <>
-                    <button
-                      onClick={() => {
-                        if (!hasSendableEstimate) {
-                          setError('No matching estimate in Drive folder. Add one before sending.')
-                          return
-                        }
-                        void openComposer('estimate_sent')
-                      }}
-                      style={{
-                        ...smallButton,
-                        opacity: hasSendableEstimate ? 1 : 0.55,
-                        cursor: hasSendableEstimate ? 'pointer' : 'not-allowed',
-                      }}
-                      disabled={!hasSendableEstimate}
-                      title={
-                        hasSendableEstimate
-                          ? 'Send latest estimate'
-                          : 'No matching estimate in Drive folder'
-                      }
-                    >
-                      {iconLabel(Send, 'Edit & send estimate')}
-                    </button>
-                  </>
-                )}
-                <Link
-                  href={linkedEstimateHref}
-                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                >
-                  {iconLabel(FileText, linkedEstimateLabel)}
-                </Link>
-                {job.status !== 'estimate_scheduled' && (
-                  <Link
-                    href={`/crm/jobs/${id}/schedule`}
-                    style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                  >
-                    {iconLabel(CalendarCheck, 'Schedule job')}
-                  </Link>
-                )}
-                {canSendScheduledEmail && (
-                  <button
-                    onClick={() => void openComposer('scheduled')}
-                    style={{ ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }}
-                  >
-                    {iconLabel(Mail, 'Edit & send scheduled email')}
-                  </button>
-                )}
-              {job.status === 'estimate_scheduled' && (
-                <>
-                  <button
-                    onClick={() => void patchJob({ estimate_sent_at: nowIso() })}
-                    style={smallButton}
-                  >
-                    {iconLabel(Send, 'Mark estimate sent')}
-                  </button>
-                </>
-              )}
-              {job.status === 'estimate_sent' && (
-                <>
-                  <button
-                    onClick={() => void openComposer('follow_up')}
-                    style={smallButton}
-                  >
-                    {iconLabel(Mail, 'Edit & send follow up')}
-                  </button>
-                  <button
-                    onClick={() => void patchJob({ status: 'follow_up' })}
-                    style={smallButton}
-                  >
-                    {iconLabel(Mail, 'Move to follow up')}
-                  </button>
-                  <button
-                    onClick={() => void patchJob({ status: 'lost' })}
-                    style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
-                  >
-                    {iconLabel(XCircle, 'Mark lost')}
-                  </button>
-                </>
-              )}
-              {job.status === 'follow_up' && (
-                <>
-                  <button
-                    onClick={() => void openComposer('follow_up')}
-                    style={smallButton}
-                  >
-                    {iconLabel(Mail, 'Edit & send follow up')}
-                  </button>
-                  <button
-                    onClick={() => router.push(`/crm/jobs/${id}/schedule`)}
-                    style={smallButton}
-                  >
-                    {iconLabel(CalendarCheck, 'Schedule job')}
-                  </button>
-                  <button
-                    onClick={() => void patchJob({ status: 'lost' })}
-                    style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
-                  >
-                    {iconLabel(XCircle, 'Mark lost')}
-                  </button>
-                </>
-              )}
-              {job.status === 'scheduled' && (
-                <>
-                  <button
-                    onClick={() => void patchJob({ completed_at: nowIso() })}
-                    style={{ ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }}
-                  >
-                    {iconLabel(CheckCircle2, 'Mark completed')}
-                  </button>
-                </>
-              )}
-              {job.status === 'completed' && (
-                <button
-                  onClick={() => void openComposer('completed')}
-                  style={smallButton}
-                >
-                  {iconLabel(Mail, 'Edit & send completed')}
-                </button>
-              )}
-              </div>
-            {composeStage && (
-              <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
-                <div className="mb-2 font-extrabold text-gray-900">Email editor</div>
-                {composeLoading ? (
-                  <div className="text-gray-500">Loading template...</div>
-                ) : (
-                  <div className="grid gap-2.5">
+                {(job.status === 'completed' || paintLogs.length > 0 || afterPhotos.length > 0 || job.closeout_notes) && (
+                  <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
                     <div className="text-xs font-extrabold tracking-wide text-gray-500 uppercase">
-                      Subject
+                      Closeout Reference
                     </div>
-                    <input
-                      value={composeSubject}
-                      onChange={(e) => setComposeSubject(e.target.value)}
-                      style={{ ...inputStyle, padding: '10px' }}
-                    />
-                    <div className="text-xs font-extrabold tracking-wide text-gray-500 uppercase">
-                      Body
-                    </div>
-                    <textarea
-                      value={composeBody}
-                      onChange={(e) => setComposeBody(e.target.value)}
-                      style={{ ...inputStyle, height: 160, resize: 'vertical', padding: '10px' }}
-                    />
-                    {composeNeedsEstimateAttachment && (
-                      <div
-                        className={`rounded-lg border px-2.5 py-2 text-xs font-semibold ${
-                          hasSendableEstimate
-                            ? 'border-green-200 bg-green-50 text-green-800'
-                            : 'border-amber-200 bg-amber-50 text-amber-800'
-                        }`}
-                      >
-                        {hasSendableEstimate
-                          ? `Estimate attachment ready: ${estimateFile?.name ?? ''}`
-                          : 'No matching estimate file found in Drive. Sending is disabled.'}
+                    <div className="mt-2 grid gap-2 text-sm text-gray-800">
+                      <div>
+                        <div className="text-xs font-bold text-gray-600 uppercase">Closeout notes</div>
+                        <div className="mt-1 whitespace-pre-wrap text-sm">
+                          {job.closeout_notes?.trim() ? job.closeout_notes : 'No closeout notes yet.'}
+                        </div>
                       </div>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => void sendComposed()}
-                        disabled={!composeCanSend}
-                        style={{
-                          ...smallButton,
-                          background: '#111',
-                          color: 'white',
-                          border: '1px solid #111',
-                          opacity: composeCanSend ? 1 : 0.55,
-                          cursor: composeCanSend ? 'pointer' : 'not-allowed',
-                        }}
-                      >
-                        {sendingStage === composeStage
-                          ? iconLabel(Send, 'Sending...')
-                          : iconLabel(Send, 'Send email')}
-                      </button>
-                      <button
-                        onClick={() => setComposeStage(null)}
-                        style={smallButton}
-                      >
-                        {iconLabel(X, 'Cancel')}
-                      </button>
+                      <div>
+                        <div className="text-xs font-bold text-gray-600 uppercase">Paint logs</div>
+                        {paintLogs.length === 0 ? (
+                          <div className="mt-1 text-sm text-gray-600">No paint logs saved yet.</div>
+                        ) : (
+                          <div className="mt-1 grid gap-2">
+                            {paintLogs.map((row, idx) => (
+                              <div key={row.id ?? `paint-${idx}`} className="rounded-lg border border-gray-200 bg-white p-2">
+                                <div className="font-semibold text-gray-900">
+                                  {row.where_used || `Area ${idx + 1}`}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-700">
+                                  Product: {row.paint_product || '-'} | Sheen: {row.sheen || '-'} | Color: {row.color || '-'}
+                                </div>
+                                {row.notes && <div className="mt-1 text-xs text-gray-600">{row.notes}</div>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-gray-600 uppercase">After photos</div>
+                        {afterPhotos.length === 0 ? (
+                          <div className="mt-1 text-sm text-gray-600">No after photos uploaded yet.</div>
+                        ) : (
+                          <div className="mt-1 grid gap-1">
+                            {afterPhotos.map((photo) => (
+                              <a
+                                key={photo.id}
+                                href={photo.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sm text-gray-800 underline"
+                              >
+                                After photo - {formatDate(photo.created_at)}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
-              </div>
-            )}
+                <div className="mt-5 grid gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {job.status === 'estimate_scheduled' && (
+                      <button
+                        onClick={() => openStageEmail('estimate_scheduled')}
+                        style={{ ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }}
+                      >
+                        {iconLabel(Mail, 'Edit & send estimate scheduled')}
+                      </button>
+                    )}
+
+                    {job.status !== 'scheduled' && (
+                      <button onClick={() => openStageEmail('estimate_sent')} style={smallButton}>
+                        {iconLabel(Send, 'Edit & send estimate')}
+                      </button>
+                    )}
+
+                    <Link
+                      href={linkedEstimateHref}
+                      style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                    >
+                      {iconLabel(FileText, linkedEstimateLabel)}
+                    </Link>
+
+                    {job.status !== 'estimate_scheduled' && (
+                      <Link
+                        href={`/crm/jobs/${id}/schedule`}
+                        style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        {iconLabel(CalendarCheck, 'Schedule job')}
+                      </Link>
+                    )}
+
+                    {canSendScheduledEmail && (
+                      <button
+                        onClick={() => openStageEmail('scheduled')}
+                        style={
+                          job.scheduled_email_sent_at
+                            ? smallButton
+                            : { ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }
+                        }
+                      >
+                        {iconLabel(
+                          Mail,
+                          stageEmailActionLabel('scheduled', Boolean(job.scheduled_email_sent_at))
+                        )}
+                      </button>
+                    )}
+
+                    {job.status === 'estimate_scheduled' && (
+                      <button onClick={() => void patchJob({ estimate_sent_at: nowIso() })} style={smallButton}>
+                        {iconLabel(Send, 'Mark estimate sent')}
+                      </button>
+                    )}
+
+                    {job.status === 'estimate_sent' && (
+                      <>
+                        <button onClick={() => openStageEmail('follow_up')} style={smallButton}>
+                          {iconLabel(Mail, 'Edit & send follow up')}
+                        </button>
+                        <button onClick={() => void patchJob({ status: 'follow_up' })} style={smallButton}>
+                          {iconLabel(Mail, 'Move to follow up')}
+                        </button>
+                        <button
+                          onClick={() => void patchJob({ status: 'lost' })}
+                          style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
+                        >
+                          {iconLabel(XCircle, 'Mark lost')}
+                        </button>
+                      </>
+                    )}
+
+                    {job.status === 'follow_up' && (
+                      <>
+                        <button onClick={() => openStageEmail('follow_up')} style={smallButton}>
+                          {iconLabel(Mail, 'Edit & send follow up')}
+                        </button>
+                        <button onClick={() => router.push(`/crm/jobs/${id}/schedule`)} style={smallButton}>
+                          {iconLabel(CalendarCheck, 'Schedule job')}
+                        </button>
+                        <button
+                          onClick={() => void patchJob({ status: 'lost' })}
+                          style={{ ...smallButton, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b' }}
+                        >
+                          {iconLabel(XCircle, 'Mark lost')}
+                        </button>
+                      </>
+                    )}
+
+                    {job.status === 'scheduled' && (
+                      <button
+                        onClick={() => void markCompletedAndPrompt()}
+                        style={{ ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }}
+                      >
+                        {iconLabel(CheckCircle2, 'Mark completed')}
+                      </button>
+                    )}
+
+                    {job.status === 'completed' && (
+                      <button
+                        onClick={() => openCloseout()}
+                        style={
+                          job.completed_email_sent_at
+                            ? smallButton
+                            : { ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }
+                        }
+                      >
+                        {iconLabel(Mail, 'Open closeout')}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="w-full max-w-full flex-[0_0_300px]">
@@ -877,6 +853,19 @@ export default function JobDetailPage() {
       >
         {iconLabel(ArrowLeft, 'Back to jobs', iconSizeMd)}
       </Link>
+      <StageEmailModal
+        jobId={typeof id === 'string' ? id : null}
+        stage={emailStage}
+        open={emailStage != null}
+        onClose={closeStageEmail}
+        onSent={handleStageEmailSent}
+      />
+      <JobCompletionCloseoutModal
+        jobId={typeof id === 'string' ? id : null}
+        open={closeoutOpen}
+        onClose={closeCloseout}
+        onSaved={(result) => void handleCloseoutSaved(result)}
+      />
       </div>
     </div>
   )
@@ -911,9 +900,3 @@ const smallButton: React.CSSProperties = {
   gap: 6,
 }
 
-const inputStyle: React.CSSProperties = {
-  border: '1px solid #d1d5db',
-  borderRadius: 10,
-  fontSize: 14,
-  width: '100%',
-}

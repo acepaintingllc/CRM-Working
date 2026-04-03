@@ -30,32 +30,34 @@ type LinkedEstimateRecord = {
   created_at: string | null
 }
 
-function isMissingJobsColumnError(message: string, column: string) {
-  return (
-    message.includes(`Could not find the '${column}' column of 'jobs' in the schema cache`) ||
-    message.includes(`column "${column}" of relation "jobs" does not exist`)
-  )
-}
-
 async function updateJobCompat(orgId: string, id: string, patch: Record<string, unknown>) {
-  const first = await supabaseAdmin
-    .from('jobs')
-    .update(patch)
-    .eq('org_id', orgId)
-    .eq('id', id)
-    .select('*')
-    .single()
+  const nextPatch = { ...patch }
+  for (let i = 0; i < 8; i++) {
+    const attempt = await supabaseAdmin
+      .from('jobs')
+      .update(nextPatch)
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .select('*')
+      .single()
+    if (!attempt.error) return attempt
 
-  if (!first.error) return first
-  if (!('scheduled_end_date' in patch)) return first
-  if (!isMissingJobsColumnError(first.error.message ?? '', 'scheduled_end_date')) return first
-
-  const retryPatch = { ...patch }
-  delete retryPatch.scheduled_end_date
+    const missingByCache = attempt.error.message.match(
+      /Could not find the '([a-zA-Z0-9_]+)' column of 'jobs' in the schema cache/i
+    )
+    const missingByRelation = attempt.error.message.match(
+      /column "([a-zA-Z0-9_]+)" of relation "jobs" does not exist/i
+    )
+    const missing = missingByCache?.[1] ?? missingByRelation?.[1] ?? null
+    if (!missing || !(missing in nextPatch)) {
+      return attempt
+    }
+    delete nextPatch[missing]
+  }
 
   return supabaseAdmin
     .from('jobs')
-    .update(retryPatch)
+    .update(patch)
     .eq('org_id', orgId)
     .eq('id', id)
     .select('*')
@@ -102,6 +104,7 @@ export async function PATCH(
     'scheduled_date',
     'scheduled_end_date',
     'completed_at',
+    'closeout_notes',
   ]) {
     if (key in body) allowed[key] = body[key]
   }

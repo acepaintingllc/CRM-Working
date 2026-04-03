@@ -1,6 +1,12 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
+import StageEmailModal, {
+  stageEmailActionLabel,
+  type StageEmailStage,
+  type StageEmailSentResult,
+} from '@/app/crm/jobs/_components/StageEmailModal'
+import JobCompletionCloseoutModal from '@/app/crm/jobs/_components/JobCompletionCloseoutModal'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -41,6 +47,8 @@ type Job = {
   scheduled_end_date?: string | null
   scheduled_email_sent_at?: string | null
   completed_at: string | null
+  completed_email_sent_at?: string | null
+  closeout_notes?: string | null
 }
 
 const columns: { key: JobStatus; title: string }[] = [
@@ -69,12 +77,16 @@ export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [completedQuery, setCompletedQuery] = useState('')
   const [showAllCompleted, setShowAllCompleted] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
   const [showLost, setShowLost] = useState(false)
   const [showEmptyStages, setShowEmptyStages] = useState(false)
   const [compactActions, setCompactActions] = useState(false)
+  const [emailJobId, setEmailJobId] = useState<string | null>(null)
+  const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
+  const [closeoutJobId, setCloseoutJobId] = useState<string | null>(null)
 
   const grouped = useMemo(() => {
     const map: Record<JobStatus, Job[]> = {
@@ -127,10 +139,11 @@ export default function JobsPage() {
     const payload = await res.json().catch(() => null)
     if (!res.ok) {
       setError(payload?.error ?? res.statusText)
-      return
+      return null
     }
 
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...payload.job } : j)))
+    return (payload?.job ?? null) as Partial<Job> | null
   }
 
   const nowIso = () => new Date().toISOString()
@@ -153,6 +166,7 @@ export default function JobsPage() {
 
   const activityForJob = (job: Job) => {
     const items: { label: string; at: string }[] = []
+    if (job.completed_email_sent_at) items.push({ label: 'Review email sent', at: job.completed_email_sent_at })
     if (job.completed_at) items.push({ label: 'Completed', at: job.completed_at })
     if (job.scheduled_email_sent_at) items.push({ label: 'Confirmation email sent', at: job.scheduled_email_sent_at })
     if (job.scheduled_date) items.push({ label: 'Scheduled', at: job.scheduled_date })
@@ -189,6 +203,53 @@ export default function JobsPage() {
       event.stopPropagation()
       fn()
     }
+
+  const openStageEmail = (jobId: string, stage: StageEmailStage) => {
+    setError(null)
+    setEmailJobId(jobId)
+    setEmailStage(stage)
+  }
+
+  const closeStageEmail = () => {
+    setEmailJobId(null)
+    setEmailStage(null)
+  }
+
+  const handleStageEmailSent = (result: StageEmailSentResult) => {
+    setError(null)
+    if (emailJobId && result.job) {
+      const patch = result.job as Partial<Job>
+      setJobs((prev) => prev.map((job) => (job.id === emailJobId ? { ...job, ...patch } : job)))
+    }
+    setNotice(result.warning ?? 'Email sent')
+  }
+
+  const markCompletedAndPrompt = async (job: Job) => {
+    const updated = await patchJob(job.id, { completed_at: nowIso() })
+    if (updated) {
+      setNotice(null)
+      setCloseoutJobId(job.id)
+    }
+  }
+
+  const openCloseout = (jobId: string) => {
+    setError(null)
+    setCloseoutJobId(jobId)
+  }
+
+  const closeCloseout = () => {
+    setCloseoutJobId(null)
+  }
+
+  const handleCloseoutSaved = (result: { job?: Partial<Job> | null; notice?: string | null }) => {
+    setError(null)
+    if (closeoutJobId && result.job) {
+      setJobs((prev) =>
+        prev.map((job) => (job.id === closeoutJobId ? { ...job, ...result.job } : job))
+      )
+    }
+    if (result.notice) setNotice(result.notice)
+  }
 
   const columnCount = (status: JobStatus) => grouped[status].length
   const visibleColumns = columns
@@ -260,6 +321,12 @@ export default function JobsPage() {
       {error && (
         <div className="mt-3 rounded-xl border border-red-200 bg-white p-3 text-red-800 shadow-sm">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="mt-3 rounded-xl border border-green-200 bg-white p-3 text-green-700 shadow-sm">
+          {notice}
         </div>
       )}
 
@@ -365,9 +432,7 @@ export default function JobsPage() {
                               <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
                               <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
                                 <button
-                                  onClick={stop(() => {
-                                    router.push(`/crm/jobs/${job.id}?compose=estimate_sent`)
-                                  })}
+                                  onClick={stop(() => openStageEmail(job.id, 'estimate_sent'))}
                                   style={smallButton}
                                 >
                                   {iconLabel(Send, 'Review & send estimate')}
@@ -389,12 +454,7 @@ export default function JobsPage() {
                             </details>
                           ) : (
                             <>
-                              <button
-                                onClick={stop(() => {
-                                  router.push(`/crm/jobs/${job.id}?compose=estimate_sent`)
-                                })}
-                                style={smallButton}
-                              >
+                              <button onClick={stop(() => openStageEmail(job.id, 'estimate_sent'))} style={smallButton}>
                                 {iconLabel(Send, 'Review & send estimate')}
                               </button>
                               <button
@@ -434,12 +494,7 @@ export default function JobsPage() {
                                 >
                                   {iconLabel(CalendarCheck, 'Schedule job')}
                                 </Link>
-                                <button
-                                  onClick={stop(async () => {
-                                    router.push(`/crm/jobs/${job.id}?compose=follow_up`)
-                                  })}
-                                  style={smallButton}
-                                >
+                                <button onClick={stop(() => openStageEmail(job.id, 'follow_up'))} style={smallButton}>
                                   {iconLabel(Mail, 'Send follow up')}
                                 </button>
                                 <button
@@ -469,12 +524,7 @@ export default function JobsPage() {
                               >
                                 {iconLabel(CalendarCheck, 'Schedule job')}
                               </Link>
-                              <button
-                                onClick={stop(async () => {
-                                  router.push(`/crm/jobs/${job.id}?compose=follow_up`)
-                                })}
-                                style={smallButton}
-                              >
+                              <button onClick={stop(() => openStageEmail(job.id, 'follow_up'))} style={smallButton}>
                                 {iconLabel(Mail, 'Send follow up')}
                               </button>
                               <button
@@ -505,12 +555,7 @@ export default function JobsPage() {
                                 >
                                   {iconLabel(CalendarCheck, 'Schedule job')}
                                 </Link>
-                                <button
-                                  onClick={stop(async () => {
-                                    router.push(`/crm/jobs/${job.id}?compose=follow_up`)
-                                  })}
-                                  style={smallButton}
-                                >
+                                <button onClick={stop(() => openStageEmail(job.id, 'follow_up'))} style={smallButton}>
                                   {iconLabel(Mail, 'Send follow up')}
                                 </button>
                                 <button
@@ -534,12 +579,7 @@ export default function JobsPage() {
                               >
                                 {iconLabel(CalendarCheck, 'Schedule job')}
                               </Link>
-                              <button
-                                onClick={stop(async () => {
-                                  router.push(`/crm/jobs/${job.id}?compose=follow_up`)
-                                })}
-                                style={smallButton}
-                              >
+                              <button onClick={stop(() => openStageEmail(job.id, 'follow_up'))} style={smallButton}>
                                 {iconLabel(Mail, 'Send follow up')}
                               </button>
                               <button
@@ -564,15 +604,20 @@ export default function JobsPage() {
                               <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
                               <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
                                 <button
-                                  onClick={stop(() => {
-                                    router.push(`/crm/jobs/${job.id}?compose=scheduled`)
-                                  })}
-                                  style={smallButton}
+                                  onClick={stop(() => openStageEmail(job.id, 'scheduled'))}
+                                  style={
+                                    job.scheduled_email_sent_at
+                                      ? smallButton
+                                      : { ...smallButton, background: '#111', border: '1px solid #111', color: '#fff' }
+                                  }
                                 >
-                                  {iconLabel(Mail, 'Edit & send scheduled email')}
+                                  {iconLabel(
+                                    Mail,
+                                    stageEmailActionLabel('scheduled', Boolean(job.scheduled_email_sent_at))
+                                  )}
                                 </button>
                                 <button
-                                  onClick={stop(() => void patchJob(job.id, { completed_at: nowIso() }))}
+                                  onClick={stop(() => void markCompletedAndPrompt(job))}
                                   style={smallButton}
                                 >
                                   {iconLabel(CheckCircle2, 'Mark completed')}
@@ -589,15 +634,20 @@ export default function JobsPage() {
                           ) : (
                             <>
                               <button
-                                onClick={stop(() => {
-                                  router.push(`/crm/jobs/${job.id}?compose=scheduled`)
-                                })}
-                                style={smallButton}
+                                onClick={stop(() => openStageEmail(job.id, 'scheduled'))}
+                                style={
+                                  job.scheduled_email_sent_at
+                                    ? smallButton
+                                    : { ...smallButton, background: '#111', border: '1px solid #111', color: '#fff' }
+                                }
                               >
-                                {iconLabel(Mail, 'Edit & send scheduled email')}
+                                {iconLabel(
+                                  Mail,
+                                  stageEmailActionLabel('scheduled', Boolean(job.scheduled_email_sent_at))
+                                )}
                               </button>
                               <button
-                                onClick={stop(() => void patchJob(job.id, { completed_at: nowIso() }))}
+                                onClick={stop(() => void markCompletedAndPrompt(job))}
                                 style={smallButton}
                               >
                                 {iconLabel(CheckCircle2, 'Mark completed')}
@@ -613,6 +663,39 @@ export default function JobsPage() {
                           )}
                         </>
                       )}
+
+                      {job.status === 'completed' && (
+                        <>
+                          {compactActions ? (
+                            <details onClick={(e) => e.stopPropagation()}>
+                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
+                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                                <button
+                                  onClick={stop(() => openCloseout(job.id))}
+                                  style={
+                                    job.completed_email_sent_at
+                                      ? smallButton
+                                      : { ...smallButton, background: '#111', border: '1px solid #111', color: '#fff' }
+                                  }
+                                >
+                                  {iconLabel(Mail, 'Open closeout')}
+                                </button>
+                              </div>
+                            </details>
+                          ) : (
+                            <button
+                              onClick={stop(() => openCloseout(job.id))}
+                              style={
+                                job.completed_email_sent_at
+                                  ? smallButton
+                                  : { ...smallButton, background: '#111', border: '1px solid #111', color: '#fff' }
+                              }
+                            >
+                              {iconLabel(Mail, 'Open closeout')}
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -622,6 +705,19 @@ export default function JobsPage() {
           </div>
         </div>
       )}
+      <StageEmailModal
+        jobId={emailJobId}
+        stage={emailStage}
+        open={emailStage != null && emailJobId != null}
+        onClose={closeStageEmail}
+        onSent={handleStageEmailSent}
+      />
+      <JobCompletionCloseoutModal
+        jobId={closeoutJobId}
+        open={closeoutJobId != null}
+        onClose={closeCloseout}
+        onSaved={handleCloseoutSaved}
+      />
       </div>
     </div>
   )

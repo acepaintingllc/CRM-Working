@@ -1112,26 +1112,6 @@ function mapDoorRow(row: Unsafe, jobId: string) {
   }
 }
 
-function mapOpeningRow(row: Unsafe, jobId: string) {
-  const trimItemId = asText(row.trim_menu_id || row.trim_item_id)
-  const primerMode = asText(row.primer_mode)
-  const spotPrimePct = asNumberish(row.spot_prime_pct)
-  return {
-    JobID: jobId,
-    RoomID: asText(row.room_id),
-    OpeningType: trimItemId,
-    OpeningTypeID: trimItemId,
-    ItemID: trimItemId,
-    Qty: asNumberish(row.qty),
-    Quantity: asNumberish(row.qty),
-    PrimerMode: primerMode,
-    SpotPrimePct: spotPrimePct,
-    Notes: asText(row.notes),
-    'Active?': toYN(row.active, 'Y'),
-    Active: toYN(row.active, 'Y'),
-  }
-}
-
 async function writeInputTabs(params: {
   origin: string
   orgId: string

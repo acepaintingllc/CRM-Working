@@ -16,7 +16,7 @@ const stages: { key: Stage; label: string }[] = [
   { key: 'estimate_sent', label: 'Estimate sent' },
   { key: 'follow_up', label: 'Follow up' },
   { key: 'scheduled', label: 'Scheduled' },
-  { key: 'completed', label: 'Completed' },
+  { key: 'completed', label: 'Completed / review request' },
 ]
 
 const availableVars = [
