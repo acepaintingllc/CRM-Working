@@ -349,3 +349,72 @@ export async function copyDriveFile(params: {
     },
   } as const
 }
+
+export async function uploadDriveFile(params: {
+  origin: string
+  orgId: string
+  userId: string
+  folderId: string
+  name: string
+  mimeType: string
+  data: Buffer
+}) {
+  const access = await getValidAccessToken({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+  })
+  if ('error' in access) return { error: access.error } as const
+
+  const boundary = `acecrm_upload_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const metadata = JSON.stringify({
+    name: params.name,
+    parents: [params.folderId],
+  })
+
+  const head = Buffer.from(
+    `--${boundary}\r\n` +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      `${metadata}\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Type: ${params.mimeType}\r\n\r\n`,
+    'utf8'
+  )
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8')
+  const body = Buffer.concat([head, params.data, tail])
+
+  const url = new URL('https://www.googleapis.com/upload/drive/v3/files')
+  url.searchParams.set('uploadType', 'multipart')
+  url.searchParams.set('fields', 'id,name,webViewLink')
+  url.searchParams.set('supportsAllDrives', 'true')
+
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${access.accessToken}`,
+      'Content-Type': `multipart/related; boundary=${boundary}`,
+    },
+    body,
+  })
+
+  const json: unknown = await res.json().catch(() => null)
+  if (!res.ok) {
+    const msg = readGoogleErrorMessage(json) ?? 'Failed to upload Drive file'
+    return { error: msg, status: res.status } as const
+  }
+
+  const obj = asRecord(json)
+  const id = obj?.id
+  const name = obj?.name
+  if (typeof id !== 'string' || typeof name !== 'string') {
+    return { error: 'Drive returned an invalid file response' } as const
+  }
+  const webViewLink = obj?.webViewLink
+  return {
+    file: {
+      id,
+      name,
+      webViewLink: typeof webViewLink === 'string' ? webViewLink : null,
+    },
+  } as const
+}

@@ -1,6 +1,11 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
+import StageEmailModal, {
+  stageEmailActionLabel,
+  type StageEmailStage,
+  type StageEmailSentResult,
+} from '@/app/crm/jobs/_components/StageEmailModal'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
@@ -21,6 +26,10 @@ type CalendarAddResult = {
   scheduleId: string
   eventId?: string | null
   skipped?: boolean
+}
+
+type JobScheduleMeta = {
+  scheduled_email_sent_at?: string | null
 }
 
 function pad2(n: number) {
@@ -61,27 +70,47 @@ export default function JobSchedulePage() {
   const [rows, setRows] = useState<ScheduleRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [addingCalendar, setAddingCalendar] = useState(false)
+  const [jobMeta, setJobMeta] = useState<JobScheduleMeta | null>(null)
+  const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
 
   const [startLocal, setStartLocal] = useState('')
   const [endLocal, setEndLocal] = useState('')
   const [notes, setNotes] = useState('')
+
+  const loadJobMeta = async () => {
+    if (!id || typeof id !== 'string') return null
+    const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
+    const payload = await res.json().catch(() => null)
+    if (!res.ok) return null
+    const nextMeta = (payload?.job ?? null) as JobScheduleMeta | null
+    setJobMeta(nextMeta)
+    return nextMeta
+  }
 
   useEffect(() => {
     if (!id || typeof id !== 'string') return
     const load = async () => {
       setLoading(true)
       setError(null)
-      const res = await authedFetch(`/api/jobs/${id}/schedules`, { cache: 'no-store' })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        setError(payload?.error ?? res.statusText)
+      const [scheduleRes, jobRes] = await Promise.all([
+        authedFetch(`/api/jobs/${id}/schedules`, { cache: 'no-store' }),
+        authedFetch(`/api/jobs/${id}`, { cache: 'no-store' }),
+      ])
+      const schedulePayload = await scheduleRes.json().catch(() => null)
+      const jobPayload = await jobRes.json().catch(() => null)
+      if (!scheduleRes.ok) {
+        setError(schedulePayload?.error ?? scheduleRes.statusText)
         setRows([])
         setLoading(false)
         return
       }
-      setRows(payload?.schedules ?? [])
+      setRows(schedulePayload?.schedules ?? [])
+      if (jobRes.ok) {
+        setJobMeta((jobPayload?.job ?? null) as JobScheduleMeta | null)
+      }
       setLoading(false)
     }
     void load()
@@ -109,6 +138,7 @@ export default function JobSchedulePage() {
       setError('Invalid date/time')
       return
     }
+    const hadNoSchedules = rows.length === 0
     setSaving(true)
     setError(null)
     const res = await authedFetch(`/api/jobs/${id}/schedules`, {
@@ -124,6 +154,12 @@ export default function JobSchedulePage() {
     }
     setRows((prev) => [payload.schedule, ...prev])
     setNotes('')
+    if (hadNoSchedules) {
+      const refreshedJob = await loadJobMeta()
+      if (refreshedJob && !refreshedJob.scheduled_email_sent_at) {
+        setEmailStage('scheduled')
+      }
+    }
   }
 
   const deleteSchedule = async (scheduleId: string) => {
@@ -166,6 +202,24 @@ export default function JobSchedulePage() {
         })
       )
     }
+  }
+
+  const openScheduledEmail = () => {
+    setError(null)
+    setEmailStage('scheduled')
+  }
+
+  const closeStageEmail = () => {
+    setEmailStage(null)
+  }
+
+  const handleStageEmailSent = (result: StageEmailSentResult) => {
+    setError(null)
+    if (result.job) {
+      const patch = result.job as Partial<JobScheduleMeta>
+      setJobMeta((prev) => ({ ...(prev ?? {}), ...patch }))
+    }
+    setNotice(result.warning ?? 'Email sent')
   }
 
   return (
@@ -218,6 +272,7 @@ export default function JobSchedulePage() {
           </div>
 
           {error && <div style={{ color: '#b91c1c', fontSize: 14 }}>{error}</div>}
+          {notice && <div style={{ color: '#15803d', fontSize: 14 }}>{notice}</div>}
 
           <button
             onClick={() => void addSchedule()}
@@ -315,15 +370,34 @@ export default function JobSchedulePage() {
                   : iconLabel(CalendarCheck, 'Add scheduled blocks to Google Calendar')}
               </button>
               <Link
-                href={`/crm/jobs/${id}?compose=scheduled`}
-                style={{ ...actionButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                href="#"
+                onClick={(event) => {
+                  event.preventDefault()
+                  openScheduledEmail()
+                }}
+                style={{
+                  ...actionButton,
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: jobMeta?.scheduled_email_sent_at ? 'white' : '#111',
+                  border: jobMeta?.scheduled_email_sent_at ? '1px solid #d1d5db' : '1px solid #111',
+                  color: jobMeta?.scheduled_email_sent_at ? '#111' : 'white',
+                }}
               >
-                {iconLabel(Mail, 'Edit & send scheduled email')}
+                {iconLabel(Mail, stageEmailActionLabel('scheduled', Boolean(jobMeta?.scheduled_email_sent_at)))}
               </Link>
             </div>
           </div>
         )}
       </div>
+      <StageEmailModal
+        jobId={typeof id === 'string' ? id : null}
+        stage={emailStage}
+        open={emailStage != null}
+        onClose={closeStageEmail}
+        onSent={handleStageEmailSent}
+      />
     </div>
   )
 }

@@ -57,6 +57,14 @@ function toIsoFromDateTimeLocal(v: string) {
   return dt.toISOString()
 }
 
+function createSendIdempotencyKey(stage: string, jobId: string) {
+  const suffix =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `stage:${stage}:job:${jobId}:${suffix}`
+}
+
 export default function NewJobPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -245,10 +253,11 @@ export default function NewJobPage() {
   }
 
   const sendStageEmail = async (jobId: string, stage: string, subject?: string, body?: string) => {
+    const idempotencyKey = createSendIdempotencyKey(stage, jobId)
     const res = await authedFetch(`/api/jobs/${jobId}/send-stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage, subject, body }),
+      body: JSON.stringify({ stage, subject, body, idempotency_key: idempotencyKey }),
     })
     const payload = await res.json().catch(() => null)
     if (!res.ok) {
