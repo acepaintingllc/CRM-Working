@@ -3,7 +3,11 @@
   "crons": [
     {
       "path": "/api/internal/notes/reminders/run",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/internal/notes/reminders/run",
+      "schedule": "0 12 * * *"
     }
   ]
 }

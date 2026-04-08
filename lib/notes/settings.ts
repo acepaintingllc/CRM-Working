@@ -30,7 +30,7 @@ export async function getNotesSettingsWithDefaults(params: {
   const parsedTime = parseHHMM(settings?.daily_summary_time_local ?? null)
   const dailySummaryTimeLocal = parsedTime
     ? `${String(parsedTime.hour).padStart(2, '0')}:${String(parsedTime.minute).padStart(2, '0')}`
-    : '07:00'
+    : '06:00'
 
   return {
     settings,

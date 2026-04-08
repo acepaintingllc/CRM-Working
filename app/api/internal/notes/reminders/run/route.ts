@@ -195,7 +195,7 @@ async function processDailySummary(params: {
   const configuredTime = parseHHMM(params.dailyTimeLocal)
   const configured = configuredTime
     ? `${String(configuredTime.hour).padStart(2, '0')}:${String(configuredTime.minute).padStart(2, '0')}`
-    : '07:00'
+    : '06:00'
 
   if (nowTimeKey < configured) {
     return { sent: 0, failed: 0, skipped: 1, reason: 'before_send_window' }
@@ -348,6 +348,7 @@ async function runReminderJob(request: Request) {
 
   const now = new Date()
   const origin = new URL(request.url).origin
+  const includeTaskReminders = request.method === 'POST'
 
   let organizationsProcessed = 0
   let remindersSent = 0
@@ -383,18 +384,20 @@ async function runReminderJob(request: Request) {
     }
     const tasks = (tasksRes.data ?? []) as NotesTaskRow[]
 
-    const taskReminderResult = await processTaskReminders({
-      origin,
-      orgId,
-      senderUserId,
-      emailTo,
-      crmName: orgDefaults.name,
-      timezone,
-      tasks,
-    })
-    remindersSent += taskReminderResult.sent
-    remindersFailed += taskReminderResult.failed
-    remindersSkipped += taskReminderResult.skipped
+    if (includeTaskReminders) {
+      const taskReminderResult = await processTaskReminders({
+        origin,
+        orgId,
+        senderUserId,
+        emailTo,
+        crmName: orgDefaults.name,
+        timezone,
+        tasks,
+      })
+      remindersSent += taskReminderResult.sent
+      remindersFailed += taskReminderResult.failed
+      remindersSkipped += taskReminderResult.skipped
+    }
 
     const dailySummaryResult = await processDailySummary({
       origin,
@@ -403,14 +406,14 @@ async function runReminderJob(request: Request) {
       emailTo,
       crmName: orgDefaults.name,
       timezone,
-      dailyTimeLocal: settings?.daily_summary_time_local || '07:00',
+      dailyTimeLocal: settings?.daily_summary_time_local || '06:00',
       now,
       tasks,
       settings: settings ?? {
         org_id: orgId,
         sender_user_id: senderUserId,
         daily_summary_email_to: emailTo,
-        daily_summary_time_local: '07:00',
+        daily_summary_time_local: '06:00',
         timezone,
         show_upcoming_days: 3,
         last_daily_summary_attempted_on: null,

@@ -44,7 +44,7 @@ export default function NotesTodayPage() {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [settingsEmail, setSettingsEmail] = useState('')
-  const [settingsTime, setSettingsTime] = useState('07:00')
+  const [settingsTime, setSettingsTime] = useState('06:00')
   const [settingsTz, setSettingsTz] = useState('America/Chicago')
   const [settingsUpcoming, setSettingsUpcoming] = useState('3')
   const [lastDailyAttemptedOn, setLastDailyAttemptedOn] = useState<string | null>(null)
@@ -74,7 +74,7 @@ export default function NotesTodayPage() {
       if (settingsRes.ok) {
         const typed = settingsPayload as SettingsPayload
         setSettingsEmail(typed.settings.daily_summary_email_to ?? '')
-        setSettingsTime(typed.settings.daily_summary_time_local ?? '07:00')
+        setSettingsTime(typed.settings.daily_summary_time_local ?? '06:00')
         setSettingsTz(typed.settings.timezone ?? 'America/Chicago')
         setSettingsUpcoming(String(typed.settings.show_upcoming_days ?? 3))
         setLastDailyAttemptedOn(typed.settings.last_daily_summary_attempted_on ?? null)

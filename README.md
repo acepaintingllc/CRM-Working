@@ -47,7 +47,8 @@ Set `NOTES_CRON_SECRET` or `CRON_SECRET` and send:
 
 - `Authorization: Bearer <your secret>`
 
-`vercel.json` schedules this route every 10 minutes for Vercel deployments.
+`vercel.json` schedules this route twice daily at `11:00 UTC` and `12:00 UTC`.
+That covers `06:00` in `America/Chicago` across daylight saving time changes. The first run before the local send window skips, and the first run at or after `06:00` sends the daily summary once.
 
 The job sends:
 
