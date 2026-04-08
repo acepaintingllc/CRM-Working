@@ -2744,7 +2744,7 @@ export default function EstimateEditorPage() {
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <div>
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Estimate Intake</h1>
-            <div style={{ marginTop: 4, color: '#6b7280', fontSize: 13 }}>
+            <div style={{ marginTop: 4, color: 'var(--crm-muted)', fontSize: 13 }}>
               Job: {estimate.job_id} | {saving ? 'Saving...' : notice ?? 'Idle'}
             </div>
             {catalogs.schema_mismatch && (
@@ -2880,7 +2880,7 @@ export default function EstimateEditorPage() {
 
         {activeTab === 'Rooms' && (
           <div style={{ display: 'grid', gap: 10 }}>
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 10, display: 'grid', gap: 8 }}>
+            <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 10, padding: 10, display: 'grid', gap: 8 }}>
               <div style={{ fontWeight: 700 }}>Default Prep Levels</div>
               <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
                 <label style={{ display: 'grid', gap: 4 }}>
@@ -2971,7 +2971,7 @@ export default function EstimateEditorPage() {
                 <div key={room.room_id || index} style={roomCardStyle}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                     <div style={{ fontWeight: 800 }}>
-                      {room.room_name || 'Untitled Room'} <span style={{ color: '#6b7280' }}>({room.room_id})</span>
+                      {room.room_name || 'Untitled Room'} <span style={{ color: 'var(--crm-muted)' }}>({room.room_id})</span>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button onClick={() => moveRoom(index, -1)} style={btnGhost} disabled={index === 0}>
@@ -3004,7 +3004,7 @@ export default function EstimateEditorPage() {
                     </label>
                     <label style={{ display: 'grid', gap: 4 }}>
                       <div style={labelStyle}>Room ID (Auto)</div>
-                      <input value={room.room_id} readOnly style={{ ...inputStyle, background: '#f9fafb' }} />
+                      <input value={room.room_id} readOnly style={{ ...inputStyle, background: 'var(--crm-bg-soft)' }} />
                     </label>
                     <label style={{ display: 'grid', gap: 4 }}>
                       <div style={labelStyle}>Wall Geometry Mode</div>
@@ -3030,7 +3030,7 @@ export default function EstimateEditorPage() {
                       </>
                     )}
                     {room.mode === 'SEG' && (
-                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#4b5563' }}>
+                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--crm-muted-strong)' }}>
                         This room uses segmented walls. Add segments in the Segments tab.
                       </div>
                     )}
@@ -3205,7 +3205,7 @@ export default function EstimateEditorPage() {
                         <input value={room.ceilingsqft_override} onChange={(e) => updateRoom(index, { ceilingsqft_override: e.target.value })} style={inputStyle} />
                       </label>
                       {room.mode === 'SEG' && (
-                        <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#4b5563' }}>
+                        <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--crm-muted-strong)' }}>
                           This room uses segmented ceilings. Add ceiling segments in the Segments tab.
                         </div>
                       )}
@@ -3274,7 +3274,7 @@ export default function EstimateEditorPage() {
                           <option value="Heavy">Heavy</option>
                         </select>
                       </label>
-                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#6b7280' }}>
+                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--crm-muted)' }}>
                         These choices map to Trim Menu IDs in the spreadsheet (Constants).
                       </div>
                       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -3322,8 +3322,8 @@ export default function EstimateEditorPage() {
 
                       <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', alignItems: 'start' }}>
                         {baseboardSelected && (
-                        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
-                          <div style={{ ...labelStyle, color: '#111' }}>Baseboard</div>
+                        <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
+                          <div style={{ ...labelStyle, color: 'var(--crm-text)' }}>Baseboard</div>
                           <label style={{ display: 'grid', gap: 4 }}>
                             <div style={labelStyle}>Type</div>
                             <select
@@ -3359,7 +3359,7 @@ export default function EstimateEditorPage() {
                             Auto-calc from perimeter
                           </label>
                           <details style={{ gridColumn: '1 / -1' }}>
-                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--crm-muted-strong)' }}>Prime/Prep</summary>
                             <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
                               <label style={{ display: 'grid', gap: 4 }}>
                                 <div style={labelStyle}>Primer Mode</div>
@@ -3410,8 +3410,8 @@ export default function EstimateEditorPage() {
                         )}
 
                         {crownSelected && (
-                        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
-                          <div style={{ ...labelStyle, color: '#111' }}>Crown</div>
+                        <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
+                          <div style={{ ...labelStyle, color: 'var(--crm-text)' }}>Crown</div>
                           <label style={{ display: 'grid', gap: 4 }}>
                             <div style={labelStyle}>Type</div>
                             <select
@@ -3447,7 +3447,7 @@ export default function EstimateEditorPage() {
                             Auto-calc from perimeter
                           </label>
                           <details style={{ gridColumn: '1 / -1' }}>
-                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--crm-muted-strong)' }}>Prime/Prep</summary>
                             <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
                               <label style={{ display: 'grid', gap: 4 }}>
                                 <div style={labelStyle}>Primer Mode</div>
@@ -3498,8 +3498,8 @@ export default function EstimateEditorPage() {
                         )}
 
                         {windowCasingSelected && (
-                        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
-                          <div style={{ ...labelStyle, color: '#111' }}>Window Casing</div>
+                        <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
+                          <div style={{ ...labelStyle, color: 'var(--crm-text)' }}>Window Casing</div>
                           <div style={{ display: 'grid', gap: 6, gridTemplateColumns: '1fr 120px', alignItems: 'end' }}>
                             <label style={{ display: 'grid', gap: 4 }}>
                               <div style={labelStyle}>Type</div>
@@ -3528,7 +3528,7 @@ export default function EstimateEditorPage() {
                             </label>
                           </div>
                           <details style={{ gridColumn: '1 / -1' }}>
-                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--crm-muted-strong)' }}>Prime/Prep</summary>
                             <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
                               <label style={{ display: 'grid', gap: 4 }}>
                                 <div style={labelStyle}>Primer Mode</div>
@@ -3618,8 +3618,8 @@ export default function EstimateEditorPage() {
                         )}
 
                         {doorCasingSelected && (
-                        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
-                          <div style={{ ...labelStyle, color: '#111' }}>Door Casing</div>
+                        <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
+                          <div style={{ ...labelStyle, color: 'var(--crm-text)' }}>Door Casing</div>
                           <div style={{ display: 'grid', gap: 6, gridTemplateColumns: '1fr 120px', alignItems: 'end' }}>
                             <label style={{ display: 'grid', gap: 4 }}>
                               <div style={labelStyle}>Type</div>
@@ -3648,7 +3648,7 @@ export default function EstimateEditorPage() {
                             </label>
                           </div>
                           <details style={{ gridColumn: '1 / -1' }}>
-                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--crm-muted-strong)' }}>Prime/Prep</summary>
                             <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
                               <label style={{ display: 'grid', gap: 4 }}>
                                 <div style={labelStyle}>Primer Mode</div>
@@ -3738,8 +3738,8 @@ export default function EstimateEditorPage() {
                         )}
 
                         {doorsSelected && (
-                        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
-                          <div style={{ ...labelStyle, color: '#111' }}>Doors</div>
+                        <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 8, padding: 8, display: 'grid', gap: 8, alignContent: 'start' }}>
+                          <div style={{ ...labelStyle, color: 'var(--crm-text)' }}>Doors</div>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'end', flexWrap: 'wrap' }}>
                             <label style={{ display: 'grid', gap: 4, flex: '1 1 260px', minWidth: 220 }}>
                               <div style={labelStyle}>Type</div>
@@ -3780,7 +3780,7 @@ export default function EstimateEditorPage() {
                             </label>
                           </div>
                           <details style={{ gridColumn: '1 / -1' }}>
-                            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                            <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--crm-muted-strong)' }}>Prime/Prep</summary>
                             <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
                               <label style={{ display: 'grid', gap: 4 }}>
                                 <div style={labelStyle}>Primer Mode</div>
@@ -3870,7 +3870,7 @@ export default function EstimateEditorPage() {
                                   Remove
                                 </button>
                                 <details style={{ gridColumn: '1 / -1' }}>
-                                  <summary style={{ cursor: 'pointer', fontSize: 12, color: '#374151' }}>Prime/Prep</summary>
+                                  <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--crm-muted-strong)' }}>Prime/Prep</summary>
                                   <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
                                     <label style={{ display: 'grid', gap: 4 }}>
                                       <div style={labelStyle}>Primer Mode</div>
@@ -3933,7 +3933,7 @@ export default function EstimateEditorPage() {
                         )}
                       </div>
 
-                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#6b7280', overflowWrap: 'anywhere' }}>
+                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--crm-muted)', overflowWrap: 'anywhere' }}>
                         Trim items map to sheet Trim Menu IDs from Constants: {generatedTrimItems
                           .filter((item) => item.room_id === room.room_id)
                           .map((item) => item.trim_menu_id)
@@ -3953,10 +3953,10 @@ export default function EstimateEditorPage() {
 
         {activeTab === 'Segments' && (
           <div style={{ display: 'grid', gap: 10 }}>
-            <div style={{ fontSize: 12, color: '#4b5563' }}>
+            <div style={{ fontSize: 12, color: 'var(--crm-muted-strong)' }}>
               If a room is set to Segmented, add segments here; wall sqft will be calculated from segments and height.
             </div>
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 10, display: 'grid', gap: 10 }}>
+            <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 10, padding: 10, display: 'grid', gap: 10 }}>
               <button
                 type="button"
                 style={{ ...btnGhost, justifySelf: 'start' }}
@@ -3987,7 +3987,7 @@ export default function EstimateEditorPage() {
                   </div>
 
                   {segments.length === 0 ? (
-                    <div style={{ color: '#6b7280' }}>No segment rows yet.</div>
+                    <div style={{ color: 'var(--crm-muted)' }}>No segment rows yet.</div>
                   ) : (
                     segments
                       .map((row, index) => ({ row, index }))
@@ -4017,7 +4017,7 @@ export default function EstimateEditorPage() {
                             </label>
                             <label style={{ display: 'grid', gap: 4 }}>
                               <div style={labelStyle}>Segment # (Auto)</div>
-                              <input value={row.seg_no} readOnly style={{ ...inputStyle, background: '#f9fafb' }} />
+                              <input value={row.seg_no} readOnly style={{ ...inputStyle, background: 'var(--crm-bg-soft)' }} />
                             </label>
                             <label style={{ display: 'grid', gap: 4 }}>
                               <div style={labelStyle}>Complexity Type</div>
@@ -4130,7 +4130,7 @@ export default function EstimateEditorPage() {
               )}
             </div>
 
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 10, display: 'grid', gap: 10 }}>
+            <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 10, padding: 10, display: 'grid', gap: 10 }}>
               <button
                 type="button"
                 style={{ ...btnGhost, justifySelf: 'start' }}
@@ -4147,7 +4147,7 @@ export default function EstimateEditorPage() {
               {ceilingSegmentsOpen && (
                 <>
                   <div style={{ fontWeight: 800 }}>Ceiling Segments</div>
-                  <div style={{ fontSize: 12, color: '#4b5563' }}>
+                  <div style={{ fontSize: 12, color: 'var(--crm-muted-strong)' }}>
                     INPUT_CeilingSegments rows for ceiling geometry.
                   </div>
                   <div style={{ display: 'grid', gap: 6, gridTemplateColumns: '1fr auto' }}>
@@ -4173,7 +4173,7 @@ export default function EstimateEditorPage() {
                   </div>
 
                   {ceilingSegments.length === 0 ? (
-                    <div style={{ color: '#6b7280' }}>No ceiling segment rows yet.</div>
+                    <div style={{ color: 'var(--crm-muted)' }}>No ceiling segment rows yet.</div>
                   ) : (
                     ceilingSegments
                       .map((row, index) => ({ row, index }))
@@ -4200,7 +4200,7 @@ export default function EstimateEditorPage() {
                           </label>
                           <label style={{ display: 'grid', gap: 4 }}>
                             <div style={labelStyle}>Seg # (Auto)</div>
-                            <input value={row.seg_no} readOnly style={{ ...inputStyle, background: '#f9fafb' }} />
+                            <input value={row.seg_no} readOnly style={{ ...inputStyle, background: 'var(--crm-bg-soft)' }} />
                           </label>
                           <label style={{ display: 'grid', gap: 4 }}>
                             <div style={labelStyle}>Length_in</div>
@@ -4264,15 +4264,15 @@ export default function EstimateEditorPage() {
         {activeTab === 'Rollers' && (
           <div style={{ display: 'grid', gap: 12 }}>
             {(!engineColorList || (engineColorList.wall_colors ?? []).length === 0) && (
-              <div style={{ color: '#6b7280' }}>
+              <div style={{ color: 'var(--crm-muted)' }}>
                 Run Recalculate to load ENGINE_ColorList wall colors for roller selection.
               </div>
             )}
 
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 10, display: 'grid', gap: 8 }}>
+            <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 10, padding: 10, display: 'grid', gap: 8 }}>
               <div style={{ fontWeight: 800, fontSize: 14 }}>Walls Rollers</div>
               {rollersDraft.filter((row) => row.scope === 'Wall').length === 0 && (
-                <div style={{ color: '#6b7280', fontSize: 12 }}>
+                <div style={{ color: 'var(--crm-muted)', fontSize: 12 }}>
                   Add wall colors in Rooms (Walls Include = Y) to generate roller rows.
                 </div>
               )}
@@ -4287,7 +4287,7 @@ export default function EstimateEditorPage() {
                     <div
                       key={`${row.scope}-${row.wall_color_id}-${index}`}
                       style={{
-                        border: '1px solid #e5e7eb',
+                        border: '1px solid var(--crm-border-soft)',
                         borderRadius: 10,
                         padding: 10,
                         display: 'grid',
@@ -4338,7 +4338,7 @@ export default function EstimateEditorPage() {
             </div>
 
             {hasCeilings && (
-              <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 10, display: 'grid', gap: 8 }}>
+              <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 10, padding: 10, display: 'grid', gap: 8 }}>
                 <div style={{ fontWeight: 800, fontSize: 14 }}>Ceiling Roller</div>
                 {rollersDraft
                   .filter((row) => row.scope === 'Ceiling')
@@ -4348,7 +4348,7 @@ export default function EstimateEditorPage() {
                       <div
                         key={`${row.scope}-${index}`}
                         style={{
-                          border: '1px solid #e5e7eb',
+                          border: '1px solid var(--crm-border-soft)',
                           borderRadius: 10,
                           padding: 10,
                           display: 'grid',
@@ -4406,7 +4406,7 @@ export default function EstimateEditorPage() {
                 <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                   <label style={{ display: 'grid', gap: 4 }}>
                     <div style={labelStyle}>Trip #</div>
-                    <input value={trip.trip_num} readOnly style={{ ...inputStyle, background: '#f9fafb' }} />
+                    <input value={trip.trip_num} readOnly style={{ ...inputStyle, background: 'var(--crm-bg-soft)' }} />
                   </label>
                   <label style={{ display: 'grid', gap: 4, gridColumn: '1 / -1' }}>
                     <div style={labelStyle}>Trip Notes</div>
@@ -4420,14 +4420,14 @@ export default function EstimateEditorPage() {
 
                 <div style={{ display: 'grid', gap: 8 }}>
                   {trip.tasks.length === 0 && (
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>No tasks yet. Add a task for this trip.</div>
+                    <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>No tasks yet. Add a task for this trip.</div>
                   )}
                   {trip.tasks.map((task, taskIndex) => (
-                    <div key={task.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, display: 'grid', gap: 8 }}>
+                    <div key={task.id} style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 8, padding: 8, display: 'grid', gap: 8 }}>
                       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
                         <label style={{ display: 'grid', gap: 4 }}>
                           <div style={labelStyle}>Trip #</div>
-                          <input value={trip.trip_num} readOnly style={{ ...inputStyle, background: '#f9fafb' }} />
+                          <input value={trip.trip_num} readOnly style={{ ...inputStyle, background: 'var(--crm-bg-soft)' }} />
                         </label>
                         <label style={{ display: 'grid', gap: 4 }}>
                           <div style={labelStyle}>Entry Type</div>
@@ -4543,7 +4543,7 @@ export default function EstimateEditorPage() {
                     <button onClick={() => addPrejobTask(tripIndex)} style={btnGhost}>
                       {iconLabel(Plus, 'Add Task', 14)}
                     </button>
-                    <div style={{ fontSize: 12, color: '#6b7280', alignSelf: 'center' }}>
+                    <div style={{ fontSize: 12, color: 'var(--crm-muted)', alignSelf: 'center' }}>
                       Choose Template or Manual for each task.
                     </div>
                     <button onClick={() => removePrejobTrip(tripIndex)} style={btnDanger}>
@@ -4561,7 +4561,7 @@ export default function EstimateEditorPage() {
         {activeTab === 'Other' && (
           <div style={{ display: 'grid', gap: 10 }}>
             {otherItems.length === 0 && (
-              <div style={{ fontSize: 12, color: '#6b7280' }}>
+              <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>
                 No custom rows yet. Add an item for manual custom work.
               </div>
             )}
@@ -4688,7 +4688,7 @@ export default function EstimateEditorPage() {
                 </a>
               </div>
             )}
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, display: 'grid', gap: 10 }}>
+            <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 10, padding: 12, display: 'grid', gap: 10 }}>
               <div style={{ fontWeight: 800 }}>Paint Product Selection</div>
               {missingSettings.length > 0 && (
                 <div style={{ border: '1px solid #fcd34d', background: '#fffbeb', borderRadius: 10, padding: 10 }}>
@@ -4862,8 +4862,8 @@ export default function EstimateEditorPage() {
                 ['TrimTotal', 'TRIM & DOORS TOTAL'],
                 ['PreJobTotal', 'Pre-Job Total'],
               ].map(([key, label]) => (
-                <div key={key} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: 12, color: '#6b7280', textTransform: 'uppercase', fontWeight: 800 }}>{label}</div>
+                <div key={key} style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontSize: 12, color: 'var(--crm-muted)', textTransform: 'uppercase', fontWeight: 800 }}>{label}</div>
                   <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900 }}>
                     {formatCurrency(outputs[key])}
                   </div>
@@ -4871,7 +4871,7 @@ export default function EstimateEditorPage() {
               ))}
             </div>
 
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, display: 'grid', gap: 10 }}>
+            <div style={{ border: '1px solid var(--crm-border-soft)', borderRadius: 10, padding: 12, display: 'grid', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                 <div style={{ fontWeight: 800 }}>Advanced Adjustments</div>
                 <button
@@ -4884,7 +4884,7 @@ export default function EstimateEditorPage() {
               </div>
               {advancedAdjustmentsOpen && (
                 <>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>
+                  <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>
                     These values write to INPUT_JobSettings and are intended for post-review adjustments.
                   </div>
                   <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
@@ -4954,7 +4954,7 @@ export default function EstimateEditorPage() {
 }
 
 const inputStyle: CSSProperties = {
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   borderRadius: 10,
   fontSize: 13,
   padding: '8px 10px',
@@ -4963,13 +4963,13 @@ const inputStyle: CSSProperties = {
 
 const labelStyle: CSSProperties = {
   fontSize: 11,
-  color: '#6b7280',
+  color: 'var(--crm-muted)',
   textTransform: 'uppercase',
   fontWeight: 800,
 }
 
 const roomCardStyle: CSSProperties = {
-  border: '1px solid #e5e7eb',
+  border: '1px solid var(--crm-border-soft)',
   borderRadius: 10,
   padding: 10,
   display: 'grid',
@@ -4990,9 +4990,9 @@ const btnPrimary: CSSProperties = {
   gap: 6,
   padding: '10px 14px',
   borderRadius: 12,
-  border: '1px solid #111',
-  background: '#111',
-  color: '#fff',
+  border: '1px solid var(--crm-accent)',
+  background: 'var(--crm-accent)',
+  color: 'var(--crm-accent-text)',
   fontWeight: 800,
   fontSize: 13,
   cursor: 'pointer',
@@ -5005,9 +5005,9 @@ const btnGhost: CSSProperties = {
   gap: 6,
   padding: '8px 12px',
   borderRadius: 12,
-  border: '1px solid #d1d5db',
-  background: '#fff',
-  color: '#111',
+  border: '1px solid var(--crm-border)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text)',
   fontWeight: 700,
   fontSize: 12,
   textDecoration: 'none',

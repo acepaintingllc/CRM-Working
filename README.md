@@ -36,6 +36,21 @@ Or run the full gate in one command:
 npm run check
 ```
 
+## Notes Module Cron
+
+The internal notes reminder runner is available at:
+
+- `POST /api/internal/notes/reminders/run`
+
+Set `NOTES_CRON_SECRET` and send:
+
+- `Authorization: Bearer <NOTES_CRON_SECRET>`
+
+The job sends:
+
+- task reminder emails when `notes_tasks.reminder_at` is due
+- one daily summary email only when there is at least one active overdue or due-today task
+
 ## Google Estimate Sheets
 
 To enable “Create estimate sheet” (copies a Google Sheets template and autofills customer/job fields), set:

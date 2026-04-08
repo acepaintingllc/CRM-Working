@@ -245,8 +245,8 @@ export default function EstimatesPage() {
             style={{
               width: '100%',
               maxWidth: 460,
-              background: '#fff',
-              border: '1px solid #e5e7eb',
+              background: 'var(--crm-card)',
+              border: '1px solid var(--crm-border-soft)',
               borderRadius: 12,
               padding: 14,
               display: 'grid',
@@ -254,7 +254,7 @@ export default function EstimatesPage() {
             }}
           >
             <div style={{ fontWeight: 800, fontSize: 17 }}>Delete Estimate?</div>
-            <div style={{ color: '#4b5563', fontSize: 13 }}>
+            <div style={{ color: 'var(--crm-muted-strong)', fontSize: 13 }}>
               This will permanently delete this estimate and all saved inputs for{' '}
               <strong>{confirmingDelete.job_title ?? 'this job'}</strong>.
             </div>
@@ -265,9 +265,9 @@ export default function EstimatesPage() {
                 style={{
                   padding: '8px 12px',
                   borderRadius: 9,
-                  border: '1px solid #d1d5db',
-                  background: '#fff',
-                  color: '#111',
+                  border: '1px solid var(--crm-border)',
+                  background: 'var(--crm-card)',
+                  color: 'var(--crm-text)',
                   fontWeight: 700,
                   cursor: 'pointer',
                 }}
@@ -282,7 +282,7 @@ export default function EstimatesPage() {
                   borderRadius: 9,
                   border: '1px solid #dc2626',
                   background: '#dc2626',
-                  color: '#fff',
+                  color: 'var(--crm-accent-text)',
                   fontWeight: 800,
                   cursor: 'pointer',
                   opacity: deletingId ? 0.7 : 1,

@@ -227,7 +227,7 @@ export default function JobSchedulePage() {
       <div className="crm-topbar" style={{ marginBottom: 12 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>Schedule job</div>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>
+          <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>
             Add one or more scheduled date ranges for this job.
           </div>
         </div>
@@ -280,8 +280,8 @@ export default function JobSchedulePage() {
             style={{
               padding: '12px',
               borderRadius: 10,
-              background: '#111',
-              color: 'white',
+              background: 'var(--crm-accent)',
+              color: 'var(--crm-accent-text)',
               border: 'none',
               fontWeight: 800,
               cursor: 'pointer',
@@ -296,9 +296,9 @@ export default function JobSchedulePage() {
       </div>
 
       <div style={{ marginTop: 14 }}>
-        {loading && <div style={{ color: '#6b7280' }}>Loading schedule...</div>}
+        {loading && <div style={{ color: 'var(--crm-muted)' }}>Loading schedule...</div>}
         {!loading && sorted.length === 0 && (
-          <div style={{ color: '#6b7280' }}>No schedule blocks yet.</div>
+          <div style={{ color: 'var(--crm-muted)' }}>No schedule blocks yet.</div>
         )}
         {!loading && sorted.length > 0 && (
           <div style={{ display: 'grid', gap: 8 }}>
@@ -306,8 +306,8 @@ export default function JobSchedulePage() {
               <div
                 key={row.id}
                 style={{
-                  background: 'white',
-                  border: '1px solid #e5e7eb',
+                  background: 'var(--crm-card)',
+                  border: '1px solid var(--crm-border-soft)',
                   borderRadius: 12,
                   padding: 12,
                   display: 'flex',
@@ -320,7 +320,7 @@ export default function JobSchedulePage() {
                     {new Date(row.start_at).toLocaleString()} - {new Date(row.end_at).toLocaleString()}
                   </div>
                   {row.notes && (
-                    <div style={{ marginTop: 4, fontSize: 13, color: '#6b7280' }}>{row.notes}</div>
+                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--crm-muted)' }}>{row.notes}</div>
                   )}
                   {row.calendar_event_id && (
                     <div style={{ marginTop: 4, fontSize: 12, color: '#16a34a', fontWeight: 700 }}>
@@ -358,8 +358,8 @@ export default function JobSchedulePage() {
                   padding: '10px 12px',
                   borderRadius: 10,
                   border: 'none',
-                  background: '#111',
-                  color: 'white',
+                  background: 'var(--crm-accent)',
+                  color: 'var(--crm-accent-text)',
                   fontWeight: 800,
                   cursor: 'pointer',
                   opacity: addingCalendar ? 0.7 : 1,
@@ -405,7 +405,7 @@ export default function JobSchedulePage() {
 const inputStyle: React.CSSProperties = {
   padding: '12px',
   borderRadius: 10,
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   fontSize: 14,
   width: '100%',
 }
@@ -413,9 +413,9 @@ const inputStyle: React.CSSProperties = {
 const actionButton: React.CSSProperties = {
   padding: '10px 12px',
   borderRadius: 10,
-  border: '1px solid #e5e7eb',
-  background: 'white',
-  color: '#111',
+  border: '1px solid var(--crm-border-soft)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text)',
   fontWeight: 800,
   fontSize: 14,
   display: 'inline-flex',
@@ -426,7 +426,7 @@ const actionButton: React.CSSProperties = {
 const label: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
-  color: '#6b7280',
+  color: 'var(--crm-muted)',
   textTransform: 'uppercase',
   marginBottom: 6,
 }

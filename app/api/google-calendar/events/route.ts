@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   const month = searchParams.get('month') // YYYY-MM
   const range = month ? monthRange(month) : null
 
-  const limit = readIntParam(searchParams.get('limit'), 20, 1, 100)
+  const limit = readIntParam(searchParams.get('limit'), 20, 1, 250)
   const days = readIntParam(searchParams.get('days'), 30, 1, 90)
 
   const now = new Date()

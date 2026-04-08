@@ -7,12 +7,12 @@ export default function TemplatesLibraryPage() {
   return (
     <div className="crm-page" style={{ maxWidth: 860, margin: '0 auto', display: 'grid', gap: 14 }}>
       <div className="crm-card" style={{ borderRadius: 14, padding: 18 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#6b7280', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--crm-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6 }}>
           <Shapes size={16} aria-hidden="true" />
           Templates library
         </div>
         <h1 style={{ margin: '8px 0 0', fontSize: 24, fontWeight: 900 }}>Templates Library</h1>
-        <p style={{ margin: '6px 0 0', color: '#4b5563', fontSize: 14 }}>
+        <p style={{ margin: '6px 0 0', color: 'var(--crm-muted-strong)', fontSize: 14 }}>
           Central place for reusable customer communication templates.
         </p>
       </div>
@@ -53,12 +53,12 @@ export default function TemplatesLibraryPage() {
 
 const tile: React.CSSProperties = {
   display: 'block',
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   borderRadius: 12,
-  background: 'white',
+  background: 'var(--crm-card)',
   padding: 14,
   textDecoration: 'none',
-  color: '#111',
+  color: 'var(--crm-text)',
 }
 
 const tileTitle: React.CSSProperties = {
@@ -71,7 +71,7 @@ const tileTitle: React.CSSProperties = {
 
 const tileSub: React.CSSProperties = {
   marginTop: 6,
-  color: '#4b5563',
+  color: 'var(--crm-muted-strong)',
   fontSize: 13,
   lineHeight: 1.4,
 }
@@ -83,8 +83,8 @@ const backLink: React.CSSProperties = {
   width: 'fit-content',
   padding: '10px 14px',
   borderRadius: 10,
-  background: '#111',
-  color: 'white',
+  background: 'var(--crm-accent)',
+  color: 'var(--crm-accent-text)',
   textDecoration: 'none',
   fontWeight: 700,
 }

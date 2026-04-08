@@ -7,12 +7,12 @@ export default function SettingsPage() {
   return (
     <div className="crm-page" style={{ maxWidth: 980, margin: '0 auto', display: 'grid', gap: 14 }}>
       <div className="crm-card" style={{ borderRadius: 14, padding: 18 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#6b7280', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--crm-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6 }}>
           <SettingsIcon size={16} aria-hidden="true" />
           Settings
         </div>
         <h1 style={{ margin: '8px 0 0', fontSize: 24, fontWeight: 900 }}>CRM Settings</h1>
-        <p style={{ margin: '6px 0 0', color: '#4b5563', fontSize: 14 }}>
+        <p style={{ margin: '6px 0 0', color: 'var(--crm-muted-strong)', fontSize: 14 }}>
           Manage your company profile, integrations, and templates in one place.
         </p>
       </div>
@@ -48,12 +48,12 @@ export default function SettingsPage() {
 
 const tile: React.CSSProperties = {
   display: 'block',
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   borderRadius: 12,
-  background: 'white',
+  background: 'var(--crm-card)',
   padding: 14,
   textDecoration: 'none',
-  color: '#111',
+  color: 'var(--crm-text)',
 }
 
 const tileTitle: React.CSSProperties = {
@@ -66,7 +66,7 @@ const tileTitle: React.CSSProperties = {
 
 const tileSub: React.CSSProperties = {
   marginTop: 6,
-  color: '#4b5563',
+  color: 'var(--crm-muted-strong)',
   fontSize: 13,
   lineHeight: 1.4,
 }
