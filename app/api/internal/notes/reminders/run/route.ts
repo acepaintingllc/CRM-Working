@@ -313,10 +313,13 @@ async function processDailySummary(params: {
   return { sent: 1, failed: 0, skipped: 0, reason: 'sent' }
 }
 
-export async function POST(request: Request) {
-  const secret = process.env.NOTES_CRON_SECRET
+async function runReminderJob(request: Request) {
+  const secret = process.env.NOTES_CRON_SECRET ?? process.env.CRON_SECRET
   if (!secret) {
-    return NextResponse.json({ error: 'NOTES_CRON_SECRET is not configured.' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'NOTES_CRON_SECRET or CRON_SECRET is not configured.' },
+      { status: 500 }
+    )
   }
 
   const auth = request.headers.get('authorization') ?? ''
@@ -435,4 +438,12 @@ export async function POST(request: Request) {
       skipped: dailySummariesSkipped,
     },
   })
+}
+
+export async function GET(request: Request) {
+  return runReminderJob(request)
+}
+
+export async function POST(request: Request) {
+  return runReminderJob(request)
 }

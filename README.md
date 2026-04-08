@@ -40,11 +40,14 @@ npm run check
 
 The internal notes reminder runner is available at:
 
+- `GET /api/internal/notes/reminders/run`
 - `POST /api/internal/notes/reminders/run`
 
-Set `NOTES_CRON_SECRET` and send:
+Set `NOTES_CRON_SECRET` or `CRON_SECRET` and send:
 
-- `Authorization: Bearer <NOTES_CRON_SECRET>`
+- `Authorization: Bearer <your secret>`
+
+`vercel.json` schedules this route every 10 minutes for Vercel deployments.
 
 The job sends:
 
