@@ -161,7 +161,7 @@ export default function NotesTodayPage() {
                 {data.notes.recent.map((note) => (
                   <Link
                     key={note.id}
-                    href={`/crm/notes/notes?focus=${encodeURIComponent(note.id)}`}
+                    href={`/crm/notes/notes/${encodeURIComponent(note.id)}`}
                     className="rounded-xl border border-gray-200 bg-white p-3 hover:bg-gray-50"
                   >
                     <div className="flex items-start justify-between gap-2">
