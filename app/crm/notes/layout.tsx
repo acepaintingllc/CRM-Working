@@ -18,9 +18,9 @@ export default function NotesLayout({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto grid w-full max-w-5xl gap-4">
       <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="text-xs font-extrabold uppercase tracking-wide text-gray-500">Notes Module</div>
-        <h1 className="mt-1 text-2xl font-extrabold text-gray-900">Notes</h1>
-        <p className="mt-1 text-sm text-gray-600">
+        <div className="text-xs font-extrabold uppercase tracking-wide text-[var(--crm-muted)]">Notes Module</div>
+        <h1 className="mt-1 text-2xl font-extrabold text-[var(--crm-text)]">Notes</h1>
+        <p className="mt-1 text-sm text-[var(--crm-text-soft)]">
           Personal tasks, reminders, and backlog notes in one mobile-first workflow.
         </p>
       </section>
@@ -35,7 +35,7 @@ export default function NotesLayout({ children }: { children: ReactNode }) {
               className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${
                 active
                   ? 'border-black bg-black text-white'
-                  : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+                  : 'border-gray-300 bg-white text-[var(--crm-text)] hover:bg-gray-50'
               }`}
             >
               <tab.Icon size={16} aria-hidden="true" />

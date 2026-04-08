@@ -25,6 +25,8 @@ type SettingsPayload = {
     daily_summary_time_local: string
     timezone: string
     show_upcoming_days: number
+    last_daily_summary_attempted_on?: string | null
+    last_daily_summary_sent_on?: string | null
   }
 }
 
@@ -42,9 +44,11 @@ export default function NotesTodayPage() {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [settingsEmail, setSettingsEmail] = useState('')
-  const [settingsTime, setSettingsTime] = useState('07:00')
+  const [settingsTime, setSettingsTime] = useState('06:00')
   const [settingsTz, setSettingsTz] = useState('America/Chicago')
   const [settingsUpcoming, setSettingsUpcoming] = useState('3')
+  const [lastDailyAttemptedOn, setLastDailyAttemptedOn] = useState<string | null>(null)
+  const [lastDailySentOn, setLastDailySentOn] = useState<string | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null)
   const [logs, setLogs] = useState<ReminderLogRow[]>([])
@@ -70,9 +74,11 @@ export default function NotesTodayPage() {
       if (settingsRes.ok) {
         const typed = settingsPayload as SettingsPayload
         setSettingsEmail(typed.settings.daily_summary_email_to ?? '')
-        setSettingsTime(typed.settings.daily_summary_time_local ?? '07:00')
+        setSettingsTime(typed.settings.daily_summary_time_local ?? '06:00')
         setSettingsTz(typed.settings.timezone ?? 'America/Chicago')
         setSettingsUpcoming(String(typed.settings.show_upcoming_days ?? 3))
+        setLastDailyAttemptedOn(typed.settings.last_daily_summary_attempted_on ?? null)
+        setLastDailySentOn(typed.settings.last_daily_summary_sent_on ?? null)
       }
       if (logsRes.ok) {
         setLogs((logsPayload?.logs ?? []) as ReminderLogRow[])
@@ -155,7 +161,7 @@ export default function NotesTodayPage() {
                 {data.notes.recent.map((note) => (
                   <Link
                     key={note.id}
-                    href={`/crm/notes/notes?focus=${encodeURIComponent(note.id)}`}
+                    href={`/crm/notes/notes/${encodeURIComponent(note.id)}`}
                     className="rounded-xl border border-gray-200 bg-white p-3 hover:bg-gray-50"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -220,11 +226,21 @@ export default function NotesTodayPage() {
               {settingsSaving ? 'Saving...' : 'Save Settings'}
             </button>
             {settingsMsg && <div className="text-sm text-gray-600">{settingsMsg}</div>}
+            <div className="text-xs text-gray-500">
+              Daily summary last attempted: {lastDailyAttemptedOn ?? 'Never'}
+            </div>
+            <div className="text-xs text-gray-500">
+              Daily summary last sent: {lastDailySentOn ?? 'Never'}
+            </div>
           </section>
 
           <section className="grid gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
             <h3 className="text-base font-extrabold text-gray-900">Recent Reminder Logs</h3>
-            {logs.length === 0 && <div className="text-sm text-gray-500">No reminder logs yet.</div>}
+            {logs.length === 0 && (
+              <div className="text-sm text-gray-500">
+                No reminder logs yet. If this stays empty, the reminder cron job is probably not running.
+              </div>
+            )}
             {logs.map((log) => (
               <div key={log.id} className="rounded-xl border border-gray-200 p-3 text-sm">
                 <div className="font-bold text-gray-900">

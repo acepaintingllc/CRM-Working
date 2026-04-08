@@ -40,11 +40,15 @@ npm run check
 
 The internal notes reminder runner is available at:
 
+- `GET /api/internal/notes/reminders/run`
 - `POST /api/internal/notes/reminders/run`
 
-Set `NOTES_CRON_SECRET` and send:
+Set `NOTES_CRON_SECRET` or `CRON_SECRET` and send:
 
-- `Authorization: Bearer <NOTES_CRON_SECRET>`
+- `Authorization: Bearer <your secret>`
+
+`vercel.json` schedules this route twice daily at `11:00 UTC` and `12:00 UTC`.
+That covers `06:00` in `America/Chicago` across daylight saving time changes. The first run before the local send window skips, and the first run at or after `06:00` sends the daily summary once.
 
 The job sends:
 

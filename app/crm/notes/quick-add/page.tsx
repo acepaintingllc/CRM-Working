@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { FolderRow, RecurrenceFrequency, RecurrenceRule, RecurrenceUnit } from '../_lib'
 import { recurrenceOptions, recurrenceUnitOptions, toIsoFromLocal } from '../_lib'
+import { useSearchParams } from 'next/navigation'
 
 type Mode = 'task' | 'note'
 
@@ -16,6 +17,7 @@ function localDateTimeToIso(value: string) {
 }
 
 export default function NotesQuickAddPage() {
+  const searchParams = useSearchParams()
   const [mode, setMode] = useState<Mode>('task')
   const [folders, setFolders] = useState<FolderRow[]>([])
   const [saving, setSaving] = useState(false)
@@ -50,6 +52,19 @@ export default function NotesQuickAddPage() {
     }
     void loadFolders()
   }, [])
+
+  useEffect(() => {
+    const requestedMode = searchParams.get('mode')
+    const requestedFolderId = searchParams.get('folder')
+
+    if (requestedMode === 'note') {
+      setMode('note')
+    }
+    if (requestedFolderId) {
+      setMode('note')
+      setNoteFolderId(requestedFolderId)
+    }
+  }, [searchParams])
 
   const taskRecurrencePayload = useMemo(() => {
     if (!taskRecurrence) return null
