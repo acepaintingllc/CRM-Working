@@ -80,7 +80,7 @@ export default function JobEstimatePage() {
       <div className="crm-topbar" style={{ marginBottom: 12 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>Set estimate date</div>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Pick the estimate time for this job.</div>
+          <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>Pick the estimate time for this job.</div>
         </div>
         <Link href={`/crm/jobs/${id}`} style={{ ...actionButton, textDecoration: 'none' }}>
           Back to job
@@ -107,8 +107,8 @@ export default function JobEstimatePage() {
             style={{
               padding: '12px',
               borderRadius: 10,
-              background: '#111',
-              color: 'white',
+              background: 'var(--crm-accent)',
+              color: 'var(--crm-accent-text)',
               border: 'none',
               fontWeight: 800,
               cursor: 'pointer',
@@ -126,7 +126,7 @@ export default function JobEstimatePage() {
 const inputStyle: React.CSSProperties = {
   padding: '12px',
   borderRadius: 10,
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   fontSize: 14,
   width: '100%',
 }
@@ -134,9 +134,9 @@ const inputStyle: React.CSSProperties = {
 const actionButton: React.CSSProperties = {
   padding: '10px 12px',
   borderRadius: 10,
-  border: '1px solid #e5e7eb',
-  background: 'white',
-  color: '#111',
+  border: '1px solid var(--crm-border-soft)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text)',
   fontWeight: 800,
   fontSize: 14,
 }
@@ -144,7 +144,7 @@ const actionButton: React.CSSProperties = {
 const label: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
-  color: '#6b7280',
+  color: 'var(--crm-muted)',
   textTransform: 'uppercase',
   marginBottom: 6,
 }

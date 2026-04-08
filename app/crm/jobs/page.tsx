@@ -608,7 +608,7 @@ export default function JobsPage() {
                                   style={
                                     job.scheduled_email_sent_at
                                       ? smallButton
-                                      : { ...smallButton, background: '#111', border: '1px solid #111', color: '#fff' }
+                                      : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
                                   }
                                 >
                                   {iconLabel(
@@ -638,7 +638,7 @@ export default function JobsPage() {
                                 style={
                                   job.scheduled_email_sent_at
                                     ? smallButton
-                                    : { ...smallButton, background: '#111', border: '1px solid #111', color: '#fff' }
+                                    : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
                                 }
                               >
                                 {iconLabel(
@@ -675,7 +675,7 @@ export default function JobsPage() {
                                   style={
                                     job.completed_email_sent_at
                                       ? smallButton
-                                      : { ...smallButton, background: '#111', border: '1px solid #111', color: '#fff' }
+                                      : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
                                   }
                                 >
                                   {iconLabel(Mail, 'Open closeout')}
@@ -688,7 +688,7 @@ export default function JobsPage() {
                               style={
                                 job.completed_email_sent_at
                                   ? smallButton
-                                  : { ...smallButton, background: '#111', border: '1px solid #111', color: '#fff' }
+                                  : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
                               }
                             >
                               {iconLabel(Mail, 'Open closeout')}
@@ -726,9 +726,9 @@ export default function JobsPage() {
 const smallButton: React.CSSProperties = {
   padding: '6px 10px',
   borderRadius: 10,
-  border: '1px solid #d1d5db',
-  background: 'white',
-  color: '#1f2937',
+  border: '1px solid var(--crm-border)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text-soft)',
   fontWeight: 700,
   fontSize: 12,
   cursor: 'pointer',

@@ -1043,7 +1043,7 @@ export default function SimpleEstimatePage() {
       <div className="crm-topbar" style={{ marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#173427' }}>Simple estimate</h1>
-          <p style={{ margin: 0, color: '#6b7280' }}>
+          <p style={{ margin: 0, color: 'var(--crm-muted)' }}>
             {job?.title ?? 'Job'} {job?.status ? `(${job.status.replaceAll('_', ' ')})` : ''}
           </p>
         </div>
@@ -1055,14 +1055,14 @@ export default function SimpleEstimatePage() {
       </div>
 
       <div className="crm-card se-card" style={{ borderRadius: 12, padding: 16 }}>
-        {loading && <div style={{ color: '#6b7280' }}>Loading simple estimate...</div>}
+        {loading && <div style={{ color: 'var(--crm-muted)' }}>Loading simple estimate...</div>}
         {!loading && error && (
-          <div style={{ marginTop: 10, background: '#fff', border: '1px solid #fecaca', borderRadius: 12, padding: 12, color: '#991b1b' }}>
+          <div style={{ marginTop: 10, background: 'var(--crm-card)', border: '1px solid #fecaca', borderRadius: 12, padding: 12, color: '#991b1b' }}>
             {error}
           </div>
         )}
         {!loading && notice && (
-          <div style={{ marginTop: 10, background: '#fff', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12, color: '#166534' }}>
+          <div style={{ marginTop: 10, background: 'var(--crm-card)', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12, color: '#166534' }}>
             {notice}
           </div>
         )}
@@ -1108,7 +1108,7 @@ export default function SimpleEstimatePage() {
                 {simpleRooms.map((room, index) => (
                   <div
                     key={room.id ?? `room-${index}`}
-                    style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'white' }}
+                    style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'var(--crm-card)' }}
                   >
                     <div className="se-grid se-rooms-grid" style={{ display: 'grid', gridTemplateColumns: '2fr repeat(3, 1fr) 0.7fr 0.7fr 0.7fr auto', gap: 8 }}>
                     <input
@@ -1179,7 +1179,7 @@ export default function SimpleEstimatePage() {
                     />
                     <button
                       onClick={() => removeSimpleRoom(index)}
-                      style={{ ...smallButton, background: '#fff' }}
+                      style={{ ...smallButton, background: 'var(--crm-card)' }}
                     >
                       Remove
                     </button>
@@ -1306,7 +1306,7 @@ export default function SimpleEstimatePage() {
                 {ceilingRooms.map((room, index) => (
                   <div
                     key={room.id ?? `ceiling-${index}`}
-                    style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'white' }}
+                    style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'var(--crm-card)' }}
                   >
                     <div className="se-grid se-ceiling-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: 8 }}>
                     <select
@@ -1384,7 +1384,7 @@ export default function SimpleEstimatePage() {
                     </select>
                     <button
                       onClick={() => removeCeilingRoom(index)}
-                      style={{ ...smallButton, background: '#fff' }}
+                      style={{ ...smallButton, background: 'var(--crm-card)' }}
                     >
                       Remove
                     </button>
@@ -1438,7 +1438,7 @@ export default function SimpleEstimatePage() {
                 {trimItems.map((row, index) => (
                   <div
                     key={row.id ?? `trim-${index}`}
-                    style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'white' }}
+                    style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'var(--crm-card)' }}
                   >
                     <div className="se-grid se-trim-item-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8 }}>
                     <select
@@ -1492,7 +1492,7 @@ export default function SimpleEstimatePage() {
                     </select>
                     <button
                       onClick={() => removeTrimItem(index)}
-                      style={{ ...smallButton, background: '#fff' }}
+                      style={{ ...smallButton, background: 'var(--crm-card)' }}
                     >
                       Remove
                     </button>
@@ -1524,7 +1524,7 @@ export default function SimpleEstimatePage() {
                 {trimPaints.map((row, index) => (
                   <div
                     key={row.id ?? `trim-paint-${index}`}
-                    style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'white' }}
+                    style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'var(--crm-card)' }}
                   >
                     <div className="se-grid se-trim-paint-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8 }}>
                     <select
@@ -1554,7 +1554,7 @@ export default function SimpleEstimatePage() {
                     />
                     <button
                       onClick={() => removeTrimPaint(index)}
-                      style={{ ...smallButton, background: '#fff' }}
+                      style={{ ...smallButton, background: 'var(--crm-card)' }}
                     >
                       Remove
                     </button>
@@ -1584,7 +1584,7 @@ export default function SimpleEstimatePage() {
                     border: '1px solid #d9e5de',
                     borderRadius: 10,
                     padding: 10,
-                    background: 'white',
+                    background: 'var(--crm-card)',
                     display: 'grid',
                     gap: 10,
                   }}
@@ -1670,7 +1670,7 @@ export default function SimpleEstimatePage() {
                     {colorGroups.slice(0, colorCount).map((group) => (
                       <div
                         key={group.color_group}
-                        style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'white' }}
+                        style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'var(--crm-card)' }}
                       >
                         <div
                           className="se-grid se-color-grid"
@@ -1758,7 +1758,7 @@ export default function SimpleEstimatePage() {
                     {wallRooms.map((room, index) => (
                       <div
                         key={room.id ?? `wall-${index}`}
-                        style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'white' }}
+                        style={{ border: '1px solid #d9e5de', borderRadius: 10, padding: 10, background: 'var(--crm-card)' }}
                       >
                         <div className="se-grid se-wall-room-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8 }}>
                         <select
@@ -1811,7 +1811,7 @@ export default function SimpleEstimatePage() {
                           <option value="med">Medium</option>
                           <option value="high">Heavy</option>
                         </select>
-                        <button onClick={() => removeWallRoom(index)} style={{ ...smallButton, background: '#fff' }}>
+                        <button onClick={() => removeWallRoom(index)} style={{ ...smallButton, background: 'var(--crm-card)' }}>
                           Remove
                         </button>
                         </div>
@@ -1863,13 +1863,13 @@ export default function SimpleEstimatePage() {
               <button
                 onClick={() => void generateSimpleWallPdf()}
                 disabled={generatingSimplePdf || job.status !== 'estimate_scheduled'}
-                style={{ ...smallButton, background: '#111', color: 'white', border: '1px solid #111' }}
+                style={{ ...smallButton, background: 'var(--crm-accent)', color: 'var(--crm-accent-text)', border: '1px solid var(--crm-accent)' }}
               >
                 {generatingSimplePdf ? 'Generating PDF...' : 'Generate simple estimate PDF'}
               </button>
             </div>
 
-            <div style={{ marginTop: 10, fontSize: 12, color: '#6b7280' }}>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--crm-muted)' }}>
               Total wall sqft preview: {Math.round(wallTotals.wallSqft)} ({wallTotals.roomCount} rooms)
             </div>
 
@@ -1877,9 +1877,9 @@ export default function SimpleEstimatePage() {
               <div
                 style={{
                   marginTop: 10,
-                  border: '1px solid #d1d5db',
+                  border: '1px solid var(--crm-border)',
                   borderRadius: 10,
-                  background: 'white',
+                  background: 'var(--crm-card)',
                   padding: 10,
                   display: 'grid',
                   gap: 8,
@@ -1907,7 +1907,7 @@ export default function SimpleEstimatePage() {
                 <div className="crm-actions" style={{ gap: 8 }}>
                   <button
                     onClick={() => router.push(`/crm/jobs/${id}?compose=estimate_sent`)}
-                    style={{ ...smallButton, background: '#111', color: 'white', border: '1px solid #111' }}
+                    style={{ ...smallButton, background: 'var(--crm-accent)', color: 'var(--crm-accent-text)', border: '1px solid var(--crm-accent)' }}
                   >
                     Review &amp; send estimate
                   </button>
@@ -1961,7 +1961,7 @@ export default function SimpleEstimatePage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   borderRadius: 10,
   fontSize: 14,
   width: '100%',
@@ -1971,9 +1971,9 @@ const inputStyle: React.CSSProperties = {
 const smallButton: React.CSSProperties = {
   padding: '6px 10px',
   borderRadius: 10,
-  border: '1px solid #d1d5db',
-  background: 'white',
-  color: '#111',
+  border: '1px solid var(--crm-border)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text)',
   fontWeight: 700,
   fontSize: 12,
   cursor: 'pointer',

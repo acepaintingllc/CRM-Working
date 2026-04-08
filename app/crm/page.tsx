@@ -7,10 +7,13 @@ import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowRight,
+  BellRing,
   CalendarCheck,
   CircleX,
   DollarSign,
   LayoutDashboard,
+  Link2,
+  NotebookText,
   Plus,
   Search,
   Settings,
@@ -37,6 +40,36 @@ type DashboardCustomer = {
   address: string | null
 }
 
+type CalendarEvent = {
+  id: string
+  calendarId: string
+  summary: string | null
+  start: string | null
+  end: string | null
+  htmlLink: string | null
+}
+
+type NotesTaskSignal = {
+  id: string
+  title: string
+  description: string | null
+  due_at: string | null
+  is_all_day: boolean
+  has_due_time: boolean
+}
+
+type NotesDashboardPayload = {
+  tasks: {
+    overdue: NotesTaskSignal[]
+    due_today: NotesTaskSignal[]
+  }
+}
+
+type NotesReminderSignal = {
+  kind: 'overdue' | 'due_today'
+  task: NotesTaskSignal
+}
+
 const iconSizeSm = 16
 const iconSizeMd = 18
 
@@ -47,6 +80,99 @@ function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
       <span>{label}</span>
     </span>
   )
+}
+
+const selectedCalendarsStorageKey = 'acecrm.calendar.selected'
+
+function readStoredCalendarIds() {
+  try {
+    const raw = localStorage.getItem(selectedCalendarsStorageKey)
+    const parsed = raw ? JSON.parse(raw) : null
+    if (!Array.isArray(parsed)) return null
+    const ids = parsed.filter((value) => typeof value === 'string' && value.trim().length > 0)
+    return ids.length > 0 ? (ids as string[]) : null
+  } catch {
+    return null
+  }
+}
+
+function monthKeyLocal(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
+}
+
+function isDateOnly(value: string | null | undefined) {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))
+}
+
+function parseDate(value: string | null | undefined) {
+  if (!value) return null
+  if (isDateOnly(value)) {
+    const [year, month, day] = value.split('-').map((part) => Number(part))
+    if (!year || !month || !day) return null
+    return new Date(year, month - 1, day)
+  }
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function eventOccursToday(event: CalendarEvent, now: Date) {
+  const start = parseDate(event.start)
+  if (!start) return false
+
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const tomorrowStart = new Date(todayStart)
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1)
+
+  if (isDateOnly(event.start)) {
+    const end = parseDate(event.end)
+    const eventEnd = end ?? new Date(start.getTime() + 24 * 60 * 60 * 1000)
+    return start < tomorrowStart && eventEnd > todayStart
+  }
+
+  const end = parseDate(event.end) ?? start
+  return start < tomorrowStart && end >= todayStart
+}
+
+function eventSortValue(event: CalendarEvent) {
+  const start = parseDate(event.start)
+  return start?.getTime() ?? Number.MAX_SAFE_INTEGER
+}
+
+function formatEventWindow(start: string | null, end: string | null) {
+  const startDate = parseDate(start)
+  const endDate = parseDate(end)
+  if (!startDate) return 'Time TBD'
+  if (isDateOnly(start) && isDateOnly(end)) {
+    return `${startDate.toLocaleDateString()} (all day)`
+  }
+  if (isDateOnly(start) && !end) {
+    return `${startDate.toLocaleDateString()} (all day)`
+  }
+  if (endDate) {
+    const sameDay =
+      startDate.getFullYear() === endDate.getFullYear() &&
+      startDate.getMonth() === endDate.getMonth() &&
+      startDate.getDate() === endDate.getDate()
+    if (sameDay) {
+      return `${startDate.toLocaleDateString()} | ${startDate.toLocaleTimeString([], {
+        hour: 'numeric',
+        minute: '2-digit',
+      })} - ${endDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+    }
+    return `${startDate.toLocaleString()} - ${endDate.toLocaleString()}`
+  }
+  return startDate.toLocaleString()
+}
+
+function sortNotesSignals(signals: NotesReminderSignal[]) {
+  return [...signals].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'overdue' ? -1 : 1
+    const aDue = a.task.due_at ? new Date(a.task.due_at).getTime() : Number.MAX_SAFE_INTEGER
+    const bDue = b.task.due_at ? new Date(b.task.due_at).getTime() : Number.MAX_SAFE_INTEGER
+    return aDue - bDue
+  })
 }
 
 export default function CRMHome() {
@@ -60,6 +186,12 @@ export default function CRMHome() {
   const [jobs, setJobs] = useState<DashboardJob[]>([])
   const [customers, setCustomers] = useState<DashboardCustomer[]>([])
   const [search, setSearch] = useState('')
+  const [signalsLoading, setSignalsLoading] = useState(false)
+  const [calendarConnected, setCalendarConnected] = useState<boolean | null>(null)
+  const [calendarError, setCalendarError] = useState<string | null>(null)
+  const [notesError, setNotesError] = useState<string | null>(null)
+  const [calendarTodayEvents, setCalendarTodayEvents] = useState<CalendarEvent[]>([])
+  const [notesReminders, setNotesReminders] = useState<NotesReminderSignal[]>([])
   const greeting = useMemo(() => {
     const hour = new Date().getHours()
     if (hour < 12) return 'Good morning'
@@ -109,6 +241,90 @@ export default function CRMHome() {
     void loadCustomers()
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    const loadSignals = async () => {
+      setSignalsLoading(true)
+      setCalendarError(null)
+      setNotesError(null)
+
+      const now = new Date()
+      let nextCalendarConnected: boolean | null = null
+      let nextCalendarError: string | null = null
+      let nextCalendarTodayEvents: CalendarEvent[] = []
+      let nextNotesError: string | null = null
+      let nextNotesReminders: NotesReminderSignal[] = []
+
+      const [calendarStatusRes, notesDashboardRes] = await Promise.all([
+        authedFetch('/api/google-calendar/status', { cache: 'no-store' }),
+        authedFetch('/api/notes/dashboard', { cache: 'no-store' }),
+      ])
+
+      const calendarStatusPayload = await calendarStatusRes.json().catch(() => null)
+      const notesDashboardPayload = await notesDashboardRes.json().catch(() => null)
+
+      if (!calendarStatusRes.ok) {
+        nextCalendarConnected = false
+        nextCalendarError = calendarStatusPayload?.error ?? 'Unable to load calendar status.'
+      } else {
+        nextCalendarConnected = Boolean(calendarStatusPayload?.connected)
+      }
+
+      if (nextCalendarConnected) {
+        const params = new URLSearchParams()
+        params.set('month', monthKeyLocal(now))
+        params.set('limit', '250')
+        const selected = readStoredCalendarIds()
+        if (selected && selected.length > 0) {
+          params.set('calendar_ids', selected.join(','))
+        } else {
+          params.set('calendar_ids', 'primary')
+        }
+
+        const eventsRes = await authedFetch(`/api/google-calendar/events?${params.toString()}`, {
+          cache: 'no-store',
+        })
+        const eventsPayload = await eventsRes.json().catch(() => null)
+
+        if (!eventsRes.ok) {
+          nextCalendarError = eventsPayload?.error ?? 'Unable to load calendar events.'
+        } else {
+          const events = (eventsPayload?.events ?? []) as CalendarEvent[]
+          nextCalendarTodayEvents = events
+            .filter((event) => eventOccursToday(event, now))
+            .sort((a, b) => eventSortValue(a) - eventSortValue(b))
+            .slice(0, 8)
+        }
+      }
+
+      if (!notesDashboardRes.ok) {
+        nextNotesError = notesDashboardPayload?.error ?? 'Unable to load notes reminders.'
+      } else {
+        const typed = notesDashboardPayload as NotesDashboardPayload
+        const overdue = (typed.tasks?.overdue ?? []).map((task) => ({ kind: 'overdue' as const, task }))
+        const dueToday = (typed.tasks?.due_today ?? []).map((task) => ({
+          kind: 'due_today' as const,
+          task,
+        }))
+        nextNotesReminders = sortNotesSignals([...overdue, ...dueToday]).slice(0, 8)
+      }
+
+      if (cancelled) return
+      setCalendarConnected(nextCalendarConnected)
+      setCalendarError(nextCalendarError)
+      setCalendarTodayEvents(nextCalendarTodayEvents)
+      setNotesError(nextNotesError)
+      setNotesReminders(nextNotesReminders)
+      setSignalsLoading(false)
+    }
+
+    void loadSignals()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return { customers: [], jobs: [] }
@@ -140,7 +356,7 @@ export default function CRMHome() {
             </span>
           </div>
           <h1 className="m-0 text-2xl font-extrabold text-gray-900 md:text-3xl">
-            {greeting}, Austin <span aria-hidden="true">👋</span>
+            {greeting}, Austin
           </h1>
           <p className="text-sm text-gray-600 md:text-[15px]">
             Here&rsquo;s what&rsquo;s happening with your business today.
@@ -312,6 +528,139 @@ export default function CRMHome() {
             </Link>
           </div>
         </div>
+
+        <div className="crm-card grid gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-extrabold uppercase tracking-wide text-gray-500">
+                {iconLabel(Link2, 'Today Signals')}
+              </div>
+              <h2 className="mt-1 text-lg font-extrabold text-gray-900">Do I Have Anything Today?</h2>
+              <p className="mt-1 text-sm text-gray-600">Calendar today + notes reminders in one quick scan.</p>
+            </div>
+          </div>
+
+          {signalsLoading && (
+            <div className="text-sm text-gray-500">Loading today signals...</div>
+          )}
+
+          {!signalsLoading && (
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="inline-flex items-center gap-1.5 text-sm font-extrabold text-gray-900">
+                    <CalendarCheck size={16} aria-hidden="true" />
+                    <span>Calendar Today</span>
+                  </div>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-extrabold text-gray-700">
+                    {calendarConnected ? calendarTodayEvents.length : 0}
+                  </span>
+                </div>
+
+                {calendarConnected === false ? (
+                  <div className="grid gap-2">
+                    <div className="text-sm text-gray-600">Google Calendar is not connected.</div>
+                    <Link
+                      href="/crm/calendar"
+                      className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-xs font-extrabold text-white"
+                    >
+                      <CalendarCheck size={14} aria-hidden="true" />
+                      <span>Connect Google</span>
+                    </Link>
+                  </div>
+                ) : calendarError ? (
+                  <div className="grid gap-2">
+                    <div className="text-sm text-red-700">{calendarError}</div>
+                    <Link href="/crm/calendar" className="text-xs font-bold text-gray-700 underline">
+                      Open calendar
+                    </Link>
+                  </div>
+                ) : calendarTodayEvents.length === 0 ? (
+                  <div className="text-sm text-gray-500">No calendar items today.</div>
+                ) : (
+                  <div className="grid gap-2">
+                    {calendarTodayEvents.map((event) => (
+                      <div key={`${event.calendarId}:${event.id}`} className="rounded-lg border border-gray-200 p-2">
+                        <div className="text-sm font-bold text-gray-900">{event.summary ?? '(No title)'}</div>
+                        <div className="text-xs text-gray-600">{formatEventWindow(event.start, event.end)}</div>
+                        {event.htmlLink && (
+                          <a
+                            href={event.htmlLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-flex text-xs font-bold text-gray-700 underline"
+                          >
+                            Open event
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="inline-flex items-center gap-1.5 text-sm font-extrabold text-gray-900">
+                    <BellRing size={16} aria-hidden="true" />
+                    <span>Notes Reminders</span>
+                  </div>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-extrabold text-gray-700">
+                    {notesReminders.length}
+                  </span>
+                </div>
+
+                {notesError ? (
+                  <div className="grid gap-2">
+                    <div className="text-sm text-red-700">{notesError}</div>
+                    <Link href="/crm/notes" className="text-xs font-bold text-gray-700 underline">
+                      Open notes
+                    </Link>
+                  </div>
+                ) : notesReminders.length === 0 ? (
+                  <div className="text-sm text-gray-500">No notes reminders today.</div>
+                ) : (
+                  <div className="grid gap-2">
+                    {notesReminders.map((signal) => (
+                      <Link
+                        key={`${signal.kind}:${signal.task.id}`}
+                        href={`/crm/notes/tasks?focus=${encodeURIComponent(signal.task.id)}`}
+                        className="rounded-lg border border-gray-200 p-2 hover:bg-gray-50"
+                      >
+                        <div className="text-sm font-bold text-gray-900">{signal.task.title}</div>
+                        <div className="text-xs text-gray-600">
+                          {signal.kind === 'overdue' ? 'Overdue' : 'Due today'} |{' '}
+                          {formatTaskDue(
+                            signal.task.due_at,
+                            signal.task.is_all_day,
+                            signal.task.has_due_time
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/crm/calendar"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-extrabold text-gray-900 transition hover:bg-gray-50"
+            >
+              <CalendarCheck size={14} aria-hidden="true" />
+              <span>Open calendar</span>
+            </Link>
+            <Link
+              href="/crm/notes"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-extrabold text-gray-900 transition hover:bg-gray-50"
+            >
+              <NotebookText size={14} aria-hidden="true" />
+              <span>Open notes</span>
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -386,4 +735,12 @@ function formatCurrency(value: number) {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+function formatTaskDue(iso: string | null, allDay: boolean, hasDueTime: boolean) {
+  if (!iso) return 'No due date'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  if (allDay || !hasDueTime) return date.toLocaleDateString()
+  return date.toLocaleString()
 }

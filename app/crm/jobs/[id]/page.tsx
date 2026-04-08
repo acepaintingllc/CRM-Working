@@ -662,7 +662,7 @@ export default function JobDetailPage() {
                     {job.status === 'estimate_scheduled' && (
                       <button
                         onClick={() => openStageEmail('estimate_scheduled')}
-                        style={{ ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }}
+                        style={{ ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }}
                       >
                         {iconLabel(Mail, 'Edit & send estimate scheduled')}
                       </button>
@@ -696,7 +696,7 @@ export default function JobDetailPage() {
                         style={
                           job.scheduled_email_sent_at
                             ? smallButton
-                            : { ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }
+                            : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
                         }
                       >
                         {iconLabel(
@@ -749,7 +749,7 @@ export default function JobDetailPage() {
                     {job.status === 'scheduled' && (
                       <button
                         onClick={() => void markCompletedAndPrompt()}
-                        style={{ ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }}
+                        style={{ ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }}
                       >
                         {iconLabel(CheckCircle2, 'Mark completed')}
                       </button>
@@ -761,7 +761,7 @@ export default function JobDetailPage() {
                         style={
                           job.completed_email_sent_at
                             ? smallButton
-                            : { ...smallButton, background: '#111', border: '1px solid #111', color: 'white' }
+                            : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
                         }
                       >
                         {iconLabel(Mail, 'Open closeout')}
@@ -872,9 +872,9 @@ export default function JobDetailPage() {
 }
 
 const actionButton: React.CSSProperties = {
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   borderRadius: 10,
-  background: 'white',
+  background: 'var(--crm-card)',
   height: 34,
   padding: '0 10px',
   cursor: 'pointer',
@@ -889,9 +889,9 @@ const smallButton: React.CSSProperties = {
   height: 34,
   padding: '0 10px',
   borderRadius: 10,
-  border: '1px solid #d1d5db',
-  background: 'white',
-  color: '#111',
+  border: '1px solid var(--crm-border)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text)',
   fontWeight: 700,
   fontSize: 12,
   cursor: 'pointer',

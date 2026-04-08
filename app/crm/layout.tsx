@@ -11,16 +11,36 @@ import {
   CalendarDays,
   Calculator,
   Cog,
+  FileText,
   Home,
   Users,
   Wrench,
 } from "lucide-react";
+
+type ThemeMode = "system" | "light" | "dark";
+
+const themeStorageKey = "acecrm.theme";
+
+function isThemeMode(value: string | null): value is ThemeMode {
+  return value === "system" || value === "light" || value === "dark";
+}
+
+function resolveTheme(mode: ThemeMode) {
+  if (mode !== "system") return mode;
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(mode: ThemeMode) {
+  document.documentElement.dataset.theme = resolveTheme(mode);
+}
 
 export default function CrmLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>("system");
   const logoSrc = process.env.NEXT_PUBLIC_CRM_LOGO || "/ace-logo-clean.png";
   const iconSize = 16;
   const navItems = useMemo(
@@ -29,11 +49,27 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       { href: "/crm/customers", label: "Customers", Icon: Users },
       { href: "/crm/jobs", label: "Job Center", Icon: Wrench },
       { href: "/crm/estimates", label: "Estimates", Icon: Calculator },
+      { href: "/crm/notes", label: "Notes", Icon: FileText },
       { href: "/crm/calendar", label: "Calendar", Icon: CalendarDays },
       { href: "/crm/settings", label: "Settings", Icon: Cog },
     ],
     []
   );
+
+  useEffect(() => {
+    const stored = localStorage.getItem(themeStorageKey);
+    const initialTheme = isThemeMode(stored) ? stored : "system";
+    setTheme(initialTheme);
+    applyTheme(initialTheme);
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => {
+      const current = localStorage.getItem(themeStorageKey);
+      if (!current || current === "system") applyTheme("system");
+    };
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -83,6 +119,12 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
     };
   }, [router, pathname]);
 
+  const updateTheme = (nextTheme: ThemeMode) => {
+    setTheme(nextTheme);
+    localStorage.setItem(themeStorageKey, nextTheme);
+    applyTheme(nextTheme);
+  };
+
   if (!ready) return null;
 
   return (
@@ -90,9 +132,8 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       className="crm-shell"
       style={{
         minHeight: "100vh",
-        color: "#111",
-        background:
-          "radial-gradient(1200px circle at top left, #ffffff 0%, #f6f7fb 35%, #eef1f6 100%)",
+        color: "var(--crm-text)",
+        background: "var(--crm-bg)",
       }}
     >
       <div className="crm-topbar" style={{ marginBottom: 16 }}>
@@ -100,10 +141,9 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
           style={{
             width: "100%",
             borderRadius: 16,
-            border: "1px solid #d7dde8",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(248,250,253,0.9) 100%)",
-            boxShadow: "0 8px 24px rgba(17,24,39,0.06)",
+            border: "1px solid var(--crm-border)",
+            background: "var(--crm-nav-bg)",
+            boxShadow: "var(--crm-shadow)",
             backdropFilter: "blur(8px)",
             padding: 10,
             display: "grid",
@@ -127,7 +167,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                 gap: 10,
                 fontWeight: 900,
                 fontSize: 18,
-                color: "#111",
+                color: "var(--crm-text)",
                 textDecoration: "none",
               }}
             >
@@ -137,8 +177,8 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                     width: 42,
                     height: 42,
                     borderRadius: 12,
-                    background: "#fff",
-                    border: "1px solid #d1d5db",
+                    background: "var(--crm-card)",
+                    border: "1px solid var(--crm-border)",
                     display: "grid",
                     placeItems: "center",
                     overflow: "hidden",
@@ -158,6 +198,36 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
               )}
               <span>ACE Painting CRM</span>
             </Link>
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 12,
+                fontWeight: 800,
+                color: "var(--crm-muted)",
+              }}
+            >
+              Theme
+              <select
+                value={theme}
+                onChange={(event) => updateTheme(event.target.value as ThemeMode)}
+                style={{
+                  height: 34,
+                  borderRadius: 10,
+                  border: "1px solid var(--crm-border)",
+                  background: "var(--crm-input)",
+                  color: "var(--crm-text)",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  padding: "0 8px",
+                }}
+              >
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
           </div>
           <nav className="crm-nav" style={{ gap: 10 }}>
           {navItems.map((item) => {
@@ -175,15 +245,15 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                   textDecoration: "none",
                   fontWeight: 700,
                   fontSize: 14,
-                  color: active ? "white" : "#1f2937",
+                  color: active ? "var(--crm-accent-text)" : "var(--crm-text-soft)",
                   background: active
-                    ? "linear-gradient(135deg, #111827 0%, #1f2937 100%)"
-                    : "rgba(255,255,255,0.9)",
-                  border: active ? "1px solid #111827" : "1px solid #d1d5db",
+                    ? "linear-gradient(135deg, var(--crm-accent) 0%, var(--crm-accent-strong) 100%)"
+                    : "var(--crm-nav-link)",
+                  border: active ? "1px solid var(--crm-accent)" : "1px solid var(--crm-border)",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 7,
-                  boxShadow: active ? "0 4px 14px rgba(17,24,39,0.22)" : "none",
+                  boxShadow: active ? "var(--crm-shadow-active)" : "none",
                 }}
               >
                 <Icon size={iconSize} aria-hidden="true" />

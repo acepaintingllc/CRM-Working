@@ -97,7 +97,7 @@ export default function EmailTemplatesPage() {
     <div className="crm-page" style={{ maxWidth: 900, margin: '0 auto' }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Email templates</h1>
-        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: 'var(--crm-muted)', marginTop: 4 }}>
           Draft templates per job stage. Variables will be filled later from the customer/job.
         </div>
       </div>
@@ -135,7 +135,7 @@ export default function EmailTemplatesPage() {
             </button>
           </div>
 
-          {saved && <div style={{ marginTop: 8, color: '#6b7280', fontSize: 13 }}>{saved}</div>}
+          {saved && <div style={{ marginTop: 8, color: 'var(--crm-muted)', fontSize: 13 }}>{saved}</div>}
 
           <div style={{ marginTop: 12 }}>
             <div style={label}>Subject</div>
@@ -157,7 +157,7 @@ export default function EmailTemplatesPage() {
             />
           </div>
 
-          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--crm-muted)' }}>
             For the Estimate sent stage, the latest estimate PDF is attached automatically. Use{' '}
             {'{{estimateFileName}}'} or {'{{estimateFileLink}}'} if you want to mention it.
           </div>
@@ -172,8 +172,8 @@ export default function EmailTemplatesPage() {
                   style={{
                     padding: '6px 10px',
                     borderRadius: 999,
-                    border: '1px solid #e5e7eb',
-                    background: '#f9fafb',
+                    border: '1px solid var(--crm-border-soft)',
+                    background: 'var(--crm-bg-soft)',
                     cursor: 'pointer',
                     fontWeight: 800,
                     fontSize: 12,
@@ -193,9 +193,9 @@ export default function EmailTemplatesPage() {
 const button: React.CSSProperties = {
   padding: '10px 12px',
   borderRadius: 10,
-  border: '1px solid #e5e7eb',
-  background: 'white',
-  color: '#111',
+  border: '1px solid var(--crm-border-soft)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text)',
   fontWeight: 800,
   fontSize: 14,
   cursor: 'pointer',
@@ -204,7 +204,7 @@ const button: React.CSSProperties = {
 const input: React.CSSProperties = {
   padding: '12px',
   borderRadius: 10,
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   fontSize: 14,
   width: '100%',
 }
@@ -212,7 +212,7 @@ const input: React.CSSProperties = {
 const label: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
-  color: '#6b7280',
+  color: 'var(--crm-muted)',
   textTransform: 'uppercase',
   marginBottom: 6,
 }

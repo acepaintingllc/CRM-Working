@@ -31,7 +31,7 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
             <Users size={18} aria-hidden="true" />
             <span>Customers</span>
           </div>
-          <div style={{ fontSize: 12, color: "#6b7280" }}>
+          <div style={{ fontSize: 12, color: "var(--crm-muted)" }}>
             {loading ? "Loading org..." : orgId ? `Org: ${orgId}` : "Org: -"}
           </div>
         </div>
@@ -42,7 +42,7 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
       {error && (
         <div
           style={{
-            background: "#fff",
+            background: "var(--crm-card)",
             border: "1px solid #fecaca",
             borderRadius: 12,
             padding: 12,
@@ -58,8 +58,8 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
             style={{
               padding: "10px 12px",
               borderRadius: 10,
-              background: "#111",
-              color: "white",
+              background: "var(--crm-accent)",
+              color: "var(--crm-accent-text)",
               border: "none",
               cursor: "pointer",
               fontWeight: 700,
@@ -77,11 +77,11 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
       {!showChildren ? (
         <div
           style={{
-            background: "#fff",
-            border: "1px solid #e5e7eb",
+            background: "var(--crm-card)",
+            border: "1px solid var(--crm-border-soft)",
             borderRadius: 12,
             padding: 14,
-            color: "#6b7280",
+            color: "var(--crm-muted)",
           }}
         >
           {loading ? "Loading..." : "Org not ready. Hit Retry above."}

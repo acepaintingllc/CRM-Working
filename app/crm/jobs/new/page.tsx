@@ -383,7 +383,7 @@ export default function NewJobPage() {
       <div className="crm-topbar" style={{ marginBottom: 12 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 800 }}>New Job</div>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>
+          <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>
             Pick a stage, assign a customer, and optionally add estimate/scheduled events to Google Calendar.
           </div>
         </div>
@@ -394,7 +394,7 @@ export default function NewJobPage() {
 
       <div className="crm-card" style={{ borderRadius: 12, padding: 14 }}>
         {loading ? (
-          <div style={{ color: '#6b7280' }}>Loading customers...</div>
+          <div style={{ color: 'var(--crm-muted)' }}>Loading customers...</div>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
             <div>
@@ -419,7 +419,7 @@ export default function NewJobPage() {
               />
               <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
                 {filteredCustomers.length === 0 ? (
-                  <div style={{ color: '#6b7280', fontSize: 13 }}>No matches.</div>
+                  <div style={{ color: 'var(--crm-muted)', fontSize: 13 }}>No matches.</div>
                 ) : (
                   filteredCustomers.map((c) => {
                     const active = c.id === customerId
@@ -486,7 +486,7 @@ export default function NewJobPage() {
                     onChange={(e) => setEstimateDateLocal(e.target.value)}
                     style={inputStyle}
                   />
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+                  <div style={{ fontSize: 12, color: 'var(--crm-muted)', marginTop: 6 }}>
                     Defaults to 8:00 AM. Creates a 1 hour estimate event in Austin&apos;s work if enabled.
                   </div>
                 </div>
@@ -499,12 +499,12 @@ export default function NewJobPage() {
                     onChange={(e) => setScheduledDateLocal(e.target.value)}
                     style={inputStyle}
                   />
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+                  <div style={{ fontSize: 12, color: 'var(--crm-muted)', marginTop: 6 }}>
                     Defaults to 8:00 AM. Creates an 8 hour scheduled event in Austin&apos;s work if enabled.
                   </div>
                 </div>
               ) : (
-                <div style={{ gridColumn: '1 / -1', color: '#6b7280', fontSize: 13 }}>
+                <div style={{ gridColumn: '1 / -1', color: 'var(--crm-muted)', fontSize: 13 }}>
                   No date/time needed for this stage.
                 </div>
               )}
@@ -547,7 +547,7 @@ export default function NewJobPage() {
                         onChange={(e) => setEstimateHours(Number(e.target.value))}
                         style={{ ...inputStyle, width: 120 }}
                       />
-                      <div style={{ fontSize: 13, color: '#6b7280', alignSelf: 'center' }}>hours</div>
+                      <div style={{ fontSize: 13, color: 'var(--crm-muted)', alignSelf: 'center' }}>hours</div>
                     </div>
                   </div>
                 </div>
@@ -559,17 +559,17 @@ export default function NewJobPage() {
                       Edit & send
                     </button>
                   </div>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+                  <div style={{ fontSize: 12, color: 'var(--crm-muted)', marginTop: 6 }}>
                     Uses the estimate date/time above to confirm the appointment.
                   </div>
 
                   {composeStage === 'estimate_scheduled' && (
                     <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
                       {composeLoading ? (
-                        <div style={{ color: '#6b7280' }}>Loading template...</div>
+                        <div style={{ color: 'var(--crm-muted)' }}>Loading template...</div>
                       ) : (
                         <>
-                          <div style={{ fontSize: 12, fontWeight: 800, color: '#6b7280', textTransform: 'uppercase' }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--crm-muted)', textTransform: 'uppercase' }}>
                             Subject
                           </div>
                           <input
@@ -577,7 +577,7 @@ export default function NewJobPage() {
                             onChange={(e) => setComposeSubject(e.target.value)}
                             style={{ ...inputStyle, padding: '10px' }}
                           />
-                          <div style={{ fontSize: 12, fontWeight: 800, color: '#6b7280', textTransform: 'uppercase' }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--crm-muted)', textTransform: 'uppercase' }}>
                             Body
                           </div>
                           <textarea
@@ -589,7 +589,7 @@ export default function NewJobPage() {
                             <button
                               onClick={() => void save({ sendEstimateScheduled: true })}
                               disabled={saving || sendingStage === 'estimate_scheduled'}
-                              style={{ ...smallButton, background: '#111', color: 'white', border: '1px solid #111' }}
+                              style={{ ...smallButton, background: 'var(--crm-accent)', color: 'var(--crm-accent-text)', border: '1px solid var(--crm-accent)' }}
                             >
                               {sendingStage === 'estimate_scheduled' ? 'Sending...' : 'Create job & send email'}
                             </button>
@@ -639,7 +639,7 @@ export default function NewJobPage() {
                       onChange={(e) => setScheduledHours(Number(e.target.value))}
                       style={{ ...inputStyle, width: 120 }}
                     />
-                    <div style={{ fontSize: 13, color: '#6b7280', alignSelf: 'center' }}>hours</div>
+                    <div style={{ fontSize: 13, color: 'var(--crm-muted)', alignSelf: 'center' }}>hours</div>
                   </div>
                 </div>
               </div>
@@ -647,9 +647,9 @@ export default function NewJobPage() {
 
             {error && <div style={{ color: '#b91c1c', fontSize: 14 }}>{error}</div>}
             {createdJobId && error && (
-              <div style={{ fontSize: 13, color: '#6b7280' }}>
+              <div style={{ fontSize: 13, color: 'var(--crm-muted)' }}>
                 Job created.{' '}
-                <Link href={`/crm/jobs/${createdJobId}`} style={{ color: '#111', fontWeight: 700 }}>
+                <Link href={`/crm/jobs/${createdJobId}`} style={{ color: 'var(--crm-text)', fontWeight: 700 }}>
                   Open job
                 </Link>
               </div>
@@ -662,8 +662,8 @@ export default function NewJobPage() {
                 marginTop: 2,
                 padding: '12px',
                 borderRadius: 10,
-                background: '#111',
-                color: 'white',
+                background: 'var(--crm-accent)',
+                color: 'var(--crm-accent-text)',
                 border: 'none',
                 fontWeight: 800,
                 cursor: 'pointer',
@@ -682,7 +682,7 @@ export default function NewJobPage() {
 const inputStyle: React.CSSProperties = {
   padding: '12px',
   borderRadius: 10,
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--crm-border)',
   fontSize: 14,
   width: '100%',
 }
@@ -690,9 +690,9 @@ const inputStyle: React.CSSProperties = {
 const actionButton: React.CSSProperties = {
   padding: '10px 12px',
   borderRadius: 10,
-  border: '1px solid #e5e7eb',
-  background: 'white',
-  color: '#111',
+  border: '1px solid var(--crm-border-soft)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text)',
   fontWeight: 800,
   fontSize: 14,
 }
@@ -700,9 +700,9 @@ const actionButton: React.CSSProperties = {
 const smallButton: React.CSSProperties = {
   padding: '8px 10px',
   borderRadius: 10,
-  border: '1px solid #d1d5db',
-  background: 'white',
-  color: '#111',
+  border: '1px solid var(--crm-border)',
+  background: 'var(--crm-card)',
+  color: 'var(--crm-text)',
   fontWeight: 800,
   fontSize: 12,
   cursor: 'pointer',
@@ -711,14 +711,14 @@ const smallButton: React.CSSProperties = {
 const label: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
-  color: '#6b7280',
+  color: 'var(--crm-muted)',
   textTransform: 'uppercase',
   marginBottom: 6,
 }
 
 const panel: React.CSSProperties = {
-  background: '#f9fafb',
-  border: '1px solid #e5e7eb',
+  background: 'var(--crm-bg-soft)',
+  border: '1px solid var(--crm-border-soft)',
   borderRadius: 12,
   padding: 12,
 }
