@@ -1,4 +1,5 @@
 import { getValidAccessToken } from '@/lib/server/googleCalendar'
+import { supabaseAdmin } from '@/lib/server/org'
 
 function base64UrlEncode(value: Buffer | string) {
   const buf = typeof value === 'string' ? Buffer.from(value) : value
@@ -11,6 +12,42 @@ function base64UrlEncode(value: Buffer | string) {
 
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+function pickOrgText(row: Record<string, unknown>, candidates: string[]) {
+  for (const key of candidates) {
+    const raw = row[key]
+    if (typeof raw === 'string' && raw.trim()) return raw.trim()
+  }
+  return null
+}
+
+function sanitizeHeaderValue(value: string) {
+  return value.replace(/[\r\n]+/g, ' ').trim()
+}
+
+function formatMailboxHeader(name: string | null, email: string | null) {
+  if (!email) return null
+  const safeEmail = sanitizeHeaderValue(email)
+  if (!safeEmail) return null
+
+  const safeName = name ? sanitizeHeaderValue(name).replace(/"/g, '\\"') : ''
+  return safeName ? `"${safeName}" <${safeEmail}>` : safeEmail
+}
+
+async function getOrgSenderProfile(orgId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('orgs')
+    .select('*')
+    .eq('id', orgId)
+    .maybeSingle()
+  if (error) throw error
+
+  const row = (data ?? {}) as Record<string, unknown>
+  return {
+    fromName: pickOrgText(row, ['name', 'business_name', 'company_name']) ?? 'ACE Painting',
+    fromEmail: pickOrgText(row, ['business_email', 'email', 'company_email', 'from_email']),
+  }
 }
 
 export async function sendGmailMessage(params: {
@@ -29,9 +66,12 @@ export async function sendGmailMessage(params: {
   })
   if ('error' in access) return { error: access.error } as const
 
+  const sender = await getOrgSenderProfile(params.orgId)
+  const fromHeader = formatMailboxHeader(sender.fromName, sender.fromEmail)
   const boundary = `acecrm_${Date.now()}`
 
   let raw = ''
+  if (fromHeader) raw += `From: ${fromHeader}\r\n`
   raw += `To: ${params.to}\r\n`
   raw += `Subject: ${params.subject}\r\n`
   raw += 'MIME-Version: 1.0\r\n'
