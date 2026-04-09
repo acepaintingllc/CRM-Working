@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { sendGmailMessage } from '@/lib/server/googleMail'
 import { downloadDriveFile, findLatestEstimateFile } from '@/lib/server/googleDrive'
+import { checkLocalRateLimit } from '@/lib/server/rateLimit'
 import type { EmailSendStatus } from '@/lib/email/types'
 
 const uuid =
@@ -71,6 +72,8 @@ type CustomerRow = {
   address: string | null
 }
 
+type OrgRow = Record<string, unknown>
+
 type ScheduleRow = { start_at: string | null; end_at: string | null }
 
 type EmailLogStatusPersistent = Extract<EmailSendStatus, 'pending' | 'sent' | 'failed' | 'blocked'>
@@ -95,11 +98,58 @@ type EstimateAttachment = {
   matchMode?: string | null
 }
 
+type SupabaseLikeError = {
+  code?: string | null
+  message?: string | null
+}
+
 function missingJobsColumnFromError(message: string) {
   const byCache = message.match(/Could not find the '([a-zA-Z0-9_]+)' column of 'jobs' in the schema cache/i)
   if (byCache?.[1]) return byCache[1]
   const byRelation = message.match(/column "([a-zA-Z0-9_]+)" of relation "jobs" does not exist/i)
   if (byRelation?.[1]) return byRelation[1]
+  return null
+}
+
+function emailLogSchemaIssueFromError(message: string) {
+  const byCache = message.match(
+    /Could not find the '([a-zA-Z0-9_]+)' column of 'email_log' in the schema cache/i
+  )
+  if (byCache?.[1]) return `missing column ${byCache[1]}`
+
+  const byRelationColumn = message.match(
+    /column "([a-zA-Z0-9_]+)" of relation "email_log" does not exist/i
+  )
+  if (byRelationColumn?.[1]) return `missing column ${byRelationColumn[1]}`
+
+  if (
+    /relation "email_log" does not exist/i.test(message) ||
+    /Could not find the table 'email_log' in the schema cache/i.test(message)
+  ) {
+    return 'missing table'
+  }
+
+  return null
+}
+
+function isEmailLogSchemaIssue(error: SupabaseLikeError | null | undefined) {
+  if (!error) return false
+  return Boolean(emailLogSchemaIssueFromError(error.message ?? ''))
+}
+
+function logEmailLogFallback(step: string, error: SupabaseLikeError | null | undefined) {
+  const reason = emailLogSchemaIssueFromError(error?.message ?? '') ?? error?.message ?? 'unknown error'
+  console.warn(`[send-stage] email_log unavailable during ${step}; falling back`, {
+    reason,
+    code: error?.code ?? null,
+  })
+}
+
+function pickOrgText(row: OrgRow, candidates: string[]) {
+  for (const key of candidates) {
+    const raw = row[key]
+    if (typeof raw === 'string' && raw.trim()) return raw.trim()
+  }
   return null
 }
 
@@ -259,6 +309,7 @@ async function logBlockedResponse(args: {
   userId: string
   jobId: string
   stage: Stage
+  fromEmail: string
   idempotencyKey: string
   toEmail: string | null
   subject: string | null
@@ -272,6 +323,7 @@ async function logBlockedResponse(args: {
       org_id: args.orgId,
       job_id: args.jobId,
       stage: args.stage,
+      from_email: args.fromEmail,
       to_email: args.toEmail,
       subject: args.subject,
       body: args.bodyText,
@@ -287,6 +339,19 @@ async function logBlockedResponse(args: {
     return replayResponse(args.orgId, args.idempotencyKey)
   }
   if (blockedInsert.error) {
+    if (isEmailLogSchemaIssue(blockedInsert.error)) {
+      logEmailLogFallback('blocked_insert', blockedInsert.error)
+      return NextResponse.json(
+        {
+          ok: false,
+          status: 'blocked' as EmailSendStatus,
+          replayed: false,
+          error: args.errorMessage,
+        },
+        { status: args.statusCode }
+      )
+    }
+    console.error('[send-stage] blocked email_log insert failed', blockedInsert.error)
     return NextResponse.json({ error: 'Unable to create email delivery log.' }, { status: 500 })
   }
 
@@ -333,6 +398,19 @@ export async function POST(
   if (!idempotencyKey || idempotencyKey.length > 200) {
     return NextResponse.json({ error: 'Missing idempotency_key' }, { status: 400 })
   }
+
+  const orgRes = await supabaseAdmin
+    .from('orgs')
+    .select('*')
+    .eq('id', orgId)
+    .maybeSingle()
+  if (orgRes.error) {
+    return NextResponse.json({ error: 'Unable to load organization profile.' }, { status: 500 })
+  }
+  const orgRow = (orgRes.data ?? {}) as OrgRow
+  const fromEmail =
+    pickOrgText(orgRow, ['business_email', 'email', 'company_email', 'from_email']) ??
+    'no-reply@local.invalid'
 
   const replay = await getEmailLogByKey(orgId, idempotencyKey)
   if (replay) {
@@ -410,6 +488,7 @@ export async function POST(
       userId,
       jobId: id,
       stage: typedStage,
+      fromEmail,
       idempotencyKey,
       toEmail: null,
       subject: subjectDraft ?? null,
@@ -425,6 +504,7 @@ export async function POST(
       userId,
       jobId: id,
       stage: typedStage,
+      fromEmail,
       idempotencyKey,
       toEmail: null,
       subject: subjectDraft ?? null,
@@ -440,6 +520,7 @@ export async function POST(
       userId,
       jobId: id,
       stage: typedStage,
+      fromEmail,
       idempotencyKey,
       toEmail: customerRow.email,
       subject: subjectDraft ?? null,
@@ -455,6 +536,7 @@ export async function POST(
       userId,
       jobId: id,
       stage: typedStage,
+      fromEmail,
       idempotencyKey,
       toEmail: customerRow.email,
       subject: subjectDraft ?? null,
@@ -470,6 +552,7 @@ export async function POST(
       userId,
       jobId: id,
       stage: typedStage,
+      fromEmail,
       idempotencyKey,
       toEmail: customerRow.email,
       subject: subjectDraft ?? null,
@@ -485,6 +568,7 @@ export async function POST(
       userId,
       jobId: id,
       stage: typedStage,
+      fromEmail,
       idempotencyKey,
       toEmail: customerRow.email,
       subject: subjectDraft ?? null,
@@ -506,7 +590,28 @@ export async function POST(
     .in('status', throttleStatuses)
 
   if (throttleError) {
-    return NextResponse.json({ error: 'Unable to validate send limits.' }, { status: 500 })
+    if (isEmailLogSchemaIssue(throttleError)) {
+      logEmailLogFallback('throttle_check', throttleError)
+      const localRate = checkLocalRateLimit({
+        key: `send-stage:${orgId}:${userId}:${id}:${typedStage}`,
+        max: throttleMaxAttempts,
+        windowMs: throttleWindowMs,
+      })
+      if (!localRate.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            status: 'blocked' as EmailSendStatus,
+            replayed: false,
+            error: 'Too many send attempts. Please wait and retry.',
+          },
+          { status: 429 }
+        )
+      }
+    } else {
+      console.error('[send-stage] email_log throttle check failed', throttleError)
+      return NextResponse.json({ error: 'Unable to validate send limits.' }, { status: 500 })
+    }
   }
   if ((attemptCount ?? 0) >= throttleMaxAttempts) {
     return logBlockedResponse({
@@ -514,6 +619,7 @@ export async function POST(
       userId,
       jobId: id,
       stage: typedStage,
+      fromEmail,
       idempotencyKey,
       toEmail: customerRow.email,
       subject: subjectDraft ?? null,
@@ -539,6 +645,7 @@ export async function POST(
         userId,
         jobId: id,
         stage: typedStage,
+        fromEmail,
         idempotencyKey,
         toEmail: customerRow.email,
         subject: subjectDraft ?? null,
@@ -560,6 +667,7 @@ export async function POST(
         userId,
         jobId: id,
         stage: typedStage,
+        fromEmail,
         idempotencyKey,
         toEmail: customerRow.email,
         subject: subjectDraft ?? null,
@@ -599,12 +707,14 @@ export async function POST(
   const subject = subjectOverride ?? applyTemplate(template.subject ?? '', vars)
   const bodyText = bodyOverride ?? applyTemplate(template.body ?? '', vars)
 
+  let deliveryLogUnavailable = false
   const pendingInsert = await supabaseAdmin
     .from('email_log')
     .insert({
       org_id: orgId,
       job_id: id,
       stage: typedStage,
+      from_email: fromEmail,
       to_email: customerRow.email,
       subject,
       body: bodyText,
@@ -619,10 +729,22 @@ export async function POST(
     return replayResponse(orgId, idempotencyKey)
   }
   if (pendingInsert.error || !pendingInsert.data) {
-    return NextResponse.json({ error: 'Unable to create email delivery log.' }, { status: 500 })
+    if (isEmailLogSchemaIssue(pendingInsert.error)) {
+      logEmailLogFallback('pending_insert', pendingInsert.error)
+      deliveryLogUnavailable = true
+    } else if (typedStage === 'estimate_sent') {
+      console.warn('[send-stage] estimate_sent proceeding without delivery log', {
+        code: pendingInsert.error?.code ?? null,
+        message: pendingInsert.error?.message ?? 'unknown error',
+      })
+      deliveryLogUnavailable = true
+    } else {
+      console.error('[send-stage] email_log insert failed', pendingInsert.error)
+      return NextResponse.json({ error: 'Unable to create email delivery log.' }, { status: 500 })
+    }
   }
 
-  const logRow = pendingInsert.data as EmailLogRow
+  const logRow = pendingInsert.data ? (pendingInsert.data as EmailLogRow) : null
   const send = await sendGmailMessage({
     origin: new URL(request.url).origin,
     orgId,
@@ -635,14 +757,16 @@ export async function POST(
 
   if ('error' in send) {
     const normalized = normalizeErrorMessage(send.error, 'Unable to send email.')
-    await supabaseAdmin
-      .from('email_log')
-      .update({
-        status: 'failed',
-        error_message: normalized,
-      })
-      .eq('org_id', orgId)
-      .eq('id', logRow.id)
+    if (logRow) {
+      await supabaseAdmin
+        .from('email_log')
+        .update({
+          status: 'failed',
+          error_message: normalized,
+        })
+        .eq('org_id', orgId)
+        .eq('id', logRow.id)
+    }
 
     return NextResponse.json(
       {
@@ -657,18 +781,22 @@ export async function POST(
 
   const sentAtIso = new Date().toISOString()
   const warnings: string[] = []
-  const logUpdate = await supabaseAdmin
-    .from('email_log')
-    .update({
-      status: 'sent',
-      gmail_message_id: send.messageId ?? null,
-      error_message: null,
-      sent_at: sentAtIso,
-    })
-    .eq('org_id', orgId)
-    .eq('id', logRow.id)
-  if (logUpdate.error) {
-    warnings.push('Email sent, but failed to update delivery log.')
+  if (logRow) {
+    const logUpdate = await supabaseAdmin
+      .from('email_log')
+      .update({
+        status: 'sent',
+        gmail_message_id: send.messageId ?? null,
+        error_message: null,
+        sent_at: sentAtIso,
+      })
+      .eq('org_id', orgId)
+      .eq('id', logRow.id)
+    if (logUpdate.error) {
+      warnings.push('Email sent, but failed to update delivery log.')
+    }
+  } else if (deliveryLogUnavailable) {
+    warnings.push('Email sent, but delivery logging is unavailable.')
   }
 
   let updatedJob: Record<string, unknown> | null = null
