@@ -146,6 +146,16 @@ body {
   border-radius: 12px;
 }
 
+.crm-btn-primary {
+  border: 1px solid var(--crm-accent);
+  background: var(--crm-accent);
+  color: var(--crm-accent-text);
+}
+
+.crm-btn-primary:disabled {
+  opacity: 0.6;
+}
+
 input,
 textarea,
 select {
@@ -168,7 +178,11 @@ a {
   background-color: var(--crm-card) !important;
 }
 
-:root[data-theme='dark'] .bg-white\/90 {
+:root[data-theme='dark'] .bg-white\/95,
+:root[data-theme='dark'] .bg-white\/92,
+:root[data-theme='dark'] .bg-white\/90,
+:root[data-theme='dark'] .bg-white\/80,
+:root[data-theme='dark'] .bg-white\/70 {
   background-color: color-mix(in srgb, var(--crm-card) 90%, transparent) !important;
 }
 
@@ -199,8 +213,10 @@ a {
 
 :root[data-theme='dark'] .bg-black.text-white,
 :root[data-theme='dark'] .bg-gray-900.text-white,
+:root[data-theme='dark'] .bg-slate-900.text-white,
 :root[data-theme='dark'] .text-white.bg-black,
-:root[data-theme='dark'] .text-white.bg-gray-900 {
+:root[data-theme='dark'] .text-white.bg-gray-900,
+:root[data-theme='dark'] .text-white.bg-slate-900 {
   color: var(--crm-accent-text) !important;
 }
 
@@ -218,6 +234,9 @@ a {
 :root[data-theme='dark'] .border-gray-200,
 :root[data-theme='dark'] .border-gray-300,
 :root[data-theme='dark'] .border-gray-400,
+:root[data-theme='dark'] .border-white\/80,
+:root[data-theme='dark'] .border-white\/75,
+:root[data-theme='dark'] .border-white\/70,
 :root[data-theme='dark'] .border-slate-200,
 :root[data-theme='dark'] .border-slate-300,
 :root[data-theme='dark'] .border-slate-400 {

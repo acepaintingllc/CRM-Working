@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
+import ServiceWorkerRegister from "./ServiceWorkerRegister";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ACE Painting",
   description: "ACE Painting CRM",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ACE Field Cam",
+  },
 };
 
 const themeScript = `
@@ -29,6 +36,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>

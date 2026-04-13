@@ -16,6 +16,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeft,
   CalendarCheck,
+  Camera,
   CheckCircle2,
   Circle,
   ChevronDown,
@@ -64,6 +65,13 @@ type JobPhoto = {
   url: string
   caption: string | null
   created_at: string
+}
+
+type SitePhoto = {
+  id: string
+  url: string
+  caption: string | null
+  captured_at: string | null
 }
 
 type EstimateDriveFile = {
@@ -118,6 +126,7 @@ export default function JobDetailPage() {
   const [estimateFileError, setEstimateFileError] = useState<string | null>(null)
   const [paintLogs, setPaintLogs] = useState<PaintLogRow[]>([])
   const [afterPhotos, setAfterPhotos] = useState<JobPhoto[]>([])
+  const [sitePhotos, setSitePhotos] = useState<SitePhoto[]>([])
 
   useEffect(() => {
     if (typeof id !== 'string' || !id) {
@@ -136,6 +145,7 @@ export default function JobDetailPage() {
       setEstimateFileError(null)
       setPaintLogs([])
       setAfterPhotos([])
+      setSitePhotos([])
       const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
@@ -146,15 +156,17 @@ export default function JobDetailPage() {
       }
       setJob(payload?.job ?? null)
 
-      const [estimateRes, paintLogsRes, photosRes] = await Promise.all([
+      const [estimateRes, paintLogsRes, photosRes, sitePhotosRes] = await Promise.all([
         authedFetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' }),
         authedFetch(`/api/jobs/${id}/paint-logs`, { cache: 'no-store' }),
         authedFetch(`/api/jobs/${id}/photos`, { cache: 'no-store' }),
+        authedFetch(`/api/jobs/${id}/site-photos`, { cache: 'no-store' }),
       ])
 
       const estimatePayload = await estimateRes.json().catch(() => null)
       const paintLogsPayload = await paintLogsRes.json().catch(() => null)
       const photosPayload = await photosRes.json().catch(() => null)
+      const sitePhotosPayload = await sitePhotosRes.json().catch(() => null)
 
       if (estimateRes.ok && estimatePayload?.file) {
         setEstimateFile(estimatePayload.file as EstimateDriveFile)
@@ -186,6 +198,11 @@ export default function JobDetailPage() {
         setAfterPhotos(rows.filter((row) => row.phase === 'after'))
       } else {
         setAfterPhotos([])
+      }
+      if (sitePhotosRes.ok && Array.isArray(sitePhotosPayload?.photos)) {
+        setSitePhotos(sitePhotosPayload.photos as SitePhoto[])
+      } else {
+        setSitePhotos([])
       }
       setLoading(false)
     }
@@ -475,6 +492,8 @@ export default function JobDetailPage() {
     job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
       ? 'Open linked estimate'
       : 'Open estimate'
+  const otherLinkedEstimates =
+    (job?.linked_estimates ?? []).filter((row) => row.id !== job?.linked_estimate_id) ?? []
 
   return (
     <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
@@ -657,8 +676,37 @@ export default function JobDetailPage() {
                     </div>
                   </div>
                 )}
+                {sitePhotos.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-extrabold tracking-wide text-gray-500 uppercase">
+                      Field Photos
+                    </div>
+                    <div className="mt-2 grid gap-1">
+                      {sitePhotos.slice(0, 8).map((photo) => (
+                        <a
+                          key={photo.id}
+                          href={photo.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-gray-800 underline"
+                        >
+                          {photo.caption?.trim()
+                            ? photo.caption
+                            : `Field photo - ${formatDate(photo.captured_at)}`}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="mt-5 grid gap-3">
                   <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/field/jobs/${id}`}
+                      style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                    >
+                      {iconLabel(Camera, 'Open field camera')}
+                    </Link>
+
                     {job.status === 'estimate_scheduled' && (
                       <button
                         onClick={() => openStageEmail('estimate_scheduled')}
@@ -680,6 +728,37 @@ export default function JobDetailPage() {
                     >
                       {iconLabel(FileText, linkedEstimateLabel)}
                     </Link>
+                    {otherLinkedEstimates.length > 0 && (
+                      <details
+                        style={{
+                          ...smallButton,
+                          padding: '6px 8px',
+                          background: 'var(--crm-card)',
+                          border: '1px solid var(--crm-border)',
+                        }}
+                      >
+                        <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+                          Other estimates ({otherLinkedEstimates.length})
+                        </summary>
+                        <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                          {otherLinkedEstimates.map((row, index) => (
+                            <Link
+                              key={row.id}
+                              href={`/crm/estimates/${row.id}`}
+                              style={{
+                                ...smallButton,
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              {`Estimate ${index + 2}`}
+                            </Link>
+                          ))}
+                        </div>
+                      </details>
+                    )}
 
                     {job.status !== 'estimate_scheduled' && (
                       <Link

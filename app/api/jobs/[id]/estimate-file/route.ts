@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
-import { findLatestEstimateFile } from '@/lib/server/googleDrive'
+import { findLatestEstimateFile, findMatchingEstimateFiles } from '@/lib/server/googleDrive'
 
 type JobRecord = { customer_id: string | null }
 
@@ -42,6 +42,27 @@ export async function GET(
   if (!customer?.address) return NextResponse.json({ error: 'Customer address missing.' }, { status: 400 })
 
   const origin = new URL(request.url).origin
+  const url = new URL(request.url)
+  const includeAll = url.searchParams.get('all') === '1'
+
+  if (includeAll) {
+    const matches = await findMatchingEstimateFiles({
+      origin,
+      orgId,
+      userId,
+      address: customer.address,
+    })
+    if ('error' in matches) {
+      console.warn('[estimate-file] no-match', { jobId: id, reason: matches.error })
+      return NextResponse.json({ error: matches.error }, { status: 404 })
+    }
+    const latest = matches.files[0] ?? null
+    if (!latest) {
+      return NextResponse.json({ error: 'No matching estimate file found in Drive.' }, { status: 404 })
+    }
+    return NextResponse.json({ latest, files: matches.files })
+  }
+
   const result = await findLatestEstimateFile({
     origin,
     orgId,
@@ -61,7 +82,6 @@ export async function GET(
     matchMode: result.file.matchMode ?? null,
   })
 
-  const url = new URL(request.url)
   const shouldRedirect = url.searchParams.get('redirect') === '1'
   if (shouldRedirect && result.file.webViewLink) {
     return NextResponse.redirect(result.file.webViewLink)

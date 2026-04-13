@@ -45,6 +45,8 @@ type EmailTemplate = {
 type EstimateDriveFile = {
   id: string
   name: string
+  version?: number | null
+  matchMode?: 'exact' | 'normalized' | 'manual' | string
   webViewLink?: string | null
 }
 
@@ -118,8 +120,19 @@ function applyTemplate(
   value: string,
   job: JobEmailDetails | null,
   scheduledBlocks: string,
-  estimateFile: EstimateDriveFile | null
+  estimateFiles: EstimateDriveFile[],
+  selectedEstimateFileIds: string[]
 ) {
+  const selectedEstimateFiles = selectedEstimateFileIds
+    .map((id) => estimateFiles.find((file) => file.id === id) ?? null)
+    .filter((file): file is EstimateDriveFile => Boolean(file))
+  const primaryEstimateFile = selectedEstimateFiles[0] ?? null
+  const estimateFileNames = selectedEstimateFiles.map((file) => file.name).join(', ')
+  const estimateFileLinks = selectedEstimateFiles
+    .map((file) => file.webViewLink ?? '')
+    .filter(Boolean)
+    .join('\n')
+
   const vars: Record<string, string> = {
     customerName: job?.customer_name ?? '',
     customerEmail: job?.customer_email ?? '',
@@ -129,8 +142,10 @@ function applyTemplate(
     estimateDate: formatDate(job?.estimate_date),
     scheduledDate: formatDate(job?.scheduled_date),
     scheduledBlocks: scheduledBlocks || formatRange(job?.scheduled_date, job?.scheduled_end_date),
-    estimateFileName: estimateFile?.name ?? '',
-    estimateFileLink: estimateFile?.webViewLink ?? '',
+    estimateFileName: primaryEstimateFile?.name ?? '',
+    estimateFileLink: primaryEstimateFile?.webViewLink ?? '',
+    estimateFileNames,
+    estimateFileLinks,
     reviewLink:
       process.env.NEXT_PUBLIC_REVIEW_LINK ?? 'https://g.page/r/CXTTS4mREhqcEBM/review',
     customer_name: job?.customer_name ?? '',
@@ -141,8 +156,10 @@ function applyTemplate(
     estimate_date: formatDate(job?.estimate_date),
     scheduled_date: formatDate(job?.scheduled_date),
     scheduled_blocks: scheduledBlocks || formatRange(job?.scheduled_date, job?.scheduled_end_date),
-    estimate_file_name: estimateFile?.name ?? '',
-    estimate_file_link: estimateFile?.webViewLink ?? '',
+    estimate_file_name: primaryEstimateFile?.name ?? '',
+    estimate_file_link: primaryEstimateFile?.webViewLink ?? '',
+    estimate_file_names: estimateFileNames,
+    estimate_file_links: estimateFileLinks,
     review_link:
       process.env.NEXT_PUBLIC_REVIEW_LINK ?? 'https://g.page/r/CXTTS4mREhqcEBM/review',
   }
@@ -167,9 +184,18 @@ export default function StageEmailModal({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [blockingIssues, setBlockingIssues] = useState<string[]>([])
-  const [estimateFile, setEstimateFile] = useState<EstimateDriveFile | null>(null)
+  const [estimateFiles, setEstimateFiles] = useState<EstimateDriveFile[]>([])
+  const [selectedEstimateFileIds, setSelectedEstimateFileIds] = useState<string[]>([])
+  const [showEstimatePicker, setShowEstimatePicker] = useState(false)
 
   const needsEstimateAttachment = stage === 'estimate_sent' || stage === 'follow_up'
+  const selectedEstimateFiles = useMemo(() => {
+    if (!estimateFiles.length || !selectedEstimateFileIds.length) return []
+    const byId = new Map(estimateFiles.map((file) => [file.id, file]))
+    return selectedEstimateFileIds
+      .map((id) => byId.get(id) ?? null)
+      .filter((file): file is EstimateDriveFile => Boolean(file))
+  }, [estimateFiles, selectedEstimateFileIds])
   const alreadySent = useMemo(() => {
     if (!job || !stage) return false
     if (stage === 'scheduled') return Boolean(job.scheduled_email_sent_at)
@@ -190,7 +216,9 @@ export default function StageEmailModal({
       setJob(null)
       setSubject('')
       setBody('')
-      setEstimateFile(null)
+      setEstimateFiles([])
+      setSelectedEstimateFileIds([])
+      setShowEstimatePicker(false)
 
       const requests: Array<Promise<Response>> = [
         authedFetch('/api/email-templates', { cache: 'no-store' }),
@@ -201,7 +229,7 @@ export default function StageEmailModal({
         requests.push(authedFetch(`/api/jobs/${jobId}/schedules`, { cache: 'no-store' }))
       }
       if (needsEstimateAttachment) {
-        requests.push(authedFetch(`/api/jobs/${jobId}/estimate-file`, { cache: 'no-store' }))
+        requests.push(authedFetch(`/api/jobs/${jobId}/estimate-file?all=1`, { cache: 'no-store' }))
       }
 
       try {
@@ -252,12 +280,26 @@ export default function StageEmailModal({
           }
         }
 
-        let nextEstimateFile: EstimateDriveFile | null = null
+        let nextEstimateFiles: EstimateDriveFile[] = []
+        let nextSelectedEstimateFileIds: string[] = []
         let estimateFileError: string | null = null
         if (estimateRes) {
           const estimatePayload = await estimateRes.json().catch(() => null)
-          if (estimateRes.ok && estimatePayload?.file) {
-            nextEstimateFile = estimatePayload.file as EstimateDriveFile
+          const files = Array.isArray(estimatePayload?.files)
+            ? (estimatePayload.files as EstimateDriveFile[])
+            : []
+          const latest = (estimatePayload?.latest ?? null) as EstimateDriveFile | null
+          if (estimateRes.ok && files.length > 0) {
+            nextEstimateFiles = files
+            if (latest?.id && files.some((file) => file.id === latest.id)) {
+              nextSelectedEstimateFileIds = [latest.id]
+            } else {
+              nextSelectedEstimateFileIds = [files[0].id]
+            }
+          } else if (estimateRes.ok && estimatePayload?.file) {
+            const single = estimatePayload.file as EstimateDriveFile
+            nextEstimateFiles = [single]
+            nextSelectedEstimateFileIds = [single.id]
           } else {
             estimateFileError =
               typeof estimatePayload?.error === 'string'
@@ -277,19 +319,39 @@ export default function StageEmailModal({
         if (!loadedJob.customer_email) {
           nextBlockingIssues.push('Customer email is missing for this job.')
         }
-        if (needsEstimateAttachment && !nextEstimateFile) {
+        if (needsEstimateAttachment && nextEstimateFiles.length === 0) {
+          nextBlockingIssues.push(estimateFileError ?? 'No matching estimate file found in Drive.')
+        }
+        if (needsEstimateAttachment && nextSelectedEstimateFileIds.length === 0) {
           nextBlockingIssues.push(estimateFileError ?? 'No matching estimate file found in Drive.')
         }
 
         if (!cancelled) {
           setJob(loadedJob)
-          setEstimateFile(nextEstimateFile)
+          setEstimateFiles(nextEstimateFiles)
+          setSelectedEstimateFileIds(nextSelectedEstimateFileIds)
           setBlockingIssues(nextBlockingIssues)
           setSubject(
-            template ? applyTemplate(template.subject ?? '', loadedJob, scheduledBlocks, nextEstimateFile) : ''
+            template
+              ? applyTemplate(
+                  template.subject ?? '',
+                  loadedJob,
+                  scheduledBlocks,
+                  nextEstimateFiles,
+                  nextSelectedEstimateFileIds
+                )
+              : ''
           )
           setBody(
-            template ? applyTemplate(template.body ?? '', loadedJob, scheduledBlocks, nextEstimateFile) : ''
+            template
+              ? applyTemplate(
+                  template.body ?? '',
+                  loadedJob,
+                  scheduledBlocks,
+                  nextEstimateFiles,
+                  nextSelectedEstimateFileIds
+                )
+              : ''
           )
           setLoading(false)
         }
@@ -310,7 +372,9 @@ export default function StageEmailModal({
 
   if (!open || !jobId || !stage) return null
 
-  const canSend = !loading && !sending && !error && blockingIssues.length === 0
+  const missingEstimateSelection = needsEstimateAttachment && selectedEstimateFiles.length === 0
+  const canSend =
+    !loading && !sending && !error && blockingIssues.length === 0 && !missingEstimateSelection
   const closeLabel = stage === 'completed' ? 'Skip for now' : 'Cancel'
   const actionLabel = stageEmailActionLabel(stage, alreadySent)
 
@@ -324,7 +388,13 @@ export default function StageEmailModal({
     const res = await authedFetch(`/api/jobs/${jobId}/send-stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage, subject, body, idempotency_key: idempotencyKey }),
+      body: JSON.stringify({
+        stage,
+        subject,
+        body,
+        idempotency_key: idempotencyKey,
+        estimate_file_ids: needsEstimateAttachment ? selectedEstimateFileIds : undefined,
+      }),
     })
     const payload = await res.json().catch(() => null)
     setSending(false)
@@ -402,14 +472,71 @@ export default function StageEmailModal({
           {needsEstimateAttachment && (
             <div
               className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
-                estimateFile
+                selectedEstimateFiles.length > 0
                   ? 'border-green-200 bg-green-50 text-green-800'
                   : 'border-amber-200 bg-amber-50 text-amber-900'
               }`}
             >
-              {estimateFile
-                ? `Estimate attachment ready: ${estimateFile.name}`
+              {selectedEstimateFiles.length > 0
+                ? `Estimate attachments ready: ${selectedEstimateFiles.length} selected`
                 : 'Estimate attachment is required before this email can be sent.'}
+            </div>
+          )}
+
+          {needsEstimateAttachment && estimateFiles.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
+              <button
+                type="button"
+                onClick={() => setShowEstimatePicker((prev) => !prev)}
+                className="inline-flex h-8 items-center rounded-lg border border-gray-300 bg-white px-2.5 text-xs font-semibold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
+              >
+                {showEstimatePicker ? 'Hide estimate picker' : 'Choose estimate PDFs'}
+              </button>
+              {showEstimatePicker && (
+                <div className="mt-2 grid gap-1">
+                  {estimateFiles.map((file) => {
+                    const checked = selectedEstimateFileIds.includes(file.id)
+                    const versionLabel =
+                      typeof file.version === 'number' ? `v${file.version}` : null
+                    const matchLabel =
+                      typeof file.matchMode === 'string' && file.matchMode
+                        ? file.matchMode
+                        : null
+                    const meta = [versionLabel, matchLabel].filter(Boolean).join(' | ')
+                    return (
+                      <label
+                        key={file.id}
+                        className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-900"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            const isChecked = event.target.checked
+                            setSelectedEstimateFileIds((prev) => {
+                              if (isChecked) {
+                                return Array.from(new Set([...prev, file.id]))
+                              }
+                              return prev.filter((id) => id !== file.id)
+                            })
+                          }}
+                          className="mt-0.5 h-4 w-4"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold">{file.name}</span>
+                          {meta ? <span className="block text-gray-600">{meta}</span> : null}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {needsEstimateAttachment && missingEstimateSelection && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Select at least one estimate PDF.
             </div>
           )}
 

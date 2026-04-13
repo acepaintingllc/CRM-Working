@@ -17,6 +17,10 @@ function readGoogleErrorMessage(json: unknown) {
   return typeof msg === 'string' ? msg : null
 }
 
+function escapeDriveQueryValue(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+}
+
 function normalizeStreet(value: string) {
   return value.toLowerCase().replace(/\s+/g, ' ').trim()
 }
@@ -51,7 +55,36 @@ function parseEstimateFileName(name: string) {
   return { rawStreet, normalizedStreet, version }
 }
 
-export async function findLatestEstimateFile(params: {
+export type EstimateDriveMatchMode = 'exact' | 'normalized'
+
+export type EstimateDriveMatchedFile = {
+  id: string
+  name: string
+  version: number
+  matchMode: EstimateDriveMatchMode
+  webViewLink?: string | null
+}
+
+function chooseHighestVersion<T extends { version: number }>(rows: T[]) {
+  return rows.slice().sort((a, b) => b.version - a.version)[0] ?? null
+}
+
+function sortMatchedFiles(
+  rows: Array<
+    EstimateDriveMatchedFile & {
+      rawStreet: string
+      normalizedStreet: string
+    }
+  >
+) {
+  return rows.slice().sort((a, b) => {
+    if (a.version !== b.version) return b.version - a.version
+    if (a.matchMode !== b.matchMode) return a.matchMode === 'exact' ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
+export async function findMatchingEstimateFiles(params: {
   origin: string
   orgId: string
   userId: string
@@ -107,6 +140,7 @@ export async function findLatestEstimateFile(params: {
       }
     })
     .filter(Boolean) as { id: string; name: string; webViewLink?: string | null }[]
+
   const parsed = files
     .map((f) => {
       const parsedName = parseEstimateFileName(f.name ?? '')
@@ -131,40 +165,72 @@ export async function findLatestEstimateFile(params: {
     `^Estimate-${escapeRegex(rawStreet)}-v(\\d+)(?:\\.pdf)?$`,
     'i'
   )
-  const exactMatches = parsed.filter(
-    (f) => exactStreetPattern.test(f.name) && f.normalizedStreet === street
+  const exactMatches = parsed
+    .filter((f) => exactStreetPattern.test(f.name) && f.normalizedStreet === street)
+    .map((f) => ({ ...f, matchMode: 'exact' as const }))
+  const normalizedMatches = parsed
+    .filter((f) => f.normalizedStreet === street)
+    .map((f) => ({ ...f, matchMode: 'normalized' as const }))
+
+  const dedupedById = new Map<
+    string,
+    EstimateDriveMatchedFile & {
+      rawStreet: string
+      normalizedStreet: string
+    }
+  >()
+  for (const row of exactMatches) dedupedById.set(row.id, row)
+  for (const row of normalizedMatches) {
+    if (dedupedById.has(row.id)) continue
+    dedupedById.set(row.id, row)
+  }
+
+  const matches = sortMatchedFiles(Array.from(dedupedById.values())).map((row) => ({
+    id: row.id,
+    name: row.name,
+    version: row.version,
+    matchMode: row.matchMode,
+    webViewLink: row.webViewLink ?? null,
+  }))
+
+  if (matches.length === 0) {
+    return { error: 'No matching estimate PDF found in Drive folder.' } as const
+  }
+
+  return { files: matches } as const
+}
+
+export async function findLatestEstimateFile(params: {
+  origin: string
+  orgId: string
+  userId: string
+  address: string | null | undefined
+}): Promise<
+  | { file: EstimateDriveMatchedFile }
+  | { error: string }
+> {
+  const matching = await findMatchingEstimateFiles(params)
+  if ('error' in matching && typeof matching.error === 'string') {
+    return { error: matching.error }
+  }
+  const matchedFiles =
+    'files' in matching && Array.isArray(matching.files) ? matching.files : []
+  const exact = chooseHighestVersion(
+    matchedFiles.filter((row) => row.matchMode === 'exact')
   )
-  const normalizedMatches = parsed.filter((f) => f.normalizedStreet === street)
-
-  const chooseHighestVersion = <T extends { version: number }>(rows: T[]) =>
-    rows.slice().sort((a, b) => b.version - a.version)[0] ?? null
-
-  const exact = chooseHighestVersion(exactMatches)
   if (exact) {
     return {
-      file: {
-        id: exact.id,
-        name: exact.name,
-        version: exact.version,
-        matchMode: 'exact' as const,
-        webViewLink: exact.webViewLink ?? null,
-      },
+      file: exact,
     } as const
   }
-
-  const normalized = chooseHighestVersion(normalizedMatches)
+  const normalized = chooseHighestVersion(
+    matchedFiles.filter((row) => row.matchMode === 'normalized')
+  )
   if (normalized) {
     return {
-      file: {
-        id: normalized.id,
-        name: normalized.name,
-        version: normalized.version,
-        matchMode: 'normalized' as const,
-        webViewLink: normalized.webViewLink ?? null,
-      },
+      file: normalized,
     } as const
   }
-
   return { error: 'No matching estimate PDF found in Drive folder.' } as const
 }
 
@@ -417,4 +483,134 @@ export async function uploadDriveFile(params: {
       webViewLink: typeof webViewLink === 'string' ? webViewLink : null,
     },
   } as const
+}
+
+export async function ensureDriveFolder(params: {
+  origin: string
+  orgId: string
+  userId: string
+  parentFolderId: string
+  name: string
+}) {
+  const access = await getValidAccessToken({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+  })
+  if ('error' in access) return { error: access.error } as const
+
+  const q = [
+    `'${escapeDriveQueryValue(params.parentFolderId)}' in parents`,
+    "mimeType='application/vnd.google-apps.folder'",
+    'trashed=false',
+    `name='${escapeDriveQueryValue(params.name)}'`,
+  ].join(' and ')
+
+  const listUrl = new URL('https://www.googleapis.com/drive/v3/files')
+  listUrl.searchParams.set('q', q)
+  listUrl.searchParams.set('fields', 'files(id,name,webViewLink)')
+  listUrl.searchParams.set('pageSize', '1')
+  listUrl.searchParams.set('supportsAllDrives', 'true')
+  listUrl.searchParams.set('includeItemsFromAllDrives', 'true')
+
+  const listRes = await fetch(listUrl.toString(), {
+    headers: { Authorization: `Bearer ${access.accessToken}` },
+  })
+  const listJson: unknown = await listRes.json().catch(() => null)
+  if (!listRes.ok) {
+    const msg = readGoogleErrorMessage(listJson) ?? 'Failed to list Drive folders'
+    return { error: msg } as const
+  }
+
+  const listObj = asRecord(listJson)
+  const files = Array.isArray(listObj?.files) ? listObj.files : []
+  const existing = files
+    .map((file) => {
+      const row = asRecord(file)
+      if (!row) return null
+      const id = row.id
+      const name = row.name
+      const webViewLink = row.webViewLink
+      if (typeof id !== 'string' || typeof name !== 'string') return null
+      return {
+        id,
+        name,
+        webViewLink: typeof webViewLink === 'string' ? webViewLink : null,
+      }
+    })
+    .find(Boolean)
+
+  if (existing) {
+    return { folder: existing } as const
+  }
+
+  const createUrl = new URL('https://www.googleapis.com/drive/v3/files')
+  createUrl.searchParams.set('fields', 'id,name,webViewLink')
+  createUrl.searchParams.set('supportsAllDrives', 'true')
+
+  const createRes = await fetch(createUrl.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${access.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: params.name,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [params.parentFolderId],
+    }),
+  })
+  const createJson: unknown = await createRes.json().catch(() => null)
+  if (!createRes.ok) {
+    const msg = readGoogleErrorMessage(createJson) ?? 'Failed to create Drive folder'
+    return { error: msg } as const
+  }
+
+  const created = asRecord(createJson)
+  const id = created?.id
+  const name = created?.name
+  if (typeof id !== 'string' || typeof name !== 'string') {
+    return { error: 'Drive returned an invalid folder response' } as const
+  }
+  const webViewLink = created?.webViewLink
+  return {
+    folder: {
+      id,
+      name,
+      webViewLink: typeof webViewLink === 'string' ? webViewLink : null,
+    },
+  } as const
+}
+
+export async function deleteDriveFile(params: {
+  origin: string
+  orgId: string
+  userId: string
+  fileId: string
+}) {
+  const access = await getValidAccessToken({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+  })
+  if ('error' in access) return { error: access.error } as const
+
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(params.fileId)}`)
+  url.searchParams.set('supportsAllDrives', 'true')
+
+  const res = await fetch(url.toString(), {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${access.accessToken}` },
+  })
+
+  if (res.status === 404) {
+    return { ok: true } as const
+  }
+  if (!res.ok) {
+    const json: unknown = await res.json().catch(() => null)
+    const msg = readGoogleErrorMessage(json) ?? 'Failed to delete Drive file'
+    return { error: msg } as const
+  }
+
+  return { ok: true } as const
 }

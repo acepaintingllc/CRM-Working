@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { sendGmailMessage } from '@/lib/server/googleMail'
-import { downloadDriveFile, findLatestEstimateFile } from '@/lib/server/googleDrive'
+import {
+  downloadDriveFile,
+  findLatestEstimateFile,
+  findMatchingEstimateFiles,
+} from '@/lib/server/googleDrive'
 import { checkLocalRateLimit } from '@/lib/server/rateLimit'
 import type { EmailSendStatus } from '@/lib/email/types'
 
@@ -47,6 +51,8 @@ function withAliases(vars: Record<string, string | null | undefined>) {
     scheduled_blocks: vars.scheduledBlocks,
     estimate_file_name: vars.estimateFileName,
     estimate_file_link: vars.estimateFileLink,
+    estimate_file_names: vars.estimateFileNames,
+    estimate_file_links: vars.estimateFileLinks,
     review_link: vars.reviewLink,
   }
 }
@@ -388,6 +394,19 @@ export async function POST(
   const stage = typeof stageRaw === 'string' ? stageRaw : ''
   const subjectOverride = typeof body?.subject === 'string' ? body.subject : undefined
   const bodyOverride = typeof body?.body === 'string' ? body.body : undefined
+  const estimateFileIdsRaw = Array.isArray(body?.estimate_file_ids)
+    ? body.estimate_file_ids
+    : []
+  const estimateFileIds = Array.isArray(estimateFileIdsRaw)
+    ? Array.from(
+        new Set(
+          estimateFileIdsRaw
+            .filter((value: unknown): value is string => typeof value === 'string')
+            .map((value) => value.trim())
+            .filter(Boolean)
+        )
+      )
+    : []
   const idempotencyKeyRaw = body?.idempotency_key ?? body?.idempotencyKey
   const idempotencyKey =
     typeof idempotencyKeyRaw === 'string' ? idempotencyKeyRaw.trim() : ''
@@ -629,64 +648,150 @@ export async function POST(
     })
   }
 
-  let attachment: EstimateAttachment | null = null
+  let attachments: EstimateAttachment[] = []
   if (typedStage === 'follow_up' || typedStage === 'estimate_sent') {
     const origin = new URL(request.url).origin
-    const fileResult = await findLatestEstimateFile({
-      origin,
-      orgId,
-      userId,
-      address: customerRow.address,
-    })
-    if ('error' in fileResult) {
-      console.warn('[send-stage] no-match', { jobId: id, stage: typedStage, reason: fileResult.error })
-      return logBlockedResponse({
+    const selectedFiles: Array<{
+      id: string
+      name: string
+      webViewLink?: string | null
+      version?: number | null
+      matchMode?: string | null
+    }> = []
+
+    if (estimateFileIds.length > 0) {
+      const matching = await findMatchingEstimateFiles({
+        origin,
         orgId,
         userId,
-        jobId: id,
-        stage: typedStage,
-        fromEmail,
-        idempotencyKey,
-        toEmail: customerRow.email,
-        subject: subjectDraft ?? null,
-        bodyText: bodyDraft ?? null,
-        errorMessage: 'No matching estimate in Drive folder.',
-        statusCode: 400,
+        address: customerRow.address,
       })
-    }
+      if ('error' in matching) {
+        console.warn('[send-stage] no-match', {
+          jobId: id,
+          stage: typedStage,
+          reason: matching.error,
+        })
+        return logBlockedResponse({
+          orgId,
+          userId,
+          jobId: id,
+          stage: typedStage,
+          fromEmail,
+          idempotencyKey,
+          toEmail: customerRow.email,
+          subject: subjectDraft ?? null,
+          bodyText: bodyDraft ?? null,
+          errorMessage: 'No matching estimate in Drive folder.',
+          statusCode: 400,
+        })
+      }
 
-    const download = await downloadDriveFile({
-      origin,
-      orgId,
-      userId,
-      fileId: fileResult.file.id,
-    })
-    if ('error' in download) {
-      return logBlockedResponse({
+      const byId = new Map(matching.files.map((file) => [file.id, file]))
+      for (const fileId of estimateFileIds) {
+        const selected = byId.get(fileId)
+        if (selected) selectedFiles.push(selected)
+      }
+      if (selectedFiles.length !== estimateFileIds.length) {
+        return logBlockedResponse({
+          orgId,
+          userId,
+          jobId: id,
+          stage: typedStage,
+          fromEmail,
+          idempotencyKey,
+          toEmail: customerRow.email,
+          subject: subjectDraft ?? null,
+          bodyText: bodyDraft ?? null,
+          errorMessage: 'One or more selected estimate attachments are no longer available.',
+          statusCode: 400,
+        })
+      }
+      if (selectedFiles.length === 0) {
+        return logBlockedResponse({
+          orgId,
+          userId,
+          jobId: id,
+          stage: typedStage,
+          fromEmail,
+          idempotencyKey,
+          toEmail: customerRow.email,
+          subject: subjectDraft ?? null,
+          bodyText: bodyDraft ?? null,
+          errorMessage: 'Select at least one matching estimate attachment.',
+          statusCode: 400,
+        })
+      }
+    } else {
+      const fileResult = await findLatestEstimateFile({
+        origin,
         orgId,
         userId,
-        jobId: id,
-        stage: typedStage,
-        fromEmail,
-        idempotencyKey,
-        toEmail: customerRow.email,
-        subject: subjectDraft ?? null,
-        bodyText: bodyDraft ?? null,
-        errorMessage: 'Unable to read estimate file from Drive.',
-        statusCode: 400,
+        address: customerRow.address,
       })
+      if ('error' in fileResult) {
+        console.warn('[send-stage] no-match', {
+          jobId: id,
+          stage: typedStage,
+          reason: fileResult.error,
+        })
+        return logBlockedResponse({
+          orgId,
+          userId,
+          jobId: id,
+          stage: typedStage,
+          fromEmail,
+          idempotencyKey,
+          toEmail: customerRow.email,
+          subject: subjectDraft ?? null,
+          bodyText: bodyDraft ?? null,
+          errorMessage: 'No matching estimate in Drive folder.',
+          statusCode: 400,
+        })
+      }
+      selectedFiles.push(fileResult.file)
     }
 
-    attachment = {
-      id: fileResult.file.id,
-      filename: fileResult.file.name,
-      contentType: 'application/pdf',
-      data: download.buffer,
-      webViewLink: fileResult.file.webViewLink ?? null,
-      version: fileResult.file.version ?? null,
-      matchMode: fileResult.file.matchMode ?? null,
+    for (const selected of selectedFiles) {
+      const download = await downloadDriveFile({
+        origin,
+        orgId,
+        userId,
+        fileId: selected.id,
+      })
+      if ('error' in download) {
+        return logBlockedResponse({
+          orgId,
+          userId,
+          jobId: id,
+          stage: typedStage,
+          fromEmail,
+          idempotencyKey,
+          toEmail: customerRow.email,
+          subject: subjectDraft ?? null,
+          bodyText: bodyDraft ?? null,
+          errorMessage: 'Unable to read estimate file from Drive.',
+          statusCode: 400,
+        })
+      }
+      attachments.push({
+        id: selected.id,
+        filename: selected.name,
+        contentType: 'application/pdf',
+        data: download.buffer,
+        webViewLink: selected.webViewLink ?? null,
+        version: selected.version ?? null,
+        matchMode: selected.matchMode ?? null,
+      })
     }
   }
+
+  const firstAttachment = attachments[0] ?? null
+  const estimateFileNames = attachments.map((row) => row.filename).join(', ')
+  const estimateFileLinks = attachments
+    .map((row) => row.webViewLink ?? '')
+    .filter(Boolean)
+    .join('\n')
 
   const vars = withAliases({
     customerName: customerRow.name ?? '',
@@ -699,8 +804,10 @@ export async function POST(
     scheduledBlocks: scheduleBlocks
       .map((row) => `${new Date(row.start_at as string).toLocaleString()} - ${new Date(row.end_at as string).toLocaleString()}`)
       .join('\n'),
-    estimateFileName: attachment?.filename ?? '',
-    estimateFileLink: attachment?.webViewLink ?? '',
+    estimateFileName: firstAttachment?.filename ?? '',
+    estimateFileLink: firstAttachment?.webViewLink ?? '',
+    estimateFileNames,
+    estimateFileLinks,
     reviewLink: process.env.REVIEW_LINK ?? 'https://g.page/r/CXTTS4mREhqcEBM/review',
   })
 
@@ -752,7 +859,7 @@ export async function POST(
     to: customerRow.email,
     subject: subject || 'Update',
     bodyText,
-    attachment,
+    attachments,
   })
 
   if ('error' in send) {
@@ -853,14 +960,21 @@ export async function POST(
     replayed: false,
     warning: warnings.length > 0 ? warnings.join(' ') : undefined,
     job: updatedJob,
-    estimateFile: attachment
+    estimateFile: firstAttachment
       ? {
-          id: attachment.id,
-          name: attachment.filename,
-          webViewLink: attachment.webViewLink ?? null,
-          version: attachment.version ?? null,
-          matchMode: attachment.matchMode ?? null,
+          id: firstAttachment.id,
+          name: firstAttachment.filename,
+          webViewLink: firstAttachment.webViewLink ?? null,
+          version: firstAttachment.version ?? null,
+          matchMode: firstAttachment.matchMode ?? null,
         }
       : null,
+    estimateFiles: attachments.map((row) => ({
+      id: row.id,
+      name: row.filename,
+      webViewLink: row.webViewLink ?? null,
+      version: row.version ?? null,
+      matchMode: row.matchMode ?? null,
+    })),
   })
 }
