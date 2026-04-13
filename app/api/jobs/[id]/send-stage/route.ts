@@ -648,7 +648,7 @@ export async function POST(
     })
   }
 
-  let attachments: EstimateAttachment[] = []
+  const attachments: EstimateAttachment[] = []
   if (typedStage === 'follow_up' || typedStage === 'estimate_sent') {
     const origin = new URL(request.url).origin
     const selectedFiles: Array<{

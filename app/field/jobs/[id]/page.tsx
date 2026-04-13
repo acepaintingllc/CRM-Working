@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
@@ -434,7 +435,8 @@ export default function FieldJobPage() {
     if (selectedPhoto.kind === 'local') {
       const local = localPhotos.find((photo) => photo.localId === selectedPhoto.localId)
       if (!local) return
-      const { previewUrl: _previewUrl, ...persisted } = local
+      const { previewUrl, ...persisted } = local
+      void previewUrl
       await putLocalSitePhoto({
         ...persisted,
         caption: captionDraft,
@@ -676,7 +678,14 @@ export default function FieldJobPage() {
               >
                 <div className="relative aspect-[4/5] bg-slate-100">
                   {photo.previewUrl ? (
-                    <img src={photo.previewUrl} alt={photo.caption || 'Job photo'} className="h-full w-full object-cover" />
+                    <Image
+                      src={photo.previewUrl}
+                      alt={photo.caption || 'Job photo'}
+                      fill
+                      sizes="(max-width: 640px) 50vw, 33vw"
+                      className="h-full w-full object-cover"
+                      unoptimized
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center text-sm font-bold text-slate-400">
                       Preview unavailable
@@ -725,7 +734,14 @@ export default function FieldJobPage() {
 
             <div className="overflow-hidden rounded-[24px] bg-slate-100">
               {selectedPhoto.previewUrl ? (
-                <img src={selectedPhoto.previewUrl} alt={selectedPhoto.caption || 'Selected job photo'} className="max-h-[58vh] w-full object-cover" />
+                <Image
+                  src={selectedPhoto.previewUrl}
+                  alt={selectedPhoto.caption || 'Selected job photo'}
+                  width={1200}
+                  height={1200}
+                  className="max-h-[58vh] w-full object-cover"
+                  unoptimized
+                />
               ) : (
                 <div className="flex aspect-[4/5] items-center justify-center text-sm font-bold text-slate-400">
                   Preview unavailable

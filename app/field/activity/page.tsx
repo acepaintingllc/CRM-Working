@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Clock3, RefreshCw } from 'lucide-react'
@@ -134,7 +135,14 @@ export default function FieldActivityPage() {
             >
               <div className="relative aspect-[4/3] bg-slate-100">
                 {photo.previewUrl ? (
-                  <img src={photo.previewUrl} alt={photo.caption || photo.jobTitle} className="h-full w-full object-cover" />
+                  <Image
+                    src={photo.previewUrl}
+                    alt={photo.caption || photo.jobTitle}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                    className="h-full w-full object-cover"
+                    unoptimized
+                  />
                 ) : (
                   <div className="flex h-full items-center justify-center text-sm font-bold text-slate-400">
                     Preview unavailable
