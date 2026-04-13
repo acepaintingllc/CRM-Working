@@ -12,6 +12,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  const isFieldPath = path === '/field' || path.startsWith('/field/')
+  const permissionsPolicy = isFieldPath
+    ? 'camera=(self), microphone=(), geolocation=()'
+    : 'camera=(), microphone=(), geolocation=()'
+
   // Basic CSRF guard for cookie-auth mutating API calls.
   if (
     path.startsWith('/api/') &&
@@ -29,14 +34,18 @@ export function proxy(request: NextRequest) {
     // If request is browser-originated and not bearer-authenticated, enforce same-origin.
     if (!hasBearer) {
       if (!origin || origin !== expectedOrigin) {
-        return NextResponse.json({ error: 'Unauthorized request origin' }, { status: 403 })
+        const denied = NextResponse.json({ error: 'Unauthorized request origin' }, { status: 403 })
+        denied.headers.set('Permissions-Policy', permissionsPolicy)
+        return denied
       }
     }
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+  response.headers.set('Permissions-Policy', permissionsPolicy)
+  return response
 }
 
 export const config = {
-  matcher: ['/', '/api/:path*'],
+  matcher: '/:path*',
 }

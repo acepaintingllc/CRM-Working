@@ -20,6 +20,10 @@ type JobScheduleRow = {
   end_at: string | null
 }
 
+type JobSitePhotoRow = {
+  job_id: string
+}
+
 function asString(value: unknown) {
   return typeof value === 'string' ? value : null
 }
@@ -88,6 +92,22 @@ export async function GET() {
     }
   }
 
+  const sitePhotoCountByJob = new Map<string, number>()
+  if (jobIds.length) {
+    const { data: sitePhotoRows, error: sitePhotoErr } = await supabaseAdmin
+      .from('job_site_photos')
+      .select('job_id')
+      .eq('org_id', orgId)
+      .in('job_id', jobIds)
+
+    if (sitePhotoErr) return NextResponse.json({ error: sitePhotoErr.message }, { status: 500 })
+
+    for (const row of (sitePhotoRows ?? []) as JobSitePhotoRow[]) {
+      const current = sitePhotoCountByJob.get(row.job_id) ?? 0
+      sitePhotoCountByJob.set(row.job_id, current + 1)
+    }
+  }
+
   const jobs = rows.map((row) => {
     const customer = row.customer_id ? customerById.get(row.customer_id) : undefined
     const id = asString(row.id)
@@ -96,6 +116,7 @@ export async function GET() {
     const rowScheduledEndDate = asString(row.scheduled_end_date)
     const scheduledDate = rowScheduledDate ?? scheduleRange?.minStart ?? null
     const scheduledEndDate = rowScheduledEndDate ?? scheduleRange?.maxEnd ?? null
+    const sitePhotoCount = id ? sitePhotoCountByJob.get(id) ?? 0 : 0
     return {
       ...row,
       // Be defensive if older rows/schemas exist.
@@ -105,6 +126,8 @@ export async function GET() {
       customer_address: customer?.address ?? null,
       scheduled_date: scheduledDate,
       scheduled_end_date: scheduledEndDate,
+      site_photo_count: sitePhotoCount,
+      has_site_photos: sitePhotoCount > 0,
     }
   })
 

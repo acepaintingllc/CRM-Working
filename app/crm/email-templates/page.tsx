@@ -30,6 +30,12 @@ const availableVars = [
   '{{scheduledBlocks}}',
   '{{estimateFileName}}',
   '{{estimateFileLink}}',
+  '{{estimateFileNames}}',
+  '{{estimateFileLinks}}',
+  '{{estimate_file_name}}',
+  '{{estimate_file_link}}',
+  '{{estimate_file_names}}',
+  '{{estimate_file_links}}',
   '{{scheduled_blocks}}',
   '{{reviewLink}}',
 ]
@@ -158,8 +164,9 @@ export default function EmailTemplatesPage() {
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--crm-muted)' }}>
-            For the Estimate sent stage, the latest estimate PDF is attached automatically. Use{' '}
-            {'{{estimateFileName}}'} or {'{{estimateFileLink}}'} if you want to mention it.
+            For Estimate sent/follow up, one or more estimate PDFs can be attached. Use{' '}
+            {'{{estimateFileName}}'} / {'{{estimateFileLink}}'} for the primary file, or{' '}
+            {'{{estimateFileNames}}'} / {'{{estimateFileLinks}}'} for all selected files.
           </div>
 
           <div style={{ marginTop: 12 }}>

@@ -5,6 +5,16 @@ import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+function parseSpreadsheetIdFromSheetPath(path: string | null | undefined) {
+  const raw = String(path ?? '').trim()
+  if (!raw) return null
+  const filePathMatch = /sheet_([a-zA-Z0-9\-_]+)\.xlsx/.exec(raw)
+  if (filePathMatch?.[1]) return filePathMatch[1]
+  const urlMatch = /\/spreadsheets\/d\/([a-zA-Z0-9\-_]+)/.exec(raw)
+  if (urlMatch?.[1]) return urlMatch[1]
+  return null
+}
+
 export async function GET() {
   const session = await getSessionUserOrg()
   if ('error' in session) {
@@ -146,6 +156,35 @@ export async function POST(request: Request) {
       .eq('id', estimateId)
     if (update.error) {
       return NextResponse.json({ error: update.error.message }, { status: 500 })
+    }
+
+    const workbookSpreadsheetId = parseSpreadsheetIdFromSheetPath(workbook.sheetFilePath)
+    const siblingRes = await supabaseAdmin
+      .from('estimates')
+      .select('id, sheet_file_path')
+      .eq('org_id', orgId)
+      .eq('job_id', jobId)
+      .neq('id', estimateId)
+      .not('sheet_file_path', 'is', null)
+    if (siblingRes.error) {
+      return NextResponse.json({ error: siblingRes.error.message }, { status: 500 })
+    }
+    const duplicate = (siblingRes.data ?? []).find((row) => {
+      const siblingPath =
+        typeof row.sheet_file_path === 'string' ? row.sheet_file_path : null
+      if (!siblingPath) return false
+      if (siblingPath === workbook.sheetFilePath) return true
+      const siblingSpreadsheetId = parseSpreadsheetIdFromSheetPath(siblingPath)
+      return Boolean(
+        workbookSpreadsheetId &&
+          siblingSpreadsheetId &&
+          workbookSpreadsheetId === siblingSpreadsheetId
+      )
+    })
+    if (duplicate) {
+      throw new Error(
+        `Workbook isolation check failed: estimate ${duplicate.id} already references the same sheet.`
+      )
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed creating estimate workbook'

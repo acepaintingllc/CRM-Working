@@ -58,6 +58,7 @@ export async function sendGmailMessage(params: {
   subject: string
   bodyText: string
   attachment?: { filename: string; contentType: string; data: Buffer } | null
+  attachments?: Array<{ filename: string; contentType: string; data: Buffer }> | null
 }) {
   const access = await getValidAccessToken({
     origin: params.origin,
@@ -69,6 +70,9 @@ export async function sendGmailMessage(params: {
   const sender = await getOrgSenderProfile(params.orgId)
   const fromHeader = formatMailboxHeader(sender.fromName, sender.fromEmail)
   const boundary = `acecrm_${Date.now()}`
+  const normalizedAttachments = (
+    Array.isArray(params.attachments) ? params.attachments : params.attachment ? [params.attachment] : []
+  ).filter(Boolean)
 
   let raw = ''
   if (fromHeader) raw += `From: ${fromHeader}\r\n`
@@ -76,16 +80,19 @@ export async function sendGmailMessage(params: {
   raw += `Subject: ${params.subject}\r\n`
   raw += 'MIME-Version: 1.0\r\n'
 
-  if (params.attachment) {
+  if (normalizedAttachments.length > 0) {
     raw += `Content-Type: multipart/mixed; boundary=\"${boundary}\"\r\n\r\n`
     raw += `--${boundary}\r\n`
     raw += 'Content-Type: text/plain; charset="UTF-8"\r\n\r\n'
     raw += `${params.bodyText}\r\n\r\n`
-    raw += `--${boundary}\r\n`
-    raw += `Content-Type: ${params.attachment.contentType}; name="${params.attachment.filename}"\r\n`
-    raw += 'Content-Transfer-Encoding: base64\r\n'
-    raw += `Content-Disposition: attachment; filename="${params.attachment.filename}"\r\n\r\n`
-    raw += `${params.attachment.data.toString('base64')}\r\n`
+    for (const attachment of normalizedAttachments) {
+      const safeFileName = sanitizeHeaderValue(attachment.filename).replace(/"/g, '')
+      raw += `--${boundary}\r\n`
+      raw += `Content-Type: ${attachment.contentType}; name="${safeFileName}"\r\n`
+      raw += 'Content-Transfer-Encoding: base64\r\n'
+      raw += `Content-Disposition: attachment; filename="${safeFileName}"\r\n\r\n`
+      raw += `${attachment.data.toString('base64')}\r\n`
+    }
     raw += `--${boundary}--`
   } else {
     raw += 'Content-Type: text/plain; charset="UTF-8"\r\n\r\n'
