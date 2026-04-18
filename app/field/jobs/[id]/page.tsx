@@ -26,8 +26,10 @@ import {
 } from 'lucide-react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import {
+  buildDriveMediaUrl,
   createPreviewUrl,
   deleteLocalSitePhoto,
+  extractDriveFileId,
   listLocalSitePhotosForJob,
   putLocalSitePhoto,
   queueCapturedSitePhoto,
@@ -99,7 +101,7 @@ type DisplayPhoto =
       key: string
       kind: 'remote'
       remoteId: string
-      previewUrl: string
+      previewUrl: string | null
       caption: string
       capturedAt: string
       status: 'uploaded'
@@ -346,7 +348,7 @@ export default function FieldJobPage() {
         key: `remote:${photo.id}`,
         kind: 'remote',
         remoteId: photo.id,
-        previewUrl: photo.url,
+        previewUrl: buildDriveMediaUrl(photo.drive_file_id ?? extractDriveFileId(photo.url)),
         caption: photo.caption ?? '',
         capturedAt: photo.captured_at ?? photo.created_at ?? new Date().toISOString(),
         status: 'uploaded',
@@ -435,8 +437,22 @@ export default function FieldJobPage() {
     if (selectedPhoto.kind === 'local') {
       const local = localPhotos.find((photo) => photo.localId === selectedPhoto.localId)
       if (!local) return
-      const { previewUrl, ...persisted } = local
-      void previewUrl
+      const persisted: LocalSitePhotoRecord = {
+        localId: local.localId,
+        jobId: local.jobId,
+        jobTitle: local.jobTitle,
+        caption: local.caption,
+        capturedAt: local.capturedAt,
+        createdAt: local.createdAt,
+        status: local.status,
+        mimeType: local.mimeType,
+        blob: local.blob,
+        remoteId: local.remoteId,
+        remoteDriveFileId: local.remoteDriveFileId,
+        remoteUrl: local.remoteUrl,
+        uploadedAt: local.uploadedAt,
+        error: local.error,
+      }
       await putLocalSitePhoto({
         ...persisted,
         caption: captionDraft,
@@ -511,89 +527,12 @@ export default function FieldJobPage() {
   }
 
   return (
-    <div className="grid gap-3">
-      <section className="rounded-[30px] border border-white/75 bg-white/92 p-4 shadow-[0_22px_50px_rgba(15,23,42,0.12)]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <button
-              onClick={() => router.push('/field/jobs')}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-500"
-            >
-              <ArrowLeft size={14} />
-              <span>Jobs</span>
-            </button>
-            <div className="mt-3 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Field workspace</div>
-            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">
-              {job?.title ?? 'Loading job...'}
-            </h1>
-            <div className="mt-1 text-sm text-slate-500">
-              {job?.customer_name ?? 'Loading customer'}
-              {job?.customer_address ? ` | ${job.customer_address}` : ''}
-            </div>
-          </div>
-          <Link
-            href={`/crm/jobs/${jobId}`}
-            className="inline-flex h-11 items-center rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-700"
-          >
-            Open CRM
-          </Link>
-        </div>
-
-        <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
-          <select
-            value={jobId}
-            onChange={(event) => router.push(`/field/jobs/${event.target.value}`)}
-            className="h-12 rounded-[20px] border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-900"
-          >
-            {jobs.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.title} - {option.customer_name ?? option.id}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => void runSync()}
-            disabled={syncing}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-[20px] border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 disabled:opacity-60"
-          >
-            {syncing ? <LoaderCircle size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-            <span>Sync</span>
-          </button>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-3 py-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Stage</div>
-            <div className="mt-1 text-sm font-black text-slate-900">{formatStatus(job?.status)}</div>
-          </div>
-          <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-3 py-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Queued</div>
-            <div className="mt-1 text-2xl font-black text-slate-900">{queueSummary.queued}</div>
-          </div>
-          <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-3 py-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-600">Retry</div>
-            <div className="mt-1 text-2xl font-black text-amber-700">{queueSummary.failed}</div>
-          </div>
-        </div>
-      </section>
-
-      {error && (
-        <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-          {error}
-        </div>
-      )}
-
-      <section className="overflow-hidden rounded-[30px] border border-white/75 bg-white/92 shadow-[0_22px_50px_rgba(15,23,42,0.12)]">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <div className="text-sm font-black text-slate-900">Live camera</div>
-          <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-            Camera stays open between shots
-          </div>
-        </div>
-        <div className="relative bg-slate-900">
-          <video ref={videoRef} muted playsInline autoPlay className="aspect-[4/3] w-full object-cover" />
+    <div className="grid gap-4 pb-4">
+      <section className="relative isolate overflow-hidden bg-slate-950 text-white">
+        <div className="relative h-[100svh] w-full bg-slate-900">
+          <video ref={videoRef} muted playsInline autoPlay className="h-full w-full object-cover" />
           {!cameraReady && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/84 px-5 text-center text-white">
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-900/84 px-5 text-center text-white">
               {cameraError ? <AlertTriangle size={26} /> : <LoaderCircle size={26} className="animate-spin" />}
               <div className="max-w-[28ch] text-sm font-semibold">{cameraError ?? 'Starting camera...'}</div>
               {cameraError && (
@@ -607,34 +546,52 @@ export default function FieldJobPage() {
               )}
             </div>
           )}
-        </div>
-        <div className="flex items-center justify-between gap-3 px-4 py-4">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="inline-flex h-12 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-700"
-          >
-            <ImagePlus size={18} />
-            <span>Library</span>
-          </button>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-48 bg-gradient-to-t from-slate-950/80 to-transparent" />
 
           <button
-            onClick={() => void captureNow()}
-            disabled={!cameraReady || capturing}
-            className="inline-flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full border-[10px] border-slate-300 bg-slate-900 text-white shadow-[0_18px_35px_rgba(15,23,42,0.25)] disabled:opacity-60"
-            aria-label="Take photo"
+            onClick={() => router.push('/field/jobs')}
+            className="absolute left-3 z-30 inline-flex h-10 items-center gap-2 rounded-full border border-white/30 bg-slate-900/60 px-3 text-xs font-black uppercase tracking-[0.14em] text-white backdrop-blur"
+            style={{ top: 'max(12px, env(safe-area-inset-top))' }}
           >
-            {capturing ? <LoaderCircle size={26} className="animate-spin" /> : <Camera size={28} />}
+            <ArrowLeft size={14} />
+            <span>Back</span>
           </button>
 
-          <button
-            onClick={() => void runSync()}
-            disabled={syncing}
-            className="inline-flex h-12 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-700"
-          >
-            {syncing ? <LoaderCircle size={16} className="animate-spin" /> : <SendToBack size={16} />}
-            <span>Send</span>
-          </button>
+          <div className="absolute inset-x-0 bottom-0 z-30 border-t border-white/20 bg-slate-950/65 backdrop-blur">
+            <div className="mx-auto flex w-full max-w-[760px] items-center justify-between gap-3 px-4 py-4">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex h-12 items-center gap-2 rounded-full border border-white/30 bg-slate-900/70 px-4 text-sm font-black text-white"
+              >
+                <ImagePlus size={18} />
+                <span>Library</span>
+              </button>
+
+              <button
+                onClick={() => void captureNow()}
+                disabled={!cameraReady || capturing}
+                className="inline-flex h-[4.75rem] w-[4.75rem] items-center justify-center rounded-full border-[10px] border-white/50 bg-white text-slate-900 shadow-[0_20px_40px_rgba(0,0,0,0.35)] disabled:opacity-60"
+                aria-label="Take photo"
+              >
+                {capturing ? <LoaderCircle size={26} className="animate-spin" /> : <Camera size={30} />}
+              </button>
+
+              <button
+                onClick={() => void runSync()}
+                disabled={syncing}
+                className="inline-flex h-12 items-center gap-2 rounded-full border border-white/30 bg-slate-900/70 px-4 text-sm font-black text-white disabled:opacity-60"
+              >
+                {syncing ? <LoaderCircle size={16} className="animate-spin" /> : <SendToBack size={16} />}
+                <span>Send</span>
+              </button>
+            </div>
+            <div className="mx-auto w-full max-w-[760px] px-4 pb-3 text-xs font-semibold text-white/80">
+              {job?.title ?? 'Loading job'}
+              {job?.customer_name ? ` - ${job.customer_name}` : ''}
+            </div>
+          </div>
         </div>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -645,72 +602,138 @@ export default function FieldJobPage() {
         />
       </section>
 
-      <section className="grid gap-3">
-        <div className="flex items-center justify-between px-1">
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Photo stream</div>
-            <div className="mt-1 text-lg font-black text-slate-900">{mergedPhotos.length} photos</div>
-          </div>
-          {queueSummary.failed > 0 && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-amber-700">
-              <WifiOff size={14} />
-              <span>{queueSummary.failed} needs retry</span>
-            </div>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="rounded-[28px] border border-white/75 bg-white/92 px-4 py-8 text-center text-sm font-semibold text-slate-500 shadow-[0_20px_40px_rgba(15,23,42,0.12)]">
-            Loading workspace...
-          </div>
-        ) : mergedPhotos.length === 0 ? (
-          <div className="rounded-[28px] border border-white/75 bg-white/92 px-4 py-8 text-center shadow-[0_20px_40px_rgba(15,23,42,0.12)]">
-            <div className="text-lg font-black text-slate-900">No site photos yet.</div>
-            <div className="mt-1 text-sm text-slate-500">Take a shot and it will appear here immediately.</div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {mergedPhotos.map((photo) => (
-              <button
-                key={photo.key}
-                onClick={() => setSelectedPhoto(photo)}
-                className="overflow-hidden rounded-[26px] border border-white/75 bg-white/92 text-left shadow-[0_20px_40px_rgba(15,23,42,0.12)]"
-              >
-                <div className="relative aspect-[4/5] bg-slate-100">
-                  {photo.previewUrl ? (
-                    <Image
-                      src={photo.previewUrl}
-                      alt={photo.caption || 'Job photo'}
-                      fill
-                      sizes="(max-width: 640px) 50vw, 33vw"
-                      className="h-full w-full object-cover"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-sm font-bold text-slate-400">
-                      Preview unavailable
-                    </div>
-                  )}
-                  <div className="absolute left-2 top-2 rounded-full bg-white/92 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700">
-                    {photo.kind === 'local' ? statusBadge(photo.status) : 'Uploaded'}
-                  </div>
-                </div>
-                <div className="p-3">
-                  <div className="line-clamp-2 text-sm font-bold text-slate-900">
-                    {photo.caption || 'Tap to add caption'}
-                  </div>
-                  <div className="mt-2 text-xs font-semibold text-slate-400">
-                    {new Date(photo.capturedAt).toLocaleString()}
-                  </div>
-                  {photo.kind === 'local' && photo.error && (
-                    <div className="mt-2 text-xs font-bold text-amber-600">{photo.error}</div>
-                  )}
-                </div>
-              </button>
-            ))}
+      <div className="mx-auto w-full max-w-[760px] px-3 sm:px-4">
+        {error && (
+          <div className="mb-3 rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+            {error}
           </div>
         )}
-      </section>
+
+        <section className="rounded-[30px] border border-white/75 bg-white/92 p-4 shadow-[0_22px_50px_rgba(15,23,42,0.12)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Field workspace</div>
+              <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">
+                {job?.title ?? 'Loading job...'}
+              </h1>
+              <div className="mt-1 text-sm text-slate-500">
+                {job?.customer_name ?? 'Loading customer'}
+                {job?.customer_address ? ` | ${job.customer_address}` : ''}
+              </div>
+            </div>
+            <Link
+              href={`/crm/jobs/${jobId}`}
+              className="inline-flex h-11 items-center rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-700"
+            >
+              Open CRM
+            </Link>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+            <select
+              value={jobId}
+              onChange={(event) => router.push(`/field/jobs/${event.target.value}`)}
+              className="h-12 rounded-[20px] border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-900"
+            >
+              {jobs.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.title} - {option.customer_name ?? option.id}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => void runSync()}
+              disabled={syncing}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-[20px] border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 disabled:opacity-60"
+            >
+              {syncing ? <LoaderCircle size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              <span>Sync</span>
+            </button>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Stage</div>
+              <div className="mt-1 text-sm font-black text-slate-900">{formatStatus(job?.status)}</div>
+            </div>
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Queued</div>
+              <div className="mt-1 text-2xl font-black text-slate-900">{queueSummary.queued}</div>
+            </div>
+            <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-3 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-600">Retry</div>
+              <div className="mt-1 text-2xl font-black text-amber-700">{queueSummary.failed}</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-3 grid gap-3">
+          <div className="flex items-center justify-between px-1">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Photo stream</div>
+              <div className="mt-1 text-lg font-black text-slate-900">{mergedPhotos.length} photos</div>
+            </div>
+            {queueSummary.failed > 0 && (
+              <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-amber-700">
+                <WifiOff size={14} />
+                <span>{queueSummary.failed} needs retry</span>
+              </div>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="rounded-[28px] border border-white/75 bg-white/92 px-4 py-8 text-center text-sm font-semibold text-slate-500 shadow-[0_20px_40px_rgba(15,23,42,0.12)]">
+              Loading workspace...
+            </div>
+          ) : mergedPhotos.length === 0 ? (
+            <div className="rounded-[28px] border border-white/75 bg-white/92 px-4 py-8 text-center shadow-[0_20px_40px_rgba(15,23,42,0.12)]">
+              <div className="text-lg font-black text-slate-900">No site photos yet.</div>
+              <div className="mt-1 text-sm text-slate-500">Take a shot and it will appear here immediately.</div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {mergedPhotos.map((photo) => (
+                <button
+                  key={photo.key}
+                  onClick={() => setSelectedPhoto(photo)}
+                  className="overflow-hidden rounded-[26px] border border-white/75 bg-white/92 text-left shadow-[0_20px_40px_rgba(15,23,42,0.12)]"
+                >
+                  <div className="relative aspect-[4/5] bg-slate-100">
+                    {photo.previewUrl ? (
+                      <Image
+                        src={photo.previewUrl}
+                        alt={photo.caption || 'Job photo'}
+                        fill
+                        sizes="(max-width: 640px) 50vw, 33vw"
+                        className="h-full w-full object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sm font-bold text-slate-400">
+                        Preview unavailable
+                      </div>
+                    )}
+                    <div className="absolute left-2 top-2 rounded-full bg-white/92 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700">
+                      {photo.kind === 'local' ? statusBadge(photo.status) : 'Uploaded'}
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <div className="line-clamp-2 text-sm font-bold text-slate-900">
+                      {photo.caption || 'Tap to add caption'}
+                    </div>
+                    <div className="mt-2 text-xs font-semibold text-slate-400">
+                      {new Date(photo.capturedAt).toLocaleString()}
+                    </div>
+                    {photo.kind === 'local' && photo.error && (
+                      <div className="mt-2 text-xs font-bold text-amber-600">{photo.error}</div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
 
       {selectedPhoto && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/72 px-3 py-3" onClick={() => setSelectedPhoto(null)}>
@@ -793,3 +816,4 @@ export default function FieldJobPage() {
     </div>
   )
 }
+

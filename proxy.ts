@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+const defaultMaxApiBodyBytes = 20 * 1024 * 1024
+
+function resolveMaxApiBodyBytes() {
+  const raw = process.env.ACECRM_API_MAX_BODY_BYTES
+  if (!raw) return defaultMaxApiBodyBytes
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return defaultMaxApiBodyBytes
+  return parsed
+}
+
+const maxApiBodyBytes = resolveMaxApiBodyBytes()
+
 export function proxy(request: NextRequest) {
   const host = request.headers.get('host') ?? ''
   const hostname = host.split(':')[0]?.toLowerCase() ?? ''
@@ -22,18 +34,35 @@ export function proxy(request: NextRequest) {
     path.startsWith('/api/') &&
     ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
   ) {
+    const rawLength = request.headers.get('content-length')
+    if (rawLength != null && rawLength.trim() !== '') {
+      const parsedLength = Number.parseInt(rawLength, 10)
+      if (!Number.isFinite(parsedLength) || parsedLength < 0) {
+        const invalidLength = NextResponse.json({ error: 'Invalid Content-Length header' }, { status: 400 })
+        invalidLength.headers.set('Permissions-Policy', permissionsPolicy)
+        return invalidLength
+      }
+      if (parsedLength > maxApiBodyBytes) {
+        const tooLarge = NextResponse.json({ error: 'Request body too large' }, { status: 413 })
+        tooLarge.headers.set('Permissions-Policy', permissionsPolicy)
+        return tooLarge
+      }
+    }
+
     const authHeader = request.headers.get('authorization') ?? ''
     const hasBearer = /^Bearer\s+.+/i.test(authHeader)
     const origin = request.headers.get('origin')
-    const forwardedProto = request.headers.get('x-forwarded-proto')
-    const forwardedHost = request.headers.get('x-forwarded-host')
-    const resolvedHost = forwardedHost || host
-    const resolvedProto = forwardedProto || (resolvedHost.includes('localhost') ? 'http' : 'https')
-    const expectedOrigin = `${resolvedProto}://${resolvedHost}`
+    const expectedOrigin = request.nextUrl.origin
 
     // If request is browser-originated and not bearer-authenticated, enforce same-origin.
     if (!hasBearer) {
-      if (!origin || origin !== expectedOrigin) {
+      let originValue: string | null = null
+      try {
+        originValue = origin ? new URL(origin).origin : null
+      } catch {
+        originValue = null
+      }
+      if (!originValue || originValue !== expectedOrigin) {
         const denied = NextResponse.json({ error: 'Unauthorized request origin' }, { status: 403 })
         denied.headers.set('Permissions-Policy', permissionsPolicy)
         return denied

@@ -4,7 +4,7 @@ import { authedFetch } from '@/lib/auth/authedFetch'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, FilePlus2, FolderOpen, Search, Trash2 } from 'lucide-react'
+import { ChevronDown, FilePlus2, FolderOpen, Search, Send, Trash2 } from 'lucide-react'
 
 type EstimateRow = {
   id: string
@@ -40,6 +40,7 @@ export default function EstimatesPage() {
   const [error, setError] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState<EstimateRow | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [movingToSentIds, setMovingToSentIds] = useState<string[]>([])
   const [showSent, setShowSent] = useState(false)
   const [sentQuery, setSentQuery] = useState('')
 
@@ -79,6 +80,49 @@ export default function EstimatesPage() {
     void load()
   }, [load])
 
+  const moveToSent = async (row: EstimateRow) => {
+    if (!row.job_id) return
+    setError(null)
+    setMovingToSentIds((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]))
+
+    const fallbackSentAt = new Date().toISOString()
+    const res = await authedFetch(`/api/jobs/${row.job_id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estimate_sent_at: fallbackSentAt }),
+    })
+    const payload = await res.json().catch(() => null)
+
+    setMovingToSentIds((prev) => prev.filter((id) => id !== row.id))
+    if (!res.ok) {
+      setError(payload?.error ?? res.statusText)
+      return
+    }
+
+    const sentAt =
+      typeof payload?.job?.estimate_sent_at === 'string' && payload.job.estimate_sent_at
+        ? payload.job.estimate_sent_at
+        : fallbackSentAt
+    const nextStatus =
+      typeof payload?.job?.status === 'string' && payload.job.status
+        ? payload.job.status
+        : 'estimate_sent'
+
+    setRows((prev) =>
+      prev.map((item) =>
+        item.id === row.id
+          ? {
+              ...item,
+              job_estimate_sent_at: sentAt,
+              job_status: nextStatus,
+              is_sent_estimate: true,
+            }
+          : item
+      )
+    )
+    setShowSent(true)
+  }
+
   const activeEstimates = useMemo(
     () =>
       [...rows]
@@ -99,54 +143,70 @@ export default function EstimatesPage() {
     })
   }, [rows, sentQuery])
 
-  const renderEstimateCard = (row: EstimateRow) => (
-    <div
-      key={row.id}
-      onClick={() => router.push(`/crm/estimates/${row.id}`)}
-      className="cursor-pointer rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
-    >
-      <div className="flex flex-wrap justify-between gap-3">
-        <div>
-          <div className="text-base font-extrabold text-gray-900">
-            {row.job_title ?? 'Untitled job'}
+  const renderEstimateCard = (row: EstimateRow) => {
+    const movingToSent = movingToSentIds.includes(row.id)
+    return (
+      <div
+        key={row.id}
+        onClick={() => router.push(`/crm/estimates/${row.id}`)}
+        className="cursor-pointer rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+      >
+        <div className="flex flex-wrap justify-between gap-3">
+          <div>
+            <div className="text-base font-extrabold text-gray-900">
+              {row.job_title ?? 'Untitled job'}
+            </div>
+            <div className="mt-0.5 text-xs text-gray-600">
+              {row.customer_name ?? row.customer_id}
+            </div>
+            <div className="mt-1.5 text-xs text-gray-600">Status: {row.status}</div>
           </div>
-          <div className="mt-0.5 text-xs text-gray-600">
-            {row.customer_name ?? row.customer_id}
+          <div className="text-right">
+            <div className="text-xs text-gray-600">Final total</div>
+            <div className="text-xl font-black text-gray-900">
+              {formatCurrency(row.latest_output_json?.output_app?.FinalTotal)}
+            </div>
+            <div className="mt-1 text-[11px] text-gray-500">
+              Updated: {new Date(row.updated_at).toLocaleString()}
+            </div>
           </div>
-          <div className="mt-1.5 text-xs text-gray-600">Status: {row.status}</div>
         </div>
-        <div className="text-right">
-          <div className="text-xs text-gray-600">Final total</div>
-          <div className="text-xl font-black text-gray-900">
-            {formatCurrency(row.latest_output_json?.output_app?.FinalTotal)}
-          </div>
-          <div className="mt-1 text-[11px] text-gray-500">
-            Updated: {new Date(row.updated_at).toLocaleString()}
-          </div>
+        <div className="mt-3 flex justify-end gap-2">
+          {!row.is_sent_estimate && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                void moveToSent(row)
+              }}
+              disabled={movingToSent}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <Send size={14} aria-hidden="true" />
+              <span>{movingToSent ? 'Moving...' : 'Move to sent'}</span>
+            </button>
+          )}
+          <Link
+            href={`/crm/estimates/${row.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-900"
+          >
+            <FolderOpen size={14} aria-hidden="true" />
+            <span>Open</span>
+          </Link>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setConfirmingDelete(row)
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700"
+          >
+            <Trash2 size={14} aria-hidden="true" />
+            <span>Delete</span>
+          </button>
         </div>
       </div>
-      <div className="mt-3 flex justify-end gap-2">
-        <Link
-          href={`/crm/estimates/${row.id}`}
-          onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-900"
-        >
-          <FolderOpen size={14} aria-hidden="true" />
-          <span>Open</span>
-        </Link>
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            setConfirmingDelete(row)
-          }}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700"
-        >
-          <Trash2 size={14} aria-hidden="true" />
-          <span>Delete</span>
-        </button>
-      </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">

@@ -17,6 +17,19 @@ import {
   Settings as SettingsIcon,
   Shapes,
 } from 'lucide-react'
+import {
+  calcRectPerimeterLf,
+  formatCurrency,
+  normalizeColorId,
+  normalizePrimerMode,
+  paintOptionLabel,
+  parseSpreadsheetIdFromSheetPath,
+  primerModeEnabled,
+  toNumString,
+  toText,
+  toYN,
+  trimOptionLabel,
+} from './editorFormatting'
 
 type OutputApp = Record<string, string | number | null>
 
@@ -394,78 +407,11 @@ const emptyCatalogs: EstimateCatalogsPayload = {
   },
 }
 
-function toText(v: unknown) {
-  return v == null ? '' : String(v)
-}
-
-function toNumString(v: unknown) {
-  if (v == null || v === '') return ''
-  const n = Number(v)
-  return Number.isFinite(n) ? String(n) : ''
-}
-
-function toYN(v: unknown, fallback: 'Y' | 'N' = 'N'): 'Y' | 'N' {
-  return String(v ?? '').toUpperCase() === 'Y' ? 'Y' : fallback
-}
-
-function normalizePrimerMode(value: unknown): '' | 'Spot' | 'Full' {
-  const v = toText(value).trim().toLowerCase()
-  if (v === 'spot') return 'Spot'
-  if (v === 'full' || v === 'yes' || v === 'y') return 'Full'
-  return ''
-}
-
-function primerModeEnabled(value: unknown) {
-  return normalizePrimerMode(value) !== ''
-}
-
-function normalizeColorId(v: string) {
-  return v.toUpperCase().replace(/[^A-Z]/g, '')
-}
-
-function formatCurrency(value: unknown) {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return '-'
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(n)
-}
-
-function calcRectPerimeterLf(lengthIn: string, widthIn: string) {
-  const l = Number(lengthIn)
-  const w = Number(widthIn)
-  if (!Number.isFinite(l) || !Number.isFinite(w)) return ''
-  return String((2 * (l + w)) / 12)
-}
-
 function nextRoomId(rows: RoomDraft[]) {
   const used = new Set(rows.map((r) => r.room_id))
   let n = 1
   while (used.has(`R${String(n).padStart(3, '0')}`)) n += 1
   return `R${String(n).padStart(3, '0')}`
-}
-
-function paintOptionLabel(p: PaintCatalogOption) {
-  const bits = [p.label]
-  if (p.price_per_gal != null) bits.push(`$${p.price_per_gal}/gal`)
-  if (p.coverage_sqft_per_gal_per_coat != null) bits.push(`${p.coverage_sqft_per_gal_per_coat} sqft/gal`)
-  return bits.join(' - ')
-}
-
-function trimOptionLabel(item: TrimItemOption) {
-  const unit = toText(item.unit).toUpperCase()
-  return unit ? `${item.label} (${unit})` : item.label
-}
-
-function parseSpreadsheetIdFromSheetPath(path: string | null | undefined) {
-  const raw = toText(path)
-  if (!raw) return ''
-  const filePathMatch = /sheet_([a-zA-Z0-9\-_]+)\.xlsx/.exec(raw)
-  if (filePathMatch?.[1]) return filePathMatch[1]
-  const urlMatch = /\/spreadsheets\/d\/([a-zA-Z0-9\-_]+)/.exec(raw)
-  return urlMatch?.[1] ?? ''
 }
 
 function defaultCeilingTypeId(catalogs: EstimateCatalogsPayload) {

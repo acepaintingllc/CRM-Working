@@ -39,10 +39,11 @@ export type PaintLogRow = {
 
 type PhotoRow = {
   id: string
-  phase: 'before' | 'after'
   url: string
   caption: string | null
-  created_at: string
+  captured_at: string | null
+  uploaded_at: string | null
+  created_at: string | null
 }
 
 type EstimateCatalogPayload = {
@@ -212,7 +213,7 @@ export default function JobCompletionCloseoutModal({
           authedFetch('/api/email-templates', { cache: 'no-store' }),
           authedFetch(`/api/jobs/${jobId}`, { cache: 'no-store' }),
           authedFetch(`/api/jobs/${jobId}/paint-logs`, { cache: 'no-store' }),
-          authedFetch(`/api/jobs/${jobId}/photos`, { cache: 'no-store' }),
+          authedFetch(`/api/jobs/${jobId}/site-photos`, { cache: 'no-store' }),
           authedFetch('/api/estimate-options', { cache: 'no-store' }),
         ])
 
@@ -277,7 +278,7 @@ export default function JobCompletionCloseoutModal({
         setPaintRows(rows.length > 0 ? rows : [defaultPaintRow()])
 
         const photoRows = Array.isArray(photosPayload?.photos) ? (photosPayload.photos as PhotoRow[]) : []
-        setAfterPhotos(photoRows.filter((row) => row.phase === 'after'))
+        setAfterPhotos(photoRows)
 
         const basePaintOptions = [
           ...((estimateOptionsPayload?.wallPaintOptions ?? []) as string[]),
@@ -416,8 +417,14 @@ export default function JobCompletionCloseoutModal({
 
     const form = new FormData()
     form.append('file', file)
+    const localId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    form.append('client_local_id', `closeout-${localId}`)
+    form.append('captured_at', new Date().toISOString())
 
-    const res = await authedFetch(`/api/jobs/${jobId}/photos`, {
+    const res = await authedFetch(`/api/jobs/${jobId}/site-photos`, {
       method: 'POST',
       body: form,
     })
@@ -429,8 +436,8 @@ export default function JobCompletionCloseoutModal({
       return
     }
 
-    if (payload?.photo && payload.photo.phase === 'after') {
-      setAfterPhotos((prev) => [...prev, payload.photo as PhotoRow])
+    if (payload?.photo) {
+      setAfterPhotos((prev) => [payload.photo as PhotoRow, ...prev])
     }
     setPhotoNotice('Photo added.')
     event.target.value = ''
@@ -708,7 +715,7 @@ export default function JobCompletionCloseoutModal({
                     rel="noreferrer"
                     className="text-gray-700 underline"
                   >
-                    After photo · {formatDate(photo.created_at)}
+                    After photo · {formatDate(photo.captured_at ?? photo.created_at ?? photo.uploaded_at)}
                   </a>
                 ))}
               </div>

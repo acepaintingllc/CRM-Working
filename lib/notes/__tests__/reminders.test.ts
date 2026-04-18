@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { partitionTasksForDashboard, shouldSendTaskReminder } from '@/lib/notes/reminders'
-import type { NotesTaskRow } from '@/lib/notes/types'
+import { partitionTasksForDashboard, shouldSendTaskReminder } from '../reminders.ts'
+import type { NotesTaskRow } from '../types.ts'
 
 function makeTask(overrides: Partial<NotesTaskRow>): NotesTaskRow {
   const now = '2026-04-07T12:00:00.000Z'

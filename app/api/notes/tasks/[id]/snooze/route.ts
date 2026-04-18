@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 import { deriveReminderAt, isUuid } from '@/lib/notes/server'
 import { getNotesSettingsWithDefaults } from '@/lib/notes/settings'
 import {
@@ -77,7 +78,9 @@ export async function POST(request: Request, context: { params: Params }) {
     return NextResponse.json({ error: 'Invalid task id.' }, { status: 400 })
   }
 
-  const raw = await request.json().catch(() => null)
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 16 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const raw = parsed.value
   const action = (raw && typeof raw === 'object' ? (raw as { action?: unknown }).action : null) as
     | string
     | null

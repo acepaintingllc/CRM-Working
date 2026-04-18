@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/customers/api'
+import { readJsonBody } from '@/lib/server/apiRoute'
+
+function asOptionalString(value: unknown) {
+  return typeof value === 'string' ? value : null
+}
 
 export async function GET() {
   const session = await getSessionUserOrg()
@@ -33,17 +38,23 @@ export async function POST(request: Request) {
   }
 
   const { orgId } = session
-  const body = await request.json().catch(() => null)
-  if (!body?.name) {
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 64 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value
+
+  const name = asOptionalString(body.name)?.trim() ?? ''
+  if (!name) {
     return NextResponse.json({ error: 'Missing name' }, { status: 400 })
   }
+  const email = asOptionalString(body.email)?.trim() ?? null
+  const phone = asOptionalString(body.phone)?.trim() ?? null
 
   // Build payload based on columns that exist in your schema (avoid cache errors).
   const payload: Record<string, unknown> = {
     org_id: orgId,
-    name: body.name,
-    email: body.email ?? null,
-    phone: body.phone ?? null,
+    name,
+    email,
+    phone,
   }
 
   const optionalColumns = ['address', 'street', 'city', 'state', 'zip', 'notes']
@@ -75,9 +86,9 @@ export async function POST(request: Request) {
     )
   }
 
-  const normalizedName = body.name.trim().toLowerCase()
-  const normalizedEmail = body.email?.trim().toLowerCase()
-  const normalizedPhone = body.phone?.trim()
+  const normalizedName = name.toLowerCase()
+  const normalizedEmail = email?.toLowerCase() ?? null
+  const normalizedPhone = phone
 
   const duplicate = (existing ?? []).find((row) => {
     const rowName = row.name?.trim().toLowerCase() ?? ''

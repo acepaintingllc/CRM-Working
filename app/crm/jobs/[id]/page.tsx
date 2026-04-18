@@ -53,6 +53,10 @@ type JobDetail = {
   linked_estimates?: Array<{
     id: string
     status: string | null
+    version_name: string | null
+    version_state: string | null
+    version_kind: string | null
+    version_sort_order: number | null
     sheet_file_path: string | null
     updated_at: string | null
     created_at: string | null
@@ -61,10 +65,11 @@ type JobDetail = {
 
 type JobPhoto = {
   id: string
-  phase: 'before' | 'after'
   url: string
   caption: string | null
-  created_at: string
+  captured_at: string | null
+  uploaded_at: string | null
+  created_at: string | null
 }
 
 type SitePhoto = {
@@ -156,17 +161,15 @@ export default function JobDetailPage() {
       }
       setJob(payload?.job ?? null)
 
-      const [estimateRes, paintLogsRes, photosRes, sitePhotosRes] = await Promise.all([
+      const [estimateRes, paintLogsRes, photosRes] = await Promise.all([
         authedFetch(`/api/jobs/${id}/estimate-file`, { cache: 'no-store' }),
         authedFetch(`/api/jobs/${id}/paint-logs`, { cache: 'no-store' }),
-        authedFetch(`/api/jobs/${id}/photos`, { cache: 'no-store' }),
         authedFetch(`/api/jobs/${id}/site-photos`, { cache: 'no-store' }),
       ])
 
       const estimatePayload = await estimateRes.json().catch(() => null)
       const paintLogsPayload = await paintLogsRes.json().catch(() => null)
       const photosPayload = await photosRes.json().catch(() => null)
-      const sitePhotosPayload = await sitePhotosRes.json().catch(() => null)
 
       if (estimateRes.ok && estimatePayload?.file) {
         setEstimateFile(estimatePayload.file as EstimateDriveFile)
@@ -195,15 +198,18 @@ export default function JobDetailPage() {
 
       if (photosRes.ok && Array.isArray(photosPayload?.photos)) {
         const rows = photosPayload.photos as JobPhoto[]
-        setAfterPhotos(rows.filter((row) => row.phase === 'after'))
+        setAfterPhotos(rows)
       } else {
         setAfterPhotos([])
       }
-      if (sitePhotosRes.ok && Array.isArray(sitePhotosPayload?.photos)) {
-        setSitePhotos(sitePhotosPayload.photos as SitePhoto[])
-      } else {
-        setSitePhotos([])
-      }
+      setSitePhotos(
+        ((photosPayload?.photos ?? []) as JobPhoto[]).map((row) => ({
+          id: row.id,
+          url: row.url,
+          caption: row.caption,
+          captured_at: row.captured_at,
+        }))
+      )
       setLoading(false)
     }
 
@@ -262,7 +268,7 @@ export default function JobDetailPage() {
     if (!id || typeof id !== 'string') return
     const [paintRes, photosRes] = await Promise.all([
       authedFetch(`/api/jobs/${id}/paint-logs`, { cache: 'no-store' }),
-      authedFetch(`/api/jobs/${id}/photos`, { cache: 'no-store' }),
+      authedFetch(`/api/jobs/${id}/site-photos`, { cache: 'no-store' }),
     ])
     const paintPayload = await paintRes.json().catch(() => null)
     const photosPayload = await photosRes.json().catch(() => null)
@@ -281,7 +287,15 @@ export default function JobDetailPage() {
 
     if (photosRes.ok && Array.isArray(photosPayload?.photos)) {
       const rows = photosPayload.photos as JobPhoto[]
-      setAfterPhotos(rows.filter((row) => row.phase === 'after'))
+      setAfterPhotos(rows)
+      setSitePhotos(
+        rows.map((row) => ({
+          id: row.id,
+          url: row.url,
+          caption: row.caption,
+          captured_at: row.captured_at,
+        }))
+      )
     }
   }
 
@@ -488,12 +502,6 @@ export default function JobDetailPage() {
     job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
       ? `/crm/estimates/${job.linked_estimate_id}`
       : `/crm/jobs/${id}/estimate`
-  const linkedEstimateLabel =
-    job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
-      ? 'Open linked estimate'
-      : 'Open estimate'
-  const otherLinkedEstimates =
-    (job?.linked_estimates ?? []).filter((row) => row.id !== job?.linked_estimate_id) ?? []
 
   return (
     <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
@@ -667,7 +675,7 @@ export default function JobDetailPage() {
                                 rel="noreferrer"
                                 className="text-sm text-gray-800 underline"
                               >
-                                After photo - {formatDate(photo.created_at)}
+                                After photo - {formatDate(photo.captured_at ?? photo.created_at ?? photo.uploaded_at)}
                               </a>
                             ))}
                           </div>
@@ -726,39 +734,8 @@ export default function JobDetailPage() {
                       href={linkedEstimateHref}
                       style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
                     >
-                      {iconLabel(FileText, linkedEstimateLabel)}
+                      {iconLabel(FileText, 'Open estimate')}
                     </Link>
-                    {otherLinkedEstimates.length > 0 && (
-                      <details
-                        style={{
-                          ...smallButton,
-                          padding: '6px 8px',
-                          background: 'var(--crm-card)',
-                          border: '1px solid var(--crm-border)',
-                        }}
-                      >
-                        <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
-                          Other estimates ({otherLinkedEstimates.length})
-                        </summary>
-                        <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                          {otherLinkedEstimates.map((row, index) => (
-                            <Link
-                              key={row.id}
-                              href={`/crm/estimates/${row.id}`}
-                              style={{
-                                ...smallButton,
-                                textDecoration: 'none',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              {`Estimate ${index + 2}`}
-                            </Link>
-                          ))}
-                        </div>
-                      </details>
-                    )}
 
                     {job.status !== 'estimate_scheduled' && (
                       <Link

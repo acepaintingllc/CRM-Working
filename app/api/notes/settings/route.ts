@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 import { getNotesSettingsWithDefaults, upsertNotesSettings } from '@/lib/notes/settings'
 import { asOptionalTrimmedText, asRecord, isUuid, resolveOrgSenderUserId } from '@/lib/notes/server'
 import { parseHHMM, resolveTimeZone } from '@/lib/notes/time'
@@ -58,8 +59,9 @@ export async function PUT(request: Request) {
   }
 
   const { orgId, userId } = session
-  const rawBody = await request.json().catch(() => null)
-  const body = asRecord(rawBody)
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 32 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = asRecord(parsed.value)
   if (!body) {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }

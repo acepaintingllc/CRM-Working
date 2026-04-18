@@ -16,19 +16,22 @@ export async function GET(
   }
 
   const params = await Promise.resolve(context.params)
-  const id = (params as { id?: Unsafe } | null | undefined)?.id
+  const id = (params as { id?: string } | null | undefined)?.id
   if (!id || typeof id !== 'string' || !uuid.test(id)) {
     return NextResponse.json({ error: 'Invalid estimate id' }, { status: 400 })
   }
 
   try {
-    const refresh = new URL(request.url).searchParams.get('refresh') === '1'
+    const url = new URL(request.url)
+    const refresh = url.searchParams.get('refresh') === '1'
+    const source = url.searchParams.get('source') === 'template' ? 'template' : 'estimate'
     const catalogs = await getEstimateCatalogs({
-      origin: new URL(request.url).origin,
+      origin: url.origin,
       orgId: session.orgId,
       userId: session.userId,
       estimateId: id,
       forceRefresh: refresh,
+      source,
     })
     return NextResponse.json(catalogs)
   } catch (error) {

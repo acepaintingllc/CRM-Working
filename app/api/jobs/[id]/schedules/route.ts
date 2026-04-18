@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -82,8 +83,12 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
 
-  const body = await request.json().catch(() => null)
-  if (!body?.start_at || !body?.end_at) {
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 64 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value
+  const startAt = typeof body.start_at === 'string' ? body.start_at : ''
+  const endAt = typeof body.end_at === 'string' ? body.end_at : ''
+  if (!startAt || !endAt) {
     return NextResponse.json({ error: 'Missing start_at or end_at' }, { status: 400 })
   }
 
@@ -102,9 +107,9 @@ export async function POST(
     .insert({
       org_id: orgId,
       job_id: jobId,
-      start_at: body.start_at,
-      end_at: body.end_at,
-      notes: body.notes ?? null,
+      start_at: startAt,
+      end_at: endAt,
+      notes: typeof body.notes === 'string' ? body.notes : null,
     })
     .select('id, start_at, end_at, notes, calendar_event_id, calendar_added_at')
     .single()
@@ -128,8 +133,8 @@ export async function POST(
     .filter((v): v is string => typeof v === 'string')
     .sort()
 
-  const scheduledDate = starts[0] ?? body.start_at
-  const scheduledEndDate = ends[ends.length - 1] ?? body.end_at
+  const scheduledDate = starts[0] ?? startAt
+  const scheduledEndDate = ends[ends.length - 1] ?? endAt
 
   const { error: updateErr } = await updateJobScheduleRangeCompat(orgId, jobId, {
     status: 'scheduled',

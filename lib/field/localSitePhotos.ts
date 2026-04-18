@@ -1,6 +1,11 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
+import {
+  buildNextRetryAtIso,
+  isRetryDue,
+  shouldRetryUploadStatus,
+} from '@/lib/field/sitePhotoSync'
 
 export type SitePhotoApiRow = {
   id: string
@@ -26,8 +31,12 @@ export type LocalSitePhotoRecord = {
   mimeType: string
   blob: Blob | null
   remoteId: string | null
+  remoteDriveFileId: string | null
   remoteUrl: string | null
   uploadedAt: string | null
+  lastAttemptAt?: string | null
+  retryCount?: number
+  nextRetryAt?: string | null
   error: string | null
 }
 
@@ -39,6 +48,10 @@ const allJobsSyncScope = '__all_jobs__'
 let syncInFlight: Promise<{ synced: number; failed: number }> | null = null
 let rerunRequested = false
 let rerunScope: string = allJobsSyncScope
+const activeUploadLocalIds = new Set<string>()
+
+const syncParallelism = 3
+const maxRetryAttempts = 6
 
 function isBrowser() {
   return typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined'
@@ -141,13 +154,21 @@ export async function listLocalSitePhotosForJob(jobId: string) {
 
 export async function listRecentLocalSitePhotos(limit = 60) {
   const rows = await runTransaction<LocalSitePhotoRecord[]>('readonly', (store, resolve, reject) => {
-    const request = store.getAll()
+    const index = store.index('by_captured_at')
+    const request = index.openCursor(null, 'prev')
+    const out: LocalSitePhotoRecord[] = []
     request.onerror = () => reject(request.error ?? new Error('Failed to read recent photos'))
-    request.onsuccess = () => resolve((request.result as LocalSitePhotoRecord[]) ?? [])
+    request.onsuccess = () => {
+      const cursor = request.result
+      if (!cursor || out.length >= limit) {
+        resolve(out)
+        return
+      }
+      out.push(cursor.value as LocalSitePhotoRecord)
+      cursor.continue()
+    }
   })
   return rows
-    .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
-    .slice(0, limit)
 }
 
 export async function listPendingLocalSitePhotos(jobId?: string) {
@@ -165,9 +186,11 @@ export async function listPendingLocalSitePhotos(jobId?: string) {
     readByStatus('uploading'),
   ])
   const rows = [...queued, ...failed, ...uploading]
+  const nowIso = new Date().toISOString()
 
   return rows
     .filter((row) => (jobId ? row.jobId === jobId : true))
+    .filter((row) => row.status !== 'failed' || isRetryDue(row.nextRetryAt, nowIso))
     .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
 }
 
@@ -203,22 +226,25 @@ async function syncQueuedSitePhotosPass(options?: {
   let synced = 0
   let failed = 0
 
-  for (const item of pending) {
-    if (!item.blob) continue
-
-    const uploading = await updateLocalSitePhoto(item.localId, {
-      status: 'uploading',
-      error: null,
-    })
-    if (uploading && options?.onItem) options.onItem(uploading)
-
-    const form = new FormData()
-    form.append('file', item.blob, `${item.localId}.jpg`)
-    form.append('caption', item.caption)
-    form.append('client_local_id', item.localId)
-    form.append('captured_at', item.capturedAt)
+  const processItem = async (item: LocalSitePhotoRecord) => {
+    if (!item.blob) return
+    if (activeUploadLocalIds.has(item.localId)) return
+    activeUploadLocalIds.add(item.localId)
 
     try {
+      const uploading = await updateLocalSitePhoto(item.localId, {
+        status: 'uploading',
+        error: null,
+        lastAttemptAt: new Date().toISOString(),
+      })
+      if (uploading && options?.onItem) options.onItem(uploading)
+
+      const form = new FormData()
+      form.append('file', item.blob, `${item.localId}.jpg`)
+      form.append('caption', item.caption)
+      form.append('client_local_id', item.localId)
+      form.append('captured_at', item.capturedAt)
+
       const res = await authedFetch(`/api/jobs/${item.jobId}/site-photos`, {
         method: 'POST',
         body: form,
@@ -226,12 +252,16 @@ async function syncQueuedSitePhotosPass(options?: {
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         failed += 1
+        const nextRetryCount = Math.min((item.retryCount ?? 0) + 1, maxRetryAttempts)
+        const retryable = shouldRetryUploadStatus(res.status) && nextRetryCount < maxRetryAttempts
         const errored = await updateLocalSitePhoto(item.localId, {
           status: 'failed',
           error: payload?.error ?? res.statusText,
+          retryCount: nextRetryCount,
+          nextRetryAt: retryable ? buildNextRetryAtIso(new Date().toISOString(), nextRetryCount) : null,
         })
         if (errored && options?.onItem) options.onItem(errored)
-        continue
+        return
       }
 
       const photo = (payload?.photo ?? null) as SitePhotoApiRow | null
@@ -241,20 +271,46 @@ async function syncQueuedSitePhotosPass(options?: {
         error: null,
         blob: null,
         remoteId: photo?.id ?? item.remoteId,
+        remoteDriveFileId:
+          photo?.drive_file_id ??
+          item.remoteDriveFileId ??
+          extractDriveFileId(photo?.url ?? item.remoteUrl),
         remoteUrl: photo?.url ?? item.remoteUrl,
         uploadedAt: photo?.uploaded_at ?? new Date().toISOString(),
         caption: photo?.caption ?? item.caption,
+        retryCount: 0,
+        nextRetryAt: null,
       })
       if (uploaded && options?.onItem) options.onItem(uploaded)
     } catch (error) {
       failed += 1
+      const nextRetryCount = Math.min((item.retryCount ?? 0) + 1, maxRetryAttempts)
       const errored = await updateLocalSitePhoto(item.localId, {
         status: 'failed',
         error: error instanceof Error ? error.message : 'Upload failed',
+        retryCount: nextRetryCount,
+        nextRetryAt:
+          nextRetryCount < maxRetryAttempts
+            ? buildNextRetryAtIso(new Date().toISOString(), nextRetryCount)
+            : null,
       })
       if (errored && options?.onItem) options.onItem(errored)
+    } finally {
+      activeUploadLocalIds.delete(item.localId)
     }
   }
+
+  let cursor = 0
+  const workers = Array.from({ length: Math.min(syncParallelism, pending.length) }, async () => {
+    while (cursor < pending.length) {
+      const next = pending[cursor]
+      cursor += 1
+      if (!next) continue
+      await processItem(next)
+    }
+  })
+
+  await Promise.all(workers)
 
   return { synced, failed }
 }
@@ -310,9 +366,33 @@ export function createLocalSitePhotoId() {
   return `local-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+export function extractDriveFileId(value: string | null | undefined) {
+  if (!value) return null
+  const normalized = value.trim()
+  if (!normalized) return null
+
+  const directMatch = normalized.match(/^[A-Za-z0-9_-]{20,}$/)
+  if (directMatch) return directMatch[0]
+
+  const pathMatch = normalized.match(/\/d\/([A-Za-z0-9_-]{20,})/)
+  if (pathMatch?.[1]) return pathMatch[1]
+
+  const queryMatch = normalized.match(/[?&]id=([A-Za-z0-9_-]{20,})/)
+  if (queryMatch?.[1]) return queryMatch[1]
+
+  return null
+}
+
+export function buildDriveMediaUrl(fileId: string | null | undefined) {
+  const normalized = extractDriveFileId(fileId)
+  if (!normalized) return null
+  return `/api/google-drive/files/${encodeURIComponent(normalized)}?alt=media`
+}
+
 export function createPreviewUrl(record: LocalSitePhotoRecord) {
   if (record.blob) return URL.createObjectURL(record.blob)
-  return record.remoteUrl
+  const mediaUrl = buildDriveMediaUrl(record.remoteDriveFileId ?? extractDriveFileId(record.remoteUrl))
+  return mediaUrl
 }
 
 export async function queueCapturedSitePhoto(params: {
@@ -334,10 +414,17 @@ export async function queueCapturedSitePhoto(params: {
     mimeType: params.mimeType,
     blob: params.blob,
     remoteId: null,
+    remoteDriveFileId: null,
     remoteUrl: null,
     uploadedAt: null,
+    lastAttemptAt: null,
+    retryCount: 0,
+    nextRetryAt: null,
     error: null,
   }
   await putLocalSitePhoto(record)
+  if (typeof navigator === 'undefined' || navigator.onLine) {
+    void syncQueuedSitePhotos({ jobId: params.jobId })
+  }
   return record
 }

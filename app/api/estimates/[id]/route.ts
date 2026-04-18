@@ -58,7 +58,9 @@ function nextRoomId(used: Set<string>, startAt: number) {
 async function getEstimate(orgId: string, estimateId: string) {
   const res = await supabaseAdmin
     .from('estimates')
-    .select('id, org_id, job_id, customer_id, status, sheet_schema_version, sheet_file_path, latest_output_json, created_at, updated_at')
+    .select(
+      'id, org_id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, sheet_schema_version, sheet_file_path, latest_output_json, created_at, updated_at'
+    )
     .eq('org_id', orgId)
     .eq('id', estimateId)
     .maybeSingle()
@@ -74,6 +76,9 @@ async function softReplaceRows(params: {
     | 'estimate_rollers'
     | 'estimate_prejob'
     | 'estimate_trim_items'
+    | 'estimate_job_colors'
+    | 'estimate_room_flags'
+    | 'estimate_access_fees'
     | 'estimate_other'
   orgId: string
   estimateId: string
@@ -88,21 +93,64 @@ async function softReplaceRows(params: {
   if (deactivate.error) throw new Error(deactivate.error.message)
 
   if (!params.rows.length) return
-  for (const row of params.rows) {
-    const id = asText(row.id)
-    if (id && uuid.test(id)) {
-      const update = await supabaseAdmin
-        .from(params.table)
-        .update({ ...row, active: 'Y' })
-        .eq('org_id', params.orgId)
-        .eq('estimate_id', params.estimateId)
-        .eq('id', id)
-      if (update.error) throw new Error(update.error.message)
-      continue
-    }
-    const insert = await supabaseAdmin.from(params.table).insert({ ...row, active: 'Y' })
+
+  const withId = params.rows
+    .filter((row) => {
+      const id = asText(row.id)
+      return !!id && uuid.test(id)
+    })
+    .map((row) => ({ ...row, active: 'Y' }))
+  const withoutId = params.rows
+    .filter((row) => {
+      const id = asText(row.id)
+      return !(id && uuid.test(id))
+    })
+    .map((row) => ({ ...row, active: 'Y' }))
+
+  if (withId.length > 0) {
+    const upsert = await supabaseAdmin.from(params.table).upsert(withId, { onConflict: 'id' })
+    if (upsert.error) throw new Error(upsert.error.message)
+  }
+  if (withoutId.length > 0) {
+    const insert = await supabaseAdmin.from(params.table).insert(withoutId)
     if (insert.error) throw new Error(insert.error.message)
   }
+}
+
+async function saveEstimateStructuredInputsTransactional(params: {
+  orgId: string
+  estimateId: string
+  jobId: string
+  payload: Record<string, unknown>
+}) {
+  const rpc = await supabaseAdmin.rpc('save_estimate_v2_inputs', {
+    p_org_id: params.orgId,
+    p_estimate_id: params.estimateId,
+    p_job_id: params.jobId,
+    p_payload: params.payload,
+  })
+  if (rpc.error) throw new Error(rpc.error.message)
+}
+
+function isMissingStructuredEstimateSaveRpc(message: string) {
+  const lowered = asText(message).toLowerCase()
+  if (!lowered.includes('save_estimate_v2_inputs')) return false
+  return (
+    lowered.includes('does not exist') ||
+    lowered.includes('could not find the function') ||
+    lowered.includes('function public.save_estimate_v2_inputs')
+  )
+}
+
+function isRecoverableStructuredEstimateSaveRpcPkCollision(message: string) {
+  const lowered = asText(message).toLowerCase()
+  if (!lowered.includes('duplicate key value violates unique constraint')) return false
+  return (
+    lowered.includes('estimate_job_colors_pkey') ||
+    lowered.includes('estimate_room_flags_pkey') ||
+    lowered.includes('estimate_access_fees_pkey') ||
+    lowered.includes('estimate_segments_pkey')
+  )
 }
 
 export async function GET(
@@ -128,7 +176,7 @@ export async function GET(
     return NextResponse.json({ error: estimateRes.error }, { status })
   }
 
-  const [jobsettings, rooms, segments, ceilingSegments, rollers, prejob, trimItems, other] = await Promise.all([
+  const [jobsettings, rooms, segments, ceilingSegments, rollers, prejob, trimItems, jobColors, roomFlags, accessFees, other] = await Promise.all([
     supabaseAdmin
       .from('estimate_jobsettings')
       .select('*')
@@ -177,6 +225,27 @@ export async function GET(
       .eq('active', 'Y')
       .order('sort_order', { ascending: true }),
     supabaseAdmin
+      .from('estimate_job_colors')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('estimate_id', id)
+      .eq('active', 'Y')
+      .order('position', { ascending: true }),
+    supabaseAdmin
+      .from('estimate_room_flags')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('estimate_id', id)
+      .eq('active', 'Y')
+      .order('position', { ascending: true }),
+    supabaseAdmin
+      .from('estimate_access_fees')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('estimate_id', id)
+      .eq('active', 'Y')
+      .order('position', { ascending: true }),
+    supabaseAdmin
       .from('estimate_other')
       .select('*')
       .eq('org_id', orgId)
@@ -192,6 +261,9 @@ export async function GET(
   if (rollers.error) return NextResponse.json({ error: rollers.error.message }, { status: 500 })
   if (prejob.error) return NextResponse.json({ error: prejob.error.message }, { status: 500 })
   if (trimItems.error) return NextResponse.json({ error: trimItems.error.message }, { status: 500 })
+  if (jobColors.error) return NextResponse.json({ error: jobColors.error.message }, { status: 500 })
+  if (roomFlags.error) return NextResponse.json({ error: roomFlags.error.message }, { status: 500 })
+  if (accessFees.error) return NextResponse.json({ error: accessFees.error.message }, { status: 500 })
   if (other.error) return NextResponse.json({ error: other.error.message }, { status: 500 })
 
   return NextResponse.json({
@@ -204,6 +276,9 @@ export async function GET(
       rollers: rollers.data ?? [],
       prejob: prejob.data ?? [],
       trim_items: trimItems.data ?? [],
+      job_colors: jobColors.data ?? [],
+      room_flags: roomFlags.data ?? [],
+      access_fees: accessFees.data ?? [],
       other: other.data ?? [],
     },
   })
@@ -237,6 +312,35 @@ export async function PUT(
   if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 })
 
   try {
+    const useStructuredTransactionalSave =
+      Array.isArray(body.job_colors) ||
+      Array.isArray(body.room_flags) ||
+      Array.isArray(body.access_fees)
+
+    if (useStructuredTransactionalSave) {
+      const jobId = asText(estimate.job_id)
+      if (uuid.test(jobId)) {
+        try {
+          await saveEstimateStructuredInputsTransactional({
+            orgId,
+            estimateId: id,
+            jobId,
+            payload: body as Record<string, unknown>,
+          })
+          return NextResponse.json({ ok: true })
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Failed saving estimate inputs transactionally'
+          if (
+            !isMissingStructuredEstimateSaveRpc(message) &&
+            !isRecoverableStructuredEstimateSaveRpcPkCollision(message)
+          ) {
+            throw error
+          }
+        }
+      }
+    }
+
     if (body.jobsettings) {
       const row = body.jobsettings
       const upsert = await supabaseAdmin.from('estimate_jobsettings').upsert(
@@ -274,6 +378,8 @@ export async function PUT(
           trim_paint_uom: asText(row.trim_paint_uom) || null,
           trim_primer_qty: asNullableNumber(row.trim_primer_qty),
           trim_primer_uom: asText(row.trim_primer_uom) || null,
+          paint_supplied_by: asText(row.paint_supplied_by) || null,
+          crew_size: asNullableNumber(row.crew_size),
         },
         { onConflict: 'org_id,estimate_id' }
       )
@@ -291,8 +397,10 @@ export async function PUT(
       const usedRoomIds = new Set<string>()
       const rows = body.rooms
         .map((row: Unsafe, idx: number) => {
-          const wallsInclude = toYN(row.walls_include, 'N')
+          const wallsInclude = toYN(row.walls_include, 'Y')
           const ceilingInclude = toYN(row.ceiling_include, 'N')
+          const doorsInclude = toYN(row.doors_include, 'N')
+          const drywallInclude = toYN(row.drywall_include, 'N')
           const mode = asText(row.mode || 'RECT').toUpperCase() === 'SEG' ? 'SEG' : 'RECT'
           const rawRoomId = asText(row.room_id).toUpperCase()
           const roomId = rawRoomId && !usedRoomIds.has(rawRoomId) ? rawRoomId : nextRoomId(usedRoomIds, idx + 1)
@@ -323,6 +431,7 @@ export async function PUT(
             position: idx,
             room_id: roomId,
             room_name: asText(row.room_name),
+            room_type_id: asText(row.room_type_id).toUpperCase() || null,
             mode,
             length_in: mode === 'RECT' ? asNullableNumber(row.length_in) : null,
             width_in: mode === 'RECT' ? asNullableNumber(row.width_in) : null,
@@ -333,13 +442,30 @@ export async function PUT(
               ceilingInclude === 'Y' ? asNullableNumber(row.ceilingsqft_override) : null,
             baseexclude_in: mode === 'RECT' ? asNullableNumber(row.baseexclude_in) : null,
             walls_include: wallsInclude,
-            walls_primer: asText(row.walls_primer) || null,
-            walls_topcoats: wallsInclude === 'Y' ? asNullableNumber(row.walls_topcoats) : null,
+            walls_primer: asText(row.walls_primer || row.wall_primer_mode) || null,
+            walls_topcoats:
+              wallsInclude === 'Y'
+                ? asNullableNumber(row.walls_topcoats ?? row.wall_coats)
+                : null,
+            wall_primer_coats:
+              wallsInclude === 'Y'
+                ? asNullableNumber(row.wall_primer_coats)
+                : null,
+            wall_spot_prime_pct:
+              wallsInclude === 'Y'
+                ? asNullableNumber(row.wall_spot_prime_pct)
+                : null,
             walls_prep_override: asText(row.walls_prep_override) || null,
             walls_prep_level:
               wallsInclude === 'Y'
                 ? asText(row.walls_prep_level || row.walls_prep_override) || null
                 : null,
+            wall_complexity_id:
+              asText(
+                row.wall_complexity_id ||
+                  row.wall_complexity_type_id ||
+                  row.wallcomplexitytypeid
+              ).toUpperCase() || null,
             wall_sqft_override: wallsInclude === 'Y' ? asNullableNumber(row.wall_sqft_override) : null,
             openings_sqft: wallsInclude === 'Y' ? asNullableNumber(row.openings_sqft) : null,
             walls_notes: wallsInclude === 'Y' ? asText(row.walls_notes) || null : null,
@@ -355,6 +481,8 @@ export async function PUT(
             ceiling_height_surcharge:
               ceilingInclude === 'Y' ? asNullableNumber(row.ceiling_height_surcharge) : null,
             trim_include: trimInclude,
+            doors_include: doorsInclude,
+            drywall_include: drywallInclude,
             trim_primer: asText(row.trim_primer) || null,
             trim_topcoats: asNullableNumber(row.trim_topcoats),
             trim_prep_override: asText(row.trim_prep_override) || null,
@@ -363,7 +491,7 @@ export async function PUT(
             paint_crown: paintCrown,
             paint_window_casing: windowCasingTypeId ? 'Y' : 'N',
             paint_door_casing: doorCasingTypeId ? 'Y' : 'N',
-            paint_doors: doorTypeId ? 'Y' : 'N',
+            paint_doors: doorsInclude === 'Y' || doorTypeId ? 'Y' : 'N',
             door_count: doorCount,
             window_count: windowCount,
             baseboard_lf: baseboardLf,
@@ -382,6 +510,8 @@ export async function PUT(
             wall_color_id: wallColorId,
             ceiling_type_id:
               ceilingInclude === 'Y' ? asText(row.ceiling_type_id).toUpperCase() || 'FLAT' : null,
+            paint_supplied_by: asText(row.paint_supplied_by) || null,
+            notes: asText(row.notes) || null,
           }
         })
         .filter((row: { room_name: string }) => row.room_name)
@@ -483,6 +613,60 @@ export async function PUT(
             row.scope === 'Ceiling' || row.wall_color_id
         )
       await softReplaceRows({ table: 'estimate_rollers', orgId, estimateId: id, rows })
+    }
+
+    if (Array.isArray(body.job_colors)) {
+      const rows = body.job_colors
+        .map((row: Unsafe, idx: number) => ({
+          id: asText(row.id) || undefined,
+          org_id: orgId,
+          estimate_id: id,
+          job_id: estimate.job_id,
+          position: idx,
+          color_id: asText(row.color_id || row.wall_color_id).toUpperCase(),
+          color_name: asText(row.color_name) || null,
+          roller_cover_id: asText(row.roller_cover_id).toUpperCase() || null,
+          roller_cover_qty: asNullableNumber(row.roller_cover_qty),
+          active: toYN(row.active, 'Y'),
+        }))
+        .filter((row: { color_id: string }) => !!row.color_id)
+      await softReplaceRows({ table: 'estimate_job_colors', orgId, estimateId: id, rows })
+    }
+
+    if (Array.isArray(body.room_flags)) {
+      const rows = body.room_flags
+        .map((row: Unsafe, idx: number) => ({
+          id: asText(row.id) || undefined,
+          org_id: orgId,
+          estimate_id: id,
+          job_id: estimate.job_id,
+          position: idx,
+          room_id: asText(row.room_id).toUpperCase() || null,
+          flag_id: asText(row.flag_id).toUpperCase(),
+          active: toYN(row.active, 'Y'),
+        }))
+        .filter((row: { room_id: string | null; flag_id: string }) => !!(row.room_id && row.flag_id))
+      await softReplaceRows({ table: 'estimate_room_flags', orgId, estimateId: id, rows })
+    }
+
+    if (Array.isArray(body.access_fees)) {
+      const rows = body.access_fees
+        .map((row: Unsafe, idx: number) => ({
+          id: asText(row.id) || undefined,
+          org_id: orgId,
+          estimate_id: id,
+          job_id: estimate.job_id,
+          position: idx,
+          room_id: asText(row.room_id).toUpperCase() || null,
+          segment_num: asNullableNumber(row.segment_num ?? row.segment_id),
+          access_fee_id: asText(row.access_fee_id).toUpperCase(),
+          qty: asNullableNumber(row.qty) ?? 1,
+          active: toYN(row.active, 'Y'),
+          notes: asText(row.notes) || null,
+          actual_cost_override: asNullableNumber(row.actual_cost_override),
+        }))
+        .filter((row: { room_id: string | null; access_fee_id: string }) => !!(row.room_id && row.access_fee_id))
+      await softReplaceRows({ table: 'estimate_access_fees', orgId, estimateId: id, rows })
     }
 
     if (Array.isArray(body.prejob)) {

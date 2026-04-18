@@ -14,6 +14,7 @@ import {
   Cog,
   FileText,
   Home,
+  Shapes,
   Users,
   Wrench,
 } from "lucide-react";
@@ -44,12 +45,17 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeMode>("system");
   const logoSrc = process.env.NEXT_PUBLIC_CRM_LOGO || "/ace-logo-clean.png";
   const iconSize = 16;
+  const isEstimatorV2Path =
+    pathname === "/crm/estimates/v2" ||
+    Boolean(pathname?.startsWith("/crm/estimates/v2/")) ||
+    Boolean(pathname && /^\/crm\/estimates\/[^/]+\/v2(?:\/|$)/.test(pathname));
   const navItems = useMemo(
     () => [
       { href: "/crm", label: "Home", Icon: Home },
       { href: "/crm/customers", label: "Customers", Icon: Users },
       { href: "/crm/jobs", label: "Job Center", Icon: Wrench },
       { href: "/crm/estimates", label: "Estimates", Icon: Calculator },
+      { href: "/crm/estimates/v2", label: "V2", Icon: Shapes },
       { href: "/crm/notes", label: "Notes", Icon: FileText },
       { href: "/crm/calendar", label: "Calendar", Icon: CalendarDays },
       { href: "/field/jobs", label: "Field Cam", Icon: Camera },
@@ -129,133 +135,124 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
 
   if (!ready) return null;
 
+
   return (
     <div
-      className="crm-shell"
       style={{
         minHeight: "100vh",
-        color: "var(--crm-text)",
+        display: "flex",
         background: "var(--crm-bg)",
+        color: "var(--crm-text)",
       }}
     >
-      <div className="crm-topbar" style={{ marginBottom: 16 }}>
+      {/* ── Desktop sidebar ── */}
+      <aside
+        className="hidden lg:flex"
+        style={{
+          width: 220,
+          flexShrink: 0,
+          flexDirection: "column",
+          background: "var(--crm-card)",
+          borderRight: "1px solid var(--crm-border)",
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          overflowY: "auto",
+        }}
+      >
+        {/* Brand */}
         <div
           style={{
-            width: "100%",
-            borderRadius: 16,
-            border: "1px solid var(--crm-border)",
-            background: "var(--crm-nav-bg)",
-            boxShadow: "var(--crm-shadow)",
-            backdropFilter: "blur(8px)",
-            padding: 10,
-            display: "grid",
-            gap: 10,
+            padding: "18px 16px 14px",
+            borderBottom: "1px solid var(--crm-border)",
           }}
         >
-          <div
+          <Link
+            href="/crm"
             style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
               gap: 10,
-              flexWrap: "wrap",
+              textDecoration: "none",
             }}
           >
-            <Link
-              href="/crm"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-                fontWeight: 900,
-                fontSize: 18,
-                color: "var(--crm-text)",
-                textDecoration: "none",
-              }}
-            >
-              {!logoError && (
-                <span
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 12,
-                    background: "var(--crm-card)",
-                    border: "1px solid var(--crm-border)",
-                    display: "grid",
-                    placeItems: "center",
-                    overflow: "hidden",
-                    boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
-                  }}
-                >
-                  <Image
-                    src={logoSrc}
-                    alt="ACE Painting"
-                    onError={() => setLogoError(true)}
-                    width={34}
-                    height={34}
-                    unoptimized
-                    style={{ width: 34, height: 34, objectFit: "contain" }}
-                  />
-                </span>
-              )}
-              <span>ACE Painting CRM</span>
-            </Link>
-            <label
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 12,
-                fontWeight: 800,
-                color: "var(--crm-muted)",
-              }}
-            >
-              Theme
-              <select
-                value={theme}
-                onChange={(event) => updateTheme(event.target.value as ThemeMode)}
+            {!logoError && (
+              <span
                 style={{
-                  height: 34,
+                  width: 36,
+                  height: 36,
                   borderRadius: 10,
+                  background: "var(--crm-bg)",
                   border: "1px solid var(--crm-border)",
-                  background: "var(--crm-input)",
-                  color: "var(--crm-text)",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  padding: "0 8px",
+                  display: "grid",
+                  placeItems: "center",
+                  overflow: "hidden",
+                  flexShrink: 0,
                 }}
               >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-          </div>
-          <nav className="crm-nav" style={{ gap: 10 }}>
+                <Image
+                  src={logoSrc}
+                  alt="ACE Painting"
+                  onError={() => setLogoError(true)}
+                  width={28}
+                  height={28}
+                  unoptimized
+                  style={{ width: 28, height: 28, objectFit: "contain" }}
+                />
+              </span>
+            )}
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: "var(--crm-text)", lineHeight: 1.2 }}>
+                ACE Painting
+              </div>
+              <div style={{ fontSize: 11, color: "var(--crm-muted)", fontWeight: 600, marginTop: 1 }}>
+                CRM
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        {/* Nav items */}
+        <nav
+          style={{
+            flex: 1,
+            padding: "10px 10px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+          }}
+        >
           {navItems.map((item) => {
             const active =
-              pathname === item.href ||
-              (item.href !== "/crm" && pathname?.startsWith(item.href));
+              item.href === "/crm"
+                ? pathname === item.href
+                : item.href === "/crm/estimates"
+                  ? Boolean(pathname?.startsWith("/crm/estimates")) && !isEstimatorV2Path
+                  : item.href === "/crm/estimates/v2"
+                    ? isEstimatorV2Path
+                    : pathname === item.href || Boolean(pathname?.startsWith(item.href));
             const Icon = item.Icon as LucideIcon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
                   padding: "9px 12px",
-                  borderRadius: 12,
+                  borderRadius: 10,
                   textDecoration: "none",
-                  fontWeight: 700,
+                  fontWeight: active ? 700 : 500,
                   fontSize: 14,
                   color: active ? "var(--crm-accent-text)" : "var(--crm-text-soft)",
                   background: active
                     ? "linear-gradient(135deg, var(--crm-accent) 0%, var(--crm-accent-strong) 100%)"
-                    : "var(--crm-nav-link)",
-                  border: active ? "1px solid var(--crm-accent)" : "1px solid var(--crm-border)",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 7,
-                  boxShadow: active ? "var(--crm-shadow-active)" : "none",
+                    : "transparent",
+                  borderLeft: active
+                    ? "none"
+                    : "3px solid transparent",
+                  transition: "background 120ms, color 120ms",
                 }}
               >
                 <Icon size={iconSize} aria-hidden="true" />
@@ -263,11 +260,184 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-          </nav>
+        </nav>
+
+        {/* Theme at bottom */}
+        <div
+          style={{
+            padding: "14px 16px",
+            borderTop: "1px solid var(--crm-border)",
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "var(--crm-muted)",
+            }}
+          >
+            Theme
+            <select
+              value={theme}
+              onChange={(event) => updateTheme(event.target.value as ThemeMode)}
+              style={{
+                flex: 1,
+                height: 32,
+                borderRadius: 8,
+                border: "1px solid var(--crm-border)",
+                background: "var(--crm-input)",
+                color: "var(--crm-text)",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "0 6px",
+              }}
+            >
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+        </div>
+      </aside>
+
+      {/* ── Main content column ── */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+
+        {/* Mobile top bar */}
+        <div
+          className="lg:hidden"
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 30,
+            borderBottom: "1px solid var(--crm-border)",
+            background: "var(--crm-nav-bg)",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 14px",
+              justifyContent: "space-between",
+            }}
+          >
+            <Link
+              href="/crm"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontWeight: 800,
+                fontSize: 15,
+                color: "var(--crm-text)",
+                textDecoration: "none",
+                flexShrink: 0,
+              }}
+            >
+              {!logoError && (
+                <span
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    background: "var(--crm-card)",
+                    border: "1px solid var(--crm-border)",
+                    display: "grid",
+                    placeItems: "center",
+                    overflow: "hidden",
+                  }}
+                >
+                  <Image
+                    src={logoSrc}
+                    alt="ACE Painting"
+                    onError={() => setLogoError(true)}
+                    width={22}
+                    height={22}
+                    unoptimized
+                    style={{ width: 22, height: 22, objectFit: "contain" }}
+                  />
+                </span>
+              )}
+              ACE CRM
+            </Link>
+            <select
+              value={theme}
+              onChange={(event) => updateTheme(event.target.value as ThemeMode)}
+              style={{
+                height: 30,
+                borderRadius: 8,
+                border: "1px solid var(--crm-border)",
+                background: "var(--crm-input)",
+                color: "var(--crm-text)",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "0 6px",
+              }}
+            >
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+          <div
+            style={{
+              overflowX: "auto",
+              display: "flex",
+              gap: 6,
+              padding: "0 14px 10px",
+              scrollbarWidth: "none",
+            }}
+          >
+            {navItems.map((item) => {
+              const active =
+                item.href === "/crm"
+                  ? pathname === item.href
+                  : item.href === "/crm/estimates"
+                    ? Boolean(pathname?.startsWith("/crm/estimates")) && !isEstimatorV2Path
+                    : item.href === "/crm/estimates/v2"
+                      ? isEstimatorV2Path
+                      : pathname === item.href || Boolean(pathname?.startsWith(item.href));
+              const Icon = item.Icon as LucideIcon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    padding: "7px 12px",
+                    borderRadius: 10,
+                    textDecoration: "none",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    color: active ? "var(--crm-accent-text)" : "var(--crm-text-soft)",
+                    background: active
+                      ? "linear-gradient(135deg, var(--crm-accent) 0%, var(--crm-accent-strong) 100%)"
+                      : "var(--crm-nav-link)",
+                    border: active ? "1px solid var(--crm-accent)" : "1px solid var(--crm-border)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Icon size={14} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Page content */}
+        <div style={{ flex: 1 }}>
+          {children}
         </div>
       </div>
-
-      {children}
     </div>
   );
 }

@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/server'
-import { createEstimateWorkbook } from '@/lib/server/estimateSpreadsheet'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-function parseSpreadsheetIdFromSheetPath(path: string | null | undefined) {
-  const raw = String(path ?? '').trim()
-  if (!raw) return null
-  const filePathMatch = /sheet_([a-zA-Z0-9\-_]+)\.xlsx/.exec(raw)
-  if (filePathMatch?.[1]) return filePathMatch[1]
-  const urlMatch = /\/spreadsheets\/d\/([a-zA-Z0-9\-_]+)/.exec(raw)
-  if (urlMatch?.[1]) return urlMatch[1]
-  return null
+const VERSION_STATES = new Set(['draft', 'live', 'archived'])
+const VERSION_KINDS = new Set(['standard', 'alternate', 'split', 'combined', 'revision'])
+
+function asText(value: unknown) {
+  return String(value ?? '').trim()
+}
+
+function asOptionalNumber(value: unknown) {
+  if (value == null || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
 }
 
 export async function GET() {
@@ -25,7 +27,9 @@ export async function GET() {
   const { orgId } = session
   const { data: estimates, error } = await supabaseAdmin
     .from('estimates')
-    .select('id, job_id, customer_id, status, sheet_schema_version, sheet_file_path, latest_output_json, created_at, updated_at')
+    .select(
+      'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, sheet_schema_version, sheet_file_path, latest_output_json, created_at, updated_at'
+    )
     .eq('org_id', orgId)
     .order('updated_at', { ascending: false })
 
@@ -76,7 +80,9 @@ export async function GET() {
       job_title: jobs.get(row.job_id)?.title ?? null,
       job_status: jobs.get(row.job_id)?.status ?? null,
       job_estimate_sent_at: jobs.get(row.job_id)?.estimate_sent_at ?? null,
-      is_sent_estimate: Boolean(jobs.get(row.job_id)?.estimate_sent_at),
+      is_sent_estimate: Boolean(
+        jobs.get(row.job_id)?.estimate_sent_at || jobs.get(row.job_id)?.status === 'estimate_sent'
+      ),
       customer_name: customers.get(row.customer_id) ?? null,
     })),
   })
@@ -111,6 +117,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid customer_id' }, { status: 400 })
   }
 
+  const requestedVersionState = asText(body.version_state).toLowerCase()
+  const requestedVersionKind = asText(body.version_kind).toLowerCase()
+  const versionState = VERSION_STATES.has(requestedVersionState) ? requestedVersionState : 'draft'
+  const versionKind = VERSION_KINDS.has(requestedVersionKind) ? requestedVersionKind : 'standard'
+
+  const latestSortRes = await supabaseAdmin
+    .from('estimates')
+    .select('version_sort_order')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .order('version_sort_order', { ascending: false })
+    .limit(1)
+
+  if (latestSortRes.error) {
+    return NextResponse.json({ error: latestSortRes.error.message }, { status: 500 })
+  }
+
+  const existingSort = asOptionalNumber(latestSortRes.data?.[0]?.version_sort_order)
+  const requestedSortOrder = asOptionalNumber(body.version_sort_order)
+  const versionSortOrder =
+    requestedSortOrder != null ? Math.max(0, Math.trunc(requestedSortOrder)) : (existingSort ?? -1) + 1
+  const fallbackVersionName = `Estimate Version ${versionSortOrder + 1}`
+  const versionName = asText(body.version_name) || fallbackVersionName
+
   const createRes = await supabaseAdmin
     .from('estimates')
     .insert({
@@ -118,9 +148,15 @@ export async function POST(request: Request) {
       job_id: jobId,
       customer_id: customerId,
       status: 'draft',
+      version_name: versionName,
+      version_state: versionState,
+      version_kind: versionKind,
+      version_sort_order: versionSortOrder,
       created_by: userId,
     })
-    .select('id, job_id')
+    .select(
+      'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
+    )
     .single()
 
   if (createRes.error) {
@@ -134,67 +170,24 @@ export async function POST(request: Request) {
     job_id: jobId,
   })
   if (settingsInsert.error) {
+    await supabaseAdmin.from('estimates').delete().eq('org_id', orgId).eq('id', estimateId)
     return NextResponse.json({ error: settingsInsert.error.message }, { status: 500 })
   }
 
-  try {
-    const origin = new URL(request.url).origin
-    const workbook = await createEstimateWorkbook({
-      origin,
-      orgId,
-      userId,
-      estimateId,
-      jobId,
-    })
-    const update = await supabaseAdmin
-      .from('estimates')
-      .update({
-        sheet_schema_version: workbook.schemaVersion,
-        sheet_file_path: workbook.sheetFilePath,
-      })
-      .eq('org_id', orgId)
-      .eq('id', estimateId)
-    if (update.error) {
-      return NextResponse.json({ error: update.error.message }, { status: 500 })
-    }
-
-    const workbookSpreadsheetId = parseSpreadsheetIdFromSheetPath(workbook.sheetFilePath)
-    const siblingRes = await supabaseAdmin
-      .from('estimates')
-      .select('id, sheet_file_path')
-      .eq('org_id', orgId)
-      .eq('job_id', jobId)
-      .neq('id', estimateId)
-      .not('sheet_file_path', 'is', null)
-    if (siblingRes.error) {
-      return NextResponse.json({ error: siblingRes.error.message }, { status: 500 })
-    }
-    const duplicate = (siblingRes.data ?? []).find((row) => {
-      const siblingPath =
-        typeof row.sheet_file_path === 'string' ? row.sheet_file_path : null
-      if (!siblingPath) return false
-      if (siblingPath === workbook.sheetFilePath) return true
-      const siblingSpreadsheetId = parseSpreadsheetIdFromSheetPath(siblingPath)
-      return Boolean(
-        workbookSpreadsheetId &&
-          siblingSpreadsheetId &&
-          workbookSpreadsheetId === siblingSpreadsheetId
-      )
-    })
-    if (duplicate) {
-      throw new Error(
-        `Workbook isolation check failed: estimate ${duplicate.id} already references the same sheet.`
-      )
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed creating estimate workbook'
-    await supabaseAdmin
-      .from('estimates')
-      .update({ status: 'error' })
-      .eq('org_id', orgId)
-      .eq('id', estimateId)
-    return NextResponse.json({ error: message }, { status: 400 })
+  const pricingPolicyInsert = await supabaseAdmin.from('estimate_pricing_policies').insert({
+    org_id: orgId,
+    estimate_id: estimateId,
+    job_id: jobId,
+  })
+  if (pricingPolicyInsert.error) {
+    await supabaseAdmin.from('estimate_jobsettings').delete().eq('org_id', orgId).eq('estimate_id', estimateId)
+    await supabaseAdmin.from('estimates').delete().eq('org_id', orgId).eq('id', estimateId)
+    return NextResponse.json({ error: pricingPolicyInsert.error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, id: estimateId })
+  return NextResponse.json({
+    ok: true,
+    id: estimateId,
+    estimate: createRes.data,
+  })
 }

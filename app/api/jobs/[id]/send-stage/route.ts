@@ -1,16 +1,28 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
+import { supabaseAdmin } from '@/lib/server/org'
 import { sendGmailMessage } from '@/lib/server/googleMail'
 import {
   downloadDriveFile,
   findLatestEstimateFile,
   findMatchingEstimateFiles,
 } from '@/lib/server/googleDrive'
-import { checkLocalRateLimit } from '@/lib/server/rateLimit'
 import type { EmailSendStatus } from '@/lib/email/types'
-
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import { applyTemplate, withTemplateAliases } from '@/lib/server/emailTemplate'
+import { serverLog } from '@/lib/server/log'
+import { assertSchema, isMissingSchemaErrorMessage } from '@/lib/server/schema'
+import {
+  buildJobSelect,
+  filterOptionalJobColumnPayload,
+  getAvailableOptionalJobColumns,
+  withOptionalJobColumns,
+} from '@/lib/server/jobSchema'
+import {
+  jsonError,
+  readJsonBody,
+  readUuidParam,
+  requireSessionUserOrg,
+  resolveParams,
+} from '@/lib/server/apiRoute'
 
 const stageValues = [
   'estimate_scheduled',
@@ -28,34 +40,6 @@ const throttleMaxAttempts = 6
 const replayPollTries = 8
 const replayPollDelayMs = 150
 const throttleStatuses: Array<'pending' | 'sent' | 'failed'> = ['pending', 'sent', 'failed']
-
-function applyTemplate(template: string, vars: Record<string, string | null | undefined>) {
-  let output = template
-  for (const [key, value] of Object.entries(vars)) {
-    const safe = value ?? ''
-    output = output.replaceAll(`{{${key}}}`, safe)
-  }
-  return output
-}
-
-function withAliases(vars: Record<string, string | null | undefined>) {
-  return {
-    ...vars,
-    customer_name: vars.customerName,
-    customer_email: vars.customerEmail,
-    customer_phone: vars.customerPhone,
-    customer_address: vars.customerAddress,
-    job_title: vars.jobTitle,
-    estimate_date: vars.estimateDate,
-    scheduled_date: vars.scheduledDate,
-    scheduled_blocks: vars.scheduledBlocks,
-    estimate_file_name: vars.estimateFileName,
-    estimate_file_link: vars.estimateFileLink,
-    estimate_file_names: vars.estimateFileNames,
-    estimate_file_links: vars.estimateFileLinks,
-    review_link: vars.reviewLink,
-  }
-}
 
 type JobRecord = {
   customer_id: string | null
@@ -104,53 +88,6 @@ type EstimateAttachment = {
   matchMode?: string | null
 }
 
-type SupabaseLikeError = {
-  code?: string | null
-  message?: string | null
-}
-
-function missingJobsColumnFromError(message: string) {
-  const byCache = message.match(/Could not find the '([a-zA-Z0-9_]+)' column of 'jobs' in the schema cache/i)
-  if (byCache?.[1]) return byCache[1]
-  const byRelation = message.match(/column "([a-zA-Z0-9_]+)" of relation "jobs" does not exist/i)
-  if (byRelation?.[1]) return byRelation[1]
-  return null
-}
-
-function emailLogSchemaIssueFromError(message: string) {
-  const byCache = message.match(
-    /Could not find the '([a-zA-Z0-9_]+)' column of 'email_log' in the schema cache/i
-  )
-  if (byCache?.[1]) return `missing column ${byCache[1]}`
-
-  const byRelationColumn = message.match(
-    /column "([a-zA-Z0-9_]+)" of relation "email_log" does not exist/i
-  )
-  if (byRelationColumn?.[1]) return `missing column ${byRelationColumn[1]}`
-
-  if (
-    /relation "email_log" does not exist/i.test(message) ||
-    /Could not find the table 'email_log' in the schema cache/i.test(message)
-  ) {
-    return 'missing table'
-  }
-
-  return null
-}
-
-function isEmailLogSchemaIssue(error: SupabaseLikeError | null | undefined) {
-  if (!error) return false
-  return Boolean(emailLogSchemaIssueFromError(error.message ?? ''))
-}
-
-function logEmailLogFallback(step: string, error: SupabaseLikeError | null | undefined) {
-  const reason = emailLogSchemaIssueFromError(error?.message ?? '') ?? error?.message ?? 'unknown error'
-  console.warn(`[send-stage] email_log unavailable during ${step}; falling back`, {
-    reason,
-    code: error?.code ?? null,
-  })
-}
-
 function pickOrgText(row: OrgRow, candidates: string[]) {
   for (const key of candidates) {
     const raw = row[key]
@@ -159,33 +96,29 @@ function pickOrgText(row: OrgRow, candidates: string[]) {
   return null
 }
 
-async function updateJobCompat(
-  orgId: string,
-  jobId: string,
-  payload: Record<string, unknown>
-) {
-  const patch = { ...payload }
-  for (let i = 0; i < 6; i++) {
-    const attempt = await supabaseAdmin
-      .from('jobs')
-      .update(patch)
-      .eq('org_id', orgId)
-      .eq('id', jobId)
-      .select('*')
-      .single()
-    if (!attempt.error) return attempt
-
-    const missingColumn = missingJobsColumnFromError(attempt.error.message ?? '')
-    if (!missingColumn || !(missingColumn in patch)) return attempt
-    delete patch[missingColumn]
-  }
+async function updateJobStatus(orgId: string, jobId: string, payload: Record<string, unknown>) {
+  const optionalJobColumns = await getAvailableOptionalJobColumns()
+  const jobSelect = buildJobSelect(
+    [
+      'id',
+      'customer_id',
+      'title',
+      'status',
+      'completed_at',
+      'estimate_date',
+      'estimate_sent_at',
+      'scheduled_date',
+      'scheduled_end_date',
+    ],
+    optionalJobColumns
+  )
 
   return supabaseAdmin
     .from('jobs')
-    .update(payload)
+    .update(filterOptionalJobColumnPayload(payload, optionalJobColumns))
     .eq('org_id', orgId)
     .eq('id', jobId)
-    .select('*')
+    .select(jobSelect)
     .single()
 }
 
@@ -261,13 +194,30 @@ async function getReplayRow(orgId: string, idempotencyKey: string) {
 
 async function getJobSnapshot(orgId: string, jobId: string | null) {
   if (!jobId) return null
+  const optionalJobColumns = await getAvailableOptionalJobColumns()
+  const jobSelect = buildJobSelect(
+    [
+      'id',
+      'customer_id',
+      'title',
+      'status',
+      'completed_at',
+      'estimate_date',
+      'estimate_sent_at',
+      'scheduled_date',
+      'scheduled_end_date',
+      'created_at',
+      'updated_at',
+    ],
+    optionalJobColumns
+  )
   const { data } = await supabaseAdmin
     .from('jobs')
-    .select('*')
+    .select(jobSelect)
     .eq('org_id', orgId)
     .eq('id', jobId)
     .maybeSingle()
-  return data ?? null
+  return withOptionalJobColumns((data ?? null) as Record<string, unknown> | null, optionalJobColumns)
 }
 
 async function replayResponse(orgId: string, idempotencyKey: string) {
@@ -345,18 +295,6 @@ async function logBlockedResponse(args: {
     return replayResponse(args.orgId, args.idempotencyKey)
   }
   if (blockedInsert.error) {
-    if (isEmailLogSchemaIssue(blockedInsert.error)) {
-      logEmailLogFallback('blocked_insert', blockedInsert.error)
-      return NextResponse.json(
-        {
-          ok: false,
-          status: 'blocked' as EmailSendStatus,
-          replayed: false,
-          error: args.errorMessage,
-        },
-        { status: args.statusCode }
-      )
-    }
     console.error('[send-stage] blocked email_log insert failed', blockedInsert.error)
     return NextResponse.json({ error: 'Unable to create email delivery log.' }, { status: 500 })
   }
@@ -376,20 +314,81 @@ export async function POST(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+  const { orgId, userId } = auth.session
+  const params = await resolveParams(context)
+  const idParam = readUuidParam((params as { id?: string } | null | undefined)?.id, 'job id')
+  if (!idParam.ok) return idParam.response
+  const id = idParam.value
+
+  const schema = await assertSchema([
+    {
+      table: 'jobs',
+      columns: [
+        'id',
+        'org_id',
+        'customer_id',
+        'title',
+        'status',
+        'completed_at',
+        'estimate_date',
+        'estimate_sent_at',
+        'scheduled_date',
+        'scheduled_end_date',
+      ],
+    },
+    { table: 'customers', columns: ['id', 'org_id', 'name', 'email', 'phone', 'address'] },
+    { table: 'orgs', columns: ['id'] },
+    { table: 'email_templates', columns: ['org_id', 'stage', 'subject', 'body'] },
+    { table: 'job_schedules', columns: ['org_id', 'job_id', 'start_at', 'end_at'] },
+    {
+      table: 'email_log',
+      columns: [
+        'id',
+        'org_id',
+        'job_id',
+        'stage',
+        'from_email',
+        'to_email',
+        'subject',
+        'body',
+        'idempotency_key',
+        'status',
+        'error_message',
+        'created_by',
+        'gmail_message_id',
+        'sent_at',
+        'created_at',
+      ],
+    },
+  ])
+  if (!schema.ok) {
+    const message = isMissingSchemaErrorMessage(schema.error)
+      ? `Missing required schema for ${schema.table}. Run latest SQL migrations.`
+      : schema.error
+    return jsonError(message, 500)
   }
 
-  const { orgId, userId } = session
-  const params = await Promise.resolve(context.params)
-  const id = (params as { id?: string } | null | undefined)?.id
-  if (!id || typeof id !== 'string' || !uuid.test(id)) {
-    return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
-  }
+  const optionalJobColumns = await getAvailableOptionalJobColumns()
+  const jobSelect = buildJobSelect(
+    [
+      'id',
+      'customer_id',
+      'title',
+      'status',
+      'completed_at',
+      'estimate_date',
+      'estimate_sent_at',
+      'scheduled_date',
+      'scheduled_end_date',
+    ],
+    optionalJobColumns
+  )
 
-  const body = await request.json().catch(() => null)
+  const parsedBody = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 96 * 1024 })
+  if (!parsedBody.ok) return parsedBody.response
+  const body = parsedBody.value
   const stageRaw = body?.stage
   const stage = typeof stageRaw === 'string' ? stageRaw : ''
   const subjectOverride = typeof body?.subject === 'string' ? body.subject : undefined
@@ -412,10 +411,10 @@ export async function POST(
     typeof idempotencyKeyRaw === 'string' ? idempotencyKeyRaw.trim() : ''
 
   if (!stage || !stageSet.has(stage)) {
-    return NextResponse.json({ error: 'Invalid stage' }, { status: 400 })
+    return jsonError('Invalid stage', 400)
   }
   if (!idempotencyKey || idempotencyKey.length > 200) {
-    return NextResponse.json({ error: 'Missing idempotency_key' }, { status: 400 })
+    return jsonError('Missing idempotency_key', 400)
   }
 
   const orgRes = await supabaseAdmin
@@ -424,7 +423,7 @@ export async function POST(
     .eq('id', orgId)
     .maybeSingle()
   if (orgRes.error) {
-    return NextResponse.json({ error: 'Unable to load organization profile.' }, { status: 500 })
+    return jsonError('Unable to load organization profile.', 500)
   }
   const orgRow = (orgRes.data ?? {}) as OrgRow
   const fromEmail =
@@ -439,15 +438,18 @@ export async function POST(
   const typedStage = stage as Stage
   const { data: job, error: jobErr } = await supabaseAdmin
     .from('jobs')
-    .select('*')
+    .select(jobSelect)
     .eq('org_id', orgId)
     .eq('id', id)
     .maybeSingle()
 
-  if (jobErr) return NextResponse.json({ error: 'Unable to load job.' }, { status: 500 })
-  if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+  if (jobErr) return jsonError('Unable to load job.', 500)
+  if (!job) return jsonError('Job not found', 404)
 
-  const jobRow = job as JobRecord
+  const jobRow = withOptionalJobColumns(
+    (job ?? null) as unknown as Record<string, unknown> | null,
+    optionalJobColumns
+  ) as JobRecord
   const { data: customer } = await supabaseAdmin
     .from('customers')
     .select('id, name, email, phone, address')
@@ -474,7 +476,7 @@ export async function POST(
     .filter((row) => Boolean(row.start_at && row.end_at))
 
   const customerRow = (customer ?? null) as CustomerRow | null
-  const varsBase = withAliases({
+  const varsBase = withTemplateAliases({
     customerName: customerRow?.name ?? '',
     customerEmail: customerRow?.email ?? '',
     customerPhone: customerRow?.phone ?? '',
@@ -609,28 +611,8 @@ export async function POST(
     .in('status', throttleStatuses)
 
   if (throttleError) {
-    if (isEmailLogSchemaIssue(throttleError)) {
-      logEmailLogFallback('throttle_check', throttleError)
-      const localRate = checkLocalRateLimit({
-        key: `send-stage:${orgId}:${userId}:${id}:${typedStage}`,
-        max: throttleMaxAttempts,
-        windowMs: throttleWindowMs,
-      })
-      if (!localRate.ok) {
-        return NextResponse.json(
-          {
-            ok: false,
-            status: 'blocked' as EmailSendStatus,
-            replayed: false,
-            error: 'Too many send attempts. Please wait and retry.',
-          },
-          { status: 429 }
-        )
-      }
-    } else {
-      console.error('[send-stage] email_log throttle check failed', throttleError)
-      return NextResponse.json({ error: 'Unable to validate send limits.' }, { status: 500 })
-    }
+    console.error('[send-stage] email_log throttle check failed', throttleError)
+    return jsonError('Unable to validate send limits.', 500)
   }
   if ((attemptCount ?? 0) >= throttleMaxAttempts) {
     return logBlockedResponse({
@@ -667,7 +649,7 @@ export async function POST(
         address: customerRow.address,
       })
       if ('error' in matching) {
-        console.warn('[send-stage] no-match', {
+        serverLog.warn('[send-stage] no-match', {
           jobId: id,
           stage: typedStage,
           reason: matching.error,
@@ -730,7 +712,7 @@ export async function POST(
         address: customerRow.address,
       })
       if ('error' in fileResult) {
-        console.warn('[send-stage] no-match', {
+        serverLog.warn('[send-stage] no-match', {
           jobId: id,
           stage: typedStage,
           reason: fileResult.error,
@@ -793,7 +775,7 @@ export async function POST(
     .filter(Boolean)
     .join('\n')
 
-  const vars = withAliases({
+  const vars = withTemplateAliases({
     customerName: customerRow.name ?? '',
     customerEmail: customerRow.email ?? '',
     customerPhone: customerRow.phone ?? '',
@@ -814,7 +796,6 @@ export async function POST(
   const subject = subjectOverride ?? applyTemplate(template.subject ?? '', vars)
   const bodyText = bodyOverride ?? applyTemplate(template.body ?? '', vars)
 
-  let deliveryLogUnavailable = false
   const pendingInsert = await supabaseAdmin
     .from('email_log')
     .insert({
@@ -836,19 +817,8 @@ export async function POST(
     return replayResponse(orgId, idempotencyKey)
   }
   if (pendingInsert.error || !pendingInsert.data) {
-    if (isEmailLogSchemaIssue(pendingInsert.error)) {
-      logEmailLogFallback('pending_insert', pendingInsert.error)
-      deliveryLogUnavailable = true
-    } else if (typedStage === 'estimate_sent') {
-      console.warn('[send-stage] estimate_sent proceeding without delivery log', {
-        code: pendingInsert.error?.code ?? null,
-        message: pendingInsert.error?.message ?? 'unknown error',
-      })
-      deliveryLogUnavailable = true
-    } else {
-      console.error('[send-stage] email_log insert failed', pendingInsert.error)
-      return NextResponse.json({ error: 'Unable to create email delivery log.' }, { status: 500 })
-    }
+    console.error('[send-stage] email_log insert failed', pendingInsert.error)
+    return jsonError('Unable to create email delivery log.', 500)
   }
 
   const logRow = pendingInsert.data ? (pendingInsert.data as EmailLogRow) : null
@@ -902,21 +872,22 @@ export async function POST(
     if (logUpdate.error) {
       warnings.push('Email sent, but failed to update delivery log.')
     }
-  } else if (deliveryLogUnavailable) {
-    warnings.push('Email sent, but delivery logging is unavailable.')
   }
 
   let updatedJob: Record<string, unknown> | null = null
 
   if (typedStage === 'estimate_sent') {
-    const { data: stageJob, error: updateErr } = await updateJobCompat(orgId, id, {
+    const { data: stageJob, error: updateErr } = await updateJobStatus(orgId, id, {
       status: 'estimate_sent',
       estimate_sent_at: sentAtIso,
     })
     if (updateErr) {
       warnings.push(`Email sent, but failed to sync estimate status: ${updateErr.message}`)
     } else {
-      updatedJob = (stageJob ?? null) as Record<string, unknown> | null
+      updatedJob = withOptionalJobColumns(
+        (stageJob ?? null) as unknown as Record<string, unknown> | null,
+        optionalJobColumns
+      ) as Record<string, unknown> | null
     }
   }
 
@@ -930,7 +901,7 @@ export async function POST(
       .filter((value): value is string => typeof value === 'string')
       .sort()
 
-    const { data: stageJob, error: updateErr } = await updateJobCompat(orgId, id, {
+    const { data: stageJob, error: updateErr } = await updateJobStatus(orgId, id, {
       status: 'scheduled',
       scheduled_date: starts[0] ?? jobRow.scheduled_date ?? null,
       scheduled_end_date: ends[ends.length - 1] ?? null,
@@ -939,18 +910,24 @@ export async function POST(
     if (updateErr) {
       warnings.push(`Email sent, but failed to sync scheduled status: ${updateErr.message}`)
     } else {
-      updatedJob = (stageJob ?? null) as Record<string, unknown> | null
+      updatedJob = withOptionalJobColumns(
+        (stageJob ?? null) as unknown as Record<string, unknown> | null,
+        optionalJobColumns
+      ) as Record<string, unknown> | null
     }
   }
 
   if (typedStage === 'completed') {
-    const { data: stageJob, error: updateErr } = await updateJobCompat(orgId, id, {
+    const { data: stageJob, error: updateErr } = await updateJobStatus(orgId, id, {
       completed_email_sent_at: sentAtIso,
     })
     if (updateErr) {
       warnings.push(`Email sent, but failed to sync review email status: ${updateErr.message}`)
     } else {
-      updatedJob = (stageJob ?? null) as Record<string, unknown> | null
+      updatedJob = withOptionalJobColumns(
+        (stageJob ?? null) as unknown as Record<string, unknown> | null,
+        optionalJobColumns
+      ) as Record<string, unknown> | null
     }
   }
 

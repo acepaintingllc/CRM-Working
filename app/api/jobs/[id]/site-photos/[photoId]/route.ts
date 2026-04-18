@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
-import { deleteDriveFile } from '@/lib/server/googleDrive'
-import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
-
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import { deleteSitePhoto, updateSitePhotoCaption } from '@/lib/server/sitePhotos'
+import {
+  jsonError,
+  readJsonBody,
+  readUuidParam,
+  requireSessionUserOrg,
+  resolveParams,
+} from '@/lib/server/apiRoute'
 
 function normalizeCaption(value: unknown) {
   if (value == null) return null
@@ -12,91 +15,59 @@ function normalizeCaption(value: unknown) {
   return trimmed || null
 }
 
-function validateIds(jobId: string | undefined, photoId: string | undefined) {
-  if (!jobId || !uuid.test(jobId)) return 'Invalid job id'
-  if (!photoId || !uuid.test(photoId)) return 'Invalid photo id'
-  return null
+function validateIds(jobId: unknown, photoId: unknown) {
+  const jobParam = readUuidParam(jobId, 'job id')
+  if (!jobParam.ok) return jobParam
+  const photoParam = readUuidParam(photoId, 'photo id')
+  if (!photoParam.ok) return photoParam
+  return { ok: true as const, jobId: jobParam.value, photoId: photoParam.value }
 }
 
 export async function PATCH(
   request: Request,
   context: { params: { id: string; photoId: string } | Promise<{ id: string; photoId: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
 
-  const params = await Promise.resolve(context.params)
-  const validationError = validateIds(params?.id, params?.photoId)
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 })
-  }
+  const params = await resolveParams(context)
+  const ids = validateIds(params?.id, params?.photoId)
+  if (!ids.ok) return ids.response
 
-  const body = await request.json().catch(() => null)
-  if (!body || !('caption' in body)) {
-    return NextResponse.json({ error: 'caption is required.' }, { status: 400 })
-  }
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 16 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value
+  if (!body || !('caption' in body)) return jsonError('caption is required.', 400)
 
-  const caption = normalizeCaption(body.caption)
-  const { data, error } = await supabaseAdmin
-    .from('job_site_photos')
-    .update({ caption })
-    .eq('org_id', session.orgId)
-    .eq('job_id', params.id)
-    .eq('id', params.photoId)
-    .select('id, client_local_id, drive_file_id, url, caption, captured_at, uploaded_at, created_at')
-    .maybeSingle()
+  const updated = await updateSitePhotoCaption({
+    orgId: auth.session.orgId,
+    jobId: ids.jobId,
+    photoId: ids.photoId,
+    caption: normalizeCaption(body.caption),
+  })
+  if ('error' in updated) return jsonError(updated.error ?? 'Unable to update site photo.', updated.status ?? 500)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!data) return NextResponse.json({ error: 'Photo not found.' }, { status: 404 })
-  return NextResponse.json({ ok: true, photo: data })
+  return NextResponse.json({ ok: true, photo: updated.photo })
 }
 
 export async function DELETE(
   request: Request,
   context: { params: { id: string; photoId: string } | Promise<{ id: string; photoId: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
 
-  const params = await Promise.resolve(context.params)
-  const validationError = validateIds(params?.id, params?.photoId)
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 })
-  }
+  const params = await resolveParams(context)
+  const ids = validateIds(params?.id, params?.photoId)
+  if (!ids.ok) return ids.response
 
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from('job_site_photos')
-    .select('id, drive_file_id')
-    .eq('org_id', session.orgId)
-    .eq('job_id', params.id)
-    .eq('id', params.photoId)
-    .maybeSingle()
-  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 })
-  if (!existing) return NextResponse.json({ error: 'Photo not found.' }, { status: 404 })
-
-  const driveDelete = await deleteDriveFile({
+  const deleted = await deleteSitePhoto({
     origin: new URL(request.url).origin,
-    orgId: session.orgId,
-    userId: session.userId,
-    fileId: String(existing.drive_file_id),
+    orgId: auth.session.orgId,
+    userId: auth.session.userId,
+    jobId: ids.jobId,
+    photoId: ids.photoId,
   })
-  if ('error' in driveDelete) {
-    return NextResponse.json({ error: driveDelete.error }, { status: 400 })
-  }
-
-  const { error } = await supabaseAdmin
-    .from('job_site_photos')
-    .delete()
-    .eq('org_id', session.orgId)
-    .eq('job_id', params.id)
-    .eq('id', params.photoId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
+  if ('error' in deleted) return jsonError(deleted.error ?? 'Unable to delete site photo.', deleted.status ?? 500)
   return NextResponse.json({ ok: true })
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 
 export async function GET() {
   const session = await getSessionUserOrg()
@@ -35,8 +36,11 @@ export async function PUT(request: Request) {
   }
 
   const { orgId } = session
-  const body = await request.json().catch(() => null)
-  if (!body?.stage) {
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 64 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value
+  const stage = typeof body.stage === 'string' ? body.stage.trim() : ''
+  if (!stage) {
     return NextResponse.json({ error: 'Missing stage' }, { status: 400 })
   }
 
@@ -45,10 +49,10 @@ export async function PUT(request: Request) {
     .upsert(
       {
         org_id: orgId,
-        stage: String(body.stage),
-        name: String(body.stage),
-        subject: String(body.subject ?? ''),
-        body: String(body.body ?? ''),
+        stage,
+        name: stage,
+        subject: typeof body.subject === 'string' ? body.subject : String(body.subject ?? ''),
+        body: typeof body.body === 'string' ? body.body : String(body.body ?? ''),
       },
       { onConflict: 'org_id,stage' }
     )

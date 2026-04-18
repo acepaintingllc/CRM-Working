@@ -4,21 +4,13 @@ import { authedFetch } from '@/lib/auth/authedFetch'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import type { LucideIcon } from 'lucide-react'
 import {
   ArrowRight,
   BellRing,
   CalendarCheck,
-  CircleX,
-  DollarSign,
-  LayoutDashboard,
-  Link2,
   NotebookText,
   Plus,
   Search,
-  Settings,
-  Trophy,
-  TrendingUp,
   Users,
   Wrench,
 } from 'lucide-react'
@@ -70,17 +62,6 @@ type NotesReminderSignal = {
   task: NotesTaskSignal
 }
 
-const iconSizeSm = 16
-const iconSizeMd = 18
-
-function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <Icon size={size} aria-hidden="true" />
-      <span>{label}</span>
-    </span>
-  )
-}
 
 const selectedCalendarsStorageKey = 'acecrm.calendar.selected'
 
@@ -189,7 +170,6 @@ export default function CRMHome() {
   const [signalsLoading, setSignalsLoading] = useState(false)
   const [calendarConnected, setCalendarConnected] = useState<boolean | null>(null)
   const [calendarError, setCalendarError] = useState<string | null>(null)
-  const [notesError, setNotesError] = useState<string | null>(null)
   const [calendarTodayEvents, setCalendarTodayEvents] = useState<CalendarEvent[]>([])
   const [notesReminders, setNotesReminders] = useState<NotesReminderSignal[]>([])
   const greeting = useMemo(() => {
@@ -247,13 +227,12 @@ export default function CRMHome() {
     const loadSignals = async () => {
       setSignalsLoading(true)
       setCalendarError(null)
-      setNotesError(null)
+      
 
       const now = new Date()
       let nextCalendarConnected: boolean | null = null
       let nextCalendarError: string | null = null
       let nextCalendarTodayEvents: CalendarEvent[] = []
-      let nextNotesError: string | null = null
       let nextNotesReminders: NotesReminderSignal[] = []
 
       const [calendarStatusRes, notesDashboardRes] = await Promise.all([
@@ -298,9 +277,7 @@ export default function CRMHome() {
         }
       }
 
-      if (!notesDashboardRes.ok) {
-        nextNotesError = notesDashboardPayload?.error ?? 'Unable to load notes reminders.'
-      } else {
+      if (notesDashboardRes.ok) {
         const typed = notesDashboardPayload as NotesDashboardPayload
         const overdue = (typed.tasks?.overdue ?? []).map((task) => ({ kind: 'overdue' as const, task }))
         const dueToday = (typed.tasks?.due_today ?? []).map((task) => ({
@@ -314,7 +291,6 @@ export default function CRMHome() {
       setCalendarConnected(nextCalendarConnected)
       setCalendarError(nextCalendarError)
       setCalendarTodayEvents(nextCalendarTodayEvents)
-      setNotesError(nextNotesError)
       setNotesReminders(nextNotesReminders)
       setSignalsLoading(false)
     }
@@ -345,387 +321,778 @@ export default function CRMHome() {
     }
   }, [customers, jobs, search])
 
+  const salesTotal = useMemo(
+    () =>
+      jobs
+        .filter((j) => j.status === 'completed')
+        .reduce((sum, j) => {
+          const n = Number(j.estimate_total_amount)
+          return sum + (Number.isFinite(n) ? n : 0)
+        }, 0),
+    [jobs]
+  )
+
+  const pipelineTotal = useMemo(
+    () =>
+      jobs.reduce((sum, j) => {
+        const n = Number(j.estimate_total_amount)
+        return sum + (Number.isFinite(n) && n > 0 ? n : 0)
+      }, 0),
+    [jobs]
+  )
+
+  const openJobs = useMemo(
+    () => jobs.filter((j) => j.status !== 'completed' && j.status !== 'lost'),
+    [jobs]
+  )
+
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+
   return (
-    <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
+    <div className="min-h-full py-5 md:py-7" style={{ background: 'var(--crm-bg)' }}>
       <div className="mx-auto grid max-w-6xl gap-4 px-4 md:gap-5 md:px-6">
-        <div className="crm-card grid gap-2 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="text-xs font-extrabold uppercase tracking-wide text-gray-500">
-            <span className="inline-flex items-center gap-1.5">
-              <LayoutDashboard size={iconSizeSm} aria-hidden="true" />
-              <span>Dashboard</span>
-            </span>
-          </div>
-          <h1 className="m-0 text-2xl font-extrabold text-gray-900 md:text-3xl">
-            {greeting}, Austin
-          </h1>
-          <p className="text-sm text-gray-600 md:text-[15px]">
-            Here&rsquo;s what&rsquo;s happening with your business today.
-          </p>
-          {counts && (
-            <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
-                title="Win rate"
-                value={`${counts.winRate}%`}
-                sub={`${counts.total} total decisions`}
-                accentClass="border-l-green-500"
-                Icon={TrendingUp}
-                emptyHint={counts.total === 0 ? 'No estimates yet - create your first estimate' : null}
-              />
-              <StatCard
-                title="Average ticket"
-                value={counts.avgTicket == null ? '-' : formatCurrency(counts.avgTicket)}
-                sub="Completed jobs with estimate total"
-                accentClass="border-l-blue-500"
-                Icon={DollarSign}
-                emptyHint={counts.avgTicket == null || counts.avgTicket <= 0 ? 'No paid jobs yet - add your first win' : null}
-              />
-              <StatCard
-                title="Estimates won"
-                value={String(counts.won)}
-                sub="Completed jobs"
-                accentClass="border-l-green-500"
-                Icon={Trophy}
-                emptyHint={counts.won === 0 ? 'No wins yet - close your first estimate' : null}
-              />
-              <StatCard
-                title="Estimates lost"
-                value={String(counts.lost)}
-                sub="Marked lost"
-                accentClass="border-l-red-500"
-                Icon={CircleX}
-                emptyHint={counts.lost === 0 ? 'No losses logged - keep momentum going' : null}
-              />
-            </div>
-          )}
-        </div>
 
-        <div className="crm-card grid gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="text-xs font-extrabold uppercase tracking-wide text-gray-500">
-            {iconLabel(Search, 'Global search')}
-          </div>
-          <input
-            aria-label="Search customers or jobs"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search customers or jobs..."
-            className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none ring-black/70 transition placeholder:text-gray-400 focus:ring-2"
-          />
-          {search.trim() === '' && (
-            <div className="text-xs text-gray-500">Type to search across customers and jobs.</div>
-          )}
-
-          {search.trim() !== '' && (
-            <div className="grid gap-3">
-              <div>
-                <div className="text-xs font-extrabold uppercase tracking-wide text-gray-500">
-                  {iconLabel(Users, 'Customers')}
-                </div>
-                {searchResults.customers.length === 0 && (
-                  <div className="text-sm text-gray-500">No customer matches.</div>
-                )}
-                {searchResults.customers.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/crm/customers/${c.id}`}
-                    className="mt-1.5 block rounded-xl border border-gray-200 p-2.5 text-gray-900 transition hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
-                    aria-label={`Open customer ${c.name ?? c.id}`}
-                  >
-                    <div className="font-bold">{c.name}</div>
-                    {(c.email || c.phone) && (
-                      <div className="text-xs text-gray-500">
-                        {[c.email, c.phone].filter(Boolean).join(' | ')}
-                      </div>
-                    )}
-                  </Link>
-                ))}
-              </div>
-
-              <div>
-                <div className="text-xs font-extrabold uppercase tracking-wide text-gray-500">
-                  {iconLabel(Wrench, 'Jobs')}
-                </div>
-                {searchResults.jobs.length === 0 && (
-                  <div className="text-sm text-gray-500">No job matches.</div>
-                )}
-                {searchResults.jobs.map((j) => (
-                  <Link
-                    key={j.id}
-                    href={`/crm/jobs/${j.id}`}
-                    className="mt-1.5 block rounded-xl border border-gray-200 p-2.5 text-gray-900 transition hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
-                    aria-label={`Open job ${j.title ?? j.id}`}
-                  >
-                    <div className="font-bold">{j.title ?? 'Untitled job'}</div>
-                    {(j.customer_name || j.customer_address) && (
-                      <div className="text-xs text-gray-500">
-                        {[j.customer_name, j.customer_address].filter(Boolean).join(' | ')}
-                      </div>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <FeatureCard
-            href="/crm/customers"
-            title="Customers"
-            sub="Profiles, contact info, and history."
-            Icon={Users}
-            iconShellClass="border border-gray-300 bg-white text-black"
-            highlight
-          />
-          <FeatureCard
-            href="/crm/jobs"
-            title="Job Center"
-            sub="Estimates, scheduling, and completion tracking."
-            Icon={Wrench}
-            iconShellClass="border border-gray-300 bg-white text-black"
-          />
-          <FeatureCard
-            href="/crm/calendar"
-            title="Calendar"
-            sub="Google Calendar view and event management."
-            Icon={CalendarCheck}
-            iconShellClass="border border-gray-300 bg-white text-black"
-          />
-          <FeatureCard
-            href="/crm/settings"
-            title="Settings"
-            sub="Templates, integrations, and CRM configuration."
-            Icon={Settings}
-            iconShellClass="border border-gray-300 bg-white text-black"
-          />
-        </div>
-
-        <div className="crm-card flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
-          <div className="font-extrabold text-gray-900">{iconLabel(Plus, 'Quick actions', iconSizeMd)}</div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/crm/customers/new"
-              aria-label="Create new customer"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-black px-3 py-2 text-sm font-extrabold text-white transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-black/80"
+        {/* Top bar: greeting + date + search */}
+        <div
+          className="crm-card flex flex-col gap-3 rounded-2xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+        >
+          <div>
+            <div
+              className="text-[11px] font-extrabold uppercase tracking-widest"
+              style={{ color: 'var(--crm-muted)' }}
             >
-              <Plus size={iconSizeSm} aria-hidden="true" />
-              <span>New customer</span>
-            </Link>
-            <Link
-              href="/crm/jobs/new"
-              aria-label="Create new job"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-black px-3 py-2 text-sm font-extrabold text-white transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-black/80"
-            >
-              <Plus size={iconSizeSm} aria-hidden="true" />
-              <span>New job</span>
-            </Link>
-            <Link
-              href="/crm/calendar"
-              aria-label="Open calendar"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-extrabold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/80"
-            >
-              <CalendarCheck size={iconSizeSm} aria-hidden="true" />
-              <span>Open calendar</span>
-            </Link>
-          </div>
-        </div>
-
-        <div className="crm-card grid gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-extrabold uppercase tracking-wide text-gray-500">
-                {iconLabel(Link2, 'Today Signals')}
-              </div>
-              <h2 className="mt-1 text-lg font-extrabold text-gray-900">Do I Have Anything Today?</h2>
-              <p className="mt-1 text-sm text-gray-600">Calendar today + notes reminders in one quick scan.</p>
+              {today}
             </div>
+            <h1
+              className="mt-0.5 text-xl font-extrabold md:text-2xl"
+              style={{ color: 'var(--crm-text)' }}
+            >
+              {greeting}, Austin
+            </h1>
           </div>
-
-          {signalsLoading && (
-            <div className="text-sm text-gray-500">Loading today signals...</div>
-          )}
-
-          {!signalsLoading && (
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div className="rounded-xl border border-gray-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="inline-flex items-center gap-1.5 text-sm font-extrabold text-gray-900">
-                    <CalendarCheck size={16} aria-hidden="true" />
-                    <span>Calendar Today</span>
-                  </div>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-extrabold text-gray-700">
-                    {calendarConnected ? calendarTodayEvents.length : 0}
-                  </span>
-                </div>
-
-                {calendarConnected === false ? (
-                  <div className="grid gap-2">
-                    <div className="text-sm text-gray-600">Google Calendar is not connected.</div>
-                    <Link
-                      href="/crm/calendar"
-                      className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-xs font-extrabold text-white"
+          <div className="relative w-full sm:w-72">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2"
+              style={{ color: 'var(--crm-muted)' }}
+              aria-hidden="true"
+            />
+            <input
+              aria-label="Search customers or jobs"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search customers or jobs..."
+              className="w-full rounded-xl border py-2.5 pl-8 pr-3 text-sm outline-none transition"
+              style={{
+                background: 'var(--crm-input)',
+                borderColor: 'var(--crm-border)',
+                color: 'var(--crm-text)',
+              }}
+            />
+            {search.trim() !== '' && (
+              <div
+                className="absolute left-0 right-0 top-full z-20 mt-1.5 grid gap-2 rounded-xl border p-3 shadow-xl"
+                style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+              >
+                {searchResults.customers.length > 0 && (
+                  <div>
+                    <div
+                      className="mb-1 text-[10px] font-extrabold uppercase tracking-widest"
+                      style={{ color: 'var(--crm-muted)' }}
                     >
-                      <CalendarCheck size={14} aria-hidden="true" />
-                      <span>Connect Google</span>
-                    </Link>
-                  </div>
-                ) : calendarError ? (
-                  <div className="grid gap-2">
-                    <div className="text-sm text-red-700">{calendarError}</div>
-                    <Link href="/crm/calendar" className="text-xs font-bold text-gray-700 underline">
-                      Open calendar
-                    </Link>
-                  </div>
-                ) : calendarTodayEvents.length === 0 ? (
-                  <div className="text-sm text-gray-500">No calendar items today.</div>
-                ) : (
-                  <div className="grid gap-2">
-                    {calendarTodayEvents.map((event) => (
-                      <div key={`${event.calendarId}:${event.id}`} className="rounded-lg border border-gray-200 p-2">
-                        <div className="text-sm font-bold text-gray-900">{event.summary ?? '(No title)'}</div>
-                        <div className="text-xs text-gray-600">{formatEventWindow(event.start, event.end)}</div>
-                        {event.htmlLink && (
-                          <a
-                            href={event.htmlLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-1 inline-flex text-xs font-bold text-gray-700 underline"
-                          >
-                            Open event
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-gray-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="inline-flex items-center gap-1.5 text-sm font-extrabold text-gray-900">
-                    <BellRing size={16} aria-hidden="true" />
-                    <span>Notes Reminders</span>
-                  </div>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-extrabold text-gray-700">
-                    {notesReminders.length}
-                  </span>
-                </div>
-
-                {notesError ? (
-                  <div className="grid gap-2">
-                    <div className="text-sm text-red-700">{notesError}</div>
-                    <Link href="/crm/notes" className="text-xs font-bold text-gray-700 underline">
-                      Open notes
-                    </Link>
-                  </div>
-                ) : notesReminders.length === 0 ? (
-                  <div className="text-sm text-gray-500">No notes reminders today.</div>
-                ) : (
-                  <div className="grid gap-2">
-                    {notesReminders.map((signal) => (
+                      Customers
+                    </div>
+                    {searchResults.customers.map((c) => (
                       <Link
-                        key={`${signal.kind}:${signal.task.id}`}
-                        href={`/crm/notes/tasks?focus=${encodeURIComponent(signal.task.id)}`}
-                        className="rounded-lg border border-gray-200 p-2 hover:bg-gray-50"
+                        key={c.id}
+                        href={`/crm/customers/${c.id}`}
+                        className="block rounded-lg px-2.5 py-2 text-sm transition"
+                        style={{ color: 'var(--crm-text)' }}
                       >
-                        <div className="text-sm font-bold text-gray-900">{signal.task.title}</div>
-                        <div className="text-xs text-gray-600">
-                          {signal.kind === 'overdue' ? 'Overdue' : 'Due today'} |{' '}
-                          {formatTaskDue(
-                            signal.task.due_at,
-                            signal.task.is_all_day,
-                            signal.task.has_due_time
-                          )}
-                        </div>
+                        <div className="font-semibold">{c.name}</div>
+                        {(c.email || c.phone) && (
+                          <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
+                            {[c.email, c.phone].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
                       </Link>
                     ))}
                   </div>
                 )}
+                {searchResults.jobs.length > 0 && (
+                  <div>
+                    <div
+                      className="mb-1 text-[10px] font-extrabold uppercase tracking-widest"
+                      style={{ color: 'var(--crm-muted)' }}
+                    >
+                      Jobs
+                    </div>
+                    {searchResults.jobs.map((j) => (
+                      <Link
+                        key={j.id}
+                        href={`/crm/jobs/${j.id}`}
+                        className="block rounded-lg px-2.5 py-2 text-sm transition"
+                        style={{ color: 'var(--crm-text)' }}
+                      >
+                        <div className="font-semibold">{j.title ?? 'Untitled job'}</div>
+                        {j.customer_name && (
+                          <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
+                            {j.customer_name}
+                          </div>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {searchResults.customers.length === 0 && searchResults.jobs.length === 0 && (
+                  <div className="text-sm" style={{ color: 'var(--crm-muted)' }}>
+                    No results.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sales hero row */}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          {/* Big sales card */}
+          <div
+            className="crm-card col-span-2 rounded-2xl border p-5 shadow-sm md:col-span-1 md:p-6"
+            style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+          >
+            <div
+              className="flex items-center justify-between"
+            >
+              <div
+                className="text-[11px] font-extrabold uppercase tracking-widest"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                Sales
+              </div>
+              <Link
+                href="/crm/jobs"
+                className="text-xs font-semibold underline-offset-2 hover:underline"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                View
+              </Link>
+            </div>
+            <div
+              className="mt-3 text-3xl font-extrabold tracking-tight md:text-4xl"
+              style={{ color: 'var(--crm-text)' }}
+            >
+              {formatCurrency(salesTotal)}
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t pt-4" style={{ borderColor: 'var(--crm-border)' }}>
+              <div>
+                <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
+                  Estimates Won
+                </div>
+                <div className="mt-0.5 text-xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
+                  {counts?.won ?? '-'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
+                  Avg. Value
+                </div>
+                <div className="mt-0.5 text-xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
+                  {counts?.avgTicket != null ? formatCurrency(counts.avgTicket) : '-'}
+                </div>
               </div>
             </div>
-          )}
+          </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/crm/calendar"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-extrabold text-gray-900 transition hover:bg-gray-50"
+          {/* Win Rate donut */}
+          <div
+            className="crm-card flex flex-col items-center justify-center gap-3 rounded-2xl border p-6 shadow-sm"
+            style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+          >
+            <div
+              className="text-[11px] font-extrabold uppercase tracking-widest"
+              style={{ color: 'var(--crm-muted)' }}
             >
-              <CalendarCheck size={14} aria-hidden="true" />
-              <span>Open calendar</span>
+              Win Rate
+            </div>
+            <DonutRing pct={counts?.winRate ?? 0} label={`${counts?.winRate ?? 0}%`} />
+            <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
+              {counts?.total ?? 0} total decisions
+            </div>
+          </div>
+
+          {/* Pipeline Value */}
+          <div
+            className="crm-card rounded-2xl border p-5 shadow-sm md:p-6"
+            style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+          >
+            <div className="flex items-center justify-between">
+              <div
+                className="text-[11px] font-extrabold uppercase tracking-widest"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                Pipeline
+              </div>
+              <Link
+                href="/crm/jobs"
+                className="text-xs font-semibold underline-offset-2 hover:underline"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                View
+              </Link>
+            </div>
+            <div
+              className="mt-3 text-3xl font-extrabold tracking-tight md:text-4xl"
+              style={{ color: 'var(--crm-text)' }}
+            >
+              {formatCurrency(pipelineTotal)}
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t pt-4" style={{ borderColor: 'var(--crm-border)' }}>
+              <div>
+                <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
+                  Open Jobs
+                </div>
+                <div className="mt-0.5 text-xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
+                  {openJobs.length}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
+                  Avg. Open Value
+                </div>
+                <div className="mt-0.5 text-xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
+                  {(() => {
+                    const openWithVal = openJobs.filter((j) => {
+                      const n = Number(j.estimate_total_amount)
+                      return Number.isFinite(n) && n > 0
+                    })
+                    if (openWithVal.length === 0) return '-'
+                    const avg = openWithVal.reduce((s, j) => s + Number(j.estimate_total_amount), 0) / openWithVal.length
+                    return formatCurrency(avg)
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Estimates metrics row */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {/* Total Estimates */}
+          <div
+            className="crm-card rounded-2xl border p-5 shadow-sm"
+            style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+          >
+            <div className="flex items-center justify-between">
+              <div
+                className="text-[11px] font-extrabold uppercase tracking-widest"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                Total Estimates
+              </div>
+              <Link
+                href="/crm/jobs"
+                className="text-xs font-semibold underline-offset-2 hover:underline"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                View
+              </Link>
+            </div>
+            <div className="mt-2 text-3xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
+              {jobs.length}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3" style={{ borderColor: 'var(--crm-border)' }}>
+              <div>
+                <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>Worth</div>
+                <div className="mt-0.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
+                  {formatCurrency(pipelineTotal)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>Avg. Value</div>
+                <div className="mt-0.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
+                  {counts?.avgTicket != null ? formatCurrency(counts.avgTicket) : '-'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Open Estimates */}
+          <div
+            className="crm-card rounded-2xl border p-5 shadow-sm"
+            style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+          >
+            <div className="flex items-center justify-between">
+              <div
+                className="text-[11px] font-extrabold uppercase tracking-widest"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                Open Estimates
+              </div>
+              <Link
+                href="/crm/jobs"
+                className="text-xs font-semibold underline-offset-2 hover:underline"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                View
+              </Link>
+            </div>
+            <div className="mt-2 text-3xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
+              {openJobs.length}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3" style={{ borderColor: 'var(--crm-border)' }}>
+              <div>
+                <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>Worth</div>
+                <div className="mt-0.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
+                  {formatCurrency(
+                    openJobs.reduce((sum, j) => {
+                      const n = Number(j.estimate_total_amount)
+                      return sum + (Number.isFinite(n) && n > 0 ? n : 0)
+                    }, 0)
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>Avg. Value</div>
+                <div className="mt-0.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
+                  {(() => {
+                    const openWithVal = openJobs.filter((j) => {
+                      const n = Number(j.estimate_total_amount)
+                      return Number.isFinite(n) && n > 0
+                    })
+                    if (openWithVal.length === 0) return '-'
+                    const avg =
+                      openWithVal.reduce((s, j) => s + Number(j.estimate_total_amount), 0) /
+                      openWithVal.length
+                    return formatCurrency(avg)
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Close Rate */}
+          <div
+            className="crm-card col-span-2 rounded-2xl border p-5 shadow-sm sm:col-span-1"
+            style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+          >
+            <div
+              className="text-[11px] font-extrabold uppercase tracking-widest"
+              style={{ color: 'var(--crm-muted)' }}
+            >
+              Close Rate
+            </div>
+            <div className="mt-2 text-3xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
+              {counts?.winRate ?? 0}%
+            </div>
+            <div className="mt-3">
+              <div
+                className="h-5 overflow-hidden rounded-full"
+                style={{ background: 'var(--crm-border)' }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${counts?.winRate ?? 0}%`,
+                    background: 'var(--crm-accent)',
+                  }}
+                />
+              </div>
+              <div className="mt-2 text-xs" style={{ color: 'var(--crm-muted)' }}>
+                {counts?.won ?? 0} won · {counts?.lost ?? 0} lost
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick actions */}
+        <div
+          className="crm-card flex flex-col gap-3 rounded-2xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+        >
+          <div
+            className="flex items-center gap-1.5 text-sm font-extrabold"
+            style={{ color: 'var(--crm-text)' }}
+          >
+            <Plus size={15} aria-hidden="true" />
+            Quick actions
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Link
+              href="/crm/customers/new"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-extrabold transition-transform hover:scale-[1.02] sm:justify-start sm:py-2"
+              style={{ background: 'var(--crm-accent)', color: 'var(--crm-accent-text)' }}
+            >
+              <Users size={13} aria-hidden="true" />
+              New customer
             </Link>
             <Link
-              href="/crm/notes"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-extrabold text-gray-900 transition hover:bg-gray-50"
+              href="/crm/jobs/new"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-extrabold transition-transform hover:scale-[1.02] sm:justify-start sm:py-2"
+              style={{ background: 'var(--crm-accent)', color: 'var(--crm-accent-text)' }}
             >
-              <NotebookText size={14} aria-hidden="true" />
-              <span>Open notes</span>
+              <Wrench size={13} aria-hidden="true" />
+              New job
+            </Link>
+            <Link
+              href="/crm/calendar"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-semibold transition sm:justify-start sm:py-2"
+              style={{
+                borderColor: 'var(--crm-border)',
+                background: 'var(--crm-button)',
+                color: 'var(--crm-button-text)',
+              }}
+            >
+              <CalendarCheck size={13} aria-hidden="true" />
+              Calendar
+            </Link>
+            <Link
+              href="/crm/customers"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-semibold transition sm:justify-start sm:py-2"
+              style={{
+                borderColor: 'var(--crm-border)',
+                background: 'var(--crm-button)',
+                color: 'var(--crm-button-text)',
+              }}
+            >
+              <Users size={13} aria-hidden="true" />
+              Customers
             </Link>
           </div>
         </div>
+
+        {/* Activity + Today Signals */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Activity feed */}
+          <div
+            className="crm-card rounded-2xl border shadow-sm"
+            style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+          >
+            <div
+              className="flex items-center gap-3 border-b px-5 pt-5 pb-3"
+              style={{ borderColor: 'var(--crm-border)' }}
+            >
+              <button
+                className="rounded-lg px-3 py-1.5 text-sm font-extrabold"
+                style={{ background: 'var(--crm-accent)', color: 'var(--crm-accent-text)' }}
+              >
+                Activity
+              </button>
+              <Link
+                href="/crm/notes/tasks"
+                className="rounded-lg px-3 py-1.5 text-sm font-semibold transition"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                Tasks
+              </Link>
+            </div>
+            <div className="px-5 py-4">
+              {jobs.length === 0 ? (
+                <div className="py-8 text-center text-sm" style={{ color: 'var(--crm-muted)' }}>
+                  No activity yet. Create your first job to get started.
+                </div>
+              ) : (
+                <div className="grid gap-0">
+                  {jobs.slice(0, 8).map((job, i) => (
+                    <Link
+                      key={job.id}
+                      href={`/crm/jobs/${job.id}`}
+                      className="group flex gap-3 py-3 transition"
+                      style={{
+                        borderBottom: i < Math.min(jobs.length, 8) - 1 ? `1px solid var(--crm-border)` : 'none',
+                      }}
+                    >
+                      <div
+                        className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-extrabold"
+                        style={{
+                          background: job.status === 'completed'
+                            ? 'var(--crm-success-bg)'
+                            : job.status === 'lost'
+                              ? 'var(--crm-danger-bg)'
+                              : 'var(--crm-border)',
+                          color: job.status === 'completed'
+                            ? 'var(--crm-success-text)'
+                            : job.status === 'lost'
+                              ? 'var(--crm-danger-text)'
+                              : 'var(--crm-muted)',
+                        }}
+                      >
+                        {job.status === 'completed' ? '✓' : job.status === 'lost' ? '✕' : '·'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div
+                          className="truncate text-sm font-semibold"
+                          style={{ color: 'var(--crm-text)' }}
+                        >
+                          {job.title ?? 'Untitled job'}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <span className="text-xs" style={{ color: 'var(--crm-muted)' }}>
+                            {job.customer_name ?? 'No customer'}
+                          </span>
+                          {job.estimate_total_amount != null &&
+                            Number(job.estimate_total_amount) > 0 && (
+                              <span
+                                className="text-xs font-semibold"
+                                style={{ color: 'var(--crm-text-soft)' }}
+                              >
+                                · {formatCurrency(Number(job.estimate_total_amount))}
+                              </span>
+                            )}
+                        </div>
+                      </div>
+                      <div
+                        className="flex-shrink-0 self-center text-xs font-semibold"
+                        style={{ color: 'var(--crm-muted)' }}
+                      >
+                        {formatStatus(job.status)}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {jobs.length > 8 && (
+                <Link
+                  href="/crm/jobs"
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline"
+                  style={{ color: 'var(--crm-muted)' }}
+                >
+                  View all {jobs.length} jobs <ArrowRight size={11} />
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Today Signals */}
+          <div
+            className="crm-card rounded-2xl border shadow-sm"
+            style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
+          >
+            <div
+              className="flex items-center gap-3 border-b px-5 pt-5 pb-3"
+              style={{ borderColor: 'var(--crm-border)' }}
+            >
+              <button
+                className="rounded-lg px-3 py-1.5 text-sm font-extrabold"
+                style={{ background: 'var(--crm-accent)', color: 'var(--crm-accent-text)' }}
+              >
+                Calendar
+              </button>
+              <button
+                className="rounded-lg px-3 py-1.5 text-sm font-semibold"
+                style={{ color: 'var(--crm-muted)' }}
+              >
+                Reminders
+              </button>
+            </div>
+
+            <div className="px-5 py-4">
+              {signalsLoading ? (
+                <div className="py-8 text-center text-sm" style={{ color: 'var(--crm-muted)' }}>
+                  Loading...
+                </div>
+              ) : calendarConnected === false ? (
+                <div className="grid gap-2 py-4">
+                  <div className="text-sm" style={{ color: 'var(--crm-muted)' }}>
+                    Google Calendar is not connected.
+                  </div>
+                  <Link
+                    href="/crm/calendar"
+                    className="inline-flex w-fit items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-extrabold"
+                    style={{ background: 'var(--crm-accent)', color: 'var(--crm-accent-text)' }}
+                  >
+                    Connect Google
+                  </Link>
+                </div>
+              ) : calendarError ? (
+                <div className="py-4 text-sm" style={{ color: 'var(--crm-danger-text)' }}>
+                  {calendarError}
+                </div>
+              ) : calendarTodayEvents.length === 0 ? (
+                <div className="py-8 text-center text-sm" style={{ color: 'var(--crm-muted)' }}>
+                  No calendar items today.
+                </div>
+              ) : (
+                <div className="grid gap-0">
+                  {calendarTodayEvents.map((event, i) => (
+                    <div
+                      key={`${event.calendarId}:${event.id}`}
+                      className="py-3"
+                      style={{
+                        borderBottom:
+                          i < calendarTodayEvents.length - 1
+                            ? `1px solid var(--crm-border)`
+                            : 'none',
+                      }}
+                    >
+                      <div
+                        className="text-sm font-semibold"
+                        style={{ color: 'var(--crm-text)' }}
+                      >
+                        {event.summary ?? '(No title)'}
+                      </div>
+                      <div className="mt-0.5 text-xs" style={{ color: 'var(--crm-muted)' }}>
+                        {formatEventWindow(event.start, event.end)}
+                      </div>
+                      {event.htmlLink && (
+                        <a
+                          href={event.htmlLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex text-xs font-semibold underline-offset-2 hover:underline"
+                          style={{ color: 'var(--crm-muted)' }}
+                        >
+                          Open event
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Notes reminders */}
+              {!signalsLoading && notesReminders.length > 0 && (
+                <div
+                  className="mt-4 border-t pt-4"
+                  style={{ borderColor: 'var(--crm-border)' }}
+                >
+                  <div
+                    className="mb-2 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest"
+                    style={{ color: 'var(--crm-muted)' }}
+                  >
+                    <BellRing size={12} aria-hidden="true" />
+                    Reminders
+                    <span
+                      className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold"
+                      style={{ background: 'var(--crm-border)', color: 'var(--crm-muted)' }}
+                    >
+                      {notesReminders.length}
+                    </span>
+                  </div>
+                  <div className="grid gap-2">
+                    {notesReminders.slice(0, 4).map((signal) => (
+                      <Link
+                        key={`${signal.kind}:${signal.task.id}`}
+                        href={`/crm/notes/tasks?focus=${encodeURIComponent(signal.task.id)}`}
+                        className="flex items-start gap-2 rounded-lg border p-2.5 transition"
+                        style={{
+                          borderColor:
+                            signal.kind === 'overdue'
+                              ? 'var(--crm-danger-border)'
+                              : 'var(--crm-border)',
+                          background:
+                            signal.kind === 'overdue'
+                              ? 'var(--crm-danger-bg)'
+                              : 'transparent',
+                        }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className="truncate text-sm font-semibold"
+                            style={{ color: 'var(--crm-text)' }}
+                          >
+                            {signal.task.title}
+                          </div>
+                          <div
+                            className="text-xs"
+                            style={{
+                              color:
+                                signal.kind === 'overdue'
+                                  ? 'var(--crm-danger-text)'
+                                  : 'var(--crm-muted)',
+                            }}
+                          >
+                            {signal.kind === 'overdue' ? 'Overdue' : 'Due today'} ·{' '}
+                            {formatTaskDue(
+                              signal.task.due_at,
+                              signal.task.is_all_day,
+                              signal.task.has_due_time
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              className="flex gap-2 border-t px-5 py-3"
+              style={{ borderColor: 'var(--crm-border)' }}
+            >
+              <Link
+                href="/crm/calendar"
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition"
+                style={{
+                  borderColor: 'var(--crm-border)',
+                  background: 'var(--crm-button)',
+                  color: 'var(--crm-button-text)',
+                }}
+              >
+                <CalendarCheck size={13} aria-hidden="true" />
+                Calendar
+              </Link>
+              <Link
+                href="/crm/notes"
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition"
+                style={{
+                  borderColor: 'var(--crm-border)',
+                  background: 'var(--crm-button)',
+                  color: 'var(--crm-button-text)',
+                }}
+              >
+                <NotebookText size={13} aria-hidden="true" />
+                Notes
+              </Link>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   )
 }
 
-function StatCard(props: {
-  title: string
-  value: string
-  sub: string
-  accentClass: string
-  Icon: LucideIcon
-  emptyHint: string | null
-}) {
-  const { title, value, sub, accentClass, Icon, emptyHint } = props
+function DonutRing({ pct, label }: { pct: number; label: string }) {
+  const size = 100
+  const r = 36
+  const c = 2 * Math.PI * r
+  const filled = Math.min(100, Math.max(0, pct))
+  const dash = (filled / 100) * c
   return (
-    <div
-      className={`rounded-2xl border border-gray-200 border-l-4 bg-white p-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${accentClass}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-500">{title}</div>
-        <Icon size={16} className="text-gray-400" aria-hidden="true" />
-      </div>
-      <div className="mt-1.5 text-2xl font-extrabold text-gray-900">{value}</div>
-      <div className="mt-1 text-xs text-gray-500">{sub}</div>
-      {emptyHint && (
-        <Link
-          href="/crm/jobs/new"
-          className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-gray-700 underline-offset-2 hover:text-black hover:underline focus:outline-none focus:ring-2 focus:ring-black/70"
-          aria-label={emptyHint}
-        >
-          <span>{emptyHint}</span>
-          <ArrowRight size={12} aria-hidden="true" />
-        </Link>
-      )}
+    <div className="relative inline-flex items-center justify-center">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle
+          cx={50} cy={50} r={r}
+          fill="none"
+          stroke="var(--crm-border)"
+          strokeWidth={10}
+        />
+        <circle
+          cx={50} cy={50} r={r}
+          fill="none"
+          stroke="var(--crm-accent)"
+          strokeWidth={10}
+          strokeDasharray={`${dash} ${c}`}
+          strokeLinecap="round"
+          transform="rotate(-90 50 50)"
+        />
+      </svg>
+      <span
+        className="absolute text-base font-extrabold"
+        style={{ color: 'var(--crm-text)' }}
+      >
+        {label}
+      </span>
     </div>
-  )
-}
-
-function FeatureCard(props: {
-  href: string
-  title: string
-  sub: string
-  Icon: LucideIcon
-  iconShellClass: string
-  highlight?: boolean
-}) {
-  const { href, title, sub, Icon, iconShellClass, highlight } = props
-  return (
-    <Link
-      href={href}
-      className={`block rounded-2xl border bg-white p-4 text-gray-900 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-black/70 ${
-        highlight ? 'border-black' : 'border-gray-200'
-      }`}
-      aria-label={`Open ${title}`}
-    >
-      <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100">
-        <span
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-md ${iconShellClass}`}
-        >
-          <Icon size={18} aria-hidden="true" />
-        </span>
-      </div>
-      <div className="mt-2.5 text-base font-extrabold">{title}</div>
-      <div className="mt-1 text-sm leading-5 text-gray-600">{sub}</div>
-    </Link>
   )
 }
 
@@ -735,6 +1102,20 @@ function formatCurrency(value: number) {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+function formatStatus(status: string | null) {
+  const map: Record<string, string> = {
+    estimate_sent: 'Estimate Sent',
+    estimate_scheduled: 'Scheduled',
+    follow_up: 'Follow Up',
+    completed: 'Won',
+    lost: 'Lost',
+    new: 'New',
+    in_progress: 'In Progress',
+  }
+  if (!status) return 'Open'
+  return map[status] ?? status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 function formatTaskDue(iso: string | null, allDay: boolean, hasDueTime: boolean) {

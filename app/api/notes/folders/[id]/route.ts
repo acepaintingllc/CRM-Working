@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 import { asNullableInt, asOptionalTrimmedText, asRecord, isUuid } from '@/lib/notes/server'
 import type { NotesFolderRow } from '@/lib/notes/types'
 
@@ -18,8 +19,9 @@ export async function PATCH(request: Request, context: { params: Params }) {
     return NextResponse.json({ error: 'Invalid folder id.' }, { status: 400 })
   }
 
-  const raw = await request.json().catch(() => null)
-  const body = asRecord(raw)
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 16 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = asRecord(parsed.value)
   if (!body) {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }
@@ -89,8 +91,12 @@ export async function DELETE(request: Request, context: { params: Params }) {
   }
 
   const count = countRes.count ?? 0
-  const rawBody = await request.json().catch(() => null)
-  const body = asRecord(rawBody) ?? {}
+  const parsedBody = await readJsonBody<Record<string, unknown>>(request, {
+    maxBytes: 16 * 1024,
+    allowEmpty: true,
+  })
+  if (!parsedBody.ok) return parsedBody.response
+  const body = asRecord(parsedBody.value) ?? {}
   const strategy = typeof body.strategy === 'string' ? body.strategy : null
   const targetFolderId = asOptionalTrimmedText(body.target_folder_id)
 
