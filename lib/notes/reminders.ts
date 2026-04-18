@@ -1,5 +1,5 @@
-import type { NotesTaskRow } from '@/lib/notes/types'
-import { getTodayBoundsInTimeZone, localDateKey } from '@/lib/notes/time'
+import type { NotesTaskRow } from './types.ts'
+import { getTodayBoundsInTimeZone, localDateKey } from './time.ts'
 
 function formatDueLabel(task: Pick<NotesTaskRow, 'due_at' | 'is_all_day' | 'has_due_time'>, timeZone: string) {
   if (!task.due_at) return 'No due date'

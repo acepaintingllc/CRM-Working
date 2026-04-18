@@ -1,6 +1,24 @@
 import { copyDriveFile, exportDriveFile } from '@/lib/server/googleDrive'
 import { clearRanges, readRangeValues, writeRangeValues } from '@/lib/server/googleSheets'
 import { supabaseAdmin } from '@/lib/server/org'
+import {
+  asNumberish,
+  asText,
+  buildSheetPath,
+  columnLetterFromIndex,
+  findSummaryColAValue,
+  findSummaryMetricValue,
+  findSummarySectionRow,
+  normalizeHeader,
+  normalizeSummaryLabel,
+  normalizeSchemaKey,
+  parseMaybeNumber,
+  parseSpreadsheetIdFromPath,
+  sanitizeDriveName,
+  toSheetCell,
+  toYN,
+  valueAt,
+} from '@/lib/server/estimateSpreadsheetUtils'
 
 const FALLBACK_TEMPLATE_ID = '1zufQIEtGqP8wZoPjg203TG2HkYS9iSdvBImHC6Ok3Rs'
 const WORKBOOK_BUCKET = 'estimate-workbooks'
@@ -41,53 +59,6 @@ export class MissingInputsError extends Error {
   }
 }
 
-function asText(value: unknown) {
-  return value == null ? '' : String(value).trim()
-}
-
-function asNumberish(value: unknown) {
-  return value == null || value === '' ? '' : value
-}
-
-function toSheetCell(value: unknown): string | number | boolean | null {
-  if (value == null || value === '') return ''
-  if (typeof value === 'number' || typeof value === 'boolean') return value
-  return String(value)
-}
-
-function toYN(value: unknown, fallback: 'Y' | 'N' = 'N') {
-  const raw = String(value ?? '').trim().toUpperCase()
-  if (raw === 'Y' || raw === 'N') return raw
-  return fallback
-}
-
-function parseSpreadsheetIdFromPath(path: string | null | undefined) {
-  const match = /sheet_([a-zA-Z0-9\-_]+)\.xlsx/.exec(String(path ?? ''))
-  return match?.[1] ?? null
-}
-
-function buildSheetPath(orgId: string, estimateId: string, spreadsheetId: string) {
-  return `org/${orgId}/estimates/${estimateId}/sheet_${spreadsheetId}.xlsx`
-}
-
-function sanitizeDriveName(value: string) {
-  return value
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function columnLetterFromIndex(index: number) {
-  let n = index + 1
-  let out = ''
-  while (n > 0) {
-    const rem = (n - 1) % 26
-    out = String.fromCharCode(65 + rem) + out
-    n = Math.floor((n - 1) / 26)
-  }
-  return out
-}
-
 async function loadActiveTrimItemsEventually(params: {
   orgId: string
   estimateId: string
@@ -120,108 +91,10 @@ async function loadActiveTrimItemsEventually(params: {
   return { data: lastData, error: lastError }
 }
 
-function parseMaybeNumber(value: string | null | undefined) {
-  const raw = String(value ?? '').trim()
-  if (!raw) return null
-  const cleaned = raw.replace(/[$,%\s,]/g, '')
-  const n = Number(cleaned)
-  return Number.isFinite(n) ? n : raw
-}
-
-function normalizeSummaryLabel(value: string | null | undefined) {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-}
-
-function findSummaryMetricValue(values: string[][], labelNeedles: string[]) {
-  const normalizedNeedles = labelNeedles.map((label) => normalizeSummaryLabel(label))
-  const tryParse = (raw: unknown) => parseMaybeNumber(asText(raw))
-  const tryNumber = (raw: unknown) => {
-    const parsed = tryParse(raw)
-    return typeof parsed === 'number' ? parsed : null
-  }
-
-  for (let rowIndex = 0; rowIndex < values.length; rowIndex += 1) {
-    const row = values[rowIndex] ?? []
-    for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
-      const normalizedCell = normalizeSummaryLabel(row[colIndex])
-      if (!normalizedCell) continue
-      const matches = normalizedNeedles.some((needle) => normalizedCell.includes(needle))
-      if (!matches) continue
-
-      const nearbyCandidates: unknown[] = [
-        row[colIndex + 1],
-        row[colIndex + 2],
-        values[rowIndex + 1]?.[colIndex],
-        values[rowIndex + 1]?.[colIndex + 1],
-        values[rowIndex + 1]?.[colIndex + 2],
-        row[colIndex - 1],
-      ]
-
-      for (const candidate of nearbyCandidates) {
-        const n = tryNumber(candidate)
-        if (n != null) return n
-      }
-
-      for (const candidate of nearbyCandidates) {
-        const parsed = tryParse(candidate)
-        if (parsed != null) return parsed
-      }
-    }
-  }
-
-  return null
-}
-
-function findSummaryColAValue(values: string[][], labelNeedles: string[]) {
-  const normalizedNeedles = labelNeedles.map((label) => normalizeSummaryLabel(label))
-  for (let rowIndex = values.length - 1; rowIndex >= 0; rowIndex -= 1) {
-    const row = values[rowIndex] ?? []
-    const normalizedA = normalizeSummaryLabel(row[0])
-    if (!normalizedA) continue
-    const matches = normalizedNeedles.some(
-      (needle) => normalizedA === needle || normalizedA.includes(needle)
-    )
-    if (!matches) continue
-    const parsed = parseMaybeNumber(asText(row[1]))
-    if (parsed != null) return parsed
-  }
-  return null
-}
-
-function findSummarySectionRow(values: string[][], sectionTitle: string) {
-  const needle = normalizeSummaryLabel(sectionTitle)
-  for (let rowIndex = 0; rowIndex < values.length; rowIndex += 1) {
-    const row = values[rowIndex] ?? []
-    const normalizedA = normalizeSummaryLabel(row[0])
-    if (!normalizedA) continue
-    if (normalizedA.includes(needle)) return rowIndex
-  }
-  return -1
-}
-
-function normalizeHeader(value: string | null | undefined) {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-}
-
-function normalizeSchemaKey(value: string | null | undefined) {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-}
-
 function getHeaderIndex(map: HeaderMap, header: string) {
   const exact = map.indexByHeader.get(header)
   if (exact != null) return exact
   return map.indexByNormalizedHeader.get(normalizeHeader(header))
-}
-
-function valueAt(row: string[], index: number) {
-  if (index < 0 || index >= row.length) return ''
-  return row[index] ?? ''
 }
 
 type JobControlTargetKey = 'activeJobId' | 'customerName' | 'customerAddress' | 'estimateDate'
@@ -630,6 +503,7 @@ async function ensureSpreadsheetForEstimate(params: {
   }
 
   const templateId =
+    process.env.GOOGLE_SHEETS_ESTIMATE_V2_TEMPLATE_ID ??
     process.env.GOOGLE_SHEETS_ESTIMATES_TEMPLATE_ID ??
     process.env.GOOGLE_SHEETS_ESTIMATE_TEMPLATE_ID ??
     FALLBACK_TEMPLATE_ID

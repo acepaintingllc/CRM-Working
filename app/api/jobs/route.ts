@@ -1,10 +1,29 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
+import { supabaseAdmin } from '@/lib/server/org'
+import { assertSchema, isMissingSchemaErrorMessage } from '@/lib/server/schema'
+import {
+  buildJobSelect,
+  getAvailableOptionalJobColumns,
+  withOptionalJobColumns,
+} from '@/lib/server/jobSchema'
+import { jsonError, readJsonBody, requireSessionUserOrg } from '@/lib/server/apiRoute'
 
 type JobRow = {
+  id?: string | null
   customer_id?: string | null
   title?: string | null
+  description?: string | null
   status?: string | null
+  estimate_date?: string | null
+  estimate_sent_at?: string | null
+  scheduled_date?: string | null
+  scheduled_end_date?: string | null
+  completed_at?: string | null
+  scheduled_email_sent_at?: string | null
+  completed_email_sent_at?: string | null
+  closeout_notes?: string | null
+  created_at?: string | null
+  updated_at?: string | null
   [key: string]: unknown
 }
 
@@ -29,27 +48,27 @@ function asString(value: unknown) {
 }
 
 export async function GET() {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+  const { orgId } = auth.session
 
-  const { orgId } = session
+  const optionalJobColumns = await getAvailableOptionalJobColumns()
+  const jobSelect = buildJobSelect(
+    ['id', 'customer_id', 'title', 'description', 'status', 'estimate_date', 'estimate_sent_at', 'scheduled_date', 'scheduled_end_date', 'completed_at', 'closeout_notes', 'created_at', 'updated_at'],
+    optionalJobColumns
+  )
 
-  // Avoid relying on PostgREST embedded joins (jobs -> customers) because they require
-  // a FK relationship that may not exist yet in the DB while the schema is evolving.
   const { data, error } = await supabaseAdmin
     .from('jobs')
-    .select('*')
+    .select(jobSelect)
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: 'Unable to load jobs.' }, { status: 500 })
+    return jsonError('Unable to load jobs.', 500)
   }
 
-  const rows = (data ?? []) as JobRow[]
+  const rows = (data ?? []) as unknown as JobRow[]
   const jobIds = rows
     .map((r) => asString(r.id))
     .filter((v): v is string => Boolean(v))
@@ -59,7 +78,7 @@ export async function GET() {
   if (customerIds.length) {
     const { data: customers, error: cErr } = await supabaseAdmin
       .from('customers')
-      .select('id, name, address')
+      .select('*')
       .eq('org_id', orgId)
       .in('id', customerIds)
 
@@ -78,17 +97,21 @@ export async function GET() {
       .eq('org_id', orgId)
       .in('job_id', jobIds)
 
-    if (schedErr) return NextResponse.json({ error: schedErr.message }, { status: 500 })
-
-    for (const row of (schedules ?? []) as JobScheduleRow[]) {
-      const current = scheduleByJob.get(row.job_id) ?? { minStart: null, maxEnd: null }
-      if (row.start_at && (!current.minStart || row.start_at < current.minStart)) {
-        current.minStart = row.start_at
+    if (schedErr) {
+      if (!isMissingSchemaErrorMessage(schedErr.message)) {
+        return NextResponse.json({ error: schedErr.message }, { status: 500 })
       }
-      if (row.end_at && (!current.maxEnd || row.end_at > current.maxEnd)) {
-        current.maxEnd = row.end_at
+    } else {
+      for (const row of (schedules ?? []) as JobScheduleRow[]) {
+        const current = scheduleByJob.get(row.job_id) ?? { minStart: null, maxEnd: null }
+        if (row.start_at && (!current.minStart || row.start_at < current.minStart)) {
+          current.minStart = row.start_at
+        }
+        if (row.end_at && (!current.maxEnd || row.end_at > current.maxEnd)) {
+          current.maxEnd = row.end_at
+        }
+        scheduleByJob.set(row.job_id, current)
       }
-      scheduleByJob.set(row.job_id, current)
     }
   }
 
@@ -100,15 +123,20 @@ export async function GET() {
       .eq('org_id', orgId)
       .in('job_id', jobIds)
 
-    if (sitePhotoErr) return NextResponse.json({ error: sitePhotoErr.message }, { status: 500 })
-
-    for (const row of (sitePhotoRows ?? []) as JobSitePhotoRow[]) {
-      const current = sitePhotoCountByJob.get(row.job_id) ?? 0
-      sitePhotoCountByJob.set(row.job_id, current + 1)
+    if (sitePhotoErr) {
+      if (!isMissingSchemaErrorMessage(sitePhotoErr.message)) {
+        return NextResponse.json({ error: sitePhotoErr.message }, { status: 500 })
+      }
+    } else {
+      for (const row of (sitePhotoRows ?? []) as JobSitePhotoRow[]) {
+        const current = sitePhotoCountByJob.get(row.job_id) ?? 0
+        sitePhotoCountByJob.set(row.job_id, current + 1)
+      }
     }
   }
 
   const jobs = rows.map((row) => {
+    const safeRow = withOptionalJobColumns(row, optionalJobColumns) ?? row
     const customer = row.customer_id ? customerById.get(row.customer_id) : undefined
     const id = asString(row.id)
     const scheduleRange = id ? scheduleByJob.get(id) : undefined
@@ -118,10 +146,9 @@ export async function GET() {
     const scheduledEndDate = rowScheduledEndDate ?? scheduleRange?.maxEnd ?? null
     const sitePhotoCount = id ? sitePhotoCountByJob.get(id) ?? 0 : 0
     return {
-      ...row,
-      // Be defensive if older rows/schemas exist.
-      title: row.title ?? 'Untitled job',
-      status: row.status ?? 'estimate_scheduled',
+      ...safeRow,
+      title: safeRow.title ?? 'Untitled job',
+      status: safeRow.status ?? 'estimate_scheduled',
       customer_name: customer?.name ?? null,
       customer_address: customer?.address ?? null,
       scheduled_date: scheduledDate,
@@ -136,31 +163,66 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await getSessionUserOrg()
-    if ('error' in session) {
-      const status = session.error === 'Not authenticated' ? 401 : 403
-      return NextResponse.json({ error: session.error }, { status })
+    const auth = await requireSessionUserOrg()
+    if (!auth.ok) return auth.response
+    const { orgId } = auth.session
+
+    const schema = await assertSchema([
+      {
+        table: 'jobs',
+        columns: [
+          'org_id',
+          'customer_id',
+          'title',
+          'description',
+          'status',
+          'estimate_date',
+          'estimate_sent_at',
+          'scheduled_date',
+          'scheduled_end_date',
+          'completed_at',
+        ],
+      },
+    ])
+    if (!schema.ok) {
+      const message = isMissingSchemaErrorMessage(schema.error)
+        ? `Missing required schema for ${schema.table}. Run latest SQL migrations.`
+        : schema.error
+      return jsonError(message, 500)
     }
 
-    const { orgId } = session
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
-    if (!body) {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-    }
+    const optionalJobColumns = await getAvailableOptionalJobColumns()
+    const jobSelect = buildJobSelect(
+      [
+        'id',
+        'customer_id',
+        'title',
+        'description',
+        'status',
+        'estimate_date',
+        'estimate_sent_at',
+        'scheduled_date',
+        'scheduled_end_date',
+        'completed_at',
+        'closeout_notes',
+        'created_at',
+        'updated_at',
+      ],
+      optionalJobColumns
+    )
+
+    const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 128 * 1024 })
+    if (!parsed.ok) return parsed.response
+    const body = parsed.value
 
     const customerId = asString(body.customer_id)
     const title = asString(body.title)
     if (!customerId || !title) {
-      return NextResponse.json(
-        { error: 'Missing customer_id or title' },
-        { status: 400 }
-      )
+      return jsonError('Missing customer_id or title', 400)
     }
 
     const status = asString(body.status) || 'estimate_scheduled'
 
-    // Build payload defensively. If a column doesn't exist yet in the DB (schema still evolving),
-    // including it (even as null) will cause PostgREST errors. Only send provided non-null fields.
     const insertPayload: Record<string, unknown> = {
       org_id: orgId,
       customer_id: customerId,
@@ -180,133 +242,23 @@ export async function POST(request: Request) {
       }
     }
 
-    const insertOnce = async (payload: Record<string, unknown>) => {
-      return supabaseAdmin
-        .from('jobs')
-        .insert(payload)
-        // Use "*" to avoid schema-cache failures when columns are still being added/migrated.
-        .select('*')
-        .single()
-    }
-
-    let { data, error } = await insertOnce(insertPayload)
-
+    const { data, error } = await supabaseAdmin
+      .from('jobs')
+      .insert(insertPayload)
+      .select(jobSelect)
+      .single()
     if (error) {
-      const msg = error.message ?? ''
-
-      // Common schema drift cases:
-      // - "property_id" exists and is NOT NULL (older schema)
-      // - "customer_id" column doesn't exist (older schema)
-      const needsPropertyId = msg.includes('property_id') && msg.includes('null value')
-      const missingCustomerId = msg.includes('customer_id') && msg.includes('does not exist')
-
-      if (needsPropertyId || missingCustomerId) {
-        const retryPayload: Record<string, unknown> = { ...insertPayload }
-        // Some schemas require both customer_id and property_id. If customer_id doesn't exist,
-        // we must omit it. Otherwise, keep it and also set property_id.
-        if (missingCustomerId) {
-          delete retryPayload.customer_id
-        }
-
-        // If the schema enforces a FK to "properties", create (or re-use) a property row first.
-        let propertyId: string | null = null
-        try {
-          // Try to find an existing property linked to this customer (if the column exists).
-          const lookup = await supabaseAdmin
-            .from('properties')
-            .select('id')
-            .eq('org_id', orgId)
-            .eq('customer_id', customerId)
-            .limit(1)
-            .maybeSingle()
-
-          if (!lookup.error && lookup.data?.id) {
-            propertyId = String(lookup.data.id)
-          }
-        } catch {
-          // ignore and attempt insert
-        }
-
-        if (!propertyId) {
-          // Fetch the customer to populate common property fields (best effort).
-          const { data: customer } = await supabaseAdmin
-            .from('customers')
-            .select('id, name, address')
-            .eq('org_id', orgId)
-            .eq('id', customerId)
-            .maybeSingle()
-
-          const customerRow = (customer ?? null) as { name?: string | null; address?: string | null } | null
-          const addr = customerRow?.address ?? ''
-          const parts = addr.split(',').map((p) => p.trim()).filter(Boolean)
-          const street = parts[0] ?? 'Unknown'
-          const city = parts[1] ?? 'Unknown'
-          const stateZip = parts[2] ?? ''
-          const stateMatch = stateZip.match(/([A-Za-z]{2})/)
-          const zipMatch = stateZip.match(/(\d{5})(?:-\d{4})?/)
-
-          const base: Record<string, unknown> = {
-            org_id: orgId,
-            customer_id: customerId,
-            name: customerRow?.name ?? 'Property',
-            street,
-            city,
-            state: stateMatch?.[1] ?? 'NA',
-            zip: zipMatch?.[1] ?? '00000',
-          }
-          if (!base.full_address) {
-            const fullAddress = [street, city, [base.state, base.zip].join(' ').trim()]
-              .filter(Boolean)
-              .join(', ')
-            if (fullAddress) {
-              base.full_address = fullAddress
-            }
-          }
-
-          // Retry loop that strips unknown columns if your properties schema differs.
-          const propPayload: Record<string, unknown> = { ...base }
-          for (let i = 0; i < 6; i++) {
-            const created = await supabaseAdmin
-              .from('properties')
-              .insert(propPayload)
-              .select('id')
-              .single()
-
-            if (!created.error) {
-              propertyId = String((created.data as { id?: string | null } | null)?.id ?? '')
-              if (!propertyId) propertyId = null
-              break
-            }
-
-            const emsg = created.error.message ?? ''
-            const m =
-              emsg.match(/column \"([a-zA-Z0-9_]+)\" of relation \"properties\" does not exist/i) ||
-              emsg.match(/Could not find the '([a-zA-Z0-9_]+)' column of 'properties'/i)
-            if (m?.[1] && m[1] in propPayload) {
-              delete propPayload[m[1]]
-              continue
-            }
-
-            return NextResponse.json({ error: 'Unable to create property for job.' }, { status: 500 })
-          }
-        }
-
-        if (propertyId) {
-          retryPayload.property_id = propertyId
-        }
-
-        const retry = await insertOnce(retryPayload)
-        data = retry.data
-        error = retry.error
-      }
+      return jsonError('Unable to create job.', 500)
     }
 
-    if (error) {
-      return NextResponse.json({ error: 'Unable to create job.' }, { status: 500 })
-    }
-
-    return NextResponse.json({ ok: true, job: data })
+    return NextResponse.json({
+      ok: true,
+      job: withOptionalJobColumns(
+        (data ?? null) as unknown as JobRow | null,
+        optionalJobColumns
+      ),
+    })
   } catch {
-    return NextResponse.json({ error: 'Unable to create job.' }, { status: 500 })
+    return jsonError('Unable to create job.', 500)
   }
 }

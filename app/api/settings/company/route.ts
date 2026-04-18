@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 
 type Unsafe = Record<string, unknown>
 
@@ -90,7 +91,9 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: session.error }, { status })
   }
 
-  const body = (await request.json().catch(() => null)) as Unsafe | null
+  const parsed = await readJsonBody<Unsafe>(request, { maxBytes: 64 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value
   const profile = ((body?.profile ?? body) as Unsafe | null) ?? null
   if (!profile) {
     return NextResponse.json({ error: 'Missing profile payload' }, { status: 400 })

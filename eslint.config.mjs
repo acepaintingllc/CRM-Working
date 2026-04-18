@@ -9,6 +9,19 @@ const eslintConfig = defineConfig([
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "react-hooks/set-state-in-effect": "off",
+      "no-console": ["error", { allow: ["error"] }],
+      "react/no-danger": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "AssignmentExpression[left.property.name='innerHTML']",
+          message: "Avoid assigning to innerHTML; use safe DOM APIs.",
+        },
+        {
+          selector: "CallExpression[callee.property.name='insertAdjacentHTML']",
+          message: "Avoid insertAdjacentHTML with unsanitized content.",
+        },
+      ],
     },
   },
   // Override default ignores of eslint-config-next.

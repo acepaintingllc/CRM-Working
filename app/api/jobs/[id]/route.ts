@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
-
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import { supabaseAdmin } from '@/lib/server/org'
+import { assertSchema, isMissingSchemaErrorMessage } from '@/lib/server/schema'
+import {
+  buildJobSelect,
+  filterOptionalJobColumnPayload,
+  getAvailableOptionalJobColumns,
+  withOptionalJobColumns,
+} from '@/lib/server/jobSchema'
+import {
+  jsonError,
+  readJsonBody,
+  readUuidParam,
+  requireSessionUserOrg,
+  resolveParams,
+} from '@/lib/server/apiRoute'
 
 type JobPatch = {
   completed_at?: string | null
@@ -25,43 +36,13 @@ type CustomerRecord = { name: string | null; address: string | null; email?: str
 type LinkedEstimateRecord = {
   id: string
   status: string | null
+  version_name: string | null
+  version_state: string | null
+  version_kind: string | null
+  version_sort_order: number | null
   sheet_file_path: string | null
   updated_at: string | null
   created_at: string | null
-}
-
-async function updateJobCompat(orgId: string, id: string, patch: Record<string, unknown>) {
-  const nextPatch = { ...patch }
-  for (let i = 0; i < 8; i++) {
-    const attempt = await supabaseAdmin
-      .from('jobs')
-      .update(nextPatch)
-      .eq('org_id', orgId)
-      .eq('id', id)
-      .select('*')
-      .single()
-    if (!attempt.error) return attempt
-
-    const missingByCache = attempt.error.message.match(
-      /Could not find the '([a-zA-Z0-9_]+)' column of 'jobs' in the schema cache/i
-    )
-    const missingByRelation = attempt.error.message.match(
-      /column "([a-zA-Z0-9_]+)" of relation "jobs" does not exist/i
-    )
-    const missing = missingByCache?.[1] ?? missingByRelation?.[1] ?? null
-    if (!missing || !(missing in nextPatch)) {
-      return attempt
-    }
-    delete nextPatch[missing]
-  }
-
-  return supabaseAdmin
-    .from('jobs')
-    .update(patch)
-    .eq('org_id', orgId)
-    .eq('id', id)
-    .select('*')
-    .single()
 }
 
 function nextStatusForPatch(current: string, patch: JobPatch) {
@@ -76,23 +57,63 @@ export async function PATCH(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+  const { orgId } = auth.session
+
+  const params = await resolveParams(context)
+  const idParam = readUuidParam((params as { id?: string } | null | undefined)?.id, 'job id')
+  if (!idParam.ok) return idParam.response
+  const id = idParam.value
+
+  const schema = await assertSchema([
+    {
+      table: 'jobs',
+      columns: [
+        'id',
+        'org_id',
+        'status',
+        'title',
+        'description',
+        'estimate_date',
+        'estimate_sent_at',
+        'scheduled_date',
+        'scheduled_end_date',
+        'completed_at',
+        'closeout_notes',
+      ],
+    },
+  ])
+  if (!schema.ok) {
+    const message = isMissingSchemaErrorMessage(schema.error)
+      ? `Missing required schema for ${schema.table}. Run latest SQL migrations.`
+      : schema.error
+    return jsonError(message, 500)
   }
 
-  const { orgId } = session
-  const params = await Promise.resolve(context.params)
-  const id = (params as { id?: string } | null | undefined)?.id
-  if (!id || typeof id !== 'string' || !uuid.test(id)) {
-    return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
-  }
+  const optionalJobColumns = await getAvailableOptionalJobColumns()
+  const jobSelect = buildJobSelect(
+    [
+      'id',
+      'customer_id',
+      'title',
+      'description',
+      'status',
+      'estimate_date',
+      'estimate_sent_at',
+      'scheduled_date',
+      'scheduled_end_date',
+      'completed_at',
+      'closeout_notes',
+      'created_at',
+      'updated_at',
+    ],
+    optionalJobColumns
+  )
 
-  const body = await request.json().catch(() => null)
-  if (!body) {
-    return NextResponse.json({ error: 'Missing body' }, { status: 400 })
-  }
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 128 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value
 
   const allowed: Record<string, unknown> = {}
   for (const key of [
@@ -116,48 +137,80 @@ export async function PATCH(
     .eq('id', id)
     .maybeSingle()
 
-  if (existingErr) return NextResponse.json({ error: existingErr.message }, { status: 500 })
-  if (!existing) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+  if (existingErr) return jsonError(existingErr.message, 500)
+  if (!existing) return jsonError('Job not found', 404)
 
   // Auto-move if dates/flags are set, unless caller explicitly sets status.
   if (!('status' in allowed)) {
     allowed.status = nextStatusForPatch(existing.status, allowed as JobPatch)
   }
 
-  const { data, error } = await updateJobCompat(orgId, id, allowed)
+  const { data, error } = await supabaseAdmin
+    .from('jobs')
+    .update(filterOptionalJobColumnPayload(allowed, optionalJobColumns))
+    .eq('org_id', orgId)
+    .eq('id', id)
+    .select(jobSelect)
+    .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, job: data })
+  if (error) return jsonError(error.message, 500)
+  return NextResponse.json({
+    ok: true,
+    job: withOptionalJobColumns(
+      (data ?? null) as unknown as Record<string, unknown> | null,
+      optionalJobColumns
+    ),
+  })
 }
 
 export async function GET(
   _request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+  const { orgId } = auth.session
 
-  const { orgId } = session
-  const params = await Promise.resolve(context.params)
-  const id = (params as { id?: string } | null | undefined)?.id
-  if (!id || typeof id !== 'string' || !uuid.test(id)) {
-    return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
-  }
+  const params = await resolveParams(context)
+  const idParam = readUuidParam((params as { id?: string } | null | undefined)?.id, 'job id')
+  if (!idParam.ok) return idParam.response
+  const id = idParam.value
+
+  const optionalJobColumns = await getAvailableOptionalJobColumns()
+  const jobSelect = buildJobSelect(
+    [
+      'id',
+      'org_id',
+      'customer_id',
+      'title',
+      'description',
+      'status',
+      'estimate_date',
+      'estimate_sent_at',
+      'scheduled_date',
+      'scheduled_end_date',
+      'completed_at',
+      'closeout_notes',
+      'created_at',
+      'updated_at',
+    ],
+    optionalJobColumns
+  )
 
   const { data: job, error } = await supabaseAdmin
     .from('jobs')
-    .select('*')
+    .select(jobSelect)
     .eq('org_id', orgId)
     .eq('id', id)
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+  if (error) return jsonError(error.message, 500)
+  if (!job) return jsonError('Job not found', 404)
 
-  const mutableJob = job as JobRecord
+  const mutableJob = withOptionalJobColumns(
+    (job ?? null) as unknown as Record<string, unknown> | null,
+    optionalJobColumns
+  ) as JobRecord
   if (!mutableJob.scheduled_date || !mutableJob.scheduled_end_date) {
     const { data: schedules } = await supabaseAdmin
       .from('job_schedules')
@@ -172,10 +225,16 @@ export async function GET(
       const scheduled_date = starts.length > 0 ? starts[0] : null
       const scheduled_end_date = ends.length > 0 ? ends[ends.length - 1] : null
 
-      const { data: updated } = await updateJobCompat(orgId, id, {
+      const { data: updated } = await supabaseAdmin
+        .from('jobs')
+        .update({
         scheduled_date,
         scheduled_end_date,
-      })
+        })
+        .eq('org_id', orgId)
+        .eq('id', id)
+        .select('scheduled_date, scheduled_end_date')
+        .maybeSingle()
 
       if (updated) {
         mutableJob.scheduled_date = (updated as JobRecord).scheduled_date ?? null
@@ -207,19 +266,22 @@ export async function GET(
 
   const { data: linkedEstimateRows, error: linkedEstimatesErr } = await supabaseAdmin
     .from('estimates')
-    .select('id, status, sheet_file_path, updated_at, created_at')
+    .select(
+      'id, status, version_name, version_state, version_kind, version_sort_order, sheet_file_path, updated_at, created_at'
+    )
     .eq('org_id', orgId)
     .eq('job_id', id)
-    .order('updated_at', { ascending: false })
+    .order('version_sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
   if (linkedEstimatesErr) {
-    return NextResponse.json({ error: linkedEstimatesErr.message }, { status: 500 })
+    return jsonError(linkedEstimatesErr.message, 500)
   }
 
   const linkedEstimates = (linkedEstimateRows ?? []) as LinkedEstimateRecord[]
 
   return NextResponse.json({
     job: {
-      ...job,
+      ...mutableJob,
       customer_name: customer?.name ?? null,
       customer_address: customer?.address ?? null,
       customer_email: customer?.email ?? null,
@@ -234,18 +296,14 @@ export async function DELETE(
   _request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+  const { orgId } = auth.session
 
-  const { orgId } = session
-  const params = await Promise.resolve(context.params)
-  const id = (params as { id?: string } | null | undefined)?.id
-  if (!id || typeof id !== 'string' || !uuid.test(id)) {
-    return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
-  }
+  const params = await resolveParams(context)
+  const idParam = readUuidParam((params as { id?: string } | null | undefined)?.id, 'job id')
+  if (!idParam.ok) return idParam.response
+  const id = idParam.value
 
   const { error } = await supabaseAdmin
     .from('jobs')
@@ -253,6 +311,6 @@ export async function DELETE(
     .eq('org_id', orgId)
     .eq('id', id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return jsonError(error.message, 500)
   return NextResponse.json({ ok: true })
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { computeNextDueAtIso, getNextRecurrenceDate } from '@/lib/notes/recurrence'
+import { computeNextDueAtIso, getNextRecurrenceDate } from '../recurrence.ts'
 
 test('daily recurrence advances one day by default', () => {
   const base = new Date('2026-04-07T15:00:00.000Z')

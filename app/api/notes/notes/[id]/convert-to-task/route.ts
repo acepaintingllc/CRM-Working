@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 import {
   asBoolean,
   asNullableIso,
@@ -42,8 +43,12 @@ export async function POST(request: Request, context: { params: Params }) {
   }
   const note = noteRes.data as NotesNoteRow
 
-  const raw = await request.json().catch(() => null)
-  const body = asRecord(raw) ?? {}
+  const parsed = await readJsonBody<Record<string, unknown>>(request, {
+    maxBytes: 64 * 1024,
+    allowEmpty: true,
+  })
+  if (!parsed.ok) return parsed.response
+  const body = asRecord(parsed.value) ?? {}
   const carryBody = asBoolean(body.carry_body, true)
   const dueAtIso = asNullableIso(body.due_at)
   const isAllDay = asBoolean(body.is_all_day, false)

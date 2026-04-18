@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 import { asRecord, isUuid } from '@/lib/notes/server'
 
 export async function POST(request: Request) {
@@ -9,8 +10,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: session.error }, { status })
   }
 
-  const raw = await request.json().catch(() => null)
-  const body = asRecord(raw)
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 16 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = asRecord(parsed.value)
   if (!body || !Array.isArray(body.folder_ids)) {
     return NextResponse.json({ error: 'folder_ids array is required.' }, { status: 400 })
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 import {
   asBoolean,
   asNullableIso,
@@ -110,8 +111,9 @@ export async function POST(request: Request) {
   }
   const { orgId, userId } = session
 
-  const rawBody = await request.json().catch(() => null)
-  const body = asRecord(rawBody)
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 128 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = asRecord(parsed.value)
   if (!body) {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }

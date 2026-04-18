@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /tmp/design-extract)",
+      "Bash(tar -xf /tmp/design -C /tmp/design-extract)",
+      "Bash(echo \"Exit: $?\")",
+      "Read(//tmp/**)",
+      "Bash(npx tsc *)",
+      "Bash(find /c/Users/ehrha/Documents/ace-crm-working/app/crm/estimates/[id]/v2 -type f)",
+      "Bash(find /c/Users/ehrha/Documents/ace-crm-working/app/crm/estimates/[id]/v2 -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\))"
+    ]
+  }
+}

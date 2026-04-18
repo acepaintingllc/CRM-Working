@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getGoogleOAuthConfig } from '@/lib/server/googleCalendar'
+import { readJsonBody } from '@/lib/server/apiRoute'
 
 function safeNextPath(value: string | null, fallback: string) {
   const next = (value ?? '').trim()
@@ -114,7 +115,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const { origin } = new URL(request.url)
-  const body = await request.json().catch(() => null)
+  const parsed = await readJsonBody<Record<string, unknown>>(request, {
+    maxBytes: 8 * 1024,
+    allowEmpty: true,
+  })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value ?? {}
   const next = safeNextPath(typeof body?.next === 'string' ? body.next : null, '/crm/calendar')
   const session = await getSessionUserOrg()
   if ('error' in session) {

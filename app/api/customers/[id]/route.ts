@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/customers/api'
+import { readJsonBody } from '@/lib/server/apiRoute'
 
 
 export async function GET(
@@ -113,16 +114,20 @@ export async function PATCH(
     )
   }
 
-  const body = await request.json().catch(() => null)
-  if (!body?.name || typeof body.name !== 'string' || !body.name.trim()) {
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 64 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value
+
+  const nameValue = typeof body.name === 'string' ? body.name.trim() : ''
+  if (!nameValue) {
     return NextResponse.json({ error: 'Missing name' }, { status: 400 })
   }
 
   const payload: Record<string, unknown> = {
-    name: body.name.trim(),
-    email: body.email?.trim() || null,
-    phone: body.phone?.trim() || null,
-    address: body.address?.trim() || null,
+    name: nameValue,
+    email: typeof body.email === 'string' ? body.email.trim() || null : null,
+    phone: typeof body.phone === 'string' ? body.phone.trim() || null : null,
+    address: typeof body.address === 'string' ? body.address.trim() || null : null,
   }
 
   const optionalColumns = ['street', 'city', 'state', 'zip', 'notes']

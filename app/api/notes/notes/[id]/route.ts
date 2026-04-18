@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 import { asBoolean, asOptionalTrimmedText, asRecord, isUuid } from '@/lib/notes/server'
 import type { NotesNoteRow } from '@/lib/notes/types'
 
@@ -48,8 +49,9 @@ export async function PATCH(request: Request, context: { params: Params }) {
     return NextResponse.json({ error: 'Invalid note id.' }, { status: 400 })
   }
 
-  const raw = await request.json().catch(() => null)
-  const body = asRecord(raw)
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 128 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = asRecord(parsed.value)
   if (!body) {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken, resolveCalendarId } from '@/lib/server/googleCalendar'
+import { readJsonBody } from '@/lib/server/apiRoute'
 
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -20,8 +21,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: token.error }, { status: 400 })
   }
 
-  const body = await request.json().catch(() => null)
-  if (!body?.start || !body?.end || !body?.summary) {
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 64 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.value
+  const summary = typeof body.summary === 'string' ? body.summary : ''
+  const start = typeof body.start === 'string' ? body.start : ''
+  const end = typeof body.end === 'string' ? body.end : ''
+  if (!summary || !start || !end) {
     return NextResponse.json(
       { error: 'Missing summary, start, or end' },
       { status: 400 }
@@ -29,11 +35,11 @@ export async function POST(request: Request) {
   }
 
   const payload = {
-    summary: String(body.summary),
+    summary,
     description: body.description ? String(body.description) : undefined,
     location: body.location ? String(body.location) : undefined,
-    start: { dateTime: String(body.start) },
-    end: { dateTime: String(body.end) },
+    start: { dateTime: start },
+    end: { dateTime: end },
   }
 
   const calendarName =

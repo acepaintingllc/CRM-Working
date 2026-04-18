@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { findLatestEstimateFile, findMatchingEstimateFiles } from '@/lib/server/googleDrive'
+import { serverLog } from '@/lib/server/log'
 
 type JobRecord = { customer_id: string | null }
 
@@ -53,7 +54,7 @@ export async function GET(
       address: customer.address,
     })
     if ('error' in matches) {
-      console.warn('[estimate-file] no-match', { jobId: id, reason: matches.error })
+      serverLog.warn('[estimate-file] no-match', { jobId: id, reason: matches.error })
       return NextResponse.json({ error: matches.error }, { status: 404 })
     }
     const latest = matches.files[0] ?? null
@@ -71,10 +72,10 @@ export async function GET(
   })
 
   if ('error' in result) {
-    console.warn('[estimate-file] no-match', { jobId: id, reason: result.error })
+    serverLog.warn('[estimate-file] no-match', { jobId: id, reason: result.error })
     return NextResponse.json({ error: result.error }, { status: 404 })
   }
-  console.info('[estimate-file] selected', {
+  serverLog.info('[estimate-file] selected', {
     jobId: id,
     fileId: result.file.id,
     fileName: result.file.name,

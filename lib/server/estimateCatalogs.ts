@@ -35,6 +35,30 @@ type WallComplexityType = CatalogOption & {
   access_fee: number | null
 }
 
+type RoomType = CatalogOption & {
+  default_wall_rate_id: string | null
+  default_ceil_rate_id: string | null
+  top_cut_in_factor: number | null
+  bot_cut_in_factor: number | null
+  height_factor_ovr: number | null
+  default_complexity_id: string | null
+  default_wall_mode: 'RECT' | 'SEG' | null
+  notes: string | null
+}
+
+type RoomFlag = CatalogOption & {
+  wall_factor: number | null
+  ceil_factor: number | null
+  notes: string | null
+}
+
+type AccessFee = CatalogOption & {
+  fee_type: string | null
+  amount: number | null
+  unit: string | null
+  notes: string | null
+}
+
 type TrimItem = CatalogOption & {
   unit: string | null
   notes: string | null
@@ -75,9 +99,12 @@ type SuppliesRate = {
 export type EstimateCatalogs = {
   paint_products: PaintProduct[]
   ceiling_types: CeilingType[]
+  room_types: RoomType[]
   wall_complexity_types: WallComplexityType[]
   color_codes: CatalogOption[]
   roller_covers: RollerCover[]
+  room_flags: RoomFlag[]
+  access_fees: AccessFee[]
   trim_items: TrimItem[]
   trim_menu_items: TrimItem[]
   prejob_trips: PreJobTrip[]
@@ -142,12 +169,65 @@ function constantsTableKey(title: string) {
   return normalizeKey(title)
 }
 
+function isLikelyColumnHeader(value: string) {
+  const normalized = normalizeKey(value)
+  if (!normalized) return false
+  const headerHints = [
+    'id',
+    'name',
+    'label',
+    'type',
+    'active',
+    'scope',
+    'qty',
+    'quantity',
+    'notes',
+    'note',
+    'amount',
+    'unit',
+    'uom',
+    'price',
+    'coverage',
+    'factor',
+    'mult',
+    'task',
+    'trip',
+    'category',
+    'value',
+    'key',
+    'default',
+    'coats',
+    'mode',
+    'height',
+    'length',
+    'width',
+    'room',
+    'color',
+    'size',
+  ]
+  return headerHints.some((hint) => normalized.includes(hint))
+}
+
 function nonEmptyIndexes(row: string[]) {
   const indexes: number[] = []
   for (let i = 0; i < row.length; i += 1) {
     if (asText(row[i])) indexes.push(i)
   }
   return indexes
+}
+
+function findHeaderRowIndex(values: string[][], titleRowIndex: number): number {
+  // Some tables have 1-2 description/note rows between the title and column headers.
+  // A real header row has ≥2 non-empty cells starting at col 0.
+  // Single-cell rows immediately after the title are treated as description rows and skipped.
+  for (let offset = 1; offset <= 3; offset++) {
+    const candidate = values[titleRowIndex + offset] ?? []
+    const idx = nonEmptyIndexes(candidate)
+    if (idx.length >= 2 && idx[0] === 0) return titleRowIndex + offset
+    if (idx.length === 0) break // blank row — stop scanning
+    // single-cell row: likely a description, keep scanning
+  }
+  return titleRowIndex + 1 // fallback to original behaviour
 }
 
 function isLikelyTableTitle(values: string[][], rowIndex: number) {
@@ -159,10 +239,15 @@ function isLikelyTableTitle(values: string[][], rowIndex: number) {
   const rowNonEmptyCount = nonEmptyIndexes(row).length
   if (rowNonEmptyCount > 2) return false
 
-  const headerRow = values[rowIndex + 1] ?? []
+  const headerRowIndex = findHeaderRowIndex(values, rowIndex)
+  const headerRow = values[headerRowIndex] ?? []
   const headerIndexes = nonEmptyIndexes(headerRow)
   if (headerIndexes.length < 1) return false
   if (headerIndexes[0] !== 0) return false
+  const headerLabels = headerIndexes.map((idx) => asText(headerRow[idx])).filter(Boolean)
+  const headerLikeCount = headerLabels.filter((label) => isLikelyColumnHeader(label)).length
+  if (headerLikeCount < 1) return false
+  if (headerLabels.length >= 2 && headerLikeCount < 2) return false
 
   const headerFirst = asText(headerRow[0])
   if (!headerFirst || normalizeKey(headerFirst).startsWith('cat')) return false
@@ -172,14 +257,16 @@ function isLikelyTableTitle(values: string[][], rowIndex: number) {
 export function parseTableToObjects(values: string[][], titleRowIndex: number): ConstantsTable | null {
   const title = asText(values[titleRowIndex]?.[0])
   if (!title) return null
-  const headerRow = values[titleRowIndex + 1] ?? []
+
+  const headerRowIndex = findHeaderRowIndex(values, titleRowIndex)
+  const headerRow = values[headerRowIndex] ?? []
   const headerIndexes = nonEmptyIndexes(headerRow)
   if (headerIndexes.length < 1 || headerIndexes[0] !== 0) return null
   const headers = headerIndexes.map((colIdx) => asText(headerRow[colIdx]))
   if (headers.some((h) => !h)) return null
 
   const rows: Record<string, string>[] = []
-  for (let rowIndex = titleRowIndex + 2; rowIndex < values.length; rowIndex += 1) {
+  for (let rowIndex = headerRowIndex + 1; rowIndex < values.length; rowIndex += 1) {
     if (rowIndex !== titleRowIndex && isLikelyTableTitle(values, rowIndex)) break
     const row = values[rowIndex] ?? []
     const isBlank = headerIndexes.every((colIdx) => !asText(row[colIdx]))
@@ -214,7 +301,10 @@ export function findTable(constants: ConstantsTables, title: string): ConstantsT
   const exact = entries.find((table) => constantsTableKey(table.title) === target)
   if (exact) return exact
 
-  const fuzzy = entries.find((table) => constantsTableKey(table.title).includes(target))
+  const fuzzy = entries.find((table) => {
+    const key = constantsTableKey(table.title)
+    return key.includes(target) || target.includes(key)
+  })
   if (fuzzy) return fuzzy
   return null
 }
@@ -226,9 +316,14 @@ function tableHasAnyHeader(table: ConstantsTable | null | undefined, headers: st
 }
 
 function rowByHeader(row: Record<string, string>, synonyms: string[]) {
-  for (const key of Object.keys(row)) {
-    if (synonyms.map((s) => normalizeKey(s)).includes(normalizeKey(key))) {
-      return row[key]
+  const entries = Object.entries(row)
+  for (const synonym of synonyms) {
+    const target = normalizeKey(synonym)
+    if (!target) continue
+    for (const [key, value] of entries) {
+      if (normalizeKey(key) === target) {
+        return value
+      }
     }
   }
   return ''
@@ -337,7 +432,16 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
   const constants = loadConstants(values)
   const paintRows = findTable(constants, 'CAT_PaintProducts')?.rows ?? []
   const ceilingRows = findTable(constants, 'CAT_CeilingTypes')?.rows ?? []
+  const roomTypeRows = findTable(constants, 'CAT_RoomTypes')?.rows ?? []
   const wallComplexityRows = findTable(constants, 'CAT_WallComplexity')?.rows ?? []
+  const roomFlagRows =
+    findTable(constants, 'CAT_RoomFlags')?.rows ??
+    findTable(constants, 'Room Flags')?.rows ??
+    []
+  const accessFeeRows =
+    findTable(constants, 'CAT_AccessFees')?.rows ??
+    findTable(constants, 'Access Fees')?.rows ??
+    []
   const rollerRows = findTable(constants, 'CAT_RollerCovers')?.rows ?? []
   const colorRows =
     findTable(constants, 'CAT_ColorCodes')?.rows ??
@@ -385,12 +489,43 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
     .map((row) => ({
       id: asText(rowByHeader(row, ['ComplexityTypeID', 'WallComplexityTypeID', 'TemplateID', 'ID'])).toUpperCase(),
       label:
-        asText(rowByHeader(row, ['DisplayName', 'TemplateName', 'Name', 'Label'])) ||
+        asText(rowByHeader(row, ['DisplayName', 'Label'])) ||
         asText(rowByHeader(row, ['ComplexityTypeID', 'WallComplexityTypeID', 'TemplateID', 'ID'])).toUpperCase(),
       labor_multiplier: asMaybeNumber(rowByHeader(row, ['LaborMultiplier', 'Labor Multiplier'])),
       access_fee: asMaybeNumber(rowByHeader(row, ['AccessFee$', 'AccessFee', 'Access Fee', 'Access Fee $'])),
       active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
     }))
+    .filter((row) => row.id && row.label && row.active === 'Y')
+
+  const roomTypes: RoomType[] = roomTypeRows
+    .map((row) => {
+      const modeRaw = asText(
+        rowByHeader(row, ['DefaultWallMode', 'WallMode', 'Wall Mode'])
+      ).toUpperCase()
+      const defaultWallMode: RoomType['default_wall_mode'] =
+        modeRaw === 'SEG' ? 'SEG' : modeRaw === 'RECT' ? 'RECT' : null
+      return {
+        id: asText(rowByHeader(row, ['RoomTypeID', 'ID'])).toUpperCase(),
+        label:
+          asText(rowByHeader(row, ['DisplayName', 'Name', 'Label'])) ||
+          asText(rowByHeader(row, ['RoomTypeID', 'ID'])).toUpperCase(),
+        default_wall_rate_id: asText(
+          rowByHeader(row, ['DefaultWallRateID', 'WallRateID', 'Wall Rate ID'])
+        ) || null,
+        default_ceil_rate_id: asText(
+          rowByHeader(row, ['DefaultCeilRateID', 'CeilRateID', 'Ceiling Rate ID'])
+        ) || null,
+        top_cut_in_factor: asMaybeNumber(rowByHeader(row, ['TopCutInFactor', 'Top Cut In Factor'])),
+        bot_cut_in_factor: asMaybeNumber(rowByHeader(row, ['BotCutInFactor', 'Bottom Cut In Factor'])),
+        height_factor_ovr: asMaybeNumber(rowByHeader(row, ['HeightFactorOvr', 'Height Factor Ovr'])),
+        default_complexity_id: asText(
+          rowByHeader(row, ['DefaultComplexityID', 'ComplexityTypeID', 'WallComplexityTypeID'])
+        ).toUpperCase() || null,
+        default_wall_mode: defaultWallMode,
+        notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
+        active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
+      }
+    })
     .filter((row) => row.id && row.label && row.active === 'Y')
 
   const rollerCovers: RollerCover[] = rollerRows
@@ -420,6 +555,33 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
       active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
     }))
     .filter((row) => row.id && row.active === 'Y')
+
+  const roomFlags: RoomFlag[] = roomFlagRows
+    .map((row) => ({
+      id: asText(rowByHeader(row, ['FlagID', 'RoomFlagID', 'ID'])).toUpperCase(),
+      label:
+        asText(rowByHeader(row, ['DisplayName', 'FlagName', 'Name', 'Label'])) ||
+        asText(rowByHeader(row, ['FlagID', 'RoomFlagID', 'ID'])).toUpperCase(),
+      wall_factor: asMaybeNumber(rowByHeader(row, ['WallFactor', 'Wall Multiplier'])),
+      ceil_factor: asMaybeNumber(rowByHeader(row, ['CeilFactor', 'CeilingFactor', 'Ceiling Multiplier'])),
+      notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
+      active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
+    }))
+    .filter((row) => row.id && row.label && row.active === 'Y')
+
+  const accessFees: AccessFee[] = accessFeeRows
+    .map((row) => ({
+      id: asText(rowByHeader(row, ['AccessFeeID', 'FeeID', 'ID'])).toUpperCase(),
+      label:
+        asText(rowByHeader(row, ['DisplayName', 'FeeName', 'Name', 'Label'])) ||
+        asText(rowByHeader(row, ['AccessFeeID', 'FeeID', 'ID'])).toUpperCase(),
+      fee_type: asText(rowByHeader(row, ['FeeType', 'Type'])) || null,
+      amount: asMaybeNumber(rowByHeader(row, ['Amount', 'Fee', 'Value', 'Cost'])),
+      unit: asText(rowByHeader(row, ['Unit', 'UOM'])) || null,
+      notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
+      active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
+    }))
+    .filter((row) => row.id && row.label && row.active === 'Y')
 
   const trimMenuItems: TrimItem[] = trimRows
     .map((row) => ({
@@ -534,9 +696,12 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
   return {
     paint_products: paintProducts,
     ceiling_types: ceilingTypes,
+    room_types: roomTypes,
     wall_complexity_types: wallComplexityTypes,
     color_codes: colorCodes,
     roller_covers: rollerCovers,
+    room_flags: roomFlags,
+    access_fees: accessFees,
     trim_items: mergedTrimMenuItems,
     trim_menu_items: mergedTrimMenuItems,
     prejob_trips: preJobTrips,
@@ -567,6 +732,7 @@ export async function getEstimateCatalogs(params: {
   userId: string
   estimateId: string
   forceRefresh?: boolean
+  source?: 'estimate' | 'template'
 }): Promise<EstimateCatalogsResult> {
   const estimateRes = await supabaseAdmin
     .from('estimates')
@@ -577,11 +743,16 @@ export async function getEstimateCatalogs(params: {
   if (estimateRes.error) throw new Error(estimateRes.error.message)
   if (!estimateRes.data) throw new Error('Estimate not found')
 
-  const spreadsheetId =
-    parseSpreadsheetIdFromPath(estimateRes.data.sheet_file_path) ??
+  const estimateSpreadsheetId = parseSpreadsheetIdFromPath(estimateRes.data.sheet_file_path)
+  const templateSpreadsheetId =
+    process.env.GOOGLE_SHEETS_ESTIMATE_V2_TEMPLATE_ID ??
     process.env.GOOGLE_SHEETS_ESTIMATES_TEMPLATE_ID ??
     process.env.GOOGLE_SHEETS_ESTIMATE_TEMPLATE_ID ??
     FALLBACK_TEMPLATE_ID
+  const spreadsheetId =
+    params.source === 'template'
+      ? templateSpreadsheetId ?? estimateSpreadsheetId ?? FALLBACK_TEMPLATE_ID
+      : estimateSpreadsheetId ?? templateSpreadsheetId ?? FALLBACK_TEMPLATE_ID
 
   const constants = await readRangeValues({
     origin: params.origin,

@@ -28,12 +28,19 @@ Run these before merging:
 npm run lint
 npm run typecheck
 npm run build
+npm test
 ```
 
 Or run the full gate in one command:
 
 ```bash
 npm run check
+```
+
+Maximum gate:
+
+```bash
+npm run check:full
 ```
 
 ## Notes Module Cron
@@ -55,9 +62,30 @@ The job sends:
 - task reminder emails when `notes_tasks.reminder_at` is due
 - one daily summary email only when there is at least one active overdue or due-today task
 
+## Site Photos Canonical Endpoint
+
+Use the site photos API as the canonical photo path:
+
+- `GET /api/jobs/:id/site-photos`
+- `POST /api/jobs/:id/site-photos`
+- `PATCH /api/jobs/:id/site-photos/:photoId`
+- `DELETE /api/jobs/:id/site-photos/:photoId`
+
+Legacy `/api/jobs/:id/photos` has been removed.
+
+If you previously stored closeout photos in `job_photos`, run:
+
+- `supabase/sql/037_job_photos_backfill_to_site_photos.sql`
+
+Backfill summary view:
+
+- `public.v_job_photo_backfill_report`
+
 ## Google Estimate Sheets
 
 To enable “Create estimate sheet” (copies a Google Sheets template and autofills customer/job fields), set:
+- `GOOGLE_SHEETS_ESTIMATE_V2_TEMPLATE_ID` (v2 estimator template; if unset, falls back to existing estimate template vars)
+- `GOOGLE_SHEETS_ESTIMATES_TEMPLATE_ID` (existing estimates template var; used as fallback for v2)
 
 - `GOOGLE_SHEETS_ESTIMATE_TEMPLATE_ID` (Spreadsheet file ID from `/d/<ID>/edit`)
 - `GOOGLE_DRIVE_ESTIMATE_SHEETS_FOLDER_ID` (Destination folder for new sheet copies)

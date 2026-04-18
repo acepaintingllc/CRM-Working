@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { readJsonBody } from '@/lib/server/apiRoute'
 import { asBoolean, asOptionalTrimmedText, asRecord, isUuid } from '@/lib/notes/server'
 import type { NotesNoteRow, NotesNoteStatus } from '@/lib/notes/types'
 
@@ -58,8 +59,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: session.error }, { status })
   }
 
-  const rawBody = await request.json().catch(() => null)
-  const body = asRecord(rawBody)
+  const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 128 * 1024 })
+  if (!parsed.ok) return parsed.response
+  const body = asRecord(parsed.value)
   if (!body) {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }

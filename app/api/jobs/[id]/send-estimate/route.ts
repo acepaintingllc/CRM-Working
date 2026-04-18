@@ -3,32 +3,9 @@ import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { downloadDriveFile, findLatestEstimateFile } from '@/lib/server/googleDrive'
 import { sendGmailMessage } from '@/lib/server/googleMail'
 import { checkLocalRateLimit } from '@/lib/server/rateLimit'
-
-function applyTemplate(template: string, vars: Record<string, string | null | undefined>) {
-  let output = template
-  for (const [key, value] of Object.entries(vars)) {
-    const safe = value ?? ''
-    output = output.replaceAll(`{{${key}}}`, safe)
-  }
-  return output
-}
-
-function withAliases(vars: Record<string, string | null | undefined>) {
-  return {
-    ...vars,
-    customer_name: vars.customerName,
-    customer_email: vars.customerEmail,
-    customer_phone: vars.customerPhone,
-    customer_address: vars.customerAddress,
-    job_title: vars.jobTitle,
-    estimate_date: vars.estimateDate,
-    scheduled_date: vars.scheduledDate,
-    scheduled_blocks: vars.scheduledBlocks,
-    estimate_file_name: vars.estimateFileName,
-    estimate_file_link: vars.estimateFileLink,
-    review_link: vars.reviewLink,
-  }
-}
+import { applyTemplate, withTemplateAliases } from '@/lib/server/emailTemplate'
+import { serverLog } from '@/lib/server/log'
+import { enforceContentLength, requireMultipartFormData } from '@/lib/server/apiRoute'
 
 type JobRecord = {
   customer_id: string | null
@@ -38,6 +15,7 @@ type JobRecord = {
 }
 
 type ScheduleRow = { start_at: string | null; end_at: string | null }
+const maxEstimateUploadBytes = 20 * 1024 * 1024
 
 export async function POST(
   request: Request,
@@ -105,6 +83,11 @@ export async function POST(
     let bodyOverride: string | null = null
 
     if (contentType.includes('multipart/form-data')) {
+      const typeCheck = requireMultipartFormData(request)
+      if (!typeCheck.ok) return typeCheck.response
+      const sizeCheck = enforceContentLength(request, maxEstimateUploadBytes)
+      if (!sizeCheck.ok) return sizeCheck.response
+
       const form = await request.formData()
       const file = form.get('file')
       const subjectField = form.get('subject')
@@ -112,6 +95,9 @@ export async function POST(
       if (typeof subjectField === 'string') subjectOverride = subjectField
       if (typeof bodyField === 'string') bodyOverride = bodyField
       if (file && file instanceof File) {
+        if (file.size > maxEstimateUploadBytes) {
+          return NextResponse.json({ error: 'Uploaded file is too large.' }, { status: 413 })
+        }
         const buffer = Buffer.from(await file.arrayBuffer())
         attachment = {
           id: null,
@@ -133,10 +119,10 @@ export async function POST(
       })
 
       if ('error' in fileResult) {
-        console.warn('[send-estimate] no-match', { jobId: id, reason: fileResult.error })
+        serverLog.warn('[send-estimate] no-match', { jobId: id, reason: fileResult.error })
         return NextResponse.json({ error: 'No matching estimate in Drive folder.' }, { status: 400 })
       }
-      console.info('[send-estimate] selected', {
+      serverLog.info('[send-estimate] selected', {
         jobId: id,
         fileId: fileResult.file.id,
         fileName: fileResult.file.name,
@@ -181,7 +167,7 @@ export async function POST(
       .filter(Boolean)
       .join('\n')
 
-    const vars = withAliases({
+    const vars = withTemplateAliases({
       customerName: customer.name ?? '',
       customerEmail: customer.email ?? '',
       customerPhone: customer.phone ?? '',

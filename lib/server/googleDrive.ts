@@ -46,7 +46,7 @@ function escapeRegex(value: string) {
 }
 
 function parseEstimateFileName(name: string) {
-  const m = /^Estimate-(.+)-v(\d+)(?:\.pdf)?$/i.exec(name)
+  const m = /^Estimate-(.+)-v(\d+)(?:-.+)?(?:\.pdf)?$/i.exec(name)
   if (!m) return null
   const rawStreet = normalizeSpaces(m[1] ?? '')
   const normalizedStreet = normalizeStreet(rawStreet)
@@ -162,7 +162,7 @@ export async function findMatchingEstimateFiles(params: {
   }[]
 
   const exactStreetPattern = new RegExp(
-    `^Estimate-${escapeRegex(rawStreet)}-v(\\d+)(?:\\.pdf)?$`,
+    `^Estimate-${escapeRegex(rawStreet)}-v(\\d+)(?:-.+)?(?:\\.pdf)?$`,
     'i'
   )
   const exactMatches = parsed
