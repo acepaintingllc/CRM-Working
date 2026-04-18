@@ -233,7 +233,6 @@ export default function CRMHome() {
       let nextCalendarConnected: boolean | null = null
       let nextCalendarError: string | null = null
       let nextCalendarTodayEvents: CalendarEvent[] = []
-      let nextNotesError: string | null = null
       let nextNotesReminders: NotesReminderSignal[] = []
 
       const [calendarStatusRes, notesDashboardRes] = await Promise.all([
@@ -278,9 +277,7 @@ export default function CRMHome() {
         }
       }
 
-      if (!notesDashboardRes.ok) {
-        nextNotesError = notesDashboardPayload?.error ?? 'Unable to load notes reminders.'
-      } else {
+      if (notesDashboardRes.ok) {
         const typed = notesDashboardPayload as NotesDashboardPayload
         const overdue = (typed.tasks?.overdue ?? []).map((task) => ({ kind: 'overdue' as const, task }))
         const dueToday = (typed.tasks?.due_today ?? []).map((task) => ({
