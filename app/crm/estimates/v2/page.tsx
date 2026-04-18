@@ -612,9 +612,8 @@ export default function EstimatorV2HomePage() {
   }, [jobQuery, jobs])
 
   const selectedJob = useMemo(
-    () => jobs.find((j) => j.id === selectedJobId) ?? null,
-    [jobs, selectedJobId]
-  )
+  () => jobs.find((j) => j.id === selectedJobId) ?? null,
+)
 
   const selectedJobVersions = useMemo(() => {
     if (!selectedJobId) return []

@@ -170,7 +170,6 @@ export default function CRMHome() {
   const [signalsLoading, setSignalsLoading] = useState(false)
   const [calendarConnected, setCalendarConnected] = useState<boolean | null>(null)
   const [calendarError, setCalendarError] = useState<string | null>(null)
-  const [_notesError, setNotesError] = useState<string | null>(null)
   const [calendarTodayEvents, setCalendarTodayEvents] = useState<CalendarEvent[]>([])
   const [notesReminders, setNotesReminders] = useState<NotesReminderSignal[]>([])
   const greeting = useMemo(() => {
@@ -228,7 +227,7 @@ export default function CRMHome() {
     const loadSignals = async () => {
       setSignalsLoading(true)
       setCalendarError(null)
-      setNotesError(null)
+      
 
       const now = new Date()
       let nextCalendarConnected: boolean | null = null
@@ -295,7 +294,6 @@ export default function CRMHome() {
       setCalendarConnected(nextCalendarConnected)
       setCalendarError(nextCalendarError)
       setCalendarTodayEvents(nextCalendarTodayEvents)
-      setNotesError(nextNotesError)
       setNotesReminders(nextNotesReminders)
       setSignalsLoading(false)
     }
