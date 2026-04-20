@@ -98,6 +98,14 @@ function missingNamedRangeMessage(message: string) {
     : `Missing one or more named ranges in the estimate template. Required: ${required}. Optional: ${optional}.`
 }
 
+function buildWallScope(roomNames: string, paintProduct: string) {
+  const rooms = String(roomNames ?? '').trim()
+  const paint = String(paintProduct ?? '').trim()
+  if (!rooms) return ''
+  if (!paint) return rooms
+  return `${rooms}, using ${paint}`
+}
+
 export async function POST(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
@@ -602,7 +610,10 @@ export async function POST(
         value: String(row.data.extra_supplies_allowance ?? ''),
       },
     ]),
-    { range: 'wall_scope', value: roomNames },
+    {
+      range: 'wall_scope',
+      value: buildWallScope(roomNames, String((defaults as Unsafe).wall_paint_product ?? '')),
+    },
     { range: 'wall_room_names', value: roomNames },
     { range: 'ceiling_paint_product', value: String((ceilingDefaults as Unsafe)?.ceiling_paint_product ?? '') },
     { range: 'ceiling_roller_cover_size', value: String((ceilingDefaults as Unsafe)?.roller_cover_size ?? 'N/A') || 'N/A' },

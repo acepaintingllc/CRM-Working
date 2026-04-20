@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { createEstimateRatesFlagsCatalogSnapshot } from '@/lib/server/estimateRatesFlags'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -183,6 +184,17 @@ export async function POST(request: Request) {
     await supabaseAdmin.from('estimate_jobsettings').delete().eq('org_id', orgId).eq('estimate_id', estimateId)
     await supabaseAdmin.from('estimates').delete().eq('org_id', orgId).eq('id', estimateId)
     return NextResponse.json({ error: pricingPolicyInsert.error.message }, { status: 500 })
+  }
+
+  const snapshotInsert = await createEstimateRatesFlagsCatalogSnapshot({
+    orgId,
+    estimateId,
+  })
+  if (!snapshotInsert.ok) {
+    await supabaseAdmin.from('estimate_pricing_policies').delete().eq('org_id', orgId).eq('estimate_id', estimateId)
+    await supabaseAdmin.from('estimate_jobsettings').delete().eq('org_id', orgId).eq('estimate_id', estimateId)
+    await supabaseAdmin.from('estimates').delete().eq('org_id', orgId).eq('id', estimateId)
+    return NextResponse.json({ error: snapshotInsert.error }, { status: snapshotInsert.status })
   }
 
   return NextResponse.json({

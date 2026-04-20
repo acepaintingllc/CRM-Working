@@ -1,5 +1,9 @@
 import { readRangeValues } from '@/lib/server/googleSheets'
 import { supabaseAdmin } from '@/lib/server/org'
+import {
+  getOrCreateEstimateRatesFlagsCatalogOverlay,
+  readLiveRatesFlagsCatalogOverlay,
+} from '@/lib/server/estimateRatesFlags'
 
 const FALLBACK_TEMPLATE_ID = '1zufQIEtGqP8wZoPjg203TG2HkYS9iSdvBImHC6Ok3Rs'
 const CACHE_TTL_MS = 5 * 60 * 1000
@@ -15,6 +19,7 @@ type PaintProduct = CatalogOption & {
   price_per_gal: number | null
   coverage_sqft_per_gal_per_coat: number | null
   notes: string | null
+  scopes?: string[]
 }
 
 type CeilingType = CatalogOption & {
@@ -27,6 +32,23 @@ type RollerCover = CatalogOption & {
   scope: 'Wall' | 'Ceiling' | 'Other'
   size_in: number | null
   price_each: number | null
+  notes: string | null
+}
+
+type ProductionRate = CatalogOption & {
+  scope_id: string | null
+  surface_type: string | null
+  condition: string | null
+  prep_sqft_per_hr: number | null
+  sqft_per_hr: number | null
+  primer_sqft_per_hr: number | null
+  notes: string | null
+}
+
+type HeightFactor = CatalogOption & {
+  min_height_ft: number | null
+  max_height_ft: number | null
+  labor_multiplier: number | null
   notes: string | null
 }
 
@@ -49,6 +71,7 @@ type RoomType = CatalogOption & {
 type RoomFlag = CatalogOption & {
   wall_factor: number | null
   ceil_factor: number | null
+  trim_factor: number | null
   notes: string | null
 }
 
@@ -61,6 +84,11 @@ type AccessFee = CatalogOption & {
 
 type TrimItem = CatalogOption & {
   unit: string | null
+  family: string | null
+  unit_type: string | null
+  helper_allowed: boolean
+  default_production_rate_id: string | null
+  production_rate_id: string | null
   notes: string | null
   default_qty: number | null
   is_active: boolean
@@ -101,6 +129,8 @@ export type EstimateCatalogs = {
   ceiling_types: CeilingType[]
   room_types: RoomType[]
   wall_complexity_types: WallComplexityType[]
+  production_rates?: ProductionRate[]
+  height_factors?: HeightFactor[]
   color_codes: CatalogOption[]
   roller_covers: RollerCover[]
   room_flags: RoomFlag[]
@@ -136,6 +166,13 @@ const catalogCache = new Map<string, CachedCatalogs>()
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
+}
+
+function isAreaBasedUnit(value: unknown) {
+  const raw = asText(value).toLowerCase().replace(/\s+/g, '')
+  if (!raw) return false
+  if (!raw.includes('$')) return false
+  return raw.includes('/sqft') || raw.includes('/sf')
 }
 
 function asMaybeNumber(value: unknown) {
@@ -434,6 +471,14 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
   const ceilingRows = findTable(constants, 'CAT_CeilingTypes')?.rows ?? []
   const roomTypeRows = findTable(constants, 'CAT_RoomTypes')?.rows ?? []
   const wallComplexityRows = findTable(constants, 'CAT_WallComplexity')?.rows ?? []
+  const productionRateRows =
+    findTable(constants, 'CAT_ProductionRates')?.rows ??
+    findTable(constants, 'Production Rates')?.rows ??
+    []
+  const heightFactorRows =
+    findTable(constants, 'CAT_HeightFactors')?.rows ??
+    findTable(constants, 'Height Factors')?.rows ??
+    []
   const roomFlagRows =
     findTable(constants, 'CAT_RoomFlags')?.rows ??
     findTable(constants, 'Room Flags')?.rows ??
@@ -458,7 +503,11 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
     ? preJobPrimary
     : preJobTasksTable ?? preJobPrimary
   const preJobRows = preJobTable?.rows ?? []
-  const suppliesRows = findTable(constants, 'SUPPLIES RATES')?.rows ?? []
+  const suppliesRows =
+    findTable(constants, 'SUPPLIES RATES')?.rows ??
+    findTable(constants, 'CAT_Supplies')?.rows ??
+    findTable(constants, 'Supplies Rates')?.rows ??
+    []
 
   const paintProducts: PaintProduct[] = paintRows
     .map((row) => ({
@@ -496,6 +545,47 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
       active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
     }))
     .filter((row) => row.id && row.label && row.active === 'Y')
+
+  const productionRates: ProductionRate[] = productionRateRows
+    .map((row) => ({
+      id: asText(rowByHeader(row, ['RateID', 'ID'])).toUpperCase(),
+      label:
+        asText(rowByHeader(row, ['DisplayName', 'Name', 'Label'])) ||
+        asText(rowByHeader(row, ['RateID', 'ID'])).toUpperCase(),
+      scope_id: asText(rowByHeader(row, ['ScopeID', 'Scope'])) || null,
+      surface_type: asText(rowByHeader(row, ['SurfaceType', 'Surface'])) || null,
+      condition: asText(rowByHeader(row, ['Condition'])) || null,
+      prep_sqft_per_hr: asMaybeNumber(
+        rowByHeader(row, ['PrepSqFtPerHr', 'PrepSqFt/hr', 'Prep Rate'])
+      ),
+      sqft_per_hr: asMaybeNumber(rowByHeader(row, ['SqFtPerHr', 'SqFt/hr', 'Rate'])),
+      primer_sqft_per_hr: asMaybeNumber(
+        rowByHeader(row, ['PrimerSqFtPerHr', 'PrimerSqFt/hr', 'Primer Rate'])
+      ),
+      notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
+      active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
+    }))
+    .filter((row) => row.id && row.active === 'Y')
+
+  const heightFactors: HeightFactor[] = heightFactorRows
+    .map((row) => ({
+      id: asText(rowByHeader(row, ['HeightBandID', 'HeightFactorID', 'ID'])).toUpperCase(),
+      label:
+        asText(rowByHeader(row, ['DisplayName', 'Name', 'Label'])) ||
+        asText(rowByHeader(row, ['HeightBandID', 'HeightFactorID', 'ID'])).toUpperCase(),
+      min_height_ft: asMaybeNumber(
+        rowByHeader(row, ['MinHeight_ft', 'MinHeight', 'Min Height'])
+      ),
+      max_height_ft: asMaybeNumber(
+        rowByHeader(row, ['MaxHeight_ft', 'MaxHeight', 'Max Height'])
+      ),
+      labor_multiplier: asMaybeNumber(
+        rowByHeader(row, ['LaborMultiplier', 'Labor Multiplier', 'LaborMult'])
+      ),
+      notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
+      active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
+    }))
+    .filter((row) => row.id && row.active === 'Y')
 
   const roomTypes: RoomType[] = roomTypeRows
     .map((row) => {
@@ -564,6 +654,7 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
         asText(rowByHeader(row, ['FlagID', 'RoomFlagID', 'ID'])).toUpperCase(),
       wall_factor: asMaybeNumber(rowByHeader(row, ['WallFactor', 'Wall Multiplier'])),
       ceil_factor: asMaybeNumber(rowByHeader(row, ['CeilFactor', 'CeilingFactor', 'Ceiling Multiplier'])),
+      trim_factor: asMaybeNumber(rowByHeader(row, ['TrimFactor', 'Trim Multiplier'])),
       notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
       active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
     }))
@@ -590,6 +681,14 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
         asText(rowByHeader(row, ['DisplayName', 'Name', 'Label'])) ||
         asText(rowByHeader(row, ['TrimItemID', 'TrimMenuID', 'ItemID', 'ID'])),
       unit: asText(rowByHeader(row, ['Unit', 'UOM'])) || null,
+      family:
+        asText(rowByHeader(row, ['Family', 'TrimFamily', 'Category'])) ||
+        inferTrimCategory(asText(rowByHeader(row, ['DisplayName', 'Name', 'Label']))),
+      unit_type: asText(rowByHeader(row, ['UnitType', 'RateUnit', 'Unit', 'UOM'])) || null,
+      helper_allowed: toYN(rowByHeader(row, ['HelperAllowed', 'RoomHelperAllowed', 'Helper']), 'N') === 'Y',
+      default_production_rate_id:
+        asText(rowByHeader(row, ['DefaultProductionRateID', 'ProductionRateID', 'RateID'])) || null,
+      production_rate_id: asText(rowByHeader(row, ['ProductionRateID', 'RateID'])) || null,
       notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
       default_qty: asMaybeNumber(rowByHeader(row, ['DefaultQty', 'QtyDefault'])),
       active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
@@ -610,6 +709,11 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
         asText(rowByHeader(row, ['DisplayName', 'Name', 'Label'])) ||
         asText(rowByHeader(row, ['DoorTypeID', 'ID'])),
       unit: asText(rowByHeader(row, ['Unit', 'UOM'])) || null,
+      family: 'door',
+      unit_type: asText(rowByHeader(row, ['UnitType', 'RateUnit', 'Unit', 'UOM'])) || null,
+      helper_allowed: false,
+      default_production_rate_id: asText(rowByHeader(row, ['DefaultProductionRateID', 'ProductionRateID', 'RateID'])) || null,
+      production_rate_id: asText(rowByHeader(row, ['ProductionRateID', 'RateID'])) || null,
       notes: asText(rowByHeader(row, ['Notes', 'Note'])) || null,
       default_qty: asMaybeNumber(rowByHeader(row, ['DefaultQty', 'QtyDefault'])),
       active: toYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']), 'Y'),
@@ -698,6 +802,8 @@ function parseCatalogs(values: string[][]): EstimateCatalogs {
     ceiling_types: ceilingTypes,
     room_types: roomTypes,
     wall_complexity_types: wallComplexityTypes,
+    production_rates: productionRates,
+    height_factors: heightFactors,
     color_codes: colorCodes,
     roller_covers: rollerCovers,
     room_flags: roomFlags,
@@ -726,14 +832,112 @@ function parseSheetDefaults(values: string[][]): EstimateSheetDefaults {
   }
 }
 
+async function readV2Products(orgId: string): Promise<PaintProduct[]> {
+  const { data, error } = await supabaseAdmin
+    .from('v2_products')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('status', 'Active')
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(`Failed to read V2 products: ${error.message}`)
+
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    id: asText(row.id),
+    label: asText(row.display_name ?? row.display_id ?? row.label ?? row.name),
+    type: asText(row.family ?? ''),
+    price_per_gal: row.cost_per_unit as number | null,
+    coverage_sqft_per_gal_per_coat: row.coverage_sqft_per_gal_per_coat as number | null,
+    notes: asText(row.notes ?? ''),
+    active: 'Y' as const,
+    scopes: (row.default_scopes ?? []) as string[],
+  }))
+}
+
+async function readV2CatalogSnapshot(
+  orgId: string,
+  estimateId: string
+): Promise<EstimateCatalogsResult | null> {
+  const { data, error } = await supabaseAdmin
+    .from('v2_catalog_snapshots')
+    .select('payload_json')
+    .eq('org_id', orgId)
+    .eq('estimate_id', estimateId)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to read V2 catalog snapshot: ${error.message}`)
+  if (!data) return null
+
+  const payload = data.payload_json as EstimateCatalogsResult
+  return payload
+}
+
+function hydrateV2CatalogSnapshotWithProducts(
+  snapshot: EstimateCatalogsResult,
+  products: Array<{ id: string; label: string; active: 'Y' | 'N'; type: string; price_per_gal: number | null; coverage_sqft_per_gal_per_coat: number | null; notes: string | null; scopes?: string[] }>
+) {
+  const productsById = new Map(
+    products
+      .map((row) => [asText(row.id).toUpperCase(), asText(row.label)] as const)
+      .filter(([id, label]) => !!id && !!label)
+  )
+
+  const paintProducts = (snapshot.catalogs.paint_products ?? []).map((row) => {
+    const id = asText(row.id).toUpperCase()
+    const label = asText(row.label) || productsById.get(id) || asText(row.label)
+    return label && label !== asText(row.label) ? { ...row, label } : row
+  })
+
+  return {
+    ...snapshot,
+    catalogs: {
+      ...snapshot.catalogs,
+      paint_products: paintProducts.length > 0 ? paintProducts : products,
+    },
+  }
+}
+
 export async function getEstimateCatalogs(params: {
   origin: string
   orgId: string
   userId: string
   estimateId: string
   forceRefresh?: boolean
-  source?: 'estimate' | 'template'
-}): Promise<EstimateCatalogsResult> {
+  source?: 'estimate' | 'template' | 'v2'
+}): Promise<EstimateCatalogsResult> {  // Handle V2-specific catalog loading
+  if (params.source === 'v2') {
+    const snapshot = await readV2CatalogSnapshot(params.orgId, params.estimateId)
+    const v2Products = await readV2Products(params.orgId)
+    if (!snapshot) {
+      // Fall back to reading V2 products and building a catalog on-the-fly
+      return {
+        spreadsheet_id: '',
+        schema_version: 'v2',
+        schema_mismatch: false,
+        defaults: {
+          override_labor_rate: null,
+          override_markup: null,
+          rounding_increment_hours: null,
+          dayhours: null,
+        },
+        catalogs: {
+          paint_products: v2Products,
+          ceiling_types: [],
+          room_types: [],
+          wall_complexity_types: [],
+          color_codes: [],
+          roller_covers: [],
+          room_flags: [],
+          access_fees: [],
+          trim_items: [],
+          trim_menu_items: [],
+          prejob_trips: [],
+          supplies_rates: [],
+        },
+      }
+    }
+    return hydrateV2CatalogSnapshotWithProducts(snapshot, v2Products)
+  }
   const estimateRes = await supabaseAdmin
     .from('estimates')
     .select('id, sheet_file_path, sheet_schema_version')
@@ -768,21 +972,110 @@ export async function getEstimateCatalogs(params: {
 
   const cacheKey = `${spreadsheetId}:${schemaVersion}`
   const cached = catalogCache.get(cacheKey)
+  let parsed: EstimateCatalogs
+  let defaults: EstimateSheetDefaults
   if (!params.forceRefresh && cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return {
-      spreadsheet_id: spreadsheetId,
-      schema_version: schemaVersion,
-      schema_mismatch:
-        !!estimateRes.data.sheet_schema_version &&
-        asText(estimateRes.data.sheet_schema_version) !== schemaVersion,
-      defaults: cached.defaults,
-      catalogs: cached.data,
-    }
+    parsed = cached.data
+    defaults = cached.defaults
+  } else {
+    parsed = parseCatalogs(constants.values)
+    defaults = parseSheetDefaults(constants.values)
+    catalogCache.set(cacheKey, { at: Date.now(), data: parsed, defaults })
   }
 
-  const parsed = parseCatalogs(constants.values)
-  const defaults = parseSheetDefaults(constants.values)
-  catalogCache.set(cacheKey, { at: Date.now(), data: parsed, defaults })
+  let overlay = null
+  if (params.source === 'template') {
+    overlay = await readLiveRatesFlagsCatalogOverlay({ orgId: params.orgId })
+  } else {
+    overlay = await getOrCreateEstimateRatesFlagsCatalogOverlay({
+      orgId: params.orgId,
+      estimateId: params.estimateId,
+    })
+  }
+
+  const catalogsWithOverlay: EstimateCatalogs = overlay
+    ? {
+        ...parsed,
+        production_rates: overlay.production_rates
+          .filter((row) => row.active === 'Y')
+          .map((row) => ({
+            id: row.id,
+            label: row.label,
+            active: row.active,
+            scope_id: row.scope_id,
+            surface_type: row.surface_type,
+            condition: row.condition,
+            prep_sqft_per_hr: row.prep_sqft_per_hr,
+            sqft_per_hr: row.sqft_per_hr,
+            primer_sqft_per_hr: row.primer_sqft_per_hr,
+            notes: row.notes,
+          })),
+        height_factors: overlay.height_factors
+          .filter((row) => row.active === 'Y')
+          .map((row) => ({
+            id: row.id,
+            label: row.label,
+            active: row.active,
+            min_height_ft: row.min_height_ft,
+            max_height_ft: row.max_height_ft,
+            labor_multiplier: row.labor_multiplier,
+            notes: row.notes,
+          })),
+        wall_complexity_types: overlay.wall_complexity_types
+          .filter((row) => row.active === 'Y')
+          .map((row) => ({
+            id: row.id,
+            label: row.label,
+            active: row.active,
+            labor_multiplier: row.labor_multiplier,
+            access_fee: row.access_fee,
+          })),
+        ceiling_types: overlay.ceiling_types
+          .filter((row) => row.active === 'Y')
+          .map((row) => ({
+            id: row.id,
+            label: row.label,
+            active: row.active,
+            labor_mult: row.labor_mult,
+            surcharge_per_sqft: row.surcharge_per_sqft,
+            notes: row.notes,
+          })),
+        room_flags: overlay.room_flags
+          .filter((row) => row.active === 'Y')
+          .map((row) => ({
+            id: row.id,
+            label: row.label,
+            active: row.active,
+            wall_factor: row.wall_factor,
+            ceil_factor: row.ceil_factor,
+            trim_factor: row.trim_factor,
+            notes: row.notes,
+          })),
+        access_fees: overlay.access_fees
+          .filter((row) => row.active === 'Y')
+          .map((row) => ({
+            id: row.id,
+            label: row.label,
+            active: row.active,
+            fee_type: row.fee_type,
+            amount: row.amount,
+            unit: row.unit,
+            notes: row.notes,
+          })),
+        supplies_rates: [
+          ...parsed.supplies_rates.filter((row) => !isAreaBasedUnit(row.unit)),
+          ...overlay.area_supplies_rates
+            .filter((row) => row.active === 'Y')
+            .map((row) => ({
+              key: row.key,
+              scope: row.scope,
+              unit: row.unit,
+              value: row.value,
+              notes: row.notes,
+            })),
+        ],
+      }
+    : parsed
 
   return {
     spreadsheet_id: spreadsheetId,
@@ -791,6 +1084,6 @@ export async function getEstimateCatalogs(params: {
       !!estimateRes.data.sheet_schema_version &&
       asText(estimateRes.data.sheet_schema_version) !== schemaVersion,
     defaults,
-    catalogs: parsed,
+    catalogs: catalogsWithOverlay,
   }
 }

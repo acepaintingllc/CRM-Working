@@ -12,12 +12,12 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: 'portrait',
     icons: [
       {
-        src: '/ace-logo-clean.png',
+        src: '/ace-logo-global.png',
         sizes: '512x512',
         type: 'image/png',
       },
       {
-        src: '/ace-logo.png',
+        src: '/ace-logo-global.png',
         sizes: '512x512',
         type: 'image/png',
       },

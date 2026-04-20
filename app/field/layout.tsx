@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import { getBrandLogoUrl } from '@/lib/brand/logo'
 import { supabaseBrowser } from '@/lib/supabase/client'
 import { syncQueuedSitePhotos } from '@/lib/field/localSitePhotos'
 
@@ -61,7 +62,7 @@ export default function FieldLayout({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
   const [online, setOnline] = useState(true)
   const [logoError, setLogoError] = useState(false)
-  const logoSrc = process.env.NEXT_PUBLIC_CRM_LOGO || '/ace-logo-clean.png'
+  const logoSrc = getBrandLogoUrl()
 
   useEffect(() => {
     setOnline(typeof navigator === 'undefined' ? true : navigator.onLine)

@@ -24,7 +24,8 @@ export async function GET(
   try {
     const url = new URL(request.url)
     const refresh = url.searchParams.get('refresh') === '1'
-    const source = url.searchParams.get('source') === 'template' ? 'template' : 'estimate'
+    const v2 = url.searchParams.get('v2') === '1'
+    const source = v2 ? 'v2' : url.searchParams.get('source') === 'template' ? 'template' : 'estimate'
     const catalogs = await getEstimateCatalogs({
       origin: url.origin,
       orgId: session.orgId,
