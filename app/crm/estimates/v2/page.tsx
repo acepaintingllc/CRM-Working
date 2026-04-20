@@ -4,6 +4,7 @@ import { authedFetch } from '@/lib/auth/authedFetch'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, FilePlus2, FolderOpen, Search, Send, Trash2 } from 'lucide-react'
 
 type NavItem = {
   label: string
@@ -58,8 +59,8 @@ const VERSION_KIND_OPTIONS = [
 ] as const
 
 const SETTINGS_LINKS: NavItem[] = [
-  { label: 'Products', disabled: true },
-  { label: 'Rates & Flags', disabled: true },
+  { label: 'Products', href: '/crm/estimates/v2/products' },
+  { label: 'Rates & Flags', href: '/crm/estimates/v2/rates' },
   { label: 'Settings', href: '/crm/settings' },
 ]
 
@@ -462,6 +463,10 @@ function buildSearchHaystack(estimate: HomeEstimate) {
   return `${estimate.version_name} ${estimate.job_title} ${estimate.customer_name} ${estimate.version_kind} ${estimate.version_state}`.toLowerCase()
 }
 
+function estimateWorkspaceHref(estimateId: string) {
+  return `/crm/estimates/${estimateId}/v2`
+}
+
 export default function EstimatorV2HomePage() {
   const router = useRouter()
 
@@ -476,6 +481,8 @@ export default function EstimatorV2HomePage() {
   const [versionName, setVersionName] = useState('')
   const [versionKind, setVersionKind] = useState<(typeof VERSION_KIND_OPTIONS)[number]['value']>('standard')
   const [creating, setCreating] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState<HomeEstimate | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -544,6 +551,57 @@ export default function EstimatorV2HomePage() {
       return
     }
     router.push(`/crm/estimates/${payload.id}/v2`)
+  }
+
+  const deleteVersion = async () => {
+    if (!confirmingDelete) return
+    setDeletingId(confirmingDelete.estimate_id)
+    setError(null)
+
+    const res = await authedFetch(`/api/estimates/${confirmingDelete.estimate_id}`, {
+      method: 'DELETE',
+    })
+    const payload = await res.json().catch(() => null)
+    setDeletingId(null)
+
+    if (!res.ok) {
+      setError(payload?.error ?? res.statusText)
+      return
+    }
+
+    const deletedId = confirmingDelete.estimate_id
+    setData((prev) => {
+      if (!prev) return prev
+
+      const remainingRecent = prev.recent_estimates.filter((row) => row.estimate_id !== deletedId)
+      const remainingSearch = prev.search_estimates.filter((row) => row.estimate_id !== deletedId)
+      const nextSnapshot =
+        prev.snapshot?.estimate_id === deletedId
+          ? remainingSearch[0]
+            ? {
+                ...remainingSearch[0],
+                total_versions: remainingSearch.length,
+              }
+            : null
+          : prev.snapshot
+
+      return {
+        ...prev,
+        recent_estimates: remainingRecent,
+        search_estimates: remainingSearch,
+        snapshot: nextSnapshot,
+        summary: {
+          draft_count: remainingSearch.filter((row) => row.version_state === 'draft').length,
+          sent_or_awaiting_count: remainingSearch.filter((row) => row.is_sent_estimate).length,
+          live_count: remainingSearch.filter((row) => row.version_state === 'live').length,
+          pipeline_total: remainingSearch.reduce((sum, row) => {
+            if (row.version_state === 'archived') return sum
+            return sum + (row.final_total ?? 0)
+          }, 0),
+        },
+      }
+    })
+    setConfirmingDelete(null)
   }
 
   // Reset form fields when selected job changes
@@ -1161,7 +1219,8 @@ export default function EstimatorV2HomePage() {
                       </div>
                     </div>
                     <Link
-                      href={`/crm/estimates/${estimate.estimate_id}/v2`}
+                      href={estimateWorkspaceHref(estimate.estimate_id)}
+                      prefetch={false}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -1175,9 +1234,31 @@ export default function EstimatorV2HomePage() {
                         fontWeight: 700,
                         whiteSpace: 'nowrap',
                       }}
-                    >
+                      >
                       Open version
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(estimate)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        padding: '7px 9px',
+                        borderRadius: 8,
+                        border: '1px solid rgba(248,113,113,0.28)',
+                        background: 'rgba(239,68,68,0.08)',
+                        color: '#fecaca',
+                        textDecoration: 'none',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Trash2 size={12} aria-hidden="true" />
+                      Delete
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1313,6 +1394,84 @@ export default function EstimatorV2HomePage() {
           }
         `}</style>
       </div>
+
+      {confirmingDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 16,
+            zIndex: 80,
+          }}
+          onClick={() => (deletingId ? null : setConfirmingDelete(null))}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 500,
+              borderRadius: 18,
+              border: '1px solid var(--v2-line)',
+              background: 'var(--v2-bg-2)',
+              boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+              padding: 20,
+              display: 'grid',
+              gap: 14,
+            }}
+          >
+            <div>
+              <div style={{ ...S.cardLabel, marginBottom: 8 }}>Delete version</div>
+              <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>
+                Delete {confirmingDelete.version_name}
+              </div>
+              <div style={{ marginTop: 8, color: 'var(--v2-ink-3)', lineHeight: 1.6, fontSize: 14 }}>
+                This will permanently delete the version for {confirmingDelete.job_title}. This cannot be undone.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(null)}
+                disabled={Boolean(deletingId)}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  border: '1px solid var(--v2-line)',
+                  background: 'var(--v2-bg)',
+                  color: 'var(--v2-ink)',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: deletingId ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteVersion()}
+                disabled={Boolean(deletingId)}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(248,113,113,0.38)',
+                  background: deletingId ? 'rgba(220,38,38,0.75)' : '#dc2626',
+                  color: '#fff',
+                  fontWeight: 800,
+                  fontSize: 13,
+                  cursor: deletingId ? 'not-allowed' : 'pointer',
+                  opacity: deletingId ? 0.8 : 1,
+                }}
+              >
+                {deletingId ? 'Deleting...' : 'Delete version'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

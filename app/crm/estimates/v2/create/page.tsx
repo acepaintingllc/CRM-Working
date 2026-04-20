@@ -44,6 +44,10 @@ function formatDateTime(value: string | null | undefined) {
   return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
+function estimateWorkspaceHref(estimateId: string) {
+  return `/crm/estimates/${estimateId}/v2`
+}
+
 export default function EstimatorV2CreatePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -277,7 +281,8 @@ export default function EstimatorV2CreatePage() {
                   </div>
                 </div>
                 <Link
-                  href={`/crm/estimates/${estimate.id}/v2`}
+                  href={estimateWorkspaceHref(estimate.id)}
+                  prefetch={false}
                   style={{
                     padding: '9px 12px',
                     borderRadius: 10,

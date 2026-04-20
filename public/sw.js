@@ -5,8 +5,7 @@ const APP_SHELL = [
   '/field/activity',
   '/field/settings',
   '/manifest.webmanifest',
-  '/ace-logo-clean.png',
-  '/ace-logo.png',
+  '/ace-logo-global.png',
 ]
 
 const STATIC_PATH_PREFIXES = ['/_next/static/', '/icons/']

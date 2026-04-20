@@ -105,6 +105,7 @@ export async function readRangeValues(params: {
   userId: string
   spreadsheetId: string
   range: string
+  includeEmptyRows?: boolean
 }) {
   const access = await getAccess(params)
   if (!access.ok) return { error: access.error } as const
@@ -124,9 +125,10 @@ export async function readRangeValues(params: {
 
   const obj = asRecord(json)
   const rawValues = Array.isArray(obj?.values) ? obj?.values : []
-  const values = rawValues
-    .map((row) => (Array.isArray(row) ? row.map((cell) => (cell == null ? '' : String(cell))) : []))
-    .filter((row) => row.length > 0)
+  const mapped = rawValues.map((row) =>
+    Array.isArray(row) ? row.map((cell) => (cell == null ? '' : String(cell))) : []
+  )
+  const values = params.includeEmptyRows ? mapped : mapped.filter((row) => row.length > 0)
 
   return { values } as const
 }

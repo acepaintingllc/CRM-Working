@@ -500,8 +500,8 @@ export default function JobDetailPage() {
     Boolean(job?.scheduled_date || job?.scheduled_end_date) && job?.status !== 'completed'
   const linkedEstimateHref =
     job?.linked_estimate_id && typeof job.linked_estimate_id === 'string'
-      ? `/crm/estimates/${job.linked_estimate_id}`
-      : `/crm/jobs/${id}/estimate`
+      ? `/crm/estimates/${job.linked_estimate_id}/v2`
+      : `/crm/estimates/v2/create?job=${id}`
 
   return (
     <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">

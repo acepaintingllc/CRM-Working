@@ -1,6 +1,7 @@
 "use client";
 
 import { authedFetch } from '@/lib/auth/authedFetch'
+import { getBrandLogoUrl } from '@/lib/brand/logo'
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -43,7 +44,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("system");
-  const logoSrc = process.env.NEXT_PUBLIC_CRM_LOGO || "/ace-logo-clean.png";
+  const logoSrc = getBrandLogoUrl()
   const iconSize = 16;
   const isEstimatorV2Path =
     pathname === "/crm/estimates/v2" ||

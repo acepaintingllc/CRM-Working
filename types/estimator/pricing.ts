@@ -45,6 +45,9 @@ export type EstimateVersionRollup = {
   rawLaborDays: number | null
   effectiveLaborDays: number | null
   laborCost: number | null
+  wallPaintMaterialCost: number | null
+  ceilingPaintMaterialCost: number | null
+  trimPaintMaterialCost: number | null
   paintMaterialCost: number | null
   primerMaterialCost: number | null
   supplyCost: number | null
@@ -54,6 +57,12 @@ export type EstimateVersionRollup = {
   postLaborPolicyTotal: number | null
   minimumAdjustmentAmount: number | null
   finalTotal: number | null
+  trimPaintProductId: string | null
+  trimPaintProductLabel: string | null
+  trimPaintGallons: number | null
+  trimPaintQuarts: number | null
+  trimPaintNormalizedGallons: number | null
+  trimPaintCost: number | null
   createdAt: string
   updatedAt: string
 }
