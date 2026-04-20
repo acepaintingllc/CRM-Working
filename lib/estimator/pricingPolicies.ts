@@ -141,7 +141,7 @@ export function reconcileWholeDollarRows<T extends { price: number }>(
     remainders.push({ index, remainder: exact - allocation })
   }
 
-  let allocated = allocations.reduce((sum, value) => sum + value, 0)
+  const allocated = allocations.reduce((sum, value) => sum + value, 0)
   let remaining = diff - allocated
   remainders.sort((a, b) => b.remainder - a.remainder)
 

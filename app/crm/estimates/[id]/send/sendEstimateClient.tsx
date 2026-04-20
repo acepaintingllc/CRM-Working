@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
@@ -295,7 +295,7 @@ export default function SendEstimateClient({
   const [form, setForm] = useState<DraftState | null>(null)
   const mountedRef = useRef(true)
 
-  const loadSendPage = async (options?: { hard?: boolean }) => {
+  const loadSendPage = useCallback(async (options?: { hard?: boolean }) => {
     setLoading(true)
     if (options?.hard) {
       setMessage(null)
@@ -343,7 +343,7 @@ export default function SendEstimateClient({
     )
     setLoading(false)
     return true
-  }
+  }, [catalogSource, estimateId])
 
   useEffect(() => {
     mountedRef.current = true
@@ -352,7 +352,7 @@ export default function SendEstimateClient({
     return () => {
       mountedRef.current = false
     }
-  }, [estimateId])
+  }, [loadSendPage])
 
   const liveDocument = useMemo(() => {
     if (!data || !form) return null

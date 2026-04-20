@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 
 type ProductStatus = 'Active' | 'Inactive' | 'Archived'
@@ -25,116 +25,7 @@ type ProductRow = {
   updated_at: string
 }
 
-const MOCK_PRODUCTS: ProductRow[] = [
-  {
-    id: 'p1',
-    name: 'Scuff-X',
-    family: 'Paint',
-    base: 'Waterborne',
-    subtype: 'Eggshell',
-    cost_per_unit: 68.5,
-    coverage_sqft_per_gal_per_coat: 350,
-    efficiency_pct: 85,
-    default_coats: 2,
-    default_sheen: 'Eggshell',
-    default_scopes: ['Walls', 'Trim'],
-    notes: 'Primary production wall paint.',
-    status: 'Active',
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'p2',
-    name: 'Aura Interior',
-    family: 'Paint',
-    base: 'Waterborne',
-    subtype: 'Satin',
-    cost_per_unit: 79.99,
-    coverage_sqft_per_gal_per_coat: 350,
-    efficiency_pct: 82,
-    default_coats: 2,
-    default_sheen: 'Satin',
-    default_scopes: ['Walls'],
-    notes: 'Premium option for occupied homes.',
-    status: 'Active',
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'p3',
-    name: 'Regal Select',
-    family: 'Paint',
-    base: 'Waterborne',
-    subtype: 'Flat',
-    cost_per_unit: 55.2,
-    coverage_sqft_per_gal_per_coat: 380,
-    efficiency_pct: 87,
-    default_coats: 2,
-    default_sheen: 'Flat',
-    default_scopes: ['Ceilings', 'Walls'],
-    notes: 'Good for low-luster large areas.',
-    status: 'Active',
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'p4',
-    name: 'ProBlock',
-    family: 'Primer',
-    base: 'Oil-Based',
-    subtype: 'Stain Block',
-    cost_per_unit: 42,
-    coverage_sqft_per_gal_per_coat: 400,
-    efficiency_pct: 88,
-    default_coats: 1,
-    default_sheen: 'N/A',
-    default_scopes: ['Walls', 'Ceilings'],
-    notes: 'Blocks heavy tannin bleed-through.',
-    status: 'Active',
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'p5',
-    name: 'Stix',
-    family: 'Primer',
-    base: 'Waterborne',
-    subtype: 'High Adhesion',
-    cost_per_unit: 48,
-    coverage_sqft_per_gal_per_coat: 450,
-    efficiency_pct: 84,
-    default_coats: 1,
-    default_sheen: 'N/A',
-    default_scopes: ['Trim', 'Doors'],
-    notes: 'Bonding primer for glossy surfaces.',
-    status: 'Active',
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'p6',
-    name: 'Fresh Start',
-    family: 'Primer',
-    base: 'Waterborne',
-    subtype: 'Multi-Purpose',
-    cost_per_unit: 39.5,
-    coverage_sqft_per_gal_per_coat: 425,
-    efficiency_pct: 86,
-    default_coats: 1,
-    default_sheen: 'N/A',
-    default_scopes: ['Walls'],
-    notes: 'General-purpose reset primer.',
-    status: 'Archived',
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  },
-]
-
 const FAMILIES: ProductFamily[] = ['Paint', 'Primer']
-const DEFAULT_SELECTED_BY_FAMILY: Record<ProductFamily, string> = {
-  Paint: 'p1',
-  Primer: 'p4',
-}
 
 const S = {
   page: {
@@ -552,7 +443,7 @@ export default function ProductsPage() {
       }
     }
     void loadProducts()
-  }, [])
+  }, [activeFamily])
 
   const filtered = useMemo(() => products.filter((p) => p.family === activeFamily), [products, activeFamily])
   const selected = filtered.find((p) => p.id === selectedId) ?? filtered[0] ?? null

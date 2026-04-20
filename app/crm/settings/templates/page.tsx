@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, FileText, MessageSquareText, NotebookPen, Shapes } from 'lucide-react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import { templatePresets } from '@/lib/customer-estimates/presets'
@@ -52,9 +52,6 @@ export default function TemplatesLibraryPage() {
       alive = false
     }
   }, [])
-
-  const presetLabels = useMemo(() => templatePresets.map((preset) => preset.label), [])
-
   const save = async () => {
     setSaving(true)
     setError(null)

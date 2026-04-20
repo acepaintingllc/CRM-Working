@@ -4,7 +4,6 @@ import type {
   CustomerEstimateDocument,
   CustomerEstimatePricingSummary,
   CustomerEstimateQuoteRow,
-  CustomerEstimateSection,
   CustomerEstimateSectionKey,
   EstimatePublicSnapshot,
   Unsafe,

@@ -1053,24 +1053,12 @@ function Field({
   )
 }
 
-function RoomSetup({ children }: { children: ReactNode }) {
-  return <section className="section-card section-card-compact" style={{ ...S.panel, display: 'grid', gap: 8 }}>{children}</section>
-}
-
 function GeometryBlock({ children }: { children: ReactNode }) {
   return <section className="section-card section-card-green section-card-compact" style={{ ...S.panel, display: 'grid', gap: 8 }}>{children}</section>
 }
 
 function PaintSetup({ children }: { children: ReactNode }) {
   return <section className="section-card section-card-compact" style={{ ...S.panel, display: 'grid', gap: 8 }}>{children}</section>
-}
-
-function Modifiers({ children }: { children: ReactNode }) {
-  return <section className="section-card section-card-compact" style={{ ...S.panel, display: 'grid', gap: 8 }}>{children}</section>
-}
-
-function Scope({ children }: { children: ReactNode }) {
-  return <section className="section-card section-card-compact" style={{ ...S.panel, display: 'grid', gap: 6 }}>{children}</section>
 }
 
 function Advanced({ children }: { children: ReactNode }) {
@@ -2354,17 +2342,13 @@ export default function EstimateV2WallsPage() {
   const wallPaintOptions = allPaintProducts.filter((p) => !p.scopes || p.scopes.length === 0 || p.scopes.includes('Walls'))
   const ceilingPaintOptions = allPaintProducts.filter((p) => !p.scopes || p.scopes.length === 0 || p.scopes.includes('Ceilings'))
   const trimPaintOptions = allPaintProducts.filter((p) => !p.scopes || p.scopes.length === 0 || p.scopes.includes('Trim'))
-  const roomTypeOptions = useMemo(() => {
-    if (catalogs.room_types.length > 0) return catalogs.room_types
-    if (selectedRoom?.roomTypeId) {
-      return [{ id: selectedRoom.roomTypeId, label: selectedRoom.roomTypeId }]
-    }
-    return []
-  }, [catalogs.room_types, selectedRoom?.roomTypeId])
+  const roomTypeOptions = catalogs.room_types.length > 0
+    ? catalogs.room_types
+    : selectedRoom?.roomTypeId
+      ? [{ id: selectedRoom.roomTypeId, label: selectedRoom.roomTypeId }]
+      : []
   
-  const primerOptions = allPrimerProducts
   const wallPrimerOptions = allPrimerProducts.filter((p) => !p.scopes || p.scopes.length === 0 || p.scopes.includes('Walls'))
-  const ceilingPrimerOptions = allPrimerProducts.filter((p) => !p.scopes || p.scopes.length === 0 || p.scopes.includes('Ceilings'))
   const trimPrimerOptions = allPrimerProducts.filter((p) => !p.scopes || p.scopes.length === 0 || p.scopes.includes('Trim'))
 
   const [openWallsSection, setOpenWallsSection] = useState<Record<string, boolean>>({})

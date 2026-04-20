@@ -97,12 +97,7 @@ function applyScopeCosts(
   products: ReturnType<typeof productMap>
 ) {
   const laborRate = pos(n(scope.row.labor_rate_per_hour)) ?? settings.labor_rate_per_hour
-  const paintProduct = scope.row.paint_product_id ? products.get(scope.row.paint_product_id) : undefined
   const primerProduct = scope.row.primer_product_id ? products.get(scope.row.primer_product_id) : undefined
-  const paintPrice =
-    pos(n(scope.row.paint_price_per_gal)) ??
-    pos(n(paintProduct?.price_per_gal)) ??
-    settings.paint_price_per_gal
   const primerPrice =
     pos(n(scope.row.primer_price_per_gal)) ??
     pos(n(primerProduct?.price_per_gal)) ??

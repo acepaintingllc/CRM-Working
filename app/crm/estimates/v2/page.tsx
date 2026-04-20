@@ -4,7 +4,7 @@ import { authedFetch } from '@/lib/auth/authedFetch'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, FilePlus2, FolderOpen, Search, Send, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 
 type NavItem = {
   label: string
