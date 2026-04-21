@@ -178,23 +178,23 @@ export default function FolderNotesPage() {
   }
 
   return (
-    <div className="grid gap-4 pb-16">
-      <section className="rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="grid gap-4">
+      <section className="rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid gap-2">
-            <div className="text-xs font-extrabold uppercase tracking-[0.24em] text-[var(--crm-muted)]">
+            <div className="text-xs font-extrabold uppercase tracking-[0.24em] text-emerald-300/80">
               Folder Browser
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--crm-muted)]">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-500">
               <NotesToolbarLink href={buildNotesHref('/crm/notes/notes', status)}>
                 All Notes
               </NotesToolbarLink>
               <span>/</span>
-              <span className="font-bold text-[var(--crm-text)]">{folder?.name ?? 'Loading...'}</span>
+              <span className="font-bold text-white">{folder?.name ?? 'Loading...'}</span>
             </div>
             <div>
-              <h2 className="text-2xl font-extrabold text-[var(--crm-text)]">{folder?.name ?? 'Folder'}</h2>
-              <p className="mt-1 text-sm text-[var(--crm-text-soft)]">
+              <h2 className="text-2xl font-extrabold text-white">{folder?.name ?? 'Folder'}</h2>
+              <p className="mt-1 text-sm text-neutral-400">
                 Scan previews first, then open the note you want to review or edit.
               </p>
             </div>
@@ -207,20 +207,10 @@ export default function FolderNotesPage() {
                 buildNotesHref(`/crm/notes/notes/folders/${folderId}`, nextStatus)
               }
             />
-            <NotesToolbarLink href="/crm/notes/quick-add">Quick Add</NotesToolbarLink>
-            <NotesToolbarLink
-              href={buildNotesHref('/crm/notes/quick-add', status, {
-                mode: 'note',
-                folder: folderId,
-              })}
-              primary
-            >
-              New Note
-            </NotesToolbarLink>
             <button
               type="button"
               onClick={() => setCreateFolderOpen((current) => !current)}
-              className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-extrabold text-[var(--crm-text)] hover:bg-gray-50"
+              className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm font-extrabold text-neutral-200 hover:border-neutral-600 hover:bg-neutral-800"
             >
               New Folder
             </button>
@@ -231,7 +221,7 @@ export default function FolderNotesPage() {
           <button
             type="button"
             onClick={() => void renameFolder()}
-            className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-bold text-[var(--crm-text)]"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm font-bold text-neutral-200"
           >
             Rename Folder
           </button>
@@ -249,23 +239,23 @@ export default function FolderNotesPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search inside this folder..."
-            className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm"
+            className="w-full rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white"
           />
         </div>
 
         {createFolderOpen && (
-          <div className="mt-4 grid gap-3 rounded-3xl border border-dashed border-gray-300 bg-gray-50 p-4 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="mt-4 grid gap-3 rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-4 md:grid-cols-[minmax(0,1fr)_auto]">
             <input
               value={newFolderName}
               onChange={(event) => setNewFolderName(event.target.value)}
               placeholder="Folder name"
-              className="rounded-2xl border border-gray-300 bg-white px-4 py-3 text-sm"
+              className="rounded-2xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-white"
             />
             <button
               type="button"
               disabled={folderSaving}
               onClick={() => void createFolder()}
-              className="rounded-2xl bg-black px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+              className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 disabled:opacity-60"
             >
               {folderSaving ? 'Creating...' : 'Create Folder'}
             </button>
@@ -273,28 +263,28 @@ export default function FolderNotesPage() {
         )}
       </section>
 
-      {loading && <div className="text-sm text-gray-500">Loading folder...</div>}
-      {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {loading && <div className="text-sm text-neutral-400">Loading folder...</div>}
+      {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
 
       {!loading && !folder && (
-        <div className="rounded-[30px] border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+        <div className="rounded-[30px] border border-neutral-800 bg-neutral-950 p-6 text-sm text-neutral-400 shadow-sm">
           Folder not found.
         </div>
       )}
 
       {!loading && folder && (
-        <section className="grid gap-4 rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
+        <section className="grid gap-4 rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-extrabold text-[var(--crm-text)]">Notes in {folder.name}</h3>
-              <p className="mt-1 text-sm text-[var(--crm-text-soft)]">
+              <h3 className="text-lg font-extrabold text-white">Notes in {folder.name}</h3>
+              <p className="mt-1 text-sm text-neutral-400">
                 {filteredNotes.length} {filteredNotes.length === 1 ? 'note' : 'notes'} in this view.
               </p>
             </div>
           </div>
 
           {filteredNotes.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-500">
+            <div className="rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-6 text-sm text-neutral-500">
               {search.trim()
                 ? 'No notes in this folder match the current search.'
                 : 'No notes in this folder yet.'}

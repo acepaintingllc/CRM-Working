@@ -59,6 +59,7 @@ const VERSION_KIND_OPTIONS = [
 ] as const
 
 const SETTINGS_LINKS: NavItem[] = [
+  { label: 'Defaults', href: '/crm/estimates/v2/defaults' },
   { label: 'Products', href: '/crm/estimates/v2/products' },
   { label: 'Rates & Flags', href: '/crm/estimates/v2/rates' },
   { label: 'Settings', href: '/crm/settings' },

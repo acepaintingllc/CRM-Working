@@ -13,43 +13,15 @@ import type {
   TrimMeasurementMode,
   TrimUnitType,
 } from '../estimator/trimTypes.ts'
-
-type Unsafe = Record<string, unknown>
-
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-function asText(value: unknown) {
-  return value == null ? '' : String(value).trim()
-}
-
-function asNullableNumber(value: unknown) {
-  if (value == null || value === '') return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
-
-function toYN(value: unknown, fallback: 'Y' | 'N' = 'N') {
-  const raw = asText(value).toUpperCase()
-  if (raw === 'Y' || raw === 'N') return raw
-  return fallback
-}
-
-function toColorId(value: unknown) {
-  return asText(value)
-    .toUpperCase()
-    .replace(/[^A-Z]/g, '')
-}
-
-function pickValue(row: Unsafe, keys: string[]) {
-  for (const key of keys) {
-    if (key in row) return row[key]
-  }
-  return undefined
-}
-
-function asNullableNumberFromKeys(row: Unsafe, keys: string[]) {
-  return asNullableNumber(pickValue(row, keys))
-}
+import {
+  asNullableNumber,
+  asNullableNumberFromKeys,
+  asText,
+  isUuid,
+  toColorId,
+  toYN,
+  type UnsafeRecord as Unsafe,
+} from '../estimator/parsing.ts'
 
 function nextRoomId(used: Set<string>, startAt: number) {
   let n = Math.max(1, startAt)
@@ -57,11 +29,6 @@ function nextRoomId(used: Set<string>, startAt: number) {
     n += 1
   }
   return `R${String(n).padStart(3, '0')}`
-}
-
-function isUuid(value: unknown) {
-  const raw = asText(value)
-  return !!raw && uuid.test(raw)
 }
 
 function toWallScopeMode(value: unknown): 'RECT' | 'SEG' {

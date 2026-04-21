@@ -8,7 +8,6 @@ import { calculateTrim } from '@/lib/estimator/trim'
 import { calculateWalls } from '@/lib/estimator/walls'
 import { productMap } from '@/lib/estimator/wallsHelpers'
 import type { CompanyProfile, Unsafe } from '@/lib/customer-estimates/types'
-import { resolveEstimateCatalogSource } from './estimateCustomerPortalSource.ts'
 
 type EstimateRow = {
   id: string
@@ -19,8 +18,6 @@ type EstimateRow = {
   version_state: string | null
   version_kind: string | null
   version_sort_order: number | null
-  sheet_schema_version: string | null
-  latest_output_json: Unsafe | null
   created_at: string | null
   updated_at: string | null
 }
@@ -47,6 +44,12 @@ type EstimateTemplateSettingsRow = {
   default_template_key: string | null
   quote_validity_days: number | null
   terms_text: string | null
+  labor_day_policy_enabled?: boolean | null
+  dayhours?: number | null
+  rounding_increment_hours?: number | null
+  override_labor_rate?: number | null
+  job_minimum_enabled?: boolean | null
+  job_minimum_amount?: number | null
   updated_at: string | null
 }
 
@@ -105,11 +108,10 @@ export async function loadEstimateCustomerSendContext(params: {
   orgId: string
   userId: string
   estimateId: string
-  catalogSource?: 'estimate' | 'v2'
 }) {
   const estimateRes = await supabaseAdmin
     .from('estimates')
-    .select('id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, sheet_schema_version, latest_output_json, created_at, updated_at')
+    .select('id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at')
     .eq('org_id', params.orgId)
     .eq('id', params.estimateId)
     .maybeSingle()
@@ -265,19 +267,11 @@ export async function loadEstimateCustomerSendContext(params: {
     logo_url: pickText(companyRow, ['logo_url', 'logo', 'brand_logo_url']),
   }
 
-  const catalogSource = resolveEstimateCatalogSource({
-    sheetSchemaVersion: estimate.sheet_schema_version,
-    roomWallScopes: wallScopesRes.data ?? [],
-    roomCeilingScopes: ceilingScopesRes.data ?? [],
-    roomTrimScopes: trimScopesRes.data ?? [],
-    catalogSource: params.catalogSource,
-  })
   const catalogs = await getEstimateCatalogs({
     origin: params.origin,
     orgId: params.orgId,
     userId: params.userId,
     estimateId: params.estimateId,
-    source: catalogSource,
   }).catch(() => null)
 
   const publicVersions = (versionsRes.data ?? []) as Unsafe[]
@@ -290,6 +284,20 @@ export async function loadEstimateCustomerSendContext(params: {
     : null
 
   const jobsettings = (jobsettingsRes.data ?? {}) as EstimateJobSettingsRow
+  const effectiveLaborRate = jobsettings.override_labor_rate ?? settingsRow.override_labor_rate ?? null
+  const effectiveLaborDayEnabled =
+    typeof jobsettings.labor_day_policy_enabled === 'boolean'
+      ? jobsettings.labor_day_policy_enabled
+      : settingsRow.labor_day_policy_enabled
+  const effectiveDayhours = jobsettings.dayhours ?? settingsRow.dayhours ?? 8
+  const effectiveRoundingIncrement =
+    jobsettings.rounding_increment_hours ?? settingsRow.rounding_increment_hours ?? 4
+  const effectiveJobMinimumEnabled =
+    typeof jobsettings.job_minimum_enabled === 'boolean'
+      ? jobsettings.job_minimum_enabled
+      : settingsRow.job_minimum_enabled
+  const effectiveJobMinimumAmount =
+    jobsettings.job_minimum_amount ?? settingsRow.job_minimum_amount ?? 0
   let quoteWallScopes = (wallScopesRes.data ?? []) as Unsafe[]
   let quoteCeilingScopes = (ceilingScopesRes.data ?? []) as Unsafe[]
   let quoteTrimScopes = (trimScopesRes.data ?? []) as Unsafe[]
@@ -311,7 +319,7 @@ export async function loadEstimateCustomerSendContext(params: {
         scopes: wallScopes,
         segments: wallSegments,
         settings: {
-          labor_rate_per_hour: jobsettings.override_labor_rate ?? null,
+          labor_rate_per_hour: effectiveLaborRate,
         },
         catalogs: catalogs.catalogs as Parameters<typeof calculateWalls>[0]['catalogs'],
       })
@@ -320,7 +328,7 @@ export async function loadEstimateCustomerSendContext(params: {
         scopes: ceilingScopes,
         segments: ceilingSegments,
         settings: {
-          labor_rate_per_hour: jobsettings.override_labor_rate ?? null,
+          labor_rate_per_hour: effectiveLaborRate,
         },
         catalogs: catalogs.catalogs as Parameters<typeof calculateCeilings>[0]['catalogs'],
       })
@@ -337,7 +345,7 @@ export async function loadEstimateCustomerSendContext(params: {
           }
         }),
         settings: {
-          labor_rate_per_hour: jobsettings.override_labor_rate ?? null,
+          labor_rate_per_hour: effectiveLaborRate,
         },
         catalogs: catalogs.catalogs as unknown as Parameters<typeof calculateTrim>[0]['catalogs'],
       })
@@ -349,13 +357,13 @@ export async function loadEstimateCustomerSendContext(params: {
       pricingSummary = buildEstimatePricingSummary(
         [wallCalculations, ceilingCalculations, trimCalculations],
         {
-          enabled: jobsettings.labor_day_policy_enabled !== false,
-          dayhours: jobsettings.dayhours ?? 8,
-          roundingIncrementHours: jobsettings.rounding_increment_hours ?? 4,
+          enabled: effectiveLaborDayEnabled !== false,
+          dayhours: effectiveDayhours,
+          roundingIncrementHours: effectiveRoundingIncrement,
         },
         {
-          enabled: jobsettings.job_minimum_enabled === true,
-          amount: jobsettings.job_minimum_amount ?? 0,
+          enabled: effectiveJobMinimumEnabled === true,
+          amount: effectiveJobMinimumAmount,
         },
         trimPaint
       )

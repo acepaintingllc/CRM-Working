@@ -7,7 +7,7 @@ import type {
   CustomerEstimateSectionKey,
   EstimatePublicSnapshot,
   Unsafe,
-} from './types'
+} from './types.ts'
 import { buildDefaultTermsText, splitTermsText } from './presets.ts'
 import { reconcileWholeDollarRows } from '../estimator/pricingPolicies.ts'
 
@@ -531,12 +531,6 @@ function extractScopeRows(params: {
   return sectionBuckets
 }
 
-function getOutputValue(outputs: Record<string, unknown> | null | undefined, key: string) {
-  const value = outputs?.[key]
-  const num = asNum(value)
-  return num
-}
-
 function buildCustomerProfile(params: {
   customer?: Unsafe | null
   job: Unsafe
@@ -603,8 +597,7 @@ export function buildCustomerEstimateDocument(params: {
 }): CustomerEstimateDocument {
   const estimate = params.estimate
   const job = params.job
-  const outputs = ((estimate.latest_output_json as Unsafe | null | undefined)?.output_app ?? {}) as Record<string, unknown>
-  const total = params.pricingSummary?.finalTotal ?? getOutputValue(outputs, 'FinalTotal')
+  const total = params.pricingSummary?.finalTotal ?? null
   const scoped = extractScopeRows({
     rooms: params.inputs.rooms ?? [],
     roomWallScopes: params.inputs.room_wall_scopes ?? [],
@@ -617,7 +610,7 @@ export function buildCustomerEstimateDocument(params: {
   })
 
   const versionName = asText(estimate.version_name) || 'Estimate'
-  const flowVersion = asText(estimate.sheet_schema_version).toLowerCase().startsWith('v2') ? 'v2' : 'legacy'
+  const flowVersion = 'v2'
   const status = asText(params.publicMeta?.status) || asText(estimate.version_state) || 'draft'
   const title = params.overrides?.title?.trim() || versionName
   const estimateDate = asText(job.estimate_date || estimate.created_at || estimate.updated_at)

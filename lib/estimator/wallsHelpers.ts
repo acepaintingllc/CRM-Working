@@ -8,6 +8,7 @@ import type {
   WallCalculationSettings,
   YN,
 } from './wallsTypes.ts'
+import { DEFAULT_LABOR_RATE } from './defaults.ts'
 
 const DEFAULTS = {
   standard_door_deduction_sf: 21,
@@ -19,7 +20,7 @@ const DEFAULTS = {
   paint_coats: 2,
   primer_coats: 1,
   spot_prime_percent: 30,
-  labor_rate_per_hour: 65,
+  labor_rate_per_hour: DEFAULT_LABOR_RATE,
   area_supply_cost_per_sf: 0.08,
   per_color_supply_cost: 20,
   paint_price_per_gal: 45,

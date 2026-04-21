@@ -46,7 +46,7 @@ const RATE_SUBGROUPS: Record<
   ],
   unit_rates: [
     { key: 'unit_rates_doors', label: 'Doors' },
-    { key: 'unit_rates_trim', label: 'Trim' },
+    { key: 'unit_rates_trim', label: 'Trim Types' },
     { key: 'unit_rates_drywall', label: 'Drywall' },
   ],
   access_fees: [
@@ -113,6 +113,9 @@ function getDefaultDraft(category: RatesFlagsCategory) {
   }
   return draft
 }
+
+
+
 
 function categoryByKey(
   categories: RatesFlagsCategory[],
@@ -409,7 +412,6 @@ export default function RatesPage() {
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [draftActive, setDraftActive] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [seeding, setSeeding] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   async function load(keepId?: string) {
@@ -451,7 +453,6 @@ export default function RatesPage() {
   }, [activeTab, flagsSection, rateCategory, roomDefaultsSection])
 
   const categories = data?.categories ?? []
-  const isSeeded = data?.seeded ?? false
   const activeCategory = categoryByKey(categories, activeCategoryKey)
 
   const filteredRows = useMemo(() => {
@@ -529,7 +530,7 @@ export default function RatesPage() {
   }
 
   async function saveCurrent() {
-    if (!activeCategory || !isSeeded) return
+    if (!activeCategory) return
     const action: RatesFlagsMutationAction = isCreating ? 'create' : 'update'
     const ok = await mutate(
       action,
@@ -544,7 +545,7 @@ export default function RatesPage() {
   }
 
   async function archiveOrReactivate(nextActive: boolean) {
-    if (!selectedRow || !activeCategory || !isSeeded) return
+    if (!selectedRow || !activeCategory) return
     const ok = await mutate(
       nextActive ? 'reactivate' : 'archive',
       { id: selectedRow.id },
@@ -556,7 +557,7 @@ export default function RatesPage() {
   }
 
   function startCreate() {
-    if (!activeCategory || !isSeeded) return
+    if (!activeCategory) return
     setIsCreating(true)
     setSelectedId('')
     setDraft(getDefaultDraft(activeCategory))
@@ -566,7 +567,7 @@ export default function RatesPage() {
   }
 
   function startDuplicate() {
-    if (!activeCategory || !selectedRow || !isSeeded) return
+    if (!activeCategory || !selectedRow) return
     const next = buildDraftFromRow(activeCategory, selectedRow)
     next.id = `${selectedRow.id}_COPY`
     setIsCreating(true)
@@ -587,26 +588,6 @@ export default function RatesPage() {
     setDraft({})
     setDraftActive(true)
     setIsCreating(false)
-  }
-
-  async function importFromTemplate() {
-    setSeeding(true)
-    setError(null)
-    setNotice(null)
-    const res = await authedFetch('/api/estimates/v2/rates-flags/import', {
-      method: 'POST',
-    })
-    const payload = (await res.json().catch(() => null)) as
-      | { error?: string }
-      | { ok: true }
-      | null
-    setSeeding(false)
-    if (!res.ok) {
-      setError(payload && 'error' in payload ? payload.error || res.statusText : res.statusText)
-      return
-    }
-    setNotice('Imported template constants into database.')
-    await load()
   }
 
   return (
@@ -715,7 +696,7 @@ export default function RatesPage() {
               </div>
             )}
             <div style={{ ...S.detailSub, marginTop: 2 }}>
-              {activeCategory?.table_title ?? 'Loading table...'}
+              {activeCategory?.label ?? 'Loading catalog...'}
             </div>
             <div style={{ fontSize: 'calc(11px + 4pt)', color: 'var(--v2-ink-3)' }}>
               {activeCategory?.description ?? 'Loading category metadata...'}
@@ -728,13 +709,11 @@ export default function RatesPage() {
               placeholder="Search rows..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              disabled={!isSeeded}
             />
             <select
               style={S.select}
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-              disabled={!isSeeded}
             >
               <option value="active">Active</option>
               <option value="archived">Archived</option>
@@ -743,27 +722,17 @@ export default function RatesPage() {
             <button type="button" style={S.actionBtn('default')} onClick={() => void load(selectedId || undefined)}>
               Refresh
             </button>
-            {!isSeeded && (
-              <button
-                type="button"
-                style={S.actionBtn('primary')}
-                onClick={() => void importFromTemplate()}
-                disabled={seeding || loading}
-              >
-                {seeding ? 'Importing...' : 'Import Template'}
-              </button>
-            )}
           </div>
 
           <div style={S.actions}>
-            <button type="button" style={S.actionBtn('default')} onClick={startCreate} disabled={!isSeeded || saving}>
+            <button type="button" style={S.actionBtn('default')} onClick={startCreate} disabled={saving}>
               Add
             </button>
             <button
               type="button"
               style={S.actionBtn('default')}
               onClick={startDuplicate}
-              disabled={!selectedRow || !isSeeded || saving}
+              disabled={!selectedRow || saving}
             >
               Duplicate
             </button>
@@ -771,7 +740,7 @@ export default function RatesPage() {
               type="button"
               style={S.actionBtn(selectedRow?.active ? 'danger' : 'default')}
               onClick={() => void archiveOrReactivate(!(selectedRow?.active ?? false))}
-              disabled={!selectedRow || isCreating || saving || !isSeeded}
+              disabled={!selectedRow || isCreating || saving}
             >
               {selectedRow?.active ? 'Archive' : 'Reactivate'}
             </button>
@@ -779,7 +748,7 @@ export default function RatesPage() {
               type="button"
               style={S.actionBtn('primary')}
               onClick={() => void saveCurrent()}
-              disabled={!activeCategory || saving || !isSeeded}
+              disabled={!activeCategory || saving}
             >
               Save
             </button>
@@ -788,16 +757,10 @@ export default function RatesPage() {
           <div style={S.tableWrap}>
             {loading && <div style={S.message}>Loading...</div>}
             {!loading && error && <div style={{ ...S.message, color: '#fda4af' }}>{error}</div>}
-            {!loading && !error && !isSeeded && (
-              <div style={S.message}>
-                Template constants are not seeded for this org yet. Use <strong>Import Template</strong> to populate
-                Rates &amp; Flags in the app database.
-              </div>
-            )}
-            {!loading && !error && isSeeded && activeCategory && filteredRows.length === 0 && (
+            {!loading && !error && activeCategory && filteredRows.length === 0 && (
               <div style={S.message}>No rows found for this filter.</div>
             )}
-            {!loading && !error && isSeeded && activeCategory && filteredRows.length > 0 && (
+            {!loading && !error && activeCategory && filteredRows.length > 0 && (
               <table style={S.table}>
                 <thead>
                   <tr>
@@ -871,7 +834,6 @@ export default function RatesPage() {
                     style={S.input}
                     value={draftActive ? 'Y' : 'N'}
                     onChange={(event) => setDraftActive(event.target.value === 'Y')}
-                    disabled={!isSeeded}
                   >
                     <option value="Y">Active</option>
                     <option value="N">Archived</option>
@@ -886,7 +848,7 @@ export default function RatesPage() {
                     {field.type === 'select' ? (
                       <select
                         style={S.input}
-                        disabled={field.readOnly || !isSeeded}
+                        disabled={field.readOnly}
                         value={draft[field.key] ?? ''}
                         onChange={(event) =>
                           setDraft((prev) => ({
@@ -905,7 +867,7 @@ export default function RatesPage() {
                       <input
                         style={S.input}
                         type={field.type === 'number' ? 'number' : 'text'}
-                        readOnly={field.readOnly || !isSeeded}
+                        readOnly={field.readOnly}
                         value={draft[field.key] ?? ''}
                         onChange={(event) =>
                           setDraft((prev) => ({
@@ -931,7 +893,7 @@ export default function RatesPage() {
               type="button"
               style={S.actionBtn('primary')}
               onClick={() => void saveCurrent()}
-              disabled={!activeCategory || saving || !isSeeded}
+              disabled={!activeCategory || saving}
             >
               {saving ? 'Saving...' : isCreating ? 'Create Row' : 'Save Changes'}
             </button>
@@ -961,3 +923,4 @@ export default function RatesPage() {
     </div>
   )
 }
+

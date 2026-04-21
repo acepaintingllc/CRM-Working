@@ -10,15 +10,8 @@ import {
   normalizeNotesStatus,
   NotePreviewCard,
   NotesStatusTabs,
-  NotesToolbarLink,
 } from './_components'
 import { useRouter, useSearchParams } from 'next/navigation'
-
-type FolderDeletePayload = {
-  error?: string
-  notes_count?: number
-  required?: boolean
-}
 
 function sortByUpdated(notes: NoteRow[]) {
   return [...notes].sort((left, right) => {
@@ -30,6 +23,12 @@ function sortByUpdated(notes: NoteRow[]) {
 
 function latestNote(notes: NoteRow[]) {
   return sortByUpdated(notes)[0] ?? null
+}
+
+type FolderDeletePayload = {
+  error?: string
+  notes_count?: number
+  required?: boolean
 }
 
 export default function NotesExplorerHomePage() {
@@ -88,12 +87,10 @@ export default function NotesExplorerHomePage() {
 
   const filteredNotes = filterNotesBySearch(notes, search)
   const folderNameById = new Map(folders.map((folder) => [folder.id, folder.name]))
-
-  const starredNotes = sortByUpdated(notes.filter((note) => note.starred)).slice(0, 6)
-  const looseNotes = sortByUpdated(
-    notes.filter((note) => note.folder_id == null && !note.starred)
-  ).slice(0, 12)
-  const searchResults = sortByUpdated(filteredNotes).slice(0, 12)
+  const starredNotes = sortByUpdated(notes.filter((note) => note.starred)).slice(0, 8)
+  const recentNotes = sortByUpdated(notes).slice(0, 8)
+  const looseNotes = sortByUpdated(notes.filter((note) => note.folder_id == null && !note.starred)).slice(0, 8)
+  const searchResults = sortByUpdated(filteredNotes).slice(0, 16)
 
   const createFolder = async () => {
     if (!newFolderName.trim()) return
@@ -201,9 +198,7 @@ export default function NotesExplorerHomePage() {
     }
 
     const target = targets[0]
-    const confirmed = window.confirm(
-      `Move notes into "${target.name}" and delete "${folder.name}"?`
-    )
+    const confirmed = window.confirm(`Move notes into "${target.name}" and delete "${folder.name}"?`)
     if (!confirmed) return
 
     const res = await authedFetch(`/api/notes/folders/${folder.id}`, {
@@ -220,18 +215,17 @@ export default function NotesExplorerHomePage() {
   }
 
   return (
-    <div className="grid gap-4 pb-16">
-      <section className="rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="grid gap-4">
+      <section className="rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid gap-2">
-            <div className="text-xs font-extrabold uppercase tracking-[0.24em] text-[var(--crm-muted)]">
+            <div className="text-xs font-extrabold uppercase tracking-[0.24em] text-emerald-300/80">
               Notes Explorer
             </div>
             <div>
-              <h2 className="text-2xl font-extrabold text-[var(--crm-text)]">Browse notes like files</h2>
-              <p className="mt-1 max-w-2xl text-sm text-[var(--crm-text-soft)]">
-                Open folders, scan previews, and jump into individual notes without turning the page
-                into one long editor.
+              <h2 className="text-2xl font-extrabold text-white">Browse notes like a workspace</h2>
+              <p className="mt-1 max-w-2xl text-sm text-neutral-400">
+                Search first, skim dense previews, then open the note editor as a dedicated destination.
               </p>
             </div>
           </div>
@@ -241,17 +235,10 @@ export default function NotesExplorerHomePage() {
               status={status}
               buildHref={(nextStatus) => buildNotesHref('/crm/notes/notes', nextStatus)}
             />
-            <NotesToolbarLink href="/crm/notes/quick-add">Quick Add</NotesToolbarLink>
-            <NotesToolbarLink
-              href={buildNotesHref('/crm/notes/quick-add', status, { mode: 'note' })}
-              primary
-            >
-              New Note
-            </NotesToolbarLink>
             <button
               type="button"
               onClick={() => setCreateFolderOpen((current) => !current)}
-              className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-extrabold text-[var(--crm-text)] hover:bg-gray-50"
+              className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
             >
               New Folder
             </button>
@@ -263,13 +250,15 @@ export default function NotesExplorerHomePage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search all notes..."
-            className="rounded-2xl border border-gray-300 px-4 py-3 text-sm"
+            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
           />
           <button
             type="button"
             onClick={() => setManageFolders((current) => !current)}
-            className={`rounded-2xl px-4 py-3 text-sm font-extrabold ${
-              manageFolders ? 'bg-gray-900 text-white' : 'border border-gray-300 bg-white text-[var(--crm-text)]'
+            className={`rounded-2xl px-4 py-3 text-sm font-extrabold transition ${
+              manageFolders
+                ? 'bg-emerald-400 text-neutral-950'
+                : 'border border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-600 hover:bg-neutral-800'
             }`}
           >
             {manageFolders ? 'Done Managing Folders' : 'Manage Folders'}
@@ -277,18 +266,18 @@ export default function NotesExplorerHomePage() {
         </div>
 
         {createFolderOpen && (
-          <div className="mt-4 grid gap-3 rounded-3xl border border-dashed border-gray-300 bg-gray-50 p-4 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="mt-4 grid gap-3 rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-4 md:grid-cols-[minmax(0,1fr)_auto]">
             <input
               value={newFolderName}
               onChange={(event) => setNewFolderName(event.target.value)}
               placeholder="Folder name"
-              className="rounded-2xl border border-gray-300 bg-white px-4 py-3 text-sm"
+              className="rounded-2xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
             />
             <button
               type="button"
               disabled={folderSaving}
               onClick={() => void createFolder()}
-              className="rounded-2xl bg-black px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+              className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 disabled:opacity-60"
             >
               {folderSaving ? 'Creating...' : 'Create Folder'}
             </button>
@@ -296,26 +285,26 @@ export default function NotesExplorerHomePage() {
         )}
       </section>
 
-      {loading && <div className="text-sm text-gray-500">Loading notes explorer...</div>}
-      {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {loading && <div className="text-sm text-neutral-400">Loading notes explorer...</div>}
+      {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
 
       {!loading && (
         <>
-          <section className="grid gap-3 rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
+          <section className="grid gap-3 rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-extrabold uppercase tracking-[0.2em] text-gray-500">Folders</h3>
-                <p className="mt-1 text-sm text-[var(--crm-text-soft)]">
-                  Double click to open on desktop. Single tap opens on touch devices.
+                <h3 className="text-sm font-extrabold uppercase tracking-[0.2em] text-neutral-500">Folders</h3>
+                <p className="mt-1 text-sm text-neutral-400">
+                  Open folders for deeper navigation. Management stays secondary unless you turn it on.
                 </p>
               </div>
-              <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-[var(--crm-muted)]">
+              <div className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs font-bold text-neutral-500">
                 {folders.length} folders
               </div>
             </div>
 
             {folders.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-500">
+              <div className="rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-6 text-sm text-neutral-500">
                 No folders yet. Create one or start with uncategorized notes.
               </div>
             ) : (
@@ -333,9 +322,7 @@ export default function NotesExplorerHomePage() {
                       canMoveUp={index > 0}
                       canMoveDown={index < folders.length - 1}
                       onSelect={() => setSelectedFolderId(folder.id)}
-                      onOpen={() =>
-                        router.push(buildNotesHref(`/crm/notes/notes/folders/${folder.id}`, status))
-                      }
+                      onOpen={() => router.push(buildNotesHref(`/crm/notes/notes/folders/${folder.id}`, status))}
                       onRename={() => void renameFolder(folder)}
                       onDelete={() => void deleteFolder(folder)}
                       onMoveUp={() => void reorderFolder(folder.id, 'up')}
@@ -348,50 +335,45 @@ export default function NotesExplorerHomePage() {
           </section>
 
           {search.trim() ? (
-            <section className="grid gap-3 rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
-              <div>
-                <h3 className="text-lg font-extrabold text-[var(--crm-text)]">Search Results</h3>
-                <p className="mt-1 text-sm text-[var(--crm-text-soft)]">
-                  {searchResults.length === 0
-                    ? `No notes matched "${search.trim()}".`
-                    : `${searchResults.length} notes matched "${search.trim()}".`}
-                </p>
-              </div>
-
-              {searchResults.length > 0 && (
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {searchResults.map((note) => (
-                    <NotePreviewCard
-                      key={note.id}
-                      note={note}
-                      selected={selectedNoteId === note.id}
-                      onSelect={() => setSelectedNoteId(note.id)}
-                      onOpen={() => router.push(buildNotesHref(`/crm/notes/notes/${note.id}`, status))}
-                      contextLabel={note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized'}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+            <ExplorerSection
+              title="Search Results"
+              description={
+                searchResults.length === 0
+                  ? `No notes matched "${search.trim()}".`
+                  : `${searchResults.length} notes matched "${search.trim()}".`
+              }
+              notes={searchResults}
+              selectedNoteId={selectedNoteId}
+              onSelect={setSelectedNoteId}
+              onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
+              getContextLabel={(note) => note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized'}
+            />
           ) : (
-            <div className="grid gap-4 xl:grid-cols-2">
-              <SmartSection
-                title="Starred"
-                description="Pinned notes that need to stay visible."
+            <div className="grid gap-4 xl:grid-cols-3">
+              <ExplorerSection
+                title="Pinned Notes"
+                description="Starred notes that should stay in easy reach."
                 notes={starredNotes}
                 selectedNoteId={selectedNoteId}
-                onSelect={(noteId) => setSelectedNoteId(noteId)}
+                onSelect={setSelectedNoteId}
                 onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
-                getContextLabel={(note) =>
-                  note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized'
-                }
+                getContextLabel={(note) => note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized'}
               />
-              <SmartSection
+              <ExplorerSection
+                title="Recent Notes"
+                description="Most recently updated notes across the module."
+                notes={recentNotes}
+                selectedNoteId={selectedNoteId}
+                onSelect={setSelectedNoteId}
+                onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
+                getContextLabel={(note) => note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized'}
+              />
+              <ExplorerSection
                 title="Loose Notes"
-                description="Notes that are not inside a folder yet."
+                description="Uncategorized notes that still need filing."
                 notes={looseNotes}
                 selectedNoteId={selectedNoteId}
-                onSelect={(noteId) => setSelectedNoteId(noteId)}
+                onSelect={setSelectedNoteId}
                 onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
                 getContextLabel={() => 'Uncategorized'}
               />
@@ -403,7 +385,7 @@ export default function NotesExplorerHomePage() {
   )
 }
 
-function SmartSection(props: {
+function ExplorerSection(props: {
   title: string
   description: string
   notes: NoteRow[]
@@ -413,14 +395,14 @@ function SmartSection(props: {
   getContextLabel: (note: NoteRow) => string
 }) {
   return (
-    <section className="grid gap-3 rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
+    <section className="grid gap-3 rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
       <div>
-        <h3 className="text-lg font-extrabold text-[var(--crm-text)]">{props.title}</h3>
-        <p className="mt-1 text-sm text-[var(--crm-text-soft)]">{props.description}</p>
+        <h3 className="text-lg font-extrabold text-white">{props.title}</h3>
+        <p className="mt-1 text-sm text-neutral-400">{props.description}</p>
       </div>
 
       {props.notes.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-500">
+        <div className="rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-6 text-sm text-neutral-500">
           Nothing to show here yet.
         </div>
       ) : (

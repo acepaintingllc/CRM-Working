@@ -82,6 +82,8 @@ export type UnitRateRow = RatesFlagsBaseRow & {
   unit_rate_group: 'doors' | 'trim' | 'drywall'
   unit_rate_type: string
   unit: string
+  helper_allowed?: string
+  default_production_rate_id?: string
   default_qty: string
   labor_rate: string
   material_rate: string

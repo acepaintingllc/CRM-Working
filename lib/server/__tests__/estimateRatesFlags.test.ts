@@ -4,7 +4,7 @@ import {
   _test,
   buildRatesFlagsPayloadFromValues,
   parseConstantsTablesDetailed,
-} from '../estimateRatesFlags.ts'
+} from '../rates-flags/index.ts'
 
 function buildSampleConstantsValues() {
   return [
@@ -379,4 +379,128 @@ test('height factors parse min/max and render multiplier/range fields', () => {
   assert.equal((h0 as unknown as Record<string, string>).secondary_value, '0 - 10')
   assert.equal((h16 as unknown as Record<string, string>).primary_value, '1.50')
   assert.equal((h16 as unknown as Record<string, string>).secondary_value, '16')
+})
+
+test('buildOverlayFromRows maps trim items and room types from DB rows', () => {
+  const overlay = _test.buildOverlayFromRows({
+    templateVersion: 3,
+    rows: [
+      {
+        id: 'row-trim',
+        org_id: 'org-1',
+        template_id: 'tmpl-1',
+        category_key: 'unit_rates_trim',
+        row_id: 'BASE_STD',
+        display_name: 'Baseboard Standard',
+        active: 'Y',
+        sort_order: 0,
+        values_json: {
+          id: 'BASE_STD',
+          display_name: 'Baseboard Standard',
+          unit_rate_type: 'BASEBOARD',
+          unit: 'LF',
+          helper_allowed: 'Y',
+          default_production_rate_id: 'TRIM_BASE_STD',
+        },
+      },
+      {
+        id: 'row-room',
+        org_id: 'org-1',
+        template_id: 'tmpl-1',
+        category_key: 'room_types',
+        row_id: 'BEDROOM',
+        display_name: 'Bedroom',
+        active: 'Y',
+        sort_order: 1,
+        values_json: {
+          id: 'BEDROOM',
+          display_name: 'Bedroom',
+          default_wall_rate_id: 'WALL_STD',
+          default_ceil_rate_id: 'CEIL_STD',
+          default_complexity_id: 'NORMAL',
+          default_wall_mode: 'RECT',
+          top_cut_in_factor: '1.1',
+          bot_cut_in_factor: '1.0',
+          typical_height_ft: '9',
+        },
+      },
+      {
+        id: 'row-prod',
+        org_id: 'org-1',
+        template_id: 'tmpl-1',
+        category_key: 'production_rates_trim',
+        row_id: 'TRIM_BASE_STD',
+        display_name: 'Trim Baseboard',
+        active: 'Y',
+        sort_order: 2,
+        values_json: {
+          id: 'TRIM_BASE_STD',
+          production_scope: 'trim',
+          scope_id: 'TRIM',
+          display_name: 'Trim Baseboard',
+          surface_type: 'BASEBOARD',
+          sqft_per_hr: '90',
+        },
+      },
+    ],
+  })
+
+  assert.equal(overlay.template_version, 3)
+  assert.equal(overlay.trim_items.length, 1)
+  assert.equal(overlay.trim_items[0].id, 'BASE_STD')
+  assert.equal(overlay.trim_items[0].helper_allowed, true)
+  assert.equal(overlay.trim_items[0].default_production_rate_id, 'TRIM_BASE_STD')
+  assert.equal(overlay.room_types.length, 1)
+  assert.equal(overlay.room_types[0].id, 'BEDROOM')
+  assert.equal(overlay.room_types[0].default_wall_mode, 'RECT')
+  assert.equal(overlay.production_rates.length, 1)
+  assert.equal(overlay.production_rates[0].id, 'TRIM_BASE_STD')
+})
+
+test('ensureTemplateState creates an empty template on first access', async () => {
+  const calls: string[] = []
+  const fakeSupabase = {
+    from(table: string) {
+      calls.push(table)
+      if (table === 'estimator_template_constants') {
+        return {
+          select() {
+            return this
+          },
+          eq() {
+            return this
+          },
+          maybeSingle: async () => ({ data: null, error: null }),
+          insert() {
+            return {
+              select() {
+                return {
+                  single: async () => ({
+                    data: {
+                      id: 'tmpl-1',
+                      org_id: 'org-1',
+                      version: 1,
+                      seeded_at: '2026-01-01T00:00:00Z',
+                    },
+                    error: null,
+                  }),
+                }
+              },
+            }
+          },
+        }
+      }
+      throw new Error(`Unexpected table: ${table}`)
+    },
+  }
+
+  _test.setSupabaseAdminProvider(async () => fakeSupabase)
+  try {
+    const state = await _test.ensureTemplateState('org-1')
+    assert.equal(state.template?.id, 'tmpl-1')
+    assert.equal(state.rows.length, 0)
+    assert.deepEqual(calls, ['estimator_template_constants', 'estimator_template_constants'])
+  } finally {
+    _test.setSupabaseAdminProvider(null)
+  }
 })

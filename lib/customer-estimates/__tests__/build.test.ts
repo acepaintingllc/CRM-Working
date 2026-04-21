@@ -27,7 +27,6 @@ test('buildCustomerEstimateDocument cleans scope copy and keeps only included se
       version_state: 'draft',
       created_at: '2026-04-20T12:00:00Z',
       updated_at: '2026-04-20T12:00:00Z',
-      latest_output_json: { output_app: { FinalTotal: 1250 } },
     },
     job: {
       customer_name: 'Taylor Jones',
@@ -87,6 +86,7 @@ test('buildCustomerEstimateDocument cleans scope copy and keeps only included se
   })
 
   assert.equal(document.meta.quote_date, '4/20/2026')
+  assert.equal(document.meta.flow_version, 'v2')
   assert.equal(document.customer.name, 'Taylor Jones')
   assert.match(document.customer.address, /Newburgh, IN 47630/)
   assert.equal(document.total, 1191)
@@ -114,7 +114,6 @@ test('buildCustomerEstimateDocument reconciles visible rows to the internal fina
       version_state: 'draft',
       created_at: '2026-04-20T12:00:00Z',
       updated_at: '2026-04-20T12:00:00Z',
-      latest_output_json: { output_app: { FinalTotal: 4361.26 } },
     },
     job: {
       customer_name: 'Rob & Kelley Gustafson',
@@ -232,7 +231,6 @@ test('buildCustomerEstimateDocument falls back to jobsettings paint products for
       version_state: 'draft',
       created_at: '2026-04-20T12:00:00Z',
       updated_at: '2026-04-20T12:00:00Z',
-      latest_output_json: { output_app: { FinalTotal: 555 } },
     },
     job: {
       customer_name: 'Taylor Jones',
@@ -324,7 +322,6 @@ test('buildCustomerEstimateDocument resolves paint labels from display ids when 
       version_state: 'draft',
       created_at: '2026-04-20T12:00:00Z',
       updated_at: '2026-04-20T12:00:00Z',
-      latest_output_json: { output_app: { FinalTotal: 555 } },
     },
     job: {
       customer_name: 'Taylor Jones',
@@ -404,7 +401,6 @@ test('buildCustomerEstimateDocument preserves manual scope wording overrides exa
       version_state: 'draft',
       created_at: '2026-04-20T12:00:00Z',
       updated_at: '2026-04-20T12:00:00Z',
-      latest_output_json: { output_app: { FinalTotal: 250 } },
     },
     job: {
       customer_name: 'Taylor Jones',

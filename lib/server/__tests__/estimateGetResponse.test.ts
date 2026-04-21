@@ -7,6 +7,7 @@ test('buildEstimateGetResponse includes trim paint and paint products', () => {
     estimate: { id: 'EST-1' },
     inputs: {
       jobsettings: { trim_paint_id: 'TRIM-WHITE' },
+      org_defaults: { override_labor_rate: 40 },
       paint_products: [{ id: 'TRIM-WHITE', label: 'Trim White' }],
       rooms: [],
       room_wall_scopes: [],

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
-import { createEstimateRatesFlagsCatalogSnapshot } from '@/lib/server/estimateRatesFlags'
+import { loadEstimateTemplateSettings } from '@/lib/server/estimateTemplateSettings'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -29,7 +29,7 @@ export async function GET() {
   const { data: estimates, error } = await supabaseAdmin
     .from('estimates')
     .select(
-      'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, sheet_schema_version, sheet_file_path, latest_output_json, created_at, updated_at'
+      'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
     )
     .eq('org_id', orgId)
     .order('updated_at', { ascending: false })
@@ -165,10 +165,28 @@ export async function POST(request: Request) {
   }
 
   const estimateId = createRes.data.id
+  const templateDefaults = await loadEstimateTemplateSettings(orgId).catch(() => null)
   const settingsInsert = await supabaseAdmin.from('estimate_jobsettings').insert({
     org_id: orgId,
     estimate_id: estimateId,
     job_id: jobId,
+    walls_paint_id: templateDefaults?.walls_paint_id ?? null,
+    walls_primer_id: templateDefaults?.walls_primer_id ?? null,
+    ceiling_paint_id: templateDefaults?.ceiling_paint_id ?? null,
+    ceiling_primer_id: templateDefaults?.ceiling_primer_id ?? null,
+    trim_paint_id: templateDefaults?.trim_paint_id ?? null,
+    trim_primer_id: templateDefaults?.trim_primer_id ?? null,
+    primer_id:
+      templateDefaults?.walls_primer_id ??
+      templateDefaults?.ceiling_primer_id ??
+      templateDefaults?.trim_primer_id ??
+      null,
+    labor_day_policy_enabled: templateDefaults?.labor_day_policy_enabled,
+    dayhours: templateDefaults?.dayhours ?? null,
+    rounding_increment_hours: templateDefaults?.rounding_increment_hours ?? null,
+    override_labor_rate: templateDefaults?.override_labor_rate ?? null,
+    job_minimum_enabled: templateDefaults?.job_minimum_enabled,
+    job_minimum_amount: templateDefaults?.job_minimum_amount ?? null,
   })
   if (settingsInsert.error) {
     await supabaseAdmin.from('estimates').delete().eq('org_id', orgId).eq('id', estimateId)
@@ -184,17 +202,6 @@ export async function POST(request: Request) {
     await supabaseAdmin.from('estimate_jobsettings').delete().eq('org_id', orgId).eq('estimate_id', estimateId)
     await supabaseAdmin.from('estimates').delete().eq('org_id', orgId).eq('id', estimateId)
     return NextResponse.json({ error: pricingPolicyInsert.error.message }, { status: 500 })
-  }
-
-  const snapshotInsert = await createEstimateRatesFlagsCatalogSnapshot({
-    orgId,
-    estimateId,
-  })
-  if (!snapshotInsert.ok) {
-    await supabaseAdmin.from('estimate_pricing_policies').delete().eq('org_id', orgId).eq('estimate_id', estimateId)
-    await supabaseAdmin.from('estimate_jobsettings').delete().eq('org_id', orgId).eq('estimate_id', estimateId)
-    await supabaseAdmin.from('estimates').delete().eq('org_id', orgId).eq('id', estimateId)
-    return NextResponse.json({ error: snapshotInsert.error }, { status: snapshotInsert.status })
   }
 
   return NextResponse.json({

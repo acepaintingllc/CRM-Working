@@ -7,7 +7,7 @@ import {
 import {
   applyRatesFlagsMutation,
   readRatesFlagsPayload,
-} from '@/lib/server/estimateRatesFlags'
+} from '@/lib/server/rates-flags'
 import type { RatesFlagsMutationRequest } from '@/types/estimator/ratesFlags'
 
 export async function GET(request: Request) {
