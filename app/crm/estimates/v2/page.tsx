@@ -59,9 +59,9 @@ const VERSION_KIND_OPTIONS = [
 ] as const
 
 const SETTINGS_LINKS: NavItem[] = [
-  { label: 'Defaults', href: '/crm/estimates/v2/defaults' },
-  { label: 'Products', href: '/crm/estimates/v2/products' },
-  { label: 'Rates & Flags', href: '/crm/estimates/v2/rates' },
+  { label: 'Defaults', href: '/crm/quotes/defaults' },
+  { label: 'Products', href: '/crm/quotes/products' },
+  { label: 'Rates & Flags', href: '/crm/quotes/rates' },
   { label: 'Settings', href: '/crm/settings' },
 ]
 
@@ -465,7 +465,7 @@ function buildSearchHaystack(estimate: HomeEstimate) {
 }
 
 function estimateWorkspaceHref(estimateId: string) {
-  return `/crm/estimates/${estimateId}/v2`
+  return `/crm/quotes/${estimateId}`
 }
 
 export default function EstimatorV2HomePage() {
@@ -493,7 +493,7 @@ export default function EstimatorV2HomePage() {
       setError(null)
 
       const [homeRes, jobsRes] = await Promise.all([
-        authedFetch('/api/estimates/v2/home', { cache: 'no-store' }),
+        authedFetch('/api/quotes/home', { cache: 'no-store' }),
         authedFetch('/api/jobs', { cache: 'no-store' }),
       ])
 
@@ -535,7 +535,7 @@ export default function EstimatorV2HomePage() {
     }
     setCreating(true)
     setError(null)
-    const response = await authedFetch('/api/estimates', {
+    const response = await authedFetch('/api/quotes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -551,7 +551,7 @@ export default function EstimatorV2HomePage() {
       setError(payload?.error ?? response.statusText)
       return
     }
-    router.push(`/crm/estimates/${payload.id}/v2`)
+    router.push(`/crm/quotes/${payload.id}`)
   }
 
   const deleteVersion = async () => {
@@ -559,7 +559,7 @@ export default function EstimatorV2HomePage() {
     setDeletingId(confirmingDelete.estimate_id)
     setError(null)
 
-    const res = await authedFetch(`/api/estimates/${confirmingDelete.estimate_id}`, {
+    const res = await authedFetch(`/api/quotes/${confirmingDelete.estimate_id}`, {
       method: 'DELETE',
     })
     const payload = await res.json().catch(() => null)
@@ -659,7 +659,7 @@ export default function EstimatorV2HomePage() {
 
   const heroSummaryText = data
     ? `${data.search_estimates.length} total versions | ${data.summary.draft_count} drafts | ${data.summary.sent_or_awaiting_count} sent/awaiting | ${data.summary.live_count} live`
-    : 'Build and track estimator versions with live status, totals, and search.'
+    : 'Build and track quote versions with live status, totals, and search.'
 
   const filteredJobs = useMemo(() => {
     const q = jobQuery.trim().toLowerCase()
@@ -709,7 +709,7 @@ export default function EstimatorV2HomePage() {
 
           <div>
             <div style={S.mobileDate}>{formatToday()}</div>
-            <h1 style={S.mobileTitle}>Estimator home</h1>
+            <h1 style={S.mobileTitle}>Quote home</h1>
           </div>
 
           <div style={S.mobileStats}>
@@ -742,7 +742,7 @@ export default function EstimatorV2HomePage() {
                 return (
                   <Link
                     key={job.id}
-                    href={`/crm/estimates/v2/create?job=${job.id}`}
+                    href={`/crm/quotes/create?job=${job.id}`}
                     style={{
                       display: 'block',
                       borderRadius: 14,
@@ -774,10 +774,10 @@ export default function EstimatorV2HomePage() {
               <div style={S.brandMark}>A</div>
               <div>
                 <div style={S.brandName}>ACE CRM</div>
-                <div style={S.brandSub}>Estimator V2</div>
+                <div style={S.brandSub}>Quotes</div>
               </div>
             </div>
-            <div style={S.crumbs}>ACE CRM / ESTIMATOR V2 / HOME</div>
+            <div style={S.crumbs}>ACE CRM / QUOTES / HOME</div>
           </div>
 
           <div style={S.topControls}>
@@ -787,16 +787,16 @@ export default function EstimatorV2HomePage() {
                 onChange={(event) => setSearchQuery(event.target.value)}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-                placeholder="Search estimate versions"
+                placeholder="Search quote versions"
                 style={S.search}
-                aria-label="Search estimate versions"
+                aria-label="Search quote versions"
               />
               {searchFocused && searchResults.length > 0 && (
                 <div style={S.searchResults}>
                   {searchResults.map((estimate) => (
                     <Link
                       key={estimate.estimate_id}
-                      href={`/crm/estimates/${estimate.estimate_id}/v2`}
+                      href={`/crm/quotes/${estimate.estimate_id}`}
                       style={S.searchResultLink}
                     >
                       <div style={S.estimateTitle}>{estimate.version_name}</div>
@@ -875,7 +875,7 @@ export default function EstimatorV2HomePage() {
               }}
             >
               <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
-              New estimate
+              New quote
             </a>
           </div>
         </div>
@@ -982,7 +982,7 @@ export default function EstimatorV2HomePage() {
                 >
                   <div style={{ fontSize: 15, fontWeight: 700 }}>No eligible jobs yet</div>
                   <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--v2-ink-3)' }}>
-                    V2 creation starts from a job with a linked customer. Add the contact first,
+                    Quote creation starts from a job with a linked customer. Add the contact first,
                     then create the job in the normal CRM flow.
                   </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -1186,7 +1186,7 @@ export default function EstimatorV2HomePage() {
 
                 {selectedJob && selectedJobVersions.length === 0 && (
                   <div style={S.emptyState}>
-                    No V2 versions exist under this job yet. Use the panel on the right to create
+                    No quote versions exist under this job yet. Use the panel on the right to create
                     the first one.
                   </div>
                 )}
@@ -1206,7 +1206,7 @@ export default function EstimatorV2HomePage() {
                     <div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
                         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--v2-ink)' }}>
-                          {estimate.version_name ?? 'Estimate Version'}
+                          {estimate.version_name ?? 'Quote Version'}
                         </div>
                         {estimate.final_total != null && estimate.final_total > 0 && (
                           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--v2-green-2)' }}>
@@ -1279,10 +1279,10 @@ export default function EstimatorV2HomePage() {
                 <div>
                   <div style={{ ...S.cardLabel, marginBottom: 8 }}>Create Version</div>
                   <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>
-                    Add the next estimate version
+                    Add the next quote version
                   </div>
                   <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.7, color: 'var(--v2-ink-3)' }}>
-                    Creates a new estimate version linked to this job, then opens it in the workspace.
+                    Creates a new quote version linked to this job, then opens it in the workspace.
                   </div>
                 </div>
 

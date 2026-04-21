@@ -1,18 +1,28 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-
-type JobStatus =
-  | 'estimate_scheduled'
-  | 'estimate_sent'
-  | 'follow_up'
-  | 'scheduled'
-  | 'completed'
-  | 'lost'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { authedFetch } from '@/lib/auth/authedFetch'
+import { getResponseErrorMessage, parseResponseBody } from '@/lib/jobs/actions'
+import {
+  next8amLocalDateTimeValue,
+  toIsoFromLocalDateTimeValue,
+} from '@/lib/jobs/dateHelpers'
+import { applyTemplate, buildJobEmailTemplateVars } from '@/lib/jobs/emailTemplate'
+import { makeIdempotencyKey } from '@/lib/jobs/idempotency'
+import { JOB_STATUS_OPTIONS, type JobStatus, type StageEmailStage } from '@/lib/jobs/types'
+import {
+  jobsButtonAccentClassName,
+  jobsButtonSecondaryClassName,
+  jobsButtonSmallClassName,
+  jobsCardClassName,
+  jobsInputClassName,
+  jobsLabelClassName,
+  jobsPageShellClassName,
+  jobsPanelClassName,
+  jobsTextareaClassName,
+} from '@/lib/jobs/uiClasses'
 
 type CustomerOption = {
   id: string
@@ -29,40 +39,8 @@ type EmailTemplate = {
 }
 
 function addHours(startIso: string, hours: number) {
-  const d = new Date(startIso)
-  return new Date(d.getTime() + hours * 60 * 60 * 1000).toISOString()
-}
-
-function next8amLocalDateTimeValue() {
-  const now = new Date()
-  const d = new Date(now)
-  d.setHours(8, 0, 0, 0)
-  if (d.getTime() <= now.getTime()) {
-    d.setDate(d.getDate() + 1)
-  }
-  // Format for <input type="datetime-local">: YYYY-MM-DDTHH:mm
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(
-    d.getHours()
-  )}:${pad2(d.getMinutes())}`
-}
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-
-function toIsoFromDateTimeLocal(v: string) {
-  // datetime-local returns local time with no TZ; convert to Date then ISO.
-  const dt = new Date(v)
-  if (Number.isNaN(dt.getTime())) return null
-  return dt.toISOString()
-}
-
-function createSendIdempotencyKey(stage: string, jobId: string) {
-  const suffix =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`
-  return `stage:${stage}:job:${jobId}:${suffix}`
+  const date = new Date(startIso)
+  return new Date(date.getTime() + hours * 60 * 60 * 1000).toISOString()
 }
 
 export default function NewJobPage() {
@@ -73,67 +51,59 @@ export default function NewJobPage() {
   const [customers, setCustomers] = useState<CustomerOption[]>([])
   const [customerQuery, setCustomerQuery] = useState('')
   const [customerId, setCustomerId] = useState<string | null>(null)
-
-  const selectedCustomer = useMemo(
-    () => customers.find((c) => c.id === customerId) ?? null,
-    [customers, customerId]
-  )
-
-  const filteredCustomers = useMemo(() => {
-    const q = customerQuery.trim().toLowerCase()
-    if (!q) return customers.slice(0, 2)
-    const matches = customers.filter((c) => {
-      const hay = `${c.name} ${c.email ?? ''} ${c.phone ?? ''} ${c.address ?? ''}`.toLowerCase()
-      return hay.includes(q)
-    })
-    return matches.slice(0, 20)
-  }, [customers, customerQuery])
-
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [createdJobId, setCreatedJobId] = useState<string | null>(null)
-
   const [status, setStatus] = useState<JobStatus>('estimate_scheduled')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-
-  // Scheduling inputs (calendar popup)
   const [estimateDateLocal, setEstimateDateLocal] = useState('')
   const [scheduledDateLocal, setScheduledDateLocal] = useState('')
-
-  // Google Calendar event previews (editable)
   const [addEstimateToCalendar, setAddEstimateToCalendar] = useState(true)
   const [estimateSummary, setEstimateSummary] = useState('')
   const [estimateLocation, setEstimateLocation] = useState('')
   const [estimateHours, setEstimateHours] = useState(1)
-
   const [addScheduledToCalendar, setAddScheduledToCalendar] = useState(true)
   const [scheduledSummary, setScheduledSummary] = useState('')
   const [scheduledLocation, setScheduledLocation] = useState('')
   const [scheduledHours, setScheduledHours] = useState(8)
-
-  const [composeStage, setComposeStage] = useState<string | null>(null)
+  const [composeStage, setComposeStage] = useState<StageEmailStage | null>(null)
   const [composeSubject, setComposeSubject] = useState('')
   const [composeBody, setComposeBody] = useState('')
   const [composeLoading, setComposeLoading] = useState(false)
   const [sendingStage, setSendingStage] = useState<string | null>(null)
 
+  const selectedCustomer = useMemo(
+    () => customers.find((customer) => customer.id === customerId) ?? null,
+    [customers, customerId]
+  )
+
+  const filteredCustomers = useMemo(() => {
+    const query = customerQuery.trim().toLowerCase()
+    if (!query) return customers.slice(0, 2)
+    return customers
+      .filter((customer) => {
+        const haystack =
+          `${customer.name} ${customer.email ?? ''} ${customer.phone ?? ''} ${customer.address ?? ''}`.toLowerCase()
+        return haystack.includes(query)
+      })
+      .slice(0, 20)
+  }, [customers, customerQuery])
+
   useEffect(() => {
     const loadCustomers = async () => {
       setLoading(true)
       setError(null)
-
-      const res = await authedFetch('/api/customers', { cache: 'no-store' })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        setError(payload?.error ?? res.statusText)
+      const response = await authedFetch('/api/customers', { cache: 'no-store' })
+      const payload = await parseResponseBody(response)
+      if (!response.ok) {
+        setError(getResponseErrorMessage(response, payload))
         setCustomers([])
         setLoading(false)
         return
       }
-
-      setCustomers(payload?.customers ?? [])
+      setCustomers(((payload.json as { customers?: CustomerOption[] } | null)?.customers ?? []) as CustomerOption[])
       setLoading(false)
     }
 
@@ -142,26 +112,22 @@ export default function NewJobPage() {
 
   useEffect(() => {
     if (!preselectedCustomerId || customerId) return
-    const match = customers.find((c) => c.id === preselectedCustomerId)
+    const match = customers.find((customer) => customer.id === preselectedCustomerId)
     if (match) {
       setCustomerId(match.id)
       setCustomerQuery('')
     }
   }, [customerId, customers, preselectedCustomerId])
 
-  // Auto-fill calendar event fields when customer/title change.
   useEffect(() => {
-    const cName = selectedCustomer?.name ?? 'Customer'
-    const loc = selectedCustomer?.address ?? ''
+    const customerName = selectedCustomer?.name ?? 'Customer'
+    const location = selectedCustomer?.address ?? ''
+    setEstimateSummary(`Estimate: ${customerName}`)
+    setScheduledSummary(`Job - ${customerName}`)
+    setEstimateLocation(location)
+    setScheduledLocation(location)
+  }, [selectedCustomer?.id, title, selectedCustomer?.name, selectedCustomer?.address])
 
-    setEstimateSummary(`Estimate: ${cName}`)
-    setScheduledSummary(`Job - ${cName}`)
-    setEstimateLocation(loc)
-    setScheduledLocation(loc)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCustomer?.id, title])
-
-  // Default the visible datetime picker to 8:00 AM (next occurrence).
   useEffect(() => {
     if (status === 'estimate_scheduled' && !estimateDateLocal) {
       setEstimateDateLocal(next8amLocalDateTimeValue())
@@ -169,8 +135,7 @@ export default function NewJobPage() {
     if (status === 'scheduled' && !scheduledDateLocal) {
       setScheduledDateLocal(next8amLocalDateTimeValue())
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status])
+  }, [status, estimateDateLocal, scheduledDateLocal])
 
   useEffect(() => {
     if (status !== 'estimate_scheduled' && composeStage === 'estimate_scheduled') {
@@ -185,7 +150,7 @@ export default function NewJobPage() {
     startIso: string
     endIso: string
   }) => {
-    const res = await authedFetch('/api/google-calendar/create-event', {
+    const response = await authedFetch('/api/google-calendar/create-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -197,71 +162,63 @@ export default function NewJobPage() {
         end: args.endIso,
       }),
     })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      throw new Error(payload?.error ?? res.statusText)
+    const payload = await parseResponseBody(response)
+    if (!response.ok) {
+      throw new Error(getResponseErrorMessage(response, payload))
     }
-    return payload?.event ?? null
+    return (payload.json as { event?: unknown } | null)?.event ?? null
   }
 
-  const buildTemplateVars = (estimateIso: string | null, scheduledIso: string | null) => ({
-    customerName: selectedCustomer?.name ?? '',
-    customerEmail: selectedCustomer?.email ?? '',
-    customerPhone: selectedCustomer?.phone ?? '',
-    customerAddress: selectedCustomer?.address ?? '',
-    jobTitle: title.trim() || '',
-    estimateDate: estimateIso ? new Date(estimateIso).toLocaleString() : '',
-    scheduledDate: scheduledIso ? new Date(scheduledIso).toLocaleString() : '',
-    scheduledBlocks: scheduledIso ? new Date(scheduledIso).toLocaleString() : '',
-    estimateFileName: '',
-    estimateFileLink: '',
-    reviewLink: process.env.NEXT_PUBLIC_REVIEW_LINK ?? 'https://g.page/r/CXTTS4mREhqcEBM/review',
-    customer_name: selectedCustomer?.name ?? '',
-    customer_email: selectedCustomer?.email ?? '',
-    customer_phone: selectedCustomer?.phone ?? '',
-    customer_address: selectedCustomer?.address ?? '',
-    job_title: title.trim() || '',
-    estimate_date: estimateIso ? new Date(estimateIso).toLocaleString() : '',
-    scheduled_date: scheduledIso ? new Date(scheduledIso).toLocaleString() : '',
-    scheduled_blocks: scheduledIso ? new Date(scheduledIso).toLocaleString() : '',
-    estimate_file_name: '',
-    estimate_file_link: '',
-    review_link: process.env.NEXT_PUBLIC_REVIEW_LINK ?? 'https://g.page/r/CXTTS4mREhqcEBM/review',
-  })
-
-  const applyTemplate = (value: string, vars: Record<string, string>) =>
-    Object.entries(vars).reduce((acc, [key, val]) => acc.replaceAll(`{{${key}}}`, val ?? ''), value)
-
-  const openComposer = async (stage: string) => {
+  const openComposer = async (stage: StageEmailStage) => {
     setComposeStage(stage)
     setComposeLoading(true)
     setError(null)
-    const res = await authedFetch('/api/email-templates', { cache: 'no-store' })
-    const payload = await res.json().catch(() => null)
+    const response = await authedFetch('/api/email-templates', { cache: 'no-store' })
+    const payload = await parseResponseBody(response)
     setComposeLoading(false)
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
+    if (!response.ok) {
+      setError(getResponseErrorMessage(response, payload))
       return
     }
-    const templates = (payload?.templates ?? []) as EmailTemplate[]
-    const row = templates.find((t) => t.stage === stage)
-    const estimateIso = estimateDateLocal ? toIsoFromDateTimeLocal(estimateDateLocal) : null
-    const scheduledIso = scheduledDateLocal ? toIsoFromDateTimeLocal(scheduledDateLocal) : null
-    const vars = buildTemplateVars(estimateIso, scheduledIso)
+    const templates = (((payload.json as { templates?: EmailTemplate[] } | null)?.templates ?? []) as EmailTemplate[])
+    const row = templates.find((template) => template.stage === stage)
+    const estimateIso = estimateDateLocal ? toIsoFromLocalDateTimeValue(estimateDateLocal) : null
+    const scheduledIso = scheduledDateLocal ? toIsoFromLocalDateTimeValue(scheduledDateLocal) : null
+    const vars = buildJobEmailTemplateVars({
+      customerName: selectedCustomer?.name ?? '',
+      customerEmail: selectedCustomer?.email ?? '',
+      customerPhone: selectedCustomer?.phone ?? '',
+      customerAddress: selectedCustomer?.address ?? '',
+      jobTitle: title.trim(),
+      estimateDate: estimateIso ? new Date(estimateIso).toLocaleString() : '',
+      scheduledDate: scheduledIso ? new Date(scheduledIso).toLocaleString() : '',
+      scheduledBlocks: scheduledIso ? new Date(scheduledIso).toLocaleString() : '',
+      estimateFileName: '',
+      estimateFileLink: '',
+    })
     setComposeSubject(applyTemplate(row?.subject ?? '', vars))
     setComposeBody(applyTemplate(row?.body ?? '', vars))
   }
 
-  const sendStageEmail = async (jobId: string, stage: string, subject?: string, body?: string) => {
-    const idempotencyKey = createSendIdempotencyKey(stage, jobId)
-    const res = await authedFetch(`/api/jobs/${jobId}/send-stage`, {
+  const sendStageEmail = async (
+    jobId: string,
+    stage: StageEmailStage,
+    subject?: string,
+    body?: string
+  ) => {
+    const response = await authedFetch(`/api/jobs/${jobId}/send-stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage, subject, body, idempotency_key: idempotencyKey }),
+      body: JSON.stringify({
+        stage,
+        subject,
+        body,
+        idempotency_key: makeIdempotencyKey(stage, jobId),
+      }),
     })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      throw new Error(payload?.error ?? res.statusText)
+    const payload = await parseResponseBody(response)
+    if (!response.ok) {
+      throw new Error(getResponseErrorMessage(response, payload))
     }
   }
 
@@ -273,29 +230,26 @@ export default function NewJobPage() {
       setError('Select a customer')
       return
     }
-
     if (!title.trim()) {
       setError('Job title is required')
       return
     }
-
     if (options?.sendEstimateScheduled && status !== 'estimate_scheduled') {
-      setError('Estimate scheduled email requires the "Estimate scheduled" stage.')
+      setError('Quote scheduled email requires the "Quote scheduled" stage.')
       return
     }
 
-    const estimateIso = estimateDateLocal ? toIsoFromDateTimeLocal(estimateDateLocal) : null
+    const estimateIso = estimateDateLocal ? toIsoFromLocalDateTimeValue(estimateDateLocal) : null
     if (estimateDateLocal && !estimateIso) {
-      setError('Estimate date/time is invalid')
+      setError('Quote date/time is invalid')
       return
     }
-
     if (options?.sendEstimateScheduled && !estimateIso) {
-      setError('Add an estimate date/time before sending the email.')
+      setError('Add a quote date/time before sending the email.')
       return
     }
 
-    const scheduledIso = scheduledDateLocal ? toIsoFromDateTimeLocal(scheduledDateLocal) : null
+    const scheduledIso = scheduledDateLocal ? toIsoFromLocalDateTimeValue(scheduledDateLocal) : null
     if (scheduledDateLocal && !scheduledIso) {
       setError('Scheduled date/time is invalid')
       return
@@ -303,8 +257,7 @@ export default function NewJobPage() {
 
     setSaving(true)
     try {
-      // 1) Create job in DB
-      const res = await authedFetch('/api/jobs', {
+      const response = await authedFetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -312,43 +265,38 @@ export default function NewJobPage() {
           title: title.trim(),
           description: description.trim() || null,
           status,
-          // Only include date fields that make sense for the selected stage.
           estimate_date: status === 'estimate_scheduled' ? estimateIso : null,
           scheduled_date: status === 'scheduled' ? scheduledIso : null,
         }),
       })
-      const text = await res.text()
-      let payload: { error?: string; details?: string; hint?: string; code?: string; job?: { id?: string } } | null = null
-      try {
-        payload = text ? JSON.parse(text) : null
-      } catch {
-        payload = null
-      }
-      if (!res.ok) {
-        const message = payload?.error ?? res.statusText
-        const details = payload?.details ? `\n${payload.details}` : ''
-        const hint = payload?.hint ? `\n${payload.hint}` : ''
-        const code = payload?.code ? `\n(code ${payload.code})` : ''
+      const payload = await parseResponseBody(response)
+      if (!response.ok) {
+        const parsed = (payload.json as {
+          details?: string
+          hint?: string
+          code?: string
+        } | null) ?? null
+        const message = getResponseErrorMessage(response, payload)
+        const details = parsed?.details ? `\n${parsed.details}` : ''
+        const hint = parsed?.hint ? `\n${parsed.hint}` : ''
+        const code = parsed?.code ? `\n(code ${parsed.code})` : ''
         throw new Error(`${message}${details}${hint}${code}`)
       }
-      const createdId = payload?.job?.id ?? null
+
+      const createdId =
+        ((payload.json as { job?: { id?: string } } | null)?.job?.id ?? null) as string | null
       setCreatedJobId(createdId)
 
       if (options?.sendEstimateScheduled) {
-        if (!createdId) {
-          throw new Error('Job created without an id; unable to send email.')
-        }
-        if (!selectedCustomer?.email) {
-          throw new Error('Customer email is missing.')
-        }
+        if (!createdId) throw new Error('Job created without an id; unable to send email.')
+        if (!selectedCustomer?.email) throw new Error('Customer email is missing.')
         setSendingStage('estimate_scheduled')
         await sendStageEmail(createdId, 'estimate_scheduled', composeSubject, composeBody)
         setSendingStage(null)
       }
 
-      // 2) Optionally create calendar events (best-effort, but block on errors so you see them)
       if (status === 'estimate_scheduled' && addEstimateToCalendar && estimateIso) {
-                await createCalendarEvent({
+        await createCalendarEvent({
           summary: estimateSummary || `Estimate: ${selectedCustomer?.name ?? 'Customer'}`,
           location: estimateLocation || selectedCustomer?.address,
           description: description.trim() || selectedCustomer?.address || null,
@@ -368,8 +316,8 @@ export default function NewJobPage() {
       }
 
       router.push('/crm/jobs')
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create job')
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to create job')
       setSaving(false)
       setSendingStage(null)
       return
@@ -379,74 +327,83 @@ export default function NewJobPage() {
   }
 
   return (
-    <div className="crm-page" style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div className="crm-topbar" style={{ marginBottom: 12 }}>
+    <div className={`${jobsPageShellClassName} max-w-[900px]`}>
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>New Job</div>
-          <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>
+          <div className="text-lg font-extrabold">New Job</div>
+          <div className="text-xs text-[var(--crm-muted)]">
             Pick a stage, assign a customer, and optionally add estimate/scheduled events to Google Calendar.
           </div>
         </div>
-        <Link href="/crm/jobs" style={{ ...actionButton, textDecoration: 'none' }}>
+        <Link href="/crm/jobs" className={`${jobsButtonSecondaryClassName} no-underline`}>
           Back
         </Link>
       </div>
 
-      <div className="crm-card" style={{ borderRadius: 12, padding: 14 }}>
+      <div className={jobsCardClassName}>
         {loading ? (
-          <div style={{ color: 'var(--crm-muted)' }}>Loading customers...</div>
+          <div className="text-[var(--crm-muted)]">Loading customers...</div>
         ) : (
-          <div style={{ display: 'grid', gap: 12 }}>
+          <div className="grid gap-3">
             <div>
-              <div style={label}>Stage</div>
-              <select value={status} onChange={(e) => setStatus(e.target.value as JobStatus)} style={inputStyle}>
-                <option value="estimate_scheduled">Estimate scheduled</option>
-                <option value="estimate_sent">Estimate sent</option>
-                <option value="follow_up">Follow up</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="completed">Completed</option>
-                <option value="lost">Lost</option>
+              <div className={jobsLabelClassName}>Stage</div>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as JobStatus)}
+                className={jobsInputClassName}
+              >
+                {JOB_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.title}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
-              <div style={label}>Customer</div>
+              <div className={jobsLabelClassName}>Customer</div>
               <input
                 placeholder="Search customer by name / phone / email / address..."
                 value={customerQuery}
-                onChange={(e) => setCustomerQuery(e.target.value)}
-                style={inputStyle}
+                onChange={(event) => setCustomerQuery(event.target.value)}
+                className={jobsInputClassName}
               />
-              <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+              <div className="mt-2.5 grid gap-2">
                 {filteredCustomers.length === 0 ? (
-                  <div style={{ color: 'var(--crm-muted)', fontSize: 13 }}>No matches.</div>
+                  <div className="text-sm text-[var(--crm-muted)]">No matches.</div>
                 ) : (
-                  filteredCustomers.map((c) => {
-                    const active = c.id === customerId
+                  filteredCustomers.map((customer) => {
+                    const active = customer.id === customerId
                     return (
                       <button
-                        key={c.id}
+                        key={customer.id}
                         type="button"
-                        onClick={() => setCustomerId(c.id)}
-                        style={{
-                          textAlign: 'left',
-                          padding: 12,
-                          borderRadius: 12,
-                          border: active ? '1px solid #111' : '1px solid #e5e7eb',
-                          background: active ? '#111' : 'white',
-                          color: active ? 'white' : '#111',
-                          cursor: 'pointer',
-                        }}
+                        onClick={() => setCustomerId(customer.id)}
+                        className={`rounded-xl border px-3 py-3 text-left ${
+                          active
+                            ? 'border-[#111] bg-[#111] text-white'
+                            : 'border-gray-200 bg-white text-[#111]'
+                        }`}
                       >
-                        <div style={{ fontWeight: 800 }}>{c.name}</div>
-                        {(c.phone || c.email) && (
-                          <div style={{ marginTop: 4, fontSize: 12, color: active ? 'rgba(255,255,255,0.8)' : '#6b7280' }}>
-                            {c.phone ?? ''}{c.phone && c.email ? ' - ' : ''}{c.email ?? ''}
+                        <div className="font-extrabold">{customer.name}</div>
+                        {(customer.phone || customer.email) && (
+                          <div
+                            className={`mt-1 text-xs ${
+                              active ? 'text-white/80' : 'text-gray-500'
+                            }`}
+                          >
+                            {customer.phone ?? ''}
+                            {customer.phone && customer.email ? ' - ' : ''}
+                            {customer.email ?? ''}
                           </div>
                         )}
-                        {c.address && (
-                          <div style={{ marginTop: 4, fontSize: 12, color: active ? 'rgba(255,255,255,0.8)' : '#6b7280' }}>
-                            {c.address}
+                        {customer.address && (
+                          <div
+                            className={`mt-1 text-xs ${
+                              active ? 'text-white/80' : 'text-gray-500'
+                            }`}
+                          >
+                            {customer.address}
                           </div>
                         )}
                       </button>
@@ -457,54 +414,54 @@ export default function NewJobPage() {
             </div>
 
             <div>
-              <div style={label}>Job title</div>
+              <div className={jobsLabelClassName}>Job title</div>
               <input
                 placeholder="ex: Exterior repaint"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                style={inputStyle}
+                onChange={(event) => setTitle(event.target.value)}
+                className={jobsInputClassName}
               />
             </div>
 
             <div>
-              <div style={label}>Notes</div>
+              <div className={jobsLabelClassName}>Notes</div>
               <textarea
                 placeholder="Scope, paint colors, prep notes, etc."
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                style={{ ...inputStyle, height: 110, resize: 'vertical' }}
+                onChange={(event) => setDescription(event.target.value)}
+                className={`${jobsTextareaClassName} min-h-[110px]`}
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="grid gap-3 md:grid-cols-2">
               {status === 'estimate_scheduled' ? (
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={label}>Estimate date/time</div>
+                <div className="md:col-span-2">
+                  <div className={jobsLabelClassName}>Quote date/time</div>
                   <input
                     type="datetime-local"
                     value={estimateDateLocal}
-                    onChange={(e) => setEstimateDateLocal(e.target.value)}
-                    style={inputStyle}
+                    onChange={(event) => setEstimateDateLocal(event.target.value)}
+                    className={jobsInputClassName}
                   />
-                  <div style={{ fontSize: 12, color: 'var(--crm-muted)', marginTop: 6 }}>
+                  <div className="mt-1.5 text-xs text-[var(--crm-muted)]">
                     Defaults to 8:00 AM. Creates a 1 hour estimate event in Austin&apos;s work if enabled.
                   </div>
                 </div>
               ) : status === 'scheduled' ? (
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={label}>Scheduled date/time</div>
+                <div className="md:col-span-2">
+                  <div className={jobsLabelClassName}>Scheduled date/time</div>
                   <input
                     type="datetime-local"
                     value={scheduledDateLocal}
-                    onChange={(e) => setScheduledDateLocal(e.target.value)}
-                    style={inputStyle}
+                    onChange={(event) => setScheduledDateLocal(event.target.value)}
+                    className={jobsInputClassName}
                   />
-                  <div style={{ fontSize: 12, color: 'var(--crm-muted)', marginTop: 6 }}>
+                  <div className="mt-1.5 text-xs text-[var(--crm-muted)]">
                     Defaults to 8:00 AM. Creates an 8 hour scheduled event in Austin&apos;s work if enabled.
                   </div>
                 </div>
               ) : (
-                <div style={{ gridColumn: '1 / -1', color: 'var(--crm-muted)', fontSize: 13 }}>
+                <div className="md:col-span-2 text-sm text-[var(--crm-muted)]">
                   No date/time needed for this stage.
                 </div>
               )}
@@ -512,88 +469,92 @@ export default function NewJobPage() {
 
             {status === 'estimate_scheduled' ? (
               <>
-                <div style={panel}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 900 }}>Estimate calendar event</div>
-                    <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                <div className={jobsPanelClassName}>
+                  <div className="flex items-center justify-between">
+                    <div className="font-black">Estimate calendar event</div>
+                    <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={addEstimateToCalendar}
-                        onChange={(e) => setAddEstimateToCalendar(e.target.checked)}
+                        onChange={(event) => setAddEstimateToCalendar(event.target.checked)}
                       />
                       Add to Google
                     </label>
                   </div>
 
-                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                  <div className="mt-2.5 grid gap-2.5">
                     <input
                       value={estimateSummary}
-                      onChange={(e) => setEstimateSummary(e.target.value)}
+                      onChange={(event) => setEstimateSummary(event.target.value)}
                       placeholder="Summary"
-                      style={inputStyle}
+                      className={jobsInputClassName}
                     />
                     <input
                       value={estimateLocation}
-                      onChange={(e) => setEstimateLocation(e.target.value)}
+                      onChange={(event) => setEstimateLocation(event.target.value)}
                       placeholder="Location (auto from customer address)"
-                      style={inputStyle}
+                      className={jobsInputClassName}
                     />
-                    <div style={{ display: 'flex', gap: 10 }}>
+                    <div className="flex gap-2.5">
                       <input
                         type="number"
                         min={0.25}
                         step={0.25}
                         value={estimateHours}
-                        onChange={(e) => setEstimateHours(Number(e.target.value))}
-                        style={{ ...inputStyle, width: 120 }}
+                        onChange={(event) => setEstimateHours(Number(event.target.value))}
+                        className={`${jobsInputClassName} w-[120px]`}
                       />
-                      <div style={{ fontSize: 13, color: 'var(--crm-muted)', alignSelf: 'center' }}>hours</div>
+                      <div className="self-center text-sm text-[var(--crm-muted)]">hours</div>
                     </div>
                   </div>
                 </div>
 
-                <div style={panel}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                    <div style={{ fontWeight: 900 }}>Estimate scheduled email</div>
-                    <button onClick={() => void openComposer('estimate_scheduled')} style={smallButton}>
+                <div className={jobsPanelClassName}>
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="font-black">Quote scheduled email</div>
+                    <button
+                      onClick={() => void openComposer('estimate_scheduled')}
+                      className={jobsButtonSmallClassName}
+                    >
                       Edit & send
                     </button>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--crm-muted)', marginTop: 6 }}>
+                  <div className="mt-1.5 text-xs text-[var(--crm-muted)]">
                     Uses the estimate date/time above to confirm the appointment.
                   </div>
 
                   {composeStage === 'estimate_scheduled' && (
-                    <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                    <div className="mt-3 grid gap-2.5">
                       {composeLoading ? (
-                        <div style={{ color: 'var(--crm-muted)' }}>Loading template...</div>
+                        <div className="text-[var(--crm-muted)]">Loading template...</div>
                       ) : (
                         <>
-                          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--crm-muted)', textTransform: 'uppercase' }}>
-                            Subject
-                          </div>
+                          <div className={jobsLabelClassName}>Subject</div>
                           <input
                             value={composeSubject}
-                            onChange={(e) => setComposeSubject(e.target.value)}
-                            style={{ ...inputStyle, padding: '10px' }}
+                            onChange={(event) => setComposeSubject(event.target.value)}
+                            className={jobsInputClassName}
                           />
-                          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--crm-muted)', textTransform: 'uppercase' }}>
-                            Body
-                          </div>
+                          <div className={jobsLabelClassName}>Body</div>
                           <textarea
                             value={composeBody}
-                            onChange={(e) => setComposeBody(e.target.value)}
-                            style={{ ...inputStyle, height: 160, resize: 'vertical', padding: '10px' }}
+                            onChange={(event) => setComposeBody(event.target.value)}
+                            className={`${jobsTextareaClassName} min-h-[160px]`}
                           />
-                          <div className="crm-actions" style={{ gap: 8, alignItems: 'center' }}>
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               onClick={() => void save({ sendEstimateScheduled: true })}
                               disabled={saving || sendingStage === 'estimate_scheduled'}
-                              style={{ ...smallButton, background: 'var(--crm-accent)', color: 'var(--crm-accent-text)', border: '1px solid var(--crm-accent)' }}
+                              className={jobsButtonAccentClassName}
                             >
-                              {sendingStage === 'estimate_scheduled' ? 'Sending...' : 'Create job & send email'}
+                              {sendingStage === 'estimate_scheduled'
+                                ? 'Sending...'
+                                : 'Create job & send email'}
                             </button>
-                            <button onClick={() => setComposeStage(null)} style={smallButton}>
+                            <button
+                              onClick={() => setComposeStage(null)}
+                              className={jobsButtonSmallClassName}
+                            >
                               Cancel
                             </button>
                           </div>
@@ -604,52 +565,52 @@ export default function NewJobPage() {
                 </div>
               </>
             ) : status === 'scheduled' ? (
-              <div style={panel}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 900 }}>Scheduled calendar event</div>
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+              <div className={jobsPanelClassName}>
+                <div className="flex items-center justify-between">
+                  <div className="font-black">Scheduled calendar event</div>
+                  <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       checked={addScheduledToCalendar}
-                      onChange={(e) => setAddScheduledToCalendar(e.target.checked)}
+                      onChange={(event) => setAddScheduledToCalendar(event.target.checked)}
                     />
                     Add to Google
                   </label>
                 </div>
 
-                <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                <div className="mt-2.5 grid gap-2.5">
                   <input
                     value={scheduledSummary}
-                    onChange={(e) => setScheduledSummary(e.target.value)}
+                    onChange={(event) => setScheduledSummary(event.target.value)}
                     placeholder="Summary"
-                    style={inputStyle}
+                    className={jobsInputClassName}
                   />
                   <input
                     value={scheduledLocation}
-                    onChange={(e) => setScheduledLocation(e.target.value)}
+                    onChange={(event) => setScheduledLocation(event.target.value)}
                     placeholder="Location (auto from customer address)"
-                    style={inputStyle}
+                    className={jobsInputClassName}
                   />
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <div className="flex gap-2.5">
                     <input
                       type="number"
                       min={0.25}
                       step={0.25}
                       value={scheduledHours}
-                      onChange={(e) => setScheduledHours(Number(e.target.value))}
-                      style={{ ...inputStyle, width: 120 }}
+                      onChange={(event) => setScheduledHours(Number(event.target.value))}
+                      className={`${jobsInputClassName} w-[120px]`}
                     />
-                    <div style={{ fontSize: 13, color: 'var(--crm-muted)', alignSelf: 'center' }}>hours</div>
+                    <div className="self-center text-sm text-[var(--crm-muted)]">hours</div>
                   </div>
                 </div>
               </div>
             ) : null}
 
-            {error && <div style={{ color: '#b91c1c', fontSize: 14 }}>{error}</div>}
+            {error && <div className="text-sm text-red-700">{error}</div>}
             {createdJobId && error && (
-              <div style={{ fontSize: 13, color: 'var(--crm-muted)' }}>
+              <div className="text-sm text-[var(--crm-muted)]">
                 Job created.{' '}
-                <Link href={`/crm/jobs/${createdJobId}`} style={{ color: 'var(--crm-text)', fontWeight: 700 }}>
+                <Link href={`/crm/jobs/${createdJobId}`} className="font-bold text-[var(--crm-text)]">
                   Open job
                 </Link>
               </div>
@@ -658,17 +619,7 @@ export default function NewJobPage() {
             <button
               onClick={() => void save()}
               disabled={saving}
-              style={{
-                marginTop: 2,
-                padding: '12px',
-                borderRadius: 10,
-                background: 'var(--crm-accent)',
-                color: 'var(--crm-accent-text)',
-                border: 'none',
-                fontWeight: 800,
-                cursor: 'pointer',
-                opacity: saving ? 0.6 : 1,
-              }}
+              className={`${jobsButtonAccentClassName} mt-0.5`}
             >
               {saving ? 'Saving...' : 'Create job'}
             </button>
@@ -677,48 +628,4 @@ export default function NewJobPage() {
       </div>
     </div>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: '12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border)',
-  fontSize: 14,
-  width: '100%',
-}
-
-const actionButton: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border-soft)',
-  background: 'var(--crm-card)',
-  color: 'var(--crm-text)',
-  fontWeight: 800,
-  fontSize: 14,
-}
-
-const smallButton: React.CSSProperties = {
-  padding: '8px 10px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border)',
-  background: 'var(--crm-card)',
-  color: 'var(--crm-text)',
-  fontWeight: 800,
-  fontSize: 12,
-  cursor: 'pointer',
-}
-
-const label: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: 'var(--crm-muted)',
-  textTransform: 'uppercase',
-  marginBottom: 6,
-}
-
-const panel: React.CSSProperties = {
-  background: 'var(--crm-bg-soft)',
-  border: '1px solid var(--crm-border-soft)',
-  borderRadius: 12,
-  padding: 12,
 }

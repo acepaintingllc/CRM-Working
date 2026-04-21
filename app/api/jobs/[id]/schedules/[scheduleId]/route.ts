@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken, resolveCalendarId } from '@/lib/server/googleCalendar'
+import { syncJobScheduleRange } from '@/lib/server/jobScheduleSync'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -26,6 +27,16 @@ export async function DELETE(
   if (!scheduleId || typeof scheduleId !== 'string' || !uuid.test(scheduleId)) {
     return NextResponse.json({ error: 'Invalid schedule id' }, { status: 400 })
   }
+
+  const { data: jobRow, error: jobErr } = await supabaseAdmin
+    .from('jobs')
+    .select('id, status')
+    .eq('org_id', orgId)
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 })
+  if (!jobRow) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
 
   const { data: schedule, error: fetchErr } = await supabaseAdmin
     .from('job_schedules')
@@ -71,5 +82,13 @@ export async function DELETE(
     .eq('id', scheduleId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const { error: syncErr } = await syncJobScheduleRange(orgId, jobId, {
+    statusWhenSchedulesExist: 'scheduled',
+    statusWhenEmpty: typeof jobRow.status === 'string' ? jobRow.status : undefined,
+  })
+
+  if (syncErr) return NextResponse.json({ error: syncErr.message }, { status: 500 })
+
   return NextResponse.json({ ok: true })
 }

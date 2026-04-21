@@ -39,7 +39,7 @@ export function useEstimateV2SummaryData(estimateId: string) {
   const refreshPricing = useCallback(async () => {
     if (!estimateId) return
     try {
-      const res = await authedFetch(`/api/estimates/${estimateId}`, { cache: 'no-store' })
+      const res = await authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' })
       const payload = (await res.json().catch(() => null)) as EstimateV2SummaryPageData | null
       if (res.ok && payload?.pricing_summary) {
         setData((prev) => (prev ? { ...prev, pricing_summary: payload.pricing_summary } : prev))

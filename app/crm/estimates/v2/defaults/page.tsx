@@ -159,6 +159,7 @@ const S = {
 export default function EstimateDefaultsPage() {
   const [products, setProducts] = useState<ProductRow[]>([])
   const [settings, setSettings] = useState<TemplateSettingsRow | null>(null)
+  const [savedSnapshot, setSavedSnapshot] = useState<TemplateSettingsRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -171,8 +172,8 @@ export default function EstimateDefaultsPage() {
         setLoading(true)
         setError(null)
         const [productsRes, settingsRes] = await Promise.all([
-          authedFetch('/api/estimates/v2/products', { cache: 'no-store' }),
-          authedFetch('/api/settings/templates', { cache: 'no-store' }),
+          authedFetch('/api/quotes/products', { cache: 'no-store' }),
+          authedFetch('/api/settings/estimate-defaults', { cache: 'no-store' }),
         ])
         const [productsPayload, settingsPayload] = await Promise.all([
           productsRes.json().catch(() => null),
@@ -186,8 +187,8 @@ export default function EstimateDefaultsPage() {
         }
         if (!active) return
         setProducts(productsPayload?.products ?? [])
-        const next = settingsPayload?.settings ?? {}
-        setSettings({
+        const next = settingsPayload?.data ?? {}
+        const normalized = {
           walls_paint_id: next.walls_paint_id ?? null,
           walls_primer_id: next.walls_primer_id ?? null,
           ceiling_paint_id: next.ceiling_paint_id ?? null,
@@ -195,7 +196,9 @@ export default function EstimateDefaultsPage() {
           trim_paint_id: next.trim_paint_id ?? null,
           trim_primer_id: next.trim_primer_id ?? null,
           override_labor_rate: Number(next.override_labor_rate ?? DEFAULT_LABOR_RATE),
-        })
+        }
+        setSettings(normalized)
+        setSavedSnapshot(normalized)
       } catch (err) {
         if (active) {
           setError(err instanceof Error ? err.message : 'Failed to load defaults')
@@ -229,22 +232,28 @@ export default function EstimateDefaultsPage() {
     ],
     [paintProducts, primerProducts]
   )
+  const dirty = useMemo(
+    () => JSON.stringify(settings) !== JSON.stringify(savedSnapshot),
+    [savedSnapshot, settings]
+  )
 
   const save = async () => {
     if (!settings) return
     try {
       setSaving(true)
       setError(null)
-      const res = await authedFetch('/api/settings/templates', {
+      setSaved(null)
+      const res = await authedFetch('/api/settings/estimate-defaults', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ data: settings }),
       })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
         throw new Error(payload?.error ?? 'Failed to save defaults')
       }
-      setSettings(payload?.settings ?? settings)
+      setSettings(payload?.data ?? settings)
+      setSavedSnapshot(payload?.data ?? settings)
       setSaved('Saved')
       window.setTimeout(() => setSaved(null), 1200)
     } catch (err) {
@@ -259,21 +268,21 @@ export default function EstimateDefaultsPage() {
       <div style={S.wrap}>
         <header style={S.header}>
           <div>
-            <div style={S.crumb}>Estimator V2 / Defaults</div>
-            <h1 style={S.title}>Estimator Defaults</h1>
+            <div style={S.crumb}>Quotes / Defaults</div>
+            <h1 style={S.title}>Quote Defaults</h1>
             <div style={S.sub}>
-              Org-level defaults for new V2 estimates. Quote validity and terms stay on the
+              Org-level defaults for new quotes. Quote validity and terms stay on the
               send settings page.
             </div>
           </div>
-          <Link href="/crm/estimates/v2" style={S.backLink}>
-            {'<- Home'}
+          <Link href="/crm/quotes" style={S.backLink}>
+            {'<- Quotes'}
           </Link>
         </header>
 
         <section style={S.card}>
           <div style={S.sectionTitle}>Paint & Primer</div>
-          <div style={S.sectionSub}>Shared starter selections for new estimate job settings.</div>
+          <div style={S.sectionSub}>Shared starter selections for new quote job settings.</div>
           <div style={S.grid2}>
             {productDefaultFields.map(({ label, key, options }) => (
               <label key={key} style={S.label}>
@@ -303,7 +312,7 @@ export default function EstimateDefaultsPage() {
         <section style={S.card}>
           <div style={S.sectionTitle}>Labor Rate</div>
           <div style={S.sectionSub}>
-            Org-level labor rate used when a specific estimate has not saved its own override.
+            Org-level labor rate used when a specific quote has not saved its own override.
           </div>
           <div style={{ maxWidth: 240 }}>
             <label style={S.label}>
@@ -332,7 +341,7 @@ export default function EstimateDefaultsPage() {
             {!loading && error && <span style={{ color: '#ff6b6b' }}>{error}</span>}
             {!loading && !error && saved && <span style={{ color: 'var(--v2-green-2)' }}>{saved}</span>}
           </div>
-          <button type="button" style={S.saveBtn} onClick={() => void save()} disabled={loading || saving || !settings}>
+          <button type="button" style={S.saveBtn} onClick={() => void save()} disabled={loading || saving || !settings || !dirty}>
             {saving ? 'Saving...' : 'Save Defaults'}
           </button>
         </div>

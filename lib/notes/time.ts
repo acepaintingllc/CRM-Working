@@ -107,3 +107,41 @@ export function parseHHMM(value: string | null | undefined) {
   if (!match) return null
   return { hour: Number(match[1]), minute: Number(match[2]) }
 }
+
+export function toLocalDateInput(iso: string | null | undefined) {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function toLocalTimeInput(iso: string | null | undefined) {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+export function toIsoFromLocal(params: {
+  date: string
+  time: string
+  hasDueTime: boolean
+  isAllDay: boolean
+}) {
+  if (!params.date) return null
+  const timeValue = params.isAllDay || !params.hasDueTime ? '09:00' : params.time || '09:00'
+  const localDate = new Date(`${params.date}T${timeValue}`)
+  if (Number.isNaN(localDate.getTime())) return null
+  return localDate.toISOString()
+}
+
+export function formatDue(iso: string | null, allDay: boolean, hasDueTime: boolean) {
+  if (!iso) return 'No due date'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  if (allDay || !hasDueTime) return date.toLocaleDateString()
+  return date.toLocaleString()
+}

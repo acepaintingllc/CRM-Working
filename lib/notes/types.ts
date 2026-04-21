@@ -72,6 +72,10 @@ export type NotesFolderRow = {
   updated_at: string
 }
 
+export type NotesFolderWithCount = NotesFolderRow & {
+  note_count: number
+}
+
 export type NotesSettingsRow = {
   org_id: string
   sender_user_id: string | null
@@ -83,6 +87,77 @@ export type NotesSettingsRow = {
   last_daily_summary_sent_on: string | null
   created_at: string
   updated_at: string
+}
+
+export type NotesTaskResponse = {
+  ok?: true
+  task: NotesTaskRow
+}
+
+export type NotesTasksResponse = {
+  tasks: NotesTaskRow[]
+  filters: {
+    status: NotesTaskStatus
+    due: string
+    starred: boolean
+    priority: NotesPriority | null
+  }
+}
+
+export type NotesNoteResponse = {
+  ok?: true
+  note: NotesNoteRow
+}
+
+export type NotesNotesResponse = {
+  notes: NotesNoteRow[]
+  filters: {
+    status: NotesNoteStatus
+    folder_id: string | null
+    search: string
+  }
+}
+
+export type NotesFolderResponse = {
+  ok?: true
+  folder: NotesFolderRow
+}
+
+export type NotesFoldersResponse = {
+  folders: NotesFolderWithCount[]
+}
+
+export type NotesFolderDeleteResponse = {
+  error?: string
+  notes_count?: number
+  required?: boolean
+}
+
+export type NotesDashboardResponse = {
+  today: {
+    timezone: string
+    date_key: string
+  }
+  settings: {
+    upcoming_days: number
+  }
+  tasks: {
+    overdue: NotesTaskRow[]
+    due_today: NotesTaskRow[]
+    upcoming: NotesTaskRow[]
+    untimed_today: NotesTaskRow[]
+  }
+  notes: {
+    starred: NotesNoteRow[]
+    recent: NotesNoteRow[]
+  }
+}
+
+export type NotesConvertToTaskResponse = {
+  ok?: true
+  task?: {
+    id: string
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

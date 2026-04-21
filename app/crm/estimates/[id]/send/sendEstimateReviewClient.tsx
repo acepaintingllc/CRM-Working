@@ -287,7 +287,7 @@ function ScopeEditor({
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 900, color: muted ? C.ink2 : C.ink }}>{section.label}</div>
           <div style={{ marginTop: 4, fontSize: 12, color: muted ? C.ink3 : C.ink3 }}>
-            {muted ? 'Not included in this estimate' : scopeSummary(section, value)}
+            {muted ? 'Not included in this quote' : scopeSummary(section, value)}
           </div>
         </div>
         <div style={{ fontSize: 12, color: C.ink3, fontWeight: 800, whiteSpace: 'nowrap' }}>
@@ -302,7 +302,7 @@ function ScopeEditor({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           style={{ ...textareaBase, minHeight: 92 }}
-          placeholder={muted ? `${section.label} is not included in this estimate.` : 'Edit customer-facing scope copy'}
+          placeholder={muted ? `${section.label} is not included in this quote.` : 'Edit customer-facing scope copy'}
         />
       </div>
     </details>
@@ -325,11 +325,11 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
     ;(async () => {
       setLoading(true)
       setError(null)
-      const res = await authedFetch(`/api/estimates/${estimateId}/customer-send`)
+      const res = await authedFetch(`/api/quotes/${estimateId}/customer-send`)
       const payload = await res.json().catch(() => null)
       if (!alive) return
       if (!res.ok) {
-        setError(payload?.error ?? 'Unable to load estimate send page')
+        setError(payload?.error ?? 'Unable to load quote send page')
         setLoading(false)
         return
       }
@@ -418,7 +418,7 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
     setBusy(true)
     setError(null)
     setMessage(null)
-    const res = await authedFetch(`/api/estimates/${estimateId}/customer-send`, {
+    const res = await authedFetch(`/api/quotes/${estimateId}/customer-send`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ draft: draftPayload(form) }),
@@ -455,7 +455,7 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
     setBusy(true)
     setError(null)
     setMessage(null)
-    const res = await authedFetch(`/api/estimates/${estimateId}/customer-send`, {
+    const res = await authedFetch(`/api/quotes/${estimateId}/customer-send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode, draft: draftPayload(form) }),
@@ -527,7 +527,7 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
               <div style={{ fontSize: 18, fontWeight: 900 }}>{actionLabel}</div>
               <div style={{ marginTop: 10, color: C.ink2 }}>{error}</div>
               <div style={{ marginTop: 16 }}>
-                <Link href={`/crm/estimates/${estimateId}/v2/summary`} style={{ color: '#d7f3df', fontWeight: 800 }}>
+                <Link href={`/crm/quotes/${estimateId}/summary`} style={{ color: '#d7f3df', fontWeight: 800 }}>
                   Return to internal review
                 </Link>
               </div>
@@ -567,7 +567,7 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <StatusChip status={version?.status ?? 'draft'} />
               <Link
-                href={`/crm/estimates/${estimateId}/v2/summary`}
+                href={`/crm/quotes/${estimateId}/summary`}
                 style={{ ...secondaryButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
               >
                 Back to review

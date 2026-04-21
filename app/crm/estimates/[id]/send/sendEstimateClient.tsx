@@ -85,22 +85,22 @@ const templatePresets: TemplatePreset[] = [
   {
     key: 'default',
     label: 'Default',
-    subject: 'Your estimate is ready',
+    subject: 'Your quote is ready',
     body:
-      'Hello,\n\nYour estimate is ready. Please review the secure link below and let us know if you have any questions.\n\nThank you.',
+      'Hello,\n\nYour quote is ready. Please review the secure link below and let us know if you have any questions.\n\nThank you.',
   },
   {
     key: 'concise',
     label: 'Concise',
-    subject: 'Attached: estimate for your project',
-    body: 'Hello,\n\nYour estimate is ready for review.\n\nThank you.',
+    subject: 'Attached: quote for your project',
+    body: 'Hello,\n\nYour quote is ready for review.\n\nThank you.',
   },
   {
     key: 'friendly',
     label: 'Friendly',
-    subject: 'Here is your estimate',
+    subject: 'Here is your quote',
     body:
-      'Hello,\n\nIt was great talking with you. Your estimate is ready to review at the secure link below.\n\nPlease reach out if you want to discuss anything before you accept.',
+      'Hello,\n\nIt was great talking with you. Your quote is ready to review at the secure link below.\n\nPlease reach out if you want to discuss anything before you accept.',
   },
 ]
 
@@ -198,10 +198,10 @@ function buildDraftFromData(
     bcc_email: asText(draft.bcc_email),
     subject:
       asText(draft.subject) ||
-      `${asText(data.document.meta.title) || 'Estimate'} from ${asText(data.company.business_name) || 'ACE Painting'}`,
+      `${asText(data.document.meta.title) || 'Quote'} from ${asText(data.company.business_name) || 'ACE Painting'}`,
     body:
       asText(draft.body) ||
-      `Hello ${asText(data.document.customer.name) || 'there'},\n\nYour estimate is ready for review.\n\nThank you.`,
+      `Hello ${asText(data.document.customer.name) || 'there'},\n\nYour quote is ready for review.\n\nThank you.`,
     template_key: asText(draft.template_key) || 'default',
     title: asText(draft.title) || asText(data.document.meta.title),
     quote_validity_days: asText(draft.quote_validity_days) || String(data.document.quote_validity_days ?? 90),
@@ -224,7 +224,7 @@ function draftPayload(form: DraftState) {
 }
 
 function customerSendUrl(estimateId: string, catalogSource?: 'estimate' | 'v2') {
-  const url = `/api/estimates/${estimateId}/customer-send`
+  const url = `/api/quotes/${estimateId}/customer-send`
   return catalogSource === 'v2' ? `${url}?v2=1` : url
 }
 
@@ -308,7 +308,7 @@ export default function SendEstimateClient({
     const payload = await res.json().catch(() => null)
     if (!mountedRef.current) return false
     if (!res.ok) {
-      setError(payload?.error ?? 'Unable to load estimate send page')
+      setError(payload?.error ?? 'Unable to load quote send page')
       setLoading(false)
       return false
     }
@@ -495,12 +495,12 @@ export default function SendEstimateClient({
       : false
     if (hasUnsavedChanges) {
       const shouldDiscard = window.confirm(
-        'Reload the latest estimate data from the server? This will discard unsaved changes on this page.'
+        'Reload the latest quote data from the server? This will discard unsaved changes on this page.'
       )
       if (!shouldDiscard) return
     }
     await loadSendPage({ hard: true })
-    setMessage('Reloaded latest estimate data.')
+    setMessage('Reloaded latest quote data.')
   }
 
   const downloadPdf = () => {
@@ -539,7 +539,7 @@ export default function SendEstimateClient({
               <div style={{ fontSize: 18, fontWeight: 900 }}>{actionLabel}</div>
               <div style={{ marginTop: 10, color: C.ink2 }}>{error}</div>
               <div style={{ marginTop: 16 }}>
-                <Link href={`/crm/estimates/${estimateId}/v2/summary`} style={{ color: '#d7f3df', fontWeight: 800 }}>
+                <Link href={`/crm/quotes/${estimateId}/summary`} style={{ color: '#d7f3df', fontWeight: 800 }}>
                   Return to internal review
                 </Link>
               </div>
@@ -590,7 +590,7 @@ export default function SendEstimateClient({
                 Reload latest
               </button>
               <Link
-                href={`/crm/estimates/${estimateId}/v2/summary`}
+                href={`/crm/quotes/${estimateId}/summary`}
                 style={{
                   ...secondaryButton,
                   textDecoration: 'none',

@@ -272,7 +272,7 @@ describe('EstimateV2EditorPageContent', () => {
     expect(addRoom).toHaveBeenCalled()
     await waitFor(() => {
       expect(save).toHaveBeenCalled()
-      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/summary')
+      expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-1/summary')
     })
   })
 
@@ -289,7 +289,7 @@ describe('EstimateV2EditorPageContent', () => {
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
 
     expect(
-      screen.getByRole('status', { name: 'Loading estimate editor workspace' })
+      screen.getByRole('status', { name: 'Loading quote workspace' })
     ).toHaveTextContent('Loading workspace...')
     expect(screen.getByRole('alert')).toHaveTextContent('Failed to fetch estimate workspace')
   })

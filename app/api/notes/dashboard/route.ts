@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { getNotesSettingsWithDefaults } from '@/lib/notes/settings'
 import { partitionTasksForDashboard } from '@/lib/notes/reminders'
-import type { NotesNoteRow, NotesTaskRow } from '@/lib/notes/types'
+import type { NotesDashboardResponse, NotesNoteRow, NotesTaskRow } from '@/lib/notes/types'
 
 export async function GET() {
   const session = await getSessionUserOrg()
@@ -50,7 +50,7 @@ export async function GET() {
     const starred = notes.filter((row) => row.starred).slice(0, 6)
     const recent = notes.slice(0, 6)
 
-    return NextResponse.json({
+    return NextResponse.json<NotesDashboardResponse>({
       today: {
         timezone: defaults.timezone,
         date_key: grouped.dateKey,

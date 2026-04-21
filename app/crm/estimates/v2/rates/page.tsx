@@ -417,7 +417,7 @@ export default function RatesPage() {
   async function load(keepId?: string) {
     setLoading(true)
     setError(null)
-    const res = await authedFetch('/api/estimates/v2/rates-flags', {
+    const res = await authedFetch('/api/quotes/rates-flags', {
       cache: 'no-store',
     })
     const payload = (await res.json().catch(() => null)) as
@@ -506,7 +506,7 @@ export default function RatesPage() {
     if (!activeCategory) return false
     setSaving(true)
     setNotice(null)
-    const res = await authedFetch('/api/estimates/v2/rates-flags', {
+    const res = await authedFetch('/api/quotes/rates-flags', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -594,14 +594,14 @@ export default function RatesPage() {
     <div className="ace-v2-shell" style={S.page}>
       <header style={S.header}>
         <nav style={S.crumb}>
-          <Link href="/crm/estimates/v2" style={{ color: 'inherit', textDecoration: 'none' }}>
-            Estimator V2
+          <Link href="/crm/quotes" style={{ color: 'inherit', textDecoration: 'none' }}>
+            Quotes
           </Link>
           <span>/</span>
           <span style={{ color: 'var(--v2-ink-2)' }}>Rates, Flags &amp; Room Defaults</span>
         </nav>
-        <Link href="/crm/estimates/v2" style={S.back}>
-          {'<- Home'}
+        <Link href="/crm/quotes" style={S.back}>
+          {'<- Quotes'}
         </Link>
       </header>
 

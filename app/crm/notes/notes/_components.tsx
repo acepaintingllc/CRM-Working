@@ -1,9 +1,9 @@
 'use client'
 
+import type { NotesFolderWithCount, NotesNoteRow } from '@/lib/notes/types'
 import Link from 'next/link'
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { EllipsisVertical, FileText, Folder, FolderOpen, Star } from 'lucide-react'
-import type { FolderRow, NoteRow } from '../_lib'
 
 export type NotesBrowserStatus = 'active' | 'archived'
 
@@ -25,7 +25,7 @@ export function buildNotesHref(
   return query ? `${path}?${query}` : path
 }
 
-export function filterNotesBySearch(notes: NoteRow[], search: string) {
+export function filterNotesBySearch(notes: NotesNoteRow[], search: string) {
   const needle = search.trim().toLowerCase()
   if (!needle) return notes
   return notes.filter((note) => `${note.title} ${note.body}`.toLowerCase().includes(needle))
@@ -47,8 +47,8 @@ export function formatNoteTimestamp(iso: string) {
   })
 }
 
-export function groupNotesByFolder(notes: NoteRow[]) {
-  const map = new Map<string, NoteRow[]>()
+export function groupNotesByFolder(notes: NotesNoteRow[]) {
+  const map = new Map<string, NotesNoteRow[]>()
   for (const note of notes) {
     if (!note.folder_id) continue
     const existing = map.get(note.folder_id) ?? []
@@ -175,9 +175,9 @@ export function NotesToolbarLink(props: {
 }
 
 export function FolderTile(props: {
-  folder: FolderRow
+  folder: NotesFolderWithCount
   noteCount: number
-  latestNote: NoteRow | null
+  latestNote: NotesNoteRow | null
   selected: boolean
   manageMode: boolean
   canMoveUp: boolean
@@ -271,7 +271,7 @@ export function FolderTile(props: {
 }
 
 export function NotePreviewCard(props: {
-  note: NoteRow
+  note: NotesNoteRow
   selected: boolean
   onSelect: () => void
   onOpen: () => void

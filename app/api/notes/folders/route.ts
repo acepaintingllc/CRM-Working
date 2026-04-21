@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { readJsonBody } from '@/lib/server/apiRoute'
 import { asOptionalTrimmedText, asRecord } from '@/lib/notes/server'
-import type { NotesFolderRow } from '@/lib/notes/types'
+import type { NotesFolderResponse, NotesFolderRow, NotesFoldersResponse, NotesFolderWithCount } from '@/lib/notes/types'
 
 export async function GET() {
   const session = await getSessionUserOrg()
@@ -35,11 +35,11 @@ export async function GET() {
     countMap.set(folderId, (countMap.get(folderId) ?? 0) + 1)
   }
 
-  const folders = ((foldersRes.data ?? []) as NotesFolderRow[]).map((folder) => ({
+  const folders: NotesFolderWithCount[] = ((foldersRes.data ?? []) as NotesFolderRow[]).map((folder) => ({
     ...folder,
     note_count: countMap.get(folder.id) ?? 0,
   }))
-  return NextResponse.json({ folders })
+  return NextResponse.json<NotesFoldersResponse>({ folders })
 }
 
 export async function POST(request: Request) {
@@ -90,5 +90,5 @@ export async function POST(request: Request) {
       : 'Unable to create folder.'
     return NextResponse.json({ error: message }, { status: 400 })
   }
-  return NextResponse.json({ ok: true, folder: insert.data as NotesFolderRow })
+  return NextResponse.json<NotesFolderResponse>({ ok: true, folder: insert.data as NotesFolderRow })
 }

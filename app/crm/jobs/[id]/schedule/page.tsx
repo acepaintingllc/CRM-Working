@@ -1,26 +1,40 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-import StageEmailModal, {
-  stageEmailActionLabel,
-  type StageEmailStage,
-  type StageEmailSentResult,
-} from '@/app/crm/jobs/_components/StageEmailModal'
-
-import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, CalendarCheck, CalendarClock, Mail, Trash2 } from 'lucide-react'
-
-type ScheduleRow = {
-  id: string
-  start_at: string
-  end_at: string
-  notes: string | null
-  calendar_event_id: string | null
-  calendar_added_at: string | null
-}
+import StageEmailModal, {
+  stageEmailActionLabel,
+  type StageEmailSentResult,
+  type StageEmailStage,
+} from '@/app/crm/jobs/_components/StageEmailModal'
+import { authedFetch } from '@/lib/auth/authedFetch'
+import {
+  addScheduleRow,
+  deleteScheduleRow,
+  fetchJobDetail,
+  fetchJobSchedules,
+  getResponseErrorMessage,
+  parseResponseBody,
+  type JobScheduleMeta,
+  type ScheduleRow,
+} from '@/lib/jobs/actions'
+import {
+  addLocalDateTimeHours,
+  next8amLocalDateTimeValue,
+  toIsoFromLocalDateTimeValue,
+} from '@/lib/jobs/dateHelpers'
+import {
+  jobsButtonAccentClassName,
+  jobsButtonDangerClassName,
+  jobsButtonSecondaryClassName,
+  jobsCardClassName,
+  jobsInputClassName,
+  jobsLabelClassName,
+  jobsPageShellClassName,
+} from '@/lib/jobs/uiClasses'
 
 type CalendarAddResult = {
   scheduleId: string
@@ -28,34 +42,12 @@ type CalendarAddResult = {
   skipped?: boolean
 }
 
-type JobScheduleMeta = {
-  scheduled_email_sent_at?: string | null
-}
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-
-function toLocalInputValue(d: Date) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(
-    d.getHours()
-  )}:${pad2(d.getMinutes())}`
-}
-
-function next8amLocalValue() {
-  const now = new Date()
-  const next = new Date(now)
-  if (now.getHours() >= 8) next.setDate(next.getDate() + 1)
-  next.setHours(8, 0, 0, 0)
-  return toLocalInputValue(next)
-}
-
 const iconSizeSm = 16
 const iconSizeMd = 18
 
 function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+    <span className="inline-flex items-center gap-1.5">
       <Icon size={size} aria-hidden="true" />
       <span>{label}</span>
     </span>
@@ -75,17 +67,14 @@ export default function JobSchedulePage() {
   const [addingCalendar, setAddingCalendar] = useState(false)
   const [jobMeta, setJobMeta] = useState<JobScheduleMeta | null>(null)
   const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
-
   const [startLocal, setStartLocal] = useState('')
   const [endLocal, setEndLocal] = useState('')
   const [notes, setNotes] = useState('')
 
   const loadJobMeta = async () => {
     if (!id || typeof id !== 'string') return null
-    const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) return null
-    const nextMeta = (payload?.job ?? null) as JobScheduleMeta | null
+    const detail = await fetchJobDetail(id).catch(() => null)
+    const nextMeta = (detail?.job ?? null) as JobScheduleMeta | null
     setJobMeta(nextMeta)
     return nextMeta
   }
@@ -95,21 +84,13 @@ export default function JobSchedulePage() {
     const load = async () => {
       setLoading(true)
       setError(null)
-      const [scheduleRes, jobRes] = await Promise.all([
-        authedFetch(`/api/jobs/${id}/schedules`, { cache: 'no-store' }),
-        authedFetch(`/api/jobs/${id}`, { cache: 'no-store' }),
-      ])
-      const schedulePayload = await scheduleRes.json().catch(() => null)
-      const jobPayload = await jobRes.json().catch(() => null)
-      if (!scheduleRes.ok) {
-        setError(schedulePayload?.error ?? scheduleRes.statusText)
+      try {
+        const [schedules, detail] = await Promise.all([fetchJobSchedules(id), fetchJobDetail(id)])
+        setRows(schedules)
+        setJobMeta((detail.job ?? null) as JobScheduleMeta | null)
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load schedule.')
         setRows([])
-        setLoading(false)
-        return
-      }
-      setRows(schedulePayload?.schedules ?? [])
-      if (jobRes.ok) {
-        setJobMeta((jobPayload?.job ?? null) as JobScheduleMeta | null)
       }
       setLoading(false)
     }
@@ -117,13 +98,8 @@ export default function JobSchedulePage() {
   }, [id])
 
   useEffect(() => {
-    if (!startLocal) setStartLocal(next8amLocalValue())
-    if (!endLocal) {
-      const start = startLocal ? new Date(startLocal) : new Date(next8amLocalValue())
-      const end = new Date(start)
-      end.setHours(end.getHours() + 8)
-      setEndLocal(toLocalInputValue(end))
-    }
+    if (!startLocal) setStartLocal(next8amLocalDateTimeValue())
+    if (!endLocal) setEndLocal(addLocalDateTimeHours(startLocal, 8))
   }, [startLocal, endLocal])
 
   const addSchedule = async () => {
@@ -132,33 +108,34 @@ export default function JobSchedulePage() {
       setError('Start and end are required')
       return
     }
-    const startIso = new Date(startLocal).toISOString()
-    const endIso = new Date(endLocal).toISOString()
-    if (Number.isNaN(new Date(startIso).getTime()) || Number.isNaN(new Date(endIso).getTime())) {
+    const startIso = toIsoFromLocalDateTimeValue(startLocal)
+    const endIso = toIsoFromLocalDateTimeValue(endLocal)
+    if (!startIso || !endIso) {
       setError('Invalid date/time')
       return
     }
     const hadNoSchedules = rows.length === 0
     setSaving(true)
     setError(null)
-    const res = await authedFetch(`/api/jobs/${id}/schedules`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ start_at: startIso, end_at: endIso, notes: notes.trim() || null }),
-    })
-    const payload = await res.json().catch(() => null)
-    setSaving(false)
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
-      return
-    }
-    setRows((prev) => [payload.schedule, ...prev])
-    setNotes('')
-    if (hadNoSchedules) {
-      const refreshedJob = await loadJobMeta()
-      if (refreshedJob && !refreshedJob.scheduled_email_sent_at) {
-        setEmailStage('scheduled')
+    try {
+      const schedule = await addScheduleRow(id, {
+        start_at: startIso,
+        end_at: endIso,
+        notes: notes.trim() || null,
+      })
+      if (schedule) setRows((prev) => [schedule, ...prev])
+      setNotes('')
+      if (hadNoSchedules) {
+        const refreshedJob = await loadJobMeta()
+        if (refreshedJob && !refreshedJob.scheduled_email_sent_at) {
+          setEmailStage('scheduled')
+        }
       }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to add schedule block.')
+      return
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -166,39 +143,41 @@ export default function JobSchedulePage() {
     if (!id || typeof id !== 'string') return
     const ok = window.confirm('Delete this scheduled block?')
     if (!ok) return
-    const res = await authedFetch(`/api/jobs/${id}/schedules/${scheduleId}`, { method: 'DELETE' })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
-      return
+    try {
+      await deleteScheduleRow(id, scheduleId)
+      setRows((prev) => prev.filter((row) => row.id !== scheduleId))
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete schedule block.')
     }
-    setRows((prev) => prev.filter((r) => r.id !== scheduleId))
   }
 
-  const sorted = useMemo(() => {
-    return [...rows].sort((a, b) => a.start_at.localeCompare(b.start_at))
-  }, [rows])
+  const sorted = useMemo(() => [...rows].sort((a, b) => a.start_at.localeCompare(b.start_at)), [rows])
 
   const addToCalendar = async () => {
-    if (!sorted.length) {
+    if (!sorted.length || !id || typeof id !== 'string') {
       setError('Add at least one scheduled block first.')
       return
     }
     setAddingCalendar(true)
     setError(null)
     const res = await authedFetch(`/api/jobs/${id}/schedules/add-to-calendar`, { method: 'POST' })
-    const payload = await res.json().catch(() => null)
+    const payload = await parseResponseBody(res)
     setAddingCalendar(false)
     if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
+      setError(getResponseErrorMessage(res, payload))
       return
     }
-    if (payload?.events) {
+    const events = ((payload.json as { events?: CalendarAddResult[] } | null)?.events ?? []) as CalendarAddResult[]
+    if (events.length) {
       setRows((prev) =>
         prev.map((row) => {
-          const found = (payload.events as CalendarAddResult[]).find((e) => e.scheduleId === row.id)
+          const found = events.find((event) => event.scheduleId === row.id)
           if (!found || found.skipped) return row
-          return { ...row, calendar_event_id: found.eventId ?? row.calendar_event_id, calendar_added_at: new Date().toISOString() }
+          return {
+            ...row,
+            calendar_event_id: found.eventId ?? row.calendar_event_id,
+            calendar_added_at: new Date().toISOString(),
+          }
         })
       )
     }
@@ -207,10 +186,6 @@ export default function JobSchedulePage() {
   const openScheduledEmail = () => {
     setError(null)
     setEmailStage('scheduled')
-  }
-
-  const closeStageEmail = () => {
-    setEmailStage(null)
   }
 
   const handleStageEmailSent = (result: StageEmailSentResult) => {
@@ -223,70 +198,64 @@ export default function JobSchedulePage() {
   }
 
   return (
-    <div className="crm-page" style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div className="crm-topbar" style={{ marginBottom: 12 }}>
+    <div className={`${jobsPageShellClassName} max-w-[900px]`}>
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <div style={{ fontSize: 20, fontWeight: 800 }}>Schedule job</div>
-          <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>
+          <div className="text-[20px] font-extrabold">Schedule job</div>
+          <div className="text-xs text-[var(--crm-muted)]">
             Add one or more scheduled date ranges for this job.
           </div>
         </div>
-        <div className="crm-actions">
-          <Link href={`/crm/jobs/${id}`} style={{ ...actionButton, textDecoration: 'none' }}>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/crm/jobs/${id}`}
+            className={`${jobsButtonSecondaryClassName} no-underline`}
+          >
             {iconLabel(ArrowLeft, 'Back to job', iconSizeMd)}
           </Link>
         </div>
       </div>
 
-      <div className="crm-card" style={{ borderRadius: 12, padding: 14 }}>
-        <div style={{ display: 'grid', gap: 10 }}>
-          <div className="crm-columns" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div className={jobsCardClassName}>
+        <div className="grid gap-2.5">
+          <div className="grid gap-2.5 md:grid-cols-2">
             <div>
-              <div style={label}>Start</div>
+              <div className={jobsLabelClassName}>Start</div>
               <input
                 type="datetime-local"
                 value={startLocal}
-                onChange={(e) => setStartLocal(e.target.value)}
-                style={inputStyle}
+                onChange={(event) => setStartLocal(event.target.value)}
+                className={jobsInputClassName}
               />
             </div>
             <div>
-              <div style={label}>End</div>
+              <div className={jobsLabelClassName}>End</div>
               <input
                 type="datetime-local"
                 value={endLocal}
-                onChange={(e) => setEndLocal(e.target.value)}
-                style={inputStyle}
+                onChange={(event) => setEndLocal(event.target.value)}
+                className={jobsInputClassName}
               />
             </div>
           </div>
 
           <div>
-            <div style={label}>Notes (optional)</div>
+            <div className={jobsLabelClassName}>Notes (optional)</div>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(event) => setNotes(event.target.value)}
               placeholder="Crew, materials, access notes, etc."
-              style={{ ...inputStyle, height: 90, resize: 'vertical' }}
+              className={`${jobsInputClassName} min-h-[90px] resize-y`}
             />
           </div>
 
-          {error && <div style={{ color: '#b91c1c', fontSize: 14 }}>{error}</div>}
-          {notice && <div style={{ color: '#15803d', fontSize: 14 }}>{notice}</div>}
+          {error && <div className="text-sm text-red-700">{error}</div>}
+          {notice && <div className="text-sm text-green-700">{notice}</div>}
 
           <button
             onClick={() => void addSchedule()}
             disabled={saving}
-            style={{
-              padding: '12px',
-              borderRadius: 10,
-              background: 'var(--crm-accent)',
-              color: 'var(--crm-accent-text)',
-              border: 'none',
-              fontWeight: 800,
-              cursor: 'pointer',
-              opacity: saving ? 0.6 : 1,
-            }}
+            className={jobsButtonAccentClassName}
           >
             {saving
               ? iconLabel(CalendarClock, 'Saving...')
@@ -295,52 +264,32 @@ export default function JobSchedulePage() {
         </div>
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        {loading && <div style={{ color: 'var(--crm-muted)' }}>Loading schedule...</div>}
+      <div className="mt-3.5">
+        {loading && <div className="text-[var(--crm-muted)]">Loading schedule...</div>}
         {!loading && sorted.length === 0 && (
-          <div style={{ color: 'var(--crm-muted)' }}>No schedule blocks yet.</div>
+          <div className="text-[var(--crm-muted)]">No schedule blocks yet.</div>
         )}
         {!loading && sorted.length > 0 && (
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div className="grid gap-2">
             {sorted.map((row) => (
               <div
                 key={row.id}
-                style={{
-                  background: 'var(--crm-card)',
-                  border: '1px solid var(--crm-border-soft)',
-                  borderRadius: 12,
-                  padding: 12,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                }}
+                className="flex justify-between gap-3 rounded-xl border border-[var(--crm-border-soft)] bg-[var(--crm-card)] p-3"
               >
                 <div>
-                  <div style={{ fontWeight: 800 }}>
+                  <div className="font-extrabold">
                     {new Date(row.start_at).toLocaleString()} - {new Date(row.end_at).toLocaleString()}
                   </div>
                   {row.notes && (
-                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--crm-muted)' }}>{row.notes}</div>
+                    <div className="mt-1 text-[13px] text-[var(--crm-muted)]">{row.notes}</div>
                   )}
                   {row.calendar_event_id && (
-                    <div style={{ marginTop: 4, fontSize: 12, color: '#16a34a', fontWeight: 700 }}>
-                      Added to calendar
-                    </div>
+                    <div className="mt-1 text-xs font-bold text-green-600">Added to calendar</div>
                   )}
                 </div>
                 <button
                   onClick={() => void deleteSchedule(row.id)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 10,
-                    border: '1px solid #fecaca',
-                    background: '#fee2e2',
-                    color: '#991b1b',
-                    fontWeight: 700,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    height: 'fit-content',
-                  }}
+                  className={jobsButtonDangerClassName}
                 >
                   {iconLabel(Trash2, 'Delete')}
                 </button>
@@ -349,84 +298,42 @@ export default function JobSchedulePage() {
           </div>
         )}
         {!loading && sorted.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <div className="crm-actions">
+          <div className="mt-2.5">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => void addToCalendar()}
                 disabled={addingCalendar}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: 'var(--crm-accent)',
-                  color: 'var(--crm-accent-text)',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  opacity: addingCalendar ? 0.7 : 1,
-                }}
+                className={jobsButtonAccentClassName}
               >
                 {addingCalendar
                   ? iconLabel(CalendarCheck, 'Adding to calendar...')
                   : iconLabel(CalendarCheck, 'Add scheduled blocks to Google Calendar')}
               </button>
-              <Link
-                href="#"
-                onClick={(event) => {
-                  event.preventDefault()
-                  openScheduledEmail()
-                }}
-                style={{
-                  ...actionButton,
-                  textDecoration: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  background: jobMeta?.scheduled_email_sent_at ? 'white' : '#111',
-                  border: jobMeta?.scheduled_email_sent_at ? '1px solid #d1d5db' : '1px solid #111',
-                  color: jobMeta?.scheduled_email_sent_at ? '#111' : 'white',
-                }}
+              <button
+                onClick={openScheduledEmail}
+                className={
+                  jobMeta?.scheduled_email_sent_at
+                    ? jobsButtonSecondaryClassName
+                    : 'inline-flex items-center gap-1.5 rounded-[10px] border border-[#111] bg-[#111] px-3 py-2 text-sm font-extrabold text-white transition hover:opacity-95'
+                }
               >
-                {iconLabel(Mail, stageEmailActionLabel('scheduled', Boolean(jobMeta?.scheduled_email_sent_at)))}
-              </Link>
+                {iconLabel(
+                  Mail,
+                  stageEmailActionLabel('scheduled', Boolean(jobMeta?.scheduled_email_sent_at))
+                )}
+              </button>
             </div>
           </div>
         )}
       </div>
+
       <StageEmailModal
         jobId={typeof id === 'string' ? id : null}
         stage={emailStage}
         open={emailStage != null}
-        onClose={closeStageEmail}
+        onClose={() => setEmailStage(null)}
         onSent={handleStageEmailSent}
       />
     </div>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: '12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border)',
-  fontSize: 14,
-  width: '100%',
-}
-
-const actionButton: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border-soft)',
-  background: 'var(--crm-card)',
-  color: 'var(--crm-text)',
-  fontWeight: 800,
-  fontSize: 14,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-}
-
-const label: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: 'var(--crm-muted)',
-  textTransform: 'uppercase',
-  marginBottom: 6,
 }

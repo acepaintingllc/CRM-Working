@@ -1,42 +1,10 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { readJsonBody } from '@/lib/server/apiRoute'
+import { syncJobScheduleRange } from '@/lib/server/jobScheduleSync'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-function isMissingJobsColumnError(message: string, column: string) {
-  return (
-    message.includes(`Could not find the '${column}' column of 'jobs' in the schema cache`) ||
-    message.includes(`column "${column}" of relation "jobs" does not exist`)
-  )
-}
-
-async function updateJobScheduleRangeCompat(
-  orgId: string,
-  jobId: string,
-  payload: { status: string; scheduled_date: string | null; scheduled_end_date: string | null }
-) {
-  const first = await supabaseAdmin
-    .from('jobs')
-    .update(payload)
-    .eq('org_id', orgId)
-    .eq('id', jobId)
-
-  if (!first.error) return first
-  if (!isMissingJobsColumnError(first.error.message ?? '', 'scheduled_end_date')) return first
-
-  const retryPayload = {
-    status: payload.status,
-    scheduled_date: payload.scheduled_date,
-  }
-
-  return supabaseAdmin
-    .from('jobs')
-    .update(retryPayload)
-    .eq('org_id', orgId)
-    .eq('id', jobId)
-}
 
 export async function GET(
   _request: Request,
@@ -116,30 +84,8 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const { data: allRows, error: allRowsErr } = await supabaseAdmin
-    .from('job_schedules')
-    .select('start_at, end_at')
-    .eq('org_id', orgId)
-    .eq('job_id', jobId)
-
-  if (allRowsErr) return NextResponse.json({ error: allRowsErr.message }, { status: 500 })
-
-  const starts = (allRows ?? [])
-    .map((r) => r.start_at)
-    .filter((v): v is string => typeof v === 'string')
-    .sort()
-  const ends = (allRows ?? [])
-    .map((r) => r.end_at)
-    .filter((v): v is string => typeof v === 'string')
-    .sort()
-
-  const scheduledDate = starts[0] ?? startAt
-  const scheduledEndDate = ends[ends.length - 1] ?? endAt
-
-  const { error: updateErr } = await updateJobScheduleRangeCompat(orgId, jobId, {
-    status: 'scheduled',
-    scheduled_date: scheduledDate,
-    scheduled_end_date: scheduledEndDate,
+  const { error: updateErr } = await syncJobScheduleRange(orgId, jobId, {
+    statusWhenSchedulesExist: 'scheduled',
   })
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })

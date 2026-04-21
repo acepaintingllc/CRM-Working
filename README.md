@@ -81,34 +81,9 @@ Backfill summary view:
 
 - `public.v_job_photo_backfill_report`
 
-## Google Estimate Sheets
-
-To enable “Create estimate sheet” (copies a Google Sheets template and autofills customer/job fields), set:
-- `GOOGLE_SHEETS_ESTIMATE_V2_TEMPLATE_ID` (v2 estimator template; if unset, falls back to existing estimate template vars)
-- `GOOGLE_SHEETS_ESTIMATES_TEMPLATE_ID` (existing estimates template var; used as fallback for v2)
-
-- `GOOGLE_SHEETS_ESTIMATE_TEMPLATE_ID` (Spreadsheet file ID from `/d/<ID>/edit`)
-- `GOOGLE_DRIVE_ESTIMATE_SHEETS_FOLDER_ID` (Destination folder for new sheet copies)
-  - If unset, the app falls back to `GOOGLE_DRIVE_ESTIMATES_FOLDER_ID`.
-
-### Template setup (named ranges)
-
-In your template spreadsheet, keep labels like “Customer Name” as normal text. The app fills **cells that have Named ranges**:
-
-- `customer_name` (required)
-- `customer_address` (required)
-
-Optional (filled only if you create these named ranges):
-
-- `customer_email`, `customer_phone`
-- `job_title`, `job_description`, `estimate_date`, `job_id`
-- `customer_street`, `customer_city`, `customer_state`, `customer_zip`
-
-To create a named range: select the value cell (e.g. `B4`) → **Data → Named ranges** → name it (e.g. `customer_name`).
-
 If you previously connected Google before these scopes were added, go to `/crm/calendar` and:
 
-1) Disconnect  
+1) Disconnect
 2) Connect Google again
 
 ## Learn More

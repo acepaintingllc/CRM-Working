@@ -182,7 +182,6 @@ export type RatesFlagsPayload = {
   source: 'db' | 'sheet'
   seeded: boolean
   template_version: number | null
-  spreadsheet_id?: string
   schema_version?: string
   categories: RatesFlagsCategory[]
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { loadCrmHomeData } from '../home/loader.ts'
-import { createLoadingCrmHomeLoadState } from '../home/state.ts'
+import { loadCrmHomeData, loadCrmHomeSources } from '../home/loader.ts'
+import { applyCrmHomeSourcePatch, createInitialCrmHomeLoadState } from '../home/state.ts'
 import type { CrmHomeFetchResponse, CrmHomeSourceErrorKey } from '../home/types.ts'
 
 type FetchMap = Partial<Record<CrmHomeSourceErrorKey, Omit<CrmHomeFetchResponse, 'source'>>>
@@ -111,12 +111,13 @@ test('loadCrmHomeData resolves successful source data into a ready home state', 
     },
   })
 
-  assert.equal(state.hasCriticalError, false)
-  assert.equal(state.hasWarnings, false)
+  assert.equal(state.summary.hasCriticalError, false)
+  assert.equal(state.summary.hasWarnings, false)
   assert.equal(state.data.metrics.salesTotal, 1200)
   assert.equal(state.data.signals.calendarConnected, true)
   assert.equal(state.data.signals.calendarTodayEvents.length, 1)
   assert.equal(state.data.signals.notesReminders.length, 1)
+  assert.equal(state.sources.jobs.availability, 'available')
   assert.equal(calls.some((call) => call.source === 'calendarEvents'), true)
   assert.deepEqual(logCalls, [])
 })
@@ -153,9 +154,10 @@ test('loadCrmHomeData treats jobs failure as a critical dashboard error', async 
     logError: () => undefined,
   })
 
-  assert.equal(state.hasCriticalError, true)
-  assert.equal(state.hasWarnings, false)
-  assert.equal(state.errorsBySource.jobs, 'Jobs failed')
+  assert.equal(state.summary.hasCriticalError, true)
+  assert.equal(state.summary.hasWarnings, false)
+  assert.equal(state.sources.jobs.availability, 'unavailable')
+  assert.equal(state.sources.jobs.errorMessage, 'Jobs failed')
 })
 
 test('loadCrmHomeData treats customers and notes failures as warnings only', async () => {
@@ -201,10 +203,11 @@ test('loadCrmHomeData treats customers and notes failures as warnings only', asy
     logError: () => undefined,
   })
 
-  assert.equal(state.hasCriticalError, false)
-  assert.equal(state.hasWarnings, true)
-  assert.equal(state.errorsBySource.customers, 'Customers failed')
-  assert.equal(state.errorsBySource.notes, 'Notes failed')
+  assert.equal(state.summary.hasCriticalError, false)
+  assert.equal(state.summary.hasWarnings, true)
+  assert.deepEqual(state.summary.warningSources, ['customers', 'notes'])
+  assert.equal(state.sources.customers.availability, 'unavailable')
+  assert.equal(state.sources.notes.availability, 'unavailable')
 })
 
 test('loadCrmHomeData logs malformed payloads and skips calendar events when disconnected', async () => {
@@ -245,38 +248,48 @@ test('loadCrmHomeData logs malformed payloads and skips calendar events when dis
   })
 
   assert.equal(calls.some((call) => call.source === 'calendarEvents'), false)
-  assert.equal(state.hasWarnings, true)
+  assert.equal(state.summary.hasWarnings, true)
+  assert.equal(state.sources.calendarEvents.availability, 'missing')
   assert.deepEqual(logCalls, [
     { source: 'customers', message: 'Malformed customers response.' },
     { source: 'notes', message: 'Malformed notes dashboard response.' },
   ])
 })
 
-test('reload path clears stale errors before a new successful resolution', async () => {
-  const erroredState = await loadCrmHomeData({
+test('loadCrmHomeSources marks malformed payloads invalid and keeps partial refresh scoped', async () => {
+  const patch = await loadCrmHomeSources(
+    {
+      now: new Date('2026-04-21T12:00:00.000Z'),
+      fetchJson: createFetchJsonStub(
+        {
+          notes: {
+            ok: true,
+            payload: { nope: true },
+            errorMessage: null,
+          },
+        },
+        []
+      ),
+      readSelectedCalendarIds: () => null,
+      logError: () => undefined,
+    },
+    ['notes']
+  )
+
+  assert.equal(patch.notes?.source.availability, 'invalid')
+  assert.equal(patch.notes?.source.status, 'degraded')
+  assert.equal(patch.jobs, undefined)
+})
+
+test('partial refresh updates only requested sources and calendar dependencies', async () => {
+  const initial = await loadCrmHomeData({
     now: new Date('2026-04-21T12:00:00.000Z'),
     fetchJson: createFetchJsonStub(
       {
-        jobs: {
-          ok: false,
-          payload: { error: 'Jobs failed' },
-          errorMessage: 'Jobs failed',
-        },
-        customers: {
-          ok: true,
-          payload: { customers: [] },
-          errorMessage: null,
-        },
-        calendarStatus: {
-          ok: true,
-          payload: { connected: false },
-          errorMessage: null,
-        },
-        notes: {
-          ok: true,
-          payload: { tasks: { overdue: [], due_today: [] } },
-          errorMessage: null,
-        },
+        jobs: { ok: true, payload: { jobs: [] }, errorMessage: null },
+        customers: { ok: true, payload: { customers: [] }, errorMessage: null },
+        calendarStatus: { ok: true, payload: { connected: false }, errorMessage: null },
+        notes: { ok: true, payload: { tasks: { overdue: [], due_today: [] } }, errorMessage: null },
       },
       []
     ),
@@ -284,40 +297,32 @@ test('reload path clears stale errors before a new successful resolution', async
     logError: () => undefined,
   })
 
-  const loadingState = createLoadingCrmHomeLoadState(erroredState.data, true)
-  assert.deepEqual(loadingState.errorsBySource, {})
+  const calls: Array<{ source: CrmHomeSourceErrorKey; url: string }> = []
+  const patch = await loadCrmHomeSources(
+    {
+      now: new Date('2026-04-21T12:05:00.000Z'),
+      fetchJson: createFetchJsonStub(
+        {
+          calendarStatus: { ok: true, payload: { connected: true }, errorMessage: null },
+          calendarEvents: { ok: true, payload: { events: [] }, errorMessage: null },
+        },
+        calls
+      ),
+      readSelectedCalendarIds: () => ['primary'],
+      logError: () => undefined,
+    },
+    ['calendarEvents']
+  )
 
-  const recoveredState = await loadCrmHomeData({
-    now: new Date('2026-04-21T12:00:00.000Z'),
-    fetchJson: createFetchJsonStub(
-      {
-        jobs: {
-          ok: true,
-          payload: { jobs: [] },
-          errorMessage: null,
-        },
-        customers: {
-          ok: true,
-          payload: { customers: [] },
-          errorMessage: null,
-        },
-        calendarStatus: {
-          ok: true,
-          payload: { connected: false },
-          errorMessage: null,
-        },
-        notes: {
-          ok: true,
-          payload: { tasks: { overdue: [], due_today: [] } },
-          errorMessage: null,
-        },
-      },
-      []
-    ),
-    readSelectedCalendarIds: () => null,
-    logError: () => undefined,
-  })
+  const refreshed = applyCrmHomeSourcePatch(
+    initial,
+    patch,
+    new Date('2026-04-21T12:05:00.000Z')
+  )
 
-  assert.deepEqual(recoveredState.errorsBySource, {})
-  assert.equal(recoveredState.hasCriticalError, false)
+  assert.equal(calls.some((call) => call.source === 'jobs'), false)
+  assert.equal(calls.some((call) => call.source === 'calendarStatus'), true)
+  assert.equal(calls.some((call) => call.source === 'calendarEvents'), true)
+  assert.equal(refreshed.sources.calendarStatus.availability, 'available')
+  assert.equal(refreshed.sources.calendarEvents.availability, 'available')
 })

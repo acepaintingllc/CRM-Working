@@ -46,14 +46,13 @@ function buildConnectResponse(params: {
   authUrl.searchParams.set('access_type', 'offline')
   authUrl.searchParams.set('prompt', 'consent')
   authUrl.searchParams.set('include_granted_scopes', 'true')
-  // Calendar + Drive (estimate PDFs + estimate sheets) + Sheets write + Gmail send + Apps Script run.
+  // Calendar + Drive (estimate PDFs) + Gmail send + Apps Script run.
   // Using broad scopes to avoid "insufficient authentication scopes" errors.
   authUrl.searchParams.set(
     'scope',
     [
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/drive',
-      'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/script.projects',
     ].join(' ')

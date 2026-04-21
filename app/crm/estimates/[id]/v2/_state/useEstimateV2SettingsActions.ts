@@ -19,7 +19,7 @@ export function useEstimateV2SettingsActions(params: {
         if (policySaveTimerRef.current) clearTimeout(policySaveTimerRef.current)
         policySaveTimerRef.current = setTimeout(async () => {
           if (!estimateId) return
-          await authedFetch(`/api/estimates/${estimateId}`, {
+          await authedFetch(`/api/quotes/${estimateId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

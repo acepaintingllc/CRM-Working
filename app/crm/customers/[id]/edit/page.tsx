@@ -1,9 +1,17 @@
 'use client'
 
+import { CustomerForm } from '@/app/crm/customers/_components/CustomerForm'
+import { readJsonResponse } from '@/app/crm/customers/_lib/http'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import {
+  customerRecordToFormValues,
+  type CustomerFormValues,
+  type CustomerLegacyAddressCleanup,
+} from '@/lib/customers/forms'
+import type { CustomerDetail, UpdateCustomerInput } from '@/lib/customers/types'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Save, UserRoundCog, X } from 'lucide-react'
+import { ArrowLeft, UserRoundCog } from 'lucide-react'
 
 function safeReturnPath(value: string | null, id: string | undefined) {
   if (!value) return id ? `/crm/customers/${id}` : '/crm/customers'
@@ -23,13 +31,9 @@ export default function EditCustomerPage() {
   )
 
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [address, setAddress] = useState('')
+  const [initialValues, setInitialValues] = useState<CustomerFormValues | null>(null)
+  const [legacyAddressCleanup, setLegacyAddressCleanup] = useState<CustomerLegacyAddressCleanup | null>(null)
 
   useEffect(() => {
     let ignore = false
@@ -43,10 +47,11 @@ export default function EditCustomerPage() {
 
       setErr(null)
       setLoading(true)
-      const res = await authedFetch(`/api/customers/${id}`, { cache: 'no-store' })
-      const payload = await res.json().catch(() => null)
 
-      if (!res.ok) {
+      const response = await authedFetch(`/api/customers/${id}`, { cache: 'no-store' })
+      const payload = await readJsonResponse<{ customer?: CustomerDetail; error?: string }>(response)
+
+      if (!response.ok) {
         if (!ignore) {
           setErr(payload?.error ?? 'Failed to load customer.')
           setLoading(false)
@@ -55,11 +60,17 @@ export default function EditCustomerPage() {
       }
 
       const customer = payload?.customer ?? null
+      const formValues = customer ? customerRecordToFormValues(customer) : null
+
       if (!ignore) {
-        setName(customer?.name ?? '')
-        setPhone(customer?.phone ?? '')
-        setEmail(customer?.email ?? '')
-        setAddress(customer?.address ?? '')
+        if (formValues && !formValues.ok) {
+          setErr(formValues.error)
+          setInitialValues(null)
+          setLegacyAddressCleanup(null)
+        } else {
+          setInitialValues(formValues?.value.values ?? null)
+          setLegacyAddressCleanup(formValues?.value.legacyAddressCleanup ?? null)
+        }
         setLoading(false)
       }
     }
@@ -70,42 +81,34 @@ export default function EditCustomerPage() {
     }
   }, [id])
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setErr(null)
-
+  async function patchCustomer(values: CustomerFormValues) {
     if (!id || typeof id !== 'string') {
-      setErr('Missing customer id.')
-      return
-    }
-    if (!name.trim()) {
-      setErr('Name is required.')
-      return
+      throw new Error('Missing customer id.')
     }
 
-    try {
-      setSaving(true)
-      const res = await authedFetch(`/api/customers/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          phone: phone.trim() || null,
-          email: email.trim() || null,
-          address: address.trim() || null,
-        }),
-      })
-
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(payload?.error ?? 'Failed to update customer.')
-
-      router.push(returnPath)
-      router.refresh()
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'Failed to update customer.')
-    } finally {
-      setSaving(false)
+    const payload: UpdateCustomerInput = {
+      name: values.name,
+      phone: values.phone || null,
+      email: values.email || null,
+      street: values.street || null,
+      city: values.city || null,
+      state: values.state || null,
+      zip: values.zip || null,
+      notes: null,
     }
+
+    const response = await authedFetch(`/api/customers/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    const result = await readJsonResponse<{ error?: string }>(response)
+    if (!response.ok) {
+      throw new Error(result?.error ?? 'Failed to update customer.')
+    }
+
+    router.push(returnPath)
   }
 
   return (
@@ -128,48 +131,15 @@ export default function EditCustomerPage() {
       {err && <div className="text-red-600">{err}</div>}
       {loading && <div className="text-sm text-gray-600">Loading customer...</div>}
 
-      {!loading && (
-        <form onSubmit={onSubmit} className="space-y-3">
-          <div>
-            <label className="text-sm">Name *</label>
-            <input className="border rounded-md w-full p-2" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm">Phone</label>
-              <input className="border rounded-md w-full p-2" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-sm">Email</label>
-              <input className="border rounded-md w-full p-2" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm">Address</label>
-            <input className="border rounded-md w-full p-2" value={address} onChange={(e) => setAddress(e.target.value)} />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-black text-white px-3 py-2 text-sm disabled:opacity-50 inline-flex items-center gap-2"
-            >
-              <Save size={16} aria-hidden="true" />
-              <span>{saving ? 'Saving...' : 'Save changes'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push(returnPath)}
-              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm inline-flex items-center gap-2"
-            >
-              <X size={16} aria-hidden="true" />
-              <span>Cancel</span>
-            </button>
-          </div>
-        </form>
+      {!loading && initialValues && (
+        <CustomerForm
+          initialValues={initialValues}
+          legacyAddressCleanup={legacyAddressCleanup}
+          onSubmit={patchCustomer}
+          submitLabel="Save changes"
+          submittingLabel="Saving..."
+          onCancel={() => router.push(returnPath)}
+        />
       )}
     </div>
   )

@@ -12,18 +12,18 @@ export async function loadPublicEstimateByToken(token: string, origin?: string) 
     .eq('public_token', token)
     .maybeSingle()
   if (versionRes.error) return { error: versionRes.error.message } as const
-  if (!versionRes.data) return { error: 'Estimate not found' } as const
+  if (!versionRes.data) return { error: 'Quote not found' } as const
 
   const version = versionRes.data as Unsafe
   const snapshot = (version.snapshot_json ?? {}) as Record<string, unknown>
   const document = (snapshot.document ?? null) as EstimatePublicSnapshot['document'] | null
-  if (!document) return { error: 'Estimate snapshot missing' } as const
+  if (!document) return { error: 'Quote snapshot missing' } as const
   const normalizedSnapshot: Record<string, unknown> = {
     ...snapshot,
     document,
   }
 
-  const publicUrl = origin ? `${origin}/estimate/${token}` : null
+  const publicUrl = origin ? `${origin}/quote/${token}` : null
   const payload: EstimatePublicSnapshot = {
     estimate_id: asText(version.estimate_id),
     estimate_version_id: asText(version.id),

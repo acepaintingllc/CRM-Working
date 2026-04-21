@@ -116,7 +116,7 @@ export async function GET() {
       estimate_id: row.id,
       job_id: row.job_id,
       customer_id: row.customer_id,
-      version_name: row.version_name?.trim() || 'Estimate Version',
+      version_name: row.version_name?.trim() || 'Quote Version',
       version_state: row.version_state?.trim() || 'draft',
       version_kind: row.version_kind?.trim() || 'standard',
       version_sort_order: row.version_sort_order ?? 0,

@@ -1,82 +1,32 @@
 'use client'
 
-import Link from 'next/link'
-import { ArrowLeft, CalendarCheck, Link2, ShieldCheck } from 'lucide-react'
+import { CalendarCheck, ShieldCheck } from 'lucide-react'
+import { SettingsNavTile } from '@/app/crm/settings/_components/SettingsNavTile'
+import { SettingsPageShell } from '@/app/crm/settings/_components/SettingsPageShell'
 
 export default function IntegrationsSettingsPage() {
   return (
-    <div className="crm-page" style={{ maxWidth: 860, margin: '0 auto', display: 'grid', gap: 14 }}>
-      <div className="crm-card" style={{ borderRadius: 14, padding: 18 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--crm-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-          <Link2 size={16} aria-hidden="true" />
-          Integrations
-        </div>
-        <h1 style={{ margin: '8px 0 0', fontSize: 24, fontWeight: 900 }}>Integrations</h1>
-        <p style={{ margin: '6px 0 0', color: 'var(--crm-muted-strong)', fontSize: 14 }}>
-          Manage connection health and provider controls.
-        </p>
-      </div>
-
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-        <Link href="/crm/calendar" style={tile}>
-          <div style={tileTitle}>
-            <CalendarCheck size={18} aria-hidden="true" />
-            <span>Google Calendar</span>
-          </div>
-          <div style={tileSub}>Connect/disconnect and manage event sync behavior.</div>
-        </Link>
-
-        <Link href="/env-check" style={tile}>
-          <div style={tileTitle}>
-            <ShieldCheck size={18} aria-hidden="true" />
-            <span>Environment health</span>
-          </div>
-          <div style={tileSub}>Validate required environment keys and setup status.</div>
-        </Link>
-      </div>
-
-      <Link href="/crm/settings" style={backLink}>
-        <ArrowLeft size={16} aria-hidden="true" />
-        <span>Back to settings</span>
-      </Link>
-    </div>
+    <SettingsPageShell
+      eyebrow="Integrations"
+      title="Integrations"
+      description="Provider-specific connection setup stays separate from persisted CRM settings forms."
+      backHref="/crm/settings"
+      backLabel="Back to settings"
+    >
+      <section className="grid gap-3 md:grid-cols-2">
+        <SettingsNavTile
+          href="/crm/calendar"
+          title="Google Calendar"
+          description="Connect or disconnect calendars and manage sync behavior."
+          Icon={CalendarCheck}
+        />
+        <SettingsNavTile
+          href="/env-check"
+          title="Environment health"
+          description="Validate environment keys and setup status outside the CRM settings data model."
+          Icon={ShieldCheck}
+        />
+      </section>
+    </SettingsPageShell>
   )
-}
-
-const tile: React.CSSProperties = {
-  display: 'block',
-  border: '1px solid var(--crm-border)',
-  borderRadius: 12,
-  background: 'var(--crm-card)',
-  padding: 14,
-  textDecoration: 'none',
-  color: 'var(--crm-text)',
-}
-
-const tileTitle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  fontWeight: 800,
-  fontSize: 16,
-}
-
-const tileSub: React.CSSProperties = {
-  marginTop: 6,
-  color: 'var(--crm-muted-strong)',
-  fontSize: 13,
-  lineHeight: 1.4,
-}
-
-const backLink: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  width: 'fit-content',
-  padding: '10px 14px',
-  borderRadius: 10,
-  background: 'var(--crm-accent)',
-  color: 'var(--crm-accent-text)',
-  textDecoration: 'none',
-  fontWeight: 700,
 }

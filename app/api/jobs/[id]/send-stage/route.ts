@@ -12,7 +12,6 @@ import { serverLog } from '@/lib/server/log'
 import { assertSchema, isMissingSchemaErrorMessage } from '@/lib/server/schema'
 import {
   buildJobSelect,
-  filterOptionalJobColumnPayload,
   getAvailableOptionalJobColumns,
   withOptionalJobColumns,
 } from '@/lib/server/jobSchema'
@@ -23,18 +22,16 @@ import {
   requireSessionUserOrg,
   resolveParams,
 } from '@/lib/server/apiRoute'
+import {
+  isJobStatus,
+  isStageEmailStage,
+  JOB_EMAIL_STAGE_RULES,
+  STAGE_EMAIL_STAGES,
+  type StageEmailStage,
+} from '@/lib/jobs/types'
+import { applyJobStageSideEffect } from '@/lib/server/jobScheduleSync'
 
-const stageValues = [
-  'estimate_scheduled',
-  'estimate_sent',
-  'follow_up',
-  'scheduled',
-  'completed',
-] as const
-
-type Stage = (typeof stageValues)[number]
-
-const stageSet = new Set<string>(stageValues)
+const stageSet = new Set<string>(STAGE_EMAIL_STAGES)
 const throttleWindowMs = 10 * 60 * 1000
 const throttleMaxAttempts = 6
 const replayPollTries = 8
@@ -94,32 +91,6 @@ function pickOrgText(row: OrgRow, candidates: string[]) {
     if (typeof raw === 'string' && raw.trim()) return raw.trim()
   }
   return null
-}
-
-async function updateJobStatus(orgId: string, jobId: string, payload: Record<string, unknown>) {
-  const optionalJobColumns = await getAvailableOptionalJobColumns()
-  const jobSelect = buildJobSelect(
-    [
-      'id',
-      'customer_id',
-      'title',
-      'status',
-      'completed_at',
-      'estimate_date',
-      'estimate_sent_at',
-      'scheduled_date',
-      'scheduled_end_date',
-    ],
-    optionalJobColumns
-  )
-
-  return supabaseAdmin
-    .from('jobs')
-    .update(filterOptionalJobColumnPayload(payload, optionalJobColumns))
-    .eq('org_id', orgId)
-    .eq('id', jobId)
-    .select(jobSelect)
-    .single()
 }
 
 function normalizeErrorMessage(error: unknown, fallback: string) {
@@ -264,7 +235,7 @@ async function logBlockedResponse(args: {
   orgId: string
   userId: string
   jobId: string
-  stage: Stage
+  stage: StageEmailStage
   fromEmail: string
   idempotencyKey: string
   toEmail: string | null
@@ -410,7 +381,7 @@ export async function POST(
   const idempotencyKey =
     typeof idempotencyKeyRaw === 'string' ? idempotencyKeyRaw.trim() : ''
 
-  if (!stage || !stageSet.has(stage)) {
+  if (!stage || !stageSet.has(stage) || !isStageEmailStage(stage)) {
     return jsonError('Invalid stage', 400)
   }
   if (!idempotencyKey || idempotencyKey.length > 200) {
@@ -435,7 +406,7 @@ export async function POST(
     return replayResponse(orgId, idempotencyKey)
   }
 
-  const typedStage = stage as Stage
+  const typedStage = stage as StageEmailStage
   const { data: job, error: jobErr } = await supabaseAdmin
     .from('jobs')
     .select(jobSelect)
@@ -450,6 +421,7 @@ export async function POST(
     (job ?? null) as unknown as Record<string, unknown> | null,
     optionalJobColumns
   ) as JobRecord
+  const stageRule = JOB_EMAIL_STAGE_RULES[typedStage]
   const { data: customer } = await supabaseAdmin
     .from('customers')
     .select('id, name, email, phone, address')
@@ -551,7 +523,7 @@ export async function POST(
     })
   }
 
-  if (typedStage === 'completed' && jobRow.status !== 'completed' && !jobRow.completed_at) {
+  if (stageRule.requiresCompleted && jobRow.status !== 'completed' && !jobRow.completed_at) {
     return logBlockedResponse({
       orgId,
       userId,
@@ -567,7 +539,7 @@ export async function POST(
     })
   }
 
-  if (typedStage === 'scheduled' && scheduleBlocks.length === 0) {
+  if (stageRule.requiresScheduleBlocks && scheduleBlocks.length === 0) {
     return logBlockedResponse({
       orgId,
       userId,
@@ -583,7 +555,7 @@ export async function POST(
     })
   }
 
-  if (typedStage === 'estimate_scheduled' && !jobRow.estimate_date) {
+  if (stageRule.requiresEstimateDate && !jobRow.estimate_date) {
     return logBlockedResponse({
       orgId,
       userId,
@@ -876,58 +848,30 @@ export async function POST(
 
   let updatedJob: Record<string, unknown> | null = null
 
-  if (typedStage === 'estimate_sent') {
-    const { data: stageJob, error: updateErr } = await updateJobStatus(orgId, id, {
-      status: 'estimate_sent',
-      estimate_sent_at: sentAtIso,
-    })
-    if (updateErr) {
-      warnings.push(`Email sent, but failed to sync estimate status: ${updateErr.message}`)
-    } else {
-      updatedJob = withOptionalJobColumns(
-        (stageJob ?? null) as unknown as Record<string, unknown> | null,
-        optionalJobColumns
-      ) as Record<string, unknown> | null
-    }
-  }
-
-  if (typedStage === 'scheduled') {
-    const starts = scheduleBlocks
-      .map((row) => row.start_at)
-      .filter((value): value is string => typeof value === 'string')
-      .sort()
-    const ends = scheduleBlocks
-      .map((row) => row.end_at)
-      .filter((value): value is string => typeof value === 'string')
-      .sort()
-
-    const { data: stageJob, error: updateErr } = await updateJobStatus(orgId, id, {
-      status: 'scheduled',
-      scheduled_date: starts[0] ?? jobRow.scheduled_date ?? null,
-      scheduled_end_date: ends[ends.length - 1] ?? null,
-      scheduled_email_sent_at: sentAtIso,
-    })
-    if (updateErr) {
-      warnings.push(`Email sent, but failed to sync scheduled status: ${updateErr.message}`)
-    } else {
-      updatedJob = withOptionalJobColumns(
-        (stageJob ?? null) as unknown as Record<string, unknown> | null,
-        optionalJobColumns
-      ) as Record<string, unknown> | null
-    }
-  }
-
-  if (typedStage === 'completed') {
-    const { data: stageJob, error: updateErr } = await updateJobStatus(orgId, id, {
-      completed_email_sent_at: sentAtIso,
-    })
-    if (updateErr) {
-      warnings.push(`Email sent, but failed to sync review email status: ${updateErr.message}`)
-    } else {
-      updatedJob = withOptionalJobColumns(
-        (stageJob ?? null) as unknown as Record<string, unknown> | null,
-        optionalJobColumns
-      ) as Record<string, unknown> | null
+  if (
+    typedStage === 'estimate_sent' ||
+    typedStage === 'scheduled' ||
+    typedStage === 'completed'
+  ) {
+    const currentStatus = isJobStatus(jobRow.status) ? jobRow.status : null
+    if (!currentStatus || stageRule.allowedFrom.includes(currentStatus)) {
+      const sync = await applyJobStageSideEffect(orgId, id, {
+        stage: typedStage,
+        sentAt: sentAtIso,
+        statusWhenEmpty:
+          typedStage === 'scheduled' && typeof jobRow.status === 'string' ? jobRow.status : undefined,
+      })
+      if (sync.error) {
+        const warningLabel =
+          typedStage === 'estimate_sent'
+            ? 'estimate status'
+            : typedStage === 'scheduled'
+            ? 'scheduled status'
+            : 'review email status'
+        warnings.push(`Email sent, but failed to sync ${warningLabel}: ${sync.error.message}`)
+      } else {
+        updatedJob = (sync.job ?? null) as Record<string, unknown> | null
+      }
     }
   }
 

@@ -27,7 +27,7 @@ export function EstimateV2Header({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Link
-            href="/crm/estimates/v2"
+            href="/crm/quotes"
             onClick={(event) => {
               if (!confirmNavigation()) event.preventDefault()
             }}
@@ -61,13 +61,13 @@ export function EstimateV2Header({
           className="v2-btn"
           onClick={vm.toggleSettings}
           style={{ ...styles.button, fontSize: 'calc(11px + 4pt)' }}
-          title="Estimate settings"
+          title="Quote settings"
         >
           Settings
         </button>
         {vm.estimateId ? (
           <Link
-            href={`/crm/estimates/${vm.estimateId}/v2/summary`}
+            href={`/crm/quotes/${vm.estimateId}/summary`}
             style={{
               ...styles.button,
               display: 'inline-flex',

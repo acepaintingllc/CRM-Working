@@ -14,6 +14,8 @@ import {
   requireSessionUserOrg,
   resolveParams,
 } from '@/lib/server/apiRoute'
+import { deriveJobScheduleRange } from '@/lib/server/jobScheduleSync'
+import { resolveImpliedJobStatusFromPatch } from '@/lib/jobs/types'
 
 type JobPatch = {
   completed_at?: string | null
@@ -42,14 +44,6 @@ type LinkedEstimateRecord = {
   version_sort_order: number | null
   updated_at: string | null
   created_at: string | null
-}
-
-function nextStatusForPatch(current: string, patch: JobPatch) {
-  if (patch?.completed_at) return 'completed'
-  if (patch?.scheduled_date) return 'scheduled'
-  if (patch?.estimate_sent_at) return 'estimate_sent'
-  if (patch?.estimate_date) return 'estimate_scheduled'
-  return current
 }
 
 export async function PATCH(
@@ -141,7 +135,7 @@ export async function PATCH(
 
   // Auto-move if dates/flags are set, unless caller explicitly sets status.
   if (!('status' in allowed)) {
-    allowed.status = nextStatusForPatch(existing.status, allowed as JobPatch)
+    allowed.status = resolveImpliedJobStatusFromPatch(allowed as JobPatch) ?? existing.status
   }
 
   const { data, error } = await supabaseAdmin
@@ -219,29 +213,9 @@ export async function GET(
       .order('start_at', { ascending: true })
 
     if (schedules && schedules.length > 0) {
-      const starts = (schedules as ScheduleRecord[]).map((s) => s.start_at).filter(Boolean).sort()
-      const ends = (schedules as ScheduleRecord[]).map((s) => s.end_at).filter(Boolean).sort()
-      const scheduled_date = starts.length > 0 ? starts[0] : null
-      const scheduled_end_date = ends.length > 0 ? ends[ends.length - 1] : null
-
-      const { data: updated } = await supabaseAdmin
-        .from('jobs')
-        .update({
-        scheduled_date,
-        scheduled_end_date,
-        })
-        .eq('org_id', orgId)
-        .eq('id', id)
-        .select('scheduled_date, scheduled_end_date')
-        .maybeSingle()
-
-      if (updated) {
-        mutableJob.scheduled_date = (updated as JobRecord).scheduled_date ?? null
-        mutableJob.scheduled_end_date = (updated as JobRecord).scheduled_end_date ?? null
-      } else {
-        mutableJob.scheduled_date = scheduled_date
-        mutableJob.scheduled_end_date = scheduled_end_date
-      }
+      const range = deriveJobScheduleRange(schedules as ScheduleRecord[])
+      mutableJob.scheduled_date = range.scheduled_date
+      mutableJob.scheduled_end_date = range.scheduled_end_date
     }
   }
 

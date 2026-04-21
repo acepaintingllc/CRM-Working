@@ -39,7 +39,7 @@ export async function readRatesFlagsPayload(params: {
 
 export function buildRatesFlagsPayloadFromValues(
   values: string[][],
-  spreadsheetId: string
+  _spreadsheetId: string
 ): RatesFlagsPayload {
   const tables = parseConstantsTablesDetailed(values)
   const categories = CATEGORY_CONFIGS.map((config) => {
@@ -50,7 +50,6 @@ export function buildRatesFlagsPayloadFromValues(
     source: 'sheet',
     seeded: true,
     template_version: null,
-    spreadsheet_id: spreadsheetId,
     schema_version: parseSchemaVersion(values),
     categories,
   }

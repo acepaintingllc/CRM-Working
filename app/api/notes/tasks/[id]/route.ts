@@ -12,7 +12,7 @@ import {
   normalizeReminderOffset,
   parseTaskRecurrenceRule,
 } from '@/lib/notes/server'
-import type { NotesTaskRow } from '@/lib/notes/types'
+import type { NotesTaskResponse, NotesTaskRow } from '@/lib/notes/types'
 
 type Params = { id: string } | Promise<{ id: string }>
 
@@ -47,7 +47,7 @@ export async function GET(_: Request, context: { params: Params }) {
     return NextResponse.json({ error: loaded.error }, { status: loaded.status })
   }
 
-  return NextResponse.json({ task: loaded.task })
+  return NextResponse.json<NotesTaskResponse>({ task: loaded.task })
 }
 
 export async function PATCH(request: Request, context: { params: Params }) {
@@ -178,7 +178,7 @@ export async function PATCH(request: Request, context: { params: Params }) {
     return NextResponse.json({ error: 'Unable to update task.' }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, task: update.data as NotesTaskRow })
+  return NextResponse.json<NotesTaskResponse>({ ok: true, task: update.data as NotesTaskRow })
 }
 
 export async function DELETE(_: Request, context: { params: Params }) {

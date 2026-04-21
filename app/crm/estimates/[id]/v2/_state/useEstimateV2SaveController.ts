@@ -200,7 +200,7 @@ export function useEstimateV2SaveController(params: {
         lastNormalizedDomains: normalizedDomains,
       }))
 
-      const response = await authedFetch(`/api/estimates/${estimateId}`, {
+      const response = await authedFetch(`/api/quotes/${estimateId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         ...(trigger === 'auto' ? { 'X-Estimate-Save-Mode': 'auto' } : {}),

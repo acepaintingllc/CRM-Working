@@ -37,7 +37,7 @@ export function EstimateV2EditorHeaderArea({
       confirmNavigation={confirmNavigation}
       onNext={() =>
         void saveVm.save().then((ok) => {
-          if (ok && estimateId) router.push(`/crm/estimates/${estimateId}/v2/summary`)
+          if (ok && estimateId) router.push(`/crm/quotes/${estimateId}/summary`)
         })
       }
     />

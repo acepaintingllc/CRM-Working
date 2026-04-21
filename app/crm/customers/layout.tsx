@@ -6,8 +6,6 @@ import { RefreshCw, Users } from "lucide-react";
 function CustomersShell({ children }: { children: React.ReactNode }) {
   const { loading, error, orgId, refresh } = useOrg();
 
-  const showChildren = !!orgId;
-
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <div
@@ -74,21 +72,7 @@ function CustomersShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {!showChildren ? (
-        <div
-          style={{
-            background: "var(--crm-card)",
-            border: "1px solid var(--crm-border-soft)",
-            borderRadius: 12,
-            padding: 14,
-            color: "var(--crm-muted)",
-          }}
-        >
-          {loading ? "Loading..." : "Org not ready. Hit Retry above."}
-        </div>
-      ) : (
-        children
-      )}
+      {children}
     </div>
   );
 }

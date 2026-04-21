@@ -6,5 +6,5 @@ export default async function SendEstimatePage({
   params: Promise<{ id: string }> | { id: string }
 }) {
   const resolved = await Promise.resolve(params)
-  redirect(`/crm/estimates/${resolved.id}/v2/send`)
+  redirect(`/crm/quotes/${resolved.id}/send`)
 }

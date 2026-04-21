@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildCustomerEstimateDocument } from '../build.ts'
+import { buildCustomerEstimateDocument, type CustomerEstimateInput } from '../build.ts'
 import { buildDefaultTermsText, splitTermsText } from '../presets.ts'
 
 test('splitTermsText keeps paragraph breaks and drops empties', () => {
@@ -20,7 +20,7 @@ test('buildDefaultTermsText produces a fixed terms structure', () => {
 })
 
 test('buildCustomerEstimateDocument cleans scope copy and keeps only included sections', () => {
-  const document = buildCustomerEstimateDocument({
+  const input: CustomerEstimateInput = {
     estimate: {
       id: 'EST-1',
       version_name: 'V2 Internal',
@@ -83,7 +83,8 @@ test('buildCustomerEstimateDocument cleans scope copy and keeps only included se
     pricingSummary: {
       finalTotal: 1190.9,
     },
-  })
+  }
+  const document = buildCustomerEstimateDocument(input)
 
   assert.equal(document.meta.quote_date, '4/20/2026')
   assert.equal(document.meta.flow_version, 'v2')

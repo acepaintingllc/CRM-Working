@@ -102,8 +102,8 @@ export function useEstimateV2EditorLoader(params: {
       meta.setValidationIssues([])
 
       const [estimateRes, catalogsRes] = await Promise.all([
-        authedFetch(`/api/estimates/${estimateId}`, { cache: 'no-store' }),
-        authedFetch(`/api/estimates/${estimateId}/catalogs?v2=1`, { cache: 'no-store' }),
+        authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' }),
+        authedFetch(`/api/quotes/${estimateId}/catalogs?v2=1`, { cache: 'no-store' }),
       ])
 
       const estimatePayload = (await estimateRes.json().catch(() => null)) as

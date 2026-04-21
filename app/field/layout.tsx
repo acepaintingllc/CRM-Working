@@ -125,7 +125,7 @@ export default function FieldLayout({ children }: { children: ReactNode }) {
     { href: '/crm', label: 'Home', Icon: Home },
     { href: '/crm/customers', label: 'Customers', Icon: Users },
     { href: '/crm/jobs', label: 'Job Center', Icon: Wrench },
-    { href: '/crm/estimates', label: 'Estimates', Icon: Calculator },
+    { href: '/crm/quotes', label: 'Quotes', Icon: Calculator },
     { href: '/crm/notes', label: 'Notes', Icon: FileText },
     { href: '/crm/calendar', label: 'Calendar', Icon: CalendarDays },
     { href: '/field/jobs', label: 'Field Cam', Icon: Camera },

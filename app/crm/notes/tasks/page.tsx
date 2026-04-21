@@ -1,83 +1,42 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
+import { useTaskList } from '@/lib/notes/client/useTaskList'
+import { formatDue } from '@/lib/notes/time'
+import type { NotesTaskRow } from '@/lib/notes/types'
 import Link from 'next/link'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useMemo, type ReactNode } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { Check, Clock3, EllipsisVertical, Repeat, Star, PencilLine } from 'lucide-react'
 import { buildNotesModuleHref } from '../_components'
-import { formatDue, recurrenceLabel, type TaskRow } from '../_lib'
-
-type StatusFilter = 'active' | 'completed' | 'archived'
-type DueFilter = 'all' | 'overdue' | 'today' | 'upcoming'
-type PriorityFilter = 'all' | 'low' | 'medium' | 'high'
+import { recurrenceLabel } from '../_lib'
 
 export default function NotesTasksPage() {
-  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const focusId = searchParams.get('focus')
-
-  const [status, setStatus] = useState<StatusFilter>('active')
-  const [due, setDue] = useState<DueFilter>('all')
-  const [priority, setPriority] = useState<PriorityFilter>('all')
-  const [starredOnly, setStarredOnly] = useState(false)
-  const [search, setSearch] = useState('')
-  const [tasks, setTasks] = useState<TaskRow[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    const query = new URLSearchParams()
-    query.set('status', status)
-    if (status === 'active') query.set('due', due)
-    if (priority !== 'all') query.set('priority', priority)
-    if (starredOnly) query.set('starred', 'true')
-    if (search.trim()) query.set('search', search.trim())
-    const res = await authedFetch(`/api/notes/tasks?${query.toString()}`, { cache: 'no-store' })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to load tasks.')
-      setLoading(false)
-      return
-    }
-    setTasks((payload?.tasks ?? []) as TaskRow[])
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, due, priority, starredOnly])
-
-  useEffect(() => {
-    const timeout = setTimeout(() => void load(), 250)
-    return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search])
+  const {
+    tasks,
+    loading,
+    error,
+    filters,
+    setStatus,
+    setDue,
+    setPriority,
+    setStarredOnly,
+    setSearch,
+    completeTask,
+    reopenTask,
+    archiveTask,
+    unarchiveTask,
+    snoozeTask,
+    deleteTask,
+  } = useTaskList()
 
   const taskHref = (taskId: string) =>
     buildNotesModuleHref(pathname ?? '/crm/notes/tasks', searchParams, {
       composer: 'task',
       taskId,
     })
-
-  const runAction = async (path: string, method: 'POST' | 'DELETE' = 'POST', body?: Record<string, unknown>) => {
-    const res = await authedFetch(path, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? 'Action failed.')
-      return
-    }
-    await load()
-    router.refresh()
-  }
 
   const taskCountLabel = useMemo(() => `${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}`, [tasks.length])
 
@@ -97,13 +56,13 @@ export default function NotesTasksPage() {
 
         <div className="mt-4 grid gap-3 xl:grid-cols-[auto_auto_auto_auto_minmax(0,1fr)]">
           <div className="inline-flex rounded-2xl bg-neutral-900 p-1">
-            {(['active', 'completed', 'archived'] as StatusFilter[]).map((value) => (
+            {(['active', 'completed', 'archived'] as const).map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setStatus(value)}
                 className={`rounded-xl px-3 py-2 text-sm font-extrabold transition ${
-                  status === value ? 'bg-emerald-400 text-neutral-950' : 'text-neutral-400 hover:text-white'
+                  filters.status === value ? 'bg-emerald-400 text-neutral-950' : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 {value[0].toUpperCase() + value.slice(1)}
@@ -112,9 +71,9 @@ export default function NotesTasksPage() {
           </div>
 
           <select
-            value={status === 'active' ? due : 'all'}
-            disabled={status !== 'active'}
-            onChange={(event) => setDue(event.target.value as DueFilter)}
+            value={filters.status === 'active' ? filters.due : 'all'}
+            disabled={filters.status !== 'active'}
+            onChange={(event) => setDue(event.target.value as 'all' | 'overdue' | 'today' | 'upcoming')}
             className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-emerald-400 disabled:opacity-50"
           >
             <option value="all">All due states</option>
@@ -124,8 +83,8 @@ export default function NotesTasksPage() {
           </select>
 
           <select
-            value={priority}
-            onChange={(event) => setPriority(event.target.value as PriorityFilter)}
+            value={filters.priority}
+            onChange={(event) => setPriority(event.target.value as 'all' | 'low' | 'medium' | 'high')}
             className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-emerald-400"
           >
             <option value="all">All priorities</option>
@@ -135,12 +94,12 @@ export default function NotesTasksPage() {
           </select>
 
           <label className="inline-flex items-center gap-2 rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-neutral-200">
-            <input type="checkbox" checked={starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
+            <input type="checkbox" checked={filters.starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
             <span>Starred only</span>
           </label>
 
           <input
-            value={search}
+            value={filters.search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search tasks..."
             className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
@@ -173,13 +132,7 @@ export default function NotesTasksPage() {
                   <button
                     type="button"
                     aria-label={task.status === 'active' ? `Complete ${task.title}` : `Reopen ${task.title}`}
-                    onClick={() =>
-                      void runAction(
-                        task.status === 'active'
-                          ? `/api/notes/tasks/${task.id}/complete`
-                          : `/api/notes/tasks/${task.id}/reopen`
-                      )
-                    }
+                    onClick={() => void (task.status === 'active' ? completeTask(task.id) : reopenTask(task.id))}
                     className={`mt-0.5 inline-flex size-9 items-center justify-center rounded-full border ${
                       task.status === 'completed'
                         ? 'border-emerald-400/40 bg-emerald-400 text-neutral-950'
@@ -219,14 +172,14 @@ export default function NotesTasksPage() {
                       <>
                         <button
                           type="button"
-                          onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'tomorrow' })}
+                          onClick={() => void snoozeTask(task.id, 'tomorrow')}
                           className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
                         >
                           Snooze
                         </button>
                         <button
                           type="button"
-                          onClick={() => void runAction(`/api/notes/tasks/${task.id}/archive`)}
+                          onClick={() => void archiveTask(task.id)}
                           className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
                         >
                           Archive
@@ -240,28 +193,18 @@ export default function NotesTasksPage() {
                       <div className="absolute right-0 top-11 z-20 min-w-40 rounded-2xl border border-neutral-800 bg-neutral-950 p-1 shadow-xl">
                         {task.status === 'active' && (
                           <>
-                            <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/complete`)}>
-                              Complete
-                            </MenuAction>
-                            <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'later_today' })}>
-                              Snooze later today
-                            </MenuAction>
-                            <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'next_week' })}>
-                              Snooze next week
-                            </MenuAction>
+                            <MenuAction onClick={() => void completeTask(task.id)}>Complete</MenuAction>
+                            <MenuAction onClick={() => void snoozeTask(task.id, 'later_today')}>Snooze later today</MenuAction>
+                            <MenuAction onClick={() => void snoozeTask(task.id, 'next_week')}>Snooze next week</MenuAction>
                           </>
                         )}
                         {task.status === 'completed' && (
-                          <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/reopen`)}>
-                            Reopen
-                          </MenuAction>
+                          <MenuAction onClick={() => void reopenTask(task.id)}>Reopen</MenuAction>
                         )}
                         {task.status === 'archived' && (
-                          <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/unarchive`)}>
-                            Unarchive
-                          </MenuAction>
+                          <MenuAction onClick={() => void unarchiveTask(task.id)}>Unarchive</MenuAction>
                         )}
-                        <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}`, 'DELETE')} danger>
+                        <MenuAction onClick={() => void deleteTask(task.id)} danger>
                           Delete
                         </MenuAction>
                       </div>

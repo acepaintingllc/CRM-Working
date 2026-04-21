@@ -217,7 +217,7 @@ async function getEstimate(orgId: string, estimateId: string) {
     .eq('id', estimateId)
     .maybeSingle()
   if (res.error) return { error: res.error.message } as const
-  if (!res.data) return { error: 'Estimate not found' } as const
+  if (!res.data) return { error: 'Quote not found' } as const
   return { estimate: res.data } as const
 }
 
@@ -322,7 +322,7 @@ export async function loadEstimateV2Response(params: {
   const estimateRes = await getEstimate(params.orgId, params.estimateId)
   if ('error' in estimateRes) {
     const message = asText(estimateRes.error) || 'Failed to load estimate'
-    fail(message, message === 'Estimate not found' ? 404 : 500)
+    fail(message, message === 'Quote not found' ? 404 : 500)
   }
 
   let quoteWallScopes: Unsafe[] = []
@@ -684,7 +684,7 @@ export async function saveEstimateV2Inputs(params: {
   const estimateRes = await getEstimate(params.orgId, params.estimateId)
   if ('error' in estimateRes) {
     const message = asText(estimateRes.error) || 'Failed to load estimate'
-    fail(message, message === 'Estimate not found' ? 404 : 500)
+    fail(message, message === 'Quote not found' ? 404 : 500)
   }
   const estimate = estimateRes.estimate
 
@@ -1681,7 +1681,7 @@ export async function deleteEstimateV2(params: { orgId: string; estimateId: stri
   const estimateRes = await getEstimate(params.orgId, params.estimateId)
   if ('error' in estimateRes) {
     const message = asText(estimateRes.error) || 'Failed to load estimate'
-    fail(message, message === 'Estimate not found' ? 404 : 500)
+    fail(message, message === 'Quote not found' ? 404 : 500)
   }
 
   const remove = await supabaseAdmin

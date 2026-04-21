@@ -45,7 +45,7 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 function estimateWorkspaceHref(estimateId: string) {
-  return `/crm/estimates/${estimateId}/v2`
+  return `/crm/quotes/${estimateId}`
 }
 
 export default function EstimatorV2CreatePage() {
@@ -71,7 +71,7 @@ export default function EstimatorV2CreatePage() {
 
       const [jobsRes, estimatesRes] = await Promise.all([
         authedFetch('/api/jobs', { cache: 'no-store' }),
-        authedFetch('/api/estimates', { cache: 'no-store' }),
+        authedFetch('/api/quotes', { cache: 'no-store' }),
       ])
 
       const [jobsPayload, estimatesPayload] = await Promise.all([
@@ -104,7 +104,7 @@ export default function EstimatorV2CreatePage() {
     setCreating(true)
     setError(null)
 
-    const response = await authedFetch('/api/estimates', {
+    const response = await authedFetch('/api/quotes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -123,7 +123,7 @@ export default function EstimatorV2CreatePage() {
       return
     }
 
-    router.push(`/crm/estimates/${payload.id}/v2`)
+    router.push(`/crm/quotes/${payload.id}`)
   }
 
   const mono: React.CSSProperties = { fontFamily: 'var(--v2-mono)' }
@@ -153,7 +153,7 @@ export default function EstimatorV2CreatePage() {
         }}
       >
         <Link
-          href="/crm/estimates/v2"
+          href="/crm/quotes"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -171,7 +171,7 @@ export default function EstimatorV2CreatePage() {
           ← Back
         </Link>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ ...label, marginBottom: 2 }}>Create Version</div>
+          <div style={{ ...label, marginBottom: 2 }}>Create Quote</div>
           <div
             style={{
               fontSize: 15,
@@ -255,7 +255,7 @@ export default function EstimatorV2CreatePage() {
             }}
           >
             <div style={{ ...label, marginBottom: 12 }}>
-              Existing Versions ({jobVersions.length})
+              Existing Quotes ({jobVersions.length})
             </div>
             {jobVersions.map((estimate, i) => (
               <div
@@ -272,7 +272,7 @@ export default function EstimatorV2CreatePage() {
               >
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-                    {estimate.version_name ?? 'Estimate Version'}
+                    {estimate.version_name ?? 'Quote Version'}
                   </div>
                   <div style={{ ...mono, fontSize: 12, color: 'var(--v2-ink-3)', lineHeight: 1.6 }}>
                     {formatVersionState(estimate.version_state)} / {formatVersionState(estimate.version_kind)}
@@ -316,7 +316,7 @@ export default function EstimatorV2CreatePage() {
           <div>
             <div style={{ ...label, marginBottom: 8 }}>New Version</div>
             <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>
-              Add the next estimate version
+              Add the next quote version
             </div>
           </div>
 

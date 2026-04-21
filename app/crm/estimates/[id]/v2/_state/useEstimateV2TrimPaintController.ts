@@ -24,7 +24,7 @@ export function useEstimateV2TrimPaintController(params: {
         if (!estimateId) return
         setPolicySaving(true)
         try {
-          await authedFetch(`/api/estimates/${estimateId}`, {
+          await authedFetch(`/api/quotes/${estimateId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
