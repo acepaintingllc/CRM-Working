@@ -5,7 +5,7 @@ import type {
   WallPerColorSupplyGroup,
   MissingInput,
   ResolvedSettings,
-} from './wallsTypes'
+} from './wallsTypes.ts'
 
 export type CeilingMode = 'RECT' | 'SEG'
 export type CeilingSegmentShape = 'RECTANGLE' | 'TRIANGLE' | 'MANUAL'

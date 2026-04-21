@@ -1,59 +1,23 @@
-type AnyRecord = Record<string, unknown>
+import type { EstimateV2GetResponse, EstimateV2ResponseInputs } from '@/types/estimator/v2'
 
 export type EstimateGetResponseParams = {
-  estimate: AnyRecord
-  inputs: {
-    jobsettings: unknown
-    paint_products: unknown[]
-    rooms: unknown[]
-    room_wall_scopes: unknown[]
-    segments: unknown[]
-    wall_segments: unknown[]
-    ceiling_segments: unknown[]
-    room_ceiling_scopes: unknown[]
-    ceiling_scope_segments: unknown[]
-    room_trim_scopes: unknown[]
-    rollers: unknown[]
-    prejob: unknown[]
-    trim_items: unknown[]
-    job_colors: unknown[]
-    room_flags: unknown[]
-    access_fees: unknown[]
-    other: unknown[]
-  }
-  wall_calculations: unknown
-  ceiling_calculations: unknown
-  trim_calculations: unknown
-  trim_paint: unknown
-  pricing_summary: unknown
+  estimate: EstimateV2GetResponse['estimate'] | Record<string, unknown>
+  inputs: EstimateV2ResponseInputs
+  wall_calculations: EstimateV2GetResponse['wall_calculations']
+  ceiling_calculations: EstimateV2GetResponse['ceiling_calculations']
+  trim_calculations: EstimateV2GetResponse['trim_calculations']
+  trim_paint: EstimateV2GetResponse['trim_paint']
+  pricing_summary: EstimateV2GetResponse['pricing_summary'] | Record<string, unknown>
 }
 
-export function buildEstimateGetResponse(params: EstimateGetResponseParams) {
+export function buildEstimateGetResponse(params: EstimateGetResponseParams): EstimateV2GetResponse {
   return {
-    estimate: params.estimate,
-    inputs: {
-      jobsettings: params.inputs.jobsettings,
-      paint_products: params.inputs.paint_products,
-      rooms: params.inputs.rooms,
-      room_wall_scopes: params.inputs.room_wall_scopes,
-      segments: params.inputs.segments,
-      wall_segments: params.inputs.wall_segments,
-      ceiling_segments: params.inputs.ceiling_segments,
-      room_ceiling_scopes: params.inputs.room_ceiling_scopes,
-      ceiling_scope_segments: params.inputs.ceiling_scope_segments,
-      room_trim_scopes: params.inputs.room_trim_scopes,
-      rollers: params.inputs.rollers,
-      prejob: params.inputs.prejob,
-      trim_items: params.inputs.trim_items,
-      job_colors: params.inputs.job_colors,
-      room_flags: params.inputs.room_flags,
-      access_fees: params.inputs.access_fees,
-      other: params.inputs.other,
-    },
+    estimate: params.estimate as EstimateV2GetResponse['estimate'],
+    inputs: params.inputs,
     wall_calculations: params.wall_calculations,
     ceiling_calculations: params.ceiling_calculations,
     trim_calculations: params.trim_calculations,
     trim_paint: params.trim_paint,
-    pricing_summary: params.pricing_summary,
+    pricing_summary: params.pricing_summary as EstimateV2GetResponse['pricing_summary'],
   }
 }

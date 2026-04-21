@@ -92,7 +92,7 @@ export default function NewEstimatePage() {
             </div>
             <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">New estimate</h1>
             <div className="max-w-[56ch] text-sm text-slate-600">
-              Create a workbook from your template and link it to this estimate in one step.
+              Create a DB-backed estimate and link it to this job in one step.
             </div>
           </div>
           <Link

@@ -40,7 +40,6 @@ type LinkedEstimateRecord = {
   version_state: string | null
   version_kind: string | null
   version_sort_order: number | null
-  sheet_file_path: string | null
   updated_at: string | null
   created_at: string | null
 }
@@ -267,7 +266,7 @@ export async function GET(
   const { data: linkedEstimateRows, error: linkedEstimatesErr } = await supabaseAdmin
     .from('estimates')
     .select(
-      'id, status, version_name, version_state, version_kind, version_sort_order, sheet_file_path, updated_at, created_at'
+      'id, status, version_name, version_state, version_kind, version_sort_order, updated_at, created_at'
     )
     .eq('org_id', orgId)
     .eq('job_id', id)

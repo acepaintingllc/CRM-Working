@@ -5,7 +5,7 @@ import type {
   WallPerColorSupplyGroup,
   WallRoomTotal,
   YN,
-} from './wallsTypes'
+} from './wallsTypes.ts'
 
 export type TrimUnitType = 'LF' | 'EA' | 'SF'
 export type TrimMeasurementMode = 'MANUAL' | 'ROOM_HELPER'

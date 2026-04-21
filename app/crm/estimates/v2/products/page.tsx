@@ -615,8 +615,10 @@ export default function ProductsPage() {
               <div style={{ padding: 20, textAlign: 'center' }}>Loading products...</div>
             ) : error ? (
               <div style={{ padding: 20, color: '#ff6b6b' }}>{error}</div>
-            ) : selected ? (
-              <>
+            ) : (
+              <div style={{ display: 'grid', gap: 0 }}>
+            {selected ? (
+              <div style={{ display: 'grid', gap: 0 }}>
             <section style={S.section}>
               <div style={S.sectionLabel}>Basic</div>
               <label style={S.fieldLabel}>Product Name</label>
@@ -752,9 +754,11 @@ export default function ProductsPage() {
                 onChange={(e) => setFormState((prev) => ({ ...prev, notes: e.target.value }))}
               />
             </section>
-              </>
+              </div>
             ) : (
               <div style={{ padding: 20, textAlign: 'center' }}>Select a product to edit</div>
+            )}
+              </div>
             )}
           </div>
 

@@ -163,8 +163,8 @@ export function reconcileWholeDollarRows<T extends { price: number }>(
  * Applies the labor day policy to raw labor hours.
  *
  * Rules:
- *   - rawDays < 1  â†’ bill exactly 1 day (dayhours)
- *   - rawDays >= 1 â†’ round up to nearest (roundingIncrementHours / dayhours) day increment
+ *   - rawDays < 1: bill exactly 1 day (dayhours)
+ *   - rawDays >= 1: round up to nearest (roundingIncrementHours / dayhours) day increment
  *   - Always rounds up, never down
  *   - When disabled, effective = raw (no change)
  */
@@ -173,8 +173,9 @@ export function applyLaborDayPolicy(
   settings: LaborDayPolicySettings
 ): LaborDayPolicyResult {
   const { enabled, dayhours, roundingIncrementHours } = settings
-  const safeDayhours = dayhours > 0 ? dayhours : 8
-  const safeIncrement = roundingIncrementHours > 0 ? roundingIncrementHours : safeDayhours / 2
+  const safeDayhours = dayhours > 0 ? dayhours : DEFAULT_DAY_HOURS
+  const safeIncrement =
+    roundingIncrementHours > 0 ? roundingIncrementHours : DEFAULT_ROUNDING_INCREMENT_HOURS
   const rawDays = round4(rawHours / safeDayhours)
 
   if (!enabled) {
@@ -217,10 +218,11 @@ export function applyJobMinimum(
   subtotal: number,
   settings: JobMinimumSettings
 ): JobMinimumResult {
-  if (!settings.enabled || subtotal >= settings.amount) {
+  const safeAmount = settings.amount > 0 ? settings.amount : DEFAULT_JOB_MINIMUM_AMOUNT
+  if (!settings.enabled || subtotal >= safeAmount) {
     return { adjustmentAmount: 0, finalTotal: round2(subtotal) }
   }
-  const adjustmentAmount = round2(settings.amount - subtotal)
+  const adjustmentAmount = round2(safeAmount - subtotal)
   return { adjustmentAmount, finalTotal: round2(subtotal + adjustmentAmount) }
 }
 
@@ -243,7 +245,7 @@ export function allocateMinimumAdjustment(
 
   const grandTotal = rooms.reduce((sum, r) => sum + r.baseTotal, 0)
   if (grandTotal <= 0) {
-    // Edge case: no base total to weight against â€” distribute equally
+    // Edge case: no base total to weight against; distribute equally.
     const perRoom = round2(adjustmentAmount / Math.max(rooms.length, 1))
     return rooms.map((r) => ({
       room_id: r.room_id,
@@ -272,7 +274,7 @@ export function allocateMinimumAdjustment(
 /**
  * Builds the full estimate-level pricing summary from wall calculation output
  * and policy settings. Uses the engine's room_totals as the cost base so the
- * labor rate is always the single value the engine resolved â€” no separate rate
+ * labor rate is always the single value the engine resolved; no separate rate
  * parameter needed.
  */
 export function buildEstimatePricingSummary(
@@ -281,7 +283,7 @@ export function buildEstimatePricingSummary(
   minimumPolicy: JobMinimumSettings,
   trimPaint: EstimateTrimPaintInput | null = null
 ): EstimatePricingSummary {
-  const laborRate = engines[0]?.assumptions.labor_rate_per_hour ?? 65
+  const laborRate = engines[0]?.assumptions.labor_rate_per_hour ?? DEFAULT_LABOR_RATE
   const wallEngine = engines[0]
   const ceilingEngine = engines[1]
 
@@ -318,8 +320,7 @@ export function buildEstimatePricingSummary(
 
   const trimPaintMaterialCost = round2(trimPaint?.paint_cost ?? 0)
   const paintMaterialCost = round2(wallPaintMaterialCost + ceilingPaintMaterialCost + trimPaintMaterialCost)
-
-  // Per-color shared supply costs â€” aggregate across all engines
+  // Per-color shared supply costs; aggregate across all engines.
   let perColorSupplyCost = 0
   for (const engine of engines) {
     for (const group of engine.per_color_supply_groups) {
@@ -375,3 +376,10 @@ export function buildEstimatePricingSummary(
     trimPaint,
   }
 }
+import {
+  DEFAULT_DAY_HOURS,
+  DEFAULT_JOB_MINIMUM_AMOUNT,
+  DEFAULT_LABOR_RATE,
+  DEFAULT_ROUNDING_INCREMENT_HOURS,
+} from './defaults.ts'
+

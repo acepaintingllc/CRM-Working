@@ -278,14 +278,11 @@ export async function GET(
   }
 
   const url = new URL(request.url)
-  const catalogSource =
-    url.searchParams.get('v2') === '1' || url.searchParams.get('source') === 'v2' ? 'v2' : undefined
   const contextResult = await loadEstimateCustomerSendContext({
     origin: url.origin,
     orgId: session.orgId,
     userId: session.userId,
     estimateId: id,
-    catalogSource,
   })
   if ('error' in contextResult) {
     return NextResponse.json({ error: contextResult.error }, { status: 404 })
@@ -354,7 +351,6 @@ export async function PUT(
     orgId: session.orgId,
     userId: session.userId,
     estimateId: id,
-    catalogSource: url.searchParams.get('v2') === '1' || url.searchParams.get('source') === 'v2' ? 'v2' : undefined,
   })
   if ('error' in contextResult) {
     return NextResponse.json({ error: contextResult.error }, { status: 404 })
@@ -404,7 +400,6 @@ export async function POST(
     orgId: session.orgId,
     userId: session.userId,
     estimateId: id,
-    catalogSource: url.searchParams.get('v2') === '1' || url.searchParams.get('source') === 'v2' ? 'v2' : undefined,
   })
   if ('error' in contextResult) {
     return NextResponse.json({ error: contextResult.error }, { status: 404 })

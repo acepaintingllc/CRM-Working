@@ -1,6 +1,14 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
+import {
+  eventSortValue,
+  isDateOnly,
+  monthKeyLocal,
+  parseCalendarDate,
+  readStoredCalendarIds,
+  selectedCalendarIdsStorageKey,
+} from '@/lib/crm/home/calendar'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
@@ -11,8 +19,6 @@ type CalendarInfo = {
   backgroundColor: string | null
   foregroundColor: string | null
 }
-
-type GoogleEmbedMode = 'MONTH' | 'WEEK' | 'AGENDA'
 
 type CalendarEvent = {
   id: string
@@ -31,27 +37,9 @@ type WeekSegment = {
   bar: boolean
 }
 
-const selectedStorageKey = 'acecrm.calendar.selected'
-const embedModeStorageKey = 'acecrm.calendar.viewMode'
+type GoogleEmbedMode = 'MONTH' | 'WEEK' | 'AGENDA'
+
 const weekDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-
-function isEmbedMode(value: string | null): value is GoogleEmbedMode {
-  return value === 'MONTH' || value === 'WEEK' || value === 'AGENDA'
-}
-
-function readStoredCalendarIds() {
-  try {
-    const raw = localStorage.getItem(selectedStorageKey)
-    const parsed = raw ? JSON.parse(raw) : null
-    return Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : null
-  } catch {
-    return null
-  }
-}
-
-function isDateOnly(value: string | null | undefined) {
-  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))
-}
 
 function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -72,33 +60,10 @@ function localDateKey(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-function monthParam(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  return `${year}-${month}`
-}
-
 function dateFromLocalKey(key: string) {
   const [year, month, day] = key.split('-').map((part) => Number(part))
   if (!year || !month || !day) return null
   return new Date(year, month - 1, day)
-}
-
-function parseEventDate(value: string | null | undefined) {
-  if (!value) return null
-  if (isDateOnly(value)) {
-    const [year, month, day] = value.split('-').map((part) => Number(part))
-    if (!year || !month || !day) return null
-    return new Date(year, month - 1, day)
-  }
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return null
-  return parsed
-}
-
-function eventSortValue(event: CalendarEvent) {
-  const start = parseEventDate(event.start)
-  return start?.getTime() ?? Number.MAX_SAFE_INTEGER
 }
 
 function sameLocalDay(a: Date, b: Date) {
@@ -128,12 +93,12 @@ function buildMonthWeeks(month: Date) {
 }
 
 function eventTouchesDay(event: CalendarEvent, day: Date) {
-  const start = parseEventDate(event.start)
+  const start = parseCalendarDate(event.start)
   if (!start) return false
 
   const dayStart = startOfLocalDay(day)
   const dayEnd = addDays(dayStart, 1)
-  const end = parseEventDate(event.end)
+  const end = parseCalendarDate(event.end)
 
   if (isDateOnly(event.start)) {
     const exclusiveEnd = end ?? addDays(startOfLocalDay(start), 1)
@@ -145,16 +110,16 @@ function eventTouchesDay(event: CalendarEvent, day: Date) {
 }
 
 function eventSpansMultipleDays(event: CalendarEvent) {
-  const start = parseEventDate(event.start)
-  const end = parseEventDate(event.end)
+  const start = parseCalendarDate(event.start)
+  const end = parseCalendarDate(event.end)
   if (!start || !end) return false
   const adjustedEnd = isDateOnly(event.end) ? addDays(end, -1) : end
   return !sameLocalDay(startOfLocalDay(start), startOfLocalDay(adjustedEnd))
 }
 
 function formatEventTime(start: string | null, end: string | null) {
-  const startDate = parseEventDate(start)
-  const endDate = parseEventDate(end)
+  const startDate = parseCalendarDate(start)
+  const endDate = parseCalendarDate(end)
   if (!startDate) return 'Time TBD'
   if (isDateOnly(start)) return 'All day'
 
@@ -228,14 +193,14 @@ export default function CalendarPage() {
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([])
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDayKey, setSelectedDayKey] = useState(localDateKey(today))
-  const [embedMode, setEmbedMode] = useState<GoogleEmbedMode>('MONTH')
-  const [showGoogleEmbed, setShowGoogleEmbed] = useState(false)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
   const [eventsError, setEventsError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [eventsRefreshNonce, setEventsRefreshNonce] = useState(0)
+  const [showGoogleEmbed, setShowGoogleEmbed] = useState(false)
+  const [embedMode, setEmbedMode] = useState<GoogleEmbedMode>('MONTH')
 
   const selectedIdsParam = useMemo(() => selectedCalendarIds.join(','), [selectedCalendarIds])
   const calendarById = useMemo(
@@ -307,14 +272,6 @@ export default function CalendarPage() {
   }
 
   useEffect(() => {
-    try {
-      const storedMode = localStorage.getItem(embedModeStorageKey)
-      if (isEmbedMode(storedMode)) {
-        setEmbedMode(storedMode)
-      }
-    } catch {
-      // ignore
-    }
     void loadStatusAndCalendars()
   }, [])
 
@@ -325,19 +282,11 @@ export default function CalendarPage() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(selectedStorageKey, JSON.stringify(selectedCalendarIds))
+      localStorage.setItem(selectedCalendarIdsStorageKey, JSON.stringify(selectedCalendarIds))
     } catch {
       // ignore
     }
   }, [selectedCalendarIds])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(embedModeStorageKey, embedMode)
-    } catch {
-      // ignore
-    }
-  }, [embedMode])
 
   useEffect(() => {
     if (!connected || selectedCalendarIds.length === 0) {
@@ -354,7 +303,7 @@ export default function CalendarPage() {
       const params = new URLSearchParams()
       params.set('calendar_ids', selectedIdsParam)
       params.set('limit', '250')
-      params.set('month', monthParam(visibleMonth))
+      params.set('month', monthKeyLocal(visibleMonth))
       const res = await authedFetch(`/api/google-calendar/events?${params.toString()}`, {
         cache: 'no-store',
       })

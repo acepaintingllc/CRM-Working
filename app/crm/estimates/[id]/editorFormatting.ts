@@ -59,13 +59,3 @@ export function trimOptionLabel(item: { label: string; unit: string | null }) {
   const unit = toText(item.unit).toUpperCase()
   return unit ? `${item.label} (${unit})` : item.label
 }
-
-export function parseSpreadsheetIdFromSheetPath(path: string | null | undefined) {
-  const raw = toText(path)
-  if (!raw) return ''
-  const filePathMatch = /sheet_([a-zA-Z0-9\-_]+)\.xlsx/.exec(raw)
-  if (filePathMatch?.[1]) return filePathMatch[1]
-  const urlMatch = /\/spreadsheets\/d\/([a-zA-Z0-9\-_]+)/.exec(raw)
-  return urlMatch?.[1] ?? ''
-}
-

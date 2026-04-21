@@ -47,12 +47,8 @@ export async function GET() {
       upcomingDays: defaults.showUpcomingDays,
     })
 
-    const uncategorized = notes.filter((row) => row.folder_id == null).slice(0, 6)
-    const uncategorizedIds = new Set(uncategorized.map((row) => row.id))
-    const recent = [
-      ...uncategorized,
-      ...notes.filter((row) => !uncategorizedIds.has(row.id)).slice(0, Math.max(0, 6 - uncategorized.length)),
-    ]
+    const starred = notes.filter((row) => row.starred).slice(0, 6)
+    const recent = notes.slice(0, 6)
 
     return NextResponse.json({
       today: {
@@ -69,10 +65,9 @@ export async function GET() {
         untimed_today: grouped.untimedToday,
       },
       notes: {
+        starred,
         recent,
-        uncategorized,
       },
-      quick_add_path: '/crm/notes/quick-add',
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load notes dashboard.'

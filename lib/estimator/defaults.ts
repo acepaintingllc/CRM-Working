@@ -1,0 +1,10 @@
+export const DEFAULT_ESTIMATE_TEMPLATE_KEY = 'default'
+export const DEFAULT_QUOTE_VALIDITY_DAYS = 90
+export const DEFAULT_TERMS_TEXT = ''
+
+export const DEFAULT_LABOR_DAY_POLICY_ENABLED = true
+export const DEFAULT_DAY_HOURS = 8
+export const DEFAULT_ROUNDING_INCREMENT_HOURS = 4
+export const DEFAULT_LABOR_RATE = 40
+export const DEFAULT_JOB_MINIMUM_ENABLED = false
+export const DEFAULT_JOB_MINIMUM_AMOUNT = 0

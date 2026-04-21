@@ -16,21 +16,8 @@ type EstimateRow = {
   job_status: string | null
   job_estimate_sent_at: string | null
   is_sent_estimate: boolean
-  latest_output_json?: {
-    output_app?: Record<string, string | number | null>
-    updated_at?: string
-  } | null
+  version_name: string | null
   updated_at: string
-}
-
-function formatCurrency(value: string | number | null | undefined) {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return '-'
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(n)
 }
 
 export default function EstimatesPage() {
@@ -148,7 +135,7 @@ export default function EstimatesPage() {
     return (
       <div
         key={row.id}
-        onClick={() => router.push(`/crm/estimates/${row.id}`)}
+        onClick={() => router.push(`/crm/estimates/${row.id}/v2`)}
         className="cursor-pointer rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
       >
         <div className="flex flex-wrap justify-between gap-3">
@@ -162,10 +149,8 @@ export default function EstimatesPage() {
             <div className="mt-1.5 text-xs text-gray-600">Status: {row.status}</div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-gray-600">Final total</div>
-            <div className="text-xl font-black text-gray-900">
-              {formatCurrency(row.latest_output_json?.output_app?.FinalTotal)}
-            </div>
+            <div className="text-xs text-gray-600">Version</div>
+            <div className="text-xl font-black text-gray-900">{row.version_name ?? 'Draft'}</div>
             <div className="mt-1 text-[11px] text-gray-500">
               Updated: {new Date(row.updated_at).toLocaleString()}
             </div>
@@ -186,7 +171,7 @@ export default function EstimatesPage() {
             </button>
           )}
           <Link
-            href={`/crm/estimates/${row.id}`}
+            href={`/crm/estimates/${row.id}/v2`}
             onClick={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-900"
           >
@@ -215,7 +200,7 @@ export default function EstimatesPage() {
           <div>
             <h1 className="m-0 text-2xl font-extrabold text-gray-900">Estimates</h1>
             <div className="mt-1 text-sm text-gray-600">
-              Spreadsheet-backed estimates using INPUT_* / OUTPUT_App.
+              DB-backed estimate versions for the v2 editor.
             </div>
           </div>
           <Link

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { loadEstimateTemplateSettings } from '@/lib/server/estimateTemplateSettings'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -31,18 +32,30 @@ export async function POST(
 
   const jobId = estimateRes.data.job_id
   const orgId = session.orgId
+  const templateDefaults = await loadEstimateTemplateSettings(orgId).catch(() => null)
 
   await supabaseAdmin.from('estimate_jobsettings').upsert(
     {
       org_id: orgId,
       estimate_id: id,
       job_id: jobId,
-      walls_paint_id: 'A',
-      ceiling_paint_id: 'A',
-      trim_paint_id: 'A',
-      primer_id: 'A',
-      dayhours: 8,
-      rounding_increment_hours: 4,
+      walls_paint_id: templateDefaults?.walls_paint_id ?? null,
+      walls_primer_id: templateDefaults?.walls_primer_id ?? null,
+      ceiling_paint_id: templateDefaults?.ceiling_paint_id ?? null,
+      ceiling_primer_id: templateDefaults?.ceiling_primer_id ?? null,
+      trim_paint_id: templateDefaults?.trim_paint_id ?? null,
+      trim_primer_id: templateDefaults?.trim_primer_id ?? null,
+      primer_id:
+        templateDefaults?.walls_primer_id ??
+        templateDefaults?.ceiling_primer_id ??
+        templateDefaults?.trim_primer_id ??
+        null,
+      labor_day_policy_enabled: templateDefaults?.labor_day_policy_enabled,
+      dayhours: templateDefaults?.dayhours ?? null,
+      rounding_increment_hours: templateDefaults?.rounding_increment_hours ?? null,
+      override_labor_rate: templateDefaults?.override_labor_rate ?? null,
+      job_minimum_enabled: templateDefaults?.job_minimum_enabled,
+      job_minimum_amount: templateDefaults?.job_minimum_amount ?? null,
     },
     { onConflict: 'org_id,estimate_id' }
   )

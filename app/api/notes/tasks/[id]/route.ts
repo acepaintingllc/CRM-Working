@@ -29,6 +29,27 @@ async function loadTask(orgId: string, id: string) {
   return { task: query.data as NotesTaskRow }
 }
 
+export async function GET(_: Request, context: { params: Params }) {
+  const session = await getSessionUserOrg()
+  if ('error' in session) {
+    const status = session.error === 'Not authenticated' ? 401 : 403
+    return NextResponse.json({ error: session.error }, { status })
+  }
+
+  const params = await Promise.resolve(context.params)
+  const id = params?.id
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: 'Invalid task id.' }, { status: 400 })
+  }
+
+  const loaded = await loadTask(session.orgId, id)
+  if ('error' in loaded) {
+    return NextResponse.json({ error: loaded.error }, { status: loaded.status })
+  }
+
+  return NextResponse.json({ task: loaded.task })
+}
+
 export async function PATCH(request: Request, context: { params: Params }) {
   const session = await getSessionUserOrg()
   if ('error' in session) {

@@ -1,51 +1,31 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
-import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import {
-  formatDue,
-  recurrenceLabel,
-  recurrenceOptions,
-  recurrenceUnitOptions,
-  toIsoFromLocal,
-  toLocalDateInput,
-  toLocalTimeInput,
-  type RecurrenceFrequency,
-  type RecurrenceUnit,
-  type TaskRow,
-} from '../_lib'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { Check, Clock3, EllipsisVertical, Repeat, Star, PencilLine } from 'lucide-react'
+import { buildNotesModuleHref } from '../_components'
+import { formatDue, recurrenceLabel, type TaskRow } from '../_lib'
 
 type StatusFilter = 'active' | 'completed' | 'archived'
 type DueFilter = 'all' | 'overdue' | 'today' | 'upcoming'
+type PriorityFilter = 'all' | 'low' | 'medium' | 'high'
 
 export default function NotesTasksPage() {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const focusId = searchParams.get('focus')
 
   const [status, setStatus] = useState<StatusFilter>('active')
   const [due, setDue] = useState<DueFilter>('all')
+  const [priority, setPriority] = useState<PriorityFilter>('all')
+  const [starredOnly, setStarredOnly] = useState(false)
   const [search, setSearch] = useState('')
   const [tasks, setTasks] = useState<TaskRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [editId, setEditId] = useState<string | null>(null)
-
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [dueTime, setDueTime] = useState('')
-  const [allDay, setAllDay] = useState(false)
-  const [reminderEnabled, setReminderEnabled] = useState(false)
-  const [reminderAtLocal, setReminderAtLocal] = useState('')
-  const [reminderOffset, setReminderOffset] = useState('')
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | ''>('')
-  const [starred, setStarred] = useState(false)
-  const [recurrence, setRecurrence] = useState<RecurrenceFrequency | ''>('')
-  const [customInterval, setCustomInterval] = useState('1')
-  const [customUnit, setCustomUnit] = useState<RecurrenceUnit>('week')
 
   const load = async () => {
     setLoading(true)
@@ -53,6 +33,8 @@ export default function NotesTasksPage() {
     const query = new URLSearchParams()
     query.set('status', status)
     if (status === 'active') query.set('due', due)
+    if (priority !== 'all') query.set('priority', priority)
+    if (starredOnly) query.set('starred', 'true')
     if (search.trim()) query.set('search', search.trim())
     const res = await authedFetch(`/api/notes/tasks?${query.toString()}`, { cache: 'no-store' })
     const payload = await res.json().catch(() => null)
@@ -68,93 +50,19 @@ export default function NotesTasksPage() {
   useEffect(() => {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, due])
+  }, [status, due, priority, starredOnly])
 
   useEffect(() => {
-    const t = setTimeout(() => void load(), 250)
-    return () => clearTimeout(t)
+    const timeout = setTimeout(() => void load(), 250)
+    return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
-  useEffect(() => {
-    if (!focusId || tasks.length === 0) return
-    const task = tasks.find((row) => row.id === focusId)
-    if (!task) return
-    openEditor(task)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusId, tasks.length])
-
-  const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks])
-  const editingTask = editId ? taskById.get(editId) ?? null : null
-
-  const openEditor = (task: TaskRow) => {
-    setEditId(task.id)
-    setTitle(task.title)
-    setDescription(task.description ?? '')
-    setDueDate(toLocalDateInput(task.due_at))
-    setDueTime(toLocalTimeInput(task.due_at))
-    setAllDay(task.is_all_day)
-    setReminderEnabled(task.reminder_enabled)
-    setReminderAtLocal(task.reminder_at ? task.reminder_at.slice(0, 16) : '')
-    setReminderOffset(task.reminder_offset_minutes == null ? '' : String(task.reminder_offset_minutes))
-    setPriority(task.priority ?? '')
-    setStarred(task.starred)
-    setRecurrence(task.recurrence_rule?.frequency ?? '')
-    setCustomInterval(String(task.recurrence_rule?.interval ?? 1))
-    setCustomUnit(task.recurrence_rule?.unit ?? 'week')
-  }
-
-  const closeEditor = () => {
-    setEditId(null)
-  }
-
-  const saveEdit = async () => {
-    if (!editingTask) return
-    const dueAt = toIsoFromLocal({
-      date: dueDate,
-      time: dueTime,
-      hasDueTime: !allDay && Boolean(dueTime),
-      isAllDay: allDay,
+  const taskHref = (taskId: string) =>
+    buildNotesModuleHref(pathname ?? '/crm/notes/tasks', searchParams, {
+      composer: 'task',
+      taskId,
     })
-    const reminderAt = reminderAtLocal ? new Date(reminderAtLocal).toISOString() : null
-    const recurrencePayload =
-      recurrence === ''
-        ? null
-        : recurrence === 'custom'
-        ? {
-            frequency: 'custom' as const,
-            interval: Math.max(1, Number(customInterval || '1')),
-            unit: customUnit,
-          }
-        : { frequency: recurrence }
-
-    setSaving(true)
-    const res = await authedFetch(`/api/notes/tasks/${editingTask.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: title.trim(),
-        description: description.trim() || null,
-        due_at: dueAt,
-        is_all_day: allDay,
-        has_due_time: !allDay && Boolean(dueTime),
-        reminder_enabled: reminderEnabled,
-        reminder_at: reminderAt,
-        reminder_offset_minutes: reminderOffset.trim() ? Number(reminderOffset.trim()) : null,
-        priority: priority || null,
-        starred,
-        recurrence_rule: recurrencePayload,
-      }),
-    })
-    const payload = await res.json().catch(() => null)
-    setSaving(false)
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to save task.')
-      return
-    }
-    closeEditor()
-    await load()
-  }
 
   const runAction = async (path: string, method: 'POST' | 'DELETE' = 'POST', body?: Record<string, unknown>) => {
     const res = await authedFetch(path, {
@@ -165,300 +73,229 @@ export default function NotesTasksPage() {
     const payload = await res.json().catch(() => null)
     if (!res.ok) {
       setError(payload?.error ?? 'Action failed.')
-      return false
+      return
     }
     await load()
-    return true
+    router.refresh()
   }
 
+  const taskCountLabel = useMemo(() => `${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}`, [tasks.length])
+
   return (
-    <div className="grid gap-4 pb-14">
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {(['active', 'completed', 'archived'] as StatusFilter[]).map((value) => (
-            <button
-              key={value}
-              onClick={() => setStatus(value)}
-              className={`rounded-xl px-3 py-2 text-sm font-extrabold ${
-                status === value ? 'bg-black text-white' : 'bg-gray-100 text-gray-800'
-              }`}
-            >
-              {value[0].toUpperCase() + value.slice(1)}
-            </button>
-          ))}
-          <Link href="/crm/notes/quick-add" className="ml-auto rounded-xl border border-gray-300 px-3 py-2 text-sm font-bold">
-            Quick Add
-          </Link>
+    <div className="grid gap-4">
+      <section className="rounded-[28px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-extrabold uppercase tracking-[0.24em] text-emerald-300/80">Tasks</div>
+            <h2 className="mt-2 text-2xl font-extrabold text-white">Compact task manager</h2>
+            <p className="mt-1 text-sm text-neutral-400">Filter quickly, act inline, and open editing in the dedicated task composer.</p>
+          </div>
+          <div className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs font-bold text-neutral-400">
+            {taskCountLabel}
+          </div>
         </div>
 
-        {status === 'active' && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {(['all', 'overdue', 'today', 'upcoming'] as DueFilter[]).map((value) => (
+        <div className="mt-4 grid gap-3 xl:grid-cols-[auto_auto_auto_auto_minmax(0,1fr)]">
+          <div className="inline-flex rounded-2xl bg-neutral-900 p-1">
+            {(['active', 'completed', 'archived'] as StatusFilter[]).map((value) => (
               <button
                 key={value}
-                onClick={() => setDue(value)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
-                  due === value ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'
+                type="button"
+                onClick={() => setStatus(value)}
+                className={`rounded-xl px-3 py-2 text-sm font-extrabold transition ${
+                  status === value ? 'bg-emerald-400 text-neutral-950' : 'text-neutral-400 hover:text-white'
                 }`}
               >
-                {value === 'all' ? 'All' : value[0].toUpperCase() + value.slice(1)}
+                {value[0].toUpperCase() + value.slice(1)}
               </button>
             ))}
           </div>
-        )}
 
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search tasks..."
-          className="w-full rounded-xl border border-gray-300 px-3 py-2"
-        />
+          <select
+            value={status === 'active' ? due : 'all'}
+            disabled={status !== 'active'}
+            onChange={(event) => setDue(event.target.value as DueFilter)}
+            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-emerald-400 disabled:opacity-50"
+          >
+            <option value="all">All due states</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Due today</option>
+            <option value="upcoming">Upcoming</option>
+          </select>
+
+          <select
+            value={priority}
+            onChange={(event) => setPriority(event.target.value as PriorityFilter)}
+            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-emerald-400"
+          >
+            <option value="all">All priorities</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+
+          <label className="inline-flex items-center gap-2 rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-neutral-200">
+            <input type="checkbox" checked={starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
+            <span>Starred only</span>
+          </label>
+
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search tasks..."
+            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+          />
+        </div>
       </section>
 
-      {status === 'completed' && (
-        <button
-          onClick={() => void runAction('/api/notes/tasks/completed', 'DELETE')}
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-extrabold text-red-700"
-        >
-          Bulk Delete Completed Tasks
-        </button>
-      )}
-
-      {editingTask && (
-        <section className="grid gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-extrabold text-gray-900">Edit Task</h2>
-          <label className="grid gap-1 text-sm font-semibold">
-            Title
-            <input value={title} onChange={(event) => setTitle(event.target.value)} className="rounded-xl border border-gray-300 px-3 py-2" />
-          </label>
-          <label className="grid gap-1 text-sm font-semibold">
-            Description
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              className="min-h-24 rounded-xl border border-gray-300 px-3 py-2"
-            />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="grid gap-1 text-sm font-semibold">
-              Due Date
-              <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="rounded-xl border border-gray-300 px-3 py-2" />
-            </label>
-            <label className="grid gap-1 text-sm font-semibold">
-              Due Time
-              <input
-                type="time"
-                value={dueTime}
-                disabled={allDay}
-                onChange={(event) => setDueTime(event.target.value)}
-                className="rounded-xl border border-gray-300 px-3 py-2 disabled:bg-gray-100"
-              />
-            </label>
-            <label className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
-              <input type="checkbox" checked={allDay} onChange={(event) => setAllDay(event.target.checked)} />
-              <span>All day</span>
-            </label>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={reminderEnabled}
-                onChange={(event) => setReminderEnabled(event.target.checked)}
-              />
-              <span>Reminder email</span>
-            </label>
-            <label className="grid gap-1 text-sm font-semibold">
-              Reminder Time
-              <input
-                type="datetime-local"
-                value={reminderAtLocal}
-                onChange={(event) => setReminderAtLocal(event.target.value)}
-                disabled={!reminderEnabled}
-                className="rounded-xl border border-gray-300 px-3 py-2 disabled:bg-gray-100"
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-semibold">
-              Reminder Offset (min)
-              <input
-                type="number"
-                min={0}
-                value={reminderOffset}
-                onChange={(event) => setReminderOffset(event.target.value)}
-                disabled={!reminderEnabled}
-                className="rounded-xl border border-gray-300 px-3 py-2 disabled:bg-gray-100"
-              />
-            </label>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="grid gap-1 text-sm font-semibold">
-              Recurrence
-              <select
-                value={recurrence}
-                onChange={(event) => setRecurrence(event.target.value as RecurrenceFrequency | '')}
-                className="rounded-xl border border-gray-300 px-3 py-2"
-              >
-                <option value="">None</option>
-                {recurrenceOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {recurrence === 'custom' && (
-              <>
-                <label className="grid gap-1 text-sm font-semibold">
-                  Every
-                  <input
-                    type="number"
-                    min={1}
-                    value={customInterval}
-                    onChange={(event) => setCustomInterval(event.target.value)}
-                    className="rounded-xl border border-gray-300 px-3 py-2"
-                  />
-                </label>
-                <label className="grid gap-1 text-sm font-semibold">
-                  Unit
-                  <select
-                    value={customUnit}
-                    onChange={(event) => setCustomUnit(event.target.value as RecurrenceUnit)}
-                    className="rounded-xl border border-gray-300 px-3 py-2"
-                  >
-                    {recurrenceUnitOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            )}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="grid gap-1 text-sm font-semibold">
-              Priority
-              <select
-                value={priority}
-                onChange={(event) => setPriority(event.target.value as 'low' | 'medium' | 'high' | '')}
-                className="rounded-xl border border-gray-300 px-3 py-2"
-              >
-                <option value="">None</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </label>
-            <label className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
-              <input type="checkbox" checked={starred} onChange={(event) => setStarred(event.target.checked)} />
-              <span>Starred</span>
-            </label>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button disabled={saving} onClick={() => void saveEdit()} className="rounded-xl bg-black px-4 py-2 text-sm font-extrabold text-white">
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-            <button onClick={closeEditor} className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-bold text-gray-800">
-              Cancel
-            </button>
-          </div>
-        </section>
-      )}
-
-      {loading && <div className="text-sm text-gray-500">Loading tasks...</div>}
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {loading && <div className="text-sm text-neutral-400">Loading tasks...</div>}
+      {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
 
       {!loading && (
         <section className="grid gap-2">
-          {tasks.length === 0 && <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-500">No tasks found.</div>}
-          {tasks.map((task) => (
-            <article key={task.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-base font-extrabold text-gray-900">
-                    {task.starred ? '★ ' : ''}
-                    {task.title}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {formatDue(task.due_at, task.is_all_day, task.has_due_time)} · Priority: {task.priority ?? 'none'} ·
-                    Recurrence: {recurrenceLabel(task.recurrence_rule)}
-                  </div>
-                  {task.description && <div className="mt-1 text-sm text-gray-600">{task.description}</div>}
-                </div>
-                <div className="flex flex-wrap gap-2">
+          {tasks.length === 0 && (
+            <div className="rounded-[28px] border border-dashed border-neutral-800 bg-neutral-950 p-6 text-sm text-neutral-500 shadow-sm">
+              No tasks found for the current filters.
+            </div>
+          )}
+          {tasks.map((task) => {
+            const isFocused = focusId === task.id
+            return (
+              <article
+                key={task.id}
+                className={`grid gap-3 rounded-[26px] border p-4 shadow-sm transition ${
+                  isFocused
+                    ? 'border-emerald-400/60 bg-neutral-900 ring-1 ring-emerald-400/30'
+                    : 'border-neutral-800 bg-neutral-950 hover:border-neutral-700'
+                }`}
+              >
+                <div className="flex flex-wrap items-start gap-3">
                   <button
-                    onClick={() => openEditor(task)}
-                    className="rounded-lg border border-gray-300 px-2 py-1 text-xs font-bold text-gray-800"
-                  >
-                    Edit
-                  </button>
-                  <button
+                    type="button"
+                    aria-label={task.status === 'active' ? `Complete ${task.title}` : `Reopen ${task.title}`}
                     onClick={() =>
-                      void runAction(`/api/notes/tasks/${task.id}`, 'DELETE')
+                      void runAction(
+                        task.status === 'active'
+                          ? `/api/notes/tasks/${task.id}/complete`
+                          : `/api/notes/tasks/${task.id}/reopen`
+                      )
                     }
-                    className="rounded-lg border border-red-200 px-2 py-1 text-xs font-bold text-red-700"
+                    className={`mt-0.5 inline-flex size-9 items-center justify-center rounded-full border ${
+                      task.status === 'completed'
+                        ? 'border-emerald-400/40 bg-emerald-400 text-neutral-950'
+                        : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-emerald-400 hover:text-emerald-300'
+                    }`}
                   >
-                    Delete
+                    <Check size={16} aria-hidden="true" />
                   </button>
-                </div>
-              </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                {task.status === 'active' && (
-                  <>
-                    <button
-                      onClick={() => void runAction(`/api/notes/tasks/${task.id}/complete`)}
-                      className="rounded-lg bg-black px-2.5 py-1.5 text-xs font-extrabold text-white"
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-extrabold text-white">{task.title}</h3>
+                      {task.starred && <Star size={14} className="fill-amber-400 text-amber-400" aria-hidden="true" />}
+                      <TaskPill>{task.priority ?? 'none'} priority</TaskPill>
+                      {task.recurrence_rule && (
+                        <TaskPill icon={<Repeat size={13} aria-hidden="true" />}>{recurrenceLabel(task.recurrence_rule)}</TaskPill>
+                      )}
+                    </div>
+                    {task.description && <p className="mt-1 line-clamp-2 text-sm text-neutral-400">{task.description}</p>}
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
+                      <TaskPill icon={<Clock3 size={13} aria-hidden="true" />}>
+                        {formatDue(task.due_at, task.is_all_day, task.has_due_time)}
+                      </TaskPill>
+                      <TaskPill>{task.status}</TaskPill>
+                    </div>
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    <Link
+                      href={taskHref(task.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
                     >
-                      Complete
-                    </button>
-                    <button
-                      onClick={() => void runAction(`/api/notes/tasks/${task.id}/archive`)}
-                      className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold"
-                    >
-                      Archive
-                    </button>
-                    <button
-                      onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'later_today' })}
-                      className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold"
-                    >
-                      Snooze Later Today
-                    </button>
-                    <button
-                      onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'tomorrow' })}
-                      className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold"
-                    >
-                      Snooze Tomorrow
-                    </button>
-                    <button
-                      onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'next_week' })}
-                      className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold"
-                    >
-                      Snooze Next Week
-                    </button>
-                  </>
-                )}
-                {task.status === 'completed' && (
-                  <button
-                    onClick={() => void runAction(`/api/notes/tasks/${task.id}/reopen`)}
-                    className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold"
-                  >
-                    Reopen
-                  </button>
-                )}
-                {task.status === 'archived' && (
-                  <button
-                    onClick={() => void runAction(`/api/notes/tasks/${task.id}/unarchive`)}
-                    className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold"
-                  >
-                    Unarchive
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
+                      <PencilLine size={14} aria-hidden="true" />
+                      <span>Edit</span>
+                    </Link>
+                    {task.status === 'active' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'tomorrow' })}
+                          className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
+                        >
+                          Snooze
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void runAction(`/api/notes/tasks/${task.id}/archive`)}
+                          className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
+                        >
+                          Archive
+                        </button>
+                      </>
+                    )}
+                    <details className="relative">
+                      <summary className="flex size-9 cursor-pointer list-none items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800 [&::-webkit-details-marker]:hidden">
+                        <EllipsisVertical size={15} aria-hidden="true" />
+                      </summary>
+                      <div className="absolute right-0 top-11 z-20 min-w-40 rounded-2xl border border-neutral-800 bg-neutral-950 p-1 shadow-xl">
+                        {task.status === 'active' && (
+                          <>
+                            <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/complete`)}>
+                              Complete
+                            </MenuAction>
+                            <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'later_today' })}>
+                              Snooze later today
+                            </MenuAction>
+                            <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/snooze`, 'POST', { action: 'next_week' })}>
+                              Snooze next week
+                            </MenuAction>
+                          </>
+                        )}
+                        {task.status === 'completed' && (
+                          <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/reopen`)}>
+                            Reopen
+                          </MenuAction>
+                        )}
+                        {task.status === 'archived' && (
+                          <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}/unarchive`)}>
+                            Unarchive
+                          </MenuAction>
+                        )}
+                        <MenuAction onClick={() => void runAction(`/api/notes/tasks/${task.id}`, 'DELETE')} danger>
+                          Delete
+                        </MenuAction>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
         </section>
       )}
     </div>
+  )
+}
+
+function TaskPill(props: { children: ReactNode; icon?: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-400">
+      {props.icon}
+      <span>{props.children}</span>
+    </span>
+  )
+}
+
+function MenuAction(props: { children: ReactNode; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+        props.danger ? 'text-red-300 hover:bg-red-500/10' : 'text-neutral-200 hover:bg-neutral-900'
+      }`}
+    >
+      {props.children}
+    </button>
   )
 }

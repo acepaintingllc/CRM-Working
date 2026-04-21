@@ -57,7 +57,6 @@ type JobDetail = {
     version_state: string | null
     version_kind: string | null
     version_sort_order: number | null
-    sheet_file_path: string | null
     updated_at: string | null
     created_at: string | null
   }>
