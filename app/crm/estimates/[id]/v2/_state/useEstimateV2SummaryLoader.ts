@@ -97,7 +97,7 @@ export function useEstimateV2SummaryLoader(estimateId: string, state: SummaryLoa
       state.setLoading(true)
       state.setError(null)
 
-      const res = await authedFetch(`/api/estimates/${estimateId}`, { cache: 'no-store' })
+      const res = await authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' })
       const payload = (await res.json().catch(() => null)) as
         | EstimateV2SummaryPageData
         | { error?: string }

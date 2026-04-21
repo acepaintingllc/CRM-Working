@@ -156,7 +156,7 @@ export default function EstimatePortalClient({
     setBusy(true)
     setMessage(null)
     try {
-      const res = await fetch(`/api/estimate-public/${snapshot.public_token}/accept`, {
+      const res = await fetch(`/api/quote-public/${snapshot.public_token}/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -183,7 +183,7 @@ export default function EstimatePortalClient({
     setBusy(true)
     setMessage(null)
     try {
-      const res = await fetch(`/api/estimate-public/${snapshot.public_token}/decline`, {
+      const res = await fetch(`/api/quote-public/${snapshot.public_token}/decline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: declineReason }),
@@ -423,7 +423,7 @@ export default function EstimatePortalClient({
                         opacity: busy || !canAccept ? 0.55 : 1,
                       }}
                     >
-                      Accept Estimate
+                      Accept Quote
                     </button>
                   </div>
                 </div>

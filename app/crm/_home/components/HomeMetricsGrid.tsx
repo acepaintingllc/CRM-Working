@@ -1,228 +1,244 @@
-import Link from 'next/link'
 import { formatCurrency } from '@/lib/crm/home/formatters'
 import type { CrmHomeMetrics } from '@/lib/crm/home/types'
 import { DonutRing } from './DonutRing'
+import { DashboardCardShell } from './primitives/DashboardCardShell'
+import { DashboardSectionHeader } from './primitives/DashboardSectionHeader'
+import { DashboardSkeletonBlock } from './primitives/DashboardSkeletonBlock'
+import { DashboardSkeletonRow } from './primitives/DashboardSkeletonRow'
+import { crmBorderStyle, crmMutedTextStyle, crmTextStyle } from './primitives/tokens'
+import { cx } from './primitives/utils'
 
 type HomeMetricsGridProps = {
-  metrics: CrmHomeMetrics
+  viewModel: {
+    metrics: CrmHomeMetrics
+    isLoading: boolean
+    isUnavailable: boolean
+  }
 }
 
-export function HomeMetricsGrid({ metrics }: HomeMetricsGridProps) {
+type MetricSubRowDescriptor = {
+  label: string
+  value: string | number
+  valueClassName?: string
+}
+
+type MetricCardDescriptor = {
+  label: string
+  href: string
+  value: string | number
+  className?: string
+  valueClassName?: string
+  subRows: MetricSubRowDescriptor[]
+  subRowValueClassName?: string
+}
+
+function MetricSubRow({
+  label,
+  value,
+  valueClassName = 'mt-0.5 text-xl font-extrabold',
+}: MetricSubRowDescriptor) {
+  return (
+    <div>
+      <div className="text-xs" style={crmMutedTextStyle}>
+        {label}
+      </div>
+      <div className={valueClassName} style={crmTextStyle}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function renderMetricCard(
+  descriptor: MetricCardDescriptor,
+  isLoading: boolean,
+  isUnavailable: boolean,
+  loadingValueClassName: string
+) {
+  const unavailableValue = '\u2014'
+  return (
+    <DashboardCardShell key={descriptor.label} className={cx('p-5', descriptor.className)}>
+      <DashboardSectionHeader label={descriptor.label} actionHref={descriptor.href} actionLabel="View" />
+      <div className={descriptor.valueClassName ?? 'mt-3 text-3xl font-extrabold tracking-tight md:text-4xl'} style={crmTextStyle}>
+        {isLoading ? (
+          <DashboardSkeletonBlock className={loadingValueClassName} />
+        ) : isUnavailable ? (
+          unavailableValue
+        ) : (
+          descriptor.value
+        )}
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 border-t pt-4" style={crmBorderStyle}>
+        {descriptor.subRows.map((subRow) =>
+          isLoading ? (
+            <DashboardSkeletonRow
+              key={subRow.label}
+              valueClassName={subRow.valueClassName === 'mt-0.5 text-sm font-extrabold' ? 'h-6 w-24' : 'h-8 w-20'}
+            />
+          ) : isUnavailable ? (
+            <MetricSubRow
+              key={subRow.label}
+              label={subRow.label}
+              value={unavailableValue}
+              valueClassName={subRow.valueClassName}
+            />
+          ) : (
+            <MetricSubRow key={subRow.label} {...subRow} />
+          )
+        )}
+      </div>
+    </DashboardCardShell>
+  )
+}
+
+export function HomeMetricsGrid({ viewModel }: HomeMetricsGridProps) {
+  const { metrics, isLoading, isUnavailable } = viewModel
+
+  const primaryMetricCards: MetricCardDescriptor[] = [
+    {
+      label: 'Sales',
+      href: '/crm/jobs',
+      value: formatCurrency(metrics.salesTotal),
+      className: 'col-span-2 md:col-span-1 md:p-6',
+      subRows: [
+        { label: 'Estimates Won', value: metrics.won },
+        {
+          label: 'Avg. Value',
+          value: metrics.avgTicket != null ? formatCurrency(metrics.avgTicket) : '-',
+        },
+      ],
+    },
+    {
+      label: 'Pipeline',
+      href: '/crm/jobs',
+      value: formatCurrency(metrics.pipelineTotal),
+      className: 'md:p-6',
+      subRows: [
+        { label: 'Open Jobs', value: metrics.openJobsCount },
+        {
+          label: 'Avg. Open Value',
+          value: metrics.openJobsAvgValue != null ? formatCurrency(metrics.openJobsAvgValue) : '-',
+        },
+      ],
+    },
+  ]
+
+  const secondaryMetricCards: MetricCardDescriptor[] = [
+    {
+      label: 'Total Estimates',
+      href: '/crm/jobs',
+      value: metrics.totalEstimates,
+      valueClassName: 'mt-2 text-3xl font-extrabold',
+      subRows: [
+        {
+          label: 'Worth',
+          value: formatCurrency(metrics.pipelineTotal),
+          valueClassName: 'mt-0.5 text-sm font-extrabold',
+        },
+        {
+          label: 'Avg. Value',
+          value: metrics.avgTicket != null ? formatCurrency(metrics.avgTicket) : '-',
+          valueClassName: 'mt-0.5 text-sm font-extrabold',
+        },
+      ],
+    },
+    {
+      label: 'Open Estimates',
+      href: '/crm/jobs',
+      value: metrics.openJobsCount,
+      valueClassName: 'mt-2 text-3xl font-extrabold',
+      subRows: [
+        {
+          label: 'Worth',
+          value: formatCurrency(metrics.openJobsTotal),
+          valueClassName: 'mt-0.5 text-sm font-extrabold',
+        },
+        {
+          label: 'Avg. Value',
+          value: metrics.openJobsAvgValue != null ? formatCurrency(metrics.openJobsAvgValue) : '-',
+          valueClassName: 'mt-0.5 text-sm font-extrabold',
+        },
+      ],
+    },
+  ]
+
   return (
     <>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-        <div
-          className="crm-card col-span-2 rounded-2xl border p-5 shadow-sm md:col-span-1 md:p-6"
-          style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div
-              className="text-[11px] font-extrabold uppercase tracking-widest"
-              style={{ color: 'var(--crm-muted)' }}
-            >
-              Sales
-            </div>
-            <Link
-              href="/crm/jobs"
-              className="text-xs font-semibold underline-offset-2 hover:underline"
-              style={{ color: 'var(--crm-muted)' }}
-            >
-              View
-            </Link>
-          </div>
-          <div
-            className="mt-3 text-3xl font-extrabold tracking-tight md:text-4xl"
-            style={{ color: 'var(--crm-text)' }}
-          >
-            {formatCurrency(metrics.salesTotal)}
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 border-t pt-4" style={{ borderColor: 'var(--crm-border)' }}>
-            <div>
-              <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
-                Estimates Won
-              </div>
-              <div className="mt-0.5 text-xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
-                {metrics.won}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
-                Avg. Value
-              </div>
-              <div className="mt-0.5 text-xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
-                {metrics.avgTicket != null ? formatCurrency(metrics.avgTicket) : '-'}
-              </div>
-            </div>
-          </div>
-        </div>
+        {renderMetricCard(primaryMetricCards[0], isLoading, isUnavailable, 'h-10 w-32')}
 
-        <div
-          className="crm-card flex flex-col items-center justify-center gap-3 rounded-2xl border p-6 shadow-sm"
-          style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
-        >
-          <div
-            className="text-[11px] font-extrabold uppercase tracking-widest"
-            style={{ color: 'var(--crm-muted)' }}
-          >
-            Win Rate
-          </div>
-          <DonutRing pct={metrics.winRate} label={`${metrics.winRate}%`} />
-          <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
-            {metrics.total} total decisions
-          </div>
-        </div>
+        <DashboardCardShell className="flex flex-col items-center justify-center gap-3 p-6">
+          <DashboardSectionHeader label="Win Rate" />
+          {isLoading ? (
+            <>
+              <DashboardSkeletonBlock className="h-28 w-28 rounded-full" />
+              <DashboardSkeletonBlock className="h-4 w-28" />
+            </>
+          ) : isUnavailable ? (
+            <>
+              <div className="text-5xl font-extrabold" style={crmTextStyle}>
+                {'\u2014'}
+              </div>
+              <div className="text-xs" style={crmMutedTextStyle}>
+                Metrics unavailable
+              </div>
+            </>
+          ) : (
+            <>
+              <DonutRing pct={metrics.winRate} label={`${metrics.winRate}%`} />
+              <div className="text-xs" style={crmMutedTextStyle}>
+                {metrics.total} total decisions
+              </div>
+            </>
+          )}
+        </DashboardCardShell>
 
-        <div
-          className="crm-card rounded-2xl border p-5 shadow-sm md:p-6"
-          style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div
-              className="text-[11px] font-extrabold uppercase tracking-widest"
-              style={{ color: 'var(--crm-muted)' }}
-            >
-              Pipeline
-            </div>
-            <Link
-              href="/crm/jobs"
-              className="text-xs font-semibold underline-offset-2 hover:underline"
-              style={{ color: 'var(--crm-muted)' }}
-            >
-              View
-            </Link>
-          </div>
-          <div
-            className="mt-3 text-3xl font-extrabold tracking-tight md:text-4xl"
-            style={{ color: 'var(--crm-text)' }}
-          >
-            {formatCurrency(metrics.pipelineTotal)}
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 border-t pt-4" style={{ borderColor: 'var(--crm-border)' }}>
-            <div>
-              <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
-                Open Jobs
-              </div>
-              <div className="mt-0.5 text-xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
-                {metrics.openJobsCount}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>
-                Avg. Open Value
-              </div>
-              <div className="mt-0.5 text-xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
-                {metrics.openJobsAvgValue != null ? formatCurrency(metrics.openJobsAvgValue) : '-'}
-              </div>
-            </div>
-          </div>
-        </div>
+        {renderMetricCard(primaryMetricCards[1], isLoading, isUnavailable, 'h-10 w-32')}
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <div
-          className="crm-card rounded-2xl border p-5 shadow-sm"
-          style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div
-              className="text-[11px] font-extrabold uppercase tracking-widest"
-              style={{ color: 'var(--crm-muted)' }}
-            >
-              Total Estimates
-            </div>
-            <Link
-              href="/crm/jobs"
-              className="text-xs font-semibold underline-offset-2 hover:underline"
-              style={{ color: 'var(--crm-muted)' }}
-            >
-              View
-            </Link>
-          </div>
-          <div className="mt-2 text-3xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
-            {metrics.totalEstimates}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3" style={{ borderColor: 'var(--crm-border)' }}>
-            <div>
-              <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>Worth</div>
-              <div className="mt-0.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
-                {formatCurrency(metrics.pipelineTotal)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>Avg. Value</div>
-              <div className="mt-0.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
-                {metrics.avgTicket != null ? formatCurrency(metrics.avgTicket) : '-'}
-              </div>
-            </div>
-          </div>
-        </div>
+        {secondaryMetricCards.map((descriptor) =>
+          renderMetricCard(descriptor, isLoading, isUnavailable, 'h-8 w-20')
+        )}
 
-        <div
-          className="crm-card rounded-2xl border p-5 shadow-sm"
-          style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div
-              className="text-[11px] font-extrabold uppercase tracking-widest"
-              style={{ color: 'var(--crm-muted)' }}
-            >
-              Open Estimates
-            </div>
-            <Link
-              href="/crm/jobs"
-              className="text-xs font-semibold underline-offset-2 hover:underline"
-              style={{ color: 'var(--crm-muted)' }}
-            >
-              View
-            </Link>
-          </div>
-          <div className="mt-2 text-3xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
-            {metrics.openJobsCount}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3" style={{ borderColor: 'var(--crm-border)' }}>
-            <div>
-              <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>Worth</div>
-              <div className="mt-0.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
-                {formatCurrency(metrics.openJobsTotal)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs" style={{ color: 'var(--crm-muted)' }}>Avg. Value</div>
-              <div className="mt-0.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
-                {metrics.openJobsAvgValue != null ? formatCurrency(metrics.openJobsAvgValue) : '-'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="crm-card col-span-2 rounded-2xl border p-5 shadow-sm sm:col-span-1"
-          style={{ background: 'var(--crm-card)', borderColor: 'var(--crm-border)' }}
-        >
-          <div
-            className="text-[11px] font-extrabold uppercase tracking-widest"
-            style={{ color: 'var(--crm-muted)' }}
-          >
-            Close Rate
-          </div>
-          <div className="mt-2 text-3xl font-extrabold" style={{ color: 'var(--crm-text)' }}>
-            {metrics.winRate}%
+        <DashboardCardShell className="col-span-2 p-5 sm:col-span-1">
+          <DashboardSectionHeader label="Close Rate" />
+          <div className="mt-2 text-3xl font-extrabold" style={crmTextStyle}>
+            {isLoading ? (
+              <DashboardSkeletonBlock className="h-8 w-20" />
+            ) : isUnavailable ? (
+              '\u2014'
+            ) : (
+              `${metrics.winRate}%`
+            )}
           </div>
           <div className="mt-3">
             <div className="h-5 overflow-hidden rounded-full" style={{ background: 'var(--crm-border)' }}>
               <div
-                className="h-full rounded-full transition-all duration-500"
+                className={cx('h-full rounded-full transition-all duration-500', isLoading && 'animate-pulse')}
                 style={{
-                  width: `${metrics.winRate}%`,
-                  background: 'var(--crm-accent)',
+                  width: isLoading ? '45%' : isUnavailable ? '0%' : `${metrics.winRate}%`,
+                  background: isLoading
+                    ? 'var(--crm-border-soft)'
+                    : isUnavailable
+                      ? 'var(--crm-border-soft)'
+                      : 'var(--crm-accent)',
                 }}
               />
             </div>
-            <div className="mt-2 text-xs" style={{ color: 'var(--crm-muted)' }}>
-              {metrics.won} won {'\u2022'} {metrics.lost} lost
+            <div className="mt-2 text-xs" style={crmMutedTextStyle}>
+              {isLoading ? (
+                <DashboardSkeletonBlock className="h-4 w-24" />
+              ) : isUnavailable ? (
+                'Metrics unavailable'
+              ) : (
+                <>
+                  {metrics.won} won {'\u2022'} {metrics.lost} lost
+                </>
+              )}
             </div>
           </div>
-        </div>
+        </DashboardCardShell>
       </div>
     </>
   )

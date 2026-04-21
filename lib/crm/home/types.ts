@@ -1,3 +1,5 @@
+import type { NotesDashboardResponse } from '@/lib/notes/types'
+
 export type DashboardJob = {
   id: string
   status: string | null
@@ -33,11 +35,10 @@ export type NotesTaskSignal = {
   has_due_time: boolean
 }
 
+type NotesDashboardTaskKeys = keyof NotesDashboardResponse['tasks']
+
 export type NotesDashboardPayload = {
-  tasks: {
-    overdue: NotesTaskSignal[]
-    due_today: NotesTaskSignal[]
-  }
+  tasks: Pick<Record<NotesDashboardTaskKeys, NotesTaskSignal[]>, 'overdue' | 'due_today'>
 }
 
 export type NotesReminderSignal = {
@@ -87,7 +88,34 @@ export type CrmHomeSourceErrorKey =
   | 'calendarEvents'
   | 'notes'
 
+export type CrmHomeSourceStatus = 'idle' | 'loading' | 'ready' | 'error' | 'degraded'
+
+export type CrmHomeSourceAvailability =
+  | 'available'
+  | 'missing'
+  | 'invalid'
+  | 'unavailable'
+
 export type CrmHomeSourceErrorMap = Partial<Record<CrmHomeSourceErrorKey, string>>
+
+export type CrmHomeSourceState = {
+  status: CrmHomeSourceStatus
+  availability: CrmHomeSourceAvailability
+  errorMessage: string | null
+  lastLoadedAt: string | null
+  canRefresh: boolean
+}
+
+export type CrmHomeSourceStateMap = Record<CrmHomeSourceErrorKey, CrmHomeSourceState>
+
+export type CrmHomeSummary = {
+  isInitialLoading: boolean
+  isReloading: boolean
+  hasCriticalError: boolean
+  hasWarnings: boolean
+  warningSources: CrmHomeSourceErrorKey[]
+  isBusy: boolean
+}
 
 export type CrmHomeFetchResponse = {
   source: CrmHomeSourceErrorKey
@@ -99,9 +127,12 @@ export type CrmHomeFetchResponse = {
 export type CrmHomeSourceResult<T> = {
   source: CrmHomeSourceErrorKey
   ok: boolean
+  status: CrmHomeSourceStatus
+  availability: CrmHomeSourceAvailability
   value: T
   errorMessage: string | null
   rawPayload: unknown
+  lastLoadedAt: string
 }
 
 export type CrmHomeLoaderDependencies = {
@@ -111,11 +142,31 @@ export type CrmHomeLoaderDependencies = {
   logError: (source: CrmHomeSourceErrorKey, message: string, detail?: unknown) => void
 }
 
+export type CrmHomeSourcePatch = Partial<{
+  jobs: {
+    source: CrmHomeSourceResult<DashboardJob[]>
+    data: DashboardJob[]
+  }
+  customers: {
+    source: CrmHomeSourceResult<DashboardCustomer[]>
+    data: DashboardCustomer[]
+  }
+  calendarStatus: {
+    source: CrmHomeSourceResult<boolean>
+    data: boolean | null
+  }
+  calendarEvents: {
+    source: CrmHomeSourceResult<CalendarEvent[]>
+    data: CalendarEvent[]
+  }
+  notes: {
+    source: CrmHomeSourceResult<NotesDashboardPayload | null>
+    data: NotesReminderSignal[]
+  }
+}>
+
 export type CrmHomeLoadState = {
   data: CrmHomeData
-  errorsBySource: CrmHomeSourceErrorMap
-  isInitialLoading: boolean
-  isReloading: boolean
-  hasCriticalError: boolean
-  hasWarnings: boolean
+  sources: CrmHomeSourceStateMap
+  summary: CrmHomeSummary
 }

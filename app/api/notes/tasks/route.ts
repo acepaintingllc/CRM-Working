@@ -14,7 +14,7 @@ import {
 } from '@/lib/notes/server'
 import { getNotesSettingsWithDefaults } from '@/lib/notes/settings'
 import { partitionTasksForDashboard } from '@/lib/notes/reminders'
-import type { NotesTaskRow, NotesTaskStatus } from '@/lib/notes/types'
+import type { NotesTaskResponse, NotesTaskRow, NotesTaskStatus, NotesTasksResponse } from '@/lib/notes/types'
 
 function normalizeTaskRows(rows: NotesTaskRow[]) {
   return rows.map((row) => ({
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
       if (due === 'upcoming') tasks = grouped.upcoming
     }
 
-    return NextResponse.json({
+    return NextResponse.json<NotesTasksResponse>({
       tasks,
       filters: {
         status,
@@ -173,5 +173,5 @@ export async function POST(request: Request) {
   }
 
   const task = normalizeTaskRows([insert.data as NotesTaskRow])[0]
-  return NextResponse.json({ ok: true, task })
+  return NextResponse.json<NotesTaskResponse>({ ok: true, task })
 }

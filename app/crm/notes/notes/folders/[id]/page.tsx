@@ -1,23 +1,16 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-import { useEffect, useState } from 'react'
+import { useNotesExplorer } from '@/lib/notes/client/useNotesExplorer'
+import { useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import type { FolderRow, NoteRow } from '../../../_lib'
 import {
   buildNotesHref,
-  filterNotesBySearch,
+  FolderActionModal,
   normalizeNotesStatus,
   NotePreviewCard,
   NotesStatusTabs,
   NotesToolbarLink,
 } from '../../_components'
-
-type FolderDeletePayload = {
-  error?: string
-  notes_count?: number
-  required?: boolean
-}
 
 export default function FolderNotesPage() {
   const params = useParams<{ id: string }>()
@@ -25,157 +18,30 @@ export default function FolderNotesPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const status = normalizeNotesStatus(searchParams.get('status'))
-
-  const [folders, setFolders] = useState<FolderRow[]>([])
-  const [notes, setNotes] = useState<NoteRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
-  const [folderSaving, setFolderSaving] = useState(false)
-
-  const loadData = async () => {
-    if (!folderId) return
-
-    setLoading(true)
-    setError(null)
-
-    const [foldersRes, notesRes] = await Promise.all([
-      authedFetch('/api/notes/folders', { cache: 'no-store' }),
-      authedFetch(`/api/notes/notes?status=${status}&folder_id=${folderId}`, { cache: 'no-store' }),
-    ])
-
-    const foldersPayload = await foldersRes.json().catch(() => null)
-    const notesPayload = await notesRes.json().catch(() => null)
-
-    if (!foldersRes.ok) {
-      setError(foldersPayload?.error ?? 'Unable to load folders.')
-      setLoading(false)
-      return
-    }
-    if (!notesRes.ok) {
-      setError(notesPayload?.error ?? 'Unable to load notes.')
-      setLoading(false)
-      return
-    }
-
-    setFolders((foldersPayload?.folders ?? []) as FolderRow[])
-    setNotes((notesPayload?.notes ?? []) as NoteRow[])
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    void loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folderId, status])
-
-  const folder = folders.find((item) => item.id === folderId) ?? null
-  const filteredNotes = filterNotesBySearch(notes, search)
-
-  const createFolder = async () => {
-    if (!newFolderName.trim()) return
-    setFolderSaving(true)
-    setError(null)
-    const res = await authedFetch('/api/notes/folders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newFolderName.trim() }),
-    })
-    const payload = await res.json().catch(() => null)
-    setFolderSaving(false)
-
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to create folder.')
-      return
-    }
-
-    setNewFolderName('')
-    setCreateFolderOpen(false)
-    await loadData()
-  }
-
-  const renameFolder = async () => {
-    if (!folder) return
-    const nextName = window.prompt('Rename folder', folder.name)
-    if (!nextName || !nextName.trim()) return
-
-    const res = await authedFetch(`/api/notes/folders/${folder.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: nextName.trim() }),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to rename folder.')
-      return
-    }
-
-    await loadData()
-  }
-
-  const deleteFolder = async () => {
-    if (!folder) return
-
-    const firstTry = await authedFetch(`/api/notes/folders/${folder.id}`, { method: 'DELETE' })
-    const firstPayload = (await firstTry.json().catch(() => null)) as FolderDeletePayload | null
-
-    if (firstTry.ok) {
-      router.push(buildNotesHref('/crm/notes/notes', status))
-      return
-    }
-
-    if (firstTry.status !== 409 || !firstPayload?.required) {
-      setError(firstPayload?.error ?? 'Unable to delete folder.')
-      return
-    }
-
-    const noteCount = firstPayload.notes_count ?? 0
-    const uncategorize = window.confirm(
-      `Folder "${folder.name}" has ${noteCount} notes. Press OK to move them to uncategorized before deleting. Press Cancel to choose another folder.`
-    )
-
-    if (uncategorize) {
-      const res = await authedFetch(`/api/notes/folders/${folder.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ strategy: 'uncategorize' }),
-      })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        setError(payload?.error ?? 'Unable to delete folder.')
-        return
-      }
-      router.push(buildNotesHref('/crm/notes/notes', status))
-      return
-    }
-
-    const targets = folders.filter((row) => row.id !== folder.id)
-    if (targets.length === 0) {
-      setError('Create another folder first or use uncategorize.')
-      return
-    }
-
-    const target = targets[0]
-    const confirmed = window.confirm(
-      `Move notes into "${target.name}" and delete "${folder.name}"?`
-    )
-    if (!confirmed) return
-
-    const res = await authedFetch(`/api/notes/folders/${folder.id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ strategy: 'move_to_folder', target_folder_id: target.id }),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to delete folder.')
-      return
-    }
-
-    router.push(buildNotesHref('/crm/notes/notes', status))
-  }
+  const {
+    folder,
+    notes,
+    loading,
+    saving,
+    error,
+    search,
+    setSearch,
+    selectedNoteId,
+    setSelectedNoteId,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    modalState,
+    closeModal,
+    submitRename,
+    submitDelete,
+    beginMoveDelete,
+    setDeleteTargetFolderId,
+    setRenameValue,
+    availableMoveTargets,
+  } = useNotesExplorer({ status, folderId })
 
   return (
     <div className="grid gap-4">
@@ -220,14 +86,14 @@ export default function FolderNotesPage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void renameFolder()}
+            onClick={() => folder && void renameFolder(folder)}
             className="rounded-xl border border-neutral-700 px-3 py-2 text-sm font-bold text-neutral-200"
           >
             Rename Folder
           </button>
           <button
             type="button"
-            onClick={() => void deleteFolder()}
+            onClick={() => folder && void deleteFolder(folder)}
             className="rounded-xl border border-red-200 px-3 py-2 text-sm font-bold text-red-700"
           >
             Delete Folder
@@ -253,11 +119,16 @@ export default function FolderNotesPage() {
             />
             <button
               type="button"
-              disabled={folderSaving}
-              onClick={() => void createFolder()}
+              disabled={saving}
+              onClick={async () => {
+                const ok = await createFolder(newFolderName)
+                if (!ok) return
+                setNewFolderName('')
+                setCreateFolderOpen(false)
+              }}
               className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 disabled:opacity-60"
             >
-              {folderSaving ? 'Creating...' : 'Create Folder'}
+              {saving ? 'Creating...' : 'Create Folder'}
             </button>
           </div>
         )}
@@ -265,6 +136,24 @@ export default function FolderNotesPage() {
 
       {loading && <div className="text-sm text-neutral-400">Loading folder...</div>}
       {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
+      <FolderActionModal
+        open={modalState.open}
+        mode={modalState.mode}
+        folderName={modalState.folder?.name ?? ''}
+        renameValue={modalState.renameValue}
+        noteCount={modalState.noteCount}
+        availableMoveTargets={availableMoveTargets}
+        selectedMoveTargetId={modalState.deleteTargetFolderId}
+        saving={saving}
+        error={error}
+        onClose={closeModal}
+        onRenameValueChange={setRenameValue}
+        onSelectedMoveTargetIdChange={setDeleteTargetFolderId}
+        onSubmitRename={() => void submitRename()}
+        onChooseUncategorize={() => void submitDelete('uncategorize')}
+        onChooseMove={beginMoveDelete}
+        onSubmitMove={() => void submitDelete('move_to_folder')}
+      />
 
       {!loading && !folder && (
         <div className="rounded-[30px] border border-neutral-800 bg-neutral-950 p-6 text-sm text-neutral-400 shadow-sm">
@@ -278,12 +167,12 @@ export default function FolderNotesPage() {
             <div>
               <h3 className="text-lg font-extrabold text-white">Notes in {folder.name}</h3>
               <p className="mt-1 text-sm text-neutral-400">
-                {filteredNotes.length} {filteredNotes.length === 1 ? 'note' : 'notes'} in this view.
+                {notes.length} {notes.length === 1 ? 'note' : 'notes'} in this view.
               </p>
             </div>
           </div>
 
-          {filteredNotes.length === 0 ? (
+          {notes.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-6 text-sm text-neutral-500">
               {search.trim()
                 ? 'No notes in this folder match the current search.'
@@ -291,7 +180,7 @@ export default function FolderNotesPage() {
             </div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {filteredNotes.map((note) => (
+              {notes.map((note) => (
                 <NotePreviewCard
                   key={note.id}
                   note={note}

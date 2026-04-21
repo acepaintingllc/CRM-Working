@@ -106,7 +106,7 @@ describe('EstimateV2SummaryPageContent', () => {
 
     render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
 
-    expect(screen.getByRole('status', { name: 'Loading estimate summary' })).toHaveTextContent(
+    expect(screen.getByRole('status', { name: 'Loading quote summary' })).toHaveTextContent(
       'Loading summary...'
     )
   })
@@ -120,7 +120,7 @@ describe('EstimateV2SummaryPageContent', () => {
 
     render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
 
-    expect(screen.getByRole('alert', { name: 'Estimate summary failed to load' })).toHaveTextContent(
+    expect(screen.getByRole('alert', { name: 'Quote summary failed to load' })).toHaveTextContent(
       'Failed to refresh pricing'
     )
   })

@@ -1,10 +1,10 @@
-import SendEstimateClient from '../../send/sendEstimateClient'
+import { redirect } from 'next/navigation'
 
-export default async function SendEstimatePage({
+export default async function LegacyEstimateSendPage({
   params,
 }: {
   params: Promise<{ id: string }> | { id: string }
 }) {
   const resolved = await Promise.resolve(params)
-  return <SendEstimateClient estimateId={resolved.id} catalogSource="v2" />
+  redirect(`/crm/quotes/${resolved.id}/send`)
 }

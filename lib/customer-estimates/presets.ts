@@ -9,22 +9,22 @@ export const templatePresets: TemplatePreset[] = [
   {
     key: 'default',
     label: 'Default',
-    subject: 'Your estimate is ready',
+    subject: 'Your quote is ready',
     body:
-      'Hello,\n\nYour estimate is ready. Please review the secure link below and let us know if you have any questions.\n\nThank you.',
+      'Hello,\n\nYour quote is ready. Please review the secure link below and let us know if you have any questions.\n\nThank you.',
   },
   {
     key: 'concise',
     label: 'Concise',
-    subject: 'Attached: estimate for your project',
-    body: 'Hello,\n\nYour estimate is ready for review.\n\nThank you.',
+    subject: 'Attached: quote for your project',
+    body: 'Hello,\n\nYour quote is ready for review.\n\nThank you.',
   },
   {
     key: 'friendly',
     label: 'Friendly',
-    subject: 'Here is your estimate',
+    subject: 'Here is your quote',
     body:
-      'Hello,\n\nIt was great talking with you. Your estimate is ready to review at the secure link below.\n\nPlease reach out if you want to discuss anything before you accept.',
+      'Hello,\n\nIt was great talking with you. Your quote is ready to review at the secure link below.\n\nPlease reach out if you want to discuss anything before you accept.',
   },
 ]
 
@@ -46,7 +46,7 @@ export function buildDefaultTermsText(params: {
   cardFeeNote: string
 }) {
   return [
-    `This estimate is valid for ${params.quoteValidityDays} days from ${params.estimateDate || 'the date shown above'}.`,
+    `This quote is valid for ${params.quoteValidityDays} days from ${params.estimateDate || 'the date shown above'}.`,
     params.depositLanguage,
     params.cardFeeNote,
     'Acceptance confirms the scope, pricing, schedule, and terms shown on this page.',

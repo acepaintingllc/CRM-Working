@@ -426,7 +426,7 @@ export default function ProductsPage() {
     const loadProducts = async () => {
       try {
         setLoading(true)
-        const res = await authedFetch('/api/estimates/v2/products', { cache: 'no-store' })
+        const res = await authedFetch('/api/quotes/products', { cache: 'no-store' })
         if (!res.ok) {
           throw new Error(`Failed to load products: ${res.statusText}`)
         }
@@ -476,7 +476,7 @@ export default function ProductsPage() {
     if (!selected) return
     try {
       setSaving(true)
-      const res = await authedFetch(`/api/estimates/v2/products/${selected.id}`, {
+      const res = await authedFetch(`/api/quotes/products/${selected.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formState),
@@ -498,7 +498,7 @@ export default function ProductsPage() {
     if (!window.confirm(`Delete "${selected.name}"?`)) return
     try {
       setSaving(true)
-      const res = await authedFetch(`/api/estimates/v2/products/${selected.id}`, {
+      const res = await authedFetch(`/api/quotes/products/${selected.id}`, {
         method: 'DELETE',
       })
       if (!res.ok) {
@@ -517,14 +517,14 @@ export default function ProductsPage() {
     <div className="ace-v2-shell" style={S.page}>
       <header style={S.header}>
         <nav style={S.breadcrumb}>
-          <Link href="/crm/estimates/v2" style={{ color: 'inherit', textDecoration: 'none' }}>
-            Estimator V2
+          <Link href="/crm/quotes" style={{ color: 'inherit', textDecoration: 'none' }}>
+            Quotes
           </Link>
           <span style={S.breadcrumbSep}>/</span>
           <span style={S.breadcrumbCurrent}>Products</span>
         </nav>
-        <Link href="/crm/estimates/v2" style={S.backLink}>
-          {'<- Home'}
+        <Link href="/crm/quotes" style={S.backLink}>
+          {'<- Quotes'}
         </Link>
       </header>
 

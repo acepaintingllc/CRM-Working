@@ -1,0 +1,178 @@
+import { renderHook, waitFor, act } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useCrmHomeData } from '../useCrmHomeData'
+
+const { mockAuthedFetch, mockReadStoredCalendarIds } = vi.hoisted(() => ({
+  mockAuthedFetch: vi.fn(),
+  mockReadStoredCalendarIds: vi.fn(),
+}))
+
+vi.mock('@/lib/auth/authedFetch', () => ({
+  authedFetch: mockAuthedFetch,
+}))
+
+vi.mock('@/lib/crm/home/calendar', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/crm/home/calendar')>()
+  return {
+    ...actual,
+    readStoredCalendarIds: mockReadStoredCalendarIds,
+  }
+})
+
+function createJsonResponse(ok: boolean, payload: unknown, status = 200) {
+  return Promise.resolve({
+    ok,
+    status,
+    json: () => Promise.resolve(payload),
+  })
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve
+  })
+
+  return { promise, resolve }
+}
+
+describe('useCrmHomeData', () => {
+  beforeEach(() => {
+    mockAuthedFetch.mockReset()
+    mockReadStoredCalendarIds.mockReset()
+    mockReadStoredCalendarIds.mockReturnValue(['primary'])
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('exposes loading source states before initial resolution', async () => {
+    const jobsRequest = createDeferred<Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>>()
+
+    mockAuthedFetch.mockImplementation((url: string) => {
+      if (url === '/api/jobs') return jobsRequest.promise
+      if (url === '/api/customers') return createJsonResponse(true, { customers: [] })
+      if (url === '/api/google-calendar/status') {
+        return createJsonResponse(true, { connected: false })
+      }
+      if (url === '/api/notes/dashboard') {
+        return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
+      }
+      throw new Error(`Unexpected URL: ${url}`)
+    })
+
+    const { result } = renderHook(() => useCrmHomeData())
+
+    expect(result.current.summary.isInitialLoading).toBe(true)
+    expect(result.current.sources.jobs.status).toBe('loading')
+
+    jobsRequest.resolve(createJsonResponse(true, { jobs: [] }))
+
+    await waitFor(() => {
+      expect(result.current.summary.isBusy).toBe(false)
+    })
+  })
+
+  it('full reload preserves previous data while requested sources load again', async () => {
+    mockAuthedFetch.mockImplementation((url: string) => {
+      if (url === '/api/jobs') {
+        return createJsonResponse(true, {
+          jobs: [
+            {
+              id: 'job-1',
+              status: 'completed',
+              title: 'Kitchen repaint',
+              customer_name: 'Alice Jones',
+              customer_address: '123 Main St',
+              estimate_total_amount: 1200,
+            },
+          ],
+        })
+      }
+      if (url === '/api/customers') return createJsonResponse(true, { customers: [] })
+      if (url === '/api/google-calendar/status') {
+        return createJsonResponse(true, { connected: false })
+      }
+      if (url === '/api/notes/dashboard') {
+        return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
+      }
+      throw new Error(`Unexpected URL: ${url}`)
+    })
+
+    const { result } = renderHook(() => useCrmHomeData())
+
+    await waitFor(() => {
+      expect(result.current.summary.isBusy).toBe(false)
+    })
+
+    const reloadRequest = createDeferred<
+      Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
+    >()
+    mockAuthedFetch.mockImplementationOnce(
+      () => reloadRequest.promise
+    )
+
+    act(() => {
+      void result.current.reloadAll()
+    })
+
+    expect(result.current.summary.isReloading).toBe(true)
+    expect(result.current.data.jobs.length).toBe(1)
+
+    reloadRequest.resolve(
+      createJsonResponse(true, {
+        jobs: [
+          {
+            id: 'job-1',
+            status: 'completed',
+            title: 'Kitchen repaint',
+            customer_name: 'Alice Jones',
+            customer_address: '123 Main St',
+            estimate_total_amount: 1200,
+          },
+        ],
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.summary.isBusy).toBe(false)
+    })
+  })
+
+  it('targeted refresh only transitions the requested source slice', async () => {
+    mockAuthedFetch.mockImplementation((url: string) => {
+      if (url === '/api/jobs') return createJsonResponse(true, { jobs: [] })
+      if (url === '/api/customers') return createJsonResponse(true, { customers: [] })
+      if (url === '/api/google-calendar/status') return createJsonResponse(true, { connected: false })
+      if (url === '/api/notes/dashboard') {
+        return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
+      }
+      throw new Error(`Unexpected URL: ${url}`)
+    })
+
+    const { result } = renderHook(() => useCrmHomeData())
+
+    await waitFor(() => {
+      expect(result.current.summary.isBusy).toBe(false)
+    })
+
+    const notesRequest = createDeferred<Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>>()
+    mockAuthedFetch.mockImplementationOnce(
+      () => notesRequest.promise
+    )
+
+    act(() => {
+      void result.current.refreshSource('notes')
+    })
+
+    expect(result.current.sources.notes.status).toBe('loading')
+    expect(result.current.sources.jobs.status).toBe('ready')
+
+    notesRequest.resolve(createJsonResponse(true, { tasks: { overdue: [], due_today: [] } }))
+
+    await waitFor(() => {
+      expect(result.current.sources.notes.status).toBe('ready')
+    })
+  })
+})

@@ -73,7 +73,7 @@ export async function POST(
       .maybeSingle()
 
     if (!template) {
-      return NextResponse.json({ error: 'Missing email template for estimate sent' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing email template for quote sent' }, { status: 400 })
     }
 
     const origin = new URL(request.url).origin

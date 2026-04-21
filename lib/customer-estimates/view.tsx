@@ -14,6 +14,13 @@ const C = {
   soft: '#f6f6f6',
 }
 
+const DEFAULT_COMPANY_INFO = {
+  name: 'ACE Painting LLC',
+  phone: '812-228-8803',
+  email: 'austin@newburghacepainting.com',
+} as const
+// TODO: Replace these fallbacks with the org profile feature once company settings are fully wired.
+
 function fmtCurrency(value: number | null | undefined) {
   if (value == null) return ''
   return `$${Math.round(value).toLocaleString('en-US')}`
@@ -92,9 +99,9 @@ function LogoMark({ logoUrl, alt }: { logoUrl: string; alt: string }) {
 
 function Header({ document }: { document: CustomerEstimateDocument }) {
   const logoUrl = getBrandLogoUrl(document.company.logo_url)
-  const companyName = document.company.business_name || 'ACE Painting LLC'
-  const phone = document.company.main_phone || '812-228-8803'
-  const email = document.company.business_email || 'austin@newburghacepainting.com'
+  const companyName = document.company.business_name || DEFAULT_COMPANY_INFO.name
+  const phone = document.company.main_phone || DEFAULT_COMPANY_INFO.phone
+  const email = document.company.business_email || DEFAULT_COMPANY_INFO.email
   return (
     <header style={{ display: 'grid', gap: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 14, alignItems: 'start' }}>
@@ -344,7 +351,7 @@ export function PublicChrome({
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
           <div style={{ display: 'grid', gap: 4 }}>
             <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em', color: C.muted, fontWeight: 700 }}>
-              Customer Estimate
+              Customer Quote
             </div>
             <div style={{ fontSize: 24, fontWeight: 900 }}>{title}</div>
             {subtitle ? <div style={{ fontSize: 13, color: C.muted }}>{subtitle}</div> : null}

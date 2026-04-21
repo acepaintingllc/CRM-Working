@@ -8,6 +8,8 @@ import { calculateTrim } from '@/lib/estimator/trim'
 import { calculateWalls } from '@/lib/estimator/walls'
 import { productMap } from '@/lib/estimator/wallsHelpers'
 import type { CompanyProfile, Unsafe } from '@/lib/customer-estimates/types'
+import { loadCompanyProfileSettings } from '@/lib/server/settings/companyProfileStore'
+import { loadQuoteSendDefaults } from '@/lib/server/settings/quoteSendDefaultsStore'
 
 type EstimateRow = {
   id: string
@@ -41,9 +43,6 @@ type CustomerRow = {
 }
 
 type EstimateTemplateSettingsRow = {
-  default_template_key: string | null
-  quote_validity_days: number | null
-  terms_text: string | null
   labor_day_policy_enabled?: boolean | null
   dayhours?: number | null
   rounding_increment_hours?: number | null
@@ -69,14 +68,6 @@ type EstimateJobSettingsRow = {
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
-}
-
-function pickText(row: Unsafe, keys: string[]) {
-  for (const key of keys) {
-    const value = row[key]
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-  return ''
 }
 
 function resolveRoomModeById(params: {
@@ -117,11 +108,11 @@ export async function loadEstimateCustomerSendContext(params: {
     .maybeSingle()
 
   if (estimateRes.error) return { error: estimateRes.error.message } as const
-  if (!estimateRes.data) return { error: 'Estimate not found' } as const
+  if (!estimateRes.data) return { error: 'Quote not found' } as const
 
   const estimate = estimateRes.data as EstimateRow
 
-  const [jobRes, customerRes, companyRes, settingsRes, jobsettingsRes, roomsRes, wallScopesRes, segmentsRes, wallSegmentsRes, ceilingSegmentsRes, ceilingScopesRes, ceilingScopeSegmentsRes, trimScopesRes, trimItemsRes, otherRes, versionsRes] = await Promise.all([
+  const [jobRes, customerRes, companyProfileRes, quoteDefaultsRes, settingsRes, jobsettingsRes, roomsRes, wallScopesRes, segmentsRes, wallSegmentsRes, ceilingSegmentsRes, ceilingScopesRes, ceilingScopeSegmentsRes, trimScopesRes, trimItemsRes, otherRes, versionsRes] = await Promise.all([
     supabaseAdmin
       .from('jobs')
       .select('id, title, estimate_date')
@@ -134,11 +125,8 @@ export async function loadEstimateCustomerSendContext(params: {
       .eq('org_id', params.orgId)
       .eq('id', estimate.customer_id)
       .maybeSingle(),
-    supabaseAdmin
-      .from('orgs')
-      .select('*')
-      .eq('id', params.orgId)
-      .maybeSingle(),
+    loadCompanyProfileSettings(params.orgId).catch(() => null),
+    loadQuoteSendDefaults(params.orgId).catch(() => null),
     supabaseAdmin
       .from('estimate_template_settings')
       .select('*')
@@ -237,7 +225,6 @@ export async function loadEstimateCustomerSendContext(params: {
 
   if (jobRes.error) return { error: jobRes.error.message } as const
   if (customerRes.error) return { error: customerRes.error.message } as const
-  if (companyRes.error) return { error: companyRes.error.message } as const
   if (settingsRes.error) return { error: settingsRes.error.message } as const
   if (jobsettingsRes.error) return { error: jobsettingsRes.error.message } as const
   if (roomsRes.error) return { error: roomsRes.error.message } as const
@@ -254,18 +241,23 @@ export async function loadEstimateCustomerSendContext(params: {
 
   const job = (jobRes.data ?? {}) as JobRow
   const customer = (customerRes.data ?? {}) as CustomerRow
-  const companyRow = (companyRes.data ?? {}) as Unsafe
   const settingsRow = (settingsRes.data ?? {}) as EstimateTemplateSettingsRow
-  const company: CompanyProfile = {
-    business_name: pickText(companyRow, ['name', 'business_name', 'company_name']) || 'ACE Painting',
-    timezone: pickText(companyRow, ['timezone']) || 'America/Chicago',
-    main_phone: pickText(companyRow, ['main_phone', 'phone', 'company_phone']),
-    business_email: pickText(companyRow, ['business_email', 'email', 'company_email', 'from_email']),
-    address: pickText(companyRow, ['address', 'company_address']),
-    website: pickText(companyRow, ['website', 'company_website']),
-    sender_signature: pickText(companyRow, ['sender_signature', 'default_sender_signature', 'email_signature', 'signature']),
-    logo_url: pickText(companyRow, ['logo_url', 'logo', 'brand_logo_url']),
-  }
+  const company = (companyProfileRes ?? {
+    business_name: '',
+    timezone: 'America/Chicago',
+    main_phone: '',
+    business_email: '',
+    address: '',
+    website: '',
+    sender_signature: '',
+    logo_url: '',
+  }) as CompanyProfile
+  const quoteDefaults =
+    quoteDefaultsRes ?? {
+      default_template_key: 'default',
+      quote_validity_days: 90,
+      terms_text: '',
+    }
 
   const catalogs = await getEstimateCatalogs({
     origin: params.origin,
@@ -280,7 +272,7 @@ export async function loadEstimateCustomerSendContext(params: {
     publicVersions.find((row) => asText(row.status) !== 'draft' && asText(row.public_token)) ?? null
   const previewVersion = latestDraftVersion ?? latestSentVersion ?? publicVersions[0] ?? null
   const publicUrl = latestSentVersion?.public_token
-    ? `${params.origin}/estimate/${latestSentVersion.public_token}`
+    ? `${params.origin}/quote/${latestSentVersion.public_token}`
     : null
 
   const jobsettings = (jobsettingsRes.data ?? {}) as EstimateJobSettingsRow
@@ -384,10 +376,10 @@ export async function loadEstimateCustomerSendContext(params: {
     customer,
     company,
     settings: {
-      default_template_key: asText(settingsRow.default_template_key) || 'default',
-      quote_validity_days: settingsRow.quote_validity_days ?? 90,
-      terms_text: asText(settingsRow.terms_text),
-      updated_at: settingsRow.updated_at,
+      default_template_key: quoteDefaults.default_template_key,
+      quote_validity_days: quoteDefaults.quote_validity_days,
+      terms_text: quoteDefaults.terms_text,
+      updated_at: null,
     },
     inputs: {
       rooms: (roomsRes.data ?? []) as Unsafe[],

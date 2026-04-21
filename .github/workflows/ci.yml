@@ -19,8 +19,6 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key
       GOOGLE_CLIENT_ID: dummy-google-client-id
       GOOGLE_CLIENT_SECRET: dummy-google-client-secret
-      GOOGLE_SHEETS_ESTIMATE_TEMPLATE_ID: dummy-sheet-template-id
-      GOOGLE_DRIVE_ESTIMATE_SHEETS_FOLDER_ID: dummy-drive-folder-id
       GOOGLE_DRIVE_ESTIMATES_FOLDER_ID: dummy-estimates-folder-id
       GOOGLE_APPS_SCRIPT_ESTIMATE_PDF_SCRIPT_ID: dummy-script-id
     steps:

@@ -11,6 +11,52 @@ import type {
 import { buildDefaultTermsText, splitTermsText } from './presets.ts'
 import { reconcileWholeDollarRows } from '../estimator/pricingPolicies.ts'
 
+type CustomerEstimateRow = Unsafe
+type CustomerEstimateCatalogs = {
+  paint_products?: CustomerEstimateRow[]
+  trim_items?: CustomerEstimateRow[]
+}
+
+export interface CustomerEstimateInput {
+  estimate: CustomerEstimateRow
+  job: CustomerEstimateRow
+  customer?: CustomerEstimateRow | null
+  company: CompanyProfile
+  inputs: {
+    rooms?: CustomerEstimateRow[]
+    room_wall_scopes?: CustomerEstimateRow[]
+    room_ceiling_scopes?: CustomerEstimateRow[]
+    room_trim_scopes?: CustomerEstimateRow[]
+    trim_items?: CustomerEstimateRow[]
+    other?: CustomerEstimateRow[]
+    jobsettings?: CustomerEstimateRow | null
+  }
+  catalogs?: CustomerEstimateCatalogs | null
+  settings?: {
+    quote_validity_days?: number | null
+    terms_text?: string | null
+    default_template_key?: string | null
+  }
+  pricingSummary?: CustomerEstimatePricingSummary | null
+  overrides?: {
+    title?: string
+    intro_paragraph?: string
+    closing_paragraph?: string
+    scope_text_edits?: Partial<Record<CustomerEstimateSectionKey, string>>
+    quote_validity_days?: number | string | null
+    deposit_language?: string
+    card_fee_note?: string
+  }
+  publicMeta?: {
+    status?: string
+    sent_at?: string | null
+    viewed_at?: string | null
+    accepted_at?: string | null
+    declined_at?: string | null
+    public_token?: string | null
+  }
+}
+
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
 }
@@ -224,7 +270,7 @@ function buildScopeText(params: {
   if (override) return override
   const fallback = uniqueText(params.fallbackTexts).map((text) => cleanCustomerFacingText(text)).filter(Boolean).join('\n')
   if (fallback) return fallback
-  return `${params.label} is included in this estimate.`
+  return `${params.label} is included in this quote.`
 }
 
 function buildCustomerEstimateSections(params: {
@@ -281,6 +327,9 @@ type ScopeBucket = {
   primeModes: Array<'SPOT' | 'FULL'>
 }
 
+type ScopeBuckets = Record<CustomerEstimateSectionKey, ScopeBucket>
+type TrimTypeRow = Unsafe & { category: string; label: string; price: number }
+
 function createScopeBuckets(): Record<CustomerEstimateSectionKey, ScopeBucket> {
   return {
     walls: { texts: [], price: 0, rooms: [], paintProducts: [], subjectLabels: [], notes: [], coats: [], primeModes: [] },
@@ -303,12 +352,250 @@ function addToBucket(
     primeMode?: 'SPOT' | 'FULL' | null
   }
 ) {
-  if (params.room) bucket.rooms.push(params.room)
-  if (params.paintProduct) bucket.paintProducts.push(params.paintProduct)
-  if (params.subjectLabel) bucket.subjectLabels.push(params.subjectLabel)
-  if (params.note) bucket.notes.push(params.note)
-  if (params.coat != null) bucket.coats.push(params.coat)
-  if (params.primeMode === 'SPOT' || params.primeMode === 'FULL') bucket.primeModes.push(params.primeMode)
+  return {
+    ...bucket,
+    rooms: params.room ? [...bucket.rooms, params.room] : bucket.rooms,
+    paintProducts: params.paintProduct ? [...bucket.paintProducts, params.paintProduct] : bucket.paintProducts,
+    subjectLabels: params.subjectLabel ? [...bucket.subjectLabels, params.subjectLabel] : bucket.subjectLabels,
+    notes: params.note ? [...bucket.notes, params.note] : bucket.notes,
+    coats: params.coat != null ? [...bucket.coats, params.coat] : bucket.coats,
+    primeModes:
+      params.primeMode === 'SPOT' || params.primeMode === 'FULL'
+        ? [...bucket.primeModes, params.primeMode]
+        : bucket.primeModes,
+  }
+}
+
+function pickPrice(row: Unsafe) {
+  return (
+    asNum(row.effective_total) ??
+    asNum(row.final_total) ??
+    asNum(row.raw_total) ??
+    asNum(row.override_total) ??
+    0
+  )
+}
+
+function resolvePrimeMode(row: Unsafe) {
+  const mode = asText(row.prime_mode).toUpperCase()
+  if (mode === 'FULL' || mode === 'SPOT') return mode
+  return null
+}
+
+function appendScopeBucket(
+  sectionBuckets: ScopeBuckets,
+  scope: CustomerEstimateSectionKey,
+  price: number,
+  params: Parameters<typeof addToBucket>[1]
+) {
+  const nextBucket = addToBucket(sectionBuckets[scope], params)
+  sectionBuckets[scope] = { ...nextBucket, price: sectionBuckets[scope].price + price }
+}
+
+function applyPaintScopeRows(params: {
+  sectionBuckets: ScopeBuckets
+  scope: 'walls' | 'ceilings'
+  rows: Unsafe[]
+  roomLabels: Map<string, string>
+  paintLabels: Map<string, string>
+  defaultPaintProductId: string | null
+  prepKeys: string[]
+  coatKeys: string[]
+}) {
+  const activeRows = params.rows.filter((row) => asText(row.active || row.include).toUpperCase() !== 'N')
+  for (const row of activeRows) {
+    const roomId = asText(row.room_id).toUpperCase()
+    const roomName = params.roomLabels.get(roomId) ?? humanizeRoomCode(roomId)
+    const paintProduct = resolvePaintProductLabel({
+      paintProductId: asText(row.paint_product_id) || params.defaultPaintProductId,
+      fallbackLabel: asText(row.paint_product_label),
+      paintLabelsById: params.paintLabels,
+    })
+    const notes = prepFragments(params.prepKeys.map((key) => asText(row[key])))
+    const coats = params.coatKeys.map((key) => asNum(row[key])).find((value) => value != null) ?? null
+    appendScopeBucket(params.sectionBuckets, params.scope, pickPrice(row), {
+      room: roomName,
+      paintProduct,
+      note: notes.join(', '),
+      coat: coats,
+      primeMode: resolvePrimeMode(row),
+    })
+  }
+}
+
+function extractRoomRows(params: {
+  sectionBuckets: ScopeBuckets
+  roomLabels: Map<string, string>
+  paintLabels: Map<string, string>
+  roomWallScopes: Unsafe[]
+  roomCeilingScopes: Unsafe[]
+  wallPaintProductId: string | null
+  ceilingPaintProductId: string | null
+}) {
+  applyPaintScopeRows({
+    sectionBuckets: params.sectionBuckets,
+    scope: 'walls',
+    rows: params.roomWallScopes,
+    roomLabels: params.roomLabels,
+    paintLabels: params.paintLabels,
+    defaultPaintProductId: params.wallPaintProductId,
+    prepKeys: ['notes', 'walls_prep_override', 'scope_notes'],
+    coatKeys: ['paint_coats', 'wall_coats'],
+  })
+  applyPaintScopeRows({
+    sectionBuckets: params.sectionBuckets,
+    scope: 'ceilings',
+    rows: params.roomCeilingScopes,
+    roomLabels: params.roomLabels,
+    paintLabels: params.paintLabels,
+    defaultPaintProductId: params.ceilingPaintProductId,
+    prepKeys: ['notes', 'ceiling_prep_override', 'scope_notes'],
+    coatKeys: ['paint_coats', 'ceiling_coats'],
+  })
+}
+
+function classifyTrimRows(params: {
+  trimItems: Unsafe[]
+  trimLabelById: Map<string, string>
+  trimMetaById: Map<string, { family: string; label: string }>
+}) {
+  return params.trimItems.map((row) => {
+    const trimId = asText(row.trim_menu_id).toUpperCase()
+    const meta = params.trimMetaById.get(trimId)
+    const label =
+      meta?.label ||
+      labelOrFallback(row.trim_menu_label, '') ||
+      params.trimLabelById.get(trimId) ||
+      humanizeIdentifier(trimId) ||
+      trimId
+
+    return {
+      ...row,
+      price: pickPrice(row),
+      category: trimCategory(label, meta?.family ?? null),
+      label,
+    } satisfies TrimTypeRow
+  })
+}
+
+function collectTrimRows(params: {
+  sectionBuckets: ScopeBuckets
+  scope: CustomerEstimateSectionKey
+  rows: TrimTypeRow[]
+  roomLabels: Map<string, string>
+  paintLabels: Map<string, string>
+  trimPaintProductId: string | null
+}) {
+  for (const row of params.rows) {
+    const roomId = asText(row.room_id).toUpperCase()
+    const roomName = params.roomLabels.get(roomId) ?? humanizeRoomCode(roomId)
+    const notes = prepFragments([asText(row.notes), asText(row.prep_level_override), asText(row.override_description)])
+    const paintProduct = resolvePaintProductLabel({
+      paintProductId: asText(row.paint_product_id) || params.trimPaintProductId,
+      fallbackLabel: asText(row.paint_product_label),
+      paintLabelsById: params.paintLabels,
+    })
+    appendScopeBucket(params.sectionBuckets, params.scope, row.price, {
+      room: roomName,
+      subjectLabel: row.label,
+      paintProduct,
+      note: notes.join(', '),
+      coat: asNum(row.coats) ?? null,
+      primeMode: resolvePrimeMode(row),
+    })
+  }
+}
+
+function extractTrimRows(params: {
+  sectionBuckets: ScopeBuckets
+  trimItems: Unsafe[]
+  trimLabelById: Map<string, string>
+  trimMetaById: Map<string, { family: string; label: string }>
+  roomLabels: Map<string, string>
+  paintLabels: Map<string, string>
+  trimPaintProductId: string | null
+}) {
+  const trimTypeRows = classifyTrimRows(params)
+  collectTrimRows({
+    sectionBuckets: params.sectionBuckets,
+    scope: 'trim',
+    rows: trimTypeRows.filter((row) => ['baseboard', 'crown', 'window_casing'].includes(row.category)),
+    roomLabels: params.roomLabels,
+    paintLabels: params.paintLabels,
+    trimPaintProductId: params.trimPaintProductId,
+  })
+  collectTrimRows({
+    sectionBuckets: params.sectionBuckets,
+    scope: 'doors',
+    rows: trimTypeRows.filter((row) => ['door', 'door_casing'].includes(row.category)),
+    roomLabels: params.roomLabels,
+    paintLabels: params.paintLabels,
+    trimPaintProductId: params.trimPaintProductId,
+  })
+  collectTrimRows({
+    sectionBuckets: params.sectionBuckets,
+    scope: 'cabinets',
+    rows: trimTypeRows.filter((row) => row.category === 'cabinet'),
+    roomLabels: params.roomLabels,
+    paintLabels: params.paintLabels,
+    trimPaintProductId: params.trimPaintProductId,
+  })
+}
+
+function extractProductRows(params: {
+  sectionBuckets: ScopeBuckets
+  otherRows: Unsafe[]
+}) {
+  for (const row of params.otherRows) {
+    const desc = labelOrFallback(asText(row.client_description), '') || labelOrFallback(asText(row.location), '')
+    const location = asText(row.location)
+    const qty = asNum(row.qty) ?? 1
+    const uom = asText(row.uom)
+    params.sectionBuckets.other.price += pickPrice(row)
+    params.sectionBuckets.other.texts.push(
+      cleanCustomerFacingText(
+        textJoin([
+          desc || 'Additional work',
+          location ? `in ${labelOrFallback(location, humanizeRoomCode(location))}` : '',
+          qty ? `${qty}${uom ? ` ${uom}` : ''}` : '',
+        ])
+      )
+    )
+  }
+}
+
+function finalizeScopeBuckets(sectionBuckets: ScopeBuckets) {
+  const finalizeBucket = (scope: CustomerEstimateSectionKey, scopeWord: string) => {
+    const bucket = sectionBuckets[scope]
+    if (bucket.price <= 0) {
+      sectionBuckets[scope] = { ...bucket, texts: [] }
+      return
+    }
+
+    const sentence = buildSentence({ bucket, scopeWord })
+    if (sentence) {
+      sectionBuckets[scope] = { ...bucket, texts: [sentence] }
+      return
+    }
+
+    sectionBuckets[scope] = {
+      ...bucket,
+      texts: uniqueText(bucket.texts).map((text) => cleanCustomerFacingText(text)).filter(Boolean),
+    }
+  }
+
+  finalizeBucket('walls', 'on walls')
+  finalizeBucket('ceilings', 'on ceilings')
+  finalizeBucket('trim', 'on trim')
+  finalizeBucket('doors', 'on doors')
+  finalizeBucket('cabinets', 'on cabinets')
+  sectionBuckets.other = {
+    ...sectionBuckets.other,
+    texts:
+      sectionBuckets.other.price > 0
+        ? uniqueText(sectionBuckets.other.texts).map((text) => cleanCustomerFacingText(text)).filter(Boolean)
+        : [],
+  }
 }
 
 function buildSentence(params: {
@@ -369,164 +656,26 @@ function extractScopeRows(params: {
   }
 
   const sectionBuckets = createScopeBuckets()
-
-  const pickPrice = (row: Unsafe) =>
-    asNum(row.effective_total) ??
-    asNum(row.final_total) ??
-    asNum(row.raw_total) ??
-    asNum(row.override_total) ??
-    0
-
-  const wallScopes = params.roomWallScopes.filter((row) => asText(row.active || row.include).toUpperCase() !== 'N')
-  for (const row of wallScopes) {
-    const price = pickPrice(row)
-    sectionBuckets.walls.price += price
-    const roomId = asText(row.room_id).toUpperCase()
-    const roomName = roomLabels.get(roomId) ?? humanizeRoomCode(roomId)
-    const paintProduct = resolvePaintProductLabel({
-      paintProductId: asText(row.paint_product_id) || wallPaintProductId,
-      fallbackLabel: asText(row.paint_product_label),
-      paintLabelsById: paintLabels,
-    })
-    const notes = prepFragments([asText(row.notes), asText(row.walls_prep_override), asText(row.scope_notes)])
-    const coats = asNum(row.paint_coats) ?? asNum(row.wall_coats) ?? null
-    const primeMode = asText(row.prime_mode).toUpperCase() === 'FULL'
-      ? 'FULL'
-      : asText(row.prime_mode).toUpperCase() === 'SPOT'
-        ? 'SPOT'
-        : null
-    addToBucket(sectionBuckets.walls, {
-      room: roomName,
-      paintProduct,
-      note: notes.join(', '),
-      coat: coats,
-      primeMode,
-    })
-  }
-
-  const ceilingScopes = params.roomCeilingScopes.filter((row) => asText(row.active || row.include).toUpperCase() !== 'N')
-  for (const row of ceilingScopes) {
-    const price = pickPrice(row)
-    sectionBuckets.ceilings.price += price
-    const roomId = asText(row.room_id).toUpperCase()
-    const roomName = roomLabels.get(roomId) ?? humanizeRoomCode(roomId)
-    const paintProduct = resolvePaintProductLabel({
-      paintProductId: asText(row.paint_product_id) || ceilingPaintProductId,
-      fallbackLabel: asText(row.paint_product_label),
-      paintLabelsById: paintLabels,
-    })
-    const notes = prepFragments([asText(row.notes), asText(row.ceiling_prep_override), asText(row.scope_notes)])
-    const coats = asNum(row.paint_coats) ?? asNum(row.ceiling_coats) ?? null
-    const primeMode = asText(row.prime_mode).toUpperCase() === 'FULL'
-      ? 'FULL'
-      : asText(row.prime_mode).toUpperCase() === 'SPOT'
-        ? 'SPOT'
-        : null
-    addToBucket(sectionBuckets.ceilings, {
-      room: roomName,
-      paintProduct,
-      note: notes.join(', '),
-      coat: coats,
-      primeMode,
-    })
-  }
-
-  const trimTypeRows = params.trimItems.map((row) => {
-    const trimId = asText(row.trim_menu_id).toUpperCase()
-    const meta = trimMetaById.get(trimId)
-    const label =
-      meta?.label ||
-      labelOrFallback(row.trim_menu_label, '') ||
-      trimLabelById.get(trimId) ||
-      humanizeIdentifier(trimId) ||
-      trimId
-    return {
-      ...row,
-      price: pickPrice(row),
-      category: trimCategory(label, meta?.family ?? null),
-      label,
-    }
+  extractRoomRows({
+    sectionBuckets,
+    roomLabels,
+    paintLabels,
+    roomWallScopes: params.roomWallScopes,
+    roomCeilingScopes: params.roomCeilingScopes,
+    wallPaintProductId,
+    ceilingPaintProductId,
   })
-
-  const trimRows = trimTypeRows.filter((row) => row.category === 'baseboard' || row.category === 'crown' || row.category === 'window_casing')
-  const doorRows = trimTypeRows.filter((row) => row.category === 'door' || row.category === 'door_casing')
-  const cabinetRows = trimTypeRows.filter((row) => row.category === 'cabinet')
-
-  const collectTrimRows = (rows: Array<Unsafe & { label: string; price: number }>, scope: CustomerEstimateSectionKey) => {
-    for (const row of rows) {
-      sectionBuckets[scope].price += row.price
-      const roomId = asText(row.room_id).toUpperCase()
-      const roomName = roomLabels.get(roomId) ?? humanizeRoomCode(roomId)
-      const coats = asNum(row.coats) ?? null
-      const notes = prepFragments([asText(row.notes), asText(row.prep_level_override), asText(row.override_description)])
-      const paintProduct = resolvePaintProductLabel({
-        paintProductId: asText(row.paint_product_id) || trimPaintProductId,
-        fallbackLabel: asText(row.paint_product_label),
-        paintLabelsById: paintLabels,
-      })
-      const primeMode = asText(row.prime_mode).toUpperCase() === 'FULL'
-        ? 'FULL'
-        : asText(row.prime_mode).toUpperCase() === 'SPOT'
-          ? 'SPOT'
-          : null
-      addToBucket(sectionBuckets[scope], {
-        room: roomName,
-        subjectLabel: row.label,
-        paintProduct,
-        note: notes.join(', '),
-        coat: coats,
-        primeMode,
-      })
-    }
-  }
-
-  collectTrimRows(trimRows, 'trim')
-  collectTrimRows(doorRows, 'doors')
-  collectTrimRows(cabinetRows, 'cabinets')
-
-  for (const row of params.otherRows) {
-    const price = pickPrice(row)
-    sectionBuckets.other.price += price
-    const desc = labelOrFallback(asText((row as Unsafe).client_description), '') || labelOrFallback(asText((row as Unsafe).location), '')
-    const location = asText((row as Unsafe).location)
-    const qty = asNum((row as Unsafe).qty) ?? 1
-    const uom = asText((row as Unsafe).uom)
-    const text = cleanCustomerFacingText(
-      textJoin([
-        desc || 'Additional work',
-        location ? `in ${labelOrFallback(location, humanizeRoomCode(location))}` : '',
-        qty ? `${qty}${uom ? ` ${uom}` : ''}` : '',
-      ])
-    )
-    sectionBuckets.other.texts.push(text)
-  }
-
-  const finalizeBucket = (scope: CustomerEstimateSectionKey, scopeWord: string) => {
-    const bucket = sectionBuckets[scope]
-    if (bucket.price <= 0) {
-      bucket.texts = []
-      return
-    }
-    const sentence = buildSentence({ bucket, scopeWord })
-    if (sentence) {
-      bucket.texts = [sentence]
-      return
-    }
-    bucket.texts = uniqueText(bucket.texts).map((text) => cleanCustomerFacingText(text)).filter(Boolean)
-  }
-
-  finalizeBucket('walls', 'on walls')
-  finalizeBucket('ceilings', 'on ceilings')
-  finalizeBucket('trim', 'on trim')
-  finalizeBucket('doors', 'on doors')
-  finalizeBucket('cabinets', 'on cabinets')
-  if (sectionBuckets.other.price > 0) {
-    sectionBuckets.other.texts = uniqueText(sectionBuckets.other.texts)
-      .map((text) => cleanCustomerFacingText(text))
-      .filter(Boolean)
-  } else {
-    sectionBuckets.other.texts = []
-  }
+  extractTrimRows({
+    sectionBuckets,
+    trimItems: params.trimItems,
+    trimLabelById,
+    trimMetaById,
+    roomLabels,
+    paintLabels,
+    trimPaintProductId,
+  })
+  extractProductRows({ sectionBuckets, otherRows: params.otherRows })
+  finalizeScopeBuckets(sectionBuckets)
 
   return sectionBuckets
 }
@@ -556,45 +705,7 @@ function buildCustomerProfile(params: {
   }
 }
 
-export function buildCustomerEstimateDocument(params: {
-  estimate: Unsafe
-  job: Unsafe
-  customer?: Unsafe | null
-  company: CompanyProfile
-  inputs: {
-    rooms?: Unsafe[]
-    room_wall_scopes?: Unsafe[]
-    room_ceiling_scopes?: Unsafe[]
-    room_trim_scopes?: Unsafe[]
-    trim_items?: Unsafe[]
-    other?: Unsafe[]
-    jobsettings?: Unsafe | null
-  }
-  catalogs?: Unsafe | null
-  settings?: {
-    quote_validity_days?: number | null
-    terms_text?: string | null
-    default_template_key?: string | null
-  }
-  pricingSummary?: CustomerEstimatePricingSummary | null
-  overrides?: {
-    title?: string
-    intro_paragraph?: string
-    closing_paragraph?: string
-    scope_text_edits?: Partial<Record<CustomerEstimateSectionKey, string>>
-    quote_validity_days?: number | string | null
-    deposit_language?: string
-    card_fee_note?: string
-  }
-  publicMeta?: {
-    status?: string
-    sent_at?: string | null
-    viewed_at?: string | null
-    accepted_at?: string | null
-    declined_at?: string | null
-    public_token?: string | null
-  }
-}): CustomerEstimateDocument {
+export function buildCustomerEstimateDocument(params: CustomerEstimateInput): CustomerEstimateDocument {
   const estimate = params.estimate
   const job = params.job
   const total = params.pricingSummary?.finalTotal ?? null
@@ -609,17 +720,17 @@ export function buildCustomerEstimateDocument(params: {
     jobsettings: params.inputs.jobsettings ?? undefined,
   })
 
-  const versionName = asText(estimate.version_name) || 'Estimate'
+  const versionName = asText(estimate.version_name) || 'Quote'
   const flowVersion = 'v2'
   const status = asText(params.publicMeta?.status) || asText(estimate.version_state) || 'draft'
   const title = params.overrides?.title?.trim() || versionName
   const estimateDate = asText(job.estimate_date || estimate.created_at || estimate.updated_at)
   const intro =
     params.overrides?.intro_paragraph?.trim() ||
-    `Thank you for the opportunity to prepare this estimate for ${asText(job.customer_name) || 'your project'}.`
+    `Thank you for the opportunity to prepare this quote for ${asText(job.customer_name) || 'your project'}.`
   const closing =
     params.overrides?.closing_paragraph?.trim() ||
-    'Please review the estimate below. If everything looks right, you can accept it directly from the secure link.'
+    'Please review the quote below. If everything looks right, you can accept it directly from the secure link.'
   const quoteValidityDays = Number(params.overrides?.quote_validity_days ?? params.settings?.quote_validity_days ?? 90)
   const depositLanguage =
     params.overrides?.deposit_language?.trim() ||

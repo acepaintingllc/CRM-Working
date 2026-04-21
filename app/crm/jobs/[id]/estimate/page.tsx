@@ -1,33 +1,29 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
 import Link from 'next/link'
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-
-function toLocalInputValue(d: Date) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(
-    d.getHours()
-  )}:${pad2(d.getMinutes())}`
-}
-
-function next8amLocalValue() {
-  const now = new Date()
-  const next = new Date(now)
-  if (now.getHours() >= 8) next.setDate(next.getDate() + 1)
-  next.setHours(8, 0, 0, 0)
-  return toLocalInputValue(next)
-}
+import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { authedFetch } from '@/lib/auth/authedFetch'
+import { getResponseErrorMessage, parseResponseBody } from '@/lib/jobs/actions'
+import {
+  next8amLocalDateTimeValue,
+  toIsoFromLocalDateTimeValue,
+  toLocalDateTimeInputValue,
+} from '@/lib/jobs/dateHelpers'
+import {
+  jobsButtonAccentClassName,
+  jobsButtonSecondaryClassName,
+  jobsCardClassName,
+  jobsInputClassName,
+  jobsLabelClassName,
+  jobsPageShellClassName,
+} from '@/lib/jobs/uiClasses'
 
 export default function JobEstimatePage() {
   const params = useParams()
   const rawId = (params as { id?: string } | null | undefined)?.id
   const id = Array.isArray(rawId) ? rawId[0] : rawId
+  const router = useRouter()
 
   const [estimateLocal, setEstimateLocal] = useState('')
   const [saving, setSaving] = useState(false)
@@ -37,16 +33,17 @@ export default function JobEstimatePage() {
     if (!id || typeof id !== 'string') return
     const load = async () => {
       const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
-      const payload = await res.json().catch(() => null)
+      const payload = await parseResponseBody(res)
       if (!res.ok) {
-        setError(payload?.error ?? res.statusText)
+        setError(getResponseErrorMessage(res, payload))
         return
       }
-      const existing = payload?.job?.estimate_date
+      const existing = (payload.json as { job?: { estimate_date?: string | null } } | null)?.job
+        ?.estimate_date
       if (existing) {
-        setEstimateLocal(toLocalInputValue(new Date(existing)))
+        setEstimateLocal(toLocalDateTimeInputValue(new Date(existing)))
       } else {
-        setEstimateLocal(next8amLocalValue())
+        setEstimateLocal(next8amLocalDateTimeValue())
       }
     }
     void load()
@@ -58,7 +55,11 @@ export default function JobEstimatePage() {
       setError('Pick a date/time')
       return
     }
-    const iso = new Date(estimateLocal).toISOString()
+    const iso = toIsoFromLocalDateTimeValue(estimateLocal)
+    if (!iso) {
+      setError('Pick a valid date/time')
+      return
+    }
     setSaving(true)
     setError(null)
     const res = await authedFetch(`/api/jobs/${id}`, {
@@ -66,85 +67,50 @@ export default function JobEstimatePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ estimate_date: iso, status: 'estimate_scheduled' }),
     })
-    const payload = await res.json().catch(() => null)
+    const payload = await parseResponseBody(res)
     setSaving(false)
     if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
+      setError(getResponseErrorMessage(res, payload))
       return
     }
-    window.location.href = `/crm/jobs/${id}`
+    router.push(`/crm/jobs/${id}`)
   }
 
   return (
-    <div className="crm-page" style={{ maxWidth: 700, margin: '0 auto' }}>
-      <div className="crm-topbar" style={{ marginBottom: 12 }}>
+    <div className={`${jobsPageShellClassName} max-w-[700px]`}>
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <div style={{ fontSize: 20, fontWeight: 800 }}>Set estimate date</div>
-          <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>Pick the estimate time for this job.</div>
+          <div className="text-[20px] font-extrabold">Set quote date</div>
+          <div className="text-xs text-[var(--crm-muted)]">Pick the quote time for this job.</div>
         </div>
-        <Link href={`/crm/jobs/${id}`} style={{ ...actionButton, textDecoration: 'none' }}>
+        <Link href={`/crm/jobs/${id}`} className={`${jobsButtonSecondaryClassName} no-underline`}>
           Back to job
         </Link>
       </div>
 
-      <div className="crm-card" style={{ borderRadius: 12, padding: 14 }}>
-        <div style={{ display: 'grid', gap: 10 }}>
+      <div className={jobsCardClassName}>
+        <div className="grid gap-2.5">
           <div>
-            <div style={label}>Estimate date/time</div>
+            <div className={jobsLabelClassName}>Quote date/time</div>
             <input
               type="datetime-local"
               value={estimateLocal}
-              onChange={(e) => setEstimateLocal(e.target.value)}
-              style={inputStyle}
+              onChange={(event) => setEstimateLocal(event.target.value)}
+              className={jobsInputClassName}
             />
           </div>
 
-          {error && <div style={{ color: '#b91c1c', fontSize: 14 }}>{error}</div>}
+          {error && <div className="text-sm text-red-700">{error}</div>}
 
           <button
             onClick={() => void save()}
             disabled={saving}
-            style={{
-              padding: '12px',
-              borderRadius: 10,
-              background: 'var(--crm-accent)',
-              color: 'var(--crm-accent-text)',
-              border: 'none',
-              fontWeight: 800,
-              cursor: 'pointer',
-              opacity: saving ? 0.6 : 1,
-            }}
+            className={jobsButtonAccentClassName}
           >
-            {saving ? 'Saving...' : 'Save estimate date'}
+            {saving ? 'Saving...' : 'Save quote date'}
           </button>
         </div>
       </div>
     </div>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: '12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border)',
-  fontSize: 14,
-  width: '100%',
-}
-
-const actionButton: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border-soft)',
-  background: 'var(--crm-card)',
-  color: 'var(--crm-text)',
-  fontWeight: 800,
-  fontSize: 14,
-}
-
-const label: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: 'var(--crm-muted)',
-  textTransform: 'uppercase',
-  marginBottom: 6,
 }

@@ -291,7 +291,7 @@ export function EstimateV2EditorPageContent({ estimateId }: { estimateId?: strin
           )}
 
           {pageVm.loading && (
-            <div role="status" aria-live="polite" aria-label="Loading estimate editor workspace" style={S.panel}>
+            <div role="status" aria-live="polite" aria-label="Loading quote workspace" style={S.panel}>
               Loading workspace...
             </div>
           )}

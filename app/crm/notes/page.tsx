@@ -1,45 +1,14 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
+import { useNotesDashboard } from '@/lib/notes/client/useNotesDashboard'
+import { formatDue } from '@/lib/notes/time'
+import type { NotesNoteRow, NotesTaskRow } from '@/lib/notes/types'
 import Link from 'next/link'
-import { useEffect, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { AlertTriangle, ArrowUpRight, Clock3, Star } from 'lucide-react'
-import { formatDue, type NoteRow, type TaskRow } from './_lib'
-
-type DashboardPayload = {
-  tasks: {
-    overdue: TaskRow[]
-    due_today: TaskRow[]
-    upcoming: TaskRow[]
-  }
-  notes: {
-    starred: NoteRow[]
-    recent: NoteRow[]
-  }
-}
 
 export default function NotesTodayPage() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [data, setData] = useState<DashboardPayload | null>(null)
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      setError(null)
-      const res = await authedFetch('/api/notes/dashboard', { cache: 'no-store' })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        setError(payload?.error ?? 'Unable to load dashboard.')
-        setLoading(false)
-        return
-      }
-      setData(payload as DashboardPayload)
-      setLoading(false)
-    }
-
-    void load()
-  }, [])
+  const { data, loading, error } = useNotesDashboard()
 
   return (
     <div className="grid gap-4">
@@ -96,7 +65,7 @@ export default function NotesTodayPage() {
 
 function TaskSection(props: {
   title: string
-  tasks: TaskRow[]
+  tasks: NotesTaskRow[]
   empty: string
   icon?: ReactNode
 }) {
@@ -135,7 +104,7 @@ function TaskSection(props: {
 
 function NotesSection(props: {
   title: string
-  notes: NoteRow[]
+  notes: NotesNoteRow[]
   empty: string
   icon?: ReactNode
 }) {

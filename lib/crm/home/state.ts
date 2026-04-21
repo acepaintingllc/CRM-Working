@@ -1,14 +1,33 @@
 import { createCrmHomeData } from './selectors.ts'
 import type {
   CalendarEvent,
-  CrmHomeData,
   CrmHomeLoadState,
+  CrmHomeSourceAvailability,
   CrmHomeSourceErrorKey,
   CrmHomeSourceErrorMap,
+  CrmHomeSourcePatch,
+  CrmHomeSourceResult,
+  CrmHomeSourceState,
+  CrmHomeSourceStateMap,
+  CrmHomeSummary,
   DashboardCustomer,
   DashboardJob,
   NotesReminderSignal,
 } from './types.ts'
+
+const CRM_HOME_SOURCE_KEYS: CrmHomeSourceErrorKey[] = [
+  'jobs',
+  'customers',
+  'calendarStatus',
+  'calendarEvents',
+  'notes',
+]
+
+type ParserResult<T> = {
+  value: T
+  availability: Extract<CrmHomeSourceAvailability, 'available' | 'missing' | 'invalid'>
+  errorMessage: string | null
+}
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -78,50 +97,87 @@ function readCalendarEvent(value: unknown) {
   }
 }
 
-export function readJobsPayload(payload: unknown) {
+export function readJobsPayload(payload: unknown): ParserResult<DashboardJob[]> {
   if (!isRecord(payload) || !Array.isArray(payload.jobs)) {
-    return { value: [] as DashboardJob[], error: 'Malformed jobs response.' }
+    return {
+      value: [],
+      availability: 'invalid',
+      errorMessage: 'Malformed jobs response.',
+    }
   }
   return {
     value: payload.jobs.map(readJob).filter((job): job is DashboardJob => job != null),
-    error: null,
+    availability: 'available',
+    errorMessage: null,
   }
 }
 
-export function readCustomersPayload(payload: unknown) {
+export function readCustomersPayload(payload: unknown): ParserResult<DashboardCustomer[]> {
   if (!isRecord(payload) || !Array.isArray(payload.customers)) {
-    return { value: [] as DashboardCustomer[], error: 'Malformed customers response.' }
+    return {
+      value: [],
+      availability: 'invalid',
+      errorMessage: 'Malformed customers response.',
+    }
   }
   return {
     value: payload.customers
       .map(readCustomer)
       .filter((customer): customer is DashboardCustomer => customer != null),
-    error: null,
+    availability: 'available',
+    errorMessage: null,
   }
 }
 
-export function readCalendarStatusPayload(payload: unknown) {
-  if (!isRecord(payload) || typeof payload.connected !== 'boolean') {
-    return { value: false, error: 'Malformed calendar status response.' }
+export function readCalendarStatusPayload(payload: unknown): ParserResult<boolean> {
+  if (!isRecord(payload) || !('connected' in payload)) {
+    return {
+      value: false,
+      availability: 'missing',
+      errorMessage: 'Missing calendar status response.',
+    }
   }
-  return { value: payload.connected, error: null }
+
+  if (typeof payload.connected !== 'boolean') {
+    return {
+      value: false,
+      availability: 'invalid',
+      errorMessage: 'Malformed calendar status response.',
+    }
+  }
+
+  return { value: payload.connected, availability: 'available', errorMessage: null }
 }
 
-export function readCalendarEventsPayload(payload: unknown) {
+export function readCalendarEventsPayload(payload: unknown): ParserResult<CalendarEvent[]> {
   if (!isRecord(payload) || !Array.isArray(payload.events)) {
-    return { value: [] as CalendarEvent[], error: 'Malformed calendar events response.' }
+    return {
+      value: [],
+      availability: 'invalid',
+      errorMessage: 'Malformed calendar events response.',
+    }
   }
   return {
     value: payload.events
       .map(readCalendarEvent)
       .filter((event): event is CalendarEvent => event != null),
-    error: null,
+    availability: 'available',
+    errorMessage: null,
   }
 }
 
-export function readNotesDashboardPayload(payload: unknown) {
+export function readNotesDashboardPayload(payload: unknown): ParserResult<{
+  tasks: {
+    overdue: NonNullable<ReturnType<typeof readNotesTaskSignal>>[]
+    due_today: NonNullable<ReturnType<typeof readNotesTaskSignal>>[]
+  }
+} | null> {
   if (!isRecord(payload) || !isRecord(payload.tasks)) {
-    return { value: null, error: 'Malformed notes dashboard response.' }
+    return {
+      value: null,
+      availability: 'invalid',
+      errorMessage: 'Malformed notes dashboard response.',
+    }
   }
 
   const overdue = Array.isArray(payload.tasks.overdue)
@@ -142,11 +198,125 @@ export function readNotesDashboardPayload(payload: unknown) {
         due_today: dueToday,
       },
     },
-    error: null,
+    availability: 'available',
+    errorMessage: null,
   }
 }
 
+export function createCrmHomeSourceState(
+  status: CrmHomeSourceState['status'],
+  availability: CrmHomeSourceAvailability,
+  errorMessage: string | null = null,
+  lastLoadedAt: string | null = null,
+  canRefresh = true
+): CrmHomeSourceState {
+  return {
+    status,
+    availability,
+    errorMessage,
+    lastLoadedAt,
+    canRefresh,
+  }
+}
+
+export function createInitialCrmHomeSourceStateMap(): CrmHomeSourceStateMap {
+  return {
+    jobs: createCrmHomeSourceState('loading', 'missing'),
+    customers: createCrmHomeSourceState('loading', 'missing'),
+    calendarStatus: createCrmHomeSourceState('loading', 'missing'),
+    calendarEvents: createCrmHomeSourceState('loading', 'missing'),
+    notes: createCrmHomeSourceState('loading', 'missing'),
+  }
+}
+
+export function sourceResultToState<T>(result: CrmHomeSourceResult<T>): CrmHomeSourceState {
+  return {
+    status: result.status,
+    availability: result.availability,
+    errorMessage: result.errorMessage,
+    lastLoadedAt: result.lastLoadedAt,
+    canRefresh: true,
+  }
+}
+
+export function createSkippedCrmHomeSourceResult(
+  source: CrmHomeSourceErrorKey,
+  availability: Extract<CrmHomeSourceAvailability, 'missing'>,
+  lastLoadedAt: string,
+  value: CalendarEvent[]
+): CrmHomeSourceResult<CalendarEvent[]> {
+  return {
+    source,
+    ok: true,
+    status: 'ready',
+    availability,
+    value,
+    errorMessage: null,
+    rawPayload: null,
+    lastLoadedAt,
+  }
+}
+
+export function buildCrmHomeErrors(
+  sources: CrmHomeSourceStateMap
+): CrmHomeSourceErrorMap {
+  const next: CrmHomeSourceErrorMap = {}
+  for (const key of CRM_HOME_SOURCE_KEYS) {
+    const message = sources[key].errorMessage
+    if (message) next[key] = message
+  }
+  return next
+}
+
+export function getCrmHomeWarningSources(sources: CrmHomeSourceStateMap) {
+  return CRM_HOME_SOURCE_KEYS.filter((key) => {
+    if (key === 'jobs') return false
+    const source = sources[key]
+    return source.status === 'error' || source.status === 'degraded'
+  })
+}
+
+export function deriveCrmHomeSummary(sources: CrmHomeSourceStateMap): CrmHomeSummary {
+  const isBusy = CRM_HOME_SOURCE_KEYS.some((key) => sources[key].status === 'loading')
+  const hasLoadedAnySource = CRM_HOME_SOURCE_KEYS.some((key) => sources[key].lastLoadedAt != null)
+  const isInitialLoading = isBusy && !hasLoadedAnySource
+  const isReloading = isBusy && hasLoadedAnySource
+  const jobsSource = sources.jobs
+  const hasCriticalError = jobsSource.status === 'error' || jobsSource.status === 'degraded'
+  const warningSources = getCrmHomeWarningSources(sources)
+
+  return {
+    isInitialLoading,
+    isReloading,
+    hasCriticalError,
+    hasWarnings: !hasCriticalError && warningSources.length > 0,
+    warningSources,
+    isBusy,
+  }
+}
+
+function createDataFromStateParts(params: {
+  data: CrmHomeLoadState['data']
+  jobs?: DashboardJob[]
+  customers?: DashboardCustomer[]
+  calendarConnected?: boolean | null
+  calendarTodayEvents?: CalendarEvent[]
+  notesReminders?: NotesReminderSignal[]
+  now?: Date
+}) {
+  const { data, now } = params
+  return createCrmHomeData({
+    jobs: params.jobs ?? data.jobs,
+    customers: params.customers ?? data.customers,
+    calendarConnected: params.calendarConnected ?? data.signals.calendarConnected,
+    calendarTodayEvents: params.calendarTodayEvents ?? data.signals.calendarTodayEvents,
+    notesReminders: params.notesReminders ?? data.signals.notesReminders,
+    now,
+  })
+}
+
 export function createInitialCrmHomeLoadState(now = new Date()): CrmHomeLoadState {
+  const sources = createInitialCrmHomeSourceStateMap()
   return {
     data: createCrmHomeData({
       jobs: [],
@@ -156,80 +326,111 @@ export function createInitialCrmHomeLoadState(now = new Date()): CrmHomeLoadStat
       notesReminders: [],
       now,
     }),
-    errorsBySource: {},
-    isInitialLoading: true,
-    isReloading: false,
-    hasCriticalError: false,
-    hasWarnings: false,
+    sources,
+    summary: deriveCrmHomeSummary(sources),
   }
 }
 
 export function createLoadingCrmHomeLoadState(
-  previousData: CrmHomeData,
-  hasLoadedBefore: boolean
+  previousState: CrmHomeLoadState,
+  sourceKeys: CrmHomeSourceErrorKey[]
 ): CrmHomeLoadState {
+  const sources = { ...previousState.sources }
+
+  for (const key of sourceKeys) {
+    sources[key] = {
+      ...sources[key],
+      status: 'loading',
+      errorMessage: null,
+    }
+  }
+
   return {
-    data: previousData,
-    errorsBySource: {},
-    isInitialLoading: !hasLoadedBefore,
-    isReloading: hasLoadedBefore,
-    hasCriticalError: false,
-    hasWarnings: false,
+    data: previousState.data,
+    sources,
+    summary: deriveCrmHomeSummary(sources),
   }
 }
 
-export function buildCrmHomeErrors(
-  errors: Array<[CrmHomeSourceErrorKey, string | null | undefined]>
-): CrmHomeSourceErrorMap {
-  const next: CrmHomeSourceErrorMap = {}
-  for (const [key, message] of errors) {
-    if (message) next[key] = message
+export function applyCrmHomeSourcePatch(
+  previousState: CrmHomeLoadState,
+  patch: CrmHomeSourcePatch,
+  now = new Date()
+): CrmHomeLoadState {
+  const sources = { ...previousState.sources }
+  let jobs = previousState.data.jobs
+  let customers = previousState.data.customers
+  let calendarConnected = previousState.data.signals.calendarConnected
+  let calendarTodayEvents = previousState.data.signals.calendarTodayEvents
+  let notesReminders = previousState.data.signals.notesReminders
+
+  if (patch.jobs) {
+    sources.jobs = sourceResultToState(patch.jobs.source)
+    jobs = patch.jobs.data
   }
-  return next
+
+  if (patch.customers) {
+    sources.customers = sourceResultToState(patch.customers.source)
+    customers = patch.customers.data
+  }
+
+  if (patch.calendarStatus) {
+    sources.calendarStatus = sourceResultToState(patch.calendarStatus.source)
+    calendarConnected = patch.calendarStatus.data
+  }
+
+  if (patch.calendarEvents) {
+    sources.calendarEvents = sourceResultToState(patch.calendarEvents.source)
+    calendarTodayEvents = patch.calendarEvents.data
+  }
+
+  if (patch.notes) {
+    sources.notes = sourceResultToState(patch.notes.source)
+    notesReminders = patch.notes.data
+  }
+
+  const data = createDataFromStateParts({
+    data: previousState.data,
+    jobs,
+    customers,
+    calendarConnected,
+    calendarTodayEvents,
+    notesReminders,
+    now,
+  })
+
+  return {
+    data,
+    sources,
+    summary: deriveCrmHomeSummary(sources),
+  }
 }
 
-export function hasCriticalCrmHomeError(errorsBySource: CrmHomeSourceErrorMap) {
-  return Boolean(errorsBySource.jobs)
-}
-
-export function hasCrmHomeWarnings(errorsBySource: CrmHomeSourceErrorMap) {
-  return Object.keys(errorsBySource).length > 0 && !hasCriticalCrmHomeError(errorsBySource)
-}
-
-export function getCrmHomeWarningSources(errorsBySource: CrmHomeSourceErrorMap) {
-  return (Object.keys(errorsBySource) as CrmHomeSourceErrorKey[]).filter((key) => key !== 'jobs')
-}
-
-export function createResolvedCrmHomeLoadState({
-  now = new Date(),
-  jobs,
-  customers,
-  calendarConnected,
-  calendarTodayEvents,
-  notesReminders,
-  errorsBySource,
-}: {
+export function createResolvedCrmHomeLoadState(params: {
   now?: Date
   jobs: DashboardJob[]
   customers: DashboardCustomer[]
   calendarConnected: boolean | null
   calendarTodayEvents: CalendarEvent[]
   notesReminders: NotesReminderSignal[]
-  errorsBySource: CrmHomeSourceErrorMap
+  sources: Partial<CrmHomeSourceStateMap>
 }): CrmHomeLoadState {
+  const baseSources = createInitialCrmHomeSourceStateMap()
+  const sources = {
+    ...baseSources,
+    ...params.sources,
+  }
+
   return {
     data: createCrmHomeData({
-      jobs,
-      customers,
-      calendarConnected,
-      calendarTodayEvents,
-      notesReminders,
-      now,
+      jobs: params.jobs,
+      customers: params.customers,
+      calendarConnected: params.calendarConnected,
+      calendarTodayEvents: params.calendarTodayEvents,
+      notesReminders: params.notesReminders,
+      now: params.now,
     }),
-    errorsBySource,
-    isInitialLoading: false,
-    isReloading: false,
-    hasCriticalError: hasCriticalCrmHomeError(errorsBySource),
-    hasWarnings: hasCrmHomeWarnings(errorsBySource),
+    sources,
+    summary: deriveCrmHomeSummary(sources),
   }
 }

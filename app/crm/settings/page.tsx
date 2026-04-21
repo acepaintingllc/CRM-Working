@@ -1,72 +1,46 @@
 'use client'
 
-import Link from 'next/link'
 import { Building2, FileStack, Link2, Settings as SettingsIcon } from 'lucide-react'
+import { SettingsNavTile } from './_components/SettingsNavTile'
+import { SettingsPageShell } from './_components/SettingsPageShell'
 
 export default function SettingsPage() {
   return (
-    <div className="crm-page" style={{ maxWidth: 980, margin: '0 auto', display: 'grid', gap: 14 }}>
-      <div className="crm-card" style={{ borderRadius: 14, padding: 18 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--crm-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+    <SettingsPageShell
+      eyebrow="Settings"
+      title="CRM Settings"
+      description="Manage company identity, quote send defaults, and integrations from one organized settings area."
+    >
+      <section className="grid gap-3 md:grid-cols-3">
+        <SettingsNavTile
+          href="/crm/settings/company"
+          title="Company profile"
+          description="Business details and sender defaults used in customer-facing flows."
+          Icon={Building2}
+        />
+        <SettingsNavTile
+          href="/crm/settings/integrations"
+          title="Integrations"
+          description="Connection health and provider setup entry points."
+          Icon={Link2}
+        />
+        <SettingsNavTile
+          href="/crm/settings/templates"
+          title="Templates and send defaults"
+          description="Email template access plus dedicated quote send defaults."
+          Icon={FileStack}
+        />
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.24em] text-slate-500">
           <SettingsIcon size={16} aria-hidden="true" />
-          Settings
+          Growth pattern
         </div>
-        <h1 style={{ margin: '8px 0 0', fontSize: 24, fontWeight: 900 }}>CRM Settings</h1>
-        <p style={{ margin: '6px 0 0', color: 'var(--crm-muted-strong)', fontSize: 14 }}>
-          Manage your company profile, integrations, and templates in one place.
+        <p className="mt-2 text-sm text-slate-600">
+          Add new settings by creating a typed domain contract, a behavior-specific route, and a page built on the shared settings resource hook and primitives.
         </p>
-      </div>
-
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
-        <Link href="/crm/settings/company" style={tile}>
-          <div style={tileTitle}>
-            <Building2 size={18} aria-hidden="true" />
-            <span>Company profile</span>
-          </div>
-          <div style={tileSub}>Business details, defaults, and brand information.</div>
-        </Link>
-
-        <Link href="/crm/settings/integrations" style={tile}>
-          <div style={tileTitle}>
-            <Link2 size={18} aria-hidden="true" />
-            <span>Integrations</span>
-          </div>
-          <div style={tileSub}>Connection status and provider setup controls.</div>
-        </Link>
-
-        <Link href="/crm/settings/templates" style={tile}>
-          <div style={tileTitle}>
-            <FileStack size={18} aria-hidden="true" />
-            <span>Templates library</span>
-          </div>
-          <div style={tileSub}>Email templates now, with room for SMS and notes templates later.</div>
-        </Link>
-      </div>
-    </div>
+      </section>
+    </SettingsPageShell>
   )
-}
-
-const tile: React.CSSProperties = {
-  display: 'block',
-  border: '1px solid var(--crm-border)',
-  borderRadius: 12,
-  background: 'var(--crm-card)',
-  padding: 14,
-  textDecoration: 'none',
-  color: 'var(--crm-text)',
-}
-
-const tileTitle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  fontWeight: 800,
-  fontSize: 16,
-}
-
-const tileSub: React.CSSProperties = {
-  marginTop: 6,
-  color: 'var(--crm-muted-strong)',
-  fontSize: 13,
-  lineHeight: 1.4,
 }

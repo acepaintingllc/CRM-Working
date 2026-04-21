@@ -15,7 +15,6 @@ import {
   Cog,
   FileText,
   Home,
-  Shapes,
   Users,
   Wrench,
 } from "lucide-react";
@@ -46,7 +45,9 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeMode>("system");
   const logoSrc = getBrandLogoUrl()
   const iconSize = 16;
-  const isEstimatorV2Path =
+  const isQuotePath =
+    pathname === "/crm/quotes" ||
+    Boolean(pathname?.startsWith("/crm/quotes/")) ||
     pathname === "/crm/estimates/v2" ||
     Boolean(pathname?.startsWith("/crm/estimates/v2/")) ||
     Boolean(pathname && /^\/crm\/estimates\/[^/]+\/v2(?:\/|$)/.test(pathname));
@@ -55,8 +56,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       { href: "/crm", label: "Home", Icon: Home },
       { href: "/crm/customers", label: "Customers", Icon: Users },
       { href: "/crm/jobs", label: "Job Center", Icon: Wrench },
-      { href: "/crm/estimates", label: "Estimates", Icon: Calculator },
-      { href: "/crm/estimates/v2", label: "V2", Icon: Shapes },
+      { href: "/crm/quotes", label: "Quotes", Icon: Calculator },
       { href: "/crm/notes", label: "Notes", Icon: FileText },
       { href: "/crm/calendar", label: "Calendar", Icon: CalendarDays },
       { href: "/field/jobs", label: "Field Cam", Icon: Camera },
@@ -227,11 +227,9 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
             const active =
               item.href === "/crm"
                 ? pathname === item.href
-                : item.href === "/crm/estimates"
-                  ? Boolean(pathname?.startsWith("/crm/estimates")) && !isEstimatorV2Path
-                  : item.href === "/crm/estimates/v2"
-                    ? isEstimatorV2Path
-                    : pathname === item.href || Boolean(pathname?.startsWith(item.href));
+                : item.href === "/crm/quotes"
+                  ? isQuotePath
+                  : pathname === item.href || Boolean(pathname?.startsWith(item.href));
             const Icon = item.Icon as LucideIcon;
             return (
               <Link
@@ -399,11 +397,9 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
               const active =
                 item.href === "/crm"
                   ? pathname === item.href
-                  : item.href === "/crm/estimates"
-                    ? Boolean(pathname?.startsWith("/crm/estimates")) && !isEstimatorV2Path
-                    : item.href === "/crm/estimates/v2"
-                      ? isEstimatorV2Path
-                      : pathname === item.href || Boolean(pathname?.startsWith(item.href));
+                  : item.href === "/crm/quotes"
+                    ? isQuotePath
+                    : pathname === item.href || Boolean(pathname?.startsWith(item.href));
               const Icon = item.Icon as LucideIcon;
               return (
                 <Link

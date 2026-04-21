@@ -129,7 +129,7 @@ function SummaryStatusBadge({ statusLabel }: { statusLabel: string }) {
 
   return (
     <span
-      aria-label={`Estimate status: ${statusLabel}`}
+      aria-label={`Quote status: ${statusLabel}`}
       style={{
         padding: '6px 10px',
         borderRadius: 999,
@@ -174,7 +174,7 @@ function SummaryActionLinks({ estimateId, compact = false }: { estimateId: strin
   return (
     <>
       <Link
-        href={`/crm/estimates/${estimateId}/v2`}
+        href={`/crm/quotes/${estimateId}`}
         style={{
           ...baseStyle,
           border: `1px solid ${C.border}`,
@@ -185,7 +185,7 @@ function SummaryActionLinks({ estimateId, compact = false }: { estimateId: strin
         Edit
       </Link>
       <Link
-        href={`/crm/estimates/${estimateId}/v2/send`}
+        href={`/crm/quotes/${estimateId}/send`}
         style={{
           ...baseStyle,
           border: compact ? '1px solid rgba(132,204,147,0.26)' : `1px solid ${C.border}`,
@@ -228,7 +228,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
       <div
         role="status"
         aria-live="polite"
-        aria-label="Loading estimate summary"
+        aria-label="Loading quote summary"
         style={{
           minHeight: '100vh',
           background: C.bg,
@@ -249,7 +249,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
       <div
         role="alert"
         aria-live="assertive"
-        aria-label="Estimate summary failed to load"
+        aria-label="Quote summary failed to load"
         style={{
           minHeight: '100vh',
           background: C.bg,
@@ -475,7 +475,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
           }}
         >
           <Link
-            href="/crm/estimates/v2"
+            href="/crm/quotes"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -490,7 +490,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
             <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
               &larr;
             </span>
-            <span>Back</span>
+              <span>Back to Quotes</span>
           </Link>
           <SummaryStatusBadge statusLabel={derived.statusLabel} />
         </header>
@@ -498,7 +498,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
         <main style={{ display: 'grid', gap: 12, minWidth: 0 }}>
           <section style={{ ...card, padding: '16px', borderRadius: 16, display: 'grid', gap: 8 }}>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.ink3 }}>
-              Internal estimate summary
+              Internal quote summary
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.02, letterSpacing: '-0.04em', fontWeight: 900, color: C.ink }}>
@@ -620,8 +620,8 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <Link href="/crm/estimates/v2" style={{ fontSize: 12, color: C.ink3, textDecoration: 'none', flexShrink: 0 }}>
-              Back to Estimates
+            <Link href="/crm/quotes" style={{ fontSize: 12, color: C.ink3, textDecoration: 'none', flexShrink: 0 }}>
+              Back to Quotes
             </Link>
             <span style={{ color: C.border }}>/</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, flexShrink: 0 }}>{derived.versionName}</span>
@@ -644,7 +644,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
           <main style={mainColStyle}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 4 }}>
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.ink3 }}>
-                Internal estimate summary
+                Internal quote summary
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                 <h2 style={{ margin: 0, fontSize: 28, fontWeight: 900, letterSpacing: '-0.03em', color: C.ink }}>{derived.versionName}</h2>

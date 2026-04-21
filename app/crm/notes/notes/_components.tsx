@@ -1,9 +1,10 @@
 'use client'
 
+import type { NotesFolderWithCount, NotesNoteRow } from '@/lib/notes/types'
+import { useLockBodyScroll } from '@/lib/hooks/useLockBodyScroll'
 import Link from 'next/link'
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { EllipsisVertical, FileText, Folder, FolderOpen, Star } from 'lucide-react'
-import type { FolderRow, NoteRow } from '../_lib'
 
 export type NotesBrowserStatus = 'active' | 'archived'
 
@@ -25,7 +26,7 @@ export function buildNotesHref(
   return query ? `${path}?${query}` : path
 }
 
-export function filterNotesBySearch(notes: NoteRow[], search: string) {
+export function filterNotesBySearch(notes: NotesNoteRow[], search: string) {
   const needle = search.trim().toLowerCase()
   if (!needle) return notes
   return notes.filter((note) => `${note.title} ${note.body}`.toLowerCase().includes(needle))
@@ -47,8 +48,8 @@ export function formatNoteTimestamp(iso: string) {
   })
 }
 
-export function groupNotesByFolder(notes: NoteRow[]) {
-  const map = new Map<string, NoteRow[]>()
+export function groupNotesByFolder(notes: NotesNoteRow[]) {
+  const map = new Map<string, NotesNoteRow[]>()
   for (const note of notes) {
     if (!note.folder_id) continue
     const existing = map.get(note.folder_id) ?? []
@@ -78,7 +79,7 @@ function useCoarsePointer() {
 }
 
 function handleExplorerKeyDown(
-  event: KeyboardEvent<HTMLElement>,
+  event: ReactKeyboardEvent<HTMLElement>,
   onSelect: () => void,
   onOpen: () => void
 ) {
@@ -175,9 +176,9 @@ export function NotesToolbarLink(props: {
 }
 
 export function FolderTile(props: {
-  folder: FolderRow
+  folder: NotesFolderWithCount
   noteCount: number
-  latestNote: NoteRow | null
+  latestNote: NotesNoteRow | null
   selected: boolean
   manageMode: boolean
   canMoveUp: boolean
@@ -271,7 +272,7 @@ export function FolderTile(props: {
 }
 
 export function NotePreviewCard(props: {
-  note: NoteRow
+  note: NotesNoteRow
   selected: boolean
   onSelect: () => void
   onOpen: () => void
@@ -332,5 +333,157 @@ export function NotePreviewCard(props: {
         </div>
       </div>
     </article>
+  )
+}
+
+export function FolderActionModal(props: {
+  open: boolean
+  mode: 'rename' | 'delete_choice' | 'delete_move' | null
+  folderName: string
+  renameValue: string
+  noteCount: number
+  availableMoveTargets: NotesFolderWithCount[]
+  selectedMoveTargetId: string
+  saving: boolean
+  error: string | null
+  onClose: () => void
+  onRenameValueChange: (value: string) => void
+  onSelectedMoveTargetIdChange: (value: string) => void
+  onSubmitRename: () => void
+  onChooseUncategorize: () => void
+  onChooseMove: () => void
+  onSubmitMove: () => void
+}) {
+  useLockBodyScroll(props.open)
+
+  useEffect(() => {
+    if (!props.open || typeof window === 'undefined') return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') props.onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [props.onClose, props.open])
+
+  if (!props.open || !props.mode) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-lg rounded-[28px] border border-neutral-800 bg-neutral-950 p-5 shadow-2xl">
+        {props.mode === 'rename' && (
+          <>
+            <div>
+              <h2 className="text-xl font-extrabold text-white">Rename Folder</h2>
+              <p className="mt-1 text-sm text-neutral-400">Update the folder name without changing its notes.</p>
+            </div>
+            <div className="mt-4 grid gap-2">
+              <label className="grid gap-1 text-sm font-semibold text-neutral-300">
+                Folder name
+                <input
+                  value={props.renameValue}
+                  onChange={(event) => props.onRenameValueChange(event.target.value)}
+                  className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                />
+              </label>
+            </div>
+          </>
+        )}
+
+        {props.mode === 'delete_choice' && (
+          <>
+            <div>
+              <h2 className="text-xl font-extrabold text-white">Delete Folder</h2>
+              <p className="mt-1 text-sm text-neutral-400">
+                &quot;{props.folderName}&quot; still contains {props.noteCount}{' '}
+                {props.noteCount === 1 ? 'note' : 'notes'}.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/60 p-4">
+              <button
+                type="button"
+                onClick={props.onChooseUncategorize}
+                disabled={props.saving}
+                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 disabled:opacity-60"
+              >
+                Move notes to Uncategorized
+              </button>
+              <button
+                type="button"
+                onClick={props.onChooseMove}
+                disabled={props.saving}
+                className="rounded-2xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm font-extrabold text-neutral-200 disabled:opacity-60"
+              >
+                Move notes into another folder
+              </button>
+            </div>
+          </>
+        )}
+
+        {props.mode === 'delete_move' && (
+          <>
+            <div>
+              <h2 className="text-xl font-extrabold text-white">Move Notes Before Delete</h2>
+              <p className="mt-1 text-sm text-neutral-400">
+                Choose where to move notes from &quot;{props.folderName}&quot; before the folder is deleted.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-2">
+              <label className="grid gap-1 text-sm font-semibold text-neutral-300">
+                Destination folder
+                <select
+                  value={props.selectedMoveTargetId}
+                  onChange={(event) => props.onSelectedMoveTargetIdChange(event.target.value)}
+                  className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                >
+                  <option value="">Select a folder</option>
+                  {props.availableMoveTargets.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </>
+        )}
+
+        {props.error && (
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+            {props.error}
+          </div>
+        )}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={props.onClose}
+            disabled={props.saving}
+            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-bold text-neutral-200 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          {props.mode === 'rename' && (
+            <button
+              type="button"
+              onClick={props.onSubmitRename}
+              disabled={props.saving}
+              className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 disabled:opacity-60"
+            >
+              {props.saving ? 'Saving...' : 'Save Name'}
+            </button>
+          )}
+          {props.mode === 'delete_move' && (
+            <button
+              type="button"
+              onClick={props.onSubmitMove}
+              disabled={props.saving}
+              className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+            >
+              {props.saving ? 'Deleting...' : 'Move Notes and Delete'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

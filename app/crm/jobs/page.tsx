@@ -1,12 +1,24 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
+import {
+  fetchJobList,
+  patchJobDateFields,
+  patchJobStatus,
+  type JobSummary,
+} from '@/lib/jobs/actions'
+import {
+  JOB_STATUS_OPTIONS,
+  createJobStatusBuckets,
+  getJobWorkflowActions,
+  type JobWorkflowResolvedAction,
+  type JobStatus,
+} from '@/lib/jobs/types'
 import StageEmailModal, {
-  stageEmailActionLabel,
   type StageEmailStage,
   type StageEmailSentResult,
 } from '@/app/crm/jobs/_components/StageEmailModal'
 import JobCompletionCloseoutModal from '@/app/crm/jobs/_components/JobCompletionCloseoutModal'
+import { jobsButtonSmallClassName } from '@/lib/jobs/uiClasses'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -24,41 +36,12 @@ import {
   XCircle,
 } from 'lucide-react'
 
-type JobStatus =
-  | 'estimate_scheduled'
-  | 'estimate_sent'
-  | 'follow_up'
-  | 'scheduled'
-  | 'completed'
-  | 'lost'
+type Job = JobSummary
 
-type Job = {
-  id: string
-  customer_id: string
-  customer_name: string | null
-  customer_address: string | null
-  title: string
-  description: string | null
-  status: JobStatus
-  created_at?: string | null
-  estimate_date: string | null
-  estimate_sent_at: string | null
-  scheduled_date: string | null
-  scheduled_end_date?: string | null
-  scheduled_email_sent_at?: string | null
-  completed_at: string | null
-  completed_email_sent_at?: string | null
-  closeout_notes?: string | null
-}
-
-const columns: { key: JobStatus; title: string }[] = [
-  { key: 'estimate_scheduled', title: 'Estimate scheduled' },
-  { key: 'estimate_sent', title: 'Estimate sent' },
-  { key: 'follow_up', title: 'Follow up' },
-  { key: 'scheduled', title: 'Scheduled' },
-  { key: 'completed', title: 'Completed' },
-  { key: 'lost', title: 'Lost' },
-]
+const columns: { key: JobStatus; title: string }[] = JOB_STATUS_OPTIONS.map((option) => ({
+  key: option.value,
+  title: option.title,
+}))
 
 const iconSizeSm = 16
 const iconSizeMd = 18
@@ -89,14 +72,7 @@ export default function JobsPage() {
   const [closeoutJobId, setCloseoutJobId] = useState<string | null>(null)
 
   const grouped = useMemo(() => {
-    const map: Record<JobStatus, Job[]> = {
-      estimate_scheduled: [],
-      estimate_sent: [],
-      follow_up: [],
-      scheduled: [],
-      completed: [],
-      lost: [],
-    }
+    const map = createJobStatusBuckets<Job>()
     for (const j of jobs) map[j.status]?.push(j)
     return map
   }, [jobs])
@@ -104,17 +80,12 @@ export default function JobsPage() {
   const load = async () => {
     setLoading(true)
     setError(null)
-
-    const res = await authedFetch('/api/jobs', { cache: 'no-store' })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
+    try {
+      setJobs(await fetchJobList())
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load jobs.')
       setJobs([])
-      setLoading(false)
-      return
     }
-
-    setJobs(payload?.jobs ?? [])
     setLoading(false)
   }
 
@@ -131,19 +102,17 @@ export default function JobsPage() {
   }, [])
 
   const patchJob = async (id: string, patch: Record<string, unknown>) => {
-    const res = await authedFetch(`/api/jobs/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
+    try {
+      const nextJob =
+        typeof patch.status === 'string'
+          ? await patchJobStatus(id, patch.status as JobStatus)
+          : await patchJobDateFields(id, patch)
+      setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...nextJob } : j)))
+      return (nextJob ?? null) as Partial<Job> | null
+    } catch (patchError) {
+      setError(patchError instanceof Error ? patchError.message : 'Failed to update job.')
       return null
     }
-
-    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...payload.job } : j)))
-    return (payload?.job ?? null) as Partial<Job> | null
   }
 
   const nowIso = () => new Date().toISOString()
@@ -170,7 +139,7 @@ export default function JobsPage() {
     if (job.completed_at) items.push({ label: 'Completed', at: job.completed_at })
     if (job.scheduled_email_sent_at) items.push({ label: 'Confirmation email sent', at: job.scheduled_email_sent_at })
     if (job.scheduled_date) items.push({ label: 'Scheduled', at: job.scheduled_date })
-    if (job.estimate_sent_at) items.push({ label: 'Estimate sent', at: job.estimate_sent_at })
+    if (job.estimate_sent_at) items.push({ label: 'Quote sent', at: job.estimate_sent_at })
     if (job.estimate_date) items.push({ label: 'Estimate set', at: job.estimate_date })
     if (job.created_at) items.push({ label: 'Job created', at: job.created_at })
     items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
@@ -256,6 +225,115 @@ export default function JobsPage() {
     .filter((col) => (col.key === 'completed' ? showCompleted : col.key === 'lost' ? showLost : true))
     .filter((col) => showEmptyStages || columnCount(col.key) > 0)
 
+  const actionClassName = (action: JobWorkflowResolvedAction) => {
+    if (action.tone === 'accent') {
+      return 'inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--crm-accent)] bg-[var(--crm-accent)] px-2.5 py-1.5 text-xs font-bold text-[var(--crm-accent-text)] transition hover:opacity-95'
+    }
+    if (action.tone === 'danger') {
+      return 'inline-flex items-center gap-1.5 rounded-[10px] border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100'
+    }
+    return jobsButtonSmallClassName
+  }
+
+  const actionIcon = (action: JobWorkflowResolvedAction) => {
+    switch (action.id) {
+      case 'review_send_quote':
+      case 'edit_send_quote':
+      case 'mark_quote_sent':
+        return Send
+      case 'set_quote_date':
+        return CalendarClock
+      case 'schedule_job':
+      case 'change_scheduled_date':
+        return CalendarCheck
+      case 'move_to_follow_up':
+      case 'send_follow_up':
+      case 'send_scheduled_email':
+      case 'open_closeout':
+        return Mail
+      case 'mark_completed':
+        return CheckCircle2
+      case 'mark_lost':
+        return XCircle
+      default:
+        return Mail
+    }
+  }
+
+  const runBoardAction = async (job: Job, action: JobWorkflowResolvedAction) => {
+    if (action.confirmMessage && !window.confirm(action.confirmMessage)) return
+    if (action.kind === 'navigate' && action.href) {
+      router.push(action.href)
+      return
+    }
+    if (action.kind === 'stage_email' && action.stage) {
+      openStageEmail(job.id, action.stage)
+      return
+    }
+    if (action.kind === 'open_closeout') {
+      openCloseout(job.id)
+      return
+    }
+    if (action.kind === 'patch_status' && action.status) {
+      await patchJob(job.id, { status: action.status })
+      return
+    }
+    if (action.kind === 'patch_date' && action.dateField === 'completed_at') {
+      await markCompletedAndPrompt(job)
+      return
+    }
+    if (action.kind === 'patch_date' && action.dateField === 'estimate_sent_at') {
+      await patchJob(job.id, { estimate_sent_at: nowIso() })
+    }
+  }
+
+  const renderBoardAction = (job: Job, action: JobWorkflowResolvedAction) => {
+    const Icon = actionIcon(action)
+    if (action.kind === 'navigate' && action.href) {
+      return (
+        <Link
+          key={`${job.id}-${action.id}`}
+          href={action.href}
+          onClick={(event) => event.stopPropagation()}
+          className={`${actionClassName(action)} no-underline`}
+        >
+          {iconLabel(Icon, action.label)}
+        </Link>
+      )
+    }
+
+    return (
+      <button
+        type="button"
+        key={`${job.id}-${action.id}`}
+        onClick={stop(() => {
+          void runBoardAction(job, action)
+        })}
+        className={actionClassName(action)}
+      >
+        {iconLabel(Icon, action.label)}
+      </button>
+    )
+  }
+
+  const renderBoardActions = (job: Job) => {
+    const actions = getJobWorkflowActions('board', job)
+    if (actions.length === 0) return null
+
+    if (compactActions) {
+      return (
+        <details onClick={(event) => event.stopPropagation()}>
+          <summary className={jobsButtonSmallClassName}>{iconLabel(ChevronDown, 'More')}</summary>
+          <div className="mt-1.5 grid gap-1.5">
+            {actions.map((action) => renderBoardAction(job, action))}
+          </div>
+        </details>
+      )
+    }
+
+    return actions.map((action) => renderBoardAction(job, action))
+  }
+
   return (
     <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
       <div className="mx-auto max-w-[2000px] px-4 md:px-6">
@@ -269,6 +347,7 @@ export default function JobsPage() {
 
           <div className="flex flex-wrap items-center gap-2">
           <button
+            type="button"
             onClick={() => setShowEmptyStages((prev) => !prev)}
             aria-label={showEmptyStages ? 'Hide empty stages' : 'Show empty stages'}
             className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
@@ -280,6 +359,7 @@ export default function JobsPage() {
             {iconLabel(ChevronDown, showEmptyStages ? 'Hide empty stages' : 'Show empty stages', iconSizeMd)}
           </button>
           <button
+            type="button"
             onClick={() => setShowCompleted((prev) => !prev)}
             aria-label={showCompleted ? 'Hide completed jobs' : 'Show completed jobs'}
             className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
@@ -291,6 +371,7 @@ export default function JobsPage() {
             {iconLabel(CheckCircle2, showCompleted ? 'Hide completed' : 'Show completed', iconSizeMd)}
           </button>
           <button
+            type="button"
             onClick={() => setShowLost((prev) => !prev)}
             aria-label={showLost ? 'Hide lost jobs' : 'Show lost jobs'}
             className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
@@ -302,6 +383,7 @@ export default function JobsPage() {
             {iconLabel(XCircle, showLost ? 'Hide lost' : 'Show lost', iconSizeMd)}
           </button>
           <button
+            type="button"
             onClick={() => void load()}
             aria-label="Refresh jobs"
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
@@ -362,8 +444,9 @@ export default function JobsPage() {
                     />
                     {!completedQuery && grouped.completed.length > 5 && (
                       <button
+                        type="button"
                         onClick={() => setShowAllCompleted((prev) => !prev)}
-                        style={{ ...smallButton, width: 'fit-content' }}
+                        className={`${jobsButtonSmallClassName} w-fit`}
                       >
                         {showAllCompleted ? 'Show last 5' : 'Show all'}
                       </button>
@@ -424,279 +507,7 @@ export default function JobsPage() {
                       </div>
                     )}
 
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {job.status === 'estimate_scheduled' && (
-                        <>
-                          {compactActions ? (
-                            <details onClick={(e) => e.stopPropagation()}>
-                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
-                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
-                                <button
-                                  onClick={stop(() => openStageEmail(job.id, 'estimate_sent'))}
-                                  style={smallButton}
-                                >
-                                  {iconLabel(Send, 'Review & send estimate')}
-                                </button>
-                                <button
-                                  onClick={stop(() => void patchJob(job.id, { estimate_sent_at: nowIso() }))}
-                                  style={smallButton}
-                                >
-                                  {iconLabel(Send, 'Mark estimate sent')}
-                                </button>
-                                <Link
-                                  href={`/crm/jobs/${job.id}/estimate`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                                >
-                                  {iconLabel(CalendarClock, 'Set estimate date')}
-                                </Link>
-                              </div>
-                            </details>
-                          ) : (
-                            <>
-                              <button onClick={stop(() => openStageEmail(job.id, 'estimate_sent'))} style={smallButton}>
-                                {iconLabel(Send, 'Review & send estimate')}
-                              </button>
-                              <button
-                                onClick={stop(() => void patchJob(job.id, { estimate_sent_at: nowIso() }))}
-                                style={smallButton}
-                              >
-                                {iconLabel(Send, 'Mark estimate sent')}
-                              </button>
-                              <Link
-                                href={`/crm/jobs/${job.id}/estimate`}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                              >
-                                {iconLabel(CalendarClock, 'Set estimate date')}
-                              </Link>
-                            </>
-                          )}
-                        </>
-                      )}
-
-                      {job.status === 'estimate_sent' && (
-                        <>
-                          {compactActions ? (
-                            <details onClick={(e) => e.stopPropagation()}>
-                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
-                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
-                                <button
-                                  onClick={stop(() => void patchJob(job.id, { status: 'follow_up' }))}
-                                  style={smallButton}
-                                >
-                                  {iconLabel(Mail, 'Move to follow up')}
-                                </button>
-                                <Link
-                                  href={`/crm/jobs/${job.id}/schedule`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                                >
-                                  {iconLabel(CalendarCheck, 'Schedule job')}
-                                </Link>
-                                <button onClick={stop(() => openStageEmail(job.id, 'follow_up'))} style={smallButton}>
-                                  {iconLabel(Mail, 'Send follow up')}
-                                </button>
-                                <button
-                                  onClick={stop(() => {
-                                    const ok = window.confirm('Mark this job as lost?')
-                                    if (!ok) return
-                                    void patchJob(job.id, { status: 'lost' })
-                                  })}
-                                  style={{ ...smallButton, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}
-                                >
-                                  {iconLabel(XCircle, 'Mark lost')}
-                                </button>
-                              </div>
-                            </details>
-                          ) : (
-                            <>
-                              <button
-                                onClick={stop(() => void patchJob(job.id, { status: 'follow_up' }))}
-                                style={smallButton}
-                              >
-                                {iconLabel(Mail, 'Move to follow up')}
-                              </button>
-                              <Link
-                                href={`/crm/jobs/${job.id}/schedule`}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                              >
-                                {iconLabel(CalendarCheck, 'Schedule job')}
-                              </Link>
-                              <button onClick={stop(() => openStageEmail(job.id, 'follow_up'))} style={smallButton}>
-                                {iconLabel(Mail, 'Send follow up')}
-                              </button>
-                              <button
-                                onClick={stop(() => {
-                                  const ok = window.confirm('Mark this job as lost?')
-                                  if (!ok) return
-                                  void patchJob(job.id, { status: 'lost' })
-                                })}
-                                style={{ ...smallButton, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}
-                              >
-                                {iconLabel(XCircle, 'Mark lost')}
-                              </button>
-                            </>
-                          )}
-                        </>
-                      )}
-
-                      {job.status === 'follow_up' && (
-                        <>
-                          {compactActions ? (
-                            <details onClick={(e) => e.stopPropagation()}>
-                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
-                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
-                                <Link
-                                  href={`/crm/jobs/${job.id}/schedule`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                                >
-                                  {iconLabel(CalendarCheck, 'Schedule job')}
-                                </Link>
-                                <button onClick={stop(() => openStageEmail(job.id, 'follow_up'))} style={smallButton}>
-                                  {iconLabel(Mail, 'Send follow up')}
-                                </button>
-                                <button
-                                  onClick={stop(() => {
-                                    const ok = window.confirm('Mark this job as lost?')
-                                    if (!ok) return
-                                    void patchJob(job.id, { status: 'lost' })
-                                  })}
-                                  style={{ ...smallButton, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}
-                                >
-                                  {iconLabel(XCircle, 'Mark lost')}
-                                </button>
-                              </div>
-                            </details>
-                          ) : (
-                            <>
-                              <Link
-                                href={`/crm/jobs/${job.id}/schedule`}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                              >
-                                {iconLabel(CalendarCheck, 'Schedule job')}
-                              </Link>
-                              <button onClick={stop(() => openStageEmail(job.id, 'follow_up'))} style={smallButton}>
-                                {iconLabel(Mail, 'Send follow up')}
-                              </button>
-                              <button
-                                onClick={stop(() => {
-                                  const ok = window.confirm('Mark this job as lost?')
-                                  if (!ok) return
-                                  void patchJob(job.id, { status: 'lost' })
-                                })}
-                                style={{ ...smallButton, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}
-                              >
-                                {iconLabel(XCircle, 'Mark lost')}
-                              </button>
-                            </>
-                          )}
-                        </>
-                      )}
-
-                      {job.status === 'scheduled' && (
-                        <>
-                          {compactActions ? (
-                            <details onClick={(e) => e.stopPropagation()}>
-                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
-                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
-                                <button
-                                  onClick={stop(() => openStageEmail(job.id, 'scheduled'))}
-                                  style={
-                                    job.scheduled_email_sent_at
-                                      ? smallButton
-                                      : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
-                                  }
-                                >
-                                  {iconLabel(
-                                    Mail,
-                                    stageEmailActionLabel('scheduled', Boolean(job.scheduled_email_sent_at))
-                                  )}
-                                </button>
-                                <button
-                                  onClick={stop(() => void markCompletedAndPrompt(job))}
-                                  style={smallButton}
-                                >
-                                  {iconLabel(CheckCircle2, 'Mark completed')}
-                                </button>
-                                <Link
-                                  href={`/crm/jobs/${job.id}/schedule`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                                >
-                                  {iconLabel(CalendarCheck, 'Change scheduled date')}
-                                </Link>
-                              </div>
-                            </details>
-                          ) : (
-                            <>
-                              <button
-                                onClick={stop(() => openStageEmail(job.id, 'scheduled'))}
-                                style={
-                                  job.scheduled_email_sent_at
-                                    ? smallButton
-                                    : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
-                                }
-                              >
-                                {iconLabel(
-                                  Mail,
-                                  stageEmailActionLabel('scheduled', Boolean(job.scheduled_email_sent_at))
-                                )}
-                              </button>
-                              <button
-                                onClick={stop(() => void markCompletedAndPrompt(job))}
-                                style={smallButton}
-                              >
-                                {iconLabel(CheckCircle2, 'Mark completed')}
-                              </button>
-                              <Link
-                                href={`/crm/jobs/${job.id}/schedule`}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{ ...smallButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                              >
-                                {iconLabel(CalendarCheck, 'Change scheduled date')}
-                              </Link>
-                            </>
-                          )}
-                        </>
-                      )}
-
-                      {job.status === 'completed' && (
-                        <>
-                          {compactActions ? (
-                            <details onClick={(e) => e.stopPropagation()}>
-                              <summary style={smallButton}>{iconLabel(ChevronDown, 'More')}</summary>
-                              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
-                                <button
-                                  onClick={stop(() => openCloseout(job.id))}
-                                  style={
-                                    job.completed_email_sent_at
-                                      ? smallButton
-                                      : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
-                                  }
-                                >
-                                  {iconLabel(Mail, 'Open closeout')}
-                                </button>
-                              </div>
-                            </details>
-                          ) : (
-                            <button
-                              onClick={stop(() => openCloseout(job.id))}
-                              style={
-                                job.completed_email_sent_at
-                                  ? smallButton
-                                  : { ...smallButton, background: 'var(--crm-accent)', border: '1px solid var(--crm-accent)', color: 'var(--crm-accent-text)' }
-                              }
-                            >
-                              {iconLabel(Mail, 'Open closeout')}
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">{renderBoardActions(job)}</div>
                   </div>
                 ))}
               </div>
@@ -721,18 +532,4 @@ export default function JobsPage() {
       </div>
     </div>
   )
-}
-
-const smallButton: React.CSSProperties = {
-  padding: '6px 10px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border)',
-  background: 'var(--crm-card)',
-  color: 'var(--crm-text-soft)',
-  fontWeight: 700,
-  fontSize: 12,
-  cursor: 'pointer',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
 }

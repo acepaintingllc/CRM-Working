@@ -1,10 +1,11 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { readStoredCalendarIds } from '@/lib/crm/home/calendar'
-import { loadCrmHomeData } from '@/lib/crm/home/loader'
+import { loadCrmHomeData, loadCrmHomeSources } from '@/lib/crm/home/loader'
 import {
+  applyCrmHomeSourcePatch,
   createInitialCrmHomeLoadState,
   createLoadingCrmHomeLoadState,
 } from '@/lib/crm/home/state'
@@ -44,32 +45,50 @@ async function fetchJson(
 
 export function useCrmHomeData() {
   const [state, setState] = useState(() => createInitialCrmHomeLoadState())
-  const hasLoadedOnceRef = useRef(false)
 
-  const load = useCallback(async () => {
-    setState((current) => createLoadingCrmHomeLoadState(current.data, hasLoadedOnceRef.current))
+  const deps = {
+    fetchJson,
+    readSelectedCalendarIds: readStoredCalendarIds,
+    logError: logSourceError,
+  }
 
-    const nextState = await loadCrmHomeData({
-      fetchJson,
-      readSelectedCalendarIds: readStoredCalendarIds,
-      logError: logSourceError,
-    })
+  const reloadAll = useCallback(async () => {
+    setState((current) =>
+      createLoadingCrmHomeLoadState(current, [
+        'jobs',
+        'customers',
+        'calendarStatus',
+        'calendarEvents',
+        'notes',
+      ])
+    )
+
+    const nextState = await loadCrmHomeData(deps)
 
     setState(nextState)
-    hasLoadedOnceRef.current = true
+  }, [])
+
+  const refreshSource = useCallback(async (source: CrmHomeSourceErrorKey) => {
+    const sourceKeys =
+      source === 'calendarStatus' || source === 'calendarEvents'
+        ? (['calendarStatus', 'calendarEvents'] as CrmHomeSourceErrorKey[])
+        : ([source] as CrmHomeSourceErrorKey[])
+
+    setState((current) => createLoadingCrmHomeLoadState(current, sourceKeys))
+
+    const patch = await loadCrmHomeSources(deps, sourceKeys)
+    setState((current) => applyCrmHomeSourcePatch(current, patch))
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void reloadAll()
+  }, [reloadAll])
 
   return {
     data: state.data,
-    errorsBySource: state.errorsBySource,
-    isInitialLoading: state.isInitialLoading,
-    isReloading: state.isReloading,
-    hasCriticalError: state.hasCriticalError,
-    hasWarnings: state.hasWarnings,
-    reload: load,
+    sources: state.sources,
+    summary: state.summary,
+    reloadAll,
+    refreshSource,
   }
 }

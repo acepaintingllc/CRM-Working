@@ -1,73 +1,6 @@
 'use client'
 
-export type RecurrenceFrequency =
-  | 'daily'
-  | 'weekdays'
-  | 'weekly'
-  | 'monthly'
-  | 'quarterly'
-  | 'yearly'
-  | 'custom'
-
-export type RecurrenceUnit = 'day' | 'week' | 'month' | 'year'
-
-export type RecurrenceRule = {
-  frequency: RecurrenceFrequency
-  interval?: number
-  unit?: RecurrenceUnit
-}
-
-export type TaskRow = {
-  id: string
-  title: string
-  description: string | null
-  status: 'active' | 'completed' | 'archived'
-  due_at: string | null
-  is_all_day: boolean
-  has_due_time: boolean
-  reminder_enabled: boolean
-  reminder_at: string | null
-  reminder_offset_minutes: number | null
-  recurrence_rule: RecurrenceRule | null
-  recurrence_series_id: string | null
-  priority: 'low' | 'medium' | 'high' | null
-  starred: boolean
-  source_note_id: string | null
-  created_at: string
-  updated_at: string
-  completed_at: string | null
-  archived_at: string | null
-}
-
-export type NoteRow = {
-  id: string
-  title: string
-  body: string
-  folder_id: string | null
-  status: 'active' | 'archived'
-  starred: boolean
-  created_at: string
-  updated_at: string
-  archived_at: string | null
-}
-
-export type FolderRow = {
-  id: string
-  name: string
-  sort_order: number
-  note_count?: number
-}
-
-export type SettingsRow = {
-  org_id: string
-  sender_user_id: string | null
-  daily_summary_email_to: string | null
-  daily_summary_time_local: string
-  timezone: string
-  show_upcoming_days: number
-  last_daily_summary_attempted_on: string | null
-  last_daily_summary_sent_on: string | null
-}
+import type { NotesRecurrenceRule, RecurrenceFrequency, RecurrenceUnit } from '@/lib/notes/types'
 
 export const recurrenceOptions: Array<{ value: RecurrenceFrequency; label: string }> = [
   { value: 'daily', label: 'Daily' },
@@ -86,45 +19,7 @@ export const recurrenceUnitOptions: Array<{ value: RecurrenceUnit; label: string
   { value: 'year', label: 'Years' },
 ]
 
-export function toLocalDateInput(iso: string | null | undefined) {
-  if (!iso) return ''
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-export function toLocalTimeInput(iso: string | null | undefined) {
-  if (!iso) return ''
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-}
-
-export function toIsoFromLocal(params: {
-  date: string
-  time: string
-  hasDueTime: boolean
-  isAllDay: boolean
-}) {
-  if (!params.date) return null
-  const timeValue = params.isAllDay || !params.hasDueTime ? '09:00' : params.time || '09:00'
-  const localDate = new Date(`${params.date}T${timeValue}`)
-  if (Number.isNaN(localDate.getTime())) return null
-  return localDate.toISOString()
-}
-
-export function formatDue(iso: string | null, allDay: boolean, hasDueTime: boolean) {
-  if (!iso) return 'No due date'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  if (allDay || !hasDueTime) return d.toLocaleDateString()
-  return d.toLocaleString()
-}
-
-export function recurrenceLabel(rule: RecurrenceRule | null) {
+export function recurrenceLabel(rule: NotesRecurrenceRule | null) {
   if (!rule) return 'None'
   const interval = Math.max(1, Math.trunc(rule.interval ?? 1))
   if (rule.frequency === 'weekdays') return interval === 1 ? 'Weekdays' : `Every ${interval} weekdays`

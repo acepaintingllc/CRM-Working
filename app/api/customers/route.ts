@@ -1,137 +1,31 @@
-import { NextResponse } from 'next/server'
-import { supabaseAdmin, getSessionUserOrg } from '@/lib/customers/api'
-import { readJsonBody } from '@/lib/server/apiRoute'
-
-function asOptionalString(value: unknown) {
-  return typeof value === 'string' ? value : null
-}
+import { requireSessionUserOrg, readJsonBody } from '@/lib/server/apiRoute'
+import { serviceResultResponse } from '@/lib/server/routeResult'
+import { serverLog } from '@/lib/server/log'
+import { normalizeCreateCustomerInput } from '@/lib/customers/normalizers'
+import { createCustomer, listCustomers } from '@/lib/customers/service'
 
 export async function GET() {
-  const session = await getSessionUserOrg()
+  const session = await requireSessionUserOrg()
+  if (!session.ok) return session.response
 
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
-
-  const { orgId } = session
-
-  const { data, error } = await supabaseAdmin
-    .from('customers')
-    .select('id, name, email, phone, address')
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ customers: data ?? [] })
+  return serviceResultResponse(await listCustomers(session.session.orgId), (customers) => ({ customers }))
 }
 
 export async function POST(request: Request) {
-  const session = await getSessionUserOrg()
+  const session = await requireSessionUserOrg()
+  if (!session.ok) return session.response
 
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
-
-  const { orgId } = session
   const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 64 * 1024 })
   if (!parsed.ok) return parsed.response
-  const body = parsed.value
 
-  const name = asOptionalString(body.name)?.trim() ?? ''
-  if (!name) {
-    return NextResponse.json({ error: 'Missing name' }, { status: 400 })
-  }
-  const email = asOptionalString(body.email)?.trim() ?? null
-  const phone = asOptionalString(body.phone)?.trim() ?? null
-
-  // Build payload based on columns that exist in your schema (avoid cache errors).
-  const payload: Record<string, unknown> = {
-    org_id: orgId,
-    name,
-    email,
-    phone,
-  }
-
-  const optionalColumns = ['address', 'street', 'city', 'state', 'zip', 'notes']
-  for (const key of optionalColumns) {
-    if (body[key] !== undefined && body[key] !== null) {
-      payload[key] = body[key]
-    }
-  }
-  if (!payload.address) {
-    const parts = [
-      payload.street,
-      payload.city,
-      [payload.state, payload.zip].filter(Boolean).join(' ').trim(),
-    ].filter(Boolean)
-    if (parts.length) {
-      payload.address = parts.join(', ')
-    }
-  }
-
-  const { data: existing, error: existingErr } = await supabaseAdmin
-    .from('customers')
-    .select('id, name, email, phone')
-    .eq('org_id', orgId)
-
-  if (existingErr) {
-    return NextResponse.json(
-      { error: existingErr.message },
-      { status: 500 }
-    )
-  }
-
-  const normalizedName = name.toLowerCase()
-  const normalizedEmail = email?.toLowerCase() ?? null
-  const normalizedPhone = phone
-
-  const duplicate = (existing ?? []).find((row) => {
-    const rowName = row.name?.trim().toLowerCase() ?? ''
-    const rowEmail = row.email?.trim().toLowerCase()
-    const rowPhone = row.phone?.trim()
-
-    return (
-      rowName === normalizedName ||
-      (normalizedEmail && rowEmail === normalizedEmail) ||
-      (normalizedPhone && rowPhone === normalizedPhone)
-    )
+  const input = normalizeCreateCustomerInput(parsed.value, {
+    onUnsupportedFields: (fields) => {
+      serverLog.warn('Ignoring unsupported customer fields in POST /api/customers', fields)
+    },
   })
 
-  if (duplicate) {
-    return NextResponse.json(
-      { error: 'A customer with the same name, email, or phone already exists.' },
-      { status: 409 }
-    )
-  }
-
-  const insertOnce = async (p: Record<string, unknown>) =>
-    supabaseAdmin.from('customers').insert(p).select('*').single()
-
-  let { data, error } = await insertOnce(payload)
-
-  // Strip unknown columns iteratively until insert succeeds or a non-schema error occurs.
-  for (let i = 0; error && i < 6; i++) {
-    const msg = error.message ?? ''
-    const m =
-      msg.match(/column \"([a-zA-Z0-9_]+)\" of relation \"customers\" does not exist/i) ||
-      msg.match(/Could not find the '([a-zA-Z0-9_]+)' column of 'customers'/i)
-
-    if (!m?.[1] || !(m[1] in payload)) break
-    delete payload[m[1]]
-
-    const retry = await insertOnce(payload)
-    data = retry.data
-    error = retry.error
-  }
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ ok: true, customer: data })
+  return serviceResultResponse(
+    input.ok ? await createCustomer(session.session.orgId, input.data) : input,
+    (customer) => ({ ok: true, customer })
+  )
 }

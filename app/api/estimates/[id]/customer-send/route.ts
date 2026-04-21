@@ -321,7 +321,7 @@ export async function GET(
     pricing_summary: (contextResult as Record<string, unknown>).pricing_summary ?? null,
     draft,
     version: latestVersion,
-    public_url: latestVersion?.public_token ? `${url.origin}/estimate/${latestVersion.public_token}` : contextResult.public_url,
+    public_url: latestVersion?.public_token ? `${url.origin}/quote/${latestVersion.public_token}` : contextResult.public_url,
     document,
     versions: contextResult.public_versions ?? [],
   })
@@ -367,7 +367,7 @@ export async function PUT(
     return NextResponse.json({
       ok: true,
       version,
-      public_url: asText(version.public_token) ? `${url.origin}/estimate/${version.public_token}` : contextResult.public_url,
+      public_url: asText(version.public_token) ? `${url.origin}/quote/${version.public_token}` : contextResult.public_url,
       document: version.snapshot_json ?? null,
     })
   } catch (error) {
@@ -423,7 +423,7 @@ export async function POST(
     if (mode === 'send') {
       let token = asText(publicVersion.public_token)
       if (!token) token = randomUUID().replace(/-/g, '')
-      const publicUrl = `${url.origin}/estimate/${token}`
+      const publicUrl = `${url.origin}/quote/${token}`
       const sentAt = new Date().toISOString()
       const update = await supabaseAdmin
         .from('estimate_public_versions')
@@ -449,15 +449,15 @@ export async function POST(
       })
 
       const document = publicVersion.snapshot_json as Record<string, unknown>
-      const subject = draft.subject || `${asText(contextResult.estimate.version_name) || 'Estimate'} ready`
+      const subject = draft.subject || `${asText(contextResult.estimate.version_name) || 'Quote'} ready`
       const bodyText =
         draft.body ||
         [
           `Hello ${asText(contextResult.job.customer_name) || 'there'},`,
           '',
-          `Your estimate is ready: ${publicUrl}`,
+          `Your quote is ready: ${publicUrl}`,
           '',
-          'You can review the full estimate and accept it directly from the link above.',
+          'You can review the full quote and accept it directly from the link above.',
           '',
           contextResult.company.sender_signature || `Thanks,\n${contextResult.company.business_name || 'ACE Painting'}`,
         ].join('\n')
@@ -488,7 +488,7 @@ export async function POST(
       mode,
       version: publicVersion,
       public_url: asText(publicVersion.public_token)
-        ? `${url.origin}/estimate/${publicVersion.public_token}`
+        ? `${url.origin}/quote/${publicVersion.public_token}`
         : contextResult.public_url,
       document: publicVersion.snapshot_json ?? null,
     })

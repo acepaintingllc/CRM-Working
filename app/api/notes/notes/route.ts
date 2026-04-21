@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { readJsonBody } from '@/lib/server/apiRoute'
 import { asBoolean, asOptionalTrimmedText, asRecord, isUuid } from '@/lib/notes/server'
-import type { NotesNoteRow, NotesNoteStatus } from '@/lib/notes/types'
+import type { NotesNoteResponse, NotesNoteRow, NotesNotesResponse, NotesNoteStatus } from '@/lib/notes/types'
 
 function asNoteStatus(value: string | null): NotesNoteStatus | null {
   if (value === 'active' || value === 'archived') return value
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     })
   }
 
-  return NextResponse.json({ notes, filters: { status, folder_id: folderId, search } })
+  return NextResponse.json<NotesNotesResponse>({ notes, filters: { status, folder_id: folderId, search } })
 }
 
 export async function POST(request: Request) {
@@ -89,5 +89,5 @@ export async function POST(request: Request) {
   if (insert.error || !insert.data) {
     return NextResponse.json({ error: 'Unable to create note.' }, { status: 500 })
   }
-  return NextResponse.json({ ok: true, note: insert.data as NotesNoteRow })
+  return NextResponse.json<NotesNoteResponse>({ ok: true, note: insert.data as NotesNoteRow })
 }

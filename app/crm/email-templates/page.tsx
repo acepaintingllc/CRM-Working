@@ -12,8 +12,8 @@ type Stage =
   | 'completed'
 
 const stages: { key: Stage; label: string }[] = [
-  { key: 'estimate_scheduled', label: 'Estimate scheduled' },
-  { key: 'estimate_sent', label: 'Estimate sent' },
+  { key: 'estimate_scheduled', label: 'Quote scheduled' },
+  { key: 'estimate_sent', label: 'Quote sent' },
   { key: 'follow_up', label: 'Follow up' },
   { key: 'scheduled', label: 'Scheduled' },
   { key: 'completed', label: 'Completed / review request' },
@@ -164,7 +164,7 @@ export default function EmailTemplatesPage() {
           </div>
 
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--crm-muted)' }}>
-            For Estimate sent/follow up, one or more estimate PDFs can be attached. Use{' '}
+            For Quote sent/follow up, one or more quote PDFs can be attached. Use{' '}
             {'{{estimateFileName}}'} / {'{{estimateFileLink}}'} for the primary file, or{' '}
             {'{{estimateFileNames}}'} / {'{{estimateFileLinks}}'} for all selected files.
           </div>

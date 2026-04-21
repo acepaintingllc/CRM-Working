@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { readJsonBody } from '@/lib/server/apiRoute'
 import { asBoolean, asOptionalTrimmedText, asRecord, isUuid } from '@/lib/notes/server'
-import type { NotesNoteRow } from '@/lib/notes/types'
+import type { NotesNoteResponse, NotesNoteRow } from '@/lib/notes/types'
 
 type Params = { id: string } | Promise<{ id: string }>
 
@@ -33,7 +33,7 @@ export async function GET(_: Request, context: { params: Params }) {
     return NextResponse.json({ error: 'Note not found.' }, { status: 404 })
   }
 
-  return NextResponse.json({ note: note.data as NotesNoteRow })
+  return NextResponse.json<NotesNoteResponse>({ note: note.data as NotesNoteRow })
 }
 
 export async function PATCH(request: Request, context: { params: Params }) {
@@ -89,7 +89,7 @@ export async function PATCH(request: Request, context: { params: Params }) {
   if (update.error || !update.data) {
     return NextResponse.json({ error: 'Unable to update note.' }, { status: 500 })
   }
-  return NextResponse.json({ ok: true, note: update.data as NotesNoteRow })
+  return NextResponse.json<NotesNoteResponse>({ ok: true, note: update.data as NotesNoteRow })
 }
 
 export async function DELETE(_: Request, context: { params: Params }) {
