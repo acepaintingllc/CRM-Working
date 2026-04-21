@@ -5,6 +5,7 @@ import { useNotesExplorer } from '@/lib/notes/client/useNotesExplorer'
 import { useState } from 'react'
 import {
   buildNotesHref,
+  FolderActionModal,
   FolderTile,
   normalizeNotesStatus,
   NotePreviewCard,
@@ -40,6 +41,14 @@ export default function NotesExplorerHomePage() {
     renameFolder,
     reorderFolder,
     deleteFolder,
+    modalState,
+    closeModal,
+    submitRename,
+    submitDelete,
+    beginMoveDelete,
+    setDeleteTargetFolderId,
+    setRenameValue,
+    availableMoveTargets,
     folderNameById,
     starredNotes,
     recentNotes,
@@ -125,6 +134,24 @@ export default function NotesExplorerHomePage() {
 
       {loading && <div className="text-sm text-neutral-400">Loading notes explorer...</div>}
       {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
+      <FolderActionModal
+        open={modalState.open}
+        mode={modalState.mode}
+        folderName={modalState.folder?.name ?? ''}
+        renameValue={modalState.renameValue}
+        noteCount={modalState.noteCount}
+        availableMoveTargets={availableMoveTargets}
+        selectedMoveTargetId={modalState.deleteTargetFolderId}
+        saving={saving}
+        error={error}
+        onClose={closeModal}
+        onRenameValueChange={setRenameValue}
+        onSelectedMoveTargetIdChange={setDeleteTargetFolderId}
+        onSubmitRename={() => void submitRename()}
+        onChooseUncategorize={() => void submitDelete('uncategorize')}
+        onChooseMove={beginMoveDelete}
+        onSubmitMove={() => void submitDelete('move_to_folder')}
+      />
 
       {!loading && (
         <>

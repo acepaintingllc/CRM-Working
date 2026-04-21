@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
   buildNotesHref,
+  FolderActionModal,
   normalizeNotesStatus,
   NotePreviewCard,
   NotesStatusTabs,
@@ -32,6 +33,14 @@ export default function FolderNotesPage() {
     createFolder,
     renameFolder,
     deleteFolder,
+    modalState,
+    closeModal,
+    submitRename,
+    submitDelete,
+    beginMoveDelete,
+    setDeleteTargetFolderId,
+    setRenameValue,
+    availableMoveTargets,
   } = useNotesExplorer({ status, folderId })
 
   return (
@@ -127,6 +136,24 @@ export default function FolderNotesPage() {
 
       {loading && <div className="text-sm text-neutral-400">Loading folder...</div>}
       {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
+      <FolderActionModal
+        open={modalState.open}
+        mode={modalState.mode}
+        folderName={modalState.folder?.name ?? ''}
+        renameValue={modalState.renameValue}
+        noteCount={modalState.noteCount}
+        availableMoveTargets={availableMoveTargets}
+        selectedMoveTargetId={modalState.deleteTargetFolderId}
+        saving={saving}
+        error={error}
+        onClose={closeModal}
+        onRenameValueChange={setRenameValue}
+        onSelectedMoveTargetIdChange={setDeleteTargetFolderId}
+        onSubmitRename={() => void submitRename()}
+        onChooseUncategorize={() => void submitDelete('uncategorize')}
+        onChooseMove={beginMoveDelete}
+        onSubmitMove={() => void submitDelete('move_to_folder')}
+      />
 
       {!loading && !folder && (
         <div className="rounded-[30px] border border-neutral-800 bg-neutral-950 p-6 text-sm text-neutral-400 shadow-sm">

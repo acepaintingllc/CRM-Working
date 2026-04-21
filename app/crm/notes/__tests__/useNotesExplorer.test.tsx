@@ -23,8 +23,6 @@ describe('useNotesExplorer', () => {
   beforeEach(() => {
     mockAuthedFetch.mockReset()
     mockPush.mockReset()
-    vi.spyOn(window, 'confirm').mockReset()
-    vi.spyOn(window, 'prompt').mockReset()
   })
 
   it('loads folders and notes together', async () => {
@@ -46,8 +44,7 @@ describe('useNotesExplorer', () => {
     })
   })
 
-  it('handles the folder delete cascade and refreshes local data', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('opens the shared delete modal when the server requires a delete strategy', async () => {
     mockAuthedFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -59,19 +56,7 @@ describe('useNotesExplorer', () => {
       })
       .mockResolvedValueOnce({
         ok: false,
-        json: async () => ({ error: 'Conflict', required: true, notes_count: 1 }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ ok: true }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ folders: [] }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ notes: [], filters: { status: 'active', folder_id: null, search: '' } }),
+        json: async () => ({ error: 'Conflict', required: true, notes_count: 1, strategies: ['uncategorize', 'move_to_folder'] }),
       })
 
     const { result } = renderHook(() => useNotesExplorer({ status: 'active' }))
@@ -84,8 +69,8 @@ describe('useNotesExplorer', () => {
       await result.current.deleteFolder(result.current.folders[0]!)
     })
 
-    await waitFor(() => {
-      expect(result.current.folders.length).toBe(0)
-    })
+    expect(result.current.modalState.open).toBe(true)
+    expect(result.current.modalState.mode).toBe('delete_choice')
+    expect(result.current.modalState.noteCount).toBe(1)
   })
 })

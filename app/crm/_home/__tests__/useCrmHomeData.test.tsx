@@ -27,6 +27,15 @@ function createJsonResponse(ok: boolean, payload: unknown, status = 200) {
   })
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('useCrmHomeData', () => {
   beforeEach(() => {
     mockAuthedFetch.mockReset()
@@ -39,13 +48,10 @@ describe('useCrmHomeData', () => {
   })
 
   it('exposes loading source states before initial resolution', async () => {
-    let releaseJobs: (() => void) | null = null
-    const jobsPromise = new Promise((resolve) => {
-      releaseJobs = () => resolve(createJsonResponse(true, { jobs: [] }))
-    })
+    const jobsRequest = createDeferred<Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>>()
 
     mockAuthedFetch.mockImplementation((url: string) => {
-      if (url === '/api/jobs') return jobsPromise
+      if (url === '/api/jobs') return jobsRequest.promise
       if (url === '/api/customers') return createJsonResponse(true, { customers: [] })
       if (url === '/api/google-calendar/status') {
         return createJsonResponse(true, { connected: false })
@@ -61,7 +67,7 @@ describe('useCrmHomeData', () => {
     expect(result.current.summary.isInitialLoading).toBe(true)
     expect(result.current.sources.jobs.status).toBe('loading')
 
-    releaseJobs?.()
+    jobsRequest.resolve(createJsonResponse(true, { jobs: [] }))
 
     await waitFor(() => {
       expect(result.current.summary.isBusy).toBe(false)
@@ -100,26 +106,11 @@ describe('useCrmHomeData', () => {
       expect(result.current.summary.isBusy).toBe(false)
     })
 
-    let releaseReload: (() => void) | null = null
+    const reloadRequest = createDeferred<
+      Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
+    >()
     mockAuthedFetch.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          releaseReload = () =>
-            resolve(
-              createJsonResponse(true, {
-                jobs: [
-                  {
-                    id: 'job-1',
-                    status: 'completed',
-                    title: 'Kitchen repaint',
-                    customer_name: 'Alice Jones',
-                    customer_address: '123 Main St',
-                    estimate_total_amount: 1200,
-                  },
-                ],
-              })
-            )
-        })
+      () => reloadRequest.promise
     )
 
     act(() => {
@@ -129,7 +120,20 @@ describe('useCrmHomeData', () => {
     expect(result.current.summary.isReloading).toBe(true)
     expect(result.current.data.jobs.length).toBe(1)
 
-    releaseReload?.()
+    reloadRequest.resolve(
+      createJsonResponse(true, {
+        jobs: [
+          {
+            id: 'job-1',
+            status: 'completed',
+            title: 'Kitchen repaint',
+            customer_name: 'Alice Jones',
+            customer_address: '123 Main St',
+            estimate_total_amount: 1200,
+          },
+        ],
+      })
+    )
 
     await waitFor(() => {
       expect(result.current.summary.isBusy).toBe(false)
@@ -153,13 +157,9 @@ describe('useCrmHomeData', () => {
       expect(result.current.summary.isBusy).toBe(false)
     })
 
-    let releaseNotes: (() => void) | null = null
+    const notesRequest = createDeferred<Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>>()
     mockAuthedFetch.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          releaseNotes = () =>
-            resolve(createJsonResponse(true, { tasks: { overdue: [], due_today: [] } }))
-        })
+      () => notesRequest.promise
     )
 
     act(() => {
@@ -169,7 +169,7 @@ describe('useCrmHomeData', () => {
     expect(result.current.sources.notes.status).toBe('loading')
     expect(result.current.sources.jobs.status).toBe('ready')
 
-    releaseNotes?.()
+    notesRequest.resolve(createJsonResponse(true, { tasks: { overdue: [], due_today: [] } }))
 
     await waitFor(() => {
       expect(result.current.sources.notes.status).toBe('ready')

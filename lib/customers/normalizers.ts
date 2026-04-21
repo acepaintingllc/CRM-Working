@@ -37,6 +37,22 @@ type CustomerDbRowLike = {
   link_label?: string | null
 }
 
+type CustomerWritePayload = {
+  name: string
+  email: string | null
+  phone: string | null
+  street: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  address: string | null
+  notes: string | null
+}
+
+type CustomerUpdateWritePayload = Omit<CustomerWritePayload, 'notes'> & {
+  notes?: string | null
+}
+
 function asOptionalString(value: unknown) {
   return typeof value === 'string' ? value : null
 }
@@ -136,7 +152,7 @@ export function normalizeCreateCustomerTimelineNoteInput(
   })
 }
 
-export function buildCreateCustomerWritePayload(input: CreateCustomerInput) {
+export function buildCreateCustomerWritePayload(input: CreateCustomerInput): CustomerWritePayload {
   return {
     name: input.name.trim(),
     email: input.email?.trim().toLowerCase() || null,
@@ -150,8 +166,10 @@ export function buildCreateCustomerWritePayload(input: CreateCustomerInput) {
   }
 }
 
-export function buildUpdateCustomerWritePayload(input: NormalizedUpdateCustomerInput) {
-  const payload: Record<string, unknown> = {
+export function buildUpdateCustomerWritePayload(
+  input: NormalizedUpdateCustomerInput
+): CustomerUpdateWritePayload {
+  const payload: CustomerUpdateWritePayload = {
     name: input.name.trim(),
     email: input.email?.trim().toLowerCase() || null,
     phone: input.phone?.trim() || null,

@@ -31,8 +31,8 @@ function readNullableString(value: unknown) {
 }
 
 async function getDefaultFetch(): Promise<CalendarFetch> {
-  const module = await import('../../auth/authedFetch.ts')
-  return module.authedFetch
+  const authModule = await import('../../auth/authedFetch.ts')
+  return authModule.authedFetch
 }
 
 async function readJson(response: Response) {

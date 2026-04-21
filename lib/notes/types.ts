@@ -131,6 +131,8 @@ export type NotesFolderDeleteResponse = {
   error?: string
   notes_count?: number
   required?: boolean
+  strategies?: Array<'uncategorize' | 'move_to_folder'>
+  deleted_folder_id?: string
 }
 
 export type NotesDashboardResponse = {
