@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { readJsonBody } from '@/lib/server/apiRoute'
 import { syncJobScheduleRange } from '@/lib/server/jobScheduleSync'
+import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -31,7 +32,7 @@ export async function GET(
     .order('start_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ schedules: data ?? [] })
+  return dataResponse(data ?? [])
 }
 
 export async function POST(
@@ -90,5 +91,5 @@ export async function POST(
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true, schedule: data })
+  return mutationResponse(data, 'Schedule added.')
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { loadData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
+import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
 import type { QuoteDefaults } from '@/lib/settings/types'
 import type {
   RatesFlagsMutationAction,
@@ -29,19 +29,20 @@ export type CustomerSendMutationResponse = {
 }
 
 export async function loadQuoteHome<T>() {
-  return requestApi<T>('/api/quotes/home', { cache: 'no-store' })
+  return loadData<T>('/api/quotes/home', { cache: 'no-store' })
 }
 
 export async function loadQuoteList<T>() {
-  return requestApi<T>('/api/quotes', { cache: 'no-store' })
+  return loadData<T>('/api/quotes', { cache: 'no-store' })
 }
 
 export async function createQuoteVersion<T extends { id: string }>(input: CreateQuoteVersionInput) {
-  return requestApi<T>('/api/quotes', {
+  const result = await mutateData<T>('/api/quotes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
+  return result.data
 }
 
 export async function deleteQuoteVersion(id: string) {
@@ -56,7 +57,7 @@ export async function loadQuoteProducts<T>() {
 
 export async function loadQuoteCatalogs<T>(id: string, options?: { v2?: boolean }) {
   const suffix = options?.v2 ? '?v2=1' : ''
-  return requestApi<T>(`/api/quotes/${id}/catalogs${suffix}`, { cache: 'no-store' })
+  return loadData<T>(`/api/quotes/${id}/catalogs${suffix}`, { cache: 'no-store' })
 }
 
 export async function updateQuoteProduct<T>(id: string, input: Partial<T>) {
@@ -82,11 +83,11 @@ export async function saveQuoteDefaults(data: QuoteDefaults) {
 }
 
 export async function loadCustomerSendPage<T>(url: string) {
-  return requestApi<T>(url, { cache: 'no-store' })
+  return loadData<T>(url, { cache: 'no-store' })
 }
 
 export async function loadRatesFlags() {
-  return requestApi<RatesFlagsPayload>('/api/quotes/rates-flags', { cache: 'no-store' })
+  return loadData<RatesFlagsPayload>('/api/quotes/rates-flags', { cache: 'no-store' })
 }
 
 export async function mutateRatesFlags(payload: {
@@ -95,7 +96,7 @@ export async function mutateRatesFlags(payload: {
   values: Record<string, unknown>
   original_id?: string
 }) {
-  return requestApi<{ ok: true }>('/api/quotes/rates-flags', {
+  return mutateData<boolean>('/api/quotes/rates-flags', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -106,20 +107,22 @@ export async function saveCustomerSendDraft<T extends CustomerSendMutationRespon
   url: string,
   draft: Record<string, unknown>
 ) {
-  return requestApi<T>(url, {
+  const result = await mutateData<T>(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ draft }),
   })
+  return result.data
 }
 
 export async function submitCustomerSend<T extends CustomerSendMutationResponse>(
   url: string,
   payload: { mode: 'test' | 'send'; draft: Record<string, unknown> }
 ) {
-  return requestApi<T>(url, {
+  const result = await mutateData<T>(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+  return result.data
 }

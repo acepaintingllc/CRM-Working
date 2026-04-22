@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken, resolveCalendarId } from '@/lib/server/googleCalendar'
+import { mutationResponse } from '@/lib/server/routeResult'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -144,5 +145,5 @@ export async function POST(
     return NextResponse.json({ error: updateErr.message }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, events: results })
+  return mutationResponse(results, 'Added schedules to calendar.')
 }

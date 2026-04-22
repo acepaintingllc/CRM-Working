@@ -9,6 +9,7 @@ type CrmSectionCardProps = {
   eyebrow?: string
   badge?: ReactNode
   actions?: ReactNode
+  variant?: 'default' | 'compact' | 'rail' | 'interactive'
 }
 
 export function CrmSectionCard({
@@ -20,9 +21,21 @@ export function CrmSectionCard({
   eyebrow,
   badge,
   actions,
+  variant = 'default',
 }: CrmSectionCardProps) {
+  const spacingClassName =
+    variant === 'compact'
+      ? 'px-4 py-4'
+      : variant === 'rail'
+        ? 'px-4 py-5'
+        : 'px-5 py-5'
+  const variantClassName =
+    variant === 'interactive'
+      ? 'transition duration-200 hover:-translate-y-0.5 hover:border-[color:var(--crm-ui-accent-border)] hover:shadow-[0_22px_52px_rgba(17,24,39,0.10)]'
+      : ''
+
   return (
-    <section className={`ace-crm-surface px-5 py-5 ${className}`.trim()}>
+    <section className={`ace-crm-surface ${spacingClassName} ${variantClassName} ${className}`.trim()}>
       {(title || description || actions || eyebrow || badge) && (
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 max-w-3xl">

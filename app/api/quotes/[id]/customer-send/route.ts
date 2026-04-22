@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
+import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
 import { sendGmailMessage } from '@/lib/server/googleMail'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { loadEstimateCustomerSendContext } from '@/lib/server/estimateCustomerPortal'
@@ -310,7 +311,7 @@ export async function GET(
     return NextResponse.json({ error: document.error }, { status: 500 })
   }
 
-  return NextResponse.json({
+  return dataResponse({
     estimate: contextResult.estimate,
     job: contextResult.job,
     customer: (contextResult as Record<string, unknown>).customer ?? null,
@@ -364,12 +365,11 @@ export async function PUT(
       body,
       context: contextResult,
     })
-    return NextResponse.json({
-      ok: true,
+    return mutationResponse({
       version,
       public_url: asText(version.public_token) ? `${url.origin}/quote/${version.public_token}` : contextResult.public_url,
       document: version.snapshot_json ?? null,
-    })
+    }, 'Draft saved.')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to save draft'
     return NextResponse.json({ error: message }, { status: 400 })
@@ -474,24 +474,22 @@ export async function POST(
         return NextResponse.json({ error: send.error }, { status: 400 })
       }
 
-      return NextResponse.json({
-        ok: true,
+      return mutationResponse({
         mode,
         public_url: publicUrl,
         version: publicVersion,
         document,
-      })
+      }, 'Quote sent.')
     }
 
-    return NextResponse.json({
-      ok: true,
+    return mutationResponse({
       mode,
       version: publicVersion,
       public_url: asText(publicVersion.public_token)
         ? `${url.origin}/quote/${publicVersion.public_token}`
         : contextResult.public_url,
       document: publicVersion.snapshot_json ?? null,
-    })
+    }, mode === 'test' ? 'Test message sent.' : null)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to send quote'
     return NextResponse.json({ error: message }, { status: 400 })

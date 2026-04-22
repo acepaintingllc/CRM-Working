@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cx } from './utils'
+import { CrmDenseSurfaceCard } from '@/app/crm/_components/CrmDenseSurfaceCard'
 
 type DashboardCardShellProps = {
   children: ReactNode
@@ -7,5 +7,5 @@ type DashboardCardShellProps = {
 }
 
 export function DashboardCardShell({ children, className }: DashboardCardShellProps) {
-  return <div className={cx('crm-card rounded-2xl border shadow-sm', className)}>{children}</div>
+  return <CrmDenseSurfaceCard className={className}>{children}</CrmDenseSurfaceCard>
 }

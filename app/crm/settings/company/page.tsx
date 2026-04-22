@@ -4,11 +4,12 @@ import { useCallback } from 'react'
 import { Building2 } from 'lucide-react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
 import { CompanyProfileForm } from '@/app/crm/settings/_components/CompanyProfileForm'
-import { SettingsNotice } from '@/app/crm/settings/_components/SettingsNotice'
-import { SettingsPageShell } from '@/app/crm/settings/_components/SettingsPageShell'
 import { loadData, saveData } from '@/lib/client/api'
 import {
   emptyCompanyProfileSettings,
@@ -36,19 +37,21 @@ export default function CompanyProfilePage() {
   const canSave = resource.hasLoaded && resource.dirty && !resource.saving && !validationError
 
   return (
-    <SettingsPageShell
-      eyebrow="Company profile"
-      title="Company Profile"
-      description="Set the company identity and sender defaults used across customer-facing CRM workflows."
-      backHref="/crm/settings"
-      backLabel="Back to settings"
-      actions={
-        <CrmChip tone="accent" className="px-3 py-2 text-xs font-semibold">
-          <Building2 size={14} aria-hidden="true" />
-          <span>Canonical company profile settings</span>
-        </CrmChip>
-      }
-    >
+    <CrmPageShell className="max-w-5xl">
+      <CrmPageHeader
+        eyebrow="Company profile"
+        emoji="⚙️"
+        title="Company Profile"
+        description="Set the company identity and sender defaults used across customer-facing CRM workflows."
+        backHref="/crm/settings"
+        backLabel="Back to settings"
+        actions={
+          <CrmChip tone="accent" className="px-3 py-2 text-xs font-semibold">
+            <Building2 size={14} aria-hidden="true" />
+            <span>Canonical company profile settings</span>
+          </CrmChip>
+        }
+      />
       {resource.loading && !resource.hasLoaded ? (
         <CrmSectionCard title="Loading company profile">
           <p className="text-sm text-[color:var(--crm-ui-muted)]">Loading company profile...</p>
@@ -57,7 +60,7 @@ export default function CompanyProfilePage() {
 
       {!resource.loading && !resource.hasLoaded && resource.error ? (
         <CrmSectionCard title="Company profile unavailable">
-          <SettingsNotice tone="error">{resource.error}</SettingsNotice>
+          <CrmNotice tone="error">{resource.error}</CrmNotice>
           <div className="mt-4">
             <CrmButton type="button" onClick={() => void resource.reload()}>
               Retry
@@ -78,6 +81,6 @@ export default function CompanyProfilePage() {
           validationError={resource.dirty ? validationError : null}
         />
       ) : null}
-    </SettingsPageShell>
+    </CrmPageShell>
   )
 }

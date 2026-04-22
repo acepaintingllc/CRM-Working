@@ -1,5 +1,7 @@
-import Link from 'next/link'
 import { CalendarCheck, Plus, Users, Wrench } from 'lucide-react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmDenseActionRow } from '@/app/crm/_components/CrmDenseActionRow'
+import { CrmDenseSurfaceCard } from '@/app/crm/_components/CrmDenseSurfaceCard'
 
 type QuickActionsCardProps = {
   viewModel: {
@@ -21,36 +23,28 @@ function actionIcon(icon: 'calendar' | 'plus' | 'users' | 'wrench') {
 
 export function QuickActionsCard({ viewModel }: QuickActionsCardProps) {
   return (
-    <div className="crm-card flex flex-col gap-3 rounded-2xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-1.5 text-sm font-extrabold" style={{ color: 'var(--crm-text)' }}>
-        <Plus size={15} aria-hidden="true" />
-        Quick actions
-      </div>
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+    <CrmDenseSurfaceCard
+      title="Quick actions"
+      actions={
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[color:var(--crm-ui-muted)]">
+          <Plus size={14} aria-hidden="true" />
+          Shared CRM actions
+        </span>
+      }
+    >
+      <CrmDenseActionRow className="grid grid-cols-2 sm:flex sm:flex-wrap">
         {viewModel.items.map((item) => (
-          <Link
+          <CrmButton
             key={item.href}
             href={item.href}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm transition sm:justify-start sm:py-2 ${
-              item.tone === 'primary'
-                ? 'font-extrabold transition-transform hover:scale-[1.02]'
-                : 'border font-semibold'
-            }`}
-            style={
-              item.tone === 'primary'
-                ? { background: 'var(--crm-accent)', color: 'var(--crm-accent-text)' }
-                : {
-                    borderColor: 'var(--crm-border)',
-                    background: 'var(--crm-button)',
-                    color: 'var(--crm-button-text)',
-                  }
-            }
+            tone={item.tone}
+            className="justify-center text-sm no-underline sm:justify-start"
           >
             {actionIcon(item.icon)}
             {item.label}
-          </Link>
+          </CrmButton>
         ))}
-      </div>
-    </div>
+      </CrmDenseActionRow>
+    </CrmDenseSurfaceCard>
   )
 }

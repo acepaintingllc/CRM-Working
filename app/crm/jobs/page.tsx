@@ -11,15 +11,17 @@ import JobCompletionCloseoutModal from '@/app/crm/jobs/_components/JobCompletion
 import { useJobsBoardPage } from '@/app/crm/jobs/_hooks/useJobsBoardPage'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmDenseActionRow } from '@/app/crm/_components/CrmDenseActionRow'
+import { CrmDenseMetaList } from '@/app/crm/_components/CrmDenseMetaList'
+import { CrmDenseSectionHeader } from '@/app/crm/_components/CrmDenseSectionHeader'
+import { CrmDenseSurfaceCard } from '@/app/crm/_components/CrmDenseSurfaceCard'
 import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
 import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
-import { crmButtonClassName } from '@/app/crm/_components/crmStyles'
 
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { MouseEvent } from 'react'
 import type { LucideIcon } from 'lucide-react'
@@ -103,15 +105,8 @@ export default function JobsPage() {
 
   const columnCount = (status: (typeof JOB_STATUS_OPTIONS)[number]['value']) => grouped[status].length
 
-  const actionClassName = (action: JobWorkflowResolvedAction) => {
-    if (action.tone === 'accent') {
-      return crmButtonClassName('primary', 'min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs')
-    }
-    if (action.tone === 'danger') {
-      return crmButtonClassName('danger', 'min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs')
-    }
-    return crmButtonClassName('secondary', 'min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs')
-  }
+  const actionTone = (action: JobWorkflowResolvedAction) =>
+    action.tone === 'accent' ? 'primary' : action.tone === 'danger' ? 'danger' : 'secondary'
 
   const actionIcon = (action: JobWorkflowResolvedAction) => {
     switch (action.id) {
@@ -145,28 +140,30 @@ export default function JobsPage() {
     const Icon = actionIcon(action)
     if (action.kind === 'navigate' && action.href) {
       return (
-        <Link
+        <CrmButton
           key={`${job.id}-${action.id}`}
           href={action.href}
           onClick={(event) => event.stopPropagation()}
-          className={`${actionClassName(action)} no-underline`}
+          tone={actionTone(action)}
+          className="min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs no-underline"
         >
           {iconLabel(Icon, action.label)}
-        </Link>
+        </CrmButton>
       )
     }
 
     return (
-      <button
+      <CrmButton
         type="button"
         key={`${job.id}-${action.id}`}
         onClick={stop(() => {
           void runBoardAction(job, action)
         })}
-        className={actionClassName(action)}
+        tone={actionTone(action)}
+        className="min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs"
       >
         {iconLabel(Icon, action.label)}
-      </button>
+      </CrmButton>
     )
   }
 
@@ -177,9 +174,7 @@ export default function JobsPage() {
     if (compactActions) {
       return (
         <details onClick={(event) => event.stopPropagation()}>
-          <summary
-            className={crmButtonClassName('secondary', 'min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs')}
-          >
+          <summary className="ace-crm-btn ace-crm-btn-secondary min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs">
             {iconLabel(ChevronDown, 'More')}
           </summary>
           <div className="mt-1.5 grid gap-1.5">
@@ -202,42 +197,42 @@ export default function JobsPage() {
         badge={<CrmChip tone="accent">Board workflow</CrmChip>}
         actions={
           <>
-            <button
+            <CrmButton
               type="button"
               onClick={() => setShowEmptyStages((prev) => !prev)}
               aria-label={showEmptyStages ? 'Hide empty stages' : 'Show empty stages'}
-              className={crmButtonClassName(showEmptyStages ? 'primary' : 'secondary')}
+              tone={showEmptyStages ? 'primary' : 'secondary'}
             >
               {iconLabel(
                 ChevronDown,
                 showEmptyStages ? 'Hide empty stages' : 'Show empty stages',
                 iconSizeMd
               )}
-            </button>
-            <button
+            </CrmButton>
+            <CrmButton
               type="button"
               onClick={() => setShowCompleted((prev) => !prev)}
               aria-label={showCompleted ? 'Hide completed jobs' : 'Show completed jobs'}
-              className={crmButtonClassName(showCompleted ? 'primary' : 'secondary')}
+              tone={showCompleted ? 'primary' : 'secondary'}
             >
               {iconLabel(CheckCircle2, showCompleted ? 'Hide completed' : 'Show completed', iconSizeMd)}
-            </button>
-            <button
+            </CrmButton>
+            <CrmButton
               type="button"
               onClick={() => setShowLost((prev) => !prev)}
               aria-label={showLost ? 'Hide lost jobs' : 'Show lost jobs'}
-              className={crmButtonClassName(showLost ? 'primary' : 'secondary')}
+              tone={showLost ? 'primary' : 'secondary'}
             >
               {iconLabel(XCircle, showLost ? 'Hide lost' : 'Show lost', iconSizeMd)}
-            </button>
-            <button
+            </CrmButton>
+            <CrmButton
               type="button"
               onClick={() => void load()}
               aria-label="Refresh jobs"
-              className={crmButtonClassName('secondary')}
+              tone="secondary"
             >
               {iconLabel(RefreshCw, 'Refresh', iconSizeMd)}
-            </button>
+            </CrmButton>
             <CrmButton href="/crm/jobs/new" tone="primary" className="no-underline" aria-label="Add job">
               {iconLabel(Plus, 'Add job', iconSizeMd)}
             </CrmButton>
@@ -266,10 +261,9 @@ export default function JobsPage() {
               <CrmSectionCard
                 key={col.key}
                 className="bg-[color:var(--crm-ui-surface)]/95 p-2.5 backdrop-blur"
-                title={col.title}
-                badge={<CrmChip>{columnCount(col.key)}</CrmChip>}
               >
                 <div className="grid gap-2">
+                  <CrmDenseSectionHeader title={col.title} badge={<CrmChip>{columnCount(col.key)}</CrmChip>} />
                   {col.key === 'completed' ? (
                     <div className="grid gap-2">
                       <CrmSearchBar
@@ -281,10 +275,7 @@ export default function JobsPage() {
                         <button
                           type="button"
                           onClick={() => setShowAllCompleted((prev) => !prev)}
-                          className={crmButtonClassName(
-                            'secondary',
-                            'min-h-0 w-fit rounded-[10px] px-2.5 py-1.5 text-xs'
-                          )}
+                          className="ace-crm-btn ace-crm-btn-secondary min-h-0 w-fit rounded-[10px] px-2.5 py-1.5 text-xs"
                         >
                           {showAllCompleted ? 'Show last 5' : 'Show all'}
                         </button>
@@ -306,11 +297,16 @@ export default function JobsPage() {
                   ) : null}
 
                   {(col.key === 'completed' ? filteredCompleted : grouped[col.key]).map((job) => (
-                    <div
+                    <CrmDenseSurfaceCard
                       key={job.id}
-                      onClick={() => router.push(`/crm/jobs/${job.id}`)}
-                      className="ace-crm-surface cursor-pointer p-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(17,24,39,0.12)]"
+                      className="cursor-pointer"
+                      interactive
                     >
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/crm/jobs/${job.id}`)}
+                        className="grid w-full gap-0 text-left"
+                      >
                       <div className="text-base leading-tight font-extrabold text-[color:var(--crm-ui-text)] break-words">
                         {job.title}
                       </div>
@@ -324,24 +320,29 @@ export default function JobsPage() {
                         </div>
                       ) : null}
 
-                      <div className="mt-1.5 text-xs leading-4.5 text-[color:var(--crm-ui-muted)]">
-                        {job.status === 'scheduled' ? (
-                          <>
-                            {formatRange(job.scheduled_date, job.scheduled_end_date) ? (
-                              <div>Scheduled: {formatRange(job.scheduled_date, job.scheduled_end_date)}</div>
-                            ) : null}
-                            {job.completed_at ? <div>Completed: {formatDate(job.completed_at)}</div> : null}
-                          </>
-                        ) : (
-                          <>
-                            {job.estimate_date ? <div>Estimate: {formatDate(job.estimate_date)}</div> : null}
-                            {job.scheduled_date ? <div>Scheduled: {formatDate(job.scheduled_date)}</div> : null}
-                            {job.completed_at ? <div>Completed: {formatDate(job.completed_at)}</div> : null}
-                          </>
-                        )}
-                      </div>
+                      <CrmDenseMetaList
+                        className="mt-2"
+                        items={[
+                          ...(job.status === 'scheduled'
+                            ? [
+                                {
+                                  label: 'Scheduled',
+                                  value: formatRange(job.scheduled_date, job.scheduled_end_date) ?? '-',
+                                },
+                                {
+                                  label: 'Completed',
+                                  value: formatDate(job.completed_at) ?? '-',
+                                },
+                              ]
+                            : [
+                                { label: 'Estimate', value: formatDate(job.estimate_date) ?? '-' },
+                                { label: 'Scheduled', value: formatDate(job.scheduled_date) ?? '-' },
+                                { label: 'Completed', value: formatDate(job.completed_at) ?? '-' },
+                              ]),
+                        ]}
+                      />
                       {!compactActions && deriveJobActivitySummary(job).length > 0 ? (
-                        <div className="mt-2 grid gap-1 border-t border-dashed border-[color:var(--crm-ui-border)] pt-1.5 text-[11px] text-[color:var(--crm-ui-muted)]">
+                        <div className="mt-2 grid gap-1 border-t border-dashed border-[color:var(--crm-ui-border)] pt-2 text-[11px] text-[color:var(--crm-ui-muted)]">
                           <div className="font-bold text-[color:var(--crm-ui-text)]">Recent activity</div>
                           {deriveJobActivitySummary(job).map((item, idx) => (
                             <div key={`${job.id}-act-${idx}`}>
@@ -350,9 +351,11 @@ export default function JobsPage() {
                           ))}
                         </div>
                       ) : null}
-
-                      <div className="mt-2 flex flex-wrap gap-1.5">{renderBoardActions(job)}</div>
-                    </div>
+                      </button>
+                      <CrmDenseActionRow className="mt-3" data-testid={`job-card-actions-${job.id}`}>
+                        {renderBoardActions(job)}
+                      </CrmDenseActionRow>
+                    </CrmDenseSurfaceCard>
                   ))}
                 </div>
               </CrmSectionCard>

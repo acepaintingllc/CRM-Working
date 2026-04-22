@@ -1,10 +1,17 @@
 'use client'
 
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { ArrowLeft, CalendarCheck, CalendarClock, Mail, Trash2 } from 'lucide-react'
+import { CalendarCheck, CalendarClock, Mail, Trash2 } from 'lucide-react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
+import { CrmField } from '@/app/crm/_components/CrmField'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import StageEmailModal, {
   stageEmailActionLabel,
   type StageEmailSentResult,
@@ -25,18 +32,8 @@ import {
   next8amLocalDateTimeValue,
   toIsoFromLocalDateTimeValue,
 } from '@/lib/jobs/dateHelpers'
-import {
-  jobsButtonAccentClassName,
-  jobsButtonDangerClassName,
-  jobsButtonSecondaryClassName,
-  jobsCardClassName,
-  jobsInputClassName,
-  jobsLabelClassName,
-  jobsPageShellClassName,
-} from '@/lib/jobs/uiClasses'
 
 const iconSizeSm = 16
-const iconSizeMd = 18
 
 function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
   return (
@@ -190,133 +187,107 @@ export default function JobSchedulePage() {
   }
 
   return (
-    <div className={`${jobsPageShellClassName} max-w-[900px]`}>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[20px] font-extrabold">Schedule job</div>
-          <div className="text-xs text-[var(--crm-muted)]">
-            Add one or more scheduled date ranges for this job.
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/crm/jobs/${id}`}
-            className={`${jobsButtonSecondaryClassName} no-underline`}
-          >
-            {iconLabel(ArrowLeft, 'Back to job', iconSizeMd)}
-          </Link>
-        </div>
-      </div>
+    <CrmPageShell className="max-w-[900px]">
+      <CrmPageHeader
+        eyebrow="Pipeline workflow"
+        emoji="📅"
+        title="Schedule job"
+        description="Add one or more scheduled date ranges for this job."
+        backHref={`/crm/jobs/${id}`}
+        backLabel="Back to job"
+      />
 
-      <div className={jobsCardClassName}>
-        <div className="grid gap-2.5">
-          <div className="grid gap-2.5 md:grid-cols-2">
-            <div>
-              <div className={jobsLabelClassName}>Start</div>
+      <CrmSectionCard title="Schedule blocks">
+        <div className="grid gap-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <CrmField label="Start">
               <input
                 type="datetime-local"
                 value={startLocal}
                 onChange={(event) => setStartLocal(event.target.value)}
-                className={jobsInputClassName}
+                className={crmInputClassName('text-sm')}
               />
-            </div>
-            <div>
-              <div className={jobsLabelClassName}>End</div>
+            </CrmField>
+            <CrmField label="End">
               <input
                 type="datetime-local"
                 value={endLocal}
                 onChange={(event) => setEndLocal(event.target.value)}
-                className={jobsInputClassName}
+                className={crmInputClassName('text-sm')}
               />
-            </div>
+            </CrmField>
           </div>
 
-          <div>
-            <div className={jobsLabelClassName}>Notes (optional)</div>
+          <CrmField label="Notes (optional)">
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               placeholder="Crew, materials, access notes, etc."
-              className={`${jobsInputClassName} min-h-[90px] resize-y`}
+              className={crmInputClassName('min-h-[90px] resize-y text-sm')}
             />
-          </div>
+          </CrmField>
 
-          {error && <div className="text-sm text-red-700">{error}</div>}
-          {notice && <div className="text-sm text-green-700">{notice}</div>}
+          {error ? <CrmNotice tone="error" compact>{error}</CrmNotice> : null}
+          {notice ? <CrmNotice tone="success" compact>{notice}</CrmNotice> : null}
 
-          <button
-            onClick={() => void addSchedule()}
-            disabled={saving}
-            className={jobsButtonAccentClassName}
-          >
-            {saving
-              ? iconLabel(CalendarClock, 'Saving...')
-              : iconLabel(CalendarClock, 'Add scheduled block')}
-          </button>
+          <CrmButton type="button" onClick={() => void addSchedule()} disabled={saving} tone="primary">
+            {saving ? iconLabel(CalendarClock, 'Saving...') : iconLabel(CalendarClock, 'Add scheduled block')}
+          </CrmButton>
         </div>
-      </div>
+      </CrmSectionCard>
 
       <div className="mt-3.5">
-        {loading && <div className="text-[var(--crm-muted)]">Loading schedule...</div>}
-        {!loading && sorted.length === 0 && (
-          <div className="text-[var(--crm-muted)]">No schedule blocks yet.</div>
-        )}
-        {!loading && sorted.length > 0 && (
+        {loading ? <div className="text-[color:var(--crm-ui-muted)]">Loading schedule...</div> : null}
+        {!loading && sorted.length === 0 ? (
+          <CrmEmptyState
+            emoji="📭"
+            title="No schedule blocks yet"
+            description="Add the first scheduled block to begin job scheduling and calendar sync."
+          />
+        ) : null}
+        {!loading && sorted.length > 0 ? (
           <div className="grid gap-2">
             {sorted.map((row) => (
               <div
                 key={row.id}
-                className="flex justify-between gap-3 rounded-xl border border-[var(--crm-border-soft)] bg-[var(--crm-card)] p-3"
+                className="ace-crm-surface flex justify-between gap-3 rounded-[var(--crm-ui-radius-sm)] p-3"
               >
                 <div>
-                  <div className="font-extrabold">
+                  <div className="font-extrabold text-[color:var(--crm-ui-text)]">
                     {new Date(row.start_at).toLocaleString()} - {new Date(row.end_at).toLocaleString()}
                   </div>
-                  {row.notes && (
-                    <div className="mt-1 text-[13px] text-[var(--crm-muted)]">{row.notes}</div>
-                  )}
-                  {row.calendar_event_id && (
+                  {row.notes ? (
+                    <div className="mt-1 text-[13px] text-[color:var(--crm-ui-muted)]">{row.notes}</div>
+                  ) : null}
+                  {row.calendar_event_id ? (
                     <div className="mt-1 text-xs font-bold text-green-600">Added to calendar</div>
-                  )}
+                  ) : null}
                 </div>
-                <button
-                  onClick={() => void deleteSchedule(row.id)}
-                  className={jobsButtonDangerClassName}
-                >
+                <CrmButton onClick={() => void deleteSchedule(row.id)} tone="danger">
                   {iconLabel(Trash2, 'Delete')}
-                </button>
+                </CrmButton>
               </div>
             ))}
           </div>
-        )}
-        {!loading && sorted.length > 0 && (
+        ) : null}
+        {!loading && sorted.length > 0 ? (
           <div className="mt-2.5">
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => void addToCalendar()}
-                disabled={addingCalendar}
-                className={jobsButtonAccentClassName}
-              >
+              <CrmButton type="button" onClick={() => void addToCalendar()} disabled={addingCalendar} tone="primary">
                 {addingCalendar
                   ? iconLabel(CalendarCheck, 'Adding to calendar...')
                   : iconLabel(CalendarCheck, 'Add scheduled blocks to Google Calendar')}
-              </button>
-              <button
+              </CrmButton>
+              <CrmButton
+                type="button"
                 onClick={openScheduledEmail}
-                className={
-                  jobMeta?.scheduled_email_sent_at
-                    ? jobsButtonSecondaryClassName
-                    : 'inline-flex items-center gap-1.5 rounded-[10px] border border-[#111] bg-[#111] px-3 py-2 text-sm font-extrabold text-white transition hover:opacity-95'
-                }
+                tone={jobMeta?.scheduled_email_sent_at ? 'secondary' : 'primary'}
               >
-                {iconLabel(
-                  Mail,
-                  stageEmailActionLabel('scheduled', Boolean(jobMeta?.scheduled_email_sent_at))
-                )}
-              </button>
+                {iconLabel(Mail, stageEmailActionLabel('scheduled', Boolean(jobMeta?.scheduled_email_sent_at)))}
+              </CrmButton>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       <StageEmailModal
@@ -326,6 +297,6 @@ export default function JobSchedulePage() {
         onClose={() => setEmailStage(null)}
         onSent={handleStageEmailSent}
       />
-    </div>
+    </CrmPageShell>
   )
 }

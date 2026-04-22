@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import {
   createSitePhotoFromUpload,
   listSitePhotosForJob,
@@ -11,6 +10,7 @@ import {
   requireSessionUserOrg,
   resolveParams,
 } from '@/lib/server/apiRoute'
+import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
 
 const maxPhotoSizeBytes = 12 * 1024 * 1024
 const maxUploadRequestBytes = maxPhotoSizeBytes + 512 * 1024
@@ -28,7 +28,7 @@ export async function GET(
 
   const list = await listSitePhotosForJob(auth.session.orgId, jobParam.value)
   if ('error' in list) return jsonError(list.error ?? 'Unable to load site photos.', 500)
-  return NextResponse.json({ photos: list.photos })
+  return dataResponse(list.photos)
 }
 
 export async function POST(
@@ -90,9 +90,8 @@ export async function POST(
     file: fileValue,
   })
   if ('error' in created) return jsonError(created.error ?? 'Unable to create site photo.', created.status ?? 500)
-  return NextResponse.json({
-    ok: true,
+  return mutationResponse({
     duplicate: created.duplicate,
     photo: created.photo,
-  })
+  }, created.duplicate ? null : 'Photo uploaded.')
 }

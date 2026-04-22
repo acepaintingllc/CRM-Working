@@ -1,5 +1,8 @@
 'use client'
 
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmField } from '@/app/crm/_components/CrmField'
 import type { JobStatus, JobStatusOption } from '@/lib/jobs/types'
 import { ArrowLeft, Trash2, type LucideIcon } from 'lucide-react'
 
@@ -23,7 +26,6 @@ type JobDetailHeaderProps = {
   onDelete: () => void
   onStatusChange: (status: string) => void
   formatStatus: (value: string | null | undefined) => string
-  deleteButtonClassName: string
 }
 
 export default function JobDetailHeader({
@@ -35,42 +37,30 @@ export default function JobDetailHeader({
   onDelete,
   onStatusChange,
   formatStatus,
-  deleteButtonClassName,
 }: JobDetailHeaderProps) {
   return (
-    <>
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="m-0 text-2xl font-bold text-gray-900">Job details</h1>
-          <p className="m-0 text-sm text-gray-600">Full job overview and schedule.</p>
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid gap-1">
+          <h2 className="m-0 text-xl font-black text-[color:var(--crm-ui-text)]">Job status</h2>
+          <p className="m-0 text-sm text-[color:var(--crm-ui-muted)]">Full job overview and schedule.</p>
         </div>
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
-        >
+        <CrmButton type="button" onClick={onBack}>
           {iconLabel(ArrowLeft, 'Back')}
-        </button>
+        </CrmButton>
       </div>
 
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div className="text-3xl font-extrabold tracking-tight text-gray-900">{title}</div>
-        {status ? (
-          <div className="inline-flex items-center rounded-full border border-gray-300 bg-gray-100 px-3 py-1 text-xs font-extrabold tracking-wide text-gray-800">
-            {formatStatus(status)}
-          </div>
-        ) : null}
+        <div className="text-3xl font-extrabold tracking-tight text-[color:var(--crm-ui-text)]">{title}</div>
+        {status ? <CrmChip tone="accent">{formatStatus(status)}</CrmChip> : null}
       </div>
       {status ? (
         <>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <div className="text-xs font-extrabold tracking-wide text-gray-500 uppercase">
-              Job stage
-            </div>
+          <CrmField label="Job stage">
             <select
               value={status}
               onChange={(event) => onStatusChange(event.target.value)}
-              className="h-9 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 outline-none ring-black/70 focus:ring-2"
+              className="ace-crm-input max-w-[280px] text-sm"
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -78,14 +68,14 @@ export default function JobDetailHeader({
                 </option>
               ))}
             </select>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={onDelete} className={deleteButtonClassName} disabled={deleting}>
+          </CrmField>
+          <div className="flex flex-wrap gap-2">
+            <CrmButton type="button" onClick={onDelete} tone="danger" disabled={deleting}>
               {deleting ? iconLabel(Trash2, 'Deleting...') : iconLabel(Trash2, 'Delete job')}
-            </button>
+            </CrmButton>
           </div>
         </>
       ) : null}
-    </>
+    </div>
   )
 }

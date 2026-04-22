@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
+import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -62,7 +63,7 @@ export async function GET(
     .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ rows: data ?? [] })
+  return dataResponse(data ?? [])
 }
 
 export async function PUT(
@@ -122,5 +123,5 @@ export async function PUT(
     .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, rows: data ?? [] })
+  return mutationResponse(data ?? [], 'Paint log saved.')
 }

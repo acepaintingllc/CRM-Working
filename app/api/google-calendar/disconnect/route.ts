@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { deleteTokenRow } from '@/lib/server/googleCalendar'
+import { mutationResponse } from '@/lib/server/routeResult'
 
 export async function POST() {
   const session = await getSessionUserOrg()
@@ -13,7 +14,7 @@ export async function POST() {
 
   try {
     await deleteTokenRow(orgId, userId)
-    return NextResponse.json({ ok: true })
+    return mutationResponse(true, 'Google Calendar disconnected.')
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Failed to disconnect'
     return NextResponse.json(

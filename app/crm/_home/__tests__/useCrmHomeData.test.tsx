@@ -57,7 +57,7 @@ describe('useCrmHomeData', () => {
       if (url === '/api/jobs') return jobsRequest.promise
       if (url === '/api/customers') return createJsonResponse(true, { data: [] })
       if (url === '/api/google-calendar/status') {
-        return createJsonResponse(true, { connected: false })
+        return createJsonResponse(true, { data: { connected: false } })
       }
       if (url === '/api/notes/dashboard') {
         return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
@@ -95,7 +95,7 @@ describe('useCrmHomeData', () => {
       }
       if (url === '/api/customers') return createJsonResponse(true, { data: [] })
       if (url === '/api/google-calendar/status') {
-        return createJsonResponse(true, { connected: false })
+        return createJsonResponse(true, { data: { connected: false } })
       }
       if (url === '/api/notes/dashboard') {
         return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
@@ -145,7 +145,9 @@ describe('useCrmHomeData', () => {
     mockAuthedFetch.mockImplementation((url: string) => {
       if (url === '/api/jobs') return createJsonResponse(true, { data: [] })
       if (url === '/api/customers') return createJsonResponse(true, { data: [] })
-      if (url === '/api/google-calendar/status') return createJsonResponse(true, { connected: false })
+      if (url === '/api/google-calendar/status') {
+        return createJsonResponse(true, { data: { connected: false } })
+      }
       if (url === '/api/notes/dashboard') {
         return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
       }

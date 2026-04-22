@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getTokenRow } from '@/lib/server/googleCalendar'
+import { dataResponse } from '@/lib/server/routeResult'
 
 export async function GET() {
   const session = await getSessionUserOrg()
@@ -12,7 +13,7 @@ export async function GET() {
 
   try {
     const row = await getTokenRow(orgId, userId)
-    return NextResponse.json({ connected: Boolean(row) })
+    return dataResponse({ connected: Boolean(row) })
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Failed to read calendar connection'
     return NextResponse.json(

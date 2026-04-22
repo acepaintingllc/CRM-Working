@@ -1,22 +1,20 @@
 'use client'
 
-import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmField } from '@/app/crm/_components/CrmField'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import { loadJobEstimateDate, saveJobEstimateDate } from '@/lib/jobs/client'
 import {
   next8amLocalDateTimeValue,
   toIsoFromLocalDateTimeValue,
   toLocalDateTimeInputValue,
 } from '@/lib/jobs/dateHelpers'
-import {
-  jobsButtonAccentClassName,
-  jobsButtonSecondaryClassName,
-  jobsCardClassName,
-  jobsInputClassName,
-  jobsLabelClassName,
-  jobsPageShellClassName,
-} from '@/lib/jobs/uiClasses'
 
 export default function JobEstimatePage() {
   const params = useParams()
@@ -69,40 +67,34 @@ export default function JobEstimatePage() {
   }
 
   return (
-    <div className={`${jobsPageShellClassName} max-w-[700px]`}>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[20px] font-extrabold">Set quote date</div>
-          <div className="text-xs text-[var(--crm-muted)]">Pick the quote time for this job.</div>
-        </div>
-        <Link href={`/crm/jobs/${id}`} className={`${jobsButtonSecondaryClassName} no-underline`}>
-          Back to job
-        </Link>
-      </div>
+    <CrmPageShell className="max-w-[700px]">
+      <CrmPageHeader
+        eyebrow="Pipeline workflow"
+        emoji="🕒"
+        title="Set quote date"
+        description="Pick the quote time for this job using the shared CRM page shell."
+        backHref={`/crm/jobs/${id}`}
+        backLabel="Back to job"
+      />
 
-      <div className={jobsCardClassName}>
-        <div className="grid gap-2.5">
-          <div>
-            <div className={jobsLabelClassName}>Quote date/time</div>
+      <CrmSectionCard title="Quote schedule">
+        <div className="grid gap-3">
+          <CrmField label="Quote date/time">
             <input
               type="datetime-local"
               value={estimateLocal}
               onChange={(event) => setEstimateLocal(event.target.value)}
-              className={jobsInputClassName}
+              className={crmInputClassName('text-sm')}
             />
-          </div>
+          </CrmField>
 
-          {error && <div className="text-sm text-red-700">{error}</div>}
+          {error ? <CrmNotice tone="error" compact>{error}</CrmNotice> : null}
 
-          <button
-            onClick={() => void save()}
-            disabled={saving}
-            className={jobsButtonAccentClassName}
-          >
+          <CrmButton type="button" onClick={() => void save()} disabled={saving} tone="primary">
             {saving ? 'Saving...' : 'Save quote date'}
-          </button>
+          </CrmButton>
         </div>
-      </div>
-    </div>
+      </CrmSectionCard>
+    </CrmPageShell>
   )
 }

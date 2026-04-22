@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken, resolveCalendarId } from '@/lib/server/googleCalendar'
 import { readJsonBody } from '@/lib/server/apiRoute'
+import { mutationResponse } from '@/lib/server/routeResult'
 
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -75,8 +76,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 
-  return NextResponse.json({
-    ok: true,
+  return mutationResponse({
     event: {
       id: typeof obj?.id === 'string' ? obj.id : '',
       htmlLink: typeof obj?.htmlLink === 'string' ? obj.htmlLink : null,

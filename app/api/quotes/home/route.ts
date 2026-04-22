@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
 import { jsonError, requireSessionUserOrg } from '@/lib/server/apiRoute'
 import { supabaseAdmin } from '@/lib/server/org'
+import { dataResponse } from '@/lib/server/routeResult'
 import { isMissingSchemaErrorMessage } from '@/lib/server/schema'
 
 type EstimateRow = {
@@ -139,7 +139,7 @@ export async function GET() {
     return sum + (row.final_total ?? 0)
   }, 0)
 
-  return NextResponse.json({
+  return dataResponse({
     summary: {
       draft_count: draftCount,
       sent_or_awaiting_count: sentOrAwaitingCount,

@@ -1,7 +1,8 @@
 'use client'
 
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmDenseActionRow } from '@/app/crm/_components/CrmDenseActionRow'
 import type { JobWorkflowResolvedAction } from '@/lib/jobs/types'
-import Link from 'next/link'
 import {
   CalendarCheck,
   Camera,
@@ -24,7 +25,7 @@ function iconLabel(Icon: LucideIcon, label: string, size = 16) {
 
 type JobActionRailProps = {
   actions: JobWorkflowResolvedAction[]
-  getActionClassName: (action: JobWorkflowResolvedAction) => string
+  getActionTone: (action: JobWorkflowResolvedAction) => 'primary' | 'secondary' | 'danger'
   onAction: (action: JobWorkflowResolvedAction) => void
 }
 
@@ -55,40 +56,38 @@ function actionIcon(action: JobWorkflowResolvedAction): LucideIcon {
   }
 }
 
-export default function JobActionRail({
-  actions,
-  getActionClassName,
-  onAction,
-}: JobActionRailProps) {
+export default function JobActionRail({ actions, getActionTone, onAction }: JobActionRailProps) {
   return (
-    <div className="mt-5 grid gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="mt-2 grid gap-3">
+      <CrmDenseActionRow>
         {actions.map((action) => {
           const Icon = actionIcon(action)
           if (action.kind === 'navigate' && action.href) {
             return (
-              <Link
+              <CrmButton
                 key={action.id}
                 href={action.href}
-                className={`${getActionClassName(action)} no-underline`}
+                tone={getActionTone(action)}
+                className="min-h-0 px-2.5 py-1.5 text-xs no-underline"
               >
                 {iconLabel(Icon, action.label)}
-              </Link>
+              </CrmButton>
             )
           }
 
           return (
-            <button
+            <CrmButton
               type="button"
               key={action.id}
               onClick={() => onAction(action)}
-              className={getActionClassName(action)}
+              tone={getActionTone(action)}
+              className="min-h-0 px-2.5 py-1.5 text-xs"
             >
               {iconLabel(Icon, action.label)}
-            </button>
+            </CrmButton>
           )
         })}
-      </div>
+      </CrmDenseActionRow>
     </div>
   )
 }

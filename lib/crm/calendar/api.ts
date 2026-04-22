@@ -1,4 +1,4 @@
-import { getApiErrorMessage, parseApiResponse } from '../../client/apiCore.ts'
+import { getApiErrorMessage, getApiPayloadData, parseApiResponse } from '../../client/apiCore.ts'
 import { eventSortValue, monthKeyLocal } from '../home/calendar.ts'
 
 import type { CalendarEvent, CalendarInfo } from './types.ts'
@@ -66,16 +66,16 @@ export function readCalendarInfo(value: unknown): CalendarInfo | null {
 }
 
 export function readCalendarInfosPayload(payload: unknown): ReadArrayResult<CalendarInfo> {
-  if (!isRecord(payload) || !Array.isArray(payload.calendars)) {
+  if (!Array.isArray(payload)) {
     return { valid: false, value: [] }
   }
 
-  const calendars = payload.calendars
+  const calendars = payload
     .map((value) => readCalendarInfo(value))
     .filter((value): value is CalendarInfo => value != null)
 
   return {
-    valid: calendars.length === payload.calendars.length,
+    valid: calendars.length === payload.length,
     value: calendars,
   }
 }
@@ -131,19 +131,21 @@ export function resolveInitialSelectedCalendarIds(
 export async function fetchCalendarStatus(fetchImpl?: CalendarFetch): Promise<FetchResult<boolean>> {
   const fetcher = fetchImpl ?? (await getDefaultFetch())
   const payload = await fetchCalendarPayload(fetcher('/api/google-calendar/status', { cache: 'no-store' }))
+  const data = getApiPayloadData<{ connected?: boolean }>(payload)
 
-  if (!isRecord(payload) || typeof payload.connected !== 'boolean') {
+  if (!isRecord(data) || typeof data.connected !== 'boolean') {
     return { value: false, errorMessage: 'Invalid calendar status response.' }
   }
 
-  return { value: payload.connected, errorMessage: null }
+  return { value: data.connected, errorMessage: null }
 }
 
 export async function fetchCalendars(fetchImpl?: CalendarFetch): Promise<FetchResult<CalendarInfo[]>> {
   const fetcher = fetchImpl ?? (await getDefaultFetch())
   const payload = await fetchCalendarPayload(fetcher('/api/google-calendar/calendars', { cache: 'no-store' }))
+  const data = getApiPayloadData<unknown[]>(payload)
 
-  const parsed = readCalendarInfosPayload(payload)
+  const parsed = readCalendarInfosPayload(data)
   if (!parsed.valid) {
     return { value: [], errorMessage: 'Invalid calendar list response.' }
   }
@@ -166,8 +168,9 @@ export async function fetchEvents(
       cache: 'no-store',
     })
   )
+  const data = getApiPayloadData<{ events?: unknown[] }>(payload)
 
-  const parsed = readCalendarEventsPayload(payload)
+  const parsed = readCalendarEventsPayload(data)
   if (!parsed.valid) {
     return { value: [], errorMessage: 'Invalid calendar events response.' }
   }
@@ -187,12 +190,13 @@ export async function connectCalendar(next: string, fetchImpl?: CalendarFetch) {
       body: JSON.stringify({ next }),
     })
   )
+  const data = getApiPayloadData<{ url?: string }>(payload)
 
-  if (!isRecord(payload) || typeof payload.url !== 'string' || payload.url.length === 0) {
+  if (!isRecord(data) || typeof data.url !== 'string' || data.url.length === 0) {
     throw new Error('Failed to start Google connection')
   }
 
-  return payload.url
+  return data.url
 }
 
 export async function disconnectCalendar(fetchImpl?: CalendarFetch) {

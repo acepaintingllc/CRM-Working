@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken } from '@/lib/server/googleCalendar'
+import { dataResponse } from '@/lib/server/routeResult'
 
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -124,7 +125,7 @@ export async function GET(request: Request) {
       .flat()
       .sort((a, b) => parseEventSortTime(a.start) - parseEventSortTime(b.start))
       .slice(0, limit)
-    return NextResponse.json({ events, timeMin, timeMax })
+    return dataResponse({ events, timeMin, timeMax })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to fetch events'
     return NextResponse.json(

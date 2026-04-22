@@ -1,6 +1,13 @@
 'use client'
 
 import type { CSSProperties } from 'react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmDenseActionRow } from '@/app/crm/_components/CrmDenseActionRow'
+import { CrmDenseMetaList } from '@/app/crm/_components/CrmDenseMetaList'
+import { CrmDenseSectionHeader } from '@/app/crm/_components/CrmDenseSectionHeader'
+import { CrmDenseSurfaceCard } from '@/app/crm/_components/CrmDenseSurfaceCard'
+import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 
 import {
   dayNumberLabel,
@@ -76,45 +83,26 @@ export function CalendarPicker({
   toggleCalendar,
 }: CalendarPickerProps) {
   return (
-    <div
-      style={{
-        marginBottom: 10,
-        background: 'var(--crm-card)',
-        border: '1px solid var(--crm-border-soft)',
-        borderRadius: 12,
-        padding: 12,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 10,
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 800 }}>Calendars</div>
-        <div style={{ fontSize: 12, color: 'var(--crm-muted)' }}>
-          {selectedCalendarIds.length} selected
-        </div>
-      </div>
+    <div className="grid gap-3">
+      <CrmDenseSectionHeader
+        title="Calendars"
+        badge={
+          <span className="ace-crm-chip border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface-muted)] text-[color:var(--crm-ui-muted)]">
+            {selectedCalendarIds.length} selected
+          </span>
+        }
+      />
       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         {calendars.map((calendar) => {
           const active = selectedCalendarIds.includes(calendar.id)
           return (
             <label
               key={calendar.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                border: active ? '1px solid var(--crm-accent)' : '1px solid var(--crm-border-soft)',
-                borderRadius: 10,
-                padding: '8px 10px',
-                cursor: 'pointer',
-                background: active ? 'var(--crm-bg-soft)' : 'var(--crm-card)',
-              }}
+              className={`flex cursor-pointer items-center gap-2 rounded-[16px] border px-3 py-2 ${
+                active
+                  ? 'border-[color:var(--crm-ui-accent-border)] bg-[color:var(--crm-ui-accent-soft)]'
+                  : 'border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface)]'
+              }`}
             >
               <input type="checkbox" checked={active} onChange={() => toggleCalendar(calendar.id)} />
               <span
@@ -180,34 +168,31 @@ export function MonthBoard({
             {eventsLoading ? 'Loading events...' : `${events.length} event${events.length === 1 ? '' : 's'} loaded`}
           </div>
         </div>
-        <div className="month-actions">
-          <button type="button" onClick={goToPreviousMonth} style={pillButton}>
+        <CrmDenseActionRow className="month-actions">
+          <CrmButton type="button" onClick={goToPreviousMonth} className="min-h-0 px-3 py-1.5 text-xs">
             Prev
-          </button>
-          <button type="button" onClick={goToToday} style={pillButton}>
+          </CrmButton>
+          <CrmButton type="button" onClick={goToToday} className="min-h-0 px-3 py-1.5 text-xs">
             Today
-          </button>
-          <button type="button" onClick={goToNextMonth} style={pillButton}>
+          </CrmButton>
+          <CrmButton type="button" onClick={goToNextMonth} className="min-h-0 px-3 py-1.5 text-xs">
             Next
-          </button>
-        </div>
+          </CrmButton>
+        </CrmDenseActionRow>
       </div>
 
       {selectedCalendarIds.length === 0 ? (
-        <div style={emptyState}>Choose calendars above to show your month board.</div>
+        <CrmEmptyState
+          compact
+          emoji="📆"
+          title="Choose calendars"
+          description="Choose calendars above to show your month board."
+          className="m-4 shadow-none"
+        />
       ) : eventsError ? (
-        <div
-          style={{
-            border: '1px solid var(--crm-danger-border)',
-            background: 'var(--crm-danger-bg)',
-            color: 'var(--crm-danger-text)',
-            borderRadius: 12,
-            padding: 12,
-            fontSize: 13,
-          }}
-        >
+        <CrmNotice tone="error" compact>
           {eventsError}
-        </div>
+        </CrmNotice>
       ) : (
         <div className="month-board" aria-busy={eventsLoading}>
           <div className="month-weekday-row">
@@ -286,28 +271,34 @@ export function SelectedDayPanel({
 }: SelectedDayPanelProps) {
   return (
     <section className="selected-day-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--crm-text)' }}>
-            {selectedDay.toLocaleDateString([], { weekday: 'long' })}
-          </div>
-          <div style={{ marginTop: 3, fontSize: 12, color: 'var(--crm-muted)', fontWeight: 700 }}>
-            {selectedDay.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
-          </div>
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--crm-muted)', fontWeight: 800 }}>
-          {selectedDayEvents.length} item{selectedDayEvents.length === 1 ? '' : 's'}
-        </div>
-      </div>
+      <CrmDenseSectionHeader
+        title={selectedDay.toLocaleDateString([], { weekday: 'long' })}
+        description={selectedDay.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
+        badge={
+          <span className="ace-crm-chip border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface-muted)] text-[color:var(--crm-ui-muted)]">
+            {selectedDayEvents.length} item{selectedDayEvents.length === 1 ? '' : 's'}
+          </span>
+        }
+      />
 
       <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
         {selectedDayEvents.length === 0 ? (
-          <div style={emptyState}>No calendar items for this day.</div>
+          <CrmEmptyState
+            compact
+            emoji="🗓️"
+            title="No calendar items"
+            description="No calendar items for this day."
+            className="shadow-none"
+          />
         ) : (
           selectedDayEvents.map((event) => {
             const calendar = calendarById.get(event.calendarId)
             return (
-              <div key={`${event.calendarId}:${event.id}:${event.start ?? ''}`} className="detail-event">
+              <CrmDenseSurfaceCard
+                key={`${event.calendarId}:${event.id}:${event.start ?? ''}`}
+                className="detail-event shadow-none"
+                tone="muted"
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <span
@@ -336,38 +327,18 @@ export function SelectedDayPanel({
                     </a>
                   ) : null}
                 </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--crm-muted-strong)', fontWeight: 700 }}>
-                  {formatEventTime(event.start, event.end)}
-                </div>
-                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--crm-muted)' }}>
-                  {calendar?.summary ?? event.calendarId}
-                </div>
-              </div>
+                <CrmDenseMetaList
+                  className="mt-3"
+                  items={[
+                    { label: 'Time', value: formatEventTime(event.start, event.end) },
+                    { label: 'Calendar', value: calendar?.summary ?? event.calendarId },
+                  ]}
+                />
+              </CrmDenseSurfaceCard>
             )
           })
         )}
       </div>
     </section>
   )
-}
-
-const pillButton: CSSProperties = {
-  height: 32,
-  padding: '0 10px',
-  borderRadius: 999,
-  border: '1px solid var(--crm-border)',
-  background: 'var(--crm-card)',
-  color: 'var(--crm-text)',
-  fontWeight: 700,
-  fontSize: 12,
-  cursor: 'pointer',
-}
-
-const emptyState: CSSProperties = {
-  border: '1px dashed #d1d5db',
-  borderRadius: 12,
-  padding: 12,
-  color: 'var(--crm-muted)',
-  fontSize: 13,
-  background: 'var(--crm-bg-soft)',
 }

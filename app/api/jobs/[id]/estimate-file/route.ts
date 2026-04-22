@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { findLatestEstimateFile, findMatchingEstimateFiles } from '@/lib/server/googleDrive'
 import { serverLog } from '@/lib/server/log'
+import { dataResponse } from '@/lib/server/routeResult'
 
 type JobRecord = { customer_id: string | null }
 
@@ -61,7 +62,7 @@ export async function GET(
     if (!latest) {
       return NextResponse.json({ error: 'No matching estimate file found in Drive.' }, { status: 404 })
     }
-    return NextResponse.json({ latest, files: matches.files })
+    return dataResponse({ latest, files: matches.files })
   }
 
   const result = await findLatestEstimateFile({
@@ -88,5 +89,5 @@ export async function GET(
     return NextResponse.redirect(result.file.webViewLink)
   }
 
-  return NextResponse.json({ file: result.file })
+  return dataResponse(result.file)
 }

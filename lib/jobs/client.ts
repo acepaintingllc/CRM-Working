@@ -1,6 +1,12 @@
 'use client'
 
-import { loadData, requestApi, type ApiDataEnvelope, type ApiMutationEnvelope } from '@/lib/client/api'
+import {
+  loadData,
+  mutateData,
+  requestApi,
+  type ApiDataEnvelope,
+  type ApiMutationEnvelope,
+} from '@/lib/client/api'
 import { mapPaintLogRow, type PaintLogRow } from '@/lib/jobs/paintLog'
 import type {
   JobCloseoutNotesPatchPayload,
@@ -203,33 +209,30 @@ export async function patchJobDateFields(
 }
 
 export async function fetchJobSchedules(jobId: string) {
-  const payload = await requestApi<{ schedules?: ScheduleRow[] }>(`/api/jobs/${jobId}/schedules`, {
-    cache: 'no-store',
-  })
-  return (payload.schedules ?? []) as ScheduleRow[]
+  return loadData<ScheduleRow[]>(`/api/jobs/${jobId}/schedules`, { cache: 'no-store' })
 }
 
 export async function addScheduleRow(
   jobId: string,
   payload: { start_at: string; end_at: string; notes?: string | null }
 ) {
-  const result = await requestApi<{ schedule?: ScheduleRow }>(`/api/jobs/${jobId}/schedules`, {
+  const result = await mutateData<ScheduleRow>(`/api/jobs/${jobId}/schedules`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  return (result.schedule ?? null) as ScheduleRow | null
+  return result.data ?? null
 }
 
 export async function deleteScheduleRow(jobId: string, scheduleId: string) {
-  await requestApi(`/api/jobs/${jobId}/schedules/${scheduleId}`, { method: 'DELETE' })
+  await mutateData<boolean>(`/api/jobs/${jobId}/schedules/${scheduleId}`, { method: 'DELETE' })
 }
 
 export async function listPhotos(jobId: string) {
-  const payload = await requestApi<{ photos?: JobPhoto[] }>(`/api/jobs/${jobId}/site-photos`, {
+  const photos = await loadData<JobPhoto[]>(`/api/jobs/${jobId}/site-photos`, {
     cache: 'no-store',
   })
-  return normalizePhotoBundle((payload.photos ?? []) as JobPhoto[])
+  return normalizePhotoBundle(photos)
 }
 
 export async function uploadPhoto(jobId: string, payload: UploadPhotoPayload) {
@@ -241,7 +244,7 @@ export async function uploadPhoto(jobId: string, payload: UploadPhotoPayload) {
     form.append('caption', payload.caption)
   }
 
-  const result = await requestApi<{ photo?: JobPhoto; duplicate?: boolean }>(
+  const result = await mutateData<{ photo?: JobPhoto | null; duplicate?: boolean }>(
     `/api/jobs/${jobId}/site-photos`,
     {
       method: 'POST',
@@ -250,16 +253,16 @@ export async function uploadPhoto(jobId: string, payload: UploadPhotoPayload) {
   )
 
   return {
-    duplicate: Boolean(result.duplicate),
-    photo: (result.photo ?? null) as JobPhoto | null,
+    duplicate: Boolean(result.data?.duplicate),
+    photo: (result.data?.photo ?? null) as JobPhoto | null,
   }
 }
 
 export async function listPaintLogs(jobId: string) {
-  const payload = await requestApi<{ rows?: PaintLogRow[] }>(`/api/jobs/${jobId}/paint-logs`, {
+  const payload = await loadData<PaintLogRow[]>(`/api/jobs/${jobId}/paint-logs`, {
     cache: 'no-store',
   })
-  return ((payload.rows ?? []) as PaintLogRow[]).map((row) => mapPaintLogRow(row))
+  return payload.map((row) => mapPaintLogRow(row))
 }
 
 export async function createJob(payload: CreateJobPayload) {
@@ -296,7 +299,7 @@ export async function saveJobEstimateDate(jobId: string, estimateDate: string) {
 }
 
 export async function createGoogleCalendarEvent(payload: JobCalendarEventPayload) {
-  const result = await requestApi<{ event?: unknown }>('/api/google-calendar/create-event', {
+  const result = await mutateData<{ event?: unknown }>('/api/google-calendar/create-event', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -309,15 +312,15 @@ export async function createGoogleCalendarEvent(payload: JobCalendarEventPayload
     }),
   })
 
-  return result.event ?? null
+  return result.data?.event ?? null
 }
 
 export async function addSchedulesToCalendar(jobId: string) {
-  const payload = await requestApi<{ events?: CalendarAddResult[] }>(
+  const payload = await mutateData<CalendarAddResult[]>(
     `/api/jobs/${jobId}/schedules/add-to-calendar`,
     {
       method: 'POST',
     }
   )
-  return (payload.events ?? []) as CalendarAddResult[]
+  return payload.data ?? []
 }
