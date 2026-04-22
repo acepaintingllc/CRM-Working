@@ -23,6 +23,7 @@ import {
   normalizeTrimScope,
   resolveRoomModeById,
 } from '../_lib/estimateV2EditorNormalize'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2WallCalculationsPayload } from '@/types/estimator/v2'
 import type {
   EstimateV2EditorCollections,
@@ -35,6 +36,7 @@ const AUTO_SAVE_DELAY_MS = 900
 
 export function useEstimateV2SaveController(params: {
   estimateId?: string
+  routeFamily: EstimateRouteFamily
   collections: EstimateV2EditorCollections
   meta: EstimateV2EditorMetaState
   currentSnapshot: string
@@ -48,7 +50,15 @@ export function useEstimateV2SaveController(params: {
     trimPrimerProductId: string
   }
 }) {
-  const { estimateId, collections, meta, currentSnapshot, dirty, effectiveJobProductDefaults } = params
+  const {
+    estimateId,
+    routeFamily,
+    collections,
+    meta,
+    currentSnapshot,
+    dirty,
+    effectiveJobProductDefaults,
+  } = params
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveRef = useRef<(trigger?: 'manual' | 'auto') => Promise<boolean>>(async () => false)
   const saveRequestTrackerRef = useRef(createSaveRequestTracker())
@@ -201,7 +211,7 @@ export function useEstimateV2SaveController(params: {
         lastNormalizedDomains: normalizedDomains,
       }))
 
-      const response = await authedFetch(`/api/quotes/${estimateId}`, {
+      const response = await authedFetch(routeFamily.estimateApiHref(estimateId), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         ...(trigger === 'auto' ? { 'X-Estimate-Save-Mode': 'auto' } : {}),
@@ -341,7 +351,14 @@ export function useEstimateV2SaveController(params: {
       meta.setSaveStatus('saved')
       return true
     },
-    [collections, effectiveJobProductDefaults, estimateId, meta, normalizeJobDefaultProductOverride]
+    [
+      collections,
+      effectiveJobProductDefaults,
+      estimateId,
+      meta,
+      normalizeJobDefaultProductOverride,
+      routeFamily,
+    ]
   )
 
   useEffect(() => {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 
 export type SummaryPolicyDraft = {
   laborDayEnabled: boolean
@@ -14,10 +15,11 @@ export type SummaryPolicyDraft = {
 
 export function useEstimateV2SummaryPolicyController(params: {
   estimateId: string
+  routeFamily: EstimateRouteFamily
   refreshPricing: () => Promise<void>
   setPolicySaving: (value: boolean) => void
 }) {
-  const { estimateId, refreshPricing, setPolicySaving } = params
+  const { estimateId, routeFamily, refreshPricing, setPolicySaving } = params
   const policyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const savePolicyDebounced = useCallback(
@@ -27,7 +29,7 @@ export function useEstimateV2SummaryPolicyController(params: {
         if (!estimateId) return
         setPolicySaving(true)
         try {
-          await authedFetch(`/api/quotes/${estimateId}`, {
+          await authedFetch(routeFamily.estimateApiHref(estimateId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -47,7 +49,7 @@ export function useEstimateV2SummaryPolicyController(params: {
         }
       }, 800)
     },
-    [estimateId, refreshPricing, setPolicySaving]
+    [estimateId, refreshPricing, routeFamily, setPolicySaving]
   )
 
   useEffect(

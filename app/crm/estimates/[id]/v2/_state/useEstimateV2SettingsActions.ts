@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 
 export function useEstimateV2SettingsActions(params: {
   estimateId?: string
+  routeFamily: EstimateRouteFamily
   meta: EstimateV2EditorMetaState
 }) {
-  const { estimateId, meta } = params
+  const { estimateId, routeFamily, meta } = params
   const customerSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const policySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -19,7 +21,7 @@ export function useEstimateV2SettingsActions(params: {
         if (policySaveTimerRef.current) clearTimeout(policySaveTimerRef.current)
         policySaveTimerRef.current = setTimeout(async () => {
           if (!estimateId) return
-          await authedFetch(`/api/quotes/${estimateId}`, {
+          await authedFetch(routeFamily.estimateApiHref(estimateId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -49,7 +51,7 @@ export function useEstimateV2SettingsActions(params: {
       })
       meta.setDebugMeta((prev) => ({ ...prev, dirtySource: 'job-settings' }))
     },
-    [estimateId, meta]
+    [estimateId, meta, routeFamily]
   )
 
   const flushCustomerSave = useCallback(() => {

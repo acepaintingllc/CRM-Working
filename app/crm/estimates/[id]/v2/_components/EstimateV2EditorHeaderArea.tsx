@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import { EstimateV2Header } from './EstimateV2Header'
 import type {
   EstimateV2EditorHeaderVm,
@@ -18,12 +19,14 @@ type HeaderAreaStyles = {
 export function EstimateV2EditorHeaderArea({
   styles,
   estimateId,
+  routeFamily,
   headerVm,
   saveVm,
   confirmNavigation,
 }: {
   styles: HeaderAreaStyles
   estimateId?: string
+  routeFamily: EstimateRouteFamily
   headerVm: EstimateV2EditorHeaderVm
   saveVm: EstimateV2EditorSaveVm
   confirmNavigation: () => boolean
@@ -33,11 +36,12 @@ export function EstimateV2EditorHeaderArea({
   return (
     <EstimateV2Header
       styles={styles}
+      routeFamily={routeFamily}
       vm={headerVm}
       confirmNavigation={confirmNavigation}
       onNext={() =>
         void saveVm.save().then((ok) => {
-          if (ok && estimateId) router.push(`/crm/quotes/${estimateId}/summary`)
+          if (ok && estimateId) router.push(routeFamily.summaryHref(estimateId))
         })
       }
     />

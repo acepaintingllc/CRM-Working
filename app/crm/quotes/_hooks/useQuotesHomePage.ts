@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { fetchJobList, type JobSummary } from '@/lib/jobs/client'
+import {
+  removeQuoteEstimateFromHomeData,
+  type QuoteHomeData,
+  type QuoteHomeEstimate,
+} from '@/lib/quotes/collectionData'
 import { deleteQuoteVersion, loadQuoteHome } from '@/lib/quotes/client'
 import {
   deriveQuoteVersionsForJob,
@@ -9,7 +14,6 @@ import {
   type EligibleQuoteVersionJob,
 } from '@/lib/quotes/versionCreation'
 import { buildSearchHaystack, buildSummaryCards } from '../_home/quoteHomePresentation'
-import type { HomeData, HomeEstimate } from '../_home/quoteHomeTypes'
 import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 
 type QuoteHomeEligibleJob = EligibleQuoteVersionJob<JobSummary>
@@ -21,35 +25,8 @@ const EMPTY_SUMMARY = {
   pipeline_total: 0,
 }
 
-function recomputeSummary(estimates: HomeEstimate[]) {
-  return {
-    draft_count: estimates.filter((row) => row.version_state === 'draft').length,
-    sent_or_awaiting_count: estimates.filter((row) => row.is_sent_estimate).length,
-    live_count: estimates.filter((row) => row.version_state === 'live').length,
-    pipeline_total: estimates.reduce((sum, row) => {
-      if (row.version_state === 'archived') return sum
-      return sum + (row.final_total ?? 0)
-    }, 0),
-  }
-}
-
-function deriveSnapshot(
-  previousSnapshot: HomeData['snapshot'],
-  remainingSearch: HomeEstimate[],
-  deletedId: string
-) {
-  if (previousSnapshot?.estimate_id !== deletedId) return previousSnapshot
-  const nextSnapshot = remainingSearch[0]
-  return nextSnapshot
-    ? {
-        ...nextSnapshot,
-        total_versions: remainingSearch.length,
-      }
-    : null
-}
-
 export function useQuotesHomePage() {
-  const [data, setData] = useState<HomeData | null>(null)
+  const [data, setData] = useState<QuoteHomeData | null>(null)
   const [jobs, setJobs] = useState<QuoteHomeEligibleJob[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +34,7 @@ export function useQuotesHomePage() {
   const [searchFocused, setSearchFocused] = useState(false)
   const [jobQuery, setJobQuery] = useState('')
   const [selectedJobId, setSelectedJobId] = useState('')
-  const [confirmingDelete, setConfirmingDelete] = useState<HomeEstimate | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState<QuoteHomeEstimate | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -68,7 +45,7 @@ export function useQuotesHomePage() {
       setError(null)
       try {
         const [homePayload, jobsPayload] = await Promise.all([
-          loadQuoteHome<HomeData>(),
+          loadQuoteHome<QuoteHomeData>(),
           fetchJobList(),
         ])
 
@@ -139,7 +116,7 @@ export function useQuotesHomePage() {
 
   const mobileSummaryCards = useMemo(() => [summaryCards[0], summaryCards[3]].filter(Boolean), [summaryCards])
 
-  function requestDeleteVersion(estimate: HomeEstimate) {
+  function requestDeleteVersion(estimate: QuoteHomeEstimate) {
     setConfirmingDelete(estimate)
   }
 
@@ -159,17 +136,7 @@ export function useQuotesHomePage() {
       await deleteQuoteVersion(deletedId)
       setData((previous) => {
         if (!previous) return previous
-
-        const remainingRecent = previous.recent_estimates.filter((row) => row.estimate_id !== deletedId)
-        const remainingSearch = previous.search_estimates.filter((row) => row.estimate_id !== deletedId)
-
-        return {
-          ...previous,
-          recent_estimates: remainingRecent,
-          search_estimates: remainingSearch,
-          snapshot: deriveSnapshot(previous.snapshot, remainingSearch, deletedId),
-          summary: recomputeSummary(remainingSearch),
-        }
+        return removeQuoteEstimateFromHomeData(previous, deletedId)
       })
       setConfirmingDelete(null)
     } catch (deleteError) {

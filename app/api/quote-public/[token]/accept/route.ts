@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { writeEstimatePublicEvent } from '@/lib/server/customer-send/repository'
 import { supabaseAdmin } from '@/lib/server/org'
 import { loadPublicEstimateByToken } from '@/lib/server/estimatePublicPortal'
 
@@ -54,11 +55,11 @@ export async function POST(
 
   if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 })
 
-  await supabaseAdmin.from('estimate_public_events').insert({
-    org_id: loaded.version.org_id,
-    estimate_public_version_id: loaded.snapshot.estimate_version_id,
-    event_type: 'accepted',
-    actor_type: 'customer',
+  await writeEstimatePublicEvent({
+    orgId: (loaded.version.org_id as string) ?? '',
+    versionId: loaded.snapshot.estimate_version_id,
+    eventType: 'accepted',
+    actorType: 'customer',
     metadata: {
       legal_name: legalName,
       signature_type: signatureType,

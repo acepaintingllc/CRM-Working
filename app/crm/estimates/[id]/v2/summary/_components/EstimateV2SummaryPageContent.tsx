@@ -11,6 +11,10 @@ import { EstimateV2SummaryPricingTable } from './EstimateV2SummaryPricingTable'
 import { EstimateV2SummaryRoomBlock } from './EstimateV2SummaryRoomBlock'
 import { fmtUSD } from '../_lib/estimateV2SummaryFormat'
 import { useEstimateV2SummaryDerived } from '../_lib/useEstimateV2SummaryDerived'
+import {
+  estimateRouteFamily,
+  type EstimateRouteFamily,
+} from '../../../estimateRouteFamily'
 
 const C = {
   bg: '#0a0a0a',
@@ -148,7 +152,15 @@ function SummaryStatusBadge({ statusLabel }: { statusLabel: string }) {
   )
 }
 
-function SummaryActionLinks({ estimateId, compact = false }: { estimateId: string; compact?: boolean }) {
+function SummaryActionLinks({
+  estimateId,
+  routeFamily,
+  compact = false,
+}: {
+  estimateId: string
+  routeFamily: EstimateRouteFamily
+  compact?: boolean
+}) {
   const baseStyle: CSSProperties = compact
     ? {
         display: 'flex',
@@ -174,7 +186,7 @@ function SummaryActionLinks({ estimateId, compact = false }: { estimateId: strin
   return (
     <>
       <Link
-        href={`/crm/quotes/${estimateId}`}
+        href={routeFamily.editorHref(estimateId)}
         style={{
           ...baseStyle,
           border: `1px solid ${C.border}`,
@@ -185,7 +197,7 @@ function SummaryActionLinks({ estimateId, compact = false }: { estimateId: strin
         Edit
       </Link>
       <Link
-        href={`/crm/quotes/${estimateId}/send`}
+        href={routeFamily.sendHref(estimateId)}
         style={{
           ...baseStyle,
           border: compact ? '1px solid rgba(132,204,147,0.26)' : `1px solid ${C.border}`,
@@ -199,7 +211,13 @@ function SummaryActionLinks({ estimateId, compact = false }: { estimateId: strin
   )
 }
 
-export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: string }) {
+export function EstimateV2SummaryPageContent({
+  estimateId,
+  routeFamily = estimateRouteFamily,
+}: {
+  estimateId: string
+  routeFamily?: EstimateRouteFamily
+}) {
   const {
     data,
     job,
@@ -208,7 +226,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
     policySaving,
     jobSettingsVm,
     trimPaintVm,
-  } = useEstimateV2SummaryData(estimateId)
+  } = useEstimateV2SummaryData(estimateId, routeFamily)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [openRooms, setOpenRooms] = useState<Record<string, boolean>>({})
   const derived = useEstimateV2SummaryDerived({
@@ -475,7 +493,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
           }}
         >
           <Link
-            href="/crm/quotes"
+            href={routeFamily.listHref}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -592,7 +610,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
                         Saving...
                       </div>
                     )}
-                    <SummaryActionLinks estimateId={estimateId} compact />
+                    <SummaryActionLinks estimateId={estimateId} routeFamily={routeFamily} compact />
                   </div>
                 </div>
               </div>
@@ -620,7 +638,10 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <Link href="/crm/quotes" style={{ fontSize: 12, color: C.ink3, textDecoration: 'none', flexShrink: 0 }}>
+            <Link
+              href={routeFamily.listHref}
+              style={{ fontSize: 12, color: C.ink3, textDecoration: 'none', flexShrink: 0 }}
+            >
               Back to Quotes
             </Link>
             <span style={{ color: C.border }}>/</span>
@@ -636,7 +657,7 @@ export function EstimateV2SummaryPageContent({ estimateId }: { estimateId: strin
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <SummaryStatusBadge statusLabel={derived.statusLabel} />
-            <SummaryActionLinks estimateId={estimateId} />
+            <SummaryActionLinks estimateId={estimateId} routeFamily={routeFamily} />
           </div>
         </header>
 

@@ -1,32 +1,11 @@
 import type { JobSummary } from '@/lib/jobs/client'
+import type {
+  QuoteHomeData,
+  QuoteHomeEstimate,
+} from '@/lib/quotes/collectionData'
 
-export type HomeEstimate = {
-  estimate_id: string
-  job_id: string
-  customer_id: string
-  version_name: string
-  version_state: string
-  version_kind: string
-  version_sort_order: number
-  job_title: string
-  customer_name: string
-  final_total: number | null
-  updated_at: string | null
-  created_at: string | null
-  is_sent_estimate: boolean
-}
-
-export type HomeData = {
-  summary: {
-    draft_count: number
-    sent_or_awaiting_count: number
-    live_count: number
-    pipeline_total: number
-  }
-  recent_estimates: HomeEstimate[]
-  snapshot: (HomeEstimate & { total_versions: number }) | null
-  search_estimates: HomeEstimate[]
-}
+export type HomeEstimate = QuoteHomeEstimate
+export type HomeData = QuoteHomeData
 
 export type QuoteHomeJob = JobSummary
 
@@ -43,4 +22,3 @@ export type SummaryCardVm = {
   valueColor?: string
   subtextColor?: string
 }
-

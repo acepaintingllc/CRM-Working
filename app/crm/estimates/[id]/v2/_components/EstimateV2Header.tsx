@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2EditorHeaderVm } from '../_state/estimateV2EditorTypes'
 
 type HeaderStyles = {
@@ -13,11 +14,13 @@ type HeaderStyles = {
 
 export function EstimateV2Header({
   styles,
+  routeFamily,
   vm,
   confirmNavigation,
   onNext,
 }: {
   styles: HeaderStyles
+  routeFamily: EstimateRouteFamily
   vm: EstimateV2EditorHeaderVm
   confirmNavigation: () => boolean
   onNext: () => void
@@ -27,7 +30,7 @@ export function EstimateV2Header({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Link
-            href="/crm/quotes"
+            href={routeFamily.listHref}
             onClick={(event) => {
               if (!confirmNavigation()) event.preventDefault()
             }}
@@ -67,7 +70,7 @@ export function EstimateV2Header({
         </button>
         {vm.estimateId ? (
           <Link
-            href={`/crm/quotes/${vm.estimateId}/summary`}
+            href={routeFamily.summaryHref(vm.estimateId)}
             style={{
               ...styles.button,
               display: 'inline-flex',

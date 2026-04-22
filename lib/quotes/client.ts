@@ -9,19 +9,13 @@ import type {
   RatesFlagsPayload,
 } from '@/types/estimator/ratesFlags'
 
-export type CustomerSendVersion = {
-  status?: string | null
-  sent_at?: string | null
-  viewed_at?: string | null
-  accepted_at?: string | null
-  declined_at?: string | null
-  public_token?: string | null
-}
-
-export type CustomerSendMutationResponse = {
-  public_url?: string | null
-  version?: CustomerSendVersion | null
-}
+export {
+  loadCustomerSendPage,
+  saveCustomerSendDraft,
+  submitCustomerSend,
+  type CustomerSendMutationResponse,
+  type CustomerSendVersion,
+} from '@/lib/customer-send/client'
 
 export async function loadQuoteHome<T>() {
   return loadData<T>('/api/quotes/home', { cache: 'no-store' })
@@ -77,10 +71,6 @@ export async function saveQuoteDefaults(data: QuoteDefaults) {
   return saveData('/api/settings/quote-defaults', data)
 }
 
-export async function loadCustomerSendPage<T>(url: string) {
-  return loadData<T>(url, { cache: 'no-store' })
-}
-
 export async function loadRatesFlags() {
   return loadData<RatesFlagsPayload>('/api/quotes/rates-flags', { cache: 'no-store' })
 }
@@ -96,28 +86,4 @@ export async function mutateRatesFlags(payload: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-}
-
-export async function saveCustomerSendDraft<T extends CustomerSendMutationResponse>(
-  url: string,
-  draft: Record<string, unknown>
-) {
-  const result = await mutateData<T>(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ draft }),
-  })
-  return result.data
-}
-
-export async function submitCustomerSend<T extends CustomerSendMutationResponse>(
-  url: string,
-  payload: { mode: 'test' | 'send'; draft: Record<string, unknown> }
-) {
-  const result = await mutateData<T>(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return result.data
 }

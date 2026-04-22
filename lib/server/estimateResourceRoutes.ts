@@ -1,0 +1,129 @@
+import { getEstimateCatalogs } from '@/lib/server/estimateCatalogs'
+import {
+  jsonError,
+  readJsonBody,
+  readUuidParam,
+  requireSessionUserOrg,
+  resolveParams,
+} from '@/lib/server/apiRoute'
+import {
+  deleteEstimateV2,
+  EstimateV2RouteServiceError,
+  loadEstimateV2Response,
+  saveEstimateV2Inputs,
+} from '@/lib/server/estimateV2RouteService'
+import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
+
+export type EstimateRouteContext = {
+  params: { id: string } | Promise<{ id: string }>
+}
+
+type EstimateDeleteCopy = {
+  deletedNotice: string
+}
+
+function toErrorResponse(error: unknown) {
+  if (error instanceof EstimateV2RouteServiceError) {
+    return jsonError(error.message, error.status)
+  }
+  const message = error instanceof Error ? error.message : 'Estimate API request failed'
+  return jsonError(message, 500)
+}
+
+export async function handleEstimateRouteGet(request: Request, context: EstimateRouteContext) {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  const params = await resolveParams(context)
+  const estimateId = readUuidParam(params?.id, 'estimate id')
+  if (!estimateId.ok) return estimateId.response
+
+  try {
+    const payload = await loadEstimateV2Response({
+      requestOrigin: new URL(request.url).origin,
+      orgId: auth.session.orgId,
+      userId: auth.session.userId,
+      estimateId: estimateId.value,
+    })
+    return dataResponse(payload)
+  } catch (error) {
+    return toErrorResponse(error)
+  }
+}
+
+export async function handleEstimateRoutePut(request: Request, context: EstimateRouteContext) {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  const params = await resolveParams(context)
+  const estimateId = readUuidParam(params?.id, 'estimate id')
+  if (!estimateId.ok) return estimateId.response
+
+  const body = await readJsonBody(request)
+  if (!body.ok) return body.response
+
+  try {
+    const payload = await saveEstimateV2Inputs({
+      requestOrigin: new URL(request.url).origin,
+      orgId: auth.session.orgId,
+      userId: auth.session.userId,
+      estimateId: estimateId.value,
+      body: (body.value ?? {}) as Record<string, unknown>,
+      autosaveOnly:
+        (request.headers.get('x-estimate-save-mode')?.toLowerCase() ?? 'manual') === 'auto',
+    })
+    return mutationResponse(payload)
+  } catch (error) {
+    return toErrorResponse(error)
+  }
+}
+
+export async function handleEstimateRouteDelete(
+  _request: Request,
+  context: EstimateRouteContext,
+  copy: EstimateDeleteCopy
+) {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  const params = await resolveParams(context)
+  const estimateId = readUuidParam(params?.id, 'estimate id')
+  if (!estimateId.ok) return estimateId.response
+
+  try {
+    const payload = await deleteEstimateV2({
+      orgId: auth.session.orgId,
+      estimateId: estimateId.value,
+    })
+    return mutationResponse(payload, copy.deletedNotice)
+  } catch (error) {
+    return toErrorResponse(error)
+  }
+}
+
+export async function handleEstimateCatalogsRouteGet(
+  request: Request,
+  context: EstimateRouteContext
+) {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  const params = await resolveParams(context)
+  const estimateId = readUuidParam(params?.id, 'estimate id')
+  if (!estimateId.ok) return estimateId.response
+
+  try {
+    const url = new URL(request.url)
+    const catalogs = await getEstimateCatalogs({
+      origin: url.origin,
+      orgId: auth.session.orgId,
+      userId: auth.session.userId,
+      estimateId: estimateId.value,
+      forceRefresh: url.searchParams.get('refresh') === '1',
+    })
+    return dataResponse(catalogs)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load estimate catalogs'
+    return jsonError(message, 400)
+  }
+}

@@ -10,6 +10,7 @@
     "test": "npm run test:node && npm run test:components",
     "test:node": "node --experimental-specifier-resolution=node --test \"lib/**/__tests__/*.test.ts\"",
     "test:components": "vitest run",
+    "test:customer-send": "vitest run --config vitest.customer-send.config.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run build",

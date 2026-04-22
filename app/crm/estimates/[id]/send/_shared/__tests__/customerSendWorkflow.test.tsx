@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { quoteRouteFamily } from '@/app/crm/estimates/[id]/estimateRouteFamily'
 import {
   buildCustomerSendComposerDraft,
   customerSendUrl,
@@ -18,7 +19,7 @@ const {
   submitCustomerSend: vi.fn(),
 }))
 
-vi.mock('@/lib/quotes/client', () => ({
+vi.mock('@/lib/customer-send/client', () => ({
   loadCustomerSendPage,
   saveCustomerSendDraft,
   submitCustomerSend,
@@ -79,7 +80,10 @@ describe('customerSendWorkflow', () => {
 
     expect(draft.to_email).toBe('customer@example.com')
     expect(draft.scope_text_edits.walls).toBe('Custom walls copy')
-    expect(customerSendUrl('estimate-1', 'v2')).toBe('/api/quotes/estimate-1/customer-send?v2=1')
+    expect(customerSendUrl('estimate-1', 'v2')).toBe('/api/estimates/estimate-1/customer-send?v2=1')
+    expect(customerSendUrl('estimate-1', 'v2', quoteRouteFamily)).toBe(
+      '/api/quotes/estimate-1/customer-send?v2=1'
+    )
     expect(deriveCustomerSendLabels(basePayload as never).document).toBe('Quote')
   })
 
@@ -129,7 +133,7 @@ describe('customerSendWorkflow', () => {
     })
 
     expect(saveCustomerSendDraft).toHaveBeenCalledWith(
-      '/api/quotes/estimate-1/customer-send?v2=1',
+      '/api/estimates/estimate-1/customer-send?v2=1',
       expect.objectContaining({ title: 'Kitchen Quote' })
     )
 
@@ -138,10 +142,34 @@ describe('customerSendWorkflow', () => {
     })
 
     expect(submitCustomerSend).toHaveBeenCalledWith(
-      '/api/quotes/estimate-1/customer-send?v2=1',
+      '/api/estimates/estimate-1/customer-send?v2=1',
       expect.objectContaining({ mode: 'send' })
     )
     expect(result.current.publicUrl).toBe('https://example.test/quote')
     expect(result.current.message).toBe('Quote sent.')
+  })
+
+  it('uses quote route overrides when the alias family is provided', async () => {
+    loadCustomerSendPage.mockResolvedValue(basePayload)
+
+    const { result } = renderHook(() =>
+      useCustomerSendWorkflow({
+        estimateId: 'estimate-1',
+        catalogSource: 'v2' as const,
+        routeFamily: quoteRouteFamily,
+        buildForm: buildCustomerSendComposerDraft,
+        buildDocument: (data) => data.document,
+        draftPayload: (form) => form,
+        loadErrorMessage: 'Unable to load quote send page',
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.form?.title).toBe('Kitchen Quote')
+    })
+
+    expect(loadCustomerSendPage).toHaveBeenCalledWith(
+      '/api/quotes/estimate-1/customer-send?v2=1'
+    )
   })
 })

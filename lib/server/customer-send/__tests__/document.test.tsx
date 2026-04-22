@@ -1,0 +1,154 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { buildCustomerDocumentFromSendContext } from '../document'
+import type { EstimateCustomerSendContextData } from '../contextTypes'
+
+const { mockBuildCustomerEstimateDocument } = vi.hoisted(() => ({
+  mockBuildCustomerEstimateDocument: vi.fn(),
+}))
+
+vi.mock('@/lib/customer-estimates/build', () => ({
+  buildCustomerEstimateDocument: mockBuildCustomerEstimateDocument,
+}))
+
+describe('customer send document builder', () => {
+  beforeEach(() => {
+    mockBuildCustomerEstimateDocument.mockReset()
+    mockBuildCustomerEstimateDocument.mockReturnValue({
+      meta: {
+        estimate_id: 'estimate-1',
+        version_name: 'Kitchen Quote',
+        version_state: 'draft',
+        flow_version: 'v2',
+        title: 'Kitchen Quote',
+        quote_date: '2026-04-22',
+        sent_at: null,
+        viewed_at: null,
+        accepted_at: null,
+        declined_at: null,
+        status: 'draft',
+        public_token: null,
+      },
+      company: {},
+      customer: {},
+      intro_paragraph: '',
+      closing_paragraph: '',
+      quote_validity_days: 90,
+      deposit_language: '',
+      card_fee_note: '',
+      quote_rows: [],
+      scopes: [],
+      total: 1500,
+      terms: [],
+    })
+  })
+
+  it('passes context data, overrides, and public meta through to the canonical document builder', () => {
+    const context: EstimateCustomerSendContextData = {
+      estimate: {
+        id: 'estimate-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        status: 'draft',
+        version_name: 'Kitchen Quote',
+        version_state: 'draft',
+        version_kind: 'standard',
+        version_sort_order: 1,
+        created_at: '2026-04-01T00:00:00.000Z',
+        updated_at: '2026-04-02T00:00:00.000Z',
+      },
+      job: {
+        id: 'job-1',
+        title: 'Kitchen',
+        estimate_date: '2026-04-22',
+        customer_name: 'Taylor',
+        customer_email: 'taylor@example.com',
+        customer_phone: '555-1212',
+        customer_address: '123 Main',
+      },
+      customer: {
+        id: 'customer-1',
+        name: 'Taylor',
+        email: 'taylor@example.com',
+        phone: '555-1212',
+        address: '123 Main',
+        street: '123 Main',
+        city: 'Austin',
+        state: 'TX',
+        zip: '78701',
+      },
+      company: {
+        business_name: 'ACE Painting',
+        timezone: 'America/Chicago',
+        main_phone: '',
+        business_email: '',
+        address: '',
+        website: '',
+        sender_signature: '',
+        logo_url: '',
+      },
+      inputs: {
+        rooms: [],
+        room_wall_scopes: [],
+        segments: [],
+        wall_segments: [],
+        ceiling_segments: [],
+        room_ceiling_scopes: [],
+        ceiling_scope_segments: [],
+        room_trim_scopes: [],
+        trim_items: [],
+        other: [],
+        jobsettings: {},
+      },
+      catalogs: { paints: [] },
+      settings: {
+        default_template_key: 'default',
+        quote_validity_days: 90,
+        terms_text: 'Terms',
+      },
+      pricing_summary: { finalTotal: 1500 },
+      latest_public_version: null,
+      latest_sent_version: null,
+      latest_draft_version: null,
+      public_url: null,
+      public_versions: [],
+    }
+
+    const result = buildCustomerDocumentFromSendContext({
+      context,
+      overrides: {
+        title: 'Custom title',
+        quote_validity_days: 45,
+      },
+      publicMeta: {
+        status: 'sent',
+        sent_at: '2026-04-22T12:00:00.000Z',
+        public_token: 'token-1',
+      },
+    })
+
+    expect(mockBuildCustomerEstimateDocument).toHaveBeenCalledWith({
+      estimate: context.estimate,
+      job: context.job,
+      customer: context.customer,
+      company: context.company,
+      inputs: context.inputs,
+      catalogs: context.catalogs,
+      settings: context.settings,
+      pricingSummary: { finalTotal: 1500 },
+      overrides: {
+        title: 'Custom title',
+        quote_validity_days: 45,
+      },
+      publicMeta: {
+        status: 'sent',
+        sent_at: '2026-04-22T12:00:00.000Z',
+        public_token: 'token-1',
+      },
+    })
+    expect(result).toEqual(
+      expect.objectContaining({
+        total: 1500,
+      })
+    )
+  })
+})

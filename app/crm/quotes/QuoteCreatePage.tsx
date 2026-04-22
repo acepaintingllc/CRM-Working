@@ -1,6 +1,7 @@
 'use client'
 
 import { fetchJobList, type JobSummary } from '@/lib/jobs/client'
+import type { QuoteListEstimate } from '@/lib/quotes/collectionData'
 import { loadQuoteList } from '@/lib/quotes/client'
 import {
   deriveQuoteVersionsForJob,
@@ -21,21 +22,12 @@ import { useQuoteVersionCreation } from './_hooks/useQuoteVersionCreation'
 
 type QuoteCreatePageJob = EligibleQuoteVersionJob<JobSummary>
 
-type EstimateRow = {
-  id: string
-  job_id: string
-  version_name: string | null
-  version_state: string | null
-  version_kind: string | null
-  updated_at: string | null
-}
-
 export default function EstimatorV2CreatePage() {
   const searchParams = useSearchParams()
   const jobId = searchParams.get('job') ?? ''
 
   const [jobs, setJobs] = useState<QuoteCreatePageJob[]>([])
-  const [estimates, setEstimates] = useState<EstimateRow[]>([])
+  const [estimates, setEstimates] = useState<QuoteListEstimate[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -58,13 +50,13 @@ export default function EstimatorV2CreatePage() {
       try {
         const [jobsPayload, estimatesPayload] = await Promise.all([
           fetchJobList(),
-          loadQuoteList<{ estimates?: EstimateRow[] }>(),
+          loadQuoteList<{ estimates?: QuoteListEstimate[] }>(),
         ])
 
         if (!active) return
 
         setJobs(filterEligibleQuoteVersionJobs(jobsPayload))
-        setEstimates((estimatesPayload?.estimates ?? []) as EstimateRow[])
+        setEstimates((estimatesPayload?.estimates ?? []) as QuoteListEstimate[])
       } catch (error) {
         if (!active) return
         setLoadError(error instanceof Error ? error.message : 'Failed to load quote creation data.')

@@ -1,4 +1,5 @@
-import SendQuoteClient from './SendQuoteClient'
+import { quoteRouteFamily } from '@/app/crm/estimates/[id]/estimateRouteFamily'
+import SendEstimateClient from '@/app/crm/estimates/[id]/send/sendEstimateClient'
 
 export default async function SendQuotePage({
   params,
@@ -6,5 +7,11 @@ export default async function SendQuotePage({
   params: Promise<{ id: string }> | { id: string }
 }) {
   const resolved = await Promise.resolve(params)
-  return <SendQuoteClient estimateId={resolved.id} catalogSource="v2" />
+  return (
+    <SendEstimateClient
+      estimateId={resolved.id}
+      catalogSource="v2"
+      routeFamily={quoteRouteFamily}
+    />
+  )
 }
