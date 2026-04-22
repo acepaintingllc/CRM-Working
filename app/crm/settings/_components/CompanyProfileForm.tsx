@@ -15,7 +15,7 @@ type CompanyProfileFormProps = {
 }
 
 const inputClassName =
-  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-slate-900/70 placeholder:text-slate-400 focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100'
+  'ace-crm-input text-sm'
 
 export function CompanyProfileForm(props: CompanyProfileFormProps) {
   return (
@@ -108,14 +108,14 @@ export function CompanyProfileForm(props: CompanyProfileFormProps) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-[color:var(--crm-ui-muted)]">
           These fields are stored as canonical company profile settings.
         </p>
         <button
           type="button"
           onClick={props.onSave}
           disabled={!props.canSave}
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-900 bg-slate-900 px-3 text-sm font-semibold text-white transition hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+          className="ace-crm-btn ace-crm-btn-primary"
         >
           <span>{props.saving ? 'Saving...' : 'Save changes'}</span>
         </button>

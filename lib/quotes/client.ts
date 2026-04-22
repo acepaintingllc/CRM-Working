@@ -1,7 +1,7 @@
 'use client'
 
 import { loadData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
-import type { EstimateDefaults } from '@/lib/settings/types'
+import type { QuoteDefaults } from '@/lib/settings/types'
 import type {
   RatesFlagsMutationAction,
   RatesFlagsPayload,
@@ -73,12 +73,12 @@ export async function deleteQuoteProduct(id: string) {
   })
 }
 
-export async function loadEstimateDefaults() {
-  return loadData<EstimateDefaults>('/api/settings/estimate-defaults', { cache: 'no-store' })
+export async function loadQuoteDefaults() {
+  return loadData<QuoteDefaults>('/api/settings/quote-defaults', { cache: 'no-store' })
 }
 
-export async function saveEstimateDefaults(data: EstimateDefaults) {
-  return saveData('/api/settings/estimate-defaults', data)
+export async function saveQuoteDefaults(data: QuoteDefaults) {
+  return saveData('/api/settings/quote-defaults', data)
 }
 
 export async function loadCustomerSendPage<T>(url: string) {

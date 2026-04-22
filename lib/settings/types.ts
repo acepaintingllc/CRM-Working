@@ -15,7 +15,7 @@ export type QuoteSendDefaults = {
   terms_text: string
 }
 
-export type EstimateDefaults = {
+export type QuoteDefaults = {
   walls_paint_id: string | null
   walls_primer_id: string | null
   ceiling_paint_id: string | null

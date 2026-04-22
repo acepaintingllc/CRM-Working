@@ -2,6 +2,9 @@
 
 import { useCallback } from 'react'
 import { Building2 } from 'lucide-react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
 import { CompanyProfileForm } from '@/app/crm/settings/_components/CompanyProfileForm'
 import { SettingsNotice } from '@/app/crm/settings/_components/SettingsNotice'
@@ -40,31 +43,27 @@ export default function CompanyProfilePage() {
       backHref="/crm/settings"
       backLabel="Back to settings"
       actions={
-        <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+        <CrmChip tone="accent" className="px-3 py-2 text-xs font-semibold">
           <Building2 size={14} aria-hidden="true" />
           <span>Canonical company profile settings</span>
-        </div>
+        </CrmChip>
       }
     >
       {resource.loading && !resource.hasLoaded ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-600">Loading company profile…</p>
-        </div>
+        <CrmSectionCard title="Loading company profile">
+          <p className="text-sm text-[color:var(--crm-ui-muted)]">Loading company profile...</p>
+        </CrmSectionCard>
       ) : null}
 
       {!resource.loading && !resource.hasLoaded && resource.error ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <CrmSectionCard title="Company profile unavailable">
           <SettingsNotice tone="error">{resource.error}</SettingsNotice>
           <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => void resource.reload()}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
-            >
+            <CrmButton type="button" onClick={() => void resource.reload()}>
               Retry
-            </button>
+            </CrmButton>
           </div>
-        </div>
+        </CrmSectionCard>
       ) : null}
 
       {resource.hasLoaded ? (

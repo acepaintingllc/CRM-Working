@@ -1,4 +1,4 @@
-import EstimatePortalClient from '../../estimate/[token]/EstimatePortalClient'
+import QuotePortalClient from './QuotePortalClient'
 import {
   loadPublicEstimateByToken,
   markPublicEstimateViewed,
@@ -28,7 +28,7 @@ export default async function PublicQuotePage({
   }
 
   return (
-    <EstimatePortalClient
+    <QuotePortalClient
       snapshot={loaded.snapshot}
       printMode={resolvedSearchParams.print === '1'}
     />

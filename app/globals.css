@@ -355,34 +355,34 @@ a {
 
 /* ============ CRM UI DESIGN SYSTEM ============ */
 .ace-crm-shell {
-  --crm-ui-page: #f1ece2;
-  --crm-ui-page-2: #e8e2d6;
-  --crm-ui-surface: rgba(255, 255, 255, 0.92);
-  --crm-ui-surface-strong: #ffffff;
-  --crm-ui-surface-muted: #f7f3eb;
-  --crm-ui-border: #d7d0c1;
-  --crm-ui-border-strong: #bdb49f;
-  --crm-ui-text: #171717;
-  --crm-ui-muted: #5f635b;
-  --crm-ui-muted-2: #7c8077;
-  --crm-ui-accent: #224f39;
-  --crm-ui-accent-2: #2f6b4d;
-  --crm-ui-accent-soft: rgba(47, 107, 77, 0.1);
-  --crm-ui-accent-border: rgba(34, 79, 57, 0.24);
-  --crm-ui-success-bg: #eaf6ef;
-  --crm-ui-success-border: #b9dac3;
-  --crm-ui-success-text: #24553b;
-  --crm-ui-warning-bg: #fbf2df;
-  --crm-ui-warning-border: #e7c98b;
-  --crm-ui-warning-text: #8b5b16;
-  --crm-ui-danger-bg: #faeaea;
-  --crm-ui-danger-border: #e2b8b8;
-  --crm-ui-danger-text: #8b2f2f;
+  --crm-ui-page: #090909;
+  --crm-ui-page-2: #131313;
+  --crm-ui-surface: rgba(19, 19, 19, 0.96);
+  --crm-ui-surface-strong: #1a1a1a;
+  --crm-ui-surface-muted: #101010;
+  --crm-ui-border: #262626;
+  --crm-ui-border-strong: #333333;
+  --crm-ui-text: #f5f5f5;
+  --crm-ui-muted: #b1b1b1;
+  --crm-ui-muted-2: #7a7a7a;
+  --crm-ui-accent: #84cc93;
+  --crm-ui-accent-2: #a7d9b4;
+  --crm-ui-accent-soft: rgba(132, 204, 147, 0.12);
+  --crm-ui-accent-border: rgba(132, 204, 147, 0.3);
+  --crm-ui-success-bg: #0f2416;
+  --crm-ui-success-border: #2f5a3a;
+  --crm-ui-success-text: #a7d9b4;
+  --crm-ui-warning-bg: #3b2f06;
+  --crm-ui-warning-border: #92400e;
+  --crm-ui-warning-text: #fde68a;
+  --crm-ui-danger-bg: #3b0d12;
+  --crm-ui-danger-border: #7f1d1d;
+  --crm-ui-danger-text: #fecaca;
   --crm-ui-mono: 'JetBrains Mono', ui-monospace, monospace;
   --crm-ui-sans: 'Inter', system-ui, sans-serif;
   --crm-ui-radius: 18px;
   --crm-ui-radius-sm: 12px;
-  --crm-ui-shadow: 0 18px 48px rgba(17, 24, 39, 0.08);
+  --crm-ui-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
   background:
     radial-gradient(circle at top left, rgba(132, 204, 147, 0.08), transparent 28%),
     linear-gradient(135deg, var(--crm-ui-page), var(--crm-ui-page-2));
@@ -443,7 +443,7 @@ a {
 .ace-crm-btn-primary {
   border-color: var(--crm-ui-accent);
   background: var(--crm-ui-accent);
-  color: #f6f4ef;
+  color: #062410;
 }
 
 .ace-crm-btn-secondary {
@@ -490,6 +490,11 @@ a {
 .ace-crm-input:focus {
   border-color: var(--crm-ui-accent-2);
   box-shadow: 0 0 0 3px rgba(47, 107, 77, 0.12);
+}
+
+.ace-crm-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 

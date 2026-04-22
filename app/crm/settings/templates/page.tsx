@@ -2,6 +2,8 @@
 
 import { useCallback } from 'react'
 import { FileText, MessageSquareText, NotebookPen } from 'lucide-react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
 import { QuoteSendDefaultsForm } from '@/app/crm/settings/_components/QuoteSendDefaultsForm'
 import { SettingsNavTile } from '@/app/crm/settings/_components/SettingsNavTile'
@@ -63,24 +65,20 @@ export default function TemplatesLibraryPage() {
       </section>
 
       {resource.loading && !resource.hasLoaded ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-600">Loading quote send defaults…</p>
-        </div>
+        <CrmSectionCard title="Loading quote send defaults">
+          <p className="text-sm text-[color:var(--crm-ui-muted)]">Loading quote send defaults...</p>
+        </CrmSectionCard>
       ) : null}
 
       {!resource.loading && !resource.hasLoaded && resource.error ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <CrmSectionCard title="Quote send defaults unavailable">
           <SettingsNotice tone="error">{resource.error}</SettingsNotice>
           <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => void resource.reload()}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
-            >
+            <CrmButton type="button" onClick={() => void resource.reload()}>
               Retry
-            </button>
+            </CrmButton>
           </div>
-        </div>
+        </CrmSectionCard>
       ) : null}
 
       {resource.hasLoaded ? (

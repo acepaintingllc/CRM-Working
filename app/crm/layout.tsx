@@ -19,22 +19,12 @@ import {
   Wrench,
 } from "lucide-react";
 
-type ThemeMode = "system" | "light" | "dark";
-
 const themeStorageKey = "acecrm.theme";
 
-function isThemeMode(value: string | null): value is ThemeMode {
-  return value === "system" || value === "light" || value === "dark";
-}
-
-function resolveTheme(mode: ThemeMode) {
-  if (mode !== "system") return mode;
-  if (typeof window === "undefined") return "light";
+function resolveStoredTheme() {
+  const stored = localStorage.getItem(themeStorageKey);
+  if (stored === "light" || stored === "dark") return stored;
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function applyTheme(mode: ThemeMode) {
-  document.documentElement.dataset.theme = resolveTheme(mode);
 }
 
 export default function CrmLayout({ children }: { children: React.ReactNode }) {
@@ -42,7 +32,6 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [logoError, setLogoError] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>("system");
   const logoSrc = getBrandLogoUrl()
   const iconSize = 16;
   const isQuotePath =
@@ -66,18 +55,12 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
-    const stored = localStorage.getItem(themeStorageKey);
-    const initialTheme = isThemeMode(stored) ? stored : "system";
-    setTheme(initialTheme);
-    applyTheme(initialTheme);
+    const previousTheme = document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = "dark";
 
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-      const current = localStorage.getItem(themeStorageKey);
-      if (!current || current === "system") applyTheme("system");
+    return () => {
+      document.documentElement.dataset.theme = previousTheme || resolveStoredTheme();
     };
-    media.addEventListener("change", handleChange);
-    return () => media.removeEventListener("change", handleChange);
   }, []);
 
   useEffect(() => {
@@ -127,12 +110,6 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, [router, pathname]);
-
-  const updateTheme = (nextTheme: ThemeMode) => {
-    setTheme(nextTheme);
-    localStorage.setItem(themeStorageKey, nextTheme);
-    applyTheme(nextTheme);
-  };
 
   if (!ready) return null;
 
@@ -261,7 +238,6 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Theme at bottom */}
         <div
           style={{
             padding: "14px 16px",
@@ -278,10 +254,8 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
               color: "var(--crm-muted)",
             }}
           >
-            Theme
-            <select
-              value={theme}
-              onChange={(event) => updateTheme(event.target.value as ThemeMode)}
+            <span>Theme</span>
+            <span
               style={{
                 flex: 1,
                 height: 32,
@@ -291,13 +265,13 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                 color: "var(--crm-text)",
                 fontSize: 12,
                 fontWeight: 700,
-                padding: "0 6px",
+                padding: "0 10px",
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+              Dark
+            </span>
           </label>
         </div>
       </aside>
@@ -365,9 +339,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
               )}
               ACE CRM
             </Link>
-            <select
-              value={theme}
-              onChange={(event) => updateTheme(event.target.value as ThemeMode)}
+            <div
               style={{
                 height: 30,
                 borderRadius: 8,
@@ -376,13 +348,13 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                 color: "var(--crm-text)",
                 fontSize: 12,
                 fontWeight: 700,
-                padding: "0 6px",
+                padding: "0 10px",
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+              Dark
+            </div>
           </div>
           <div
             style={{

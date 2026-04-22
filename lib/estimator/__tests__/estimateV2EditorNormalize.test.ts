@@ -8,7 +8,7 @@ import {
   normalizeRoom,
   normalizeScope,
   resolveRoomModeById,
-} from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorNormalize.ts'
+} from '../../../app/crm/quotes/[id]/_lib/estimateV2EditorNormalize.ts'
 
 test('createDefaultRoom assigns the next sequential room code', () => {
   const room = createDefaultRoom([

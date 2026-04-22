@@ -6,16 +6,16 @@ const {
   mockSaveCompanyProfileSettings,
   mockLoadQuoteSendDefaults,
   mockSaveQuoteSendDefaults,
-  mockLoadEstimateDefaults,
-  mockSaveEstimateDefaults,
+  mockLoadQuoteDefaults,
+  mockSaveQuoteDefaults,
 } = vi.hoisted(() => ({
   mockServerGetSessionUserOrg: vi.fn(),
   mockLoadCompanyProfileSettings: vi.fn(),
   mockSaveCompanyProfileSettings: vi.fn(),
   mockLoadQuoteSendDefaults: vi.fn(),
   mockSaveQuoteSendDefaults: vi.fn(),
-  mockLoadEstimateDefaults: vi.fn(),
-  mockSaveEstimateDefaults: vi.fn(),
+  mockLoadQuoteDefaults: vi.fn(),
+  mockSaveQuoteDefaults: vi.fn(),
 }))
 
 vi.mock('@/lib/server/org', () => ({
@@ -32,9 +32,9 @@ vi.mock('@/lib/server/settings/quoteSendDefaultsStore', () => ({
   saveQuoteSendDefaults: mockSaveQuoteSendDefaults,
 }))
 
-vi.mock('@/lib/server/settings/estimateDefaultsStore', () => ({
-  loadEstimateDefaults: mockLoadEstimateDefaults,
-  saveEstimateDefaults: mockSaveEstimateDefaults,
+vi.mock('@/lib/server/settings/quoteDefaultsStore', () => ({
+  loadQuoteDefaults: mockLoadQuoteDefaults,
+  saveQuoteDefaults: mockSaveQuoteDefaults,
 }))
 
 vi.mock('@/lib/settings/companyProfile', async () => {
@@ -51,15 +51,15 @@ vi.mock('@/lib/settings/quoteSendDefaults', async () => {
   }
 })
 
-vi.mock('@/lib/settings/estimateDefaults', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/settings/estimateDefaults')>('@/lib/settings/estimateDefaults')
+vi.mock('@/lib/settings/quoteDefaults', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/settings/quoteDefaults')>('@/lib/settings/quoteDefaults')
   return {
     ...actual,
   }
 })
 
 import { GET as getCompanyRoute, PUT as putCompanyRoute } from '../company/route'
-import { GET as getEstimateDefaultsRoute, PUT as putEstimateDefaultsRoute } from '../estimate-defaults/route'
+import { GET as getQuoteDefaultsRoute, PUT as putQuoteDefaultsRoute } from '../quote-defaults/route'
 import { GET as getQuoteSendDefaultsRoute, PUT as putQuoteSendDefaultsRoute } from '../quote-send-defaults/route'
 
 function jsonRequest(method: string, body: unknown) {
@@ -77,8 +77,8 @@ describe('settings routes', () => {
     mockSaveCompanyProfileSettings.mockReset()
     mockLoadQuoteSendDefaults.mockReset()
     mockSaveQuoteSendDefaults.mockReset()
-    mockLoadEstimateDefaults.mockReset()
-    mockSaveEstimateDefaults.mockReset()
+    mockLoadQuoteDefaults.mockReset()
+    mockSaveQuoteDefaults.mockReset()
     mockServerGetSessionUserOrg.mockResolvedValue({ orgId: 'org-1', userId: 'user-1' })
   })
 
@@ -98,7 +98,7 @@ describe('settings routes', () => {
       quote_validity_days: 90,
       terms_text: 'Terms',
     })
-    mockLoadEstimateDefaults.mockResolvedValue({
+    mockLoadQuoteDefaults.mockResolvedValue({
       walls_paint_id: null,
       walls_primer_id: null,
       ceiling_paint_id: null,
@@ -114,7 +114,7 @@ describe('settings routes', () => {
     await expect((await getQuoteSendDefaultsRoute()).json()).resolves.toEqual({
       data: expect.objectContaining({ default_template_key: 'default' }),
     })
-    await expect((await getEstimateDefaultsRoute()).json()).resolves.toEqual({
+    await expect((await getQuoteDefaultsRoute()).json()).resolves.toEqual({
       data: expect.objectContaining({ override_labor_rate: 65 }),
     })
   })
@@ -135,7 +135,7 @@ describe('settings routes', () => {
       quote_validity_days: 30,
       terms_text: 'Terms',
     })
-    mockSaveEstimateDefaults.mockResolvedValue({
+    mockSaveQuoteDefaults.mockResolvedValue({
       walls_paint_id: 'paint-1',
       walls_primer_id: null,
       ceiling_paint_id: null,
@@ -168,7 +168,7 @@ describe('settings routes', () => {
         },
       })
     )
-    const estimateResponse = await putEstimateDefaultsRoute(
+    const quoteDefaultsResponse = await putQuoteDefaultsRoute(
       jsonRequest('PUT', {
         data: {
           walls_paint_id: 'paint-1',
@@ -190,9 +190,9 @@ describe('settings routes', () => {
       data: expect.objectContaining({ quote_validity_days: 30 }),
       notice: 'Quote send defaults saved.',
     })
-    await expect(estimateResponse.json()).resolves.toEqual({
+    await expect(quoteDefaultsResponse.json()).resolves.toEqual({
       data: expect.objectContaining({ walls_paint_id: 'paint-1' }),
-      notice: 'Estimate defaults saved.',
+      notice: 'Quote defaults saved.',
     })
   })
 
@@ -213,8 +213,8 @@ describe('settings routes', () => {
       })
     )
 
-    const oversizedResponse = await putEstimateDefaultsRoute(
-      new Request('http://localhost/estimate-defaults', {
+    const oversizedResponse = await putQuoteDefaultsRoute(
+      new Request('http://localhost/quote-defaults', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -232,7 +232,7 @@ describe('settings routes', () => {
     await expect(oversizedResponse.json()).resolves.toEqual({ error: 'Request body too large.' })
     expect(mockSaveCompanyProfileSettings).not.toHaveBeenCalled()
     expect(mockSaveQuoteSendDefaults).not.toHaveBeenCalled()
-    expect(mockSaveEstimateDefaults).not.toHaveBeenCalled()
+    expect(mockSaveQuoteDefaults).not.toHaveBeenCalled()
   })
 
   it('returns 400 for invalid settings payloads', async () => {
@@ -255,7 +255,7 @@ describe('settings routes', () => {
       })
     )
 
-    const estimateResponse = await putEstimateDefaultsRoute(
+    const quoteDefaultsResponse = await putQuoteDefaultsRoute(
       jsonRequest('PUT', {
         data: {
           walls_paint_id: null,
@@ -271,10 +271,10 @@ describe('settings routes', () => {
 
     expect(companyResponse.status).toBe(400)
     expect(quoteResponse.status).toBe(400)
-    expect(estimateResponse.status).toBe(400)
+    expect(quoteDefaultsResponse.status).toBe(400)
     await expect(companyResponse.json()).resolves.toEqual({ error: 'Business name is required.' })
     await expect(quoteResponse.json()).resolves.toEqual({ error: 'Default template preset is invalid.' })
-    await expect(estimateResponse.json()).resolves.toEqual({ error: 'Labor rate must be between 0 and 10000.' })
+    await expect(quoteDefaultsResponse.json()).resolves.toEqual({ error: 'Labor rate must be between 0 and 10000.' })
   })
 
   it('maps auth failures through the shared session guard', async () => {

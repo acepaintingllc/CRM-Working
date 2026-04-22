@@ -12,16 +12,16 @@ type SettingsNavTileProps = {
 export function SettingsNavTile(props: SettingsNavTileProps) {
   const content = (
     <>
-      <div className="inline-flex items-center gap-2 text-base font-extrabold text-slate-950">
+      <div className="inline-flex items-center gap-2 text-base font-extrabold text-[color:var(--crm-ui-text)]">
         <props.Icon size={18} aria-hidden="true" />
         <span>{props.title}</span>
       </div>
-      <div className="mt-2 text-sm leading-6 text-slate-600">{props.description}</div>
+      <div className="mt-2 text-sm leading-6 text-[color:var(--crm-ui-muted)]">{props.description}</div>
     </>
   )
 
   const className =
-    'block rounded-xl border border-slate-200 bg-white p-4 no-underline shadow-sm transition hover:border-slate-300 hover:bg-slate-50'
+    'ace-crm-surface block rounded-[var(--crm-ui-radius-sm)] p-4 no-underline transition hover:-translate-y-0.5 hover:border-[color:var(--crm-ui-accent-border)] hover:bg-[color:var(--crm-ui-surface-strong)]'
 
   if (!props.href || props.planned) {
     return (
