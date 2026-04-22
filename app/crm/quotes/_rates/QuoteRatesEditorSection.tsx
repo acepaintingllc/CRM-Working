@@ -3,6 +3,7 @@
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
 import { CrmField } from '@/app/crm/_components/CrmField'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useQuoteRatesPage } from '@/app/crm/quotes/_hooks/useQuoteRatesPage'
 
@@ -36,7 +37,7 @@ export function QuoteRatesEditorSection({
             type="button"
             tone="primary"
             onClick={() => void controller.actions.saveCurrent()}
-            disabled={!controller.editorVm.activeCategory || controller.editorVm.saving}
+            disabled={!controller.editorVm.canSave}
           >
             {controller.editorVm.saving
               ? 'Saving...'
@@ -54,6 +55,11 @@ export function QuoteRatesEditorSection({
         <CrmEmptyState title="No active category" description="Select a tab and category." />
       ) : (
         <div className="grid gap-4">
+          {controller.editorVm.inlineValidation ? (
+            <CrmNotice tone="info" compact>
+              {controller.editorVm.inlineValidation}
+            </CrmNotice>
+          ) : null}
           <CrmField label="Status">
             <select
               className="ace-crm-input text-sm"
@@ -74,13 +80,8 @@ export function QuoteRatesEditorSection({
                 <select
                   className="ace-crm-input text-sm"
                   disabled={field.readOnly}
-                  value={controller.editorVm.draft[field.key] ?? ''}
-                  onChange={(event) =>
-                    controller.actions.setDraft((current) => ({
-                      ...current,
-                      [field.key]: event.target.value,
-                    }))
-                  }
+                  value={controller.editorVm.formatDraftValue(field.key)}
+                  onChange={(event) => controller.actions.updateDraftValue(field.key, event.target.value)}
                 >
                   {(field.options ?? ['']).map((option) => (
                     <option key={option || 'blank'} value={option}>
@@ -93,13 +94,8 @@ export function QuoteRatesEditorSection({
                   className="ace-crm-input text-sm"
                   type={field.type === 'number' ? 'number' : 'text'}
                   readOnly={field.readOnly}
-                  value={controller.editorVm.draft[field.key] ?? ''}
-                  onChange={(event) =>
-                    controller.actions.setDraft((current) => ({
-                      ...current,
-                      [field.key]: event.target.value,
-                    }))
-                  }
+                  value={controller.editorVm.formatDraftValue(field.key)}
+                  onChange={(event) => controller.actions.updateDraftValue(field.key, event.target.value)}
                 />
               )}
             </CrmField>

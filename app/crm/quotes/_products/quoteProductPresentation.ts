@@ -1,13 +1,4 @@
-import type { QuoteProductRow } from '@/lib/quotes/productsForm'
-
-export const QUOTE_PRODUCT_SCOPE_OPTIONS = [
-  'Walls',
-  'Ceilings',
-  'Trim',
-  'Doors',
-  'Cabinetry',
-  'Other',
-] as const
+import { type QuoteProductRow } from '@/lib/quotes/productsForm'
 
 export function formatQuoteProductMeta(product: QuoteProductRow) {
   return `${product.base ?? 'N/A'} / ${product.subtype ?? 'N/A'}`

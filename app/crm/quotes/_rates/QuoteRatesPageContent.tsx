@@ -12,6 +12,9 @@ import { QuoteRatesTableSection } from './QuoteRatesTableSection'
 
 export function QuoteRatesPageContent() {
   const controller = useQuoteRatesPage()
+  const handleRetry = controller.uiState.canRetry
+    ? () => void controller.actions.reload(controller.selectedId || undefined)
+    : null
 
   return (
     <>
@@ -34,6 +37,7 @@ export function QuoteRatesPageContent() {
             </select>
             <CrmButton
               type="button"
+              disabled={!controller.uiState.canRetry}
               onClick={() => void controller.actions.reload(controller.selectedId || undefined)}
             >
               Refresh
@@ -43,17 +47,18 @@ export function QuoteRatesPageContent() {
       />
 
       <CrmResourceState
-        loading={controller.feedbackVm.loading}
-        error={controller.resource.error}
-        hasData={controller.feedbackVm.hasData}
+        loading={controller.uiState.loading}
+        error={controller.uiState.loadError}
+        hasData={controller.uiState.hasData}
         loadingTitle="Loading rates and flags"
         loadingDescription="Loading rates and flags..."
         errorTitle="Rates and flags unavailable"
-        onRetry={() => void controller.actions.reload(controller.selectedId || undefined)}
+        onRetry={handleRetry}
       >
-        {controller.feedbackVm.notice ? <CrmNotice tone="success">{controller.feedbackVm.notice}</CrmNotice> : null}
-        {controller.error && !controller.resource.error ? (
-          <CrmNotice tone="error">{controller.error}</CrmNotice>
+        {controller.uiState.pageBanner ? (
+          <CrmNotice tone={controller.uiState.pageBanner.tone}>
+            {controller.uiState.pageBanner.message}
+          </CrmNotice>
         ) : null}
 
         <CrmDetailLayout

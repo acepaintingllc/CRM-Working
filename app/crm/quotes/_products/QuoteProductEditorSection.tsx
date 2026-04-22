@@ -6,8 +6,12 @@ import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useQuoteProductsPage } from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
-import type { ProductFamily } from '@/lib/quotes/productsForm'
-import { QUOTE_PRODUCT_SCOPE_OPTIONS } from './quoteProductPresentation'
+import {
+  QUOTE_PRODUCT_FAMILIES,
+  QUOTE_PRODUCT_SCOPE_OPTIONS,
+  QUOTE_PRODUCT_SHEEN_OPTIONS,
+  QUOTE_PRODUCT_STATUSES,
+} from '@/lib/quotes/productsForm'
 
 type QuoteProductsController = ReturnType<typeof useQuoteProductsPage>
 
@@ -16,24 +20,25 @@ export function QuoteProductEditorSection({
 }: {
   controller: QuoteProductsController
 }) {
-  function setFormField<K extends keyof typeof controller.formState>(
+  function setDraftField<K extends keyof typeof controller.draft>(
     field: K,
-    value: (typeof controller.formState)[K]
+    value: (typeof controller.draft)[K]
   ) {
-    controller.actions.setFormState((current) => ({ ...current, [field]: value }))
+    controller.actions.updateDraftField(field, value)
   }
+
+  const fieldErrors = controller.editorVm.validation.fields
 
   return (
     <CrmSectionCard
       title={controller.selected ? controller.selected.name : 'Product editor'}
-      
       description="This remains a dense admin editor, but it now uses the shared CRM shell and resource states."
       actions={
         <div className="flex flex-wrap gap-2">
           <CrmButton
             type="button"
             tone="primary"
-            disabled={!controller.editorVm.selected || controller.editorVm.saving || Boolean(controller.editorVm.validationError)}
+            disabled={!controller.editorVm.canSave}
             onClick={() => void controller.actions.save()}
           >
             {controller.editorVm.saving ? 'Saving...' : 'Save changes'}
@@ -41,7 +46,7 @@ export function QuoteProductEditorSection({
           <CrmButton
             type="button"
             tone="danger"
-            disabled={!controller.editorVm.selected || controller.editorVm.saving}
+            disabled={!controller.editorVm.canDelete}
             onClick={() => void controller.actions.remove()}
           >
             Delete
@@ -56,128 +61,138 @@ export function QuoteProductEditorSection({
         />
       ) : (
         <div className="grid gap-4">
-          {controller.editorVm.validationError ? (
+          {controller.editorVm.inlineValidation ? (
             <CrmNotice tone="info" compact>
-              {controller.editorVm.validationError}
+              {controller.editorVm.inlineValidation}
             </CrmNotice>
           ) : null}
 
-          <CrmField label="Product name">
+          <CrmField label="Product name" error={fieldErrors.name}>
             <input
+              aria-label="Product name"
               className="ace-crm-input text-sm"
-              value={controller.formState.name ?? ''}
-              onChange={(event) => setFormField('name', event.target.value)}
-            />
-          </CrmField>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <CrmField label="Family">
-              <select
-                className="ace-crm-input text-sm"
-                value={controller.formState.family ?? 'Paint'}
-                onChange={(event) =>
-                  setFormField('family', event.target.value as ProductFamily)
-                }
-              >
-                <option value="Paint">Paint</option>
-                <option value="Primer">Primer</option>
-              </select>
-            </CrmField>
-            <CrmField label="Base">
-              <input
-                className="ace-crm-input text-sm"
-                value={controller.formState.base ?? ''}
-                onChange={(event) => setFormField('base', event.target.value)}
-              />
-            </CrmField>
-          </div>
-
-          <CrmField label="Subtype">
-            <input
-              className="ace-crm-input text-sm"
-              value={controller.formState.subtype ?? ''}
-              onChange={(event) => setFormField('subtype', event.target.value)}
+              value={controller.draft.name}
+              onChange={(event) => setDraftField('name', event.target.value)}
             />
           </CrmField>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <CrmField label="Cost / unit">
+            <CrmField label="Family" error={fieldErrors.family}>
+              <select
+                aria-label="Family"
+                className="ace-crm-input text-sm"
+                value={controller.draft.family}
+                onChange={(event) => setDraftField('family', event.target.value)}
+              >
+                {QUOTE_PRODUCT_FAMILIES.map((family) => (
+                  <option key={family} value={family}>
+                    {family}
+                  </option>
+                ))}
+              </select>
+            </CrmField>
+            <CrmField label="Base" error={fieldErrors.base}>
               <input
+                aria-label="Base"
+                className="ace-crm-input text-sm"
+                value={controller.draft.base}
+                onChange={(event) => setDraftField('base', event.target.value)}
+              />
+            </CrmField>
+            <CrmField label="Status" error={fieldErrors.status}>
+              <select
+                aria-label="Status"
+                className="ace-crm-input text-sm"
+                value={controller.draft.status}
+                onChange={(event) => setDraftField('status', event.target.value)}
+              >
+                {QUOTE_PRODUCT_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </CrmField>
+          </div>
+
+          <CrmField label="Subtype" error={fieldErrors.subtype}>
+            <input
+              aria-label="Subtype"
+              className="ace-crm-input text-sm"
+              value={controller.draft.subtype}
+              onChange={(event) => setDraftField('subtype', event.target.value)}
+            />
+          </CrmField>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <CrmField label="Cost / unit" error={fieldErrors.cost_per_unit}>
+              <input
+                aria-label="Cost / unit"
                 className="ace-crm-input text-sm"
                 type="number"
                 step="0.01"
-                value={controller.formState.cost_per_unit ?? ''}
+                value={controller.draft.cost_per_unit}
+                onChange={(event) => setDraftField('cost_per_unit', event.target.value)}
+              />
+            </CrmField>
+            <CrmField
+              label="Coverage (sqft)"
+              error={fieldErrors.coverage_sqft_per_gal_per_coat}
+            >
+              <input
+                aria-label="Coverage (sqft)"
+                className="ace-crm-input text-sm"
+                type="number"
+                step="0.01"
+                value={controller.draft.coverage_sqft_per_gal_per_coat}
                 onChange={(event) =>
-                  setFormField(
-                    'cost_per_unit',
-                    event.target.value ? Number(event.target.value) : null
-                  )
+                  setDraftField('coverage_sqft_per_gal_per_coat', event.target.value)
                 }
               />
             </CrmField>
-            <CrmField label="Coverage (sqft)">
+            <CrmField label="Efficiency (%)" error={fieldErrors.efficiency_pct}>
               <input
+                aria-label="Efficiency (%)"
                 className="ace-crm-input text-sm"
                 type="number"
                 step="0.01"
-                value={controller.formState.coverage_sqft_per_gal_per_coat ?? ''}
-                onChange={(event) =>
-                  setFormField(
-                    'coverage_sqft_per_gal_per_coat',
-                    event.target.value ? Number(event.target.value) : null
-                  )
-                }
-              />
-            </CrmField>
-            <CrmField label="Efficiency (%)">
-              <input
-                className="ace-crm-input text-sm"
-                type="number"
-                step="0.01"
-                value={controller.formState.efficiency_pct ?? ''}
-                onChange={(event) =>
-                  setFormField(
-                    'efficiency_pct',
-                    event.target.value ? Number(event.target.value) : null
-                  )
-                }
+                value={controller.draft.efficiency_pct}
+                onChange={(event) => setDraftField('efficiency_pct', event.target.value)}
               />
             </CrmField>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <CrmField label="Default coats">
+            <CrmField label="Default coats" error={fieldErrors.default_coats}>
               <input
+                aria-label="Default coats"
                 className="ace-crm-input text-sm"
                 type="number"
-                value={controller.formState.default_coats ?? ''}
-                onChange={(event) =>
-                  setFormField(
-                    'default_coats',
-                    event.target.value ? Number(event.target.value) : null
-                  )
-                }
+                step="1"
+                value={controller.draft.default_coats}
+                onChange={(event) => setDraftField('default_coats', event.target.value)}
               />
             </CrmField>
-            <CrmField label="Default sheen">
+            <CrmField label="Default sheen" error={fieldErrors.default_sheen}>
               <select
+                aria-label="Default sheen"
                 className="ace-crm-input text-sm"
-                value={controller.formState.default_sheen ?? 'N/A'}
-                onChange={(event) => setFormField('default_sheen', event.target.value)}
+                value={controller.draft.default_sheen}
+                onChange={(event) => setDraftField('default_sheen', event.target.value)}
               >
-                <option value="Eggshell">Eggshell</option>
-                <option value="Satin">Satin</option>
-                <option value="Flat">Flat</option>
-                <option value="Semi-Gloss">Semi-Gloss</option>
-                <option value="N/A">N/A</option>
+                {QUOTE_PRODUCT_SHEEN_OPTIONS.map((sheen) => (
+                  <option key={sheen} value={sheen}>
+                    {sheen}
+                  </option>
+                ))}
               </select>
             </CrmField>
           </div>
 
-          <CrmField label="Applies to">
+          <CrmField label="Applies to" error={fieldErrors.default_scopes}>
             <div className="grid gap-2 sm:grid-cols-2">
               {QUOTE_PRODUCT_SCOPE_OPTIONS.map((scope) => {
-                const currentScopes = controller.formState.default_scopes ?? []
+                const currentScopes = controller.draft.default_scopes
                 const checked = currentScopes.includes(scope)
                 return (
                   <label
@@ -188,7 +203,7 @@ export function QuoteProductEditorSection({
                       type="checkbox"
                       checked={checked}
                       onChange={(event) =>
-                        setFormField(
+                        setDraftField(
                           'default_scopes',
                           event.target.checked
                             ? [...currentScopes, scope]
@@ -203,11 +218,12 @@ export function QuoteProductEditorSection({
             </div>
           </CrmField>
 
-          <CrmField label="Notes">
+          <CrmField label="Notes" error={fieldErrors.notes}>
             <textarea
+              aria-label="Notes"
               className="ace-crm-input min-h-[120px] resize-y text-sm"
-              value={controller.formState.notes ?? ''}
-              onChange={(event) => setFormField('notes', event.target.value)}
+              value={controller.draft.notes}
+              onChange={(event) => setDraftField('notes', event.target.value)}
             />
           </CrmField>
         </div>

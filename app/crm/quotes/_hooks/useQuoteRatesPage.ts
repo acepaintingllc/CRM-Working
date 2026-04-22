@@ -2,15 +2,23 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
 import { loadRatesFlags, mutateRatesFlags } from '@/lib/quotes/client'
 import {
-  buildRatesFlagsDraftFromRow,
+  createEmptyDraft,
+  draftToMutationValues,
+  formatDraftValue,
+  rowToDraft,
+  updateDraftField,
+  validateDraft,
+} from '@/lib/quotes/ratesFlagsDraftAdapters'
+import {
   categoryByKey,
-  getDefaultRatesFlagsDraft,
   valueFromRatesFlagsRow,
 } from '@/lib/quotes/ratesFlagsForm'
 import type {
   RatesFlagsCategoryKey,
+  RatesFlagsDraft,
   RatesFlagsMutationAction,
   RatesFlagsPayload,
   RatesFlagsTab,
@@ -95,10 +103,10 @@ export function useQuoteRatesPage() {
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string>('')
   const [isCreating, setIsCreating] = useState(false)
-  const [draft, setDraft] = useState<Record<string, string>>({})
+  const [draft, setDraft] = useState<RatesFlagsDraft>({})
   const [draftActive, setDraftActive] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const resource = useLoadableResource<RatesFlagsPayload>({
@@ -160,15 +168,26 @@ export function useQuoteRatesPage() {
 
   useEffect(() => {
     if (!activeCategory || isCreating || !selectedRow) return
-    setDraft(buildRatesFlagsDraftFromRow(activeCategory, selectedRow))
+    setDraft(rowToDraft(activeCategory, selectedRow))
     setDraftActive(selectedRow.active)
   }, [activeCategory, isCreating, selectedRow])
+
+  function updateDraftValue(fieldKey: string, rawInput: string) {
+    if (!activeCategory) return
+    setDraft((current) => updateDraftField(activeCategory, current, fieldKey, rawInput))
+  }
+
+  const validationResult = activeCategory ? validateDraft(activeCategory, draft) : null
+  const validationError = validationResult && !validationResult.ok ? validationResult.error : null
+  const hasData =
+    resource.data.categories.length > 0 || (!resource.loading && !resource.error)
 
   async function reload(keepId?: string) {
     const ok = await resource.refresh()
     if (ok && keepId) {
       setSelectedId(keepId)
     }
+    return ok
   }
 
   async function mutate(
@@ -179,7 +198,7 @@ export function useQuoteRatesPage() {
     if (!activeCategory) return false
     setSaving(true)
     setNotice(null)
-    setError(null)
+    setActionError(null)
     try {
       await mutateRatesFlags({
         category: activeCategory.key,
@@ -189,7 +208,7 @@ export function useQuoteRatesPage() {
       })
       return true
     } catch (mutationError) {
-      setError(
+      setActionError(
         mutationError instanceof Error ? mutationError.message : 'Failed to save changes.'
       )
       return false
@@ -200,17 +219,23 @@ export function useQuoteRatesPage() {
 
   async function saveCurrent() {
     if (!activeCategory) return
+    setActionError(null)
+    setNotice(null)
+    if (!validationResult?.ok) {
+      return
+    }
     const action: RatesFlagsMutationAction = isCreating ? 'create' : 'update'
     const ok = await mutate(
       action,
-      { ...draft, active: draftActive ? 'Y' : 'N' },
+      draftToMutationValues(activeCategory, draft, draftActive),
       isCreating ? undefined : selectedRow?.id
     )
     if (!ok) return
-    const keep = draft.id || selectedId
+    const keep = typeof draft.id === 'string' && draft.id ? draft.id : selectedId
     setIsCreating(false)
+    const reloaded = await reload(keep)
+    if (!reloaded) return
     setNotice(`${isCreating ? 'Created' : 'Saved'} ${activeCategory.label}.`)
-    await reload(keep)
   }
 
   async function archiveOrReactivate(nextActive: boolean) {
@@ -221,35 +246,36 @@ export function useQuoteRatesPage() {
       selectedRow.id
     )
     if (!ok) return
+    const reloaded = await reload(selectedRow.id)
+    if (!reloaded) return
     setNotice(nextActive ? 'Reactivated row.' : 'Archived row.')
-    await reload(selectedRow.id)
   }
 
   function startCreate() {
     if (!activeCategory) return
     setIsCreating(true)
     setSelectedId('')
-    setDraft(getDefaultRatesFlagsDraft(activeCategory))
+    setDraft(createEmptyDraft(activeCategory))
     setDraftActive(true)
     setNotice(null)
-    setError(null)
+    setActionError(null)
   }
 
   function startDuplicate() {
     if (!activeCategory || !selectedRow) return
-    const next = buildRatesFlagsDraftFromRow(activeCategory, selectedRow)
+    const next = rowToDraft(activeCategory, selectedRow)
     next.id = `${selectedRow.id}_COPY`
     setIsCreating(true)
     setSelectedId('')
     setDraft(next)
     setDraftActive(selectedRow.active)
     setNotice(null)
-    setError(null)
+    setActionError(null)
   }
 
   function cancelEdit() {
     if (selectedRow && activeCategory) {
-      setDraft(buildRatesFlagsDraftFromRow(activeCategory, selectedRow))
+      setDraft(rowToDraft(activeCategory, selectedRow))
       setDraftActive(selectedRow.active)
       setIsCreating(false)
       return
@@ -259,14 +285,19 @@ export function useQuoteRatesPage() {
     setIsCreating(false)
   }
 
-  const feedbackVm = {
+  const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
-    error: error ?? resource.error,
+    hasData,
+    loadError: resource.error,
+    actionError,
+    validationError,
     notice,
-    hasData:
-      resource.data.categories.length > 0 ||
-      (!resource.loading && !resource.error),
-  }
+    canRetry: !resource.loading,
+    canSave: Boolean(activeCategory) && !saving && !resource.error && Boolean(validationResult?.ok),
+    canArchiveToggle:
+      Boolean(selectedRow) && !isCreating && !saving && !resource.loading && !resource.error,
+    canDuplicate: Boolean(selectedRow) && !saving && !resource.loading && !resource.error,
+  })
 
   const filtersVm = {
     search,
@@ -284,6 +315,8 @@ export function useQuoteRatesPage() {
     selectedRow,
     selectedId,
     isCreating,
+    canDuplicate: uiState.canDuplicate,
+    canArchiveToggle: uiState.canArchiveToggle,
   }
 
   const editorVm = {
@@ -293,6 +326,11 @@ export function useQuoteRatesPage() {
     activeCategory,
     selectedRow,
     isCreating,
+    inlineValidation: uiState.inlineValidation,
+    canSave: uiState.canSave,
+    formatDraftValue: activeCategory
+      ? (fieldKey: string) => formatDraftValue(activeCategory, draft, fieldKey)
+      : () => '',
   }
 
   return {
@@ -315,12 +353,9 @@ export function useQuoteRatesPage() {
     setSelectedId,
     isCreating,
     draft,
-    setDraft,
     draftActive,
     setDraftActive,
     saving,
-    error: error ?? resource.error,
-    notice,
     activeCategory,
     filteredRows,
     selectedRow,
@@ -330,8 +365,9 @@ export function useQuoteRatesPage() {
     startCreate,
     startDuplicate,
     cancelEdit,
+    updateDraftValue,
     valueFromRow: valueFromRatesFlagsRow,
-    feedbackVm,
+    uiState,
     filtersVm,
     tableVm,
     editorVm,
@@ -344,7 +380,6 @@ export function useQuoteRatesPage() {
       setStatusFilter,
       setSearch,
       setSelectedId,
-      setDraft,
       setDraftActive,
       reload,
       saveCurrent,
@@ -352,6 +387,7 @@ export function useQuoteRatesPage() {
       startCreate,
       startDuplicate,
       cancelEdit,
+      updateDraftValue,
     },
   }
 }

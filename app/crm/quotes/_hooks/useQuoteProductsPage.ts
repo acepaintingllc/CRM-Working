@@ -2,29 +2,32 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
 import {
   deleteQuoteProduct,
   loadQuoteProducts,
   updateQuoteProduct,
 } from '@/lib/quotes/client'
 import {
-  quoteProductToFormValues,
-  validateQuoteProductFormValues,
+  QUOTE_PRODUCT_FAMILIES,
+  createEmptyQuoteProductDraft,
+  quoteProductRowToDraft,
+  validateQuoteProductDraft,
   type ProductFamily,
-  type QuoteProductFormValues,
+  type QuoteProductDraft,
+  type QuoteProductValidationState,
   type QuoteProductRow,
 } from '@/lib/quotes/productsForm'
 
-const PRODUCT_FAMILIES: ProductFamily[] = ['Paint', 'Primer']
 const emptyProductRows: QuoteProductRow[] = []
 
 export function useQuoteProductsPage() {
   const [activeFamily, setActiveFamily] = useState<ProductFamily>('Paint')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [formState, setFormState] = useState<QuoteProductFormValues>({})
+  const [draft, setDraft] = useState<QuoteProductDraft>(() => createEmptyQuoteProductDraft())
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const resource = useLoadableResource<QuoteProductRow[]>({
@@ -53,7 +56,7 @@ export function useQuoteProductsPage() {
   useEffect(() => {
     if (!selected && filtered.length === 0) {
       setSelectedId(null)
-      setFormState({})
+      setDraft(createEmptyQuoteProductDraft())
       return
     }
     if (selected) {
@@ -63,54 +66,70 @@ export function useQuoteProductsPage() {
 
   useEffect(() => {
     if (!selected) return
-    setFormState(quoteProductToFormValues(selected))
+    setDraft(quoteProductRowToDraft(selected))
   }, [selected])
 
-  const validation = validateQuoteProductFormValues(formState)
-  const validationError = validation.ok ? null : validation.error
-  const feedbackVm = {
+  const validationResult = validateQuoteProductDraft(draft)
+  const validation: QuoteProductValidationState = validationResult.validation
+  const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
-    error: resource.error,
-    mutationError: error,
+    hasData: resource.data.length > 0 || (!resource.loading && !resource.error),
+    loadError: resource.error,
+    actionError,
+    validationError: validation.ok ? null : validation.summary,
     notice,
-    hasData:
-      resource.data.length > 0 || (!resource.loading && !resource.error),
-  }
+    canRetry: !resource.loading,
+    canSave: Boolean(selected) && !saving && validation.ok && !resource.error,
+    canDelete: Boolean(selected) && !saving && !resource.error,
+  })
   const catalogVm = {
     activeFamily,
-    families: PRODUCT_FAMILIES,
+    families: QUOTE_PRODUCT_FAMILIES,
     search,
     filtered,
     selectedId,
     selected,
   }
   const editorVm = {
-    formState,
+    draft: validationResult.draft,
     selected,
     saving,
-    validationError: error ? null : validationError,
+    validation,
+    inlineValidation: uiState.inlineValidation,
+    canSave: uiState.canSave,
+    canDelete: uiState.canDelete,
+  }
+
+  function updateDraftField<K extends keyof QuoteProductDraft>(
+    field: K,
+    value: QuoteProductDraft[K]
+  ) {
+    setDraft((current) => ({
+      ...current,
+      [field]: value,
+    }))
   }
 
   async function save() {
     if (!selected) return false
-    setError(null)
+    setActionError(null)
     setNotice(null)
-    const validated = validateQuoteProductFormValues(formState)
+    const validated = validateQuoteProductDraft(draft)
+    setDraft(validated.draft)
     if (!validated.ok) {
-      setError(validated.error)
       return false
     }
 
     setSaving(true)
     try {
-      const updated = await updateQuoteProduct<QuoteProductRow>(selected.id, validated.value)
+      const updated = await updateQuoteProduct<QuoteProductRow>(selected.id, validated.payload)
       resource.setData((current) =>
         current.map((product) => (product.id === selected.id ? updated.data : product))
       )
       setNotice(updated.notice ?? 'Product saved.')
       return true
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to save product.')
+      setActionError(saveError instanceof Error ? saveError.message : 'Failed to save product.')
       return false
     } finally {
       setSaving(false)
@@ -122,7 +141,7 @@ export function useQuoteProductsPage() {
     const ok = window.confirm(`Delete "${selected.name}"?`)
     if (!ok) return false
     setSaving(true)
-    setError(null)
+    setActionError(null)
     setNotice(null)
     try {
       await deleteQuoteProduct(selected.id)
@@ -131,7 +150,9 @@ export function useQuoteProductsPage() {
       setNotice('Product deleted.')
       return true
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete product.')
+      setActionError(
+        deleteError instanceof Error ? deleteError.message : 'Failed to delete product.'
+      )
       return false
     } finally {
       setSaving(false)
@@ -142,29 +163,26 @@ export function useQuoteProductsPage() {
     resource,
     activeFamily,
     setActiveFamily,
-    families: PRODUCT_FAMILIES,
+    families: QUOTE_PRODUCT_FAMILIES,
     search,
     setSearch,
     filtered,
     selected,
     selectedId,
     setSelectedId,
-    formState,
-    setFormState,
+    draft: validationResult.draft,
     saving,
-    error,
-    notice,
-    validationError: error ? null : validationError,
+    validation,
     save,
     remove,
-    feedbackVm,
+    uiState,
     catalogVm,
     editorVm,
     actions: {
       setActiveFamily,
       setSearch,
       setSelectedId,
-      setFormState,
+      updateDraftField,
       save,
       remove,
     },

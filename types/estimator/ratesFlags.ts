@@ -194,3 +194,17 @@ export type RatesFlagsMutationRequest = {
   original_id?: string
   values: Record<string, unknown>
 }
+
+export type RatesFlagsDraftValue = string | number | boolean | null
+
+export type RatesFlagsDraft = Record<string, RatesFlagsDraftValue>
+
+export type RatesFlagsDraftValidationResult =
+  | {
+      ok: true
+    }
+  | {
+      ok: false
+      error: string
+      fieldKey?: string
+    }
