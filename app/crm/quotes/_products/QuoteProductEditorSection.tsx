@@ -31,8 +31,18 @@ export function QuoteProductEditorSection({
 
   return (
     <CrmSectionCard
-      title={controller.selected ? controller.selected.name : 'Product editor'}
-      description="This remains a dense admin editor, but it now uses the shared CRM shell and resource states."
+      title={
+        controller.editorVm.isCreating
+          ? 'New product'
+          : controller.selected
+            ? controller.selected.name
+            : 'Product editor'
+      }
+      description={
+        controller.editorVm.isCreating
+          ? 'Create a new quote product row with explicit family, status, and estimator defaults.'
+          : 'Dense admin editor for catalog defaults, pricing, and lifecycle status.'
+      }
       actions={
         <div className="flex flex-wrap gap-2">
           <CrmButton
@@ -41,7 +51,16 @@ export function QuoteProductEditorSection({
             disabled={!controller.editorVm.canSave}
             onClick={() => void controller.actions.save()}
           >
-            {controller.editorVm.saving ? 'Saving...' : 'Save changes'}
+            {controller.editorVm.saving
+              ? controller.editorVm.isCreating
+                ? 'Creating...'
+                : 'Saving...'
+              : controller.editorVm.isCreating
+                ? 'Create product'
+                : 'Save changes'}
+          </CrmButton>
+          <CrmButton type="button" onClick={controller.actions.cancelEdit}>
+            {controller.editorVm.isCreating ? 'Cancel create' : 'Reset'}
           </CrmButton>
           <CrmButton
             type="button"
@@ -54,7 +73,7 @@ export function QuoteProductEditorSection({
         </div>
       }
     >
-      {!controller.editorVm.selected ? (
+      {!controller.editorVm.selected && !controller.editorVm.isCreating ? (
         <CrmEmptyState
           title="Select a product"
           description="Choose a product row from the list to edit it."

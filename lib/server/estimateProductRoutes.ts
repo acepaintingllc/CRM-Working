@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import {
   createEmptyQuoteProductDraft,
+  normalizeQuoteProductStatusFilter,
   quoteProductPatchToDraft,
   quoteProductRowToDraft,
   validateQuoteProductDraft,
+  type QuoteProductStatusFilter,
   type QuoteProductRow,
 } from '@/lib/quotes/productsForm'
 import {
@@ -52,17 +54,30 @@ function validationErrorResponse(validation: {
   )
 }
 
-export async function handleEstimateProductsRouteGet() {
+export async function handleEstimateProductsRouteGet(request?: Request) {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
+  const requestedStatus = request
+    ? normalizeQuoteProductStatusFilter(new URL(request.url).searchParams.get('status'), 'active')
+    : ('active' as QuoteProductStatusFilter)
+
   try {
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('v2_products')
       .select('*')
       .eq('org_id', auth.session.orgId)
-      .eq('status', 'Active')
-      .order('created_at', { ascending: false })
+
+    if (requestedStatus !== 'all') {
+      const statusMap = {
+        active: 'Active',
+        inactive: 'Inactive',
+        archived: 'Archived',
+      } as const
+      query = query.eq('status', statusMap[requestedStatus])
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false })
 
     if (error) return jsonError(error.message, 400)
 

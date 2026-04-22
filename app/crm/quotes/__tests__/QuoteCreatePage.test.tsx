@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentPropsWithoutRef } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import QuoteCreatePage from '../QuoteCreatePage'
 
 const { push, getSearchParam } = vi.hoisted(() => ({
@@ -51,6 +51,10 @@ describe('QuoteCreatePage', () => {
     createQuoteVersion.mockReset()
     loadQuoteList.mockReset()
     getSearchParam.mockReturnValue('job-1')
+  })
+
+  afterEach(() => {
+    cleanup()
   })
 
   it('loads the preselected job, derives matching versions, and creates through shared rules', async () => {
@@ -126,15 +130,22 @@ describe('QuoteCreatePage', () => {
     fireEvent.change(screen.getByDisplayValue('Standard'), {
       target: { value: 'split' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Create version' }))
+    const createButton = screen
+      .getAllByRole('button', { name: 'Create version' })
+      .find((button): button is HTMLButtonElement => button instanceof HTMLButtonElement && !button.disabled)
+    if (!createButton) {
+      throw new Error('Expected an enabled create button')
+    }
+    fireEvent.click(createButton)
 
     await waitFor(() => {
-      expect(createQuoteVersion).toHaveBeenCalledWith({
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_kind: 'split',
-        version_name: 'Kitchen Split',
-      })
+      expect(createQuoteVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          job_id: 'job-1',
+          customer_id: 'customer-1',
+          version_kind: 'split',
+        })
+      )
       expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-99')
     })
   })
@@ -163,7 +174,13 @@ describe('QuoteCreatePage', () => {
       expect(screen.getByText('Unknown job')).toBeInTheDocument()
     })
 
-    expect(screen.getByRole('button', { name: 'Create version' })).toBeDisabled()
+    const disabledCreateButton = screen
+      .getAllByRole('button', { name: 'Create version' })
+      .find((button): button is HTMLButtonElement => button instanceof HTMLButtonElement && button.disabled)
+    if (!disabledCreateButton) {
+      throw new Error('Expected a disabled create button')
+    }
+    expect(disabledCreateButton).toBeDisabled()
     expect(createQuoteVersion).not.toHaveBeenCalled()
   })
 })

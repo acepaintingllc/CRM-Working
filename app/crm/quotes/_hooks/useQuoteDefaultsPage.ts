@@ -30,7 +30,7 @@ export function useQuoteDefaultsPage() {
     initialData: emptyResource,
     load: async () => {
       const [products, settings] = await Promise.all([
-        loadQuoteProducts<ProductRow[]>(),
+        loadQuoteProducts<ProductRow[]>({ status: 'active' }),
         loadQuoteDefaults(),
       ])
 

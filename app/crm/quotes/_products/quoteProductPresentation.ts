@@ -1,7 +1,7 @@
 import { type QuoteProductRow } from '@/lib/quotes/productsForm'
 
 export function formatQuoteProductMeta(product: QuoteProductRow) {
-  return `${product.base ?? 'N/A'} / ${product.subtype ?? 'N/A'}`
+  return `${product.base ?? 'N/A'} / ${product.subtype ?? 'N/A'} / ${product.status}`
 }
 
 export function formatQuoteProductStats(product: QuoteProductRow) {
