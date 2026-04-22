@@ -79,11 +79,33 @@ export function useQuoteDefaultsPage() {
   const validation = validateQuoteDefaults(resource.data.settings)
   const validationError = validation.ok ? null : validation.error
   const canSave = resource.hasLoaded && resource.dirty && !resource.saving && !validationError
+  const feedbackVm = {
+    error: resource.error,
+    notice: resource.notice,
+    loading: resource.loading,
+    hasLoaded: resource.hasLoaded,
+    saving: resource.saving,
+  }
+  const formVm = {
+    settings: resource.data.settings,
+    productDefaultFields,
+    validationError: resource.error ? null : validationError,
+    canSave,
+  }
+  const actions = {
+    reload: () => resource.reload(),
+    save: () => resource.saveChanges(),
+    setSettings: (next: QuoteDefaults) =>
+      resource.setData((current) => ({ ...current, settings: next })),
+  }
 
   return {
     resource,
     productDefaultFields,
     validationError: resource.error ? null : validationError,
     canSave,
+    feedbackVm,
+    formVm,
+    actions,
   }
 }

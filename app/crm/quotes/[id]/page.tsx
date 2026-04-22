@@ -1,16 +1,15 @@
-'use client'
+import { EstimateV2ErrorBoundary } from '@/app/crm/estimates/[id]/v2/_components/EstimateV2ErrorBoundary'
+import { EstimateV2EditorPageContent } from '@/app/crm/estimates/[id]/v2/_components/EstimateV2EditorPageContent'
 
-import { useParams } from 'next/navigation'
-import { EstimateV2ErrorBoundary } from './_components/EstimateV2ErrorBoundary'
-import { EstimateV2EditorPageContent } from './_components/EstimateV2EditorPageContent'
-
-export default function QuoteWorkspacePage() {
-  const params = useParams<{ id: string }>()
-  const quoteId = Array.isArray(params?.id) ? params.id[0] : params?.id
-
+export default async function QuoteWorkspacePage({
+  params,
+}: {
+  params: Promise<{ id: string }> | { id: string }
+}) {
+  const resolved = await Promise.resolve(params)
   return (
     <EstimateV2ErrorBoundary>
-      <EstimateV2EditorPageContent estimateId={quoteId} />
+      <EstimateV2EditorPageContent estimateId={resolved.id} />
     </EstimateV2ErrorBoundary>
   )
 }

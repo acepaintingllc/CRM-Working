@@ -259,6 +259,42 @@ export function useQuoteRatesPage() {
     setIsCreating(false)
   }
 
+  const feedbackVm = {
+    loading: resource.loading,
+    error: error ?? resource.error,
+    notice,
+    hasData:
+      resource.data.categories.length > 0 ||
+      (!resource.loading && !resource.error),
+  }
+
+  const filtersVm = {
+    search,
+    statusFilter,
+    activeTab,
+    rateSection,
+    rateCategory,
+    flagsSection,
+    roomDefaultsSection,
+  }
+
+  const tableVm = {
+    activeCategory,
+    filteredRows,
+    selectedRow,
+    selectedId,
+    isCreating,
+  }
+
+  const editorVm = {
+    draft,
+    draftActive,
+    saving,
+    activeCategory,
+    selectedRow,
+    isCreating,
+  }
+
   return {
     resource,
     activeTab,
@@ -295,5 +331,27 @@ export function useQuoteRatesPage() {
     startDuplicate,
     cancelEdit,
     valueFromRow: valueFromRatesFlagsRow,
+    feedbackVm,
+    filtersVm,
+    tableVm,
+    editorVm,
+    actions: {
+      setActiveTab,
+      setRateSection,
+      setRateCategory,
+      setFlagsSection,
+      setRoomDefaultsSection,
+      setStatusFilter,
+      setSearch,
+      setSelectedId,
+      setDraft,
+      setDraftActive,
+      reload,
+      saveCurrent,
+      archiveOrReactivate,
+      startCreate,
+      startDuplicate,
+      cancelEdit,
+    },
   }
 }
