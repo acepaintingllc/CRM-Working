@@ -9,21 +9,23 @@ import { QuoteProductsCatalogSection } from './QuoteProductsCatalogSection'
 
 export function QuoteProductsPageContent() {
   const controller = useQuoteProductsPage()
+  const handleRetry = controller.uiState.canRetry ? () => void controller.resource.refresh() : null
 
   return (
     <CrmResourceState
-      loading={controller.feedbackVm.loading}
-      error={controller.feedbackVm.error}
-      hasData={controller.feedbackVm.hasData}
+      loading={controller.uiState.loading}
+      error={controller.uiState.loadError}
+      hasData={controller.uiState.hasData}
       loadingTitle="Loading quote products"
       loadingDescription="Loading quote products..."
       errorTitle="Quote products unavailable"
-      onRetry={() => void controller.resource.refresh()}
+      onRetry={handleRetry}
     >
-      {controller.feedbackVm.notice ? (
-        <CrmNotice tone="success">{controller.feedbackVm.notice}</CrmNotice>
+      {controller.uiState.pageBanner ? (
+        <CrmNotice tone={controller.uiState.pageBanner.tone}>
+          {controller.uiState.pageBanner.message}
+        </CrmNotice>
       ) : null}
-      {controller.error ? <CrmNotice tone="error">{controller.error}</CrmNotice> : null}
 
       <CrmDetailLayout
         main={<QuoteProductsCatalogSection controller={controller} />}

@@ -1,18 +1,13 @@
 'use client'
 
 import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
+import type { QuoteProductPayload } from '@/lib/quotes/productsForm'
+import type { CreateQuoteVersionInput } from '@/lib/quotes/versionCreation'
 import type { QuoteDefaults } from '@/lib/settings/types'
 import type {
   RatesFlagsMutationAction,
   RatesFlagsPayload,
 } from '@/types/estimator/ratesFlags'
-
-type CreateQuoteVersionInput = {
-  job_id: string
-  customer_id: string
-  version_kind: string
-  version_name?: string
-}
 
 export type CustomerSendVersion = {
   status?: string | null
@@ -60,7 +55,7 @@ export async function loadQuoteCatalogs<T>(id: string, options?: { v2?: boolean 
   return loadData<T>(`/api/quotes/${id}/catalogs${suffix}`, { cache: 'no-store' })
 }
 
-export async function updateQuoteProduct<T>(id: string, input: Partial<T>) {
+export async function updateQuoteProduct<T>(id: string, input: QuoteProductPayload) {
   return requestApi<ApiMutationEnvelope<T>>(`/api/quotes/products/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

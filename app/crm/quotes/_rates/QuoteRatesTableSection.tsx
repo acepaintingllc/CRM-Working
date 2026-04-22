@@ -25,7 +25,7 @@ export function QuoteRatesTableSection({
           <CrmButton
             type="button"
             onClick={controller.actions.startDuplicate}
-            disabled={!controller.tableVm.selectedRow || controller.editorVm.saving}
+            disabled={!controller.tableVm.canDuplicate}
           >
             Duplicate
           </CrmButton>
@@ -35,7 +35,7 @@ export function QuoteRatesTableSection({
             onClick={() =>
               void controller.actions.archiveOrReactivate(!(controller.tableVm.selectedRow?.active ?? false))
             }
-            disabled={!controller.tableVm.selectedRow || controller.tableVm.isCreating || controller.editorVm.saving}
+            disabled={!controller.tableVm.canArchiveToggle}
           >
             {controller.tableVm.selectedRow?.active ? 'Archive' : 'Reactivate'}
           </CrmButton>

@@ -1,19 +1,25 @@
 'use client'
 
-import { loadData } from '@/lib/client/api'
-import { createQuoteVersion, loadQuoteList } from '@/lib/quotes/client'
+import { fetchJobList, type JobSummary } from '@/lib/jobs/client'
+import { loadQuoteList } from '@/lib/quotes/client'
+import {
+  deriveQuoteVersionsForJob,
+  filterEligibleQuoteVersionJobs,
+  QUOTE_VERSION_KIND_OPTIONS,
+  type EligibleQuoteVersionJob,
+  type QuoteVersionKind,
+} from '@/lib/quotes/versionCreation'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import {
+  estimateWorkspaceHref,
+  formatDateTime,
+  formatVersionState,
+} from './_home/quoteHomePresentation'
+import { useQuoteVersionCreation } from './_hooks/useQuoteVersionCreation'
 
-type JobRow = {
-  id: string
-  title: string
-  customer_id: string
-  customer_name: string | null
-  customer_address?: string | null
-  status: string
-}
+type QuoteCreatePageJob = EligibleQuoteVersionJob<JobSummary>
 
 type EstimateRow = {
   id: string
@@ -24,104 +30,68 @@ type EstimateRow = {
   updated_at: string | null
 }
 
-const VERSION_KIND_OPTIONS = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'alternate', label: 'Alternate' },
-  { value: 'split', label: 'Split' },
-  { value: 'combined', label: 'Combined' },
-  { value: 'revision', label: 'Revision' },
-] as const
-
-function formatVersionState(value: string | null | undefined) {
-  return String(value ?? 'draft')
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (m) => m.toUpperCase())
-}
-
-function formatDateTime(value: string | null | undefined) {
-  if (!value) return 'No activity yet'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-}
-
-function estimateWorkspaceHref(estimateId: string) {
-  return `/crm/quotes/${estimateId}`
-}
-
 export default function EstimatorV2CreatePage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const jobId = searchParams.get('job') ?? ''
 
-  const [job, setJob] = useState<JobRow | null>(null)
+  const [jobs, setJobs] = useState<QuoteCreatePageJob[]>([])
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [versionName, setVersionName] = useState('')
-  const [versionKind, setVersionKind] = useState<(typeof VERSION_KIND_OPTIONS)[number]['value']>('standard')
-  const [creating, setCreating] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!jobId) return
     let active = true
+
+    if (!jobId) {
+      setJobs([])
+      setEstimates([])
+      setLoadError(null)
+      setLoading(false)
+      return () => {
+        active = false
+      }
+    }
 
     const load = async () => {
       setLoading(true)
-      setError(null)
+      setLoadError(null)
       try {
         const [jobsPayload, estimatesPayload] = await Promise.all([
-          loadData<JobRow[]>('/api/jobs', { cache: 'no-store' }),
+          fetchJobList(),
           loadQuoteList<{ estimates?: EstimateRow[] }>(),
         ])
 
         if (!active) return
 
-        const found = jobsPayload.find((j) => j.id === jobId) ?? null
-        setJob(found)
+        setJobs(filterEligibleQuoteVersionJobs(jobsPayload))
         setEstimates((estimatesPayload?.estimates ?? []) as EstimateRow[])
       } catch (error) {
         if (!active) return
-        setError(error instanceof Error ? error.message : 'Failed to load quote creation data.')
+        setLoadError(error instanceof Error ? error.message : 'Failed to load quote creation data.')
       } finally {
         if (active) setLoading(false)
       }
     }
 
     void load()
-    return () => { active = false }
+    return () => {
+      active = false
+    }
   }, [jobId])
 
-  const jobVersions = useMemo(
-    () =>
-      estimates
-        .filter((e) => e.job_id === jobId)
-        .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '')),
-    [estimates, jobId]
-  )
-
-  const createVersion = async () => {
-    if (!job) return
-    setCreating(true)
-    setError(null)
-
-    try {
-      const payload = await createQuoteVersion<{ id: string }>({
-        job_id: job.id,
-        customer_id: job.customer_id,
-        version_kind: versionKind,
-        ...(versionName.trim() ? { version_name: versionName.trim() } : {}),
-      })
-      router.push(`/crm/quotes/${payload.id}`)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to create quote.')
-    } finally {
-      setCreating(false)
-    }
-  }
+  const job = useMemo(() => jobs.find((candidate) => candidate.id === jobId) ?? null, [jobs, jobId])
+  const createController = useQuoteVersionCreation(job)
+  const jobVersions = useMemo(() => deriveQuoteVersionsForJob(estimates, jobId), [estimates, jobId])
+  const error = loadError ?? createController.error
 
   const mono: React.CSSProperties = { fontFamily: 'var(--v2-mono)' }
-  const label: React.CSSProperties = { ...mono, fontSize: 10, color: 'var(--v2-ink-3)', letterSpacing: '0.16em', textTransform: 'uppercase' }
+  const label: React.CSSProperties = {
+    ...mono,
+    fontSize: 10,
+    color: 'var(--v2-ink-3)',
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+  }
 
   return (
     <div
@@ -132,7 +102,6 @@ export default function EstimatorV2CreatePage() {
         padding: '0 0 80px',
       }}
     >
-      {/* Header */}
       <div
         style={{
           display: 'flex',
@@ -162,7 +131,7 @@ export default function EstimatorV2CreatePage() {
             fontWeight: 700,
           }}
         >
-          ← Back
+          Back
         </Link>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ ...label, marginBottom: 2 }}>Create Quote</div>
@@ -176,14 +145,13 @@ export default function EstimatorV2CreatePage() {
               whiteSpace: 'nowrap',
             }}
           >
-            {loading ? '...' : (job?.title ?? 'Unknown job')}
+            {loading ? '...' : job?.title ?? 'Unknown job'}
           </div>
         </div>
       </div>
 
       <div style={{ padding: '20px 16px', display: 'grid', gap: 20 }}>
-        {/* Error */}
-        {error && (
+        {error ? (
           <div
             style={{
               borderRadius: 14,
@@ -197,10 +165,9 @@ export default function EstimatorV2CreatePage() {
           >
             {error}
           </div>
-        )}
+        ) : null}
 
-        {/* Job info */}
-        {!loading && job && (
+        {!loading && job ? (
           <div
             style={{
               borderRadius: 16,
@@ -234,10 +201,9 @@ export default function EstimatorV2CreatePage() {
               </Link>
             </div>
           </div>
-        )}
+        ) : null}
 
-        {/* Existing versions */}
-        {!loading && jobVersions.length > 0 && (
+        {!loading && jobVersions.length > 0 ? (
           <div
             style={{
               borderRadius: 16,
@@ -248,10 +214,8 @@ export default function EstimatorV2CreatePage() {
               gap: 0,
             }}
           >
-            <div style={{ ...label, marginBottom: 12 }}>
-              Existing Quotes ({jobVersions.length})
-            </div>
-            {jobVersions.map((estimate, i) => (
+            <div style={{ ...label, marginBottom: 12 }}>Existing Quotes ({jobVersions.length})</div>
+            {jobVersions.map((estimate, index) => (
               <div
                 key={estimate.id}
                 style={{
@@ -259,9 +223,9 @@ export default function EstimatorV2CreatePage() {
                   gridTemplateColumns: 'minmax(0, 1fr) auto',
                   gap: 12,
                   alignItems: 'center',
-                  paddingTop: i === 0 ? 0 : 14,
-                  paddingBottom: i < jobVersions.length - 1 ? 14 : 0,
-                  borderBottom: i < jobVersions.length - 1 ? '1px solid var(--v2-line)' : 'none',
+                  paddingTop: index === 0 ? 0 : 14,
+                  paddingBottom: index < jobVersions.length - 1 ? 14 : 0,
+                  borderBottom: index < jobVersions.length - 1 ? '1px solid var(--v2-line)' : 'none',
                 }}
               >
                 <div>
@@ -294,9 +258,8 @@ export default function EstimatorV2CreatePage() {
               </div>
             ))}
           </div>
-        )}
+        ) : null}
 
-        {/* Create form */}
         <div
           style={{
             borderRadius: 16,
@@ -317,8 +280,8 @@ export default function EstimatorV2CreatePage() {
           <label style={{ display: 'grid', gap: 8 }}>
             <span style={label}>Version Name</span>
             <input
-              value={versionName}
-              onChange={(e) => setVersionName(e.target.value)}
+              value={createController.versionName}
+              onChange={(event) => createController.setVersionName(event.target.value)}
               placeholder="Leave blank for default name"
               style={{
                 width: '100%',
@@ -335,9 +298,9 @@ export default function EstimatorV2CreatePage() {
           <label style={{ display: 'grid', gap: 8 }}>
             <span style={label}>Version Kind</span>
             <select
-              value={versionKind}
-              onChange={(e) =>
-                setVersionKind(e.target.value as (typeof VERSION_KIND_OPTIONS)[number]['value'])
+              value={createController.versionKind}
+              onChange={(event) =>
+                createController.setVersionKind(event.target.value as QuoteVersionKind)
               }
               style={{
                 width: '100%',
@@ -349,29 +312,32 @@ export default function EstimatorV2CreatePage() {
                 fontSize: 15,
               }}
             >
-              {VERSION_KIND_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+              {QUOTE_VERSION_KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
               ))}
             </select>
           </label>
 
           <button
             type="button"
-            onClick={() => void createVersion()}
-            disabled={!job || creating || loading}
+            onClick={() => void createController.createVersion()}
+            disabled={!job || createController.creating || loading}
             style={{
               width: '100%',
               padding: '15px 16px',
               borderRadius: 12,
               border: '1px solid rgba(134,239,172,0.34)',
-              background: !job || creating || loading ? 'rgba(74,222,128,0.12)' : '#8ad39b',
-              color: !job || creating || loading ? '#9cd7ae' : '#062410',
+              background:
+                !job || createController.creating || loading ? 'rgba(74,222,128,0.12)' : '#8ad39b',
+              color: !job || createController.creating || loading ? '#9cd7ae' : '#062410',
               fontSize: 15,
               fontWeight: 800,
-              cursor: !job || creating || loading ? 'not-allowed' : 'pointer',
+              cursor: !job || createController.creating || loading ? 'not-allowed' : 'pointer',
             }}
           >
-            {creating ? 'Creating version...' : 'Create version'}
+            {createController.creating ? 'Creating version...' : 'Create version'}
           </button>
         </div>
       </div>

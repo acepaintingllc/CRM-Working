@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server'
-import { getSessionUserOrg } from '@/lib/server/org'
+import {
+  jsonError,
+  readJsonBody,
+  readUuidParam,
+  requireSessionUserOrg,
+} from '@/lib/server/apiRoute'
+import {
+  quoteProductPatchToDraft,
+  quoteProductRowToDraft,
+  validateQuoteProductDraft,
+  type QuoteProductRow,
+} from '@/lib/quotes/productsForm'
 import { supabaseAdmin } from '@/lib/server/org'
-
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 type V2Product = {
   id: string
@@ -28,46 +36,57 @@ export async function PATCH(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
 
   const params = await Promise.resolve(context.params)
-  const id = (params as { id?: string } | null | undefined)?.id
-  if (!id || typeof id !== 'string' || !uuid.test(id)) {
-    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 })
-  }
+  const idResult = readUuidParam((params as { id?: string } | null | undefined)?.id, 'product id')
+  if (!idResult.ok) return idResult.response
+
+  const bodyResult = await readJsonBody<Record<string, unknown>>(request)
+  if (!bodyResult.ok) return bodyResult.response
 
   try {
-    const body = await request.json()
-
     // First verify the product belongs to the user's org
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from('v2_products')
       .select('*')
-      .eq('id', id)
-      .eq('org_id', session.orgId)
+      .eq('id', idResult.value)
+      .eq('org_id', auth.session.orgId)
       .single()
 
     if (fetchError || !existing) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      return jsonError('Product not found', 404)
+    }
+
+    const mergedDraft = {
+      ...quoteProductRowToDraft(existing as QuoteProductRow),
+      ...quoteProductPatchToDraft(bodyResult.value),
+    }
+    const validated = validateQuoteProductDraft(mergedDraft)
+    if (!validated.ok) {
+      return NextResponse.json(
+        {
+          error: validated.validation.summary ?? 'Invalid product payload.',
+          fields: validated.validation.fields,
+        },
+        { status: 400 }
+      )
     }
 
     const { data, error } = await supabaseAdmin
       .from('v2_products')
       .update({
-        ...body,
+        ...validated.payload,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', id)
-      .eq('org_id', session.orgId)
+      .eq('id', idResult.value)
+      .eq('org_id', auth.session.orgId)
       .select()
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      return jsonError(error.message, 400)
     }
 
     return NextResponse.json({
@@ -76,7 +95,7 @@ export async function PATCH(
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update product'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return jsonError(message, 500)
   }
 }
 
@@ -84,39 +103,34 @@ export async function DELETE(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
 
   const params = await Promise.resolve(context.params)
-  const id = (params as { id?: string } | null | undefined)?.id
-  if (!id || typeof id !== 'string' || !uuid.test(id)) {
-    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 })
-  }
+  const idResult = readUuidParam((params as { id?: string } | null | undefined)?.id, 'product id')
+  if (!idResult.ok) return idResult.response
 
   try {
     // First verify the product belongs to the user's org
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from('v2_products')
       .select('*')
-      .eq('id', id)
-      .eq('org_id', session.orgId)
+      .eq('id', idResult.value)
+      .eq('org_id', auth.session.orgId)
       .single()
 
     if (fetchError || !existing) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      return jsonError('Product not found', 404)
     }
 
     const { error } = await supabaseAdmin
       .from('v2_products')
       .delete()
-      .eq('id', id)
-      .eq('org_id', session.orgId)
+      .eq('id', idResult.value)
+      .eq('org_id', auth.session.orgId)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      return jsonError(error.message, 400)
     }
 
     return NextResponse.json({
@@ -125,6 +139,6 @@ export async function DELETE(
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete product'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return jsonError(message, 500)
   }
 }

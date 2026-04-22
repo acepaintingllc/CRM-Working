@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { buildDefaultQuoteVersionName, normalizeQuoteVersionKind } from '@/lib/quotes/versionCreation'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { loadEstimateTemplateSettings } from '@/lib/server/estimateTemplateSettings'
 import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
@@ -7,8 +8,6 @@ const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const VERSION_STATES = new Set(['draft', 'live', 'archived'])
-const VERSION_KINDS = new Set(['standard', 'alternate', 'split', 'combined', 'revision'])
-
 function asText(value: unknown) {
   return String(value ?? '').trim()
 }
@@ -120,9 +119,9 @@ export async function POST(request: Request) {
   }
 
   const requestedVersionState = asText(body.version_state).toLowerCase()
-  const requestedVersionKind = asText(body.version_kind).toLowerCase()
+  const requestedVersionKind = asText(body.version_kind)
   const versionState = VERSION_STATES.has(requestedVersionState) ? requestedVersionState : 'draft'
-  const versionKind = VERSION_KINDS.has(requestedVersionKind) ? requestedVersionKind : 'standard'
+  const versionKind = normalizeQuoteVersionKind(requestedVersionKind)
 
   const latestSortRes = await supabaseAdmin
     .from('estimates')
@@ -140,7 +139,7 @@ export async function POST(request: Request) {
   const requestedSortOrder = asOptionalNumber(body.version_sort_order)
   const versionSortOrder =
     requestedSortOrder != null ? Math.max(0, Math.trunc(requestedSortOrder)) : (existingSort ?? -1) + 1
-  const fallbackVersionName = `Quote Version ${versionSortOrder + 1}`
+  const fallbackVersionName = buildDefaultQuoteVersionName(versionSortOrder)
   const versionName = asText(body.version_name) || fallbackVersionName
 
   const createRes = await supabaseAdmin

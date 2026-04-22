@@ -12,6 +12,7 @@ type UseEditableResourceParams<TData> = {
   load: () => Promise<TData>
   save: (data: TData) => Promise<SaveResult<TData>>
   getErrorMessage?: (error: unknown) => string
+  isDirty?: (current: TData, snapshot: TData) => boolean
 }
 
 function defaultErrorMessage(error: unknown) {
@@ -22,11 +23,16 @@ function stableStringify(value: unknown) {
   return JSON.stringify(value)
 }
 
+function defaultIsDirty<TData>(current: TData, snapshot: TData) {
+  return stableStringify(current) !== stableStringify(snapshot)
+}
+
 export function useEditableResource<TData>({
   initialData,
   load,
   save,
   getErrorMessage = defaultErrorMessage,
+  isDirty = defaultIsDirty,
 }: UseEditableResourceParams<TData>) {
   const [data, setDataState] = useState(initialData)
   const [snapshot, setSnapshot] = useState(initialData)
@@ -106,10 +112,7 @@ export function useEditableResource<TData>({
     }
   }, [data, saving])
 
-  const dirty = useMemo(
-    () => stableStringify(data) !== stableStringify(snapshot),
-    [data, snapshot]
-  )
+  const dirty = useMemo(() => isDirty(data, snapshot), [data, isDirty, snapshot])
 
   return {
     data,
