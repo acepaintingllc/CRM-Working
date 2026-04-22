@@ -1,13 +1,20 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
+import { mutate as swrMutate } from 'swr'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createSWRWrapper } from '@/app/crm/__tests__/swrTestUtils'
 import { useCustomerDetail } from '../_hooks/useCustomerDetail'
 import { useCustomerList } from '../_hooks/useCustomerList'
 import { useCustomerTimeline } from '../_hooks/useCustomerTimeline'
 
 const authedFetch = vi.fn()
+const invalidateSwrKey = vi.fn<(key: string) => Promise<unknown>>()
 
 vi.mock('@/lib/auth/authedFetch', () => ({
-  authedFetch: (...args: unknown[]) => authedFetch(...args),
+  authedFetch: (input: RequestInfo | URL, init?: RequestInit) => authedFetch(input, init),
+}))
+
+vi.mock('@/app/crm/_hooks/swrCache', () => ({
+  invalidateSwrKey: (key: string) => invalidateSwrKey(key),
 }))
 
 function createResponse(ok: boolean, payload: unknown, status = ok ? 200 : 500) {
@@ -38,6 +45,8 @@ function deferred<T>() {
 describe('customer hooks', () => {
   beforeEach(() => {
     authedFetch.mockReset()
+    invalidateSwrKey.mockClear()
+    invalidateSwrKey.mockImplementation((key: string) => swrMutate(key))
   })
 
   it('useCustomerDetail ignores stale responses when the id changes', async () => {
@@ -49,6 +58,7 @@ describe('customer hooks', () => {
 
     const { result, rerender } = renderHook(({ id }) => useCustomerDetail(id), {
       initialProps: { id: 'customer-a' as string | undefined },
+      wrapper: createSWRWrapper(),
     })
 
     rerender({ id: 'customer-b' })
@@ -66,7 +76,9 @@ describe('customer hooks', () => {
   })
 
   it('useCustomerDetail reports missing ids as load errors without leaving loading stuck', async () => {
-    const { result } = renderHook(() => useCustomerDetail(undefined))
+    const { result } = renderHook(() => useCustomerDetail(undefined), {
+      wrapper: createSWRWrapper(),
+    })
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.customer).toBeNull()
@@ -79,7 +91,9 @@ describe('customer hooks', () => {
       .mockResolvedValueOnce(createDataResponse({ id: 'customer-1', name: 'Taylor Updated' }))
       .mockResolvedValueOnce(createResponse(false, { error: 'Delete failed' }))
 
-    const { result } = renderHook(() => useCustomerDetail('customer-1'))
+    const { result } = renderHook(() => useCustomerDetail('customer-1'), {
+      wrapper: createSWRWrapper(),
+    })
 
     await waitFor(() => expect(result.current.customer?.name).toBe('Taylor Jones'))
 
@@ -103,7 +117,9 @@ describe('customer hooks', () => {
       .mockResolvedValueOnce(createDataResponse({ id: 'customer-1', name: 'Taylor Jones' }))
       .mockResolvedValueOnce(createMutationResponse(true))
 
-    const { result } = renderHook(() => useCustomerDetail('customer-1'))
+    const { result } = renderHook(() => useCustomerDetail('customer-1'), {
+      wrapper: createSWRWrapper(),
+    })
     await waitFor(() => expect(result.current.customer?.id).toBe('customer-1'))
 
     let deleted = false
@@ -113,36 +129,31 @@ describe('customer hooks', () => {
 
     expect(deleted).toBe(true)
     expect(result.current.error).toBeNull()
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers')
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers/customer-1')
   })
 
-  it('useCustomerList resets and ignores stale responses across refreshes without org bootstrap', async () => {
-    const first = deferred<ReturnType<typeof createResponse>>()
-    const second = deferred<ReturnType<typeof createResponse>>()
-    let activePromise = first.promise
-    authedFetch.mockImplementation(() => activePromise)
+  it('useCustomerList reuses the SWR cache across remounts', async () => {
+    authedFetch.mockResolvedValue(createDataResponse([{ id: '1', name: 'First' }]))
 
-    const { result } = renderHook(() => useCustomerList())
+    const wrapper = createSWRWrapper()
+    const first = renderHook(() => useCustomerList(), { wrapper })
+    await waitFor(() => expect(first.result.current.listCustomers[0]?.id).toBe('1'))
 
-    activePromise = second.promise
-    await act(async () => {
-      void result.current.loadList()
-    })
+    first.unmount()
 
-    second.resolve(createDataResponse([{ id: '2', name: 'Second' }]))
-    await waitFor(() => expect(result.current.listCustomers[0]?.id).toBe('2'))
+    const second = renderHook(() => useCustomerList(), { wrapper })
+    await waitFor(() => expect(second.result.current.listCustomers[0]?.id).toBe('1'))
 
-    first.resolve(createDataResponse([{ id: '1', name: 'First' }]))
-    await act(async () => {
-      await Promise.resolve()
-    })
-
-    expect(result.current.listCustomers[0]?.id).toBe('2')
+    expect(authedFetch).toHaveBeenCalledTimes(1)
   })
 
   it('useCustomerList surfaces fetch failures and resets the list', async () => {
     authedFetch.mockResolvedValue(createResponse(false, { error: 'List exploded' }))
 
-    const { result } = renderHook(() => useCustomerList())
+    const { result } = renderHook(() => useCustomerList(), {
+      wrapper: createSWRWrapper(),
+    })
 
     await waitFor(() => expect(result.current.listLoading).toBe(false))
     expect(result.current.listCustomers).toEqual([])
@@ -158,6 +169,7 @@ describe('customer hooks', () => {
 
     const { result, rerender } = renderHook(({ customerId }) => useCustomerTimeline(customerId), {
       initialProps: { customerId: 'customer-a' as string | undefined },
+      wrapper: createSWRWrapper(),
     })
 
     rerender({ customerId: 'customer-b' })
@@ -206,7 +218,9 @@ describe('customer hooks', () => {
         ])
       )
 
-    const { result } = renderHook(() => useCustomerTimeline('customer-1'))
+    const { result } = renderHook(() => useCustomerTimeline('customer-1'), {
+      wrapper: createSWRWrapper(),
+    })
     await waitFor(() => expect(result.current.timelineEvents[0]?.id).toBe('old'))
 
     act(() => {
@@ -220,8 +234,8 @@ describe('customer hooks', () => {
 
     expect(saved).toBe(true)
     expect(result.current.noteBody).toBe('')
-    expect(result.current.timelineEvents[0]?.id).toBe('new')
     expect(result.current.timelineError).toBeNull()
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers/customer-1/timeline')
   })
 
   it('useCustomerTimeline preserves the draft on note save failure and short-circuits missing ids', async () => {
@@ -229,7 +243,9 @@ describe('customer hooks', () => {
       .mockResolvedValueOnce(createDataResponse([]))
       .mockResolvedValueOnce(createResponse(false, { error: 'Save exploded' }))
 
-    const { result } = renderHook(() => useCustomerTimeline('customer-1'))
+    const { result } = renderHook(() => useCustomerTimeline('customer-1'), {
+      wrapper: createSWRWrapper(),
+    })
     await waitFor(() => expect(result.current.timelineLoading).toBe(false))
 
     act(() => {
@@ -245,7 +261,9 @@ describe('customer hooks', () => {
     expect(result.current.noteBody).toBe('Keep me')
     expect(result.current.timelineError).toBe('Save exploded')
 
-    const missing = renderHook(() => useCustomerTimeline(undefined))
+    const missing = renderHook(() => useCustomerTimeline(undefined), {
+      wrapper: createSWRWrapper(),
+    })
     await waitFor(() => expect(missing.result.current.timelineLoading).toBe(false))
     expect(missing.result.current.timelineEvents).toEqual([])
     expect(missing.result.current.timelineError).toBeNull()

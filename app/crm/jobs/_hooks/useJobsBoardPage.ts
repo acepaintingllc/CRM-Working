@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
+import { useSwrResource } from '@/app/crm/_hooks/useSwrResource'
 import {
   fetchJobList,
   patchJobDateFields,
@@ -36,6 +37,7 @@ const columns: { key: JobStatus; title: string }[] = JOB_STATUS_OPTIONS.map((opt
   title: option.title,
 }))
 const emptyJobs: JobSummary[] = []
+const jobsBoardKey = '/api/jobs'
 
 export function useJobsBoardPage(deps: JobsBoardDeps = {}) {
   const router = useRouter()
@@ -54,11 +56,9 @@ export function useJobsBoardPage(deps: JobsBoardDeps = {}) {
   const [emailJobId, setEmailJobId] = useState<string | null>(null)
   const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
   const [closeoutJobId, setCloseoutJobId] = useState<string | null>(null)
-  const jobsResource = useLoadableResource<JobSummary[]>({
-    initialData: emptyJobs,
+  const jobsResource = useSwrResource<JobSummary[]>(jobsBoardKey, {
+    fallbackData: emptyJobs,
     load: () => loadJobs(),
-    getErrorMessage: (loadError: unknown) =>
-      loadError instanceof Error ? loadError.message : 'Failed to load jobs.',
   })
   const saveStatusRef = useRef(saveStatus)
   const saveFieldsRef = useRef(saveFields)
@@ -71,7 +71,7 @@ export function useJobsBoardPage(deps: JobsBoardDeps = {}) {
     saveFieldsRef.current = saveFields
   }, [saveFields])
 
-  const jobs = jobsResource.data
+  const jobs = jobsResource.data ?? emptyJobs
   const loading = jobsResource.loading
   const error = jobsResource.error
   const setError = jobsResource.setError
@@ -95,6 +95,7 @@ export function useJobsBoardPage(deps: JobsBoardDeps = {}) {
           ? await saveStatusRef.current(id, patch.status as JobStatus)
           : await saveFieldsRef.current(id, patch)
       setJobs((prev) => prev.map((job) => (job.id === id ? { ...job, ...nextJob } : job)))
+      await invalidateSwrKey(jobsBoardKey)
       return (nextJob ?? null) as Partial<JobSummary> | null
     } catch (patchError) {
       setError(patchError instanceof Error ? patchError.message : 'Failed to update job.')

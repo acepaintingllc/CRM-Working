@@ -1,6 +1,18 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createSWRWrapper } from '@/app/crm/__tests__/swrTestUtils'
 import type { JobStatus } from '@/lib/jobs/types'
+
+const authedFetch = vi.fn()
+const invalidateSwrKey = vi.fn<(key: string) => Promise<unknown>>()
+
+vi.mock('@/lib/auth/authedFetch', () => ({
+  authedFetch: (input: RequestInfo | URL, init?: RequestInit) => authedFetch(input, init),
+}))
+
+vi.mock('@/app/crm/_hooks/swrCache', () => ({
+  invalidateSwrKey: (key: string) => invalidateSwrKey(key),
+}))
 
 vi.mock('@/lib/jobs/client', () => ({
   fetchJobList: vi.fn(),
@@ -50,6 +62,7 @@ const jobs = [
 describe('useJobsBoardPage', () => {
   beforeEach(() => {
     mockPush.mockReset()
+    invalidateSwrKey.mockClear()
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation(() => ({
@@ -69,7 +82,7 @@ describe('useJobsBoardPage', () => {
         fetchJobList,
         patchJobStatus,
       })
-    )
+    , { wrapper: createSWRWrapper() })
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.grouped.estimate_sent).toHaveLength(1)
@@ -86,6 +99,7 @@ describe('useJobsBoardPage', () => {
 
     expect(patchJobStatus).toHaveBeenCalledWith('job-1', 'follow_up')
     expect(result.current.grouped.follow_up).toHaveLength(1)
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/jobs')
   })
 
   it('opens stage email and closeout flows from board actions', async () => {
@@ -94,7 +108,7 @@ describe('useJobsBoardPage', () => {
         fetchJobList: async () => [...jobs],
         patchJobDateFields: async () => ({ completed_at: '2026-04-21T12:00:00.000Z' }),
       })
-    )
+    , { wrapper: createSWRWrapper() })
 
     await waitFor(() => expect(result.current.loading).toBe(false))
 
@@ -128,7 +142,7 @@ describe('useJobsBoardPage', () => {
       useJobsBoardPage({
         fetchJobList: async () => [...jobs],
       })
-    )
+    , { wrapper: createSWRWrapper() })
 
     await waitFor(() => expect(result.current.loading).toBe(false))
 

@@ -3,10 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useNewJobPage } from '../_hooks/useNewJobPage'
 
 const authedFetch = vi.fn()
+const invalidateSwrKey = vi.fn<(key: string) => Promise<unknown>>()
 const push = vi.fn()
 
 vi.mock('@/lib/auth/authedFetch', () => ({
-  authedFetch: (...args: unknown[]) => authedFetch(...args),
+  authedFetch: (input: RequestInfo | URL, init?: RequestInit) => authedFetch(input, init),
+}))
+
+vi.mock('@/app/crm/_hooks/swrCache', () => ({
+  invalidateSwrKey: (key: string) => invalidateSwrKey(key),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -27,6 +32,7 @@ describe('useNewJobPage', () => {
   beforeEach(() => {
     authedFetch.mockReset()
     push.mockReset()
+    invalidateSwrKey.mockClear()
   })
 
   it('loads customers, validates create values, and routes to detail on save', async () => {
@@ -72,5 +78,6 @@ describe('useNewJobPage', () => {
     })
 
     expect(push).toHaveBeenCalledWith('/crm/jobs/job-1')
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/jobs')
   })
 })
