@@ -1,15 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { authedFetch } from '@/lib/auth/authedFetch'
+import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
+import { useSwrResource } from '@/app/crm/_hooks/useSwrResource'
 import { useEntityDetailActions } from '@/app/crm/_hooks/useEntityDetailActions'
 import {
-  fetchCloseoutData,
-  fetchJobDetail,
+  getResponseErrorMessage,
+  parseResponseBody,
 } from '@/lib/jobs/actions'
 import {
   deleteJob as deleteJobRequest,
+  listPaintLogs,
+  listPhotos,
   patchJobDateFields,
   patchJobStatus,
   type EstimateDriveFile,
@@ -37,17 +41,42 @@ type JobDetailResource = {
   sitePhotos: SitePhoto[]
 }
 
-const emptyJobDetailResource: JobDetailResource = {
-  job: null,
-  estimateFile: null,
-  estimateFileError: null,
-  paintLogs: [],
-  afterPhotos: [],
-  sitePhotos: [],
+type EstimateFilePayload = {
+  data?:
+    | {
+        file?: EstimateDriveFile | null
+      }
+    | EstimateDriveFile
+  error?: string
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Failed to load job.'
+async function loadEstimateFile(jobId: string) {
+  const response = await authedFetch(`/api/jobs/${jobId}/estimate-file`, { cache: 'no-store' })
+  const parsed = await parseResponseBody<EstimateFilePayload>(response)
+  const payload = parsed.json
+  const data = payload?.data && typeof payload.data === 'object' ? payload.data : null
+  const file =
+    ((data as { file?: EstimateDriveFile | null } | null)?.file ??
+      (payload?.data && !Array.isArray(payload.data)
+        ? (payload.data as EstimateDriveFile)
+        : null)) as EstimateDriveFile | null
+
+  if (response.ok) {
+    return {
+      estimateFile: file,
+      estimateFileError:
+        file == null ? payload?.error ?? 'No matching estimate in Drive folder' : null,
+    }
+  }
+
+  return {
+    estimateFile: null,
+    estimateFileError: getResponseErrorMessage(
+      response,
+      parsed,
+      'No matching estimate in Drive folder'
+    ),
+  }
 }
 
 export function useJobDetailPage() {
@@ -61,27 +90,147 @@ export function useJobDetailPage() {
   const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
   const [closeoutOpen, setCloseoutOpen] = useState(false)
   const [timelineOpen, setTimelineOpen] = useState(true)
+  const [resourceError, setResourceError] = useState<string | null>(null)
+  const [estimateFile, setEstimateFile] = useState<EstimateDriveFile | null>(null)
+  const [estimateFileError, setEstimateFileError] = useState<string | null>(null)
+  const [paintLogs, setPaintLogs] = useState<PaintLogRow[]>([])
+  const [afterPhotos, setAfterPhotos] = useState<JobPhoto[]>([])
+  const [sitePhotos, setSitePhotos] = useState<SitePhoto[]>([])
+  const [secondaryLoading, setSecondaryLoading] = useState(false)
+  const secondaryRequestIdRef = useRef(0)
 
-  const resource = useLoadableResource<JobDetailResource>({
-    initialData: emptyJobDetailResource,
-    load: async () => {
-      if (typeof id !== 'string' || !id) {
-        throw new Error('Missing job id in URL.')
-      }
-
-      const detail = await fetchJobDetail(id)
-      return {
-        job: detail.job,
-        estimateFile: detail.estimateFile as EstimateDriveFile | null,
-        estimateFileError: detail.estimateFileError,
-        paintLogs: detail.paintLogs,
-        afterPhotos: detail.afterPhotos,
-        sitePhotos: detail.sitePhotos,
-      }
-    },
-    getErrorMessage,
-    reloadKey: id,
+  const jobKey = typeof id === 'string' && id ? `/api/jobs/${id}` : null
+  const jobsBoardKey = '/api/jobs'
+  const jobResource = useSwrResource<JobDetail | null>(jobKey, {
+    fallbackData: null,
   })
+  const job = jobResource.data ?? null
+
+  const setError = useCallback(
+    (value: string | null) => {
+      setResourceError(value)
+      jobResource.setError(value)
+    },
+    [jobResource]
+  )
+
+  const loadSecondaryData = useCallback(async () => {
+    if (!id || typeof id !== 'string') {
+      setEstimateFile(null)
+      setEstimateFileError(null)
+      setPaintLogs([])
+      setAfterPhotos([])
+      setSitePhotos([])
+      setSecondaryLoading(false)
+      return false
+    }
+
+    const requestId = ++secondaryRequestIdRef.current
+    setSecondaryLoading(true)
+
+    try {
+      const [estimateState, paintLogRows, photoBundle] = await Promise.all([
+        loadEstimateFile(id),
+        listPaintLogs(id),
+        listPhotos(id),
+      ])
+
+      if (secondaryRequestIdRef.current !== requestId) return false
+
+      setEstimateFile(estimateState.estimateFile)
+      setEstimateFileError(estimateState.estimateFileError)
+      setPaintLogs(paintLogRows)
+      setAfterPhotos(photoBundle.afterPhotos)
+      setSitePhotos(photoBundle.sitePhotos)
+      return true
+    } catch {
+      if (secondaryRequestIdRef.current !== requestId) return false
+      setEstimateFile(null)
+      setEstimateFileError('Failed to load job support data.')
+      setPaintLogs([])
+      setAfterPhotos([])
+      setSitePhotos([])
+      return false
+    } finally {
+      if (secondaryRequestIdRef.current === requestId) {
+        setSecondaryLoading(false)
+      }
+    }
+  }, [id])
+
+  useEffect(() => {
+    void loadSecondaryData()
+  }, [loadSecondaryData])
+
+  const refreshResource = useCallback(async () => {
+    const [jobOk, secondaryOk] = await Promise.all([jobResource.refresh(), loadSecondaryData()])
+    return jobOk && secondaryOk
+  }, [jobResource, loadSecondaryData])
+
+  const resource: {
+    data: JobDetailResource
+    loading: boolean
+    error: string | null
+    refresh: () => Promise<boolean>
+    setData: (value: JobDetailResource | ((current: JobDetailResource) => JobDetailResource)) => void
+    setError: (value: string | null) => void
+  } = useMemo(
+    () => ({
+      data: {
+        job,
+        estimateFile,
+        estimateFileError,
+        paintLogs,
+        afterPhotos,
+        sitePhotos,
+      },
+      loading:
+        (jobKey ? jobResource.loading : false) || secondaryLoading,
+      error:
+        resourceError ??
+        jobResource.error ??
+        (jobKey ? null : 'Missing job id in URL.'),
+      refresh: refreshResource,
+      setData: (value) => {
+        const current = {
+          job,
+          estimateFile,
+          estimateFileError,
+          paintLogs,
+          afterPhotos,
+          sitePhotos,
+        }
+        const next =
+          typeof value === 'function'
+            ? (value as (current: JobDetailResource) => JobDetailResource)(current)
+            : value
+
+        jobResource.setData(next.job)
+        setEstimateFile(next.estimateFile)
+        setEstimateFileError(next.estimateFileError)
+        setPaintLogs(next.paintLogs)
+        setAfterPhotos(next.afterPhotos)
+        setSitePhotos(next.sitePhotos)
+        setResourceError(null)
+      },
+      setError,
+    }),
+    [
+      afterPhotos,
+      estimateFile,
+      estimateFileError,
+      job,
+      jobKey,
+      jobResource,
+      loadSecondaryData,
+      paintLogs,
+      refreshResource,
+      resourceError,
+      secondaryLoading,
+      setError,
+      sitePhotos,
+    ]
+  )
 
   const detailActions = useEntityDetailActions({
     deleteMessage: 'Delete this job? This cannot be undone.',
@@ -91,6 +240,10 @@ export function useJobDetailPage() {
       resource.setError(null)
       try {
         await deleteJobRequest(id)
+        await Promise.all([
+          jobKey ? invalidateSwrKey(jobKey) : Promise.resolve(undefined),
+          invalidateSwrKey(jobsBoardKey),
+        ])
         router.replace('/crm/jobs')
         return true
       } catch (deleteError) {
@@ -114,39 +267,35 @@ export function useJobDetailPage() {
     setEmailStage(stage)
   }, [searchParams, resource.loading, resource.data.job, emailStage])
 
-  const patchJob = async (patch: Record<string, unknown>) => {
-    if (!id || typeof id !== 'string' || !resource.data.job) return null
-    try {
-      const updated =
-        typeof patch.status === 'string'
-          ? await patchJobStatus(id, patch.status as JobStatus)
-          : await patchJobDateFields(id, patch)
-      resource.setData((current) => ({
-        ...current,
-        job: current.job ? { ...current.job, ...updated } : current.job,
-      }))
-      resource.setError(null)
-      return (updated ?? null) as Partial<JobDetail> | null
-    } catch (patchError) {
-      resource.setError(patchError instanceof Error ? patchError.message : 'Failed to update job.')
-      return null
-    }
-  }
+  const patchJob = useCallback(
+    async (patch: Record<string, unknown>) => {
+      if (!id || typeof id !== 'string' || !resource.data.job) return null
+      try {
+        const updated =
+          typeof patch.status === 'string'
+            ? await patchJobStatus(id, patch.status as JobStatus)
+            : await patchJobDateFields(id, patch)
+        resource.setData((current) => ({
+          ...current,
+          job: current.job ? { ...current.job, ...updated } : current.job,
+        }))
+        resource.setError(null)
+        await Promise.all([
+          jobKey ? invalidateSwrKey(jobKey) : Promise.resolve(undefined),
+          invalidateSwrKey(jobsBoardKey),
+        ])
+        return (updated ?? null) as Partial<JobDetail> | null
+      } catch (patchError) {
+        resource.setError(patchError instanceof Error ? patchError.message : 'Failed to update job.')
+        return null
+      }
+    },
+    [id, jobKey, jobsBoardKey, resource]
+  )
 
-  const refreshCloseoutData = async () => {
-    if (!id || typeof id !== 'string') return
-    try {
-      const closeout = await fetchCloseoutData(id)
-      resource.setData((current) => ({
-        ...current,
-        paintLogs: closeout.paintLogs,
-        afterPhotos: closeout.afterPhotos,
-        sitePhotos: closeout.sitePhotos,
-      }))
-    } catch {
-      // Keep the page interactive if closeout-specific reload fails.
-    }
-  }
+  const refreshCloseoutData = useCallback(async () => {
+    await loadSecondaryData()
+  }, [loadSecondaryData])
 
   const nowIso = () => new Date().toISOString()
 
@@ -181,6 +330,10 @@ export function useJobDetailPage() {
         ...current,
         job: current.job ? { ...current.job, ...(result.job as Partial<JobDetail>) } : current.job,
       }))
+      void Promise.all([
+        jobKey ? invalidateSwrKey(jobKey) : Promise.resolve(undefined),
+        invalidateSwrKey(jobsBoardKey),
+      ])
     }
     setNotice(result.warning ?? 'Email sent')
   }
@@ -204,6 +357,10 @@ export function useJobDetailPage() {
         ...current,
         job: current.job ? { ...current.job, ...(result.job as Partial<JobDetail>) } : current.job,
       }))
+      await Promise.all([
+        jobKey ? invalidateSwrKey(jobKey) : Promise.resolve(undefined),
+        invalidateSwrKey(jobsBoardKey),
+      ])
     }
     if (result.notice) setNotice(result.notice)
     await refreshCloseoutData()

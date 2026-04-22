@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createSWRWrapper } from '@/app/crm/__tests__/swrTestUtils'
 import JobDetailPage from '../[id]/page'
 
 const authedFetch = vi.fn()
@@ -85,7 +86,7 @@ describe('JobDetailPage', () => {
       .mockResolvedValueOnce(createResponse({ data: [] }))
       .mockResolvedValueOnce(createResponse({ data: { ok: true } }))
 
-    render(<JobDetailPage />)
+    render(<JobDetailPage />, { wrapper: createSWRWrapper() })
 
     await waitFor(() => expect(screen.getAllByText('Exterior repaint').length).toBeGreaterThan(0))
     await user.click(screen.getAllByRole('button', { name: 'Copy' })[0])
@@ -101,7 +102,7 @@ describe('JobDetailPage', () => {
       .mockResolvedValueOnce(createResponse({ data: [] }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
 
-    render(<JobDetailPage />)
+    render(<JobDetailPage />, { wrapper: createSWRWrapper() })
 
     await waitFor(() => expect(screen.getByText('Job not found')).toBeTruthy())
 
@@ -113,7 +114,7 @@ describe('JobDetailPage', () => {
       .mockResolvedValueOnce(createResponse({ data: [] }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
 
-    render(<JobDetailPage />)
+    render(<JobDetailPage />, { wrapper: createSWRWrapper() })
 
     await waitFor(() => expect(screen.getByText('Job unavailable')).toBeTruthy())
     expect(screen.getByText('Failed to load job.')).toBeTruthy()

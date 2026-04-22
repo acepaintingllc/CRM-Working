@@ -5,8 +5,8 @@ import { getBrandLogoUrl } from '@/lib/brand/logo'
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { supabaseBrowser } from "@/lib/supabase/client";
+import { usePathname } from "next/navigation";
+import { SWRConfig } from 'swr'
 import type { LucideIcon } from "lucide-react";
 import {
   Camera,
@@ -28,7 +28,6 @@ function resolveStoredTheme() {
 }
 
 export default function CrmLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [logoError, setLogoError] = useState(false);
@@ -67,34 +66,10 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
     let alive = true;
 
     (async () => {
-      if (!supabaseBrowser?.auth?.getSession) {
-        console.error("[CRM LAYOUT] Supabase client not initialized correctly.", {
-          hasClient: Boolean(supabaseBrowser),
-        });
-        return;
-      }
-
-      let { data, error } = await supabaseBrowser.auth.getSession();
-      if (!data?.session) {
-        const refreshed = await supabaseBrowser.auth.refreshSession();
-        data = refreshed.data;
-        error = refreshed.error;
-      }
       if (!alive) return;
-
-      if (error || !data?.session) {
-        const next = encodeURIComponent(pathname || "/crm");
-        router.replace(`/login?next=${next}`);
-        return;
-      }
 
       try {
         const bootstrapRes = await authedFetch("/api/bootstrap-org", { method: "POST" });
-        if (bootstrapRes.status === 401) {
-          const next = encodeURIComponent(pathname || "/crm");
-          router.replace(`/login?next=${next}`);
-          return;
-        }
         if (!bootstrapRes.ok) {
           const payload = await bootstrapRes.json().catch(() => null);
           console.error("[CRM LAYOUT] Failed to bootstrap org membership.", payload?.error ?? bootstrapRes.statusText);
@@ -109,7 +84,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [router, pathname]);
+  }, [pathname]);
 
   if (!ready) return null;
 
@@ -404,7 +379,15 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
 
         {/* Page content */}
         <div style={{ flex: 1 }}>
-          {children}
+          <SWRConfig
+            value={{
+              fetcher: (url: string) => authedFetch(url).then((response) => response.json()),
+              revalidateOnFocus: false,
+              dedupingInterval: 5000,
+            }}
+          >
+            {children}
+          </SWRConfig>
         </div>
       </div>
     </div>

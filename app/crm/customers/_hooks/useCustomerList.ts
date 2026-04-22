@@ -1,22 +1,18 @@
 'use client'
 
-import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
-import { loadCustomerList } from '@/lib/customers/client'
+import { useSwrResource } from '@/app/crm/_hooks/useSwrResource'
 import type { CustomerSummary } from '@/lib/customers/types'
 
 const emptyCustomerList: CustomerSummary[] = []
+const customerListKey = '/api/customers'
 
 export function useCustomerList() {
-  const listResource = useLoadableResource<CustomerSummary[]>({
-    initialData: emptyCustomerList,
-    load: loadCustomerList,
-    getErrorMessage: (error: unknown) =>
-      error instanceof Error ? error.message : 'Failed to load customers.',
-    reloadKey: 'customers',
+  const listResource = useSwrResource<CustomerSummary[]>(customerListKey, {
+    fallbackData: emptyCustomerList,
   })
 
   return {
-    listCustomers: listResource.data,
+    listCustomers: listResource.data ?? emptyCustomerList,
     listLoading: listResource.loading,
     listError: listResource.error,
     loadList: listResource.refresh,

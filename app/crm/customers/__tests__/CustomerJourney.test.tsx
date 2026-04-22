@@ -1,12 +1,15 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import userEvent from '@testing-library/user-event'
+import { mutate as swrMutate } from 'swr'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createSWRWrapper } from '@/app/crm/__tests__/swrTestUtils'
 import NewCustomerPage from '../new/page'
 import CustomerDetailPage from '../[id]/page'
 import EditCustomerPage from '../[id]/edit/page'
 
 const authedFetch = vi.fn()
+const invalidateSwrKey = vi.fn<(key: string) => Promise<unknown>>()
 const push = vi.fn()
 const replace = vi.fn()
 const refresh = vi.fn()
@@ -17,7 +20,11 @@ const useSearchParams = vi.fn()
 const useOrg = vi.fn()
 
 vi.mock('@/lib/auth/authedFetch', () => ({
-  authedFetch: (...args: unknown[]) => authedFetch(...args),
+  authedFetch: (input: RequestInfo | URL, init?: RequestInit) => authedFetch(input, init),
+}))
+
+vi.mock('@/app/crm/_hooks/swrCache', () => ({
+  invalidateSwrKey: (key: string) => invalidateSwrKey(key),
 }))
 
 vi.mock('@/app/crm/customers/customers-orgproviders', () => ({
@@ -67,6 +74,8 @@ describe('customer journey smoke', () => {
     usePathname.mockReset()
     useSearchParams.mockReset()
     useOrg.mockReset()
+    invalidateSwrKey.mockClear()
+    invalidateSwrKey.mockImplementation((key: string) => swrMutate(key))
     useOrg.mockReturnValue({ orgId: 'org-1', loading: false, error: null, refresh: vi.fn() })
     usePathname.mockReturnValue('/crm/customers/customer-1')
     useSearchParams.mockReturnValue(new URLSearchParams(''))
@@ -86,7 +95,7 @@ describe('customer journey smoke', () => {
     const user = userEvent.setup()
 
     authedFetch.mockResolvedValueOnce(createMutationResponse({ id: 'customer-1' }))
-    render(<NewCustomerPage />)
+    render(<NewCustomerPage />, { wrapper: createSWRWrapper() })
 
     await user.type(screen.getByLabelText('Name *'), 'Taylor Jones')
     await user.type(screen.getByLabelText('Street'), '123 Main St')
@@ -97,6 +106,7 @@ describe('customer journey smoke', () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/crm/customers/customer-1'))
     expect(refresh).not.toHaveBeenCalled()
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers')
     cleanup()
 
     authedFetch.mockReset()
@@ -143,7 +153,7 @@ describe('customer journey smoke', () => {
       )
       .mockResolvedValueOnce(createMutationResponse(true))
 
-    render(<CustomerDetailPage />)
+    render(<CustomerDetailPage />, { wrapper: createSWRWrapper() })
 
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Customer details' })).toBeTruthy()
@@ -151,10 +161,14 @@ describe('customer journey smoke', () => {
     expect(screen.getAllByText('Taylor Jones').length).toBeGreaterThan(0)
     await user.type(screen.getByPlaceholderText('Add a note about this customer...'), 'Customer prefers mornings')
     await user.click(screen.getByRole('button', { name: 'Add note' }))
-    await waitFor(() => expect(screen.getByText('Customer prefers mornings')).toBeTruthy())
+    await waitFor(() =>
+      expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers/customer-1/timeline')
+    )
 
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(push).toHaveBeenCalledWith('/crm/customers'))
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers/customer-1/timeline')
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers/customer-1')
     cleanup()
 
     authedFetch.mockReset()
@@ -179,7 +193,7 @@ describe('customer journey smoke', () => {
       )
       .mockResolvedValueOnce(createMutationResponse({ id: 'customer-1' }))
 
-    render(<EditCustomerPage />)
+    render(<EditCustomerPage />, { wrapper: createSWRWrapper() })
 
     await waitFor(() => expect(screen.getByDisplayValue('Taylor Jones')).toBeTruthy())
     const nameInput = screen.getByLabelText('Name *')
@@ -189,5 +203,6 @@ describe('customer journey smoke', () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/crm/customers/customer-1'))
     expect(refresh).not.toHaveBeenCalled()
+    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers/customer-1')
   }, 15000)
 })

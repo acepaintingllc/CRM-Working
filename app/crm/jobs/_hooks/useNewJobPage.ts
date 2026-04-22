@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
 import { loadCustomerList } from '@/lib/customers/client'
 import { createJob } from '@/lib/jobs/client'
 import {
@@ -124,6 +125,7 @@ export function useNewJobPage() {
         validated: validated.value,
       })
 
+      await invalidateSwrKey('/api/jobs')
       setNotice('Job created.')
       router.push(createdId ? `/crm/jobs/${createdId}` : '/crm/jobs')
       return true

@@ -1,22 +1,20 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
-import { loadCustomerTimeline, saveCustomerTimelineNote } from '@/lib/customers/client'
+import { useSwrResource } from '@/app/crm/_hooks/useSwrResource'
+import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
+import { saveCustomerTimelineNote } from '@/lib/customers/client'
 import type { CustomerTimelineEvent } from '@/lib/customers/types'
 
 const emptyTimelineEvents: CustomerTimelineEvent[] = []
 
 export function useCustomerTimeline(customerId: string | undefined) {
-  const timelineResource = useLoadableResource<CustomerTimelineEvent[]>({
-    initialData: emptyTimelineEvents,
-    load: async () => {
-      if (typeof customerId !== 'string' || !customerId) return []
-      return loadCustomerTimeline(customerId)
-    },
-    getErrorMessage: (error: unknown) =>
-      error instanceof Error ? error.message : 'Failed to load customer timeline.',
-    reloadKey: customerId,
+  const timelineKey =
+    typeof customerId === 'string' && customerId
+      ? `/api/customers/${customerId}/timeline`
+      : null
+  const timelineResource = useSwrResource<CustomerTimelineEvent[]>(timelineKey, {
+    fallbackData: emptyTimelineEvents,
   })
   const [noteBody, setNoteBody] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
@@ -30,7 +28,9 @@ export function useCustomerTimeline(customerId: string | undefined) {
     try {
       await saveCustomerTimelineNote(customerId, noteBody.trim())
       setNoteBody('')
-      await loadTimeline()
+      if (timelineKey) {
+        await invalidateSwrKey(timelineKey)
+      }
       return true
     } catch (error: unknown) {
       setTimelineError(error instanceof Error ? error.message : 'Failed to save customer note.')
@@ -41,7 +41,7 @@ export function useCustomerTimeline(customerId: string | undefined) {
   }, [customerId, loadTimeline, noteBody, setTimelineError])
 
   return {
-    timelineEvents: timelineResource.data,
+    timelineEvents: timelineResource.data ?? emptyTimelineEvents,
     timelineLoading: timelineResource.loading,
     timelineError: timelineResource.error,
     noteBody,
