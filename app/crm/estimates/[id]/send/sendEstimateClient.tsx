@@ -1,113 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
+import { templatePresets } from '@/lib/customer-estimates/presets'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import {
-  type CustomerSendMutationResponse,
-  loadCustomerSendPage,
-  saveCustomerSendDraft,
-  submitCustomerSend,
-} from '@/lib/quotes/client'
-import type {
-  CompanyProfile,
-  CustomerEstimateDocument,
-  CustomerEstimateSectionKey,
-  Unsafe,
-} from '@/lib/customer-estimates/types'
-
-type DraftState = {
-  to_email: string
-  cc_email: string
-  bcc_email: string
-  subject: string
-  body: string
-  template_key: string
-  title: string
-  quote_validity_days: string
-  scope_text_edits: Record<CustomerEstimateSectionKey, string>
-}
-
-type VersionState = {
-  status: string
-  sent_at: string | null
-  viewed_at: string | null
-  accepted_at: string | null
-  declined_at: string | null
-  public_token: string | null
-}
-
-type SendPageData = {
-  estimate: Unsafe
-  job: {
-    customer_name?: string | null
-    customer_address?: string | null
-    customer_email?: string | null
-    customer_phone?: string | null
-    title?: string | null
-    estimate_date?: string | null
-  }
-  customer?: {
-    name?: string | null
-    company_name?: string | null
-    email?: string | null
-    phone?: string | null
-    address?: string | null
-    street?: string | null
-    city?: string | null
-    state?: string | null
-    zip?: string | null
-  } | null
-  company: CompanyProfile
-  inputs: {
-    rooms?: Unsafe[]
-    room_wall_scopes?: Unsafe[]
-    room_ceiling_scopes?: Unsafe[]
-    room_trim_scopes?: Unsafe[]
-    trim_items?: Unsafe[]
-    other?: Unsafe[]
-    jobsettings?: Unsafe | null
-  }
-  catalogs?: Unsafe | null
-  pricing_summary?: { finalTotal: number | null } | null
-  draft: Record<string, unknown>
-  version: Record<string, unknown> | null
-  public_url: string | null
-  document: CustomerEstimateDocument
-  versions: Record<string, unknown>[]
-}
-
-type TemplatePreset = {
-  key: string
-  label: string
-  subject: string
-  body: string
-}
-
-const templatePresets: TemplatePreset[] = [
-  {
-    key: 'default',
-    label: 'Default',
-    subject: 'Your quote is ready',
-    body:
-      'Hello,\n\nYour quote is ready. Please review the secure link below and let us know if you have any questions.\n\nThank you.',
-  },
-  {
-    key: 'concise',
-    label: 'Concise',
-    subject: 'Attached: quote for your project',
-    body: 'Hello,\n\nYour quote is ready for review.\n\nThank you.',
-  },
-  {
-    key: 'friendly',
-    label: 'Friendly',
-    subject: 'Here is your quote',
-    body:
-      'Hello,\n\nIt was great talking with you. Your quote is ready to review at the secure link below.\n\nPlease reach out if you want to discuss anything before you accept.',
-  },
-]
+  asText,
+  buildCustomerSendComposerDraft,
+  buildCustomerSendComposerPreview,
+  type CustomerSendComposerDraft,
+  useCustomerSendWorkflow,
+} from './_shared/customerSendWorkflow'
 
 const shellBg =
   'radial-gradient(circle at top left, rgba(133,199,155,0.08), transparent 28%), radial-gradient(circle at bottom right, rgba(255,255,255,0.05), transparent 24%), linear-gradient(180deg, #111 0%, #090909 100%)'
@@ -116,14 +20,12 @@ const C = {
   bg: '#0b0b0b',
   shell: '#111111',
   card: '#171717',
-  card2: '#202020',
   border: '#2a2a2a',
   borderSoft: '#373737',
   ink: '#f4f4f4',
   ink2: '#c4c4c4',
   ink3: '#8f8f8f',
-  green: '#85c79b',
-}
+} as const
 
 const shellCard: CSSProperties = {
   background: C.card,
@@ -155,7 +57,7 @@ const actionButton: CSSProperties = {
   fontSize: 13,
   fontWeight: 800,
   cursor: 'pointer',
-  border: `1px solid rgba(133,199,155,0.28)`,
+  border: '1px solid rgba(133,199,155,0.28)',
   background: 'rgba(133,199,155,0.12)',
   color: '#d7f3df',
 }
@@ -167,70 +69,31 @@ const secondaryButton: CSSProperties = {
   color: C.ink,
 }
 
-function asText(value: unknown) {
-  return value == null ? '' : String(value).trim()
+function FieldLabel({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ fontSize: 12, fontWeight: 800, color: C.ink2, marginBottom: 6 }}>
+      {children}
+    </div>
+  )
 }
 
-function sectionDraftText(
-  draft: Record<string, unknown> | null | undefined,
-  key: CustomerEstimateSectionKey
-) {
-  const scope = (draft?.scope_text_edits as Record<string, unknown> | null | undefined) ?? {}
-  return asText(scope[key])
-}
-
-function buildInitialDraft(data: SendPageData): DraftState {
-  return buildDraftFromData(data, data.draft ?? {}, true)
-}
-
-function buildDraftFromData(
-  data: SendPageData,
-  draft: Record<string, unknown>,
-  keepScopeWordingDrafts: boolean
-): DraftState {
-  const scopeTextEdits = {
-    walls: keepScopeWordingDrafts ? sectionDraftText(draft, 'walls') : '',
-    ceilings: keepScopeWordingDrafts ? sectionDraftText(draft, 'ceilings') : '',
-    trim: keepScopeWordingDrafts ? sectionDraftText(draft, 'trim') : '',
-    doors: keepScopeWordingDrafts ? sectionDraftText(draft, 'doors') : '',
-    cabinets: keepScopeWordingDrafts ? sectionDraftText(draft, 'cabinets') : '',
-    other: keepScopeWordingDrafts ? sectionDraftText(draft, 'other') : '',
-  }
-
-  return {
-    to_email: asText(draft.to_email) || asText(data.job.customer_email) || asText(data.document.customer.email),
-    cc_email: asText(draft.cc_email),
-    bcc_email: asText(draft.bcc_email),
-    subject:
-      asText(draft.subject) ||
-      `${asText(data.document.meta.title) || 'Quote'} from ${asText(data.company.business_name) || 'ACE Painting'}`,
-    body:
-      asText(draft.body) ||
-      `Hello ${asText(data.document.customer.name) || 'there'},\n\nYour quote is ready for review.\n\nThank you.`,
-    template_key: asText(draft.template_key) || 'default',
-    title: asText(draft.title) || asText(data.document.meta.title),
-    quote_validity_days: asText(draft.quote_validity_days) || String(data.document.quote_validity_days ?? 90),
-    scope_text_edits: scopeTextEdits,
-  }
-}
-
-function draftPayload(form: DraftState) {
-  return {
-    to_email: form.to_email,
-    cc_email: form.cc_email,
-    bcc_email: form.bcc_email,
-    subject: form.subject,
-    body: form.body,
-    template_key: form.template_key,
-    title: form.title,
-    quote_validity_days: form.quote_validity_days,
-    scope_text_edits: form.scope_text_edits,
-  }
-}
-
-function customerSendUrl(estimateId: string, catalogSource?: 'estimate' | 'v2') {
-  const url = `/api/quotes/${estimateId}/customer-send`
-  return catalogSource === 'v2' ? `${url}?v2=1` : url
+function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          color: C.ink3,
+          fontWeight: 700,
+        }}
+      >
+        {title}
+      </div>
+      {subtitle ? <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5 }}>{subtitle}</div> : null}
+    </div>
+  )
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -264,23 +127,18 @@ function StatusChip({ status }: { status: string }) {
   )
 }
 
-function FieldLabel({ children }: { children: ReactNode }) {
-  return (
-    <div style={{ fontSize: 12, fontWeight: 800, color: C.ink2, marginBottom: 6 }}>
-      {children}
-    </div>
-  )
-}
-
-function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div style={{ display: 'grid', gap: 4 }}>
-      <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.ink3, fontWeight: 700 }}>
-        {title}
-      </div>
-      {subtitle ? <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5 }}>{subtitle}</div> : null}
-    </div>
-  )
+function draftPayload(form: CustomerSendComposerDraft) {
+  return {
+    to_email: form.to_email,
+    cc_email: form.cc_email,
+    bcc_email: form.bcc_email,
+    subject: form.subject,
+    body: form.body,
+    template_key: form.template_key,
+    title: form.title,
+    quote_validity_days: form.quote_validity_days,
+    scope_text_edits: form.scope_text_edits,
+  }
 }
 
 export default function SendEstimateClient({
@@ -290,116 +148,40 @@ export default function SendEstimateClient({
   estimateId: string
   catalogSource?: 'estimate' | 'v2'
 }) {
-  const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [data, setData] = useState<SendPageData | null>(null)
-  const [publicUrl, setPublicUrl] = useState<string | null>(null)
-  const [version, setVersion] = useState<VersionState | null>(null)
-  const [form, setForm] = useState<DraftState | null>(null)
-  const mountedRef = useRef(true)
+  const {
+    loading,
+    busy,
+    message,
+    setMessage,
+    error,
+    setError,
+    data,
+    publicUrl,
+    form,
+    setForm,
+    reload,
+    persistDraft,
+    submit,
+    labels,
+    liveDocument,
+    currentTemplate,
+    hasLiveLink,
+    version,
+  } = useCustomerSendWorkflow<CustomerSendComposerDraft>({
+    estimateId,
+    catalogSource,
+    buildForm: buildCustomerSendComposerDraft,
+    buildDocument: buildCustomerSendComposerPreview,
+    draftPayload,
+    loadErrorMessage: 'Unable to load quote send page',
+  })
 
-  const loadSendPage = useCallback(async (options?: { hard?: boolean }) => {
-    setLoading(true)
-    if (options?.hard) {
-      setMessage(null)
-      setError(null)
-    } else {
-      setError(null)
-    }
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
-    let payload: SendPageData
-    try {
-      payload = await loadCustomerSendPage<SendPageData>(customerSendUrl(estimateId, catalogSource))
-    } catch (error) {
-      if (!mountedRef.current) return false
-      setError(error instanceof Error ? error.message : 'Unable to load quote send page')
-      setLoading(false)
-      return false
-    }
-    if (!mountedRef.current) return false
-
-    setData(payload)
-    setPublicUrl((payload?.public_url as string | null) ?? null)
-    setVersion(
-      payload?.version
-        ? {
-            status: asText(payload.version.status) || 'draft',
-            sent_at: (payload.version.sent_at as string | null) ?? null,
-            viewed_at: (payload.version.viewed_at as string | null) ?? null,
-            accepted_at: (payload.version.accepted_at as string | null) ?? null,
-            declined_at: (payload.version.declined_at as string | null) ?? null,
-            public_token: (payload.version.public_token as string | null) ?? null,
-          }
-        : {
-            status: 'draft',
-            sent_at: null,
-            viewed_at: null,
-            accepted_at: null,
-            declined_at: null,
-            public_token: null,
-          }
-    )
-    setForm(
-      buildDraftFromData(
-        payload as SendPageData,
-        (payload?.draft as Record<string, unknown> | null | undefined) ?? {},
-        !options?.hard
-      )
-    )
-    setLoading(false)
-    return true
-  }, [catalogSource, estimateId])
-
-  useEffect(() => {
-    mountedRef.current = true
-    void loadSendPage()
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [loadSendPage])
-
-  const liveDocument = useMemo(() => {
-    if (!data || !form) return null
-    return buildCustomerEstimateDocument({
-      estimate: data.estimate,
-      job: data.job,
-      customer: data.customer ?? null,
-      company: data.company,
-      inputs: data.inputs,
-      catalogs: data.catalogs ?? null,
-      pricingSummary: data.pricing_summary ? { finalTotal: data.pricing_summary.finalTotal ?? null } : null,
-      overrides: {
-        title: form.title,
-        scope_text_edits: form.scope_text_edits,
-        quote_validity_days: form.quote_validity_days,
-      },
-      publicMeta: {
-        status: version?.status ?? 'draft',
-        sent_at: version?.sent_at ?? null,
-        viewed_at: version?.viewed_at ?? null,
-        accepted_at: version?.accepted_at ?? null,
-        declined_at: version?.declined_at ?? null,
-        public_token: version?.public_token ?? null,
-      },
-    })
-  }, [data, form, version])
-
-  const currentTemplate = useMemo(() => {
-    return templatePresets.find((preset) => preset.key === form?.template_key) ?? templatePresets[0]
-  }, [form?.template_key])
-  const isV2Quote = data?.document.meta.flow_version === 'v2'
-  const documentLabel = isV2Quote ? 'Quote' : 'Estimate'
-  const documentLabelLower = documentLabel.toLowerCase()
-  const shellLabel = isV2Quote ? 'Customer Quote' : 'Customer Estimate'
-  const actionLabel = isV2Quote ? 'Send Quote' : 'Send Estimate'
-
-  const isLive = asText(version?.status) !== 'draft'
-  const hasLiveLink = Boolean(publicUrl)
-
-  const setDraftField = <K extends keyof DraftState>(key: K, value: DraftState[K]) => {
+  const setDraftField = <K extends keyof CustomerSendComposerDraft>(
+    key: K,
+    value: CustomerSendComposerDraft[K]
+  ) => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
   }
 
@@ -417,81 +199,9 @@ export default function SendEstimateClient({
     )
   }
 
-  const persistDraft = async () => {
-    if (!form) return
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    let payload: CustomerSendMutationResponse
-    try {
-      payload = await saveCustomerSendDraft<CustomerSendMutationResponse>(
-        customerSendUrl(estimateId, catalogSource),
-        draftPayload(form)
-      )
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unable to save draft')
-      setBusy(false)
-      return
-    }
-
-    setMessage('Draft saved.')
-    setPublicUrl((payload?.public_url as string | null) ?? publicUrl)
-    if (payload?.version) {
-      setVersion({
-        status: asText(payload.version.status) || 'draft',
-        sent_at: (payload.version.sent_at as string | null) ?? null,
-        viewed_at: (payload.version.viewed_at as string | null) ?? null,
-        accepted_at: (payload.version.accepted_at as string | null) ?? null,
-        declined_at: (payload.version.declined_at as string | null) ?? null,
-        public_token: (payload.version.public_token as string | null) ?? null,
-      })
-    }
-    setBusy(false)
-  }
-
-  const submitEstimate = async (mode: 'test' | 'send') => {
-    if (!form) return
-    if (mode === 'test' && !form.to_email.trim()) {
-      setError('To email is required for a test send.')
-      return
-    }
-
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    let payload: CustomerSendMutationResponse
-    try {
-      payload = await submitCustomerSend<CustomerSendMutationResponse>(
-        customerSendUrl(estimateId, catalogSource),
-        {
-          mode,
-          draft: draftPayload(form),
-        }
-      )
-    } catch (error) {
-      setError(error instanceof Error ? error.message : `Unable to send ${documentLabelLower}`)
-      setBusy(false)
-      return
-    }
-
-    setMessage(mode === 'test' ? 'Test message sent.' : `${documentLabel} sent.`)
-    setPublicUrl((payload?.public_url as string | null) ?? publicUrl)
-    if (payload?.version) {
-      setVersion({
-        status: asText(payload.version.status) || (mode === 'send' ? 'sent' : 'draft'),
-        sent_at: (payload.version.sent_at as string | null) ?? null,
-        viewed_at: (payload.version.viewed_at as string | null) ?? null,
-        accepted_at: (payload.version.accepted_at as string | null) ?? null,
-        declined_at: (payload.version.declined_at as string | null) ?? null,
-        public_token: (payload.version.public_token as string | null) ?? null,
-      })
-    }
-    setBusy(false)
-  }
-
   const copyLink = async () => {
     if (!publicUrl) {
-      setError(`Send the ${documentLabelLower} first to create a live link.`)
+      setError(`Send the ${labels.documentLower} first to create a live link.`)
       return
     }
     await navigator.clipboard.writeText(publicUrl)
@@ -499,18 +209,18 @@ export default function SendEstimateClient({
   }
 
   const hardRefresh = async () => {
-    if (busy) return
-    const hasUnsavedChanges = !!form && !!data
-      ? JSON.stringify(form) !== JSON.stringify(buildInitialDraft(data))
-      : false
+    if (busy || !data || !form) return
+    const hasUnsavedChanges =
+      JSON.stringify(form) !==
+      JSON.stringify(buildCustomerSendComposerDraft(data, data.draft ?? {}, true))
     if (hasUnsavedChanges) {
       const shouldDiscard = window.confirm(
-        'Reload the latest quote data from the server? This will discard unsaved changes on this page.'
+        `Reload the latest ${labels.documentLower} data from the server? This will discard unsaved changes on this page.`
       )
       if (!shouldDiscard) return
     }
-    await loadSendPage({ hard: true })
-    setMessage('Reloaded latest quote data.')
+    await reload({ hard: true })
+    setMessage(`Reloaded latest ${labels.documentLower} data.`)
   }
 
   const downloadPdf = () => {
@@ -523,16 +233,19 @@ export default function SendEstimateClient({
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div style={{ minHeight: '100vh', background: C.bg, color: C.ink }}>
         <div style={{ minHeight: '100vh', background: shellBg, padding: 20 }}>
           <div style={{ maxWidth: 1580, margin: '0 auto', display: 'grid', gap: 18 }}>
-            <div style={{ ...shellCard, padding: '16px 18px' }}>
-              <div style={{ height: 16, width: 180, background: '#222', borderRadius: 8 }} />
-              <div style={{ marginTop: 10, height: 28, width: 340, background: '#222', borderRadius: 8 }} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 430px) minmax(0, 1fr)', gap: 18 }}>
-              <div style={{ ...shellCard, minHeight: 700, background: C.card }} />
-              <div style={{ ...shellCard, minHeight: 900, background: C.card }} />
+            <div style={{ ...shellCard, padding: '16px 18px', minHeight: 90 }} />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(360px, 430px) minmax(0, 1fr)',
+                gap: 18,
+              }}
+            >
+              <div style={{ ...shellCard, minHeight: 700 }} />
+              <div style={{ ...shellCard, minHeight: 900 }} />
             </div>
           </div>
         </div>
@@ -542,11 +255,11 @@ export default function SendEstimateClient({
 
   if (error && !data) {
     return (
-      <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div style={{ minHeight: '100vh', background: C.bg, color: C.ink }}>
         <div style={{ minHeight: '100vh', background: shellBg, padding: 20 }}>
           <div style={{ maxWidth: 980, margin: '0 auto' }}>
             <div style={{ ...shellCard, padding: 18 }}>
-              <div style={{ fontSize: 18, fontWeight: 900 }}>{actionLabel}</div>
+              <div style={{ fontSize: 18, fontWeight: 900 }}>{labels.action}</div>
               <div style={{ marginTop: 10, color: C.ink2 }}>{error}</div>
               <div style={{ marginTop: 16 }}>
                 <Link href={`/crm/quotes/${estimateId}/summary`} style={{ color: '#d7f3df', fontWeight: 800 }}>
@@ -563,15 +276,7 @@ export default function SendEstimateClient({
   if (!data || !form || !liveDocument) return null
 
   return (
-    <div
-      className="send-shell"
-      style={{
-        minHeight: '100vh',
-        background: C.bg,
-        color: C.ink,
-        fontFamily: "'Inter', system-ui, sans-serif",
-      }}
-    >
+    <div className="send-shell" style={{ minHeight: '100vh', background: C.bg, color: C.ink }}>
       <div className="send-page" style={{ minHeight: '100vh', background: shellBg, padding: 20 }}>
         <div style={{ maxWidth: 1580, margin: '0 auto', display: 'grid', gap: 18 }}>
           <div
@@ -586,19 +291,35 @@ export default function SendEstimateClient({
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.ink3, fontWeight: 700 }}>
-                {shellLabel}
+              <div
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: C.ink3,
+                  fontWeight: 700,
+                }}
+              >
+                {labels.shell}
               </div>
-              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 900, letterSpacing: '-0.03em' }}>{actionLabel}</div>
+              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 900, letterSpacing: '-0.03em' }}>
+                {labels.action}
+              </div>
               <div style={{ marginTop: 4, fontSize: 13, color: C.ink2 }}>
-                {asText(data.document.customer.name) || 'Customer'} - {asText(data.document.meta.title) || documentLabel}
+                {asText(data.document.customer.name) || 'Customer'} |{' '}
+                {asText(data.document.meta.title) || labels.document}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+                justifyContent: 'flex-end',
+              }}
+            >
               <StatusChip status={version?.status ?? 'draft'} />
-              <button type="button" onClick={hardRefresh} className="send-buttons" style={secondaryButton}>
-                Reload latest
-              </button>
               <Link
                 href={`/crm/quotes/${estimateId}/summary`}
                 style={{
@@ -643,7 +364,7 @@ export default function SendEstimateClient({
                     border: '1px solid rgba(133,199,155,0.24)',
                     background: 'rgba(133,199,155,0.08)',
                     color: '#cdeed5',
-                    borderRadius: 10,
+                    borderRadius: 12,
                     padding: '10px 12px',
                     fontSize: 13,
                   }}
@@ -651,163 +372,153 @@ export default function SendEstimateClient({
                   {message}
                 </div>
               ) : null}
+              {error ? (
+                <div
+                  style={{
+                    border: '1px solid rgba(248,113,113,0.24)',
+                    background: 'rgba(248,113,113,0.08)',
+                    color: '#fecaca',
+                    borderRadius: 12,
+                    padding: '10px 12px',
+                    fontSize: 13,
+                  }}
+                >
+                  {error}
+                </div>
+              ) : null}
 
               <SectionTitle
-                title="Email"
-                subtitle="Prefilled from CRM data, but fully editable before draft or send."
+                title="Delivery"
+                subtitle={`Prepare the exact ${labels.documentLower} email the customer will receive.`}
               />
 
-              <label style={{ display: 'grid' }}>
-                <FieldLabel>To email</FieldLabel>
-                <input
-                  value={form.to_email}
-                  onChange={(event) => setDraftField('to_email', event.target.value)}
-                  style={inputBase}
-                  placeholder="customer@example.com"
-                />
-              </label>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div>
+                  <FieldLabel>Template</FieldLabel>
+                  <select
+                    value={form.template_key}
+                    onChange={(event) => applyTemplate(event.target.value)}
+                    style={inputBase}
+                  >
+                    {templatePresets.map((preset) => (
+                      <option key={preset.key} value={preset.key}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <label style={{ display: 'grid' }}>
-                  <FieldLabel>CC</FieldLabel>
+                <div>
+                  <FieldLabel>To</FieldLabel>
                   <input
-                    value={form.cc_email}
-                    onChange={(event) => setDraftField('cc_email', event.target.value)}
+                    value={form.to_email}
+                    onChange={(event) => setDraftField('to_email', event.target.value)}
                     style={inputBase}
-                    placeholder="optional"
                   />
-                </label>
-                <label style={{ display: 'grid' }}>
-                  <FieldLabel>BCC</FieldLabel>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <FieldLabel>CC</FieldLabel>
+                    <input
+                      value={form.cc_email}
+                      onChange={(event) => setDraftField('cc_email', event.target.value)}
+                      style={inputBase}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>BCC</FieldLabel>
+                    <input
+                      value={form.bcc_email}
+                      onChange={(event) => setDraftField('bcc_email', event.target.value)}
+                      style={inputBase}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <FieldLabel>Subject</FieldLabel>
                   <input
-                    value={form.bcc_email}
-                    onChange={(event) => setDraftField('bcc_email', event.target.value)}
+                    value={form.subject}
+                    onChange={(event) => setDraftField('subject', event.target.value)}
                     style={inputBase}
-                    placeholder="optional"
                   />
-                </label>
+                </div>
+
+                <div>
+                  <FieldLabel>Title</FieldLabel>
+                  <input
+                    value={form.title}
+                    onChange={(event) => setDraftField('title', event.target.value)}
+                    style={inputBase}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Validity (days)</FieldLabel>
+                  <input
+                    value={form.quote_validity_days}
+                    onChange={(event) => setDraftField('quote_validity_days', event.target.value)}
+                    style={inputBase}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Message</FieldLabel>
+                  <textarea
+                    value={form.body}
+                    onChange={(event) => setDraftField('body', event.target.value)}
+                    style={textareaBase}
+                  />
+                </div>
               </div>
 
-              <label style={{ display: 'grid' }}>
-                <FieldLabel>Template preset</FieldLabel>
-                <select
-                  value={form.template_key}
-                  onChange={(event) => applyTemplate(event.target.value)}
-                  style={inputBase}
-                >
-                  {templatePresets.map((preset) => (
-                    <option key={preset.key} value={preset.key}>
-                      {preset.label}
-                    </option>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((current) => !current)}
+                style={secondaryButton}
+              >
+                {showAdvanced ? 'Hide scope wording edits' : 'Edit scope wording'}
+              </button>
+
+              {showAdvanced ? (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {(
+                    ['walls', 'ceilings', 'trim', 'doors', 'cabinets', 'other'] as const
+                  ).map((sectionKey) => (
+                    <div key={sectionKey}>
+                      <FieldLabel>{sectionKey}</FieldLabel>
+                      <textarea
+                        value={form.scope_text_edits[sectionKey]}
+                        onChange={(event) =>
+                          setDraftField('scope_text_edits', {
+                            ...form.scope_text_edits,
+                            [sectionKey]: event.target.value,
+                          })
+                        }
+                        style={{ ...textareaBase, minHeight: 84 }}
+                      />
+                    </div>
                   ))}
-                </select>
-              </label>
+                </div>
+              ) : null}
 
-              <label style={{ display: 'grid' }}>
-                <FieldLabel>Subject</FieldLabel>
-                <input
-                  value={form.subject}
-                  onChange={(event) => setDraftField('subject', event.target.value)}
-                  style={inputBase}
-                  placeholder={`${documentLabel} ready`}
-                />
-              </label>
-
-              <label style={{ display: 'grid' }}>
-                <FieldLabel>Email body</FieldLabel>
-                <textarea
-                  value={form.body}
-                  onChange={(event) => setDraftField('body', event.target.value)}
-                  style={textareaBase}
-                  placeholder="Write the customer message here"
-                />
-              </label>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-                <button type="button" disabled={busy} onClick={persistDraft} style={actionButton}>
+              <div style={{ display: 'grid', gap: 10, marginTop: 'auto', paddingTop: 6 }}>
+                <button type="button" disabled={busy} onClick={() => void persistDraft()} style={actionButton}>
                   Save Draft
                 </button>
-                <button type="button" disabled={busy} onClick={() => submitEstimate('test')} style={secondaryButton}>
+                <button type="button" disabled={busy} onClick={() => void submit('test')} style={secondaryButton}>
                   Send Test
                 </button>
-                <button type="button" disabled={busy} onClick={() => submitEstimate('send')} style={actionButton}>
-                {actionLabel}
-              </button>
+                <button type="button" disabled={busy} onClick={() => void submit('send')} style={actionButton}>
+                  {labels.action}
+                </button>
                 <button type="button" disabled={!hasLiveLink} onClick={copyLink} style={secondaryButton}>
                   Copy Link
                 </button>
-              </div>
-
-              <details open style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 900, color: C.ink }}>
-                  Advanced
-                </summary>
-                <div style={{ marginTop: 14, display: 'grid', gap: 14 }}>
-                  <label style={{ display: 'grid' }}>
-                    <FieldLabel>{documentLabel} title</FieldLabel>
-                    <input
-                      value={form.title}
-                      onChange={(event) => setDraftField('title', event.target.value)}
-                      style={inputBase}
-                    />
-                  </label>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <label style={{ display: 'grid' }}>
-                      <FieldLabel>Quote validity days</FieldLabel>
-                      <input
-                        value={form.quote_validity_days}
-                        onChange={(event) => setDraftField('quote_validity_days', event.target.value)}
-                        style={inputBase}
-                        inputMode="numeric"
-                      />
-                    </label>
-                    <label style={{ display: 'grid' }}>
-                      <FieldLabel>Template key</FieldLabel>
-                      <input value={currentTemplate.key} readOnly style={{ ...inputBase, opacity: 0.72 }} />
-                    </label>
-                  </div>
-
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    <FieldLabel>Scope wording edits</FieldLabel>
-                    <div style={{ display: 'grid', gap: 10 }}>
-                      {(['walls', 'ceilings', 'trim', 'doors', 'cabinets', 'other'] as CustomerEstimateSectionKey[]).map((key) => (
-                        <label key={key} style={{ display: 'grid', gap: 6 }}>
-                          <div style={{ fontSize: 12, fontWeight: 800, color: C.ink2, textTransform: 'capitalize' }}>{key}</div>
-                          <textarea
-                            value={form.scope_text_edits[key]}
-                            onChange={(event) =>
-                              setForm((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      scope_text_edits: {
-                                        ...prev.scope_text_edits,
-                                        [key]: event.target.value,
-                                      },
-                                    }
-                                  : prev
-                              )
-                            }
-                            placeholder="Leave blank to use calculated customer copy"
-                            style={{ ...textareaBase, minHeight: 74 }}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </details>
-
-              <div style={{ display: 'grid', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
-                <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.55 }}>
-                  Current live link: {publicUrl ? <span style={{ color: '#d7f3df' }}>{publicUrl}</span> : 'Not sent yet'}
-                </div>
-                <div style={{ fontSize: 12, color: C.ink3, lineHeight: 1.55 }}>
-                  {isLive
-                  ? 'This quote version is live and frozen.'
-                    : 'Edits here stay in the draft until you send the quote.'}
-                </div>
+                <button type="button" disabled={busy} onClick={hardRefresh} style={secondaryButton}>
+                  Reload Latest
+                </button>
               </div>
             </aside>
 
@@ -822,52 +533,39 @@ export default function SendEstimateClient({
                 overflow: 'auto',
               }}
             >
-              <div
-                className="send-preview-panel"
-                style={{
-                  display: 'grid',
-                  gap: 14,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    alignItems: 'baseline',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <div>
-                    <div style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.ink3, fontWeight: 700 }}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        letterSpacing: '0.16em',
+                        textTransform: 'uppercase',
+                        color: C.ink3,
+                        fontWeight: 700,
+                      }}
+                    >
                       Customer Preview
                     </div>
                     <div style={{ marginTop: 4, fontSize: 18, fontWeight: 900 }}>
                       Exact document the customer will see
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <span
-                      style={{
-                        border: `1px solid ${C.borderSoft}`,
-                        background: '#101010',
-                        borderRadius: 999,
-                        padding: '6px 10px',
-                        color: C.ink2,
-                        fontSize: 12,
-                        fontWeight: 800,
-                      }}
-                    >
-                      {liveDocument.scopes.length} scope sections
-                    </span>
-                    <span
-                      style={{
-                        border: `1px solid ${C.borderSoft}`,
-                        background: '#101010',
-                        borderRadius: 999,
-                        padding: '6px 10px',
-                        color: C.ink2,
-                        fontSize: 12,
-                        fontWeight: 800,
-                      }}
-                    >
-                      {liveDocument.meta.status}
-                    </span>
+                  <div style={{ fontSize: 12, color: C.ink3, fontWeight: 800 }}>
+                    {currentTemplate.label} template
                   </div>
                 </div>
-                <CustomerEstimateDocumentView document={liveDocument} showShell={false} />
+                <div style={{ borderRadius: 18, background: '#f2f0eb', padding: 18 }}>
+                  <CustomerEstimateDocumentView document={liveDocument} showShell={false} />
+                </div>
               </div>
             </main>
           </div>
@@ -887,7 +585,7 @@ export default function SendEstimateClient({
           .send-topbar,
           .send-controls,
           .send-buttons,
-          .send-preview-panel > div:first-child {
+          .send-preview > div:first-child {
             display: none !important;
           }
           .send-preview {
@@ -896,10 +594,6 @@ export default function SendEstimateClient({
             overflow: visible !important;
             border: none !important;
             background: #fff !important;
-            padding: 0 !important;
-          }
-          .send-preview-panel {
-            display: block !important;
             padding: 0 !important;
           }
           a[href]:after {

@@ -68,6 +68,28 @@ export function useQuoteProductsPage() {
 
   const validation = validateQuoteProductFormValues(formState)
   const validationError = validation.ok ? null : validation.error
+  const feedbackVm = {
+    loading: resource.loading,
+    error: resource.error,
+    mutationError: error,
+    notice,
+    hasData:
+      resource.data.length > 0 || (!resource.loading && !resource.error),
+  }
+  const catalogVm = {
+    activeFamily,
+    families: PRODUCT_FAMILIES,
+    search,
+    filtered,
+    selectedId,
+    selected,
+  }
+  const editorVm = {
+    formState,
+    selected,
+    saving,
+    validationError: error ? null : validationError,
+  }
 
   async function save() {
     if (!selected) return false
@@ -135,5 +157,16 @@ export function useQuoteProductsPage() {
     validationError: error ? null : validationError,
     save,
     remove,
+    feedbackVm,
+    catalogVm,
+    editorVm,
+    actions: {
+      setActiveFamily,
+      setSearch,
+      setSelectedId,
+      setFormState,
+      save,
+      remove,
+    },
   }
 }

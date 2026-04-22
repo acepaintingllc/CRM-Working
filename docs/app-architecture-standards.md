@@ -42,6 +42,7 @@ This is the default architecture for ordinary CRM features. Follow these rules u
 - `Estimate` is the canonical internal domain term for shared services, types, hooks, and helpers.
 - `Quote` remains an allowed user-facing label and route alias.
 - Do not introduce parallel `quote*` and `estimate*` shared abstractions for the same concept.
+- For the quote/estimate route contract, follow [quote-estimate-architecture.md](./quote-estimate-architecture.md).
 
 ## Allowed exception
 
