@@ -1,35 +1,42 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmFormActions } from '@/app/crm/_components/CrmFormActions'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
-import { useAsyncSubmitState } from '@/app/crm/_hooks/useAsyncSubmitState'
-import {
-  normalizeCustomerFormValues,
-  type CustomerFormValues,
-  type CustomerLegacyAddressCleanup,
+import type {
+  CustomerFormValues,
+  CustomerLegacyAddressCleanup,
 } from '@/lib/customers/forms'
 
 type CustomerFormProps = {
-  initialValues?: Partial<CustomerFormValues>
-  onSubmit: (payload: CustomerFormValues) => Promise<void>
-  submitLabel: string
-  submittingLabel: string
+  value: CustomerFormValues
+  onChange: (next: CustomerFormValues) => void
+  onSubmit?: () => void
+  submitLabel?: string
+  submittingLabel?: string
   cancelLabel?: string
   onCancel?: () => void
   legacyAddressCleanup?: CustomerLegacyAddressCleanup | null
+  saving?: boolean
+  error?: string | null
+  notice?: string | null
+  validationError?: string | null
 }
 
 export function CustomerForm({
-  initialValues,
+  value,
+  onChange,
   onSubmit,
-  submitLabel,
-  submittingLabel,
+  submitLabel = 'Save changes',
+  submittingLabel = 'Saving...',
   cancelLabel = 'Cancel',
   onCancel,
   legacyAddressCleanup = null,
+  saving = false,
+  error = null,
+  notice = null,
+  validationError = null,
 }: CustomerFormProps) {
   const fieldId = {
     name: 'customer-name',
@@ -40,79 +47,36 @@ export function CustomerForm({
     state: 'customer-state',
     zip: 'customer-zip',
   }
-  const normalizedInitialValues = useMemo(
-    () => normalizeCustomerFormValues(initialValues),
-    [initialValues]
-  )
-  const prepareSubmit = useCallback((values: CustomerFormValues) => {
-    if (!values.name.trim()) {
-      return { ok: false as const, error: 'Name is required.' }
-    }
 
-    if (
-      legacyAddressCleanup?.needsCleanup &&
-      (!values.street.trim() || !values.city.trim() || !values.state.trim() || !values.zip.trim())
-    ) {
-      return {
-        ok: false as const,
-        error: 'Enter street, city, state, and ZIP to replace the legacy address.',
-      }
-    }
-
-    return {
-      ok: true as const,
-      payload: {
-        name: values.name.trim(),
-        phone: values.phone.trim(),
-        email: values.email.trim(),
-        street: values.street.trim(),
-        city: values.city.trim(),
-        state: values.state.trim(),
-        zip: values.zip.trim(),
-      },
-    }
-  }, [legacyAddressCleanup])
-  const {
-    values,
-    setValues,
-    saving,
-    error,
-    submit,
-  } = useAsyncSubmitState<CustomerFormValues, CustomerFormValues>({
-    initialValues: normalizedInitialValues,
-    prepareSubmit,
-    onSubmit,
-    getErrorMessage: (submitError: unknown) =>
-      submitError instanceof Error ? submitError.message : 'Failed to save customer.',
-  })
-
-  function updateField<K extends keyof CustomerFormValues>(field: K, value: CustomerFormValues[K]) {
-    setValues((current) => ({ ...current, [field]: value }))
+  function updateField<K extends keyof CustomerFormValues>(field: K, nextValue: CustomerFormValues[K]) {
+    onChange({ ...value, [field]: nextValue })
   }
 
-  async function handleSubmit(event: React.FormEvent) {
+  function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    await submit()
+    onSubmit?.()
   }
 
   return (
     <>
       {error ? <CrmNotice tone="error" compact>{error}</CrmNotice> : null}
-      {legacyAddressCleanup && (
+      {notice ? <CrmNotice tone="success" compact>{notice}</CrmNotice> : null}
+      {validationError ? <CrmNotice tone="info" compact>{validationError}</CrmNotice> : null}
+      {legacyAddressCleanup ? (
         <CrmNotice tone="warning" title="Legacy address needs cleanup" compact>
           <div>{legacyAddressCleanup.warning}</div>
           <div className="mt-2 text-xs">
             Current stored address: {legacyAddressCleanup.legacyAddress}
           </div>
         </CrmNotice>
-      )}
+      ) : null}
 
       <form onSubmit={handleSubmit} className="grid gap-4">
         <CrmField label="Name *">
           <input
             id={fieldId.name}
             className="ace-crm-input text-sm"
-            value={values.name}
+            value={value.name}
             onChange={(event) => updateField('name', event.target.value)}
           />
         </CrmField>
@@ -122,7 +86,7 @@ export function CustomerForm({
             <input
               id={fieldId.phone}
               className="ace-crm-input text-sm"
-              value={values.phone}
+              value={value.phone}
               onChange={(event) => updateField('phone', event.target.value)}
             />
           </CrmField>
@@ -130,7 +94,7 @@ export function CustomerForm({
             <input
               id={fieldId.email}
               className="ace-crm-input text-sm"
-              value={values.email}
+              value={value.email}
               onChange={(event) => updateField('email', event.target.value)}
             />
           </CrmField>
@@ -140,7 +104,7 @@ export function CustomerForm({
           <input
             id={fieldId.street}
             className="ace-crm-input text-sm"
-            value={values.street}
+            value={value.street}
             onChange={(event) => updateField('street', event.target.value)}
           />
         </CrmField>
@@ -150,7 +114,7 @@ export function CustomerForm({
             <input
               id={fieldId.city}
               className="ace-crm-input text-sm"
-              value={values.city}
+              value={value.city}
               onChange={(event) => updateField('city', event.target.value)}
             />
           </CrmField>
@@ -158,7 +122,7 @@ export function CustomerForm({
             <input
               id={fieldId.state}
               className="ace-crm-input text-sm"
-              value={values.state}
+              value={value.state}
               onChange={(event) => updateField('state', event.target.value)}
             />
           </CrmField>
@@ -166,7 +130,7 @@ export function CustomerForm({
             <input
               id={fieldId.zip}
               className="ace-crm-input text-sm"
-              value={values.zip}
+              value={value.zip}
               onChange={(event) => updateField('zip', event.target.value)}
             />
           </CrmField>

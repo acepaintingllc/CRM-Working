@@ -4,10 +4,11 @@ import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
 import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
+import { CrmResourceState } from '@/app/crm/_components/CrmResourceState'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useJobDetailPage } from '@/app/crm/jobs/_hooks/useJobDetailPage'
-import StageEmailModal from '@/app/crm/jobs/_components/StageEmailModal'
 import JobCompletionCloseoutModal from '@/app/crm/jobs/_components/JobCompletionCloseoutModal'
+import StageEmailModal from '@/app/crm/jobs/_components/StageEmailModal'
 import JobActionRail from '@/app/crm/jobs/[id]/_components/JobActionRail'
 import JobCloseoutPanel from '@/app/crm/jobs/[id]/_components/JobCloseoutPanel'
 import JobDetailHeader from '@/app/crm/jobs/[id]/_components/JobDetailHeader'
@@ -20,165 +21,109 @@ import {
 } from '@/lib/jobs/types'
 
 export default function JobDetailPage() {
-  const {
-    id,
-    router,
-    job,
-    loading,
-    error,
-    notice,
-    deleting,
-    emailStage,
-    closeoutOpen,
-    timelineOpen,
-    setTimelineOpen,
-    estimateFile,
-    estimateFileError,
-    paintLogs,
-    afterPhotos,
-    sitePhotos,
-    copy,
-    patchJob,
-    deleteJob,
-    openStageEmail,
-    openCloseout,
-    closeStageEmail,
-    closeCloseout,
-    handleStageEmailSent,
-    handleCloseoutSaved,
-    handleStatusChange,
-    markCompletedAndPrompt,
-    formatDate,
-    formatRange,
-    formatStatus,
-  } = useJobDetailPage()
+  const controller = useJobDetailPage()
 
-  const detailActions = job ? getJobWorkflowActions('detail', job) : []
+  const detailActions = controller.job ? getJobWorkflowActions('detail', controller.job) : []
 
   const actionTone = (action: JobWorkflowResolvedAction) =>
     action.tone === 'accent' ? 'primary' : action.tone === 'danger' ? 'danger' : 'secondary'
-
-  const runDetailAction = async (action: JobWorkflowResolvedAction) => {
-    if (!job) return
-    if (action.confirmMessage && !window.confirm(action.confirmMessage)) return
-    if (action.kind === 'navigate' && action.href) {
-      router.push(action.href)
-      return
-    }
-    if (action.kind === 'stage_email' && action.stage) {
-      openStageEmail(action.stage)
-      return
-    }
-    if (action.kind === 'patch_status' && action.status) {
-      await handleStatusChange(action.status)
-      return
-    }
-    if (action.kind === 'open_closeout') {
-      openCloseout()
-      return
-    }
-    if (action.kind === 'patch_date' && action.dateField === 'completed_at') {
-      await markCompletedAndPrompt()
-      return
-    }
-    if (action.kind === 'patch_date' && action.dateField === 'estimate_sent_at') {
-      await patchJob({ estimate_sent_at: new Date().toISOString() })
-    }
-  }
 
   return (
     <CrmPageShell className="max-w-6xl">
       <CrmPageHeader
         eyebrow="Pipeline workflow"
         emoji="🧾"
-        title={job?.title ?? 'Job details'}
+        title={controller.job?.title ?? 'Job details'}
         description="Shared CRM job detail page with workflow actions, schedule context, and closeout data."
         backHref="/crm/jobs"
         backLabel="Back to jobs"
       />
 
-      <JobDetailHeader
-        title={job?.title ?? 'Job details'}
-        status={job?.status ?? null}
-        statusOptions={JOB_STATUS_OPTIONS}
-        deleting={deleting}
-        onBack={() => router.back()}
-        onDelete={() => void deleteJob()}
-        onStatusChange={(status) => void handleStatusChange(status)}
-        formatStatus={formatStatus}
-      />
+      <CrmResourceState
+        loading={controller.resource.loading}
+        error={controller.resource.error}
+        hasData={Boolean(controller.job)}
+        loadingTitle="Loading job"
+        loadingDescription="Loading job..."
+        errorTitle="Job unavailable"
+        emptyTitle="Job not found"
+        emptyDescription="This job could not be found."
+        onRetry={() => void controller.resource.refresh()}
+      >
+        {controller.notice ? <CrmNotice tone="success">{controller.notice}</CrmNotice> : null}
 
-      {loading ? (
-        <CrmSectionCard title="Loading job">
-          <div className="text-[color:var(--crm-ui-muted)]">Loading job...</div>
-        </CrmSectionCard>
-      ) : null}
-      {!loading && error ? <CrmNotice tone="error">{error}</CrmNotice> : null}
-      {!loading && notice ? <CrmNotice tone="success">{notice}</CrmNotice> : null}
-      {!loading && !error && !job ? (
-        <CrmSectionCard title="Job not found">
-          <div className="text-[color:var(--crm-ui-muted)]">Job not found.</div>
-        </CrmSectionCard>
-      ) : null}
+        {controller.job ? (
+          <>
+            <JobDetailHeader
+              title={controller.job.title}
+              status={controller.job.status}
+              statusOptions={JOB_STATUS_OPTIONS}
+              deleting={controller.deleting}
+              onBack={() => controller.router.back()}
+              onDelete={() => void controller.deleteJob()}
+              onStatusChange={(status) => void controller.handleStatusChange(status)}
+              formatStatus={controller.formatStatus}
+            />
 
-      {!loading && job ? (
-        <CrmDetailLayout
-          main={
-            <>
-              <CrmSectionCard title="Details">
-                <JobDetailsPanel
-                  job={job}
-                  estimateFile={estimateFile}
-                  estimateFileError={estimateFileError}
-                  onCopy={(label, value) => void copy(label, value)}
-                />
-              </CrmSectionCard>
-              <CrmSectionCard title="Closeout">
-                <JobCloseoutPanel
-                  job={job}
-                  paintLogs={paintLogs}
-                  afterPhotos={afterPhotos}
-                  sitePhotos={sitePhotos}
-                  detailActions={detailActions}
-                  formatDate={formatDate}
-                />
-              </CrmSectionCard>
-              <CrmSectionCard title="Actions" variant="compact">
-                <JobActionRail
-                  actions={detailActions}
-                  getActionTone={actionTone}
-                  onAction={(action) => void runDetailAction(action)}
-                />
-              </CrmSectionCard>
-            </>
-          }
-          side={
-            <CrmSectionCard title="Timeline" variant="rail">
-              <JobTimeline
-                job={job}
-                open={timelineOpen}
-                onToggle={() => setTimelineOpen((prev) => !prev)}
-                onEstimateDateChange={(iso) => void patchJob({ estimate_date: iso })}
-                formatDate={formatDate}
-                formatRange={formatRange}
-              />
-            </CrmSectionCard>
-          }
-        />
-      ) : null}
+            <CrmDetailLayout
+              main={
+                <>
+                  <CrmSectionCard title="Details">
+                    <JobDetailsPanel
+                      job={controller.job}
+                      estimateFile={controller.estimateFile}
+                      estimateFileError={controller.estimateFileError}
+                      onCopy={(label, value) => void controller.copy(label, value)}
+                    />
+                  </CrmSectionCard>
+                  <CrmSectionCard title="Closeout">
+                    <JobCloseoutPanel
+                      job={controller.job}
+                      paintLogs={controller.paintLogs}
+                      afterPhotos={controller.afterPhotos}
+                      sitePhotos={controller.sitePhotos}
+                      detailActions={detailActions}
+                      formatDate={controller.formatDate}
+                    />
+                  </CrmSectionCard>
+                  <CrmSectionCard title="Actions" variant="compact">
+                    <JobActionRail
+                      actions={detailActions}
+                      getActionTone={actionTone}
+                      onAction={(action) => void controller.runWorkflowAction(action)}
+                    />
+                  </CrmSectionCard>
+                </>
+              }
+              side={
+                <CrmSectionCard title="Timeline" variant="rail">
+                  <JobTimeline
+                    job={controller.job}
+                    open={controller.timelineOpen}
+                    onToggle={() => controller.setTimelineOpen((prev) => !prev)}
+                    onEstimateDateChange={(iso) => void controller.patchJob({ estimate_date: iso })}
+                    formatDate={controller.formatDate}
+                    formatRange={controller.formatRange}
+                  />
+                </CrmSectionCard>
+              }
+            />
+          </>
+        ) : null}
+      </CrmResourceState>
 
       <StageEmailModal
-        jobId={typeof id === 'string' ? id : null}
-        stage={emailStage}
-        open={emailStage != null}
-        onClose={closeStageEmail}
-        onSent={handleStageEmailSent}
+        jobId={typeof controller.id === 'string' ? controller.id : null}
+        stage={controller.emailStage}
+        open={controller.emailStage != null}
+        onClose={controller.closeStageEmail}
+        onSent={controller.handleStageEmailSent}
       />
       <JobCompletionCloseoutModal
-        jobId={typeof id === 'string' ? id : null}
-        open={closeoutOpen}
-        onClose={closeCloseout}
-        onSaved={(result) => void handleCloseoutSaved(result)}
+        jobId={typeof controller.id === 'string' ? controller.id : null}
+        open={controller.closeoutOpen}
+        onClose={controller.closeCloseout}
+        onSaved={(result) => void controller.handleCloseoutSaved(result)}
       />
     </CrmPageShell>
   )

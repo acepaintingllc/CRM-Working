@@ -19,6 +19,11 @@ This is the default architecture for ordinary CRM features. Follow these rules u
 - Use `useResource` for standard read-only resource loading.
 - Use `useEditableResource` for standard CRUD/settings-style load/save flows.
 - Keep page components thin; move orchestration into hooks or client-domain helpers.
+- Standard CRUD defaults:
+  - list pages use `CrmPageShell`, `CrmPageHeader`, URL-backed filters when navigation should preserve state, and `CrmResourceState`
+  - detail pages use `CrmDetailLayout`, one orchestration hook, and shared notice/retry/delete/copy handling
+  - create/edit pages use `CrmEntityFormPage`, one orchestration hook, render-only forms, and detail-first navigation on save
+  - settings-style resources use `useEditableResource` unless the page is a documented dense editor
 
 ## Form and validation ownership
 
@@ -41,3 +46,6 @@ This is the default architecture for ordinary CRM features. Follow these rules u
 ## Allowed exception
 
 - Estimator V2 may keep its custom state architecture where its complexity materially exceeds standard CRUD flows.
+- Quote product and rates/flags editors are allowed dense-admin exceptions:
+  - they still use CRM page shells, resource states, and hook-owned orchestration
+  - they may keep split catalog/editor layouts because they manage dense tabbed collections and inline editing across many row types

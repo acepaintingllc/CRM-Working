@@ -1,4 +1,4 @@
-import type { CSSProperties, HTMLAttributes, ReactNode } from 'react'
+import type { CSSProperties, HTMLAttributes } from 'react'
 
 type CrmDenseActionRowProps = HTMLAttributes<HTMLDivElement> & {
   className?: string

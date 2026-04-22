@@ -95,7 +95,7 @@ describe('customer journey smoke', () => {
     await user.type(screen.getByLabelText('ZIP'), '47630')
     await user.click(screen.getByRole('button', { name: 'Create customer' }))
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/crm/customers'))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/crm/customers/customer-1'))
     expect(refresh).not.toHaveBeenCalled()
     cleanup()
 

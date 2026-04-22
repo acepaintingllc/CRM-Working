@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CustomerForm } from '../_components/CustomerForm'
+import { normalizeCustomerFormValues } from '@/lib/customers/forms'
 
 describe('CustomerForm', () => {
   afterEach(() => {
@@ -12,9 +13,12 @@ describe('CustomerForm', () => {
     const user = userEvent.setup()
     render(
       <CustomerForm
-        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        value={normalizeCustomerFormValues()}
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
         submitLabel="Save"
         submittingLabel="Saving..."
+        validationError="Name is required."
       />
     )
 
@@ -28,7 +32,7 @@ describe('CustomerForm', () => {
 
     render(
       <CustomerForm
-        initialValues={{
+        value={{
           name: ' Taylor Jones ',
           phone: ' 812-555-0100 ',
           email: ' taylor@example.com ',
@@ -37,7 +41,16 @@ describe('CustomerForm', () => {
           state: ' in ',
           zip: ' 47630 ',
         }}
-        onSubmit={onSubmit}
+        onChange={vi.fn()}
+        onSubmit={() => onSubmit({
+          name: 'Taylor Jones',
+          phone: '812-555-0100',
+          email: 'taylor@example.com',
+          street: '123 Main St',
+          city: 'Newburgh',
+          state: 'in',
+          zip: '47630',
+        })}
         submitLabel="Save"
         submittingLabel="Saving..."
       />
@@ -58,10 +71,12 @@ describe('CustomerForm', () => {
   })
 
   it('reseeds values when initial values change', async () => {
+    const onChange = vi.fn()
     const { rerender } = render(
       <CustomerForm
-        initialValues={{ name: 'Taylor Jones' }}
-        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        value={{ ...normalizeCustomerFormValues(), name: 'Taylor Jones' }}
+        onChange={onChange}
+        onSubmit={vi.fn()}
         submitLabel="Save"
         submittingLabel="Saving..."
       />
@@ -71,8 +86,9 @@ describe('CustomerForm', () => {
 
     rerender(
       <CustomerForm
-        initialValues={{ name: 'Jordan Lee' }}
-        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        value={{ ...normalizeCustomerFormValues(), name: 'Jordan Lee' }}
+        onChange={onChange}
+        onSubmit={vi.fn()}
         submitLabel="Save"
         submittingLabel="Saving..."
       />
@@ -85,15 +101,17 @@ describe('CustomerForm', () => {
     const user = userEvent.setup()
     render(
       <CustomerForm
-        initialValues={{ name: 'Taylor Jones' }}
+        value={{ ...normalizeCustomerFormValues(), name: 'Taylor Jones' }}
+        onChange={vi.fn()}
         legacyAddressCleanup={{
           needsCleanup: true,
           warning: 'This customer has an address in an older format.',
           legacyAddress: '123 Main St Newburgh IN',
         }}
-        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onSubmit={vi.fn()}
         submitLabel="Save"
         submittingLabel="Saving..."
+        validationError="Enter street, city, state, and ZIP to replace the legacy address."
       />
     )
 
@@ -111,16 +129,18 @@ describe('CustomerForm', () => {
     const onCancel = vi.fn()
     render(
       <CustomerForm
-        initialValues={{ name: 'Taylor Jones' }}
-        onSubmit={vi.fn().mockRejectedValue(new Error('Save failed'))}
+        value={{ ...normalizeCustomerFormValues(), name: 'Taylor Jones' }}
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
         submitLabel="Save"
         submittingLabel="Saving..."
         onCancel={onCancel}
+        error="Save failed"
       />
     )
 
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByText('Save failed')).toBeTruthy()
+    expect(screen.getByText('Save failed')).toBeTruthy()
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onCancel).toHaveBeenCalledTimes(1)
@@ -130,18 +150,18 @@ describe('CustomerForm', () => {
     const user = userEvent.setup()
     render(
       <CustomerForm
-        initialValues={{ name: 'Taylor Jones', email: 'taylor@example.com' }}
-        onSubmit={vi
-          .fn()
-          .mockRejectedValue(new Error('A customer with the same name, email, or phone already exists.'))}
+        value={{ ...normalizeCustomerFormValues(), name: 'Taylor Jones', email: 'taylor@example.com' }}
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
         submitLabel="Save"
         submittingLabel="Saving..."
+        error="A customer with the same name, email, or phone already exists."
       />
     )
 
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(
-      await screen.findByText('A customer with the same name, email, or phone already exists.')
+      screen.getByText('A customer with the same name, email, or phone already exists.')
     ).toBeTruthy()
   })
 })

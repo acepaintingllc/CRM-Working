@@ -30,6 +30,10 @@ export type CustomerFormState = {
   legacyAddressCleanup: CustomerLegacyAddressCleanup | null
 }
 
+type CustomerFormValidationResult =
+  | { ok: true; value: CustomerFormValues }
+  | { ok: false; error: string }
+
 type CustomerFormStateResult =
   | { ok: true; value: CustomerFormState }
   | { ok: false; error: string }
@@ -57,6 +61,38 @@ export function normalizeCustomerFormValues(values?: CustomerFormInput): Custome
     city: asText(values?.city),
     state: asText(values?.state),
     zip: asText(values?.zip),
+  }
+}
+
+export function validateCustomerFormValues(
+  values: CustomerFormValues,
+  legacyAddressCleanup?: CustomerLegacyAddressCleanup | null
+): CustomerFormValidationResult {
+  if (!values.name.trim()) {
+    return { ok: false, error: 'Name is required.' }
+  }
+
+  if (
+    legacyAddressCleanup?.needsCleanup &&
+    (!values.street.trim() || !values.city.trim() || !values.state.trim() || !values.zip.trim())
+  ) {
+    return {
+      ok: false,
+      error: 'Enter street, city, state, and ZIP to replace the legacy address.',
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      name: values.name.trim(),
+      phone: values.phone.trim(),
+      email: values.email.trim(),
+      street: values.street.trim(),
+      city: values.city.trim(),
+      state: values.state.trim(),
+      zip: values.zip.trim(),
+    },
   }
 }
 

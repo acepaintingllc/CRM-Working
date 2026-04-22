@@ -12,7 +12,8 @@
   - `serviceResultResponse` envelope mapping
 - `lib/jobs/service.ts` owns jobs CRUD normalization, persistence, enrichment, and canonical route-contract data shaping.
 - `lib/server/jobScheduleSync.ts` owns persisted schedule summary/status side effects for schedule creation, deletion, and stage-email schedule/review effects.
-- `lib/jobs/actions.ts` is the client boundary for jobs UI fetches and mutations. It should consume the shared client helpers in `lib/client/api.ts` rather than feature-local request parsing.
+- `lib/jobs/client.ts` is the canonical client boundary for jobs CRUD-style reads/writes and direct endpoint helpers.
+- `lib/jobs/actions.ts` is reserved for aggregate workflow helpers such as detail aggregation, stage email composition/send flows, and closeout aggregation.
 - `app/crm/jobs/page.tsx`, `app/crm/jobs/new/page.tsx`, and `app/crm/jobs/[id]/page.tsx` are page composition shells. Their controller hooks under `app/crm/jobs/_hooks/**` own page-level orchestration.
 - Presentational detail UI lives in `app/crm/jobs/[id]/_components/**`.
 - Modal shells stay in `app/crm/jobs/_components`, while `useEmailComposer` and `useCloseoutForm` own their internal state and request logic.

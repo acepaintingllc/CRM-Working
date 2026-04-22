@@ -118,6 +118,7 @@ export function useEmailTemplatesController() {
   )
 
   return {
+    hasLoaded: resource.hasLoaded,
     active,
     setActive,
     activeLabel,
