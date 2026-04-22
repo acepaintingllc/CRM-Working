@@ -272,7 +272,7 @@ describe('EstimateV2EditorPageContent', () => {
     expect(addRoom).toHaveBeenCalled()
     await waitFor(() => {
       expect(save).toHaveBeenCalled()
-      expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-1/summary')
+      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/summary')
     })
   })
 

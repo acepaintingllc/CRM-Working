@@ -1,6 +1,10 @@
 'use client'
 
 import { useEffect } from 'react'
+import {
+  estimateRouteFamily,
+  type EstimateRouteFamily,
+} from '../../estimateRouteFamily'
 import { useEstimateV2CeilingActions } from './useEstimateV2CeilingActions'
 import { useEstimateV2DerivedState } from './useEstimateV2DerivedState'
 import { useEstimateV2EditorLoader } from './useEstimateV2EditorLoader'
@@ -12,7 +16,13 @@ import { useEstimateV2SettingsActions } from './useEstimateV2SettingsActions'
 import { useEstimateV2TrimActions } from './useEstimateV2TrimActions'
 import { useEstimateV2WallActions } from './useEstimateV2WallActions'
 
-export function useEstimateV2EditorState({ estimateId }: { estimateId?: string }) {
+export function useEstimateV2EditorState({
+  estimateId,
+  routeFamily = estimateRouteFamily,
+}: {
+  estimateId?: string
+  routeFamily?: EstimateRouteFamily
+}) {
   const store = useEstimateV2EditorStore()
   const { collections, meta, state } = store
   const { setScopes } = collections
@@ -21,6 +31,7 @@ export function useEstimateV2EditorState({ estimateId }: { estimateId?: string }
 
   useEstimateV2EditorLoader({
     estimateId,
+    routeFamily,
     collections,
     meta,
   })
@@ -61,9 +72,10 @@ export function useEstimateV2EditorState({ estimateId }: { estimateId?: string }
     roomModeById: derived.roomModeById,
     roomHeightFactorByRoomId: derived.roomHeightFactorByRoomId,
   })
-  const settingsActions = useEstimateV2SettingsActions({ estimateId, meta })
+  const settingsActions = useEstimateV2SettingsActions({ estimateId, routeFamily, meta })
   const saveController = useEstimateV2SaveController({
     estimateId,
+    routeFamily,
     collections,
     meta,
     currentSnapshot: derived.currentSnapshot,

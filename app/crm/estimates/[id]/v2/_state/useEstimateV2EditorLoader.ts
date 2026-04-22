@@ -22,6 +22,7 @@ import { asText } from '@/lib/estimator/parsing'
 import { sanitizeV2WallsDrafts } from '@/lib/estimator/v2WallsSanitize'
 import { sanitizeV2CeilingsDrafts } from '@/lib/estimator/v2CeilingsSanitize'
 import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import { inferTrimUnitTypeFromText } from '../_lib/estimateV2EditorNormalize'
 import { recalculateEditorDraftFactors } from '../_lib/estimateV2EditorRecalculate'
 import {
@@ -96,10 +97,11 @@ function buildJobSettingsDraft(
 
 export function useEstimateV2EditorLoader(params: {
   estimateId?: string
+  routeFamily: EstimateRouteFamily
   collections: EstimateV2EditorCollections
   meta: EstimateV2EditorMetaState
 }) {
-  const { estimateId, collections, meta } = params
+  const { estimateId, routeFamily, collections, meta } = params
 
   const loadWorkspace = useEffectEvent(async (activeRef: { current: boolean }) => {
     try {
@@ -108,8 +110,10 @@ export function useEstimateV2EditorLoader(params: {
       meta.setValidationIssues([])
 
       const [estimateRes, catalogsRes] = await Promise.all([
-        authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' }),
-        authedFetch(`/api/quotes/${estimateId}/catalogs?v2=1`, { cache: 'no-store' }),
+        authedFetch(routeFamily.estimateApiHref(estimateId!), { cache: 'no-store' }),
+        authedFetch(routeFamily.catalogsApiHref(estimateId!, { catalogSource: 'v2' }), {
+          cache: 'no-store',
+        }),
       ])
       const estimateParsed = await parseApiResponse(estimateRes)
       const catalogsParsed = await parseApiResponse(catalogsRes)

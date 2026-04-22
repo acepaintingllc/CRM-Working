@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { estimateRouteFamily } from '../../../estimateRouteFamily'
 import { useEstimateV2SaveController } from '../useEstimateV2SaveController'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
 
@@ -133,6 +134,7 @@ describe('useEstimateV2SaveController', () => {
     const { result } = renderHook(() =>
       useEstimateV2SaveController({
         estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
         collections: harness.collections as never,
         meta: harness.meta as never,
         currentSnapshot: harness.fixture.currentSnapshot,
@@ -156,6 +158,7 @@ describe('useEstimateV2SaveController', () => {
     const { result } = renderHook(() =>
       useEstimateV2SaveController({
         estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
         collections: harness.collections as never,
         meta: harness.meta as never,
         currentSnapshot: harness.fixture.currentSnapshot,
@@ -182,6 +185,7 @@ describe('useEstimateV2SaveController', () => {
     const { result } = renderHook(() =>
       useEstimateV2SaveController({
         estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
         collections: harness.collections as never,
         meta: harness.meta as never,
         currentSnapshot: harness.fixture.currentSnapshot,
@@ -209,6 +213,7 @@ describe('useEstimateV2SaveController', () => {
     const { result } = renderHook(() =>
       useEstimateV2SaveController({
         estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
         collections: harness.collections as never,
         meta: harness.meta as never,
         currentSnapshot: harness.fixture.currentSnapshot,
@@ -245,6 +250,7 @@ describe('useEstimateV2SaveController', () => {
     const { result } = renderHook(() =>
       useEstimateV2SaveController({
         estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
         collections: harness.collections as never,
         meta: harness.meta as never,
         currentSnapshot: harness.fixture.currentSnapshot,

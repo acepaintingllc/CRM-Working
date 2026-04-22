@@ -20,8 +20,15 @@ import {
   useEstimateV2TrimPaintController,
 } from './useEstimateV2TrimPaintController'
 import { useEstimateV2SummaryLoader } from './useEstimateV2SummaryLoader'
+import {
+  estimateRouteFamily,
+  type EstimateRouteFamily,
+} from '../../estimateRouteFamily'
 
-export function useEstimateV2SummaryData(estimateId: string) {
+export function useEstimateV2SummaryData(
+  estimateId: string,
+  routeFamily: EstimateRouteFamily = estimateRouteFamily
+) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<EstimateV2Error | null>(null)
   const [data, setData] = useState<EstimateV2SummaryPageData | null>(null)
@@ -40,7 +47,9 @@ export function useEstimateV2SummaryData(estimateId: string) {
   const refreshPricing = useCallback(async () => {
     if (!estimateId) return
     try {
-      const res = await authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' })
+      const res = await authedFetch(routeFamily.estimateApiHref(estimateId), {
+        cache: 'no-store',
+      })
       const parsed = await parseApiResponse(res)
       const payload = getApiPayloadData<EstimateV2SummaryPageData>(parsed.json)
       if (res.ok && payload?.pricing_summary) {
@@ -65,9 +74,9 @@ export function useEstimateV2SummaryData(estimateId: string) {
       })
       setError(createEstimateV2Error('Failed to refresh pricing', { retryable: true }))
     }
-  }, [estimateId])
+  }, [estimateId, routeFamily])
 
-  useEstimateV2SummaryLoader(estimateId, {
+  useEstimateV2SummaryLoader(estimateId, routeFamily, {
     setLoading,
     setError,
     setData,
@@ -85,11 +94,13 @@ export function useEstimateV2SummaryData(estimateId: string) {
 
   const { savePolicyDebounced } = useEstimateV2SummaryPolicyController({
     estimateId,
+    routeFamily,
     refreshPricing,
     setPolicySaving,
   })
   const { saveTrimPaintDebounced } = useEstimateV2TrimPaintController({
     estimateId,
+    routeFamily,
     refreshPricing,
     setPolicySaving,
   })

@@ -20,6 +20,7 @@ import {
   DEFAULT_LABOR_RATE,
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from '@/lib/estimator/defaults'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type {
   EstimateV2JobMeta,
   EstimateV2JobSettingsInput,
@@ -97,13 +98,19 @@ function applyJobSettingsDefaults(
   }
 }
 
-export function useEstimateV2SummaryLoader(estimateId: string, state: SummaryLoaderState) {
+export function useEstimateV2SummaryLoader(
+  estimateId: string,
+  routeFamily: EstimateRouteFamily,
+  state: SummaryLoaderState
+) {
   const loadSummary = useEffectEvent(async (activeRef: { current: boolean }) => {
     try {
       state.setLoading(true)
       state.setError(null)
 
-      const res = await authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' })
+      const res = await authedFetch(routeFamily.estimateApiHref(estimateId), {
+        cache: 'no-store',
+      })
       const parsed = await parseApiResponse(res)
       const payload = getApiPayloadData<EstimateV2SummaryPageData>(parsed.json)
 

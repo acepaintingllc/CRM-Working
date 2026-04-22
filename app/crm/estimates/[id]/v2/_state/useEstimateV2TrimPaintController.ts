@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 
 export type SummaryTrimPaintDraft = {
   trimPaintProductId: string
@@ -11,10 +12,11 @@ export type SummaryTrimPaintDraft = {
 
 export function useEstimateV2TrimPaintController(params: {
   estimateId: string
+  routeFamily: EstimateRouteFamily
   refreshPricing: () => Promise<void>
   setPolicySaving: (value: boolean) => void
 }) {
-  const { estimateId, refreshPricing, setPolicySaving } = params
+  const { estimateId, routeFamily, refreshPricing, setPolicySaving } = params
   const trimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const saveTrimPaintDebounced = useCallback(
@@ -24,7 +26,7 @@ export function useEstimateV2TrimPaintController(params: {
         if (!estimateId) return
         setPolicySaving(true)
         try {
-          await authedFetch(`/api/quotes/${estimateId}`, {
+          await authedFetch(routeFamily.estimateApiHref(estimateId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -41,7 +43,7 @@ export function useEstimateV2TrimPaintController(params: {
         }
       }, 600)
     },
-    [estimateId, refreshPricing, setPolicySaving]
+    [estimateId, refreshPricing, routeFamily, setPolicySaving]
   )
 
   useEffect(

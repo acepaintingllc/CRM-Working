@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
 import { templatePresets } from '@/lib/customer-estimates/presets'
+import {
+  type CustomerSendMutationResponse,
+  loadCustomerSendPage,
+  saveCustomerSendDraft,
+  submitCustomerSend,
+} from '@/lib/customer-send/client'
 import type {
   CompanyProfile,
   CustomerEstimateDocument,
@@ -10,11 +16,9 @@ import type {
   Unsafe,
 } from '@/lib/customer-estimates/types'
 import {
-  type CustomerSendMutationResponse,
-  loadCustomerSendPage,
-  saveCustomerSendDraft,
-  submitCustomerSend,
-} from '@/lib/quotes/client'
+  estimateRouteFamily,
+  type EstimateRouteFamily,
+} from '../../estimateRouteFamily'
 
 export type CustomerSendRouteCatalogSource = 'estimate' | 'v2'
 
@@ -100,6 +104,7 @@ export type CustomerSendReviewDraft = CustomerSendFormBase
 type UseCustomerSendWorkflowOptions<TForm extends CustomerSendFormBase> = {
   estimateId: string
   catalogSource?: CustomerSendRouteCatalogSource
+  routeFamily?: EstimateRouteFamily
   buildForm: (
     data: CustomerSendPageData,
     draft: Record<string, unknown>,
@@ -120,10 +125,10 @@ export function asText(value: unknown) {
 
 export function customerSendUrl(
   estimateId: string,
-  catalogSource?: CustomerSendRouteCatalogSource
+  catalogSource?: CustomerSendRouteCatalogSource,
+  routeFamily: EstimateRouteFamily = estimateRouteFamily
 ) {
-  const url = `/api/quotes/${estimateId}/customer-send`
-  return catalogSource === 'v2' ? `${url}?v2=1` : url
+  return routeFamily.customerSendApiHref(estimateId, { catalogSource })
 }
 
 export function sectionDraftText(
@@ -301,6 +306,7 @@ export function buildCustomerSendReviewPreview(
 export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
   estimateId,
   catalogSource,
+  routeFamily = estimateRouteFamily,
   buildForm,
   buildDocument,
   draftPayload,
@@ -329,7 +335,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
       let payload: CustomerSendPageData
       try {
         payload = await loadCustomerSendPage<CustomerSendPageData>(
-          customerSendUrl(estimateId, catalogSource)
+          customerSendUrl(estimateId, catalogSource, routeFamily)
         )
       } catch (loadError) {
         if (!mountedRef.current) return false
@@ -346,7 +352,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
       setLoading(false)
       return true
     },
-    [buildForm, catalogSource, estimateId, loadErrorMessage]
+    [buildForm, catalogSource, estimateId, loadErrorMessage, routeFamily]
   )
 
   useEffect(() => {
@@ -380,7 +386,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
     let payload: CustomerSendMutationResponse
     try {
       payload = await saveCustomerSendDraft<CustomerSendMutationResponse>(
-        customerSendUrl(estimateId, catalogSource),
+        customerSendUrl(estimateId, catalogSource, routeFamily),
         draftPayload(form)
       )
     } catch (saveError) {
@@ -396,7 +402,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
     }
     setBusy(false)
     return true
-  }, [catalogSource, draftPayload, estimateId, form, publicUrl])
+  }, [catalogSource, draftPayload, estimateId, form, publicUrl, routeFamily])
 
   const submit = useCallback(
     async (mode: 'test' | 'send') => {
@@ -413,7 +419,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
       let payload: CustomerSendMutationResponse
       try {
         payload = await submitCustomerSend<CustomerSendMutationResponse>(
-          customerSendUrl(estimateId, catalogSource),
+          customerSendUrl(estimateId, catalogSource, routeFamily),
           {
             mode,
             draft: draftPayload(form),
@@ -439,7 +445,16 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
       setBusy(false)
       return true
     },
-    [catalogSource, draftPayload, estimateId, form, labels.document, labels.documentLower, publicUrl]
+    [
+      catalogSource,
+      draftPayload,
+      estimateId,
+      form,
+      labels.document,
+      labels.documentLower,
+      publicUrl,
+      routeFamily,
+    ]
   )
 
   return {

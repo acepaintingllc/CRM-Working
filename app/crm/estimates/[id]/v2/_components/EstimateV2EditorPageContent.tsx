@@ -4,6 +4,10 @@ import { useEstimateV2EditorState } from '../_state/useEstimateV2EditorState'
 import type { ScopeKind } from '@/lib/estimator/scopeKinds'
 import { useCallback, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import {
+  estimateRouteFamily,
+  type EstimateRouteFamily,
+} from '../../estimateRouteFamily'
 import pageStyles from './EstimateV2EditorPageContent.module.css'
 import { EstimateV2EditorFooterBar } from './EstimateV2EditorFooterBar'
 import { EstimateV2EditorHeaderArea } from './EstimateV2EditorHeaderArea'
@@ -176,7 +180,13 @@ const S = {
   } as CSSProperties,
 } as const
 
-export function EstimateV2EditorPageContent({ estimateId }: { estimateId?: string }) {
+export function EstimateV2EditorPageContent({
+  estimateId,
+  routeFamily = estimateRouteFamily,
+}: {
+  estimateId?: string
+  routeFamily?: EstimateRouteFamily
+}) {
   const {
     pageVm,
     headerVm,
@@ -188,7 +198,7 @@ export function EstimateV2EditorPageContent({ estimateId }: { estimateId?: strin
     jobSettingsVm,
     saveVm,
     toDisplayNumber,
-  } = useEstimateV2EditorState({ estimateId })
+  } = useEstimateV2EditorState({ estimateId, routeFamily })
 
   const wallsSectionRef = useRef<HTMLDivElement | null>(null)
   const ceilingsSectionRef = useRef<HTMLDivElement | null>(null)
@@ -257,6 +267,7 @@ export function EstimateV2EditorPageContent({ estimateId }: { estimateId?: strin
       <EstimateV2EditorHeaderArea
         styles={S}
         estimateId={estimateId}
+        routeFamily={routeFamily}
         headerVm={headerVm}
         saveVm={saveVm}
         confirmNavigation={confirmNavigation}

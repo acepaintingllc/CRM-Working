@@ -7,6 +7,10 @@ import { templatePresets } from '@/lib/customer-estimates/presets'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import {
+  estimateRouteFamily,
+  type EstimateRouteFamily,
+} from '../estimateRouteFamily'
+import {
   asText,
   buildCustomerSendReviewDraft,
   buildCustomerSendReviewPreview,
@@ -226,7 +230,13 @@ function draftPayload(form: CustomerSendReviewDraft) {
   }
 }
 
-export default function SendEstimateReviewClient({ estimateId }: { estimateId: string }) {
+export default function SendEstimateReviewClient({
+  estimateId,
+  routeFamily = estimateRouteFamily,
+}: {
+  estimateId: string
+  routeFamily?: EstimateRouteFamily
+}) {
   const {
     loading,
     busy,
@@ -247,6 +257,7 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
     version,
   } = useCustomerSendWorkflow<CustomerSendReviewDraft>({
     estimateId,
+    routeFamily,
     buildForm: (data, draft) => buildCustomerSendReviewDraft(data, draft),
     buildDocument: buildCustomerSendReviewPreview,
     draftPayload,
@@ -324,7 +335,10 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
               <div style={{ fontSize: 18, fontWeight: 900 }}>{labels.action}</div>
               <div style={{ marginTop: 10, color: C.ink2 }}>{error}</div>
               <div style={{ marginTop: 16 }}>
-                <Link href={`/crm/quotes/${estimateId}/summary`} style={{ color: '#d7f3df', fontWeight: 800 }}>
+                <Link
+                  href={routeFamily.summaryHref(estimateId)}
+                  style={{ color: '#d7f3df', fontWeight: 800 }}
+                >
                   Return to internal review
                 </Link>
               </div>
@@ -383,7 +397,7 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
             >
               <StatusChip status={version?.status ?? 'draft'} />
               <Link
-                href={`/crm/quotes/${estimateId}/summary`}
+                href={routeFamily.summaryHref(estimateId)}
                 style={{
                   ...secondaryButton,
                   textDecoration: 'none',

@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentPropsWithoutRef } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import QuoteCreatePage from '../QuoteCreatePage'
 
 const { push, getSearchParam } = vi.hoisted(() => ({
@@ -26,9 +26,8 @@ vi.mock('next/link', () => ({
   default: ({
     href,
     children,
-    prefetch: _prefetch,
-    ...props
-  }: ComponentPropsWithoutRef<'a'> & { href: string; prefetch?: boolean }) => (
+  ...props
+  }: ComponentPropsWithoutRef<'a'> & { href: string }) => (
     <a href={href} {...props}>
       {children}
     </a>
@@ -52,10 +51,6 @@ describe('QuoteCreatePage', () => {
     createQuoteVersion.mockReset()
     loadQuoteList.mockReset()
     getSearchParam.mockReturnValue('job-1')
-  })
-
-  afterEach(() => {
-    cleanup()
   })
 
   it('loads the preselected job, derives matching versions, and creates through shared rules', async () => {
@@ -120,7 +115,7 @@ describe('QuoteCreatePage', () => {
     render(<QuoteCreatePage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Existing Quotes (2)')).toBeTruthy()
+      expect(screen.getByText('Existing Quotes (2)')).toBeInTheDocument()
     })
 
     expect(screen.getAllByText('Version B').length).toBeGreaterThan(0)
@@ -165,7 +160,7 @@ describe('QuoteCreatePage', () => {
     render(<QuoteCreatePage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Unknown job')).toBeTruthy()
+      expect(screen.getByText('Unknown job')).toBeInTheDocument()
     })
 
     expect(screen.getByRole('button', { name: 'Create version' })).toBeDisabled()

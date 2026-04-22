@@ -16,6 +16,7 @@ vi.mock('@/lib/server/apiRoute', () => ({
   requireSessionUserOrg: mockRequireSessionUserOrg,
   readUuidParam: mockReadUuidParam,
   readJsonBody: mockReadJsonBody,
+  resolveParams: (context: { params: unknown }) => Promise.resolve(context.params),
   jsonError: (error: string, status: number) =>
     new Response(JSON.stringify({ error }), { status }),
 }))

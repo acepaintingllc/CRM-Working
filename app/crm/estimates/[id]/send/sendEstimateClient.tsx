@@ -6,6 +6,10 @@ import type { CSSProperties, ReactNode } from 'react'
 import { templatePresets } from '@/lib/customer-estimates/presets'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import {
+  estimateRouteFamily,
+  type EstimateRouteFamily,
+} from '../estimateRouteFamily'
+import {
   asText,
   buildCustomerSendComposerDraft,
   buildCustomerSendComposerPreview,
@@ -144,9 +148,11 @@ function draftPayload(form: CustomerSendComposerDraft) {
 export default function SendEstimateClient({
   estimateId,
   catalogSource,
+  routeFamily = estimateRouteFamily,
 }: {
   estimateId: string
   catalogSource?: 'estimate' | 'v2'
+  routeFamily?: EstimateRouteFamily
 }) {
   const {
     loading,
@@ -170,6 +176,7 @@ export default function SendEstimateClient({
   } = useCustomerSendWorkflow<CustomerSendComposerDraft>({
     estimateId,
     catalogSource,
+    routeFamily,
     buildForm: buildCustomerSendComposerDraft,
     buildDocument: buildCustomerSendComposerPreview,
     draftPayload,
@@ -262,7 +269,10 @@ export default function SendEstimateClient({
               <div style={{ fontSize: 18, fontWeight: 900 }}>{labels.action}</div>
               <div style={{ marginTop: 10, color: C.ink2 }}>{error}</div>
               <div style={{ marginTop: 16 }}>
-                <Link href={`/crm/quotes/${estimateId}/summary`} style={{ color: '#d7f3df', fontWeight: 800 }}>
+                <Link
+                  href={routeFamily.summaryHref(estimateId)}
+                  style={{ color: '#d7f3df', fontWeight: 800 }}
+                >
                   Return to internal review
                 </Link>
               </div>
@@ -321,7 +331,7 @@ export default function SendEstimateClient({
             >
               <StatusChip status={version?.status ?? 'draft'} />
               <Link
-                href={`/crm/quotes/${estimateId}/summary`}
+                href={routeFamily.summaryHref(estimateId)}
                 style={{
                   ...secondaryButton,
                   textDecoration: 'none',

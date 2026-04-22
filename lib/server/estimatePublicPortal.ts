@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './org'
+import { writeEstimatePublicEvent } from './customer-send/repository'
 import type { EstimatePublicSnapshot, Unsafe } from '@/lib/customer-estimates/types'
 
 function asText(value: unknown) {
@@ -60,11 +61,11 @@ export async function markPublicEstimateViewed(params: {
     .select('*')
     .maybeSingle()
   if (update.error) return { error: update.error.message } as const
-  await supabaseAdmin.from('estimate_public_events').insert({
-    org_id: params.orgId,
-    estimate_public_version_id: params.versionId,
-    event_type: 'viewed',
-    actor_type: params.actorType ?? 'customer',
+  await writeEstimatePublicEvent({
+    orgId: params.orgId,
+    versionId: params.versionId,
+    eventType: 'viewed',
+    actorType: params.actorType ?? 'customer',
     metadata: params.metadata ?? {},
   })
   return { ok: true as const, viewed_at: viewedAt, version: update.data as Unsafe | null }
