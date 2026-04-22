@@ -1,14 +1,15 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
-import { toIsoFromLocal, toLocalDateInput, toLocalTimeInput } from '@/lib/notes/time'
-import type {
-  NotesTaskResponse,
-  NotesTaskRow,
-  RecurrenceFrequency,
-  RecurrenceUnit,
-} from '@/lib/notes/types'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  createEmptyTaskFormValues,
+  taskFormValuesToPayload,
+  taskResponseToFormValues,
+  type NotesTaskFormValues,
+} from '@/lib/notes/forms/taskForm'
+import { mapNotesFormServerError, useNotesFormState } from '@/lib/notes/forms/shared'
+import type { NotesTaskResponse, RecurrenceFrequency, RecurrenceUnit } from '@/lib/notes/types'
+import { useEffect, useState } from 'react'
 
 type UseTaskFormParams = {
   open: boolean
@@ -16,50 +17,33 @@ type UseTaskFormParams = {
   onSuccess: () => void
 }
 
-function localDateTimeToIso(value: string) {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toISOString()
-}
-
 export function useTaskForm({ open, taskId, onSuccess }: UseTaskFormParams) {
   const [loading, setLoading] = useState(Boolean(taskId))
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [dueTime, setDueTime] = useState('')
-  const [allDay, setAllDay] = useState(false)
-  const [reminderEnabled, setReminderEnabled] = useState(false)
-  const [reminderAtLocal, setReminderAtLocal] = useState('')
-  const [reminderOffset, setReminderOffset] = useState('')
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | ''>('')
-  const [starred, setStarred] = useState(false)
-  const [recurrence, setRecurrence] = useState<RecurrenceFrequency | ''>('')
-  const [customInterval, setCustomInterval] = useState('1')
-  const [customUnit, setCustomUnit] = useState<RecurrenceUnit>('week')
+  const [initialValues, setInitialValues] = useState<NotesTaskFormValues>(createEmptyTaskFormValues())
+  const form = useNotesFormState({
+    initialValues,
+    prepareSubmit: taskFormValuesToPayload,
+    onSubmit: async (payload) => {
+      const res = await authedFetch(taskId ? `/api/notes/tasks/${taskId}` : '/api/notes/tasks', {
+        method: taskId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const responsePayload = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(mapNotesFormServerError(responsePayload, 'Unable to save task.'))
+      }
+      onSuccess()
+    },
+    fallbackMessage: 'Unable to save task.',
+  })
+  const { setError } = form
 
   useEffect(() => {
     if (!open) return
     if (!taskId) {
       setLoading(false)
-      setError(null)
-      setTitle('')
-      setDescription('')
-      setDueDate('')
-      setDueTime('')
-      setAllDay(false)
-      setReminderEnabled(false)
-      setReminderAtLocal('')
-      setReminderOffset('')
-      setPriority('')
-      setStarred(false)
-      setRecurrence('')
-      setCustomInterval('1')
-      setCustomUnit('week')
+      setInitialValues(createEmptyTaskFormValues())
       return
     }
 
@@ -71,31 +55,19 @@ export function useTaskForm({ open, taskId, onSuccess }: UseTaskFormParams) {
       const payload = await res.json().catch(() => null)
       if (cancelled) return
       if (!res.ok) {
-        setError(payload?.error ?? 'Unable to load task.')
+        setError(mapNotesFormServerError(payload, 'Unable to load task.'))
         setLoading(false)
         return
       }
 
-      const task = (payload as NotesTaskResponse | null)?.task ?? null
-      if (!task) {
+      const values = taskResponseToFormValues(payload as NotesTaskResponse | null)
+      if (!values) {
         setError('Task not found.')
         setLoading(false)
         return
       }
 
-      setTitle(task.title)
-      setDescription(task.description ?? '')
-      setDueDate(toLocalDateInput(task.due_at))
-      setDueTime(toLocalTimeInput(task.due_at))
-      setAllDay(task.is_all_day)
-      setReminderEnabled(task.reminder_enabled)
-      setReminderAtLocal(task.reminder_at ? task.reminder_at.slice(0, 16) : '')
-      setReminderOffset(task.reminder_offset_minutes == null ? '' : String(task.reminder_offset_minutes))
-      setPriority(task.priority ?? '')
-      setStarred(task.starred)
-      setRecurrence(task.recurrence_rule?.frequency ?? '')
-      setCustomInterval(String(task.recurrence_rule?.interval ?? 1))
-      setCustomUnit(task.recurrence_rule?.unit ?? 'week')
+      setInitialValues(values)
       setLoading(false)
     }
 
@@ -103,96 +75,44 @@ export function useTaskForm({ open, taskId, onSuccess }: UseTaskFormParams) {
     return () => {
       cancelled = true
     }
-  }, [open, taskId])
+  }, [open, setError, taskId])
 
-  const recurrencePayload = useMemo(() => {
-    if (!recurrence) return null
-    if (recurrence === 'custom') {
-      return {
-        frequency: 'custom' as const,
-        interval: Math.max(1, Number(customInterval || '1')),
-        unit: customUnit,
-      }
-    }
-    return { frequency: recurrence }
-  }, [customInterval, customUnit, recurrence])
-
-  const handleSave = async () => {
-    if (!title.trim()) {
-      setError('Task title is required.')
-      return
-    }
-
-    setSaving(true)
-    setError(null)
-
-    const dueAt = toIsoFromLocal({
-      date: dueDate,
-      time: dueTime,
-      hasDueTime: !allDay && Boolean(dueTime),
-      isAllDay: allDay,
-    })
-
-    const body = {
-      title: title.trim(),
-      description: description.trim() || null,
-      due_at: dueAt,
-      is_all_day: allDay,
-      has_due_time: !allDay && Boolean(dueTime),
-      reminder_enabled: reminderEnabled,
-      reminder_at: localDateTimeToIso(reminderAtLocal),
-      reminder_offset_minutes: reminderOffset.trim() ? Number(reminderOffset.trim()) : null,
-      priority: priority || null,
-      starred,
-      recurrence_rule: recurrencePayload,
-    }
-
-    const res = await authedFetch(taskId ? `/api/notes/tasks/${taskId}` : '/api/notes/tasks', {
-      method: taskId ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const payload = await res.json().catch(() => null)
-    setSaving(false)
-
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to save task.')
-      return
-    }
-
-    onSuccess()
+  const values = form.values
+  const updateField = <K extends keyof NotesTaskFormValues>(field: K, value: NotesTaskFormValues[K]) => {
+    form.setValues((current) => ({ ...current, [field]: value }))
   }
 
   return {
     loading,
-    error,
-    saving,
-    title,
-    setTitle,
-    description,
-    setDescription,
-    dueDate,
-    setDueDate,
-    dueTime,
-    setDueTime,
-    allDay,
-    setAllDay,
-    reminderEnabled,
-    setReminderEnabled,
-    reminderAtLocal,
-    setReminderAtLocal,
-    reminderOffset,
-    setReminderOffset,
-    priority,
-    setPriority,
-    starred,
-    setStarred,
-    recurrence,
-    setRecurrence,
-    customInterval,
-    setCustomInterval,
-    customUnit,
-    setCustomUnit,
-    handleSave,
+    error: form.error,
+    saving: form.saving,
+    dirty: form.dirty,
+    title: values.title,
+    setTitle: (value: string) => updateField('title', value),
+    description: values.description,
+    setDescription: (value: string) => updateField('description', value),
+    dueDate: values.dueDate,
+    setDueDate: (value: string) => updateField('dueDate', value),
+    dueTime: values.dueTime,
+    setDueTime: (value: string) => updateField('dueTime', value),
+    allDay: values.allDay,
+    setAllDay: (value: boolean) => updateField('allDay', value),
+    reminderEnabled: values.reminderEnabled,
+    setReminderEnabled: (value: boolean) => updateField('reminderEnabled', value),
+    reminderAtLocal: values.reminderAtLocal,
+    setReminderAtLocal: (value: string) => updateField('reminderAtLocal', value),
+    reminderOffset: values.reminderOffset,
+    setReminderOffset: (value: string) => updateField('reminderOffset', value),
+    priority: values.priority,
+    setPriority: (value: 'low' | 'medium' | 'high' | '') => updateField('priority', value),
+    starred: values.starred,
+    setStarred: (value: boolean) => updateField('starred', value),
+    recurrence: values.recurrence,
+    setRecurrence: (value: RecurrenceFrequency | '') => updateField('recurrence', value),
+    customInterval: values.customInterval,
+    setCustomInterval: (value: string) => updateField('customInterval', value),
+    customUnit: values.customUnit,
+    setCustomUnit: (value: RecurrenceUnit) => updateField('customUnit', value),
+    handleSave: form.submit,
   }
 }

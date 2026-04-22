@@ -24,8 +24,10 @@ export default function FolderNotesPage() {
     folder,
     notes,
     loading,
+    loadingMore,
     saving,
     error,
+    hasMore,
     search,
     setSearch,
     selectedNoteId,
@@ -33,6 +35,7 @@ export default function FolderNotesPage() {
     createFolder,
     renameFolder,
     deleteFolder,
+    loadMore,
     modalState,
     closeModal,
     submitRename,
@@ -179,17 +182,31 @@ export default function FolderNotesPage() {
                 : 'No notes in this folder yet.'}
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {notes.map((note) => (
-                <NotePreviewCard
-                  key={note.id}
-                  note={note}
-                  selected={selectedNoteId === note.id}
-                  onSelect={() => setSelectedNoteId(note.id)}
-                  onOpen={() => router.push(buildNotesHref(`/crm/notes/notes/${note.id}`, status))}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {notes.map((note) => (
+                  <NotePreviewCard
+                    key={note.id}
+                    note={note}
+                    selected={selectedNoteId === note.id}
+                    onSelect={() => setSelectedNoteId(note.id)}
+                    onOpen={() => router.push(buildNotesHref(`/crm/notes/notes/${note.id}`, status))}
+                  />
+                ))}
+              </div>
+              {hasMore && (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => void loadMore()}
+                    disabled={loadingMore}
+                    className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800 disabled:opacity-60"
+                  >
+                    {loadingMore ? 'Loading...' : 'Load More Notes'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}

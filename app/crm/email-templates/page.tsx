@@ -1,23 +1,17 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-
-import { useEffect, useMemo, useState } from 'react'
-
-type Stage =
-  | 'estimate_scheduled'
-  | 'estimate_sent'
-  | 'follow_up'
-  | 'scheduled'
-  | 'completed'
-
-const stages: { key: Stage; label: string }[] = [
-  { key: 'estimate_scheduled', label: 'Quote scheduled' },
-  { key: 'estimate_sent', label: 'Quote sent' },
-  { key: 'follow_up', label: 'Follow up' },
-  { key: 'scheduled', label: 'Scheduled' },
-  { key: 'completed', label: 'Completed / review request' },
-]
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { crmButtonClassName, crmInputClassName } from '@/app/crm/_components/crmStyles'
+import {
+  useEmailTemplatesController,
+  emailTemplateStages,
+  type EmailTemplateStage,
+} from './useEmailTemplatesController'
 
 const availableVars = [
   '{{customerName}}',
@@ -40,186 +34,113 @@ const availableVars = [
   '{{reviewLink}}',
 ]
 
-function keyFor(stage: Stage) {
-  return `acecrm.emailTemplates.${stage}`
-}
-
 export default function EmailTemplatesPage() {
-  const [active, setActive] = useState<Stage>('estimate_scheduled')
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
-  const [saved, setSaved] = useState<string | null>(null)
-  const [templates, setTemplates] = useState<Record<string, { subject: string; body: string }>>({})
-
-  const storageKey = useMemo(() => keyFor(active), [active])
-
-  useEffect(() => {
-    const load = async () => {
-      const res = await authedFetch('/api/email-templates', { cache: 'no-store' })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        setSaved(payload?.error ?? 'Failed to load templates')
-        return
-      }
-
-      const map: Record<string, { subject: string; body: string }> = {}
-      for (const row of payload?.templates ?? []) {
-        map[row.stage] = { subject: row.subject ?? '', body: row.body ?? '' }
-      }
-      setTemplates(map)
-    }
-
-    void load()
-  }, [])
-
-  useEffect(() => {
-    const current = templates[active] ?? { subject: '', body: '' }
-    setSubject(current.subject)
-    setBody(current.body)
-    setSaved(null)
-  }, [templates, active, storageKey])
-
-  const save = async () => {
-    const res = await authedFetch('/api/email-templates', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: active, subject, body }),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setSaved(payload?.error ?? 'Failed to save')
-      return
-    }
-    setTemplates((prev) => ({ ...prev, [active]: { subject, body } }))
-    setSaved('Saved')
-    window.setTimeout(() => setSaved(null), 1200)
-  }
-
-  const insertVar = (v: string) => {
-    setBody((prev) => (prev ? `${prev}\n${v}` : v))
-  }
+  const controller = useEmailTemplatesController()
 
   return (
-    <div className="crm-page" style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Email templates</h1>
-        <div style={{ fontSize: 13, color: 'var(--crm-muted)', marginTop: 4 }}>
-          Draft templates per job stage. Variables will be filled later from the customer/job.
-        </div>
-      </div>
+    <CrmPageShell className="max-w-[900px]">
+      <CrmPageHeader
+        eyebrow="Message system"
+        emoji="📬"
+        title="Email templates"
+        description="Draft templates per job stage. Variables will be filled later from the customer and job."
+        badge={<CrmChip tone="accent">Quote-family CRM UI</CrmChip>}
+        actions={
+          <CrmButton
+            onClick={() => void controller.saveChanges()}
+            disabled={!controller.dirty || controller.saving}
+            tone="primary"
+          >
+            {controller.saving ? 'Saving...' : 'Save changes'}
+          </CrmButton>
+        }
+      />
 
-      <div className="crm-columns" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 12, marginTop: 12 }}>
-        <div className="crm-card" style={{ borderRadius: 12, padding: 12 }}>
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>Stages</div>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {stages.map((s) => (
+      {controller.error ? <CrmNotice tone="error" emoji="⚠️">{controller.error}</CrmNotice> : null}
+      {controller.notice ? <CrmNotice tone="success" emoji="✨">{controller.notice}</CrmNotice> : null}
+
+      <div className="grid gap-3 md:grid-cols-[260px_minmax(0,1fr)]">
+        <CrmSectionCard
+          title="Stages"
+          emoji="🗂️"
+          description="Switch between the reusable templates for each workflow stage."
+        >
+          <div className="mt-3 grid gap-2">
+            {emailTemplateStages.map((stage) => (
               <button
-                key={s.key}
-                onClick={() => setActive(s.key)}
-                style={{
-                  textAlign: 'left',
-                  padding: '10px 12px',
-                  borderRadius: 10,
-                  border: active === s.key ? '1px solid #111' : '1px solid #e5e7eb',
-                  background: active === s.key ? '#111' : 'white',
-                  color: active === s.key ? 'white' : '#111',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
+                key={stage.key}
+                type="button"
+                onClick={() => controller.setActive(stage.key as EmailTemplateStage)}
+                className={`rounded-2xl border px-3 py-2.5 text-left text-sm font-bold transition ${
+                  controller.active === stage.key
+                    ? 'border-[color:var(--crm-ui-accent)] bg-[color:var(--crm-ui-accent)] text-[#f6f4ef]'
+                    : 'border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface-strong)] text-[color:var(--crm-ui-text)] hover:bg-[color:var(--crm-ui-surface-muted)]'
+                }`}
               >
-                {s.label}
+                {stage.label}
               </button>
             ))}
           </div>
-        </div>
+        </CrmSectionCard>
 
-        <div className="crm-card" style={{ borderRadius: 12, padding: 12 }}>
-          <div className="crm-topbar">
-            <div style={{ fontWeight: 900 }}>{stages.find((s) => s.key === active)?.label}</div>
-            <button onClick={save} style={button}>
-              Save
-            </button>
-          </div>
-
-          {saved && <div style={{ marginTop: 8, color: 'var(--crm-muted)', fontSize: 13 }}>{saved}</div>}
-
-          <div style={{ marginTop: 12 }}>
-            <div style={label}>Subject</div>
+        <CrmSectionCard
+          title={controller.activeLabel}
+          emoji="✍️"
+          description="Write the subject and body once, then reuse it anywhere that stage appears."
+        >
+          <div className="mt-4">
+            <div className={labelClassName}>Subject</div>
             <input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
+              value={controller.subject}
+              onChange={(event) => controller.setSubject(event.target.value)}
               placeholder="ex: Your estimate is scheduled"
-              style={input}
+              className={inputClassName}
             />
           </div>
 
-          <div style={{ marginTop: 12 }}>
-            <div style={label}>Body</div>
+          <div className="mt-4">
+            <div className={labelClassName}>Body</div>
             <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
+              value={controller.body}
+              onChange={(event) => controller.setBody(event.target.value)}
               placeholder="Write the email template here..."
-              style={{ ...input, height: 220, resize: 'vertical' }}
+              className={`${inputClassName} min-h-[220px] resize-y`}
             />
           </div>
 
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--crm-muted)' }}>
+          <div className="mt-2 text-xs text-[color:var(--crm-ui-muted)]">
             For Quote sent/follow up, one or more quote PDFs can be attached. Use{' '}
             {'{{estimateFileName}}'} / {'{{estimateFileLink}}'} for the primary file, or{' '}
             {'{{estimateFileNames}}'} / {'{{estimateFileLinks}}'} for all selected files.
           </div>
 
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Variables</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {availableVars.map((v) => (
+          <div className="mt-4">
+            <div className="mb-2 flex items-center gap-2 text-sm font-black text-[color:var(--crm-ui-text)]">
+              <span aria-hidden="true">🧩</span>
+              <span>Variables</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {availableVars.map((value) => (
                 <button
-                  key={v}
-                  onClick={() => insertVar(v)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 999,
-                    border: '1px solid var(--crm-border-soft)',
-                    background: 'var(--crm-bg-soft)',
-                    cursor: 'pointer',
-                    fontWeight: 800,
-                    fontSize: 12,
-                  }}
+                  key={value}
+                  type="button"
+                  onClick={() => controller.insertVariable(value)}
+                  className={crmButtonClassName(
+                    'secondary',
+                    'min-h-0 rounded-full px-2.5 py-1 text-xs font-extrabold text-[color:var(--crm-ui-muted)]'
+                  )}
                 >
-                  {v}
+                  {value}
                 </button>
               ))}
             </div>
           </div>
-        </div>
+        </CrmSectionCard>
       </div>
-    </div>
+    </CrmPageShell>
   )
 }
 
-const button: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border-soft)',
-  background: 'var(--crm-card)',
-  color: 'var(--crm-text)',
-  fontWeight: 800,
-  fontSize: 14,
-  cursor: 'pointer',
-}
+const inputClassName = crmInputClassName('min-h-[3rem] text-sm')
 
-const input: React.CSSProperties = {
-  padding: '12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border)',
-  fontSize: 14,
-  width: '100%',
-}
-
-const label: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: 'var(--crm-muted)',
-  textTransform: 'uppercase',
-  marginBottom: 6,
-}
+const labelClassName = 'ace-crm-mono mb-1.5 text-[11px] font-bold text-[color:var(--crm-ui-muted)]'

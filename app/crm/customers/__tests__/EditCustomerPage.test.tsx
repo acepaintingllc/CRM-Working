@@ -40,7 +40,7 @@ describe('EditCustomerPage', () => {
   it('loads malformed legacy addresses into cleanup mode without blocking the form', async () => {
     authedFetch.mockResolvedValue(
       createResponse({
-        customer: {
+        data: {
           id: 'customer-1',
           name: 'Taylor Jones',
           email: 'taylor@example.com',
@@ -67,7 +67,7 @@ describe('EditCustomerPage', () => {
   it('loads structured addresses normally', async () => {
     authedFetch.mockResolvedValue(
       createResponse({
-        customer: {
+        data: {
           id: 'customer-1',
           name: 'Taylor Jones',
           email: 'taylor@example.com',
@@ -94,7 +94,7 @@ describe('EditCustomerPage', () => {
     authedFetch
       .mockResolvedValueOnce(
         createResponse({
-          customer: {
+          data: {
             id: 'customer-1',
             name: 'Taylor Jones',
             email: 'taylor@example.com',
@@ -129,7 +129,7 @@ describe('EditCustomerPage', () => {
     authedFetch
       .mockResolvedValueOnce(
         createResponse({
-          customer: {
+          data: {
             id: 'customer-1',
             name: 'Taylor Jones',
             email: 'taylor@example.com',

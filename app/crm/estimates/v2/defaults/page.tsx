@@ -2,10 +2,14 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   DEFAULT_LABOR_RATE,
 } from '@/lib/estimator/defaults'
+import {
+  loadEstimateDefaults,
+  loadQuoteProducts,
+  saveEstimateDefaults,
+} from '@/lib/quotes/client'
 
 type ProductRow = {
   id: string
@@ -171,23 +175,13 @@ export default function EstimateDefaultsPage() {
       try {
         setLoading(true)
         setError(null)
-        const [productsRes, settingsRes] = await Promise.all([
-          authedFetch('/api/quotes/products', { cache: 'no-store' }),
-          authedFetch('/api/settings/estimate-defaults', { cache: 'no-store' }),
-        ])
         const [productsPayload, settingsPayload] = await Promise.all([
-          productsRes.json().catch(() => null),
-          settingsRes.json().catch(() => null),
+          loadQuoteProducts<ProductRow[]>(),
+          loadEstimateDefaults(),
         ])
-        if (!productsRes.ok) {
-          throw new Error(productsPayload?.error ?? 'Failed to load products')
-        }
-        if (!settingsRes.ok) {
-          throw new Error(settingsPayload?.error ?? 'Failed to load defaults')
-        }
         if (!active) return
-        setProducts(productsPayload?.products ?? [])
-        const next = settingsPayload?.data ?? {}
+        setProducts(productsPayload)
+        const next = settingsPayload ?? {}
         const normalized = {
           walls_paint_id: next.walls_paint_id ?? null,
           walls_primer_id: next.walls_primer_id ?? null,
@@ -243,17 +237,9 @@ export default function EstimateDefaultsPage() {
       setSaving(true)
       setError(null)
       setSaved(null)
-      const res = await authedFetch('/api/settings/estimate-defaults', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: settings }),
-      })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        throw new Error(payload?.error ?? 'Failed to save defaults')
-      }
-      setSettings(payload?.data ?? settings)
-      setSavedSnapshot(payload?.data ?? settings)
+      const result = await saveEstimateDefaults(settings)
+      setSettings(result.data ?? settings)
+      setSavedSnapshot(result.data ?? settings)
       setSaved('Saved')
       window.setTimeout(() => setSaved(null), 1200)
     } catch (err) {

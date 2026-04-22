@@ -3,8 +3,7 @@
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { authedFetch } from '@/lib/auth/authedFetch'
-import { getResponseErrorMessage, parseResponseBody } from '@/lib/jobs/actions'
+import { loadJobEstimateDate, saveJobEstimateDate } from '@/lib/jobs/client'
 import {
   next8amLocalDateTimeValue,
   toIsoFromLocalDateTimeValue,
@@ -32,18 +31,15 @@ export default function JobEstimatePage() {
   useEffect(() => {
     if (!id || typeof id !== 'string') return
     const load = async () => {
-      const res = await authedFetch(`/api/jobs/${id}`, { cache: 'no-store' })
-      const payload = await parseResponseBody(res)
-      if (!res.ok) {
-        setError(getResponseErrorMessage(res, payload))
-        return
-      }
-      const existing = (payload.json as { job?: { estimate_date?: string | null } } | null)?.job
-        ?.estimate_date
-      if (existing) {
-        setEstimateLocal(toLocalDateTimeInputValue(new Date(existing)))
-      } else {
-        setEstimateLocal(next8amLocalDateTimeValue())
+      try {
+        const existing = await loadJobEstimateDate(id)
+        if (existing) {
+          setEstimateLocal(toLocalDateTimeInputValue(new Date(existing)))
+        } else {
+          setEstimateLocal(next8amLocalDateTimeValue())
+        }
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load job.')
       }
     }
     void load()
@@ -62,18 +58,14 @@ export default function JobEstimatePage() {
     }
     setSaving(true)
     setError(null)
-    const res = await authedFetch(`/api/jobs/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estimate_date: iso, status: 'estimate_scheduled' }),
-    })
-    const payload = await parseResponseBody(res)
-    setSaving(false)
-    if (!res.ok) {
-      setError(getResponseErrorMessage(res, payload))
-      return
+    try {
+      await saveJobEstimateDate(id, iso)
+      router.push(`/crm/jobs/${id}`)
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to save quote date.')
+    } finally {
+      setSaving(false)
     }
-    router.push(`/crm/jobs/${id}`)
   }
 
   return (

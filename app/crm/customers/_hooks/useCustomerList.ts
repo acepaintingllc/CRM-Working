@@ -1,25 +1,15 @@
 'use client'
 
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
-import { authedFetch } from '@/lib/auth/authedFetch'
+import { loadCustomerList } from '@/lib/customers/client'
 import type { CustomerSummary } from '@/lib/customers/types'
-import { readJsonResponse } from '../_lib/http'
 
 const emptyCustomerList: CustomerSummary[] = []
 
 export function useCustomerList() {
   const listResource = useLoadableResource<CustomerSummary[]>({
     initialData: emptyCustomerList,
-    load: async () => {
-      const response = await authedFetch('/api/customers', { cache: 'no-store' })
-      const payload = await readJsonResponse<{ customers?: CustomerSummary[]; error?: string }>(response)
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'Failed to load customers.')
-      }
-
-      return payload?.customers ?? []
-    },
+    load: loadCustomerList,
     getErrorMessage: (error: unknown) =>
       error instanceof Error ? error.message : 'Failed to load customers.',
     reloadKey: 'customers',

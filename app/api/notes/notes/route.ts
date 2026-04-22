@@ -2,7 +2,14 @@ import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { readJsonBody } from '@/lib/server/apiRoute'
 import { asBoolean, asOptionalTrimmedText, asRecord, isUuid } from '@/lib/notes/server'
-import type { NotesNoteResponse, NotesNoteRow, NotesNotesResponse, NotesNoteStatus } from '@/lib/notes/types'
+import { applyCursorPage, buildNoteCursor, compareNotesForList, decodeNoteCursor } from '@/lib/notes/pagination'
+import type {
+  NotesExplorerSections,
+  NotesNoteResponse,
+  NotesNoteRow,
+  NotesNotesResponse,
+  NotesNoteStatus,
+} from '@/lib/notes/types'
 
 function asNoteStatus(value: string | null): NotesNoteStatus | null {
   if (value === 'active' || value === 'archived') return value
@@ -19,21 +26,25 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const status = asNoteStatus(searchParams.get('status')) ?? 'active'
   const folderId = searchParams.get('folder_id')
-  const search = (searchParams.get('search') ?? '').trim().toLowerCase()
+  const search = (searchParams.get('search') ?? '').trim()
+  const cursor = searchParams.get('cursor')
+  const limitRaw = Number(searchParams.get('limit') ?? '24')
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, Math.trunc(limitRaw))) : 24
 
   let query = supabaseAdmin
     .from('notes_notes')
     .select('*')
     .eq('org_id', session.orgId)
     .eq('status', status)
-    .order('starred', { ascending: false })
-    .order('updated_at', { ascending: false })
-    .limit(500)
 
   if (folderId === 'uncategorized') {
     query = query.is('folder_id', null)
   } else if (folderId && isUuid(folderId)) {
     query = query.eq('folder_id', folderId)
+  }
+  if (search) {
+    const escaped = search.replace(/,/g, ' ').replace(/\./g, ' ')
+    query = query.or(`title.ilike.%${escaped}%,body.ilike.%${escaped}%`)
   }
 
   const res = await query
@@ -41,15 +52,36 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unable to load notes.' }, { status: 500 })
   }
 
-  let notes = (res.data ?? []) as NotesNoteRow[]
-  if (search) {
-    notes = notes.filter((note) => {
-      const haystack = `${note.title} ${note.body}`.toLowerCase()
-      return haystack.includes(search)
-    })
-  }
+  const notes = (res.data ?? []) as NotesNoteRow[]
+  notes.sort(compareNotesForList)
 
-  return NextResponse.json<NotesNotesResponse>({ notes, filters: { status, folder_id: folderId, search } })
+  const paged = applyCursorPage({
+    rows: notes,
+    limit,
+    cursor,
+    decodeCursor: decodeNoteCursor,
+    matchesCursor: (row, decoded) =>
+      row.id === decoded.id &&
+      row.starred === decoded.starred &&
+      row.updated_at === decoded.updated_at,
+    buildCursor: buildNoteCursor,
+  })
+
+  const sections: NotesExplorerSections | undefined =
+    !folderId && !search
+      ? {
+          starred: notes.filter((note) => note.starred).slice(0, 8),
+          recent: [...notes].slice(0, 8),
+          loose: notes.filter((note) => note.folder_id == null && !note.starred).slice(0, 8),
+        }
+      : undefined
+
+  return NextResponse.json<NotesNotesResponse>({
+    notes: paged.rows,
+    filters: { status, folder_id: folderId, search },
+    page: paged.page,
+    sections,
+  })
 }
 
 export async function POST(request: Request) {

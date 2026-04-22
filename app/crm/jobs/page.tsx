@@ -1,28 +1,27 @@
 'use client'
 
 import {
-  fetchJobList,
-  patchJobDateFields,
-  patchJobStatus,
-  type JobSummary,
-} from '@/lib/jobs/actions'
-import {
   JOB_STATUS_OPTIONS,
-  createJobStatusBuckets,
   getJobWorkflowActions,
   type JobWorkflowResolvedAction,
-  type JobStatus,
 } from '@/lib/jobs/types'
-import StageEmailModal, {
-  type StageEmailStage,
-  type StageEmailSentResult,
-} from '@/app/crm/jobs/_components/StageEmailModal'
+import { deriveJobActivitySummary } from '@/lib/jobs/board'
+import StageEmailModal from '@/app/crm/jobs/_components/StageEmailModal'
 import JobCompletionCloseoutModal from '@/app/crm/jobs/_components/JobCompletionCloseoutModal'
-import { jobsButtonSmallClassName } from '@/lib/jobs/uiClasses'
+import { useJobsBoardPage } from '@/app/crm/jobs/_hooks/useJobsBoardPage'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
+import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { crmButtonClassName } from '@/app/crm/_components/crmStyles'
 
-import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import type { MouseEvent } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   CalendarCheck,
@@ -35,13 +34,6 @@ import {
   Send,
   XCircle,
 } from 'lucide-react'
-
-type Job = JobSummary
-
-const columns: { key: JobStatus; title: string }[] = JOB_STATUS_OPTIONS.map((option) => ({
-  key: option.value,
-  title: option.title,
-}))
 
 const iconSizeSm = 16
 const iconSizeMd = 18
@@ -57,65 +49,34 @@ function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
 
 export default function JobsPage() {
   const router = useRouter()
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [completedQuery, setCompletedQuery] = useState('')
-  const [showAllCompleted, setShowAllCompleted] = useState(false)
-  const [showCompleted, setShowCompleted] = useState(false)
-  const [showLost, setShowLost] = useState(false)
-  const [showEmptyStages, setShowEmptyStages] = useState(false)
-  const [compactActions, setCompactActions] = useState(false)
-  const [emailJobId, setEmailJobId] = useState<string | null>(null)
-  const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
-  const [closeoutJobId, setCloseoutJobId] = useState<string | null>(null)
-
-  const grouped = useMemo(() => {
-    const map = createJobStatusBuckets<Job>()
-    for (const j of jobs) map[j.status]?.push(j)
-    return map
-  }, [jobs])
-
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      setJobs(await fetchJobList())
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load jobs.')
-      setJobs([])
-    }
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    void load()
-  }, [])
-
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 900px)')
-    const apply = () => setCompactActions(media.matches)
-    apply()
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [])
-
-  const patchJob = async (id: string, patch: Record<string, unknown>) => {
-    try {
-      const nextJob =
-        typeof patch.status === 'string'
-          ? await patchJobStatus(id, patch.status as JobStatus)
-          : await patchJobDateFields(id, patch)
-      setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...nextJob } : j)))
-      return (nextJob ?? null) as Partial<Job> | null
-    } catch (patchError) {
-      setError(patchError instanceof Error ? patchError.message : 'Failed to update job.')
-      return null
-    }
-  }
-
-  const nowIso = () => new Date().toISOString()
+  const {
+    loading,
+    error,
+    notice,
+    completedQuery,
+    setCompletedQuery,
+    showAllCompleted,
+    setShowAllCompleted,
+    showCompleted,
+    setShowCompleted,
+    showLost,
+    setShowLost,
+    showEmptyStages,
+    setShowEmptyStages,
+    compactActions,
+    emailJobId,
+    emailStage,
+    closeoutJobId,
+    grouped,
+    filteredCompleted,
+    visibleColumns,
+    load,
+    runBoardAction,
+    closeStageEmail,
+    handleStageEmailSent,
+    closeCloseout,
+    handleCloseoutSaved,
+  } = useJobsBoardPage()
 
   const formatDate = (iso: string | null) => {
     if (!iso) return null
@@ -133,106 +94,23 @@ export default function JobsPage() {
     return null
   }
 
-  const activityForJob = (job: Job) => {
-    const items: { label: string; at: string }[] = []
-    if (job.completed_email_sent_at) items.push({ label: 'Review email sent', at: job.completed_email_sent_at })
-    if (job.completed_at) items.push({ label: 'Completed', at: job.completed_at })
-    if (job.scheduled_email_sent_at) items.push({ label: 'Confirmation email sent', at: job.scheduled_email_sent_at })
-    if (job.scheduled_date) items.push({ label: 'Scheduled', at: job.scheduled_date })
-    if (job.estimate_sent_at) items.push({ label: 'Quote sent', at: job.estimate_sent_at })
-    if (job.estimate_date) items.push({ label: 'Estimate set', at: job.estimate_date })
-    if (job.created_at) items.push({ label: 'Job created', at: job.created_at })
-    items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    return items.slice(0, 2)
-  }
-
-  const filteredCompleted = useMemo(() => {
-    const q = completedQuery.trim().toLowerCase()
-    let list = grouped.completed
-    if (q) {
-      list = list.filter((job) => {
-        const address = (job.customer_address ?? '')
-        const streetOnly = address.split(',')[0] ?? address
-        const hay = `${job.title} ${job.customer_name ?? ''} ${address} ${streetOnly} ${job.description ?? ''}`.toLowerCase()
-        return hay.includes(q)
-      })
-    }
-    list = [...list].sort((a, b) => {
-      const aTime = a.completed_at ? new Date(a.completed_at).getTime() : 0
-      const bTime = b.completed_at ? new Date(b.completed_at).getTime() : 0
-      return bTime - aTime
-    })
-    if (!showAllCompleted && !q) return list.slice(0, 5)
-    return list
-  }, [completedQuery, grouped.completed, showAllCompleted])
-
   const stop =
     (fn: () => void) =>
-    (event: React.MouseEvent<HTMLButtonElement>) => {
+    (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation()
       fn()
     }
 
-  const openStageEmail = (jobId: string, stage: StageEmailStage) => {
-    setError(null)
-    setEmailJobId(jobId)
-    setEmailStage(stage)
-  }
-
-  const closeStageEmail = () => {
-    setEmailJobId(null)
-    setEmailStage(null)
-  }
-
-  const handleStageEmailSent = (result: StageEmailSentResult) => {
-    setError(null)
-    if (emailJobId && result.job) {
-      const patch = result.job as Partial<Job>
-      setJobs((prev) => prev.map((job) => (job.id === emailJobId ? { ...job, ...patch } : job)))
-    }
-    setNotice(result.warning ?? 'Email sent')
-  }
-
-  const markCompletedAndPrompt = async (job: Job) => {
-    const updated = await patchJob(job.id, { completed_at: nowIso() })
-    if (updated) {
-      setNotice(null)
-      setCloseoutJobId(job.id)
-    }
-  }
-
-  const openCloseout = (jobId: string) => {
-    setError(null)
-    setCloseoutJobId(jobId)
-  }
-
-  const closeCloseout = () => {
-    setCloseoutJobId(null)
-  }
-
-  const handleCloseoutSaved = (result: { job?: Partial<Job> | null; notice?: string | null }) => {
-    setError(null)
-    if (closeoutJobId && result.job) {
-      setJobs((prev) =>
-        prev.map((job) => (job.id === closeoutJobId ? { ...job, ...result.job } : job))
-      )
-    }
-    if (result.notice) setNotice(result.notice)
-  }
-
-  const columnCount = (status: JobStatus) => grouped[status].length
-  const visibleColumns = columns
-    .filter((col) => (col.key === 'completed' ? showCompleted : col.key === 'lost' ? showLost : true))
-    .filter((col) => showEmptyStages || columnCount(col.key) > 0)
+  const columnCount = (status: (typeof JOB_STATUS_OPTIONS)[number]['value']) => grouped[status].length
 
   const actionClassName = (action: JobWorkflowResolvedAction) => {
     if (action.tone === 'accent') {
-      return 'inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--crm-accent)] bg-[var(--crm-accent)] px-2.5 py-1.5 text-xs font-bold text-[var(--crm-accent-text)] transition hover:opacity-95'
+      return crmButtonClassName('primary', 'min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs')
     }
     if (action.tone === 'danger') {
-      return 'inline-flex items-center gap-1.5 rounded-[10px] border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100'
+      return crmButtonClassName('danger', 'min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs')
     }
-    return jobsButtonSmallClassName
+    return crmButtonClassName('secondary', 'min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs')
   }
 
   const actionIcon = (action: JobWorkflowResolvedAction) => {
@@ -260,34 +138,10 @@ export default function JobsPage() {
     }
   }
 
-  const runBoardAction = async (job: Job, action: JobWorkflowResolvedAction) => {
-    if (action.confirmMessage && !window.confirm(action.confirmMessage)) return
-    if (action.kind === 'navigate' && action.href) {
-      router.push(action.href)
-      return
-    }
-    if (action.kind === 'stage_email' && action.stage) {
-      openStageEmail(job.id, action.stage)
-      return
-    }
-    if (action.kind === 'open_closeout') {
-      openCloseout(job.id)
-      return
-    }
-    if (action.kind === 'patch_status' && action.status) {
-      await patchJob(job.id, { status: action.status })
-      return
-    }
-    if (action.kind === 'patch_date' && action.dateField === 'completed_at') {
-      await markCompletedAndPrompt(job)
-      return
-    }
-    if (action.kind === 'patch_date' && action.dateField === 'estimate_sent_at') {
-      await patchJob(job.id, { estimate_sent_at: nowIso() })
-    }
-  }
-
-  const renderBoardAction = (job: Job, action: JobWorkflowResolvedAction) => {
+  const renderBoardAction = (
+    job: (typeof grouped)[keyof typeof grouped][number],
+    action: JobWorkflowResolvedAction
+  ) => {
     const Icon = actionIcon(action)
     if (action.kind === 'navigate' && action.href) {
       return (
@@ -316,14 +170,18 @@ export default function JobsPage() {
     )
   }
 
-  const renderBoardActions = (job: Job) => {
+  const renderBoardActions = (job: (typeof grouped)[keyof typeof grouped][number]) => {
     const actions = getJobWorkflowActions('board', job)
     if (actions.length === 0) return null
 
     if (compactActions) {
       return (
         <details onClick={(event) => event.stopPropagation()}>
-          <summary className={jobsButtonSmallClassName}>{iconLabel(ChevronDown, 'More')}</summary>
+          <summary
+            className={crmButtonClassName('secondary', 'min-h-0 rounded-[10px] px-2.5 py-1.5 text-xs')}
+          >
+            {iconLabel(ChevronDown, 'More')}
+          </summary>
           <div className="mt-1.5 grid gap-1.5">
             {actions.map((action) => renderBoardAction(job, action))}
           </div>
@@ -335,87 +193,67 @@ export default function JobsPage() {
   }
 
   return (
-    <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
-      <div className="mx-auto max-w-[2000px] px-4 md:px-6">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="m-0 text-2xl font-bold text-gray-900">Jobs</h1>
-            <div className="mt-1 text-sm text-gray-600">
-              Track every job through your pipeline from estimate to completion.
-            </div>
-          </div>
+    <CrmPageShell className="max-w-[2000px]">
+      <CrmPageHeader
+        eyebrow="Pipeline board"
+        emoji="🛠️"
+        title="Jobs"
+        description="Track every job through your pipeline from estimate to completion with one operational board."
+        badge={<CrmChip tone="accent">Board workflow</CrmChip>}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowEmptyStages((prev) => !prev)}
+              aria-label={showEmptyStages ? 'Hide empty stages' : 'Show empty stages'}
+              className={crmButtonClassName(showEmptyStages ? 'primary' : 'secondary')}
+            >
+              {iconLabel(
+                ChevronDown,
+                showEmptyStages ? 'Hide empty stages' : 'Show empty stages',
+                iconSizeMd
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCompleted((prev) => !prev)}
+              aria-label={showCompleted ? 'Hide completed jobs' : 'Show completed jobs'}
+              className={crmButtonClassName(showCompleted ? 'primary' : 'secondary')}
+            >
+              {iconLabel(CheckCircle2, showCompleted ? 'Hide completed' : 'Show completed', iconSizeMd)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLost((prev) => !prev)}
+              aria-label={showLost ? 'Hide lost jobs' : 'Show lost jobs'}
+              className={crmButtonClassName(showLost ? 'primary' : 'secondary')}
+            >
+              {iconLabel(XCircle, showLost ? 'Hide lost' : 'Show lost', iconSizeMd)}
+            </button>
+            <button
+              type="button"
+              onClick={() => void load()}
+              aria-label="Refresh jobs"
+              className={crmButtonClassName('secondary')}
+            >
+              {iconLabel(RefreshCw, 'Refresh', iconSizeMd)}
+            </button>
+            <CrmButton href="/crm/jobs/new" tone="primary" className="no-underline" aria-label="Add job">
+              {iconLabel(Plus, 'Add job', iconSizeMd)}
+            </CrmButton>
+          </>
+        }
+      />
 
-          <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowEmptyStages((prev) => !prev)}
-            aria-label={showEmptyStages ? 'Hide empty stages' : 'Show empty stages'}
-            className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
-              showEmptyStages
-                ? 'border-black bg-black text-white'
-                : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
-            }`}
-          >
-            {iconLabel(ChevronDown, showEmptyStages ? 'Hide empty stages' : 'Show empty stages', iconSizeMd)}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCompleted((prev) => !prev)}
-            aria-label={showCompleted ? 'Hide completed jobs' : 'Show completed jobs'}
-            className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
-              showCompleted
-                ? 'border-black bg-black text-white'
-                : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
-            }`}
-          >
-            {iconLabel(CheckCircle2, showCompleted ? 'Hide completed' : 'Show completed', iconSizeMd)}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowLost((prev) => !prev)}
-            aria-label={showLost ? 'Hide lost jobs' : 'Show lost jobs'}
-            className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-black/70 ${
-              showLost
-                ? 'border-black bg-black text-white'
-                : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
-            }`}
-          >
-            {iconLabel(XCircle, showLost ? 'Hide lost' : 'Show lost', iconSizeMd)}
-          </button>
-          <button
-            type="button"
-            onClick={() => void load()}
-            aria-label="Refresh jobs"
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
-          >
-            {iconLabel(RefreshCw, 'Refresh', iconSizeMd)}
-          </button>
-          <Link
-            href="/crm/jobs/new"
-            aria-label="Add job"
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-black bg-black px-3 text-sm font-semibold text-white no-underline transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-black/80"
-          >
-            {iconLabel(Plus, 'Add job', iconSizeMd)}
-          </Link>
-        </div>
-      </div>
-
-      {error && (
-        <div className="mt-3 rounded-xl border border-red-200 bg-white p-3 text-red-800 shadow-sm">
-          {error}
-        </div>
-      )}
-
-      {notice && (
-        <div className="mt-3 rounded-xl border border-green-200 bg-white p-3 text-green-700 shadow-sm">
-          {notice}
-        </div>
-      )}
+      {error ? <CrmNotice tone="error" emoji="⚠️">{error}</CrmNotice> : null}
+      {notice ? <CrmNotice tone="success" emoji="✨">{notice}</CrmNotice> : null}
 
       {loading ? (
-        <div className="mt-3 text-gray-600">Loading...</div>
+        <CrmSectionCard title="Loading jobs" emoji="⏳">
+          <p className="text-sm text-[color:var(--crm-ui-muted)]">Refreshing the pipeline board.</p>
+        </CrmSectionCard>
       ) : (
-        <div className={`mt-3 pb-2 ${compactActions ? 'overflow-x-auto' : ''}`}>
+        <div className={`pb-2 ${compactActions ? 'overflow-x-auto' : ''}`}>
           <div
             className={`grid gap-3 ${compactActions ? 'min-w-max' : ''}`}
             style={{
@@ -424,95 +262,101 @@ export default function JobsPage() {
                 : `repeat(${Math.max(1, visibleColumns.length)}, minmax(0, 1fr))`,
             }}
           >
-          {visibleColumns.map((col) => (
-            <div key={col.key} className="rounded-2xl border border-gray-200 bg-white/90 p-2.5 shadow-sm backdrop-blur">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-sm font-extrabold text-gray-900">{col.title}</div>
-                <div className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-gray-300 bg-white px-2 text-xs font-extrabold text-gray-700">
-                  {columnCount(col.key)}
-                </div>
-              </div>
-              <div className="grid gap-2">
-                {col.key === 'completed' && (
-                  <div className="grid gap-2">
-                    <input
-                      type="search"
-                      placeholder="Search completed..."
-                      value={completedQuery}
-                      onChange={(e) => setCompletedQuery(e.target.value)}
-                      className="h-9 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none ring-black/70 placeholder:text-gray-400 focus:ring-2"
-                    />
-                    {!completedQuery && grouped.completed.length > 5 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllCompleted((prev) => !prev)}
-                        className={`${jobsButtonSmallClassName} w-fit`}
-                      >
-                        {showAllCompleted ? 'Show last 5' : 'Show all'}
-                      </button>
-                    )}
-                  </div>
-                )}
-                {(col.key === 'completed' ? filteredCompleted : grouped[col.key]).length === 0 && (
-                  <div className="rounded-xl border border-dashed border-gray-300 bg-white p-3 text-sm text-gray-500">
-                    <div className="font-semibold text-gray-700">No jobs in this stage</div>
-                    <div className="mt-1 text-xs">
-                      {col.key === 'estimate_scheduled'
-                        ? 'New jobs will appear here after creation.'
-                        : 'Jobs move here automatically as status changes.'}
-                    </div>
-                  </div>
-                )}
-                {(col.key === 'completed' ? filteredCompleted : grouped[col.key]).map((job) => (
-                  <div
-                    key={job.id}
-                    onClick={() => router.push(`/crm/jobs/${job.id}`)}
-                    className="cursor-pointer rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
-                  >
-                    <div className="text-base leading-tight font-extrabold text-gray-900 break-words">{job.title}</div>
-                    <div className="mt-0.5 text-xs text-gray-500">
-                      {job.customer_name ? job.customer_name : `Customer: ${job.customer_id}`}
-                    </div>
-
-                    {job.description && (
-                      <div className="mt-1.5 text-xs text-gray-700">
-                        {job.description}
-                      </div>
-                    )}
-
-                    <div className="mt-1.5 text-xs leading-4.5 text-gray-500">
-                      {job.status === 'scheduled' ? (
-                        <>
-                          {formatRange(job.scheduled_date, job.scheduled_end_date) && (
-                            <div>Scheduled: {formatRange(job.scheduled_date, job.scheduled_end_date)}</div>
+            {visibleColumns.map((col) => (
+              <CrmSectionCard
+                key={col.key}
+                className="bg-[color:var(--crm-ui-surface)]/95 p-2.5 backdrop-blur"
+                title={col.title}
+                badge={<CrmChip>{columnCount(col.key)}</CrmChip>}
+              >
+                <div className="grid gap-2">
+                  {col.key === 'completed' ? (
+                    <div className="grid gap-2">
+                      <CrmSearchBar
+                        value={completedQuery}
+                        onChange={setCompletedQuery}
+                        placeholder="Search completed..."
+                      />
+                      {!completedQuery && grouped.completed.length > 5 ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllCompleted((prev) => !prev)}
+                          className={crmButtonClassName(
+                            'secondary',
+                            'min-h-0 w-fit rounded-[10px] px-2.5 py-1.5 text-xs'
                           )}
-                          {job.completed_at && <div>Completed: {formatDate(job.completed_at)}</div>}
-                        </>
-                      ) : (
-                        <>
-                          {job.estimate_date && <div>Estimate: {formatDate(job.estimate_date)}</div>}
-                          {job.scheduled_date && <div>Scheduled: {formatDate(job.scheduled_date)}</div>}
-                          {job.completed_at && <div>Completed: {formatDate(job.completed_at)}</div>}
-                        </>
-                      )}
+                        >
+                          {showAllCompleted ? 'Show last 5' : 'Show all'}
+                        </button>
+                      ) : null}
                     </div>
-                    {!compactActions && activityForJob(job).length > 0 && (
-                      <div className="mt-2 grid gap-1 border-t border-dashed border-gray-200 pt-1.5 text-[11px] text-gray-500">
-                        <div className="font-bold text-gray-700">Recent activity</div>
-                        {activityForJob(job).map((item, idx) => (
-                          <div key={`${job.id}-act-${idx}`}>
-                            {item.label}: {formatDate(item.at)}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  ) : null}
 
-                    <div className="mt-2 flex flex-wrap gap-1.5">{renderBoardActions(job)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+                  {(col.key === 'completed' ? filteredCompleted : grouped[col.key]).length === 0 ? (
+                    <CrmEmptyState
+                      className="shadow-none"
+                      emoji="📭"
+                      title="No jobs in this stage"
+                      description={
+                        col.key === 'estimate_scheduled'
+                          ? 'New jobs will appear here after creation.'
+                          : 'Jobs move here automatically as status changes.'
+                      }
+                    />
+                  ) : null}
+
+                  {(col.key === 'completed' ? filteredCompleted : grouped[col.key]).map((job) => (
+                    <div
+                      key={job.id}
+                      onClick={() => router.push(`/crm/jobs/${job.id}`)}
+                      className="ace-crm-surface cursor-pointer p-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(17,24,39,0.12)]"
+                    >
+                      <div className="text-base leading-tight font-extrabold text-[color:var(--crm-ui-text)] break-words">
+                        {job.title}
+                      </div>
+                      <div className="mt-0.5 text-xs text-[color:var(--crm-ui-muted)]">
+                        {job.customer_name ? job.customer_name : `Customer: ${job.customer_id}`}
+                      </div>
+
+                      {job.description ? (
+                        <div className="mt-1.5 text-xs text-[color:var(--crm-ui-text)]">
+                          {job.description}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-1.5 text-xs leading-4.5 text-[color:var(--crm-ui-muted)]">
+                        {job.status === 'scheduled' ? (
+                          <>
+                            {formatRange(job.scheduled_date, job.scheduled_end_date) ? (
+                              <div>Scheduled: {formatRange(job.scheduled_date, job.scheduled_end_date)}</div>
+                            ) : null}
+                            {job.completed_at ? <div>Completed: {formatDate(job.completed_at)}</div> : null}
+                          </>
+                        ) : (
+                          <>
+                            {job.estimate_date ? <div>Estimate: {formatDate(job.estimate_date)}</div> : null}
+                            {job.scheduled_date ? <div>Scheduled: {formatDate(job.scheduled_date)}</div> : null}
+                            {job.completed_at ? <div>Completed: {formatDate(job.completed_at)}</div> : null}
+                          </>
+                        )}
+                      </div>
+                      {!compactActions && deriveJobActivitySummary(job).length > 0 ? (
+                        <div className="mt-2 grid gap-1 border-t border-dashed border-[color:var(--crm-ui-border)] pt-1.5 text-[11px] text-[color:var(--crm-ui-muted)]">
+                          <div className="font-bold text-[color:var(--crm-ui-text)]">Recent activity</div>
+                          {deriveJobActivitySummary(job).map((item, idx) => (
+                            <div key={`${job.id}-act-${idx}`}>
+                              {item.label}: {formatDate(item.at)}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-2 flex flex-wrap gap-1.5">{renderBoardActions(job)}</div>
+                    </div>
+                  ))}
+                </div>
+              </CrmSectionCard>
+            ))}
           </div>
         </div>
       )}
@@ -529,7 +373,6 @@ export default function JobsPage() {
         onClose={closeCloseout}
         onSaved={handleCloseoutSaved}
       />
-      </div>
-    </div>
+    </CrmPageShell>
   )
 }

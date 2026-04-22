@@ -30,6 +30,28 @@ describe('useFolderActions', () => {
     mockRouterRefresh.mockReset()
   })
 
+  it('creates a folder and refreshes the explorer data', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, folder: { ...folders[0], id: 'folder-3', name: 'Projects' } }),
+    })
+
+    const { result } = renderHook(() =>
+      useFolderActions({ folders, status: 'active', refresh, activeFolderId: null, onDeleteActiveFolder: null })
+    )
+
+    await act(async () => {
+      await result.current.createFolder(' Projects ')
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledWith('/api/notes/folders', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ name: 'Projects' }),
+    }))
+    expect(refresh).toHaveBeenCalled()
+  })
+
   it('opens rename modal and submits the rename request', async () => {
     const refresh = vi.fn().mockResolvedValue(undefined)
     mockAuthedFetch.mockResolvedValue({

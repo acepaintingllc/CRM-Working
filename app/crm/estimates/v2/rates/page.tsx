@@ -1,6 +1,6 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
+import { loadRatesFlags, mutateRatesFlags } from '@/lib/quotes/client'
 import type {
   RatesFlagsCategory,
   RatesFlagsCategoryKey,
@@ -417,21 +417,15 @@ export default function RatesPage() {
   async function load(keepId?: string) {
     setLoading(true)
     setError(null)
-    const res = await authedFetch('/api/quotes/rates-flags', {
-      cache: 'no-store',
-    })
-    const payload = (await res.json().catch(() => null)) as
-      | RatesFlagsPayload
-      | { error?: string }
-      | null
-    if (!res.ok) {
-      setError(payload && 'error' in payload ? payload.error || res.statusText : res.statusText)
+    try {
+      const payload = await loadRatesFlags()
+      setData(payload)
+      if (keepId) setSelectedId(keepId)
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load rates and flags.')
+    } finally {
       setLoading(false)
-      return
     }
-    setData(payload as RatesFlagsPayload)
-    if (keepId) setSelectedId(keepId)
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -506,27 +500,21 @@ export default function RatesPage() {
     if (!activeCategory) return false
     setSaving(true)
     setNotice(null)
-    const res = await authedFetch('/api/quotes/rates-flags', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await mutateRatesFlags({
         category: activeCategory.key,
         action,
-        original_id: originalId,
         values,
-      }),
-    })
-    const payload = (await res.json().catch(() => null)) as
-      | { error?: string }
-      | { ok: true }
-      | null
-    setSaving(false)
-    if (!res.ok) {
-      setError(payload && 'error' in payload ? payload.error || res.statusText : res.statusText)
+        original_id: originalId,
+      })
+      setError(null)
+      return true
+    } catch (mutationError) {
+      setError(mutationError instanceof Error ? mutationError.message : 'Failed to save changes.')
       return false
+    } finally {
+      setSaving(false)
     }
-    setError(null)
-    return true
   }
 
   async function saveCurrent() {

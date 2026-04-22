@@ -7,27 +7,27 @@ type SaveResult<TData> = {
   notice?: string
 }
 
-type Params<TData> = {
+type UseEditableResourceParams<TData> = {
   initialData: TData
   load: () => Promise<TData>
   save: (data: TData) => Promise<SaveResult<TData>>
   getErrorMessage?: (error: unknown) => string
 }
 
-function stringify(value: unknown) {
-  return JSON.stringify(value)
-}
-
 function defaultErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Request failed.'
 }
 
-export function useSettingsResource<TData>({
+function stableStringify(value: unknown) {
+  return JSON.stringify(value)
+}
+
+export function useEditableResource<TData>({
   initialData,
   load,
   save,
   getErrorMessage = defaultErrorMessage,
-}: Params<TData>) {
+}: UseEditableResourceParams<TData>) {
   const [data, setDataState] = useState(initialData)
   const [snapshot, setSnapshot] = useState(initialData)
   const [loading, setLoading] = useState(true)
@@ -36,8 +36,23 @@ export function useSettingsResource<TData>({
   const [notice, setNotice] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
   const requestIdRef = useRef(0)
+  const loadRef = useRef(load)
+  const saveRef = useRef(save)
+  const getErrorMessageRef = useRef(getErrorMessage)
 
-  const replaceData = useCallback((next: TData | ((current: TData) => TData)) => {
+  useEffect(() => {
+    loadRef.current = load
+  }, [load])
+
+  useEffect(() => {
+    saveRef.current = save
+  }, [save])
+
+  useEffect(() => {
+    getErrorMessageRef.current = getErrorMessage
+  }, [getErrorMessage])
+
+  const setData = useCallback((next: TData | ((current: TData) => TData)) => {
     setNotice(null)
     setDataState((current) =>
       typeof next === 'function' ? (next as (value: TData) => TData)(current) : next
@@ -47,23 +62,24 @@ export function useSettingsResource<TData>({
   const reload = useCallback(async () => {
     const requestId = ++requestIdRef.current
     setLoading(true)
+
     try {
-      const next = await load()
-      if (requestId !== requestIdRef.current) return
-      setDataState(next)
-      setSnapshot(next)
+      const nextData = await loadRef.current()
+      if (requestIdRef.current !== requestId) return
+      setDataState(nextData)
+      setSnapshot(nextData)
       setError(null)
       setNotice(null)
       setHasLoaded(true)
     } catch (loadError) {
-      if (requestId !== requestIdRef.current) return
-      setError(getErrorMessage(loadError))
+      if (requestIdRef.current !== requestId) return
+      setError(getErrorMessageRef.current(loadError))
     } finally {
-      if (requestId === requestIdRef.current) {
+      if (requestIdRef.current === requestId) {
         setLoading(false)
       }
     }
-  }, [getErrorMessage, load])
+  }, [])
 
   useEffect(() => {
     void reload()
@@ -74,29 +90,30 @@ export function useSettingsResource<TData>({
 
   const saveChanges = useCallback(async () => {
     if (saving) return
+
     setSaving(true)
     try {
-      const result = await save(data)
+      const result = await saveRef.current(data)
       setDataState(result.data)
       setSnapshot(result.data)
       setError(null)
       setNotice(result.notice ?? 'Saved.')
       setHasLoaded(true)
     } catch (saveError) {
-      setError(getErrorMessage(saveError))
+      setError(getErrorMessageRef.current(saveError))
     } finally {
       setSaving(false)
     }
-  }, [data, getErrorMessage, save, saving])
+  }, [data, saving])
 
   const dirty = useMemo(
-    () => stringify(data) !== stringify(snapshot),
+    () => stableStringify(data) !== stableStringify(snapshot),
     [data, snapshot]
   )
 
   return {
     data,
-    setData: replaceData,
+    setData,
     loading,
     saving,
     error,

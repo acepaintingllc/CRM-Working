@@ -2,6 +2,11 @@
 
 import { useEffect, useEffectEvent } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import {
+  getApiErrorMessage,
+  parseApiResponse,
+  type ApiDataEnvelope,
+} from '@/lib/client/api'
 import { createEstimateV2Error } from '@/lib/estimator/errors'
 import {
   DEFAULT_DAY_HOURS,
@@ -105,12 +110,14 @@ export function useEstimateV2EditorLoader(params: {
         authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' }),
         authedFetch(`/api/quotes/${estimateId}/catalogs?v2=1`, { cache: 'no-store' }),
       ])
+      const estimateParsed = await parseApiResponse(estimateRes)
+      const catalogsParsed = await parseApiResponse(catalogsRes)
 
-      const estimatePayload = (await estimateRes.json().catch(() => null)) as
+      const estimatePayload = estimateParsed.json as
         | EstimateResponse
         | { error?: string }
         | null
-      const catalogsPayload = (await catalogsRes.json().catch(() => null)) as
+      const catalogsPayload = catalogsParsed.json as
         | CatalogsPayload
         | { error?: string }
         | null
@@ -119,7 +126,8 @@ export function useEstimateV2EditorLoader(params: {
 
       if (!estimateRes.ok || !estimatePayload || !('estimate' in estimatePayload)) {
         const message =
-          (estimatePayload as { error?: string } | null)?.error ?? estimateRes.statusText
+          (estimatePayload as { error?: string } | null)?.error ??
+          getApiErrorMessage(estimateRes, estimateParsed, 'Failed to load estimate')
         console.error('Estimate V2 editor load failed', {
           estimateId,
           operation: 'loadEstimate',
@@ -160,7 +168,8 @@ export function useEstimateV2EditorLoader(params: {
       meta.setCatalogs(nextCatalogs)
       if (!catalogsRes.ok) {
         const message =
-          (catalogsPayload as { error?: string } | null)?.error ?? catalogsRes.statusText
+          (catalogsPayload as { error?: string } | null)?.error ??
+          getApiErrorMessage(catalogsRes, catalogsParsed, 'Failed to load catalogs')
         console.error('Estimate V2 editor catalogs load failed', {
           estimateId,
           operation: 'loadCatalogs',
@@ -173,19 +182,20 @@ export function useEstimateV2EditorLoader(params: {
       const jobRes = await authedFetch(`/api/jobs/${estimatePayload.estimate.job_id}`, {
         cache: 'no-store',
       })
-      const jobPayload = (await jobRes.json().catch(() => null)) as
-        | { job?: typeof meta.job }
+      const jobParsed = await parseApiResponse(jobRes)
+      const jobPayload = jobParsed.json as
+        | ApiDataEnvelope<typeof meta.job>
         | { error?: string }
         | null
       if (!activeRef.current) return
-      if (jobRes.ok && jobPayload && 'job' in jobPayload && jobPayload.job) {
-        meta.setJob(jobPayload.job)
+      if (jobRes.ok && jobPayload && 'data' in jobPayload && jobPayload.data) {
+        meta.setJob(jobPayload.data)
         meta.setCustomerDraft({
-          customerId: jobPayload.job.customer_id ?? '',
-          name: jobPayload.job.customer_name ?? '',
-          email: jobPayload.job.customer_email ?? '',
-          phone: jobPayload.job.customer_phone ?? '',
-          address: jobPayload.job.customer_address ?? '',
+          customerId: jobPayload.data.customer_id ?? '',
+          name: jobPayload.data.customer_name ?? '',
+          email: jobPayload.data.customer_email ?? '',
+          phone: jobPayload.data.customer_phone ?? '',
+          address: jobPayload.data.customer_address ?? '',
         })
       }
 

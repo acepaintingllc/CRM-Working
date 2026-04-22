@@ -19,6 +19,14 @@ function createResponse(ok: boolean, payload: unknown, status = ok ? 200 : 500) 
   }
 }
 
+function createDataResponse(data: unknown) {
+  return createResponse(true, { data })
+}
+
+function createMutationResponse(data: unknown, notice?: string) {
+  return createResponse(true, { data, ...(notice ? { notice } : {}) })
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((nextResolve) => {
@@ -45,10 +53,10 @@ describe('customer hooks', () => {
 
     rerender({ id: 'customer-b' })
 
-    second.resolve(createResponse(true, { customer: { id: 'customer-b', name: 'Second' } }))
+    second.resolve(createDataResponse({ id: 'customer-b', name: 'Second' }))
     await waitFor(() => expect(result.current.customer?.id).toBe('customer-b'))
 
-    first.resolve(createResponse(true, { customer: { id: 'customer-a', name: 'First' } }))
+    first.resolve(createDataResponse({ id: 'customer-a', name: 'First' }))
     await act(async () => {
       await Promise.resolve()
     })
@@ -67,8 +75,8 @@ describe('customer hooks', () => {
 
   it('useCustomerDetail loads, refreshes, and preserves customer data on delete failure', async () => {
     authedFetch
-      .mockResolvedValueOnce(createResponse(true, { customer: { id: 'customer-1', name: 'Taylor Jones' } }))
-      .mockResolvedValueOnce(createResponse(true, { customer: { id: 'customer-1', name: 'Taylor Updated' } }))
+      .mockResolvedValueOnce(createDataResponse({ id: 'customer-1', name: 'Taylor Jones' }))
+      .mockResolvedValueOnce(createDataResponse({ id: 'customer-1', name: 'Taylor Updated' }))
       .mockResolvedValueOnce(createResponse(false, { error: 'Delete failed' }))
 
     const { result } = renderHook(() => useCustomerDetail('customer-1'))
@@ -92,8 +100,8 @@ describe('customer hooks', () => {
 
   it('useCustomerDetail reports delete success', async () => {
     authedFetch
-      .mockResolvedValueOnce(createResponse(true, { customer: { id: 'customer-1', name: 'Taylor Jones' } }))
-      .mockResolvedValueOnce(createResponse(true, {}))
+      .mockResolvedValueOnce(createDataResponse({ id: 'customer-1', name: 'Taylor Jones' }))
+      .mockResolvedValueOnce(createMutationResponse(true))
 
     const { result } = renderHook(() => useCustomerDetail('customer-1'))
     await waitFor(() => expect(result.current.customer?.id).toBe('customer-1'))
@@ -120,10 +128,10 @@ describe('customer hooks', () => {
       void result.current.loadList()
     })
 
-    second.resolve(createResponse(true, { customers: [{ id: '2', name: 'Second' }] }))
+    second.resolve(createDataResponse([{ id: '2', name: 'Second' }]))
     await waitFor(() => expect(result.current.listCustomers[0]?.id).toBe('2'))
 
-    first.resolve(createResponse(true, { customers: [{ id: '1', name: 'First' }] }))
+    first.resolve(createDataResponse([{ id: '1', name: 'First' }]))
     await act(async () => {
       await Promise.resolve()
     })
@@ -157,7 +165,7 @@ describe('customer hooks', () => {
     second.resolve(createResponse(false, { error: 'Timeline exploded' }))
     await waitFor(() => expect(result.current.timelineError).toBe('Timeline exploded'))
 
-    first.resolve(createResponse(true, { events: [{ id: 'old', type: 'note', body: 'Old', created_at: null, created_by: null, title: null, link_path: null, link_label: null }] }))
+    first.resolve(createDataResponse([{ id: 'old', type: 'note', body: 'Old', created_at: null, created_by: null, title: null, link_path: null, link_label: null }]))
     await act(async () => {
       await Promise.resolve()
     })
@@ -169,37 +177,33 @@ describe('customer hooks', () => {
   it('useCustomerTimeline loads successfully, saves a note, refreshes, and clears the draft', async () => {
     authedFetch
       .mockResolvedValueOnce(
-        createResponse(true, {
-          events: [
-            {
-              id: 'old',
-              type: 'note',
-              body: 'Old',
-              created_at: null,
-              created_by: null,
-              title: null,
-              link_path: null,
-              link_label: null,
-            },
-          ],
-        })
+        createDataResponse([
+          {
+            id: 'old',
+            type: 'note',
+            body: 'Old',
+            created_at: null,
+            created_by: null,
+            title: null,
+            link_path: null,
+            link_label: null,
+          },
+        ])
       )
-      .mockResolvedValueOnce(createResponse(true, { ok: true, event: { id: 'new' } }))
+      .mockResolvedValueOnce(createMutationResponse({ id: 'new' }))
       .mockResolvedValueOnce(
-        createResponse(true, {
-          events: [
-            {
-              id: 'new',
-              type: 'note',
-              body: 'Fresh',
-              created_at: null,
-              created_by: null,
-              title: null,
-              link_path: null,
-              link_label: null,
-            },
-          ],
-        })
+        createDataResponse([
+          {
+            id: 'new',
+            type: 'note',
+            body: 'Fresh',
+            created_at: null,
+            created_by: null,
+            title: null,
+            link_path: null,
+            link_label: null,
+          },
+        ])
       )
 
     const { result } = renderHook(() => useCustomerTimeline('customer-1'))
@@ -222,7 +226,7 @@ describe('customer hooks', () => {
 
   it('useCustomerTimeline preserves the draft on note save failure and short-circuits missing ids', async () => {
     authedFetch
-      .mockResolvedValueOnce(createResponse(true, { events: [] }))
+      .mockResolvedValueOnce(createDataResponse([]))
       .mockResolvedValueOnce(createResponse(false, { error: 'Save exploded' }))
 
     const { result } = renderHook(() => useCustomerTimeline('customer-1'))

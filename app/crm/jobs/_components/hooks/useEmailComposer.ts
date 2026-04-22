@@ -3,9 +3,11 @@
 import {
   fetchStageEmailComposerData,
   sendStageEmail,
+} from '@/lib/jobs/actions'
+import {
   type EstimateDriveFile,
   type JobDetail,
-} from '@/lib/jobs/actions'
+} from '@/lib/jobs/client'
 import { applyTemplate, buildJobEmailTemplateVars } from '@/lib/jobs/emailTemplate'
 import { stageEmailActionLabel, type StageEmailStage } from '@/lib/jobs/types'
 import { useEffect, useMemo, useState } from 'react'

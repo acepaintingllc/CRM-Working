@@ -1,3 +1,4 @@
+import { getApiErrorMessage, parseApiResponse } from '../../client/apiCore.ts'
 import { eventSortValue, monthKeyLocal } from '../home/calendar.ts'
 
 import type { CalendarEvent, CalendarInfo } from './types.ts'
@@ -35,15 +36,17 @@ async function getDefaultFetch(): Promise<CalendarFetch> {
   return authModule.authedFetch
 }
 
-async function readJson(response: Response) {
-  return response.json().catch(() => null)
-}
+async function fetchCalendarPayload(
+  responsePromise: Promise<Response>
+): Promise<unknown> {
+  const response = await responsePromise
+  const parsed = await parseApiResponse(response)
 
-function getResponseError(response: Response, payload: unknown) {
-  if (isRecord(payload) && typeof payload.error === 'string' && payload.error.trim().length > 0) {
-    return payload.error
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(response, parsed))
   }
-  return response.statusText || 'Request failed'
+
+  return parsed.json
 }
 
 export function readCalendarInfo(value: unknown): CalendarInfo | null {
@@ -127,12 +130,7 @@ export function resolveInitialSelectedCalendarIds(
 
 export async function fetchCalendarStatus(fetchImpl?: CalendarFetch): Promise<FetchResult<boolean>> {
   const fetcher = fetchImpl ?? (await getDefaultFetch())
-  const response = await fetcher('/api/google-calendar/status', { cache: 'no-store' })
-  const payload = await readJson(response)
-
-  if (!response.ok) {
-    throw new Error(getResponseError(response, payload))
-  }
+  const payload = await fetchCalendarPayload(fetcher('/api/google-calendar/status', { cache: 'no-store' }))
 
   if (!isRecord(payload) || typeof payload.connected !== 'boolean') {
     return { value: false, errorMessage: 'Invalid calendar status response.' }
@@ -143,12 +141,7 @@ export async function fetchCalendarStatus(fetchImpl?: CalendarFetch): Promise<Fe
 
 export async function fetchCalendars(fetchImpl?: CalendarFetch): Promise<FetchResult<CalendarInfo[]>> {
   const fetcher = fetchImpl ?? (await getDefaultFetch())
-  const response = await fetcher('/api/google-calendar/calendars', { cache: 'no-store' })
-  const payload = await readJson(response)
-
-  if (!response.ok) {
-    throw new Error(getResponseError(response, payload))
-  }
+  const payload = await fetchCalendarPayload(fetcher('/api/google-calendar/calendars', { cache: 'no-store' }))
 
   const parsed = readCalendarInfosPayload(payload)
   if (!parsed.valid) {
@@ -168,14 +161,11 @@ export async function fetchEvents(
   params.set('limit', '250')
   params.set('month', monthKeyLocal(args.visibleMonth))
 
-  const response = await fetcher(`/api/google-calendar/events?${params.toString()}`, {
-    cache: 'no-store',
-  })
-  const payload = await readJson(response)
-
-  if (!response.ok) {
-    throw new Error(getResponseError(response, payload))
-  }
+  const payload = await fetchCalendarPayload(
+    fetcher(`/api/google-calendar/events?${params.toString()}`, {
+      cache: 'no-store',
+    })
+  )
 
   const parsed = readCalendarEventsPayload(payload)
   if (!parsed.valid) {
@@ -190,16 +180,13 @@ export async function fetchEvents(
 
 export async function connectCalendar(next: string, fetchImpl?: CalendarFetch) {
   const fetcher = fetchImpl ?? (await getDefaultFetch())
-  const response = await fetcher('/api/google-calendar/connect', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ next }),
-  })
-  const payload = await readJson(response)
-
-  if (!response.ok) {
-    throw new Error(getResponseError(response, payload))
-  }
+  const payload = await fetchCalendarPayload(
+    fetcher('/api/google-calendar/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ next }),
+    })
+  )
 
   if (!isRecord(payload) || typeof payload.url !== 'string' || payload.url.length === 0) {
     throw new Error('Failed to start Google connection')
@@ -210,10 +197,5 @@ export async function connectCalendar(next: string, fetchImpl?: CalendarFetch) {
 
 export async function disconnectCalendar(fetchImpl?: CalendarFetch) {
   const fetcher = fetchImpl ?? (await getDefaultFetch())
-  const response = await fetcher('/api/google-calendar/disconnect', { method: 'POST' })
-  const payload = await readJson(response)
-
-  if (!response.ok) {
-    throw new Error(getResponseError(response, payload))
-  }
+  await fetchCalendarPayload(fetcher('/api/google-calendar/disconnect', { method: 'POST' }))
 }

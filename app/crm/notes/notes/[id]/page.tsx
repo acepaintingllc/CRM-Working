@@ -43,7 +43,7 @@ export default function NoteDetailPage() {
 
   return (
     <div className="grid gap-4 pb-16">
-      <section className="rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
+      <section className="rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
         <div className="grid gap-3">
           <NoteHeader note={note} effectiveStatus={derived.effectiveStatus} folderName={note?.folder_id ? folderName : null} />
 
@@ -79,18 +79,18 @@ export default function NoteDetailPage() {
         </div>
       </section>
 
-      {loading && <div className="text-sm text-gray-500">Loading note...</div>}
-      {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {message && <div className="rounded-2xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{message}</div>}
+      {loading && <div className="text-sm text-neutral-400">Loading note...</div>}
+      {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
+      {message && <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">{message}</div>}
 
       {!loading && !note && (
-        <div className="rounded-[30px] border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+        <div className="rounded-[30px] border border-neutral-800 bg-neutral-950 p-6 text-sm text-neutral-400 shadow-sm">
           Note not found.
         </div>
       )}
 
       {!loading && note && (
-        <section className="grid gap-4 rounded-[30px] border border-gray-200 bg-white p-5 shadow-sm">
+        <section className="grid gap-4 rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
           {editState.editMode ? (
             <NoteEditor
               title={editState.title}

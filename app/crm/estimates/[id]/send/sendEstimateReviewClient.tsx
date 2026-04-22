@@ -3,10 +3,15 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { authedFetch } from '@/lib/auth/authedFetch'
 import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
 import { templatePresets } from '@/lib/customer-estimates/presets'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
+import {
+  type CustomerSendMutationResponse,
+  loadCustomerSendPage,
+  saveCustomerSendDraft,
+  submitCustomerSend,
+} from '@/lib/quotes/client'
 import type {
   CompanyProfile,
   CustomerEstimateDocument,
@@ -325,16 +330,18 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
     ;(async () => {
       setLoading(true)
       setError(null)
-      const res = await authedFetch(`/api/quotes/${estimateId}/customer-send`)
-      const payload = await res.json().catch(() => null)
-      if (!alive) return
-      if (!res.ok) {
-        setError(payload?.error ?? 'Unable to load quote send page')
+      let payload: SendPageData
+      try {
+        payload = await loadCustomerSendPage<SendPageData>(`/api/quotes/${estimateId}/customer-send`)
+      } catch (error) {
+        if (!alive) return
+        setError(error instanceof Error ? error.message : 'Unable to load quote send page')
         setLoading(false)
         return
       }
+      if (!alive) return
 
-      const next = payload as SendPageData
+      const next = payload
       setData(next)
       setPublicUrl((payload?.public_url as string | null) ?? null)
       setVersion(
@@ -418,14 +425,14 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
     setBusy(true)
     setError(null)
     setMessage(null)
-    const res = await authedFetch(`/api/quotes/${estimateId}/customer-send`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ draft: draftPayload(form) }),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to save draft')
+    let payload: CustomerSendMutationResponse
+    try {
+      payload = await saveCustomerSendDraft<CustomerSendMutationResponse>(
+        `/api/quotes/${estimateId}/customer-send`,
+        draftPayload(form)
+      )
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to save draft')
       setBusy(false)
       return
     }
@@ -455,14 +462,17 @@ export default function SendEstimateReviewClient({ estimateId }: { estimateId: s
     setBusy(true)
     setError(null)
     setMessage(null)
-    const res = await authedFetch(`/api/quotes/${estimateId}/customer-send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, draft: draftPayload(form) }),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? `Unable to send ${documentLabelLower}`)
+    let payload: CustomerSendMutationResponse
+    try {
+      payload = await submitCustomerSend<CustomerSendMutationResponse>(
+        `/api/quotes/${estimateId}/customer-send`,
+        {
+          mode,
+          draft: draftPayload(form),
+        }
+      )
+    } catch (error) {
+      setError(error instanceof Error ? error.message : `Unable to send ${documentLabelLower}`)
       setBusy(false)
       return
     }

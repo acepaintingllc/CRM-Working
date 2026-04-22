@@ -26,7 +26,9 @@ describe('NotesExplorerHomePage', () => {
       allNotes: [],
       notes: [],
       loading: false,
+      loadingMore: false,
       saving: false,
+      hasMore: true,
       error: null,
       search: '',
       setSearch: vi.fn(),
@@ -38,6 +40,7 @@ describe('NotesExplorerHomePage', () => {
       renameFolder: vi.fn(),
       reorderFolder: vi.fn(),
       deleteFolder: vi.fn(),
+      loadMore: vi.fn(),
       folderNameById: new Map(),
       starredNotes: [],
       recentNotes: [],
@@ -64,5 +67,6 @@ describe('NotesExplorerHomePage', () => {
 
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByText('Rename Folder')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Load More Notes' })).toBeTruthy()
   })
 })

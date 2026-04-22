@@ -1,7 +1,7 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
-import type { NotesTaskRow, NotesTasksResponse } from '@/lib/notes/types'
+import type { NotesCursorPage, NotesTaskRow, NotesTasksResponse } from '@/lib/notes/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { notesFetchJson, useNotesMutation } from './core'
 
@@ -25,35 +25,54 @@ export function useTaskList(initialFilters?: Partial<TaskListFilters>) {
   const [search, setSearch] = useState(initialFilters?.search ?? '')
   const [tasks, setTasks] = useState<NotesTaskRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState<NotesCursorPage>({
+    next_cursor: null,
+    has_more: false,
+    limit: 24,
+  })
   const { saving, runMutation } = useNotesMutation()
 
-  const buildQuery = useCallback(() => {
+  const buildQuery = useCallback((cursor?: string | null) => {
     const query = new URLSearchParams()
     query.set('status', status)
     if (status === 'active') query.set('due', due)
     if (priority !== 'all') query.set('priority', priority)
     if (starredOnly) query.set('starred', 'true')
     if (search.trim()) query.set('search', search.trim())
+    query.set('limit', String(page.limit))
+    if (cursor) query.set('cursor', cursor)
     return query.toString()
-  }, [due, priority, search, starredOnly, status])
+  }, [due, page.limit, priority, search, starredOnly, status])
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
+  const loadTasks = useCallback(async (mode: 'reset' | 'append', cursor?: string | null) => {
+    if (mode === 'append') {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+    }
     setError(null)
     const result = await notesFetchJson<NotesTasksResponse>(
-      `/api/notes/tasks?${buildQuery()}`,
+      `/api/notes/tasks?${buildQuery(cursor ?? null)}`,
       { cache: 'no-store' },
       'Unable to load tasks.'
     )
     if (!result.ok) {
       setError(result.error)
       setLoading(false)
+      setLoadingMore(false)
       return
     }
-    setTasks(result.data.tasks)
+    setTasks((current) => (mode === 'append' ? [...current, ...result.data.tasks] : result.data.tasks))
+    setPage(result.data.page ?? { next_cursor: null, has_more: false, limit: page.limit })
     setLoading(false)
-  }, [buildQuery])
+    setLoadingMore(false)
+  }, [buildQuery, page.limit])
+
+  const refresh = useCallback(async () => {
+    await loadTasks('reset')
+  }, [loadTasks])
 
   useEffect(() => {
     if (search.trim()) return
@@ -64,6 +83,11 @@ export function useTaskList(initialFilters?: Partial<TaskListFilters>) {
     const timeout = setTimeout(() => void refresh(), 250)
     return () => clearTimeout(timeout)
   }, [refresh, search])
+
+  const loadMore = useCallback(async () => {
+    if (!page.has_more || !page.next_cursor || loadingMore) return
+    await loadTasks('append', page.next_cursor)
+  }, [loadTasks, loadingMore, page.has_more, page.next_cursor])
 
   const mutate = useCallback(
     async (path: string, method: 'POST' | 'DELETE' = 'POST', body?: Record<string, unknown>) => {
@@ -95,8 +119,10 @@ export function useTaskList(initialFilters?: Partial<TaskListFilters>) {
   return {
     tasks,
     loading,
+    loadingMore,
     saving,
     error,
+    hasMore: page.has_more,
     filters,
     setStatus,
     setDue,
@@ -104,6 +130,7 @@ export function useTaskList(initialFilters?: Partial<TaskListFilters>) {
     setStarredOnly,
     setSearch,
     refresh,
+    loadMore,
     completeTask: (taskId: string) => mutate(`/api/notes/tasks/${taskId}/complete`),
     reopenTask: (taskId: string) => mutate(`/api/notes/tasks/${taskId}/reopen`),
     archiveTask: (taskId: string) => mutate(`/api/notes/tasks/${taskId}/archive`),

@@ -2,11 +2,11 @@
 
 import { useCallback } from 'react'
 import { Building2 } from 'lucide-react'
+import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
 import { CompanyProfileForm } from '@/app/crm/settings/_components/CompanyProfileForm'
 import { SettingsNotice } from '@/app/crm/settings/_components/SettingsNotice'
 import { SettingsPageShell } from '@/app/crm/settings/_components/SettingsPageShell'
-import { loadSettingsData, saveSettingsData } from '@/app/crm/settings/_lib/api'
-import { useSettingsResource } from '@/app/crm/settings/_lib/useSettingsResource'
+import { loadData, saveData } from '@/lib/client/api'
 import {
   emptyCompanyProfileSettings,
   getCompanyProfileValidationError,
@@ -15,20 +15,15 @@ import type { CompanyProfileSettings } from '@/lib/settings/types'
 
 export default function CompanyProfilePage() {
   const load = useCallback(
-    () =>
-      loadSettingsData<CompanyProfileSettings>(
-        '/api/settings/company',
-        'Failed to load company profile.'
-      ),
+    () => loadData<CompanyProfileSettings>('/api/settings/company', { cache: 'no-store' }),
     []
   )
   const save = useCallback(
-    (data: CompanyProfileSettings) =>
-      saveSettingsData('/api/settings/company', data, 'Failed to save company profile.'),
+    (data: CompanyProfileSettings) => saveData('/api/settings/company', data),
     []
   )
 
-  const resource = useSettingsResource({
+  const resource = useEditableResource({
     initialData: emptyCompanyProfileSettings,
     load,
     save,

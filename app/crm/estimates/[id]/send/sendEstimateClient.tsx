@@ -3,9 +3,14 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { authedFetch } from '@/lib/auth/authedFetch'
 import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
+import {
+  type CustomerSendMutationResponse,
+  loadCustomerSendPage,
+  saveCustomerSendDraft,
+  submitCustomerSend,
+} from '@/lib/quotes/client'
 import type {
   CompanyProfile,
   CustomerEstimateDocument,
@@ -304,16 +309,18 @@ export default function SendEstimateClient({
       setError(null)
     }
 
-    const res = await authedFetch(customerSendUrl(estimateId, catalogSource), { cache: 'no-store' })
-    const payload = await res.json().catch(() => null)
-    if (!mountedRef.current) return false
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to load quote send page')
+    let payload: SendPageData
+    try {
+      payload = await loadCustomerSendPage<SendPageData>(customerSendUrl(estimateId, catalogSource))
+    } catch (error) {
+      if (!mountedRef.current) return false
+      setError(error instanceof Error ? error.message : 'Unable to load quote send page')
       setLoading(false)
       return false
     }
+    if (!mountedRef.current) return false
 
-    setData(payload as SendPageData)
+    setData(payload)
     setPublicUrl((payload?.public_url as string | null) ?? null)
     setVersion(
       payload?.version
@@ -415,14 +422,14 @@ export default function SendEstimateClient({
     setBusy(true)
     setError(null)
     setMessage(null)
-    const res = await authedFetch(customerSendUrl(estimateId, catalogSource), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ draft: draftPayload(form) }),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to save draft')
+    let payload: CustomerSendMutationResponse
+    try {
+      payload = await saveCustomerSendDraft<CustomerSendMutationResponse>(
+        customerSendUrl(estimateId, catalogSource),
+        draftPayload(form)
+      )
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to save draft')
       setBusy(false)
       return
     }
@@ -452,14 +459,17 @@ export default function SendEstimateClient({
     setBusy(true)
     setError(null)
     setMessage(null)
-    const res = await authedFetch(customerSendUrl(estimateId, catalogSource), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, draft: draftPayload(form) }),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(payload?.error ?? `Unable to send ${documentLabelLower}`)
+    let payload: CustomerSendMutationResponse
+    try {
+      payload = await submitCustomerSend<CustomerSendMutationResponse>(
+        customerSendUrl(estimateId, catalogSource),
+        {
+          mode,
+          draft: draftPayload(form),
+        }
+      )
+    } catch (error) {
+      setError(error instanceof Error ? error.message : `Unable to send ${documentLabelLower}`)
       setBusy(false)
       return
     }

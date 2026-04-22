@@ -27,10 +27,11 @@ export default function NotesExplorerHomePage() {
   const {
     folders,
     allNotes,
-    notes,
     loading,
+    loadingMore,
     saving,
     error,
+    hasMore,
     search,
     setSearch,
     selectedFolderId,
@@ -41,6 +42,7 @@ export default function NotesExplorerHomePage() {
     renameFolder,
     reorderFolder,
     deleteFolder,
+    loadMore,
     modalState,
     closeModal,
     submitRename,
@@ -214,34 +216,60 @@ export default function NotesExplorerHomePage() {
               getContextLabel={(note) => (note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized')}
             />
           ) : (
-            <div className="grid gap-4 xl:grid-cols-3">
-              <ExplorerSection
-                title="Pinned Notes"
-                description="Starred notes that should stay in easy reach."
-                notes={starredNotes}
-                selectedNoteId={selectedNoteId}
-                onSelect={setSelectedNoteId}
-                onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
-                getContextLabel={(note) => (note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized')}
-              />
-              <ExplorerSection
-                title="Recent Notes"
-                description="Most recently updated notes across the module."
-                notes={recentNotes}
-                selectedNoteId={selectedNoteId}
-                onSelect={setSelectedNoteId}
-                onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
-                getContextLabel={(note) => (note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized')}
-              />
-              <ExplorerSection
-                title="Loose Notes"
-                description="Uncategorized notes that still need filing."
-                notes={looseNotes}
-                selectedNoteId={selectedNoteId}
-                onSelect={setSelectedNoteId}
-                onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
-                getContextLabel={() => 'Uncategorized'}
-              />
+            <>
+              <div className="grid gap-4 xl:grid-cols-3">
+                <ExplorerSection
+                  title="Pinned Notes"
+                  description="Starred notes that should stay in easy reach."
+                  notes={starredNotes}
+                  selectedNoteId={selectedNoteId}
+                  onSelect={setSelectedNoteId}
+                  onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
+                  getContextLabel={(note) => (note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized')}
+                />
+                <ExplorerSection
+                  title="Recent Notes"
+                  description="Most recently updated notes across the module."
+                  notes={recentNotes}
+                  selectedNoteId={selectedNoteId}
+                  onSelect={setSelectedNoteId}
+                  onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
+                  getContextLabel={(note) => (note.folder_id ? folderNameById.get(note.folder_id) ?? 'Folder' : 'Uncategorized')}
+                />
+                <ExplorerSection
+                  title="Loose Notes"
+                  description="Uncategorized notes that still need filing."
+                  notes={looseNotes}
+                  selectedNoteId={selectedNoteId}
+                  onSelect={setSelectedNoteId}
+                  onOpen={(noteId) => router.push(buildNotesHref(`/crm/notes/notes/${noteId}`, status))}
+                  getContextLabel={() => 'Uncategorized'}
+                />
+              </div>
+              {hasMore && (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => void loadMore()}
+                    disabled={loadingMore}
+                    className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800 disabled:opacity-60"
+                  >
+                    {loadingMore ? 'Loading...' : 'Load More Notes'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+          {search.trim() && hasMore && (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => void loadMore()}
+                disabled={loadingMore}
+                className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800 disabled:opacity-60"
+              >
+                {loadingMore ? 'Loading...' : 'Load More Notes'}
+              </button>
             </div>
           )}
         </>

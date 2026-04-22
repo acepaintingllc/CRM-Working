@@ -1,6 +1,6 @@
 'use client'
 
-import type { JobDetail, JobPhoto, SitePhoto } from '@/lib/jobs/actions'
+import type { JobDetail, JobPhoto, SitePhoto } from '@/lib/jobs/client'
 import type { JobWorkflowResolvedAction } from '@/lib/jobs/types'
 import type { PaintLogRow } from '@/lib/jobs/paintLog'
 

@@ -70,7 +70,10 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ product: data as V2Product })
+    return NextResponse.json({
+      data: data as V2Product,
+      notice: 'Product updated.',
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update product'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -116,7 +119,10 @@ export async function DELETE(
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      data: true,
+      notice: 'Product deleted.',
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete product'
     return NextResponse.json({ error: message }, { status: 500 })

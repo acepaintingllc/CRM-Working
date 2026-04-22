@@ -8,7 +8,9 @@ export async function GET() {
   const session = await requireSessionUserOrg()
   if (!session.ok) return session.response
 
-  return serviceResultResponse(await listCustomers(session.session.orgId), (customers) => ({ customers }))
+  return serviceResultResponse(await listCustomers(session.session.orgId), (customers) => ({
+    data: customers,
+  }))
 }
 
 export async function POST(request: Request) {
@@ -26,6 +28,9 @@ export async function POST(request: Request) {
 
   return serviceResultResponse(
     input.ok ? await createCustomer(session.session.orgId, input.data) : input,
-    (customer) => ({ ok: true, customer })
+    (customer) => ({
+      data: customer,
+      notice: 'Customer created.',
+    })
   )
 }

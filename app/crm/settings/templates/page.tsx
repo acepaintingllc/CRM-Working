@@ -2,12 +2,12 @@
 
 import { useCallback } from 'react'
 import { FileText, MessageSquareText, NotebookPen } from 'lucide-react'
+import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
 import { QuoteSendDefaultsForm } from '@/app/crm/settings/_components/QuoteSendDefaultsForm'
 import { SettingsNavTile } from '@/app/crm/settings/_components/SettingsNavTile'
 import { SettingsNotice } from '@/app/crm/settings/_components/SettingsNotice'
 import { SettingsPageShell } from '@/app/crm/settings/_components/SettingsPageShell'
-import { loadSettingsData, saveSettingsData } from '@/app/crm/settings/_lib/api'
-import { useSettingsResource } from '@/app/crm/settings/_lib/useSettingsResource'
+import { loadData, saveData } from '@/lib/client/api'
 import {
   emptyQuoteSendDefaults,
   getQuoteSendDefaultsValidationError,
@@ -16,24 +16,15 @@ import type { QuoteSendDefaults } from '@/lib/settings/types'
 
 export default function TemplatesLibraryPage() {
   const load = useCallback(
-    () =>
-      loadSettingsData<QuoteSendDefaults>(
-        '/api/settings/quote-send-defaults',
-        'Failed to load quote send defaults.'
-      ),
+    () => loadData<QuoteSendDefaults>('/api/settings/quote-send-defaults', { cache: 'no-store' }),
     []
   )
   const save = useCallback(
-    (data: QuoteSendDefaults) =>
-      saveSettingsData(
-        '/api/settings/quote-send-defaults',
-        data,
-        'Failed to save quote send defaults.'
-      ),
+    (data: QuoteSendDefaults) => saveData('/api/settings/quote-send-defaults', data),
     []
   )
 
-  const resource = useSettingsResource({
+  const resource = useEditableResource({
     initialData: emptyQuoteSendDefaults,
     load,
     save,

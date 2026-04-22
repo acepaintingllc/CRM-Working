@@ -1,6 +1,11 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
+import { loadData } from '@/lib/client/api'
+import {
+  createQuoteVersion,
+  deleteQuoteVersion,
+  loadQuoteHome,
+} from '@/lib/quotes/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
@@ -491,35 +496,29 @@ export default function EstimatorV2HomePage() {
     const load = async () => {
       setLoading(true)
       setError(null)
+      try {
+        const [homePayload, jobsPayload] = await Promise.all([
+          loadQuoteHome<HomeData>(),
+          loadData<JobRow[]>('/api/jobs', { cache: 'no-store' }),
+        ])
 
-      const [homeRes, jobsRes] = await Promise.all([
-        authedFetch('/api/quotes/home', { cache: 'no-store' }),
-        authedFetch('/api/jobs', { cache: 'no-store' }),
-      ])
+        if (!active) return
 
-      const [homePayload, jobsPayload] = await Promise.all([
-        homeRes.json().catch(() => null),
-        jobsRes.json().catch(() => null),
-      ])
+        setData(homePayload)
 
-      if (!active) return
-
-      if (!homeRes.ok) {
-        setError((homePayload as { error?: string } | null)?.error ?? homeRes.statusText)
+        const liveJobs = jobsPayload.filter((j) => j.customer_id)
+        setJobs(liveJobs)
+        setSelectedJobId((current) => {
+          if (current && liveJobs.some((j) => j.id === current)) return current
+          return liveJobs[0]?.id ?? ''
+        })
+      } catch (error) {
+        if (!active) return
+        setError(error instanceof Error ? error.message : 'Failed to load quotes home.')
         setData(null)
-        setLoading(false)
-        return
+      } finally {
+        if (active) setLoading(false)
       }
-
-      setData(homePayload as HomeData)
-
-      const liveJobs = ((jobsPayload?.jobs ?? []) as JobRow[]).filter((j) => j.customer_id)
-      setJobs(liveJobs)
-      setSelectedJobId((current) => {
-        if (current && liveJobs.some((j) => j.id === current)) return current
-        return liveJobs[0]?.id ?? ''
-      })
-      setLoading(false)
     }
 
     void load()
@@ -535,23 +534,20 @@ export default function EstimatorV2HomePage() {
     }
     setCreating(true)
     setError(null)
-    const response = await authedFetch('/api/quotes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+
+    try {
+      const payload = await createQuoteVersion<{ id: string }>({
         job_id: selectedJob.id,
         customer_id: selectedJob.customer_id,
         version_kind: versionKind,
         ...(versionName.trim() ? { version_name: versionName.trim() } : {}),
-      }),
-    })
-    const payload = await response.json().catch(() => null)
-    setCreating(false)
-    if (!response.ok) {
-      setError(payload?.error ?? response.statusText)
-      return
+      })
+      router.push(`/crm/quotes/${payload.id}`)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to create quote.')
+    } finally {
+      setCreating(false)
     }
-    router.push(`/crm/quotes/${payload.id}`)
   }
 
   const deleteVersion = async () => {
@@ -559,16 +555,15 @@ export default function EstimatorV2HomePage() {
     setDeletingId(confirmingDelete.estimate_id)
     setError(null)
 
-    const res = await authedFetch(`/api/quotes/${confirmingDelete.estimate_id}`, {
-      method: 'DELETE',
-    })
-    const payload = await res.json().catch(() => null)
-    setDeletingId(null)
-
-    if (!res.ok) {
-      setError(payload?.error ?? res.statusText)
+    try {
+      await deleteQuoteVersion(confirmingDelete.estimate_id)
+    } catch (error) {
+      setDeletingId(null)
+      setError(error instanceof Error ? error.message : 'Failed to delete quote.')
       return
     }
+
+    setDeletingId(null)
 
     const deletedId = confirmingDelete.estimate_id
     setData((prev) => {

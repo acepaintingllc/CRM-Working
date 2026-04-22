@@ -1,7 +1,7 @@
 'use client'
 
 import type { EmailSendStatus } from '@/lib/email/types'
-import type { JobDetail } from '@/lib/jobs/actions'
+import type { JobDetail } from '@/lib/jobs/client'
 import { type StageEmailStage } from '@/lib/jobs/types'
 import { useEmailComposer } from '@/app/crm/jobs/_components/hooks/useEmailComposer'
 import { Mail, Send, X } from 'lucide-react'

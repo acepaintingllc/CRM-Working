@@ -26,12 +26,6 @@ export function buildNotesHref(
   return query ? `${path}?${query}` : path
 }
 
-export function filterNotesBySearch(notes: NotesNoteRow[], search: string) {
-  const needle = search.trim().toLowerCase()
-  if (!needle) return notes
-  return notes.filter((note) => `${note.title} ${note.body}`.toLowerCase().includes(needle))
-}
-
 export function noteSnippet(body: string, fallback = 'No content yet.') {
   const compact = body.replace(/\s+/g, ' ').trim()
   return compact || fallback
@@ -98,14 +92,14 @@ function OverflowMenu(props: { label: string; children: ReactNode }) {
   return (
     <details className="relative">
       <summary
-        className="flex size-9 cursor-pointer list-none items-center justify-center rounded-xl border border-gray-200 bg-white text-[var(--crm-muted)] hover:bg-gray-50 [&::-webkit-details-marker]:hidden"
+        className="flex size-9 cursor-pointer list-none items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800 [&::-webkit-details-marker]:hidden"
         onClick={(event) => event.stopPropagation()}
       >
         <EllipsisVertical size={16} aria-hidden="true" />
         <span className="sr-only">{props.label}</span>
       </summary>
       <div
-        className="absolute right-0 top-11 z-20 min-w-40 rounded-2xl border border-gray-200 bg-white p-1.5 shadow-xl"
+        className="absolute right-0 top-11 z-20 min-w-40 rounded-2xl border border-neutral-800 bg-neutral-950 p-1.5 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         {props.children}
@@ -121,8 +115,8 @@ function MenuButton(props: {
 }) {
   const color =
     props.variant === 'danger'
-      ? 'text-red-700 hover:bg-red-50'
-      : 'text-[var(--crm-text-soft)] hover:bg-gray-100'
+      ? 'text-red-300 hover:bg-red-500/10'
+      : 'text-neutral-200 hover:bg-neutral-900'
 
   return (
     <button
@@ -354,18 +348,20 @@ export function FolderActionModal(props: {
   onChooseMove: () => void
   onSubmitMove: () => void
 }) {
-  useLockBodyScroll(props.open)
+  const { open, onClose } = props
+
+  useLockBodyScroll(open)
 
   useEffect(() => {
-    if (!props.open || typeof window === 'undefined') return
+    if (!open || typeof window === 'undefined') return
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') props.onClose()
+      if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [props.onClose, props.open])
+  }, [onClose, open])
 
-  if (!props.open || !props.mode) return null
+  if (!open || !props.mode) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">

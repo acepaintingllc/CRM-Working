@@ -12,6 +12,12 @@ import {
   normalizeReminderOffset,
   parseTaskRecurrenceRule,
 } from '@/lib/notes/server'
+import {
+  applyCursorPage,
+  buildTaskCursor,
+  compareTasksForList,
+  decodeTaskCursor,
+} from '@/lib/notes/pagination'
 import { getNotesSettingsWithDefaults } from '@/lib/notes/settings'
 import { partitionTasksForDashboard } from '@/lib/notes/reminders'
 import type { NotesTaskResponse, NotesTaskRow, NotesTaskStatus, NotesTasksResponse } from '@/lib/notes/types'
@@ -41,40 +47,36 @@ export async function GET(request: Request) {
   const due = searchParams.get('due') ?? 'all'
   const starredOnly = searchParams.get('starred') === 'true'
   const priority = asPriority(searchParams.get('priority'))
-  const search = (searchParams.get('search') ?? '').trim().toLowerCase()
+  const search = (searchParams.get('search') ?? '').trim()
+  const cursor = searchParams.get('cursor')
+  const limitRaw = Number(searchParams.get('limit') ?? '24')
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, Math.trunc(limitRaw))) : 24
 
   try {
-    const [{ defaults }, query] = await Promise.all([
+    let query = supabaseAdmin
+      .from('notes_tasks')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('status', status)
+
+    if (starredOnly) query = query.eq('starred', true)
+    if (priority) query = query.eq('priority', priority)
+    if (search) {
+      const escaped = search.replace(/,/g, ' ').replace(/\./g, ' ')
+      query = query.or(`title.ilike.%${escaped}%,description.ilike.%${escaped}%`)
+    }
+
+    const [{ defaults }, queryResult] = await Promise.all([
       getNotesSettingsWithDefaults({ orgId, fallbackUserId: userId }),
-      supabaseAdmin
-        .from('notes_tasks')
-        .select('*')
-        .eq('org_id', orgId)
-        .eq('status', status)
-        .order('starred', { ascending: false })
-        .order('due_at', { ascending: true })
-        .order('created_at', { ascending: false })
-        .limit(500),
+      query,
     ])
 
-    if (query.error) {
+    if (queryResult.error) {
       return NextResponse.json({ error: 'Unable to load tasks.' }, { status: 500 })
     }
 
-    let tasks = normalizeTaskRows((query.data ?? []) as NotesTaskRow[])
-
-    if (search) {
-      tasks = tasks.filter((task) => {
-        const haystack = `${task.title} ${task.description ?? ''}`.toLowerCase()
-        return haystack.includes(search)
-      })
-    }
-    if (starredOnly) {
-      tasks = tasks.filter((task) => task.starred)
-    }
-    if (priority) {
-      tasks = tasks.filter((task) => task.priority === priority)
-    }
+    let tasks = normalizeTaskRows((queryResult.data ?? []) as NotesTaskRow[])
+    tasks.sort(compareTasksForList)
 
     if (status === 'active' && due !== 'all') {
       const grouped = partitionTasksForDashboard({
@@ -88,14 +90,29 @@ export async function GET(request: Request) {
       if (due === 'upcoming') tasks = grouped.upcoming
     }
 
+    const paged = applyCursorPage({
+      rows: tasks,
+      limit,
+      cursor,
+      decodeCursor: decodeTaskCursor,
+      matchesCursor: (row, decoded) =>
+        row.id === decoded.id &&
+        row.starred === decoded.starred &&
+        row.due_at === decoded.due_at &&
+        row.created_at === decoded.created_at,
+      buildCursor: buildTaskCursor,
+    })
+
     return NextResponse.json<NotesTasksResponse>({
-      tasks,
+      tasks: paged.rows,
       filters: {
         status,
         due,
         starred: starredOnly,
         priority,
+        search,
       },
+      page: paged.page,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load tasks.'

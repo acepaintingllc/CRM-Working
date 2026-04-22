@@ -59,8 +59,19 @@ describe('NotesTasksPage', () => {
             recurrence_rule: null,
             priority: 'high',
             starred: true,
+            reminder_sent_at: null,
+            recurrence_series_id: null,
+            source_note_id: null,
+            created_by: null,
+            created_at: '2026-04-21T00:00:00.000Z',
+            updated_at: '2026-04-21T00:00:00.000Z',
+            completed_at: null,
+            archived_at: null,
+            org_id: 'org',
           },
         ],
+        filters: { status: 'active', due: 'all', starred: false, priority: null, search: '' },
+        page: { next_cursor: 'cursor-1', has_more: true, limit: 24 },
       }),
     })
   })
@@ -79,5 +90,6 @@ describe('NotesTasksPage', () => {
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.getByRole('link', { name: 'Edit' }).getAttribute('href')).toContain('composer=task')
     expect(screen.getByText('Compact task manager')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Load More Tasks' })).toBeTruthy()
   })
 })

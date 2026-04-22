@@ -39,8 +39,9 @@ export async function readRatesFlagsPayload(params: {
 
 export function buildRatesFlagsPayloadFromValues(
   values: string[][],
-  _spreadsheetId: string
+  spreadsheetId: string
 ): RatesFlagsPayload {
+  void spreadsheetId
   const tables = parseConstantsTablesDetailed(values)
   const categories = CATEGORY_CONFIGS.map((config) => {
     const categoryTables = findCategoryTablesDetailed(tables, config)

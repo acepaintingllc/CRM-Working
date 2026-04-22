@@ -14,7 +14,7 @@ function createResponse(ok: boolean, payload: unknown, status = ok ? 200 : 500) 
     ok,
     status,
     statusText: ok ? 'OK' : 'Server Error',
-    json: vi.fn(async () => payload),
+    text: vi.fn(async () => JSON.stringify(payload)),
   }
 }
 

@@ -2,7 +2,6 @@
 
 import { useTaskList } from '@/lib/notes/client/useTaskList'
 import { formatDue } from '@/lib/notes/time'
-import type { NotesTaskRow } from '@/lib/notes/types'
 import Link from 'next/link'
 import { useMemo, type ReactNode } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -17,13 +16,16 @@ export default function NotesTasksPage() {
   const {
     tasks,
     loading,
+    loadingMore,
     error,
+    hasMore,
     filters,
     setStatus,
     setDue,
     setPriority,
     setStarredOnly,
     setSearch,
+    loadMore,
     completeTask,
     reopenTask,
     archiveTask,
@@ -214,6 +216,18 @@ export default function NotesTasksPage() {
               </article>
             )
           })}
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => void loadMore()}
+                disabled={loadingMore}
+                className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800 disabled:opacity-60"
+              >
+                {loadingMore ? 'Loading...' : 'Load More Tasks'}
+              </button>
+            </div>
+          )}
         </section>
       )}
     </div>

@@ -29,7 +29,7 @@ export async function GET(
   if (!customerId.ok) return customerId.response
 
   return serviceResultResponse(await getCustomerDetail(session.session.orgId, customerId.value), (customer) => ({
-    customer,
+    data: customer,
   }))
 }
 
@@ -49,7 +49,10 @@ export async function DELETE(
     await deleteCustomer(session.session.orgId, customerId.value, {
       isProduction: process.env.NODE_ENV === 'production',
     }),
-    () => ({ ok: true })
+    () => ({
+      data: true,
+      notice: 'Customer deleted.',
+    })
   )
 }
 
@@ -73,6 +76,9 @@ export async function PATCH(
 
   return serviceResultResponse(
     await updateCustomer(session.session.orgId, customerId.value, input.data),
-    (customer) => ({ ok: true, customer })
+    (customer) => ({
+      data: customer,
+      notice: 'Customer updated.',
+    })
   )
 }

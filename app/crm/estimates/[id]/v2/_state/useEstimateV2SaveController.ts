@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import { getApiErrorMessage, parseApiResponse } from '@/lib/client/api'
 import { createEstimateV2Error } from '@/lib/estimator/errors'
 import {
   createSaveRequestTracker,
@@ -206,7 +207,8 @@ export function useEstimateV2SaveController(params: {
         ...(trigger === 'auto' ? { 'X-Estimate-Save-Mode': 'auto' } : {}),
         body: JSON.stringify(payloadForSave),
       })
-      const payload = await response.json().catch(() => null)
+      const parsed = await parseApiResponse(response)
+      const payload = parsed.json
       meta.setSaving(false)
 
       if (!saveRequestTrackerRef.current.isLatest(requestId)) {
@@ -214,7 +216,13 @@ export function useEstimateV2SaveController(params: {
       }
 
       if (!response.ok) {
-        const message = payload?.error ?? response.statusText
+        const message =
+          (payload != null &&
+          typeof payload === 'object' &&
+          'error' in payload &&
+          typeof payload.error === 'string'
+            ? payload.error
+            : null) ?? getApiErrorMessage(response, parsed, 'Failed to save estimate')
         console.error('Estimate V2 editor save failed', {
           estimateId,
           operation: 'save',

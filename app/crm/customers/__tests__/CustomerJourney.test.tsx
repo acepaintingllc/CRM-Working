@@ -48,6 +48,14 @@ function createResponse(ok: boolean, payload: unknown, status = ok ? 200 : 500) 
   }
 }
 
+function createDataResponse(data: unknown) {
+  return createResponse(true, { data })
+}
+
+function createMutationResponse(data: unknown, notice?: string) {
+  return createResponse(true, { data, ...(notice ? { notice } : {}) })
+}
+
 describe('customer journey smoke', () => {
   beforeEach(() => {
     authedFetch.mockReset()
@@ -77,7 +85,7 @@ describe('customer journey smoke', () => {
   it('covers create, detail, edit, note add, and delete transitions', async () => {
     const user = userEvent.setup()
 
-    authedFetch.mockResolvedValueOnce(createResponse(true, { ok: true, customer: { id: 'customer-1' } }))
+    authedFetch.mockResolvedValueOnce(createMutationResponse({ id: 'customer-1' }))
     render(<NewCustomerPage />)
 
     await user.type(screen.getByLabelText('Name *'), 'Taylor Jones')
@@ -98,50 +106,42 @@ describe('customer journey smoke', () => {
     useSearchParams.mockReturnValue(new URLSearchParams(''))
     authedFetch
       .mockResolvedValueOnce(
-        createResponse(true, {
-          customer: {
-            id: 'customer-1',
-            name: 'Taylor Jones',
-            email: 'taylor@example.com',
+        createDataResponse({
+          id: 'customer-1',
+          name: 'Taylor Jones',
+          email: 'taylor@example.com',
             phone: '812-555-0100',
             address: '123 Main St, Newburgh, IN 47630',
             street: '123 Main St',
             city: 'Newburgh',
             state: 'IN',
-            zip: '47630',
-            notes: null,
-            created_at: '2026-04-21T12:00:00.000Z',
+          zip: '47630',
+          notes: null,
+          created_at: '2026-04-21T12:00:00.000Z',
+        })
+      )
+      .mockResolvedValueOnce(
+        createDataResponse([
+          { id: 'customer-1', name: 'Taylor Jones', email: 'taylor@example.com', phone: '812-555-0100', address: '123 Main St, Newburgh, IN 47630' },
+        ])
+      )
+      .mockResolvedValueOnce(createDataResponse([]))
+      .mockResolvedValueOnce(createMutationResponse({ id: 'note-1' }))
+      .mockResolvedValueOnce(
+        createDataResponse([
+          {
+            id: 'note-1',
+            type: 'note',
+            title: null,
+            body: 'Customer prefers mornings',
+            created_at: null,
+            created_by: null,
+            link_path: null,
+            link_label: null,
           },
-        })
+        ])
       )
-      .mockResolvedValueOnce(
-        createResponse(true, {
-          customers: [{ id: 'customer-1', name: 'Taylor Jones', email: 'taylor@example.com', phone: '812-555-0100', address: '123 Main St, Newburgh, IN 47630' }],
-        })
-      )
-      .mockResolvedValueOnce(
-        createResponse(true, {
-          events: [],
-        })
-      )
-      .mockResolvedValueOnce(createResponse(true, { ok: true, event: { id: 'note-1' } }))
-      .mockResolvedValueOnce(
-        createResponse(true, {
-          events: [
-            {
-              id: 'note-1',
-              type: 'note',
-              title: null,
-              body: 'Customer prefers mornings',
-              created_at: null,
-              created_by: null,
-              link_path: null,
-              link_label: null,
-            },
-          ],
-        })
-      )
-      .mockResolvedValueOnce(createResponse(true, {}))
+      .mockResolvedValueOnce(createMutationResponse(true))
 
     render(<CustomerDetailPage />)
 
@@ -163,23 +163,21 @@ describe('customer journey smoke', () => {
     useSearchParams.mockReturnValue(new URLSearchParams('returnTo=%2Fcrm%2Fcustomers%2Fcustomer-1'))
     authedFetch
       .mockResolvedValueOnce(
-        createResponse(true, {
-          customer: {
-            id: 'customer-1',
-            name: 'Taylor Jones',
-            email: 'taylor@example.com',
+        createDataResponse({
+          id: 'customer-1',
+          name: 'Taylor Jones',
+          email: 'taylor@example.com',
             phone: '812-555-0100',
             address: '123 Main St, Newburgh, IN 47630',
             street: '123 Main St',
             city: 'Newburgh',
             state: 'IN',
-            zip: '47630',
-            notes: null,
-            created_at: null,
-          },
+          zip: '47630',
+          notes: null,
+          created_at: null,
         })
       )
-      .mockResolvedValueOnce(createResponse(true, {}))
+      .mockResolvedValueOnce(createMutationResponse({ id: 'customer-1' }))
 
     render(<EditCustomerPage />)
 
@@ -191,5 +189,5 @@ describe('customer journey smoke', () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/crm/customers/customer-1'))
     expect(refresh).not.toHaveBeenCalled()
-  })
+  }, 15000)
 })

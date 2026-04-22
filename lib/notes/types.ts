@@ -94,14 +94,24 @@ export type NotesTaskResponse = {
   task: NotesTaskRow
 }
 
+export type NotesCursorPage = {
+  next_cursor: string | null
+  has_more: boolean
+  limit: number
+}
+
+export type NotesTaskListFilters = {
+  status: NotesTaskStatus
+  due: string
+  starred: boolean
+  priority: NotesPriority | null
+  search?: string
+}
+
 export type NotesTasksResponse = {
   tasks: NotesTaskRow[]
-  filters: {
-    status: NotesTaskStatus
-    due: string
-    starred: boolean
-    priority: NotesPriority | null
-  }
+  filters: NotesTaskListFilters
+  page: NotesCursorPage
 }
 
 export type NotesNoteResponse = {
@@ -109,13 +119,23 @@ export type NotesNoteResponse = {
   note: NotesNoteRow
 }
 
+export type NotesExplorerSections = {
+  starred: NotesNoteRow[]
+  recent: NotesNoteRow[]
+  loose: NotesNoteRow[]
+}
+
+export type NotesNoteListFilters = {
+  status: NotesNoteStatus
+  folder_id: string | null
+  search: string
+}
+
 export type NotesNotesResponse = {
   notes: NotesNoteRow[]
-  filters: {
-    status: NotesNoteStatus
-    folder_id: string | null
-    search: string
-  }
+  filters: NotesNoteListFilters
+  page: NotesCursorPage
+  sections?: NotesExplorerSections
 }
 
 export type NotesFolderResponse = {

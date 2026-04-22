@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import { getApiErrorMessage, parseApiResponse } from '@/lib/client/api'
 import {
   createEstimateV2Error,
   type EstimateV2Error,
@@ -40,7 +41,8 @@ export function useEstimateV2SummaryData(estimateId: string) {
     if (!estimateId) return
     try {
       const res = await authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' })
-      const payload = (await res.json().catch(() => null)) as EstimateV2SummaryPageData | null
+      const parsed = await parseApiResponse(res)
+      const payload = parsed.json as EstimateV2SummaryPageData | null
       if (res.ok && payload?.pricing_summary) {
         setData((prev) => (prev ? { ...prev, pricing_summary: payload.pricing_summary } : prev))
         if (payload.trim_paint) {
@@ -51,6 +53,7 @@ export function useEstimateV2SummaryData(estimateId: string) {
           estimateId,
           operation: 'refreshPricing',
           status: res.status,
+          message: getApiErrorMessage(res, parsed, 'Failed to refresh pricing'),
         })
         setError(createEstimateV2Error('Failed to refresh pricing', { retryable: true }))
       }

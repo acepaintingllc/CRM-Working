@@ -15,6 +15,11 @@ type JobRow = {
   has_site_photos?: boolean | null
 }
 
+type JobsPayload = {
+  data?: JobRow[]
+  error?: string
+}
+
 const stageOrder: Record<string, number> = {
   estimate_scheduled: 0,
   estimate_sent: 1,
@@ -82,14 +87,14 @@ export default function FieldJobsPage() {
       setLoading(true)
       setError(null)
       const res = await authedFetch('/api/jobs', { cache: 'no-store' })
-      const payload = await res.json().catch(() => null)
+      const payload = (await res.json().catch(() => null)) as JobsPayload | null
       if (!res.ok) {
         setJobs([])
         setError(payload?.error ?? res.statusText)
         setLoading(false)
         return
       }
-      setJobs((payload?.jobs ?? []) as JobRow[])
+      setJobs((payload?.data ?? []) as JobRow[])
       setLoading(false)
     }
 
