@@ -368,7 +368,10 @@ describe('notes routes', () => {
     expect(mockDb.updates.at(-1)).toEqual({
       table: 'notes_tasks',
       payload: expect.objectContaining({
-        reminder_at: '2026-04-28T13:30:00.000Z',
+        due_at: '2026-04-29T15:00:00.000Z',
+        is_all_day: false,
+        has_due_time: true,
+        reminder_at: '2026-04-29T13:30:00.000Z',
         reminder_sent_at: null,
       }),
     })

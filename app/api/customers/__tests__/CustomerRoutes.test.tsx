@@ -87,10 +87,10 @@ describe('customer route adapters', () => {
     })
 
     await expect(listResponse.json()).resolves.toEqual({
-      customers: [{ id: 'customer-1', name: 'Taylor Jones', email: null, phone: null, address: null }],
+      data: [{ id: 'customer-1', name: 'Taylor Jones', email: null, phone: null, address: null }],
     })
     await expect(detailResponse.json()).resolves.toEqual({
-      customer: {
+      data: {
         id: 'customer-1',
         name: 'Taylor Jones',
         email: null,
@@ -164,20 +164,23 @@ describe('customer route adapters', () => {
     })
 
     await expect(createResponse.json()).resolves.toEqual({
-      ok: true,
-      customer: expect.objectContaining({ id: 'customer-1' }),
+      data: expect.objectContaining({ id: 'customer-1' }),
+      notice: 'Customer created.',
     })
     await expect(updateResponse.json()).resolves.toEqual({
-      ok: true,
-      customer: expect.objectContaining({ id: 'customer-1' }),
+      data: expect.objectContaining({ id: 'customer-1' }),
+      notice: 'Customer updated.',
     })
-    await expect(deleteResponse.json()).resolves.toEqual({ ok: true })
+    await expect(deleteResponse.json()).resolves.toEqual({
+      data: true,
+      notice: 'Customer deleted.',
+    })
     await expect(timelineResponse.json()).resolves.toEqual({
-      events: [expect.objectContaining({ id: 'event-1' })],
+      data: [expect.objectContaining({ id: 'event-1' })],
     })
     await expect(addNoteResponse.json()).resolves.toEqual({
-      ok: true,
-      event: expect.objectContaining({ id: 'event-1' }),
+      data: expect.objectContaining({ id: 'event-1' }),
+      notice: 'Timeline note saved.',
     })
   })
 

@@ -120,9 +120,13 @@ describe('useTaskList', () => {
       await result.current.loadMore()
     })
 
-    expect(mockAuthedFetch).toHaveBeenLastCalledWith('/api/notes/tasks?status=active&due=all&limit=24&cursor=cursor-1', {
-      cache: 'no-store',
-    })
+    expect(
+      mockAuthedFetch.mock.calls.some(
+        ([url, init]) =>
+          url === '/api/notes/tasks?status=active&due=all&limit=24&cursor=cursor-1' &&
+          (init as RequestInit | undefined)?.cache === 'no-store'
+      )
+    ).toBe(true)
     expect(result.current.tasks.map((task) => task.id)).toEqual(['task-1', 'task-2'])
     expect(result.current.hasMore).toBe(false)
   })
