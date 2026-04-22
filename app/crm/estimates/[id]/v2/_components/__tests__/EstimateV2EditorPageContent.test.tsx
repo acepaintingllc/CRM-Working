@@ -5,10 +5,10 @@ import { EstimateV2EditorPageContent } from '../EstimateV2EditorPageContent'
 const push = vi.fn()
 const save = vi.fn(async () => true)
 const addRoom = vi.fn()
-const mockUseEstimateV2EditorState = vi.fn()
+const mockUseEstimateV2Editor = vi.fn()
 
-vi.mock('../../_state/useEstimateV2EditorState', () => ({
-  useEstimateV2EditorState: (...args: unknown[]) => mockUseEstimateV2EditorState(...args),
+vi.mock('../../_state/useEstimateV2Editor', () => ({
+  useEstimateV2Editor: (...args: unknown[]) => mockUseEstimateV2Editor(...args),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -253,7 +253,7 @@ vi.mock('../EstimateV2TrimSectionBody', () => ({
 
 describe('EstimateV2EditorPageContent', () => {
   beforeEach(() => {
-    mockUseEstimateV2EditorState.mockReturnValue(baseEditorState)
+    mockUseEstimateV2Editor.mockReturnValue(baseEditorState)
   })
 
   it('renders from grouped VMs and routes header save/navigation actions', async () => {
@@ -277,7 +277,7 @@ describe('EstimateV2EditorPageContent', () => {
   })
 
   it('exposes accessible loading and error semantics', () => {
-    mockUseEstimateV2EditorState.mockReturnValue({
+    mockUseEstimateV2Editor.mockReturnValue({
       ...baseEditorState,
       pageVm: {
         ...baseEditorState.pageVm,

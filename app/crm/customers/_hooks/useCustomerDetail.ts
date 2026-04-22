@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useSwrResource } from '@/app/crm/_hooks/useSwrResource'
-import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
+import { invalidateSwrKey, invalidateSwrPrefix } from '@/app/crm/_hooks/swrCache'
 import { deleteCustomer as deleteCustomerRequest } from '@/lib/customers/client'
 import type { CustomerDetail } from '@/lib/customers/types'
 
@@ -42,7 +42,7 @@ export function useCustomerDetail(id: string | undefined) {
     try {
       await deleteCustomerRequest(id)
       await Promise.all([
-        invalidateSwrKey('/api/customers'),
+        invalidateSwrPrefix('/api/customers'),
         invalidateSwrKey(`/api/customers/${id}`),
       ])
       return true

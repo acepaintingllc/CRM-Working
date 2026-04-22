@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useEffectEvent } from 'react'
+import { useCallback, useEffect } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   getApiErrorMessage,
@@ -103,69 +103,72 @@ export function useEstimateV2SummaryLoader(
   routeFamily: EstimateRouteFamily,
   state: SummaryLoaderState
 ) {
-  const loadSummary = useEffectEvent(async (activeRef: { current: boolean }) => {
-    try {
-      state.setLoading(true)
-      state.setError(null)
+  const loadSummary = useCallback(
+    async (activeRef: { current: boolean }) => {
+      try {
+        state.setLoading(true)
+        state.setError(null)
 
-      const res = await authedFetch(routeFamily.estimateApiHref(estimateId), {
-        cache: 'no-store',
-      })
-      const parsed = await parseApiResponse(res)
-      const payload = getApiPayloadData<EstimateV2SummaryPageData>(parsed.json)
+        const res = await authedFetch(routeFamily.estimateApiHref(estimateId), {
+          cache: 'no-store',
+        })
+        const parsed = await parseApiResponse(res)
+        const payload = getApiPayloadData<EstimateV2SummaryPageData>(parsed.json)
 
-      if (!activeRef.current) return
-      if (!res.ok || !payload) {
-        const message = getApiErrorMessage(res, parsed, 'Failed to load estimate')
-        console.error('Estimate V2 summary load failed', {
+        if (!activeRef.current) return
+        if (!res.ok || !payload) {
+          const message = getApiErrorMessage(res, parsed, 'Failed to load estimate')
+          console.error('Estimate V2 summary load failed', {
+            estimateId,
+            operation: 'loadEstimate',
+            status: res.status,
+            message,
+          })
+          state.setError(createEstimateV2Error(message, { retryable: true }))
+          state.setLoading(false)
+          return
+        }
+
+        state.setData(payload)
+
+        const defaults = applyJobSettingsDefaults(
+          payload.inputs?.jobsettings,
+          payload.inputs?.org_defaults
+        )
+        state.setLaborDayEnabled(defaults.laborDayEnabled)
+        state.setDayhours(defaults.dayhours)
+        state.setRoundIncrement(defaults.roundIncrement)
+        state.setLaborRate(defaults.laborRate)
+        state.setJobMinEnabled(defaults.jobMinEnabled)
+        state.setJobMinAmount(defaults.jobMinAmount)
+        state.setTrimPaintProductId(payload.trim_paint?.paint_product_id ?? '')
+        state.setTrimPaintGallons(payload.trim_paint?.gallons ?? 0)
+        state.setTrimPaintQuarts(payload.trim_paint?.quarts ?? 0)
+
+        const jobRes = await authedFetch(`/api/jobs/${payload.estimate.job_id}`, {
+          cache: 'no-store',
+        })
+        const jobParsed = await parseApiResponse(jobRes)
+        const jobPayload = jobParsed.json as ApiDataEnvelope<EstimateV2JobMeta> | null
+        if (!activeRef.current) return
+        if (jobRes.ok && jobPayload?.data) state.setJob(jobPayload.data)
+
+        state.setLoading(false)
+      } catch (error) {
+        if (!activeRef.current) return
+        console.error('Estimate V2 summary load crashed', {
           estimateId,
           operation: 'loadEstimate',
-          status: res.status,
-          message,
+          error,
         })
-        state.setError(createEstimateV2Error(message, { retryable: true }))
+        state.setError(
+          createEstimateV2Error('Failed to fetch estimate summary', { retryable: true })
+        )
         state.setLoading(false)
-        return
       }
-
-      state.setData(payload)
-
-      const defaults = applyJobSettingsDefaults(
-        payload.inputs?.jobsettings,
-        payload.inputs?.org_defaults
-      )
-      state.setLaborDayEnabled(defaults.laborDayEnabled)
-      state.setDayhours(defaults.dayhours)
-      state.setRoundIncrement(defaults.roundIncrement)
-      state.setLaborRate(defaults.laborRate)
-      state.setJobMinEnabled(defaults.jobMinEnabled)
-      state.setJobMinAmount(defaults.jobMinAmount)
-      state.setTrimPaintProductId(payload.trim_paint?.paint_product_id ?? '')
-      state.setTrimPaintGallons(payload.trim_paint?.gallons ?? 0)
-      state.setTrimPaintQuarts(payload.trim_paint?.quarts ?? 0)
-
-      const jobRes = await authedFetch(`/api/jobs/${payload.estimate.job_id}`, {
-        cache: 'no-store',
-      })
-      const jobParsed = await parseApiResponse(jobRes)
-      const jobPayload = jobParsed.json as
-        | ApiDataEnvelope<EstimateV2JobMeta>
-        | null
-      if (!activeRef.current) return
-      if (jobRes.ok && jobPayload?.data) state.setJob(jobPayload.data)
-
-      state.setLoading(false)
-    } catch (error) {
-      if (!activeRef.current) return
-      console.error('Estimate V2 summary load crashed', {
-        estimateId,
-        operation: 'loadEstimate',
-        error,
-      })
-      state.setError(createEstimateV2Error('Failed to fetch estimate summary', { retryable: true }))
-      state.setLoading(false)
-    }
-  })
+    },
+    [estimateId, routeFamily, state]
+  )
 
   useEffect(() => {
     if (!estimateId) return
@@ -174,5 +177,5 @@ export function useEstimateV2SummaryLoader(
     return () => {
       activeRef.current = false
     }
-  }, [estimateId])
+  }, [estimateId, loadSummary])
 }

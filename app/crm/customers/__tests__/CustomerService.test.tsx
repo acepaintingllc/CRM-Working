@@ -31,11 +31,17 @@ type QueryState = {
   action: 'select' | 'insert' | 'update' | 'delete'
   payload: unknown
   select: string | null
-  filters: Array<{ type: 'eq' | 'in'; column: string; value: unknown }>
+  selectOptions?: unknown
+  filters: Array<{ type: 'eq' | 'in' | 'or'; column: string; value: unknown }>
   order: Array<{ column: string; options?: unknown }>
+  range: { from: number; to: number } | null
 }
 
-type QueryResult = { data: unknown; error: { code?: string | null; message: string } | null }
+type QueryResult = {
+  data: unknown
+  error: { code?: string | null; message: string } | null
+  count?: number | null
+}
 
 function createMockDb(handler: (state: QueryState) => QueryResult | Promise<QueryResult>) {
   function buildQuery(table: string) {
@@ -44,13 +50,16 @@ function createMockDb(handler: (state: QueryState) => QueryResult | Promise<Quer
       action: 'select',
       payload: null,
       select: null,
+      selectOptions: null,
       filters: [],
       order: [],
+      range: null,
     }
 
     const query = {
-      select(value: string) {
+      select(value: string, options?: unknown) {
         state.select = value
+        state.selectOptions = options
         return query
       },
       insert(value: unknown) {
@@ -75,8 +84,16 @@ function createMockDb(handler: (state: QueryState) => QueryResult | Promise<Quer
         state.filters.push({ type: 'in', column, value })
         return query
       },
+      or(value: string) {
+        state.filters.push({ type: 'or', column: 'or', value })
+        return query
+      },
       order(column: string, options?: unknown) {
         state.order.push({ column, options })
+        return query
+      },
+      range(from: number, to: number) {
+        state.range = { from, to }
         return query
       },
       maybeSingle() {
@@ -113,16 +130,51 @@ describe('customer service layer', () => {
     const db = createMockDb((state) => {
       expect(state.table).toBe('customers')
       expect(state.action).toBe('select')
+      expect(state.range).toEqual({ from: 0, to: 49 })
+      expect(state.selectOptions).toEqual({ count: 'exact' })
       return {
         data: [{ id: 'customer-1', name: 'Taylor Jones', email: 'taylor@example.com', phone: null, address: '123 Main St' }],
+        count: 1,
         error: null,
       }
     })
 
-    const result = await listCustomers('org-1', { db })
+    const result = await listCustomers('org-1', {}, { db })
     expect(result).toEqual({
       ok: true,
-      data: [{ id: 'customer-1', name: 'Taylor Jones', email: 'taylor@example.com', phone: null, address: '123 Main St' }],
+      data: {
+        data: [{ id: 'customer-1', name: 'Taylor Jones', email: 'taylor@example.com', phone: null, address: '123 Main St' }],
+        total: 1,
+        page: 1,
+        pageSize: 50,
+      },
+    })
+  })
+
+  it('applies page offsets and server-side search filters', async () => {
+    const db = createMockDb((state) => {
+      expect(state.range).toEqual({ from: 25, to: 49 })
+      expect(state.filters).toContainEqual({
+        type: 'or',
+        column: 'or',
+        value: 'name.ilike.%bob%,email.ilike.%bob%,phone.ilike.%bob%',
+      })
+      return {
+        data: [{ id: 'customer-2', name: 'Bob Owner', email: null, phone: null, address: null }],
+        count: 60,
+        error: null,
+      }
+    })
+
+    const result = await listCustomers('org-1', { search: 'bob', page: 2, pageSize: 25 }, { db })
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        data: [{ id: 'customer-2', name: 'Bob Owner', email: null, phone: null, address: null }],
+        total: 60,
+        page: 2,
+        pageSize: 25,
+      },
     })
   })
 

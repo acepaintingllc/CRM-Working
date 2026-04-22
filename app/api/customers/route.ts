@@ -4,13 +4,26 @@ import { serverLog } from '@/lib/server/log'
 import { normalizeCreateCustomerInput } from '@/lib/customers/normalizers'
 import { createCustomer, listCustomers } from '@/lib/customers/service'
 
-export async function GET() {
+function readPositiveInt(value: string | null, fallback: number) {
+  if (value == null || value.trim() === '') return fallback
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(1, Math.trunc(parsed))
+}
+
+export async function GET(request: Request) {
   const session = await requireSessionUserOrg()
   if (!session.ok) return session.response
 
-  return serviceResultResponse(await listCustomers(session.session.orgId), (customers) => ({
-    data: customers,
-  }))
+  const { searchParams } = new URL(request.url)
+  const page = readPositiveInt(searchParams.get('page'), 1)
+  const pageSize = Math.min(50, readPositiveInt(searchParams.get('pageSize'), 50))
+  const search = (searchParams.get('search') ?? '').trim()
+
+  return serviceResultResponse(
+    await listCustomers(session.session.orgId, { search, page, pageSize }),
+    (customers) => customers
+  )
 }
 
 export async function POST(request: Request) {

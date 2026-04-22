@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CustomersPage from '../page'
 
 const mockUseOrg = vi.fn()
@@ -17,17 +17,31 @@ describe('CustomersPage', () => {
   beforeEach(() => {
     mockUseOrg.mockReset()
     mockUseCustomerList.mockReset()
+    vi.useFakeTimers()
   })
 
-  it('renders the shared CRM shell and filters customers from the search bar', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('renders the shared CRM shell and debounces server-side search updates', () => {
+    const setSearch = vi.fn()
+    const setPage = vi.fn()
+
     mockUseOrg.mockReturnValue({ orgId: 'org-123' })
     mockUseCustomerList.mockReturnValue({
-      listCustomers: [
+      customers: [
         { id: '1', name: 'Alice Painter', email: 'alice@example.com', phone: '555-1111', address: '123 Main St' },
         { id: '2', name: 'Bob Owner', email: 'bob@example.com', phone: '555-2222', address: '456 Oak Ave' },
       ],
-      listLoading: false,
-      listError: null,
+      total: 2,
+      page: 1,
+      pageSize: 50,
+      search: '',
+      setSearch,
+      setPage,
+      loading: false,
+      error: null,
     })
 
     render(<CustomersPage />)
@@ -36,11 +50,16 @@ describe('CustomersPage', () => {
     expect(screen.getByText('Org: org-123')).toBeTruthy()
     expect(screen.getByText('Alice Painter')).toBeTruthy()
 
-    fireEvent.change(screen.getByPlaceholderText('Search customers by name, email, phone, or address...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search customers by name, email, or phone...'), {
       target: { value: 'bob' },
     })
 
-    expect(screen.queryByText('Alice Painter')).toBeNull()
-    expect(screen.getByText('Bob Owner')).toBeTruthy()
+    expect(setSearch).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    expect(setSearch).toHaveBeenCalledWith('bob')
   })
 })

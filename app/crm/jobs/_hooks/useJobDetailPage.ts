@@ -222,7 +222,6 @@ export function useJobDetailPage() {
       job,
       jobKey,
       jobResource,
-      loadSecondaryData,
       paintLogs,
       refreshResource,
       resourceError,

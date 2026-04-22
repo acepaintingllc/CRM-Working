@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { useEstimateV2EditorViewModels } from '../useEstimateV2EditorViewModels'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
 import type { EstimateV2PaintProductOption } from '@/types/estimator/v2'
@@ -8,6 +9,49 @@ function createViewModelParams() {
   const fixture = createMixedEstimateV2Fixture()
   const selectedRoom = fixture.rooms[0]
   const paintProducts = fixture.catalogs.paint_products as EstimateV2PaintProductOption[]
+  const store = createEstimateV2Store({
+    collections: {
+      rooms: fixture.rooms,
+      scopes: fixture.scopes,
+      segments: fixture.segments,
+      roomFlags: fixture.roomFlags,
+      ceilingScopes: fixture.ceilingScopes,
+      ceilingSegments: fixture.ceilingSegments,
+      trimScopes: fixture.trimScopes,
+    },
+    meta: {
+      loading: false,
+      saving: false,
+      estimate: fixture.estimate,
+      job: fixture.job,
+      catalogs: fixture.catalogs,
+      wallCalculations: fixture.wallCalculations,
+      ceilingCalculations: fixture.ceilingCalculations,
+      trimCalculations: fixture.trimCalculations,
+      selectedRoomId: 'R001',
+      error: null,
+      validationIssues: ['R001: Needs paint selection'],
+      lastSavedSnapshot: fixture.currentSnapshot,
+      saveStatus: 'saved',
+      autoSaveHint: null,
+      settingsOpen: false,
+      jobDefaultsOpen: false,
+      jobSettingsDraft: fixture.jobSettingsDraft,
+      orgJobProductDefaults: fixture.orgJobProductDefaults,
+      customerDraft: {
+        customerId: fixture.job.customer_id ?? '',
+        name: fixture.job.customer_name ?? '',
+        email: fixture.job.customer_email ?? '',
+        phone: fixture.job.customer_phone ?? '',
+        address: fixture.job.customer_address ?? '',
+      },
+      debugMeta: {
+        dirtySource: null,
+        lastSaveTrigger: null,
+        lastNormalizedDomains: [],
+      },
+    },
+  })
 
   const derived = {
     selectedRoom,
@@ -93,45 +137,7 @@ function createViewModelParams() {
 
   return {
     estimateId: fixture.estimate.id,
-    state: {
-      loading: false,
-      saving: false,
-      estimate: fixture.estimate,
-      job: fixture.job,
-      catalogs: fixture.catalogs,
-      rooms: fixture.rooms,
-      scopes: fixture.scopes,
-      segments: fixture.segments,
-      roomFlags: fixture.roomFlags,
-      ceilingScopes: fixture.ceilingScopes,
-      ceilingSegments: fixture.ceilingSegments,
-      trimScopes: fixture.trimScopes,
-      selectedRoomId: 'R001',
-      error: null,
-      validationIssues: ['R001: Needs paint selection'],
-      saveStatus: 'saved' as const,
-      settingsOpen: false,
-      jobDefaultsOpen: false,
-      jobSettingsDraft: fixture.jobSettingsDraft,
-      orgJobProductDefaults: fixture.orgJobProductDefaults,
-      customerDraft: {
-        customerId: fixture.job.customer_id ?? '',
-        name: fixture.job.customer_name ?? '',
-        email: fixture.job.customer_email ?? '',
-        phone: fixture.job.customer_phone ?? '',
-        address: fixture.job.customer_address ?? '',
-      },
-      debugMeta: {
-        dirtySource: null,
-        lastSaveTrigger: null,
-        lastNormalizedDomains: [],
-      },
-    },
-    meta: {
-      setSelectedRoomId: vi.fn(),
-      setSettingsOpen: vi.fn(),
-      setJobDefaultsOpen: vi.fn(),
-    },
+    store,
     derived,
     roomActions: {
       addRoom: vi.fn(),

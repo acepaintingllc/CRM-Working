@@ -39,15 +39,20 @@ describe('useNewJobPage', () => {
     authedFetch
       .mockResolvedValueOnce(
         createResponse({
-          data: [
-            {
-              id: 'customer-1',
-              name: 'Taylor Jones',
-              email: 'taylor@example.com',
-              phone: '812-555-0100',
-              address: '123 Main St, Newburgh, IN 47630',
-            },
-          ],
+          data: {
+            data: [
+              {
+                id: 'customer-1',
+                name: 'Taylor Jones',
+                email: 'taylor@example.com',
+                phone: '812-555-0100',
+                address: '123 Main St, Newburgh, IN 47630',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 50,
+          },
         })
       )
       .mockResolvedValueOnce(

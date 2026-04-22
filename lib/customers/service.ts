@@ -17,6 +17,8 @@ import {
   customerError,
   customerOk,
   type CreateCustomerInput,
+  type CustomerListPage,
+  type CustomerListQuery,
   type CreateCustomerTimelineNoteInput,
   type CustomerServiceResult,
   type CustomerTimelineEvent,
@@ -180,21 +182,42 @@ async function ensureCustomerExists(db: CustomerDb, orgId: string, customerId: s
 
 export async function listCustomers(
   orgId: string,
+  query: CustomerListQuery = {},
   deps?: CustomerServiceDeps
-): Promise<CustomerServiceResult<ReturnType<typeof mapCustomerSummary>[]>> {
+): Promise<CustomerServiceResult<CustomerListPage>> {
   const db = getDb(deps)
-  const { data, error } = await db
+  const pageSize = Math.max(1, Math.min(50, Math.trunc(query.pageSize ?? 50) || 50))
+  const page = Math.max(1, Math.trunc(query.page ?? 1) || 1)
+  const offset = (page - 1) * pageSize
+  const search = query.search?.trim() ?? ''
+
+  let customerQuery = db
     .from('customers')
-    .select(customerSummarySelect)
+    .select(customerSummarySelect, { count: 'exact' })
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
+    .range(offset, offset + pageSize - 1)
+
+  if (search) {
+    const escaped = search.replace(/,/g, ' ').replace(/\./g, ' ')
+    customerQuery = customerQuery.or(
+      `name.ilike.%${escaped}%,email.ilike.%${escaped}%,phone.ilike.%${escaped}%`
+    )
+  }
+
+  const { data, error, count } = await customerQuery
 
   if (error) {
     logCustomerError('customers.list_failed', { orgId, error: error.message })
     return customerError('server_error', error.message)
   }
 
-  return customerOk((data ?? []).map(mapCustomerSummary))
+  return customerOk({
+    data: (data ?? []).map(mapCustomerSummary),
+    total: count ?? 0,
+    page,
+    pageSize,
+  })
 }
 
 export async function getCustomerDetail(

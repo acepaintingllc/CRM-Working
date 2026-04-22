@@ -59,11 +59,76 @@ describe('customer route adapters', () => {
     mockServerGetSessionUserOrg.mockResolvedValue({ orgId: 'org-1', userId: 'user-1' })
   })
 
-  it('keeps the list and detail success envelopes stable', async () => {
+  it('returns the first paginated customer page by default', async () => {
     mockListCustomers.mockResolvedValue({
       ok: true,
-      data: [{ id: 'customer-1', name: 'Taylor Jones', email: null, phone: null, address: null }],
+      data: {
+        data: [{ id: 'customer-1', name: 'Taylor Jones', email: null, phone: null, address: null }],
+        total: 73,
+        page: 1,
+        pageSize: 50,
+      },
     })
+
+    const response = await listCustomersRoute(new Request('http://localhost/api/customers'))
+
+    await expect(response.json()).resolves.toEqual({
+      data: [{ id: 'customer-1', name: 'Taylor Jones', email: null, phone: null, address: null }],
+      total: 73,
+      page: 1,
+      pageSize: 50,
+    })
+    expect(mockListCustomers).toHaveBeenCalledWith('org-1', {
+      search: '',
+      page: 1,
+      pageSize: 50,
+    })
+  })
+
+  it('passes search and page params to the list service', async () => {
+    mockListCustomers.mockResolvedValue({
+      ok: true,
+      data: {
+        data: [{ id: 'customer-2', name: 'Bob Owner', email: null, phone: null, address: null }],
+        total: 3,
+        page: 2,
+        pageSize: 25,
+      },
+    })
+
+    const response = await listCustomersRoute(
+      new Request('http://localhost/api/customers?search=bob&page=2&pageSize=25')
+    )
+
+    await expect(response.json()).resolves.toEqual({
+      data: [{ id: 'customer-2', name: 'Bob Owner', email: null, phone: null, address: null }],
+      total: 3,
+      page: 2,
+      pageSize: 25,
+    })
+    expect(mockListCustomers).toHaveBeenCalledWith('org-1', {
+      search: 'bob',
+      page: 2,
+      pageSize: 25,
+    })
+  })
+
+  it('normalizes invalid pagination params before reaching the service', async () => {
+    mockListCustomers.mockResolvedValue({
+      ok: true,
+      data: { data: [], total: 0, page: 1, pageSize: 50 },
+    })
+
+    await listCustomersRoute(new Request('http://localhost/api/customers?page=0&pageSize=999'))
+
+    expect(mockListCustomers).toHaveBeenCalledWith('org-1', {
+      search: '',
+      page: 1,
+      pageSize: 50,
+    })
+  })
+
+  it('keeps the detail success envelope stable', async () => {
     mockGetCustomerDetail.mockResolvedValue({
       ok: true,
       data: {
@@ -81,14 +146,10 @@ describe('customer route adapters', () => {
       },
     })
 
-    const listResponse = await listCustomersRoute()
     const detailResponse = await getCustomerRoute(new Request('http://localhost/customer'), {
       params: { id: 'd4e9f6ea-4ac6-4e8f-8e62-a4bc90f2d67d' },
     })
 
-    await expect(listResponse.json()).resolves.toEqual({
-      data: [{ id: 'customer-1', name: 'Taylor Jones', email: null, phone: null, address: null }],
-    })
     await expect(detailResponse.json()).resolves.toEqual({
       data: {
         id: 'customer-1',
@@ -348,7 +409,7 @@ describe('customer route adapters', () => {
   it('returns auth failures from the shared session guard', async () => {
     mockServerGetSessionUserOrg.mockResolvedValue({ error: 'Not authenticated' })
 
-    const response = await listCustomersRoute()
+    const response = await listCustomersRoute(new Request('http://localhost/api/customers'))
 
     expect(response.status).toBe(401)
     await expect(response.json()).resolves.toEqual({ error: 'Not authenticated' })
@@ -358,7 +419,7 @@ describe('customer route adapters', () => {
   it('returns forbidden session failures from the shared session guard', async () => {
     mockServerGetSessionUserOrg.mockResolvedValue({ error: 'Org access denied' })
 
-    const response = await listCustomersRoute()
+    const response = await listCustomersRoute(new Request('http://localhost/api/customers'))
 
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toEqual({ error: 'Org access denied' })

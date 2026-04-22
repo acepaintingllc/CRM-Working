@@ -15,6 +15,19 @@ export type CustomerSummary = {
   address: string | null
 }
 
+export type CustomerListPage = {
+  data: CustomerSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type CustomerListQuery = {
+  search?: string
+  page?: number
+  pageSize?: number
+}
+
 export type CustomerDetail = CustomerSummary & {
   street: string | null
   city: string | null

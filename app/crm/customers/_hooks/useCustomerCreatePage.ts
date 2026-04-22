@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
+import { invalidateSwrPrefix } from '@/app/crm/_hooks/swrCache'
 import { createCustomer } from '@/lib/customers/client'
 import {
   normalizeCustomerFormValues,
@@ -47,7 +47,7 @@ export function useCustomerCreatePage() {
         notes: null,
       }
       const result = await createCustomer(payload)
-      await invalidateSwrKey('/api/customers')
+      await invalidateSwrPrefix('/api/customers')
       setNotice(result.notice ?? 'Customer created.')
       router.push(result.data?.id ? `/crm/customers/${result.data.id}` : '/crm/customers')
       return true
