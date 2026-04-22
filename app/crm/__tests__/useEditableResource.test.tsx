@@ -2,6 +2,11 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useEditableResource } from '../_hooks/useEditableResource'
 
+type NullableNameAmount = {
+  name: string | null
+  amount: string
+}
+
 describe('useEditableResource', () => {
   it('uses the default comparator for unchanged and changed values', async () => {
     const { result } = renderHook(() =>
@@ -82,11 +87,8 @@ describe('useEditableResource', () => {
 
   it('uses a custom comparator for normalized-equal values', async () => {
     const isDirty = vi.fn(
-      (
-        current: { name: string | null; amount: string },
-        snapshot: { name: string | null; amount: string }
-      ) => {
-        const normalize = (value: { name: string | null; amount: string }) => ({
+      (current: NullableNameAmount, snapshot: NullableNameAmount) => {
+        const normalize = (value: NullableNameAmount) => ({
           name: (value.name ?? '').trim(),
           amount: value.amount.trim(),
         })
@@ -96,7 +98,7 @@ describe('useEditableResource', () => {
     )
 
     const { result } = renderHook(() =>
-      useEditableResource({
+      useEditableResource<NullableNameAmount>({
         initialData: { name: null, amount: '' },
         load: async () => ({ name: null, amount: '' }),
         save: async (data) => ({ data }),
