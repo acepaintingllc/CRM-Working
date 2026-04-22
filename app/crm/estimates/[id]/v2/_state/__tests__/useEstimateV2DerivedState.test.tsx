@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { useEstimateV2DerivedState } from '../useEstimateV2DerivedState'
@@ -65,7 +65,7 @@ describe('useEstimateV2DerivedState', () => {
       'wall-r002-main',
       'wall-r002-excluded',
     ])
-    expect(result.current.currentSnapshot).toBe(fixture.currentSnapshot)
+    expect(result.current.currentSnapshot).toEqual(fixture.currentSnapshot)
     expect(result.current.useLocalPreviewCalculations).toBe(false)
     expect(result.current.selectedRoom?.roomId).toBe('R001')
     expect(result.current.selectedRoomEffectiveSqFt).toBe(396)
@@ -77,10 +77,13 @@ describe('useEstimateV2DerivedState', () => {
   })
 
   it('falls back safely to local preview calculations when snapshots are stale or calc payloads are malformed', () => {
-    const { store } = createDerivedStore()
+    const { fixture, store } = createDerivedStore()
     store.getState().setMeta((prev) => ({
       ...prev,
-      lastSavedSnapshot: 'stale-snapshot',
+      lastSavedSnapshot: {
+        payload: fixture.currentSnapshot.payload,
+        comparisonKey: 'stale-snapshot',
+      },
       selectedRoomId: 'R002',
       ceilingCalculations: { scopes: 'not-an-array' } as never,
       trimCalculations: { scopes: null } as never,
@@ -95,5 +98,30 @@ describe('useEstimateV2DerivedState', () => {
     expect(result.current.selectedTrimMeasurement).toBeNull()
     expect(result.current.wallPaintLabel).toBe('Wall Satin')
     expect(result.current.saveStatusText).toContain('Unsaved changes')
+  })
+
+  it('toggles dirty state off and on as the canonical saved snapshot changes', () => {
+    const { store } = createDerivedStore()
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.dirty).toBe(false)
+
+    act(() => {
+      store.getState().setScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === 'wall-r001-main' ? { ...scope, notes: 'Fresh note' } : scope
+        )
+      )
+    })
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.useLocalPreviewCalculations).toBe(true)
+
+    act(() => {
+      store.getState().setLastSavedSnapshot(result.current.currentSnapshot)
+    })
+
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.useLocalPreviewCalculations).toBe(false)
   })
 })

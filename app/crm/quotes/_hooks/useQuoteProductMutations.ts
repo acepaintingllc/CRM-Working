@@ -14,24 +14,19 @@ type Options = {
   setData: ResourceSetter
   setSaving: (value: boolean) => void
   setActionError: (value: string | null) => void
-  setNotice: (value: string | null) => void
 }
 
-export function useQuoteProductMutations({
-  setData,
-  setSaving,
-  setActionError,
-  setNotice,
-}: Options) {
+export function useQuoteProductMutations({ setData, setSaving, setActionError }: Options) {
   async function createProduct(payload: Parameters<typeof createQuoteProduct<QuoteProductRow>>[0]) {
     setSaving(true)
     setActionError(null)
-    setNotice(null)
     try {
       const created = await createQuoteProduct<QuoteProductRow>(payload)
       setData((current) => [created.data, ...current])
-      setNotice(created.notice ?? 'Product created.')
-      return created.data
+      return {
+        data: created.data,
+        notice: created.notice ?? 'Product created.',
+      }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Failed to create product.')
       return null
@@ -46,12 +41,13 @@ export function useQuoteProductMutations({
   ) {
     setSaving(true)
     setActionError(null)
-    setNotice(null)
     try {
       const updated = await updateQuoteProduct<QuoteProductRow>(id, payload)
       setData((current) => current.map((product) => (product.id === id ? updated.data : product)))
-      setNotice(updated.notice ?? 'Product saved.')
-      return updated.data
+      return {
+        data: updated.data,
+        notice: updated.notice ?? 'Product saved.',
+      }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Failed to save product.')
       return null
@@ -61,20 +57,18 @@ export function useQuoteProductMutations({
   }
 
   async function removeProduct(selected: QuoteProductRow) {
-    const ok = window.confirm(`Delete "${selected.name}"?`)
-    if (!ok) return false
-
     setSaving(true)
     setActionError(null)
-    setNotice(null)
     try {
       await deleteQuoteProduct(selected.id)
       setData((current) => current.filter((product) => product.id !== selected.id))
-      setNotice('Product deleted.')
-      return true
+      return {
+        ok: true as const,
+        notice: 'Product deleted.',
+      }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Failed to delete product.')
-      return false
+      return null
     } finally {
       setSaving(false)
     }

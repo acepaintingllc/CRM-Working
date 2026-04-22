@@ -1,27 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { SETTINGS_LINKS, formatToday, formatVersionState } from './quoteHomePresentation'
+import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
-import type { HomeEstimate } from './quoteHomeTypes'
+import type { QuotesHomeHeaderVm } from './quoteHomeTypes'
 
 type Props = {
-  heroSummaryText: string
-  searchFocused: boolean
-  searchQuery: string
-  searchResults: HomeEstimate[]
+  vm: QuotesHomeHeaderVm
   onSearchFocusedChange: (focused: boolean) => void
   onSearchQueryChange: (value: string) => void
 }
 
-export function QuotesHomeHeader({
-  heroSummaryText,
-  searchFocused,
-  searchQuery,
-  searchResults,
-  onSearchFocusedChange,
-  onSearchQueryChange,
-}: Props) {
+export function QuotesHomeHeader({ vm, onSearchFocusedChange, onSearchQueryChange }: Props) {
   return (
     <>
       <div style={S.topRow}>
@@ -39,7 +29,7 @@ export function QuotesHomeHeader({
         <div style={S.topControls}>
           <div style={S.searchWrap}>
             <input
-              value={searchQuery}
+              value={vm.searchQuery}
               onChange={(event) => onSearchQueryChange(event.target.value)}
               onFocus={() => onSearchFocusedChange(true)}
               onBlur={() => setTimeout(() => onSearchFocusedChange(false), 150)}
@@ -47,20 +37,12 @@ export function QuotesHomeHeader({
               style={S.search}
               aria-label="Search quote versions"
             />
-            {searchFocused && searchResults.length > 0 ? (
+            {vm.searchFocused && vm.searchResults.length > 0 ? (
               <div style={S.searchResults}>
-                {searchResults.map((estimate) => (
-                  <Link
-                    key={estimate.estimate_id}
-                    href={`/crm/quotes/${estimate.estimate_id}`}
-                    style={S.searchResultLink}
-                  >
-                    <div style={S.estimateTitle}>{estimate.version_name}</div>
-                    <div style={S.estimateMeta}>
-                      {estimate.job_title}
-                      <br />
-                      {estimate.customer_name} / {formatVersionState(estimate.version_state)}
-                    </div>
+                {vm.searchResults.map((estimate) => (
+                  <Link key={estimate.id} href={estimate.href} style={S.searchResultLink}>
+                    <div style={S.estimateTitle}>{estimate.title}</div>
+                    <div style={S.estimateMeta}>{estimate.meta}</div>
                   </Link>
                 ))}
               </div>
@@ -89,7 +71,7 @@ export function QuotesHomeHeader({
         <div>
           <div style={S.eyebrow}>{formatToday()}</div>
           <h1 style={S.h1}>Estimator home</h1>
-          <div style={S.subhead}>{heroSummaryText}</div>
+          <div style={S.subhead}>{vm.heroSummaryText}</div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
           <Link
@@ -137,4 +119,3 @@ export function QuotesHomeHeader({
     </>
   )
 }
-

@@ -213,7 +213,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       selectedRoomId: '',
       error: null,
       validationIssues: [],
-      lastSavedSnapshot: '',
+      lastSavedSnapshot: null,
       saveStatus: 'idle',
       autoSaveHint: null,
       settingsOpen: false,

@@ -1,21 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { formatVersionState } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
-import type { QuoteHomeJob } from './quoteHomeTypes'
+import type { QuotesHomeSelectedJobVm } from './quoteHomeTypes'
 
 type Props = {
-  loading: boolean
-  selectedJob: QuoteHomeJob | null
-  selectedJobVersionsCount: number
+  vm: QuotesHomeSelectedJobVm
 }
 
-export function QuotesHomeSelectedJobPanel({
-  loading,
-  selectedJob,
-  selectedJobVersionsCount,
-}: Props) {
+export function QuotesHomeSelectedJobPanel({ vm }: Props) {
   return (
     <div
       style={{
@@ -27,13 +20,9 @@ export function QuotesHomeSelectedJobPanel({
     >
       <div style={{ ...S.cardLabel, marginBottom: 10 }}>Selected Job</div>
 
-      {!selectedJob && !loading ? (
-        <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>
-          Select a job from the left to view versions and create the next one.
-        </div>
-      ) : null}
+      {vm.emptyMessage ? <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>{vm.emptyMessage}</div> : null}
 
-      {selectedJob ? (
+      {vm.title ? (
         <div style={{ display: 'grid', gap: 18 }}>
           <div
             style={{
@@ -54,15 +43,14 @@ export function QuotesHomeSelectedJobPanel({
                   color: 'var(--v2-ink)',
                 }}
               >
-                {selectedJob.title}
+                {vm.title}
               </div>
               <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.7, color: 'var(--v2-ink-2)' }}>
-                {selectedJob.customer_name ?? 'Unknown customer'}
-                {selectedJob.customer_address ? ` | ${selectedJob.customer_address}` : ''}
+                {vm.customerLine}
               </div>
             </div>
             <Link
-              href={`/crm/jobs/${selectedJob.id}`}
+              href={vm.jobHref ?? '#'}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -88,11 +76,7 @@ export function QuotesHomeSelectedJobPanel({
               gap: 12,
             }}
           >
-            {[
-              { label: 'Customer', value: selectedJob.customer_name ?? 'Unknown' },
-              { label: 'Job Status', value: formatVersionState(selectedJob.status) },
-              { label: 'Versions', value: String(selectedJobVersionsCount) },
-            ].map((stat) => (
+            {vm.stats.map((stat) => (
               <div
                 key={stat.label}
                 style={{
@@ -112,4 +96,3 @@ export function QuotesHomeSelectedJobPanel({
     </div>
   )
 }
-

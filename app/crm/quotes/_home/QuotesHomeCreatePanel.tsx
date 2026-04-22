@@ -1,31 +1,21 @@
 'use client'
 
 import { QUOTE_VERSION_KIND_OPTIONS, type QuoteVersionKind } from '@/lib/quotes/versionCreation'
-import type { QuoteHomeJob } from './quoteHomeTypes'
+import type { QuotesHomeCreateVm } from './quoteHomeTypes'
 
 type Props = {
-  creating: boolean
-  loading: boolean
-  selectedJob: QuoteHomeJob | null
-  versionKind: QuoteVersionKind
-  versionName: string
+  vm: QuotesHomeCreateVm
   onCreate: () => void
   onVersionKindChange: (value: QuoteVersionKind) => void
   onVersionNameChange: (value: string) => void
 }
 
 export function QuotesHomeCreatePanel({
-  creating,
-  loading,
-  selectedJob,
-  versionKind,
-  versionName,
+  vm,
   onCreate,
   onVersionKindChange,
   onVersionNameChange,
 }: Props) {
-  const disabled = !selectedJob || creating || loading
-
   return (
     <div
       style={{
@@ -39,7 +29,16 @@ export function QuotesHomeCreatePanel({
       }}
     >
       <div>
-        <div style={{ fontFamily: 'var(--v2-mono)', fontSize: 10, color: 'var(--v2-ink-3)', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div
+          style={{
+            fontFamily: 'var(--v2-mono)',
+            fontSize: 10,
+            color: 'var(--v2-ink-3)',
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            marginBottom: 8,
+          }}
+        >
           Create Version
         </div>
         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>
@@ -63,7 +62,7 @@ export function QuotesHomeCreatePanel({
           Version Name
         </span>
         <input
-          value={versionName}
+          value={vm.versionName}
           onChange={(event) => onVersionNameChange(event.target.value)}
           placeholder="Leave blank for the next default version name"
           style={{
@@ -91,7 +90,7 @@ export function QuotesHomeCreatePanel({
           Version Kind
         </span>
         <select
-          value={versionKind}
+          value={vm.versionKind}
           onChange={(event) => onVersionKindChange(event.target.value as QuoteVersionKind)}
           style={{
             width: '100%',
@@ -114,20 +113,20 @@ export function QuotesHomeCreatePanel({
       <button
         type="button"
         onClick={onCreate}
-        disabled={disabled}
+        disabled={!vm.canCreate}
         style={{
           width: '100%',
           padding: '14px 16px',
           borderRadius: 12,
           border: '1px solid rgba(134,239,172,0.34)',
-          background: disabled ? 'rgba(74,222,128,0.12)' : '#8ad39b',
-          color: disabled ? '#9cd7ae' : '#062410',
+          background: !vm.canCreate ? 'rgba(74,222,128,0.12)' : '#8ad39b',
+          color: !vm.canCreate ? '#9cd7ae' : '#062410',
           fontSize: 14,
           fontWeight: 800,
-          cursor: disabled ? 'not-allowed' : 'pointer',
+          cursor: !vm.canCreate ? 'not-allowed' : 'pointer',
         }}
       >
-        {creating ? 'Creating version...' : 'Create version'}
+        {vm.creating ? 'Creating version...' : 'Create version'}
       </button>
     </div>
   )

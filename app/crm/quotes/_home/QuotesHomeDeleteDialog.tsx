@@ -1,17 +1,16 @@
 'use client'
 
 import { S } from './quoteHomeStyles'
-import type { HomeEstimate } from './quoteHomeTypes'
+import type { QuotesHomeDeleteDialogVm } from './quoteHomeTypes'
 
 type Props = {
-  deletingId: string | null
-  estimate: HomeEstimate | null
+  vm: QuotesHomeDeleteDialogVm
   onCancel: () => void
   onConfirm: () => void
 }
 
-export function QuotesHomeDeleteDialog({ deletingId, estimate, onCancel, onConfirm }: Props) {
-  if (!estimate) return null
+export function QuotesHomeDeleteDialog({ vm, onCancel, onConfirm }: Props) {
+  if (!vm.estimateId) return null
 
   return (
     <div
@@ -43,10 +42,10 @@ export function QuotesHomeDeleteDialog({ deletingId, estimate, onCancel, onConfi
         <div>
           <div style={{ ...S.cardLabel, marginBottom: 8 }}>Delete version</div>
           <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>
-            Delete {estimate.version_name}
+            Delete {vm.versionName}
           </div>
           <div style={{ marginTop: 8, color: 'var(--v2-ink-3)', lineHeight: 1.6, fontSize: 14 }}>
-            This will permanently delete the version for {estimate.job_title}. This cannot be undone.
+            This will permanently delete the version for {vm.jobTitle}. This cannot be undone.
           </div>
         </div>
 
@@ -54,7 +53,7 @@ export function QuotesHomeDeleteDialog({ deletingId, estimate, onCancel, onConfi
           <button
             type="button"
             onClick={onCancel}
-            disabled={Boolean(deletingId)}
+            disabled={vm.deleting}
             style={{
               padding: '8px 10px',
               borderRadius: 10,
@@ -63,7 +62,7 @@ export function QuotesHomeDeleteDialog({ deletingId, estimate, onCancel, onConfi
               color: 'var(--v2-ink)',
               fontWeight: 700,
               fontSize: 13,
-              cursor: deletingId ? 'not-allowed' : 'pointer',
+              cursor: vm.deleting ? 'not-allowed' : 'pointer',
             }}
           >
             Cancel
@@ -71,24 +70,23 @@ export function QuotesHomeDeleteDialog({ deletingId, estimate, onCancel, onConfi
           <button
             type="button"
             onClick={onConfirm}
-            disabled={Boolean(deletingId)}
+            disabled={vm.deleting}
             style={{
               padding: '8px 10px',
               borderRadius: 10,
               border: '1px solid rgba(248,113,113,0.38)',
-              background: deletingId ? 'rgba(220,38,38,0.75)' : '#dc2626',
+              background: vm.deleting ? 'rgba(220,38,38,0.75)' : '#dc2626',
               color: '#fff',
               fontWeight: 800,
               fontSize: 13,
-              cursor: deletingId ? 'not-allowed' : 'pointer',
-              opacity: deletingId ? 0.8 : 1,
+              cursor: vm.deleting ? 'not-allowed' : 'pointer',
+              opacity: vm.deleting ? 0.8 : 1,
             }}
           >
-            {deletingId ? 'Deleting...' : 'Delete version'}
+            {vm.deleting ? 'Deleting...' : 'Delete version'}
           </button>
         </div>
       </div>
     </div>
   )
 }
-

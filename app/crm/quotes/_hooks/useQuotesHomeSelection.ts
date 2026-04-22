@@ -5,7 +5,7 @@ import {
   deriveQuoteVersionsForJob,
   type EligibleQuoteVersionJob,
 } from '@/lib/quotes/versionCreation'
-import { buildSearchHaystack, buildSummaryCards } from '../_home/quoteHomePresentation'
+import { buildSearchHaystack } from '../_home/quoteHomePresentation'
 import type { QuoteHomeData, QuoteHomeEstimate } from '@/lib/quotes/collectionData'
 
 type Options<TJob extends EligibleQuoteVersionJob> = {
@@ -36,7 +36,6 @@ export function useQuotesHomeSelection<TJob extends SearchableQuoteHomeJob>({
   }, [jobs])
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? null
-  const summaryCards = useMemo(() => buildSummaryCards(data), [data])
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -45,10 +44,6 @@ export function useQuotesHomeSelection<TJob extends SearchableQuoteHomeJob>({
       .filter((estimate) => buildSearchHaystack(estimate).includes(q))
       .slice(0, 8)
   }, [data, searchQuery])
-
-  const heroSummaryText = data
-    ? `${data.search_estimates.length} total versions | ${data.summary.draft_count} drafts | ${data.summary.sent_or_awaiting_count} sent/awaiting | ${data.summary.live_count} live`
-    : 'Build and track quote versions with live status, totals, and search.'
 
   const filteredJobs = useMemo(() => {
     const q = jobQuery.trim().toLowerCase()
@@ -72,18 +67,12 @@ export function useQuotesHomeSelection<TJob extends SearchableQuoteHomeJob>({
     return map
   }, [data])
 
-  const mobileSummaryCards = useMemo(
-    () => [summaryCards[0], summaryCards[3]].filter(Boolean),
-    [summaryCards]
-  )
-
   return {
     searchQuery,
     setSearchQuery,
     searchFocused,
     setSearchFocused,
     searchResults,
-    heroSummaryText,
     jobQuery,
     setJobQuery,
     selectedJobId,
@@ -92,7 +81,5 @@ export function useQuotesHomeSelection<TJob extends SearchableQuoteHomeJob>({
     filteredJobs,
     selectedJobVersions,
     versionCountByJob,
-    summaryCards,
-    mobileSummaryCards,
   }
 }

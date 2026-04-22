@@ -1,46 +1,68 @@
 'use client'
 
 import { useState } from 'react'
-import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
-import { loadQuoteProducts } from '@/lib/quotes/client'
 import {
   QUOTE_PRODUCT_FAMILIES,
   type ProductFamily,
-  type QuoteProductRow,
   type QuoteProductStatusFilter,
 } from '@/lib/quotes/productsForm'
 import { useQuoteProductEditorState } from './useQuoteProductEditorState'
 import { useQuoteProductMutations } from './useQuoteProductMutations'
 import { useQuoteProductsCatalogState } from './useQuoteProductsCatalogState'
+import { useQuoteProductsData } from './useQuoteProductsData'
 
-const emptyProductRows: QuoteProductRow[] = []
+export type QuoteProductsCatalogVm = {
+  activeFamily: ProductFamily
+  families: readonly ProductFamily[]
+  statusFilter: QuoteProductStatusFilter
+  search: string
+  filtered: ReturnType<typeof useQuoteProductsCatalogState>['filtered']
+  selectedId: string | null
+  selected: ReturnType<typeof useQuoteProductsCatalogState>['selected']
+}
+
+export type QuoteProductsEditorVm = {
+  draft: ReturnType<typeof useQuoteProductEditorState>['draft']
+  selected: ReturnType<typeof useQuoteProductsCatalogState>['selected']
+  saving: boolean
+  isCreating: boolean
+  validation: ReturnType<typeof useQuoteProductEditorState>['validation']
+  inlineValidation: string | null
+  canSave: boolean
+  canDelete: boolean
+}
+
+export type QuoteProductsActions = {
+  setActiveFamily: (nextFamily: ProductFamily) => void
+  setStatusFilter: (next: string) => void
+  setSearch: (value: string) => void
+  setSelectedId: (id: string | null) => void
+  updateDraftField: ReturnType<typeof useQuoteProductEditorState>['updateDraftField']
+  startCreate: () => void
+  cancelEdit: () => void
+  save: () => Promise<boolean>
+  requestRemove: () => Promise<boolean>
+}
 
 export function useQuoteProductsPage() {
+  const resource = useQuoteProductsData()
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const resource = useLoadableResource<QuoteProductRow[]>({
-    initialData: emptyProductRows,
-    load: () => loadQuoteProducts<QuoteProductRow[]>({ status: 'all' }),
-    getErrorMessage: (loadError: unknown) =>
-      loadError instanceof Error ? loadError.message : 'Failed to load quote products.',
-  })
-
-  const catalogVm = useQuoteProductsCatalogState({
+  const catalog = useQuoteProductsCatalogState({
     products: resource.data,
   })
 
   const editor = useQuoteProductEditorState({
-    selected: catalogVm.selected,
+    selected: catalog.selected,
   })
 
   const mutations = useQuoteProductMutations({
     setData: resource.setData,
     setSaving,
     setActionError,
-    setNotice,
   })
 
   const validation = editor.validation
@@ -56,12 +78,12 @@ export function useQuoteProductsPage() {
       !saving &&
       validation.ok &&
       !resource.error &&
-      (editor.isCreating || Boolean(catalogVm.selected)),
-    canDelete: Boolean(catalogVm.selected) && !editor.isCreating && !saving && !resource.error,
+      (editor.isCreating || Boolean(catalog.selected)),
+    canDelete: Boolean(catalog.selected) && !editor.isCreating && !saving && !resource.error,
   })
 
   function setActiveFamily(nextFamily: ProductFamily) {
-    catalogVm.setActiveFamily(nextFamily)
+    catalog.setActiveFamily(nextFamily)
     if (editor.isCreating) {
       editor.updateDraftField('family', nextFamily)
     }
@@ -69,19 +91,19 @@ export function useQuoteProductsPage() {
 
   function setSelectedId(id: string | null) {
     if (editor.isCreating) {
-      editor.cancel(catalogVm.selected)
+      editor.cancel(catalog.selected)
     }
-    catalogVm.setSelectedId(id)
+    catalog.setSelectedId(id)
   }
 
   function startCreate() {
-    editor.startCreate(catalogVm.activeFamily)
+    editor.startCreate(catalog.activeFamily)
     setNotice(null)
     setActionError(null)
   }
 
   function cancelEdit() {
-    editor.cancel(catalogVm.selected)
+    editor.cancel(catalog.selected)
     setNotice(null)
     setActionError(null)
   }
@@ -90,87 +112,95 @@ export function useQuoteProductsPage() {
     const validated = editor.getValidatedDraft()
     if (!validated.ok) return false
 
+    setNotice(null)
     if (editor.isCreating) {
       const created = await mutations.createProduct(validated.payload)
       if (!created) return false
-      catalogVm.setActiveFamily((created.family as ProductFamily | null) ?? catalogVm.activeFamily)
-      catalogVm.setStatusFilter('all')
-      catalogVm.setSearch('')
-      catalogVm.setSelectedId(created.id)
-      editor.finishCreate(created)
+      setNotice(created.notice)
+      catalog.setActiveFamily((created.data.family as ProductFamily | null) ?? catalog.activeFamily)
+      catalog.setStatusFilter('all')
+      catalog.setSearch('')
+      catalog.setSelectedId(created.data.id)
+      editor.finishCreate(created.data)
       return true
     }
 
-    if (!catalogVm.selected) return false
-    const updated = await mutations.updateProduct(catalogVm.selected.id, validated.payload)
+    if (!catalog.selected) return false
+    const updated = await mutations.updateProduct(catalog.selected.id, validated.payload)
     if (!updated) return false
-    catalogVm.setActiveFamily((updated.family as ProductFamily | null) ?? catalogVm.activeFamily)
-    catalogVm.setSelectedId(updated.id)
+    setNotice(updated.notice)
+    catalog.setActiveFamily((updated.data.family as ProductFamily | null) ?? catalog.activeFamily)
+    catalog.setSelectedId(updated.data.id)
     return true
   }
 
-  async function remove() {
-    if (!catalogVm.selected || saving) return false
-    const removedId = catalogVm.selected.id
-    const ok = await mutations.removeProduct(catalogVm.selected)
+  async function requestRemove() {
+    if (!catalog.selected || saving) return false
+    const ok = window.confirm(`Delete "${catalog.selected.name}"?`)
     if (!ok) return false
-    if (catalogVm.selectedId === removedId) {
-      catalogVm.setSelectedId(null)
+
+    setNotice(null)
+    const removedId = catalog.selected.id
+    const removed = await mutations.removeProduct(catalog.selected)
+    if (!removed) return false
+    setNotice(removed.notice)
+    if (catalog.selectedId === removedId) {
+      catalog.setSelectedId(null)
     }
     return true
   }
 
   return {
     resource,
-    activeFamily: catalogVm.activeFamily,
+    activeFamily: catalog.activeFamily,
     setActiveFamily,
     families: QUOTE_PRODUCT_FAMILIES,
-    statusFilter: catalogVm.statusFilter as QuoteProductStatusFilter,
-    setStatusFilter: catalogVm.setStatusFilter,
-    search: catalogVm.search,
-    setSearch: catalogVm.setSearch,
-    filtered: catalogVm.filtered,
-    selected: catalogVm.selected,
-    selectedId: catalogVm.selectedId,
+    statusFilter: catalog.statusFilter as QuoteProductStatusFilter,
+    setStatusFilter: catalog.setStatusFilter,
+    search: catalog.search,
+    setSearch: catalog.setSearch,
+    filtered: catalog.filtered,
+    selected: catalog.selected,
+    selectedId: catalog.selectedId,
     setSelectedId,
     isCreating: editor.isCreating,
     draft: editor.draft,
     saving,
     validation,
     save,
-    remove,
+    remove: requestRemove,
     startCreate,
     cancelEdit,
     uiState,
     catalogVm: {
-      activeFamily: catalogVm.activeFamily,
+      activeFamily: catalog.activeFamily,
       families: QUOTE_PRODUCT_FAMILIES,
-      statusFilter: catalogVm.statusFilter,
-      search: catalogVm.search,
-      filtered: catalogVm.filtered,
-      selectedId: catalogVm.selectedId,
-      selected: catalogVm.selected,
-    },
+      statusFilter: catalog.statusFilter,
+      search: catalog.search,
+      filtered: catalog.filtered,
+      selectedId: catalog.selectedId,
+      selected: catalog.selected,
+    } satisfies QuoteProductsCatalogVm,
     editorVm: {
       draft: editor.draft,
-      selected: catalogVm.selected,
+      selected: catalog.selected,
       saving,
       isCreating: editor.isCreating,
       validation,
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
       canDelete: uiState.canDelete,
-    },
+    } satisfies QuoteProductsEditorVm,
     actions: {
       setActiveFamily,
-      setStatusFilter: catalogVm.setStatusFilter,
-      setSearch: catalogVm.setSearch,
+      setStatusFilter: catalog.setStatusFilter,
+      setSearch: catalog.setSearch,
       setSelectedId,
       updateDraftField: editor.updateDraftField,
       startCreate,
       cancelEdit,
       save,
-      remove,
-    },
+      requestRemove,
+    } satisfies QuoteProductsActions,
   }
 }

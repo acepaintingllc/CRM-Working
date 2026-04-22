@@ -1,4 +1,15 @@
-import type { HomeData, HomeEstimate, NavItem, SummaryCardVm } from './quoteHomeTypes'
+import type {
+  HomeData,
+  HomeEstimate,
+  NavItem,
+  QuoteHomeJob,
+  QuoteHomeJobListItemVm,
+  QuoteHomeVersionItemVm,
+  QuotesHomeDeleteDialogVm,
+  QuotesHomeSelectedJobVm,
+  SearchResultVm,
+  SummaryCardVm,
+} from './quoteHomeTypes'
 
 export const SETTINGS_LINKS: NavItem[] = [
   { label: 'Defaults', href: '/crm/quotes/defaults' },
@@ -54,6 +65,118 @@ export function buildSearchHaystack(estimate: HomeEstimate) {
 
 export function estimateWorkspaceHref(estimateId: string) {
   return `/crm/quotes/${estimateId}`
+}
+
+export function buildSearchResultVm(estimate: HomeEstimate): SearchResultVm {
+  return {
+    id: estimate.estimate_id,
+    href: estimateWorkspaceHref(estimate.estimate_id),
+    title: estimate.version_name,
+    meta: `${estimate.job_title}\n${estimate.customer_name} / ${formatVersionState(estimate.version_state)}`,
+  }
+}
+
+export function buildHeroSummaryText(data: HomeData | null) {
+  return data
+    ? `${data.search_estimates.length} total versions | ${data.summary.draft_count} drafts | ${data.summary.sent_or_awaiting_count} sent/awaiting | ${data.summary.live_count} live`
+    : 'Build and track quote versions with live status, totals, and search.'
+}
+
+export function buildQuoteHomeJobListItemVm(
+  job: QuoteHomeJob,
+  versionCount: number,
+  options?: { mobile?: boolean; selectedJobId?: string }
+): QuoteHomeJobListItemVm {
+  return {
+    id: job.id,
+    title: job.title,
+    customerName: job.customer_name ?? 'Unknown customer',
+    versionCountLabel: `${versionCount} version${versionCount === 1 ? '' : 's'}`,
+    href: options?.mobile ? `/crm/quotes/create?job=${job.id}` : undefined,
+    isSelected: options?.selectedJobId === job.id,
+  }
+}
+
+export function buildQuotesHomeSelectedJobVm(
+  selectedJob: QuoteHomeJob | null,
+  selectedJobVersionsCount: number,
+  loading: boolean
+): QuotesHomeSelectedJobVm {
+  if (!selectedJob) {
+    return {
+      loading,
+      emptyMessage: loading
+        ? null
+        : 'Select a job from the left to view versions and create the next one.',
+      title: null,
+      customerLine: null,
+      jobHref: null,
+      stats: [],
+    }
+  }
+
+  return {
+    loading,
+    emptyMessage: null,
+    title: selectedJob.title,
+    customerLine: `${selectedJob.customer_name ?? 'Unknown customer'}${
+      selectedJob.customer_address ? ` | ${selectedJob.customer_address}` : ''
+    }`,
+    jobHref: `/crm/jobs/${selectedJob.id}`,
+    stats: [
+      { label: 'Customer', value: selectedJob.customer_name ?? 'Unknown' },
+      { label: 'Job Status', value: formatVersionState(selectedJob.status) },
+      { label: 'Versions', value: String(selectedJobVersionsCount) },
+    ],
+  }
+}
+
+export function buildQuoteHomeVersionItemVm(
+  estimate: HomeEstimate,
+  deletingId: string | null
+): QuoteHomeVersionItemVm {
+  return {
+    id: estimate.estimate_id,
+    title: estimate.version_name ?? 'Quote Version',
+    total:
+      estimate.final_total != null && estimate.final_total > 0
+        ? formatCurrency(estimate.final_total)
+        : null,
+    meta: `${formatVersionState(estimate.version_state)} / ${formatVersionState(
+      estimate.version_kind
+    )} · Updated ${formatDateTime(estimate.updated_at)}`,
+    href: estimateWorkspaceHref(estimate.estimate_id),
+    deleting: deletingId === estimate.estimate_id,
+  }
+}
+
+export function buildQuotesHomeVersionHeading(selectedJob: QuoteHomeJob | null, versions: HomeEstimate[]) {
+  return selectedJob
+    ? `${versions.length} version${versions.length === 1 ? '' : 's'} under this job`
+    : 'Pick a job first'
+}
+
+export function buildQuotesHomeVersionEmptyMessage(
+  selectedJob: QuoteHomeJob | null,
+  versions: HomeEstimate[]
+) {
+  if (!selectedJob) return 'Versions will appear here once a job is selected.'
+  if (versions.length === 0) {
+    return 'No quote versions exist under this job yet. Use the panel on the right to create the first one.'
+  }
+  return null
+}
+
+export function buildQuotesHomeDeleteDialogVm(
+  estimate: HomeEstimate | null,
+  deletingId: string | null
+): QuotesHomeDeleteDialogVm {
+  return {
+    estimateId: estimate?.estimate_id ?? null,
+    versionName: estimate?.version_name ?? null,
+    jobTitle: estimate?.job_title ?? null,
+    deleting: Boolean(deletingId),
+  }
 }
 
 export function buildSummaryCards(data: HomeData | null): SummaryCardVm[] {

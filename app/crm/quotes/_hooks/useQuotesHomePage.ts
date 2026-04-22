@@ -4,6 +4,18 @@ import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSelection } from './useQuotesHomeSelection'
+import {
+  buildHeroSummaryText,
+  buildQuoteHomeJobListItemVm,
+  buildQuoteHomeVersionItemVm,
+  buildQuotesHomeDeleteDialogVm,
+  buildQuotesHomeSelectedJobVm,
+  buildQuotesHomeVersionEmptyMessage,
+  buildQuotesHomeVersionHeading,
+  buildSearchResultVm,
+  buildSummaryCards,
+} from '../_home/quoteHomePresentation'
+import type { QuotesHomeJobListVm } from '../_home/quoteHomeTypes'
 
 const EMPTY_SUMMARY = {
   draft_count: 0,
@@ -24,6 +36,19 @@ export function useQuotesHomePage() {
     setError: dataState.setError,
   })
 
+  const summaryCards = buildSummaryCards(dataState.data)
+  const jobListItems = selection.filteredJobs.map((job) =>
+    buildQuoteHomeJobListItemVm(job, selection.versionCountByJob[job.id] ?? 0, {
+      selectedJobId: selection.selectedJobId,
+    })
+  )
+  const mobileItems = dataState.jobs
+    .slice(0, 10)
+    .map((job) => buildQuoteHomeJobListItemVm(job, selection.versionCountByJob[job.id] ?? 0, { mobile: true }))
+  const versionItems = selection.selectedJobVersions.map((estimate) =>
+    buildQuoteHomeVersionItemVm(estimate, deleteController.deletingId)
+  )
+
   return {
     feedbackVm: {
       loading: dataState.loading,
@@ -32,45 +57,50 @@ export function useQuotesHomePage() {
       summary: dataState.data?.summary ?? EMPTY_SUMMARY,
     },
     headerVm: {
+      heroSummaryText: buildHeroSummaryText(dataState.data),
       searchQuery: selection.searchQuery,
       searchFocused: selection.searchFocused,
-      searchResults: selection.searchResults,
-      heroSummaryText: selection.heroSummaryText,
+      searchResults: selection.searchResults.map(buildSearchResultVm),
     },
-    summaryCards: selection.summaryCards,
+    summaryCards,
     mobileVm: {
-      summaryCards: selection.mobileSummaryCards,
-      jobs: dataState.jobs.slice(0, 10),
+      summaryCards: [summaryCards[0], summaryCards[3]].filter(Boolean),
     },
     jobListVm: {
       loading: dataState.loading,
-      jobs: dataState.jobs,
-      filteredJobs: selection.filteredJobs,
-      jobQuery: selection.jobQuery,
+      searchQuery: selection.jobQuery,
       selectedJobId: selection.selectedJobId,
-      versionCountByJob: selection.versionCountByJob,
-    },
-    selectedJobVm: {
-      loading: dataState.loading,
-      selectedJob: selection.selectedJob,
-      selectedJobVersionsCount: selection.selectedJobVersions.length,
-    },
+      items: jobListItems,
+      mobileItems,
+      emptyState:
+        dataState.jobs.length === 0
+          ? 'no_jobs'
+          : jobListItems.length === 0
+            ? 'no_matches'
+            : 'none',
+    } satisfies QuotesHomeJobListVm,
+    selectedJobVm: buildQuotesHomeSelectedJobVm(
+      selection.selectedJob,
+      selection.selectedJobVersions.length,
+      dataState.loading
+    ),
     versionListVm: {
-      selectedJob: selection.selectedJob,
-      versions: selection.selectedJobVersions,
-      deletingId: deleteController.deletingId,
+      heading: buildQuotesHomeVersionHeading(selection.selectedJob, selection.selectedJobVersions),
+      emptyMessage: buildQuotesHomeVersionEmptyMessage(selection.selectedJob, selection.selectedJobVersions),
+      items: versionItems,
     },
     createVm: {
-      loading: dataState.loading,
       creating: createController.creating,
-      selectedJob: selection.selectedJob,
+      loading: dataState.loading,
+      selectedJobName: selection.selectedJob?.title ?? null,
       versionName: createController.versionName,
       versionKind: createController.versionKind,
+      canCreate: Boolean(selection.selectedJob) && !createController.creating && !dataState.loading,
     },
-    deleteDialogVm: {
-      estimate: deleteController.confirmingDelete,
-      deletingId: deleteController.deletingId,
-    },
+    deleteDialogVm: buildQuotesHomeDeleteDialogVm(
+      deleteController.confirmingDelete,
+      deleteController.deletingId
+    ),
     actions: {
       setSearchQuery: selection.setSearchQuery,
       setSearchFocused: selection.setSearchFocused,
@@ -79,9 +109,17 @@ export function useQuotesHomePage() {
       setVersionName: createController.setVersionName,
       setVersionKind: createController.setVersionKind,
       createVersion: createController.createVersion,
-      requestDeleteVersion: deleteController.requestDeleteVersion,
+      requestDeleteVersion: (value: string | { estimate_id: string }) => {
+        const estimateId = typeof value === 'string' ? value : value.estimate_id
+        const estimate =
+          dataState.data?.search_estimates.find((entry) => entry.estimate_id === estimateId) ?? null
+        if (estimate) {
+          deleteController.requestDeleteVersion(estimate)
+        }
+      },
       cancelDelete: deleteController.cancelDelete,
       confirmDeleteVersion: deleteController.confirmDeleteVersion,
+      refresh: dataState.refresh,
     },
   }
 }

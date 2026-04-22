@@ -2,28 +2,15 @@
 
 import Link from 'next/link'
 import { Trash2 } from 'lucide-react'
-import {
-  estimateWorkspaceHref,
-  formatCurrency,
-  formatDateTime,
-  formatVersionState,
-} from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
-import type { HomeEstimate, QuoteHomeJob } from './quoteHomeTypes'
+import type { QuotesHomeVersionListVm } from './quoteHomeTypes'
 
 type Props = {
-  deletingId: string | null
-  selectedJob: QuoteHomeJob | null
-  versions: HomeEstimate[]
-  onRequestDelete: (estimate: HomeEstimate) => void
+  vm: QuotesHomeVersionListVm
+  onRequestDelete: (estimateId: string) => void
 }
 
-export function QuotesHomeVersionList({
-  deletingId,
-  selectedJob,
-  versions,
-  onRequestDelete,
-}: Props) {
+export function QuotesHomeVersionList({ vm, onRequestDelete }: Props) {
   return (
     <div
       style={{
@@ -38,25 +25,14 @@ export function QuotesHomeVersionList({
     >
       <div>
         <div style={{ ...S.cardLabel, marginBottom: 8 }}>Existing Versions</div>
-        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>
-          {selectedJob
-            ? `${versions.length} version${versions.length === 1 ? '' : 's'} under this job`
-            : 'Pick a job first'}
-        </div>
+        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>{vm.heading}</div>
       </div>
 
-      {!selectedJob ? <div style={S.emptyState}>Versions will appear here once a job is selected.</div> : null}
+      {vm.emptyMessage ? <div style={S.emptyState}>{vm.emptyMessage}</div> : null}
 
-      {selectedJob && versions.length === 0 ? (
-        <div style={S.emptyState}>
-          No quote versions exist under this job yet. Use the panel on the right to create the first
-          one.
-        </div>
-      ) : null}
-
-      {versions.map((estimate) => (
+      {vm.items.map((estimate) => (
         <div
-          key={estimate.estimate_id}
+          key={estimate.id}
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(0, 1fr) auto',
@@ -68,23 +44,16 @@ export function QuotesHomeVersionList({
         >
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--v2-ink)' }}>
-                {estimate.version_name ?? 'Quote Version'}
-              </div>
-              {estimate.final_total != null && estimate.final_total > 0 ? (
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--v2-green-2)' }}>
-                  {formatCurrency(estimate.final_total)}
-                </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--v2-ink)' }}>{estimate.title}</div>
+              {estimate.total ? (
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--v2-green-2)' }}>{estimate.total}</div>
               ) : null}
             </div>
-            <div style={{ marginTop: 5, ...S.estimateMeta }}>
-              {formatVersionState(estimate.version_state)} / {formatVersionState(estimate.version_kind)}
-              {' · '}Updated {formatDateTime(estimate.updated_at)}
-            </div>
+            <div style={{ marginTop: 5, ...S.estimateMeta }}>{estimate.meta}</div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <Link
-              href={estimateWorkspaceHref(estimate.estimate_id)}
+              href={estimate.href}
               prefetch={false}
               style={{
                 display: 'inline-flex',
@@ -104,8 +73,8 @@ export function QuotesHomeVersionList({
             </Link>
             <button
               type="button"
-              onClick={() => onRequestDelete(estimate)}
-              disabled={deletingId === estimate.estimate_id}
+              onClick={() => onRequestDelete(estimate.id)}
+              disabled={estimate.deleting}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -119,7 +88,7 @@ export function QuotesHomeVersionList({
                 fontWeight: 700,
                 fontSize: 12,
                 whiteSpace: 'nowrap',
-                cursor: deletingId === estimate.estimate_id ? 'not-allowed' : 'pointer',
+                cursor: estimate.deleting ? 'not-allowed' : 'pointer',
               }}
             >
               <Trash2 size={12} aria-hidden="true" />
@@ -131,4 +100,3 @@ export function QuotesHomeVersionList({
     </div>
   )
 }
-
