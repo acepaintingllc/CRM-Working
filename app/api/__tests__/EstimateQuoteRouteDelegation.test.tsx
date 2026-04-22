@@ -9,6 +9,10 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateCustomerSendRoutePost: vi.fn(),
   handleEstimateCollectionRouteGet: vi.fn(),
   handleEstimateCollectionRoutePost: vi.fn(),
+  handleEstimateProductsRouteGet: vi.fn(),
+  handleEstimateProductsRoutePost: vi.fn(),
+  handleEstimateProductRoutePatch: vi.fn(),
+  handleEstimateProductRouteDelete: vi.fn(),
 }))
 
 vi.mock('@/lib/server/estimateResourceRoutes', () => ({
@@ -46,18 +50,36 @@ vi.mock('@/lib/server/estimateCollectionRoutes', () => ({
   },
 }))
 
+vi.mock('@/lib/server/estimateProductRoutes', () => ({
+  handleEstimateProductsRouteGet: routeHandlerMocks.handleEstimateProductsRouteGet,
+  handleEstimateProductsRoutePost: routeHandlerMocks.handleEstimateProductsRoutePost,
+  handleEstimateProductRoutePatch: routeHandlerMocks.handleEstimateProductRoutePatch,
+  handleEstimateProductRouteDelete: routeHandlerMocks.handleEstimateProductRouteDelete,
+}))
+
+import { GET as getEstimateCustomerSend, POST as postEstimateCustomerSend, PUT as putEstimateCustomerSend } from '../estimates/[id]/customer-send/route'
 import { DELETE as deleteEstimate } from '../estimates/[id]/route'
+import { GET as getEstimateVersion, POST as postEstimateVersion } from '../estimates/route'
+import { DELETE as deleteEstimateProduct, PATCH as patchEstimateProduct } from '../estimates/v2/products/[id]/route'
+import { GET as getEstimateProducts, POST as postEstimateProducts } from '../estimates/v2/products/route'
 import { DELETE as deleteQuote } from '../quotes/[id]/route'
-import { POST as postEstimateCustomerSend } from '../estimates/[id]/customer-send/route'
-import { POST as postQuoteCustomerSend } from '../quotes/[id]/customer-send/route'
-import { POST as postEstimateVersion } from '../estimates/route'
-import { POST as postQuoteVersion } from '../quotes/route'
+import { GET as getQuoteCustomerSend, POST as postQuoteCustomerSend, PUT as putQuoteCustomerSend } from '../quotes/[id]/customer-send/route'
+import { DELETE as deleteQuoteProduct, PATCH as patchQuoteProduct } from '../quotes/products/[id]/route'
+import { GET as getQuoteProducts, POST as postQuoteProducts } from '../quotes/products/route'
+import { GET as getQuoteVersion, POST as postQuoteVersion } from '../quotes/route'
 
 describe('estimate and quote route delegation', () => {
   beforeEach(() => {
     routeHandlerMocks.handleEstimateRouteDelete.mockReset()
+    routeHandlerMocks.handleEstimateCustomerSendRouteGet.mockReset()
+    routeHandlerMocks.handleEstimateCustomerSendRoutePut.mockReset()
     routeHandlerMocks.handleEstimateCustomerSendRoutePost.mockReset()
+    routeHandlerMocks.handleEstimateCollectionRouteGet.mockReset()
     routeHandlerMocks.handleEstimateCollectionRoutePost.mockReset()
+    routeHandlerMocks.handleEstimateProductsRouteGet.mockReset()
+    routeHandlerMocks.handleEstimateProductsRoutePost.mockReset()
+    routeHandlerMocks.handleEstimateProductRoutePatch.mockReset()
+    routeHandlerMocks.handleEstimateProductRouteDelete.mockReset()
   })
 
   it('delegates delete routes to the shared estimate resource handler with family-specific notices', async () => {
@@ -85,9 +107,33 @@ describe('estimate and quote route delegation', () => {
     const request = new Request('http://localhost/api/quotes/test', { method: 'POST' })
     const context = { params: { id: 'estimate-1' } }
 
+    await getEstimateCustomerSend(request, context)
+    await getQuoteCustomerSend(request, context)
+    await putEstimateCustomerSend(request, context)
+    await putQuoteCustomerSend(request, context)
     await postEstimateCustomerSend(request, context)
     await postQuoteCustomerSend(request, context)
 
+    expect(routeHandlerMocks.handleEstimateCustomerSendRouteGet).toHaveBeenNthCalledWith(
+      1,
+      request,
+      context
+    )
+    expect(routeHandlerMocks.handleEstimateCustomerSendRouteGet).toHaveBeenNthCalledWith(
+      2,
+      request,
+      context
+    )
+    expect(routeHandlerMocks.handleEstimateCustomerSendRoutePut).toHaveBeenNthCalledWith(
+      1,
+      request,
+      context
+    )
+    expect(routeHandlerMocks.handleEstimateCustomerSendRoutePut).toHaveBeenNthCalledWith(
+      2,
+      request,
+      context
+    )
     expect(routeHandlerMocks.handleEstimateCustomerSendRoutePost).toHaveBeenNthCalledWith(
       1,
       request,
@@ -105,9 +151,13 @@ describe('estimate and quote route delegation', () => {
   it('delegates version creation routes to the shared collection handler with family-specific defaults', async () => {
     const request = new Request('http://localhost/api/quotes', { method: 'POST' })
 
+    await getEstimateVersion()
+    await getQuoteVersion()
     await postEstimateVersion(request)
     await postQuoteVersion(request)
 
+    expect(routeHandlerMocks.handleEstimateCollectionRouteGet).toHaveBeenNthCalledWith(1)
+    expect(routeHandlerMocks.handleEstimateCollectionRouteGet).toHaveBeenNthCalledWith(2)
     expect(routeHandlerMocks.handleEstimateCollectionRoutePost).toHaveBeenNthCalledWith(
       1,
       request,
@@ -117,6 +167,46 @@ describe('estimate and quote route delegation', () => {
       2,
       request,
       expect.objectContaining({ createdNotice: 'Quote version created.' })
+    )
+  })
+
+  it('delegates estimate and quote product routes to the shared product handlers', async () => {
+    const collectionRequest = new Request('http://localhost/api/quotes/products', { method: 'POST' })
+    const detailRequest = new Request('http://localhost/api/quotes/products/test', { method: 'PATCH' })
+    const context = { params: { id: 'product-1' } }
+
+    await getEstimateProducts(collectionRequest)
+    await getQuoteProducts(collectionRequest)
+    await postEstimateProducts(collectionRequest)
+    await postQuoteProducts(collectionRequest)
+    await patchEstimateProduct(detailRequest, context)
+    await patchQuoteProduct(detailRequest, context)
+    await deleteEstimateProduct(detailRequest, context)
+    await deleteQuoteProduct(detailRequest, context)
+
+    expect(routeHandlerMocks.handleEstimateProductsRouteGet).toHaveBeenNthCalledWith(1, collectionRequest)
+    expect(routeHandlerMocks.handleEstimateProductsRouteGet).toHaveBeenNthCalledWith(2, collectionRequest)
+    expect(routeHandlerMocks.handleEstimateProductsRoutePost).toHaveBeenNthCalledWith(1, collectionRequest)
+    expect(routeHandlerMocks.handleEstimateProductsRoutePost).toHaveBeenNthCalledWith(2, collectionRequest)
+    expect(routeHandlerMocks.handleEstimateProductRoutePatch).toHaveBeenNthCalledWith(
+      1,
+      detailRequest,
+      context
+    )
+    expect(routeHandlerMocks.handleEstimateProductRoutePatch).toHaveBeenNthCalledWith(
+      2,
+      detailRequest,
+      context
+    )
+    expect(routeHandlerMocks.handleEstimateProductRouteDelete).toHaveBeenNthCalledWith(
+      1,
+      detailRequest,
+      context
+    )
+    expect(routeHandlerMocks.handleEstimateProductRouteDelete).toHaveBeenNthCalledWith(
+      2,
+      detailRequest,
+      context
     )
   })
 })

@@ -1,4 +1,5 @@
 export const QUOTE_PRODUCT_STATUSES = ['Active', 'Inactive', 'Archived'] as const
+export const QUOTE_PRODUCT_STATUS_FILTERS = ['active', 'inactive', 'archived', 'all'] as const
 export const QUOTE_PRODUCT_FAMILIES = ['Paint', 'Primer'] as const
 export const QUOTE_PRODUCT_SHEEN_OPTIONS = [
   'Eggshell',
@@ -17,6 +18,7 @@ export const QUOTE_PRODUCT_SCOPE_OPTIONS = [
 ] as const
 
 export type ProductStatus = (typeof QUOTE_PRODUCT_STATUSES)[number]
+export type QuoteProductStatusFilter = (typeof QUOTE_PRODUCT_STATUS_FILTERS)[number]
 export type ProductFamily = (typeof QUOTE_PRODUCT_FAMILIES)[number]
 export type QuoteProductSheen = (typeof QUOTE_PRODUCT_SHEEN_OPTIONS)[number]
 export type QuoteProductScope = (typeof QUOTE_PRODUCT_SCOPE_OPTIONS)[number]
@@ -109,6 +111,7 @@ const QUOTE_PRODUCT_SCOPE_SET = new Set<string>(QUOTE_PRODUCT_SCOPE_OPTIONS)
 const QUOTE_PRODUCT_FAMILY_SET = new Set<string>(QUOTE_PRODUCT_FAMILIES)
 const QUOTE_PRODUCT_SHEEN_SET = new Set<string>(QUOTE_PRODUCT_SHEEN_OPTIONS)
 const QUOTE_PRODUCT_STATUS_SET = new Set<string>(QUOTE_PRODUCT_STATUSES)
+const QUOTE_PRODUCT_STATUS_FILTER_SET = new Set<string>(QUOTE_PRODUCT_STATUS_FILTERS)
 
 const EMPTY_QUOTE_PRODUCT_DRAFT: QuoteProductDraft = {
   name: '',
@@ -127,6 +130,28 @@ const EMPTY_QUOTE_PRODUCT_DRAFT: QuoteProductDraft = {
 
 export function createEmptyQuoteProductDraft(): QuoteProductDraft {
   return { ...EMPTY_QUOTE_PRODUCT_DRAFT }
+}
+
+export function isQuoteProductStatus(value: string | null | undefined): value is ProductStatus {
+  return QUOTE_PRODUCT_STATUS_SET.has(String(value ?? '').trim())
+}
+
+export function normalizeQuoteProductStatus(
+  value: string | null | undefined,
+  fallback: ProductStatus = 'Active'
+): ProductStatus {
+  const normalized = String(value ?? '').trim()
+  return isQuoteProductStatus(normalized) ? normalized : fallback
+}
+
+export function normalizeQuoteProductStatusFilter(
+  value: string | null | undefined,
+  fallback: QuoteProductStatusFilter = 'active'
+): QuoteProductStatusFilter {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+  return QUOTE_PRODUCT_STATUS_FILTER_SET.has(normalized) ? (normalized as QuoteProductStatusFilter) : fallback
 }
 
 export function quoteProductRowToDraft(product: QuoteProductRow): QuoteProductDraft {

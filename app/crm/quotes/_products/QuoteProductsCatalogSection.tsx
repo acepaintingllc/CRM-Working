@@ -23,6 +23,16 @@ export function QuoteProductsCatalogSection({
         placeholder={`Search ${controller.catalogVm.activeFamily.toLowerCase()} products...`}
         actions={
           <>
+            <select
+              className="ace-crm-input min-w-[120px] text-sm"
+              value={controller.catalogVm.statusFilter}
+              onChange={(event) => controller.actions.setStatusFilter(event.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="archived">Archived</option>
+            </select>
             {controller.catalogVm.families.map((family) => (
               <CrmButton
                 key={family}
@@ -42,10 +52,13 @@ export function QuoteProductsCatalogSection({
         description="Select a product row from the current family to edit its defaults and pricing."
       >
         <div className="grid gap-3">
+          <CrmButton type="button" tone="secondary" onClick={controller.actions.startCreate}>
+            New product
+          </CrmButton>
           {controller.catalogVm.filtered.length === 0 ? (
             <CrmEmptyState
               title="No products found"
-              description="Try a different search or family filter."
+              description="Try a different search, family, or status filter."
             />
           ) : (
             controller.catalogVm.filtered.map((product) => (

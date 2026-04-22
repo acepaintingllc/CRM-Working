@@ -3,8 +3,8 @@ import {
   handleEstimateProductsRoutePost,
 } from '@/lib/server/estimateProductRoutes'
 
-export async function GET() {
-  return handleEstimateProductsRouteGet()
+export async function GET(request: Request) {
+  return handleEstimateProductsRouteGet(request)
 }
 
 export async function POST(request: Request) {

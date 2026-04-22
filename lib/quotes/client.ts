@@ -1,21 +1,16 @@
 'use client'
 
 import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
-import type { QuoteProductPayload } from '@/lib/quotes/productsForm'
+import type {
+  QuoteProductPayload,
+  QuoteProductStatusFilter,
+} from '@/lib/quotes/productsForm'
 import type { CreateQuoteVersionInput } from '@/lib/quotes/versionCreation'
 import type { QuoteDefaults } from '@/lib/settings/types'
 import type {
   RatesFlagsMutationAction,
   RatesFlagsPayload,
 } from '@/types/estimator/ratesFlags'
-
-export {
-  loadCustomerSendPage,
-  saveCustomerSendDraft,
-  submitCustomerSend,
-  type CustomerSendMutationResponse,
-  type CustomerSendVersion,
-} from '@/lib/customer-send/client'
 
 export async function loadQuoteHome<T>() {
   return loadData<T>('/api/quotes/home', { cache: 'no-store' })
@@ -40,8 +35,18 @@ export async function deleteQuoteVersion(id: string) {
   })
 }
 
-export async function loadQuoteProducts<T>() {
-  return loadData<T>('/api/quotes/products', { cache: 'no-store' })
+export async function loadQuoteProducts<T>(options: { status: QuoteProductStatusFilter }) {
+  return loadData<T>(`/api/quotes/products?status=${encodeURIComponent(options.status)}`, {
+    cache: 'no-store',
+  })
+}
+
+export async function createQuoteProduct<T>(input: QuoteProductPayload) {
+  return requestApi<ApiMutationEnvelope<T>>('/api/quotes/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
 }
 
 export async function loadQuoteCatalogs<T>(id: string, options?: { v2?: boolean }) {

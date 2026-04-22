@@ -20,41 +20,85 @@ describe('useQuoteRatesPage', () => {
   })
 
   it('loads, filters, duplicates, and saves dense rates rows', async () => {
-    loadRatesFlags.mockResolvedValue({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
-        {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [
-            { key: 'display_name', label: 'Name' },
-            { key: 'active', label: 'Status' },
-          ],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
-            { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
-          ],
-          rows: [
-            {
-              id: 'wall-rate-1',
-              display_name: 'Standard walls',
-              notes: '',
-              active: true,
-              sqft_per_hr: '150',
-              helper_allowed: 'Y',
-            },
-          ],
-        },
-      ],
-    })
+    loadRatesFlags
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 2,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [
+              { key: 'display_name', label: 'Name' },
+              { key: 'active', label: 'Status' },
+            ],
+            fields: [
+              { key: 'id', label: 'ID', type: 'text', required: true },
+              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+              { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
+              { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
+            ],
+            rows: [
+              {
+                id: 'wall-rate-1',
+                display_name: 'Standard walls',
+                notes: '',
+                active: true,
+                sqft_per_hr: '150',
+                helper_allowed: 'Y',
+              },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 2,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [
+              { key: 'display_name', label: 'Name' },
+              { key: 'active', label: 'Status' },
+            ],
+            fields: [
+              { key: 'id', label: 'ID', type: 'text', required: true },
+              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+              { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
+              { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
+            ],
+            rows: [
+              {
+                id: 'wall-rate-1',
+                display_name: 'Standard walls',
+                notes: '',
+                active: true,
+                sqft_per_hr: '150',
+                helper_allowed: 'Y',
+              },
+              {
+                id: 'wall-rate-1_COPY',
+                display_name: 'Duplicated walls',
+                notes: '',
+                active: true,
+                sqft_per_hr: '175.5',
+                helper_allowed: 'N',
+              },
+            ],
+          },
+        ],
+      })
     mutateRatesFlags.mockResolvedValue({ data: true })
 
     const { result } = renderHook(() => useQuoteRatesPage())
@@ -71,6 +115,7 @@ describe('useQuoteRatesPage', () => {
     expect(result.current.filteredRows).toHaveLength(1)
 
     act(() => {
+      result.current.setSearch('')
       result.current.startDuplicate()
     })
 
@@ -107,6 +152,10 @@ describe('useQuoteRatesPage', () => {
       tone: 'success',
       message: 'Created Wall Production.',
     })
+    await waitFor(() => {
+      expect(result.current.selectedId).toBe('wall-rate-1_COPY')
+    })
+    expect(result.current.selectedRow?.id).toBe('wall-rate-1_COPY')
   })
 
   it('exposes validation state instead of a generic error for invalid drafts', async () => {
@@ -205,6 +254,69 @@ describe('useQuoteRatesPage', () => {
     await waitFor(() => {
       expect(result.current.uiState.loadError).toBeNull()
     })
+  })
+
+  it('keeps an explicit selection when reload is asked to retain a row id', async () => {
+    loadRatesFlags
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 2,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [],
+            fields: [],
+            rows: [
+              { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
+              { id: 'wall-rate-2', display_name: 'Tall walls', notes: '', active: true },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 2,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [],
+            fields: [],
+            rows: [
+              { id: 'wall-rate-2', display_name: 'Tall walls', notes: '', active: true },
+              { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
+            ],
+          },
+        ],
+      })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.setSelectedId('wall-rate-2')
+    })
+
+    await act(async () => {
+      await result.current.actions.reload('wall-rate-2')
+    })
+
+    expect(result.current.selectedId).toBe('wall-rate-2')
+    expect(result.current.selectedRow?.id).toBe('wall-rate-2')
   })
 
   it('hides stale success notices behind validation and replaces them on mutation failure', async () => {

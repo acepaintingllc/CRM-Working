@@ -6,6 +6,7 @@ import {
   buildCustomerSendComposerDraft,
   customerSendUrl,
   deriveCustomerSendLabels,
+  normalizeCustomerSendVersion,
   useCustomerSendWorkflow,
 } from '../customerSendWorkflow'
 
@@ -147,6 +148,16 @@ describe('customerSendWorkflow', () => {
     )
     expect(result.current.publicUrl).toBe('https://example.test/quote')
     expect(result.current.message).toBe('Quote sent.')
+    expect(result.current.isLive).toBe(true)
+    expect(result.current.hasLiveLink).toBe(true)
+    expect(result.current.version).toEqual({
+      status: 'sent',
+      sent_at: '2026-04-22T12:00:00.000Z',
+      viewed_at: null,
+      accepted_at: null,
+      declined_at: null,
+      public_token: null,
+    })
   })
 
   it('uses quote route overrides when the alias family is provided', async () => {
@@ -171,5 +182,110 @@ describe('customerSendWorkflow', () => {
     expect(loadCustomerSendPage).toHaveBeenCalledWith(
       '/api/quotes/estimate-1/customer-send?v2=1'
     )
+  })
+
+  it('distinguishes test send from live send state transitions', async () => {
+    loadCustomerSendPage.mockResolvedValue(basePayload)
+    submitCustomerSend.mockResolvedValue({
+      version: { viewed_at: '2026-04-23T12:00:00.000Z' },
+    })
+
+    const { result } = renderHook(() =>
+      useCustomerSendWorkflow({
+        estimateId: 'estimate-1',
+        catalogSource: 'v2' as const,
+        buildForm: buildCustomerSendComposerDraft,
+        buildDocument: (data) => data.document,
+        draftPayload: (form) => form,
+        loadErrorMessage: 'Unable to load quote send page',
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.form?.title).toBe('Kitchen Quote')
+    })
+
+    await act(async () => {
+      await result.current.submit('test')
+    })
+
+    expect(result.current.message).toBe('Test message sent.')
+    expect(result.current.isLive).toBe(false)
+    expect(result.current.hasLiveLink).toBe(false)
+    expect(result.current.version).toEqual({
+      status: 'draft',
+      sent_at: null,
+      viewed_at: '2026-04-23T12:00:00.000Z',
+      accepted_at: null,
+      declined_at: null,
+      public_token: null,
+    })
+  })
+
+  it('supports hard reloads and clears prior status messages', async () => {
+    loadCustomerSendPage
+      .mockResolvedValueOnce(basePayload)
+      .mockResolvedValueOnce({
+        ...basePayload,
+        public_url: 'https://example.test/quote/reloaded',
+        version: {
+          status: 'sent',
+          sent_at: '2026-04-23T08:00:00.000Z',
+          public_token: 'reloaded-token',
+        },
+      })
+    saveCustomerSendDraft.mockResolvedValue({
+      public_url: 'https://example.test/quote',
+      version: { status: 'draft' },
+    })
+
+    const { result } = renderHook(() =>
+      useCustomerSendWorkflow({
+        estimateId: 'estimate-1',
+        catalogSource: 'v2' as const,
+        buildForm: buildCustomerSendComposerDraft,
+        buildDocument: (data) => data.document,
+        draftPayload: (form) => form,
+        loadErrorMessage: 'Unable to load quote send page',
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.form?.title).toBe('Kitchen Quote')
+    })
+
+    await act(async () => {
+      await result.current.persistDraft()
+    })
+    expect(result.current.message).toBe('Draft saved.')
+
+    await act(async () => {
+      await result.current.reload({ hard: true })
+    })
+
+    expect(result.current.message).toBeNull()
+    expect(result.current.error).toBeNull()
+    expect(result.current.publicUrl).toBe('https://example.test/quote/reloaded')
+    expect(result.current.version).toEqual({
+      status: 'sent',
+      sent_at: '2026-04-23T08:00:00.000Z',
+      viewed_at: null,
+      accepted_at: null,
+      declined_at: null,
+      public_token: 'reloaded-token',
+    })
+  })
+
+  it('fills missing mutation version fields from canonical defaults', () => {
+    expect(
+      normalizeCustomerSendVersion({ viewed_at: '2026-04-23T08:00:00.000Z' }, 'sent')
+    ).toEqual({
+      status: 'sent',
+      sent_at: null,
+      viewed_at: '2026-04-23T08:00:00.000Z',
+      accepted_at: null,
+      declined_at: null,
+      public_token: null,
+    })
   })
 })
