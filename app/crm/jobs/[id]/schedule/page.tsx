@@ -10,17 +10,16 @@ import StageEmailModal, {
   type StageEmailSentResult,
   type StageEmailStage,
 } from '@/app/crm/jobs/_components/StageEmailModal'
-import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   addScheduleRow,
+  addSchedulesToCalendar,
   deleteScheduleRow,
-  fetchJobDetail,
   fetchJobSchedules,
-  getResponseErrorMessage,
-  parseResponseBody,
+  type JobDetail,
   type JobScheduleMeta,
   type ScheduleRow,
-} from '@/lib/jobs/actions'
+} from '@/lib/jobs/client'
+import { fetchJobDetail } from '@/lib/jobs/actions'
 import {
   addLocalDateTimeHours,
   next8amLocalDateTimeValue,
@@ -35,12 +34,6 @@ import {
   jobsLabelClassName,
   jobsPageShellClassName,
 } from '@/lib/jobs/uiClasses'
-
-type CalendarAddResult = {
-  scheduleId: string
-  eventId?: string | null
-  skipped?: boolean
-}
 
 const iconSizeSm = 16
 const iconSizeMd = 18
@@ -74,7 +67,7 @@ export default function JobSchedulePage() {
   const loadJobMeta = async () => {
     if (!id || typeof id !== 'string') return null
     const detail = await fetchJobDetail(id).catch(() => null)
-    const nextMeta = (detail?.job ?? null) as JobScheduleMeta | null
+    const nextMeta = (detail?.job ?? null) as (JobDetail & JobScheduleMeta) | null
     setJobMeta(nextMeta)
     return nextMeta
   }
@@ -87,7 +80,7 @@ export default function JobSchedulePage() {
       try {
         const [schedules, detail] = await Promise.all([fetchJobSchedules(id), fetchJobDetail(id)])
         setRows(schedules)
-        setJobMeta((detail.job ?? null) as JobScheduleMeta | null)
+        setJobMeta((detail.job ?? null) as (JobDetail & JobScheduleMeta) | null)
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Failed to load schedule.')
         setRows([])
@@ -160,26 +153,25 @@ export default function JobSchedulePage() {
     }
     setAddingCalendar(true)
     setError(null)
-    const res = await authedFetch(`/api/jobs/${id}/schedules/add-to-calendar`, { method: 'POST' })
-    const payload = await parseResponseBody(res)
-    setAddingCalendar(false)
-    if (!res.ok) {
-      setError(getResponseErrorMessage(res, payload))
-      return
-    }
-    const events = ((payload.json as { events?: CalendarAddResult[] } | null)?.events ?? []) as CalendarAddResult[]
-    if (events.length) {
-      setRows((prev) =>
-        prev.map((row) => {
-          const found = events.find((event) => event.scheduleId === row.id)
-          if (!found || found.skipped) return row
-          return {
-            ...row,
-            calendar_event_id: found.eventId ?? row.calendar_event_id,
-            calendar_added_at: new Date().toISOString(),
-          }
-        })
-      )
+    try {
+      const events = await addSchedulesToCalendar(id)
+      if (events.length) {
+        setRows((prev) =>
+          prev.map((row) => {
+            const found = events.find((event) => event.scheduleId === row.id)
+            if (!found || found.skipped) return row
+            return {
+              ...row,
+              calendar_event_id: found.eventId ?? row.calendar_event_id,
+              calendar_added_at: new Date().toISOString(),
+            }
+          })
+        )
+      }
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : 'Failed to add schedules to calendar.')
+    } finally {
+      setAddingCalendar(false)
     }
   }
 

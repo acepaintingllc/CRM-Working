@@ -14,7 +14,7 @@ function createResponse(ok: boolean, payload: unknown, statusText = ok ? 'OK' : 
   return {
     ok,
     statusText,
-    json: async () => payload,
+    text: async () => JSON.stringify(payload),
   } as Response
 }
 

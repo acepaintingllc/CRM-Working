@@ -2,7 +2,11 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { authedFetch } from '@/lib/auth/authedFetch'
+import {
+  deleteQuoteProduct,
+  loadQuoteProducts,
+  updateQuoteProduct,
+} from '@/lib/quotes/client'
 
 type ProductStatus = 'Active' | 'Inactive' | 'Archived'
 type ProductFamily = 'Paint' | 'Primer'
@@ -426,12 +430,7 @@ export default function ProductsPage() {
     const loadProducts = async () => {
       try {
         setLoading(true)
-        const res = await authedFetch('/api/quotes/products', { cache: 'no-store' })
-        if (!res.ok) {
-          throw new Error(`Failed to load products: ${res.statusText}`)
-        }
-        const data = await res.json()
-        const prods = data.products || []
+        const prods = await loadQuoteProducts<ProductRow[]>()
         setProducts(prods)
         // Select first product of active family, or first product overall
         const firstOfFamily = prods.find((p: ProductRow) => p.family === activeFamily)
@@ -476,16 +475,8 @@ export default function ProductsPage() {
     if (!selected) return
     try {
       setSaving(true)
-      const res = await authedFetch(`/api/quotes/products/${selected.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formState),
-      })
-      if (!res.ok) {
-        throw new Error(`Failed to save product: ${res.statusText}`)
-      }
-      const updated = await res.json()
-      setProducts((prev) => prev.map((p) => (p.id === selected.id ? updated.product : p)))
+      const updated = await updateQuoteProduct<ProductRow>(selected.id, formState)
+      setProducts((prev) => prev.map((p) => (p.id === selected.id ? updated.data : p)))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save product')
     } finally {
@@ -498,12 +489,7 @@ export default function ProductsPage() {
     if (!window.confirm(`Delete "${selected.name}"?`)) return
     try {
       setSaving(true)
-      const res = await authedFetch(`/api/quotes/products/${selected.id}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        throw new Error(`Failed to delete product: ${res.statusText}`)
-      }
+      await deleteQuoteProduct(selected.id)
       setProducts((prev) => prev.filter((p) => p.id !== selected.id))
       setSelectedId(null)
     } catch (err) {

@@ -30,7 +30,7 @@ New persisted settings pages should use:
 
 1. A typed domain contract in `lib/settings`
 2. A behavior-specific API route under `app/api/settings`
-3. `useSettingsResource` for load/save/dirty/error state
+3. `useEditableResource` for load/save/dirty/error state
 4. Shared settings primitives in `app/crm/settings/_components`
 
 ## Ownership Boundaries

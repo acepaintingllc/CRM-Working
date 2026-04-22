@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadCrmHomeData, loadCrmHomeSources } from '../home/loader.ts'
-import { applyCrmHomeSourcePatch, createInitialCrmHomeLoadState } from '../home/state.ts'
+import { applyCrmHomeSourcePatch } from '../home/state.ts'
 import type { CrmHomeFetchResponse, CrmHomeSourceErrorKey } from '../home/types.ts'
 
 type FetchMap = Partial<Record<CrmHomeSourceErrorKey, Omit<CrmHomeFetchResponse, 'source'>>>
@@ -50,7 +50,7 @@ test('loadCrmHomeData resolves successful source data into a ready home state', 
         customers: {
           ok: true,
           payload: {
-            customers: [
+            data: [
               {
                 id: 'customer-1',
                 name: 'Alice Jones',
@@ -118,6 +118,8 @@ test('loadCrmHomeData resolves successful source data into a ready home state', 
   assert.equal(state.data.signals.calendarTodayEvents.length, 1)
   assert.equal(state.data.signals.notesReminders.length, 1)
   assert.equal(state.sources.jobs.availability, 'available')
+  assert.equal(state.sources.customers.availability, 'available')
+  assert.equal(state.data.customers.length, 1)
   assert.equal(calls.some((call) => call.source === 'calendarEvents'), true)
   assert.deepEqual(logCalls, [])
 })

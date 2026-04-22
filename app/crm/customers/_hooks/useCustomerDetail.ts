@@ -2,9 +2,8 @@
 
 import { useCallback, useState } from 'react'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
-import { authedFetch } from '@/lib/auth/authedFetch'
+import { deleteCustomer as deleteCustomerRequest, loadCustomerDetail } from '@/lib/customers/client'
 import type { CustomerDetail } from '@/lib/customers/types'
-import { readJsonResponse } from '../_lib/http'
 
 const emptyCustomer = null
 
@@ -19,29 +18,22 @@ export function useCustomerDetail(id: string | undefined) {
         throw new Error('Missing customer id in URL.')
       }
 
-      const response = await authedFetch(`/api/customers/${id}`, { cache: 'no-store' })
-      const payload = await readJsonResponse<{ customer?: CustomerDetail; error?: string }>(response)
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? response.statusText)
-      }
-
-      return payload?.customer ?? null
+      return loadCustomerDetail(id)
     },
     getErrorMessage: (error: unknown) =>
       error instanceof Error ? error.message : 'Failed to load customer.',
     reloadKey: id,
   })
 
-  const loadCustomer = customerResource.refresh
+  const { refresh: loadCustomer, setError: setResourceError } = customerResource
   const error = actionError ?? customerResource.error
   const setError = useCallback(
     (value: string | null) => {
       setActionError(value)
       if (value) return
-      customerResource.setError(null)
+      setResourceError(null)
     },
-    [customerResource.setError]
+    [setResourceError]
   )
 
   const deleteCustomer = useCallback(async () => {
@@ -51,14 +43,9 @@ export function useCustomerDetail(id: string | undefined) {
     }
 
     setActionError(null)
+    setDeleting(true)
     try {
-      const response = await authedFetch(`/api/customers/${id}`, { method: 'DELETE' })
-      const payload = await readJsonResponse<{ error?: string }>(response)
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? response.statusText)
-      }
-
+      await deleteCustomerRequest(id)
       return true
     } catch (deleteError: unknown) {
       setActionError(deleteError instanceof Error ? deleteError.message : 'Unable to delete customer.')

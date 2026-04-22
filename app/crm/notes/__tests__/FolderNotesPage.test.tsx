@@ -27,9 +27,11 @@ describe('FolderNotesPage', () => {
     mockUseNotesExplorer.mockReturnValue({
       folder: { id: 'folder-1', name: 'General', sort_order: 0, created_at: '', updated_at: '', org_id: 'org', note_count: 0 },
       folders: [],
-      notes: [],
+      notes: [{ id: 'note-1', title: 'Note', body: 'Body', folder_id: 'folder-1', status: 'active', starred: false, created_by: null, created_at: '', updated_at: '', archived_at: null, org_id: 'org' }],
       loading: false,
+      loadingMore: false,
       saving: false,
+      hasMore: true,
       error: null,
       search: '',
       setSearch: vi.fn(),
@@ -38,6 +40,7 @@ describe('FolderNotesPage', () => {
       createFolder: vi.fn(),
       renameFolder: vi.fn(),
       deleteFolder: vi.fn(),
+      loadMore: vi.fn(),
       modalState: {
         open: true,
         mode: 'delete_choice',
@@ -60,5 +63,6 @@ describe('FolderNotesPage', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Delete Folder' })).toBeTruthy()
     expect(screen.getByText(/still contains 3 notes/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Load More Notes' })).toBeTruthy()
   })
 })

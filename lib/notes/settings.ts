@@ -1,7 +1,9 @@
 import { supabaseAdmin } from '@/lib/server/org'
 import type { NotesSettingsRow } from '@/lib/notes/types'
 import { getOrgNotesDefaults } from '@/lib/notes/server'
-import { parseHHMM, resolveTimeZone } from '@/lib/notes/time'
+import { buildNotesSettingsDefaults } from '@/lib/notes/settingsDefaults'
+
+export { buildNotesSettingsDefaults } from '@/lib/notes/settingsDefaults'
 
 export async function getNotesSettings(orgId: string) {
   const { data, error } = await supabaseAdmin
@@ -22,26 +24,13 @@ export async function getNotesSettingsWithDefaults(params: {
     getOrgNotesDefaults(params.orgId),
   ])
 
-  const timezone = resolveTimeZone(settings?.timezone ?? orgDefaults.timezone)
-  const showUpcomingDays =
-    settings?.show_upcoming_days != null
-      ? Math.max(0, Math.min(14, settings.show_upcoming_days))
-      : 3
-  const parsedTime = parseHHMM(settings?.daily_summary_time_local ?? null)
-  const dailySummaryTimeLocal = parsedTime
-    ? `${String(parsedTime.hour).padStart(2, '0')}:${String(parsedTime.minute).padStart(2, '0')}`
-    : '06:00'
-
   return {
     settings,
-    defaults: {
-      orgName: orgDefaults.name,
-      timezone,
-      showUpcomingDays,
-      dailySummaryTimeLocal,
-      dailySummaryEmailTo: settings?.daily_summary_email_to ?? orgDefaults.businessEmail ?? null,
-      senderUserId: settings?.sender_user_id ?? params.fallbackUserId ?? null,
-    },
+    defaults: buildNotesSettingsDefaults({
+      settings,
+      orgDefaults,
+      fallbackUserId: params.fallbackUserId,
+    }),
   }
 }
 

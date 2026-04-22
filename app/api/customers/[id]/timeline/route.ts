@@ -28,7 +28,7 @@ export async function GET(
 
   return serviceResultResponse(
     await listCustomerTimeline(session.session.orgId, customerId.value),
-    (events) => ({ events })
+    (events) => ({ data: events })
   )
 }
 
@@ -56,6 +56,9 @@ export async function POST(
       customerId.value,
       input.data
     ),
-    (event) => ({ ok: true, event })
+    (event) => ({
+      data: event,
+      notice: 'Timeline note saved.',
+    })
   )
 }

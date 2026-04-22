@@ -1,6 +1,7 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
+import { loadData } from '@/lib/client/api'
+import { createQuoteVersion, loadQuoteList } from '@/lib/quotes/client'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
@@ -68,23 +69,23 @@ export default function EstimatorV2CreatePage() {
     const load = async () => {
       setLoading(true)
       setError(null)
+      try {
+        const [jobsPayload, estimatesPayload] = await Promise.all([
+          loadData<JobRow[]>('/api/jobs', { cache: 'no-store' }),
+          loadQuoteList<{ estimates?: EstimateRow[] }>(),
+        ])
 
-      const [jobsRes, estimatesRes] = await Promise.all([
-        authedFetch('/api/jobs', { cache: 'no-store' }),
-        authedFetch('/api/quotes', { cache: 'no-store' }),
-      ])
+        if (!active) return
 
-      const [jobsPayload, estimatesPayload] = await Promise.all([
-        jobsRes.json().catch(() => null),
-        estimatesRes.json().catch(() => null),
-      ])
-
-      if (!active) return
-
-      const found = ((jobsPayload?.jobs ?? []) as JobRow[]).find((j) => j.id === jobId) ?? null
-      setJob(found)
-      setEstimates((estimatesPayload?.estimates ?? []) as EstimateRow[])
-      setLoading(false)
+        const found = jobsPayload.find((j) => j.id === jobId) ?? null
+        setJob(found)
+        setEstimates((estimatesPayload?.estimates ?? []) as EstimateRow[])
+      } catch (error) {
+        if (!active) return
+        setError(error instanceof Error ? error.message : 'Failed to load quote creation data.')
+      } finally {
+        if (active) setLoading(false)
+      }
     }
 
     void load()
@@ -104,26 +105,19 @@ export default function EstimatorV2CreatePage() {
     setCreating(true)
     setError(null)
 
-    const response = await authedFetch('/api/quotes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      const payload = await createQuoteVersion<{ id: string }>({
         job_id: job.id,
         customer_id: job.customer_id,
         version_kind: versionKind,
         ...(versionName.trim() ? { version_name: versionName.trim() } : {}),
-      }),
-    })
-
-    const payload = await response.json().catch(() => null)
-    setCreating(false)
-
-    if (!response.ok) {
-      setError(payload?.error ?? response.statusText)
-      return
+      })
+      router.push(`/crm/quotes/${payload.id}`)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to create quote.')
+    } finally {
+      setCreating(false)
     }
-
-    router.push(`/crm/quotes/${payload.id}`)
   }
 
   const mono: React.CSSProperties = { fontFamily: 'var(--v2-mono)' }

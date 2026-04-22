@@ -1,17 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
-import { authedFetch } from '@/lib/auth/authedFetch'
-import { getResponseErrorMessage, parseResponseBody } from '@/lib/jobs/actions'
-import {
-  next8amLocalDateTimeValue,
-  toIsoFromLocalDateTimeValue,
-} from '@/lib/jobs/dateHelpers'
-import { applyTemplate, buildJobEmailTemplateVars } from '@/lib/jobs/emailTemplate'
-import { makeIdempotencyKey } from '@/lib/jobs/idempotency'
-import { JOB_STATUS_OPTIONS, type JobStatus, type StageEmailStage } from '@/lib/jobs/types'
+import { useNewJobPage } from '@/app/crm/jobs/_hooks/useNewJobPage'
+import { JOB_STATUS_OPTIONS, type JobStatus } from '@/lib/jobs/types'
 import {
   jobsButtonAccentClassName,
   jobsButtonSecondaryClassName,
@@ -24,307 +15,54 @@ import {
   jobsTextareaClassName,
 } from '@/lib/jobs/uiClasses'
 
-type CustomerOption = {
-  id: string
-  name: string
-  address: string | null
-  email: string | null
-  phone: string | null
-}
-
-type EmailTemplate = {
-  stage: string
-  subject: string | null
-  body: string | null
-}
-
-function addHours(startIso: string, hours: number) {
-  const date = new Date(startIso)
-  return new Date(date.getTime() + hours * 60 * 60 * 1000).toISOString()
-}
-
 export default function NewJobPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const preselectedCustomerId = searchParams.get('customerId')
-
-  const [customers, setCustomers] = useState<CustomerOption[]>([])
-  const [customerQuery, setCustomerQuery] = useState('')
-  const [customerId, setCustomerId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [createdJobId, setCreatedJobId] = useState<string | null>(null)
-  const [status, setStatus] = useState<JobStatus>('estimate_scheduled')
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [estimateDateLocal, setEstimateDateLocal] = useState('')
-  const [scheduledDateLocal, setScheduledDateLocal] = useState('')
-  const [addEstimateToCalendar, setAddEstimateToCalendar] = useState(true)
-  const [estimateSummary, setEstimateSummary] = useState('')
-  const [estimateLocation, setEstimateLocation] = useState('')
-  const [estimateHours, setEstimateHours] = useState(1)
-  const [addScheduledToCalendar, setAddScheduledToCalendar] = useState(true)
-  const [scheduledSummary, setScheduledSummary] = useState('')
-  const [scheduledLocation, setScheduledLocation] = useState('')
-  const [scheduledHours, setScheduledHours] = useState(8)
-  const [composeStage, setComposeStage] = useState<StageEmailStage | null>(null)
-  const [composeSubject, setComposeSubject] = useState('')
-  const [composeBody, setComposeBody] = useState('')
-  const [composeLoading, setComposeLoading] = useState(false)
-  const [sendingStage, setSendingStage] = useState<string | null>(null)
-
-  const selectedCustomer = useMemo(
-    () => customers.find((customer) => customer.id === customerId) ?? null,
-    [customers, customerId]
-  )
-
-  const filteredCustomers = useMemo(() => {
-    const query = customerQuery.trim().toLowerCase()
-    if (!query) return customers.slice(0, 2)
-    return customers
-      .filter((customer) => {
-        const haystack =
-          `${customer.name} ${customer.email ?? ''} ${customer.phone ?? ''} ${customer.address ?? ''}`.toLowerCase()
-        return haystack.includes(query)
-      })
-      .slice(0, 20)
-  }, [customers, customerQuery])
-
-  useEffect(() => {
-    const loadCustomers = async () => {
-      setLoading(true)
-      setError(null)
-      const response = await authedFetch('/api/customers', { cache: 'no-store' })
-      const payload = await parseResponseBody(response)
-      if (!response.ok) {
-        setError(getResponseErrorMessage(response, payload))
-        setCustomers([])
-        setLoading(false)
-        return
-      }
-      setCustomers(((payload.json as { customers?: CustomerOption[] } | null)?.customers ?? []) as CustomerOption[])
-      setLoading(false)
-    }
-
-    void loadCustomers()
-  }, [])
-
-  useEffect(() => {
-    if (!preselectedCustomerId || customerId) return
-    const match = customers.find((customer) => customer.id === preselectedCustomerId)
-    if (match) {
-      setCustomerId(match.id)
-      setCustomerQuery('')
-    }
-  }, [customerId, customers, preselectedCustomerId])
-
-  useEffect(() => {
-    const customerName = selectedCustomer?.name ?? 'Customer'
-    const location = selectedCustomer?.address ?? ''
-    setEstimateSummary(`Estimate: ${customerName}`)
-    setScheduledSummary(`Job - ${customerName}`)
-    setEstimateLocation(location)
-    setScheduledLocation(location)
-  }, [selectedCustomer?.id, title, selectedCustomer?.name, selectedCustomer?.address])
-
-  useEffect(() => {
-    if (status === 'estimate_scheduled' && !estimateDateLocal) {
-      setEstimateDateLocal(next8amLocalDateTimeValue())
-    }
-    if (status === 'scheduled' && !scheduledDateLocal) {
-      setScheduledDateLocal(next8amLocalDateTimeValue())
-    }
-  }, [status, estimateDateLocal, scheduledDateLocal])
-
-  useEffect(() => {
-    if (status !== 'estimate_scheduled' && composeStage === 'estimate_scheduled') {
-      setComposeStage(null)
-    }
-  }, [composeStage, status])
-
-  const createCalendarEvent = async (args: {
-    summary: string
-    location?: string | null
-    description?: string | null
-    startIso: string
-    endIso: string
-  }) => {
-    const response = await authedFetch('/api/google-calendar/create-event', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        calendar_name: "Austin's work",
-        summary: args.summary,
-        location: args.location ?? undefined,
-        description: args.description ?? undefined,
-        start: args.startIso,
-        end: args.endIso,
-      }),
-    })
-    const payload = await parseResponseBody(response)
-    if (!response.ok) {
-      throw new Error(getResponseErrorMessage(response, payload))
-    }
-    return (payload.json as { event?: unknown } | null)?.event ?? null
-  }
-
-  const openComposer = async (stage: StageEmailStage) => {
-    setComposeStage(stage)
-    setComposeLoading(true)
-    setError(null)
-    const response = await authedFetch('/api/email-templates', { cache: 'no-store' })
-    const payload = await parseResponseBody(response)
-    setComposeLoading(false)
-    if (!response.ok) {
-      setError(getResponseErrorMessage(response, payload))
-      return
-    }
-    const templates = (((payload.json as { templates?: EmailTemplate[] } | null)?.templates ?? []) as EmailTemplate[])
-    const row = templates.find((template) => template.stage === stage)
-    const estimateIso = estimateDateLocal ? toIsoFromLocalDateTimeValue(estimateDateLocal) : null
-    const scheduledIso = scheduledDateLocal ? toIsoFromLocalDateTimeValue(scheduledDateLocal) : null
-    const vars = buildJobEmailTemplateVars({
-      customerName: selectedCustomer?.name ?? '',
-      customerEmail: selectedCustomer?.email ?? '',
-      customerPhone: selectedCustomer?.phone ?? '',
-      customerAddress: selectedCustomer?.address ?? '',
-      jobTitle: title.trim(),
-      estimateDate: estimateIso ? new Date(estimateIso).toLocaleString() : '',
-      scheduledDate: scheduledIso ? new Date(scheduledIso).toLocaleString() : '',
-      scheduledBlocks: scheduledIso ? new Date(scheduledIso).toLocaleString() : '',
-      estimateFileName: '',
-      estimateFileLink: '',
-    })
-    setComposeSubject(applyTemplate(row?.subject ?? '', vars))
-    setComposeBody(applyTemplate(row?.body ?? '', vars))
-  }
-
-  const sendStageEmail = async (
-    jobId: string,
-    stage: StageEmailStage,
-    subject?: string,
-    body?: string
-  ) => {
-    const response = await authedFetch(`/api/jobs/${jobId}/send-stage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        stage,
-        subject,
-        body,
-        idempotency_key: makeIdempotencyKey(stage, jobId),
-      }),
-    })
-    const payload = await parseResponseBody(response)
-    if (!response.ok) {
-      throw new Error(getResponseErrorMessage(response, payload))
-    }
-  }
-
-  const save = async (options?: { sendEstimateScheduled?: boolean }) => {
-    setError(null)
-    setCreatedJobId(null)
-
-    if (!customerId) {
-      setError('Select a customer')
-      return
-    }
-    if (!title.trim()) {
-      setError('Job title is required')
-      return
-    }
-    if (options?.sendEstimateScheduled && status !== 'estimate_scheduled') {
-      setError('Quote scheduled email requires the "Quote scheduled" stage.')
-      return
-    }
-
-    const estimateIso = estimateDateLocal ? toIsoFromLocalDateTimeValue(estimateDateLocal) : null
-    if (estimateDateLocal && !estimateIso) {
-      setError('Quote date/time is invalid')
-      return
-    }
-    if (options?.sendEstimateScheduled && !estimateIso) {
-      setError('Add a quote date/time before sending the email.')
-      return
-    }
-
-    const scheduledIso = scheduledDateLocal ? toIsoFromLocalDateTimeValue(scheduledDateLocal) : null
-    if (scheduledDateLocal && !scheduledIso) {
-      setError('Scheduled date/time is invalid')
-      return
-    }
-
-    setSaving(true)
-    try {
-      const response = await authedFetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_id: customerId,
-          title: title.trim(),
-          description: description.trim() || null,
-          status,
-          estimate_date: status === 'estimate_scheduled' ? estimateIso : null,
-          scheduled_date: status === 'scheduled' ? scheduledIso : null,
-        }),
-      })
-      const payload = await parseResponseBody(response)
-      if (!response.ok) {
-        const parsed = (payload.json as {
-          details?: string
-          hint?: string
-          code?: string
-        } | null) ?? null
-        const message = getResponseErrorMessage(response, payload)
-        const details = parsed?.details ? `\n${parsed.details}` : ''
-        const hint = parsed?.hint ? `\n${parsed.hint}` : ''
-        const code = parsed?.code ? `\n(code ${parsed.code})` : ''
-        throw new Error(`${message}${details}${hint}${code}`)
-      }
-
-      const createdId =
-        ((payload.json as { job?: { id?: string } } | null)?.job?.id ?? null) as string | null
-      setCreatedJobId(createdId)
-
-      if (options?.sendEstimateScheduled) {
-        if (!createdId) throw new Error('Job created without an id; unable to send email.')
-        if (!selectedCustomer?.email) throw new Error('Customer email is missing.')
-        setSendingStage('estimate_scheduled')
-        await sendStageEmail(createdId, 'estimate_scheduled', composeSubject, composeBody)
-        setSendingStage(null)
-      }
-
-      if (status === 'estimate_scheduled' && addEstimateToCalendar && estimateIso) {
-        await createCalendarEvent({
-          summary: estimateSummary || `Estimate: ${selectedCustomer?.name ?? 'Customer'}`,
-          location: estimateLocation || selectedCustomer?.address,
-          description: description.trim() || selectedCustomer?.address || null,
-          startIso: estimateIso,
-          endIso: addHours(estimateIso, Math.max(0.25, estimateHours)),
-        })
-      }
-
-      if (status === 'scheduled' && addScheduledToCalendar && scheduledIso) {
-        await createCalendarEvent({
-          summary: scheduledSummary || `Job - ${selectedCustomer?.name ?? 'Customer'}`,
-          location: scheduledLocation || selectedCustomer?.address,
-          description: description.trim() || selectedCustomer?.address || null,
-          startIso: scheduledIso,
-          endIso: addHours(scheduledIso, Math.max(0.25, scheduledHours)),
-        })
-      }
-
-      router.push('/crm/jobs')
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to create job')
-      setSaving(false)
-      setSendingStage(null)
-      return
-    }
-
-    setSaving(false)
-  }
+  const {
+    customerQuery,
+    setCustomerQuery,
+    customerId,
+    setCustomerId,
+    loading,
+    error,
+    saving,
+    createdJobId,
+    status,
+    setStatus,
+    title,
+    setTitle,
+    description,
+    setDescription,
+    estimateDateLocal,
+    setEstimateDateLocal,
+    scheduledDateLocal,
+    setScheduledDateLocal,
+    addEstimateToCalendar,
+    setAddEstimateToCalendar,
+    estimateSummary,
+    setEstimateSummary,
+    estimateLocation,
+    setEstimateLocation,
+    estimateHours,
+    setEstimateHours,
+    addScheduledToCalendar,
+    setAddScheduledToCalendar,
+    scheduledSummary,
+    setScheduledSummary,
+    scheduledLocation,
+    setScheduledLocation,
+    scheduledHours,
+    setScheduledHours,
+    composeStage,
+    setComposeStage,
+    composeSubject,
+    setComposeSubject,
+    composeBody,
+    setComposeBody,
+    composeLoading,
+    sendingStage,
+    filteredCustomers,
+    openComposer,
+    save,
+  } = useNewJobPage()
 
   return (
     <div className={`${jobsPageShellClassName} max-w-[900px]`}>

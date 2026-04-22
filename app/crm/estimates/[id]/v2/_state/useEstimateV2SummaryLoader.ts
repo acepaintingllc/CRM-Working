@@ -3,6 +3,11 @@
 import { useEffect, useEffectEvent } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import {
+  getApiErrorMessage,
+  parseApiResponse,
+  type ApiDataEnvelope,
+} from '@/lib/client/api'
+import {
   createEstimateV2Error,
   type EstimateV2Error,
 } from '@/lib/estimator/errors'
@@ -98,7 +103,8 @@ export function useEstimateV2SummaryLoader(estimateId: string, state: SummaryLoa
       state.setError(null)
 
       const res = await authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' })
-      const payload = (await res.json().catch(() => null)) as
+      const parsed = await parseApiResponse(res)
+      const payload = parsed.json as
         | EstimateV2SummaryPageData
         | { error?: string }
         | null
@@ -106,7 +112,8 @@ export function useEstimateV2SummaryLoader(estimateId: string, state: SummaryLoa
       if (!activeRef.current) return
       if (!res.ok || !payload || !('estimate' in payload)) {
         const message =
-          (payload as { error?: string } | null)?.error ?? 'Failed to load estimate'
+          (payload as { error?: string } | null)?.error ??
+          getApiErrorMessage(res, parsed, 'Failed to load estimate')
         console.error('Estimate V2 summary load failed', {
           estimateId,
           operation: 'loadEstimate',
@@ -138,9 +145,12 @@ export function useEstimateV2SummaryLoader(estimateId: string, state: SummaryLoa
       const jobRes = await authedFetch(`/api/jobs/${nextData.estimate.job_id}`, {
         cache: 'no-store',
       })
-      const jobPayload = (await jobRes.json().catch(() => null)) as { job?: EstimateV2JobMeta } | null
+      const jobParsed = await parseApiResponse(jobRes)
+      const jobPayload = jobParsed.json as
+        | ApiDataEnvelope<EstimateV2JobMeta>
+        | null
       if (!activeRef.current) return
-      if (jobRes.ok && jobPayload?.job) state.setJob(jobPayload.job)
+      if (jobRes.ok && jobPayload?.data) state.setJob(jobPayload.data)
 
       state.setLoading(false)
     } catch (error) {

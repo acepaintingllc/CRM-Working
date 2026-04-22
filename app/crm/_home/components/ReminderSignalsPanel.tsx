@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getReminderToneDisplay } from '../display'
 import { DashboardEmptyState } from './primitives/DashboardEmptyState'
 import { DashboardSectionHeader } from './primitives/DashboardSectionHeader'
-import { crmMutedTextStyle, crmTextStyle } from './primitives/tokens'
+import { crmTextStyle } from './primitives/tokens'
 
 type ReminderSignalsPanelProps = {
   panelId: string

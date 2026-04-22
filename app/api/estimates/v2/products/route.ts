@@ -40,7 +40,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ products: data as V2Product[] })
+    return NextResponse.json({ data: data as V2Product[] })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch products'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -84,7 +84,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ product: data as V2Product }, { status: 201 })
+    return NextResponse.json(
+      {
+        data: data as V2Product,
+        notice: 'Product created.',
+      },
+      { status: 201 }
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create product'
     return NextResponse.json({ error: message }, { status: 500 })

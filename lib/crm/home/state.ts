@@ -98,7 +98,13 @@ function readCalendarEvent(value: unknown) {
 }
 
 export function readJobsPayload(payload: unknown): ParserResult<DashboardJob[]> {
-  if (!isRecord(payload) || !Array.isArray(payload.jobs)) {
+  const rows =
+    isRecord(payload) && Array.isArray(payload.jobs)
+      ? payload.jobs
+      : isRecord(payload) && Array.isArray(payload.data)
+        ? payload.data
+        : null
+  if (!rows) {
     return {
       value: [],
       availability: 'invalid',
@@ -106,14 +112,21 @@ export function readJobsPayload(payload: unknown): ParserResult<DashboardJob[]> 
     }
   }
   return {
-    value: payload.jobs.map(readJob).filter((job): job is DashboardJob => job != null),
+    value: rows.map(readJob).filter((job): job is DashboardJob => job != null),
     availability: 'available',
     errorMessage: null,
   }
 }
 
 export function readCustomersPayload(payload: unknown): ParserResult<DashboardCustomer[]> {
-  if (!isRecord(payload) || !Array.isArray(payload.customers)) {
+  const rows =
+    isRecord(payload) && Array.isArray(payload.customers)
+      ? payload.customers
+      : isRecord(payload) && Array.isArray(payload.data)
+        ? payload.data
+        : null
+
+  if (!rows) {
     return {
       value: [],
       availability: 'invalid',
@@ -121,7 +134,7 @@ export function readCustomersPayload(payload: unknown): ParserResult<DashboardCu
     }
   }
   return {
-    value: payload.customers
+    value: rows
       .map(readCustomer)
       .filter((customer): customer is DashboardCustomer => customer != null),
     availability: 'available',

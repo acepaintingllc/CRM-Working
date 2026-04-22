@@ -1,6 +1,14 @@
 'use client'
 
 import { authedFetch } from '@/lib/auth/authedFetch'
+import {
+  createEmptyNoteFormValues,
+  noteFormValuesToPayload,
+  noteResponseToFormValues,
+  withAvailableFolder,
+  type NotesNoteFormValues,
+} from '@/lib/notes/forms/noteForm'
+import { mapNotesFormServerError, useNotesFormState } from '@/lib/notes/forms/shared'
 import type {
   NotesFolderWithCount,
   NotesFoldersResponse,
@@ -18,12 +26,27 @@ type UseNoteFormParams = {
 export function useNoteForm({ open, noteId, folderId: initialFolderId, onSuccess }: UseNoteFormParams) {
   const [folders, setFolders] = useState<NotesFolderWithCount[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [folderId, setFolderId] = useState(initialFolderId ?? '')
-  const [starred, setStarred] = useState(false)
+  const [initialValues, setInitialValues] = useState<NotesNoteFormValues>(createEmptyNoteFormValues(initialFolderId))
+  const form = useNotesFormState({
+    initialValues,
+    prepareSubmit: noteFormValuesToPayload,
+    onSubmit: async (payload) => {
+      const res = await authedFetch(noteId ? `/api/notes/notes/${noteId}` : '/api/notes/notes', {
+        method: noteId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const responsePayload = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(mapNotesFormServerError(responsePayload, 'Unable to save note.'))
+      }
+
+      const note = (responsePayload as NotesNoteResponse | null)?.note ?? null
+      onSuccess(note?.id ?? null)
+    },
+    fallbackMessage: 'Unable to save note.',
+  })
+  const { setError } = form
 
   useEffect(() => {
     if (!open) return
@@ -40,35 +63,30 @@ export function useNoteForm({ open, noteId, folderId: initialFolderId, onSuccess
       const foldersPayload = await foldersRes.json().catch(() => null)
       if (cancelled) return
       if (!foldersRes.ok) {
-        setError(foldersPayload?.error ?? 'Unable to load folders.')
+        setError(mapNotesFormServerError(foldersPayload, 'Unable to load folders.'))
         setLoading(false)
         return
       }
-      setFolders((foldersPayload as NotesFoldersResponse | null)?.folders ?? [])
+      const nextFolders = (foldersPayload as NotesFoldersResponse | null)?.folders ?? []
+      setFolders(nextFolders)
 
       if (noteId) {
         const noteRes = responses[1]
         const notePayload = await noteRes.json().catch(() => null)
         if (!noteRes.ok) {
-          setError(notePayload?.error ?? 'Unable to load note.')
+          setError(mapNotesFormServerError(notePayload, 'Unable to load note.'))
           setLoading(false)
           return
         }
-        const note = (notePayload as NotesNoteResponse | null)?.note ?? null
-        if (!note) {
+        const values = noteResponseToFormValues(notePayload as NotesNoteResponse | null)
+        if (!values) {
           setError('Note not found.')
           setLoading(false)
           return
         }
-        setTitle(note.title)
-        setBody(note.body)
-        setFolderId(note.folder_id ?? '')
-        setStarred(note.starred)
+        setInitialValues(withAvailableFolder(values, nextFolders))
       } else {
-        setTitle('')
-        setBody('')
-        setFolderId(initialFolderId ?? '')
-        setStarred(false)
+        setInitialValues(withAvailableFolder(createEmptyNoteFormValues(initialFolderId), nextFolders))
       }
 
       setLoading(false)
@@ -78,51 +96,27 @@ export function useNoteForm({ open, noteId, folderId: initialFolderId, onSuccess
     return () => {
       cancelled = true
     }
-  }, [initialFolderId, noteId, open])
+  }, [initialFolderId, noteId, open, setError])
 
-  const handleSave = async () => {
-    if (!title.trim()) {
-      setError('Note title is required.')
-      return
-    }
-
-    setSaving(true)
-    setError(null)
-    const res = await authedFetch(noteId ? `/api/notes/notes/${noteId}` : '/api/notes/notes', {
-      method: noteId ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: title.trim(),
-        body,
-        folder_id: folderId || null,
-        starred,
-      }),
-    })
-    const payload = await res.json().catch(() => null)
-    setSaving(false)
-
-    if (!res.ok) {
-      setError(payload?.error ?? 'Unable to save note.')
-      return
-    }
-
-    const note = (payload as NotesNoteResponse | null)?.note ?? null
-    onSuccess(note?.id ?? null)
+  const values = form.values
+  const updateField = <K extends keyof NotesNoteFormValues>(field: K, value: NotesNoteFormValues[K]) => {
+    form.setValues((current) => ({ ...current, [field]: value }))
   }
 
   return {
     folders,
     loading,
-    saving,
-    error,
-    title,
-    setTitle,
-    body,
-    setBody,
-    folderId,
-    setFolderId,
-    starred,
-    setStarred,
-    handleSave,
+    saving: form.saving,
+    error: form.error,
+    dirty: form.dirty,
+    title: values.title,
+    setTitle: (value: string) => updateField('title', value),
+    body: values.body,
+    setBody: (value: string) => updateField('body', value),
+    folderId: values.folderId,
+    setFolderId: (value: string) => updateField('folderId', value),
+    starred: values.starred,
+    setStarred: (value: boolean) => updateField('starred', value),
+    handleSave: form.submit,
   }
 }

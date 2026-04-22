@@ -23,6 +23,15 @@ vi.mock('next/link', () => ({
   ),
 }))
 
+function createResponse(payload: unknown, ok = true) {
+  return {
+    ok,
+    status: ok ? 200 : 500,
+    statusText: ok ? 'OK' : 'Server Error',
+    text: vi.fn(async () => JSON.stringify(payload)),
+  }
+}
+
 describe('CompanyProfilePage', () => {
   beforeEach(() => {
     mockAuthedFetch.mockReset()
@@ -34,9 +43,8 @@ describe('CompanyProfilePage', () => {
 
   it('loads, validates, and saves the company profile resource', async () => {
     mockAuthedFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      .mockResolvedValueOnce(
+        createResponse({
           data: {
             business_name: 'ACE Painting',
             timezone: 'America/Chicago',
@@ -47,11 +55,10 @@ describe('CompanyProfilePage', () => {
             sender_signature: '',
             logo_url: '',
           },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+        })
+      )
+      .mockResolvedValueOnce(
+        createResponse({
           data: {
             business_name: 'ACE Pro Painting',
             timezone: 'America/Chicago',
@@ -63,8 +70,8 @@ describe('CompanyProfilePage', () => {
             logo_url: '',
           },
           notice: 'Company profile saved.',
-        }),
-      })
+        })
+      )
 
     render(<CompanyProfilePage />)
 

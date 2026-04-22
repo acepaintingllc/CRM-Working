@@ -23,6 +23,15 @@ vi.mock('next/link', () => ({
   ),
 }))
 
+function createResponse(payload: unknown, ok = true) {
+  return {
+    ok,
+    status: ok ? 200 : 500,
+    statusText: ok ? 'OK' : 'Server Error',
+    text: vi.fn(async () => JSON.stringify(payload)),
+  }
+}
+
 describe('TemplatesLibraryPage', () => {
   beforeEach(() => {
     mockAuthedFetch.mockReset()
@@ -34,22 +43,20 @@ describe('TemplatesLibraryPage', () => {
 
   it('loads quote send defaults, keeps save disabled until dirty, and surfaces save errors', async () => {
     mockAuthedFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      .mockResolvedValueOnce(
+        createResponse({
           data: {
             default_template_key: 'default',
             quote_validity_days: 90,
             terms_text: 'Terms',
           },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({
+        })
+      )
+      .mockResolvedValueOnce(
+        createResponse({
           error: 'Unable to save right now',
-        }),
-      })
+        }, false)
+      )
 
     render(<TemplatesLibraryPage />)
 

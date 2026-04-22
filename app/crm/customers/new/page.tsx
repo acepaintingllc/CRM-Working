@@ -1,8 +1,7 @@
 "use client";
 
 import { CustomerForm } from '@/app/crm/customers/_components/CustomerForm'
-import { readJsonResponse } from '@/app/crm/customers/_lib/http'
-import { authedFetch } from '@/lib/auth/authedFetch'
+import { createCustomer as createCustomerRequest } from '@/lib/customers/client'
 import type { CustomerFormValues } from '@/lib/customers/forms'
 import type { CreateCustomerInput } from '@/lib/customers/types'
 import { useRouter } from "next/navigation";
@@ -24,16 +23,7 @@ export default function NewCustomerPage() {
       notes: null,
     }
 
-    const response = await authedFetch("/api/customers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const result = await readJsonResponse<{ error?: string }>(response);
-    if (!response.ok) {
-      throw new Error(result?.error ?? "Failed to create customer.");
-    }
+    await createCustomerRequest(payload)
 
     router.push("/crm/customers");
   }

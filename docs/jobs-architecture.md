@@ -6,10 +6,15 @@
 - Reads must not mutate state. `GET /api/jobs/[id]` only returns persisted and derived values.
 
 ## Ownership
-- Jobs API routes under `app/api/jobs/**` own persistence and request validation.
+- Jobs API routes under `app/api/jobs/**` are thin adapters only:
+  - auth via `requireSessionUserOrg`
+  - param/body parsing
+  - `serviceResultResponse` envelope mapping
+- `lib/jobs/service.ts` owns jobs CRUD normalization, persistence, enrichment, and canonical route-contract data shaping.
 - `lib/server/jobScheduleSync.ts` owns persisted schedule summary/status side effects for schedule creation, deletion, and stage-email schedule/review effects.
-- `lib/jobs/actions.ts` is the client boundary for jobs UI fetches, mutations, normalization, and response parsing.
-- `app/crm/jobs/[id]/page.tsx` is the detail coordinator. Presentational detail UI lives in `app/crm/jobs/[id]/_components/**`.
+- `lib/jobs/actions.ts` is the client boundary for jobs UI fetches and mutations. It should consume the shared client helpers in `lib/client/api.ts` rather than feature-local request parsing.
+- `app/crm/jobs/page.tsx`, `app/crm/jobs/new/page.tsx`, and `app/crm/jobs/[id]/page.tsx` are page composition shells. Their controller hooks under `app/crm/jobs/_hooks/**` own page-level orchestration.
+- Presentational detail UI lives in `app/crm/jobs/[id]/_components/**`.
 - Modal shells stay in `app/crm/jobs/_components`, while `useEmailComposer` and `useCloseoutForm` own their internal state and request logic.
 
 ## Adding or Changing Workflow Stages
@@ -17,3 +22,11 @@
 - Update workflow action metadata there so board and detail surfaces render from the same config.
 - If the stage affects persisted schedule summary or status side effects, route it through `lib/server/jobScheduleSync.ts` rather than patching job fields inline.
 - If the UI needs new client fetch/mutation behavior, add it in `lib/jobs/actions.ts` and keep pages/components thin.
+
+## Route Contract
+- `GET /api/jobs` returns `{ data: JobSummary[] }`
+- `POST /api/jobs` returns `{ data: JobSummary, notice? }`
+- `GET /api/jobs/[id]` returns `{ data: JobDetail }`
+- `PATCH /api/jobs/[id]` returns `{ data: Partial<JobDetail>, notice? }`
+- `DELETE /api/jobs/[id]` returns `{ data: { ok: true }, notice? }`
+- Route handlers should not return bespoke `jobs`, `job`, or `ok` payloads for the jobs CRUD surface.

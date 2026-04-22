@@ -1,15 +1,15 @@
 'use client'
 
+import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { CustomerForm } from '@/app/crm/customers/_components/CustomerForm'
-import { readJsonResponse } from '@/app/crm/customers/_lib/http'
-import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   customerRecordToFormValues,
   type CustomerFormValues,
   type CustomerLegacyAddressCleanup,
 } from '@/lib/customers/forms'
-import type { CustomerDetail, UpdateCustomerInput } from '@/lib/customers/types'
-import { useEffect, useMemo, useState } from 'react'
+import { loadCustomerDetail, updateCustomer } from '@/lib/customers/client'
+import type { UpdateCustomerInput } from '@/lib/customers/types'
+import { useMemo } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, UserRoundCog } from 'lucide-react'
 
@@ -17,6 +17,16 @@ function safeReturnPath(value: string | null, id: string | undefined) {
   if (!value) return id ? `/crm/customers/${id}` : '/crm/customers'
   if (!value.startsWith('/')) return id ? `/crm/customers/${id}` : '/crm/customers'
   return value
+}
+
+type EditCustomerResource = {
+  initialValues: CustomerFormValues | null
+  legacyAddressCleanup: CustomerLegacyAddressCleanup | null
+}
+
+const emptyEditCustomerResource: EditCustomerResource = {
+  initialValues: null,
+  legacyAddressCleanup: null,
 }
 
 export default function EditCustomerPage() {
@@ -29,57 +39,28 @@ export default function EditCustomerPage() {
     () => safeReturnPath(searchParams.get('returnTo'), id),
     [searchParams, id]
   )
-
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState<string | null>(null)
-  const [initialValues, setInitialValues] = useState<CustomerFormValues | null>(null)
-  const [legacyAddressCleanup, setLegacyAddressCleanup] = useState<CustomerLegacyAddressCleanup | null>(null)
-
-  useEffect(() => {
-    let ignore = false
-
-    async function load() {
+  const resource = useLoadableResource<EditCustomerResource>({
+    initialData: emptyEditCustomerResource,
+    load: async () => {
       if (!id || typeof id !== 'string') {
-        setErr('Missing customer id.')
-        setLoading(false)
-        return
+        throw new Error('Missing customer id.')
       }
 
-      setErr(null)
-      setLoading(true)
-
-      const response = await authedFetch(`/api/customers/${id}`, { cache: 'no-store' })
-      const payload = await readJsonResponse<{ customer?: CustomerDetail; error?: string }>(response)
-
-      if (!response.ok) {
-        if (!ignore) {
-          setErr(payload?.error ?? 'Failed to load customer.')
-          setLoading(false)
-        }
-        return
-      }
-
-      const customer = payload?.customer ?? null
+      const customer = await loadCustomerDetail(id)
       const formValues = customer ? customerRecordToFormValues(customer) : null
-
-      if (!ignore) {
-        if (formValues && !formValues.ok) {
-          setErr(formValues.error)
-          setInitialValues(null)
-          setLegacyAddressCleanup(null)
-        } else {
-          setInitialValues(formValues?.value.values ?? null)
-          setLegacyAddressCleanup(formValues?.value.legacyAddressCleanup ?? null)
-        }
-        setLoading(false)
+      if (formValues && !formValues.ok) {
+        throw new Error(formValues.error)
       }
-    }
 
-    void load()
-    return () => {
-      ignore = true
-    }
-  }, [id])
+      return {
+        initialValues: formValues?.value.values ?? null,
+        legacyAddressCleanup: formValues?.value.legacyAddressCleanup ?? null,
+      }
+    },
+    getErrorMessage: (error: unknown) =>
+      error instanceof Error ? error.message : 'Failed to load customer.',
+    reloadKey: id,
+  })
 
   async function patchCustomer(values: CustomerFormValues) {
     if (!id || typeof id !== 'string') {
@@ -97,16 +78,7 @@ export default function EditCustomerPage() {
       notes: null,
     }
 
-    const response = await authedFetch(`/api/customers/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    const result = await readJsonResponse<{ error?: string }>(response)
-    if (!response.ok) {
-      throw new Error(result?.error ?? 'Failed to update customer.')
-    }
+    await updateCustomer(id, payload)
 
     router.push(returnPath)
   }
@@ -128,13 +100,13 @@ export default function EditCustomerPage() {
         </button>
       </div>
 
-      {err && <div className="text-red-600">{err}</div>}
-      {loading && <div className="text-sm text-gray-600">Loading customer...</div>}
+      {resource.error && <div className="text-red-600">{resource.error}</div>}
+      {resource.loading && <div className="text-sm text-gray-600">Loading customer...</div>}
 
-      {!loading && initialValues && (
+      {!resource.loading && resource.data.initialValues && (
         <CustomerForm
-          initialValues={initialValues}
-          legacyAddressCleanup={legacyAddressCleanup}
+          initialValues={resource.data.initialValues}
+          legacyAddressCleanup={resource.data.legacyAddressCleanup}
           onSubmit={patchCustomer}
           submitLabel="Save changes"
           submittingLabel="Saving..."

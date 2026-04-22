@@ -1,6 +1,8 @@
 'use client'
 
 import type {
+  NotesCursorPage,
+  NotesExplorerSections,
   NotesFolderWithCount,
   NotesFoldersResponse,
   NotesNoteRow,
@@ -8,7 +10,7 @@ import type {
 } from '@/lib/notes/types'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { buildNotesHref, filterNotesBySearch } from '@/app/crm/notes/notes/_components'
+import { buildNotesHref } from '@/app/crm/notes/notes/_components'
 import { notesFetchJson } from './core'
 import { useFolderActions } from './useFolderActions'
 
@@ -30,17 +32,34 @@ export function useNotesExplorer(params: Params) {
   const [folders, setFolders] = useState<NotesFolderWithCount[]>([])
   const [allNotes, setAllNotes] = useState<NotesNoteRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(params.folderId ?? null)
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
+  const [page, setPage] = useState<NotesCursorPage>({
+    next_cursor: null,
+    has_more: false,
+    limit: 16,
+  })
+  const [sections, setSections] = useState<NotesExplorerSections>({
+    starred: [],
+    recent: [],
+    loose: [],
+  })
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
+  const loadNotes = useCallback(async (mode: 'reset' | 'append', cursor?: string | null) => {
+    if (mode === 'append') {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+    }
     setLoadError(null)
 
-    const noteQuery = new URLSearchParams({ status: params.status })
+    const noteQuery = new URLSearchParams({ status: params.status, limit: String(page.limit) })
     if (params.folderId) noteQuery.set('folder_id', params.folderId)
+    if (search.trim()) noteQuery.set('search', search.trim())
+    if (cursor) noteQuery.set('cursor', cursor)
 
     const [foldersResult, notesResult] = await Promise.all([
       notesFetchJson<NotesFoldersResponse>('/api/notes/folders', { cache: 'no-store' }, 'Unable to load folders.'),
@@ -50,17 +69,26 @@ export function useNotesExplorer(params: Params) {
     if (!foldersResult.ok) {
       setLoadError(foldersResult.error)
       setLoading(false)
+      setLoadingMore(false)
       return
     }
     if (!notesResult.ok) {
       setLoadError(notesResult.error)
       setLoading(false)
+      setLoadingMore(false)
       return
     }
 
     setFolders(foldersResult.data.folders)
-    setAllNotes(notesResult.data.notes)
+    setAllNotes((current) => (mode === 'append' ? [...current, ...notesResult.data.notes] : notesResult.data.notes))
+    setPage(notesResult.data.page ?? { next_cursor: null, has_more: false, limit: page.limit })
+    if (notesResult.data.sections) {
+      setSections(notesResult.data.sections)
+    } else if (mode === 'reset') {
+      setSections({ starred: [], recent: [], loose: [] })
+    }
     setLoading(false)
+    setLoadingMore(false)
 
     if (params.folderId) {
       setSelectedFolderId(params.folderId)
@@ -71,11 +99,20 @@ export function useNotesExplorer(params: Params) {
       if (current && foldersResult.data.folders.some((folder) => folder.id === current)) return current
       return foldersResult.data.folders[0]?.id ?? null
     })
-  }, [params.folderId, params.status])
+  }, [page.limit, params.folderId, params.status, search])
+
+  const refresh = useCallback(async () => {
+    await loadNotes('reset')
+  }, [loadNotes])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  const loadMore = useCallback(async () => {
+    if (!page.has_more || !page.next_cursor || loadingMore) return
+    await loadNotes('append', page.next_cursor)
+  }, [loadNotes, loadingMore, page.has_more, page.next_cursor])
 
   const folderActions = useFolderActions({
     folders,
@@ -93,15 +130,18 @@ export function useNotesExplorer(params: Params) {
     () => (params.folderId ? folders.find((item) => item.id === params.folderId) ?? null : null),
     [folders, params.folderId]
   )
-  const notes = useMemo(() => filterNotesBySearch(allNotes, search), [allNotes, search])
+  const notes = useMemo(() => allNotes, [allNotes])
   const folderNameById = useMemo(() => new Map(folders.map((entry) => [entry.id, entry.name])), [folders])
-  const starredNotes = useMemo(() => sortByUpdated(allNotes.filter((note) => note.starred)).slice(0, 8), [allNotes])
-  const recentNotes = useMemo(() => sortByUpdated(allNotes).slice(0, 8), [allNotes])
+  const starredNotes = useMemo(() => (sections.starred.length > 0 ? sections.starred : sortByUpdated(allNotes.filter((note) => note.starred)).slice(0, 8)), [allNotes, sections.starred])
+  const recentNotes = useMemo(() => (sections.recent.length > 0 ? sections.recent : sortByUpdated(allNotes).slice(0, 8)), [allNotes, sections.recent])
   const looseNotes = useMemo(
-    () => sortByUpdated(allNotes.filter((note) => note.folder_id == null && !note.starred)).slice(0, 8),
-    [allNotes]
+    () =>
+      sections.loose.length > 0
+        ? sections.loose
+        : sortByUpdated(allNotes.filter((note) => note.folder_id == null && !note.starred)).slice(0, 8),
+    [allNotes, sections.loose]
   )
-  const searchResults = useMemo(() => sortByUpdated(notes).slice(0, 16), [notes])
+  const searchResults = useMemo(() => sortByUpdated(notes), [notes])
 
   return {
     folders,
@@ -109,7 +149,9 @@ export function useNotesExplorer(params: Params) {
     notes,
     folder,
     loading,
+    loadingMore,
     saving: folderActions.saving,
+    hasMore: page.has_more,
     error: loadError ?? folderActions.error,
     search,
     setSearch,
@@ -122,6 +164,7 @@ export function useNotesExplorer(params: Params) {
     reorderFolder: folderActions.reorderFolder,
     deleteFolder: folderActions.deleteFolder,
     refresh,
+    loadMore,
     folderNameById,
     starredNotes,
     recentNotes,

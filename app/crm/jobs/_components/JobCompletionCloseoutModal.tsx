@@ -1,11 +1,7 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-import {
-  parseResponseBody,
-  type JobDetail,
-} from '@/lib/jobs/actions'
-import type { PaintLogRow } from '@/lib/jobs/paintLog'
+import { loadQuoteCatalogs } from '@/lib/quotes/client'
+import { type JobDetail } from '@/lib/jobs/client'
 import { useCloseoutForm } from '@/app/crm/jobs/_components/hooks/useCloseoutForm'
 import { Mail, Plus, Send, Trash2, Upload, X } from 'lucide-react'
 import { useCallback, useRef, type ChangeEvent } from 'react'
@@ -48,14 +44,11 @@ export default function JobCompletionCloseoutModal({
 }: JobCompletionCloseoutModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const loadCatalogs = useCallback(async (linkedEstimateId: string) => {
-    const catalogsRes = await authedFetch(`/api/quotes/${linkedEstimateId}/catalogs`, {
-      cache: 'no-store',
-    })
-    const catalogsPayload = (await parseResponseBody(catalogsRes)).json as EstimateCatalogPayload | null
-    if (!catalogsRes.ok) return null
-    return catalogsPayload
-  }, [])
+  const loadCatalogs = useCallback(
+    async (linkedEstimateId: string) =>
+      loadQuoteCatalogs<EstimateCatalogPayload>(linkedEstimateId).catch(() => null),
+    []
+  )
 
   const {
     job,

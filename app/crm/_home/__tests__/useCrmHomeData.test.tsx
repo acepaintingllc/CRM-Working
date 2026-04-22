@@ -23,9 +23,12 @@ function createJsonResponse(ok: boolean, payload: unknown, status = 200) {
   return Promise.resolve({
     ok,
     status,
-    json: () => Promise.resolve(payload),
+    statusText: ok ? 'OK' : 'Server Error',
+    text: () => Promise.resolve(JSON.stringify(payload)),
   })
 }
+
+type MockJsonResponse = Awaited<ReturnType<typeof createJsonResponse>>
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -48,11 +51,11 @@ describe('useCrmHomeData', () => {
   })
 
   it('exposes loading source states before initial resolution', async () => {
-    const jobsRequest = createDeferred<Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>>()
+    const jobsRequest = createDeferred<Promise<MockJsonResponse>>()
 
     mockAuthedFetch.mockImplementation((url: string) => {
       if (url === '/api/jobs') return jobsRequest.promise
-      if (url === '/api/customers') return createJsonResponse(true, { customers: [] })
+      if (url === '/api/customers') return createJsonResponse(true, { data: [] })
       if (url === '/api/google-calendar/status') {
         return createJsonResponse(true, { connected: false })
       }
@@ -67,7 +70,7 @@ describe('useCrmHomeData', () => {
     expect(result.current.summary.isInitialLoading).toBe(true)
     expect(result.current.sources.jobs.status).toBe('loading')
 
-    jobsRequest.resolve(createJsonResponse(true, { jobs: [] }))
+    jobsRequest.resolve(createJsonResponse(true, { data: [] }))
 
     await waitFor(() => {
       expect(result.current.summary.isBusy).toBe(false)
@@ -78,7 +81,7 @@ describe('useCrmHomeData', () => {
     mockAuthedFetch.mockImplementation((url: string) => {
       if (url === '/api/jobs') {
         return createJsonResponse(true, {
-          jobs: [
+          data: [
             {
               id: 'job-1',
               status: 'completed',
@@ -90,7 +93,7 @@ describe('useCrmHomeData', () => {
           ],
         })
       }
-      if (url === '/api/customers') return createJsonResponse(true, { customers: [] })
+      if (url === '/api/customers') return createJsonResponse(true, { data: [] })
       if (url === '/api/google-calendar/status') {
         return createJsonResponse(true, { connected: false })
       }
@@ -106,9 +109,7 @@ describe('useCrmHomeData', () => {
       expect(result.current.summary.isBusy).toBe(false)
     })
 
-    const reloadRequest = createDeferred<
-      Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
-    >()
+    const reloadRequest = createDeferred<Promise<MockJsonResponse>>()
     mockAuthedFetch.mockImplementationOnce(
       () => reloadRequest.promise
     )
@@ -122,7 +123,7 @@ describe('useCrmHomeData', () => {
 
     reloadRequest.resolve(
       createJsonResponse(true, {
-        jobs: [
+        data: [
           {
             id: 'job-1',
             status: 'completed',
@@ -142,8 +143,8 @@ describe('useCrmHomeData', () => {
 
   it('targeted refresh only transitions the requested source slice', async () => {
     mockAuthedFetch.mockImplementation((url: string) => {
-      if (url === '/api/jobs') return createJsonResponse(true, { jobs: [] })
-      if (url === '/api/customers') return createJsonResponse(true, { customers: [] })
+      if (url === '/api/jobs') return createJsonResponse(true, { data: [] })
+      if (url === '/api/customers') return createJsonResponse(true, { data: [] })
       if (url === '/api/google-calendar/status') return createJsonResponse(true, { connected: false })
       if (url === '/api/notes/dashboard') {
         return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
@@ -157,7 +158,7 @@ describe('useCrmHomeData', () => {
       expect(result.current.summary.isBusy).toBe(false)
     })
 
-    const notesRequest = createDeferred<Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>>()
+    const notesRequest = createDeferred<Promise<MockJsonResponse>>()
     mockAuthedFetch.mockImplementationOnce(
       () => notesRequest.promise
     )

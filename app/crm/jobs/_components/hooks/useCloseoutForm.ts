@@ -5,10 +5,12 @@ import {
   fetchCloseoutData,
   saveCloseout,
   sendStageEmail,
+} from '@/lib/jobs/actions'
+import {
   uploadPhoto,
   type JobDetail,
   type JobPhoto,
-} from '@/lib/jobs/actions'
+} from '@/lib/jobs/client'
 import { applyTemplate, buildJobEmailTemplateVars } from '@/lib/jobs/emailTemplate'
 import {
   createDefaultPaintLogRow,

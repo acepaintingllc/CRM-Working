@@ -48,6 +48,11 @@ type JobRow = {
   scheduled_date?: string | null
 }
 
+type JobsPayload = {
+  data?: JobRow[]
+  error?: string
+}
+
 const stageOrder: Record<string, number> = {
   estimate_scheduled: 0,
   estimate_sent: 1,
@@ -266,7 +271,7 @@ export default function FieldJobPage() {
       setError(null)
       try {
         const jobsRes = await authedFetch('/api/jobs', { cache: 'no-store' })
-        const jobsPayload = await jobsRes.json().catch(() => null)
+        const jobsPayload = (await jobsRes.json().catch(() => null)) as JobsPayload | null
         if (cancelled) return
         if (!jobsRes.ok) {
           setJobs([])
@@ -275,7 +280,7 @@ export default function FieldJobPage() {
           return
         }
 
-        const rows = sortJobsByStage((jobsPayload?.jobs ?? []) as JobRow[])
+        const rows = sortJobsByStage((jobsPayload?.data ?? []) as JobRow[])
         setJobs(rows)
         setJob(rows.find((row) => row.id === jobId) ?? null)
 

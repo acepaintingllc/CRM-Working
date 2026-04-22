@@ -101,7 +101,7 @@ export function NoteComposerOverlay(props: NoteComposerProps) {
               <button
                 type="button"
                 onClick={form.handleSave}
-                disabled={form.saving}
+                disabled={form.saving || Boolean(props.noteId && !form.dirty)}
                 className="inline-flex min-w-32 items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 transition hover:bg-emerald-300 disabled:opacity-60"
               >
                 {form.saving ? 'Saving...' : props.noteId ? 'Save Note' : 'Create Note'}

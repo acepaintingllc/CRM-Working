@@ -1,6 +1,6 @@
 'use client'
 
-import type { EstimateDriveFile, JobDetail } from '@/lib/jobs/actions'
+import type { EstimateDriveFile, JobDetail } from '@/lib/jobs/client'
 import { Copy, FileText, MapPin, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 
