@@ -1,6 +1,11 @@
 'use client'
 
 import { useMemo } from 'react'
+import {
+  estimateV2StoreSelectors,
+  useEstimateV2Store,
+  type EstimateV2EditorStoreApi,
+} from '@/lib/estimates/v2/store/estimateV2Store'
 import { getFlagMultiplierHint, toDisplayNumber } from '../_lib/estimateV2EditorNormalize'
 import {
   buildCalculationState,
@@ -15,7 +20,6 @@ import {
 } from '../_lib/estimateV2EditorPresentation'
 import type {
   EstimateV2EditorCeilingsVm,
-  EstimateV2EditorMetaState,
   EstimateV2EditorHeaderVm,
   EstimateV2EditorPageVm,
   EstimateV2EditorRoomVm,
@@ -28,8 +32,7 @@ import type {
 
 export function useEstimateV2EditorViewModels(params: {
   estimateId?: string
-  state: ReturnType<typeof import('./useEstimateV2EditorStore').useEstimateV2EditorStore>['state']
-  meta: EstimateV2EditorMetaState
+  store: EstimateV2EditorStoreApi
   derived: ReturnType<typeof import('./useEstimateV2DerivedState').useEstimateV2DerivedState>
   roomActions: ReturnType<typeof import('./useEstimateV2RoomActions').useEstimateV2RoomActions>
   wallActions: ReturnType<typeof import('./useEstimateV2WallActions').useEstimateV2WallActions>
@@ -40,8 +43,7 @@ export function useEstimateV2EditorViewModels(params: {
 }) {
   const {
     estimateId,
-    state,
-    meta,
+    store,
     derived,
     roomActions,
     wallActions,
@@ -50,6 +52,8 @@ export function useEstimateV2EditorViewModels(params: {
     settingsActions,
     save,
   } = params
+  const state = useEstimateV2Store(store, estimateV2StoreSelectors.viewState)
+  const meta = useEstimateV2Store(store, estimateV2StoreSelectors.meta)
 
   const {
     addRoom,

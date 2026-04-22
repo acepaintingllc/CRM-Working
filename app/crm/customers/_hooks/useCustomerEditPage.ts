@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
-import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
+import { invalidateSwrKey, invalidateSwrPrefix } from '@/app/crm/_hooks/swrCache'
 import { safeReturnTo } from '@/lib/crm/navigation'
 import {
   customerRecordToFormValues,
@@ -79,7 +79,7 @@ export function useCustomerEditPage() {
 
       const result = await updateCustomer(id, payload)
       await Promise.all([
-        invalidateSwrKey('/api/customers'),
+        invalidateSwrPrefix('/api/customers'),
         invalidateSwrKey(`/api/customers/${id}`),
       ])
 

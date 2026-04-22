@@ -2,6 +2,11 @@
 
 import { useCallback, useMemo } from 'react'
 import {
+  estimateV2StoreSelectors,
+  useEstimateV2Store,
+  type EstimateV2EditorStoreApi,
+} from '@/lib/estimates/v2/store/estimateV2Store'
+import {
   buildCeilingScopeByRoomId,
   buildCeilingScopeEffectiveAreaById,
   buildLocalRoomEffectiveAreaByRoomId,
@@ -31,7 +36,6 @@ import {
 import { getSaveStatusText } from '@/lib/estimator/v2WallsAutosave'
 import { asText } from '@/lib/estimator/parsing'
 import { buildEstimateV2SavePayload } from '@/lib/estimator/v2DraftPayload'
-import type { EstimateV2EditorCollections, EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 import type { EstimateV2TrimTypeOption as TrimTypeOption } from '@/types/estimator/v2'
 
 const FALLBACK_COLOR_CODES = Array.from({ length: 6 }, (_, index) => ({
@@ -39,11 +43,10 @@ const FALLBACK_COLOR_CODES = Array.from({ length: 6 }, (_, index) => ({
   label: `Color ${index + 1}`,
 }))
 
-export function useEstimateV2DerivedState(params: {
-  collections: EstimateV2EditorCollections
-  meta: EstimateV2EditorMetaState
-}) {
-  const { collections, meta } = params
+export function useEstimateV2DerivedState(params: { store: EstimateV2EditorStoreApi }) {
+  const { store } = params
+  const collections = useEstimateV2Store(store, estimateV2StoreSelectors.collections)
+  const meta = useEstimateV2Store(store, estimateV2StoreSelectors.meta)
 
   const wallProductionRates = useMemo(
     () =>

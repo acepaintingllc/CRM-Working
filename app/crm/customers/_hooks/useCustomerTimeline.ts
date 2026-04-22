@@ -38,7 +38,7 @@ export function useCustomerTimeline(customerId: string | undefined) {
     } finally {
       setNoteSaving(false)
     }
-  }, [customerId, loadTimeline, noteBody, setTimelineError])
+  }, [customerId, noteBody, setTimelineError, timelineKey])
 
   return {
     timelineEvents: timelineResource.data ?? emptyTimelineEvents,

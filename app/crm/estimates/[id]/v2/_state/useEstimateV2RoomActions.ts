@@ -1,6 +1,10 @@
 'use client'
 
 import { useCallback } from 'react'
+import type {
+  EstimateV2EditorStoreApi,
+  EstimateV2EditorStoreState,
+} from '@/lib/estimates/v2/store/estimateV2Store'
 import {
   addRoomMutation,
   applyCeilingRoomModeMutation,
@@ -11,61 +15,60 @@ import {
   updateRoomMutation,
 } from '../_lib/estimateV2EditorMutations'
 import { recalculateEditorDraftFactors } from '../_lib/estimateV2EditorRecalculate'
-import type {
-  EstimateV2EditorCollections,
-  EstimateV2EditorMetaState,
-  DirtySource,
-} from './estimateV2EditorTypes'
+import type { DirtySource } from './estimateV2EditorTypes'
 import type { EstimateV2TrimTypeOption, EstimateV2WallScopeMode } from '@/types/estimator/v2'
 
 export function useEstimateV2RoomActions(params: {
-  collections: EstimateV2EditorCollections
-  meta: EstimateV2EditorMetaState
+  store: EstimateV2EditorStoreApi
   roomModeById: Map<string, 'RECT' | 'SEG'>
   trimTypeOptions: EstimateV2TrimTypeOption[]
 }) {
-  const { collections, meta, roomModeById, trimTypeOptions } = params
-  const { catalogs, selectedRoomId, setDebugMeta, setSelectedRoomId } = meta
+  const { store, roomModeById, trimTypeOptions } = params
 
   const applySynchronizedDrafts = useCallback(
     (
-      nextRooms = collections.rooms,
-      nextWallScopes = collections.scopes,
-      nextCeilingScopes = collections.ceilingScopes,
-      nextTrimScopes = collections.trimScopes,
-      nextRoomFlags = collections.roomFlags
+      nextRooms?: EstimateV2EditorStoreState['collections']['rooms'],
+      nextWallScopes?: EstimateV2EditorStoreState['collections']['scopes'],
+      nextCeilingScopes?: EstimateV2EditorStoreState['collections']['ceilingScopes'],
+      nextTrimScopes?: EstimateV2EditorStoreState['collections']['trimScopes'],
+      nextRoomFlags?: EstimateV2EditorStoreState['collections']['roomFlags']
     ) => {
+      const { collections, meta, setScopes, setCeilingScopes, setTrimScopes } = store.getState()
       const recalculated = recalculateEditorDraftFactors({
-        rooms: nextRooms,
-        wallScopes: nextWallScopes,
-        ceilingScopes: nextCeilingScopes,
-        trimScopes: nextTrimScopes,
-        roomFlags: nextRoomFlags,
-        catalogs,
+        rooms: nextRooms ?? collections.rooms,
+        wallScopes: nextWallScopes ?? collections.scopes,
+        ceilingScopes: nextCeilingScopes ?? collections.ceilingScopes,
+        trimScopes: nextTrimScopes ?? collections.trimScopes,
+        roomFlags: nextRoomFlags ?? collections.roomFlags,
+        catalogs: meta.catalogs,
         trimTypeOptions,
       })
-      collections.setScopes(recalculated.wallScopes)
-      collections.setCeilingScopes(recalculated.ceilingScopes)
-      collections.setTrimScopes(recalculated.trimScopes)
+      setScopes(recalculated.wallScopes)
+      setCeilingScopes(recalculated.ceilingScopes)
+      setTrimScopes(recalculated.trimScopes)
     },
-    [catalogs, collections, trimTypeOptions]
+    [store, trimTypeOptions]
   )
 
   const markDirty = useCallback(
     (source: DirtySource) => {
-      setDebugMeta((prev) => ({ ...prev, dirtySource: source }))
+      store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: source }))
     },
-    [setDebugMeta]
+    [store]
   )
 
   const updateRoom = useCallback(
-    (roomId: string, patch: Partial<(typeof collections.rooms)[number]>) => {
+    (
+      roomId: string,
+      patch: Partial<EstimateV2EditorStoreState['collections']['rooms'][number]>
+    ) => {
+      const { collections, setRooms } = store.getState()
       const nextRooms = updateRoomMutation(collections.rooms, roomId, patch)
-      collections.setRooms(nextRooms)
+      setRooms(nextRooms)
       applySynchronizedDrafts(nextRooms)
       markDirty('room')
     },
-    [applySynchronizedDrafts, collections, markDirty]
+    [applySynchronizedDrafts, markDirty, store]
   )
 
   const updateRoomComplexity = useCallback(
@@ -76,20 +79,30 @@ export function useEstimateV2RoomActions(params: {
   )
 
   const addRoom = useCallback(() => {
+    const { collections, setRooms, setSelectedRoomId } = store.getState()
     const next = addRoomMutation({
       rooms: collections.rooms,
       defaultHeightFactor: '1',
     })
     const nextRooms = next.rooms
     const nextWallScopes = [...collections.scopes, ...next.scopes]
-    collections.setRooms(nextRooms)
+    setRooms(nextRooms)
     setSelectedRoomId(next.room.roomId)
     applySynchronizedDrafts(nextRooms, nextWallScopes)
     markDirty('room')
-  }, [applySynchronizedDrafts, collections, markDirty, setSelectedRoomId])
+  }, [applySynchronizedDrafts, markDirty, store])
 
   const deleteRoom = useCallback(
     (roomId: string) => {
+      const {
+        collections,
+        meta,
+        setRooms,
+        setSegments,
+        setRoomFlags,
+        setCeilingSegments,
+        setSelectedRoomId,
+      } = store.getState()
       const roomScopes = collections.scopes.filter((scope) => scope.roomId === roomId)
       const roomSegments = collections.segments.filter((segment) => segment.roomId === roomId)
       const roomCeilScopes = collections.ceilingScopes.filter((scope) => scope.roomId === roomId)
@@ -117,12 +130,12 @@ export function useEstimateV2RoomActions(params: {
         ceilingSegments: collections.ceilingSegments,
         trimScopes: collections.trimScopes,
         roomId,
-        selectedRoomId,
+        selectedRoomId: meta.selectedRoomId,
       })
-      collections.setRooms(next.rooms)
-      collections.setSegments(next.segments)
-      collections.setRoomFlags(next.roomFlags)
-      collections.setCeilingSegments(next.ceilingSegments)
+      setRooms(next.rooms)
+      setSegments(next.segments)
+      setRoomFlags(next.roomFlags)
+      setCeilingSegments(next.ceilingSegments)
       setSelectedRoomId(next.selectedRoomId)
       applySynchronizedDrafts(
         next.rooms,
@@ -133,21 +146,29 @@ export function useEstimateV2RoomActions(params: {
       )
       markDirty('room')
     },
-    [applySynchronizedDrafts, collections, markDirty, selectedRoomId, setSelectedRoomId]
+    [applySynchronizedDrafts, markDirty, store]
   )
 
   const toggleFlag = useCallback(
     (roomId: string, flagId: string) => {
+      const { collections, setRoomFlags } = store.getState()
       const nextRoomFlags = toggleRoomFlagMutation(collections.roomFlags, roomId, flagId)
-      collections.setRoomFlags(nextRoomFlags)
-      applySynchronizedDrafts(collections.rooms, collections.scopes, collections.ceilingScopes, collections.trimScopes, nextRoomFlags)
+      setRoomFlags(nextRoomFlags)
+      applySynchronizedDrafts(
+        collections.rooms,
+        collections.scopes,
+        collections.ceilingScopes,
+        collections.trimScopes,
+        nextRoomFlags
+      )
       markDirty('room-flags')
     },
-    [applySynchronizedDrafts, collections, markDirty]
+    [applySynchronizedDrafts, markDirty, store]
   )
 
   const handleRoomDimChange = useCallback(
     (roomId: string, field: 'lengthIn' | 'widthIn' | 'heightIn', value: string) => {
+      const { collections, setRooms } = store.getState()
       const next = updateRoomDimensionsMutation({
         rooms: collections.rooms,
         scopes: collections.scopes,
@@ -155,15 +176,16 @@ export function useEstimateV2RoomActions(params: {
         field,
         value,
       })
-      collections.setRooms(next.rooms)
+      setRooms(next.rooms)
       applySynchronizedDrafts(next.rooms, next.scopes)
       markDirty('room')
     },
-    [applySynchronizedDrafts, collections, markDirty]
+    [applySynchronizedDrafts, markDirty, store]
   )
 
   const switchRoomGeometryMode = useCallback(
     (roomId: string, nextMode: EstimateV2WallScopeMode) => {
+      const { collections, setSegments, setCeilingSegments } = store.getState()
       const currentMode = roomModeById.get(roomId) ?? 'RECT'
       if (
         currentMode === 'SEG' &&
@@ -190,8 +212,8 @@ export function useEstimateV2RoomActions(params: {
         defaultHeightFactor: '1',
       })
 
-      collections.setSegments(nextWalls.segments)
-      collections.setCeilingSegments(nextCeilings.segments)
+      setSegments(nextWalls.segments)
+      setCeilingSegments(nextCeilings.segments)
       applySynchronizedDrafts(
         collections.rooms,
         nextWalls.scopes,
@@ -201,7 +223,7 @@ export function useEstimateV2RoomActions(params: {
       )
       markDirty('room')
     },
-    [applySynchronizedDrafts, collections, markDirty, roomModeById]
+    [applySynchronizedDrafts, markDirty, roomModeById, store]
   )
 
   return {

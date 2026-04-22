@@ -2,21 +2,24 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import type {
+  EstimateV2EditorStoreApi,
+  EstimateV2EditorStoreState,
+} from '@/lib/estimates/v2/store/estimateV2Store'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
-import type { EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 
 export function useEstimateV2SettingsActions(params: {
   estimateId?: string
   routeFamily: EstimateRouteFamily
-  meta: EstimateV2EditorMetaState
+  store: EstimateV2EditorStoreApi
 }) {
-  const { estimateId, routeFamily, meta } = params
+  const { estimateId, routeFamily, store } = params
   const customerSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const policySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateJobSettings = useCallback(
-    (patch: Partial<typeof meta.jobSettingsDraft>) => {
-      meta.setJobSettingsDraft((prev) => {
+    (patch: Partial<EstimateV2EditorStoreState['meta']['jobSettingsDraft']>) => {
+      store.getState().setJobSettingsDraft((prev) => {
         const next = { ...prev, ...patch }
         if (policySaveTimerRef.current) clearTimeout(policySaveTimerRef.current)
         policySaveTimerRef.current = setTimeout(async () => {
@@ -49,15 +52,15 @@ export function useEstimateV2SettingsActions(params: {
         }, 900)
         return next
       })
-      meta.setDebugMeta((prev) => ({ ...prev, dirtySource: 'job-settings' }))
+      store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: 'job-settings' }))
     },
-    [estimateId, meta, routeFamily]
+    [estimateId, routeFamily, store]
   )
 
   const flushCustomerSave = useCallback(() => {
     if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current)
     customerSaveTimerRef.current = setTimeout(async () => {
-      const draft = meta.customerDraft
+      const draft = store.getState().meta.customerDraft
       if (!draft.customerId) return
       await authedFetch(`/api/customers/${draft.customerId}`, {
         method: 'PATCH',
@@ -70,11 +73,11 @@ export function useEstimateV2SettingsActions(params: {
         }),
       })
     }, 0)
-  }, [meta.customerDraft])
+  }, [store])
 
   const updateCustomer = useCallback(
-    (patch: Partial<typeof meta.customerDraft>) => {
-      meta.setCustomerDraft((prev) => {
+    (patch: Partial<EstimateV2EditorStoreState['meta']['customerDraft']>) => {
+      store.getState().setCustomerDraft((prev) => {
         const next = { ...prev, ...patch }
         if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current)
         customerSaveTimerRef.current = setTimeout(async () => {
@@ -92,9 +95,9 @@ export function useEstimateV2SettingsActions(params: {
         }, 900)
         return next
       })
-      meta.setDebugMeta((prev) => ({ ...prev, dirtySource: 'customer' }))
+      store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: 'customer' }))
     },
-    [meta]
+    [store]
   )
 
   useEffect(

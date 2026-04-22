@@ -36,12 +36,27 @@ export function useNewJobPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [createdJobId, setCreatedJobId] = useState<string | null>(null)
+  const [debouncedCustomerQuery, setDebouncedCustomerQuery] = useState('')
+  const [selectedCustomerSnapshot, setSelectedCustomerSnapshot] = useState<CustomerOption | null>(null)
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedCustomerQuery(value.customerQuery.trim())
+    }, 300)
+
+    return () => window.clearTimeout(timeout)
+  }, [value.customerQuery])
 
   const customerResource = useLoadableResource<CustomerOption[]>({
     initialData: emptyCustomerOptions,
     load: async () => {
-      const rows = await loadCustomerList()
-      return rows.map((customer) => ({
+      const rows = await loadCustomerList({ search: debouncedCustomerQuery || undefined })
+      const customers = Array.isArray(rows.data)
+        ? rows.data
+        : Array.isArray(rows)
+          ? rows
+          : []
+      return customers.map((customer) => ({
         id: customer.id,
         name: customer.name ?? 'Unknown customer',
         address: customer.address ?? null,
@@ -50,29 +65,26 @@ export function useNewJobPage() {
       }))
     },
     getErrorMessage: getLoadErrorMessage,
+    reloadKey: debouncedCustomerQuery,
   })
 
   const selectedCustomer = useMemo(
-    () => customerResource.data.find((customer) => customer.id === value.customerId) ?? null,
-    [customerResource.data, value.customerId]
+    () =>
+      customerResource.data.find((customer) => customer.id === value.customerId) ??
+      (selectedCustomerSnapshot?.id === value.customerId ? selectedCustomerSnapshot : null),
+    [customerResource.data, selectedCustomerSnapshot, value.customerId]
   )
 
-  const filteredCustomers = useMemo(() => {
-    const query = value.customerQuery.trim().toLowerCase()
-    if (!query) return customerResource.data.slice(0, 20)
-    return customerResource.data
-      .filter((customer) => {
-        const haystack =
-          `${customer.name} ${customer.email ?? ''} ${customer.phone ?? ''} ${customer.address ?? ''}`.toLowerCase()
-        return haystack.includes(query)
-      })
-      .slice(0, 20)
-  }, [customerResource.data, value.customerQuery])
+  useEffect(() => {
+    const match = customerResource.data.find((customer) => customer.id === value.customerId) ?? null
+    if (match) setSelectedCustomerSnapshot(match)
+  }, [customerResource.data, value.customerId])
 
   useEffect(() => {
     if (!preselectedCustomerId || value.customerId) return
     const match = customerResource.data.find((customer) => customer.id === preselectedCustomerId)
     if (!match) return
+    setSelectedCustomerSnapshot(match)
     setValue((current) => ({ ...current, customerId: match.id, customerQuery: '' }))
   }, [customerResource.data, preselectedCustomerId, value.customerId])
 
@@ -143,7 +155,7 @@ export function useNewJobPage() {
     value,
     setValue,
     selectedCustomer,
-    filteredCustomers,
+    filteredCustomers: customerResource.data,
     saving,
     error,
     notice,

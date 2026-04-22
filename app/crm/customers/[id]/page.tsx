@@ -1,5 +1,7 @@
 'use client'
 
+import { useCallback } from 'react'
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
 import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
@@ -11,8 +13,6 @@ import { useCustomerDetail } from '@/app/crm/customers/_hooks/useCustomerDetail'
 import { useCustomerList } from '@/app/crm/customers/_hooks/useCustomerList'
 import { useCustomerTimeline } from '@/app/crm/customers/_hooks/useCustomerTimeline'
 import { useOrg } from '@/app/crm/customers/customers-orgproviders'
-import { useCallback, useMemo } from 'react'
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 export default function CustomerDetailPage() {
   useOrg()
@@ -24,13 +24,7 @@ export default function CustomerDetailPage() {
   const searchParams = useSearchParams()
 
   const query = searchParams.get('q') ?? ''
-  const hasParam = searchParams.get('has') ?? ''
-  const hasSet = useMemo(
-    () => new Set(hasParam.split(',').map((value) => value.trim()).filter(Boolean)),
-    [hasParam]
-  )
-  const hasEmail = hasSet.has('email')
-  const hasPhone = hasSet.has('phone')
+  const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1', 10) || 1)
 
   const updateParams = useCallback(
     (patch: Record<string, string | null>) => {
@@ -52,21 +46,18 @@ export default function CustomerDetailPage() {
     error,
     deleteCustomer,
   } = useCustomerDetail(id)
-  const { listCustomers, listLoading, listError } = useCustomerList()
+  const {
+    customers,
+    loading: listLoading,
+    error: listError,
+    search,
+    setSearch,
+  } = useCustomerList({
+    initialSearch: query,
+    initialPage: page,
+  })
   const { timelineEvents, timelineLoading, timelineError, noteBody, setNoteBody, noteSaving, saveNote } =
     useCustomerTimeline(id)
-
-  const filteredList = useMemo(() => {
-    const loweredQuery = query.trim().toLowerCase()
-    return listCustomers.filter((customerRow) => {
-      const matchesHas = (!hasEmail || Boolean(customerRow.email)) && (!hasPhone || Boolean(customerRow.phone))
-      if (!matchesHas) return false
-      if (!loweredQuery) return true
-      const haystack =
-        `${customerRow.name} ${customerRow.email ?? ''} ${customerRow.phone ?? ''} ${customerRow.address ?? ''}`.toLowerCase()
-      return haystack.includes(loweredQuery)
-    })
-  }, [hasEmail, hasPhone, listCustomers, query])
 
   const listQueryString = searchParams.toString()
   const detailPathWithQuery = `${pathname}${listQueryString ? `?${listQueryString}` : ''}`
@@ -120,16 +111,15 @@ export default function CustomerDetailPage() {
           <div className="hidden md:block">
             <CustomerListSidebar
               activeCustomerId={id}
-              query={query}
-              hasEmail={hasEmail}
-              hasPhone={hasPhone}
-              hasSet={hasSet}
-              listCustomers={listCustomers}
-              filteredList={filteredList}
+              query={search}
+              onQueryChange={(value) => {
+                setSearch(value)
+                updateParams({ q: value || null, page: null })
+              }}
+              listCustomers={customers}
               listLoading={listLoading}
               listError={listError}
               listQueryString={listQueryString}
-              updateParams={updateParams}
             />
           </div>
         }

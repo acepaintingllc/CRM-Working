@@ -1,6 +1,10 @@
 'use client'
 
 import { useCallback } from 'react'
+import type {
+  EstimateV2EditorStoreApi,
+  EstimateV2EditorStoreState,
+} from '@/lib/estimates/v2/store/estimateV2Store'
 import {
   addWallScopeMutation,
   addWallSegmentMutation,
@@ -11,40 +15,44 @@ import {
   toggleRoomWallIncludeMutation,
   updateWallScopeMutation,
 } from '../_lib/estimateV2EditorMutations'
-import type { EstimateV2EditorCollections, EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 
 export function useEstimateV2WallActions(params: {
-  collections: EstimateV2EditorCollections
-  meta: EstimateV2EditorMetaState
+  store: EstimateV2EditorStoreApi
   roomModeById: Map<string, 'RECT' | 'SEG'>
 }) {
-  const { collections, meta, roomModeById } = params
+  const { store, roomModeById } = params
 
   const markDirty = useCallback(() => {
-    meta.setDebugMeta((prev) => ({ ...prev, dirtySource: 'walls' }))
-  }, [meta])
+    store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: 'walls' }))
+  }, [store])
 
   const updateScope = useCallback(
-    (scopeId: string, patch: Partial<(typeof collections.scopes)[number]>) => {
-      collections.setScopes((prev) => updateWallScopeMutation(prev, scopeId, patch))
+    (
+      scopeId: string,
+      patch: Partial<EstimateV2EditorStoreState['collections']['scopes'][number]>
+    ) => {
+      store.getState().setScopes((prev) => updateWallScopeMutation(prev, scopeId, patch))
       markDirty()
     },
-    [collections, markDirty]
+    [markDirty, store]
   )
 
   const updateSegment = useCallback(
-    (segmentId: string, patch: Partial<(typeof collections.segments)[number]>) => {
-      collections.setSegments((prev) =>
+    (
+      segmentId: string,
+      patch: Partial<EstimateV2EditorStoreState['collections']['segments'][number]>
+    ) => {
+      store.getState().setSegments((prev) =>
         prev.map((segment) => (segment.id === segmentId ? { ...segment, ...patch } : segment))
       )
       markDirty()
     },
-    [collections, markDirty]
+    [markDirty, store]
   )
 
   const addScope = useCallback(
     (roomId: string) => {
-      collections.setScopes((prev) =>
+      store.getState().setScopes((prev) =>
         addWallScopeMutation({
           scopes: prev,
           roomId,
@@ -53,63 +61,66 @@ export function useEstimateV2WallActions(params: {
       )
       markDirty()
     },
-    [collections, markDirty]
+    [markDirty, store]
   )
 
   const moveScope = useCallback(
     (roomId: string, scopeId: string, direction: -1 | 1) => {
-      collections.setScopes((prev) => moveWallScopeMutation({ scopes: prev, roomId, scopeId, direction }))
+      store
+        .getState()
+        .setScopes((prev) => moveWallScopeMutation({ scopes: prev, roomId, scopeId, direction }))
       markDirty()
     },
-    [collections, markDirty]
+    [markDirty, store]
   )
 
   const deleteScope = useCallback(
     (roomId: string, scopeId: string) => {
       const ok = window.confirm('Delete this wall scope and all of its segments?')
       if (!ok) return
+      const { collections, setScopes, setSegments } = store.getState()
       const next = deleteWallScopeMutation({
         scopes: collections.scopes,
         segments: collections.segments,
         roomId,
         scopeId,
       })
-      collections.setScopes(next.scopes)
-      collections.setSegments(next.segments)
+      setScopes(next.scopes)
+      setSegments(next.segments)
       markDirty()
     },
-    [collections, markDirty]
+    [markDirty, store]
   )
 
   const addSegment = useCallback(
     (roomId: string, wallScopeId: string) => {
-      collections.setSegments((prev) => addWallSegmentMutation(prev, roomId, wallScopeId))
+      store.getState().setSegments((prev) => addWallSegmentMutation(prev, roomId, wallScopeId))
       markDirty()
     },
-    [collections, markDirty]
+    [markDirty, store]
   )
 
   const moveSegment = useCallback(
     (wallScopeId: string, segmentId: string, direction: -1 | 1) => {
-      collections.setSegments((prev) =>
+      store.getState().setSegments((prev) =>
         moveWallSegmentMutation({ segments: prev, wallScopeId, segmentId, direction })
       )
       markDirty()
     },
-    [collections, markDirty]
+    [markDirty, store]
   )
 
   const deleteSegment = useCallback(
     (wallScopeId: string, segmentId: string) => {
-      collections.setSegments((prev) => deleteWallSegmentMutation(prev, wallScopeId, segmentId))
+      store.getState().setSegments((prev) => deleteWallSegmentMutation(prev, wallScopeId, segmentId))
       markDirty()
     },
-    [collections, markDirty]
+    [markDirty, store]
   )
 
   const toggleRoomInclude = useCallback(
     (roomId: string) => {
-      collections.setScopes((prev) =>
+      store.getState().setScopes((prev) =>
         toggleRoomWallIncludeMutation({
           scopes: prev,
           roomId,
@@ -119,7 +130,7 @@ export function useEstimateV2WallActions(params: {
       )
       markDirty()
     },
-    [collections, markDirty, roomModeById]
+    [markDirty, roomModeById, store]
   )
 
   return {

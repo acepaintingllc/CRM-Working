@@ -1,6 +1,6 @@
 'use client'
 
-import { useEstimateV2EditorState } from '../_state/useEstimateV2EditorState'
+import { useEstimateV2Editor } from '../_state/useEstimateV2Editor'
 import type { ScopeKind } from '@/lib/estimator/scopeKinds'
 import { useCallback, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
@@ -198,7 +198,7 @@ export function EstimateV2EditorPageContent({
     jobSettingsVm,
     saveVm,
     toDisplayNumber,
-  } = useEstimateV2EditorState({ estimateId, routeFamily })
+  } = useEstimateV2Editor({ estimateId, routeFamily })
 
   const wallsSectionRef = useRef<HTMLDivElement | null>(null)
   const ceilingsSectionRef = useRef<HTMLDivElement | null>(null)

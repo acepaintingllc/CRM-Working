@@ -8,14 +8,27 @@ import {
 } from '@/lib/client/api'
 import type {
   CreateCustomerInput,
+  CustomerListPage,
+  CustomerListQuery,
   CustomerDetail,
-  CustomerSummary,
   CustomerTimelineEvent,
   UpdateCustomerInput,
 } from '@/lib/customers/types'
 
-export async function loadCustomerList() {
-  return loadData<CustomerSummary[]>('/api/customers', { cache: 'no-store' })
+function buildCustomerListUrl(query: CustomerListQuery = {}) {
+  const params = new URLSearchParams()
+  const search = query.search?.trim()
+
+  if (search) params.set('search', search)
+  if (query.page && query.page > 1) params.set('page', String(query.page))
+  if (query.pageSize && query.pageSize !== 50) params.set('pageSize', String(query.pageSize))
+
+  const serialized = params.toString()
+  return serialized ? `/api/customers?${serialized}` : '/api/customers'
+}
+
+export async function loadCustomerList(query: CustomerListQuery = {}) {
+  return loadData<CustomerListPage>(buildCustomerListUrl(query), { cache: 'no-store' })
 }
 
 export async function createCustomer(input: CreateCustomerInput) {
@@ -62,5 +75,5 @@ export async function saveCustomerTimelineNote(customerId: string, body: string)
 }
 
 export async function loadCustomersEnvelope() {
-  return requestApi<ApiDataEnvelope<CustomerSummary[]>>('/api/customers', { cache: 'no-store' })
+  return requestApi<ApiDataEnvelope<CustomerListPage>>('/api/customers', { cache: 'no-store' })
 }

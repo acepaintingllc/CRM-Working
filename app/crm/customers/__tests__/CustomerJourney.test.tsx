@@ -10,6 +10,7 @@ import EditCustomerPage from '../[id]/edit/page'
 
 const authedFetch = vi.fn()
 const invalidateSwrKey = vi.fn<(key: string) => Promise<unknown>>()
+const invalidateSwrPrefix = vi.fn<(prefix: string) => Promise<unknown>>()
 const push = vi.fn()
 const replace = vi.fn()
 const refresh = vi.fn()
@@ -25,6 +26,7 @@ vi.mock('@/lib/auth/authedFetch', () => ({
 
 vi.mock('@/app/crm/_hooks/swrCache', () => ({
   invalidateSwrKey: (key: string) => invalidateSwrKey(key),
+  invalidateSwrPrefix: (prefix: string) => invalidateSwrPrefix(prefix),
 }))
 
 vi.mock('@/app/crm/customers/customers-orgproviders', () => ({
@@ -75,7 +77,11 @@ describe('customer journey smoke', () => {
     useSearchParams.mockReset()
     useOrg.mockReset()
     invalidateSwrKey.mockClear()
+    invalidateSwrPrefix.mockClear()
     invalidateSwrKey.mockImplementation((key: string) => swrMutate(key))
+    invalidateSwrPrefix.mockImplementation((prefix: string) =>
+      swrMutate((key) => typeof key === 'string' && key.startsWith(prefix))
+    )
     useOrg.mockReturnValue({ orgId: 'org-1', loading: false, error: null, refresh: vi.fn() })
     usePathname.mockReturnValue('/crm/customers/customer-1')
     useSearchParams.mockReturnValue(new URLSearchParams(''))
@@ -106,7 +112,7 @@ describe('customer journey smoke', () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/crm/customers/customer-1'))
     expect(refresh).not.toHaveBeenCalled()
-    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers')
+    expect(invalidateSwrPrefix).toHaveBeenCalledWith('/api/customers')
     cleanup()
 
     authedFetch.mockReset()
@@ -131,9 +137,14 @@ describe('customer journey smoke', () => {
         })
       )
       .mockResolvedValueOnce(
-        createDataResponse([
-          { id: 'customer-1', name: 'Taylor Jones', email: 'taylor@example.com', phone: '812-555-0100', address: '123 Main St, Newburgh, IN 47630' },
-        ])
+        createDataResponse({
+          data: [
+            { id: 'customer-1', name: 'Taylor Jones', email: 'taylor@example.com', phone: '812-555-0100', address: '123 Main St, Newburgh, IN 47630' },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+        })
       )
       .mockResolvedValueOnce(createDataResponse([]))
       .mockResolvedValueOnce(createMutationResponse({ id: 'note-1' }))

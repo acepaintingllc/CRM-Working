@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useMemo, useState } from 'react'
+import Link from "next/link";
+import { ArrowRight, Mail, MapPin, Phone, Plus } from "lucide-react";
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
 import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
@@ -10,23 +13,28 @@ import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useCustomerList } from '@/app/crm/customers/_hooks/useCustomerList'
 import { useOrg } from '@/app/crm/customers/customers-orgproviders'
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowRight, Mail, MapPin, Phone, Plus } from "lucide-react";
 
 export default function CustomersPage() {
   const { orgId } = useOrg();
-  const { listCustomers, listLoading, listError } = useCustomerList();
-  const [query, setQuery] = useState("");
+  const { customers, total, page, pageSize, search, setSearch, setPage, loading, error } = useCustomerList();
+  const [searchInput, setSearchInput] = useState(search);
 
-  const filteredRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return listCustomers;
-    return listCustomers.filter((customer) => {
-      const hay = `${customer.name ?? ""} ${customer.email ?? ""} ${customer.phone ?? ""} ${customer.address ?? ""}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [listCustomers, query]);
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (searchInput !== search) {
+        setSearch(searchInput);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [search, searchInput, setSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageLabel = useMemo(() => `Page ${page} of ${totalPages}`, [page, totalPages]);
 
   return (
     <CrmPageShell>
@@ -45,20 +53,35 @@ export default function CustomersPage() {
       />
 
       <CrmSearchBar
-        value={query}
-        onChange={setQuery}
-        placeholder="Search customers by name, email, phone, or address..."
+        value={searchInput}
+        onChange={setSearchInput}
+        placeholder="Search customers by name, email, or phone..."
+        actions={
+          <div className="flex items-center gap-2">
+            <CrmButton type="button" onClick={() => setPage(page - 1)} disabled={page <= 1 || loading}>
+              Prev
+            </CrmButton>
+            <div className="text-sm font-semibold text-[color:var(--crm-ui-muted)]">{pageLabel}</div>
+            <CrmButton
+              type="button"
+              onClick={() => setPage(page + 1)}
+              disabled={page >= totalPages || loading}
+            >
+              Next
+            </CrmButton>
+          </div>
+        }
       />
 
-      {listError ? <CrmNotice tone="error" emoji="⚠️">{listError}</CrmNotice> : null}
+      {error ? <CrmNotice tone="error" emoji="⚠️">{error}</CrmNotice> : null}
 
-      {listLoading ? (
+      {loading ? (
         <CrmSectionCard title="Loading customers" emoji="⏳">
           <p className="text-sm text-[color:var(--crm-ui-muted)]">Pulling the latest customer profiles.</p>
         </CrmSectionCard>
       ) : null}
 
-      {!listLoading && !listError && listCustomers.length === 0 ? (
+      {!loading && !error && total === 0 && !search.trim() ? (
         <CrmEmptyState
           emoji="🪴"
           title="No customers yet"
@@ -67,16 +90,16 @@ export default function CustomersPage() {
         />
       ) : null}
 
-      {!listLoading && !listError && listCustomers.length > 0 && filteredRows.length === 0 ? (
+      {!loading && !error && (total === 0 ? Boolean(search.trim()) : customers.length === 0) ? (
         <CrmEmptyState
           emoji="🔎"
           title="No matching customers"
-          description="Try a broader search by name, email, phone, or address."
+          description="Try a broader search by name, email, or phone."
         />
       ) : null}
 
       <div className="grid gap-3">
-        {filteredRows.map((customer) => (
+        {customers.map((customer) => (
           <Link
             key={customer.id}
             href={`/crm/customers/${customer.id}`}

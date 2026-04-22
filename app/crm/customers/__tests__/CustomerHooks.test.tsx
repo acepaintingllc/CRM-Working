@@ -8,6 +8,7 @@ import { useCustomerTimeline } from '../_hooks/useCustomerTimeline'
 
 const authedFetch = vi.fn()
 const invalidateSwrKey = vi.fn<(key: string) => Promise<unknown>>()
+const invalidateSwrPrefix = vi.fn<(prefix: string) => Promise<unknown>>()
 
 vi.mock('@/lib/auth/authedFetch', () => ({
   authedFetch: (input: RequestInfo | URL, init?: RequestInit) => authedFetch(input, init),
@@ -15,6 +16,7 @@ vi.mock('@/lib/auth/authedFetch', () => ({
 
 vi.mock('@/app/crm/_hooks/swrCache', () => ({
   invalidateSwrKey: (key: string) => invalidateSwrKey(key),
+  invalidateSwrPrefix: (prefix: string) => invalidateSwrPrefix(prefix),
 }))
 
 function createResponse(ok: boolean, payload: unknown, status = ok ? 200 : 500) {
@@ -34,6 +36,10 @@ function createMutationResponse(data: unknown, notice?: string) {
   return createResponse(true, { data, ...(notice ? { notice } : {}) })
 }
 
+function createCustomerListPage(rows: unknown[], page = 1, total = rows.length, pageSize = 50) {
+  return createDataResponse({ data: rows, total, page, pageSize })
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((nextResolve) => {
@@ -46,7 +52,11 @@ describe('customer hooks', () => {
   beforeEach(() => {
     authedFetch.mockReset()
     invalidateSwrKey.mockClear()
+    invalidateSwrPrefix.mockClear()
     invalidateSwrKey.mockImplementation((key: string) => swrMutate(key))
+    invalidateSwrPrefix.mockImplementation((prefix: string) =>
+      swrMutate((key) => typeof key === 'string' && key.startsWith(prefix))
+    )
   })
 
   it('useCustomerDetail ignores stale responses when the id changes', async () => {
@@ -129,21 +139,21 @@ describe('customer hooks', () => {
 
     expect(deleted).toBe(true)
     expect(result.current.error).toBeNull()
-    expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers')
+    expect(invalidateSwrPrefix).toHaveBeenCalledWith('/api/customers')
     expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers/customer-1')
   })
 
   it('useCustomerList reuses the SWR cache across remounts', async () => {
-    authedFetch.mockResolvedValue(createDataResponse([{ id: '1', name: 'First' }]))
+    authedFetch.mockResolvedValue(createCustomerListPage([{ id: '1', name: 'First' }]))
 
     const wrapper = createSWRWrapper()
     const first = renderHook(() => useCustomerList(), { wrapper })
-    await waitFor(() => expect(first.result.current.listCustomers[0]?.id).toBe('1'))
+    await waitFor(() => expect(first.result.current.customers[0]?.id).toBe('1'))
 
     first.unmount()
 
     const second = renderHook(() => useCustomerList(), { wrapper })
-    await waitFor(() => expect(second.result.current.listCustomers[0]?.id).toBe('1'))
+    await waitFor(() => expect(second.result.current.customers[0]?.id).toBe('1'))
 
     expect(authedFetch).toHaveBeenCalledTimes(1)
   })
@@ -155,9 +165,37 @@ describe('customer hooks', () => {
       wrapper: createSWRWrapper(),
     })
 
-    await waitFor(() => expect(result.current.listLoading).toBe(false))
-    expect(result.current.listCustomers).toEqual([])
-    expect(result.current.listError).toBe('List exploded')
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.customers).toEqual([])
+    expect(result.current.error).toBe('List exploded')
+  })
+
+  it('useCustomerList updates the key when search or page changes and resets page on new search', async () => {
+    authedFetch
+      .mockResolvedValueOnce(createCustomerListPage([{ id: '1', name: 'First' }], 1, 60))
+      .mockResolvedValueOnce(createCustomerListPage([{ id: '51', name: 'Second Page' }], 2, 60))
+      .mockResolvedValueOnce(createCustomerListPage([{ id: '2', name: 'Bob' }], 1, 1))
+
+    const { result } = renderHook(() => useCustomerList(), {
+      wrapper: createSWRWrapper(),
+    })
+
+    await waitFor(() => expect(result.current.customers[0]?.id).toBe('1'))
+
+    await act(async () => {
+      result.current.setPage(2)
+    })
+
+    await waitFor(() => expect(result.current.page).toBe(2))
+    await waitFor(() => expect(result.current.customers[0]?.id).toBe('51'))
+
+    await act(async () => {
+      result.current.setSearch('bob')
+    })
+
+    await waitFor(() => expect(result.current.page).toBe(1))
+    await waitFor(() => expect(result.current.search).toBe('bob'))
+    await waitFor(() => expect(result.current.customers[0]?.id).toBe('2'))
   })
 
   it('useCustomerTimeline ignores stale responses and surfaces request errors', async () => {

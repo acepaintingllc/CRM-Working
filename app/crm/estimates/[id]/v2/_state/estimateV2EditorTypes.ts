@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from 'react'
 import type { EstimateV2Error } from '@/lib/estimator/errors'
 import type { ScopeKind } from '@/lib/estimator/scopeKinds'
 import type {
@@ -27,6 +26,9 @@ import type { SaveStatus } from '@/lib/estimator/v2WallsAutosave'
 
 export type Unsafe = UnsafeRecord
 
+export type EstimateV2StateUpdater<T> = T | ((prev: T) => T)
+export type EstimateV2StateSetter<T> = (value: EstimateV2StateUpdater<T>) => void
+
 export type DirtySource =
   | 'load'
   | 'room'
@@ -49,62 +51,62 @@ export type EstimateV2EditorDebugMeta = {
 
 export type EstimateV2EditorCollections = {
   rooms: EstimateV2RoomDraft[]
-  setRooms: Dispatch<SetStateAction<EstimateV2RoomDraft[]>>
+  setRooms: EstimateV2StateSetter<EstimateV2RoomDraft[]>
   scopes: EstimateV2WallScopeDraft[]
-  setScopes: Dispatch<SetStateAction<EstimateV2WallScopeDraft[]>>
+  setScopes: EstimateV2StateSetter<EstimateV2WallScopeDraft[]>
   segments: EstimateV2WallSegmentDraft[]
-  setSegments: Dispatch<SetStateAction<EstimateV2WallSegmentDraft[]>>
+  setSegments: EstimateV2StateSetter<EstimateV2WallSegmentDraft[]>
   roomFlags: EstimateV2RoomFlagDraft[]
-  setRoomFlags: Dispatch<SetStateAction<EstimateV2RoomFlagDraft[]>>
+  setRoomFlags: EstimateV2StateSetter<EstimateV2RoomFlagDraft[]>
   ceilingScopes: EstimateV2CeilingScopeDraft[]
-  setCeilingScopes: Dispatch<SetStateAction<EstimateV2CeilingScopeDraft[]>>
+  setCeilingScopes: EstimateV2StateSetter<EstimateV2CeilingScopeDraft[]>
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
-  setCeilingSegments: Dispatch<SetStateAction<EstimateV2CeilingSegmentDraft[]>>
+  setCeilingSegments: EstimateV2StateSetter<EstimateV2CeilingSegmentDraft[]>
   trimScopes: EstimateV2TrimScopeDraft[]
-  setTrimScopes: Dispatch<SetStateAction<EstimateV2TrimScopeDraft[]>>
+  setTrimScopes: EstimateV2StateSetter<EstimateV2TrimScopeDraft[]>
 }
 
 export type EstimateV2EditorMetaState = {
   loading: boolean
-  setLoading: Dispatch<SetStateAction<boolean>>
+  setLoading: EstimateV2StateSetter<boolean>
   saving: boolean
-  setSaving: Dispatch<SetStateAction<boolean>>
+  setSaving: EstimateV2StateSetter<boolean>
   estimate: EstimateV2EstimateMeta | null
-  setEstimate: Dispatch<SetStateAction<EstimateV2EstimateMeta | null>>
+  setEstimate: EstimateV2StateSetter<EstimateV2EstimateMeta | null>
   job: EstimateV2JobMeta | null
-  setJob: Dispatch<SetStateAction<EstimateV2JobMeta | null>>
+  setJob: EstimateV2StateSetter<EstimateV2JobMeta | null>
   catalogs: EstimateV2CatalogsPayload['catalogs']
-  setCatalogs: Dispatch<SetStateAction<EstimateV2CatalogsPayload['catalogs']>>
+  setCatalogs: EstimateV2StateSetter<EstimateV2CatalogsPayload['catalogs']>
   wallCalculations: EstimateV2WallCalculationsPayload | null
-  setWallCalculations: Dispatch<SetStateAction<EstimateV2WallCalculationsPayload | null>>
+  setWallCalculations: EstimateV2StateSetter<EstimateV2WallCalculationsPayload | null>
   ceilingCalculations: Unsafe | null
-  setCeilingCalculations: Dispatch<SetStateAction<Unsafe | null>>
+  setCeilingCalculations: EstimateV2StateSetter<Unsafe | null>
   trimCalculations: Unsafe | null
-  setTrimCalculations: Dispatch<SetStateAction<Unsafe | null>>
+  setTrimCalculations: EstimateV2StateSetter<Unsafe | null>
   selectedRoomId: string
-  setSelectedRoomId: Dispatch<SetStateAction<string>>
+  setSelectedRoomId: EstimateV2StateSetter<string>
   error: EstimateV2Error | null
-  setError: Dispatch<SetStateAction<EstimateV2Error | null>>
+  setError: EstimateV2StateSetter<EstimateV2Error | null>
   validationIssues: string[]
-  setValidationIssues: Dispatch<SetStateAction<string[]>>
+  setValidationIssues: EstimateV2StateSetter<string[]>
   lastSavedSnapshot: string
-  setLastSavedSnapshot: Dispatch<SetStateAction<string>>
+  setLastSavedSnapshot: EstimateV2StateSetter<string>
   saveStatus: SaveStatus
-  setSaveStatus: Dispatch<SetStateAction<SaveStatus>>
+  setSaveStatus: EstimateV2StateSetter<SaveStatus>
   autoSaveHint: string | null
-  setAutoSaveHint: Dispatch<SetStateAction<string | null>>
+  setAutoSaveHint: EstimateV2StateSetter<string | null>
   settingsOpen: boolean
-  setSettingsOpen: Dispatch<SetStateAction<boolean>>
+  setSettingsOpen: EstimateV2StateSetter<boolean>
   jobDefaultsOpen: boolean
-  setJobDefaultsOpen: Dispatch<SetStateAction<boolean>>
+  setJobDefaultsOpen: EstimateV2StateSetter<boolean>
   jobSettingsDraft: EstimateV2JobSettingsDraft
-  setJobSettingsDraft: Dispatch<SetStateAction<EstimateV2JobSettingsDraft>>
+  setJobSettingsDraft: EstimateV2StateSetter<EstimateV2JobSettingsDraft>
   orgJobProductDefaults: EstimateV2JobDefaultProducts
-  setOrgJobProductDefaults: Dispatch<SetStateAction<EstimateV2JobDefaultProducts>>
+  setOrgJobProductDefaults: EstimateV2StateSetter<EstimateV2JobDefaultProducts>
   customerDraft: EstimateV2CustomerDraft
-  setCustomerDraft: Dispatch<SetStateAction<EstimateV2CustomerDraft>>
+  setCustomerDraft: EstimateV2StateSetter<EstimateV2CustomerDraft>
   debugMeta: EstimateV2EditorDebugMeta
-  setDebugMeta: Dispatch<SetStateAction<EstimateV2EditorDebugMeta>>
+  setDebugMeta: EstimateV2StateSetter<EstimateV2EditorDebugMeta>
 }
 
 export type EstimateV2EditorSettingsVm = {
@@ -112,9 +114,9 @@ export type EstimateV2EditorSettingsVm = {
   orgJobProductDefaults: EstimateV2JobDefaultProducts
   customerDraft: EstimateV2CustomerDraft
   settingsOpen: boolean
-  setSettingsOpen: Dispatch<SetStateAction<boolean>>
+  setSettingsOpen: EstimateV2StateSetter<boolean>
   jobDefaultsOpen: boolean
-  setJobDefaultsOpen: Dispatch<SetStateAction<boolean>>
+  setJobDefaultsOpen: EstimateV2StateSetter<boolean>
   wallPaintOptions: EstimateV2PaintProductOption[]
   wallPrimerOptions: EstimateV2PaintProductOption[]
   ceilingPaintOptions: EstimateV2PaintProductOption[]
@@ -151,7 +153,7 @@ export type EstimateV2EditorSaveVm = {
 export type EstimateV2EditorRoomVm = {
   rooms: EstimateV2RoomDraft[]
   selectedRoomId: string
-  setSelectedRoomId: Dispatch<SetStateAction<string>>
+  setSelectedRoomId: EstimateV2StateSetter<string>
   selectedRoom: EstimateV2RoomDraft | null
   selectedRoomResolvedMode: 'RECT' | 'SEG'
   selectedRoomGeometryMode: 'RECT' | 'SEG'
