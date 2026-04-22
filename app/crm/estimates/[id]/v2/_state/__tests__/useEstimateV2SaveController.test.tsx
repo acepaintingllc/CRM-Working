@@ -4,6 +4,7 @@ import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { estimateRouteFamily } from '../../../estimateRouteFamily'
 import { useEstimateV2SaveController } from '../useEstimateV2SaveController'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
+import { areEstimateV2DirtySnapshotsEqual, buildEstimateV2DirtySnapshot } from '../estimateV2DirtySnapshot'
 
 const authedFetch = vi.fn()
 
@@ -168,7 +169,8 @@ describe('useEstimateV2SaveController', () => {
     first.resolve(createResponse(true, harness.fixture.summaryData))
     await firstSave
 
-    expect(harness.store.getState().meta.lastSavedSnapshot).not.toBe('')
+    expect(harness.store.getState().meta.lastSavedSnapshot).not.toBeNull()
+    expect(harness.store.getState().meta.lastSavedSnapshot?.comparisonKey).toBeTruthy()
   })
 
   it('falls back to existing calculation payloads when a successful response omits them', async () => {
@@ -234,5 +236,54 @@ describe('useEstimateV2SaveController', () => {
         .getState()
         .collections.trimScopes.find((scope) => scope.id === 'trim-r002-excluded')?.helperValue
     ).not.toBe('12')
+  })
+
+  it('updates the saved snapshot to the sanitized canonical state after a successful save', async () => {
+    const harness = createSaveHarness()
+    harness.store.getState().setTrimScopes((prev) =>
+      prev.map((scope) =>
+        scope.id === 'trim-r002-excluded'
+          ? {
+              ...scope,
+              include: 'Y',
+              measurementMode: 'ROOM_HELPER',
+              helperSource: 'ROOM_PERIMETER',
+              helperValue: '12',
+              measurementValue: '12',
+            }
+          : scope
+      )
+    )
+    authedFetch.mockResolvedValue(createResponse(true, harness.fixture.summaryData))
+
+    const { result } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: harness.fixture.currentSnapshot,
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    await expect(result.current.save('manual')).resolves.toBe(true)
+
+    const expectedSavedSnapshot = buildEstimateV2DirtySnapshot({
+      rooms: harness.store.getState().collections.rooms,
+      scopes: harness.store.getState().collections.scopes,
+      segments: harness.store.getState().collections.segments,
+      roomFlags: harness.store.getState().collections.roomFlags,
+      ceilingScopes: harness.store.getState().collections.ceilingScopes,
+      ceilingSegments: harness.store.getState().collections.ceilingSegments,
+      trimScopes: harness.store.getState().collections.trimScopes,
+    })
+
+    expect(
+      areEstimateV2DirtySnapshotsEqual(
+        harness.store.getState().meta.lastSavedSnapshot,
+        expectedSavedSnapshot
+      )
+    ).toBe(true)
   })
 })

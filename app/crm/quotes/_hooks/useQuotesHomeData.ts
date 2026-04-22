@@ -17,33 +17,32 @@ export function useQuotesHomeData() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  async function load(active = true) {
+    setLoading(true)
+    setError(null)
+    try {
+      const [homePayload, jobsPayload] = await Promise.all([loadQuoteHome<QuoteHomeData>(), fetchJobList()])
+
+      if (!active) return false
+
+      setData(homePayload)
+      setJobs(filterEligibleQuoteVersionJobs(jobsPayload))
+      return true
+    } catch (loadError) {
+      if (!active) return false
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load quotes home.')
+      setData(null)
+      setJobs([])
+      return false
+    } finally {
+      if (active) setLoading(false)
+    }
+  }
+
   useEffect(() => {
     let active = true
 
-    const load = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const [homePayload, jobsPayload] = await Promise.all([
-          loadQuoteHome<QuoteHomeData>(),
-          fetchJobList(),
-        ])
-
-        if (!active) return
-
-        setData(homePayload)
-        setJobs(filterEligibleQuoteVersionJobs(jobsPayload))
-      } catch (loadError) {
-        if (!active) return
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load quotes home.')
-        setData(null)
-        setJobs([])
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-
-    void load()
+    void load(active)
     return () => {
       active = false
     }
@@ -56,5 +55,6 @@ export function useQuotesHomeData() {
     loading,
     error,
     setError,
+    refresh: () => load(true),
   }
 }

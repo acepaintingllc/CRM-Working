@@ -28,8 +28,29 @@ export function QuoteProductsPageContent() {
       ) : null}
 
       <CrmDetailLayout
-        main={<QuoteProductsCatalogSection controller={controller} />}
-        side={<QuoteProductEditorSection controller={controller} />}
+        main={
+          <QuoteProductsCatalogSection
+            vm={controller.catalogVm}
+            actions={{
+              setSearch: controller.actions.setSearch,
+              setStatusFilter: controller.actions.setStatusFilter,
+              setActiveFamily: controller.actions.setActiveFamily,
+              setSelectedId: controller.actions.setSelectedId,
+              startCreate: controller.actions.startCreate,
+            }}
+          />
+        }
+        side={
+          <QuoteProductEditorSection
+            vm={controller.editorVm}
+            actions={{
+              updateDraftField: controller.actions.updateDraftField,
+              save: controller.actions.save,
+              cancelEdit: controller.actions.cancelEdit,
+              requestRemove: controller.actions.requestRemove,
+            }}
+          />
+        }
       />
     </CrmResourceState>
   )

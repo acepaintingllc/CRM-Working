@@ -52,14 +52,8 @@ export default function QuotesHomePage() {
           </div>
 
           <QuotesHomeJobList
-            jobs={jobListVm.jobs}
-            filteredJobs={jobListVm.filteredJobs}
-            jobQuery={jobListVm.jobQuery}
-            loading={jobListVm.loading}
-            mobileJobs={mobileVm.jobs}
+            vm={jobListVm}
             renderDesktop={false}
-            selectedJobId={jobListVm.selectedJobId}
-            versionCountByJob={jobListVm.versionCountByJob}
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
           />
@@ -68,10 +62,7 @@ export default function QuotesHomePage() {
 
       <div className="ace-v2-desktop-only" style={{ ...S.content, ...S.desktopWrap }}>
         <QuotesHomeHeader
-          heroSummaryText={headerVm.heroSummaryText}
-          searchFocused={headerVm.searchFocused}
-          searchQuery={headerVm.searchQuery}
-          searchResults={headerVm.searchResults}
+          vm={headerVm}
           onSearchFocusedChange={actions.setSearchFocused}
           onSearchQueryChange={actions.setSearchQuery}
         />
@@ -102,24 +93,14 @@ export default function QuotesHomePage() {
           }}
         >
           <QuotesHomeJobList
-            jobs={jobListVm.jobs}
-            filteredJobs={jobListVm.filteredJobs}
-            jobQuery={jobListVm.jobQuery}
-            loading={jobListVm.loading}
-            mobileJobs={[]}
+            vm={jobListVm}
             renderMobile={false}
-            selectedJobId={jobListVm.selectedJobId}
-            versionCountByJob={jobListVm.versionCountByJob}
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
           />
 
           <section style={{ display: 'grid', gap: 22, alignSelf: 'start' }}>
-            <QuotesHomeSelectedJobPanel
-              loading={selectedJobVm.loading}
-              selectedJob={selectedJobVm.selectedJob}
-              selectedJobVersionsCount={selectedJobVm.selectedJobVersionsCount}
-            />
+            <QuotesHomeSelectedJobPanel vm={selectedJobVm} />
 
             <div
               className="v2-hub-detail-grid"
@@ -129,19 +110,10 @@ export default function QuotesHomePage() {
                 gap: 22,
               }}
             >
-              <QuotesHomeVersionList
-                deletingId={versionListVm.deletingId}
-                selectedJob={versionListVm.selectedJob}
-                versions={versionListVm.versions}
-                onRequestDelete={actions.requestDeleteVersion}
-              />
+              <QuotesHomeVersionList vm={versionListVm} onRequestDelete={actions.requestDeleteVersion} />
 
               <QuotesHomeCreatePanel
-                creating={createVm.creating}
-                loading={createVm.loading}
-                selectedJob={createVm.selectedJob}
-                versionKind={createVm.versionKind}
-                versionName={createVm.versionName}
+                vm={createVm}
                 onCreate={() => void actions.createVersion()}
                 onVersionKindChange={actions.setVersionKind}
                 onVersionNameChange={actions.setVersionName}
@@ -168,8 +140,7 @@ export default function QuotesHomePage() {
       </div>
 
       <QuotesHomeDeleteDialog
-        deletingId={deleteDialogVm.deletingId}
-        estimate={deleteDialogVm.estimate}
+        vm={deleteDialogVm}
         onCancel={actions.cancelDelete}
         onConfirm={() => void actions.confirmDeleteVersion()}
       />

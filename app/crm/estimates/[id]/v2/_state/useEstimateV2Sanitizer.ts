@@ -9,7 +9,7 @@ import {
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from '@/lib/estimator/defaults'
 import { asText } from '@/lib/estimator/parsing'
-import { buildEstimateV2SavePayload, sortByPosition } from '@/lib/estimator/v2DraftPayload'
+import { sortByPosition } from '@/lib/estimator/v2DraftPayload'
 import { sanitizeV2CeilingsDrafts } from '@/lib/estimator/v2CeilingsSanitize'
 import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
 import { sanitizeV2WallsDrafts } from '@/lib/estimator/v2WallsSanitize'
@@ -34,6 +34,7 @@ import {
   normalizeTrimScope,
 } from '../_lib/estimateV2EditorNormalize'
 import type { EstimateV2EditorDebugMeta, Unsafe } from './estimateV2EditorTypes'
+import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 
 type ProductOverrideInputs = {
   wallPaintOverride: string
@@ -61,7 +62,7 @@ export type EstimateV2SanitizedLoadResult = {
     ceilingCalculations: EstimateResponse['ceiling_calculations']
     trimCalculations: EstimateResponse['trim_calculations']
     selectedRoomId: string
-    lastSavedSnapshot: string
+    lastSavedSnapshot: ReturnType<typeof buildEstimateV2DirtySnapshot>
     saveStatus: 'saved'
     autoSaveHint: null
     debugMeta: EstimateV2EditorDebugMeta
@@ -262,17 +263,15 @@ export function sanitizeEstimateV2EditorLoad(params: {
       ? selectedRoomId
       : normalizedRooms[0]?.roomId ?? ''
 
-  const lastSavedSnapshot = JSON.stringify(
-    buildEstimateV2SavePayload(
-      normalizedRooms,
-      recalculated.wallScopes,
-      sanitizedWalls.segments,
-      normalizedRoomFlags,
-      recalculated.ceilingScopes,
-      sanitizedCeilings.ceilingSegments,
-      recalculated.trimScopes
-    )
-  )
+  const lastSavedSnapshot = buildEstimateV2DirtySnapshot({
+    rooms: normalizedRooms,
+    scopes: recalculated.wallScopes,
+    segments: sanitizedWalls.segments,
+    roomFlags: normalizedRoomFlags,
+    ceilingScopes: recalculated.ceilingScopes,
+    ceilingSegments: sanitizedCeilings.ceilingSegments,
+    trimScopes: recalculated.trimScopes,
+  })
 
   return {
     catalogs,

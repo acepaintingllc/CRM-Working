@@ -24,6 +24,8 @@ function stableStringify(value: unknown) {
 }
 
 function defaultIsDirty<TData>(current: TData, snapshot: TData) {
+  // Small forms can rely on the generic stringify fallback.
+  // Dense editors should pass an explicit comparator or canonical snapshot helper.
   return stableStringify(current) !== stableStringify(snapshot)
 }
 

@@ -1,33 +1,21 @@
 'use client'
 
 import Link from 'next/link'
-import type { QuoteHomeJob } from './quoteHomeTypes'
+import type { QuotesHomeJobListVm } from './quoteHomeTypes'
 import { S } from './quoteHomeStyles'
 
 type Props = {
-  jobs: QuoteHomeJob[]
-  filteredJobs: QuoteHomeJob[]
-  jobQuery: string
-  loading: boolean
-  mobileJobs: QuoteHomeJob[]
+  vm: QuotesHomeJobListVm
   renderDesktop?: boolean
   renderMobile?: boolean
-  selectedJobId: string
-  versionCountByJob: Record<string, number>
   onJobQueryChange: (value: string) => void
   onSelectJob: (jobId: string) => void
 }
 
 export function QuotesHomeJobList({
-  jobs,
-  filteredJobs,
-  jobQuery,
-  loading,
-  mobileJobs,
+  vm,
   renderDesktop = true,
   renderMobile = true,
-  selectedJobId,
-  versionCountByJob,
   onJobQueryChange,
   onSelectJob,
 }: Props) {
@@ -37,8 +25,8 @@ export function QuotesHomeJobList({
         <div>
           <div style={S.mobileSectionLabel}>Jobs</div>
           <div style={{ display: 'grid', gap: 10 }}>
-            {loading ? <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>Loading...</div> : null}
-            {!loading && jobs.length === 0 ? (
+            {vm.loading ? <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>Loading...</div> : null}
+            {!vm.loading && vm.emptyState === 'no_jobs' ? (
               <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>
                 No eligible jobs yet.{' '}
                 <Link href="/crm/customers/new" style={{ color: 'var(--v2-green-2)' }}>
@@ -47,29 +35,26 @@ export function QuotesHomeJobList({
                 first.
               </div>
             ) : null}
-            {mobileJobs.map((job) => {
-              const count = versionCountByJob[job.id] ?? 0
-              return (
-                <Link
-                  key={job.id}
-                  href={`/crm/quotes/create?job=${job.id}`}
-                  style={{
-                    display: 'block',
-                    borderRadius: 14,
-                    border: '1px solid var(--v2-line)',
-                    background: '#111111',
-                    padding: 14,
-                    color: 'var(--v2-ink)',
-                    textDecoration: 'none',
-                  }}
-                >
-                  <div style={{ fontSize: 14, marginBottom: 3 }}>{job.title}</div>
-                  <div style={{ fontSize: 14, color: 'var(--v2-ink-3)' }}>
-                    {job.customer_name ?? 'Unknown customer'} · {count} version{count === 1 ? '' : 's'}
-                  </div>
-                </Link>
-              )
-            })}
+            {vm.mobileItems.map((job) => (
+              <Link
+                key={job.id}
+                href={job.href ?? '#'}
+                style={{
+                  display: 'block',
+                  borderRadius: 14,
+                  border: '1px solid var(--v2-line)',
+                  background: '#111111',
+                  padding: 14,
+                  color: 'var(--v2-ink)',
+                  textDecoration: 'none',
+                }}
+              >
+                <div style={{ fontSize: 14, marginBottom: 3 }}>{job.title}</div>
+                <div style={{ fontSize: 14, color: 'var(--v2-ink-3)' }}>
+                  {job.customerName} · {job.versionCountLabel}
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       ) : null}
@@ -89,7 +74,7 @@ export function QuotesHomeJobList({
           <div>
             <div style={{ ...S.cardLabel, marginBottom: 10 }}>Jobs</div>
             <input
-              value={jobQuery}
+              value={vm.searchQuery}
               onChange={(event) => onJobQueryChange(event.target.value)}
               placeholder="Search jobs by title, customer, or address"
               aria-label="Search jobs"
@@ -114,13 +99,13 @@ export function QuotesHomeJobList({
               paddingRight: 4,
             }}
           >
-            {loading ? <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>Loading jobs...</div> : null}
+            {vm.loading ? <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>Loading jobs...</div> : null}
 
-            {!loading && filteredJobs.length === 0 && jobs.length > 0 ? (
+            {!vm.loading && vm.emptyState === 'no_matches' ? (
               <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>No jobs match this search.</div>
             ) : null}
 
-            {!loading && jobs.length === 0 ? (
+            {!vm.loading && vm.emptyState === 'no_jobs' ? (
               <div
                 style={{
                   borderRadius: 14,
@@ -171,42 +156,37 @@ export function QuotesHomeJobList({
               </div>
             ) : null}
 
-            {filteredJobs.map((job) => {
-              const active = job.id === selectedJobId
-              const versionCount = versionCountByJob[job.id] ?? 0
-
-              return (
-                <button
-                  key={job.id}
-                  type="button"
-                  onClick={() => onSelectJob(job.id)}
+            {vm.items.map((job) => (
+              <button
+                key={job.id}
+                type="button"
+                onClick={() => onSelectJob(job.id)}
+                style={{
+                  textAlign: 'left',
+                  borderRadius: 14,
+                  border: `1px solid ${
+                    job.isSelected ? 'rgba(134,239,172,0.28)' : 'var(--v2-line)'
+                  }`,
+                  background: job.isSelected ? 'rgba(74,222,128,0.08)' : '#111111',
+                  padding: 14,
+                  color: 'var(--v2-ink)',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{job.title}</div>
+                <div style={{ fontSize: 14, color: 'var(--v2-ink-3)' }}>{job.customerName}</div>
+                <div
                   style={{
-                    textAlign: 'left',
-                    borderRadius: 14,
-                    border: `1px solid ${active ? 'rgba(134,239,172,0.28)' : 'var(--v2-line)'}`,
-                    background: active ? 'rgba(74,222,128,0.08)' : '#111111',
-                    padding: 14,
-                    color: 'var(--v2-ink)',
-                    cursor: 'pointer',
+                    fontFamily: 'var(--v2-mono)',
+                    fontSize: 11,
+                    color: 'var(--v2-ink-3)',
+                    marginTop: 4,
                   }}
                 >
-                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{job.title}</div>
-                  <div style={{ fontSize: 14, color: 'var(--v2-ink-3)' }}>
-                    {job.customer_name ?? 'Unknown customer'}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: 'var(--v2-mono)',
-                      fontSize: 11,
-                      color: 'var(--v2-ink-3)',
-                      marginTop: 4,
-                    }}
-                  >
-                    {versionCount} version{versionCount === 1 ? '' : 's'}
-                  </div>
-                </button>
-              )
-            })}
+                  {job.versionCountLabel}
+                </div>
+              </button>
+            ))}
           </div>
         </section>
       ) : null}

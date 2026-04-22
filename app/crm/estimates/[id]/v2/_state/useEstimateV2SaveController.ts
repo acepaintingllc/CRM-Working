@@ -13,7 +13,7 @@ import {
   createSaveRequestTracker,
   shouldQueueAutosave,
 } from '@/lib/estimator/v2WallsAutosave'
-import { buildEstimateV2SavePayload, sortByPosition } from '@/lib/estimator/v2DraftPayload'
+import { sortByPosition } from '@/lib/estimator/v2DraftPayload'
 import { sanitizeV2WallsDrafts } from '@/lib/estimator/v2WallsSanitize'
 import { validateV2WallsBeforeSave } from '@/lib/estimator/v2WallsValidation'
 import { sanitizeV2CeilingsDrafts } from '@/lib/estimator/v2CeilingsSanitize'
@@ -31,6 +31,8 @@ import {
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2WallCalculationsPayload } from '@/types/estimator/v2'
 import type { NormalizedDomain, Unsafe } from './estimateV2EditorTypes'
+import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
+import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 
 const AUTO_SAVE_DELAY_MS = 900
 
@@ -38,7 +40,7 @@ export function useEstimateV2SaveController(params: {
   estimateId?: string
   routeFamily: EstimateRouteFamily
   store: EstimateV2EditorStoreApi
-  currentSnapshot: string
+  currentSnapshot: EstimateV2DirtySnapshot
   dirty: boolean
   effectiveJobProductDefaults: {
     wallPaintProductId: string
@@ -120,15 +122,16 @@ export function useEstimateV2SaveController(params: {
         currentState.setTrimScopes(trimScopesForSave)
       }
 
-      const payloadForSave = buildEstimateV2SavePayload(
-        currentState.collections.rooms,
-        scopeRowsForSave,
-        segmentRowsForSave,
-        currentState.collections.roomFlags,
-        ceilingScopesForSave,
-        ceilingSegmentsForSave,
-        trimScopesForSave
-      )
+      const payloadSnapshotForSave = buildEstimateV2DirtySnapshot({
+        rooms: currentState.collections.rooms,
+        scopes: scopeRowsForSave,
+        segments: segmentRowsForSave,
+        roomFlags: currentState.collections.roomFlags,
+        ceilingScopes: ceilingScopesForSave,
+        ceilingSegments: ceilingSegmentsForSave,
+        trimScopes: trimScopesForSave,
+      })
+      const payloadForSave = payloadSnapshotForSave.payload
 
       if (sanitizedWalls.changed) {
         currentState.setScopes(scopeRowsForSave)
@@ -335,17 +338,15 @@ export function useEstimateV2SaveController(params: {
 
       meta.setEstimate((prev) => (prev ? { ...prev, updated_at: new Date().toISOString() } : prev))
       meta.setLastSavedSnapshot(
-        JSON.stringify(
-          buildEstimateV2SavePayload(
-            store.getState().collections.rooms,
-            nextScopes,
-            nextSegments,
-            store.getState().collections.roomFlags,
-            nextCeilingScopes,
-            nextCeilingSegments,
-            nextTrimScopes
-          )
-        )
+        buildEstimateV2DirtySnapshot({
+          rooms: store.getState().collections.rooms,
+          scopes: nextScopes,
+          segments: nextSegments,
+          roomFlags: store.getState().collections.roomFlags,
+          ceilingScopes: nextCeilingScopes,
+          ceilingSegments: nextCeilingSegments,
+          trimScopes: nextTrimScopes,
+        })
       )
       meta.setSaveStatus('saved')
       return true
@@ -379,7 +380,7 @@ export function useEstimateV2SaveController(params: {
         autoSaveTimerRef.current = null
       }
     }
-  }, [currentSnapshot, dirty, meta.loading, meta.saving])
+  }, [currentSnapshot.comparisonKey, dirty, meta.loading, meta.saving])
 
   useEffect(
     () => () => {

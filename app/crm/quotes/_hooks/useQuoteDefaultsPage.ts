@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
 import { loadQuoteDefaults, loadQuoteProducts, saveQuoteDefaults } from '@/lib/quotes/client'
 import {
+  areQuoteDefaultsEqual,
   normalizeQuoteDefaults,
   validateQuoteDefaults,
 } from '@/lib/quotes/defaultsForm'
@@ -56,6 +57,7 @@ export function useQuoteDefaultsPage() {
     },
     getErrorMessage: (error: unknown) =>
       error instanceof Error ? error.message : 'Failed to save quote defaults.',
+    isDirty: (current, snapshot) => !areQuoteDefaultsEqual(current.settings, snapshot.settings),
   })
 
   const productDefaultFields = useMemo(() => {
@@ -100,10 +102,6 @@ export function useQuoteDefaultsPage() {
   }
 
   return {
-    resource,
-    productDefaultFields,
-    validationError: resource.error ? null : validationError,
-    canSave,
     feedbackVm,
     formVm,
     actions,

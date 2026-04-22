@@ -1,4 +1,5 @@
 import { buildEstimateV2SavePayload } from '../v2DraftPayload.ts'
+import { createEstimateV2DirtySnapshot, type EstimateV2DirtySnapshot } from '../../../app/crm/estimates/[id]/v2/_state/estimateV2DirtySnapshot'
 import type {
   EstimateV2Catalogs,
   EstimateV2EstimateMeta,
@@ -37,7 +38,7 @@ type MixedEstimateFixture = {
   pricingSummary: EstimateV2PricingSummary
   trimPaint: EstimateV2TrimPaint
   summaryData: EstimateV2SummaryPageData
-  currentSnapshot: string
+  currentSnapshot: EstimateV2DirtySnapshot
 }
 
 function clone<T>(value: T): T {
@@ -685,7 +686,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     pricing_summary: clone(pricingSummary),
   }
 
-  const currentSnapshot = JSON.stringify(payload)
+  const currentSnapshot = createEstimateV2DirtySnapshot(payload)
 
   return {
     estimate: clone(estimate),

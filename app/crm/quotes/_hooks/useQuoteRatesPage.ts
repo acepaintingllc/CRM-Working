@@ -1,14 +1,10 @@
 'use client'
 
 import { useCallback } from 'react'
-import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
 import { valueFromRatesFlagsRow } from '@/lib/quotes/ratesFlagsForm'
-import { loadRatesFlags } from '@/lib/quotes/client'
-import type {
-  RatesFlagsPayload,
-  RatesFlagsTab,
-} from '@/types/estimator/ratesFlags'
+import type { RatesFlagsTab } from '@/types/estimator/ratesFlags'
+import { useQuoteRatesData } from './useQuoteRatesData'
 import { useQuoteRatesEditorState } from './useQuoteRatesEditorState'
 import { useQuoteRatesFilters } from './useQuoteRatesFilters'
 import { useQuoteRatesPersistence } from './useQuoteRatesPersistence'
@@ -23,20 +19,59 @@ export {
   type StatusFilter,
 } from './quoteRatesPageConfig'
 
-const emptyRatesFlags: RatesFlagsPayload = {
-  source: 'db',
-  seeded: false,
-  template_version: null,
-  categories: [],
+export type QuoteRatesFiltersVm = {
+  search: string
+  statusFilter: ReturnType<typeof useQuoteRatesFilters>['statusFilter']
+  activeTab: RatesFlagsTab
+  rateSection: ReturnType<typeof useQuoteRatesFilters>['rateSection']
+  rateCategory: ReturnType<typeof useQuoteRatesFilters>['rateCategory']
+  flagsSection: ReturnType<typeof useQuoteRatesFilters>['flagsSection']
+  roomDefaultsSection: ReturnType<typeof useQuoteRatesFilters>['roomDefaultsSection']
+}
+
+export type QuoteRatesTableVm = {
+  activeCategory: ReturnType<typeof useQuoteRatesFilters>['activeCategory']
+  filteredRows: ReturnType<typeof useQuoteRatesFilters>['filteredRows']
+  selectedRow: ReturnType<typeof useQuoteRatesEditorState>['selectedRow']
+  selectedId: string
+  isCreating: boolean
+  canDuplicate: boolean
+  canArchiveToggle: boolean
+}
+
+export type QuoteRatesEditorVm = {
+  draft: ReturnType<typeof useQuoteRatesEditorState>['draft']
+  draftActive: boolean
+  saving: boolean
+  activeCategory: ReturnType<typeof useQuoteRatesFilters>['activeCategory']
+  selectedRow: ReturnType<typeof useQuoteRatesEditorState>['selectedRow']
+  isCreating: boolean
+  inlineValidation: string | null
+  canSave: boolean
+  formatDraftValue: ReturnType<typeof useQuoteRatesEditorState>['formatDraftValue']
+}
+
+export type QuoteRatesActions = {
+  setActiveTab: ReturnType<typeof useQuoteRatesFilters>['setActiveTab']
+  setRateSection: ReturnType<typeof useQuoteRatesFilters>['setRateSection']
+  setRateCategory: ReturnType<typeof useQuoteRatesFilters>['setRateCategory']
+  setFlagsSection: ReturnType<typeof useQuoteRatesFilters>['setFlagsSection']
+  setRoomDefaultsSection: ReturnType<typeof useQuoteRatesFilters>['setRoomDefaultsSection']
+  setStatusFilter: ReturnType<typeof useQuoteRatesFilters>['setStatusFilter']
+  setSearch: ReturnType<typeof useQuoteRatesFilters>['setSearch']
+  setSelectedId: ReturnType<typeof useQuoteRatesEditorState>['setSelectedId']
+  setDraftActive: ReturnType<typeof useQuoteRatesEditorState>['setDraftActive']
+  reload: (keepId?: string) => Promise<boolean>
+  saveCurrent: () => Promise<void>
+  archiveOrReactivate: (nextActive: boolean) => Promise<void>
+  startCreate: () => void
+  startDuplicate: () => void
+  cancelEdit: () => void
+  updateDraftValue: ReturnType<typeof useQuoteRatesEditorState>['updateDraftValue']
 }
 
 export function useQuoteRatesPage() {
-  const resource = useLoadableResource<RatesFlagsPayload>({
-    initialData: emptyRatesFlags,
-    load: () => loadRatesFlags(),
-    getErrorMessage: (loadError: unknown) =>
-      loadError instanceof Error ? loadError.message : 'Failed to load rates and flags.',
-  })
+  const resource = useQuoteRatesData()
 
   const filters = useQuoteRatesFilters({ payload: resource.data })
   const editor = useQuoteRatesEditorState({
@@ -44,8 +79,7 @@ export function useQuoteRatesPage() {
     filteredRows: filters.filteredRows,
   })
 
-  const hasData =
-    resource.data.categories.length > 0 || (!resource.loading && !resource.error)
+  const hasData = resource.data.categories.length > 0 || (!resource.loading && !resource.error)
 
   const reload = useCallback(
     async (keepId?: string) => {
@@ -131,38 +165,6 @@ export function useQuoteRatesPage() {
     canDuplicate: Boolean(editor.selectedRow) && !persistence.saving && !resource.loading && !resource.error,
   })
 
-  const filtersVm = {
-    search: filters.search,
-    statusFilter: filters.statusFilter,
-    activeTab: filters.activeTab as RatesFlagsTab,
-    rateSection: filters.rateSection,
-    rateCategory: filters.rateCategory,
-    flagsSection: filters.flagsSection,
-    roomDefaultsSection: filters.roomDefaultsSection,
-  }
-
-  const tableVm = {
-    activeCategory: filters.activeCategory,
-    filteredRows: filters.filteredRows,
-    selectedRow: editor.selectedRow,
-    selectedId: editor.selectedId,
-    isCreating: editor.isCreating,
-    canDuplicate: uiState.canDuplicate,
-    canArchiveToggle: uiState.canArchiveToggle,
-  }
-
-  const editorVm = {
-    draft: editor.draft,
-    draftActive: editor.draftActive,
-    saving: persistence.saving,
-    activeCategory: filters.activeCategory,
-    selectedRow: editor.selectedRow,
-    isCreating: editor.isCreating,
-    inlineValidation: uiState.inlineValidation,
-    canSave: uiState.canSave,
-    formatDraftValue: editor.formatDraftValue,
-  }
-
   return {
     resource,
     activeTab: filters.activeTab,
@@ -198,9 +200,35 @@ export function useQuoteRatesPage() {
     updateDraftValue: editor.updateDraftValue,
     valueFromRow: valueFromRatesFlagsRow,
     uiState,
-    filtersVm,
-    tableVm,
-    editorVm,
+    filtersVm: {
+      search: filters.search,
+      statusFilter: filters.statusFilter,
+      activeTab: filters.activeTab as RatesFlagsTab,
+      rateSection: filters.rateSection,
+      rateCategory: filters.rateCategory,
+      flagsSection: filters.flagsSection,
+      roomDefaultsSection: filters.roomDefaultsSection,
+    } satisfies QuoteRatesFiltersVm,
+    tableVm: {
+      activeCategory: filters.activeCategory,
+      filteredRows: filters.filteredRows,
+      selectedRow: editor.selectedRow,
+      selectedId: editor.selectedId,
+      isCreating: editor.isCreating,
+      canDuplicate: uiState.canDuplicate,
+      canArchiveToggle: uiState.canArchiveToggle,
+    } satisfies QuoteRatesTableVm,
+    editorVm: {
+      draft: editor.draft,
+      draftActive: editor.draftActive,
+      saving: persistence.saving,
+      activeCategory: filters.activeCategory,
+      selectedRow: editor.selectedRow,
+      isCreating: editor.isCreating,
+      inlineValidation: uiState.inlineValidation,
+      canSave: uiState.canSave,
+      formatDraftValue: editor.formatDraftValue,
+    } satisfies QuoteRatesEditorVm,
     actions: {
       setActiveTab: filters.setActiveTab,
       setRateSection: filters.setRateSection,
@@ -218,6 +246,6 @@ export function useQuoteRatesPage() {
       startDuplicate,
       cancelEdit,
       updateDraftValue: editor.updateDraftValue,
-    },
+    } satisfies QuoteRatesActions,
   }
 }

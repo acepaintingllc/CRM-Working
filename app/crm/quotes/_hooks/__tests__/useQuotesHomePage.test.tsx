@@ -185,10 +185,10 @@ describe('useQuotesHomePage', () => {
       expect(result.current.feedbackVm.loading).toBe(false)
     })
 
-    expect(result.current.jobListVm.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    expect(result.current.jobListVm.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
     expect(result.current.jobListVm.selectedJobId).toBe('job-1')
-    expect(result.current.selectedJobVm.selectedJob?.id).toBe('job-1')
-    expect(result.current.versionListVm.versions.map((estimate) => estimate.estimate_id)).toEqual([
+    expect(result.current.selectedJobVm.title).toBe('Kitchen')
+    expect(result.current.versionListVm.items.map((estimate) => estimate.id)).toEqual([
       'estimate-2',
       'estimate-1',
     ])
@@ -198,10 +198,8 @@ describe('useQuotesHomePage', () => {
       result.current.actions.setJobQuery('garage')
     })
 
-    expect(result.current.headerVm.searchResults.map((estimate) => estimate.estimate_id)).toEqual([
-      'estimate-2',
-    ])
-    expect(result.current.jobListVm.filteredJobs.map((job) => job.id)).toEqual(['job-2'])
+    expect(result.current.headerVm.searchResults.map((estimate) => estimate.id)).toEqual(['estimate-2'])
+    expect(result.current.jobListVm.items.map((job) => job.id)).toEqual(['job-2'])
   })
 
   it('resets version fields when the selected job changes and creates a version', async () => {
@@ -294,14 +292,11 @@ describe('useQuotesHomePage', () => {
     })
 
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
-    expect(result.current.deleteDialogVm.estimate).toBeNull()
-    expect(result.current.versionListVm.versions.map((estimate) => estimate.estimate_id)).toEqual([
-      'estimate-2',
-    ])
+    expect(result.current.deleteDialogVm.estimateId).toBeNull()
+    expect(result.current.versionListVm.items.map((estimate) => estimate.id)).toEqual(['estimate-2'])
     expect(result.current.summaryCards[0].value).toBe('0')
     expect(result.current.summaryCards[1].value).toBe('2')
     expect(result.current.summaryCards[2].value).toBe('1')
     expect(result.current.summaryCards[3].value).toBe('$1,300')
   })
 })
-

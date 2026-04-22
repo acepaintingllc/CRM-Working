@@ -5,7 +5,10 @@ import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
 import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
-import { useQuoteProductsPage } from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
+import type {
+  QuoteProductsActions,
+  QuoteProductsEditorVm,
+} from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
 import {
   QUOTE_PRODUCT_FAMILIES,
   QUOTE_PRODUCT_SCOPE_OPTIONS,
@@ -13,33 +16,26 @@ import {
   QUOTE_PRODUCT_STATUSES,
 } from '@/lib/quotes/productsForm'
 
-type QuoteProductsController = ReturnType<typeof useQuoteProductsPage>
+type Props = {
+  vm: QuoteProductsEditorVm
+  actions: Pick<
+    QuoteProductsActions,
+    'updateDraftField' | 'save' | 'cancelEdit' | 'requestRemove'
+  >
+}
 
-export function QuoteProductEditorSection({
-  controller,
-}: {
-  controller: QuoteProductsController
-}) {
-  function setDraftField<K extends keyof typeof controller.draft>(
-    field: K,
-    value: (typeof controller.draft)[K]
-  ) {
-    controller.actions.updateDraftField(field, value)
+export function QuoteProductEditorSection({ vm, actions }: Props) {
+  function setDraftField<K extends keyof typeof vm.draft>(field: K, value: (typeof vm.draft)[K]) {
+    actions.updateDraftField(field, value)
   }
 
-  const fieldErrors = controller.editorVm.validation.fields
+  const fieldErrors = vm.validation.fields
 
   return (
     <CrmSectionCard
-      title={
-        controller.editorVm.isCreating
-          ? 'New product'
-          : controller.selected
-            ? controller.selected.name
-            : 'Product editor'
-      }
+      title={vm.isCreating ? 'New product' : vm.selected ? vm.selected.name : 'Product editor'}
       description={
-        controller.editorVm.isCreating
+        vm.isCreating
           ? 'Create a new quote product row with explicit family, status, and estimator defaults.'
           : 'Dense admin editor for catalog defaults, pricing, and lifecycle status.'
       }
@@ -48,41 +44,35 @@ export function QuoteProductEditorSection({
           <CrmButton
             type="button"
             tone="primary"
-            disabled={!controller.editorVm.canSave}
-            onClick={() => void controller.actions.save()}
+            disabled={!vm.canSave}
+            onClick={() => void actions.save()}
           >
-            {controller.editorVm.saving
-              ? controller.editorVm.isCreating
-                ? 'Creating...'
-                : 'Saving...'
-              : controller.editorVm.isCreating
-                ? 'Create product'
-                : 'Save changes'}
+            {vm.saving ? (vm.isCreating ? 'Creating...' : 'Saving...') : vm.isCreating ? 'Create product' : 'Save changes'}
           </CrmButton>
-          <CrmButton type="button" onClick={controller.actions.cancelEdit}>
-            {controller.editorVm.isCreating ? 'Cancel create' : 'Reset'}
+          <CrmButton type="button" onClick={actions.cancelEdit}>
+            {vm.isCreating ? 'Cancel create' : 'Reset'}
           </CrmButton>
           <CrmButton
             type="button"
             tone="danger"
-            disabled={!controller.editorVm.canDelete}
-            onClick={() => void controller.actions.remove()}
+            disabled={!vm.canDelete}
+            onClick={() => void actions.requestRemove()}
           >
             Delete
           </CrmButton>
         </div>
       }
     >
-      {!controller.editorVm.selected && !controller.editorVm.isCreating ? (
+      {!vm.selected && !vm.isCreating ? (
         <CrmEmptyState
           title="Select a product"
           description="Choose a product row from the list to edit it."
         />
       ) : (
         <div className="grid gap-4">
-          {controller.editorVm.inlineValidation ? (
+          {vm.inlineValidation ? (
             <CrmNotice tone="info" compact>
-              {controller.editorVm.inlineValidation}
+              {vm.inlineValidation}
             </CrmNotice>
           ) : null}
 
@@ -90,7 +80,7 @@ export function QuoteProductEditorSection({
             <input
               aria-label="Product name"
               className="ace-crm-input text-sm"
-              value={controller.draft.name}
+              value={vm.draft.name}
               onChange={(event) => setDraftField('name', event.target.value)}
             />
           </CrmField>
@@ -100,7 +90,7 @@ export function QuoteProductEditorSection({
               <select
                 aria-label="Family"
                 className="ace-crm-input text-sm"
-                value={controller.draft.family}
+                value={vm.draft.family}
                 onChange={(event) => setDraftField('family', event.target.value)}
               >
                 {QUOTE_PRODUCT_FAMILIES.map((family) => (
@@ -114,7 +104,7 @@ export function QuoteProductEditorSection({
               <input
                 aria-label="Base"
                 className="ace-crm-input text-sm"
-                value={controller.draft.base}
+                value={vm.draft.base}
                 onChange={(event) => setDraftField('base', event.target.value)}
               />
             </CrmField>
@@ -122,7 +112,7 @@ export function QuoteProductEditorSection({
               <select
                 aria-label="Status"
                 className="ace-crm-input text-sm"
-                value={controller.draft.status}
+                value={vm.draft.status}
                 onChange={(event) => setDraftField('status', event.target.value)}
               >
                 {QUOTE_PRODUCT_STATUSES.map((status) => (
@@ -138,7 +128,7 @@ export function QuoteProductEditorSection({
             <input
               aria-label="Subtype"
               className="ace-crm-input text-sm"
-              value={controller.draft.subtype}
+              value={vm.draft.subtype}
               onChange={(event) => setDraftField('subtype', event.target.value)}
             />
           </CrmField>
@@ -150,20 +140,17 @@ export function QuoteProductEditorSection({
                 className="ace-crm-input text-sm"
                 type="number"
                 step="0.01"
-                value={controller.draft.cost_per_unit}
+                value={vm.draft.cost_per_unit}
                 onChange={(event) => setDraftField('cost_per_unit', event.target.value)}
               />
             </CrmField>
-            <CrmField
-              label="Coverage (sqft)"
-              error={fieldErrors.coverage_sqft_per_gal_per_coat}
-            >
+            <CrmField label="Coverage (sqft)" error={fieldErrors.coverage_sqft_per_gal_per_coat}>
               <input
                 aria-label="Coverage (sqft)"
                 className="ace-crm-input text-sm"
                 type="number"
                 step="0.01"
-                value={controller.draft.coverage_sqft_per_gal_per_coat}
+                value={vm.draft.coverage_sqft_per_gal_per_coat}
                 onChange={(event) =>
                   setDraftField('coverage_sqft_per_gal_per_coat', event.target.value)
                 }
@@ -175,7 +162,7 @@ export function QuoteProductEditorSection({
                 className="ace-crm-input text-sm"
                 type="number"
                 step="0.01"
-                value={controller.draft.efficiency_pct}
+                value={vm.draft.efficiency_pct}
                 onChange={(event) => setDraftField('efficiency_pct', event.target.value)}
               />
             </CrmField>
@@ -188,7 +175,7 @@ export function QuoteProductEditorSection({
                 className="ace-crm-input text-sm"
                 type="number"
                 step="1"
-                value={controller.draft.default_coats}
+                value={vm.draft.default_coats}
                 onChange={(event) => setDraftField('default_coats', event.target.value)}
               />
             </CrmField>
@@ -196,7 +183,7 @@ export function QuoteProductEditorSection({
               <select
                 aria-label="Default sheen"
                 className="ace-crm-input text-sm"
-                value={controller.draft.default_sheen}
+                value={vm.draft.default_sheen}
                 onChange={(event) => setDraftField('default_sheen', event.target.value)}
               >
                 {QUOTE_PRODUCT_SHEEN_OPTIONS.map((sheen) => (
@@ -211,7 +198,7 @@ export function QuoteProductEditorSection({
           <CrmField label="Applies to" error={fieldErrors.default_scopes}>
             <div className="grid gap-2 sm:grid-cols-2">
               {QUOTE_PRODUCT_SCOPE_OPTIONS.map((scope) => {
-                const currentScopes = controller.draft.default_scopes
+                const currentScopes = vm.draft.default_scopes
                 const checked = currentScopes.includes(scope)
                 return (
                   <label
@@ -241,7 +228,7 @@ export function QuoteProductEditorSection({
             <textarea
               aria-label="Notes"
               className="ace-crm-input min-h-[120px] resize-y text-sm"
-              value={controller.draft.notes}
+              value={vm.draft.notes}
               onChange={(event) => setDraftField('notes', event.target.value)}
             />
           </CrmField>

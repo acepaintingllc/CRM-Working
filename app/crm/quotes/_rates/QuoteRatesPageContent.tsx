@@ -64,11 +64,41 @@ export function QuoteRatesPageContent() {
         <CrmDetailLayout
           main={
             <div className="grid gap-4">
-              <QuoteRatesCategorySection controller={controller} />
-              <QuoteRatesTableSection controller={controller} />
+              <QuoteRatesCategorySection
+                filtersVm={controller.filtersVm}
+                tableVm={{ activeCategory: controller.tableVm.activeCategory }}
+                actions={{
+                  setActiveTab: controller.actions.setActiveTab,
+                  setRateSection: controller.actions.setRateSection,
+                  setRateCategory: controller.actions.setRateCategory,
+                  setFlagsSection: controller.actions.setFlagsSection,
+                  setRoomDefaultsSection: controller.actions.setRoomDefaultsSection,
+                }}
+              />
+              <QuoteRatesTableSection
+                vm={controller.tableVm}
+                valueFromRow={controller.valueFromRow}
+                actions={{
+                  startCreate: controller.actions.startCreate,
+                  startDuplicate: controller.actions.startDuplicate,
+                  archiveOrReactivate: controller.actions.archiveOrReactivate,
+                  setSelectedId: controller.actions.setSelectedId,
+                }}
+              />
             </div>
           }
-          side={<QuoteRatesEditorSection controller={controller} />}
+          side={
+            <QuoteRatesEditorSection
+              vm={controller.editorVm}
+              templateVersion={controller.resource.data.template_version}
+              actions={{
+                saveCurrent: controller.actions.saveCurrent,
+                cancelEdit: controller.actions.cancelEdit,
+                setDraftActive: controller.actions.setDraftActive,
+                updateDraftValue: controller.actions.updateDraftValue,
+              }}
+            />
+          }
         />
       </CrmResourceState>
     </>

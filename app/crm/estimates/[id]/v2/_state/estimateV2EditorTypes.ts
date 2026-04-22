@@ -23,6 +23,7 @@ import type {
   UnsafeRecord,
 } from '@/types/estimator/v2'
 import type { SaveStatus } from '@/lib/estimator/v2WallsAutosave'
+import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 
 export type Unsafe = UnsafeRecord
 
@@ -89,8 +90,8 @@ export type EstimateV2EditorMetaState = {
   setError: EstimateV2StateSetter<EstimateV2Error | null>
   validationIssues: string[]
   setValidationIssues: EstimateV2StateSetter<string[]>
-  lastSavedSnapshot: string
-  setLastSavedSnapshot: EstimateV2StateSetter<string>
+  lastSavedSnapshot: EstimateV2DirtySnapshot | null
+  setLastSavedSnapshot: EstimateV2StateSetter<EstimateV2DirtySnapshot | null>
   saveStatus: SaveStatus
   setSaveStatus: EstimateV2StateSetter<SaveStatus>
   autoSaveHint: string | null

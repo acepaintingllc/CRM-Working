@@ -30,7 +30,7 @@ vi.mock('../useEstimateV2DerivedState', () => ({
     roomHeightFactorByRoomId: new Map([['R001', '1']]),
     defaultColorCodeId: 'COLOR1',
     dirty: true,
-    currentSnapshot: '{}',
+    currentSnapshot: { payload: {} as never, comparisonKey: '{}' },
   }),
 }))
 
