@@ -5,7 +5,6 @@ import EditCustomerPage from '../[id]/edit/page'
 
 const authedFetch = vi.fn()
 const push = vi.fn()
-const refresh = vi.fn()
 
 vi.mock('@/lib/auth/authedFetch', () => ({
   authedFetch: (...args: unknown[]) => authedFetch(...args),
@@ -13,7 +12,7 @@ vi.mock('@/lib/auth/authedFetch', () => ({
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'customer-1' }),
-  useRouter: () => ({ push, refresh }),
+  useRouter: () => ({ push }),
   useSearchParams: () => new URLSearchParams('returnTo=%2Fcrm%2Fcustomers%2Fcustomer-1'),
 }))
 
@@ -30,7 +29,6 @@ describe('EditCustomerPage', () => {
   beforeEach(() => {
     authedFetch.mockReset()
     push.mockReset()
-    refresh.mockReset()
   })
 
   afterEach(() => {
@@ -118,14 +116,12 @@ describe('EditCustomerPage', () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith('/crm/customers/customer-1')
     )
-    expect(refresh).not.toHaveBeenCalled()
   })
 
   it('surfaces server patch failures', async () => {
     const user = userEvent.setup()
     authedFetch.mockReset()
     push.mockReset()
-    refresh.mockReset()
     authedFetch
       .mockResolvedValueOnce(
         createResponse({

@@ -1,7 +1,9 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { useEntityDetailActions } from '@/app/crm/_hooks/useEntityDetailActions'
 import {
   fetchCloseoutData,
   fetchJobDetail,
@@ -20,7 +22,33 @@ import {
   type JobStatus,
 } from '@/lib/jobs/types'
 import type { PaintLogRow } from '@/lib/jobs/paintLog'
-import type { StageEmailSentResult, StageEmailStage } from '@/app/crm/jobs/_components/StageEmailModal'
+import type {
+  StageEmailSentResult,
+  StageEmailStage,
+} from '@/app/crm/jobs/_components/StageEmailModal'
+import type { JobWorkflowResolvedAction } from '@/lib/jobs/types'
+
+type JobDetailResource = {
+  job: JobDetail | null
+  estimateFile: EstimateDriveFile | null
+  estimateFileError: string | null
+  paintLogs: PaintLogRow[]
+  afterPhotos: JobPhoto[]
+  sitePhotos: SitePhoto[]
+}
+
+const emptyJobDetailResource: JobDetailResource = {
+  job: null,
+  estimateFile: null,
+  estimateFileError: null,
+  paintLogs: [],
+  afterPhotos: [],
+  sitePhotos: [],
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Failed to load job.'
+}
 
 export function useJobDetailPage() {
   const params = useParams()
@@ -28,99 +56,79 @@ export function useJobDetailPage() {
   const id = Array.isArray(rawId) ? rawId[0] : rawId
   const router = useRouter()
   const searchParams = useSearchParams()
-
-  const [job, setJob] = useState<JobDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
   const [closeoutOpen, setCloseoutOpen] = useState(false)
   const [timelineOpen, setTimelineOpen] = useState(true)
-  const [estimateFile, setEstimateFile] = useState<EstimateDriveFile | null>(null)
-  const [estimateFileError, setEstimateFileError] = useState<string | null>(null)
-  const [paintLogs, setPaintLogs] = useState<PaintLogRow[]>([])
-  const [afterPhotos, setAfterPhotos] = useState<JobPhoto[]>([])
-  const [sitePhotos, setSitePhotos] = useState<SitePhoto[]>([])
 
-  useEffect(() => {
-    if (typeof id !== 'string' || !id) {
-      setJob(null)
-      setLoading(false)
-      setError('Missing job id in URL.')
-      setNotice(null)
-      return
-    }
-
-    const load = async () => {
-      setLoading(true)
-      setError(null)
-      setNotice(null)
-      setEstimateFile(null)
-      setEstimateFileError(null)
-      setPaintLogs([])
-      setAfterPhotos([])
-      setSitePhotos([])
-      try {
-        const detail = await fetchJobDetail(id)
-        setJob(detail.job)
-        setEstimateFile(detail.estimateFile as EstimateDriveFile | null)
-        setEstimateFileError(detail.estimateFileError)
-        setPaintLogs(detail.paintLogs)
-        setAfterPhotos(detail.afterPhotos)
-        setSitePhotos(detail.sitePhotos)
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load job.')
-        setJob(null)
+  const resource = useLoadableResource<JobDetailResource>({
+    initialData: emptyJobDetailResource,
+    load: async () => {
+      if (typeof id !== 'string' || !id) {
+        throw new Error('Missing job id in URL.')
       }
-      setLoading(false)
-    }
 
-    void load()
-  }, [id])
+      const detail = await fetchJobDetail(id)
+      return {
+        job: detail.job,
+        estimateFile: detail.estimateFile as EstimateDriveFile | null,
+        estimateFileError: detail.estimateFileError,
+        paintLogs: detail.paintLogs,
+        afterPhotos: detail.afterPhotos,
+        sitePhotos: detail.sitePhotos,
+      }
+    },
+    getErrorMessage,
+    reloadKey: id,
+  })
+
+  const detailActions = useEntityDetailActions({
+    deleteMessage: 'Delete this job? This cannot be undone.',
+    deleteAction: async () => {
+      if (!id || typeof id !== 'string' || deleting) return false
+      setDeleting(true)
+      resource.setError(null)
+      try {
+        await deleteJobRequest(id)
+        router.replace('/crm/jobs')
+        return true
+      } catch (deleteError) {
+        resource.setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete job.')
+        return false
+      } finally {
+        setDeleting(false)
+      }
+    },
+  })
 
   useEffect(() => {
     const composeValue = searchParams.get('compose')
     const stage = isStageEmailStage(composeValue) ? composeValue : null
-    if (!stage || loading || !job) return
+    if (!stage || resource.loading || !resource.data.job) return
     if (stage === 'completed') {
       setCloseoutOpen(true)
       return
     }
     if (emailStage === stage) return
     setEmailStage(stage)
-  }, [searchParams, loading, job, emailStage])
-
-  const copy = async (label: string, value: string | null | undefined) => {
-    if (!value) return
-    try {
-      await navigator.clipboard.writeText(value)
-    } catch {
-      const el = document.createElement('textarea')
-      el.value = value
-      el.style.position = 'fixed'
-      el.style.left = '-9999px'
-      document.body.appendChild(el)
-      el.focus()
-      el.select()
-      document.execCommand('copy')
-      document.body.removeChild(el)
-    }
-    setNotice(`${label} copied`)
-    window.setTimeout(() => setNotice(null), 1200)
-  }
+  }, [searchParams, resource.loading, resource.data.job, emailStage])
 
   const patchJob = async (patch: Record<string, unknown>) => {
-    if (!id || typeof id !== 'string') return null
+    if (!id || typeof id !== 'string' || !resource.data.job) return null
     try {
       const updated =
         typeof patch.status === 'string'
           ? await patchJobStatus(id, patch.status as JobStatus)
           : await patchJobDateFields(id, patch)
-      setJob((prev) => (prev ? { ...prev, ...updated } : prev))
+      resource.setData((current) => ({
+        ...current,
+        job: current.job ? { ...current.job, ...updated } : current.job,
+      }))
+      resource.setError(null)
       return (updated ?? null) as Partial<JobDetail> | null
     } catch (patchError) {
-      setError(patchError instanceof Error ? patchError.message : 'Failed to update job.')
+      resource.setError(patchError instanceof Error ? patchError.message : 'Failed to update job.')
       return null
     }
   }
@@ -129,9 +137,12 @@ export function useJobDetailPage() {
     if (!id || typeof id !== 'string') return
     try {
       const closeout = await fetchCloseoutData(id)
-      setPaintLogs(closeout.paintLogs)
-      setAfterPhotos(closeout.afterPhotos)
-      setSitePhotos(closeout.sitePhotos)
+      resource.setData((current) => ({
+        ...current,
+        paintLogs: closeout.paintLogs,
+        afterPhotos: closeout.afterPhotos,
+        sitePhotos: closeout.sitePhotos,
+      }))
     } catch {
       // Keep the page interactive if closeout-specific reload fails.
     }
@@ -139,29 +150,13 @@ export function useJobDetailPage() {
 
   const nowIso = () => new Date().toISOString()
 
-  const deleteJob = async () => {
-    if (!id || typeof id !== 'string' || deleting) return
-    const ok = window.confirm('Delete this job? This cannot be undone.')
-    if (!ok) return
-    setDeleting(true)
-    setError(null)
-    try {
-      await deleteJobRequest(id)
-      router.replace('/crm/jobs')
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete job.')
-    } finally {
-      setDeleting(false)
-    }
-  }
-
   const openStageEmail = (stage: StageEmailStage) => {
-    setError(null)
+    resource.setError(null)
     setEmailStage(stage)
   }
 
   const openCloseout = () => {
-    setError(null)
+    resource.setError(null)
     setCloseoutOpen(true)
   }
 
@@ -180,16 +175,18 @@ export function useJobDetailPage() {
   }
 
   const handleStageEmailSent = (result: StageEmailSentResult) => {
-    setError(null)
+    resource.setError(null)
     if (result.job) {
-      const patch = result.job as Partial<JobDetail>
-      setJob((prev) => (prev ? { ...prev, ...patch } : prev))
+      resource.setData((current) => ({
+        ...current,
+        job: current.job ? { ...current.job, ...(result.job as Partial<JobDetail>) } : current.job,
+      }))
     }
     setNotice(result.warning ?? 'Email sent')
   }
 
   const markCompletedAndPrompt = async () => {
-    if (!job) return
+    if (!resource.data.job) return
     const updated = await patchJob({ completed_at: nowIso() })
     if (updated) {
       setNotice(null)
@@ -201,16 +198,19 @@ export function useJobDetailPage() {
     job?: Partial<JobDetail> | null
     notice?: string | null
   }) => {
-    setError(null)
+    resource.setError(null)
     if (result.job) {
-      setJob((prev) => (prev ? { ...prev, ...(result.job as Partial<JobDetail>) } : prev))
+      resource.setData((current) => ({
+        ...current,
+        job: current.job ? { ...current.job, ...(result.job as Partial<JobDetail>) } : current.job,
+      }))
     }
     if (result.notice) setNotice(result.notice)
     await refreshCloseoutData()
   }
 
   const handleStatusChange = async (nextStatus: string) => {
-    if (!job || nextStatus === job.status) return
+    if (!resource.data.job || nextStatus === resource.data.job.status) return
     if (nextStatus === 'completed') {
       await markCompletedAndPrompt()
       return
@@ -240,28 +240,58 @@ export function useJobDetailPage() {
     return s.replace(/\b\w/g, (m) => m.toUpperCase())
   }
 
+  const statusMessage = useMemo(
+    () => detailActions.statusMessage ?? notice,
+    [detailActions.statusMessage, notice]
+  )
+
+  const runWorkflowAction = async (action: JobWorkflowResolvedAction) => {
+    if (!resource.data.job) return
+    if (action.confirmMessage && !window.confirm(action.confirmMessage)) return
+    if (action.kind === 'navigate' && action.href) {
+      router.push(action.href)
+      return
+    }
+    if (action.kind === 'stage_email' && action.stage) {
+      openStageEmail(action.stage)
+      return
+    }
+    if (action.kind === 'patch_status' && action.status) {
+      await handleStatusChange(action.status)
+      return
+    }
+    if (action.kind === 'open_closeout') {
+      openCloseout()
+      return
+    }
+    if (action.kind === 'patch_date' && action.dateField === 'completed_at') {
+      await markCompletedAndPrompt()
+      return
+    }
+    if (action.kind === 'patch_date' && action.dateField === 'estimate_sent_at') {
+      await patchJob({ estimate_sent_at: new Date().toISOString() })
+    }
+  }
+
   return {
     id,
     router,
-    searchParams,
-    job,
-    loading,
-    error,
-    setError,
-    notice,
+    resource,
+    job: resource.data.job,
+    notice: statusMessage,
     deleting,
     emailStage,
     closeoutOpen,
     timelineOpen,
     setTimelineOpen,
-    estimateFile,
-    estimateFileError,
-    paintLogs,
-    afterPhotos,
-    sitePhotos,
-    copy,
+    estimateFile: resource.data.estimateFile,
+    estimateFileError: resource.data.estimateFileError,
+    paintLogs: resource.data.paintLogs,
+    afterPhotos: resource.data.afterPhotos,
+    sitePhotos: resource.data.sitePhotos,
+    copy: detailActions.copyValue,
     patchJob,
-    deleteJob,
+    deleteJob: detailActions.confirmAndDelete,
     openStageEmail,
     openCloseout,
     closeStageEmail,
@@ -270,9 +300,9 @@ export function useJobDetailPage() {
     handleCloseoutSaved,
     handleStatusChange,
     markCompletedAndPrompt,
+    runWorkflowAction,
     formatDate,
     formatRange,
     formatStatus,
-    setEmailStage,
   }
 }

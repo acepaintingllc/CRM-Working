@@ -6,6 +6,7 @@ import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CustomerDetailCard } from '@/app/crm/customers/_components/CustomerDetailCard'
 import { CustomerListSidebar } from '@/app/crm/customers/_components/CustomerListSidebar'
 import { CustomerTimelinePanel } from '@/app/crm/customers/_components/CustomerTimelinePanel'
+import { useEntityDetailActions } from '@/app/crm/_hooks/useEntityDetailActions'
 import { useCustomerDetail } from '@/app/crm/customers/_hooks/useCustomerDetail'
 import { useCustomerList } from '@/app/crm/customers/_hooks/useCustomerList'
 import { useCustomerTimeline } from '@/app/crm/customers/_hooks/useCustomerTimeline'
@@ -49,8 +50,6 @@ export default function CustomerDetailPage() {
     loading,
     deleting,
     error,
-    statusMessage,
-    setStatusMessage,
     deleteCustomer,
   } = useCustomerDetail(id)
   const { listCustomers, listLoading, listError } = useCustomerList()
@@ -71,25 +70,10 @@ export default function CustomerDetailPage() {
 
   const listQueryString = searchParams.toString()
   const detailPathWithQuery = `${pathname}${listQueryString ? `?${listQueryString}` : ''}`
-
-  const copy = useCallback(async (label: string, value: string | null) => {
-    if (!value) return
-    try {
-      await navigator.clipboard.writeText(value)
-    } catch {
-      const el = document.createElement('textarea')
-      el.value = value
-      el.style.position = 'fixed'
-      el.style.left = '-9999px'
-      document.body.appendChild(el)
-      el.focus()
-      el.select()
-      document.execCommand('copy')
-      document.body.removeChild(el)
-    }
-    setStatusMessage(`${label} copied`)
-    window.setTimeout(() => setStatusMessage(null), 1200)
-  }, [setStatusMessage])
+  const detailActions = useEntityDetailActions({
+    deleteMessage: 'Delete this customer? This cannot be undone.',
+    deleteAction: deleteCustomer,
+  })
 
   return (
     <CrmPageShell className="max-w-6xl">
@@ -109,16 +93,14 @@ export default function CustomerDetailPage() {
               customer={customer}
               loading={loading}
               error={error}
-              statusMessage={statusMessage}
+              statusMessage={detailActions.statusMessage}
               deleting={deleting}
               detailPathWithQuery={detailPathWithQuery}
               onBack={() => router.push('/crm/customers')}
-              onCopy={(label, value) => void copy(label, value)}
+              onCopy={(label, value) => void detailActions.copyValue(label, value)}
               onDelete={async () => {
                 if (!id || typeof id !== 'string') return
-                const ok = window.confirm('Delete this customer? This cannot be undone.')
-                if (!ok) return
-                const deleted = await deleteCustomer()
+                const deleted = await detailActions.confirmAndDelete()
                 if (deleted) router.push('/crm/customers')
               }}
             />

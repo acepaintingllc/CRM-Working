@@ -1,7 +1,6 @@
 import { authedFetch } from '../auth/authedFetch.ts'
 import {
   requestApiWith,
-  type ApiDataEnvelope,
   type ApiReadMetaEnvelope,
   type ApiMutationEnvelope,
 } from './apiCore.ts'
