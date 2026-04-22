@@ -11,7 +11,7 @@ This settings slice is organized around explicit domains rather than page-local 
 - `integrations`
   Navigation surface for provider setup and diagnostics, not a persisted settings blob.
 
-Estimate creation defaults still live separately and are exposed through `/api/settings/estimate-defaults` so the quote defaults UI does not rewrite unrelated estimate settings.
+Quote creation defaults are exposed through `/api/settings/quote-defaults` and back the Quotes defaults UI directly.
 
 ## Route Contracts
 
@@ -19,8 +19,8 @@ Estimate creation defaults still live separately and are exposed through `/api/s
 - `PUT /api/settings/company` -> `{ data: CompanyProfileSettings, notice }`
 - `GET /api/settings/quote-send-defaults` -> `{ data: QuoteSendDefaults }`
 - `PUT /api/settings/quote-send-defaults` -> `{ data: QuoteSendDefaults, notice }`
-- `GET /api/settings/estimate-defaults` -> `{ data: EstimateDefaults }`
-- `PUT /api/settings/estimate-defaults` -> `{ data: EstimateDefaults, notice }`
+- `GET /api/settings/quote-defaults` -> `{ data: QuoteDefaults }`
+- `PUT /api/settings/quote-defaults` -> `{ data: QuoteDefaults, notice }`
 
 Errors use `{ error }` with stable HTTP status codes.
 

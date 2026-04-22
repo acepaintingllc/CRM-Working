@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { recalculateEditorDraftFactors } from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorRecalculate.ts'
+import { recalculateEditorDraftFactors } from '../../../app/crm/quotes/[id]/_lib/estimateV2EditorRecalculate.ts'
 
 test('recalculateEditorDraftFactors syncs wall, ceiling, and trim factors and strips invalid trim helper mode', () => {
   const result = recalculateEditorDraftFactors({

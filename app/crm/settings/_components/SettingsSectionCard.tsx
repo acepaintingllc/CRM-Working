@@ -8,11 +8,11 @@ type SettingsSectionCardProps = {
 
 export function SettingsSectionCard(props: SettingsSectionCardProps) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="ace-crm-surface p-5">
       <div className="mb-4">
-        <h2 className="text-lg font-black text-slate-950">{props.title}</h2>
+        <h2 className="text-lg font-black text-[color:var(--crm-ui-text)]">{props.title}</h2>
         {props.description ? (
-          <p className="mt-1 text-sm text-slate-600">{props.description}</p>
+          <p className="mt-1 text-sm text-[color:var(--crm-ui-muted)]">{props.description}</p>
         ) : null}
       </div>
       <div className="grid gap-4">{props.children}</div>

@@ -7,7 +7,7 @@ import {
   moveTrimScopeMutation,
   stripInvalidTrimHelperModeMutation,
   toggleRoomFlagMutation,
-} from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorMutations.ts'
+} from '../../../app/crm/quotes/[id]/_lib/estimateV2EditorMutations.ts'
 
 test('addRoomMutation appends a room and seeds one RECT wall scope', () => {
   const result = addRoomMutation({

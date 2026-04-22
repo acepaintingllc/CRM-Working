@@ -5,10 +5,10 @@ import {
   parseCompanyProfileSettings,
 } from '@/lib/settings/companyProfile'
 import {
-  emptyEstimateDefaults,
-  normalizeEstimateDefaults,
-  parseEstimateDefaults,
-} from '@/lib/settings/estimateDefaults'
+  emptyQuoteDefaults,
+  normalizeQuoteDefaults,
+  parseQuoteDefaults,
+} from '@/lib/settings/quoteDefaults'
 import {
   emptyQuoteSendDefaults,
   normalizeQuoteSendDefaults,
@@ -81,11 +81,11 @@ describe('settings domain parsers', () => {
     })
   })
 
-  it('normalizes estimate defaults without leaking unrelated fields', () => {
-    expect(normalizeEstimateDefaults(null)).toEqual(emptyEstimateDefaults)
+  it('normalizes quote defaults without leaking unrelated fields', () => {
+    expect(normalizeQuoteDefaults(null)).toEqual(emptyQuoteDefaults)
 
     expect(
-      parseEstimateDefaults({
+      parseQuoteDefaults({
         walls_paint_id: 'paint-1',
         override_labor_rate: -1,
       })
@@ -95,12 +95,12 @@ describe('settings domain parsers', () => {
     })
 
     expect(
-      normalizeEstimateDefaults({
+      normalizeQuoteDefaults({
         walls_paint_id: 'paint-1',
         quote_validity_days: 30,
       })
     ).toEqual({
-      ...emptyEstimateDefaults,
+      ...emptyQuoteDefaults,
       walls_paint_id: 'paint-1',
     })
   })

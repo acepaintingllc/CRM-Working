@@ -1,3 +1,3 @@
 'use client'
 
-export { default } from '../../estimates/v2/create/page'
+export { default } from '../QuoteCreatePage'

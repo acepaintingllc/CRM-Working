@@ -1,8 +1,8 @@
 'use client'
 
 import { useParams } from 'next/navigation'
-import { EstimateV2ErrorBoundary } from '../../estimates/[id]/v2/_components/EstimateV2ErrorBoundary'
-import { EstimateV2EditorPageContent } from '../../estimates/[id]/v2/_components/EstimateV2EditorPageContent'
+import { EstimateV2ErrorBoundary } from './_components/EstimateV2ErrorBoundary'
+import { EstimateV2EditorPageContent } from './_components/EstimateV2EditorPageContent'
 
 export default function QuoteWorkspacePage() {
   const params = useParams<{ id: string }>()

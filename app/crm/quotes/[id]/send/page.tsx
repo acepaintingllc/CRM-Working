@@ -1,4 +1,4 @@
-import SendEstimateClient from '../../../estimates/[id]/send/sendEstimateClient'
+import SendQuoteClient from './SendQuoteClient'
 
 export default async function SendQuotePage({
   params,
@@ -6,5 +6,5 @@ export default async function SendQuotePage({
   params: Promise<{ id: string }> | { id: string }
 }) {
   const resolved = await Promise.resolve(params)
-  return <SendEstimateClient estimateId={resolved.id} catalogSource="v2" />
+  return <SendQuoteClient estimateId={resolved.id} catalogSource="v2" />
 }

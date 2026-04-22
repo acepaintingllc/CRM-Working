@@ -1,3 +1,4 @@
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import type { ReactNode } from 'react'
 
 type SettingsNoticeProps = {
@@ -5,16 +6,12 @@ type SettingsNoticeProps = {
   children: ReactNode
 }
 
-const toneClasses: Record<SettingsNoticeProps['tone'], string> = {
-  error: 'border-red-200 bg-red-50 text-red-700',
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  info: 'border-slate-200 bg-slate-50 text-slate-600',
+const toneMap: Record<SettingsNoticeProps['tone'], 'error' | 'success' | 'info'> = {
+  error: 'error',
+  success: 'success',
+  info: 'info',
 }
 
 export function SettingsNotice(props: SettingsNoticeProps) {
-  return (
-    <div className={`rounded-xl border px-3 py-2 text-sm ${toneClasses[props.tone]}`}>
-      {props.children}
-    </div>
-  )
+  return <CrmNotice tone={toneMap[props.tone]}>{props.children}</CrmNotice>
 }

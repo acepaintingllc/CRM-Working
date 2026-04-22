@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams } from 'next/navigation'
-import { EstimateV2SummaryPageContent } from '../../../estimates/[id]/v2/summary/_components/EstimateV2SummaryPageContent'
+import { EstimateV2SummaryPageContent } from './_components/EstimateV2SummaryPageContent'
 
 export default function QuoteSummaryPage() {
   const params = useParams<{ id: string }>()
