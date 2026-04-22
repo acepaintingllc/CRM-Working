@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   getApiErrorMessage,
+  getApiPayloadData,
   parseApiResponse,
   type ApiDataEnvelope,
 } from '@/lib/client/api'
@@ -113,21 +114,13 @@ export function useEstimateV2EditorLoader(params: {
       const estimateParsed = await parseApiResponse(estimateRes)
       const catalogsParsed = await parseApiResponse(catalogsRes)
 
-      const estimatePayload = estimateParsed.json as
-        | EstimateResponse
-        | { error?: string }
-        | null
-      const catalogsPayload = catalogsParsed.json as
-        | CatalogsPayload
-        | { error?: string }
-        | null
+      const estimatePayload = getApiPayloadData<EstimateResponse>(estimateParsed.json)
+      const catalogsPayload = getApiPayloadData<CatalogsPayload>(catalogsParsed.json)
 
       if (!activeRef.current) return
 
-      if (!estimateRes.ok || !estimatePayload || !('estimate' in estimatePayload)) {
-        const message =
-          (estimatePayload as { error?: string } | null)?.error ??
-          getApiErrorMessage(estimateRes, estimateParsed, 'Failed to load estimate')
+      if (!estimateRes.ok || !estimatePayload) {
+        const message = getApiErrorMessage(estimateRes, estimateParsed, 'Failed to load estimate')
         console.error('Estimate V2 editor load failed', {
           estimateId,
           operation: 'loadEstimate',
@@ -142,7 +135,7 @@ export function useEstimateV2EditorLoader(params: {
       meta.setEstimate(estimatePayload.estimate)
 
       const nextCatalogs =
-        catalogsRes.ok && catalogsPayload && 'catalogs' in catalogsPayload
+        catalogsRes.ok && catalogsPayload
           ? {
               ...meta.catalogs,
               ...catalogsPayload.catalogs,

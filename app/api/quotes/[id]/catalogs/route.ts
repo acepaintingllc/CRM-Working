@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import { getEstimateCatalogs } from '@/lib/server/estimateCatalogs'
 import {
   jsonError,
@@ -6,6 +5,7 @@ import {
   requireSessionUserOrg,
   resolveParams,
 } from '@/lib/server/apiRoute'
+import { dataResponse } from '@/lib/server/routeResult'
 
 type EstimateCatalogsRouteContext = { params: { id: string } | Promise<{ id: string }> }
 
@@ -26,7 +26,7 @@ export async function GET(request: Request, context: EstimateCatalogsRouteContex
       estimateId: estimateId.value,
       forceRefresh: url.searchParams.get('refresh') === '1',
     })
-    return NextResponse.json(catalogs)
+    return dataResponse(catalogs)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load estimate catalogs'
     return jsonError(message, 400)

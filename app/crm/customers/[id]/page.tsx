@@ -1,5 +1,8 @@
 'use client'
 
+import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CustomerDetailCard } from '@/app/crm/customers/_components/CustomerDetailCard'
 import { CustomerListSidebar } from '@/app/crm/customers/_components/CustomerListSidebar'
 import { CustomerTimelinePanel } from '@/app/crm/customers/_components/CustomerTimelinePanel'
@@ -9,7 +12,6 @@ import { useCustomerTimeline } from '@/app/crm/customers/_hooks/useCustomerTimel
 import { useOrg } from '@/app/crm/customers/customers-orgproviders'
 import { useCallback, useMemo } from 'react'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
 
 export default function CustomerDetailPage() {
   useOrg()
@@ -90,40 +92,19 @@ export default function CustomerDetailPage() {
   }, [setStatusMessage])
 
   return (
-    <div className="min-h-full bg-gradient-to-br from-gray-50 to-gray-200 py-4 md:py-6">
-      <div className="mx-auto max-w-6xl px-4 md:px-6">
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="hidden w-full min-w-[220px] flex-1 md:block md:max-w-[320px]">
-            <CustomerListSidebar
-              activeCustomerId={id}
-              query={query}
-              hasEmail={hasEmail}
-              hasPhone={hasPhone}
-              hasSet={hasSet}
-              listCustomers={listCustomers}
-              filteredList={filteredList}
-              listLoading={listLoading}
-              listError={listError}
-              listQueryString={listQueryString}
-              updateParams={updateParams}
-            />
-          </div>
+    <CrmPageShell className="max-w-6xl">
+      <CrmPageHeader
+        eyebrow="Relationship hub"
+        emoji="👥"
+        title={customer?.name ?? 'Customer details'}
+        description="Customer profile, related timeline activity, and quick CRM actions."
+        backHref="/crm/customers"
+        backLabel="Back to customers"
+      />
 
-          <div className="w-full min-w-0 flex-[3_1_480px]">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h1 className="m-0 text-2xl font-bold text-gray-900">Customer details</h1>
-                <p className="m-0 text-sm text-gray-500">Customer profile and quick actions.</p>
-              </div>
-              <button
-                onClick={() => router.back()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
-              >
-                <ArrowLeft size={16} aria-hidden="true" />
-                <span>Back</span>
-              </button>
-            </div>
-
+      <CrmDetailLayout
+        main={
+          <>
             <CustomerDetailCard
               customer={customer}
               loading={loading}
@@ -151,9 +132,26 @@ export default function CustomerDetailPage() {
               setNoteBody={setNoteBody}
               onAddNote={() => void saveNote()}
             />
+          </>
+        }
+        side={
+          <div className="hidden md:block">
+            <CustomerListSidebar
+              activeCustomerId={id}
+              query={query}
+              hasEmail={hasEmail}
+              hasPhone={hasPhone}
+              hasSet={hasSet}
+              listCustomers={listCustomers}
+              filteredList={filteredList}
+              listLoading={listLoading}
+              listError={listError}
+              listQueryString={listQueryString}
+              updateParams={updateParams}
+            />
           </div>
-        </div>
-      </div>
-    </div>
+        }
+      />
+    </CrmPageShell>
   )
 }

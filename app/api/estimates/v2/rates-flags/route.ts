@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import {
   jsonError,
   readJsonBody,
@@ -8,6 +7,7 @@ import {
   applyRatesFlagsMutation,
   readRatesFlagsPayload,
 } from '@/lib/server/rates-flags'
+import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
 import type { RatesFlagsMutationRequest } from '@/types/estimator/ratesFlags'
 
 export async function GET(request: Request) {
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       orgId: auth.session.orgId,
       userId: auth.session.userId,
     })
-    return NextResponse.json(payload)
+    return dataResponse(payload)
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Failed to load rates and flags.'
@@ -51,7 +51,7 @@ async function mutate(request: Request) {
       request: payload,
     })
     if (!result.ok) return jsonError(result.error, result.status)
-    return NextResponse.json({ ok: true })
+    return mutationResponse(true)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to save rates and flags.'
     return jsonError(message, 400)

@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import {
   jsonError,
   readJsonBody,
@@ -12,6 +11,7 @@ import {
   loadEstimateV2Response,
   saveEstimateV2Inputs,
 } from '@/lib/server/estimateV2RouteService'
+import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
 
 type EstimateRouteContext = { params: { id: string } | Promise<{ id: string }> }
 
@@ -38,7 +38,7 @@ export async function GET(request: Request, context: EstimateRouteContext) {
       userId: auth.session.userId,
       estimateId: estimateId.value,
     })
-    return NextResponse.json(payload)
+    return dataResponse(payload)
   } catch (error) {
     return toErrorResponse(error)
   }
@@ -64,7 +64,7 @@ export async function PUT(request: Request, context: EstimateRouteContext) {
       body: (body.value ?? {}) as Record<string, unknown>,
       autosaveOnly: (request.headers.get('x-estimate-save-mode')?.toLowerCase() ?? 'manual') === 'auto',
     })
-    return NextResponse.json(payload)
+    return mutationResponse(payload)
   } catch (error) {
     return toErrorResponse(error)
   }
@@ -83,7 +83,7 @@ export async function DELETE(_request: Request, context: EstimateRouteContext) {
       orgId: auth.session.orgId,
       estimateId: estimateId.value,
     })
-    return NextResponse.json(payload)
+    return mutationResponse(payload, 'Quote deleted.')
   } catch (error) {
     return toErrorResponse(error)
   }

@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getGoogleOAuthConfig } from '@/lib/server/googleCalendar'
 import { readJsonBody } from '@/lib/server/apiRoute'
+import { dataResponse } from '@/lib/server/routeResult'
 
 function safeNextPath(value: string | null, fallback: string) {
   const next = (value ?? '').trim()
@@ -60,7 +61,7 @@ function buildConnectResponse(params: {
   authUrl.searchParams.set('state', state)
 
   const res = asJson
-    ? NextResponse.json({ url: authUrl.toString() })
+    ? dataResponse({ url: authUrl.toString() })
     : NextResponse.redirect(authUrl.toString())
   res.cookies.set('gc_state', state, {
     httpOnly: true,

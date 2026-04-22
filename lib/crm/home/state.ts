@@ -143,7 +143,9 @@ export function readCustomersPayload(payload: unknown): ParserResult<DashboardCu
 }
 
 export function readCalendarStatusPayload(payload: unknown): ParserResult<boolean> {
-  if (!isRecord(payload) || !('connected' in payload)) {
+  const data = isRecord(payload) && isRecord(payload.data) ? payload.data : payload
+
+  if (!isRecord(data) || !('connected' in data)) {
     return {
       value: false,
       availability: 'missing',
@@ -151,7 +153,7 @@ export function readCalendarStatusPayload(payload: unknown): ParserResult<boolea
     }
   }
 
-  if (typeof payload.connected !== 'boolean') {
+  if (typeof data.connected !== 'boolean') {
     return {
       value: false,
       availability: 'invalid',
@@ -159,11 +161,13 @@ export function readCalendarStatusPayload(payload: unknown): ParserResult<boolea
     }
   }
 
-  return { value: payload.connected, availability: 'available', errorMessage: null }
+  return { value: data.connected, availability: 'available', errorMessage: null }
 }
 
 export function readCalendarEventsPayload(payload: unknown): ParserResult<CalendarEvent[]> {
-  if (!isRecord(payload) || !Array.isArray(payload.events)) {
+  const data = isRecord(payload) && isRecord(payload.data) ? payload.data : payload
+
+  if (!isRecord(data) || !Array.isArray(data.events)) {
     return {
       value: [],
       availability: 'invalid',
@@ -171,7 +175,7 @@ export function readCalendarEventsPayload(payload: unknown): ParserResult<Calend
     }
   }
   return {
-    value: payload.events
+    value: data.events
       .map(readCalendarEvent)
       .filter((event): event is CalendarEvent => event != null),
     availability: 'available',

@@ -1,6 +1,7 @@
-import Link from 'next/link'
 import { CalendarCheck, NotebookText } from 'lucide-react'
-import { crmBorderStyle, crmButtonSecondaryStyle } from './primitives/tokens'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmDenseActionRow } from '@/app/crm/_components/CrmDenseActionRow'
+import { crmBorderStyle } from './primitives/tokens'
 
 type SignalsFooterActionsProps = {
   actions: Array<{
@@ -18,18 +19,17 @@ function actionIcon(icon: 'calendar' | 'notes') {
 
 export function SignalsFooterActions({ actions }: SignalsFooterActionsProps) {
   return (
-    <div className="flex gap-2 border-t px-5 py-3" style={crmBorderStyle}>
+    <CrmDenseActionRow className="border-t px-5 py-3" style={crmBorderStyle}>
       {actions.map((action) => (
-        <Link
+        <CrmButton
           key={action.href}
           href={action.href}
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition"
-          style={crmButtonSecondaryStyle}
+          className="min-h-0 px-3 py-1.5 text-xs no-underline"
         >
           {actionIcon(action.icon)}
           {action.label}
-        </Link>
+        </CrmButton>
       ))}
-    </div>
+    </CrmDenseActionRow>
   )
 }

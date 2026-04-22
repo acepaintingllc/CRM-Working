@@ -1,7 +1,9 @@
 import type { CompanyProfileSettings } from '@/lib/settings/types'
-import { SettingsField } from './SettingsField'
-import { SettingsNotice } from './SettingsNotice'
-import { SettingsSectionCard } from './SettingsSectionCard'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmField } from '@/app/crm/_components/CrmField'
+import { CrmFormActions } from '@/app/crm/_components/CrmFormActions'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 
 type CompanyProfileFormProps = {
   value: CompanyProfileSettings
@@ -19,81 +21,81 @@ const inputClassName =
 
 export function CompanyProfileForm(props: CompanyProfileFormProps) {
   return (
-    <SettingsSectionCard
+    <CrmSectionCard
       title="Profile"
       description="Set the business identity and outbound defaults used in customer-facing CRM flows."
     >
-      {props.error ? <SettingsNotice tone="error">{props.error}</SettingsNotice> : null}
-      {props.notice ? <SettingsNotice tone="success">{props.notice}</SettingsNotice> : null}
-      {props.validationError ? <SettingsNotice tone="info">{props.validationError}</SettingsNotice> : null}
+      {props.error ? <CrmNotice tone="error" compact>{props.error}</CrmNotice> : null}
+      {props.notice ? <CrmNotice tone="success" compact>{props.notice}</CrmNotice> : null}
+      {props.validationError ? <CrmNotice tone="info" compact>{props.validationError}</CrmNotice> : null}
 
       <div className="grid gap-3 md:grid-cols-2">
-        <SettingsField label="Business name">
+        <CrmField label="Business name">
           <input
             value={props.value.business_name}
             onChange={(event) => props.onChange({ business_name: event.target.value })}
             placeholder="ACE Painting"
             className={inputClassName}
           />
-        </SettingsField>
+        </CrmField>
 
-        <SettingsField label="Timezone">
+        <CrmField label="Timezone">
           <input
             value={props.value.timezone}
             onChange={(event) => props.onChange({ timezone: event.target.value })}
             placeholder="America/Chicago"
             className={inputClassName}
           />
-        </SettingsField>
+        </CrmField>
 
-        <SettingsField label="Main phone">
+        <CrmField label="Main phone">
           <input
             value={props.value.main_phone}
             onChange={(event) => props.onChange({ main_phone: event.target.value })}
             placeholder="(812) 555-1234"
             className={inputClassName}
           />
-        </SettingsField>
+        </CrmField>
 
-        <SettingsField label="Business email">
+        <CrmField label="Business email">
           <input
             value={props.value.business_email}
             onChange={(event) => props.onChange({ business_email: event.target.value })}
             placeholder="hello@acepainting.com"
             className={inputClassName}
           />
-        </SettingsField>
+        </CrmField>
 
-        <SettingsField label="Website">
+        <CrmField label="Website">
           <input
             value={props.value.website}
             onChange={(event) => props.onChange({ website: event.target.value })}
             placeholder="https://acepainting.com"
             className={inputClassName}
           />
-        </SettingsField>
+        </CrmField>
 
-        <SettingsField label="Logo URL">
+        <CrmField label="Logo URL">
           <input
             value={props.value.logo_url}
             onChange={(event) => props.onChange({ logo_url: event.target.value })}
             placeholder="https://..."
             className={inputClassName}
           />
-        </SettingsField>
+        </CrmField>
       </div>
 
       <div className="grid gap-3">
-        <SettingsField label="Address">
+        <CrmField label="Address">
           <input
             value={props.value.address}
             onChange={(event) => props.onChange({ address: event.target.value })}
             placeholder="123 Main St, Newburgh, IN 47630"
             className={inputClassName}
           />
-        </SettingsField>
+        </CrmField>
 
-        <SettingsField
+        <CrmField
           label="Default sender signature"
           help="Used by customer-facing email flows that need a default signature."
         >
@@ -104,22 +106,17 @@ export function CompanyProfileForm(props: CompanyProfileFormProps) {
             rows={5}
             className={`${inputClassName} min-h-36 resize-y`}
           />
-        </SettingsField>
+        </CrmField>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <CrmFormActions>
         <p className="text-xs text-[color:var(--crm-ui-muted)]">
           These fields are stored as canonical company profile settings.
         </p>
-        <button
-          type="button"
-          onClick={props.onSave}
-          disabled={!props.canSave}
-          className="ace-crm-btn ace-crm-btn-primary"
-        >
+        <CrmButton type="button" onClick={props.onSave} disabled={!props.canSave} tone="primary">
           <span>{props.saving ? 'Saving...' : 'Save changes'}</span>
-        </button>
-      </div>
-    </SettingsSectionCard>
+        </CrmButton>
+      </CrmFormActions>
+    </CrmSectionCard>
   )
 }

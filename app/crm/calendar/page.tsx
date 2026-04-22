@@ -1,7 +1,11 @@
 'use client'
 
-import type { CSSProperties } from 'react'
-
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import {
   CalendarPicker,
   MonthBoard,
@@ -38,114 +42,109 @@ export default function CalendarPage() {
   } = useCalendarPage()
 
   return (
-    <div className="crm-page" style={{ maxWidth: 1460, margin: '0 auto' }}>
-      <div className="crm-topbar" style={{ marginBottom: 10 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>Calendar</h1>
-          <div style={{ marginTop: 4, fontSize: 13, color: 'var(--crm-muted)' }}>
-            Month board from Google Calendar. Use Google for editing.
-          </div>
-        </div>
+    <CrmPageShell className="max-w-[1460px]">
+      <CrmPageHeader
+        eyebrow="Scheduling"
+        emoji="🗓️"
+        title="Calendar"
+        description="Month board from Google Calendar. Use Google for editing while the CRM manages connection state and schedule visibility."
+        actions={
+          <>
+            <CrmButton type="button" onClick={() => void refreshAll()}>
+              Refresh
+            </CrmButton>
+            {connected ? (
+              <CrmButton type="button" onClick={() => void disconnect()}>
+                Disconnect
+              </CrmButton>
+            ) : (
+              <CrmButton type="button" onClick={() => void connect()} tone="primary">
+                Connect Google
+              </CrmButton>
+            )}
+            <CrmButton href={openGoogleUrl} target="_blank" rel="noreferrer">
+              Open in Google
+            </CrmButton>
+          </>
+        }
+      />
 
-        <div className="crm-actions" style={{ gap: 8 }}>
-          <button onClick={() => void refreshAll()} style={button}>
-            Refresh
-          </button>
-          {connected ? (
-            <button onClick={() => void disconnect()} style={button}>
-              Disconnect
-            </button>
-          ) : (
-            <button
-              onClick={() => void connect()}
-              style={{ ...button, background: 'var(--crm-accent)', color: 'var(--crm-accent-text)', border: '1px solid var(--crm-accent)' }}
-            >
-              Connect Google
-            </button>
-          )}
-          <a
-            href={openGoogleUrl}
-            target="_blank"
-            rel="noreferrer"
-            style={{ ...button, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-          >
-            Open in Google
-          </a>
-        </div>
-      </div>
-
-      {error ? (
-        <div
-          style={{
-            marginBottom: 10,
-            background: 'var(--crm-card)',
-            border: '1px solid #fecaca',
-            borderRadius: 12,
-            padding: 12,
-            color: '#991b1b',
-          }}
-        >
-          {error}
-        </div>
-      ) : null}
+      {error ? <CrmNotice tone="error" emoji="⚠️">{error}</CrmNotice> : null}
 
       {connected === false ? (
-        <div
-          style={{
-            marginTop: 12,
-            background: 'var(--crm-card)',
-            border: '1px solid var(--crm-border-soft)',
-            borderRadius: 16,
-            padding: 18,
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--crm-text)' }}>Connect Google Calendar</div>
-          <button
-            onClick={() => void connect()}
-            style={{ ...button, marginTop: 14, background: 'var(--crm-accent)', color: 'var(--crm-accent-text)', border: '1px solid var(--crm-accent)' }}
-          >
-            Connect Google
-          </button>
-        </div>
+        <CrmEmptyState
+          emoji="📆"
+          title="Connect Google Calendar"
+          description="Connect Google Calendar before the CRM can load calendars, event blocks, and selected-day details."
+          action={
+            <CrmButton type="button" onClick={() => void connect()} tone="primary">
+              Connect Google
+            </CrmButton>
+          }
+        />
       ) : connected === null ? (
-        <div style={{ marginTop: 12, color: 'var(--crm-muted)' }}>Loading calendar...</div>
+        <CrmSectionCard title="Loading calendar" emoji="⏳">
+          <div className="text-sm text-[color:var(--crm-ui-muted)]">Loading calendar...</div>
+        </CrmSectionCard>
       ) : (
         <>
-          <CalendarPicker
-            calendars={calendars}
-            selectedCalendarIds={selectedCalendarIds}
-            toggleCalendar={toggleCalendar}
-          />
+          <CrmSectionCard
+            title="Visible calendars"
+            description="Choose which Google calendars appear on the month board."
+            variant="compact"
+          >
+            <CalendarPicker
+              calendars={calendars}
+              selectedCalendarIds={selectedCalendarIds}
+              toggleCalendar={toggleCalendar}
+            />
+          </CrmSectionCard>
 
           <div className="calendar-shell">
-            <MonthBoard
-              calendarById={calendarById}
-              events={events}
-              eventsError={eventsError}
-              eventsLoading={eventsLoading}
-              goToNextMonth={goToNextMonth}
-              goToPreviousMonth={goToPreviousMonth}
-              goToToday={goToToday}
-              monthWeekRows={monthWeekRows}
-              onSelectDay={selectDay}
-              selectedCalendarIds={selectedCalendarIds}
-              selectedDayKey={selectedDayKey}
-              today={today}
-              visibleMonth={visibleMonth}
-            />
+            <CrmSectionCard
+              className="p-0"
+              title="Month board"
+              description="Review scheduled activity and jump into day details."
+            >
+              <MonthBoard
+                calendarById={calendarById}
+                events={events}
+                eventsError={eventsError}
+                eventsLoading={eventsLoading}
+                goToNextMonth={goToNextMonth}
+                goToPreviousMonth={goToPreviousMonth}
+                goToToday={goToToday}
+                monthWeekRows={monthWeekRows}
+                onSelectDay={selectDay}
+                selectedCalendarIds={selectedCalendarIds}
+                selectedDayKey={selectedDayKey}
+                today={today}
+                visibleMonth={visibleMonth}
+              />
+            </CrmSectionCard>
 
             <aside className="calendar-side-panel">
-              <SelectedDayPanel
-                calendarById={calendarById}
-                selectedDay={selectedDay}
-                selectedDayEvents={selectedDayEvents}
-              />
+              <CrmSectionCard
+                title="Selected day"
+                description="Inspect events for the active date."
+                variant="rail"
+              >
+                <SelectedDayPanel
+                  calendarById={calendarById}
+                  selectedDay={selectedDay}
+                  selectedDayEvents={selectedDayEvents}
+                />
+              </CrmSectionCard>
             </aside>
           </div>
         </>
       )}
 
-      {bootstrapLoading ? <div style={{ marginTop: 10, color: 'var(--crm-muted)' }}>Syncing...</div> : null}
+      {bootstrapLoading ? (
+        <CrmNotice tone="info" compact>
+          Syncing calendar state...
+        </CrmNotice>
+      ) : null}
 
       <style jsx global>{`
         .calendar-shell {
@@ -168,6 +167,7 @@ export default function CalendarPage() {
           align-items: center;
           gap: 12px;
           margin-bottom: 12px;
+          padding: 16px 16px 0;
         }
 
         .month-title {
@@ -191,8 +191,7 @@ export default function CalendarPage() {
         }
 
         .month-board {
-          border: 1px solid var(--crm-border-soft);
-          border-radius: 14px;
+          border-top: 1px solid var(--crm-border-soft);
           overflow-x: auto;
           background: var(--crm-card);
         }
@@ -362,7 +361,6 @@ export default function CalendarPage() {
           .month-board {
             margin-left: -4px;
             margin-right: -4px;
-            border-radius: 12px;
           }
         }
 
@@ -378,17 +376,6 @@ export default function CalendarPage() {
           }
         }
       `}</style>
-    </div>
+    </CrmPageShell>
   )
-}
-
-const button: CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid var(--crm-border-soft)',
-  background: 'var(--crm-card)',
-  color: 'var(--crm-text)',
-  fontWeight: 800,
-  fontSize: 14,
-  cursor: 'pointer',
 }

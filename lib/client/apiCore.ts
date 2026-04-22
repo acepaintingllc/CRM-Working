@@ -6,6 +6,11 @@ export type ApiDataEnvelope<T> = {
   data: T
 }
 
+export type ApiReadMetaEnvelope<T> = {
+  data: T
+  meta?: Record<string, unknown>
+}
+
 export type ApiMutationEnvelope<T> = {
   data: T
   notice?: string | null
@@ -48,6 +53,14 @@ export function getApiErrorMessage(
     response.statusText ??
     fallback
   )
+}
+
+export function getApiPayloadData<T>(payload: unknown): T | null {
+  if (!payload || typeof payload !== 'object' || !('data' in payload)) {
+    return null
+  }
+
+  return ((payload as ApiDataEnvelope<T>).data ?? null) as T | null
 }
 
 export async function requestApiWith<TResponse>(

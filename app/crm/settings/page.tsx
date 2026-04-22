@@ -1,17 +1,20 @@
 'use client'
 
 import { Building2, FileStack, Link2, Settings as SettingsIcon } from 'lucide-react'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { SettingsNavTile } from './_components/SettingsNavTile'
-import { SettingsPageShell } from './_components/SettingsPageShell'
 
 export default function SettingsPage() {
   return (
-    <SettingsPageShell
-      eyebrow="Settings"
-      title="CRM Settings"
-      description="Manage company identity, quote send defaults, and integrations from one organized settings area."
-    >
+    <CrmPageShell className="max-w-5xl">
+      <CrmPageHeader
+        eyebrow="Settings"
+        emoji="⚙️"
+        title="CRM Settings"
+        description="Manage company identity, quote send defaults, and integrations from one organized settings area."
+      />
       <section className="grid gap-3 md:grid-cols-3">
         <SettingsNavTile
           href="/crm/settings/company"
@@ -42,6 +45,6 @@ export default function SettingsPage() {
           Add new settings by creating a typed domain contract, a behavior-specific route, and a page built on the shared settings resource hook and primitives.
         </p>
       </CrmSectionCard>
-    </SettingsPageShell>
+    </CrmPageShell>
   )
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken, listCalendars } from '@/lib/server/googleCalendar'
+import { dataResponse } from '@/lib/server/routeResult'
 
 export async function GET(request: Request) {
   const session = await getSessionUserOrg()
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
 
   try {
     const calendars = await listCalendars(token.accessToken)
-    return NextResponse.json({ calendars })
+    return dataResponse(calendars)
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Failed to list calendars'
     return NextResponse.json(

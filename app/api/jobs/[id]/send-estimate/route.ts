@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { mutationResponse } from '@/lib/server/routeResult'
 import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { downloadDriveFile, findLatestEstimateFile } from '@/lib/server/googleDrive'
 import { sendGmailMessage } from '@/lib/server/googleMail'
@@ -212,8 +213,7 @@ export async function POST(
       .eq('org_id', orgId)
       .eq('id', id)
 
-    return NextResponse.json({
-      ok: true,
+    return mutationResponse({
       messageId: send.messageId,
       estimateFile: {
         id: attachment.id ?? attachment.filename,
@@ -225,6 +225,6 @@ export async function POST(
     })
   } catch (e: unknown) {
     console.error('send-estimate failed', e)
-    return NextResponse.json({ error: 'Unable to send estimate email.' }, { status: 500 })
+    return Response.json({ error: 'Unable to send estimate email.' }, { status: 500 })
   }
 }

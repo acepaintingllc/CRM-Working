@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
-import { getApiErrorMessage, parseApiResponse } from '@/lib/client/api'
+import { getApiErrorMessage, getApiPayloadData, parseApiResponse } from '@/lib/client/api'
 import {
   createEstimateV2Error,
   type EstimateV2Error,
@@ -42,7 +42,7 @@ export function useEstimateV2SummaryData(estimateId: string) {
     try {
       const res = await authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' })
       const parsed = await parseApiResponse(res)
-      const payload = parsed.json as EstimateV2SummaryPageData | null
+      const payload = getApiPayloadData<EstimateV2SummaryPageData>(parsed.json)
       if (res.ok && payload?.pricing_summary) {
         setData((prev) => (prev ? { ...prev, pricing_summary: payload.pricing_summary } : prev))
         if (payload.trim_paint) {

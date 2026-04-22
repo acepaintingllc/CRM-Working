@@ -6,6 +6,7 @@ type CrmEmptyStateProps = {
   emoji?: string
   action?: ReactNode
   className?: string
+  compact?: boolean
 }
 
 export function CrmEmptyState({
@@ -14,10 +15,11 @@ export function CrmEmptyState({
   emoji,
   action,
   className = '',
+  compact = false,
 }: CrmEmptyStateProps) {
   return (
     <div
-      className={`ace-crm-surface-muted flex flex-col items-start gap-3 border-dashed px-4 py-4 ${className}`.trim()}
+      className={`ace-crm-surface-muted flex flex-col items-start border-dashed ${compact ? 'gap-2 px-3 py-3' : 'gap-3 px-4 py-4'} ${className}`.trim()}
     >
       {emoji ? (
         <div className="text-2xl" aria-hidden="true">

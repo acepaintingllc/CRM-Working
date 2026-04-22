@@ -19,17 +19,15 @@ function createResponse(ok: boolean, payload: unknown, statusText = ok ? 'OK' : 
 }
 
 test('readCalendarInfosPayload parses valid calendar payloads', () => {
-  const result = readCalendarInfosPayload({
-    calendars: [
-      {
-        id: 'primary',
-        summary: 'Primary',
-        primary: true,
-        backgroundColor: '#ffffff',
-        foregroundColor: '#111111',
-      },
-    ],
-  })
+  const result = readCalendarInfosPayload([
+    {
+      id: 'primary',
+      summary: 'Primary',
+      primary: true,
+      backgroundColor: '#ffffff',
+      foregroundColor: '#111111',
+    },
+  ])
 
   assert.equal(result.valid, true)
   assert.equal(result.value[0]?.id, 'primary')
@@ -74,13 +72,13 @@ test('fetchCalendarStatus returns a safe error on invalid payloads', async () =>
 })
 
 test('fetchCalendars and fetchEvents return safe errors on malformed payloads', async () => {
-  const calendars = await fetchCalendars(async () => createResponse(true, { calendars: [{ nope: true }] }))
+  const calendars = await fetchCalendars(async () => createResponse(true, { data: [{ nope: true }] }))
   const events = await fetchEvents(
     {
       selectedCalendarIds: ['primary'],
       visibleMonth: new Date('2026-04-01T00:00:00.000Z'),
     },
-    async () => createResponse(true, { events: [{ id: 'event-1' }] })
+    async () => createResponse(true, { data: { events: [{ id: 'event-1' }] } })
   )
 
   assert.deepEqual(calendars.value, [])

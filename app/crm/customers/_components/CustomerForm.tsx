@@ -1,7 +1,10 @@
 'use client'
 
 import { useCallback, useMemo } from 'react'
-import { Save, X } from 'lucide-react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmField } from '@/app/crm/_components/CrmField'
+import { CrmFormActions } from '@/app/crm/_components/CrmFormActions'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { useAsyncSubmitState } from '@/app/crm/_hooks/useAsyncSubmitState'
 import {
   normalizeCustomerFormValues,
@@ -94,109 +97,96 @@ export function CustomerForm({
 
   return (
     <>
-      {error && <div className="text-red-600">{error}</div>}
+      {error ? <CrmNotice tone="error" compact>{error}</CrmNotice> : null}
       {legacyAddressCleanup && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          <div className="font-semibold">Legacy address needs cleanup</div>
-          <div className="mt-1">{legacyAddressCleanup.warning}</div>
-          <div className="mt-2 text-xs text-amber-800">
+        <CrmNotice tone="warning" title="Legacy address needs cleanup" compact>
+          <div>{legacyAddressCleanup.warning}</div>
+          <div className="mt-2 text-xs">
             Current stored address: {legacyAddressCleanup.legacyAddress}
           </div>
-        </div>
+        </CrmNotice>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label htmlFor={fieldId.name} className="text-sm">Name *</label>
+      <form onSubmit={handleSubmit} className="grid gap-4">
+        <CrmField label="Name *">
           <input
             id={fieldId.name}
-            className="border rounded-md w-full p-2"
+            className="ace-crm-input text-sm"
             value={values.name}
             onChange={(event) => updateField('name', event.target.value)}
           />
-        </div>
+        </CrmField>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor={fieldId.phone} className="text-sm">Phone</label>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <CrmField label="Phone">
             <input
               id={fieldId.phone}
-              className="border rounded-md w-full p-2"
+              className="ace-crm-input text-sm"
               value={values.phone}
               onChange={(event) => updateField('phone', event.target.value)}
             />
-          </div>
-          <div>
-            <label htmlFor={fieldId.email} className="text-sm">Email</label>
+          </CrmField>
+          <CrmField label="Email">
             <input
               id={fieldId.email}
-              className="border rounded-md w-full p-2"
+              className="ace-crm-input text-sm"
               value={values.email}
               onChange={(event) => updateField('email', event.target.value)}
             />
-          </div>
+          </CrmField>
         </div>
 
-        <div>
-          <label htmlFor={fieldId.street} className="text-sm">Street</label>
+        <CrmField label="Street">
           <input
             id={fieldId.street}
-            className="border rounded-md w-full p-2"
+            className="ace-crm-input text-sm"
             value={values.street}
             onChange={(event) => updateField('street', event.target.value)}
           />
-        </div>
+        </CrmField>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label htmlFor={fieldId.city} className="text-sm">City</label>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <CrmField label="City">
             <input
               id={fieldId.city}
-              className="border rounded-md w-full p-2"
+              className="ace-crm-input text-sm"
               value={values.city}
               onChange={(event) => updateField('city', event.target.value)}
             />
-          </div>
-          <div>
-            <label htmlFor={fieldId.state} className="text-sm">State</label>
+          </CrmField>
+          <CrmField label="State">
             <input
               id={fieldId.state}
-              className="border rounded-md w-full p-2"
+              className="ace-crm-input text-sm"
               value={values.state}
               onChange={(event) => updateField('state', event.target.value)}
             />
-          </div>
-          <div>
-            <label htmlFor={fieldId.zip} className="text-sm">ZIP</label>
+          </CrmField>
+          <CrmField label="ZIP">
             <input
               id={fieldId.zip}
-              className="border rounded-md w-full p-2"
+              className="ace-crm-input text-sm"
               value={values.zip}
               onChange={(event) => updateField('zip', event.target.value)}
             />
-          </div>
+          </CrmField>
         </div>
 
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-black text-white px-3 py-2 text-sm disabled:opacity-50 inline-flex items-center gap-2"
-          >
-            <Save size={16} aria-hidden="true" />
-            <span>{saving ? submittingLabel : submitLabel}</span>
-          </button>
-          {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm inline-flex items-center gap-2"
-            >
-              <X size={16} aria-hidden="true" />
-              <span>{cancelLabel}</span>
-            </button>
-          )}
-        </div>
+        <CrmFormActions>
+          <div className="text-xs text-[color:var(--crm-ui-muted)]">
+            Customer identity and address fields follow the shared CRM form system.
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <CrmButton type="submit" disabled={saving} tone="primary">
+              <span>{saving ? submittingLabel : submitLabel}</span>
+            </CrmButton>
+            {onCancel ? (
+              <CrmButton type="button" onClick={onCancel}>
+                <span>{cancelLabel}</span>
+              </CrmButton>
+            ) : null}
+          </div>
+        </CrmFormActions>
       </form>
     </>
   )

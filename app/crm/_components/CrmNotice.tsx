@@ -7,6 +7,7 @@ type CrmNoticeProps = {
   title?: string
   emoji?: string
   children: ReactNode
+  compact?: boolean
 }
 
 const toneClassName: Record<CrmNoticeTone, string> = {
@@ -19,9 +20,11 @@ const toneClassName: Record<CrmNoticeTone, string> = {
     'border-[color:var(--crm-ui-warning-border)] bg-[color:var(--crm-ui-warning-bg)] text-[color:var(--crm-ui-warning-text)]',
 }
 
-export function CrmNotice({ tone, title, emoji, children }: CrmNoticeProps) {
+export function CrmNotice({ tone, title, emoji, children, compact = false }: CrmNoticeProps) {
   return (
-    <div className={`rounded-2xl border px-4 py-3 text-sm shadow-sm ${toneClassName[tone]}`}>
+    <div
+      className={`rounded-2xl border text-sm shadow-sm ${compact ? 'px-3 py-2.5' : 'px-4 py-3'} ${toneClassName[tone]}`}
+    >
       <div className="flex items-start gap-3">
         {emoji ? (
           <div className="mt-0.5 text-base" aria-hidden="true">

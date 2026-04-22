@@ -1,4 +1,7 @@
+import Link from 'next/link'
 import type { ReactNode } from 'react'
+import { ArrowLeft } from 'lucide-react'
+import { crmButtonClassName } from '@/app/crm/_components/crmStyles'
 
 type CrmPageHeaderProps = {
   title: string
@@ -7,6 +10,10 @@ type CrmPageHeaderProps = {
   emoji?: string
   badge?: ReactNode
   actions?: ReactNode
+  meta?: ReactNode
+  backHref?: string
+  backLabel?: string
+  backAction?: ReactNode
 }
 
 export function CrmPageHeader({
@@ -16,9 +23,25 @@ export function CrmPageHeader({
   emoji,
   badge,
   actions,
+  meta,
+  backHref,
+  backLabel = 'Back',
+  backAction,
 }: CrmPageHeaderProps) {
   return (
     <section className="ace-crm-surface overflow-hidden px-5 py-5 md:px-6 md:py-6">
+      {backAction ? <div className="mb-4">{backAction}</div> : null}
+      {!backAction && backHref ? (
+        <div className="mb-4">
+          <Link
+            href={backHref}
+            className={`${crmButtonClassName('secondary')} inline-flex w-fit items-center gap-1.5 no-underline`}
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            <span>{backLabel}</span>
+          </Link>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-3xl">
           {(eyebrow || badge) && (
@@ -46,6 +69,7 @@ export function CrmPageHeader({
                   {description}
                 </p>
               ) : null}
+              {meta ? <div className="mt-3 flex flex-wrap items-center gap-2">{meta}</div> : null}
             </div>
           </div>
         </div>

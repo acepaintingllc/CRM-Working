@@ -1,18 +1,21 @@
 'use client'
 
 import { CalendarCheck, ShieldCheck } from 'lucide-react'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { SettingsNavTile } from '@/app/crm/settings/_components/SettingsNavTile'
-import { SettingsPageShell } from '@/app/crm/settings/_components/SettingsPageShell'
 
 export default function IntegrationsSettingsPage() {
   return (
-    <SettingsPageShell
-      eyebrow="Integrations"
-      title="Integrations"
-      description="Provider-specific connection setup stays separate from persisted CRM settings forms."
-      backHref="/crm/settings"
-      backLabel="Back to settings"
-    >
+    <CrmPageShell className="max-w-5xl">
+      <CrmPageHeader
+        eyebrow="Integrations"
+        emoji="⚙️"
+        title="Integrations"
+        description="Provider-specific connection setup stays separate from persisted CRM settings forms."
+        backHref="/crm/settings"
+        backLabel="Back to settings"
+      />
       <section className="grid gap-3 md:grid-cols-2">
         <SettingsNavTile
           href="/crm/calendar"
@@ -27,6 +30,6 @@ export default function IntegrationsSettingsPage() {
           Icon={ShieldCheck}
         />
       </section>
-    </SettingsPageShell>
+    </CrmPageShell>
   )
 }

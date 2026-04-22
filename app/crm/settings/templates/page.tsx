@@ -3,12 +3,13 @@
 import { useCallback } from 'react'
 import { FileText, MessageSquareText, NotebookPen } from 'lucide-react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
 import { QuoteSendDefaultsForm } from '@/app/crm/settings/_components/QuoteSendDefaultsForm'
 import { SettingsNavTile } from '@/app/crm/settings/_components/SettingsNavTile'
-import { SettingsNotice } from '@/app/crm/settings/_components/SettingsNotice'
-import { SettingsPageShell } from '@/app/crm/settings/_components/SettingsPageShell'
 import { loadData, saveData } from '@/lib/client/api'
 import {
   emptyQuoteSendDefaults,
@@ -36,13 +37,15 @@ export default function TemplatesLibraryPage() {
   const canSave = resource.hasLoaded && resource.dirty && !resource.saving && !validationError
 
   return (
-    <SettingsPageShell
-      eyebrow="Templates"
-      title="Templates and Send Defaults"
-      description="Keep reusable email templates separate from the quote send defaults that drive customer-facing quote documents."
-      backHref="/crm/settings"
-      backLabel="Back to settings"
-    >
+    <CrmPageShell className="max-w-5xl">
+      <CrmPageHeader
+        eyebrow="Templates"
+        emoji="⚙️"
+        title="Templates and Send Defaults"
+        description="Keep reusable email templates separate from the quote send defaults that drive customer-facing quote documents."
+        backHref="/crm/settings"
+        backLabel="Back to settings"
+      />
       <section className="grid gap-3 md:grid-cols-3">
         <SettingsNavTile
           href="/crm/email-templates"
@@ -72,7 +75,7 @@ export default function TemplatesLibraryPage() {
 
       {!resource.loading && !resource.hasLoaded && resource.error ? (
         <CrmSectionCard title="Quote send defaults unavailable">
-          <SettingsNotice tone="error">{resource.error}</SettingsNotice>
+          <CrmNotice tone="error">{resource.error}</CrmNotice>
           <div className="mt-4">
             <CrmButton type="button" onClick={() => void resource.reload()}>
               Retry
@@ -93,6 +96,6 @@ export default function TemplatesLibraryPage() {
           validationError={resource.dirty ? validationError : null}
         />
       ) : null}
-    </SettingsPageShell>
+    </CrmPageShell>
   )
 }

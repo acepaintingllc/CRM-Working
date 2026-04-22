@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   getApiErrorMessage,
+  getApiPayloadData,
   parseApiResponse,
   type ApiDataEnvelope,
 } from '@/lib/client/api'
@@ -104,16 +105,11 @@ export function useEstimateV2SummaryLoader(estimateId: string, state: SummaryLoa
 
       const res = await authedFetch(`/api/quotes/${estimateId}`, { cache: 'no-store' })
       const parsed = await parseApiResponse(res)
-      const payload = parsed.json as
-        | EstimateV2SummaryPageData
-        | { error?: string }
-        | null
+      const payload = getApiPayloadData<EstimateV2SummaryPageData>(parsed.json)
 
       if (!activeRef.current) return
-      if (!res.ok || !payload || !('estimate' in payload)) {
-        const message =
-          (payload as { error?: string } | null)?.error ??
-          getApiErrorMessage(res, parsed, 'Failed to load estimate')
+      if (!res.ok || !payload) {
+        const message = getApiErrorMessage(res, parsed, 'Failed to load estimate')
         console.error('Estimate V2 summary load failed', {
           estimateId,
           operation: 'loadEstimate',
@@ -125,12 +121,11 @@ export function useEstimateV2SummaryLoader(estimateId: string, state: SummaryLoa
         return
       }
 
-      const nextData = payload as EstimateV2SummaryPageData
-      state.setData(nextData)
+      state.setData(payload)
 
       const defaults = applyJobSettingsDefaults(
-        nextData.inputs?.jobsettings,
-        nextData.inputs?.org_defaults
+        payload.inputs?.jobsettings,
+        payload.inputs?.org_defaults
       )
       state.setLaborDayEnabled(defaults.laborDayEnabled)
       state.setDayhours(defaults.dayhours)
@@ -138,11 +133,11 @@ export function useEstimateV2SummaryLoader(estimateId: string, state: SummaryLoa
       state.setLaborRate(defaults.laborRate)
       state.setJobMinEnabled(defaults.jobMinEnabled)
       state.setJobMinAmount(defaults.jobMinAmount)
-      state.setTrimPaintProductId(nextData.trim_paint?.paint_product_id ?? '')
-      state.setTrimPaintGallons(nextData.trim_paint?.gallons ?? 0)
-      state.setTrimPaintQuarts(nextData.trim_paint?.quarts ?? 0)
+      state.setTrimPaintProductId(payload.trim_paint?.paint_product_id ?? '')
+      state.setTrimPaintGallons(payload.trim_paint?.gallons ?? 0)
+      state.setTrimPaintQuarts(payload.trim_paint?.quarts ?? 0)
 
-      const jobRes = await authedFetch(`/api/jobs/${nextData.estimate.job_id}`, {
+      const jobRes = await authedFetch(`/api/jobs/${payload.estimate.job_id}`, {
         cache: 'no-store',
       })
       const jobParsed = await parseApiResponse(jobRes)

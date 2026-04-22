@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
+import { CrmDenseSectionHeader } from '@/app/crm/_components/CrmDenseSectionHeader'
 import { crmMutedTextStyle } from './tokens'
-import { cx } from './utils'
 
 type DashboardSectionHeaderProps = {
   label: string
@@ -18,28 +18,24 @@ export function DashboardSectionHeader({
   actionLabel,
   badge,
   className,
-  labelClassName,
+  labelClassName = '',
 }: DashboardSectionHeaderProps) {
   return (
-    <div className={cx('flex items-center justify-between', className)}>
-      <div className="flex items-center gap-1.5">
-        <div
-          className={cx('text-[11px] font-extrabold uppercase tracking-widest', labelClassName)}
-          style={crmMutedTextStyle}
-        >
-          {label}
-        </div>
-        {badge}
-      </div>
-      {actionHref && actionLabel ? (
-        <Link
-          href={actionHref}
-          className="text-xs font-semibold underline-offset-2 hover:underline"
-          style={crmMutedTextStyle}
-        >
-          {actionLabel}
-        </Link>
-      ) : null}
-    </div>
+    <CrmDenseSectionHeader
+      title={label}
+      badge={badge}
+      className={[className, labelClassName].filter(Boolean).join(' ')}
+      actions={
+        actionHref && actionLabel ? (
+          <Link
+            href={actionHref}
+            className="text-xs font-semibold underline-offset-2 hover:underline"
+            style={crmMutedTextStyle}
+          >
+            {actionLabel}
+          </Link>
+        ) : null
+      }
+    />
   )
 }

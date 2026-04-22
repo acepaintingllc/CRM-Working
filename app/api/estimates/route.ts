@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { loadEstimateTemplateSettings } from '@/lib/server/estimateTemplateSettings'
+import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -75,7 +76,7 @@ export async function GET() {
   )
   const customers = new Map((customersRes.data ?? []).map((c) => [c.id, c.name]))
 
-  return NextResponse.json({
+  return dataResponse({
     estimates: (estimates ?? []).map((row) => ({
       ...row,
       job_title: jobs.get(row.job_id)?.title ?? null,
@@ -204,9 +205,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: pricingPolicyInsert.error.message }, { status: 500 })
   }
 
-  return NextResponse.json({
-    ok: true,
+  return mutationResponse({
     id: estimateId,
     estimate: createRes.data,
-  })
+  }, 'Estimate version created.')
 }

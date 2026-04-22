@@ -22,6 +22,7 @@ import {
   requireSessionUserOrg,
   resolveParams,
 } from '@/lib/server/apiRoute'
+import { mutationResponse } from '@/lib/server/routeResult'
 import {
   isJobStatus,
   isStageEmailStage,
@@ -194,15 +195,7 @@ async function getJobSnapshot(orgId: string, jobId: string | null) {
 async function replayResponse(orgId: string, idempotencyKey: string) {
   const existing = await getReplayRow(orgId, idempotencyKey)
   if (!existing) {
-    return NextResponse.json(
-      {
-        ok: false,
-        status: 'replayed' as EmailSendStatus,
-        replayed: true,
-        error: 'This send request key was already used.',
-      },
-      { status: 409 }
-    )
+    return jsonError('This send request key was already used.', 409)
   }
 
   const resultStatus = asPersistentStatus(existing.status)
@@ -214,19 +207,24 @@ async function replayResponse(orgId: string, idempotencyKey: string) {
       ? 'This email request is already in progress. No duplicate email was sent.'
       : 'This email request was already processed and was not sent.'
 
-  return NextResponse.json(
+  if (resultStatus === 'failed' || resultStatus === 'blocked') {
+    return jsonError(
+      existing.error_message ?? 'Previous send attempt failed.',
+      responseStatusForPersistent(resultStatus, existing.error_message)
+    )
+  }
+
+  return mutationResponse(
     {
-      ok: resultStatus === 'sent' || resultStatus === 'pending',
       status: 'replayed' as EmailSendStatus,
       replayed: true,
       result_status: resultStatus,
       warning: defaultMessage,
-      error:
-        resultStatus === 'failed' || resultStatus === 'blocked'
-          ? existing.error_message ?? 'Previous send attempt failed.'
-          : undefined,
       job: existingJob,
+      estimateFile: null,
+      estimateFiles: [],
     },
+    undefined,
     { status: responseStatusForPersistent(resultStatus, existing.error_message) }
   )
 }
@@ -270,15 +268,7 @@ async function logBlockedResponse(args: {
     return NextResponse.json({ error: 'Unable to create email delivery log.' }, { status: 500 })
   }
 
-  return NextResponse.json(
-    {
-      ok: false,
-      status: 'blocked' as EmailSendStatus,
-      replayed: false,
-      error: args.errorMessage,
-    },
-    { status: args.statusCode }
-  )
+  return jsonError(args.errorMessage, args.statusCode)
 }
 
 export async function POST(
@@ -817,15 +807,7 @@ export async function POST(
         .eq('id', logRow.id)
     }
 
-    return NextResponse.json(
-      {
-        ok: false,
-        status: 'failed' as EmailSendStatus,
-        replayed: false,
-        error: 'Unable to send email.',
-      },
-      { status: 400 }
-    )
+    return jsonError('Unable to send email.', 400)
   }
 
   const sentAtIso = new Date().toISOString()
@@ -875,8 +857,7 @@ export async function POST(
     }
   }
 
-  return NextResponse.json({
-    ok: true,
+  return mutationResponse({
     status: 'sent' as EmailSendStatus,
     replayed: false,
     warning: warnings.length > 0 ? warnings.join(' ') : undefined,

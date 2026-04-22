@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import { deleteSitePhoto, updateSitePhotoCaption } from '@/lib/server/sitePhotos'
 import {
   jsonError,
@@ -7,6 +6,7 @@ import {
   requireSessionUserOrg,
   resolveParams,
 } from '@/lib/server/apiRoute'
+import { mutationResponse } from '@/lib/server/routeResult'
 
 function normalizeCaption(value: unknown) {
   if (value == null) return null
@@ -47,7 +47,7 @@ export async function PATCH(
   })
   if ('error' in updated) return jsonError(updated.error ?? 'Unable to update site photo.', updated.status ?? 500)
 
-  return NextResponse.json({ ok: true, photo: updated.photo })
+  return mutationResponse(updated.photo, 'Photo updated.')
 }
 
 export async function DELETE(
@@ -69,5 +69,5 @@ export async function DELETE(
     photoId: ids.photoId,
   })
   if ('error' in deleted) return jsonError(deleted.error ?? 'Unable to delete site photo.', deleted.status ?? 500)
-  return NextResponse.json({ ok: true })
+  return mutationResponse(true, 'Photo deleted.')
 }
