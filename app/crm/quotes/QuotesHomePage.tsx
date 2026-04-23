@@ -16,19 +16,18 @@ type Props = {
 }
 
 export default function QuotesHomePage({ initialData }: Props) {
-  const controller = useQuotesHomePage(initialData)
+  const { actions, sections } = useQuotesHomePage(initialData)
   const {
-    actions,
     createVm,
     deleteDialogVm,
     feedbackVm,
     headerVm,
     jobListVm,
-    mobileVm,
+    mobileSummaryCards,
     selectedJobVm,
     summaryCards,
     versionListVm,
-  } = controller
+  } = sections
 
   return (
     <div className="ace-v2-shell" style={S.main}>
@@ -48,7 +47,7 @@ export default function QuotesHomePage({ initialData }: Props) {
           </div>
 
           <div style={S.mobileStats}>
-            {mobileVm.summaryCards.map((card) => (
+            {mobileSummaryCards.map((card) => (
               <div key={`mobile-${card.label}`} style={S.mobileStatCard}>
                 <div style={S.cardLabel}>{card.label}</div>
                 <div style={{ ...S.statValue, fontSize: 18, marginBottom: 0 }}>{card.value}</div>

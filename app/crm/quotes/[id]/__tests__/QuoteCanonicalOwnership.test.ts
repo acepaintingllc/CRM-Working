@@ -44,7 +44,6 @@ const quoteAdminHookPaths = [
   'app/crm/quotes/_hooks/useQuotesHomeData.ts',
   'app/crm/quotes/_hooks/useQuotesHomeDelete.ts',
   'app/crm/quotes/_hooks/useQuotesHomePage.ts',
-  'app/crm/quotes/_hooks/useQuotesHomeSelection.ts',
   'app/crm/quotes/_hooks/useQuoteVersionCreation.ts',
 ]
 

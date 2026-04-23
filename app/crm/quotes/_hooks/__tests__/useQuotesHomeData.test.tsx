@@ -21,16 +21,19 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-const firstPayload = {
+const seededPayload = {
   summary: {
-    total_versions: 1,
+    total_versions: 3,
     draft_count: 1,
-    sent_or_awaiting_count: 0,
-    live_count: 0,
-    pipeline_total: 500,
+    sent_or_awaiting_count: 1,
+    live_count: 1,
+    pipeline_total: 1800,
   },
   jobCounts: {
-    items: [{ job_id: 'job-1', version_count: 1 }],
+    items: [
+      { job_id: 'job-1', version_count: 2 },
+      { job_id: 'job-2', version_count: 1 },
+    ],
   },
   jobs: [
     {
@@ -46,21 +49,6 @@ const firstPayload = {
       scheduled_date: null,
       completed_at: null,
     },
-  ],
-}
-
-const secondPayload = {
-  summary: {
-    total_versions: 2,
-    draft_count: 0,
-    sent_or_awaiting_count: 1,
-    live_count: 1,
-    pipeline_total: 1300,
-  },
-  jobCounts: {
-    items: [{ job_id: 'job-2', version_count: 2 }],
-  },
-  jobs: [
     {
       id: 'job-2',
       customer_id: 'customer-2',
@@ -77,19 +65,69 @@ const secondPayload = {
   ],
 }
 
+const firstPayload = {
+  summary: {
+    total_versions: 1,
+    draft_count: 1,
+    sent_or_awaiting_count: 0,
+    live_count: 0,
+    pipeline_total: 500,
+  },
+  jobCounts: {
+    items: [{ job_id: 'job-1', version_count: 1 }],
+  },
+  jobs: [seededPayload.jobs[0]],
+}
+
+const secondPayload = {
+  summary: {
+    total_versions: 2,
+    draft_count: 0,
+    sent_or_awaiting_count: 1,
+    live_count: 1,
+    pipeline_total: 1300,
+  },
+  jobCounts: {
+    items: [{ job_id: 'job-2', version_count: 2 }],
+  },
+  jobs: [seededPayload.jobs[1]],
+}
+
 describe('useQuotesHomeData', () => {
   beforeEach(() => {
     loadQuoteHomeBootstrap.mockReset()
   })
 
-  it('uses seeded bootstrap data without immediately refetching', async () => {
-    const { result } = renderHook(() => useQuotesHomeData(firstPayload))
+  it('uses seeded bootstrap data without immediately refetching and derives selection state', async () => {
+    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
+
+    await waitFor(() => {
+      expect(result.current.selectedJobId).toBe('job-1')
+    })
 
     expect(loadQuoteHomeBootstrap).not.toHaveBeenCalled()
     expect(result.current.loading).toBe(false)
-    expect(result.current.summary.total_versions).toBe(1)
-    expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-1', version_count: 1 }])
-    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1'])
+    expect(result.current.summary.total_versions).toBe(3)
+    expect(result.current.jobCounts.items).toEqual([
+      { job_id: 'job-1', version_count: 2 },
+      { job_id: 'job-2', version_count: 1 },
+    ])
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    expect(result.current.selectedJob?.id).toBe('job-1')
+    expect(result.current.versionCountByJob).toEqual({
+      'job-1': 2,
+      'job-2': 1,
+    })
+  })
+
+  it('filters jobs using the local job query', async () => {
+    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
+
+    act(() => {
+      result.current.setJobQuery('garage')
+    })
+
+    expect(result.current.filteredJobs.map((job) => job.id)).toEqual(['job-2'])
   })
 
   it('ignores stale responses from older refresh calls and keeps the latest final state', async () => {
@@ -115,6 +153,7 @@ describe('useQuotesHomeData', () => {
     expect(result.current.summary.total_versions).toBe(2)
     expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-2', version_count: 2 }])
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
+    expect(result.current.bootstrapError).toBeNull()
 
     initial.resolve(firstPayload)
     stale.resolve(firstPayload)
@@ -127,8 +166,7 @@ describe('useQuotesHomeData', () => {
     expect(result.current.summary.total_versions).toBe(2)
     expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-2', version_count: 2 }])
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
-    expect(result.current.failures.bootstrap).toBeNull()
-    expect(result.current.feedback).toBeNull()
+    expect(result.current.bootstrapError).toBeNull()
   })
 
   it('keeps prior bootstrap data when refresh fails', async () => {
@@ -144,13 +182,7 @@ describe('useQuotesHomeData', () => {
       await result.current.refresh()
     })
 
-    expect(result.current.failures.bootstrap).toEqual({
-      source: 'bootstrap',
-      message: 'bootstrap failed',
-    })
-    expect(result.current.feedback?.details).toEqual([
-      'Quote home failed to load. bootstrap failed',
-    ])
+    expect(result.current.bootstrapError).toBe('bootstrap failed')
     expect(result.current.summary.total_versions).toBe(1)
     expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-1', version_count: 1 }])
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1'])
@@ -166,10 +198,33 @@ describe('useQuotesHomeData', () => {
     expect(result.current.summary.total_versions).toBe(0)
     expect(result.current.jobCounts.items).toEqual([])
     expect(result.current.jobs).toEqual([])
-    expect(result.current.failures.bootstrap).toEqual({
-      source: 'bootstrap',
-      message: 'bootstrap failed',
+    expect(result.current.bootstrapError).toBe('bootstrap failed')
+    expect(result.current.selectedJobId).toBe('')
+    expect(result.current.selectedJob).toBeNull()
+  })
+
+  it('reconciles the selected job when refreshed jobs remove the current selection', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(firstPayload)
+
+    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
+
+    await waitFor(() => {
+      expect(result.current.selectedJobId).toBe('job-1')
     })
-    expect(result.current.feedback?.title).toBe('Quote home bootstrap failed to load')
+
+    act(() => {
+      result.current.setSelectedJobId('job-2')
+    })
+
+    expect(result.current.selectedJobId).toBe('job-2')
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    await waitFor(() => {
+      expect(result.current.selectedJobId).toBe('job-1')
+    })
+    expect(result.current.selectedJob?.id).toBe('job-1')
   })
 })

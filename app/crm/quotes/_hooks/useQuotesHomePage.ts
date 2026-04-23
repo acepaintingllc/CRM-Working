@@ -6,7 +6,6 @@ import { useQuoteJobVersions } from './useQuoteJobVersions'
 import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
-import { useQuotesHomeSelection } from './useQuotesHomeSelection'
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
 import {
   buildHeroSummaryText,
@@ -20,117 +19,114 @@ import {
   buildSearchResultVm,
   buildSummaryCards,
 } from '../_home/quoteHomePresentation'
-import type { QuotesHomeJobListVm } from '../_home/quoteHomeTypes'
+import type { QuotesHomeJobListVm, QuotesHomePageSections } from '../_home/quoteHomeTypes'
 
 export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | null) {
-  const dataState = useQuotesHomeData(initialData)
-  const selection = useQuotesHomeSelection({
-    jobCounts: dataState.jobCounts,
-    jobs: dataState.jobs,
-  })
-  const searchState = useQuotesHomeSearch(selection.searchQuery)
-  const jobVersionsState = useQuoteJobVersions(selection.selectedJobId)
-  const createController = useQuoteVersionCreation(selection.selectedJob)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-  const deleteController = useQuotesHomeDelete({
-    refresh: dataState.refresh,
-    setDeleteError,
-  })
+  const homeResource = useQuotesHomeData(initialData)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+  const searchState = useQuotesHomeSearch(searchQuery)
+  const jobVersionsState = useQuoteJobVersions(homeResource.selectedJobId)
+  const createController = useQuoteVersionCreation(homeResource.selectedJob)
+  const deleteController = useQuotesHomeDelete()
 
-  const summaryCards = buildSummaryCards(dataState.summary)
-  const jobListItems = selection.filteredJobs.map((job) =>
-    buildQuoteHomeJobListItemVm(job, selection.versionCountByJob[job.id] ?? 0, {
-      selectedJobId: selection.selectedJobId,
+  const summaryCards = buildSummaryCards(homeResource.summary)
+  const jobListItems = homeResource.filteredJobs.map((job) =>
+    buildQuoteHomeJobListItemVm(job, homeResource.versionCountByJob[job.id] ?? 0, {
+      selectedJobId: homeResource.selectedJobId,
     })
   )
-  const mobileItems = dataState.jobs
+  const mobileItems = homeResource.jobs
     .slice(0, 10)
-    .map((job) => buildQuoteHomeJobListItemVm(job, selection.versionCountByJob[job.id] ?? 0, { mobile: true }))
+    .map((job) =>
+      buildQuoteHomeJobListItemVm(job, homeResource.versionCountByJob[job.id] ?? 0, {
+        mobile: true,
+      })
+    )
   const versionItems = jobVersionsState.items.map((estimate) =>
     buildQuoteHomeVersionItemVm(estimate, deleteController.deletingId)
   )
-  const homeFailures = Object.values(dataState.failures).filter(
-    (failure): failure is NonNullable<(typeof dataState.failures)[keyof typeof dataState.failures]> =>
-      failure !== null
-  )
   const feedbackVm = buildQuotesHomeFeedbackVm({
-    homeFailures,
+    homeFailures: homeResource.bootstrapError
+      ? [{ source: 'bootstrap', message: homeResource.bootstrapError }]
+      : [],
     jobVersionsError: jobVersionsState.error,
     createError: createController.error,
-    deleteError,
+    deleteError: deleteController.error,
   })
   const resolvedFeedbackVm = feedbackVm ?? {
     tone: 'warning' as const,
-    title: null,
+    title: '',
     details: [],
     sources: [],
   }
-  const versionCount = selection.versionCountByJob[selection.selectedJobId] ?? jobVersionsState.data.total_versions
+  const versionCount =
+    homeResource.versionCountByJob[homeResource.selectedJobId] ?? jobVersionsState.data.total_versions
   const deleteTargetsById = useMemo(() => {
     return new Map(jobVersionsState.items.map((item) => [item.estimate_id, item]))
   }, [jobVersionsState.items])
 
-  return {
-    feedbackVm: {
-      loading: dataState.loading,
-      ...resolvedFeedbackVm,
-      hasData: true,
-      summary: dataState.summary,
-    },
+  const sections: QuotesHomePageSections = {
     headerVm: {
-      heroSummaryText: buildHeroSummaryText(dataState.summary),
-      searchQuery: selection.searchQuery,
-      searchFocused: selection.searchFocused,
+      heroSummaryText: buildHeroSummaryText(homeResource.summary),
+      searchQuery,
+      searchFocused,
       searchLoading: searchState.loading,
       searchEmptyMessage: searchState.emptyMessage,
       searchErrorMessage: searchState.error,
       searchCanRetry: searchState.canRetry,
       searchResults: searchState.results.map(buildSearchResultVm),
     },
-    summaryCards,
-    mobileVm: {
-      summaryCards: [summaryCards[0], summaryCards[3]].filter(Boolean),
+    feedbackVm: {
+      loading: homeResource.loading,
+      ...resolvedFeedbackVm,
     },
+    summaryCards,
     jobListVm: {
-      loading: dataState.loading,
-      searchQuery: selection.jobQuery,
-      selectedJobId: selection.selectedJobId,
+      loading: homeResource.loading,
+      searchQuery: homeResource.jobQuery,
+      selectedJobId: homeResource.selectedJobId,
       items: jobListItems,
       mobileItems,
       emptyState:
-        dataState.jobs.length === 0
+        homeResource.jobs.length === 0
           ? 'no_jobs'
           : jobListItems.length === 0
             ? 'no_matches'
             : 'none',
     } satisfies QuotesHomeJobListVm,
     selectedJobVm: buildQuotesHomeSelectedJobVm(
-      selection.selectedJob,
+      homeResource.selectedJob,
       versionCount,
-      dataState.loading
+      homeResource.loading
     ),
     versionListVm: {
-      heading: buildQuotesHomeVersionHeading(selection.selectedJob, jobVersionsState.items),
-      emptyMessage: buildQuotesHomeVersionEmptyMessage(selection.selectedJob, jobVersionsState.items),
+      heading: buildQuotesHomeVersionHeading(homeResource.selectedJob, jobVersionsState.items),
+      emptyMessage: buildQuotesHomeVersionEmptyMessage(homeResource.selectedJob, jobVersionsState.items),
       items: versionItems,
     },
     createVm: {
       creating: createController.creating,
-      loading: dataState.loading,
-      selectedJobName: selection.selectedJob?.title ?? null,
+      loading: homeResource.loading,
+      selectedJobName: homeResource.selectedJob?.title ?? null,
       versionName: createController.versionName,
       versionKind: createController.versionKind,
-      canCreate: Boolean(selection.selectedJob) && !createController.creating && !dataState.loading,
+      canCreate: Boolean(homeResource.selectedJob) && !createController.creating && !homeResource.loading,
     },
+    mobileSummaryCards: [summaryCards[0], summaryCards[3]].filter(Boolean),
     deleteDialogVm: buildQuotesHomeDeleteDialogVm(
       deleteController.confirmingDelete,
       deleteController.deletingId
     ),
+  }
+
+  return {
+    sections,
     actions: {
-      setSearchQuery: selection.setSearchQuery,
-      setSearchFocused: selection.setSearchFocused,
-      setJobQuery: selection.setJobQuery,
-      setSelectedJobId: selection.setSelectedJobId,
+      setSearchQuery,
+      setSearchFocused,
+      setJobQuery: homeResource.setJobQuery,
+      setSelectedJobId: homeResource.setSelectedJobId,
       setVersionName: createController.setVersionName,
       setVersionKind: createController.setVersionKind,
       createVersion: createController.createVersion,
@@ -148,11 +144,16 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
         const deleted = await deleteController.confirmDeleteVersion()
         if (deletedId && deleted) {
           jobVersionsState.removeVersion(deletedId)
-          await jobVersionsState.refresh()
+          const [homeRefreshed] = await Promise.all([
+            homeResource.refresh(),
+            jobVersionsState.refresh(),
+          ])
+          return homeRefreshed
         }
+        return false
       },
       refresh: async () => {
-        const [homeRefreshed] = await Promise.all([dataState.refresh(), jobVersionsState.refresh()])
+        const [homeRefreshed] = await Promise.all([homeResource.refresh(), jobVersionsState.refresh()])
         return homeRefreshed
       },
     },

@@ -43,6 +43,10 @@ export type QuoteHomeFeedbackVm = {
   sources: QuoteHomeFailureSource[]
 }
 
+export type QuotesHomeFeedbackBannerVm = QuoteHomeFeedbackVm & {
+  loading: boolean
+}
+
 export type QuotesHomeHeaderVm = {
   heroSummaryText: string
   searchFocused: boolean
@@ -115,4 +119,16 @@ export type QuotesHomeDeleteDialogVm = {
   versionName: string | null
   jobTitle: string | null
   deleting: boolean
+}
+
+export type QuotesHomePageSections = {
+  headerVm: QuotesHomeHeaderVm
+  feedbackVm: QuotesHomeFeedbackBannerVm
+  summaryCards: SummaryCardVm[]
+  jobListVm: QuotesHomeJobListVm
+  selectedJobVm: QuotesHomeSelectedJobVm
+  versionListVm: QuotesHomeVersionListVm
+  createVm: QuotesHomeCreateVm
+  mobileSummaryCards: SummaryCardVm[]
+  deleteDialogVm: QuotesHomeDeleteDialogVm
 }

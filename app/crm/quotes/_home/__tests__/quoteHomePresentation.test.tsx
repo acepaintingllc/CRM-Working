@@ -69,6 +69,7 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.deleting).toBe(true)
     expect(versionVm.meta).toContain('Live / Revision · Updated')
   })
+
   it('builds search result view models from shared home version items', () => {
     expect(buildSearchResultVm(estimate)).toEqual({
       id: 'estimate-1',
