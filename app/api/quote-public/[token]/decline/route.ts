@@ -25,7 +25,6 @@ export async function POST(
     await declinePublicEstimate({
       token: token ?? '',
       reason: parsed.value.reason,
-      origin: new URL(request.url).origin,
     })
   )
 }

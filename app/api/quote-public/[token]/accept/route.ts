@@ -30,7 +30,6 @@ export async function POST(
       acceptedTerms: parsed.value.acceptedTerms,
       userAgent: request.headers.get('user-agent') ?? '',
       ip: request.headers.get('x-forwarded-for') ?? '',
-      origin: new URL(request.url).origin,
     })
   )
 }

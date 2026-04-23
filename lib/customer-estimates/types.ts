@@ -85,7 +85,7 @@ export type CustomerEstimateDocumentSourceMeta = {
   }
 }
 
-export type BuiltCustomerEstimateDocument = {
+type CustomerEstimateDocumentBase = {
   meta: {
     estimate_id: string
     version_name: string
@@ -114,13 +114,15 @@ export type BuiltCustomerEstimateDocument = {
   source_meta: CustomerEstimateDocumentSourceMeta
 }
 
+export type BuiltCustomerEstimateDocument = CustomerEstimateDocumentBase
+
 export type CustomerEstimateTermsSection = {
   key: string
   title: string
   paragraphs: string[]
 }
 
-export type CustomerEstimateDocument = BuiltCustomerEstimateDocument & {
+export type CustomerEstimateDocument = CustomerEstimateDocumentBase & {
   header: {
     company_name: string
     contact_lines: string[]
@@ -146,31 +148,6 @@ export type CustomerEstimateDocument = BuiltCustomerEstimateDocument & {
     missing_legal_fields: string[]
     used_placeholder_fallbacks: boolean
     used_explicit_terms_text: boolean
-  }
-}
-
-export type BuiltCustomerEstimateDocument = CustomerEstimateDocument & {
-  source_meta: {
-    company: {
-      business_name: boolean
-      main_phone: boolean
-      business_email: boolean
-      address: boolean
-      website: boolean
-      sender_signature: boolean
-      logo_url: boolean
-    }
-    settings: {
-      quote_validity_days: boolean
-      terms_text: boolean
-    }
-    overrides: {
-      title: boolean
-      intro_paragraph: boolean
-      closing_paragraph: boolean
-      deposit_language: boolean
-      card_fee_note: boolean
-    }
   }
 }
 
