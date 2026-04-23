@@ -1,7 +1,4 @@
-import {
-  buildDefaultQuoteVersionName,
-  normalizeQuoteVersionKind,
-} from '@/lib/quotes/versionCreation'
+import { normalizeQuoteVersionKind } from '@/lib/quotes/versionCreation'
 import {
   buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSearchReadModel,
@@ -23,7 +20,6 @@ import {
   loadQuoteHomeSummary,
   searchDecoratedEstimateRows,
 } from '@/lib/server/estimateCollectionData'
-import { loadEstimateTemplateSettings } from '@/lib/server/estimateTemplateSettings'
 import { supabaseAdmin } from '@/lib/server/org'
 import {
   serviceResultDataResponse,
@@ -34,6 +30,7 @@ import {
   okResult,
   type ServiceResult,
 } from '@/lib/server/serviceResult'
+import { hasUniqueConstraintConflict } from '@/lib/server/dbErrors'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -42,7 +39,7 @@ const VERSION_STATES = new Set(['draft', 'live', 'archived'])
 
 type CreateEstimateCollectionCopy = {
   createdNotice: string
-  defaultVersionName: (versionSortOrder: number) => string
+  defaultVersionLabel: string
 }
 
 type EstimateRow = {
@@ -60,12 +57,6 @@ type EstimateRow = {
 
 function asText(value: unknown) {
   return String(value ?? '').trim()
-}
-
-function asOptionalNumber(value: unknown) {
-  if (value == null || value === '') return null
-  const numberValue = Number(value)
-  return Number.isFinite(numberValue) ? numberValue : null
 }
 
 async function loadEstimateCollectionPayload(
@@ -111,118 +102,56 @@ async function createEstimateCollectionVersion(params: {
   const jobId = asText(params.body.job_id)
   if (!uuid.test(jobId)) return errorResult('invalid_input', 'Invalid job_id')
 
-  const jobRes = await supabaseAdmin
-    .from('jobs')
-    .select('id, customer_id')
-    .eq('org_id', params.orgId)
-    .eq('id', jobId)
-    .maybeSingle()
-
-  if (jobRes.error) return errorResult('server_error', jobRes.error.message)
-  if (!jobRes.data) return errorResult('not_found', 'Job not found')
-
-  const customerId = asText(params.body.customer_id ?? jobRes.data.customer_id)
-  if (!uuid.test(customerId)) {
+  const customerId = asText(params.body.customer_id)
+  if (customerId && !uuid.test(customerId)) {
     return errorResult('invalid_input', 'Invalid customer_id')
   }
 
   const requestedVersionState = asText(params.body.version_state).toLowerCase()
-  const requestedVersionKind = asText(params.body.version_kind)
+  const requestedVersionKind = normalizeQuoteVersionKind(asText(params.body.version_kind))
   const versionState = VERSION_STATES.has(requestedVersionState) ? requestedVersionState : 'draft'
-  const versionKind = normalizeQuoteVersionKind(requestedVersionKind)
+  const versionName = asText(params.body.version_name) || null
 
-  const latestSortRes = await supabaseAdmin
-    .from('estimates')
-    .select('version_sort_order')
-    .eq('org_id', params.orgId)
-    .eq('job_id', jobId)
-    .order('version_sort_order', { ascending: false })
-    .limit(1)
-
-  if (latestSortRes.error) {
-    return errorResult('server_error', latestSortRes.error.message)
-  }
-
-  const existingSort = asOptionalNumber(latestSortRes.data?.[0]?.version_sort_order)
-  const requestedSortOrder = asOptionalNumber(params.body.version_sort_order)
-  const versionSortOrder =
-    requestedSortOrder != null
-      ? Math.max(0, Math.trunc(requestedSortOrder))
-      : (existingSort ?? -1) + 1
-  const versionName =
-    asText(params.body.version_name) || params.copy.defaultVersionName(versionSortOrder)
-
-  const createRes = await supabaseAdmin
-    .from('estimates')
-    .insert({
-      org_id: params.orgId,
-      job_id: jobId,
-      customer_id: customerId,
-      status: 'draft',
-      version_name: versionName,
-      version_state: versionState,
-      version_kind: versionKind,
-      version_sort_order: versionSortOrder,
-      created_by: params.userId,
-    })
-    .select(
-      'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
-    )
-    .single()
-
-  if (createRes.error) {
-    return errorResult('server_error', createRes.error.message)
-  }
-
-  const estimateId = createRes.data.id
-  const templateDefaults = await loadEstimateTemplateSettings(params.orgId).catch(() => null)
-  const settingsInsert = await supabaseAdmin.from('estimate_jobsettings').insert({
-    org_id: params.orgId,
-    estimate_id: estimateId,
-    job_id: jobId,
-    walls_paint_id: templateDefaults?.walls_paint_id ?? null,
-    walls_primer_id: templateDefaults?.walls_primer_id ?? null,
-    ceiling_paint_id: templateDefaults?.ceiling_paint_id ?? null,
-    ceiling_primer_id: templateDefaults?.ceiling_primer_id ?? null,
-    trim_paint_id: templateDefaults?.trim_paint_id ?? null,
-    trim_primer_id: templateDefaults?.trim_primer_id ?? null,
-    primer_id:
-      templateDefaults?.walls_primer_id ??
-      templateDefaults?.ceiling_primer_id ??
-      templateDefaults?.trim_primer_id ??
-      null,
-    labor_day_policy_enabled: templateDefaults?.labor_day_policy_enabled,
-    dayhours: templateDefaults?.dayhours ?? null,
-    rounding_increment_hours: templateDefaults?.rounding_increment_hours ?? null,
-    override_labor_rate: templateDefaults?.override_labor_rate ?? null,
-    job_minimum_enabled: templateDefaults?.job_minimum_enabled,
-    job_minimum_amount: templateDefaults?.job_minimum_amount ?? null,
+  const rpc = await supabaseAdmin.rpc('create_estimate_version', {
+    p_org_id: params.orgId,
+    p_user_id: params.userId,
+    p_job_id: jobId,
+    p_customer_id: customerId || null,
+    p_version_state: versionState,
+    p_version_kind: requestedVersionKind,
+    p_version_name: versionName,
+    p_default_version_label: params.copy.defaultVersionLabel,
   })
 
-  if (settingsInsert.error) {
-    await supabaseAdmin.from('estimates').delete().eq('org_id', params.orgId).eq('id', estimateId)
-    return errorResult('server_error', settingsInsert.error.message)
+  if (rpc.error) {
+    if (hasUniqueConstraintConflict(rpc.error)) {
+      return errorResult('conflict', 'Another version was created at the same time. Please retry.')
+    }
+    return errorResult('server_error', rpc.error.message)
   }
 
-  const pricingPolicyInsert = await supabaseAdmin.from('estimate_pricing_policies').insert({
-    org_id: params.orgId,
-    estimate_id: estimateId,
-    job_id: jobId,
-  })
+  const payload = (rpc.data ?? null) as
+    | {
+        ok?: boolean
+        error_kind?: string | null
+        error_message?: string | null
+        id?: string | null
+        estimate?: EstimateRow | null
+      }
+    | null
 
-  if (pricingPolicyInsert.error) {
-    await supabaseAdmin
-      .from('estimate_jobsettings')
-      .delete()
-      .eq('org_id', params.orgId)
-      .eq('estimate_id', estimateId)
-    await supabaseAdmin.from('estimates').delete().eq('org_id', params.orgId).eq('id', estimateId)
-    return errorResult('server_error', pricingPolicyInsert.error.message)
+  if (!payload?.ok) {
+    const errorKind = asText(payload?.error_kind)
+    const errorMessage = asText(payload?.error_message) || 'Failed to create estimate version.'
+    if (errorKind === 'invalid_input') return errorResult('invalid_input', errorMessage)
+    if (errorKind === 'not_found') return errorResult('not_found', errorMessage)
+    if (errorKind === 'conflict') return errorResult('conflict', errorMessage)
+    return errorResult('server_error', errorMessage)
   }
 
   return okResult({
-    id: estimateId,
-    estimate: createRes.data as EstimateRow,
+    id: asText(payload.id),
+    estimate: payload.estimate as EstimateRow,
   })
 }
 
@@ -315,10 +244,10 @@ export async function handleEstimateCollectionRoutePost(
 
 export const quoteEstimateCollectionCopy: CreateEstimateCollectionCopy = {
   createdNotice: 'Quote version created.',
-  defaultVersionName: buildDefaultQuoteVersionName,
+  defaultVersionLabel: 'Quote Version',
 }
 
 export const estimateCollectionCopy: CreateEstimateCollectionCopy = {
   createdNotice: 'Estimate version created.',
-  defaultVersionName: (versionSortOrder) => `Estimate Version ${versionSortOrder + 1}`,
+  defaultVersionLabel: 'Estimate Version',
 }
