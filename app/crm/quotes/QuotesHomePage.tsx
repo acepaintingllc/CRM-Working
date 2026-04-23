@@ -1,4 +1,5 @@
 'use client'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
 import { QuotesHomeCreatePanel } from './_home/QuotesHomeCreatePanel'
 import { QuotesHomeDeleteDialog } from './_home/QuotesHomeDeleteDialog'
 import { QuotesHomeHeader } from './_home/QuotesHomeHeader'
@@ -10,8 +11,12 @@ import { formatToday } from './_home/quoteHomePresentation'
 import { S } from './_home/quoteHomeStyles'
 import { useQuotesHomePage } from './_hooks/useQuotesHomePage'
 
-export default function QuotesHomePage() {
-  const controller = useQuotesHomePage()
+type Props = {
+  initialData?: QuoteHomeBootstrapReadModel | null
+}
+
+export default function QuotesHomePage({ initialData }: Props) {
+  const controller = useQuotesHomePage(initialData)
   const {
     actions,
     createVm,

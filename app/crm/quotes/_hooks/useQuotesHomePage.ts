@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
 import { useQuoteJobVersions } from './useQuoteJobVersions'
 import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 import { useQuotesHomeData } from './useQuotesHomeData'
@@ -21,8 +22,8 @@ import {
 } from '../_home/quoteHomePresentation'
 import type { QuotesHomeJobListVm } from '../_home/quoteHomeTypes'
 
-export function useQuotesHomePage() {
-  const dataState = useQuotesHomeData()
+export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | null) {
+  const dataState = useQuotesHomeData(initialData)
   const selection = useQuotesHomeSelection({
     jobCounts: dataState.jobCounts,
     jobs: dataState.jobs,

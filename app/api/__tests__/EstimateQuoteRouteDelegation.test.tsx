@@ -9,6 +9,7 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateCustomerSendRoutePost: vi.fn(),
   handleEstimateCollectionRouteGet: vi.fn(),
   handleEstimateCollectionRoutePost: vi.fn(),
+  handleEstimateHomeBootstrapRouteGet: vi.fn(),
   handleEstimateHomeJobCountsRouteGet: vi.fn(),
   handleEstimateHomeRecentActivityRouteGet: vi.fn(),
   handleEstimateHomeSearchRouteGet: vi.fn(),
@@ -47,6 +48,7 @@ vi.mock('@/lib/server/estimateCustomerSendRoute', () => ({
 vi.mock('@/lib/server/estimateCollectionRoutes', () => ({
   handleEstimateCollectionRouteGet: routeHandlerMocks.handleEstimateCollectionRouteGet,
   handleEstimateCollectionRoutePost: routeHandlerMocks.handleEstimateCollectionRoutePost,
+  handleEstimateHomeBootstrapRouteGet: routeHandlerMocks.handleEstimateHomeBootstrapRouteGet,
   handleEstimateHomeJobCountsRouteGet: routeHandlerMocks.handleEstimateHomeJobCountsRouteGet,
   handleEstimateHomeRecentActivityRouteGet: routeHandlerMocks.handleEstimateHomeRecentActivityRouteGet,
   handleEstimateHomeSearchRouteGet: routeHandlerMocks.handleEstimateHomeSearchRouteGet,
@@ -83,6 +85,7 @@ import { GET as getEstimateProducts, POST as postEstimateProducts } from '../est
 import { GET as getQuotePublic } from '../quote-public/[token]/route'
 import { DELETE as deleteQuote } from '../quotes/[id]/route'
 import { GET as getQuoteCustomerSend, POST as postQuoteCustomerSend, PUT as putQuoteCustomerSend } from '../quotes/[id]/customer-send/route'
+import { GET as getQuoteHomeBootstrap } from '../quotes/home/bootstrap/route'
 import { GET as getQuoteHomeJobCounts } from '../quotes/home/job-counts/route'
 import { GET as getQuoteHomeRecentActivity } from '../quotes/home/recent-activity/route'
 import { GET as getQuoteHomeSearch } from '../quotes/home/search/route'
@@ -100,6 +103,7 @@ describe('estimate and quote route delegation', () => {
     routeHandlerMocks.handleEstimateCustomerSendRoutePost.mockReset()
     routeHandlerMocks.handleEstimateCollectionRouteGet.mockReset()
     routeHandlerMocks.handleEstimateCollectionRoutePost.mockReset()
+    routeHandlerMocks.handleEstimateHomeBootstrapRouteGet.mockReset()
     routeHandlerMocks.handleEstimateHomeJobCountsRouteGet.mockReset()
     routeHandlerMocks.handleEstimateHomeRecentActivityRouteGet.mockReset()
     routeHandlerMocks.handleEstimateHomeSearchRouteGet.mockReset()
@@ -212,12 +216,14 @@ describe('estimate and quote route delegation', () => {
 
     await getQuoteHomeSummary()
     await getQuoteHomeRecentActivity()
+    await getQuoteHomeBootstrap()
     await getQuoteHomeJobCounts()
     await getQuoteHomeSearch(searchRequest)
     await getQuoteJobVersions(jobVersionsRequest, context)
 
     expect(routeHandlerMocks.handleEstimateHomeSummaryRouteGet).toHaveBeenCalledWith()
     expect(routeHandlerMocks.handleEstimateHomeRecentActivityRouteGet).toHaveBeenCalledWith()
+    expect(routeHandlerMocks.handleEstimateHomeBootstrapRouteGet).toHaveBeenCalledWith()
     expect(routeHandlerMocks.handleEstimateHomeJobCountsRouteGet).toHaveBeenCalledWith()
     expect(routeHandlerMocks.handleEstimateHomeSearchRouteGet).toHaveBeenCalledWith(searchRequest)
     expect(routeHandlerMocks.handleEstimateJobVersionsRouteGet).toHaveBeenCalledWith(

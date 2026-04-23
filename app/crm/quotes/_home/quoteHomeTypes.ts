@@ -1,12 +1,10 @@
-import type { JobSummary } from '@/lib/jobs/client'
 import type {
+  QuoteHomeEligibleJobReadModel,
   QuoteHomeJobVersionItemReadModel,
-  QuoteHomeSearchResultReadModel,
 } from '@/lib/quotes/collectionData'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 
-export type QuoteHomeJob = JobSummary
-export type QuoteHomeSearchResult = QuoteHomeSearchResultReadModel
+export type QuoteHomeJob = QuoteHomeEligibleJobReadModel
 export type QuoteHomeJobVersion = QuoteHomeJobVersionItemReadModel
 
 export type NavItem = {
@@ -33,9 +31,7 @@ export type SearchResultVm = {
 export type QuoteHomeFeedbackTone = 'warning' | 'error'
 
 export type QuoteHomeFailureSource =
-  | 'summary'
-  | 'jobCounts'
-  | 'jobs'
+  | 'bootstrap'
   | 'jobVersions'
   | 'create'
   | 'delete'

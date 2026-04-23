@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import { headers } from 'next/headers'
-import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { headers } from 'next/headers.js'
+import { createSupabaseServerClient } from '../supabase/server.ts'
 
 export const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,4 +48,3 @@ export async function getSessionUserOrg() {
 
   return { userId, orgId } as const
 }
-

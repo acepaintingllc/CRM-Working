@@ -10,21 +10,15 @@ const { push } = vi.hoisted(() => ({
 const {
   createQuoteVersion,
   deleteQuoteVersion,
-  loadQuoteHomeJobCounts,
+  loadQuoteHomeBootstrap,
   loadQuoteHomeSearch,
-  loadQuoteHomeSummary,
   loadQuoteJobVersions,
 } = vi.hoisted(() => ({
   createQuoteVersion: vi.fn(),
   deleteQuoteVersion: vi.fn(),
-  loadQuoteHomeJobCounts: vi.fn(),
+  loadQuoteHomeBootstrap: vi.fn(),
   loadQuoteHomeSearch: vi.fn(),
-  loadQuoteHomeSummary: vi.fn(),
   loadQuoteJobVersions: vi.fn(),
-}))
-
-const { fetchJobList } = vi.hoisted(() => ({
-  fetchJobList: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -34,14 +28,9 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/quotes/client', () => ({
   createQuoteVersion,
   deleteQuoteVersion,
-  loadQuoteHomeJobCounts,
+  loadQuoteHomeBootstrap,
   loadQuoteHomeSearch,
-  loadQuoteHomeSummary,
   loadQuoteJobVersions,
-}))
-
-vi.mock('@/lib/jobs/client', () => ({
-  fetchJobList,
 }))
 
 const summaryPayload = {
@@ -56,6 +45,39 @@ const jobCountsPayload = {
   items: [
     { job_id: 'job-1', version_count: 2 },
     { job_id: 'job-2', version_count: 1 },
+  ],
+}
+
+const bootstrapPayload = {
+  summary: summaryPayload,
+  jobCounts: jobCountsPayload,
+  jobs: [
+    {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      customer_name: 'Alice',
+      customer_address: '123 Main',
+      title: 'Kitchen',
+      description: null,
+      status: 'estimate_pending',
+      estimate_date: null,
+      estimate_sent_at: null,
+      scheduled_date: null,
+      completed_at: null,
+    },
+    {
+      id: 'job-2',
+      customer_id: 'customer-2',
+      customer_name: 'Bob',
+      customer_address: '456 Oak',
+      title: 'Garage',
+      description: null,
+      status: 'estimate_sent',
+      estimate_date: null,
+      estimate_sent_at: null,
+      scheduled_date: null,
+      completed_at: null,
+    },
   ],
 }
 
@@ -133,53 +155,17 @@ const refreshedJobCountsPayload = {
   ],
 }
 
+const refreshedBootstrapPayload = {
+  summary: refreshedSummaryPayload,
+  jobCounts: refreshedJobCountsPayload,
+  jobs: bootstrapPayload.jobs,
+}
+
 const refreshedJob1VersionsPayload = {
   job_id: 'job-1',
   total_versions: 1,
   items: [job1VersionsPayload.items[0]],
 }
-
-const jobsPayload = [
-  {
-    id: 'job-x',
-    customer_id: null,
-    customer_name: null,
-    customer_address: null,
-    title: 'Ignore me',
-    description: null,
-    status: 'lead',
-    estimate_date: null,
-    estimate_sent_at: null,
-    scheduled_date: null,
-    completed_at: null,
-  },
-  {
-    id: 'job-1',
-    customer_id: 'customer-1',
-    customer_name: 'Alice',
-    customer_address: '123 Main',
-    title: 'Kitchen',
-    description: null,
-    status: 'estimate_pending',
-    estimate_date: null,
-    estimate_sent_at: null,
-    scheduled_date: null,
-    completed_at: null,
-  },
-  {
-    id: 'job-2',
-    customer_id: 'customer-2',
-    customer_name: 'Bob',
-    customer_address: '456 Oak',
-    title: 'Garage',
-    description: null,
-    status: 'estimate_sent',
-    estimate_date: null,
-    estimate_sent_at: null,
-    scheduled_date: null,
-    completed_at: null,
-  },
-]
 
 describe('useQuotesHomePage', () => {
   beforeEach(() => {
@@ -187,20 +173,17 @@ describe('useQuotesHomePage', () => {
     push.mockReset()
     createQuoteVersion.mockReset()
     deleteQuoteVersion.mockReset()
-    loadQuoteHomeJobCounts.mockReset()
+    loadQuoteHomeBootstrap.mockReset()
     loadQuoteHomeSearch.mockReset()
-    loadQuoteHomeSummary.mockReset()
     loadQuoteJobVersions.mockReset()
-    fetchJobList.mockReset()
     loadQuoteHomeSearch.mockResolvedValue({
       query: '',
       items: [],
     })
   })
 
-  it('loads split home data, selected-job versions, and server-driven search state', async () => {
-    loadQuoteHomeSummary.mockResolvedValue(summaryPayload)
-    loadQuoteHomeJobCounts.mockResolvedValue(jobCountsPayload)
+  it('loads bootstrap home data, selected-job versions, and server-driven search state', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
     loadQuoteJobVersions.mockResolvedValue(job1VersionsPayload)
     loadQuoteHomeSearch.mockResolvedValue({
       query: 'revision',
@@ -220,7 +203,6 @@ describe('useQuotesHomePage', () => {
         },
       ],
     })
-    fetchJobList.mockResolvedValue(jobsPayload)
 
     const { result } = renderHook(() => useQuotesHomePage())
 
@@ -254,12 +236,10 @@ describe('useQuotesHomePage', () => {
   })
 
   it('resets version fields when the selected job changes and creates a version', async () => {
-    loadQuoteHomeSummary.mockResolvedValue(summaryPayload)
-    loadQuoteHomeJobCounts.mockResolvedValue(jobCountsPayload)
+    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
     loadQuoteJobVersions
       .mockResolvedValueOnce(job1VersionsPayload)
       .mockResolvedValueOnce(job2VersionsPayload)
-    fetchJobList.mockResolvedValue(jobsPayload)
     createQuoteVersion.mockResolvedValue({ id: 'estimate-99' })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -299,23 +279,11 @@ describe('useQuotesHomePage', () => {
   })
 
   it('surfaces an error when creating without a selected job', async () => {
-    loadQuoteHomeSummary.mockResolvedValue(summaryPayload)
-    loadQuoteHomeJobCounts.mockResolvedValue(jobCountsPayload)
-    fetchJobList.mockResolvedValue([
-      {
-        id: 'job-x',
-        customer_id: null,
-        customer_name: null,
-        customer_address: null,
-        title: 'Ignore me',
-        description: null,
-        status: 'lead',
-        estimate_date: null,
-        estimate_sent_at: null,
-        scheduled_date: null,
-        completed_at: null,
-      },
-    ])
+    loadQuoteHomeBootstrap.mockResolvedValue({
+      summary: summaryPayload,
+      jobCounts: jobCountsPayload,
+      jobs: [],
+    })
 
     const { result } = renderHook(() => useQuotesHomePage())
 
@@ -332,17 +300,13 @@ describe('useQuotesHomePage', () => {
     expect(result.current.feedbackVm.details).toEqual(['Select a job before creating a version.'])
   })
 
-  it('refreshes summary, counts, and selected-job versions after delete', async () => {
-    loadQuoteHomeSummary
-      .mockResolvedValueOnce(summaryPayload)
-      .mockResolvedValueOnce(refreshedSummaryPayload)
-    loadQuoteHomeJobCounts
-      .mockResolvedValueOnce(jobCountsPayload)
-      .mockResolvedValueOnce(refreshedJobCountsPayload)
+  it('refreshes bootstrap data and selected-job versions after delete', async () => {
+    loadQuoteHomeBootstrap
+      .mockResolvedValueOnce(bootstrapPayload)
+      .mockResolvedValueOnce(refreshedBootstrapPayload)
     loadQuoteJobVersions
       .mockResolvedValueOnce(job1VersionsPayload)
       .mockResolvedValueOnce(refreshedJob1VersionsPayload)
-    fetchJobList.mockResolvedValue(jobsPayload)
     deleteQuoteVersion.mockResolvedValue({ data: { ok: true } })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -363,8 +327,7 @@ describe('useQuotesHomePage', () => {
     })
 
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
-    expect(loadQuoteHomeSummary).toHaveBeenCalledTimes(2)
-    expect(loadQuoteHomeJobCounts).toHaveBeenCalledTimes(2)
+    expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(2)
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
     expect(result.current.deleteDialogVm.estimateId).toBeNull()
     expect(result.current.versionListVm.items.map((estimate) => estimate.id)).toEqual(['estimate-2'])
@@ -382,7 +345,7 @@ describe('useQuotesHomePage', () => {
     ])
   })
 
-  it('keeps selected-job browsing independent from the capped search results and recent activity', async () => {
+  it('keeps selected-job browsing independent from capped search results', async () => {
     const largeJobVersionsPayload = {
       job_id: 'job-1',
       total_versions: 201,
@@ -403,8 +366,7 @@ describe('useQuotesHomePage', () => {
       })),
     }
 
-    loadQuoteHomeSummary.mockResolvedValue(refreshedSummaryPayload)
-    loadQuoteHomeJobCounts.mockResolvedValue(refreshedJobCountsPayload)
+    loadQuoteHomeBootstrap.mockResolvedValue(refreshedBootstrapPayload)
     loadQuoteJobVersions.mockResolvedValue(largeJobVersionsPayload)
     loadQuoteHomeSearch.mockResolvedValue({
       query: 'version',
@@ -422,7 +384,6 @@ describe('useQuotesHomePage', () => {
         is_sent_estimate: item.is_sent_estimate,
       })),
     })
-    fetchJobList.mockResolvedValue(jobsPayload)
 
     const { result } = renderHook(() => useQuotesHomePage())
 
@@ -449,30 +410,8 @@ describe('useQuotesHomePage', () => {
     ])
   })
 
-  it('keeps home usable when job counts fail but summary and jobs load', async () => {
-    loadQuoteHomeSummary.mockResolvedValue(summaryPayload)
-    loadQuoteHomeJobCounts.mockRejectedValue(new Error('counts failed'))
-    loadQuoteJobVersions.mockResolvedValue(job1VersionsPayload)
-    fetchJobList.mockResolvedValue(jobsPayload)
-
-    const { result } = renderHook(() => useQuotesHomePage())
-
-    await waitFor(() => {
-      expect(result.current.versionListVm.items.map((estimate) => estimate.id)).toEqual([
-        'estimate-2',
-        'estimate-1',
-      ])
-    })
-
-    expect(result.current.summaryCards[0].value).toBe('1')
-    expect(result.current.feedbackVm.title).toBe('Quote home job counts failed to load')
-    expect(result.current.feedbackVm.details).toEqual(['Job counts failed to load. counts failed'])
-    expect(result.current.jobListVm.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
-  })
-
-  it('surfaces search errors separately from home partial failures and retries search independently', async () => {
-    loadQuoteHomeSummary.mockResolvedValue(summaryPayload)
-    loadQuoteHomeJobCounts.mockRejectedValue(new Error('counts failed'))
+  it('surfaces search errors separately from bootstrap data and retries search independently', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
     loadQuoteJobVersions.mockResolvedValue(job1VersionsPayload)
     loadQuoteHomeSearch
       .mockRejectedValueOnce(new Error('search failed'))
@@ -494,7 +433,6 @@ describe('useQuotesHomePage', () => {
           },
         ],
       })
-    fetchJobList.mockResolvedValue(jobsPayload)
 
     const { result } = renderHook(() => useQuotesHomePage())
 
@@ -516,8 +454,6 @@ describe('useQuotesHomePage', () => {
       { timeout: 1500 }
     )
 
-    expect(result.current.feedbackVm.details).toEqual(['Job counts failed to load. counts failed'])
-
     await act(async () => {
       result.current.actions.retrySearch()
     })
@@ -531,17 +467,14 @@ describe('useQuotesHomePage', () => {
       { timeout: 1500 }
     )
 
-    expect(loadQuoteHomeSummary).toHaveBeenCalledTimes(1)
-    expect(loadQuoteHomeJobCounts).toHaveBeenCalledTimes(1)
+    expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(1)
     expect(loadQuoteHomeSearch).toHaveBeenCalledTimes(2)
     expect(result.current.headerVm.searchErrorMessage).toBeNull()
   })
 
-  it('keeps version-load failures separate from search and home failures', async () => {
-    loadQuoteHomeSummary.mockResolvedValue(summaryPayload)
-    loadQuoteHomeJobCounts.mockResolvedValue(jobCountsPayload)
+  it('keeps version-load failures separate from bootstrap failures', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
     loadQuoteJobVersions.mockRejectedValue(new Error('versions failed'))
-    fetchJobList.mockResolvedValue(jobsPayload)
 
     const { result } = renderHook(() => useQuotesHomePage())
 
@@ -554,13 +487,10 @@ describe('useQuotesHomePage', () => {
     expect(result.current.headerVm.searchErrorMessage).toBeNull()
   })
 
-  it('page refresh retries home slices and versions without rerunning search', async () => {
-    loadQuoteHomeSummary
-      .mockResolvedValueOnce(summaryPayload)
-      .mockResolvedValueOnce(refreshedSummaryPayload)
-    loadQuoteHomeJobCounts
-      .mockResolvedValueOnce(jobCountsPayload)
-      .mockResolvedValueOnce(refreshedJobCountsPayload)
+  it('page refresh retries bootstrap and versions without rerunning search', async () => {
+    loadQuoteHomeBootstrap
+      .mockResolvedValueOnce(bootstrapPayload)
+      .mockResolvedValueOnce(refreshedBootstrapPayload)
     loadQuoteJobVersions
       .mockResolvedValueOnce(job1VersionsPayload)
       .mockResolvedValueOnce(refreshedJob1VersionsPayload)
@@ -582,7 +512,6 @@ describe('useQuotesHomePage', () => {
         },
       ],
     })
-    fetchJobList.mockResolvedValue(jobsPayload)
 
     const { result } = renderHook(() => useQuotesHomePage())
 
@@ -608,36 +537,23 @@ describe('useQuotesHomePage', () => {
       await result.current.actions.refresh()
     })
 
-    expect(loadQuoteHomeSummary).toHaveBeenCalledTimes(2)
-    expect(loadQuoteHomeJobCounts).toHaveBeenCalledTimes(2)
+    expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(2)
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
     expect(loadQuoteHomeSearch).toHaveBeenCalledTimes(1)
   })
 
   it('preserves empty states when there are no eligible jobs or quote versions', async () => {
-    loadQuoteHomeSummary.mockResolvedValue({
-      total_versions: 0,
-      draft_count: 0,
-      sent_or_awaiting_count: 0,
-      live_count: 0,
-      pipeline_total: 0,
-    })
-    loadQuoteHomeJobCounts.mockResolvedValue({ items: [] })
-    fetchJobList.mockResolvedValue([
-      {
-        id: 'job-x',
-        customer_id: null,
-        customer_name: null,
-        customer_address: null,
-        title: 'Lead only',
-        description: null,
-        status: 'lead',
-        estimate_date: null,
-        estimate_sent_at: null,
-        scheduled_date: null,
-        completed_at: null,
+    loadQuoteHomeBootstrap.mockResolvedValue({
+      summary: {
+        total_versions: 0,
+        draft_count: 0,
+        sent_or_awaiting_count: 0,
+        live_count: 0,
+        pipeline_total: 0,
       },
-    ])
+      jobCounts: { items: [] },
+      jobs: [],
+    })
 
     const { result } = renderHook(() => useQuotesHomePage())
 

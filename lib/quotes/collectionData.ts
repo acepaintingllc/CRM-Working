@@ -98,6 +98,32 @@ export type QuoteHomeJobVersionCountsReadModel = {
   }>
 }
 
+export type QuoteHomeEligibleJobReadModel = {
+  id: string
+  customer_id: string
+  customer_name: string | null
+  customer_address: string | null
+  title: string
+  description: string | null
+  status: string
+  created_at?: string | null
+  estimate_date: string | null
+  estimate_sent_at: string | null
+  scheduled_date: string | null
+  scheduled_end_date?: string | null
+  scheduled_email_sent_at?: string | null
+  completed_at: string | null
+  completed_email_sent_at?: string | null
+  closeout_notes?: string | null
+  linked_estimate_id?: string | null
+}
+
+export type QuoteHomeBootstrapReadModel = {
+  summary: QuoteHomeSummaryReadModel
+  jobCounts: QuoteHomeJobVersionCountsReadModel
+  jobs: QuoteHomeEligibleJobReadModel[]
+}
+
 export type QuoteJobVersionsReadModel = {
   job_id: string
   total_versions: number
@@ -226,6 +252,23 @@ export function buildQuoteHomeSummaryReadModel(
       if (row.version_state === 'archived') return sum
       return sum + (row.final_total ?? 0)
     }, 0),
+  }
+}
+
+export function buildQuoteHomeBootstrapReadModel(
+  rows: EstimateCollectionDecoratedRow[],
+  jobs: QuoteHomeEligibleJobReadModel[]
+): QuoteHomeBootstrapReadModel {
+  return {
+    summary: buildQuoteHomeSummaryReadModel(
+      rows.map((row) => ({
+        version_state: row.version_state,
+        final_total: row.final_total,
+        is_sent_estimate: row.is_sent_estimate,
+      }))
+    ),
+    jobCounts: buildQuoteHomeJobVersionCountsReadModel(rows),
+    jobs,
   }
 }
 
