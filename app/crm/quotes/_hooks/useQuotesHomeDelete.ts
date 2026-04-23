@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { type QuoteHomeEstimate } from '@/lib/quotes/collectionData'
+import { type QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
 import { deleteQuoteVersion } from '@/lib/quotes/client'
 
 type Options = {
@@ -10,10 +10,10 @@ type Options = {
 }
 
 export function useQuotesHomeDelete({ refresh, setError }: Options) {
-  const [confirmingDelete, setConfirmingDelete] = useState<QuoteHomeEstimate | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState<QuoteHomeJobVersionItemReadModel | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  function requestDeleteVersion(estimate: QuoteHomeEstimate) {
+  function requestDeleteVersion(estimate: QuoteHomeJobVersionItemReadModel) {
     setConfirmingDelete(estimate)
   }
 
@@ -23,7 +23,7 @@ export function useQuotesHomeDelete({ refresh, setError }: Options) {
   }
 
   async function confirmDeleteVersion() {
-    if (!confirmingDelete) return
+    if (!confirmingDelete) return false
 
     const deletedId = confirmingDelete.estimate_id
     setDeletingId(deletedId)
@@ -33,8 +33,10 @@ export function useQuotesHomeDelete({ refresh, setError }: Options) {
       await deleteQuoteVersion(deletedId)
       setConfirmingDelete(null)
       await refresh()
+      return true
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete quote.')
+      return false
     } finally {
       setDeletingId(null)
     }

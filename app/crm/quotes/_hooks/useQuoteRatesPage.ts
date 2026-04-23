@@ -1,13 +1,15 @@
 'use client'
 
-import { useCallback } from 'react'
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
 import { valueFromRatesFlagsRow } from '@/lib/quotes/ratesFlagsForm'
 import type { RatesFlagsTab } from '@/types/estimator/ratesFlags'
+import { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
 import { useQuoteRatesData } from './useQuoteRatesData'
+import { useQuoteRatesControllerActions } from './useQuoteRatesControllerActions'
 import { useQuoteRatesEditorState } from './useQuoteRatesEditorState'
 import { useQuoteRatesFilters } from './useQuoteRatesFilters'
 import { useQuoteRatesPersistence } from './useQuoteRatesPersistence'
+import { useQuoteRatesReload } from './useQuoteRatesReload'
 export {
   FLAGS_SECTIONS,
   RATE_SECTIONS,
@@ -72,132 +74,54 @@ export type QuoteRatesActions = {
 
 export function useQuoteRatesPage() {
   const resource = useQuoteRatesData()
+  const feedback = useDenseQuoteAdminFeedback()
 
   const filters = useQuoteRatesFilters({ payload: resource.data })
   const editor = useQuoteRatesEditorState({
     activeCategory: filters.activeCategory,
     filteredRows: filters.filteredRows,
   })
+  const reload = useQuoteRatesReload({ resource, editor })
 
   const hasData = resource.data.categories.length > 0 || (!resource.loading && !resource.error)
 
-  const reload = useCallback(
-    async (keepId?: string) => {
-      const ok = await resource.refresh()
-      if (ok && keepId) {
-        editor.setSelectedId(keepId)
-      }
-      return ok
-    },
-    [editor, resource]
-  )
-
   const persistence = useQuoteRatesPersistence({
-    categoryKey: filters.activeCategory?.key ?? null,
     refresh: reload,
+    feedback,
   })
 
-  async function saveCurrent() {
-    if (!filters.activeCategory) return
-    persistence.setActionError(null)
-    persistence.setNotice(null)
-    const mutation = editor.buildMutation({
-      action: editor.isCreating ? 'create' : 'update',
-    })
-    if (!mutation) {
-      return
-    }
-    const ok = await persistence.saveMutation({
-      action: mutation.action,
-      values: mutation.values,
-      originalId: mutation.originalId,
-      keepId: mutation.keepId,
-      notice: `${editor.isCreating ? 'Created' : 'Saved'} ${filters.activeCategory.label}.`,
-    })
-    if (ok) {
-      editor.finishCreate()
-    }
-  }
-
-  async function archiveOrReactivate(nextActive: boolean) {
-    if (!editor.selectedRow) return
-    await persistence.archiveToggle({
-      selectedId: editor.selectedRow.id,
-      nextActive,
-    })
-  }
-
-  function startCreate() {
-    editor.startCreate()
-    persistence.setNotice(null)
-    persistence.setActionError(null)
-  }
-
-  function startDuplicate() {
-    editor.startDuplicate()
-    persistence.setNotice(null)
-    persistence.setActionError(null)
-  }
-
-  function cancelEdit() {
-    editor.cancelEdit()
-  }
+  const controllerActions = useQuoteRatesControllerActions({
+    filters,
+    editor,
+    persistence,
+    feedback,
+    reload,
+  })
 
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
     hasData,
     loadError: resource.error,
-    actionError: persistence.actionError,
+    actionError: feedback.actionError,
     validationError: editor.validationError,
-    notice: persistence.notice,
+    notice: feedback.notice,
     canRetry: !resource.loading,
     canSave:
       Boolean(filters.activeCategory) &&
-      !persistence.saving &&
+      !feedback.saving &&
       !resource.error &&
       Boolean(editor.validationResult?.ok),
     canArchiveToggle:
       Boolean(editor.selectedRow) &&
       !editor.isCreating &&
-      !persistence.saving &&
+      !feedback.saving &&
       !resource.loading &&
       !resource.error,
-    canDuplicate: Boolean(editor.selectedRow) && !persistence.saving && !resource.loading && !resource.error,
+    canDuplicate: Boolean(editor.selectedRow) && !feedback.saving && !resource.loading && !resource.error,
   })
 
   return {
     resource,
-    activeTab: filters.activeTab,
-    setActiveTab: filters.setActiveTab,
-    rateSection: filters.rateSection,
-    setRateSection: filters.setRateSection,
-    rateCategory: filters.rateCategory,
-    setRateCategory: filters.setRateCategory,
-    flagsSection: filters.flagsSection,
-    setFlagsSection: filters.setFlagsSection,
-    roomDefaultsSection: filters.roomDefaultsSection,
-    setRoomDefaultsSection: filters.setRoomDefaultsSection,
-    statusFilter: filters.statusFilter,
-    setStatusFilter: filters.setStatusFilter,
-    search: filters.search,
-    setSearch: filters.setSearch,
-    selectedId: editor.selectedId,
-    setSelectedId: editor.setSelectedId,
-    isCreating: editor.isCreating,
-    draft: editor.draft,
-    draftActive: editor.draftActive,
-    setDraftActive: editor.setDraftActive,
-    saving: persistence.saving,
-    activeCategory: filters.activeCategory,
-    filteredRows: filters.filteredRows,
-    selectedRow: editor.selectedRow,
-    reload,
-    saveCurrent,
-    archiveOrReactivate,
-    startCreate,
-    startDuplicate,
-    cancelEdit,
-    updateDraftValue: editor.updateDraftValue,
     valueFromRow: valueFromRatesFlagsRow,
     uiState,
     filtersVm: {
@@ -221,7 +145,7 @@ export function useQuoteRatesPage() {
     editorVm: {
       draft: editor.draft,
       draftActive: editor.draftActive,
-      saving: persistence.saving,
+      saving: feedback.saving,
       activeCategory: filters.activeCategory,
       selectedRow: editor.selectedRow,
       isCreating: editor.isCreating,
@@ -239,12 +163,12 @@ export function useQuoteRatesPage() {
       setSearch: filters.setSearch,
       setSelectedId: editor.setSelectedId,
       setDraftActive: editor.setDraftActive,
-      reload,
-      saveCurrent,
-      archiveOrReactivate,
-      startCreate,
-      startDuplicate,
-      cancelEdit,
+      reload: controllerActions.reload,
+      saveCurrent: controllerActions.saveCurrent,
+      archiveOrReactivate: controllerActions.archiveOrReactivate,
+      startCreate: controllerActions.startCreate,
+      startDuplicate: controllerActions.startDuplicate,
+      cancelEdit: controllerActions.cancelEdit,
       updateDraftValue: editor.updateDraftValue,
     } satisfies QuoteRatesActions,
   }

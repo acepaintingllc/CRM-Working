@@ -9,6 +9,11 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateCustomerSendRoutePost: vi.fn(),
   handleEstimateCollectionRouteGet: vi.fn(),
   handleEstimateCollectionRoutePost: vi.fn(),
+  handleEstimateHomeJobCountsRouteGet: vi.fn(),
+  handleEstimateHomeRecentActivityRouteGet: vi.fn(),
+  handleEstimateHomeSearchRouteGet: vi.fn(),
+  handleEstimateHomeSummaryRouteGet: vi.fn(),
+  handleEstimateJobVersionsRouteGet: vi.fn(),
   handleEstimateProductsRouteGet: vi.fn(),
   handleEstimateProductsRoutePost: vi.fn(),
   handleEstimateProductRoutePatch: vi.fn(),
@@ -40,6 +45,11 @@ vi.mock('@/lib/server/estimateCustomerSendRoute', () => ({
 vi.mock('@/lib/server/estimateCollectionRoutes', () => ({
   handleEstimateCollectionRouteGet: routeHandlerMocks.handleEstimateCollectionRouteGet,
   handleEstimateCollectionRoutePost: routeHandlerMocks.handleEstimateCollectionRoutePost,
+  handleEstimateHomeJobCountsRouteGet: routeHandlerMocks.handleEstimateHomeJobCountsRouteGet,
+  handleEstimateHomeRecentActivityRouteGet: routeHandlerMocks.handleEstimateHomeRecentActivityRouteGet,
+  handleEstimateHomeSearchRouteGet: routeHandlerMocks.handleEstimateHomeSearchRouteGet,
+  handleEstimateHomeSummaryRouteGet: routeHandlerMocks.handleEstimateHomeSummaryRouteGet,
+  handleEstimateJobVersionsRouteGet: routeHandlerMocks.handleEstimateJobVersionsRouteGet,
   estimateCollectionCopy: {
     createdNotice: 'Estimate version created.',
     defaultVersionName: (value: number) => `Estimate Version ${value + 1}`,
@@ -64,6 +74,11 @@ import { DELETE as deleteEstimateProduct, PATCH as patchEstimateProduct } from '
 import { GET as getEstimateProducts, POST as postEstimateProducts } from '../estimates/v2/products/route'
 import { DELETE as deleteQuote } from '../quotes/[id]/route'
 import { GET as getQuoteCustomerSend, POST as postQuoteCustomerSend, PUT as putQuoteCustomerSend } from '../quotes/[id]/customer-send/route'
+import { GET as getQuoteHomeJobCounts } from '../quotes/home/job-counts/route'
+import { GET as getQuoteHomeRecentActivity } from '../quotes/home/recent-activity/route'
+import { GET as getQuoteHomeSearch } from '../quotes/home/search/route'
+import { GET as getQuoteHomeSummary } from '../quotes/home/summary/route'
+import { GET as getQuoteJobVersions } from '../quotes/home/jobs/[jobId]/versions/route'
 import { DELETE as deleteQuoteProduct, PATCH as patchQuoteProduct } from '../quotes/products/[id]/route'
 import { GET as getQuoteProducts, POST as postQuoteProducts } from '../quotes/products/route'
 import { GET as getQuoteVersion, POST as postQuoteVersion } from '../quotes/route'
@@ -76,6 +91,11 @@ describe('estimate and quote route delegation', () => {
     routeHandlerMocks.handleEstimateCustomerSendRoutePost.mockReset()
     routeHandlerMocks.handleEstimateCollectionRouteGet.mockReset()
     routeHandlerMocks.handleEstimateCollectionRoutePost.mockReset()
+    routeHandlerMocks.handleEstimateHomeJobCountsRouteGet.mockReset()
+    routeHandlerMocks.handleEstimateHomeRecentActivityRouteGet.mockReset()
+    routeHandlerMocks.handleEstimateHomeSearchRouteGet.mockReset()
+    routeHandlerMocks.handleEstimateHomeSummaryRouteGet.mockReset()
+    routeHandlerMocks.handleEstimateJobVersionsRouteGet.mockReset()
     routeHandlerMocks.handleEstimateProductsRouteGet.mockReset()
     routeHandlerMocks.handleEstimateProductsRoutePost.mockReset()
     routeHandlerMocks.handleEstimateProductRoutePatch.mockReset()
@@ -167,6 +187,31 @@ describe('estimate and quote route delegation', () => {
       2,
       request,
       expect.objectContaining({ createdNotice: 'Quote version created.' })
+    )
+  })
+
+  it('delegates quote-home focused routes to the shared home handlers', async () => {
+    const searchRequest = new Request('http://localhost/api/quotes/home/search?q=kitchen')
+    const jobVersionsRequest = new Request(
+      'http://localhost/api/quotes/home/jobs/11111111-1111-4111-8111-111111111111/versions'
+    )
+    const context = {
+      params: { jobId: '11111111-1111-4111-8111-111111111111' },
+    }
+
+    await getQuoteHomeSummary()
+    await getQuoteHomeRecentActivity()
+    await getQuoteHomeJobCounts()
+    await getQuoteHomeSearch(searchRequest)
+    await getQuoteJobVersions(jobVersionsRequest, context)
+
+    expect(routeHandlerMocks.handleEstimateHomeSummaryRouteGet).toHaveBeenCalledWith()
+    expect(routeHandlerMocks.handleEstimateHomeRecentActivityRouteGet).toHaveBeenCalledWith()
+    expect(routeHandlerMocks.handleEstimateHomeJobCountsRouteGet).toHaveBeenCalledWith()
+    expect(routeHandlerMocks.handleEstimateHomeSearchRouteGet).toHaveBeenCalledWith(searchRequest)
+    expect(routeHandlerMocks.handleEstimateJobVersionsRouteGet).toHaveBeenCalledWith(
+      jobVersionsRequest,
+      context
     )
   })
 

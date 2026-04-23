@@ -40,36 +40,73 @@ export type QuoteListEstimate = {
   customer_name: string
 }
 
-export type QuoteHomeEstimate = {
+type QuoteHomeVersionIdentity = {
   estimate_id: string
   job_id: string
-  customer_id: string
   version_name: string
   version_state: string
   version_kind: string
-  version_sort_order: number
   job_title: string
   customer_name: string
+}
+
+export type QuoteHomeRecentActivityItemReadModel = QuoteHomeVersionIdentity & {
+  final_total: number | null
+  updated_at: string | null
+  is_sent_estimate: boolean
+}
+
+export type QuoteHomeJobVersionItemReadModel = QuoteHomeVersionIdentity & {
+  customer_id: string
+  version_sort_order: number
   final_total: number | null
   updated_at: string | null
   created_at: string | null
   is_sent_estimate: boolean
 }
 
-export type QuoteHomeSummary = {
+export type QuoteHomeSummaryReadModel = {
+  total_versions: number
   draft_count: number
   sent_or_awaiting_count: number
   live_count: number
   pipeline_total: number
 }
 
-export type QuoteHomeData = {
-  summary: QuoteHomeSummary
+export type QuoteHomeRecentActivityReadModel = {
+  items: QuoteHomeRecentActivityItemReadModel[]
+}
+
+export type QuoteHomeSearchResultReadModel = {
+  estimate_id: string
+  job_id: string
+  customer_id: string
+  version_name: string
+  version_state: string
+  version_kind: string
+  job_title: string
+  customer_name: string
+  updated_at: string | null
+  final_total: number | null
+  is_sent_estimate: boolean
+}
+
+export type QuoteHomeJobVersionCountsReadModel = {
+  items: Array<{
+    job_id: string
+    version_count: number
+  }>
+}
+
+export type QuoteJobVersionsReadModel = {
+  job_id: string
   total_versions: number
-  version_counts_by_job: Record<string, number>
-  recent_estimates: QuoteHomeEstimate[]
-  snapshot: (QuoteHomeEstimate & { total_versions: number }) | null
-  search_estimates: QuoteHomeEstimate[]
+  items: QuoteHomeJobVersionItemReadModel[]
+}
+
+export type QuoteHomeSearchResponse = {
+  query: string
+  items: QuoteHomeSearchResultReadModel[]
 }
 
 export function toQuoteListEstimate(row: EstimateCollectionDecoratedRow): QuoteListEstimate {
@@ -92,7 +129,26 @@ export function toQuoteListEstimate(row: EstimateCollectionDecoratedRow): QuoteL
   }
 }
 
-export function toQuoteHomeEstimate(row: EstimateCollectionDecoratedRow): QuoteHomeEstimate {
+export function toQuoteHomeRecentActivityItem(
+  row: EstimateCollectionDecoratedRow
+): QuoteHomeRecentActivityItemReadModel {
+  return {
+    estimate_id: row.estimate_id,
+    job_id: row.job_id,
+    version_name: row.version_name,
+    version_state: row.version_state,
+    version_kind: row.version_kind,
+    job_title: row.job_title,
+    customer_name: row.customer_name,
+    final_total: row.final_total,
+    updated_at: row.updated_at,
+    is_sent_estimate: row.is_sent_estimate,
+  }
+}
+
+export function toQuoteHomeJobVersionItem(
+  row: EstimateCollectionDecoratedRow
+): QuoteHomeJobVersionItemReadModel {
   return {
     estimate_id: row.estimate_id,
     job_id: row.job_id,
@@ -110,8 +166,59 @@ export function toQuoteHomeEstimate(row: EstimateCollectionDecoratedRow): QuoteH
   }
 }
 
-export function buildQuoteHomeSummary(estimates: QuoteHomeEstimate[]): QuoteHomeSummary {
+export function toQuoteHomeSearchResultReadModel(
+  row: EstimateCollectionDecoratedRow
+): QuoteHomeSearchResultReadModel {
   return {
+    estimate_id: row.estimate_id,
+    job_id: row.job_id,
+    customer_id: row.customer_id,
+    version_name: row.version_name,
+    version_state: row.version_state,
+    version_kind: row.version_kind,
+    job_title: row.job_title,
+    customer_name: row.customer_name,
+    updated_at: row.updated_at,
+    final_total: row.final_total,
+    is_sent_estimate: row.is_sent_estimate,
+  }
+}
+
+export function buildQuoteHomeSearchHaystack(
+  estimate:
+    | QuoteHomeRecentActivityItemReadModel
+    | QuoteHomeJobVersionItemReadModel
+    | QuoteHomeSearchResultReadModel
+) {
+  return `${estimate.version_name} ${estimate.job_title} ${estimate.customer_name} ${estimate.version_kind} ${estimate.version_state}`.toLowerCase()
+}
+
+export function buildQuoteHomeJobVersionCountsReadModel(
+  estimates: Array<Pick<EstimateCollectionDecoratedRow, 'job_id'>>
+): QuoteHomeJobVersionCountsReadModel {
+  const counts = estimates.reduce<Record<string, number>>((nextCounts, estimate) => {
+    nextCounts[estimate.job_id] = (nextCounts[estimate.job_id] ?? 0) + 1
+    return nextCounts
+  }, {})
+
+  return {
+    items: Object.entries(counts).map(([job_id, version_count]) => ({
+      job_id,
+      version_count,
+    })),
+  }
+}
+
+export function buildQuoteHomeSummaryReadModel(
+  estimates: Array<
+    Pick<
+      QuoteHomeJobVersionItemReadModel,
+      'version_state' | 'final_total' | 'is_sent_estimate'
+    >
+  >
+): QuoteHomeSummaryReadModel {
+  return {
+    total_versions: estimates.length,
     draft_count: estimates.filter((row) => row.version_state === 'draft').length,
     sent_or_awaiting_count: estimates.filter((row) => row.is_sent_estimate).length,
     live_count: estimates.filter((row) => row.version_state === 'live').length,
@@ -122,22 +229,28 @@ export function buildQuoteHomeSummary(estimates: QuoteHomeEstimate[]): QuoteHome
   }
 }
 
-export function buildQuoteHomeVersionCountsByJob(estimates: QuoteHomeEstimate[]) {
-  return estimates.reduce<Record<string, number>>((counts, estimate) => {
-    counts[estimate.job_id] = (counts[estimate.job_id] ?? 0) + 1
-    return counts
-  }, {})
+export function buildQuoteHomeRecentActivityReadModel(
+  rows: EstimateCollectionDecoratedRow[]
+): QuoteHomeRecentActivityReadModel {
+  return {
+    items: rows.map(toQuoteHomeRecentActivityItem).slice(0, 12),
+  }
 }
 
-export function buildQuoteHomeSnapshot(
-  estimates: QuoteHomeEstimate[],
-  totalVersions = estimates.length
-): QuoteHomeData['snapshot'] {
-  const latestEstimate = estimates[0] ?? null
-  if (!latestEstimate) return null
+export function buildQuoteHomeSearchReadModel(
+  rows: EstimateCollectionDecoratedRow[],
+  query: string
+): QuoteHomeSearchResponse {
+  const normalizedQuery = query.trim().toLowerCase()
   return {
-    ...latestEstimate,
-    total_versions: totalVersions,
+    query,
+    items:
+      normalizedQuery.length === 0
+        ? []
+        : rows
+            .map(toQuoteHomeSearchResultReadModel)
+            .filter((estimate) => buildQuoteHomeSearchHaystack(estimate).includes(normalizedQuery))
+            .slice(0, 8),
   }
 }
 
@@ -147,16 +260,16 @@ export function buildQuoteListPayload(rows: EstimateCollectionDecoratedRow[]) {
   }
 }
 
-export function buildQuoteHomeData(rows: EstimateCollectionDecoratedRow[]): QuoteHomeData {
-  const estimates = rows.map(toQuoteHomeEstimate)
-  const totalVersions = rows.length
+export function buildQuoteJobVersionsReadModel(
+  rows: EstimateCollectionDecoratedRow[],
+  jobId: string
+): QuoteJobVersionsReadModel {
+  const items = rows
+    .map(toQuoteHomeJobVersionItem)
+    .filter((estimate) => estimate.job_id === jobId)
   return {
-    summary: buildQuoteHomeSummary(estimates),
-    total_versions: totalVersions,
-    version_counts_by_job: buildQuoteHomeVersionCountsByJob(estimates),
-    recent_estimates: estimates.slice(0, 12),
-    snapshot: buildQuoteHomeSnapshot(estimates, totalVersions),
-    // Visible/search subset only. Authoritative aggregates must come from full-dataset fields above.
-    search_estimates: estimates.slice(0, 200),
+    job_id: jobId,
+    total_versions: items.length,
+    items,
   }
 }

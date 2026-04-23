@@ -2,7 +2,7 @@
 
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
-import type { QuoteListEstimate } from '@/lib/quotes/collectionData'
+import type { QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
 import {
   estimateWorkspaceHref,
   formatDateTime,
@@ -10,7 +10,7 @@ import {
 } from '@/app/crm/quotes/_home/quoteHomePresentation'
 
 type QuoteCreateVersionsSectionProps = {
-  items: QuoteListEstimate[]
+  items: QuoteHomeJobVersionItemReadModel[]
 }
 
 export function QuoteCreateVersionsSection({ items }: QuoteCreateVersionsSectionProps) {
@@ -27,7 +27,7 @@ export function QuoteCreateVersionsSection({ items }: QuoteCreateVersionsSection
       <div className="grid gap-0">
         {items.map((estimate, index) => (
           <div
-            key={estimate.id}
+            key={estimate.estimate_id}
             className={`grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${
               index < items.length - 1 ? 'border-b border-[color:var(--crm-ui-border)]' : ''
             } ${index === 0 ? 'pt-0' : ''} ${index === items.length - 1 ? 'pb-0' : ''}`.trim()}
@@ -44,7 +44,7 @@ export function QuoteCreateVersionsSection({ items }: QuoteCreateVersionsSection
               </div>
             </div>
 
-            <CrmButton href={estimateWorkspaceHref(estimate.id)} prefetch={false}>
+            <CrmButton href={estimateWorkspaceHref(estimate.estimate_id)} prefetch={false}>
               Open
             </CrmButton>
           </div>

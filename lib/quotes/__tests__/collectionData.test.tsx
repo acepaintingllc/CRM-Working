@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildQuoteHomeData,
+  buildQuoteHomeJobVersionCountsReadModel,
+  buildQuoteHomeRecentActivityReadModel,
+  buildQuoteHomeSearchReadModel,
+  buildQuoteHomeSummaryReadModel,
+  buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
+  toQuoteHomeJobVersionItem,
 } from '../collectionData'
 
 const rows = [
@@ -97,49 +102,74 @@ describe('quote collection data', () => {
     })
   })
 
-  it('builds home payload summary, snapshot, and pipeline totals from shared derivation', () => {
-    const payload = buildQuoteHomeData(rows)
-
-    expect(payload.summary).toEqual({
+  it('builds summary metrics without embedding per-job selection data', () => {
+    expect(
+      buildQuoteHomeSummaryReadModel(rows.map((row) => toQuoteHomeJobVersionItem(row)))
+    ).toEqual({
+      total_versions: 3,
       draft_count: 1,
       sent_or_awaiting_count: 3,
       live_count: 1,
       pipeline_total: 1800,
     })
-    expect(payload.total_versions).toBe(3)
-    expect(payload.version_counts_by_job).toEqual({
-      'job-2': 1,
-      'job-1': 2,
-    })
-    expect(payload.snapshot).toEqual({
-      estimate_id: 'estimate-3',
+  })
+
+  it('builds recent activity separately and caps it at 12 items', () => {
+    const expandedRows = Array.from({ length: 15 }, (_, index) => ({
+      ...rows[0],
+      id: `estimate-${index + 1}`,
+      estimate_id: `estimate-${index + 1}`,
+      updated_at: `2026-04-22T${String(index).padStart(2, '0')}:00:00.000Z`,
+    }))
+
+    const payload = buildQuoteHomeRecentActivityReadModel(expandedRows)
+
+    expect(payload.items).toHaveLength(12)
+    expect(payload.items[0]).toEqual({
+      estimate_id: 'estimate-1',
       job_id: 'job-2',
-      customer_id: 'customer-2',
       version_name: 'Quote Version',
       version_state: 'draft',
       version_kind: 'alternate',
-      version_sort_order: 3,
       job_title: 'Garage',
       customer_name: 'Bob',
       final_total: 500,
-      updated_at: '2026-04-22T09:00:00.000Z',
-      created_at: '2026-04-21T09:00:00.000Z',
+      updated_at: '2026-04-22T00:00:00.000Z',
       is_sent_estimate: true,
-      total_versions: 3,
     })
-    expect(payload.recent_estimates).toHaveLength(3)
-    expect(payload.search_estimates).toHaveLength(3)
   })
 
-  it('keeps authoritative aggregates on the full dataset when the visible search subset is capped', () => {
+  it('builds dedicated per-job version counts for the job list boundary', () => {
+    expect(buildQuoteHomeJobVersionCountsReadModel(rows)).toEqual({
+      items: [
+        { job_id: 'job-2', version_count: 1 },
+        { job_id: 'job-1', version_count: 2 },
+      ],
+    })
+  })
+
+  it('filters search results case-insensitively and caps them at 8', () => {
+    const searchRows = Array.from({ length: 10 }, (_, index) => ({
+      ...rows[0],
+      id: `estimate-${index + 1}`,
+      estimate_id: `estimate-${index + 1}`,
+      version_name: `Kitchen Revision ${index + 1}`,
+      job_title: 'Kitchen',
+      customer_name: 'Alice',
+    }))
+
+    const payload = buildQuoteHomeSearchReadModel(searchRows, 'revision')
+
+    expect(payload.query).toBe('revision')
+    expect(payload.items).toHaveLength(8)
+    expect(payload.items[0]?.estimate_id).toBe('estimate-1')
+  })
+
+  it('returns full per-job versions even when search results are capped', () => {
     const expandedRows = Array.from({ length: 205 }, (_, index) => {
-      const jobId = index < 120 ? 'job-a' : 'job-b'
-      const state =
-        index < 100 ? 'draft' : index < 180 ? 'live' : 'archived'
-      const total =
-        state === 'archived'
-          ? 1000 + index
-          : 2000 + index
+      const jobId = index < 201 ? 'job-a' : 'job-b'
+      const state = index < 100 ? 'draft' : index < 180 ? 'live' : 'archived'
+      const total = state === 'archived' ? 1000 + index : 2000 + index
 
       return {
         id: `estimate-${index + 1}`,
@@ -166,24 +196,12 @@ describe('quote collection data', () => {
       }
     })
 
-    const payload = buildQuoteHomeData(expandedRows)
-    const expectedPipelineTotal = expandedRows.reduce((sum, row) => {
-      return row.version_state === 'archived' ? sum : sum + (row.final_total ?? 0)
-    }, 0)
+    const searchPayload = buildQuoteHomeSearchReadModel(expandedRows, 'version')
+    const jobVersionsPayload = buildQuoteJobVersionsReadModel(expandedRows, 'job-a')
 
-    expect(payload.summary).toEqual({
-      draft_count: 100,
-      sent_or_awaiting_count: 150,
-      live_count: 80,
-      pipeline_total: expectedPipelineTotal,
-    })
-    expect(payload.total_versions).toBe(205)
-    expect(payload.version_counts_by_job).toEqual({
-      'job-a': 120,
-      'job-b': 85,
-    })
-    expect(payload.snapshot?.estimate_id).toBe('estimate-1')
-    expect(payload.snapshot?.total_versions).toBe(205)
-    expect(payload.search_estimates).toHaveLength(200)
+    expect(searchPayload.items).toHaveLength(8)
+    expect(jobVersionsPayload.job_id).toBe('job-a')
+    expect(jobVersionsPayload.total_versions).toBe(201)
+    expect(jobVersionsPayload.items).toHaveLength(201)
   })
 })

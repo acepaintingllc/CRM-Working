@@ -1,14 +1,13 @@
 import type { JobSummary } from '@/lib/jobs/client'
 import type {
-  QuoteHomeData,
-  QuoteHomeEstimate,
+  QuoteHomeJobVersionItemReadModel,
+  QuoteHomeSearchResultReadModel,
 } from '@/lib/quotes/collectionData'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 
-export type HomeEstimate = QuoteHomeEstimate
-export type HomeData = QuoteHomeData
-
 export type QuoteHomeJob = JobSummary
+export type QuoteHomeSearchResult = QuoteHomeSearchResultReadModel
+export type QuoteHomeJobVersion = QuoteHomeJobVersionItemReadModel
 
 export type NavItem = {
   label: string

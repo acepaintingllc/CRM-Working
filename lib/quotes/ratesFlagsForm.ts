@@ -4,9 +4,14 @@ import type {
   RatesFlagsRow,
 } from '../../types/estimator/ratesFlags'
 
+function readRowValue(row: RatesFlagsRow, key: string) {
+  const match = Object.entries(row).find(([entryKey]) => entryKey === key)
+  return match?.[1]
+}
+
 export function valueFromRatesFlagsRow(row: RatesFlagsRow, key: string) {
   if (key === 'active') return row.active ? 'ACTIVE' : 'ARCHIVED'
-  const value = (row as Record<string, unknown>)[key]
+  const value = readRowValue(row, key)
   if (value == null) return ''
   if (typeof value === 'boolean') return value ? 'Y' : 'N'
   return String(value)

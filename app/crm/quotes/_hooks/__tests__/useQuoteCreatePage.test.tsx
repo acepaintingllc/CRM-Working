@@ -8,13 +8,14 @@ const { push, getSearchParam } = vi.hoisted(() => ({
   getSearchParam: vi.fn(),
 }))
 
-const { fetchJobList } = vi.hoisted(() => ({
+const { fetchJobList, loadJobRecord } = vi.hoisted(() => ({
   fetchJobList: vi.fn(),
+  loadJobRecord: vi.fn(),
 }))
 
-const { createQuoteVersion, loadQuoteList } = vi.hoisted(() => ({
+const { createQuoteVersion, loadQuoteJobVersions } = vi.hoisted(() => ({
   createQuoteVersion: vi.fn(),
-  loadQuoteList: vi.fn(),
+  loadQuoteJobVersions: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -24,11 +25,12 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/jobs/client', () => ({
   fetchJobList,
+  loadJobRecord,
 }))
 
 vi.mock('@/lib/quotes/client', () => ({
   createQuoteVersion,
-  loadQuoteList,
+  loadQuoteJobVersions,
 }))
 
 describe('useQuoteCreatePage', () => {
@@ -36,8 +38,9 @@ describe('useQuoteCreatePage', () => {
     push.mockReset()
     getSearchParam.mockReset()
     fetchJobList.mockReset()
+    loadJobRecord.mockReset()
     createQuoteVersion.mockReset()
-    loadQuoteList.mockReset()
+    loadQuoteJobVersions.mockReset()
   })
 
   it('stays idle when no job query param is present', async () => {
@@ -50,7 +53,8 @@ describe('useQuoteCreatePage', () => {
     })
 
     expect(fetchJobList).not.toHaveBeenCalled()
-    expect(loadQuoteList).not.toHaveBeenCalled()
+    expect(loadJobRecord).not.toHaveBeenCalled()
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
     expect(result.current.feedbackVm.shouldLoadJobData).toBe(false)
     expect(result.current.selectedJobVm.title).toBe('Unknown job')
     expect(result.current.createVm.canCreate).toBe(false)
@@ -58,8 +62,8 @@ describe('useQuoteCreatePage', () => {
 
   it('keeps the load error ahead of the required-job create error', async () => {
     getSearchParam.mockReturnValue('job-1')
-    fetchJobList.mockRejectedValue(new Error('Load failed'))
-    loadQuoteList.mockRejectedValue(new Error('Load failed'))
+    loadJobRecord.mockRejectedValue(new Error('Load failed'))
+    loadQuoteJobVersions.mockRejectedValue(new Error('Load failed'))
 
     const { result } = renderHook(() => useQuoteCreatePage())
 

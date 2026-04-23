@@ -3,14 +3,17 @@ import type {
   CategoryMutationParams,
   ConstantsTableDetailed,
   MutationPlanResult,
+  PersistedValuesRecord,
   RatesFlagsCategory,
+  RatesFlagsEditableCategoryKey,
+  RatesFlagsMutationRequest,
   TemplateConstantRowRecord,
 } from './categoryTypes.ts'
 import { asBooleanYN, asText, normalizeId, rowByHeader } from './shared.ts'
 import { columnLetterFromIndex, getHeaderIndex } from './tableParsing.ts'
 
-function buildRowValues(
-  config: CategoryConfig,
+function buildRowValues<TKey extends RatesFlagsEditableCategoryKey>(
+  config: CategoryConfig<TKey>,
   row: Record<string, string>
 ): Record<string, string> {
   const values: Record<string, string> = {}
@@ -19,8 +22,7 @@ function buildRowValues(
   }
   if (!values.id) values.id = rowByHeader(row, ['ID'])
   if (!values.display_name) {
-    values.display_name =
-      rowByHeader(row, ['DisplayName', 'Name', 'Label']) || values.id
+    values.display_name = rowByHeader(row, ['DisplayName', 'Name', 'Label']) || values.id
   }
   return values
 }
@@ -29,8 +31,12 @@ function getActiveValueFromRow(row: Record<string, string>) {
   return asBooleanYN(rowByHeader(row, ['Active?', 'Active', 'IsActive']))
 }
 
-export function buildCategory(
-  config: CategoryConfig,
+function validateId(value: string) {
+  return /^[A-Z0-9_]+$/.test(value)
+}
+
+export function buildCategory<TKey extends RatesFlagsEditableCategoryKey>(
+  config: CategoryConfig<TKey>,
   tables: ConstantsTableDetailed[]
 ): RatesFlagsCategory {
   const rows = tables
@@ -43,9 +49,7 @@ export function buildCategory(
     })
 
   const tableTitle =
-    tables.length > 0
-      ? tables.map((table) => table.title).join(' + ')
-      : config.tableTitles[0]
+    tables.length > 0 ? tables.map((table) => table.title).join(' + ') : config.tableTitles[0]
   return {
     key: config.key,
     tab: config.tab,
@@ -67,60 +71,9 @@ export function buildCategory(
   }
 }
 
-function validateId(value: string) {
-  return /^[A-Z0-9_]+$/.test(value)
-}
-
-export function sanitizeMutationValues(config: CategoryConfig, input: Record<string, unknown>) {
-  const values: Record<string, string> = {}
-  for (const field of config.fields) {
-    const raw = asText(input[field.key])
-    let next = raw
-    if (!next && typeof field.writeDefault === 'string') {
-      next = field.writeDefault
-    }
-    values[field.key] = next
-  }
-
-  const id = normalizeId(values.id)
-  values.id = id
-  if (!id) return { ok: false as const, error: 'ID is required.' }
-  if (!validateId(id)) {
-    return {
-      ok: false as const,
-      error: 'ID must be uppercase snake-case (A-Z, 0-9, underscore).',
-    }
-  }
-
-  for (const field of config.fields) {
-    const value = values[field.key]
-    if (field.required && !value) {
-      return { ok: false as const, error: `${field.label} is required.` }
-    }
-    if (field.type === 'number' && value) {
-      const num = Number(value.replace(/[$,%\s,]/g, ''))
-      if (!Number.isFinite(num)) {
-        return { ok: false as const, error: `${field.label} must be a valid number.` }
-      }
-    }
-  }
-
-  for (const field of config.fields) {
-    if (typeof field.writeDefault === 'function' && !values[field.key]) {
-      values[field.key] = field.writeDefault(values)
-    }
-  }
-
-  if (config.key === 'supply_rates_area_based') {
-    values.unit = '$/sqft'
-  }
-
-  return { ok: true as const, values }
-}
-
-function getTargetRow(
+function getTargetRow<TKey extends RatesFlagsEditableCategoryKey>(
   table: ConstantsTableDetailed,
-  config: CategoryConfig,
+  config: CategoryConfig<TKey>,
   id: string
 ) {
   const idField = config.fields.find((field) => field.key === 'id')
@@ -134,21 +87,17 @@ function getTargetRow(
   )
 }
 
-export function buildMutationPlan(params: CategoryMutationParams): MutationPlanResult {
+export function buildMutationPlan<TKey extends RatesFlagsEditableCategoryKey>(
+  params: CategoryMutationParams<TKey>
+): MutationPlanResult {
   const { table, config, request } = params
   const action = request.action
   const activeHeaderIndex = getHeaderIndex(table, ['Active?', 'Active', 'IsActive'])
   const idField = config.fields.find((field) => field.key === 'id')
   if (!idField) return { ok: false, error: 'Invalid category config: missing id field.', status: 500 }
 
-  const originalId = normalizeId(request.original_id || asText(request.values.id))
-  if (!originalId) {
-    return { ok: false, error: 'Missing row id.', status: 400 }
-  }
-
-  const existing = getTargetRow(table, config, originalId)
-
   if (action === 'archive' || action === 'reactivate') {
+    const existing = getTargetRow(table, config, request.rowId)
     if (!existing) return { ok: false, error: 'Row not found.', status: 404 }
     if (activeHeaderIndex == null) {
       return { ok: false, error: `Missing Active column in ${table.title}.`, status: 400 }
@@ -165,12 +114,26 @@ export function buildMutationPlan(params: CategoryMutationParams): MutationPlanR
     }
   }
 
-  const sanitized = sanitizeMutationValues(config, request.values)
-  if (!sanitized.ok) {
-    return { ok: false, error: sanitized.error, status: 400 }
+  const mutation = request as unknown as Extract<
+    RatesFlagsMutationRequest,
+    { category: TKey; action: 'create' | 'update' }
+  >
+  const originalId = normalizeId(
+    mutation.action === 'update' ? mutation.original_id : mutation.values.id
+  ) || normalizeId(mutation.values.id)
+  if (!originalId) {
+    return { ok: false, error: 'Missing row id.', status: 400 }
   }
 
-  const nextId = normalizeId(sanitized.values.id)
+  const existing = getTargetRow(table, config, originalId)
+  const nextId = normalizeId(mutation.values.id)
+  if (!validateId(nextId)) {
+    return {
+      ok: false,
+      error: 'ID must be uppercase snake-case (A-Z, 0-9, underscore).',
+      status: 400,
+    }
+  }
   if (action === 'create' && existing) {
     return { ok: false, error: `Row '${nextId}' already exists.`, status: 409 }
   }
@@ -210,28 +173,23 @@ export function buildMutationPlan(params: CategoryMutationParams): MutationPlanR
     const col = columnLetterFromIndex(headerIndex)
     updates.push({
       range: `Constants!${col}${rowNumber}`,
-      values: [[sanitized.values[field.key] ?? '']],
+      values: [[(mutation.values as Record<string, string>)[field.key] ?? '']],
     })
   }
 
   if (activeHeaderIndex != null) {
     const col = columnLetterFromIndex(activeHeaderIndex)
-    const nextActive = request.values.active === 'Y' || request.values.active === 'N'
-      ? request.values.active
-      : action === 'create'
-        ? 'Y'
-        : 'N'
     updates.push({
       range: `Constants!${col}${rowNumber}`,
-      values: [[nextActive]],
+      values: [[mutation.values.active]],
     })
   }
 
   return { ok: true, updates }
 }
 
-export function toStringRecord(value: Record<string, unknown> | null | undefined) {
-  const out: Record<string, string> = {}
+export function toStringRecord(value: PersistedValuesRecord | null | undefined) {
+  const out: PersistedValuesRecord = {}
   if (!value || typeof value !== 'object') return out
   for (const [key, raw] of Object.entries(value)) {
     out[key] = asText(raw)
@@ -239,8 +197,8 @@ export function toStringRecord(value: Record<string, unknown> | null | undefined
   return out
 }
 
-export function buildCategoryFromStoredRows(
-  config: CategoryConfig,
+export function buildCategoryFromStoredRows<TKey extends RatesFlagsEditableCategoryKey>(
+  config: CategoryConfig<TKey>,
   rows: TemplateConstantRowRecord[]
 ): RatesFlagsCategory {
   const normalizedRows = rows

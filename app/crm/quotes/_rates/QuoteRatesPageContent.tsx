@@ -13,7 +13,7 @@ import { QuoteRatesTableSection } from './QuoteRatesTableSection'
 export function QuoteRatesPageContent() {
   const controller = useQuoteRatesPage()
   const handleRetry = controller.uiState.canRetry
-    ? () => void controller.actions.reload(controller.selectedId || undefined)
+    ? () => void controller.actions.reload(controller.tableVm.selectedId || undefined)
     : null
 
   return (
@@ -38,7 +38,7 @@ export function QuoteRatesPageContent() {
             <CrmButton
               type="button"
               disabled={!controller.uiState.canRetry}
-              onClick={() => void controller.actions.reload(controller.selectedId || undefined)}
+              onClick={() => void controller.actions.reload(controller.tableVm.selectedId || undefined)}
             >
               Refresh
             </CrmButton>

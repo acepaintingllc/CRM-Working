@@ -206,12 +206,14 @@ test('mutation plan create/update/archive/reactivate and validation', () => {
     category: 'access_fees_ladders',
     action: 'create',
     values: {
+      access_group: 'ladders',
       id: 'SCAFFOLD',
       display_name: 'Scaffold',
       fee_type: 'Labor',
       amount: '200',
       unit: 'once',
       notes: 'new',
+      active: 'Y',
     },
   } as const
   const createPlan = _test.buildMutationPlan({
@@ -230,6 +232,7 @@ test('mutation plan create/update/archive/reactivate and validation', () => {
     action: 'update',
     original_id: 'LADDER',
     values: {
+      access_group: 'ladders',
       id: 'LADDER',
       display_name: '26 ft Ladder',
       fee_type: 'Labor',
@@ -256,7 +259,7 @@ test('mutation plan create/update/archive/reactivate and validation', () => {
     request: {
       category: 'access_fees_ladders',
       action: 'archive',
-      values: { id: 'LADDER' },
+      rowId: 'LADDER',
     },
   })
   assert.equal(archivePlan.ok, true)
@@ -273,15 +276,225 @@ test('mutation plan create/update/archive/reactivate and validation', () => {
       category: 'access_fees_ladders',
       action: 'create',
       values: {
+        access_group: 'ladders',
         id: 'bad-id',
         display_name: 'Broken',
         fee_type: 'Labor',
         amount: '10',
+        unit: '',
+        notes: '',
+        active: 'Y',
       },
     },
   })
   assert.equal(badIdPlan.ok, false)
   assert.match((badIdPlan as { ok: false; error: string; status: number }).error, /uppercase snake-case/i)
+})
+
+test('parseRatesFlagsMutationRequest rejects invalid category-field-action combinations at the route boundary', () => {
+  const validProductionRequest = _test.parseRatesFlagsMutationRequest({
+    category: 'production_rates_walls',
+    action: 'update',
+    original_id: 'wall_std',
+    values: {
+      production_scope: 'walls',
+      id: 'wall_std',
+      scope_id: 'WALLS',
+      display_name: 'Walls Standard',
+      surface_type: 'Drywall',
+      condition: 'Std',
+      prep_sqft_per_hr: '95',
+      sqft_per_hr: '120',
+      primer_sqft_per_hr: '110',
+      notes: '',
+      active: 'Y',
+    },
+  })
+  assert.equal(validProductionRequest.ok, true)
+  if (validProductionRequest.ok) {
+    assert.deepEqual(validProductionRequest.value, {
+      category: 'production_rates_walls',
+      action: 'update',
+      original_id: 'WALL_STD',
+      values: {
+        production_scope: 'walls',
+        id: 'WALL_STD',
+        scope_id: 'WALLS',
+        display_name: 'Walls Standard',
+        surface_type: 'Drywall',
+        condition: 'Std',
+        prep_sqft_per_hr: '95',
+        sqft_per_hr: '120',
+        primer_sqft_per_hr: '110',
+        notes: '',
+        active: 'Y',
+      },
+    })
+  }
+
+  const validRoomTemplateRequest = _test.parseRatesFlagsMutationRequest({
+    category: 'room_templates',
+    action: 'create',
+    values: {
+      id: 'BEDROOM',
+      display_name: 'Bedroom',
+      room_type_id: 'BEDROOM',
+      default_wall_rate_id: 'WALL_STD',
+      default_ceil_rate_id: 'CEIL_STD',
+      default_complexity_id: 'NORMAL',
+      default_wall_mode: 'RECT',
+      include_walls: 'Y',
+      include_ceilings: 'N',
+      include_trim: 'N',
+      include_doors: 'N',
+      include_drywall: 'N',
+      notes: '',
+    },
+  })
+  assert.equal(validRoomTemplateRequest.ok, true)
+  if (
+    validRoomTemplateRequest.ok &&
+    (validRoomTemplateRequest.value.action === 'create' ||
+      validRoomTemplateRequest.value.action === 'update')
+  ) {
+    assert.equal(validRoomTemplateRequest.value.values.active, 'Y')
+  }
+
+  const unknownCategory = _test.parseRatesFlagsMutationRequest({
+    category: 'unit_rates',
+    action: 'create',
+    values: {},
+  })
+  assert.equal(unknownCategory.ok, false)
+  assert.equal(unknownCategory.error, 'Unknown category.')
+
+  const wrongField = _test.parseRatesFlagsMutationRequest({
+    category: 'access_fees_ladders',
+    action: 'create',
+    values: {
+      access_group: 'ladders',
+      id: 'LADDER',
+      display_name: 'Ladder',
+      fee_type: 'Labor',
+      amount: '100',
+      unit: 'once',
+      notes: '',
+      active: 'Y',
+      sqft_per_hr: '12',
+    },
+  })
+  assert.equal(wrongField.ok, false)
+  assert.match(wrongField.error, /does not support field 'sqft_per_hr'/i)
+
+  const mismatchedLiteral = _test.parseRatesFlagsMutationRequest({
+    category: 'access_fees_ladders',
+    action: 'create',
+    values: {
+      access_group: 'scaffolding',
+      id: 'LADDER',
+      display_name: 'Ladder',
+      fee_type: 'Labor',
+      amount: '100',
+      unit: 'once',
+      notes: '',
+      active: 'Y',
+    },
+  })
+  assert.equal(mismatchedLiteral.ok, false)
+  assert.match(mismatchedLiteral.error, /must be 'ladders'/i)
+
+  const mismatchedAreaUnit = _test.parseRatesFlagsMutationRequest({
+    category: 'supply_rates_area_based',
+    action: 'create',
+    values: {
+      supply_group: 'area_based',
+      id: 'MASKING',
+      display_name: 'Masking',
+      scope: 'Walls',
+      unit: 'per job',
+      cost_per: '1.2',
+      notes: '',
+      active: 'Y',
+    },
+  })
+  assert.equal(mismatchedAreaUnit.ok, false)
+  assert.match(mismatchedAreaUnit.error, /must be '\$\/sqft'/i)
+
+  const invalidNumber = _test.parseRatesFlagsMutationRequest({
+    category: 'access_fees_ladders',
+    action: 'create',
+    values: {
+      access_group: 'ladders',
+      id: 'LADDER',
+      display_name: 'Ladder',
+      fee_type: 'Labor',
+      amount: 'oops',
+      unit: 'once',
+      notes: '',
+      active: 'Y',
+    },
+  })
+  assert.equal(invalidNumber.ok, false)
+  assert.match(invalidNumber.error, /must be a valid number/i)
+
+  const missingArchiveId = _test.parseRatesFlagsMutationRequest({
+    category: 'access_fees_ladders',
+    action: 'archive',
+  })
+  assert.equal(missingArchiveId.ok, false)
+  assert.match(missingArchiveId.error, /rowId/i)
+
+  const missingUpdateOriginalId = _test.parseRatesFlagsMutationRequest({
+    category: 'production_rates_walls',
+    action: 'update',
+    values: {
+      production_scope: 'walls',
+      id: 'WALL_STD',
+      scope_id: 'WALLS',
+      display_name: 'Walls',
+      surface_type: '',
+      condition: '',
+      prep_sqft_per_hr: '',
+      sqft_per_hr: '120',
+      primer_sqft_per_hr: '',
+      notes: '',
+      active: 'Y',
+    },
+  })
+  assert.equal(missingUpdateOriginalId.ok, false)
+  assert.match(missingUpdateOriginalId.error, /original id/i)
+
+  const validRequest = _test.parseRatesFlagsMutationRequest({
+    category: 'access_fees_ladders',
+    action: 'create',
+    values: {
+      access_group: 'ladders',
+      id: 'LADDER',
+      display_name: 'Ladder',
+      fee_type: 'Labor',
+      amount: '100',
+      unit: 'once',
+      notes: '',
+      active: 'N',
+    },
+  })
+  assert.equal(validRequest.ok, true)
+  if (validRequest.ok) {
+    assert.deepEqual(validRequest.value, {
+      category: 'access_fees_ladders',
+      action: 'create',
+      values: {
+        access_group: 'ladders',
+        id: 'LADDER',
+        display_name: 'Ladder',
+        fee_type: 'Labor',
+        amount: '100',
+        unit: 'once',
+        notes: '',
+        active: 'N',
+      },
+    })
+  }
 })
 
 test('access fee ID-first classification routes canonical ladder/scaffolding IDs and leaves specialty empty', () => {

@@ -1,18 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import {
-  createEmptyDraft,
-  draftToMutationValues,
-  formatDraftValue,
-  rowToDraft,
-  updateDraftField,
-  validateDraft,
-} from '@/lib/quotes/ratesFlagsDraftAdapters'
+import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
   RatesFlagsCategory,
+  RatesFlagsCreateOrUpdateMutation,
   RatesFlagsDraft,
-  RatesFlagsMutationAction,
+  RatesFlagsEditableCategoryKey,
 } from '@/types/estimator/ratesFlags'
 
 type Options = {
@@ -23,8 +17,15 @@ type Options = {
 export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Options) {
   const [selectedId, setSelectedId] = useState<string>('')
   const [isCreating, setIsCreating] = useState(false)
-  const [draft, setDraft] = useState<RatesFlagsDraft>({})
+  const [draft, setDraft] = useState<RatesFlagsDraft | null>(null)
   const [draftActive, setDraftActive] = useState(true)
+  const adapter = useMemo(
+    () =>
+      activeCategory
+        ? getRatesFlagsDraftAdapter(activeCategory.key as RatesFlagsEditableCategoryKey)
+        : null,
+    [activeCategory]
+  )
 
   useEffect(() => {
     if (!activeCategory || isCreating) return
@@ -33,7 +34,7 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
     const fallback = filteredRows[0]
     if (!fallback) {
       setSelectedId('')
-      setDraft({})
+      setDraft(null)
       return
     }
     setSelectedId(fallback.id)
@@ -45,31 +46,36 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
   }, [activeCategory, selectedId])
 
   useEffect(() => {
-    if (!activeCategory || isCreating || !selectedRow) return
-    setDraft(rowToDraft(activeCategory, selectedRow))
+    if (!activeCategory || !adapter || isCreating || !selectedRow) return
+    setDraft(adapter.rowToDraft(activeCategory, selectedRow))
     setDraftActive(selectedRow.active)
-  }, [activeCategory, isCreating, selectedRow])
+  }, [activeCategory, adapter, isCreating, selectedRow])
 
-  const validationResult = activeCategory ? validateDraft(activeCategory, draft) : null
+  const validationResult =
+    activeCategory && adapter && draft ? adapter.validateDraft(activeCategory, draft as never) : null
   const validationError = validationResult && !validationResult.ok ? validationResult.error : null
 
   function updateDraftValue(fieldKey: string, rawInput: string) {
-    if (!activeCategory) return
-    setDraft((current) => updateDraftField(activeCategory, current, fieldKey, rawInput))
+    if (!activeCategory || !adapter) return
+    setDraft((current) =>
+      current ? adapter.updateDraftField(activeCategory, current as never, fieldKey, rawInput) : current
+    )
   }
 
   function startCreate() {
-    if (!activeCategory) return
+    if (!activeCategory || !adapter) return
     setIsCreating(true)
     setSelectedId('')
-    setDraft(createEmptyDraft(activeCategory))
+    setDraft(adapter.createEmptyDraft(activeCategory))
     setDraftActive(true)
   }
 
   function startDuplicate() {
-    if (!activeCategory || !selectedRow) return
-    const next = rowToDraft(activeCategory, selectedRow)
-    next.id = `${selectedRow.id}_COPY`
+    if (!activeCategory || !adapter || !selectedRow) return
+    const next = adapter.withDuplicateId(
+      adapter.rowToDraft(activeCategory, selectedRow),
+      selectedRow.id
+    )
     setIsCreating(true)
     setSelectedId('')
     setDraft(next)
@@ -77,25 +83,32 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
   }
 
   function cancelEdit() {
-    if (selectedRow && activeCategory) {
-      setDraft(rowToDraft(activeCategory, selectedRow))
+    if (selectedRow && activeCategory && adapter) {
+      setDraft(adapter.rowToDraft(activeCategory, selectedRow))
       setDraftActive(selectedRow.active)
       setIsCreating(false)
       return
     }
-    setDraft({})
+    setDraft(null)
     setDraftActive(true)
     setIsCreating(false)
   }
 
   function buildMutation(args: {
-    action: RatesFlagsMutationAction
+    action: 'create' | 'update'
   }) {
-    if (!activeCategory || !validationResult?.ok) return null
+    if (!activeCategory || !draft || !validationResult?.ok) return null
+    const activeAdapter = adapter
+    if (!activeAdapter) return null
     return {
-      action: args.action,
-      values: draftToMutationValues(activeCategory, draft, draftActive),
-      originalId: isCreating ? undefined : selectedRow?.id,
+      // Draft values stay typed for the UI; the adapter is the only place that
+      // translates them into the wire mutation contract.
+      request: activeAdapter.toMutationRequest({
+        action: args.action,
+        draft: draft as never,
+        draftActive,
+        originalId: isCreating ? undefined : selectedRow?.id,
+      }) as RatesFlagsCreateOrUpdateMutation,
       keepId: typeof draft.id === 'string' && draft.id ? draft.id : selectedId,
     }
   }
@@ -116,7 +129,8 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
     cancelEdit,
     buildMutation,
     formatDraftValue: activeCategory
-      ? (fieldKey: string) => formatDraftValue(activeCategory, draft, fieldKey)
+      ? (fieldKey: string) =>
+          draft && adapter ? adapter.formatDraftValue(activeCategory, draft as never, fieldKey) : ''
       : () => '',
     finishCreate: () => setIsCreating(false),
   }

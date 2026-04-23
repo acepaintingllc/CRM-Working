@@ -8,13 +8,14 @@ const { push, getSearchParam } = vi.hoisted(() => ({
   getSearchParam: vi.fn(),
 }))
 
-const { fetchJobList } = vi.hoisted(() => ({
+const { fetchJobList, loadJobRecord } = vi.hoisted(() => ({
   fetchJobList: vi.fn(),
+  loadJobRecord: vi.fn(),
 }))
 
-const { createQuoteVersion, loadQuoteList } = vi.hoisted(() => ({
+const { createQuoteVersion, loadQuoteJobVersions } = vi.hoisted(() => ({
   createQuoteVersion: vi.fn(),
-  loadQuoteList: vi.fn(),
+  loadQuoteJobVersions: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -26,7 +27,7 @@ vi.mock('next/link', () => ({
   default: ({
     href,
     children,
-  ...props
+    ...props
   }: ComponentPropsWithoutRef<'a'> & { href: string }) => (
     <a href={href} {...props}>
       {children}
@@ -36,11 +37,12 @@ vi.mock('next/link', () => ({
 
 vi.mock('@/lib/jobs/client', () => ({
   fetchJobList,
+  loadJobRecord,
 }))
 
 vi.mock('@/lib/quotes/client', () => ({
   createQuoteVersion,
-  loadQuoteList,
+  loadQuoteJobVersions,
 }))
 
 describe('QuoteCreatePage', () => {
@@ -48,8 +50,9 @@ describe('QuoteCreatePage', () => {
     push.mockReset()
     getSearchParam.mockReset()
     fetchJobList.mockReset()
+    loadJobRecord.mockReset()
     createQuoteVersion.mockReset()
-    loadQuoteList.mockReset()
+    loadQuoteJobVersions.mockReset()
     getSearchParam.mockReturnValue('job-1')
   })
 
@@ -57,60 +60,59 @@ describe('QuoteCreatePage', () => {
     cleanup()
   })
 
-  it('loads the preselected job, derives matching versions, and creates through shared rules', async () => {
-    fetchJobList.mockResolvedValue([
-      {
-        id: 'job-1',
-        customer_id: 'customer-1',
-        customer_name: 'Alice',
-        customer_address: '123 Main',
-        title: 'Kitchen',
-        description: null,
-        status: 'estimate_pending',
-        estimate_date: null,
-        estimate_sent_at: null,
-        scheduled_date: null,
-        completed_at: null,
-      },
-      {
-        id: 'job-2',
-        customer_id: null,
-        customer_name: 'Bob',
-        customer_address: '456 Oak',
-        title: 'Garage',
-        description: null,
-        status: 'lead',
-        estimate_date: null,
-        estimate_sent_at: null,
-        scheduled_date: null,
-        completed_at: null,
-      },
-    ])
-    loadQuoteList.mockResolvedValue({
-      estimates: [
+  it('loads the selected job, loads only that job versions, and creates through shared rules', async () => {
+    loadJobRecord.mockResolvedValue({
+      id: 'job-1',
+      customer_id: 'customer-1',
+      customer_name: 'Alice',
+      customer_address: '123 Main',
+      customer_email: null,
+      customer_phone: null,
+      title: 'Kitchen',
+      description: null,
+      status: 'estimate_pending',
+      estimate_date: null,
+      estimate_sent_at: null,
+      scheduled_date: null,
+      scheduled_end_date: null,
+      completed_at: null,
+      linked_estimate_id: null,
+      closeout_notes: null,
+      linked_estimates: [],
+    })
+    loadQuoteJobVersions.mockResolvedValue({
+      job_id: 'job-1',
+      total_versions: 2,
+      items: [
         {
-          id: 'estimate-1',
+          estimate_id: 'estimate-2',
           job_id: 'job-1',
-          version_name: 'Version A',
-          version_state: 'draft',
-          version_kind: 'standard',
-          updated_at: '2026-04-20T10:00:00.000Z',
-        },
-        {
-          id: 'estimate-2',
-          job_id: 'job-1',
+          customer_id: 'customer-1',
           version_name: 'Version B',
           version_state: 'live',
           version_kind: 'revision',
+          version_sort_order: 2,
+          job_title: 'Kitchen',
+          customer_name: 'Alice',
+          final_total: 1300,
           updated_at: '2026-04-21T10:00:00.000Z',
+          created_at: '2026-04-20T10:00:00.000Z',
+          is_sent_estimate: false,
         },
         {
-          id: 'estimate-3',
-          job_id: 'job-2',
-          version_name: 'Garage Alt',
+          estimate_id: 'estimate-1',
+          job_id: 'job-1',
+          customer_id: 'customer-1',
+          version_name: 'Version A',
           version_state: 'draft',
-          version_kind: 'alternate',
-          updated_at: '2026-04-22T10:00:00.000Z',
+          version_kind: 'standard',
+          version_sort_order: 1,
+          job_title: 'Kitchen',
+          customer_name: 'Alice',
+          final_total: 500,
+          updated_at: '2026-04-20T10:00:00.000Z',
+          created_at: '2026-04-19T10:00:00.000Z',
+          is_sent_estimate: false,
         },
       ],
     })
@@ -122,9 +124,11 @@ describe('QuoteCreatePage', () => {
       expect(screen.getByText('Existing Quotes (2)')).toBeInTheDocument()
     })
 
+    expect(fetchJobList).not.toHaveBeenCalled()
+    expect(loadJobRecord).toHaveBeenCalledWith('job-1')
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
     expect(screen.getByText('Alice · 123 Main')).toBeInTheDocument()
     expect(screen.getAllByText('Version B').length).toBeGreaterThan(0)
-    expect(screen.queryByText('Garage Alt')).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('Leave blank for default name'), {
       target: { value: '  Kitchen Split  ' },
@@ -152,23 +156,27 @@ describe('QuoteCreatePage', () => {
     })
   })
 
-  it('disables creation when the preselected job is not eligible', async () => {
-    fetchJobList.mockResolvedValue([
-      {
-        id: 'job-1',
-        customer_id: null,
-        customer_name: 'Alice',
-        customer_address: '123 Main',
-        title: 'Kitchen',
-        description: null,
-        status: 'lead',
-        estimate_date: null,
-        estimate_sent_at: null,
-        scheduled_date: null,
-        completed_at: null,
-      },
-    ])
-    loadQuoteList.mockResolvedValue({ estimates: [] })
+  it('disables creation when the selected job is not eligible', async () => {
+    loadJobRecord.mockResolvedValue({
+      id: 'job-1',
+      customer_id: null,
+      customer_name: 'Alice',
+      customer_address: '123 Main',
+      customer_email: null,
+      customer_phone: null,
+      title: 'Kitchen',
+      description: null,
+      status: 'lead',
+      estimate_date: null,
+      estimate_sent_at: null,
+      scheduled_date: null,
+      scheduled_end_date: null,
+      completed_at: null,
+      linked_estimate_id: null,
+      closeout_notes: null,
+      linked_estimates: [],
+    })
+    loadQuoteJobVersions.mockResolvedValue({ job_id: 'job-1', total_versions: 0, items: [] })
 
     render(<QuoteCreatePage />)
 
@@ -196,7 +204,8 @@ describe('QuoteCreatePage', () => {
     })
 
     expect(fetchJobList).not.toHaveBeenCalled()
-    expect(loadQuoteList).not.toHaveBeenCalled()
+    expect(loadJobRecord).not.toHaveBeenCalled()
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
     expect(
       screen.getByText('Open this page from quote home or pass a job query parameter to create a version.')
     ).toBeInTheDocument()
@@ -204,33 +213,50 @@ describe('QuoteCreatePage', () => {
   })
 
   it('shows the load error and retries quote creation data loading', async () => {
-    fetchJobList.mockRejectedValueOnce(new Error('Load failed')).mockResolvedValueOnce([
-      {
+    loadJobRecord
+      .mockRejectedValueOnce(new Error('Load failed'))
+      .mockResolvedValueOnce({
         id: 'job-1',
         customer_id: 'customer-1',
         customer_name: 'Alice',
         customer_address: '123 Main',
+        customer_email: null,
+        customer_phone: null,
         title: 'Kitchen',
         description: null,
         status: 'estimate_pending',
         estimate_date: null,
         estimate_sent_at: null,
         scheduled_date: null,
+        scheduled_end_date: null,
         completed_at: null,
-      },
-    ])
-    loadQuoteList.mockRejectedValueOnce(new Error('Load failed')).mockResolvedValueOnce({
-      estimates: [
-        {
-          id: 'estimate-1',
-          job_id: 'job-1',
-          version_name: 'Version A',
-          version_state: 'draft',
-          version_kind: 'standard',
-          updated_at: '2026-04-20T10:00:00.000Z',
-        },
-      ],
-    })
+        linked_estimate_id: null,
+        closeout_notes: null,
+        linked_estimates: [],
+      })
+    loadQuoteJobVersions
+      .mockRejectedValueOnce(new Error('Load failed'))
+      .mockResolvedValueOnce({
+        job_id: 'job-1',
+        total_versions: 1,
+        items: [
+          {
+            estimate_id: 'estimate-1',
+            job_id: 'job-1',
+            customer_id: 'customer-1',
+            version_name: 'Version A',
+            version_state: 'draft',
+            version_kind: 'standard',
+            version_sort_order: 1,
+            job_title: 'Kitchen',
+            customer_name: 'Alice',
+            final_total: 500,
+            updated_at: '2026-04-20T10:00:00.000Z',
+            created_at: '2026-04-19T10:00:00.000Z',
+            is_sent_estimate: false,
+          },
+        ],
+      })
 
     render(<QuoteCreatePage />)
 
