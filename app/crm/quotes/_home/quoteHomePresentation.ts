@@ -78,7 +78,7 @@ export function buildSearchResultVm(estimate: HomeEstimate): SearchResultVm {
 
 export function buildHeroSummaryText(data: HomeData | null) {
   return data
-    ? `${data.search_estimates.length} total versions | ${data.summary.draft_count} drafts | ${data.summary.sent_or_awaiting_count} sent/awaiting | ${data.summary.live_count} live`
+    ? `${data.total_versions} total versions | ${data.summary.draft_count} drafts | ${data.summary.sent_or_awaiting_count} sent/awaiting | ${data.summary.live_count} live`
     : 'Build and track quote versions with live status, totals, and search.'
 }
 

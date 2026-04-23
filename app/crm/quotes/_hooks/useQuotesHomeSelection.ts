@@ -60,11 +60,7 @@ export function useQuotesHomeSelection<TJob extends SearchableQuoteHomeJob>({
   )
 
   const versionCountByJob = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const estimate of data?.search_estimates ?? []) {
-      map[estimate.job_id] = (map[estimate.job_id] ?? 0) + 1
-    }
-    return map
+    return data?.version_counts_by_job ?? {}
   }, [data])
 
   return {

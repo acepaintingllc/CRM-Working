@@ -47,11 +47,13 @@ describe('quoteHomePresentation', () => {
           live_count: 1,
           pipeline_total: 5000,
         },
+        total_versions: 24,
+        version_counts_by_job: { 'job-1': 24 },
         recent_estimates: [estimate],
         snapshot: { ...estimate, total_versions: 1 },
         search_estimates: [estimate],
       })
-    ).toBe('1 total versions | 2 drafts | 3 sent/awaiting | 1 live')
+    ).toBe('24 total versions | 2 drafts | 3 sent/awaiting | 1 live')
   })
 
   it('builds selected-job and version item view models', () => {
