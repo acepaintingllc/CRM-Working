@@ -18,6 +18,8 @@ export const SETTINGS_LINKS: NavItem[] = [
   { label: 'Settings', href: '/crm/settings' },
 ]
 
+export const QUOTE_META_SEPARATOR = ' · '
+
 export function formatToday() {
   const now = new Date()
   return now
@@ -78,7 +80,7 @@ export function buildSearchResultVm(estimate: HomeEstimate): SearchResultVm {
 
 export function buildHeroSummaryText(data: HomeData | null) {
   return data
-    ? `${data.total_versions} total versions | ${data.summary.draft_count} drafts | ${data.summary.sent_or_awaiting_count} sent/awaiting | ${data.summary.live_count} live`
+    ? `${data.total_versions} total versions${QUOTE_META_SEPARATOR}${data.summary.draft_count} drafts${QUOTE_META_SEPARATOR}${data.summary.sent_or_awaiting_count} sent/awaiting${QUOTE_META_SEPARATOR}${data.summary.live_count} live`
     : 'Build and track quote versions with live status, totals, and search.'
 }
 
@@ -120,7 +122,7 @@ export function buildQuotesHomeSelectedJobVm(
     emptyMessage: null,
     title: selectedJob.title,
     customerLine: `${selectedJob.customer_name ?? 'Unknown customer'}${
-      selectedJob.customer_address ? ` | ${selectedJob.customer_address}` : ''
+      selectedJob.customer_address ? `${QUOTE_META_SEPARATOR}${selectedJob.customer_address}` : ''
     }`,
     jobHref: `/crm/jobs/${selectedJob.id}`,
     stats: [
@@ -144,7 +146,7 @@ export function buildQuoteHomeVersionItemVm(
         : null,
     meta: `${formatVersionState(estimate.version_state)} / ${formatVersionState(
       estimate.version_kind
-    )} · Updated ${formatDateTime(estimate.updated_at)}`,
+    )}${QUOTE_META_SEPARATOR}Updated ${formatDateTime(estimate.updated_at)}`,
     href: estimateWorkspaceHref(estimate.estimate_id),
     deleting: deletingId === estimate.estimate_id,
   }

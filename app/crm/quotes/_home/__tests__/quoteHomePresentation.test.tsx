@@ -53,13 +53,13 @@ describe('quoteHomePresentation', () => {
         snapshot: { ...estimate, total_versions: 1 },
         search_estimates: [estimate],
       })
-    ).toBe('24 total versions | 2 drafts | 3 sent/awaiting | 1 live')
+    ).toBe('24 total versions · 2 drafts · 3 sent/awaiting · 1 live')
   })
 
   it('builds selected-job and version item view models', () => {
     const selectedVm = buildQuotesHomeSelectedJobVm(job, 4, false)
     expect(selectedVm.title).toBe('Kitchen')
-    expect(selectedVm.customerLine).toBe('Alice | 123 Main')
+    expect(selectedVm.customerLine).toBe('Alice · 123 Main')
     expect(selectedVm.stats).toEqual([
       { label: 'Customer', value: 'Alice' },
       { label: 'Job Status', value: 'Estimate Sent' },
@@ -70,7 +70,7 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.total).toBe('$1,250')
     expect(versionVm.href).toBe('/crm/quotes/estimate-1')
     expect(versionVm.deleting).toBe(true)
-    expect(versionVm.meta).toContain('Live / Revision')
-    expect(versionVm.meta).toContain('Updated')
+    expect(versionVm.meta).toContain('Live / Revision · Updated')
+    expect(versionVm.meta).not.toContain('Â')
   })
 })
