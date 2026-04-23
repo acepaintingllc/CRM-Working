@@ -139,72 +139,72 @@ describe('QuotesHomePage', () => {
       retrySearch: vi.fn(),
       setJobQuery: vi.fn(),
       setSelectedJobId: vi.fn(),
-      requestDeleteVersion: vi.fn(),
+      requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
       setVersionName: vi.fn(),
-      createVersion: vi.fn(),
+      create: vi.fn(),
       cancelDelete: vi.fn(),
-      confirmDeleteVersion: vi.fn(),
+      confirmDelete: vi.fn(),
     }
 
     useQuotesHomePage.mockReturnValue({
       actions,
-      sections: {
-        headerVm: {
-          heroSummaryText: '3 total versions',
-          searchFocused: false,
-          searchQuery: '',
-          searchLoading: false,
-          searchEmptyMessage: null,
-          searchErrorMessage: null,
-          searchCanRetry: false,
-          searchResults: [],
-        },
-        feedbackVm: {
-          loading: false,
-          tone: 'error',
-          title: 'Quote action failed',
-          details: ['Select a job before creating a version.'],
-          sources: ['create'],
-        },
-        summaryCards: [
-          { label: 'Drafts', value: '1', subtext: '1 draft version' },
-          { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
-        ],
-        jobListVm: {
-          loading: false,
-          searchQuery: '',
-          selectedJobId: 'job-1',
-          items: [],
-          mobileItems: [],
-          emptyState: 'none',
-        },
-        selectedJobVm: {
-          loading: false,
-          emptyMessage: null,
-          title: 'Kitchen',
-          customerLine: 'Alice',
-          jobHref: '/crm/jobs/job-1',
-          stats: [],
-        },
-        versionListVm: {
-          heading: '2 versions under this job',
-          emptyMessage: null,
-          items: [],
-        },
-        createVm: {
-          creating: false,
-          loading: false,
-          selectedJobName: 'Kitchen',
-          versionKind: 'standard',
-          versionName: '',
-          canCreate: true,
-        },
-        mobileSummaryCards: [
-          { label: 'Drafts', value: '1', subtext: '1 draft version' },
-          { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
-        ],
-        deleteDialogVm: {
+      header: {
+        heroSummaryText: '3 total versions',
+        searchFocused: false,
+        searchQuery: '',
+        searchLoading: false,
+        searchEmptyMessage: null,
+        searchErrorMessage: null,
+        searchCanRetry: false,
+        searchResults: [],
+      },
+      feedback: {
+        loading: false,
+        tone: 'error',
+        title: 'Quote action failed',
+        details: ['Select a job before creating a version.'],
+        sources: ['create'],
+      },
+      summaryCards: [
+        { label: 'Drafts', value: '1', subtext: '1 draft version' },
+        { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
+      ],
+      jobList: {
+        loading: false,
+        searchQuery: '',
+        selectedJobId: 'job-1',
+        items: [],
+        mobileItems: [],
+        emptyState: 'none',
+      },
+      selectedJob: {
+        loading: false,
+        emptyMessage: null,
+        title: 'Kitchen',
+        customerLine: 'Alice',
+        jobHref: '/crm/jobs/job-1',
+        stats: [],
+      },
+      versionList: {
+        heading: '2 versions under this job',
+        emptyMessage: null,
+        items: [],
+      },
+      create: {
+        creating: false,
+        loading: false,
+        selectedJobName: 'Kitchen',
+        versionKind: 'standard',
+        versionName: '',
+        canCreate: true,
+      },
+      mobileSummaryCards: [
+        { label: 'Drafts', value: '1', subtext: '1 draft version' },
+        { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
+      ],
+      dialogs: {
+        delete: {
           estimateId: 'estimate-2',
           versionName: 'Version B',
           jobTitle: 'Kitchen',
@@ -243,11 +243,11 @@ describe('QuotesHomePage', () => {
     expect(actions.retrySearch).toHaveBeenCalledTimes(1)
     expect(actions.setJobQuery).toHaveBeenCalledWith('garage')
     expect(actions.setSelectedJobId).toHaveBeenCalledWith('job-2')
-    expect(actions.requestDeleteVersion).toHaveBeenCalledWith('estimate-2')
+    expect(actions.requestDelete).toHaveBeenCalledWith('estimate-2')
     expect(actions.setVersionKind).toHaveBeenCalledWith('revision')
     expect(actions.setVersionName).toHaveBeenCalledWith('Custom Revision')
-    expect(actions.createVersion).toHaveBeenCalledTimes(1)
+    expect(actions.create).toHaveBeenCalledTimes(1)
     expect(actions.cancelDelete).toHaveBeenCalledTimes(1)
-    expect(actions.confirmDeleteVersion).toHaveBeenCalledTimes(1)
+    expect(actions.confirmDelete).toHaveBeenCalledTimes(1)
   })
 })

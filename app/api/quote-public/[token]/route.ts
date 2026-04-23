@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import { serviceResultDataResponse } from '@/lib/server/routeResult'
 import { loadPublicEstimateSnapshot } from '@/lib/server/estimatePublicPortal'
 

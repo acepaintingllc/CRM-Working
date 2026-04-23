@@ -16,18 +16,8 @@ type Props = {
 }
 
 export default function QuotesHomePage({ initialData }: Props) {
-  const { actions, sections } = useQuotesHomePage(initialData)
-  const {
-    createVm,
-    deleteDialogVm,
-    feedbackVm,
-    headerVm,
-    jobListVm,
-    mobileSummaryCards,
-    selectedJobVm,
-    summaryCards,
-    versionListVm,
-  } = sections
+  const controller = useQuotesHomePage(initialData)
+  const { actions } = controller
 
   return (
     <div className="ace-v2-shell" style={S.main}>
@@ -47,7 +37,7 @@ export default function QuotesHomePage({ initialData }: Props) {
           </div>
 
           <div style={S.mobileStats}>
-            {mobileSummaryCards.map((card) => (
+            {controller.mobileSummaryCards.map((card) => (
               <div key={`mobile-${card.label}`} style={S.mobileStatCard}>
                 <div style={S.cardLabel}>{card.label}</div>
                 <div style={{ ...S.statValue, fontSize: 18, marginBottom: 0 }}>{card.value}</div>
@@ -56,7 +46,7 @@ export default function QuotesHomePage({ initialData }: Props) {
           </div>
 
           <QuotesHomeJobList
-            vm={jobListVm}
+            vm={controller.jobList}
             renderDesktop={false}
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
@@ -66,32 +56,32 @@ export default function QuotesHomePage({ initialData }: Props) {
 
       <div className="ace-v2-desktop-only" style={{ ...S.content, ...S.desktopWrap }}>
         <QuotesHomeHeader
-          vm={headerVm}
+          vm={controller.header}
           onSearchFocusedChange={actions.setSearchFocused}
           onSearchQueryChange={actions.setSearchQuery}
           onSearchRetry={actions.retrySearch}
         />
 
-        {feedbackVm.title ? (
+        {controller.feedback.title ? (
           <div
             style={{
               ...S.card,
               marginBottom: 18,
-              color: feedbackVm.tone === 'error' ? 'var(--v2-red)' : '#f9e2b7',
+              color: controller.feedback.tone === 'error' ? 'var(--v2-red)' : '#f9e2b7',
               borderColor:
-                feedbackVm.tone === 'error'
+                controller.feedback.tone === 'error'
                   ? 'rgba(248,113,113,0.28)'
                   : 'rgba(249,226,183,0.22)',
               background:
-                feedbackVm.tone === 'error'
+                controller.feedback.tone === 'error'
                   ? 'rgba(127,29,29,0.18)'
                   : 'rgba(120,83,26,0.18)',
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: feedbackVm.details.length > 0 ? 8 : 0 }}>
-              {feedbackVm.title}
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: controller.feedback.details.length > 0 ? 8 : 0 }}>
+              {controller.feedback.title}
             </div>
-            {feedbackVm.details.map((detail) => (
+            {controller.feedback.details.map((detail) => (
               <div key={detail} style={{ fontSize: 14, lineHeight: 1.6 }}>
                 {detail}
               </div>
@@ -99,7 +89,7 @@ export default function QuotesHomePage({ initialData }: Props) {
           </div>
         ) : null}
 
-        <QuotesHomeSummaryCards cards={summaryCards} loading={feedbackVm.loading} />
+        <QuotesHomeSummaryCards cards={controller.summaryCards} loading={controller.feedback.loading} />
 
         <div
           id="job-hub"
@@ -111,14 +101,14 @@ export default function QuotesHomePage({ initialData }: Props) {
           }}
         >
           <QuotesHomeJobList
-            vm={jobListVm}
+            vm={controller.jobList}
             renderMobile={false}
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
           />
 
           <section style={{ display: 'grid', gap: 22, alignSelf: 'start' }}>
-            <QuotesHomeSelectedJobPanel vm={selectedJobVm} />
+            <QuotesHomeSelectedJobPanel vm={controller.selectedJob} />
 
             <div
               className="v2-hub-detail-grid"
@@ -128,11 +118,11 @@ export default function QuotesHomePage({ initialData }: Props) {
                 gap: 22,
               }}
             >
-              <QuotesHomeVersionList vm={versionListVm} onRequestDelete={actions.requestDeleteVersion} />
+              <QuotesHomeVersionList vm={controller.versionList} onRequestDelete={actions.requestDelete} />
 
               <QuotesHomeCreatePanel
-                vm={createVm}
-                onCreate={() => void actions.createVersion()}
+                vm={controller.create}
+                onCreate={() => void actions.create()}
                 onVersionKindChange={actions.setVersionKind}
                 onVersionNameChange={actions.setVersionName}
               />
@@ -158,9 +148,9 @@ export default function QuotesHomePage({ initialData }: Props) {
       </div>
 
       <QuotesHomeDeleteDialog
-        vm={deleteDialogVm}
+        vm={controller.dialogs.delete}
         onCancel={actions.cancelDelete}
-        onConfirm={() => void actions.confirmDeleteVersion()}
+        onConfirm={() => void actions.confirmDelete()}
       />
     </div>
   )

@@ -71,26 +71,11 @@ export function useQuoteJobVersions(jobId: string) {
 
   const refresh = useCallback(async () => load(jobId, { force: true }), [jobId, load])
 
-  const removeVersion = useCallback((estimateId: string) => {
-    if (!jobId) return
-    const cached = cacheRef.current[jobId]
-    const current = cached ?? emptyJobVersions(jobId)
-    const nextItems = current.items.filter((item) => item.estimate_id !== estimateId)
-    const nextValue: QuoteJobVersionsReadModel = {
-      job_id: jobId,
-      total_versions: nextItems.length,
-      items: nextItems,
-    }
-    cacheRef.current[jobId] = nextValue
-    setData(nextValue)
-  }, [jobId])
-
   return {
     data,
     items: data.items as QuoteHomeJobVersionItemReadModel[],
     loading,
     error,
     refresh,
-    removeVersion,
   }
 }

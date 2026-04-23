@@ -98,12 +98,10 @@ describe('useQuotesHomeData', () => {
     loadQuoteHomeBootstrap.mockReset()
   })
 
-  it('uses seeded bootstrap data without immediately refetching and derives selection state', async () => {
+  it('uses seeded bootstrap data without immediately refetching', async () => {
     const { result } = renderHook(() => useQuotesHomeData(seededPayload))
 
-    await waitFor(() => {
-      expect(result.current.selectedJobId).toBe('job-1')
-    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
 
     expect(loadQuoteHomeBootstrap).not.toHaveBeenCalled()
     expect(result.current.loading).toBe(false)
@@ -113,21 +111,10 @@ describe('useQuotesHomeData', () => {
       { job_id: 'job-2', version_count: 1 },
     ])
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
-    expect(result.current.selectedJob?.id).toBe('job-1')
     expect(result.current.versionCountByJob).toEqual({
       'job-1': 2,
       'job-2': 1,
     })
-  })
-
-  it('filters jobs using the local job query', async () => {
-    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
-
-    act(() => {
-      result.current.setJobQuery('garage')
-    })
-
-    expect(result.current.filteredJobs.map((job) => job.id)).toEqual(['job-2'])
   })
 
   it('ignores stale responses from older refresh calls and keeps the latest final state', async () => {
@@ -178,14 +165,16 @@ describe('useQuotesHomeData', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
 
+    let refreshed: Awaited<ReturnType<typeof result.current.refresh>> = null
     await act(async () => {
-      await result.current.refresh()
+      refreshed = await result.current.refresh()
     })
 
     expect(result.current.bootstrapError).toBe('bootstrap failed')
     expect(result.current.summary.total_versions).toBe(1)
     expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-1', version_count: 1 }])
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1'])
+    expect(refreshed).toBeNull()
   })
 
   it('keeps empty fallback data when the first bootstrap load fails', async () => {
@@ -199,32 +188,5 @@ describe('useQuotesHomeData', () => {
     expect(result.current.jobCounts.items).toEqual([])
     expect(result.current.jobs).toEqual([])
     expect(result.current.bootstrapError).toBe('bootstrap failed')
-    expect(result.current.selectedJobId).toBe('')
-    expect(result.current.selectedJob).toBeNull()
-  })
-
-  it('reconciles the selected job when refreshed jobs remove the current selection', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue(firstPayload)
-
-    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
-
-    await waitFor(() => {
-      expect(result.current.selectedJobId).toBe('job-1')
-    })
-
-    act(() => {
-      result.current.setSelectedJobId('job-2')
-    })
-
-    expect(result.current.selectedJobId).toBe('job-2')
-
-    await act(async () => {
-      await result.current.refresh()
-    })
-
-    await waitFor(() => {
-      expect(result.current.selectedJobId).toBe('job-1')
-    })
-    expect(result.current.selectedJob?.id).toBe('job-1')
   })
 })

@@ -1,10 +1,6 @@
 'use client'
 
-import { CrmButton } from '@/app/crm/_components/CrmButton'
-import { CrmFormActions } from '@/app/crm/_components/CrmFormActions'
-import { CrmModalHeader } from '@/app/crm/_components/CrmModalHeader'
-import { CrmModalShell } from '@/app/crm/_components/CrmModalShell'
-import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { QuoteAdminConfirmDialog } from '@/app/crm/quotes/_components/QuoteAdminConfirmDialog'
 import type { QuoteRatesDiscardVm } from '@/app/crm/quotes/_hooks/useQuoteRatesPage'
 
 type Props = {
@@ -47,34 +43,17 @@ export function QuoteRatesDiscardDialog({ vm, onConfirm, onCancel }: Props) {
   if (!vm.isOpen || !vm.transitionType) return null
 
   return (
-    <CrmModalShell labelledBy="quote-rates-discard-title" onClose={onCancel} widthClassName="max-w-lg">
-      <CrmModalHeader
-        title="Discard unsaved changes?"
-        description="You have draft edits that are not yet saved."
-        labelledBy="quote-rates-discard-title"
-        onClose={onCancel}
-        closeLabel="Close discard confirmation"
-      />
-
-      <div className="grid gap-4 px-5 py-4">
-        <CrmNotice tone="warning" compact>
-          {getDiscardMessage(vm.transitionType)}
-        </CrmNotice>
-        <CrmNotice tone="info" compact>
-          Choose Discard to continue and replace the draft, or Cancel to keep editing.
-        </CrmNotice>
-      </div>
-
-      <div className="border-t border-[color:var(--crm-ui-border)] px-5 py-4">
-        <CrmFormActions>
-          <CrmButton type="button" onClick={onCancel}>
-            Cancel
-          </CrmButton>
-          <CrmButton type="button" tone="danger" onClick={onConfirm}>
-            Discard and continue
-          </CrmButton>
-        </CrmFormActions>
-      </div>
-    </CrmModalShell>
+    <QuoteAdminConfirmDialog
+      isOpen={vm.isOpen}
+      labelledBy="quote-rates-discard-title"
+      title="Discard unsaved changes?"
+      description="You have draft edits that are not yet saved."
+      closeLabel="Close discard confirmation"
+      warning={getDiscardMessage(vm.transitionType)}
+      info="Choose Discard to continue and replace the draft, or Cancel to keep editing."
+      confirmLabel="Discard and continue"
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   )
 }

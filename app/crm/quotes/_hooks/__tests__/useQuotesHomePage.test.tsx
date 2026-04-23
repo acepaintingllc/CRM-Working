@@ -207,15 +207,15 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.versionListVm.items.map((estimate) => estimate.id)).toEqual([
+        expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
         'estimate-2',
         'estimate-1',
       ])
     })
 
-    expect(result.current.sections.jobListVm.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
-    expect(result.current.sections.jobListVm.selectedJobId).toBe('job-1')
-    expect(result.current.sections.selectedJobVm.title).toBe('Kitchen')
+    expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    expect(result.current.jobList.selectedJobId).toBe('job-1')
+    expect(result.current.selectedJob.title).toBe('Kitchen')
 
     act(() => {
       result.current.actions.setSearchQuery('revision')
@@ -225,14 +225,14 @@ describe('useQuotesHomePage', () => {
     await waitFor(
       () => {
         expect(
-          result.current.sections.headerVm.searchResults.map((estimate) => estimate.id)
+          result.current.header.searchResults.map((estimate) => estimate.id)
         ).toEqual(['estimate-2'])
       },
       { timeout: 1500 }
     )
 
     expect(loadQuoteHomeSearch).toHaveBeenCalledWith('revision')
-    expect(result.current.sections.jobListVm.items.map((job) => job.id)).toEqual(['job-2'])
+    expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-2'])
   })
 
   it('resets version fields when the selected job changes and creates a version', async () => {
@@ -245,7 +245,7 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.versionListVm.items.map((estimate) => estimate.id)).toEqual([
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
         'estimate-2',
         'estimate-1',
       ])
@@ -257,8 +257,8 @@ describe('useQuotesHomePage', () => {
       result.current.actions.setSelectedJobId('job-2')
     })
 
-    expect(result.current.sections.createVm.versionName).toBe('')
-    expect(result.current.sections.createVm.versionKind).toBe('standard')
+    expect(result.current.create.versionName).toBe('')
+    expect(result.current.create.versionKind).toBe('standard')
 
     act(() => {
       result.current.actions.setVersionName('  Garage Custom  ')
@@ -266,7 +266,7 @@ describe('useQuotesHomePage', () => {
     })
 
     await act(async () => {
-      await result.current.actions.createVersion()
+      await result.current.actions.create()
     })
 
     expect(createQuoteVersion).toHaveBeenCalledWith({
@@ -288,16 +288,16 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.feedbackVm.loading).toBe(false)
+      expect(result.current.feedback.loading).toBe(false)
     })
 
     await act(async () => {
-      await result.current.actions.createVersion()
+      await result.current.actions.create()
     })
 
     expect(createQuoteVersion).not.toHaveBeenCalled()
-    expect(result.current.sections.feedbackVm.title).toBe('Quote action failed')
-    expect(result.current.sections.feedbackVm.details).toEqual([
+    expect(result.current.feedback.title).toBe('Quote action failed')
+    expect(result.current.feedback.details).toEqual([
       'Select a job before creating a version.',
     ])
   })
@@ -314,35 +314,35 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.versionListVm.items.map((estimate) => estimate.id)).toEqual([
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
         'estimate-2',
         'estimate-1',
       ])
     })
 
     act(() => {
-      result.current.actions.requestDeleteVersion('estimate-1')
+      result.current.actions.requestDelete('estimate-1')
     })
 
     await act(async () => {
-      await result.current.actions.confirmDeleteVersion()
+      await result.current.actions.confirmDelete()
     })
 
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
     expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(2)
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
-    expect(result.current.sections.deleteDialogVm.estimateId).toBeNull()
-    expect(result.current.sections.versionListVm.items.map((estimate) => estimate.id)).toEqual([
+    expect(result.current.dialogs.delete.estimateId).toBeNull()
+    expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
       'estimate-2',
     ])
-    expect(result.current.sections.summaryCards[0].value).toBe('0')
-    expect(result.current.sections.summaryCards[1].value).toBe('1')
-    expect(result.current.sections.summaryCards[2].value).toBe('1')
-    expect(result.current.sections.summaryCards[3].value).toBe('$1,300')
-    expect(result.current.sections.headerVm.heroSummaryText).toBe(
+    expect(result.current.summaryCards[0].value).toBe('0')
+    expect(result.current.summaryCards[1].value).toBe('1')
+    expect(result.current.summaryCards[2].value).toBe('1')
+    expect(result.current.summaryCards[3].value).toBe('$1,300')
+    expect(result.current.header.heroSummaryText).toBe(
       '202 total versions · 0 drafts · 1 sent/awaiting · 1 live'
     )
-    expect(result.current.sections.selectedJobVm.stats).toEqual([
+    expect(result.current.selectedJob.stats).toEqual([
       { label: 'Customer', value: 'Alice' },
       { label: 'Job Status', value: 'Estimate Pending' },
       { label: 'Versions', value: '201' },
@@ -392,7 +392,7 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.versionListVm.items).toHaveLength(201)
+      expect(result.current.versionList.items).toHaveLength(201)
     })
 
     act(() => {
@@ -401,13 +401,13 @@ describe('useQuotesHomePage', () => {
 
     await waitFor(
       () => {
-        expect(result.current.sections.headerVm.searchResults).toHaveLength(8)
+        expect(result.current.header.searchResults).toHaveLength(8)
       },
       { timeout: 1500 }
     )
 
-    expect(result.current.sections.versionListVm.items).toHaveLength(201)
-    expect(result.current.sections.selectedJobVm.stats).toEqual([
+    expect(result.current.versionList.items).toHaveLength(201)
+    expect(result.current.selectedJob.stats).toEqual([
       { label: 'Customer', value: 'Alice' },
       { label: 'Job Status', value: 'Estimate Pending' },
       { label: 'Versions', value: '201' },
@@ -441,7 +441,7 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.versionListVm.items.map((estimate) => estimate.id)).toEqual([
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
         'estimate-2',
         'estimate-1',
       ])
@@ -453,7 +453,7 @@ describe('useQuotesHomePage', () => {
 
     await waitFor(
       () => {
-        expect(result.current.sections.headerVm.searchErrorMessage).toBe('search failed')
+        expect(result.current.header.searchErrorMessage).toBe('search failed')
       },
       { timeout: 1500 }
     )
@@ -465,7 +465,7 @@ describe('useQuotesHomePage', () => {
     await waitFor(
       () => {
         expect(
-          result.current.sections.headerVm.searchResults.map((estimate) => estimate.id)
+          result.current.header.searchResults.map((estimate) => estimate.id)
         ).toEqual(['estimate-2'])
       },
       { timeout: 1500 }
@@ -473,7 +473,7 @@ describe('useQuotesHomePage', () => {
 
     expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(1)
     expect(loadQuoteHomeSearch).toHaveBeenCalledTimes(2)
-    expect(result.current.sections.headerVm.searchErrorMessage).toBeNull()
+    expect(result.current.header.searchErrorMessage).toBeNull()
   })
 
   it('keeps version-load failures separate from bootstrap failures', async () => {
@@ -483,14 +483,14 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.feedbackVm.loading).toBe(false)
+      expect(result.current.feedback.loading).toBe(false)
     })
 
-    expect(result.current.sections.feedbackVm.title).toBe('Quote home loaded with errors')
-    expect(result.current.sections.feedbackVm.details).toContain(
+    expect(result.current.feedback.title).toBe('Quote home loaded with errors')
+    expect(result.current.feedback.details).toContain(
       'Job versions failed to load. versions failed'
     )
-    expect(result.current.sections.headerVm.searchErrorMessage).toBeNull()
+    expect(result.current.header.searchErrorMessage).toBeNull()
   })
 
   it('surfaces bootstrap failures from the page feedback layer', async () => {
@@ -499,14 +499,14 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.feedbackVm.loading).toBe(false)
+      expect(result.current.feedback.loading).toBe(false)
     })
 
-    expect(result.current.sections.feedbackVm.title).toBe('Quote home bootstrap failed to load')
-    expect(result.current.sections.feedbackVm.details).toEqual([
+    expect(result.current.feedback.title).toBe('Quote home bootstrap failed to load')
+    expect(result.current.feedback.details).toEqual([
       'Quote home failed to load. bootstrap failed',
     ])
-    expect(result.current.sections.jobListVm.emptyState).toBe('no_jobs')
+    expect(result.current.jobList.emptyState).toBe('no_jobs')
   })
 
   it('page refresh retries bootstrap and versions without rerunning search', async () => {
@@ -538,7 +538,7 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.versionListVm.items.map((estimate) => estimate.id)).toEqual([
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
         'estimate-2',
         'estimate-1',
       ])
@@ -550,7 +550,7 @@ describe('useQuotesHomePage', () => {
 
     await waitFor(
       () => {
-        expect(result.current.sections.headerVm.searchResults).toHaveLength(1)
+        expect(result.current.header.searchResults).toHaveLength(1)
       },
       { timeout: 1500 }
     )
@@ -580,12 +580,12 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.sections.feedbackVm.loading).toBe(false)
+      expect(result.current.feedback.loading).toBe(false)
     })
 
-    expect(result.current.sections.jobListVm.emptyState).toBe('no_jobs')
-    expect(result.current.sections.selectedJobVm.title).toBeNull()
-    expect(result.current.sections.versionListVm.items).toEqual([])
-    expect(result.current.sections.createVm.canCreate).toBe(false)
+    expect(result.current.jobList.emptyState).toBe('no_jobs')
+    expect(result.current.selectedJob.title).toBeNull()
+    expect(result.current.versionList.items).toEqual([])
+    expect(result.current.create.canCreate).toBe(false)
   })
 })

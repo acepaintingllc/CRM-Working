@@ -142,3 +142,72 @@ test('assembleCustomerEstimateDocument prefers explicit terms text and payment o
   assert.equal(document.assembly_meta.used_explicit_terms_text, true)
   assert.deepEqual(additionalTerms?.paragraphs, ['Line one.', 'Line two.'])
 })
+
+test('assembleCustomerEstimateDocument preserves built scope and pricing rows without recomposing policy text', () => {
+  const built = buildCustomerEstimateDocument(
+    createInput({
+      settings: {
+        quote_validity_days: 45,
+        terms_text: '',
+      },
+      overrides: {
+        title: 'Custom Kitchen Quote',
+        deposit_language: 'Half due on booking.',
+        card_fee_note: 'Cards add 3%.',
+        scope_text_edits: {
+          walls: 'Customer-approved custom walls copy.',
+          ceilings: '',
+          trim: '',
+          doors: '',
+          cabinets: '',
+          other: '',
+        },
+      },
+      pricingSummary: {
+        finalTotal: 1675,
+      },
+      inputs: {
+        rooms: [{ room_id: 'R001', room_name: 'Kitchen' }],
+        room_wall_scopes: [
+          {
+            id: 'wall-1',
+            room_id: 'R001',
+            include: 'Y',
+            effective_total: 1675,
+            paint_coats: 2,
+            paint_product_id: 'wall-paint',
+            paint_product_label: 'wall-paint',
+            prime_mode: 'FULL',
+            notes: '',
+            walls_prep_override: '',
+            scope_notes: '',
+          },
+        ],
+        room_ceiling_scopes: [],
+        room_trim_scopes: [],
+        trim_items: [],
+        other: [],
+      },
+      catalogs: {
+        paint_products: [{ id: 'wall-paint', display_name: 'Gallery Series', display_id: 'wall-paint' }],
+        trim_items: [],
+      },
+    })
+  )
+
+  const document = assembleCustomerEstimateDocument(built)
+  const pricingSection = document.terms_page.sections.find(
+    (section) => section.key === 'pricing_payment'
+  )
+
+  assert.equal(document.meta.title, 'Custom Kitchen Quote')
+  assert.equal(document.quote_rows[0]?.description, 'Customer-approved custom walls copy.')
+  assert.equal(document.pricing_block.rows[0]?.description, 'Customer-approved custom walls copy.')
+  assert.equal(document.total, 1675)
+  assert.equal(document.pricing_block.total, 1675)
+  assert.deepEqual(document.scopes, built.scopes)
+  assert.ok(pricingSection)
+  assert.match(pricingSection?.paragraphs.join('\n') ?? '', /Half due on booking\./)
+  assert.match(pricingSection?.paragraphs.join('\n') ?? '', /Cards add 3%\./)
+  assert.deepEqual(document.assembly_meta.missing_payment_fields, [])
+})

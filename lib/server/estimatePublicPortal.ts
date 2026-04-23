@@ -101,7 +101,7 @@ export async function loadPublicEstimateSnapshot(
 
   const loaded = await loadPublicEstimateByToken(token, snapshotOptions?.origin)
   if (!isLoadedEstimate(loaded)) {
-    return errorResult('not_found', loaded.error)
+    return errorResult('not_found', asText(loaded.error) || 'Quote not found')
   }
 
   if (!shouldMarkViewed(loaded.snapshot)) {
@@ -170,7 +170,7 @@ async function loadTransitionableEstimate(token: string) {
 
   const loaded = await loadPublicEstimateByToken(token)
   if (!isLoadedEstimate(loaded)) {
-    return errorResult('not_found', loaded.error)
+    return errorResult('not_found', asText(loaded.error) || 'Quote not found')
   }
 
   return okResult(loaded)
@@ -261,7 +261,7 @@ export async function acceptPublicEstimate(
 
   const snapshot = buildEstimatePublicSnapshotFromVersion(updateResult.data)
   if ('error' in snapshot) {
-    return errorResult('server_error', snapshot.error)
+    return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
   }
 
   return okResult(snapshot)
@@ -309,7 +309,7 @@ export async function declinePublicEstimate(
 
   const snapshot = buildEstimatePublicSnapshotFromVersion(updateResult.data)
   if ('error' in snapshot) {
-    return errorResult('server_error', snapshot.error)
+    return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
   }
 
   return okResult(snapshot)

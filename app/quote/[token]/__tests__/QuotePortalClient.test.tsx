@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import QuotePortalClient from '../QuotePortalClient'
 import type { EstimatePublicSnapshot } from '@/lib/customer-estimates/types'
+import { readFileSync } from 'fs'
+import path from 'path'
 
 const mockFetch = vi.fn()
 
@@ -11,6 +13,13 @@ function createResponse(payload: unknown, ok = true) {
     status: ok ? 200 : 400,
     json: vi.fn(async () => payload),
   }
+}
+
+function createWorkflowSnapshot(status: EstimatePublicSnapshot['status']) {
+  return createPublicSnapshot({
+    status,
+    publicToken: 'public-token',
+  })
 }
 
 function createPublicSnapshot({
@@ -165,7 +174,7 @@ describe('QuotePortalClient', () => {
   })
 
   it('submits typed signature accept payload', async () => {
-    mockFetch.mockResolvedValue(createResponse({ data: { status: 'accepted' } }))
+    mockFetch.mockResolvedValue(createResponse({ data: createWorkflowSnapshot('accepted') }))
 
     render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
 
@@ -193,11 +202,11 @@ describe('QuotePortalClient', () => {
       })
     })
 
-    expect(await screen.findByText('Quote accepted and locked.')).toBeTruthy()
+    expect(await screen.findByText('This quote has been accepted and locked.')).toBeTruthy()
   })
 
   it('supports drawn signatures and submits canvas payload', async () => {
-    mockFetch.mockResolvedValue(createResponse({ data: { status: 'accepted' } }))
+    mockFetch.mockResolvedValue(createResponse({ data: createWorkflowSnapshot('accepted') }))
 
     render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
 
@@ -243,12 +252,11 @@ describe('QuotePortalClient', () => {
 
     expect(acceptButton).toBeDisabled()
     expect(declineButton).toBeDisabled()
+    expect(screen.getByText('Submitting quote acceptance...')).toBeTruthy()
 
-    resolveFetch(createResponse({ data: { status: 'accepted' } }))
+    resolveFetch(createResponse({ data: createWorkflowSnapshot('accepted') }))
 
-    await waitFor(() => {
-      expect(screen.getByText('Quote accepted and locked.')).toBeTruthy()
-    })
+    expect(await screen.findByText('This quote has been accepted and locked.')).toBeTruthy()
   })
 
   it('renders locked content for accepted quote', () => {
@@ -270,5 +278,33 @@ describe('QuotePortalClient', () => {
 
     expect(screen.getByText('[Deposit terms missing]')).toBeTruthy()
     expect(screen.getByText('[Card fee note missing]')).toBeTruthy()
+  })
+
+  it('renders submit errors without mutating the locked state', async () => {
+    mockFetch.mockResolvedValue(createResponse({ error: 'Cannot accept a declined quote' }, false))
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Quote' }))
+
+    expect(await screen.findByText('Cannot accept a declined quote')).toBeTruthy()
+    expect(screen.queryByText('This quote has been accepted and locked.')).toBeNull()
+  })
+
+  it('keeps the quote portal client as a thin wrapper over the shared public portal', () => {
+    const source = readFileSync(
+      path.resolve(process.cwd(), 'app/quote/[token]/QuotePortalClient.tsx'),
+      'utf8'
+    )
+    const imports = Array.from(source.matchAll(/from\s+['"]([^'"]+)['"]/g), (match) => match[1]).sort()
+
+    expect(imports).toEqual([
+      './quotePortalCopy',
+      '@/lib/customer-estimates/PublicEstimatePortal',
+      '@/lib/customer-estimates/types',
+    ])
+    expect(source.includes('buildCustomerEstimateDocument')).toBe(false)
+    expect(source.includes('assembleCustomerEstimateDocument')).toBe(false)
   })
 })

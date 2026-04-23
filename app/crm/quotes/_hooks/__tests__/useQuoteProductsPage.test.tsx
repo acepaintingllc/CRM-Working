@@ -60,7 +60,6 @@ describe('useQuoteProductsPage', () => {
     deleteQuoteProduct.mockReset()
     loadQuoteProducts.mockReset()
     updateQuoteProduct.mockReset()
-    vi.stubGlobal('confirm', vi.fn(() => true))
   })
 
   afterEach(() => {
@@ -207,13 +206,24 @@ describe('useQuoteProductsPage', () => {
       message: 'Product saved.',
     })
 
+    act(() => {
+      result.current.actions.requestDelete()
+    })
+
+    expect(result.current.deleteVm).toEqual({
+      isOpen: true,
+      status: 'confirming',
+      productName: 'Super Paint Pro',
+    })
+
     await act(async () => {
-      await result.current.actions.requestRemove()
+      await result.current.actions.confirmDelete()
     })
 
     expect(deleteQuoteProduct).toHaveBeenCalledWith('paint-1')
     expect(result.current.resource.data.map((product) => product.id)).toEqual(['paint-3', 'paint-2'])
     expect(result.current.uiState.notice).toBe('Product deleted.')
+    expect(result.current.deleteVm.isOpen).toBe(false)
   })
 
   it('debounces search-driven reloads and keeps the raw input responsive', async () => {
@@ -402,8 +412,12 @@ describe('useQuoteProductsPage', () => {
       expect(result.current.catalogVm.selected?.id).toBe('paint-2')
     })
 
+    act(() => {
+      result.current.actions.requestDelete()
+    })
+
     await act(async () => {
-      await result.current.actions.requestRemove()
+      await result.current.actions.confirmDelete()
     })
 
     expect(result.current.catalogVm.products).toEqual([])
@@ -432,8 +446,12 @@ describe('useQuoteProductsPage', () => {
       expect(result.current.editorVm.selected?.id).toBe('paint-2')
     })
 
+    act(() => {
+      result.current.actions.requestDelete()
+    })
+
     await act(async () => {
-      await result.current.actions.requestRemove()
+      await result.current.actions.confirmDelete()
     })
 
     await waitFor(() => {
@@ -633,6 +651,46 @@ describe('useQuoteProductsPage', () => {
     expect(result.current.editorVm.draft.family).toBe('Paint')
   })
 
+  it('opens, cancels, and confirms delete with modal state instead of window.confirm', async () => {
+    loadQuoteProducts.mockResolvedValue([buildProduct({ id: 'paint-1' })])
+    deleteQuoteProduct.mockResolvedValue({ data: true })
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.requestDelete()
+    })
+
+    expect(result.current.deleteVm).toEqual({
+      isOpen: true,
+      status: 'confirming',
+      productName: 'Super Paint',
+    })
+
+    act(() => {
+      result.current.actions.cancelDelete()
+    })
+
+    expect(result.current.deleteVm.isOpen).toBe(false)
+    expect(deleteQuoteProduct).not.toHaveBeenCalled()
+
+    act(() => {
+      result.current.actions.requestDelete()
+    })
+
+    await act(async () => {
+      await result.current.actions.confirmDelete()
+    })
+
+    expect(deleteQuoteProduct).toHaveBeenCalledWith('paint-1')
+    expect(result.current.deleteVm.isOpen).toBe(false)
+    expect(result.current.catalogVm.selectedId).toBeNull()
+  })
+
   it('applies a queued product transition only once', async () => {
     loadQuoteProducts.mockResolvedValue([buildProduct({ id: 'paint-1' })])
 
@@ -654,6 +712,39 @@ describe('useQuoteProductsPage', () => {
     act(() => void result.current.actions.confirmDiscard())
 
     expect(result.current.catalogVm.statusFilter).toBe('inactive')
+  })
+
+  it('keeps only the first queued transition while the discard dialog is open', async () => {
+    loadQuoteProducts.mockResolvedValue([
+      buildProduct({ id: 'paint-1' }),
+      buildProduct({ id: 'paint-2', family: 'Primer', name: 'Prime Coat' }),
+    ])
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftField('name', 'Dirty Name')
+      result.current.actions.setActiveFamily('Primer')
+      result.current.actions.setStatusFilter('inactive')
+      result.current.actions.setSearch('prime')
+    })
+
+    expect(result.current.discardVm.transitionType).toBe('setActiveFamily')
+    expect(result.current.catalogVm.activeFamily).toBe('Paint')
+    expect(result.current.catalogVm.statusFilter).toBe('all')
+    expect(result.current.catalogVm.search).toBe('')
+
+    act(() => void result.current.actions.confirmDiscard())
+
+    expect(result.current.catalogVm.activeFamily).toBe('Primer')
+    expect(result.current.catalogVm.statusFilter).toBe('all')
+    expect(result.current.catalogVm.search).toBe('')
+    expect(result.current.editorVm.isDirty).toBe(true)
+    expect(result.current.editorVm.draft.name).toBe('Dirty Name')
   })
 
   it('cancels a clean create draft before replaying selection and filter transitions', async () => {

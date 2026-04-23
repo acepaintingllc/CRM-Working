@@ -41,7 +41,7 @@ describe('QuoteProductsPage', () => {
     cleanup()
   })
 
-  it('loads products and saves through the standardized CRM admin shell', async () => {
+  it('loads products, saves, and deletes through the standardized CRM admin shell', async () => {
     mockAuthedFetch
       .mockResolvedValueOnce(
         createResponse({
@@ -88,6 +88,12 @@ describe('QuoteProductsPage', () => {
           notice: 'Product saved.',
         })
       )
+      .mockResolvedValueOnce(
+        createResponse({
+          data: true,
+          notice: 'Product deleted.',
+        })
+      )
 
     render(<QuoteProductsPage />)
 
@@ -105,6 +111,18 @@ describe('QuoteProductsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Product saved.')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete product' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Product deleted.')).toBeTruthy()
     })
   })
 })

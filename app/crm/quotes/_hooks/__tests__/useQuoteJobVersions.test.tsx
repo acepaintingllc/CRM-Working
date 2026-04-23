@@ -85,23 +85,6 @@ describe('useQuoteJobVersions', () => {
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(3)
   })
 
-  it('removes a deleted version from the cached selected-job list', async () => {
-    loadQuoteJobVersions.mockResolvedValue(versionPayload)
-
-    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
-
-    await waitFor(() => {
-      expect(result.current.items).toHaveLength(2)
-    })
-
-    act(() => {
-      result.current.removeVersion('estimate-1')
-    })
-
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
-    expect(result.current.data.total_versions).toBe(1)
-  })
-
   it('ignores stale responses when the selected job changes quickly', async () => {
     const first = deferred<typeof versionPayload>()
     const second = deferred<typeof versionPayload>()

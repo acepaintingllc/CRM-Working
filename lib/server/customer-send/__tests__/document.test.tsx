@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildCustomerDocumentFromSendContext } from '../document'
 import type { EstimateCustomerSendContextData } from '../contextTypes'
+import { readFileSync } from 'fs'
+import path from 'path'
 
 const { mockBuildCustomerEstimateDocument, mockAssembleCustomerEstimateDocument } = vi.hoisted(() => ({
   mockBuildCustomerEstimateDocument: vi.fn(),
@@ -172,5 +174,16 @@ describe('customer send document builder', () => {
       },
     })
     expect(result).toEqual(expect.objectContaining({ total: 1500 }))
+  })
+
+  it('keeps server-side document assembly isolated from renderer modules', () => {
+    const source = readFileSync(
+      path.resolve(process.cwd(), 'lib/server/customer-send/document.ts'),
+      'utf8'
+    )
+
+    expect(source.includes("from '@/lib/customer-estimates/view'")).toBe(false)
+    expect(source.includes("from '@/lib/customer-estimates/PublicEstimatePortal'")).toBe(false)
+    expect(source.includes("from '@/lib/server/estimatePublicPortal'")).toBe(false)
   })
 })

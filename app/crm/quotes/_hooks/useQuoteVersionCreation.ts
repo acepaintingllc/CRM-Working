@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { createQuoteVersion } from '@/lib/quotes/client'
 import {
   buildCreateQuoteVersionInput,
@@ -18,12 +18,6 @@ export function useQuoteVersionCreation(selectedJob: EligibleQuoteVersionJob | n
   const [versionKind, setVersionKind] = useState<QuoteVersionKind>('standard')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setVersionName('')
-    setVersionKind('standard')
-    setError(null)
-  }, [selectedJob?.id])
 
   async function createVersion() {
     if (!selectedJob) {

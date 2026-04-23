@@ -26,8 +26,6 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
   const [bootstrap, setBootstrap] = useState<QuoteHomeBootstrapReadModel | null>(initialData ?? null)
   const [loading, setLoading] = useState(!initialData)
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
-  const [jobQuery, setJobQuery] = useState('')
-  const [selectedJobId, setSelectedJobId] = useState('')
   const requestIdRef = useRef(0)
   const initialDataRef = useRef(initialData)
   const bootstrapRef = useRef<QuoteHomeBootstrapReadModel | null>(initialData ?? null)
@@ -49,13 +47,14 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
 
     if (bootstrapResult.status === 'fulfilled') {
       setBootstrap(bootstrapResult.value)
+      setLoading(false)
+      return bootstrapResult.value
     } else {
       setBootstrap(bootstrapRef.current ?? EMPTY_BOOTSTRAP)
       setBootstrapError(toLoadErrorMessage('quote home bootstrap', bootstrapResult.reason))
+      setLoading(false)
+      return null
     }
-
-    setLoading(false)
-    return bootstrapResult.status === 'fulfilled'
   }, [])
 
   useEffect(() => {
@@ -74,37 +73,12 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
     }, {})
   }, [resolvedBootstrap.jobCounts.items])
 
-  useEffect(() => {
-    setSelectedJobId((current) => {
-      if (current && resolvedBootstrap.jobs.some((job) => job.id === current)) return current
-      return resolvedBootstrap.jobs[0]?.id ?? ''
-    })
-  }, [resolvedBootstrap.jobs])
-
-  const selectedJob = resolvedBootstrap.jobs.find((job) => job.id === selectedJobId) ?? null
-
-  const filteredJobs = useMemo(() => {
-    const q = jobQuery.trim().toLowerCase()
-    if (!q) return resolvedBootstrap.jobs
-    return resolvedBootstrap.jobs.filter((job) => {
-      const haystack =
-        `${job.title} ${job.customer_name ?? ''} ${job.customer_address ?? ''}`.toLowerCase()
-      return haystack.includes(q)
-    })
-  }, [jobQuery, resolvedBootstrap.jobs])
-
   return {
     summary: resolvedBootstrap.summary,
     jobCounts: resolvedBootstrap.jobCounts,
     jobs: resolvedBootstrap.jobs,
     loading,
     bootstrapError,
-    jobQuery,
-    setJobQuery,
-    selectedJobId,
-    setSelectedJobId,
-    selectedJob,
-    filteredJobs,
     versionCountByJob,
     refresh,
   }

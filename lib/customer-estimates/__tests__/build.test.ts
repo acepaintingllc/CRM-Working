@@ -545,3 +545,90 @@ test('buildCustomerEstimateDocument tracks explicit payment overrides in source 
   assert.equal(document.source_meta.overrides.deposit_language, true)
   assert.equal(document.source_meta.overrides.card_fee_note, true)
 })
+
+test('buildCustomerEstimateDocument owns business composition and emits only built document fields', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-6',
+      version_name: 'Exterior Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Jordan Customer',
+      customer_address: '456 Customer Ave',
+      estimate_date: '2026-04-20',
+    },
+    customer: {
+      name: 'Jordan Customer',
+      email: 'jordan@example.com',
+      phone: '555-0100',
+      address: '456 Customer Ave\nLeland, IN 46052',
+      street: '456 Customer Ave',
+      city: 'Leland',
+      state: 'IN',
+      zip: '46052',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '111-111-1111',
+      business_email: 'hello@ace.com',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Exterior' }],
+      room_wall_scopes: [
+        {
+          id: 'W-1',
+          room_id: 'R001',
+          include: 'Y',
+          effective_total: 900,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+          prime_mode: 'FULL',
+          notes: 'special prep',
+          walls_prep_override: '',
+          scope_notes: '',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [],
+      other: [],
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-WALL', display_name: 'Duration Exterior', display_id: 'EXT-1' }],
+      trim_items: [],
+    },
+    settings: {
+      quote_validity_days: 45,
+      terms_text: '',
+    },
+    overrides: {
+      title: 'Exterior Quote',
+      deposit_language: 'Half down to schedule.',
+      card_fee_note: 'Cards add 3%.',
+    },
+    pricingSummary: {
+      finalTotal: 900,
+    },
+  })
+
+  assert.equal('header' in document, false)
+  assert.equal('pricing_block' in document, false)
+  assert.equal('terms_page' in document, false)
+  assert.equal('assembly_meta' in document, false)
+  assert.equal(document.meta.title, 'Exterior Quote')
+  assert.equal(document.quote_validity_days, 45)
+  assert.equal(document.deposit_language, 'Half down to schedule.')
+  assert.equal(document.card_fee_note, 'Cards add 3%.')
+  assert.equal(document.source_meta.overrides.title, true)
+  assert.equal(document.source_meta.overrides.deposit_language, true)
+  assert.equal(document.source_meta.overrides.card_fee_note, true)
+  assert.match(document.quote_rows[0]?.description ?? '', /Duration Exterior/i)
+})

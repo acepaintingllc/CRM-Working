@@ -20,7 +20,7 @@ type Props = {
   vm: QuoteProductsEditorVm
   actions: Pick<
     QuoteProductsActions,
-    'updateDraftField' | 'save' | 'cancelEdit' | 'requestRemove'
+    'updateDraftField' | 'save' | 'cancelEdit' | 'requestDelete'
   >
 }
 
@@ -56,7 +56,7 @@ export function QuoteProductEditorSection({ vm, actions }: Props) {
             type="button"
             tone="danger"
             disabled={!vm.canDelete}
-            onClick={() => void actions.requestRemove()}
+            onClick={() => void actions.requestDelete()}
           >
             Delete
           </CrmButton>
