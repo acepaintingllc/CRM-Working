@@ -2,18 +2,34 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildCustomerDocumentFromSendContext } from '../document'
 import type { EstimateCustomerSendContextData } from '../contextTypes'
 
-const { mockBuildCustomerEstimateDocument } = vi.hoisted(() => ({
+const { mockBuildCustomerEstimateDocument, mockAssembleCustomerEstimateDocument } = vi.hoisted(() => ({
   mockBuildCustomerEstimateDocument: vi.fn(),
+  mockAssembleCustomerEstimateDocument: vi.fn(),
 }))
 
 vi.mock('@/lib/customer-estimates/build', () => ({
   buildCustomerEstimateDocument: mockBuildCustomerEstimateDocument,
 }))
 
+vi.mock('@/lib/customer-estimates/assemble', () => ({
+  assembleCustomerEstimateDocument: mockAssembleCustomerEstimateDocument,
+}))
+
 describe('customer send document builder', () => {
   beforeEach(() => {
     mockBuildCustomerEstimateDocument.mockReset()
+    mockAssembleCustomerEstimateDocument.mockReset()
     mockBuildCustomerEstimateDocument.mockReturnValue({
+      meta: {
+        title: 'Kitchen Quote',
+      },
+      source_meta: {
+        company: {},
+        settings: {},
+        overrides: {},
+      },
+    })
+    mockAssembleCustomerEstimateDocument.mockReturnValue({
       meta: {
         estimate_id: 'estimate-1',
         version_name: 'Kitchen Quote',
@@ -42,7 +58,7 @@ describe('customer send document builder', () => {
     })
   })
 
-  it('passes context data, overrides, and public meta through to the canonical document builder', () => {
+  it('passes context data through the builder and returns the assembled document contract', () => {
     const context: EstimateCustomerSendContextData = {
       estimate: {
         id: 'estimate-1',
@@ -145,10 +161,16 @@ describe('customer send document builder', () => {
         public_token: 'token-1',
       },
     })
-    expect(result).toEqual(
-      expect.objectContaining({
-        total: 1500,
-      })
-    )
+    expect(mockAssembleCustomerEstimateDocument).toHaveBeenCalledWith({
+      meta: {
+        title: 'Kitchen Quote',
+      },
+      source_meta: {
+        company: {},
+        settings: {},
+        overrides: {},
+      },
+    })
+    expect(result).toEqual(expect.objectContaining({ total: 1500 }))
   })
 })

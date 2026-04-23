@@ -25,6 +25,7 @@ export function useQuoteProductEditorState({ selected }: Options) {
   )
   const [hydratedRowId, setHydratedRowId] = useState<string | null>(null)
   const isCreatingRef = useRef(false)
+  const isDirtyRef = useRef(false)
 
   function setCreateMode(next: boolean) {
     isCreatingRef.current = next
@@ -37,6 +38,7 @@ export function useQuoteProductEditorState({ selected }: Options) {
     setDraft(nextDraft)
     setCleanSnapshot(nextSnapshot)
     setHydratedRowId(selected?.id ?? null)
+    isDirtyRef.current = false
   }
 
   function syncDraftWithSnapshot(nextDraft: Partial<QuoteProductDraft>) {
@@ -44,6 +46,7 @@ export function useQuoteProductEditorState({ selected }: Options) {
     const nextSnapshot = createQuoteProductDraftSnapshot(normalized)
     setDraft(normalized)
     setCleanSnapshot(nextSnapshot)
+    isDirtyRef.current = false
   }
 
   useEffect(() => {
@@ -64,6 +67,10 @@ export function useQuoteProductEditorState({ selected }: Options) {
     [draftSnapshot, cleanSnapshot]
   )
 
+  useEffect(() => {
+    isDirtyRef.current = isDirty
+  }, [isDirty])
+
   const validationResult = useMemo(() => validateQuoteProductDraft(draft), [draft])
   const validation: QuoteProductValidationState = validationResult.validation
 
@@ -71,6 +78,7 @@ export function useQuoteProductEditorState({ selected }: Options) {
     field: K,
     value: QuoteProductDraft[K]
   ) {
+    isDirtyRef.current = true
     setDraft((current) => ({
       ...current,
       [field]: value,
@@ -105,6 +113,7 @@ export function useQuoteProductEditorState({ selected }: Options) {
     isCreating,
     isCreatingNow: () => isCreatingRef.current,
     isDirty,
+    isDirtyNow: () => isDirtyRef.current,
     validation,
     hydrateDraftFromRow,
     updateDraftField,

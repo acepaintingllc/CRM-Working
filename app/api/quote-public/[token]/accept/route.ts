@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { serviceResultResponse } from '@/lib/server/routeResult'
+import { serviceResultDataResponse } from '@/lib/server/routeResult'
 import { acceptPublicEstimate } from '@/lib/server/estimatePublicPortal'
 
 function asText(value: unknown) {
@@ -25,7 +25,7 @@ export async function POST(
     body?.accepted === true ||
     body?.agreement_checked === true
 
-  return serviceResultResponse(
+  return serviceResultDataResponse(
     await acceptPublicEstimate({
       token,
       legalName,
@@ -34,7 +34,6 @@ export async function POST(
       acceptedTerms: accepted,
       userAgent: request.headers.get('user-agent') ?? '',
       ip: request.headers.get('x-forwarded-for') ?? '',
-    }),
-    (version) => ({ ok: true, version })
+    })
   )
 }

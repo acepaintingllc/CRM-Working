@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import {
   areRatesFlagsDraftSnapshotsEqual,
@@ -25,6 +25,7 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
   const [draftActive, setDraftActive] = useState(true)
   const [cleanSnapshot, setCleanSnapshot] = useState(() => createRatesFlagsDraftSnapshot(null))
   const [cleanDraftActive, setCleanDraftActive] = useState(true)
+  const isDirtyRef = useRef(false)
   const adapter = useMemo(
     () =>
       activeCategory
@@ -38,6 +39,7 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
     setDraftActive(nextDraftActive)
     setCleanSnapshot(createRatesFlagsDraftSnapshot(nextDraft))
     setCleanDraftActive(nextDraftActive)
+    isDirtyRef.current = false
   }
 
   useEffect(() => {
@@ -74,11 +76,21 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
     [cleanDraftActive, cleanSnapshot, draftActive, draftSnapshot]
   )
 
+  useEffect(() => {
+    isDirtyRef.current = isDirty
+  }, [isDirty])
+
   function updateDraftValue(fieldKey: string, rawInput: string) {
     if (!activeCategory || !adapter) return
+    isDirtyRef.current = true
     setDraft((current) =>
       current ? adapter.updateDraftField(activeCategory, current as never, fieldKey, rawInput) : current
     )
+  }
+
+  function updateDraftActive(nextActive: boolean) {
+    isDirtyRef.current = true
+    setDraftActive(nextActive)
   }
 
   function startCreate() {
@@ -135,7 +147,8 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
     draft,
     draftActive,
     isDirty,
-    setDraftActive,
+    isDirtyNow: () => isDirtyRef.current,
+    setDraftActive: updateDraftActive,
     selectedRow,
     validationResult,
     validationError,

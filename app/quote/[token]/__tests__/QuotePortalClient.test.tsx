@@ -90,6 +90,60 @@ function createPublicSnapshot({
       scopes: [],
       total: 1200,
       terms: [],
+      source_meta: {
+        company: {
+          business_name: true,
+          main_phone: true,
+          business_email: true,
+          address: true,
+          website: true,
+          sender_signature: true,
+          logo_url: false,
+        },
+        settings: {
+          quote_validity_days: true,
+          terms_text: false,
+        },
+        overrides: {
+          title: false,
+          intro_paragraph: false,
+          closing_paragraph: false,
+          deposit_language: false,
+          card_fee_note: false,
+        },
+      },
+      header: {
+        company_name: 'ACE Painting',
+        contact_lines: ['111-111-1111', 'hello@ace.com'],
+        logo_url: '',
+        document_label: 'QUOTE',
+        quote_date_label: '2026-04-15',
+      },
+      customer_block: {
+        lines: ['Jordan Customer', '456 Customer Ave'],
+      },
+      pricing_block: {
+        rows: [],
+        total: 1200,
+        footer_note: 'This quote is subject to the terms and conditions on page 2.',
+      },
+      terms_page: {
+        title: 'QUOTE TERMS',
+        sections: [
+          {
+            key: 'pricing_payment',
+            title: 'Pricing & Payment Terms',
+            paragraphs: ['[Deposit terms missing]', '[Card fee note missing]'],
+          },
+        ],
+      },
+      assembly_meta: {
+        missing_company_fields: [],
+        missing_payment_fields: ['[Deposit terms missing]', '[Card fee note missing]'],
+        missing_legal_fields: ['[Insurance statement missing]'],
+        used_placeholder_fallbacks: true,
+        used_explicit_terms_text: false,
+      },
     },
     sent_at: null,
     viewed_at: null,
@@ -209,5 +263,12 @@ describe('QuotePortalClient', () => {
 
     expect(screen.getByText('This quote has been declined and locked.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+  })
+
+  it('renders assembled placeholder policy copy from the document contract', () => {
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    expect(screen.getByText('[Deposit terms missing]')).toBeTruthy()
+    expect(screen.getByText('[Card fee note missing]')).toBeTruthy()
   })
 })

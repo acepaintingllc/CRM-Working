@@ -3,7 +3,7 @@
 import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type { RatesFlagsEditableCategoryKey, RatesFlagsTab } from '@/types/estimator/ratesFlags'
 import type { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
-import { useGuardedEditorWorkflow } from './useGuardedEditorWorkflow'
+import { useQuoteAdminIntentGuard } from './useQuoteAdminIntentGuard'
 import type {
   FlagsSectionKey,
   RateSectionKey,
@@ -48,8 +48,10 @@ export function useQuoteRatesControllerActions({
   feedback,
   reload,
 }: Options) {
-  const workflow = useGuardedEditorWorkflow<DiscardCandidateTransition>({
-    isDirty: editor.isDirty,
+  const guard = useQuoteAdminIntentGuard<DiscardCandidateTransition>({
+    hasUnsavedChanges: editor.isDirty,
+    getHasUnsavedChanges: editor.isDirtyNow,
+    getIntentType: (intent) => intent.type,
   })
 
   function discardCleanCreateDraftIfNeeded() {
@@ -129,69 +131,53 @@ export function useQuoteRatesControllerActions({
     }
   }
 
-  const setActiveTab = workflow.createGuardedAction(executeTransition, {
-    getTransition: (activeTab: RatesFlagsTab) => ({ type: 'setActiveTab', activeTab }),
-    changed: (activeTab: RatesFlagsTab) => activeTab !== filters.activeTab,
-  })
+  function requestIntent<TResult>(
+    intent: DiscardCandidateTransition,
+    changed: boolean,
+    run?: () => TResult | Promise<TResult>
+  ) {
+    return guard.requestIntent(intent, {
+      changed,
+      run: run ?? (() => executeTransition(intent) as TResult | Promise<TResult>),
+    })
+  }
 
-  const setRateSection = workflow.createGuardedAction(executeTransition, {
-    getTransition: (rateSection: RateSectionKey) => ({ type: 'setRateSection', rateSection }),
-    changed: (rateSection: RateSectionKey) => rateSection !== filters.rateSection,
-  })
+  const setActiveTab = (activeTab: RatesFlagsTab) =>
+    requestIntent({ type: 'setActiveTab', activeTab }, activeTab !== filters.activeTab)
 
-  const setRateCategory = workflow.createGuardedAction(executeTransition, {
-    getTransition: (rateCategory: string) => ({ type: 'setRateCategory', rateCategory }),
-    changed: (rateCategory: string) => rateCategory !== filters.rateCategory,
-  })
+  const setRateSection = (rateSection: RateSectionKey) =>
+    requestIntent({ type: 'setRateSection', rateSection }, rateSection !== filters.rateSection)
 
-  const setFlagsSection = workflow.createGuardedAction(executeTransition, {
-    getTransition: (flagsSection: FlagsSectionKey) => ({ type: 'setFlagsSection', flagsSection }),
-    changed: (flagsSection: FlagsSectionKey) => flagsSection !== filters.flagsSection,
-  })
+  const setRateCategory = (rateCategory: string) =>
+    requestIntent({ type: 'setRateCategory', rateCategory }, rateCategory !== filters.rateCategory)
 
-  const setRoomDefaultsSection = workflow.createGuardedAction(executeTransition, {
-    getTransition: (roomDefaultsSection: RoomDefaultsSectionKey) => ({
-      type: 'setRoomDefaultsSection',
-      roomDefaultsSection,
-    }),
-    changed: (roomDefaultsSection: RoomDefaultsSectionKey) =>
-      roomDefaultsSection !== filters.roomDefaultsSection,
-  })
+  const setFlagsSection = (flagsSection: FlagsSectionKey) =>
+    requestIntent({ type: 'setFlagsSection', flagsSection }, flagsSection !== filters.flagsSection)
 
-  const setStatusFilter = workflow.createGuardedAction(executeTransition, {
-    getTransition: (statusFilter: StatusFilter) => ({ type: 'setStatusFilter', statusFilter }),
-    changed: (statusFilter: StatusFilter) => statusFilter !== filters.statusFilter,
-  })
+  const setRoomDefaultsSection = (roomDefaultsSection: RoomDefaultsSectionKey) =>
+    requestIntent(
+      { type: 'setRoomDefaultsSection', roomDefaultsSection },
+      roomDefaultsSection !== filters.roomDefaultsSection
+    )
 
-  const setSearch = workflow.createGuardedAction(executeTransition, {
-    getTransition: (search: string) => ({ type: 'setSearch', search }),
-    changed: (search: string) => search !== filters.search,
-  })
+  const setStatusFilter = (statusFilter: StatusFilter) =>
+    requestIntent({ type: 'setStatusFilter', statusFilter }, statusFilter !== filters.statusFilter)
 
-  const setSelectedId = workflow.createGuardedAction(executeTransition, {
-    getTransition: (selectedId: string) => ({ type: 'setSelectedId', selectedId }),
-    changed: (selectedId: string) => selectedId !== editor.selectedId,
-  })
+  const setSearch = (search: string) =>
+    requestIntent({ type: 'setSearch', search }, search !== filters.search)
 
-  const guardedReload = workflow.createGuardedAction(executeTransition, {
-    getTransition: (keepId?: string) => ({ type: 'reload', keepId }),
-    changed: (_keepId?: string) => true,
-  })
+  const setSelectedId = (selectedId: string) =>
+    requestIntent({ type: 'setSelectedId', selectedId }, selectedId !== editor.selectedId)
 
-  const archiveOrReactivate = workflow.createGuardedAction(executeTransition, {
-    getTransition: (nextActive: boolean) => ({ type: 'archiveOrReactivate', nextActive }),
-    changed: () => true,
-  })
+  const guardedReload = (keepId?: string) =>
+    requestIntent({ type: 'reload', keepId }, true)
 
-  const startCreate = workflow.createGuardedAction(executeTransition, {
-    getTransition: () => ({ type: 'startCreate' }),
-    changed: () => true,
-  })
+  const archiveOrReactivate = (nextActive: boolean) =>
+    requestIntent({ type: 'archiveOrReactivate', nextActive }, true)
 
-  const startDuplicate = workflow.createGuardedAction(executeTransition, {
-    getTransition: () => ({ type: 'startDuplicate' }),
-    changed: () => true,
-  })
+  const startCreate = () => requestIntent({ type: 'startCreate' }, true)
+
+  const startDuplicate = () => requestIntent({ type: 'startDuplicate' }, true)
 
   async function saveCurrent() {
     if (!filters.activeCategory) return
@@ -213,12 +199,12 @@ export function useQuoteRatesControllerActions({
 
   function cancelEdit() {
     editor.cancelEdit()
-    workflow.cancelDiscard()
+    guard.cancelDiscard()
     feedback.clearFeedback()
   }
 
   async function confirmDiscard() {
-    return workflow.confirmDiscard(executeTransition)
+    return guard.confirmDiscard(executeTransition)
   }
 
   return {
@@ -237,19 +223,17 @@ export function useQuoteRatesControllerActions({
     startDuplicate,
     cancelEdit,
     setDraftActive: (nextActive: boolean) => {
-      workflow.markPendingMutation()
       editor.setDraftActive(nextActive)
     },
     updateDraftValue: (fieldKey: string, rawInput: string) => {
-      workflow.markPendingMutation()
       editor.updateDraftValue(fieldKey, rawInput)
     },
     confirmDiscard,
-    cancelDiscard: workflow.cancelDiscard,
+    cancelDiscard: guard.cancelDiscard,
     discardVm: {
-      isOpen: workflow.workflowVm.isOpen,
-      phase: workflow.workflowVm.phase,
-      transitionType: workflow.workflowVm.pendingTransitionType as
+      isOpen: guard.discardVm.isOpen,
+      status: guard.discardVm.status,
+      transitionType: guard.discardVm.intentType as
         | DiscardCandidateTransition['type']
         | null,
     },

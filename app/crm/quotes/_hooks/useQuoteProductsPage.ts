@@ -40,6 +40,7 @@ export type QuoteProductsEditorVm = {
 
 export type QuoteProductDiscardVm = {
   isOpen: boolean
+  status: 'idle' | 'confirming' | 'applying'
   transitionType: 'setSelectedId' | 'setActiveFamily' | 'setStatusFilter' | 'setSearch' | 'startCreate' | null
 }
 

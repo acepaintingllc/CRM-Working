@@ -123,7 +123,7 @@ describe('useQuoteRatesControllerActions', () => {
     })
 
     expect(result.current.discardVm.isOpen).toBe(true)
-    expect(result.current.discardVm.phase).toBe('confirming-discard')
+    expect(result.current.discardVm.status).toBe('confirming')
     expect(result.current.discardVm.transitionType).toBe('setSelectedId')
     expect(editor.setSelectedId).not.toHaveBeenCalled()
 
@@ -264,7 +264,7 @@ describe('useQuoteRatesControllerActions', () => {
     await act(async () => {
       await result.current.reload('WALL_STD')
     })
-    expect(result.current.discardVm.phase).toBe('confirming-discard')
+    expect(result.current.discardVm.status).toBe('confirming')
     expect(result.current.discardVm.transitionType).toBe('reload')
     expect(reload).not.toHaveBeenCalled()
 
@@ -291,7 +291,7 @@ describe('useQuoteRatesControllerActions', () => {
     })
   })
 
-  it('exposes replaying-transition while an async discard replay is in flight', async () => {
+  it('exposes applying state while an async discard intent is in flight', async () => {
     let resolveReload: ((value: boolean) => void) | null = null
     const reload = vi.fn(
       () =>
@@ -319,7 +319,7 @@ describe('useQuoteRatesControllerActions', () => {
       await Promise.resolve()
     })
 
-    expect(result.current.discardVm.phase).toBe('replaying-transition')
+    expect(result.current.discardVm.status).toBe('applying')
     expect(result.current.discardVm.transitionType).toBe('reload')
 
     await act(async () => {
@@ -327,7 +327,7 @@ describe('useQuoteRatesControllerActions', () => {
       await confirmPromise
     })
 
-    expect(result.current.discardVm.phase).toBe('idle')
+    expect(result.current.discardVm.status).toBe('idle')
     expect(result.current.discardVm.isOpen).toBe(false)
   })
 

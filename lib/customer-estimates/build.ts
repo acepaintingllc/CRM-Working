@@ -1,7 +1,8 @@
 import type {
+  BuiltCustomerEstimateDocument,
   CompanyProfile,
-  CustomerEstimateCustomer,
   CustomerEstimateDocument,
+  CustomerEstimateCustomer,
   CustomerEstimatePricingSummary,
   CustomerEstimateQuoteRow,
   CustomerEstimateSectionKey,
@@ -705,7 +706,7 @@ function buildCustomerProfile(params: {
   }
 }
 
-export function buildCustomerEstimateDocument(params: CustomerEstimateInput): CustomerEstimateDocument {
+export function buildCustomerEstimateDocument(params: CustomerEstimateInput): BuiltCustomerEstimateDocument {
   const estimate = params.estimate
   const job = params.job
   const total = params.pricingSummary?.finalTotal ?? null
@@ -791,6 +792,30 @@ export function buildCustomerEstimateDocument(params: CustomerEstimateInput): Cu
     scopes: sections,
     total: computedTotal,
     terms,
+    source_meta: {
+      company: {
+        business_name: !!asText(params.company.business_name),
+        main_phone: !!asText(params.company.main_phone),
+        business_email: !!asText(params.company.business_email),
+        address: !!asText(params.company.address),
+        website: !!asText(params.company.website),
+        sender_signature: !!asText(params.company.sender_signature),
+        logo_url: !!asText(params.company.logo_url),
+      },
+      settings: {
+        quote_validity_days:
+          params.overrides?.quote_validity_days != null ||
+          params.settings?.quote_validity_days != null,
+        terms_text: !!params.settings?.terms_text?.trim(),
+      },
+      overrides: {
+        title: !!params.overrides?.title?.trim(),
+        intro_paragraph: !!params.overrides?.intro_paragraph?.trim(),
+        closing_paragraph: !!params.overrides?.closing_paragraph?.trim(),
+        deposit_language: !!params.overrides?.deposit_language?.trim(),
+        card_fee_note: !!params.overrides?.card_fee_note?.trim(),
+      },
+    },
   }
 }
 
