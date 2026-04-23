@@ -5,38 +5,57 @@ import {
   QUOTE_PRODUCT_FAMILIES,
   normalizeQuoteProductStatusFilter,
   type ProductFamily,
+  type QuoteProductQuery,
   type QuoteProductRow,
   type QuoteProductStatusFilter,
 } from '@/lib/quotes/productsForm'
 
-type Options = {
+export function useQuoteProductsQueryState() {
+  const [activeFamily, setActiveFamily] = useState<ProductFamily>(QUOTE_PRODUCT_FAMILIES[0])
+  const [statusFilter, setStatusFilter] = useState<QuoteProductStatusFilter>('all')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, 300)
+
+    return () => window.clearTimeout(timeout)
+  }, [search])
+
+  const query = useMemo<QuoteProductQuery>(
+    () => ({
+      status: statusFilter,
+      family: activeFamily,
+      search: debouncedSearch || null,
+    }),
+    [activeFamily, debouncedSearch, statusFilter]
+  )
+
+  return {
+    activeFamily,
+    setActiveFamily,
+    statusFilter,
+    setStatusFilter: (next: string) =>
+      setStatusFilter(normalizeQuoteProductStatusFilter(next, 'all')),
+    search,
+    setSearch,
+    debouncedSearch,
+    query,
+  }
+}
+
+type SelectionOptions = {
   products: QuoteProductRow[]
 }
 
-export function useQuoteProductsCatalogState({ products }: Options) {
-  const [activeFamily, setActiveFamily] = useState<ProductFamily>(QUOTE_PRODUCT_FAMILIES[0])
-  const [statusFilter, setStatusFilter] = useState<QuoteProductStatusFilter>('all')
+export function useQuoteProductsSelectionState({ products }: SelectionOptions) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return products.filter((product) => {
-      if (product.family !== activeFamily) return false
-      if (statusFilter !== 'all') {
-        const normalizedStatus = product.status.toLowerCase()
-        if (normalizedStatus !== statusFilter) return false
-      }
-      if (!query) return true
-      const haystack =
-        `${product.name} ${product.base ?? ''} ${product.subtype ?? ''} ${product.notes ?? ''} ${product.status}`.toLowerCase()
-      return haystack.includes(query)
-    })
-  }, [activeFamily, products, search, statusFilter])
 
   const selected = useMemo(() => {
-    return filtered.find((product) => product.id === selectedId) ?? filtered[0] ?? null
-  }, [filtered, selectedId])
+    return products.find((product) => product.id === selectedId) ?? products[0] ?? null
+  }, [products, selectedId])
 
   useEffect(() => {
     if (!selected) {
@@ -48,21 +67,10 @@ export function useQuoteProductsCatalogState({ products }: Options) {
     }
   }, [selected, selectedId])
 
-  function selectProduct(id: string | null) {
-    setSelectedId(id)
-  }
-
   return {
-    activeFamily,
-    setActiveFamily,
-    statusFilter,
-    setStatusFilter: (next: string) =>
-      setStatusFilter(normalizeQuoteProductStatusFilter(next, 'all')),
+    products,
     selectedId,
-    setSelectedId: selectProduct,
-    search,
-    setSearch,
-    filtered,
+    setSelectedId,
     selected,
   }
 }

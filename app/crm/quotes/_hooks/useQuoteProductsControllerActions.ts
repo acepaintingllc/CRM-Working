@@ -1,14 +1,18 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
 import type { ProductFamily } from '@/lib/quotes/productsForm'
 import type { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
+import { useDenseQuoteAdminDiscard } from './useDenseQuoteAdminDiscard'
 import type { useQuoteProductEditorState } from './useQuoteProductEditorState'
 import type { useQuoteProductMutations } from './useQuoteProductMutations'
-import type { useQuoteProductsCatalogState } from './useQuoteProductsCatalogState'
+import type {
+  useQuoteProductsQueryState,
+  useQuoteProductsSelectionState,
+} from './useQuoteProductsCatalogState'
 
 type Options = {
-  catalog: ReturnType<typeof useQuoteProductsCatalogState>
+  queryState: ReturnType<typeof useQuoteProductsQueryState>
+  selectionState: ReturnType<typeof useQuoteProductsSelectionState>
   editor: ReturnType<typeof useQuoteProductEditorState>
   mutations: ReturnType<typeof useQuoteProductMutations>
   feedback: ReturnType<typeof useDenseQuoteAdminFeedback>
@@ -22,72 +26,45 @@ type DiscardCandidateTransition =
   | { type: 'startCreate' }
 
 export function useQuoteProductsControllerActions({
-  catalog,
+  queryState,
+  selectionState,
   editor,
   mutations,
   feedback,
 }: Options) {
-  const [pendingDiscardTransition, setPendingDiscardTransition] =
-    useState<DiscardCandidateTransition | null>(null)
-  const hasPendingMutationRef = useRef(false)
-
-  const editorNeedsDiscard = editor.isDirty
+  const discard = useDenseQuoteAdminDiscard<DiscardCandidateTransition>({
+    isDirty: editor.isDirty,
+  })
   const creating = editor.isCreating
 
-  useEffect(() => {
-    if (!editorNeedsDiscard) {
-      setPendingDiscardTransition(null)
-    }
-  }, [editorNeedsDiscard])
-
-  useEffect(() => {
-    if (!editorNeedsDiscard) {
-      hasPendingMutationRef.current = false
-    }
-  }, [editorNeedsDiscard])
-
-  const hasUnsavedChanges = () => {
-    return editorNeedsDiscard || hasPendingMutationRef.current
-  }
-
-  function cancelDiscard() {
-    setPendingDiscardTransition(null)
-  }
-
-  function queueDiscardTransition(transition: DiscardCandidateTransition) {
-    if (pendingDiscardTransition) return
-    setPendingDiscardTransition(transition)
-  }
-
   function confirmDiscard() {
-    const transition = pendingDiscardTransition
-    setPendingDiscardTransition(null)
+    const transition = discard.consumePendingDiscardTransition()
     if (!transition) return false
 
     switch (transition.type) {
       case 'setSelectedId':
         if (editor.isCreating) {
-          editor.cancel(catalog.selected)
+          editor.cancel(selectionState.selected)
         }
-        catalog.setSelectedId(transition.selectedId)
+        selectionState.setSelectedId(transition.selectedId)
         return true
       case 'setActiveFamily':
-        catalog.setActiveFamily(transition.nextFamily)
+        queryState.setActiveFamily(transition.nextFamily)
         return true
       case 'setStatusFilter':
         if (editor.isCreating) {
-          editor.cancel(catalog.selected)
+          editor.cancel(selectionState.selected)
         }
-        catalog.setStatusFilter(transition.status)
+        queryState.setStatusFilter(transition.status)
         return true
       case 'setSearch':
         if (editor.isCreating) {
-          editor.cancel(catalog.selected)
+          editor.cancel(selectionState.selected)
         }
-        catalog.setSearch(transition.search)
+        queryState.setSearch(transition.search)
         return true
       case 'startCreate':
-        editor.startCreate(catalog.activeFamily)
+        editor.startCreate(queryState.activeFamily)
         feedback.clearFeedback()
         return true
       default:
@@ -96,23 +73,23 @@ export function useQuoteProductsControllerActions({
   }
 
   function setActiveFamily(nextFamily: ProductFamily) {
-    if (hasUnsavedChanges() && !creating && nextFamily !== catalog.activeFamily) {
-      queueDiscardTransition({
+    if (discard.hasUnsavedChanges() && !creating && nextFamily !== queryState.activeFamily) {
+      discard.queueDiscardTransition({
         type: 'setActiveFamily',
         nextFamily,
       })
       return
     }
 
-    catalog.setActiveFamily(nextFamily)
+    queryState.setActiveFamily(nextFamily)
     if (creating) {
       editor.updateDraftField('family', nextFamily)
     }
   }
 
   function setSelectedId(id: string | null) {
-    if (hasUnsavedChanges() && id !== catalog.selectedId) {
-      queueDiscardTransition({
+    if (discard.hasUnsavedChanges() && id !== selectionState.selectedId) {
+      discard.queueDiscardTransition({
         type: 'setSelectedId',
         selectedId: id,
       })
@@ -120,50 +97,50 @@ export function useQuoteProductsControllerActions({
     }
 
     if (creating) {
-      editor.cancel(catalog.selected)
+      editor.cancel(selectionState.selected)
     }
-    catalog.setSelectedId(id)
+    selectionState.setSelectedId(id)
   }
 
   function setStatusFilter(next: string) {
-    if (hasUnsavedChanges() && next !== catalog.statusFilter) {
-      queueDiscardTransition({
+    if (discard.hasUnsavedChanges() && next !== queryState.statusFilter) {
+      discard.queueDiscardTransition({
         type: 'setStatusFilter',
         status: next,
       })
       return
     }
 
-    catalog.setStatusFilter(next)
+    queryState.setStatusFilter(next)
   }
 
   function setSearch(value: string) {
-    if (hasUnsavedChanges() && value !== catalog.search) {
-      queueDiscardTransition({
+    if (discard.hasUnsavedChanges() && value !== queryState.search) {
+      discard.queueDiscardTransition({
         type: 'setSearch',
         search: value,
       })
       return
     }
 
-    catalog.setSearch(value)
+    queryState.setSearch(value)
   }
 
   function startCreate() {
-    if (hasUnsavedChanges() && !creating) {
-      queueDiscardTransition({
+    if (discard.hasUnsavedChanges() && !creating) {
+      discard.queueDiscardTransition({
         type: 'startCreate',
       })
       return
     }
 
-    editor.startCreate(catalog.activeFamily)
+    editor.startCreate(queryState.activeFamily)
     feedback.clearFeedback()
   }
 
   function cancelEdit() {
-    editor.cancel(catalog.selected)
-    cancelDiscard()
+    editor.cancel(selectionState.selected)
+    discard.cancelDiscard()
     feedback.clearFeedback()
   }
 
@@ -176,49 +153,44 @@ export function useQuoteProductsControllerActions({
       if (!created) return false
 
       feedback.setSuccessNotice(created.notice)
-      catalog.setActiveFamily((created.data.family as ProductFamily | null) ?? catalog.activeFamily)
-      catalog.setStatusFilter('all')
-      catalog.setSearch('')
-      catalog.setSelectedId(created.data.id)
+      queryState.setActiveFamily((created.data.family as ProductFamily | null) ?? queryState.activeFamily)
+      queryState.setStatusFilter('all')
+      queryState.setSearch('')
+      selectionState.setSelectedId(created.data.id)
       editor.finishCreate(created.data)
       return true
     }
 
-    if (!catalog.selected) return false
-    const updated = await mutations.updateProduct(catalog.selected.id, validated.payload)
+    if (!selectionState.selected) return false
+    const updated = await mutations.updateProduct(selectionState.selected.id, validated.payload)
     if (!updated) return false
 
     feedback.setSuccessNotice(updated.notice)
-    catalog.setActiveFamily((updated.data.family as ProductFamily | null) ?? catalog.activeFamily)
-    catalog.setSelectedId(updated.data.id)
+    queryState.setActiveFamily((updated.data.family as ProductFamily | null) ?? queryState.activeFamily)
+    selectionState.setSelectedId(updated.data.id)
     editor.setDraftFromRow(updated.data)
     return true
   }
 
   async function requestRemove() {
-    if (!catalog.selected || feedback.saving) return false
-    const ok = window.confirm(`Delete "${catalog.selected.name}"?`)
+    if (!selectionState.selected || feedback.saving) return false
+    const ok = window.confirm(`Delete "${selectionState.selected.name}"?`)
     if (!ok) return false
 
-    const removedId = catalog.selected.id
-    const removed = await mutations.removeProduct(catalog.selected)
+    const removedId = selectionState.selected.id
+    const removed = await mutations.removeProduct(selectionState.selected)
     if (!removed) return false
 
     feedback.setSuccessNotice(removed.notice)
-    if (catalog.selectedId === removedId) {
-      catalog.setSelectedId(null)
+    if (selectionState.selectedId === removedId) {
+      selectionState.setSelectedId(null)
     }
     return true
   }
 
   function updateDraftField(field: Parameters<typeof editor.updateDraftField>[0], value: Parameters<typeof editor.updateDraftField>[1]) {
-    hasPendingMutationRef.current = true
+    discard.markPendingMutation()
     editor.updateDraftField(field, value)
-  }
-
-  const discardVm = {
-    isOpen: Boolean(pendingDiscardTransition),
-    transitionType: pendingDiscardTransition?.type ?? null,
   }
 
   return {
@@ -230,9 +202,12 @@ export function useQuoteProductsControllerActions({
     cancelEdit,
     updateDraftField,
     confirmDiscard,
-    cancelDiscard,
+    cancelDiscard: discard.cancelDiscard,
     save,
     requestRemove,
-    discardVm,
+    discardVm: {
+      isOpen: discard.discardVm.isOpen,
+      transitionType: discard.discardVm.transitionType?.type ?? null,
+    },
   }
 }
