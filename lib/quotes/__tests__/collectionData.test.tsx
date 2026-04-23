@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildQuoteHomeBootstrapReadModel,
   buildQuoteHomeJobVersionCountsReadModel,
   buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSearchReadModel,
@@ -148,6 +149,47 @@ describe('quote collection data', () => {
     })
   })
 
+  it('builds bootstrap payloads from the shared row builders without duplicating counts or summary logic', () => {
+    expect(
+      buildQuoteHomeBootstrapReadModel(rows, [
+        {
+          id: 'job-1',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          description: null,
+          status: 'estimate_scheduled',
+          estimate_date: null,
+          estimate_sent_at: '2026-04-21T00:00:00.000Z',
+          scheduled_date: null,
+          completed_at: null,
+        },
+      ])
+    ).toEqual({
+      summary: {
+        total_versions: 3,
+        draft_count: 1,
+        sent_or_awaiting_count: 3,
+        live_count: 1,
+        pipeline_total: 1800,
+      },
+      jobCounts: {
+        items: [
+          { job_id: 'job-2', version_count: 1 },
+          { job_id: 'job-1', version_count: 2 },
+        ],
+      },
+      jobs: [
+        expect.objectContaining({
+          id: 'job-1',
+          customer_id: 'customer-1',
+          title: 'Kitchen',
+        }),
+      ],
+    })
+  })
+
   it('filters search results case-insensitively and caps them at 8', () => {
     const searchRows = Array.from({ length: 10 }, (_, index) => ({
       ...rows[0],
@@ -162,7 +204,14 @@ describe('quote collection data', () => {
 
     expect(payload.query).toBe('revision')
     expect(payload.items).toHaveLength(8)
-    expect(payload.items[0]?.estimate_id).toBe('estimate-1')
+    expect(payload.items[0]).toEqual(toQuoteHomeJobVersionItem(searchRows[0]))
+  })
+
+  it('returns an empty item list for blank search queries', () => {
+    expect(buildQuoteHomeSearchReadModel(rows, '   ')).toEqual({
+      query: '   ',
+      items: [],
+    })
   })
 
   it('returns full per-job versions even when search results are capped', () => {

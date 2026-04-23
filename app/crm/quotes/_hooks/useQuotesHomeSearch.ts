@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type QuoteHomeSearchResponse,
-  type QuoteHomeSearchResultReadModel,
+  type QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeSearch } from '@/lib/quotes/client'
 
@@ -72,7 +72,7 @@ export function useQuotesHomeSearch(query: string) {
   return useMemo(
     () => ({
       query: data.query,
-      results: data.items as QuoteHomeSearchResultReadModel[],
+      results: data.items as QuoteHomeJobVersionItemReadModel[],
       loading,
       error,
       hasQuery: debouncedQuery.length > 0,

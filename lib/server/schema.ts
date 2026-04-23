@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/server/org'
+import { supabaseAdmin } from './org.ts'
 
 type SchemaTableCheck = {
   table: string
@@ -71,4 +71,3 @@ export async function assertSchema(checks: SchemaTableCheck[], ttlMs = defaultTt
   schemaCache.set(key, { expiresAt: now + ttlMs, result })
   return result
 }
-

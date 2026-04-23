@@ -22,6 +22,10 @@ export async function loadQuoteHomeJobCounts<T>() {
   return loadData<T>('/api/quotes/home/job-counts', { cache: 'no-store' })
 }
 
+export async function loadQuoteHomeBootstrap<T>() {
+  return loadData<T>('/api/quotes/home/bootstrap', { cache: 'no-store' })
+}
+
 export async function loadQuoteHomeSearch<T>(query: string) {
   return loadData<T>(`/api/quotes/home/search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
 }

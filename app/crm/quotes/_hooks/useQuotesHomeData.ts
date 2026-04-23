@@ -1,23 +1,18 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchJobList, type JobSummary } from '@/lib/jobs/client'
 import type {
+  QuoteHomeBootstrapReadModel,
   QuoteHomeJobVersionCountsReadModel,
   QuoteHomeSummaryReadModel,
 } from '@/lib/quotes/collectionData'
 import {
-  loadQuoteHomeJobCounts,
-  loadQuoteHomeSummary,
+  loadQuoteHomeBootstrap,
 } from '@/lib/quotes/client'
-import {
-  filterEligibleQuoteVersionJobs,
-  type EligibleQuoteVersionJob,
-} from '@/lib/quotes/versionCreation'
 import { buildQuotesHomeFeedbackVm } from '../_home/quoteHomePresentation'
 
-type QuoteHomeEligibleJob = EligibleQuoteVersionJob<JobSummary>
-type QuoteHomeSliceSource = 'summary' | 'jobCounts' | 'jobs'
+type QuoteHomeEligibleJob = QuoteHomeBootstrapReadModel['jobs'][number]
+type QuoteHomeSliceSource = 'bootstrap'
 type QuoteHomeSliceFailure = {
   source: QuoteHomeSliceSource
   message: string
@@ -35,11 +30,7 @@ const EMPTY_JOB_COUNTS: QuoteHomeJobVersionCountsReadModel = {
   items: [],
 }
 
-const EMPTY_FAILURES: Record<QuoteHomeSliceSource, QuoteHomeSliceFailure | null> = {
-  summary: null,
-  jobCounts: null,
-  jobs: null,
-}
+const EMPTY_FAILURES: Record<QuoteHomeSliceSource, QuoteHomeSliceFailure | null> = { bootstrap: null }
 
 function toLoadErrorMessage(scope: string, loadError: unknown) {
   return loadError instanceof Error ? loadError.message : `Failed to load ${scope}.`
@@ -58,14 +49,19 @@ function resolveFailure(
   }
 }
 
-export function useQuotesHomeData() {
-  const [summary, setSummary] = useState<QuoteHomeSummaryReadModel | null>(null)
-  const [jobCounts, setJobCounts] = useState<QuoteHomeJobVersionCountsReadModel | null>(null)
-  const [jobs, setJobs] = useState<QuoteHomeEligibleJob[]>([])
-  const [loading, setLoading] = useState(true)
+export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | null) {
+  const [summary, setSummary] = useState<QuoteHomeSummaryReadModel | null>(
+    initialData?.summary ?? null
+  )
+  const [jobCounts, setJobCounts] = useState<QuoteHomeJobVersionCountsReadModel | null>(
+    initialData?.jobCounts ?? null
+  )
+  const [jobs, setJobs] = useState<QuoteHomeEligibleJob[]>(initialData?.jobs ?? [])
+  const [loading, setLoading] = useState(!initialData)
   const [failures, setFailures] =
     useState<Record<QuoteHomeSliceSource, QuoteHomeSliceFailure | null>>(EMPTY_FAILURES)
   const requestIdRef = useRef(0)
+  const initialDataRef = useRef(initialData)
   const summaryRef = useRef<QuoteHomeSummaryReadModel | null>(null)
   const jobCountsRef = useRef<QuoteHomeJobVersionCountsReadModel | null>(null)
   const jobsRef = useRef<QuoteHomeEligibleJob[]>([])
@@ -87,35 +83,24 @@ export function useQuotesHomeData() {
     setLoading(true)
     setFailures(EMPTY_FAILURES)
 
-    const [summaryResult, jobCountsResult, jobsResult] =
-      await Promise.allSettled([
-        loadQuoteHomeSummary<QuoteHomeSummaryReadModel>(),
-        loadQuoteHomeJobCounts<QuoteHomeJobVersionCountsReadModel>(),
-        fetchJobList(),
-      ])
+    const [bootstrapResult] = await Promise.allSettled([
+      loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>(),
+    ])
 
     if (requestIdRef.current !== requestId) return false
 
-    setSummary(
-      summaryResult.status === 'fulfilled'
-        ? summaryResult.value
-        : (summaryRef.current ?? EMPTY_SUMMARY)
-    )
-    setJobCounts(
-      jobCountsResult.status === 'fulfilled'
-        ? jobCountsResult.value
-        : (jobCountsRef.current ?? EMPTY_JOB_COUNTS)
-    )
-    setJobs(
-      jobsResult.status === 'fulfilled'
-        ? filterEligibleQuoteVersionJobs(jobsResult.value)
-        : jobsRef.current
-    )
+    if (bootstrapResult.status === 'fulfilled') {
+      setSummary(bootstrapResult.value.summary)
+      setJobCounts(bootstrapResult.value.jobCounts)
+      setJobs(bootstrapResult.value.jobs)
+    } else {
+      setSummary(summaryRef.current ?? EMPTY_SUMMARY)
+      setJobCounts(jobCountsRef.current ?? EMPTY_JOB_COUNTS)
+      setJobs(jobsRef.current)
+    }
 
     const nextFailures = {
-      summary: resolveFailure('summary', 'quote summary', summaryResult),
-      jobCounts: resolveFailure('jobCounts', 'quote job counts', jobCountsResult),
-      jobs: resolveFailure('jobs', 'eligible jobs', jobsResult),
+      bootstrap: resolveFailure('bootstrap', 'quote home bootstrap', bootstrapResult),
     }
 
     setFailures(nextFailures)
@@ -124,6 +109,10 @@ export function useQuotesHomeData() {
   }, [])
 
   useEffect(() => {
+    if (initialDataRef.current) {
+      initialDataRef.current = null
+      return
+    }
     void refresh()
   }, [refresh])
 

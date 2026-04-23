@@ -8,7 +8,6 @@ import type {
   QuoteHomeJobVersion,
   QuoteHomeJobListItemVm,
   QuoteHomeFailureSource,
-  QuoteHomeSearchResult,
   QuoteHomeVersionItemVm,
   QuotesHomeDeleteDialogVm,
   QuotesHomeSelectedJobVm,
@@ -25,16 +24,12 @@ export const SETTINGS_LINKS: NavItem[] = [
 
 export const QUOTE_META_SEPARATOR = ' · '
 
-const HOME_FAILURE_MESSAGES: Record<'summary' | 'jobCounts' | 'jobs', string> = {
-  summary: 'Quote summary failed to load.',
-  jobCounts: 'Job counts failed to load.',
-  jobs: 'Eligible jobs failed to load.',
+const HOME_FAILURE_MESSAGES: Record<'bootstrap', string> = {
+  bootstrap: 'Quote home failed to load.',
 }
 
 const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
-  summary: 'summary',
-  jobCounts: 'job counts',
-  jobs: 'eligible jobs',
+  bootstrap: 'bootstrap',
   jobVersions: 'job versions',
   create: 'quote creation',
   delete: 'quote deletion',
@@ -85,7 +80,7 @@ export function estimateWorkspaceHref(estimateId: string) {
   return `/crm/quotes/${estimateId}`
 }
 
-export function buildSearchResultVm(estimate: QuoteHomeSearchResult): SearchResultVm {
+export function buildSearchResultVm(estimate: QuoteHomeJobVersion): SearchResultVm {
   return {
     id: estimate.estimate_id,
     href: estimateWorkspaceHref(estimate.estimate_id),
@@ -94,13 +89,13 @@ export function buildSearchResultVm(estimate: QuoteHomeSearchResult): SearchResu
   }
 }
 
-export function buildHomeLoadFailureDetail(source: 'summary' | 'jobCounts' | 'jobs', message: string) {
+export function buildHomeLoadFailureDetail(source: 'bootstrap', message: string) {
   const fallback = HOME_FAILURE_MESSAGES[source]
   return message === fallback ? message : `${fallback} ${message}`
 }
 
 export function buildQuotesHomeFeedbackVm(params: {
-  homeFailures: Array<{ source: 'summary' | 'jobCounts' | 'jobs'; message: string }>
+  homeFailures: Array<{ source: 'bootstrap'; message: string }>
   jobVersionsError: string | null
   createError: string | null
   deleteError: string | null
