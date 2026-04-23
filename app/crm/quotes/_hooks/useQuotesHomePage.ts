@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import type {
+  QuoteHomeBootstrapPageReadModel,
+  QuoteHomeBootstrapReadModel,
+} from '@/lib/quotes/collectionData'
 import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
@@ -21,7 +24,9 @@ import {
 } from '../_home/quoteHomePresentation'
 import type { QuotesHomeJobListVm, QuotesHomePageSections } from '../_home/quoteHomeTypes'
 
-export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | null) {
+export function useQuotesHomePage(
+  initialData?: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel | null
+) {
   const homeResource = useQuotesHomeData(initialData)
   const [actionWarning, setActionWarning] = useState<string | null>(null)
   const [deletedEstimateIds, setDeletedEstimateIds] = useState<string[]>([])

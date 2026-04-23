@@ -1,0 +1,152 @@
+'use client'
+
+import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
+import type {
+  RatesFlagsCategory,
+  RatesFlagsDraft,
+  RatesFlagsEditableCategory,
+  RatesFlagsEditableCategoryKey,
+  RatesFlagsRow,
+} from '@/types/estimator/ratesFlags'
+import type { QuoteRatesDataResource } from './useQuoteRatesData'
+import type {
+  QuoteRatesDerivedState,
+  QuoteRatesPendingTransition,
+  QuoteRatesWorkflowState,
+} from './quoteRatesPageState'
+
+export type QuoteRatesFiltersVm = {
+  search: string
+  statusFilter: import('./quoteRatesPageConfig').StatusFilter
+  activeTab: import('@/types/estimator/ratesFlags').RatesFlagsTab
+  rateSection: import('./quoteRatesPageConfig').RateSectionKey
+  rateCategory: import('@/types/estimator/ratesFlags').RatesFlagsCategoryKey
+  flagsSection: import('./quoteRatesPageConfig').FlagsSectionKey
+  roomDefaultsSection: import('./quoteRatesPageConfig').RoomDefaultsSectionKey
+}
+
+export type QuoteRatesTableVm = {
+  activeCategory: RatesFlagsCategory | null
+  filteredRows: RatesFlagsRow[]
+  selectedRow: RatesFlagsRow | null
+  selectedId: string
+  isCreating: boolean
+  canDuplicate: boolean
+  canArchiveToggle: boolean
+}
+
+export type QuoteRatesEditorVm = {
+  draft: RatesFlagsDraft | null
+  draftActive: boolean
+  isDirty: boolean
+  saving: boolean
+  activeCategory: RatesFlagsCategory | null
+  selectedRow: RatesFlagsRow | null
+  isCreating: boolean
+  inlineValidation: string | null
+  canSave: boolean
+  formatDraftValue: (fieldKey: string) => string
+}
+
+export type QuoteRatesDiscardVm = {
+  status: 'idle' | 'confirming' | 'applying'
+  isOpen: boolean
+  transitionType: QuoteRatesPendingTransition['type'] | null
+}
+
+export function buildQuoteRatesPageVm(params: {
+  resource: QuoteRatesDataResource
+  workflowState: QuoteRatesWorkflowState
+  derived: QuoteRatesDerivedState
+}) {
+  const { resource, workflowState, derived } = params
+
+  const hasData = resource.data.categories.length > 0 || (!resource.loading && !resource.error)
+  const uiState = buildDenseQuotePageUiState({
+    loading: resource.loading,
+    hasData,
+    loadError: resource.error,
+    actionError: workflowState.actionError,
+    validationError: derived.validationError,
+    notice: workflowState.notice,
+    noticeTone: workflowState.noticeTone,
+    canRetry: !resource.loading,
+    canSave:
+      Boolean(derived.activeCategory) &&
+      workflowState.actionStatus !== 'saving' &&
+      !resource.error &&
+      Boolean(derived.validationResult?.ok),
+    canArchiveToggle:
+      Boolean(derived.selectedRow) &&
+      workflowState.editorMode !== 'create' &&
+      workflowState.actionStatus === 'idle' &&
+      !resource.loading &&
+      !resource.error,
+    canDuplicate:
+      Boolean(derived.selectedRow) &&
+      workflowState.actionStatus === 'idle' &&
+      !resource.loading &&
+      !resource.error,
+  })
+
+  const filtersVm = {
+    search: workflowState.navigation.search,
+    statusFilter: workflowState.navigation.statusFilter,
+    activeTab: workflowState.navigation.activeTab,
+    rateSection: workflowState.navigation.rateSection,
+    rateCategory: workflowState.navigation.rateCategory,
+    flagsSection: workflowState.navigation.flagsSection,
+    roomDefaultsSection: workflowState.navigation.roomDefaultsSection,
+  } satisfies QuoteRatesFiltersVm
+
+  return {
+    uiState,
+    filtersVm,
+    workflowVm: {
+      navigation: workflowState.navigation,
+      selectedId: workflowState.selectedId,
+      editorMode: workflowState.editorMode,
+      dirty: derived.isDirty,
+      pendingTransition: workflowState.pendingTransition,
+      actionStatus: workflowState.actionStatus,
+      refreshSelectionId: workflowState.refreshSelectionId,
+      forceRefreshRehydrate: workflowState.forceRefreshRehydrate,
+    },
+    tableVm: {
+      activeCategory: derived.activeCategory,
+      filteredRows: derived.filteredRows,
+      selectedRow: derived.selectedRow,
+      selectedId: workflowState.selectedId,
+      isCreating: workflowState.editorMode === 'create',
+      canDuplicate: uiState.canDuplicate,
+      canArchiveToggle: uiState.canArchiveToggle,
+    } satisfies QuoteRatesTableVm,
+    editorVm: {
+      draft: workflowState.draft,
+      draftActive: workflowState.draftActive,
+      isDirty: derived.isDirty,
+      saving: workflowState.actionStatus === 'saving',
+      activeCategory: derived.activeCategory,
+      selectedRow: derived.selectedRow,
+      isCreating: workflowState.editorMode === 'create',
+      inlineValidation: uiState.inlineValidation,
+      canSave: uiState.canSave,
+      formatDraftValue: derived.activeCategory
+        ? (fieldKey: string) =>
+            workflowState.draft && derived.adapter
+              ? derived.adapter.formatDraftValue(
+                  derived.activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
+                  workflowState.draft as never,
+                  fieldKey
+                )
+              : ''
+        : () => '',
+    } satisfies QuoteRatesEditorVm,
+    discardVm: {
+      isOpen:
+        workflowState.discardStatus === 'confirming' && Boolean(workflowState.pendingTransition),
+      status: workflowState.discardStatus,
+      transitionType: workflowState.pendingTransition?.type ?? null,
+    } satisfies QuoteRatesDiscardVm,
+  }
+}

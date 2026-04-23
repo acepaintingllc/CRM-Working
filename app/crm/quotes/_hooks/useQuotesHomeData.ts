@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useResource } from '@/app/crm/_hooks/useResource'
 import type {
+  QuoteHomeBootstrapPageReadModel,
   QuoteHomeBootstrapReadModel,
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
@@ -22,19 +23,49 @@ const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
   jobs: [],
 }
 
+function isLegacyBootstrap(
+  payload: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel
+): payload is QuoteHomeBootstrapReadModel {
+  return 'jobCounts' in payload && Array.isArray(payload.jobs)
+}
+
+function normalizeBootstrap(
+  payload: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel
+): QuoteHomeBootstrapReadModel {
+  if (isLegacyBootstrap(payload)) {
+    return payload
+  }
+
+  return {
+    summary: payload.summary,
+    jobCounts: {
+      items: payload.jobs.items.map((job) => ({
+        job_id: job.id,
+        version_count: job.version_count,
+      })),
+    },
+    jobs: payload.jobs.items.map(({ version_count: _versionCount, ...job }) => job),
+  }
+}
+
 function toLoadErrorMessage(scope: string, loadError: unknown) {
   return loadError instanceof Error ? loadError.message : `Failed to load ${scope}.`
 }
 
-export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | null) {
-  const latestLoadedBootstrapRef = useRef(initialData ?? EMPTY_BOOTSTRAP)
+export function useQuotesHomeData(
+  initialData?: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel | null
+) {
+  const resolvedInitialData = initialData ? normalizeBootstrap(initialData) : EMPTY_BOOTSTRAP
+  const latestLoadedBootstrapRef = useRef(resolvedInitialData)
   const resource = useResource<QuoteHomeBootstrapReadModel>({
-    initialData: initialData ?? EMPTY_BOOTSTRAP,
+    initialData: resolvedInitialData,
     initialLoading: !initialData,
     skipInitialLoad: Boolean(initialData),
     resetOnError: false,
     load: async () => {
-      const nextBootstrap = await loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>()
+      const nextBootstrap = normalizeBootstrap(
+        await loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel>()
+      )
       latestLoadedBootstrapRef.current = nextBootstrap
       return nextBootstrap
     },

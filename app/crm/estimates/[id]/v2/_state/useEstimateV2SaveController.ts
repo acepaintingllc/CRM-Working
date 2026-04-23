@@ -13,26 +13,17 @@ import {
   createSaveRequestTracker,
   shouldQueueAutosave,
 } from '@/lib/estimator/v2WallsAutosave'
-import { sortByPosition } from '@/lib/estimator/v2DraftPayload'
-import { sanitizeV2WallsDrafts } from '@/lib/estimator/v2WallsSanitize'
-import { validateV2WallsBeforeSave } from '@/lib/estimator/v2WallsValidation'
-import { sanitizeV2CeilingsDrafts } from '@/lib/estimator/v2CeilingsSanitize'
-import { validateV2CeilingsBeforeSave } from '@/lib/estimator/v2CeilingsValidation'
-import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
-import { validateV2TrimBeforeSave } from '@/lib/estimator/v2TrimValidation'
-import {
-  normalizeCeilingScope,
-  normalizeCeilingSegment,
-  normalizeScope,
-  normalizeSegment,
-  normalizeTrimScope,
-  resolveRoomModeById,
-} from '../_lib/estimateV2EditorNormalize'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
-import type { EstimateV2WallCalculationsPayload } from '@/types/estimator/v2'
-import type { NormalizedDomain, Unsafe } from './estimateV2EditorTypes'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
-import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
+import {
+  prepareEstimateV2SaveState,
+  resolveEstimateV2SaveResponseState,
+  validateEstimateV2PreparedSave,
+} from './estimateV2EditorSaveOrchestration'
+import {
+  applyEstimateV2PreparedSaveCollections,
+  applyEstimateV2SuccessfulSaveState,
+} from './estimateV2EditorStoreMutations'
 
 const AUTO_SAVE_DELAY_MS = 900
 
@@ -58,13 +49,6 @@ export function useEstimateV2SaveController(params: {
   const saveRef = useRef<(trigger?: 'manual' | 'auto') => Promise<boolean>>(async () => false)
   const saveRequestTrackerRef = useRef(createSaveRequestTracker())
 
-  const normalizeJobDefaultProductOverride = useCallback(
-    (productId: string, defaultProductId: string) => {
-      return !productId || productId === defaultProductId ? '' : productId
-    },
-    []
-  )
-
   const save = useCallback(
     async (trigger: 'manual' | 'auto' = 'manual'): Promise<boolean> => {
       const currentState = store.getState()
@@ -75,102 +59,13 @@ export function useEstimateV2SaveController(params: {
         autoSaveTimerRef.current = null
       }
 
-      const normalizedDomains: NormalizedDomain[] = []
-      const sanitizedWalls = sanitizeV2WallsDrafts({
-        rooms: currentState.collections.rooms,
-        scopes: currentState.collections.scopes,
-        segments: currentState.collections.segments,
-      })
-      const scopeRowsForSave = sanitizedWalls.scopes
-      const segmentRowsForSave = sanitizedWalls.segments
-      if (sanitizedWalls.changed) normalizedDomains.push('walls')
+      const preparedSave = prepareEstimateV2SaveState(currentState)
+      applyEstimateV2PreparedSaveCollections(store, preparedSave)
 
-      const sanitizedCeilings = sanitizeV2CeilingsDrafts({
-        rooms: currentState.collections.rooms.map((room) => ({
-          roomId: room.roomId,
-          lengthIn: room.lengthIn,
-          widthIn: room.widthIn,
-          position: room.position,
-        })),
-        ceilingScopes: currentState.collections.ceilingScopes,
-        ceilingSegments: currentState.collections.ceilingSegments,
+      const issues = validateEstimateV2PreparedSave({
+        currentState,
+        prepared: preparedSave,
       })
-      const ceilingScopesForSave = sanitizedCeilings.ceilingScopes
-      const ceilingSegmentsForSave = sanitizedCeilings.ceilingSegments
-      if (sanitizedCeilings.changed) {
-        normalizedDomains.push('ceilings')
-        currentState.setCeilingScopes(ceilingScopesForSave)
-        currentState.setCeilingSegments(ceilingSegmentsForSave)
-      }
-
-      const saveRoomModeById = resolveRoomModeById({
-        rooms: currentState.collections.rooms,
-        wallScopes: scopeRowsForSave,
-        ceilingScopes: ceilingScopesForSave,
-      })
-      const sanitizedTrim = sanitizeV2TrimDrafts({
-        rooms: currentState.collections.rooms.map((room) => ({
-          roomId: room.roomId,
-          mode: saveRoomModeById.get(room.roomId) ?? 'RECT',
-          position: room.position,
-        })),
-        trimScopes: currentState.collections.trimScopes,
-      })
-      const trimScopesForSave = sanitizedTrim.trimScopes
-      if (sanitizedTrim.changed) {
-        normalizedDomains.push('trim')
-        currentState.setTrimScopes(trimScopesForSave)
-      }
-
-      const payloadSnapshotForSave = buildEstimateV2DirtySnapshot({
-        rooms: currentState.collections.rooms,
-        scopes: scopeRowsForSave,
-        segments: segmentRowsForSave,
-        roomFlags: currentState.collections.roomFlags,
-        ceilingScopes: ceilingScopesForSave,
-        ceilingSegments: ceilingSegmentsForSave,
-        trimScopes: trimScopesForSave,
-      })
-      const payloadForSave = payloadSnapshotForSave.payload
-
-      if (sanitizedWalls.changed) {
-        currentState.setScopes(scopeRowsForSave)
-        currentState.setSegments(segmentRowsForSave)
-      }
-
-      const wallIssues = validateV2WallsBeforeSave({
-        rooms: currentState.collections.rooms,
-        scopes: scopeRowsForSave,
-        segments: segmentRowsForSave,
-      })
-      const ceilingIssues = validateV2CeilingsBeforeSave({
-        rooms: currentState.collections.rooms.map((room) => ({
-          roomId: room.roomId,
-          roomName: room.roomName,
-          position: room.position,
-        })),
-        ceilingScopes: ceilingScopesForSave,
-        ceilingSegments: ceilingSegmentsForSave,
-      })
-      const trimIssues = validateV2TrimBeforeSave({
-        rooms: currentState.collections.rooms.map((room) => ({
-          roomId: room.roomId,
-          roomName: room.roomName,
-          mode: saveRoomModeById.get(room.roomId) ?? 'RECT',
-          position: room.position,
-        })),
-        trimScopes: trimScopesForSave.map((scope) => ({
-          id: scope.id,
-          roomId: scope.roomId,
-          position: scope.position,
-          include: scope.include,
-          trimTypeId: scope.trimTypeId,
-          measurementMode: scope.measurementMode,
-          helperSource: scope.helperSource || null,
-          measurementValue: scope.measurementValue,
-        })),
-      })
-      const issues = [...wallIssues, ...ceilingIssues, ...trimIssues]
       if (issues.length > 0) {
         if (trigger === 'manual') {
           meta.setValidationIssues(issues)
@@ -190,7 +85,7 @@ export function useEstimateV2SaveController(params: {
           ...prev,
           dirtySource: trigger === 'auto' ? 'save:auto' : 'save:manual',
           lastSaveTrigger: trigger,
-          lastNormalizedDomains: normalizedDomains,
+          lastNormalizedDomains: preparedSave.normalizedDomains,
         }))
         return false
       }
@@ -209,14 +104,14 @@ export function useEstimateV2SaveController(params: {
         ...prev,
         dirtySource: trigger === 'auto' ? 'save:auto' : 'save:manual',
         lastSaveTrigger: trigger,
-        lastNormalizedDomains: normalizedDomains,
+        lastNormalizedDomains: preparedSave.normalizedDomains,
       }))
 
       const response = await authedFetch(routeFamily.estimateApiHref(estimateId), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         ...(trigger === 'auto' ? { 'X-Estimate-Save-Mode': 'auto' } : {}),
-        body: JSON.stringify(payloadForSave),
+        body: JSON.stringify(preparedSave.payloadSnapshot.payload),
       })
       const parsed = await parseApiResponse(response)
       const payload = getApiPayloadData<unknown>(parsed.json)
@@ -240,125 +135,19 @@ export function useEstimateV2SaveController(params: {
         return false
       }
 
-      const nextWallCalculations =
-        payload != null && typeof payload === 'object' && 'wall_calculations' in payload
-          ? ((payload as { wall_calculations?: EstimateV2WallCalculationsPayload })
-              .wall_calculations ?? null)
-          : meta.wallCalculations
-
-      let nextScopes = scopeRowsForSave
-      let nextSegments = segmentRowsForSave
-      if (trigger === 'manual') {
-        if (nextWallCalculations?.scopes) {
-          nextScopes = sortByPosition(
-            nextWallCalculations.scopes.map((scope, index) => {
-              const normalized = normalizeScope(scope, index)
-              return {
-                ...normalized,
-                paintProductId: normalizeJobDefaultProductOverride(
-                  normalized.paintProductId,
-                  effectiveJobProductDefaults.wallPaintProductId
-                ),
-                primerProductId: normalizeJobDefaultProductOverride(
-                  normalized.primerProductId,
-                  effectiveJobProductDefaults.wallPrimerProductId
-                ),
-              }
-            })
-          )
-          store.getState().setScopes(nextScopes)
-        }
-        if (nextWallCalculations?.segments) {
-          nextSegments = sortByPosition(nextWallCalculations.segments.map(normalizeSegment))
-          store.getState().setSegments(nextSegments)
-        }
-      }
-      meta.setWallCalculations(nextWallCalculations)
-
-      const nextCeilingCalc =
-        payload != null && typeof payload === 'object' && 'ceiling_calculations' in payload
-          ? ((payload as { ceiling_calculations?: Unsafe }).ceiling_calculations ?? null)
-          : meta.ceilingCalculations
-      let nextCeilingScopes = ceilingScopesForSave
-      let nextCeilingSegments = ceilingSegmentsForSave
-      if (trigger === 'manual') {
-        if (nextCeilingCalc && Array.isArray((nextCeilingCalc as Unsafe).scopes)) {
-          nextCeilingScopes = sortByPosition(
-            ((nextCeilingCalc as Unsafe).scopes as Unsafe[]).map((scope, index) => {
-              const normalized = normalizeCeilingScope(scope, index)
-              return {
-                ...normalized,
-                paintProductId: normalizeJobDefaultProductOverride(
-                  normalized.paintProductId,
-                  effectiveJobProductDefaults.ceilingPaintProductId
-                ),
-                primerProductId: normalizeJobDefaultProductOverride(
-                  normalized.primerProductId,
-                  effectiveJobProductDefaults.ceilingPrimerProductId
-                ),
-              }
-            })
-          )
-          store.getState().setCeilingScopes(nextCeilingScopes)
-        }
-        if (nextCeilingCalc && Array.isArray((nextCeilingCalc as Unsafe).segments)) {
-          nextCeilingSegments = sortByPosition(
-            ((nextCeilingCalc as Unsafe).segments as Unsafe[]).map(normalizeCeilingSegment)
-          )
-          store.getState().setCeilingSegments(nextCeilingSegments)
-        }
-      }
-      meta.setCeilingCalculations(nextCeilingCalc)
-
-      const nextTrimCalc =
-        payload != null && typeof payload === 'object' && 'trim_calculations' in payload
-          ? ((payload as { trim_calculations?: Unsafe }).trim_calculations ?? null)
-          : meta.trimCalculations
-      let nextTrimScopes = trimScopesForSave
-      if (trigger === 'manual' && nextTrimCalc && Array.isArray((nextTrimCalc as Unsafe).scopes)) {
-        nextTrimScopes = sortByPosition(
-          ((nextTrimCalc as Unsafe).scopes as Unsafe[]).map((scope, index) => {
-            const normalized = normalizeTrimScope(scope, index)
-            return {
-              ...normalized,
-              paintProductId: normalizeJobDefaultProductOverride(
-                normalized.paintProductId,
-                effectiveJobProductDefaults.trimPaintProductId
-              ),
-              primerProductId: normalizeJobDefaultProductOverride(
-                normalized.primerProductId,
-                effectiveJobProductDefaults.trimPrimerProductId
-              ),
-            }
-          })
-        )
-        store.getState().setTrimScopes(nextTrimScopes)
-      }
-      meta.setTrimCalculations(nextTrimCalc)
-
-      meta.setEstimate((prev) => (prev ? { ...prev, updated_at: new Date().toISOString() } : prev))
-      meta.setLastSavedSnapshot(
-        buildEstimateV2DirtySnapshot({
-          rooms: store.getState().collections.rooms,
-          scopes: nextScopes,
-          segments: nextSegments,
-          roomFlags: store.getState().collections.roomFlags,
-          ceilingScopes: nextCeilingScopes,
-          ceilingSegments: nextCeilingSegments,
-          trimScopes: nextTrimScopes,
-        })
-      )
+      const responseState = resolveEstimateV2SaveResponseState({
+        trigger,
+        payload,
+        meta,
+        prepared: preparedSave,
+        currentState: store.getState(),
+        effectiveJobProductDefaults,
+      })
+      applyEstimateV2SuccessfulSaveState(store, responseState)
       meta.setSaveStatus('saved')
       return true
     },
-    [
-      effectiveJobProductDefaults,
-      estimateId,
-      meta,
-      normalizeJobDefaultProductOverride,
-      routeFamily,
-      store,
-    ]
+    [effectiveJobProductDefaults, estimateId, meta, routeFamily, store]
   )
 
   useEffect(() => {

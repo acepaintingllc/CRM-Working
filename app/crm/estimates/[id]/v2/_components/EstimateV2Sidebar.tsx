@@ -1,15 +1,9 @@
 'use client'
 
-import type { CSSProperties } from 'react'
 import { sortByPosition } from '@/lib/estimator/v2DraftPayload'
 import type { EstimateV2EditorRoomVm, EstimateV2EditorSettingsVm } from '../_state/estimateV2EditorTypes'
-import { Field, type SharedStyles } from './EstimateV2EditorPrimitives'
-
-type SidebarStyles = SharedStyles & {
-  button: CSSProperties
-  panel: CSSProperties
-  input: CSSProperties
-}
+import { Field } from './EstimateV2EditorPrimitives'
+import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 
 export function EstimateV2Sidebar({
   styles,
@@ -17,7 +11,7 @@ export function EstimateV2Sidebar({
   jobSettingsVm,
   toDisplayNumber,
 }: {
-  styles: SidebarStyles
+  styles: EstimateV2EditorPageStyles
   roomVm: EstimateV2EditorRoomVm
   jobSettingsVm: EstimateV2EditorSettingsVm
   toDisplayNumber: (value: number | null | undefined) => string

@@ -1,5 +1,8 @@
 'use client'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import type {
+  QuoteHomeBootstrapPageReadModel,
+  QuoteHomeBootstrapReadModel,
+} from '@/lib/quotes/collectionData'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
@@ -17,7 +20,7 @@ import { S } from './_home/quoteHomeStyles'
 import { useQuotesHomePage } from './_hooks/useQuotesHomePage'
 
 type Props = {
-  initialData?: QuoteHomeBootstrapReadModel | null
+  initialData?: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel | null
 }
 
 export default function QuotesHomePage({ initialData }: Props) {

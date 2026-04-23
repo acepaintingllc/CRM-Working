@@ -213,7 +213,7 @@ describe('QuotePortalClient', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'drawn' } })
 
     const signatureCanvas = screen.getByTestId('quote-signature-canvas') as HTMLCanvasElement
-    signatureCanvas.toDataURL = vi.fn(() => 'data:image/png;base64,drawn-signature')
+    signatureCanvas.toDataURL = vi.fn(() => 'data:image/png;base64,QUJDRA==')
     const agree = screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' })
     fireEvent.click(agree)
 
@@ -232,7 +232,7 @@ describe('QuotePortalClient', () => {
       const body = JSON.parse(String(init?.body))
       expect(url).toBe('/api/quote-public/public-token/accept')
       expect(body.signature_type).toBe('drawn')
-      expect(body.signature_value).toBe('data:image/png;base64,drawn-signature')
+      expect(body.signature_value).toBe('data:image/png;base64,QUJDRA==')
     })
   })
 
@@ -257,6 +257,32 @@ describe('QuotePortalClient', () => {
     resolveFetch(createResponse({ data: createWorkflowSnapshot('accepted') }))
 
     expect(await screen.findByText('This quote has been accepted and locked.')).toBeTruthy()
+  })
+
+  it('submits decline reasons and locks the portal on success', async () => {
+    mockFetch.mockResolvedValue(
+      createResponse({ data: createPublicSnapshot({ status: 'declined' }) })
+    )
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByLabelText('Decline note'), {
+      target: { value: 'Going another direction' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+
+    await waitFor(() => {
+      const [url, init] = mockFetch.mock.calls[0]
+      const body = JSON.parse(String(init?.body))
+      expect(url).toBe('/api/quote-public/public-token/decline')
+      expect(init?.method).toBe('POST')
+      expect(body).toEqual({
+        reason: 'Going another direction',
+      })
+    })
+
+    expect(await screen.findByText('This quote has been declined and locked.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
   })
 
   it('renders locked content for accepted quote', () => {

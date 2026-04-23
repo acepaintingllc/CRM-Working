@@ -16,9 +16,9 @@ vi.mock('@/lib/server/estimatePublicPortal', () => ({
   declinePublicEstimate: mockDeclinePublicEstimate,
 }))
 
-import { GET } from '../quote-public/[token]/route'
 import { POST as acceptQuote } from '../quote-public/[token]/accept/route'
 import { POST as declineQuote } from '../quote-public/[token]/decline/route'
+import { GET } from '../quote-public/[token]/route'
 
 describe('quote public routes', () => {
   beforeEach(() => {
@@ -95,12 +95,6 @@ describe('quote public routes', () => {
   })
 
   it('accept route validates required fields and writes acceptance metadata', async () => {
-    mockAcceptPublicEstimate.mockResolvedValueOnce({
-      ok: false,
-      kind: 'invalid_input',
-      message: 'Legal name is required',
-    })
-
     const invalidResponse = await acceptQuote(
       new Request('http://localhost/api/quote-public/token-1/accept', {
         method: 'POST',
@@ -115,6 +109,7 @@ describe('quote public routes', () => {
     await expect(invalidResponse.json()).resolves.toEqual({
       error: 'Legal name is required',
     })
+    expect(mockAcceptPublicEstimate).not.toHaveBeenCalled()
 
     mockAcceptPublicEstimate.mockResolvedValue({
       ok: true,
@@ -149,6 +144,7 @@ describe('quote public routes', () => {
       acceptedTerms: true,
       userAgent: 'Vitest',
       ip: '127.0.0.1',
+      origin: 'http://localhost',
     })
     await expect(response.json()).resolves.toEqual({
       data: { estimate_version_id: 'version-1', status: 'accepted' },
@@ -156,12 +152,6 @@ describe('quote public routes', () => {
   })
 
   it('accept route maps malformed input and invalid transitions clearly', async () => {
-    mockAcceptPublicEstimate.mockResolvedValueOnce({
-      ok: false,
-      kind: 'invalid_input',
-      message: 'Legal name is required',
-    })
-
     const malformedResponse = await acceptQuote(
       new Request('http://localhost/api/quote-public/token-1/accept', {
         method: 'POST',
@@ -176,8 +166,9 @@ describe('quote public routes', () => {
     )
     expect(malformedResponse.status).toBe(400)
     await expect(malformedResponse.json()).resolves.toEqual({
-      error: 'Legal name is required',
+      error: 'Invalid JSON body.',
     })
+    expect(mockAcceptPublicEstimate).not.toHaveBeenCalled()
 
     mockAcceptPublicEstimate.mockResolvedValue({
       ok: false,
@@ -192,6 +183,7 @@ describe('quote public routes', () => {
         body: JSON.stringify({
           legal_name: 'Taylor Smith',
           accepted_terms: true,
+          signature_value: 'Taylor Smith',
         }),
       }),
       {
@@ -202,6 +194,88 @@ describe('quote public routes', () => {
     expect(conflictResponse.status).toBe(409)
     await expect(conflictResponse.json()).resolves.toEqual({
       error: 'Cannot accept a declined quote',
+    })
+  })
+
+  it('accept route rejects invalid signature contracts before calling the workflow service', async () => {
+    const mismatchResponse = await acceptQuote(
+      new Request('http://localhost/api/quote-public/token-1/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          legal_name: 'Taylor Smith',
+          accepted_terms: true,
+          signature_type: 'typed',
+          signature_value: 'Taylor S.',
+        }),
+      }),
+      {
+        params: { token: 'token-1' },
+      }
+    )
+
+    expect(mismatchResponse.status).toBe(400)
+    await expect(mismatchResponse.json()).resolves.toEqual({
+      error: 'Typed signature must match the full legal name',
+    })
+
+    const drawnResponse = await acceptQuote(
+      new Request('http://localhost/api/quote-public/token-1/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          legal_name: 'Taylor Smith',
+          accepted_terms: true,
+          signature_type: 'drawn',
+          signature_value: 'not-a-data-url',
+        }),
+      }),
+      {
+        params: { token: 'token-1' },
+      }
+    )
+
+    expect(drawnResponse.status).toBe(400)
+    await expect(drawnResponse.json()).resolves.toEqual({
+      error: 'Drawn signature is invalid',
+    })
+    expect(mockAcceptPublicEstimate).not.toHaveBeenCalled()
+  })
+
+  it('accept route preserves legacy payload aliases while normalizing whitespace', async () => {
+    mockAcceptPublicEstimate.mockResolvedValue({
+      ok: true,
+      data: { estimate_version_id: 'version-1', status: 'accepted' },
+    })
+
+    await acceptQuote(
+      new Request('http://localhost/api/quote-public/token-1/accept', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'user-agent': 'Vitest',
+          'x-forwarded-for': '127.0.0.1',
+        },
+        body: JSON.stringify({
+          full_name: '  Taylor Smith  ',
+          agreement_checked: true,
+          signature: '  Taylor Smith  ',
+        }),
+      }),
+      {
+        params: { token: 'token-1' },
+      }
+    )
+
+    expect(mockAcceptPublicEstimate).toHaveBeenCalledWith({
+      token: 'token-1',
+      legalName: 'Taylor Smith',
+      signatureType: 'typed',
+      signatureValue: 'Taylor Smith',
+      acceptedTerms: true,
+      userAgent: 'Vitest',
+      ip: '127.0.0.1',
+      origin: 'http://localhost',
     })
   })
 
@@ -225,6 +299,7 @@ describe('quote public routes', () => {
     expect(mockDeclinePublicEstimate).toHaveBeenCalledWith({
       token: 'token-1',
       reason: 'Going another direction',
+      origin: 'http://localhost',
     })
     await expect(response.json()).resolves.toEqual({
       data: { estimate_version_id: 'version-1', status: 'declined' },
@@ -274,5 +349,24 @@ describe('quote public routes', () => {
     await expect(conflictResponse.json()).resolves.toEqual({
       error: 'Cannot decline an accepted quote',
     })
+  })
+
+  it('decline route rejects malformed json before hitting the workflow service', async () => {
+    const response = await declineQuote(
+      new Request('http://localhost/api/quote-public/token-1/decline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{',
+      }),
+      {
+        params: { token: 'token-1' },
+      }
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid JSON body.',
+    })
+    expect(mockDeclinePublicEstimate).not.toHaveBeenCalled()
   })
 })

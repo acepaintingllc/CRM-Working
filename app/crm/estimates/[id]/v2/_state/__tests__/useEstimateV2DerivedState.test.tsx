@@ -61,6 +61,7 @@ describe('useEstimateV2DerivedState', () => {
 
     expect(result.current.roomModeById.get('R001')).toBe('RECT')
     expect(result.current.roomModeById.get('R002')).toBe('SEG')
+    expect(result.current.sections.room.roomModeById.get('R002')).toBe('SEG')
     expect(result.current.roomScopeByRoomId.get('R002')?.map((scope) => scope.id)).toEqual([
       'wall-r002-main',
       'wall-r002-excluded',

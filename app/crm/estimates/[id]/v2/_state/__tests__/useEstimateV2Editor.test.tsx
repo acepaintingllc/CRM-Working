@@ -25,12 +25,21 @@ vi.mock('../useEstimateV2BeforeUnload', () => ({
 
 vi.mock('../useEstimateV2DerivedState', () => ({
   useEstimateV2DerivedState: () => ({
-    trimTypeOptions: [],
-    roomModeById: new Map([['R001', 'RECT']]),
-    roomHeightFactorByRoomId: new Map([['R001', '1']]),
-    defaultColorCodeId: 'COLOR1',
     dirty: true,
-    currentSnapshot: { payload: {} as never, comparisonKey: '{}' },
+    sections: {
+      catalog: {
+        trimTypeOptions: [],
+        defaultColorCodeId: 'COLOR1',
+      },
+      room: {
+        roomModeById: new Map([['R001', 'RECT']]),
+        roomHeightFactorByRoomId: new Map([['R001', '1']]),
+      },
+      calculation: {
+        dirty: true,
+        currentSnapshot: { payload: {} as never, comparisonKey: '{}' },
+      },
+    },
   }),
 }))
 

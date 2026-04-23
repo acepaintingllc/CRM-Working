@@ -1,19 +1,13 @@
 'use client'
 
-import type { CSSProperties } from 'react'
 import type { EstimateV2EditorSettingsVm } from '../_state/estimateV2EditorTypes'
-
-type DrawerStyles = {
-  mono: CSSProperties
-  label: CSSProperties
-  input: CSSProperties
-}
+import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 
 export function EstimateV2SettingsDrawer({
   styles,
   jobSettingsVm,
 }: {
-  styles: DrawerStyles
+  styles: EstimateV2EditorPageStyles
   jobSettingsVm: EstimateV2EditorSettingsVm
 }) {
   if (!jobSettingsVm.settingsOpen) return null

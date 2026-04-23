@@ -1,5 +1,25 @@
 export type Unsafe = Record<string, unknown>
 
+export type EstimatePublicStatus =
+  | 'draft'
+  | 'sent'
+  | 'viewed'
+  | 'accepted'
+  | 'declined'
+  | 'superseded'
+
+export type EstimatePublicSignatureType = 'typed' | 'drawn'
+
+export type EstimatePublicAcceptanceRecord = {
+  legal_name: string
+  signature_type: EstimatePublicSignatureType
+  signature_value: string
+  accepted_terms: true
+  accepted_at: string
+  user_agent: string
+  ip: string
+}
+
 export type CompanyProfile = {
   business_name: string
   timezone: string
@@ -65,7 +85,7 @@ export type CustomerEstimateDocumentSourceMeta = {
   }
 }
 
-export type BuiltCustomerEstimateDocument = {
+type CustomerEstimateDocumentBase = {
   meta: {
     estimate_id: string
     version_name: string
@@ -94,13 +114,15 @@ export type BuiltCustomerEstimateDocument = {
   source_meta: CustomerEstimateDocumentSourceMeta
 }
 
+export type BuiltCustomerEstimateDocument = CustomerEstimateDocumentBase
+
 export type CustomerEstimateTermsSection = {
   key: string
   title: string
   paragraphs: string[]
 }
 
-export type CustomerEstimateDocument = BuiltCustomerEstimateDocument & {
+export type CustomerEstimateDocument = CustomerEstimateDocumentBase & {
   header: {
     company_name: string
     contact_lines: string[]
@@ -133,7 +155,7 @@ export type EstimatePublicSnapshot = {
   estimate_id: string
   estimate_version_id: string
   version_number: number
-  status: 'draft' | 'sent' | 'viewed' | 'accepted' | 'declined' | 'superseded'
+  status: EstimatePublicStatus
   public_token: string | null
   public_url: string | null
   draft: Record<string, unknown>

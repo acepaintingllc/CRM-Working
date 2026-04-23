@@ -1,3 +1,4 @@
+import { resolveParams } from '@/lib/server/apiRoute'
 import { serviceResultDataResponse } from '@/lib/server/routeResult'
 import { loadPublicEstimateSnapshot } from '@/lib/server/estimatePublicPortal'
 
@@ -5,7 +6,7 @@ export async function GET(
   request: Request,
   context: { params: { token: string } | Promise<{ token: string }> }
 ) {
-  const params = await Promise.resolve(context.params)
+  const params = await resolveParams(context)
   const token = (params as { token?: string } | null | undefined)?.token
   return serviceResultDataResponse(
     await loadPublicEstimateSnapshot(

@@ -1,6 +1,5 @@
 'use client'
 
-import type { CSSProperties } from 'react'
 import type {
   EstimateV2EditorRoomVm,
   EstimateV2EditorSummaryVm,
@@ -8,16 +7,8 @@ import type {
   EstimateV2EditorWallsVm,
   EstimateV2EditorCeilingsVm,
 } from '../_state/estimateV2EditorTypes'
-import type { SharedStyles } from './EstimateV2EditorPrimitives'
+import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 import { EstimateV2RoomHeader } from './EstimateV2RoomHeader'
-
-type EditorStyles = SharedStyles & {
-  input: CSSProperties
-  button: CSSProperties
-  computedBig: CSSProperties
-  flagChip: CSSProperties
-  scopePill: CSSProperties
-}
 
 export function EstimateV2EditorRoomSetupArea({
   styles,
@@ -30,7 +21,7 @@ export function EstimateV2EditorRoomSetupArea({
   onToggleCeilingInclude,
   toDisplayNumber,
 }: {
-  styles: EditorStyles
+  styles: EstimateV2EditorPageStyles
   roomVm: EstimateV2EditorRoomVm
   summaryVm: EstimateV2EditorSummaryVm
   wallsVm: EstimateV2EditorWallsVm

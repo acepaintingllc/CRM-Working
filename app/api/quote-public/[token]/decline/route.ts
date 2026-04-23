@@ -1,26 +1,30 @@
-import { NextResponse } from 'next/server'
-import { serviceResultDataResponse } from '@/lib/server/routeResult'
+import { readJsonBody, resolveParams } from '@/lib/server/apiRoute'
+import { serviceErrorResponse, serviceResultDataResponse } from '@/lib/server/routeResult'
 import { declinePublicEstimate } from '@/lib/server/estimatePublicPortal'
-
-function asText(value: unknown) {
-  return value == null ? '' : String(value).trim()
-}
+import { parsePublicEstimateDeclineRequest } from '@/lib/customer-estimates/publicPortalContracts'
 
 export async function POST(
   request: Request,
   context: { params: { token: string } | Promise<{ token: string }> }
 ) {
-  const params = await Promise.resolve(context.params)
+  const params = await resolveParams(context)
   const token = (params as { token?: string } | null | undefined)?.token
-  if (!token || typeof token !== 'string') {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
+  const body = await readJsonBody<Record<string, unknown>>(request)
+  if (!body.ok) return body.response
+
+  const parsed = parsePublicEstimateDeclineRequest(body.value)
+  if (!parsed.ok) {
+    return serviceErrorResponse({
+      ok: false,
+      kind: 'invalid_input',
+      message: parsed.error,
+    })
   }
 
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   return serviceResultDataResponse(
     await declinePublicEstimate({
-      token,
-      reason: asText(body?.reason),
+      token: token ?? '',
+      reason: parsed.value.reason,
     })
   )
 }

@@ -118,6 +118,17 @@ export type QuoteHomeEligibleJobReadModel = {
   linked_estimate_id?: string | null
 }
 
+export type QuoteHomeJobListItemReadModel = QuoteHomeEligibleJobReadModel & {
+  version_count: number
+}
+
+export type QuoteHomeJobsPageReadModel = {
+  query: string
+  limit: number
+  next_cursor: string | null
+  items: QuoteHomeJobListItemReadModel[]
+}
+
 export type QuoteHomeBootstrapReadModel = {
   summary: QuoteHomeSummaryReadModel
   jobCounts: QuoteHomeJobVersionCountsReadModel
@@ -128,6 +139,18 @@ export type QuoteJobVersionsReadModel = {
   job_id: string
   total_versions: number
   items: QuoteHomeJobVersionItemReadModel[]
+}
+
+export type QuoteJobVersionsPageReadModel = QuoteJobVersionsReadModel & {
+  limit: number
+  next_cursor: string | null
+}
+
+export type QuoteHomeBootstrapPageReadModel = {
+  summary: QuoteHomeSummaryReadModel
+  jobs: QuoteHomeJobsPageReadModel
+  selected_job_id: string | null
+  selected_job_versions: QuoteJobVersionsPageReadModel | null
 }
 
 export type QuoteHomeSearchResponse = {
@@ -247,18 +270,45 @@ export function buildQuoteHomeSummaryReadModel(
 }
 
 export function buildQuoteHomeBootstrapReadModel(
+  params: {
+    summary: QuoteHomeSummaryReadModel
+    jobs: QuoteHomeJobsPageReadModel
+    selectedJobVersions: QuoteJobVersionsPageReadModel | null
+  }
+): QuoteHomeBootstrapPageReadModel
+export function buildQuoteHomeBootstrapReadModel(
   rows: EstimateCollectionDecoratedRow[],
   jobs: QuoteHomeEligibleJobReadModel[]
-): QuoteHomeBootstrapReadModel {
+): QuoteHomeBootstrapReadModel
+export function buildQuoteHomeBootstrapReadModel(
+  rowsOrParams:
+    | EstimateCollectionDecoratedRow[]
+    | {
+        summary: QuoteHomeSummaryReadModel
+        jobs: QuoteHomeJobsPageReadModel
+        selectedJobVersions: QuoteJobVersionsPageReadModel | null
+      },
+  jobs: QuoteHomeEligibleJobReadModel[] = []
+): QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel {
+  if (!Array.isArray(rowsOrParams)) {
+    return {
+      summary: rowsOrParams.summary,
+      jobs: rowsOrParams.jobs,
+      selected_job_id:
+        rowsOrParams.selectedJobVersions?.job_id ?? rowsOrParams.jobs.items[0]?.id ?? null,
+      selected_job_versions: rowsOrParams.selectedJobVersions,
+    }
+  }
+
   return {
     summary: buildQuoteHomeSummaryReadModel(
-      rows.map((row) => ({
+      rowsOrParams.map((row) => ({
         version_state: row.version_state,
         final_total: row.final_total,
         is_sent_estimate: row.is_sent_estimate,
       }))
     ),
-    jobCounts: buildQuoteHomeJobVersionCountsReadModel(rows),
+    jobCounts: buildQuoteHomeJobVersionCountsReadModel(rowsOrParams),
     jobs,
   }
 }
@@ -273,11 +323,26 @@ export function buildQuoteHomeRecentActivityReadModel(
 
 export function buildQuoteHomeSearchReadModel(
   rows: EstimateCollectionDecoratedRow[],
-  query: string
+  query: string,
+  _limit?: number
 ): QuoteHomeSearchResponse {
   return {
     query,
     items: rows.map(toQuoteHomeSearchResultReadModel),
+  }
+}
+
+export function buildQuoteHomeJobsPageReadModel(params: {
+  query: string
+  limit: number
+  nextCursor: string | null
+  items: QuoteHomeJobListItemReadModel[]
+}): QuoteHomeJobsPageReadModel {
+  return {
+    query: params.query,
+    limit: params.limit,
+    next_cursor: params.nextCursor,
+    items: params.items,
   }
 }
 
@@ -289,13 +354,46 @@ export function buildQuoteListPayload(rows: EstimateCollectionDecoratedRow[]) {
 
 export function buildQuoteJobVersionsReadModel(
   rows: EstimateCollectionDecoratedRow[],
+  params: {
+    jobId: string
+    totalVersions: number
+    limit: number
+    nextCursor: string | null
+  }
+): QuoteJobVersionsPageReadModel
+export function buildQuoteJobVersionsReadModel(
+  rows: EstimateCollectionDecoratedRow[],
   jobId: string
-): QuoteJobVersionsReadModel {
+): QuoteJobVersionsReadModel
+export function buildQuoteJobVersionsReadModel(
+  rows: EstimateCollectionDecoratedRow[],
+  jobIdOrParams:
+    | string
+    | {
+        jobId: string
+        totalVersions: number
+        limit: number
+        nextCursor: string | null
+      }
+): QuoteJobVersionsReadModel | QuoteJobVersionsPageReadModel {
+  if (typeof jobIdOrParams !== 'string') {
+    const items = rows
+      .map(toQuoteHomeJobVersionItem)
+      .filter((estimate) => estimate.job_id === jobIdOrParams.jobId)
+    return {
+      job_id: jobIdOrParams.jobId,
+      total_versions: jobIdOrParams.totalVersions,
+      limit: jobIdOrParams.limit,
+      next_cursor: jobIdOrParams.nextCursor,
+      items,
+    }
+  }
+
   const items = rows
     .map(toQuoteHomeJobVersionItem)
-    .filter((estimate) => estimate.job_id === jobId)
+    .filter((estimate) => estimate.job_id === jobIdOrParams)
   return {
-    job_id: jobId,
+    job_id: jobIdOrParams,
     total_versions: items.length,
     items,
   }

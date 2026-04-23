@@ -632,3 +632,339 @@ test('buildCustomerEstimateDocument owns business composition and emits only bui
   assert.equal(document.source_meta.overrides.card_fee_note, true)
   assert.match(document.quote_rows[0]?.description ?? '', /Duration Exterior/i)
 })
+
+test('buildCustomerEstimateDocument preserves mixed-scope output parity across decomposed stages', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-7',
+      version_name: 'Whole House Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-21T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Morgan Customer',
+      customer_address: '987 Market St',
+      estimate_date: '2026-04-21',
+    },
+    customer: {
+      name: 'Morgan Customer',
+      email: 'morgan@example.com',
+      phone: '555-0123',
+      address: '987 Market St\nEvansville, IN 47715',
+      street: '987 Market St',
+      city: 'Evansville',
+      state: 'IN',
+      zip: '47715',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [
+        { room_id: 'R001', room_name: 'Kitchen' },
+        { room_id: 'R002', room_name: 'Hall Bath' },
+      ],
+      room_wall_scopes: [
+        {
+          id: 'W-1',
+          room_id: 'R001',
+          include: 'Y',
+          effective_total: 850,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+          prime_mode: 'FULL',
+          notes: 'special prep',
+          walls_prep_override: '',
+          scope_notes: '',
+        },
+      ],
+      room_ceiling_scopes: [
+        {
+          id: 'C-1',
+          room_id: 'R002',
+          include: 'Y',
+          effective_total: 225,
+          paint_coats: 1,
+          paint_product_id: 'P-CEIL',
+          prime_mode: 'SPOT',
+          notes: '',
+          ceiling_prep_override: 'minor stain blocking',
+          scope_notes: '',
+        },
+      ],
+      room_trim_scopes: [],
+      trim_items: [
+        {
+          id: 'T-1',
+          room_id: 'R001',
+          trim_menu_id: 'TRIM-BASE',
+          paint_product_id: 'P-TRIM',
+          coats: 2,
+          raw_total: 175,
+          prime_mode: 'FULL',
+        },
+        {
+          id: 'T-2',
+          room_id: 'R002',
+          trim_menu_id: 'TRIM-DOOR',
+          paint_product_id: 'P-TRIM',
+          coats: 2,
+          raw_total: 130,
+          prime_mode: 'FULL',
+        },
+      ],
+      other: [
+        {
+          client_description: 'Wallpaper removal in upstairs hall',
+          location: 'Hall Bath',
+          qty: 1,
+          uom: 'area',
+          raw_total: 120,
+        },
+      ],
+    },
+    catalogs: {
+      paint_products: [
+        { id: 'P-WALL', display_name: 'SW Duration Home', display_id: 'WALL-1' },
+        { id: 'P-CEIL', display_name: 'SW Ceiling Bright White', display_id: 'CEIL-1' },
+        { id: 'P-TRIM', display_name: 'SW Emerald Urethane Trim', display_id: 'TRIM-1' },
+      ],
+      trim_items: [
+        { id: 'TRIM-BASE', label: 'Baseboards', family: 'baseboard' },
+        { id: 'TRIM-DOOR', label: 'Door and Frame', family: 'door casing' },
+      ],
+    },
+    settings: {
+      quote_validity_days: 30,
+      terms_text: '',
+    },
+    pricingSummary: {
+      finalTotal: 1500,
+    },
+  })
+
+  assert.deepEqual(
+    document.scopes.map((section) => section.key),
+    ['walls', 'ceilings', 'trim', 'doors', 'other']
+  )
+  assert.match(document.scopes.find((section) => section.key === 'walls')?.text ?? '', /special prep/i)
+  assert.match(document.scopes.find((section) => section.key === 'ceilings')?.text ?? '', /stain/i)
+  assert.match(document.scopes.find((section) => section.key === 'trim')?.text ?? '', /Baseboards/i)
+  assert.match(document.scopes.find((section) => section.key === 'doors')?.text ?? '', /Door and Frame/i)
+  assert.equal(
+    document.scopes.find((section) => section.key === 'other')?.text,
+    'Wallpaper removal in upstairs hall in Hall Bath 1 area'
+  )
+  assert.equal(document.quote_rows.length, 5)
+  assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), 1500)
+})
+
+test('buildCustomerEstimateDocument degrades missing settings and empty sections without broken output', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-8',
+      version_name: 'Sparse Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Casey Customer',
+      customer_address: '123 Main St',
+      estimate_date: '',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Kitchen' }],
+      room_wall_scopes: [
+        {
+          room_id: 'R001',
+          include: 'N',
+          effective_total: 900,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [],
+      other: [],
+    },
+    pricingSummary: {
+      finalTotal: null,
+    },
+  })
+
+  assert.equal(document.quote_validity_days, 90)
+  assert.equal(document.scopes.length, 0)
+  assert.equal(document.quote_rows.length, 0)
+  assert.equal(document.total, 0)
+  assert.equal(document.terms.length > 0, true)
+  assert.equal(document.source_meta.settings.quote_validity_days, false)
+  assert.equal(document.source_meta.settings.terms_text, false)
+})
+
+test('buildCustomerEstimateDocument normalizes malformed room and product labels into safe customer copy', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-9',
+      version_name: 'Fallback Labels',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Taylor Jones',
+      customer_address: '123 Main St',
+      estimate_date: '2026-04-20',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R002', room_name: '0123456789abcdef0123' }],
+      room_wall_scopes: [
+        {
+          room_id: 'R002',
+          include: 'Y',
+          effective_total: 320,
+          paint_coats: 2,
+          paint_product_label: '4fab71cc-37d5-4570-a432-aa0bcc0eb2c6',
+          prime_mode: 'FULL',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [],
+      other: [],
+      jobsettings: {
+        walls_paint_id: 'P-WALL',
+      },
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-WALL', display_name: 'SW SuperPaint', display_id: 'SP-1' }],
+      trim_items: [],
+    },
+    pricingSummary: {
+      finalTotal: 320,
+    },
+  })
+
+  assert.match(document.scopes[0]?.text ?? '', /Room 2/)
+  assert.match(document.scopes[0]?.text ?? '', /SW SuperPaint/)
+  assert.doesNotMatch(document.scopes[0]?.text ?? '', /0123456789abcdef0123|4fab71cc-37d5-4570-a432-aa0bcc0eb2c6/i)
+})
+
+test('buildCustomerEstimateDocument skips malformed zero-priced mixed scope rows while preserving valid sections', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-10',
+      version_name: 'Mixed Scope',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Morgan Customer',
+      customer_address: '987 Market St',
+      estimate_date: '2026-04-21',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [
+        { room_id: 'R001', room_name: 'Kitchen' },
+        { room_id: 'R002', room_name: 'Hall Bath' },
+      ],
+      room_wall_scopes: [
+        {
+          room_id: 'R001',
+          include: 'Y',
+          effective_total: 850,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+          prime_mode: 'FULL',
+        },
+        {
+          room_id: 'R002',
+          include: 'Y',
+          effective_total: 'bad',
+          paint_product_id: 'P-WALL',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [
+        {
+          room_id: 'R002',
+          trim_menu_id: 'TRIM-DOOR',
+          paint_product_id: 'P-TRIM',
+          coats: 2,
+          raw_total: 130,
+          prime_mode: 'FULL',
+        },
+        {
+          room_id: 'R002',
+          trim_menu_id: 'TRIM-BASE',
+          paint_product_id: 'P-TRIM',
+          coats: 2,
+          raw_total: 'oops',
+          prime_mode: 'FULL',
+        },
+      ],
+      other: [{ client_description: '', location: '', qty: '', raw_total: 40 }],
+    },
+    catalogs: {
+      paint_products: [
+        { id: 'P-WALL', display_name: 'SW Duration Home', display_id: 'WALL-1' },
+        { id: 'P-TRIM', display_name: 'SW Emerald Urethane Trim', display_id: 'TRIM-1' },
+      ],
+      trim_items: [
+        { id: 'TRIM-BASE', label: 'Baseboards', family: 'baseboard' },
+        { id: 'TRIM-DOOR', label: 'Door and Frame', family: 'door casing' },
+      ],
+    },
+    pricingSummary: {
+      finalTotal: 1020,
+    },
+  })
+
+  assert.deepEqual(
+    document.scopes.map((section) => section.key),
+    ['walls', 'doors', 'other']
+  )
+  assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), 1020)
+  assert.equal(document.scopes.find((section) => section.key === 'other')?.text, 'Additional work 1')
+})

@@ -1,22 +1,16 @@
 'use client'
 
-import type { CSSProperties } from 'react'
 import type { ScopeKind } from '@/lib/estimator/scopeKinds'
 import type { EstimateV2EditorSummaryVm } from '../_state/estimateV2EditorTypes'
-import { SummaryRail, type SharedStyles } from './EstimateV2EditorPrimitives'
-
-type RailStyles = SharedStyles & {
-  mono: CSSProperties
-  panel: CSSProperties
-  scopePill: CSSProperties
-}
+import { SummaryRail } from './EstimateV2EditorPrimitives'
+import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 
 export function EstimateV2SummaryRail({
   styles,
   vm,
   onFocusSection,
 }: {
-  styles: RailStyles
+  styles: EstimateV2EditorPageStyles
   vm: EstimateV2EditorSummaryVm
   onFocusSection: (section: ScopeKind) => void
 }) {
@@ -79,7 +73,7 @@ function SectionCard({
   styles,
   section,
 }: {
-  styles: RailStyles
+  styles: EstimateV2EditorPageStyles
   section: EstimateV2EditorSummaryVm['walls']
 }) {
   return (

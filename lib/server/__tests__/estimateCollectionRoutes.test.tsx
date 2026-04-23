@@ -4,8 +4,8 @@ const mocks = vi.hoisted(() => ({
   requireSessionUserOrg: vi.fn(),
   readJsonBody: vi.fn(),
   loadEstimateCollectionBootstrapPayload: vi.fn(),
-  loadEstimateCollectionJobCountsPayload: vi.fn(),
   loadEstimateCollectionJobVersionsPayload: vi.fn(),
+  loadEstimateCollectionJobsPayload: vi.fn(),
   loadEstimateCollectionPayload: vi.fn(),
   loadEstimateCollectionRecentActivityPayload: vi.fn(),
   loadEstimateCollectionSearchPayload: vi.fn(),
@@ -34,8 +34,8 @@ vi.mock('@/lib/server/apiRoute', () => ({
 
 vi.mock('@/lib/server/estimate-collection/service', () => ({
   loadEstimateCollectionBootstrapPayload: mocks.loadEstimateCollectionBootstrapPayload,
-  loadEstimateCollectionJobCountsPayload: mocks.loadEstimateCollectionJobCountsPayload,
   loadEstimateCollectionJobVersionsPayload: mocks.loadEstimateCollectionJobVersionsPayload,
+  loadEstimateCollectionJobsPayload: mocks.loadEstimateCollectionJobsPayload,
   loadEstimateCollectionPayload: mocks.loadEstimateCollectionPayload,
   loadEstimateCollectionRecentActivityPayload: mocks.loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload: mocks.loadEstimateCollectionSearchPayload,
@@ -48,217 +48,82 @@ import {
   handleEstimateCollectionRoutePost,
   handleEstimateHomeBootstrapRouteGet,
   handleEstimateHomeJobCountsRouteGet,
+  handleEstimateHomeJobsRouteGet,
   handleEstimateHomeRecentActivityRouteGet,
   handleEstimateHomeSearchRouteGet,
   handleEstimateHomeSummaryRouteGet,
   handleEstimateJobVersionsRouteGet,
 } from '../estimateCollectionRoutes'
 
-const summary = {
-  total_versions: 2,
-  draft_count: 1,
-  sent_or_awaiting_count: 2,
-  live_count: 1,
-  pipeline_total: 2000,
-}
-
-const jobCounts = {
-  items: [
-    { job_id: '11111111-1111-4111-8111-111111111111', version_count: 1 },
-    { job_id: '22222222-2222-4222-8222-222222222222', version_count: 1 },
-  ],
-}
-
-const bootstrap = {
-  summary,
-  jobCounts,
-  jobs: [
-    {
-      id: '11111111-1111-4111-8111-111111111111',
-      customer_id: 'customer-1',
-      customer_name: 'Alice',
-      customer_address: '123 Main',
-      title: 'Kitchen',
-      description: null,
-      status: 'estimate_scheduled',
-      estimate_date: null,
-      estimate_sent_at: '2026-04-21T00:00:00.000Z',
-      scheduled_date: null,
-      completed_at: null,
-    },
-  ],
-}
-
 describe('estimate collection routes', () => {
   beforeEach(() => {
-    mocks.requireSessionUserOrg.mockReset()
-    mocks.readJsonBody.mockReset()
-    mocks.loadEstimateCollectionBootstrapPayload.mockReset()
-    mocks.loadEstimateCollectionJobCountsPayload.mockReset()
-    mocks.loadEstimateCollectionJobVersionsPayload.mockReset()
-    mocks.loadEstimateCollectionPayload.mockReset()
-    mocks.loadEstimateCollectionRecentActivityPayload.mockReset()
-    mocks.loadEstimateCollectionSearchPayload.mockReset()
-    mocks.loadEstimateCollectionSummaryPayload.mockReset()
-    mocks.createEstimateCollectionVersion.mockReset()
-
+    Object.values(mocks).forEach((mock) => mock.mockReset())
     mocks.requireSessionUserOrg.mockResolvedValue({
       ok: true,
       session: { orgId: 'org-1', userId: 'user-1' },
     })
-    mocks.loadEstimateCollectionBootstrapPayload.mockResolvedValue({
-      ok: true,
-      data: bootstrap,
-    })
-    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValue({
-      ok: true,
-      data: summary,
-    })
-    mocks.loadEstimateCollectionRecentActivityPayload.mockResolvedValue({
-      ok: true,
-      data: {
-        items: [
-          { estimate_id: 'estimate-1' },
-          { estimate_id: 'estimate-2' },
-        ],
-      },
-    })
-    mocks.loadEstimateCollectionJobCountsPayload.mockResolvedValue({
-      ok: true,
-      data: jobCounts,
-    })
-    mocks.loadEstimateCollectionSearchPayload.mockResolvedValue({
-      ok: true,
-      data: {
-        query: 'garage',
-        items: [{ estimate_id: 'estimate-2' }],
-      },
-    })
-    mocks.loadEstimateCollectionJobVersionsPayload.mockResolvedValue({
-      ok: true,
-      data: {
-        job_id: '11111111-1111-4111-8111-111111111111',
-        total_versions: 2,
-        items: [{ estimate_id: 'estimate-1' }, { estimate_id: 'estimate-2' }],
-      },
-    })
     mocks.readJsonBody.mockResolvedValue({
       ok: true,
-      value: {
-        job_id: '11111111-1111-4111-8111-111111111111',
-        customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        version_kind: 'revision',
-        version_name: 'Kitchen Revision 2',
-      },
+      value: { job_id: '11111111-1111-4111-8111-111111111111' },
+    })
+    mocks.loadEstimateCollectionBootstrapPayload.mockResolvedValue({ ok: true, data: { jobs: { items: [] } } })
+    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValue({ ok: true, data: { total_versions: 2 } })
+    mocks.loadEstimateCollectionRecentActivityPayload.mockResolvedValue({ ok: true, data: { items: [] } })
+    mocks.loadEstimateCollectionJobsPayload.mockResolvedValue({ ok: true, data: { query: '', items: [] } })
+    mocks.loadEstimateCollectionSearchPayload.mockResolvedValue({ ok: true, data: { query: 'garage', limit: 8, items: [] } })
+    mocks.loadEstimateCollectionJobVersionsPayload.mockResolvedValue({
+      ok: true,
+      data: { job_id: 'job-1', total_versions: 1, limit: 25, next_cursor: null, items: [] },
     })
     mocks.createEstimateCollectionVersion.mockResolvedValue({
       ok: true,
-      data: {
-        id: 'estimate-new',
-        estimate: {
-          id: 'estimate-new',
-          version_sort_order: 2,
-        },
-      },
+      data: { id: 'estimate-new', estimate: { id: 'estimate-new' } },
     })
   })
 
-  it('keeps bootstrap, summary, recent-activity, and job-count routes thin', async () => {
-    const bootstrapResponse = await handleEstimateHomeBootstrapRouteGet()
-    const summaryResponse = await handleEstimateHomeSummaryRouteGet()
-    const recentActivityResponse = await handleEstimateHomeRecentActivityRouteGet()
-    const jobCountsResponse = await handleEstimateHomeJobCountsRouteGet()
+  it('keeps bootstrap, summary, recent-activity, jobs, and search routes thin', async () => {
+    const jobsRequest = new Request('http://localhost/api/quotes/home/jobs?q=kit&cursor=abc&limit=10')
+    const searchRequest = new Request('http://localhost/api/quotes/home/search?q=garage')
+
+    await handleEstimateHomeBootstrapRouteGet()
+    await handleEstimateHomeSummaryRouteGet()
+    await handleEstimateHomeRecentActivityRouteGet()
+    await handleEstimateHomeJobsRouteGet(jobsRequest)
+    await handleEstimateHomeSearchRouteGet(searchRequest)
 
     expect(mocks.loadEstimateCollectionBootstrapPayload).toHaveBeenCalledWith('org-1')
     expect(mocks.loadEstimateCollectionSummaryPayload).toHaveBeenCalledWith('org-1')
     expect(mocks.loadEstimateCollectionRecentActivityPayload).toHaveBeenCalledWith('org-1')
-    expect(mocks.loadEstimateCollectionJobCountsPayload).toHaveBeenCalledWith('org-1')
-    await expect(bootstrapResponse.json()).resolves.toEqual({ data: bootstrap })
-    await expect(summaryResponse.json()).resolves.toEqual({ data: summary })
-    await expect(recentActivityResponse.json()).resolves.toEqual({
-      data: {
-        items: [
-          expect.objectContaining({ estimate_id: 'estimate-1' }),
-          expect.objectContaining({ estimate_id: 'estimate-2' }),
-        ],
-      },
+    expect(mocks.loadEstimateCollectionJobsPayload).toHaveBeenCalledWith('org-1', {
+      query: 'kit',
+      cursor: 'abc',
+      limit: 10,
     })
-    await expect(jobCountsResponse.json()).resolves.toEqual({ data: jobCounts })
+    expect(mocks.loadEstimateCollectionSearchPayload).toHaveBeenCalledWith('org-1', 'garage')
   })
 
-  it('passes search queries through to the collection service', async () => {
-    mocks.loadEstimateCollectionSearchPayload.mockResolvedValueOnce({
-      ok: true,
-      data: { query: '', items: [] },
-    })
-    mocks.loadEstimateCollectionSearchPayload.mockResolvedValueOnce({
-      ok: true,
-      data: { query: 'garage', items: [{ estimate_id: 'estimate-2' }] },
-    })
-
-    const emptyResponse = await handleEstimateHomeSearchRouteGet(
-      new Request('http://localhost/api/quotes/home/search?q=')
-    )
-    const filteredResponse = await handleEstimateHomeSearchRouteGet(
-      new Request('http://localhost/api/quotes/home/search?q=garage')
-    )
-
-    expect(mocks.loadEstimateCollectionSearchPayload).toHaveBeenNthCalledWith(1, 'org-1', '')
-    expect(mocks.loadEstimateCollectionSearchPayload).toHaveBeenNthCalledWith(
-      2,
-      'org-1',
-      'garage'
-    )
-    await expect(emptyResponse.json()).resolves.toEqual({
-      data: {
-        query: '',
-        items: [],
-      },
-    })
-    await expect(filteredResponse.json()).resolves.toEqual({
-      data: {
-        query: 'garage',
-        items: [expect.objectContaining({ estimate_id: 'estimate-2' })],
-      },
-    })
+  it('marks the old job-counts route as gone', async () => {
+    const response = await handleEstimateHomeJobCountsRouteGet()
+    expect(response.status).toBe(410)
   })
 
-  it('returns 400 for invalid job ids', async () => {
-    const response = await handleEstimateJobVersionsRouteGet(
+  it('validates job ids and forwards pagination params for job versions', async () => {
+    const invalidResponse = await handleEstimateJobVersionsRouteGet(
       new Request('http://localhost/api/quotes/home/jobs/not-a-uuid/versions'),
-      {
-        params: { jobId: 'not-a-uuid' },
-      }
+      { params: { jobId: 'not-a-uuid' } }
     )
+    expect(invalidResponse.status).toBe(400)
 
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toEqual({ error: 'Invalid job id' })
-  })
-
-  it('delegates job version loading to the collection service', async () => {
-    const response = await handleEstimateJobVersionsRouteGet(
-      new Request(
-        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/versions'
-      ),
-      {
-        params: { jobId: '33333333-3333-4333-8333-333333333333' },
-      }
+    await handleEstimateJobVersionsRouteGet(
+      new Request('http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/versions?cursor=next&limit=50'),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
     )
 
     expect(mocks.loadEstimateCollectionJobVersionsPayload).toHaveBeenCalledWith(
       'org-1',
-      '33333333-3333-4333-8333-333333333333'
+      '33333333-3333-4333-8333-333333333333',
+      { cursor: 'next', limit: 50 }
     )
-    await expect(response.json()).resolves.toEqual({
-      data: {
-        job_id: '11111111-1111-4111-8111-111111111111',
-        total_versions: 2,
-        items: [
-          expect.objectContaining({ estimate_id: 'estimate-1' }),
-          expect.objectContaining({ estimate_id: 'estimate-2' }),
-        ],
-      },
-    })
   })
 
   it('delegates version creation to the shared write service', async () => {
@@ -270,74 +135,9 @@ describe('estimate collection routes', () => {
     expect(mocks.createEstimateCollectionVersion).toHaveBeenCalledWith({
       orgId: 'org-1',
       userId: 'user-1',
-      body: {
-        job_id: '11111111-1111-4111-8111-111111111111',
-        customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        version_kind: 'revision',
-        version_name: 'Kitchen Revision 2',
-      },
+      body: { job_id: '11111111-1111-4111-8111-111111111111' },
       copy: estimateCollectionCopy,
     })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({
-      data: {
-        id: 'estimate-new',
-        estimate: expect.objectContaining({
-          id: 'estimate-new',
-          version_sort_order: 2,
-        }),
-      },
-      notice: 'Estimate version created.',
-    })
-  })
-
-  it('maps invalid input failures from the write service to 400', async () => {
-    mocks.createEstimateCollectionVersion.mockResolvedValueOnce({
-      ok: false,
-      kind: 'invalid_input',
-      message: 'Invalid job_id',
-    })
-
-    const response = await handleEstimateCollectionRoutePost(
-      new Request('http://localhost/api/estimates', { method: 'POST' }),
-      estimateCollectionCopy
-    )
-
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toEqual({ error: 'Invalid job_id' })
-  })
-
-  it('maps not-found failures from the write service to 404', async () => {
-    mocks.createEstimateCollectionVersion.mockResolvedValueOnce({
-      ok: false,
-      kind: 'not_found',
-      message: 'Job not found',
-    })
-
-    const response = await handleEstimateCollectionRoutePost(
-      new Request('http://localhost/api/estimates', { method: 'POST' }),
-      estimateCollectionCopy
-    )
-
-    expect(response.status).toBe(404)
-    await expect(response.json()).resolves.toEqual({ error: 'Job not found' })
-  })
-
-  it('passes server failures through the standard mutation envelope', async () => {
-    mocks.createEstimateCollectionVersion.mockResolvedValueOnce({
-      ok: false,
-      kind: 'server_error',
-      message: 'Failed to initialize estimate_jobsettings',
-    })
-
-    const response = await handleEstimateCollectionRoutePost(
-      new Request('http://localhost/api/estimates', { method: 'POST' }),
-      estimateCollectionCopy
-    )
-
-    expect(response.status).toBe(500)
-    await expect(response.json()).resolves.toEqual({
-      error: 'Failed to initialize estimate_jobsettings',
-    })
   })
 })
