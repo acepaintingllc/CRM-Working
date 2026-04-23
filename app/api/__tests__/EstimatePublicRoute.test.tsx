@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockLoadPublicEstimateSnapshot } = vi.hoisted(() => ({
+const {
+  mockLoadPublicEstimateSnapshot,
+} = vi.hoisted(() => ({
   mockLoadPublicEstimateSnapshot: vi.fn(),
 }))
 
@@ -27,10 +29,10 @@ describe('estimate public route', () => {
     expect(invalidResponse.status).toBe(400)
     await expect(invalidResponse.json()).resolves.toEqual({ error: 'Invalid token' })
 
-    mockLoadPublicEstimateSnapshot.mockResolvedValueOnce({
+    mockLoadPublicEstimateSnapshot.mockResolvedValue({
       ok: false,
       kind: 'not_found',
-      message: 'Quote not found',
+      message: 'Estimate not found',
     })
     const missingResponse = await GET(
       new Request('http://localhost/api/estimate-public/missing'),
@@ -39,21 +41,16 @@ describe('estimate public route', () => {
       }
     )
 
-    expect(mockLoadPublicEstimateSnapshot).toHaveBeenLastCalledWith(
+    expect(mockLoadPublicEstimateSnapshot).toHaveBeenCalledWith(
       'missing',
       { origin: 'http://localhost' },
-      {
-        metadata: {
-          route: 'estimate-public-api',
-          user_agent: '',
-        },
-      }
+      { metadata: { user_agent: '' } }
     )
     expect(missingResponse.status).toBe(404)
-    await expect(missingResponse.json()).resolves.toEqual({ error: 'Quote not found' })
+    await expect(missingResponse.json()).resolves.toEqual({ error: 'Estimate not found' })
   })
 
-  it('returns the shared snapshot data payload', async () => {
+  it('marks the first eligible public estimate view and returns the snapshot', async () => {
     mockLoadPublicEstimateSnapshot.mockResolvedValue({
       ok: true,
       data: {
@@ -76,12 +73,7 @@ describe('estimate public route', () => {
     expect(mockLoadPublicEstimateSnapshot).toHaveBeenCalledWith(
       'token-1',
       { origin: 'http://localhost' },
-      {
-        metadata: {
-          route: 'estimate-public-api',
-          user_agent: 'Vitest',
-        },
-      }
+      { metadata: { user_agent: 'Vitest' } }
     )
     await expect(response.json()).resolves.toEqual({
       data: {

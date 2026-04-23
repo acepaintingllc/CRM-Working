@@ -1,5 +1,4 @@
-'use client'
-
+import { categoryByKey } from '@/lib/quotes/ratesFlagsForm'
 import type {
   RatesFlagsActivationMutationRequest,
   RatesFlagsCreateOrUpdateMutation,
@@ -7,21 +6,71 @@ import type {
   RatesFlagsRow,
 } from '@/types/estimator/ratesFlags'
 
-type MutationRequest = RatesFlagsCreateOrUpdateMutation | RatesFlagsActivationMutationRequest
+function buildRowFromMutation(request: RatesFlagsCreateOrUpdateMutation): RatesFlagsRow {
+  return {
+    ...request.values,
+    active: request.values.active === 'Y',
+  } as RatesFlagsRow
+}
 
 export function reconcileRatesFlagsPayload(
   payload: RatesFlagsPayload,
-  request: MutationRequest
+  request: RatesFlagsCreateOrUpdateMutation | RatesFlagsActivationMutationRequest
 ) {
-  void request
-  return payload
+  return {
+    ...payload,
+    categories: payload.categories.map((category) => {
+      if (category.key !== request.category) {
+        return category
+      }
+
+      if (request.action === 'archive' || request.action === 'reactivate') {
+        return {
+          ...category,
+          rows: category.rows.map((row) =>
+            row.id === request.rowId ? { ...row, active: request.action === 'reactivate' } : row
+          ),
+        }
+      }
+
+      const nextRow = buildRowFromMutation(request)
+      const originalId = 'original_id' in request ? request.original_id : nextRow.id
+
+      const updatedRows =
+        request.action === 'create'
+          ? [nextRow, ...category.rows.filter((row) => row.id !== nextRow.id)]
+          : (() => {
+              const rows = category.rows.reduce<RatesFlagsRow[]>((acc, row) => {
+                if (row.id === originalId) {
+                  acc.push(nextRow)
+                  return acc
+                }
+                if (row.id === nextRow.id) {
+                  return acc
+                }
+                acc.push(row)
+                return acc
+              }, [])
+
+              if (!rows.some((row) => row.id === nextRow.id)) {
+                rows.unshift(nextRow)
+              }
+
+              return rows
+            })()
+
+      return {
+        ...category,
+        rows: updatedRows,
+      }
+    }),
+  }
 }
 
 export function findReconciledRatesRow(
   payload: RatesFlagsPayload,
-  categoryKey: string,
+  categoryKey: RatesFlagsCreateOrUpdateMutation['category'],
   rowId: string
-): RatesFlagsRow | null {
-  const category = payload.categories.find((item) => item.key === categoryKey) ?? null
-  return category?.rows.find((row) => row.id === rowId) ?? null
+) {
+  return categoryByKey(payload.categories, categoryKey)?.rows.find((row) => row.id === rowId) ?? null
 }

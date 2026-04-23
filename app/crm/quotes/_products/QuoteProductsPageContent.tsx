@@ -1,9 +1,10 @@
 'use client'
 
 import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
-import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmResourceState } from '@/app/crm/_components/CrmResourceState'
+import { QuoteAdminPageBanner } from '@/app/crm/quotes/_components/QuoteAdminPageBanner'
 import { useQuoteProductsPage } from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
+import { QuoteProductDeleteDialog } from './QuoteProductDeleteDialog'
 import { QuoteProductEditorSection } from './QuoteProductEditorSection'
 import { QuoteProductDiscardDialog } from './QuoteProductDiscardDialog'
 import { QuoteProductsCatalogSection } from './QuoteProductsCatalogSection'
@@ -22,11 +23,7 @@ export function QuoteProductsPageContent() {
       errorTitle="Quote products unavailable"
       onRetry={handleRetry}
     >
-      {controller.uiState.pageBanner ? (
-        <CrmNotice tone={controller.uiState.pageBanner.tone}>
-          {controller.uiState.pageBanner.message}
-        </CrmNotice>
-      ) : null}
+      <QuoteAdminPageBanner banner={controller.uiState.pageBanner} />
 
       <CrmDetailLayout
         main={
@@ -48,7 +45,7 @@ export function QuoteProductsPageContent() {
               updateDraftField: controller.actions.updateDraftField,
               save: controller.actions.save,
               cancelEdit: controller.actions.cancelEdit,
-              requestRemove: controller.actions.requestRemove,
+              requestDelete: controller.actions.requestDelete,
             }}
           />
         }
@@ -57,6 +54,11 @@ export function QuoteProductsPageContent() {
         vm={controller.discardVm}
         onConfirm={() => void controller.actions.confirmDiscard()}
         onCancel={controller.actions.cancelDiscard}
+      />
+      <QuoteProductDeleteDialog
+        vm={controller.deleteVm}
+        onConfirm={() => void controller.actions.confirmDelete()}
+        onCancel={controller.actions.cancelDelete}
       />
     </CrmResourceState>
   )

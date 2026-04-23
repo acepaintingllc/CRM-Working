@@ -30,6 +30,10 @@ function buildDraftDocumentPublicMeta(context: EstimateCustomerSendContextData) 
   return buildCustomerSendPublicMeta(latestDraft, 'draft')
 }
 
+function readSnapshotDocument(snapshot: Record<string, unknown> | null | undefined) {
+  return ((snapshot?.document as Record<string, unknown> | null | undefined) ?? snapshot ?? null)
+}
+
 export function buildCustomerSendPageData(params: {
   origin: string
   context: EstimateCustomerSendContextData
@@ -118,7 +122,9 @@ export async function saveCustomerSendDraftMutation(params: {
       version: version.data,
       fallback: params.context.public_url,
     }),
-    document: (version.data.snapshot_json as Record<string, unknown> | null) ?? null,
+    document: readSnapshotDocument(
+      (version.data.snapshot_json as Record<string, unknown> | null | undefined) ?? null
+    ),
   })
 }
 

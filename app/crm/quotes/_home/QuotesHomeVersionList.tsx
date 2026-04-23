@@ -8,10 +8,9 @@ import type { QuotesHomeVersionListVm } from './quoteHomeTypes'
 type Props = {
   vm: QuotesHomeVersionListVm
   onRequestDelete: (estimateId: string) => void
-  onLoadMore?: () => void
 }
 
-export function QuotesHomeVersionList({ vm, onRequestDelete, onLoadMore }: Props) {
+export function QuotesHomeVersionList({ vm, onRequestDelete }: Props) {
   return (
     <div
       style={{
@@ -98,26 +97,6 @@ export function QuotesHomeVersionList({ vm, onRequestDelete, onLoadMore }: Props
           </div>
         </div>
       ))}
-
-      {vm.hasMore ? (
-        <button
-          type="button"
-          onClick={onLoadMore}
-          disabled={vm.loadingMore}
-          style={{
-            justifySelf: 'start',
-            borderRadius: 10,
-            border: '1px solid var(--v2-line)',
-            background: '#111111',
-            color: 'var(--v2-ink)',
-            padding: '10px 12px',
-            fontWeight: 700,
-            cursor: vm.loadingMore ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {vm.loadingMore ? 'Loading more versions...' : 'Load more versions'}
-        </button>
-      ) : null}
     </div>
   )
 }

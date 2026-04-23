@@ -62,7 +62,30 @@ export type CustomerEstimatePricingSummary = {
   finalTotal: number | null
 }
 
-export type CustomerEstimateDocument = {
+export type CustomerEstimateDocumentSourceMeta = {
+  company: {
+    business_name: boolean
+    main_phone: boolean
+    business_email: boolean
+    address: boolean
+    website: boolean
+    sender_signature: boolean
+    logo_url: boolean
+  }
+  settings: {
+    quote_validity_days: boolean
+    terms_text: boolean
+  }
+  overrides: {
+    title: boolean
+    intro_paragraph: boolean
+    closing_paragraph: boolean
+    deposit_language: boolean
+    card_fee_note: boolean
+  }
+}
+
+export type BuiltCustomerEstimateDocument = {
   meta: {
     estimate_id: string
     version_name: string
@@ -88,6 +111,42 @@ export type CustomerEstimateDocument = {
   scopes: CustomerEstimateSection[]
   total: number | null
   terms: string[]
+  source_meta: CustomerEstimateDocumentSourceMeta
+}
+
+export type CustomerEstimateTermsSection = {
+  key: string
+  title: string
+  paragraphs: string[]
+}
+
+export type CustomerEstimateDocument = BuiltCustomerEstimateDocument & {
+  header: {
+    company_name: string
+    contact_lines: string[]
+    logo_url: string
+    document_label: string
+    quote_date_label: string
+  }
+  customer_block: {
+    lines: string[]
+  }
+  pricing_block: {
+    rows: CustomerEstimateQuoteRow[]
+    total: number | null
+    footer_note: string
+  }
+  terms_page: {
+    title: string
+    sections: CustomerEstimateTermsSection[]
+  }
+  assembly_meta: {
+    missing_company_fields: Array<keyof CompanyProfile>
+    missing_payment_fields: string[]
+    missing_legal_fields: string[]
+    used_placeholder_fallbacks: boolean
+    used_explicit_terms_text: boolean
+  }
 }
 
 export type BuiltCustomerEstimateDocument = CustomerEstimateDocument & {

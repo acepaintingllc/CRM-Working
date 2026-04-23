@@ -43,3 +43,10 @@ Use the shared CRM UI for normal CRM pages unless the feature is a quote-editor-
 ## Divergence rule
 
 Only diverge from the shared CRM UI when the feature is a true workspace with materially different interaction density or visual requirements. If a page is mostly CRUD, list/detail, board, or settings work, it should stay on the shared CRM UI system.
+
+## Quote home ownership
+
+- `app/crm/quotes/QuotesHomePage.tsx` is a standard CRM page, not a workspace exception.
+- Keep page framing on shared CRM UI primitives such as `CrmPageShell`, `CrmPageHeader`, `CrmNotice`, `CrmButton`, and `CrmChip`.
+- Route-local quote-home panels may keep quote-family visual treatment for the job/version workflow, but they do not own page-level shell or header decisions.
+- The actual quote editor/workspace exception starts at the canonical estimate/quote editor routes, not on quote home.

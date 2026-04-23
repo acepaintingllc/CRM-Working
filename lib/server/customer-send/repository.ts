@@ -72,7 +72,10 @@ export async function saveCustomerSendDraftVersion(params: {
     subject: resolveNullableText(params.draft.subject),
     body: resolveNullableText(params.draft.body),
     template_key: resolveNullableText(params.draft.template_key),
-    snapshot_json: params.document,
+    snapshot_json: {
+      document: params.document,
+      draft: params.draft,
+    },
     draft_json: params.draft,
     acceptance_json: publicMeta?.acceptance_json ?? null,
     sent_at: publicMeta?.sent_at ?? null,

@@ -1,5 +1,11 @@
 'use client'
 import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
+import { crmButtonClassName } from '@/app/crm/_components/crmStyles'
 import { QuotesHomeCreatePanel } from './_home/QuotesHomeCreatePanel'
 import { QuotesHomeDeleteDialog } from './_home/QuotesHomeDeleteDialog'
 import { QuotesHomeHeader } from './_home/QuotesHomeHeader'
@@ -7,7 +13,6 @@ import { QuotesHomeJobList } from './_home/QuotesHomeJobList'
 import { QuotesHomeSelectedJobPanel } from './_home/QuotesHomeSelectedJobPanel'
 import { QuotesHomeSummaryCards } from './_home/QuotesHomeSummaryCards'
 import { QuotesHomeVersionList } from './_home/QuotesHomeVersionList'
-import { formatToday } from './_home/quoteHomePresentation'
 import { S } from './_home/quoteHomeStyles'
 import { useQuotesHomePage } from './_hooks/useQuotesHomePage'
 
@@ -17,90 +22,51 @@ type Props = {
 
 export default function QuotesHomePage({ initialData }: Props) {
   const controller = useQuotesHomePage(initialData)
-  const actions = controller.actions
-  const createVm = controller.createVm ?? controller.create
-  const deleteDialogVm = controller.deleteDialogVm ?? controller.dialogs?.delete
-  const feedbackVm = controller.feedbackVm ?? controller.feedback
-  const headerVm = controller.headerVm ?? controller.header
-  const jobListVm = controller.jobListVm ?? controller.jobList
-  const mobileSummaryCards = controller.mobileVm?.summaryCards ?? controller.mobileSummaryCards ?? []
-  const selectedJobVm = controller.selectedJobVm ?? controller.selectedJob
-  const summaryCards = controller.summaryCards ?? []
-  const versionListVm = controller.versionListVm ?? controller.versionList
+  const { actions } = controller
 
   return (
-    <div className="ace-v2-shell" style={S.main}>
-      <div className="ace-v2-mobile-only" style={S.mobileScreen}>
-        <div style={S.mobilePanel}>
-          <div style={S.mobileBrandRow}>
-            <div style={S.mobileBrandWrap}>
-              <div style={S.mobileBrandMark}>A</div>
-              <div style={{ ...S.brandName, fontSize: 16 }}>ACE CRM</div>
-            </div>
-            <div style={S.mobileAvatar}>AE</div>
-          </div>
+    <CrmPageShell className="max-w-7xl">
+      <div style={S.tokens}>
+        <CrmPageHeader
+          eyebrow="Quotes"
+          title="Quote Home"
+          description="Quote home follows the standard CRM page shell. Keep page framing on shared CRM primitives; keep only the job/version workflow panels route-local."
+          badge={<CrmChip tone="accent">Shared CRM shell</CrmChip>}
+          actions={
+            <>
+              <CrmButton href="/crm/jobs/new" tone="secondary">
+                Create job
+              </CrmButton>
+              <a href="#job-hub" className={crmButtonClassName('primary')}>
+                New quote
+              </a>
+            </>
+          }
+        />
 
-          <div>
-            <div style={S.mobileDate}>{formatToday()}</div>
-            <h1 style={S.mobileTitle}>Quote home</h1>
-          </div>
-
-          <div style={S.mobileStats}>
-            {mobileSummaryCards.map((card) => (
-              <div key={`mobile-${card.label}`} style={S.mobileStatCard}>
-                <div style={S.cardLabel}>{card.label}</div>
-                <div style={{ ...S.statValue, fontSize: 18, marginBottom: 0 }}>{card.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {mobileSummaryCards.length > 0 ? (
-            <QuotesHomeJobList
-              vm={jobListVm}
-              renderDesktop={false}
-              onJobQueryChange={actions.setJobQuery}
-              onSelectJob={actions.setSelectedJobId}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      <div className="ace-v2-desktop-only" style={{ ...S.content, ...S.desktopWrap }}>
         <QuotesHomeHeader
-          vm={headerVm}
+          vm={controller.header}
           onSearchFocusedChange={actions.setSearchFocused}
           onSearchQueryChange={actions.setSearchQuery}
           onSearchRetry={actions.retrySearch}
         />
 
-        {feedbackVm.title ? (
-          <div
-            style={{
-              ...S.card,
-              marginBottom: 18,
-              color: feedbackVm.tone === 'error' ? 'var(--v2-red)' : '#f9e2b7',
-              borderColor:
-                feedbackVm.tone === 'error'
-                  ? 'rgba(248,113,113,0.28)'
-                  : 'rgba(249,226,183,0.22)',
-              background:
-                feedbackVm.tone === 'error'
-                  ? 'rgba(127,29,29,0.18)'
-                  : 'rgba(120,83,26,0.18)',
-            }}
-          >
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: feedbackVm.details.length > 0 ? 8 : 0 }}>
-              {feedbackVm.title}
-            </div>
-            {feedbackVm.details.map((detail) => (
-              <div key={detail} style={{ fontSize: 14, lineHeight: 1.6 }}>
-                {detail}
+        {controller.feedback.title ? (
+          <div style={{ marginBottom: 18 }}>
+            <CrmNotice tone={controller.feedback.tone} title={controller.feedback.title}>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {controller.feedback.details.map((detail) => (
+                  <div key={detail}>{detail}</div>
+                ))}
               </div>
-            ))}
+            </CrmNotice>
           </div>
         ) : null}
 
-        <QuotesHomeSummaryCards cards={summaryCards} loading={feedbackVm.loading} />
+        <QuotesHomeSummaryCards
+          cards={controller.feedback.loading ? controller.mobileSummaryCards : controller.summaryCards}
+          loading={controller.feedback.loading}
+        />
 
         <div
           id="job-hub"
@@ -112,15 +78,14 @@ export default function QuotesHomePage({ initialData }: Props) {
           }}
         >
           <QuotesHomeJobList
-            vm={jobListVm}
+            vm={controller.jobList}
             renderMobile={false}
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
-            onLoadMore={() => void actions.loadMoreJobs()}
           />
 
           <section style={{ display: 'grid', gap: 22, alignSelf: 'start' }}>
-            <QuotesHomeSelectedJobPanel vm={selectedJobVm} />
+            <QuotesHomeSelectedJobPanel vm={controller.selectedJob} />
 
             <div
               className="v2-hub-detail-grid"
@@ -130,15 +95,11 @@ export default function QuotesHomePage({ initialData }: Props) {
                 gap: 22,
               }}
             >
-              <QuotesHomeVersionList
-                vm={versionListVm}
-                onRequestDelete={actions.requestDelete}
-                onLoadMore={() => void actions.loadMoreVersions()}
-              />
+              <QuotesHomeVersionList vm={controller.versionList} onRequestDelete={actions.requestDelete} />
 
               <QuotesHomeCreatePanel
-                vm={createVm}
-                onCreate={() => void (actions.createVersion?.() ?? actions.create?.())}
+                vm={controller.create}
+                onCreate={() => void actions.create()}
                 onVersionKindChange={actions.setVersionKind}
                 onVersionNameChange={actions.setVersionName}
               />
@@ -146,7 +107,7 @@ export default function QuotesHomePage({ initialData }: Props) {
           </section>
         </div>
 
-        <style jsx>{`
+        <style>{`
           @media (max-width: 980px) {
             .v2-hub-grid {
               grid-template-columns: 1fr !important;
@@ -164,10 +125,10 @@ export default function QuotesHomePage({ initialData }: Props) {
       </div>
 
       <QuotesHomeDeleteDialog
-        vm={deleteDialogVm}
+        vm={controller.dialogs.delete}
         onCancel={actions.cancelDelete}
-        onConfirm={() => void (actions.confirmDeleteVersion?.() ?? actions.confirmDelete?.())}
+        onConfirm={() => void actions.confirmDelete()}
       />
-    </div>
+    </CrmPageShell>
   )
 }

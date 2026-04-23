@@ -21,6 +21,10 @@ import type {
   EstimatePublicVersionRow,
 } from './types'
 
+function readSnapshotDocument(snapshot: Record<string, unknown> | null | undefined) {
+  return ((snapshot?.document as Record<string, unknown> | null | undefined) ?? snapshot ?? null)
+}
+
 function buildDefaultEmailBody(params: {
   draft: CustomerSendDraft
   context: EstimateCustomerSendContextData
@@ -137,6 +141,8 @@ export async function submitCustomerSendMessage(params: {
     mode: params.mode,
     public_url: publicUrl,
     version: publicVersion,
-    document: (publicVersion.snapshot_json as Record<string, unknown> | null) ?? null,
+    document: readSnapshotDocument(
+      (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
+    ),
   })
 }

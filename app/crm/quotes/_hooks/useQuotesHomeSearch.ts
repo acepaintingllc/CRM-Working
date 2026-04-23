@@ -3,13 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type QuoteHomeSearchResponse,
-  type QuoteHomeSearchResultReadModel,
+  type QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeSearch } from '@/lib/quotes/client'
 
 const emptySearchResponse: QuoteHomeSearchResponse = {
   query: '',
-  limit: 8,
   items: [],
 }
 
@@ -49,7 +48,7 @@ export function useQuotesHomeSearch(query: string) {
       })
       .catch((loadError) => {
         if (cancelled) return
-        setData({ query: nextQuery, limit: 8, items: [] })
+        setData({ query: nextQuery, items: [] })
         setError(
           loadError instanceof Error ? loadError.message : 'Failed to load quote search results.'
         )
@@ -73,7 +72,7 @@ export function useQuotesHomeSearch(query: string) {
   return useMemo(
     () => ({
       query: data.query,
-      results: data.items as QuoteHomeSearchResultReadModel[],
+      results: data.items as QuoteHomeJobVersionItemReadModel[],
       loading,
       error,
       hasQuery: debouncedQuery.length > 0,

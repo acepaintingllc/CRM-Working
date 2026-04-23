@@ -1,6 +1,7 @@
 import {
   buildCustomerEstimateDocument,
 } from '@/lib/customer-estimates/build'
+import { assembleCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import {
   errorResult,
@@ -81,7 +82,7 @@ export function buildCustomerDocumentFromSendContext(params: {
   } & { scope_text_edits?: Record<string, string> }
   publicMeta?: CustomerSendPublicMeta
 }) {
-  return buildCustomerEstimateDocument({
+  const builtDocument = buildCustomerEstimateDocument({
     estimate: params.context.estimate as Record<string, unknown>,
     job: params.context.job as Record<string, unknown>,
     customer: params.context.customer as Record<string, unknown> | null | undefined,
@@ -99,4 +100,6 @@ export function buildCustomerDocumentFromSendContext(params: {
     overrides: params.overrides,
     publicMeta: params.publicMeta,
   })
+
+  return assembleCustomerEstimateDocument(builtDocument)
 }

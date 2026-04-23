@@ -1,40 +1,45 @@
 import { supabaseAdmin } from './org'
 import { writeEstimatePublicEvent } from './customer-send/repository'
-import { serverLog } from './log'
 import { errorResult, okResult, type ServiceResult } from './serviceResult'
-import {
-  createPublicEstimateAcceptanceRecord,
-  parsePublicEstimateAcceptRequest,
-  parsePublicEstimateDeclineRequest,
-  publicEstimatePortalErrors,
-} from '@/lib/customer-estimates/publicPortalContracts'
-import { buildEstimatePublicSnapshotFromVersion } from '@/lib/customer-estimates/publicSnapshot'
-import type {
-  EstimatePublicSignatureType,
-  EstimatePublicSnapshot,
-  Unsafe,
-} from '@/lib/customer-estimates/types'
+import { ensureAssembledCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
+import type { EstimatePublicSnapshot, Unsafe } from '@/lib/customer-estimates/types'
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
 }
 
-const estimatePublicVersionsTable = 'estimate_public_versions'
-const publicQuoteNotFoundMessage = publicEstimatePortalErrors.quoteNotFound
-const publicQuoteSnapshotMissingMessage = publicEstimatePortalErrors.quoteSnapshotMissing
-const terminalTransitionSourceStatuses: ReadonlyArray<EstimatePublicSnapshot['status']> = [
-  'sent',
-  'viewed',
-]
+export async function loadPublicEstimateByToken(token: string, origin?: string) {
+  const versionRes = await supabaseAdmin
+    .from('estimate_public_versions')
+    .select('*')
+    .eq('public_token', token)
+    .maybeSingle()
+  if (versionRes.error) return { error: versionRes.error.message } as const
+  if (!versionRes.data) return { error: 'Quote not found' } as const
 
-type LoadedPublicEstimateContext = {
-  token: string
-  orgId: string
-  version: Unsafe
-  snapshot: EstimatePublicSnapshot
+  const version = versionRes.data as Unsafe
+  const payload = buildEstimatePublicSnapshotFromVersion(version, origin)
+  if ('error' in payload) return payload
+  return { version: version as Unsafe, snapshot: payload } as const
 }
 
+type PublicEstimateLoaded = Awaited<ReturnType<typeof loadPublicEstimateByToken>>
 type PublicEstimateTransitionStatus = EstimatePublicSnapshot['status']
+
+type AcceptPublicEstimateParams = {
+  token: string
+  legalName: string
+  signatureType?: string
+  signatureValue?: string
+  acceptedTerms: boolean
+  userAgent?: string
+  ip?: string
+}
+
+type DeclinePublicEstimateParams = {
+  token: string
+  reason?: string
+}
 
 type PublicEstimateSnapshotOptions = {
   origin?: string
@@ -45,255 +50,102 @@ type PublicEstimateViewOptions = {
   metadata?: Record<string, unknown>
 }
 
-type AcceptPublicEstimateParams = {
-  token: string
-  legalName: string
-  signatureType?: EstimatePublicSignatureType
-  signatureValue?: string
-  acceptedTerms: boolean
+export function buildEstimatePublicSnapshotFromVersion(
+  version: Unsafe,
   origin?: string
-  userAgent?: string
-  ip?: string
+) {
+  const token = asText(version.public_token)
+  const snapshot = (version.snapshot_json ?? {}) as Record<string, unknown>
+  const rawDocument = ((snapshot.document ?? snapshot) ?? null) as
+    | EstimatePublicSnapshot['document']
+    | Record<string, unknown>
+    | null
+  const document = rawDocument ? ensureAssembledCustomerEstimateDocument(rawDocument) : null
+  if (!document) return { error: 'Quote snapshot missing' } as const
+
+  const normalizedSnapshot: Record<string, unknown> = {
+    ...snapshot,
+    document,
+  }
+
+  return {
+    estimate_id: asText(version.estimate_id),
+    estimate_version_id: asText(version.id),
+    version_number: Number(version.version_number ?? 0),
+    status: (asText(version.status) || 'draft') as EstimatePublicSnapshot['status'],
+    public_token: token || null,
+    public_url: origin && token ? `${origin}/quote/${token}` : null,
+    draft: (normalizedSnapshot.draft ?? {}) as Record<string, unknown>,
+    document,
+    snapshot_json: normalizedSnapshot,
+    sent_at: asText(version.sent_at) || null,
+    viewed_at: asText(version.viewed_at) || null,
+    accepted_at: asText(version.accepted_at) || null,
+    declined_at: asText(version.declined_at) || null,
+    locked_at: asText(version.locked_at) || null,
+  } satisfies EstimatePublicSnapshot
 }
 
-type DeclinePublicEstimateParams = {
-  token: string
-  reason?: string
-  origin?: string
-}
-
-function shouldApplyViewedTransition(snapshot: EstimatePublicSnapshot) {
+function shouldMarkViewed(snapshot: EstimatePublicSnapshot) {
   return (snapshot.status === 'sent' || snapshot.status === 'viewed') && !snapshot.viewed_at
 }
 
-function logPublicSnapshotLoadFailure(params: {
-  token: string
-  message: string
-  orgId?: string
-  versionId?: string
-}) {
-  serverLog.error('estimate_public_snapshot_load_failed', {
-    token: params.token,
-    orgId: params.orgId ?? '',
-    versionId: params.versionId ?? '',
-    message: params.message,
-  })
-}
-
-async function loadPublicEstimateContext(params: {
-  token: string
-  origin?: string
-  notFoundMessage?: string
-}): Promise<ServiceResult<LoadedPublicEstimateContext>> {
-  const token = asText(params.token)
+export async function loadPublicEstimateSnapshot(
+  token: string,
+  snapshotOptions?: PublicEstimateSnapshotOptions,
+  viewOptions?: PublicEstimateViewOptions
+): Promise<ServiceResult<EstimatePublicSnapshot>> {
   if (!token || typeof token !== 'string') {
-    return errorResult('invalid_input', publicEstimatePortalErrors.invalidToken)
+    return errorResult('invalid_input', 'Invalid token')
   }
 
-  const versionRes = await supabaseAdmin
-    .from(estimatePublicVersionsTable)
-    .select('*')
-    .eq('public_token', token)
-    .maybeSingle()
-
-  if (versionRes.error) {
-    logPublicSnapshotLoadFailure({
-      token,
-      message: versionRes.error.message,
-    })
-    return errorResult('server_error', versionRes.error.message)
+  const loaded = await loadPublicEstimateByToken(token, snapshotOptions?.origin)
+  if (!isLoadedEstimate(loaded)) {
+    return errorResult('not_found', asText(loaded.error) || 'Quote not found')
   }
 
-  if (!versionRes.data) {
-    return errorResult('not_found', params.notFoundMessage ?? publicQuoteNotFoundMessage)
+  if (!shouldMarkViewed(loaded.snapshot)) {
+    return okResult(loaded.snapshot)
   }
 
-  const version = versionRes.data as Unsafe
-  const snapshot = buildEstimatePublicSnapshotFromVersion({
-    version,
-    origin: params.origin,
-  })
-  if ('error' in snapshot) {
-    logPublicSnapshotLoadFailure({
-      token,
-      orgId: asText(version.org_id),
-      versionId: asText(version.id),
-      message: asText(snapshot.error) || publicQuoteSnapshotMissingMessage,
-    })
-    return errorResult(
-      'server_error',
-      asText(snapshot.error) || publicQuoteSnapshotMissingMessage
-    )
+  const viewed = await markPublicEstimateViewed({
+    versionId: loaded.snapshot.estimate_version_id,
+    orgId: asText(loaded.version.org_id),
+    actorType: viewOptions?.actorType,
+    metadata: viewOptions?.metadata,
+  }).catch(() => null)
+
+  if (!viewed || 'error' in viewed || !viewed.ok) {
+    return okResult(loaded.snapshot)
   }
 
   return okResult({
-    token,
-    orgId: asText(version.org_id),
-    version,
-    snapshot,
+    ...loaded.snapshot,
+    status: 'viewed',
+    viewed_at: viewed.viewed_at,
   })
 }
 
-async function loadLatestPublicEstimateSnapshot(
-  context: LoadedPublicEstimateContext,
-  snapshotOptions?: PublicEstimateSnapshotOptions
+function isLoadedEstimate(
+  loaded: PublicEstimateLoaded
+): loaded is Extract<PublicEstimateLoaded, { version: Unsafe; snapshot: EstimatePublicSnapshot }> {
+  return 'version' in loaded && 'snapshot' in loaded
+}
+
+function isRepeatableTerminalState(
+  currentStatus: PublicEstimateTransitionStatus,
+  nextStatus: 'accepted' | 'declined'
 ) {
-  const reloaded = await loadPublicEstimateContext({
-    token: context.token,
-    origin: snapshotOptions?.origin,
-  })
-  if (!reloaded.ok) return context.snapshot
-  return reloaded.data.snapshot
+  return currentStatus === nextStatus
 }
 
-async function updatePublicEstimateTerminalVersion(params: {
-  context: LoadedPublicEstimateContext
-  payload: Record<string, unknown>
-}) {
-  const update = await supabaseAdmin
-    .from(estimatePublicVersionsTable)
-    .update(params.payload)
-    .eq('org_id', params.context.orgId)
-    .eq('id', params.context.snapshot.estimate_version_id)
-    .in('status', [...terminalTransitionSourceStatuses])
-    .select('*')
-    .maybeSingle()
-
-  if (update.error) {
-    return errorResult(
-      'server_error',
-      update.error.message || 'Unable to update public quote'
-    )
-  }
-
-  return okResult(update.data as Unsafe | null)
-}
-
-async function writePublicEstimateEvent(params: {
-  action: 'view' | 'accept' | 'decline'
-  orgId: string
-  versionId: string
-  eventType: 'viewed' | 'accepted' | 'declined'
-  actorType?: 'customer' | 'staff' | 'system'
-  metadata?: Record<string, unknown>
-}) {
-  const eventResult = await writeEstimatePublicEvent({
-    orgId: params.orgId,
-    versionId: params.versionId,
-    eventType: params.eventType,
-    actorType: params.actorType ?? 'customer',
-    metadata: params.metadata ?? {},
-  })
-
-  if (!eventResult.ok) {
-    serverLog.error('estimate_public_transition_event_failed', {
-      action: params.action,
-      orgId: params.orgId,
-      versionId: params.versionId,
-      eventType: params.eventType,
-      message: eventResult.message,
-    })
-    return
-  }
-
-  serverLog.info('estimate_public_transition_event_written', {
-    action: params.action,
-    orgId: params.orgId,
-    versionId: params.versionId,
-    eventType: params.eventType,
-  })
-}
-
-async function applyPublicEstimateViewedTransition(
-  context: LoadedPublicEstimateContext,
-  snapshotOptions?: PublicEstimateSnapshotOptions,
-  viewOptions?: PublicEstimateViewOptions
+function canTransitionToTerminalState(
+  currentStatus: PublicEstimateTransitionStatus,
+  nextStatus: 'accepted' | 'declined'
 ) {
-  if (!shouldApplyViewedTransition(context.snapshot)) {
-    return context.snapshot
-  }
-
-  const viewedAt = new Date().toISOString()
-  serverLog.info('estimate_public_view_write_attempt', {
-    token: context.token,
-    orgId: context.orgId,
-    versionId: context.snapshot.estimate_version_id,
-    currentStatus: context.snapshot.status,
-  })
-
-  const update = await supabaseAdmin
-    .from(estimatePublicVersionsTable)
-    .update({
-      status: 'viewed',
-      viewed_at: viewedAt,
-    })
-    .eq('org_id', context.orgId)
-    .eq('id', context.snapshot.estimate_version_id)
-    .is('viewed_at', null)
-    .in('status', ['sent', 'viewed'])
-    .select('*')
-    .maybeSingle()
-
-  if (update.error) {
-    serverLog.error('estimate_public_view_write_failed', {
-      token: context.token,
-      orgId: context.orgId,
-      versionId: context.snapshot.estimate_version_id,
-      currentStatus: context.snapshot.status,
-      message: update.error.message,
-    })
-    serverLog.info('estimate_public_view_write_result', {
-      token: context.token,
-      orgId: context.orgId,
-      versionId: context.snapshot.estimate_version_id,
-      applied: false,
-      reason: 'write_error',
-    })
-    return context.snapshot
-  }
-
-  if (!update.data) {
-    serverLog.info('estimate_public_view_write_result', {
-      token: context.token,
-      orgId: context.orgId,
-      versionId: context.snapshot.estimate_version_id,
-      applied: false,
-      reason: 'skipped',
-    })
-    return loadLatestPublicEstimateSnapshot(context, snapshotOptions)
-  }
-
-  await writePublicEstimateEvent({
-    action: 'view',
-    orgId: context.orgId,
-    versionId: context.snapshot.estimate_version_id,
-    eventType: 'viewed',
-    actorType: viewOptions?.actorType,
-    metadata: viewOptions?.metadata,
-  })
-
-  serverLog.info('estimate_public_view_write_result', {
-    token: context.token,
-    orgId: context.orgId,
-    versionId: context.snapshot.estimate_version_id,
-    applied: true,
-  })
-
-  const snapshot = buildEstimatePublicSnapshotFromVersion({
-    version: update.data as Unsafe,
-    origin: snapshotOptions?.origin,
-  })
-  if ('error' in snapshot) {
-    logPublicSnapshotLoadFailure({
-      token: context.token,
-      orgId: context.orgId,
-      versionId: context.snapshot.estimate_version_id,
-      message: asText(snapshot.error) || publicQuoteSnapshotMissingMessage,
-    })
-    return loadLatestPublicEstimateSnapshot(context, snapshotOptions)
-  }
-
-  return snapshot
+  if (currentStatus === 'sent' || currentStatus === 'viewed') return true
+  if (isRepeatableTerminalState(currentStatus, nextStatus)) return true
+  return false
 }
 
 function transitionConflictMessage(
@@ -311,253 +163,156 @@ function transitionConflictMessage(
   return `Cannot ${nextStatus} quote from ${currentStatus} status`
 }
 
-function getTerminalTransitionDecision(
-  currentStatus: PublicEstimateTransitionStatus,
-  nextStatus: 'accepted' | 'declined'
-) {
-  if (terminalTransitionSourceStatuses.includes(currentStatus)) {
-    return { kind: 'apply' as const }
+async function loadTransitionableEstimate(token: string) {
+  if (!token || typeof token !== 'string') {
+    return errorResult('invalid_input', 'Invalid token')
   }
-  if (currentStatus === nextStatus) {
-    return { kind: 'repeat' as const }
+
+  const loaded = await loadPublicEstimateByToken(token)
+  if (!isLoadedEstimate(loaded)) {
+    return errorResult('not_found', asText(loaded.error) || 'Quote not found')
   }
-  return {
-    kind: 'conflict' as const,
-    message: transitionConflictMessage(currentStatus, nextStatus),
-  }
+
+  return okResult(loaded)
 }
 
-async function applyPublicEstimateTerminalTransition(params: {
-  context: LoadedPublicEstimateContext
-  action: 'accept' | 'decline'
-  nextStatus: 'accepted' | 'declined'
-  origin?: string
+async function updatePublicEstimateVersion(params: {
+  orgId: string
+  versionId: string
   payload: Record<string, unknown>
-  eventMetadata: Record<string, unknown>
 }) {
-  const currentStatus = params.context.snapshot.status
-  const decision = getTerminalTransitionDecision(currentStatus, params.nextStatus)
-  if (decision.kind === 'repeat') {
-    return okResult(params.context.snapshot)
-  }
-  if (decision.kind === 'conflict') {
-    return errorResult('conflict', decision.message)
-  }
+  const update = await supabaseAdmin
+    .from('estimate_public_versions')
+    .update(params.payload)
+    .eq('org_id', params.orgId)
+    .eq('id', params.versionId)
+    .select('*')
+    .maybeSingle()
 
-  serverLog.info('estimate_public_transition_attempt', {
-    action: params.action,
-    orgId: params.context.orgId,
-    versionId: params.context.snapshot.estimate_version_id,
-    currentStatus,
-    token: params.context.token,
-  })
-
-  const updateResult = await updatePublicEstimateTerminalVersion({
-    context: params.context,
-    payload: params.payload,
-  })
-  if (!updateResult.ok) {
-    serverLog.error('estimate_public_transition_update_failed', {
-      action: params.action,
-      orgId: params.context.orgId,
-      versionId: params.context.snapshot.estimate_version_id,
-      currentStatus,
-      message: updateResult.message,
-    })
-    return updateResult
-  }
-
-  if (!updateResult.data) {
-    const latestSnapshot = await loadLatestPublicEstimateSnapshot(params.context, {
-      origin: params.origin,
-    })
-    const latestDecision = getTerminalTransitionDecision(
-      latestSnapshot.status,
-      params.nextStatus
-    )
-
-    serverLog.info('estimate_public_transition_write_result', {
-      action: params.action,
-      orgId: params.context.orgId,
-      versionId: params.context.snapshot.estimate_version_id,
-      applied: false,
-      latestStatus: latestSnapshot.status,
-    })
-
-    if (latestDecision.kind === 'repeat') {
-      return okResult(latestSnapshot)
-    }
-    if (latestDecision.kind === 'conflict') {
-      return errorResult('conflict', latestDecision.message)
-    }
-
-    serverLog.error('estimate_public_transition_write_skipped_without_terminal_state', {
-      action: params.action,
-      orgId: params.context.orgId,
-      versionId: params.context.snapshot.estimate_version_id,
-      requestedStatus: params.nextStatus,
-      latestStatus: latestSnapshot.status,
-    })
-    return errorResult('server_error', 'Unable to update public quote')
-  }
-
-  await writePublicEstimateEvent({
-    action: params.action,
-    orgId: params.context.orgId,
-    versionId: params.context.snapshot.estimate_version_id,
-    eventType: params.nextStatus,
-    metadata: params.eventMetadata,
-  })
-
-  serverLog.info('estimate_public_transition_write_result', {
-    action: params.action,
-    orgId: params.context.orgId,
-    versionId: params.context.snapshot.estimate_version_id,
-    applied: true,
-    latestStatus: params.nextStatus,
-  })
-
-  const snapshot = buildEstimatePublicSnapshotFromVersion({
-    version: updateResult.data,
-    origin: params.origin,
-  })
-  if ('error' in snapshot) {
-    logPublicSnapshotLoadFailure({
-      token: params.context.token,
-      orgId: params.context.orgId,
-      versionId: params.context.snapshot.estimate_version_id,
-      message: asText(snapshot.error) || publicQuoteSnapshotMissingMessage,
-    })
+  if (update.error || !update.data) {
     return errorResult(
       'server_error',
-      asText(snapshot.error) || publicQuoteSnapshotMissingMessage
+      update.error?.message ?? 'Unable to update public quote'
     )
   }
 
-  return okResult(snapshot)
-}
-
-export async function loadPublicEstimateSnapshot(
-  token: string,
-  snapshotOptions?: PublicEstimateSnapshotOptions,
-  viewOptions?: PublicEstimateViewOptions
-): Promise<ServiceResult<EstimatePublicSnapshot>> {
-  const contextResult = await loadPublicEstimateContext({
-    token,
-    origin: snapshotOptions?.origin,
-  })
-  if (!contextResult.ok) return contextResult
-
-  return okResult(
-    await applyPublicEstimateViewedTransition(
-      contextResult.data,
-      snapshotOptions,
-      viewOptions
-    )
-  )
-}
-
-export async function loadPublicEstimateByToken(
-  token: string,
-  origin?: string
-): Promise<{ version: Unsafe; snapshot: EstimatePublicSnapshot } | { error: string }> {
-  const contextResult = await loadPublicEstimateContext({ token, origin })
-  if (!contextResult.ok) {
-    return { error: contextResult.message }
-  }
-  return {
-    version: contextResult.data.version,
-    snapshot: contextResult.data.snapshot,
-  }
+  return okResult(update.data as Unsafe)
 }
 
 export async function acceptPublicEstimate(
   params: AcceptPublicEstimateParams
 ): Promise<ServiceResult<EstimatePublicSnapshot>> {
-  const parsed = parsePublicEstimateAcceptRequest({
-    legal_name: params.legalName,
-    signature_type: params.signatureType,
-    signature_value: params.signatureValue,
-    accepted_terms: params.acceptedTerms,
-  })
-  if (!parsed.ok) {
-    serverLog.info('estimate_public_accept_validation_failed', {
-      token: asText(params.token),
-      message: parsed.error,
-    })
-    return errorResult('invalid_input', parsed.error)
+  const legalName = asText(params.legalName)
+  if (!legalName) {
+    return errorResult('invalid_input', 'Legal name is required')
+  }
+  if (!params.acceptedTerms) {
+    return errorResult('invalid_input', 'Acceptance checkbox is required')
   }
 
-  const contextResult = await loadPublicEstimateContext({
-    token: params.token,
-    origin: params.origin,
-  })
-  if (!contextResult.ok) return contextResult
+  const loadedResult = await loadTransitionableEstimate(params.token)
+  if (!loadedResult.ok) return loadedResult
 
+  const loaded = loadedResult.data
+  const currentStatus = loaded.snapshot.status
+  if (!canTransitionToTerminalState(currentStatus, 'accepted')) {
+    return errorResult('conflict', transitionConflictMessage(currentStatus, 'accepted'))
+  }
+  if (currentStatus === 'accepted') {
+    return okResult(loaded.snapshot)
+  }
+
+  const signatureType = asText(params.signatureType) || 'typed'
+  const signatureValue = asText(params.signatureValue)
   const now = new Date().toISOString()
-  const acceptance = createPublicEstimateAcceptanceRecord({
-    acceptedAt: now,
-    ip: params.ip,
-    legalName: parsed.value.legalName,
-    signatureType: parsed.value.signatureType,
-    signatureValue: parsed.value.signatureValue,
-    userAgent: params.userAgent,
-  })
-
-  return applyPublicEstimateTerminalTransition({
-    context: contextResult.data,
-    action: 'accept',
-    nextStatus: 'accepted',
-    origin: params.origin,
+  const orgId = asText(loaded.version.org_id)
+  const versionId = loaded.snapshot.estimate_version_id
+  const updateResult = await updatePublicEstimateVersion({
+    orgId,
+    versionId,
     payload: {
       status: 'accepted',
       accepted_at: now,
       locked_at: now,
-      acceptance_json: acceptance,
-    },
-    eventMetadata: {
-      legal_name: acceptance.legal_name,
-      signature_type: acceptance.signature_type,
+      acceptance_json: {
+        legal_name: legalName,
+        signature_type: signatureType,
+        signature_value: signatureValue,
+        accepted_terms: true,
+        accepted_at: now,
+        user_agent: asText(params.userAgent),
+        ip: asText(params.ip),
+      },
     },
   })
+  if (!updateResult.ok) return updateResult
+
+  const eventResult = await writeEstimatePublicEvent({
+    orgId,
+    versionId,
+    eventType: 'accepted',
+    actorType: 'customer',
+    metadata: {
+      legal_name: legalName,
+      signature_type: signatureType,
+    },
+  })
+  if (!eventResult.ok) return eventResult
+
+  const snapshot = buildEstimatePublicSnapshotFromVersion(updateResult.data)
+  if ('error' in snapshot) {
+    return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
+  }
+
+  return okResult(snapshot)
 }
 
 export async function declinePublicEstimate(
   params: DeclinePublicEstimateParams
 ): Promise<ServiceResult<EstimatePublicSnapshot>> {
-  const parsed = parsePublicEstimateDeclineRequest({
-    reason: params.reason,
-  })
-  if (!parsed.ok) {
-    serverLog.info('estimate_public_decline_validation_failed', {
-      token: asText(params.token),
-      message: parsed.error,
-    })
-    return errorResult('invalid_input', parsed.error)
+  const loadedResult = await loadTransitionableEstimate(params.token)
+  if (!loadedResult.ok) return loadedResult
+
+  const loaded = loadedResult.data
+  const currentStatus = loaded.snapshot.status
+  if (!canTransitionToTerminalState(currentStatus, 'declined')) {
+    return errorResult('conflict', transitionConflictMessage(currentStatus, 'declined'))
+  }
+  if (currentStatus === 'declined') {
+    return okResult(loaded.snapshot)
   }
 
-  const contextResult = await loadPublicEstimateContext({
-    token: params.token,
-    origin: params.origin,
-  })
-  if (!contextResult.ok) return contextResult
-
   const now = new Date().toISOString()
-
-  return applyPublicEstimateTerminalTransition({
-    context: contextResult.data,
-    action: 'decline',
-    nextStatus: 'declined',
-    origin: params.origin,
+  const orgId = asText(loaded.version.org_id)
+  const versionId = loaded.snapshot.estimate_version_id
+  const updateResult = await updatePublicEstimateVersion({
+    orgId,
+    versionId,
     payload: {
       status: 'declined',
       declined_at: now,
       locked_at: now,
     },
-    eventMetadata: {
-      reason: parsed.value.reason,
+  })
+  if (!updateResult.ok) return updateResult
+
+  const eventResult = await writeEstimatePublicEvent({
+    orgId,
+    versionId,
+    eventType: 'declined',
+    actorType: 'customer',
+    metadata: {
+      reason: asText(params.reason),
     },
   })
+  if (!eventResult.ok) return eventResult
+
+  const snapshot = buildEstimatePublicSnapshotFromVersion(updateResult.data)
+  if ('error' in snapshot) {
+    return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
+  }
+
+  return okResult(snapshot)
 }
 
 export async function markPublicEstimateViewed(params: {
@@ -568,30 +323,21 @@ export async function markPublicEstimateViewed(params: {
 }) {
   const viewedAt = new Date().toISOString()
   const update = await supabaseAdmin
-    .from(estimatePublicVersionsTable)
+    .from('estimate_public_versions')
     .update({
       status: 'viewed',
       viewed_at: viewedAt,
     })
-    .eq('org_id', params.orgId)
     .eq('id', params.versionId)
-    .is('viewed_at', null)
-    .in('status', ['sent', 'viewed'])
     .select('*')
     .maybeSingle()
-
   if (update.error) return { error: update.error.message } as const
-
-  if (update.data) {
-    await writePublicEstimateEvent({
-      action: 'view',
-      orgId: params.orgId,
-      versionId: params.versionId,
-      eventType: 'viewed',
-      actorType: params.actorType,
-      metadata: params.metadata,
-    })
-  }
-
+  await writeEstimatePublicEvent({
+    orgId: params.orgId,
+    versionId: params.versionId,
+    eventType: 'viewed',
+    actorType: params.actorType ?? 'customer',
+    metadata: params.metadata ?? {},
+  })
   return { ok: true as const, viewed_at: viewedAt, version: update.data as Unsafe | null }
 }

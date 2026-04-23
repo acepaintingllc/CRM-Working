@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { parsePublicEstimateAcceptRequest } from './publicPortalContracts'
 import type { EstimatePublicSnapshot } from './types'
 import { CustomerEstimateDocumentView } from './view'
 import styles from './PublicEstimatePortal.module.css'
@@ -58,16 +57,9 @@ function usePublicEstimatePortalForm(initialLegalName: string) {
   const [declineReason, setDeclineReason] = useState('')
 
   const signatureValue = signatureMode === 'typed' ? typedSignature : drawnSignature
-  const acceptRequest = parsePublicEstimateAcceptRequest({
-    legal_name: legalName,
-    signature_type: signatureMode,
-    signature_value: signatureValue,
-    accepted_terms: agreementChecked,
-  })
-  const canAccept = acceptRequest.ok
+  const canAccept = Boolean(legalName.trim() && agreementChecked && signatureValue.trim())
 
   return {
-    acceptRequest,
     agreementChecked,
     canAccept,
     declineReason,
@@ -464,14 +456,12 @@ export function PublicEstimatePortal({
                     type="button"
                     disabled={workflow.busy || !form.canAccept}
                     onClick={() =>
-                      form.acceptRequest.ok
-                        ? void workflow.accept({
-                            legal_name: form.acceptRequest.value.legalName,
-                            signature_type: form.acceptRequest.value.signatureType,
-                            signature_value: form.acceptRequest.value.signatureValue,
-                            accepted_terms: form.acceptRequest.value.acceptedTerms,
-                          })
-                        : undefined
+                      void workflow.accept({
+                        legal_name: form.legalName,
+                        signature_type: form.signatureMode,
+                        signature_value: form.signatureValue,
+                        accepted_terms: form.agreementChecked,
+                      })
                     }
                     className={styles.primaryButton}
                   >

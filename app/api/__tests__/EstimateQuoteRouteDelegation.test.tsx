@@ -301,23 +301,13 @@ describe('estimate and quote route delegation', () => {
       1,
       'token-1',
       { origin: 'http://localhost' },
-      {
-        metadata: {
-          route: 'estimate-public-api',
-          user_agent: 'Vitest',
-        },
-      }
+      { metadata: { user_agent: 'Vitest' } }
     )
     expect(routeHandlerMocks.loadPublicEstimateSnapshot).toHaveBeenNthCalledWith(
       2,
       'token-1',
       { origin: 'http://localhost' },
-      {
-        metadata: {
-          route: 'quote-public-api',
-          user_agent: 'Vitest',
-        },
-      }
+      { metadata: { user_agent: 'Vitest' } }
     )
     await expect(estimateResponse.json()).resolves.toEqual({
       data: {

@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
 const mocks = vi.hoisted(() => ({
   requireSessionUserOrg: vi.fn(),
   readUuidParam: vi.fn(),
   readJsonBody: vi.fn(),
-  from: vi.fn(),
+  createEstimateProduct: vi.fn(),
+  deleteEstimateProduct: vi.fn(),
+  listEstimateProducts: vi.fn(),
+  updateEstimateProduct: vi.fn(),
 }))
 
-vi.mock('@/lib/server/apiRoute', () => ({
+vi.mock('../apiRoute.ts', () => ({
   requireSessionUserOrg: mocks.requireSessionUserOrg,
   readUuidParam: mocks.readUuidParam,
   readJsonBody: mocks.readJsonBody,
@@ -16,10 +18,14 @@ vi.mock('@/lib/server/apiRoute', () => ({
     new Response(JSON.stringify({ error }), { status }),
 }))
 
-vi.mock('@/lib/server/org', () => ({
-  supabaseAdmin: {
-    from: mocks.from,
-  },
+vi.mock('../estimate-products/service.ts', () => ({
+  createEstimateProduct: mocks.createEstimateProduct,
+  deleteEstimateProduct: mocks.deleteEstimateProduct,
+  isEstimateProductValidationFailure: (
+    result: { ok: boolean; fields?: Record<string, string> }
+  ) => !result.ok && Boolean(result.fields),
+  listEstimateProducts: mocks.listEstimateProducts,
+  updateEstimateProduct: mocks.updateEstimateProduct,
 }))
 
 import {
@@ -27,60 +33,7 @@ import {
   handleEstimateProductRoutePatch,
   handleEstimateProductsRouteGet,
   handleEstimateProductsRoutePost,
-} from '../estimateProductRoutes'
-
-function createSelectSingleChain(result: unknown) {
-  const chain = {
-    eq: vi.fn(),
-    single: vi.fn().mockResolvedValue(result),
-  }
-  chain.eq.mockReturnValue(chain)
-  return chain
-}
-
-function createUpdateChain(result: unknown) {
-  const chain = {
-    eq: vi.fn(),
-    select: vi.fn(),
-    single: vi.fn().mockResolvedValue(result),
-  }
-  chain.eq.mockReturnValue(chain)
-  chain.select.mockReturnValue(chain)
-  return chain
-}
-
-function createDeleteChain(result: unknown) {
-  const chain = {
-    eq: vi.fn(),
-  }
-  chain.eq.mockImplementation(() => {
-    if (chain.eq.mock.calls.length >= 2) {
-      return Promise.resolve(result)
-    }
-    return chain
-  })
-  return chain
-}
-
-function createListChain(result: unknown) {
-  const chain = {
-    eq: vi.fn(),
-    or: vi.fn(),
-    order: vi.fn().mockResolvedValue(result),
-  }
-  chain.eq.mockReturnValue(chain)
-  chain.or.mockReturnValue(chain)
-  return chain
-}
-
-function createInsertChain(result: unknown) {
-  const chain = {
-    select: vi.fn(),
-    single: vi.fn().mockResolvedValue(result),
-  }
-  chain.select.mockReturnValue(chain)
-  return chain
-}
+} from '../estimateProductRoutes.ts'
 
 const existingRow = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -106,7 +59,10 @@ describe('estimate product routes', () => {
     mocks.requireSessionUserOrg.mockReset()
     mocks.readUuidParam.mockReset()
     mocks.readJsonBody.mockReset()
-    mocks.from.mockReset()
+    mocks.createEstimateProduct.mockReset()
+    mocks.deleteEstimateProduct.mockReset()
+    mocks.listEstimateProducts.mockReset()
+    mocks.updateEstimateProduct.mockReset()
 
     mocks.requireSessionUserOrg.mockResolvedValue({
       ok: true,
@@ -119,21 +75,18 @@ describe('estimate product routes', () => {
   })
 
   it('filters active products by default and returns all statuses when requested', async () => {
-    const activeChain = createListChain({
-      data: [{ id: 'product-1', status: 'Active' }],
-      error: null,
-    })
-    const allChain = createListChain({
-      data: [
-        { id: 'product-1', status: 'Active' },
-        { id: 'product-2', status: 'Archived' },
-      ],
-      error: null,
-    })
-
-    mocks.from
-      .mockReturnValueOnce({ select: vi.fn(() => activeChain) })
-      .mockReturnValueOnce({ select: vi.fn(() => allChain) })
+    mocks.listEstimateProducts
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [{ id: 'product-1', status: 'Active' }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { id: 'product-1', status: 'Active' },
+          { id: 'product-2', status: 'Archived' },
+        ],
+      })
 
     const activeResponse = await handleEstimateProductsRouteGet(
       new Request('http://localhost/api/estimates/v2/products')
@@ -142,9 +95,16 @@ describe('estimate product routes', () => {
       new Request('http://localhost/api/estimates/v2/products?status=all')
     )
 
-    expect(activeChain.eq).toHaveBeenNthCalledWith(1, 'org_id', 'org-1')
-    expect(activeChain.eq).toHaveBeenNthCalledWith(2, 'status', 'Active')
-    expect(allChain.eq).toHaveBeenCalledTimes(1)
+    expect(mocks.listEstimateProducts).toHaveBeenNthCalledWith(
+      1,
+      'org-1',
+      expect.any(URLSearchParams)
+    )
+    expect(mocks.listEstimateProducts).toHaveBeenNthCalledWith(
+      2,
+      'org-1',
+      expect.any(URLSearchParams)
+    )
     await expect(activeResponse.json()).resolves.toEqual({
       data: [{ id: 'product-1', status: 'Active' }],
     })
@@ -157,12 +117,10 @@ describe('estimate product routes', () => {
   })
 
   it('applies family and search filters when requested', async () => {
-    const filteredChain = createListChain({
+    mocks.listEstimateProducts.mockResolvedValueOnce({
+      ok: true,
       data: [{ id: 'product-1', family: 'Paint', name: 'Super Paint' }],
-      error: null,
     })
-
-    mocks.from.mockReturnValueOnce({ select: vi.fn(() => filteredChain) })
 
     const response = await handleEstimateProductsRouteGet(
       new Request(
@@ -170,11 +128,9 @@ describe('estimate product routes', () => {
       )
     )
 
-    expect(filteredChain.eq).toHaveBeenNthCalledWith(1, 'org_id', 'org-1')
-    expect(filteredChain.eq).toHaveBeenNthCalledWith(2, 'status', 'Active')
-    expect(filteredChain.eq).toHaveBeenNthCalledWith(3, 'family', 'Paint')
-    expect(filteredChain.or).toHaveBeenCalledWith(
-      'name.ilike.%super%,base.ilike.%super%,subtype.ilike.%super%,notes.ilike.%super%,status.ilike.%super%'
+    expect(mocks.listEstimateProducts).toHaveBeenCalledWith(
+      'org-1',
+      expect.any(URLSearchParams)
     )
     await expect(response.json()).resolves.toEqual({
       data: [{ id: 'product-1', family: 'Paint', name: 'Super Paint' }],
@@ -185,6 +141,15 @@ describe('estimate product routes', () => {
     mocks.readJsonBody.mockResolvedValue({
       ok: true,
       value: { efficiency_pct: 120 },
+    })
+    mocks.createEstimateProduct.mockResolvedValue({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Product name is required.',
+      fields: {
+        name: 'Product name is required.',
+        efficiency_pct: 'Efficiency must be 100 or less.',
+      },
     })
 
     const response = await handleEstimateProductsRoutePost(
@@ -212,28 +177,22 @@ describe('estimate product routes', () => {
         status: 'Archived',
       },
     })
-
-    const insertSpy = vi.fn(() =>
-      createInsertChain({
-        data: { ...existingRow, status: 'Archived' },
-        error: null,
-      })
-    )
-    mocks.from.mockReturnValueOnce({
-      insert: insertSpy,
+    mocks.createEstimateProduct.mockResolvedValue({
+      ok: true,
+      data: { ...existingRow, status: 'Archived' },
     })
 
     const response = await handleEstimateProductsRoutePost(
       new Request('http://localhost/api/estimates/v2/products', { method: 'POST' })
     )
 
-    expect(insertSpy).toHaveBeenCalledWith([
-      expect.objectContaining({
-        org_id: 'org-1',
-        name: 'Super Paint',
-        status: 'Archived',
-      }),
-    ])
+    expect(mocks.createEstimateProduct).toHaveBeenCalledWith('org-1', {
+      name: 'Super Paint',
+      family: 'Paint',
+      default_sheen: 'Eggshell',
+      default_scopes: ['Walls'],
+      status: 'Archived',
+    })
     expect(response.status).toBe(201)
     await expect(response.json()).resolves.toEqual({
       data: { ...existingRow, status: 'Archived' },
@@ -246,21 +205,10 @@ describe('estimate product routes', () => {
       ok: true,
       value: { name: 'Super Paint Pro', notes: ' Updated ' },
     })
-
-    const updateSpy = vi.fn(() =>
-      createUpdateChain({
-        data: { ...existingRow, name: 'Super Paint Pro', notes: 'Updated' },
-        error: null,
-      })
-    )
-
-    mocks.from
-      .mockReturnValueOnce({
-        select: vi.fn(() => createSelectSingleChain({ data: existingRow, error: null })),
-      })
-      .mockReturnValueOnce({
-        update: updateSpy,
-      })
+    mocks.updateEstimateProduct.mockResolvedValue({
+      ok: true,
+      data: { ...existingRow, name: 'Super Paint Pro', notes: 'Updated' },
+    })
 
     const response = await handleEstimateProductRoutePatch(
       new Request('http://localhost/api/estimates/v2/products/id', { method: 'PATCH' }),
@@ -269,13 +217,13 @@ describe('estimate product routes', () => {
       }
     )
 
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(mocks.updateEstimateProduct).toHaveBeenCalledWith(
+      'org-1',
+      existingRow.id,
+      {
         name: 'Super Paint Pro',
-        family: 'Paint',
-        notes: 'Updated',
-        updated_at: expect.any(String),
-      })
+        notes: ' Updated ',
+      }
     )
     await expect(response.json()).resolves.toEqual({
       data: { ...existingRow, name: 'Super Paint Pro', notes: 'Updated' },
@@ -288,18 +236,16 @@ describe('estimate product routes', () => {
       ok: true,
       value: { name: 'Missing' },
     })
-
-    mocks.from
-      .mockReturnValueOnce({
-        select: vi.fn(() =>
-          createSelectSingleChain({ data: null, error: { message: 'not found' } })
-        ),
-      })
-      .mockReturnValueOnce({
-        select: vi.fn(() =>
-          createSelectSingleChain({ data: null, error: { message: 'not found' } })
-        ),
-      })
+    mocks.updateEstimateProduct.mockResolvedValue({
+      ok: false,
+      kind: 'not_found',
+      message: 'Product not found',
+    })
+    mocks.deleteEstimateProduct.mockResolvedValue({
+      ok: false,
+      kind: 'not_found',
+      message: 'Product not found',
+    })
 
     const patchResponse = await handleEstimateProductRoutePatch(
       new Request('http://localhost/api/estimates/v2/products/id', { method: 'PATCH' }),
@@ -321,13 +267,10 @@ describe('estimate product routes', () => {
   })
 
   it('deletes products with the canonical mutation envelope', async () => {
-    mocks.from
-      .mockReturnValueOnce({
-        select: vi.fn(() => createSelectSingleChain({ data: existingRow, error: null })),
-      })
-      .mockReturnValueOnce({
-        delete: vi.fn(() => createDeleteChain({ error: null })),
-      })
+    mocks.deleteEstimateProduct.mockResolvedValue({
+      ok: true,
+      data: true,
+    })
 
     const response = await handleEstimateProductRouteDelete(
       new Request('http://localhost/api/estimates/v2/products/id', { method: 'DELETE' }),

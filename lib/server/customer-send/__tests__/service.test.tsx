@@ -142,7 +142,9 @@ describe('customer send service', () => {
         status: 'draft',
         public_token: 'live-token',
         snapshot_json: {
-          saved: true,
+          document: {
+            saved: true,
+          },
         },
       },
     })
@@ -249,7 +251,9 @@ describe('customer send service', () => {
           status: 'draft',
           public_token: 'live-token',
           snapshot_json: {
-            saved: true,
+            document: {
+              saved: true,
+            },
           },
         },
         document: {
@@ -338,7 +342,9 @@ describe('customer send service', () => {
           status: 'draft',
           public_token: 'live-token',
           snapshot_json: {
-            saved: true,
+            document: {
+              saved: true,
+            },
           },
         },
       })

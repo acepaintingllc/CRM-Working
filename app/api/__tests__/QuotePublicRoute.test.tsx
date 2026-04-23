@@ -39,7 +39,7 @@ describe('quote public routes', () => {
     expect(invalidResponse.status).toBe(400)
     await expect(invalidResponse.json()).resolves.toEqual({ error: 'Invalid token' })
 
-    mockLoadPublicEstimateSnapshot.mockResolvedValueOnce({
+    mockLoadPublicEstimateSnapshot.mockResolvedValue({
       ok: false,
       kind: 'not_found',
       message: 'Quote not found',
@@ -50,21 +50,16 @@ describe('quote public routes', () => {
         params: { token: 'missing' },
       }
     )
-    expect(mockLoadPublicEstimateSnapshot).toHaveBeenLastCalledWith(
+    expect(mockLoadPublicEstimateSnapshot).toHaveBeenCalledWith(
       'missing',
       { origin: 'http://localhost' },
-      {
-        metadata: {
-          route: 'quote-public-api',
-          user_agent: '',
-        },
-      }
+      { metadata: { user_agent: '' } }
     )
     expect(missingResponse.status).toBe(404)
     await expect(missingResponse.json()).resolves.toEqual({ error: 'Quote not found' })
   })
 
-  it('returns the shared snapshot data payload', async () => {
+  it('marks the first eligible public view as viewed and returns the snapshot payload', async () => {
     mockLoadPublicEstimateSnapshot.mockResolvedValue({
       ok: true,
       data: {
@@ -87,12 +82,7 @@ describe('quote public routes', () => {
     expect(mockLoadPublicEstimateSnapshot).toHaveBeenCalledWith(
       'token-1',
       { origin: 'http://localhost' },
-      {
-        metadata: {
-          route: 'quote-public-api',
-          user_agent: 'Vitest',
-        },
-      }
+      { metadata: { user_agent: 'Vitest' } }
     )
     await expect(response.json()).resolves.toEqual({
       data: {
@@ -316,7 +306,28 @@ describe('quote public routes', () => {
     })
   })
 
-  it('decline route maps conflicts from the workflow service', async () => {
+  it('decline route maps idempotent retries and conflicts from the workflow service', async () => {
+    mockDeclinePublicEstimate.mockResolvedValueOnce({
+      ok: true,
+      data: { estimate_version_id: 'version-1', status: 'declined' },
+    })
+
+    const retryResponse = await declineQuote(
+      new Request('http://localhost/api/quote-public/token-1/decline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Still declining' }),
+      }),
+      {
+        params: { token: 'token-1' },
+      }
+    )
+
+    expect(retryResponse.status).toBe(200)
+    await expect(retryResponse.json()).resolves.toEqual({
+      data: { estimate_version_id: 'version-1', status: 'declined' },
+    })
+
     mockDeclinePublicEstimate.mockResolvedValueOnce({
       ok: false,
       kind: 'conflict',

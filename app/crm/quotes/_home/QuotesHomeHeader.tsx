@@ -19,17 +19,27 @@ export function QuotesHomeHeader({
   onSearchRetry,
 }: Props) {
   return (
-    <>
-      <div style={S.topRow}>
+    <div
+      style={{
+        ...S.card,
+        display: 'grid',
+        gap: 18,
+        marginBottom: 24,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 18,
+          flexWrap: 'wrap',
+        }}
+      >
         <div>
-          <div style={S.brandWrap}>
-            <div style={S.brandMark}>A</div>
-            <div>
-              <div style={S.brandName}>ACE CRM</div>
-              <div style={S.brandSub}>Quotes</div>
-            </div>
-          </div>
-          <div style={S.crumbs}>ACE CRM / QUOTES / HOME</div>
+          <div style={S.eyebrow}>{formatToday()}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>Quote home overview</div>
+          <div style={S.subhead}>{vm.heroSummaryText}</div>
         </div>
 
         <div style={S.topControls}>
@@ -102,56 +112,6 @@ export function QuotesHomeHeader({
           </div>
         </div>
       </div>
-
-      <div style={S.heroRow}>
-        <div>
-          <div style={S.eyebrow}>{formatToday()}</div>
-          <h1 style={S.h1}>Estimator home</h1>
-          <div style={S.subhead}>{vm.heroSummaryText}</div>
-        </div>
-        <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-          <Link
-            href="/crm/jobs/new"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '13px 18px',
-              borderRadius: 12,
-              border: '1px solid var(--v2-line)',
-              background: 'var(--v2-bg-2)',
-              color: 'var(--v2-ink)',
-              fontSize: 15,
-              fontWeight: 700,
-              textDecoration: 'none',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
-            Create job
-          </Link>
-          <a
-            href="#job-hub"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '13px 18px',
-              borderRadius: 12,
-              border: '1px solid rgba(134,239,172,0.34)',
-              background: '#8ad39b',
-              color: '#062410',
-              fontSize: 15,
-              fontWeight: 700,
-              textDecoration: 'none',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
-            New quote
-          </a>
-        </div>
-      </div>
-    </>
+    </div>
   )
 }

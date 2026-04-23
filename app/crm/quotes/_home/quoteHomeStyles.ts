@@ -1,6 +1,27 @@
 import type { CSSProperties } from 'react'
 
 export const S: Record<string, CSSProperties> = {
+  tokens: {
+    '--v2-bg': '#0a0a0a',
+    '--v2-bg-2': '#131313',
+    '--v2-bg-3': '#1a1a1a',
+    '--v2-line': '#262626',
+    '--v2-line-2': '#333333',
+    '--v2-ink': '#f5f5f5',
+    '--v2-ink-2': '#c5c5c5',
+    '--v2-ink-3': '#7a7a7a',
+    '--v2-green': '#84cc93',
+    '--v2-green-2': '#a7d9b4',
+    '--v2-green-dim': '#2f5a3a',
+    '--v2-green-wash': 'rgba(132, 204, 147, 0.08)',
+    '--v2-green-deep': '#0f2416',
+    '--v2-red': '#f87171',
+    '--v2-amber': '#fbbf24',
+    '--v2-mono': "'JetBrains Mono', ui-monospace, monospace",
+    color: 'var(--v2-ink)',
+    fontFamily: "'Inter', system-ui, sans-serif",
+    minWidth: 0,
+  } as CSSProperties,
   main: {
     display: 'block',
     minWidth: 0,

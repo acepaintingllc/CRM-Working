@@ -8,7 +8,7 @@ import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import type {
   QuoteProductsActions,
   QuoteProductsEditorVm,
-} from '@/app/crm/quotes/_hooks/quoteProductsPageVm'
+} from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
 import {
   QUOTE_PRODUCT_FAMILIES,
   QUOTE_PRODUCT_SCOPE_OPTIONS,
@@ -20,7 +20,7 @@ type Props = {
   vm: QuoteProductsEditorVm
   actions: Pick<
     QuoteProductsActions,
-    'updateDraftField' | 'save' | 'cancelEdit' | 'requestRemove'
+    'updateDraftField' | 'save' | 'cancelEdit' | 'requestDelete'
   >
 }
 
@@ -56,7 +56,7 @@ export function QuoteProductEditorSection({ vm, actions }: Props) {
             type="button"
             tone="danger"
             disabled={!vm.canDelete}
-            onClick={() => void actions.requestRemove()}
+            onClick={() => void actions.requestDelete()}
           >
             Delete
           </CrmButton>
@@ -73,6 +73,12 @@ export function QuoteProductEditorSection({ vm, actions }: Props) {
           {vm.inlineValidation ? (
             <CrmNotice tone="info" compact>
               {vm.inlineValidation}
+            </CrmNotice>
+          ) : null}
+
+          {vm.selectionNotice ? (
+            <CrmNotice tone="info" compact>
+              {vm.selectionNotice}
             </CrmNotice>
           ) : null}
 

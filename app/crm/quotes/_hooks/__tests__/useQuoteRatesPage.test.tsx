@@ -312,6 +312,72 @@ describe('useQuoteRatesPage', () => {
     expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
   })
 
+  it('keeps a successful save explicit when refresh verification fails', async () => {
+    loadRatesFlags.mockResolvedValueOnce({
+      source: 'db',
+      seeded: true,
+      template_version: 2,
+      categories: [
+        {
+          key: 'production_rates_walls',
+          tab: 'rates',
+          group: 'production_rates',
+          label: 'Wall Production',
+          table_title: 'Wall Production',
+          description: 'Wall rates',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
+          ],
+          rows: [
+            {
+              id: 'wall-rate-1',
+              display_name: 'Standard walls',
+              notes: '',
+              active: true,
+              sqft_per_hr: '150',
+            },
+          ],
+        },
+      ],
+    })
+    loadRatesFlags.mockRejectedValueOnce(new Error('verification failed'))
+    mutateRatesFlags.mockResolvedValue({ data: true })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Updated walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '165')
+    })
+
+    await act(async () => {
+      await result.current.actions.saveCurrent()
+    })
+
+    expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
+    expect(result.current.resource.data.categories[0]?.rows[0]).toMatchObject({
+      id: 'wall-rate-1',
+      display_name: 'Updated walls',
+      sqft_per_hr: '165',
+    })
+    expect(result.current.uiState.notice).toBe(
+      'Saved Wall Production, but refresh failed. Showing locally updated data. verification failed'
+    )
+    expect(result.current.uiState.pageBanner).toEqual({
+      tone: 'warning',
+      message:
+        'Saved Wall Production, but refresh failed. Showing locally updated data. verification failed',
+    })
+    expect(result.current.uiState.actionError).toBeNull()
+  })
+
   it('uses load errors as the shell-level status until retry succeeds', async () => {
     loadRatesFlags
       .mockRejectedValueOnce(new Error('Rates unavailable.'))
@@ -420,7 +486,7 @@ describe('useQuoteRatesPage', () => {
     expect(result.current.tableVm.selectedRow?.id).toBe('wall-rate-2')
   })
 
-  it('hides stale success notices behind validation and replaces them on mutation failure', async () => {
+  it('switches rate sections with an explicit category fallback and selection reset', async () => {
     loadRatesFlags.mockResolvedValue({
       source: 'db',
       seeded: true,
@@ -438,17 +504,102 @@ describe('useQuoteRatesPage', () => {
             { key: 'id', label: 'ID', type: 'text', required: true },
             { key: 'display_name', label: 'Display Name', type: 'text', required: true },
           ],
-          rows: [
-            {
-              id: 'wall-rate-1',
-              display_name: 'Standard walls',
-              notes: '',
-              active: true,
-            },
+          rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
+        },
+        {
+          key: 'unit_rates_doors',
+          tab: 'rates',
+          group: 'unit_rates',
+          label: 'Door Unit Rates',
+          table_title: 'Door Unit Rates',
+          description: 'Door unit rates',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
           ],
+          rows: [{ id: 'door-rate-1', display_name: 'Standard door', notes: '', active: true }],
         },
       ],
     })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    expect(result.current.filtersVm.rateCategory).toBe('production_rates_walls')
+    expect(result.current.tableVm.selectedRow?.id).toBe('wall-rate-1')
+
+    act(() => {
+      result.current.actions.setRateSection('unit_rates')
+    })
+
+    expect(result.current.filtersVm.activeTab).toBe('rates')
+    expect(result.current.filtersVm.rateSection).toBe('unit_rates')
+    expect(result.current.filtersVm.rateCategory).toBe('unit_rates_doors')
+    expect(result.current.tableVm.selectedRow?.id).toBe('door-rate-1')
+  })
+
+  it('hides stale success notices behind validation and replaces them on mutation failure', async () => {
+    loadRatesFlags
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 2,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [],
+            fields: [
+              { key: 'id', label: 'ID', type: 'text', required: true },
+              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            ],
+            rows: [
+              {
+                id: 'wall-rate-1',
+                display_name: 'Standard walls',
+                notes: '',
+                active: true,
+              },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 2,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [],
+            fields: [
+              { key: 'id', label: 'ID', type: 'text', required: true },
+              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            ],
+            rows: [
+              {
+                id: 'wall-rate-1',
+                display_name: 'Standard walls',
+                notes: '',
+                active: true,
+              },
+            ],
+          },
+        ],
+      })
     mutateRatesFlags
       .mockResolvedValueOnce({ data: true })
       .mockRejectedValueOnce(new Error('Archive failed.'))
@@ -499,6 +650,114 @@ describe('useQuoteRatesPage', () => {
       tone: 'error',
       message: 'Archive failed.',
     })
+  })
+
+  it('searches across flags and room-default categories after explicit section switches', async () => {
+    loadRatesFlags.mockResolvedValue({
+      source: 'db',
+      seeded: true,
+      template_version: 2,
+      categories: [
+        {
+          key: 'production_rates_walls',
+          tab: 'rates',
+          group: 'production_rates',
+          label: 'Wall Production',
+          table_title: 'Wall Production',
+          description: 'Wall rates',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+          ],
+          rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
+        },
+        {
+          key: 'condition_modifiers',
+          tab: 'flags',
+          group: 'condition_modifiers',
+          label: 'Condition Modifiers',
+          table_title: 'Condition Modifiers',
+          description: 'Flag rows',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            { key: 'notes', label: 'Notes', type: 'text' },
+            { key: 'wall_factor', label: 'Wall Factor', type: 'number' },
+          ],
+          rows: [
+            {
+              id: 'flag-high-traffic',
+              display_name: 'High traffic',
+              notes: 'Heavy wear',
+              active: true,
+              wall_factor: '1.2',
+              ceil_factor: '1.1',
+              trim_factor: '1.05',
+            },
+          ],
+        },
+        {
+          key: 'room_templates',
+          tab: 'room_defaults',
+          group: 'room_templates',
+          label: 'Room Templates',
+          table_title: 'Room Templates',
+          description: 'Template rows',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            { key: 'notes', label: 'Notes', type: 'text' },
+            { key: 'room_type_id', label: 'Room Type', type: 'text' },
+          ],
+          rows: [
+            {
+              id: 'template-bedroom',
+              display_name: 'Bedroom reset',
+              notes: 'Base template',
+              active: true,
+              room_type_id: 'room-bedroom',
+              default_wall_rate_id: 'wall-rate-1',
+              default_ceil_rate_id: '',
+              default_complexity_id: '',
+              default_wall_mode: 'two_coat',
+              include_walls: 'Y',
+              include_ceilings: 'Y',
+              include_trim: 'N',
+              include_doors: 'Y',
+              include_drywall: 'N',
+            },
+          ],
+        },
+      ],
+    })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.setActiveTab('flags')
+    })
+    act(() => {
+      result.current.actions.setSearch('1.2')
+    })
+
+    expect(result.current.tableVm.filteredRows.map((row) => row.id)).toEqual(['flag-high-traffic'])
+
+    act(() => {
+      result.current.actions.setRoomDefaultsSection('room_templates')
+    })
+    act(() => {
+      result.current.actions.setSearch('room-bedroom')
+    })
+
+    expect(result.current.filtersVm.activeTab).toBe('room_defaults')
+    expect(result.current.tableVm.filteredRows.map((row) => row.id)).toEqual(['template-bedroom'])
   })
 
   it('reactivates an archived row through the typed activation mutation path', async () => {
@@ -616,6 +875,7 @@ describe('useQuoteRatesPage', () => {
     })
 
     expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.status).toBe('confirming')
     expect(result.current.discardVm.transitionType).toBe('setSelectedId')
     expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
     expect(result.current.editorVm.isDirty).toBe(true)
@@ -694,6 +954,7 @@ describe('useQuoteRatesPage', () => {
     })
 
     expect(result.current.discardVm.transitionType).toBe('setActiveTab')
+    expect(result.current.discardVm.status).toBe('confirming')
     expect(result.current.filtersVm.activeTab).toBe('rates')
 
     await act(async () => {
@@ -710,6 +971,7 @@ describe('useQuoteRatesPage', () => {
     })
 
     expect(result.current.discardVm.transitionType).toBe('setStatusFilter')
+    expect(result.current.discardVm.status).toBe('confirming')
     expect(result.current.filtersVm.statusFilter).toBe('active')
 
     act(() => {
@@ -719,6 +981,149 @@ describe('useQuoteRatesPage', () => {
     expect(result.current.filtersVm.statusFilter).toBe('active')
     expect(result.current.editorVm.draft).toMatchObject({
       display_name: 'Dirty flag',
+    })
+  })
+
+  it('applies only the first pending rates transition while discard confirmation is open', async () => {
+    loadRatesFlags.mockResolvedValue({
+      source: 'db',
+      seeded: true,
+      template_version: 2,
+      categories: [
+        {
+          key: 'production_rates_walls',
+          tab: 'rates',
+          group: 'production_rates',
+          label: 'Wall Production',
+          table_title: 'Wall Production',
+          description: 'Wall rates',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+          ],
+          rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
+        },
+        {
+          key: 'condition_modifiers',
+          tab: 'flags',
+          group: 'condition_modifiers',
+          label: 'Condition Modifiers',
+          table_title: 'Condition Modifiers',
+          description: 'Flag rows',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+          ],
+          rows: [{ id: 'flag-1', display_name: 'High traffic', notes: '', active: true }],
+        },
+      ],
+    })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Dirty walls')
+      result.current.actions.setActiveTab('flags')
+      result.current.actions.setStatusFilter('archived')
+      result.current.actions.setSearch('traffic')
+    })
+
+    expect(result.current.discardVm.transitionType).toBe('setActiveTab')
+    expect(result.current.filtersVm.activeTab).toBe('rates')
+    expect(result.current.filtersVm.statusFilter).toBe('active')
+    expect(result.current.filtersVm.search).toBe('')
+
+    await act(async () => {
+      await result.current.actions.confirmDiscard()
+    })
+
+    expect(result.current.filtersVm.activeTab).toBe('flags')
+    expect(result.current.filtersVm.statusFilter).toBe('active')
+    expect(result.current.filtersVm.search).toBe('')
+    expect(result.current.editorVm.selectedRow?.id).toBe('flag-1')
+    expect(result.current.editorVm.isDirty).toBe(false)
+  })
+
+  it('guards reload behind discard confirmation and rehydrates from refreshed data', async () => {
+    loadRatesFlags
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 2,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [],
+            fields: [
+              { key: 'id', label: 'ID', type: 'text', required: true },
+              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            ],
+            rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 3,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [],
+            fields: [
+              { key: 'id', label: 'ID', type: 'text', required: true },
+              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            ],
+            rows: [{ id: 'wall-rate-1', display_name: 'Reloaded walls', notes: '', active: true }],
+          },
+        ],
+      })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Dirty walls')
+      result.current.actions.reload('wall-rate-1')
+    })
+
+    expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.transitionType).toBe('reload')
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Dirty walls',
+    })
+
+    await act(async () => {
+      await result.current.actions.confirmDiscard()
+    })
+
+    await waitFor(() => {
+      expect(result.current.resource.data.template_version).toBe(3)
+    })
+
+    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Reloaded walls',
     })
   })
 })

@@ -48,28 +48,28 @@ describe('useQuoteDefaultsPage', () => {
     const { result } = renderHook(() => useQuoteDefaultsPage())
 
     await waitFor(() => {
-      expect(result.current.feedbackVm.hasLoaded).toBe(true)
+      expect(result.current.feedback.hasLoaded).toBe(true)
     })
 
-    expect(result.current.formVm.productDefaultFields[0].options).toHaveLength(1)
+    expect(result.current.form.productDefaultFields[0].options).toHaveLength(1)
 
     act(() => {
       result.current.actions.setSettings({
-        ...result.current.formVm.settings,
+        ...result.current.form.settings,
         override_labor_rate: 70,
       })
     })
 
-    expect(result.current.formVm.canSave).toBe(true)
+    expect(result.current.form.canSave).toBe(true)
 
     await act(async () => {
       await result.current.actions.save()
     })
 
     expect(saveQuoteDefaults).toHaveBeenCalled()
-    expect(result.current.feedbackVm.notice).toBe('Quote defaults saved.')
-    expect(result.current.formVm.settings.override_labor_rate).toBe(70)
-    expect(result.current.formVm.canSave).toBe(false)
+    expect(result.current.feedback.notice).toBe('Quote defaults saved.')
+    expect(result.current.form.settings.override_labor_rate).toBe(70)
+    expect(result.current.form.canSave).toBe(false)
   })
 
   it('does not mark the page dirty when only the loaded product catalog changes on reload', async () => {
@@ -92,17 +92,17 @@ describe('useQuoteDefaultsPage', () => {
     const { result } = renderHook(() => useQuoteDefaultsPage())
 
     await waitFor(() => {
-      expect(result.current.feedbackVm.hasLoaded).toBe(true)
+      expect(result.current.feedback.hasLoaded).toBe(true)
     })
 
-    expect(result.current.formVm.canSave).toBe(false)
+    expect(result.current.form.canSave).toBe(false)
 
     await act(async () => {
       await result.current.actions.reload()
     })
 
-    expect(result.current.formVm.canSave).toBe(false)
-    expect(result.current.formVm.productDefaultFields[0].options).toHaveLength(2)
+    expect(result.current.form.canSave).toBe(false)
+    expect(result.current.form.productDefaultFields[0].options).toHaveLength(2)
   })
 
   it('tracks dirty state from settings changes only and clears it after save', async () => {
@@ -127,22 +127,22 @@ describe('useQuoteDefaultsPage', () => {
     const { result } = renderHook(() => useQuoteDefaultsPage())
 
     await waitFor(() => {
-      expect(result.current.feedbackVm.hasLoaded).toBe(true)
+      expect(result.current.feedback.hasLoaded).toBe(true)
     })
 
     act(() => {
       result.current.actions.setSettings({
-        ...result.current.formVm.settings,
+        ...result.current.form.settings,
         override_labor_rate: 72,
       })
     })
 
-    expect(result.current.formVm.canSave).toBe(true)
+    expect(result.current.form.canSave).toBe(true)
 
     await act(async () => {
       await result.current.actions.save()
     })
 
-    expect(result.current.formVm.canSave).toBe(false)
+    expect(result.current.form.canSave).toBe(false)
   })
 })

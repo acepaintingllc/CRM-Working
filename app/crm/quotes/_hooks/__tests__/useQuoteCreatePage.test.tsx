@@ -49,15 +49,15 @@ describe('useQuoteCreatePage', () => {
     const { result } = renderHook(() => useQuoteCreatePage())
 
     await waitFor(() => {
-      expect(result.current.feedbackVm.loading).toBe(false)
+      expect(result.current.feedback.loading).toBe(false)
     })
 
     expect(fetchJobList).not.toHaveBeenCalled()
     expect(loadJobRecord).not.toHaveBeenCalled()
     expect(loadQuoteJobVersions).not.toHaveBeenCalled()
-    expect(result.current.feedbackVm.shouldLoadJobData).toBe(false)
-    expect(result.current.selectedJobVm.title).toBe('Unknown job')
-    expect(result.current.createVm.canCreate).toBe(false)
+    expect(result.current.feedback.shouldLoadJobData).toBe(false)
+    expect(result.current.job.title).toBe('Unknown job')
+    expect(result.current.create.canCreate).toBe(false)
   })
 
   it('keeps the load error ahead of the required-job create error', async () => {
@@ -68,15 +68,15 @@ describe('useQuoteCreatePage', () => {
     const { result } = renderHook(() => useQuoteCreatePage())
 
     await waitFor(() => {
-      expect(result.current.feedbackVm.loading).toBe(false)
-      expect(result.current.feedbackVm.error).toBe('Load failed')
+      expect(result.current.feedback.loading).toBe(false)
+      expect(result.current.feedback.pageBanner?.message).toBe('Load failed')
     })
 
     await act(async () => {
-      await result.current.actions.createVersion()
+      await result.current.actions.create()
     })
 
-    expect(result.current.feedbackVm.error).toBe('Load failed')
+    expect(result.current.feedback.pageBanner?.message).toBe('Load failed')
     expect(createQuoteVersion).not.toHaveBeenCalled()
   })
 
@@ -104,8 +104,6 @@ describe('useQuoteCreatePage', () => {
     loadQuoteJobVersions.mockResolvedValue({
       job_id: 'job-1',
       total_versions: 1,
-      limit: 25,
-      next_cursor: null,
       items: [
         {
           estimate_id: 'estimate-1',
@@ -132,10 +130,7 @@ describe('useQuoteCreatePage', () => {
     })
 
     expect(loadJobRecord).toHaveBeenCalledWith('job-1')
-    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1', {
-      cursor: undefined,
-      limit: 25,
-    })
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
     expect(result.current.job.hasJob).toBe(true)
     expect(result.current.versions.hasVersions).toBe(true)
     expect(result.current.create.canCreate).toBe(true)
@@ -182,8 +177,8 @@ describe('useQuoteCreatePage', () => {
         linked_estimates: [],
       })
     loadQuoteJobVersions
-      .mockResolvedValueOnce({ job_id: 'job-1', total_versions: 0, limit: 25, next_cursor: null, items: [] })
-      .mockResolvedValueOnce({ job_id: 'job-2', total_versions: 0, limit: 25, next_cursor: null, items: [] })
+      .mockResolvedValueOnce({ job_id: 'job-1', total_versions: 0, items: [] })
+      .mockResolvedValueOnce({ job_id: 'job-2', total_versions: 0, items: [] })
     getSearchParam.mockReturnValue('job-1')
 
     const { result, rerender } = renderHook(() => useQuoteCreatePage())
@@ -232,12 +227,10 @@ describe('useQuoteCreatePage', () => {
       linked_estimates: [],
     })
     loadQuoteJobVersions
-      .mockResolvedValueOnce({ job_id: 'job-1', total_versions: 0, limit: 25, next_cursor: null, items: [] })
+      .mockResolvedValueOnce({ job_id: 'job-1', total_versions: 0, items: [] })
       .mockResolvedValueOnce({
         job_id: 'job-1',
         total_versions: 1,
-        limit: 25,
-        next_cursor: null,
         items: [
           {
             estimate_id: 'estimate-2',

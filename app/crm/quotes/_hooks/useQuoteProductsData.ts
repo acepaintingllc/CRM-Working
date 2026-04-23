@@ -1,8 +1,7 @@
 'use client'
 
-import type { Dispatch, SetStateAction } from 'react'
 import { useMemo } from 'react'
-import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { useResource } from '@/app/crm/_hooks/useResource'
 import { loadQuoteProducts } from '@/lib/quotes/client'
 import type { QuoteProductQuery, QuoteProductRow } from '@/lib/quotes/productsForm'
 
@@ -18,18 +17,12 @@ export function useQuoteProductsData({ query }: Options) {
     [query]
   )
 
-  return useLoadableResource<QuoteProductRow[]>({
+  return useResource<QuoteProductRow[]>({
     initialData: emptyProductRows,
     load: () => loadQuoteProducts<QuoteProductRow[]>(query),
     getErrorMessage: (loadError: unknown) =>
       loadError instanceof Error ? loadError.message : 'Failed to load quote products.',
     reloadKey,
+    resetOnError: false,
   })
-}
-
-export const useQuoteProductsResourceAdapter = useQuoteProductsData
-
-export type QuoteProductsResourceAdapter = ReturnType<typeof useQuoteProductsResourceAdapter> & {
-  allKnownData?: QuoteProductRow[]
-  setAllKnownData?: Dispatch<SetStateAction<QuoteProductRow[]>>
 }

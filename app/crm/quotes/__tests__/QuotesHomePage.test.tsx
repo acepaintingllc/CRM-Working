@@ -3,23 +3,60 @@ import { describe, expect, it, vi } from 'vitest'
 import QuotesHomePage from '../QuotesHomePage'
 
 type MockHeaderProps = {
-  vm: { heroSummaryText: string }
+  vm: {
+    heroSummaryText: string
+  }
   onSearchFocusedChange: (focused: boolean) => void
   onSearchQueryChange: (query: string) => void
   onSearchRetry: () => void
 }
 
 type MockJobListProps = {
-  vm: { emptyState: string }
+  vm: {
+    emptyState: string
+  }
+  renderDesktop?: boolean
+  renderMobile?: boolean
   onJobQueryChange: (query: string) => void
   onSelectJob: (jobId: string) => void
-  onLoadMore?: () => void
+}
+
+type MockSummaryCard = {
+  label: string
+  value: string
+  subtext?: string
+}
+
+type MockSummaryCardsProps = {
+  cards: MockSummaryCard[]
+  loading: boolean
+}
+
+type MockSelectedJobPanelProps = {
+  vm: { title: string | null }
 }
 
 type MockVersionListProps = {
   vm: { heading: string }
   onRequestDelete: (id: string) => void
-  onLoadMore?: () => void
+}
+
+type MockCreatePanelProps = {
+  vm: {
+    versionKind: string
+    versionName: string
+  }
+  onCreate: () => void
+  onVersionKindChange: (kind: string) => void
+  onVersionNameChange: (name: string) => void
+}
+
+type MockDeleteDialogProps = {
+  vm: {
+    estimateId: string | null
+  }
+  onCancel: () => void
+  onConfirm: () => void
 }
 
 const { useQuotesHomePage } = vi.hoisted(() => ({
@@ -42,43 +79,52 @@ vi.mock('../_home/QuotesHomeHeader', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeJobList', () => ({
-  QuotesHomeJobList: ({ vm, onJobQueryChange, onSelectJob, onLoadMore }: MockJobListProps) => (
+  QuotesHomeJobList: ({ vm, renderDesktop = true, renderMobile = true, onJobQueryChange, onSelectJob }: MockJobListProps) => (
     <div>
+      <div>job-list:{renderDesktop ? 'desktop' : 'mobile'}:{renderMobile ? 'mobile' : 'desktop'}</div>
       <div>job-empty:{vm.emptyState}</div>
       <button onClick={() => onJobQueryChange('garage')}>change job query</button>
       <button onClick={() => onSelectJob('job-2')}>select job</button>
-      <button onClick={onLoadMore}>load more jobs</button>
     </div>
   ),
 }))
 
 vi.mock('../_home/QuotesHomeSummaryCards', () => ({
-  QuotesHomeSummaryCards: () => <div>summary-cards</div>,
+  QuotesHomeSummaryCards: ({ cards, loading }: MockSummaryCardsProps) => (
+    <div>
+      summary-cards:{cards.map((card) => `${card.label}:${card.value}`).join('|')}:{String(loading)}
+    </div>
+  ),
 }))
 
 vi.mock('../_home/QuotesHomeSelectedJobPanel', () => ({
-  QuotesHomeSelectedJobPanel: ({ vm }: { vm: { title: string | null } }) => <div>selected-job:{vm.title}</div>,
+  QuotesHomeSelectedJobPanel: ({ vm }: MockSelectedJobPanelProps) => <div>selected-job:{vm.title ?? 'none'}</div>,
 }))
 
 vi.mock('../_home/QuotesHomeVersionList', () => ({
-  QuotesHomeVersionList: ({ vm, onRequestDelete, onLoadMore }: MockVersionListProps) => (
+  QuotesHomeVersionList: ({ vm, onRequestDelete }: MockVersionListProps) => (
     <div>
       <div>version-list:{vm.heading}</div>
       <button onClick={() => onRequestDelete('estimate-2')}>request delete</button>
-      <button onClick={onLoadMore}>load more versions</button>
     </div>
   ),
 }))
 
 vi.mock('../_home/QuotesHomeCreatePanel', () => ({
-  QuotesHomeCreatePanel: ({ onCreate }: { onCreate: () => void }) => (
-    <button onClick={onCreate}>create version</button>
+  QuotesHomeCreatePanel: ({ vm, onCreate, onVersionKindChange, onVersionNameChange }: MockCreatePanelProps) => (
+    <div>
+      <div>create-panel:{vm.versionKind}:{vm.versionName}</div>
+      <button onClick={() => onVersionKindChange('revision')}>change kind</button>
+      <button onClick={() => onVersionNameChange('Custom Revision')}>change name</button>
+      <button onClick={onCreate}>create version</button>
+    </div>
   ),
 }))
 
 vi.mock('../_home/QuotesHomeDeleteDialog', () => ({
-  QuotesHomeDeleteDialog: ({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) => (
+  QuotesHomeDeleteDialog: ({ vm, onCancel, onConfirm }: MockDeleteDialogProps) => (
     <div>
+      <div>delete-dialog:{vm.estimateId ?? 'none'}</div>
       <button onClick={onCancel}>cancel delete</button>
       <button onClick={onConfirm}>confirm delete</button>
     </div>
@@ -86,13 +132,12 @@ vi.mock('../_home/QuotesHomeDeleteDialog', () => ({
 }))
 
 describe('QuotesHomePage', () => {
-  it('renders the shell and forwards page actions', () => {
+  it('renders grouped sections and wires child callbacks through the page shell', () => {
     const actions = {
       setSearchFocused: vi.fn(),
       setSearchQuery: vi.fn(),
       retrySearch: vi.fn(),
       setJobQuery: vi.fn(),
-      loadMoreJobs: vi.fn(),
       setSelectedJobId: vi.fn(),
       requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
@@ -100,7 +145,6 @@ describe('QuotesHomePage', () => {
       create: vi.fn(),
       cancelDelete: vi.fn(),
       confirmDelete: vi.fn(),
-      loadMoreVersions: vi.fn(),
     }
 
     useQuotesHomePage.mockReturnValue({
@@ -119,19 +163,20 @@ describe('QuotesHomePage', () => {
         loading: false,
         tone: 'error',
         title: 'Quote action failed',
-        details: ['Delete failed'],
-        sources: ['delete'],
+        details: ['Select a job before creating a version.'],
+        sources: ['create'],
       },
-      summaryCards: [],
+      summaryCards: [
+        { label: 'Drafts', value: '1', subtext: '1 draft version' },
+        { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
+      ],
       jobList: {
         loading: false,
-        loadingMore: false,
         searchQuery: '',
         selectedJobId: 'job-1',
         items: [],
         mobileItems: [],
         emptyState: 'none',
-        hasMore: true,
       },
       selectedJob: {
         loading: false,
@@ -142,11 +187,9 @@ describe('QuotesHomePage', () => {
         stats: [],
       },
       versionList: {
-        heading: 'Kitchen · 2 loaded / 2 total',
+        heading: '2 versions under this job',
         emptyMessage: null,
         items: [],
-        hasMore: true,
-        loadingMore: false,
       },
       create: {
         creating: false,
@@ -156,12 +199,15 @@ describe('QuotesHomePage', () => {
         versionName: '',
         canCreate: true,
       },
-      mobileSummaryCards: [],
+      mobileSummaryCards: [
+        { label: 'Drafts', value: '1', subtext: '1 draft version' },
+        { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
+      ],
       dialogs: {
         delete: {
-          estimateId: null,
-          versionName: null,
-          jobTitle: null,
+          estimateId: 'estimate-2',
+          versionName: 'Version B',
+          jobTitle: 'Kitchen',
           deleting: false,
         },
       },
@@ -169,14 +215,25 @@ describe('QuotesHomePage', () => {
 
     render(<QuotesHomePage />)
 
+    expect(screen.getByText('Quote Home')).toBeInTheDocument()
+    expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
+    expect(screen.getByText('header:3 total versions')).toBeInTheDocument()
+    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:false')).toBeInTheDocument()
+    expect(screen.getByText('selected-job:Kitchen')).toBeInTheDocument()
+    expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
+    expect(screen.getByText('create-panel:standard:')).toBeInTheDocument()
+    expect(screen.getByText('delete-dialog:estimate-2')).toBeInTheDocument()
+    expect(screen.getByText('Quote action failed')).toBeInTheDocument()
+    expect(screen.getByText('Select a job before creating a version.')).toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: 'focus search' }))
     fireEvent.click(screen.getByRole('button', { name: 'change search' }))
     fireEvent.click(screen.getByRole('button', { name: 'retry search' }))
-    fireEvent.click(screen.getByRole('button', { name: 'change job query' }))
-    fireEvent.click(screen.getByRole('button', { name: 'load more jobs' }))
-    fireEvent.click(screen.getByRole('button', { name: 'select job' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'change job query' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'select job' })[0])
     fireEvent.click(screen.getByRole('button', { name: 'request delete' }))
-    fireEvent.click(screen.getByRole('button', { name: 'load more versions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'change kind' }))
+    fireEvent.click(screen.getByRole('button', { name: 'change name' }))
     fireEvent.click(screen.getByRole('button', { name: 'create version' }))
     fireEvent.click(screen.getByRole('button', { name: 'cancel delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'confirm delete' }))
@@ -185,10 +242,10 @@ describe('QuotesHomePage', () => {
     expect(actions.setSearchQuery).toHaveBeenCalledWith('revision')
     expect(actions.retrySearch).toHaveBeenCalledTimes(1)
     expect(actions.setJobQuery).toHaveBeenCalledWith('garage')
-    expect(actions.loadMoreJobs).toHaveBeenCalledTimes(1)
     expect(actions.setSelectedJobId).toHaveBeenCalledWith('job-2')
     expect(actions.requestDelete).toHaveBeenCalledWith('estimate-2')
-    expect(actions.loadMoreVersions).toHaveBeenCalledTimes(1)
+    expect(actions.setVersionKind).toHaveBeenCalledWith('revision')
+    expect(actions.setVersionName).toHaveBeenCalledWith('Custom Revision')
     expect(actions.create).toHaveBeenCalledTimes(1)
     expect(actions.cancelDelete).toHaveBeenCalledTimes(1)
     expect(actions.confirmDelete).toHaveBeenCalledTimes(1)

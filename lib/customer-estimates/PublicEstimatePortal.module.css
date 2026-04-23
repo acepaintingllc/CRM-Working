@@ -1,0 +1,274 @@
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(133, 199, 155, 0.08), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.05), transparent 24%),
+    linear-gradient(180deg, #111 0%, #090909 100%);
+  color: #f4f4f4;
+  padding: 20px;
+}
+
+.shell {
+  max-width: 1480px;
+  margin: 0 auto;
+  display: grid;
+  gap: 18px;
+}
+
+.card {
+  background: #171717;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.headerCard {
+  composes: card;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #909090;
+  font-weight: 700;
+}
+
+.title {
+  margin-top: 4px;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #c4c4c4;
+}
+
+.secondaryButton {
+  border: 1px solid rgba(133, 199, 155, 0.3);
+  background: rgba(133, 199, 155, 0.12);
+  color: #d7f3df;
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.acceptanceHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.acceptanceTitle {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 900;
+  color: #f4f4f4;
+}
+
+.statusMeta {
+  font-size: 12px;
+  color: #c4c4c4;
+}
+
+.notice {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.noticeInfo {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+}
+
+.noticeSuccess {
+  border: 1px solid rgba(133, 199, 155, 0.24);
+  background: rgba(133, 199, 155, 0.08);
+  color: #cdeed5;
+}
+
+.noticeError {
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+}
+
+.noticeWarning {
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  background: rgba(113, 63, 18, 0.18);
+  color: #fde68a;
+}
+
+.lockedPanel {
+  border: 1px solid rgba(133, 199, 155, 0.22);
+  background: rgba(133, 199, 155, 0.06);
+  border-radius: 12px;
+  padding: 14px;
+  color: #d7f3df;
+}
+
+.fieldsGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: #c4c4c4;
+}
+
+.input,
+.select,
+.textarea {
+  border-radius: 10px;
+  border: 1px solid #383838;
+  background: #101010;
+  color: #f4f4f4;
+  font-size: 14px;
+}
+
+.input,
+.select {
+  height: 42px;
+  padding: 0 12px;
+}
+
+.textarea {
+  padding: 12px;
+  resize: vertical;
+}
+
+.agreementRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: #c4c4c4;
+}
+
+.agreementCheckbox {
+  margin-top: 3px;
+}
+
+.actions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dangerButton {
+  border: 1px solid #4b2c2c;
+  background: #231111;
+  color: #fecaca;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid rgba(133, 199, 155, 0.3);
+  background: rgba(133, 199, 155, 0.14);
+  color: #d7f3df;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dangerButton:disabled,
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.signaturePad {
+  display: grid;
+  gap: 8px;
+}
+
+.signatureCanvas {
+  width: 100%;
+  height: 110px;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.signatureActions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.signatureClear {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #111827;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.signatureHint {
+  font-size: 12px;
+  color: #6b7280;
+  align-self: center;
+}
+
+.documentWrap {
+  display: grid;
+  gap: 18px;
+}
+
+@media (max-width: 860px) {
+  .headerCard {
+    grid-template-columns: 1fr;
+  }
+
+  .fieldsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    justify-content: stretch;
+  }
+
+  .actions button {
+    width: 100%;
+  }
+
+  .signatureActions {
+    flex-direction: column;
+  }
+}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
+import { assembleCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
 import { templatePresets } from '@/lib/customer-estimates/presets'
 import {
   type CustomerSendMutationResponse,
@@ -246,30 +247,32 @@ export function buildCustomerSendComposerPreview(
   form: CustomerSendComposerDraft,
   version: CustomerSendVersionState | null
 ) {
-  return buildCustomerEstimateDocument({
-    estimate: data.estimate,
-    job: data.job,
-    customer: data.customer ?? null,
-    company: data.company,
-    inputs: data.inputs,
-    catalogs: data.catalogs ?? null,
-    pricingSummary: data.pricing_summary
-      ? { finalTotal: data.pricing_summary.finalTotal ?? null }
-      : null,
-    overrides: {
-      title: form.title,
-      scope_text_edits: form.scope_text_edits,
-      quote_validity_days: form.quote_validity_days,
-    },
-    publicMeta: {
-      status: version?.status ?? 'draft',
-      sent_at: version?.sent_at ?? null,
-      viewed_at: version?.viewed_at ?? null,
-      accepted_at: version?.accepted_at ?? null,
-      declined_at: version?.declined_at ?? null,
-      public_token: version?.public_token ?? null,
-    },
-  })
+  return assembleCustomerEstimateDocument(
+    buildCustomerEstimateDocument({
+      estimate: data.estimate,
+      job: data.job,
+      customer: data.customer ?? null,
+      company: data.company,
+      inputs: data.inputs,
+      catalogs: data.catalogs ?? null,
+      pricingSummary: data.pricing_summary
+        ? { finalTotal: data.pricing_summary.finalTotal ?? null }
+        : null,
+      overrides: {
+        title: form.title,
+        scope_text_edits: form.scope_text_edits,
+        quote_validity_days: form.quote_validity_days,
+      },
+      publicMeta: {
+        status: version?.status ?? 'draft',
+        sent_at: version?.sent_at ?? null,
+        viewed_at: version?.viewed_at ?? null,
+        accepted_at: version?.accepted_at ?? null,
+        declined_at: version?.declined_at ?? null,
+        public_token: version?.public_token ?? null,
+      },
+    })
+  )
 }
 
 export function buildCustomerSendReviewPreview(
@@ -277,30 +280,32 @@ export function buildCustomerSendReviewPreview(
   form: CustomerSendReviewDraft,
   version: CustomerSendVersionState | null
 ) {
-  return buildCustomerEstimateDocument({
-    estimate: data.estimate,
-    job: data.job,
-    customer: data.customer ?? null,
-    company: data.company,
-    inputs: data.inputs,
-    catalogs: data.catalogs ?? null,
-    pricingSummary: data.pricing_summary
-      ? { finalTotal: data.pricing_summary.finalTotal ?? null }
-      : null,
-    settings: data.settings ?? undefined,
-    overrides: {
-      title: form.title,
-      scope_text_edits: form.scope_text_edits,
-    },
-    publicMeta: {
-      status: version?.status ?? 'draft',
-      sent_at: version?.sent_at ?? null,
-      viewed_at: version?.viewed_at ?? null,
-      accepted_at: version?.accepted_at ?? null,
-      declined_at: version?.declined_at ?? null,
-      public_token: version?.public_token ?? null,
-    },
-  })
+  return assembleCustomerEstimateDocument(
+    buildCustomerEstimateDocument({
+      estimate: data.estimate,
+      job: data.job,
+      customer: data.customer ?? null,
+      company: data.company,
+      inputs: data.inputs,
+      catalogs: data.catalogs ?? null,
+      pricingSummary: data.pricing_summary
+        ? { finalTotal: data.pricing_summary.finalTotal ?? null }
+        : null,
+      settings: data.settings ?? undefined,
+      overrides: {
+        title: form.title,
+        scope_text_edits: form.scope_text_edits,
+      },
+      publicMeta: {
+        status: version?.status ?? 'draft',
+        sent_at: version?.sent_at ?? null,
+        viewed_at: version?.viewed_at ?? null,
+        accepted_at: version?.accepted_at ?? null,
+        declined_at: version?.declined_at ?? null,
+        public_token: version?.public_token ?? null,
+      },
+    })
+  )
 }
 
 export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({

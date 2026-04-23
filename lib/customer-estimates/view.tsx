@@ -14,13 +14,6 @@ const C = {
   soft: '#f6f6f6',
 }
 
-const DEFAULT_COMPANY_INFO = {
-  name: 'ACE Painting LLC',
-  phone: '812-228-8803',
-  email: 'austin@newburghacepainting.com',
-} as const
-// TODO: Replace these fallbacks with the org profile feature once company settings are fully wired.
-
 function fmtCurrency(value: number | null | undefined) {
   if (value == null) return ''
   return `$${Math.round(value).toLocaleString('en-US')}`
@@ -98,48 +91,32 @@ function LogoMark({ logoUrl, alt }: { logoUrl: string; alt: string }) {
 }
 
 function Header({ document }: { document: CustomerEstimateDocument }) {
-  const logoUrl = getBrandLogoUrl(document.company.logo_url)
-  const companyName = document.company.business_name || DEFAULT_COMPANY_INFO.name
-  const phone = document.company.main_phone || DEFAULT_COMPANY_INFO.phone
-  const email = document.company.business_email || DEFAULT_COMPANY_INFO.email
+  const logoUrl = getBrandLogoUrl(document.header.logo_url)
+  const companyName = document.header.company_name
   return (
     <header style={{ display: 'grid', gap: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 14, alignItems: 'start' }}>
         <div style={{ fontSize: 12.5, lineHeight: 1.55 }}>
           <div style={{ fontWeight: 800 }}>{companyName}</div>
-          <div>{phone}</div>
-          <div>{email}</div>
+          {document.header.contact_lines.map((line) => (
+            <div key={line}>{line}</div>
+          ))}
         </div>
         <LogoMark logoUrl={logoUrl} alt={companyName} />
       </div>
       <div style={{ borderTop: `1px solid ${C.rule}` }} />
       <div style={{ display: 'grid', gap: 6 }}>
-        <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: '0.08em' }}>QUOTE</div>
-        <div style={{ fontSize: 13, color: C.text }}>Date: {document.meta.quote_date || '-'}</div>
+        <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: '0.08em' }}>
+          {document.header.document_label}
+        </div>
+        <div style={{ fontSize: 13, color: C.text }}>Date: {document.header.quote_date_label}</div>
       </div>
     </header>
   )
 }
 
-function formatCustomerLines(document: CustomerEstimateDocument) {
-  const lines: string[] = []
-  const customer = document.customer
-  if (customer.name) lines.push(customer.name)
-  if (customer.address) {
-    lines.push(...customer.address.split('\n').map((line) => line.trim()).filter(Boolean))
-  } else {
-    const line1 = [customer.street].filter(Boolean).join(' ').trim()
-    const line2 = [customer.city, [customer.state, customer.zip].filter(Boolean).join(' ').trim()]
-      .filter(Boolean)
-      .join(', ')
-    if (line1) lines.push(line1)
-    if (line2) lines.push(line2)
-  }
-  return lines
-}
-
 function CustomerBlock({ document }: { document: CustomerEstimateDocument }) {
-  const lines = formatCustomerLines(document)
+  const lines = document.customer_block.lines
   return (
     <section style={{ display: 'grid', gap: 8 }}>
       <div style={sectionTitleStyle()}>Customer:</div>
@@ -184,18 +161,6 @@ function ScopeTable({ rows }: { rows: CustomerEstimateQuoteRow[] }) {
   )
 }
 
-function getQuoteRows(document: CustomerEstimateDocument) {
-  if (document.quote_rows?.length) return document.quote_rows
-  return document.scopes
-    .filter((section) => section.price != null && section.text.trim())
-    .map((section) => ({
-      key: section.key,
-      label: section.label,
-      description: section.text.trim(),
-      price: section.price ?? 0,
-    }))
-}
-
 function TotalRow({ total }: { total: number | null }) {
   return (
     <div
@@ -224,90 +189,38 @@ function TermsSection({ title, children }: { title: string; children: ReactNode 
   )
 }
 
-function IncludedPreparation() {
-  return (
-    <section style={{ display: 'grid', gap: 8 }}>
-      <div style={sectionTitleStyle()}>Included Preparation</div>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 800 }}>Walls:</div>
-          <div style={{ fontSize: 12.8, lineHeight: 1.65 }}>
-            Fill minor nail holes, patch minor surface imperfections, sand patched areas, and spot-prime repairs as needed.
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 800 }}>Ceilings:</div>
-          <div style={{ fontSize: 12.8, lineHeight: 1.65 }}>
-            Fill minor surface imperfections, sand patched areas, and spot-prime repairs as needed.
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 800 }}>Trim:</div>
-          <div style={{ fontSize: 12.8, lineHeight: 1.65 }}>
-            Clean and degrease, caulk gaps, fill minor holes, sand, and spot-prime bare or repaired areas as needed.
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 function TermsPage({ document }: { document: CustomerEstimateDocument }) {
   return (
     <div style={pageStyle()}>
       <div style={{ display: 'grid', gap: 18 }}>
-        <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '0.06em' }}>QUOTE TERMS</div>
+        <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '0.06em' }}>
+          {document.terms_page.title}
+        </div>
 
-        <IncludedPreparation />
-
-        <TermsSection title="Customer Responsibilities">
-          Customer is responsible for removing fragile, valuable, or small personal items from work areas prior to the start of work.
-          Customer is also responsible for removing wall hangings, artwork, televisions, curtains, and other mounted or decorative items unless otherwise agreed.
-          Moving heavy furniture is not included unless specifically stated in this quote.
-        </TermsSection>
-
-        <TermsSection title="Exclusions">
-          This quote includes only the specific walls, ceilings, trim, doors, closets, and other areas identified in the scope above.
-          Any items or areas not specifically listed are excluded unless otherwise noted.
-          Major drywall or plaster repair, water-damage repair, and wallpaper removal are not included unless specifically stated.
-        </TermsSection>
-
-        <TermsSection title="Changes to Scope">
-          Any work requested outside the scope of this quote will be discussed and approved before the work is performed.
-          Additional labor and materials will be billed separately.
-          Additional colors beyond the original scope may affect price.
-        </TermsSection>
-
-        <TermsSection title="Pricing & Payment Terms">
-          <div>Make all checks payable to ACE Painting LLC.</div>
-          <div style={{ marginTop: 6 }}>This quote includes labor and all materials and supplies unless otherwise noted.</div>
-          <div>Pricing is valid for {document.quote_validity_days} days from the date of this quote.</div>
-          <div>A 1/3 deposit may be required for scheduling or special-order materials. The remaining balance is due upon completion unless otherwise agreed in writing.</div>
-          <div>Credit card payments are subject to a 2.9% processing fee.</div>
-        </TermsSection>
-
-        <TermsSection title="Insurance">
-          ACE Painting LLC is fully insured. Certificate of Insurance available upon request.
-        </TermsSection>
-
-        <TermsSection title="Thank you">
-          Thank you for the opportunity to earn your business.
-        </TermsSection>
+        {document.terms_page.sections.map((section) => (
+          <TermsSection key={section.key} title={section.title}>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {section.paragraphs.map((paragraph) => (
+                <div key={paragraph}>{paragraph}</div>
+              ))}
+            </div>
+          </TermsSection>
+        ))}
       </div>
     </div>
   )
 }
 
 function DocumentPage({ document }: { document: CustomerEstimateDocument }) {
-  const rows = getQuoteRows(document)
+  const rows = document.pricing_block.rows
   return (
     <div style={pageStyle()}>
       <Header document={document} />
       <CustomerBlock document={document} />
       <ScopeTable rows={rows} />
-      <TotalRow total={document.total} />
+      <TotalRow total={document.pricing_block.total} />
       <div style={{ fontSize: 13.5, lineHeight: 1.6, marginTop: -2 }}>
-        This quote is subject to the terms and conditions on page 2.
+        {document.pricing_block.footer_note}
       </div>
     </div>
   )

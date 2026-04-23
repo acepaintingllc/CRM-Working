@@ -1,10 +1,10 @@
 import type {
-  QuoteHomeJobListItemReadModel,
+  QuoteHomeEligibleJobReadModel,
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 
-export type QuoteHomeJob = QuoteHomeJobListItemReadModel
+export type QuoteHomeJob = QuoteHomeEligibleJobReadModel
 export type QuoteHomeJobVersion = QuoteHomeJobVersionItemReadModel
 
 export type NavItem = {
@@ -32,7 +32,6 @@ export type QuoteHomeFeedbackTone = 'warning' | 'error'
 
 export type QuoteHomeFailureSource =
   | 'bootstrap'
-  | 'jobs'
   | 'jobVersions'
   | 'create'
   | 'delete'
@@ -42,6 +41,10 @@ export type QuoteHomeFeedbackVm = {
   title: string
   details: string[]
   sources: QuoteHomeFailureSource[]
+}
+
+export type QuotesHomeFeedbackBannerVm = QuoteHomeFeedbackVm & {
+  loading: boolean
 }
 
 export type QuotesHomeHeaderVm = {
@@ -66,13 +69,11 @@ export type QuoteHomeJobListItemVm = {
 
 export type QuotesHomeJobListVm = {
   loading: boolean
-  loadingMore: boolean
   searchQuery: string
   selectedJobId: string
   items: QuoteHomeJobListItemVm[]
   mobileItems: QuoteHomeJobListItemVm[]
   emptyState: 'none' | 'no_jobs' | 'no_matches'
-  hasMore: boolean
 }
 
 export type QuotesHomeSelectedJobStatVm = {
@@ -102,8 +103,6 @@ export type QuotesHomeVersionListVm = {
   heading: string
   emptyMessage: string | null
   items: QuoteHomeVersionItemVm[]
-  hasMore: boolean
-  loadingMore: boolean
 }
 
 export type QuotesHomeCreateVm = {
@@ -120,4 +119,16 @@ export type QuotesHomeDeleteDialogVm = {
   versionName: string | null
   jobTitle: string | null
   deleting: boolean
+}
+
+export type QuotesHomePageSections = {
+  headerVm: QuotesHomeHeaderVm
+  feedbackVm: QuotesHomeFeedbackBannerVm
+  summaryCards: SummaryCardVm[]
+  jobListVm: QuotesHomeJobListVm
+  selectedJobVm: QuotesHomeSelectedJobVm
+  versionListVm: QuotesHomeVersionListVm
+  createVm: QuotesHomeCreateVm
+  mobileSummaryCards: SummaryCardVm[]
+  deleteDialogVm: QuotesHomeDeleteDialogVm
 }

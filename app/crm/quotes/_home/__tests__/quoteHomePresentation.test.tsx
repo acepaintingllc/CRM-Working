@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type {
-  QuoteHomeJobListItemReadModel,
+  QuoteHomeEligibleJobReadModel,
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import {
   buildHeroSummaryText,
+  buildSearchResultVm,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeSelectedJobVm,
-  buildSearchResultVm,
 } from '../quoteHomePresentation'
 
 const estimate: QuoteHomeJobVersionItemReadModel = {
@@ -26,7 +26,7 @@ const estimate: QuoteHomeJobVersionItemReadModel = {
   is_sent_estimate: true,
 }
 
-const job: QuoteHomeJobListItemReadModel = {
+const job: QuoteHomeEligibleJobReadModel = {
   id: 'job-1',
   customer_id: 'customer-1',
   customer_name: 'Alice',
@@ -38,7 +38,6 @@ const job: QuoteHomeJobListItemReadModel = {
   estimate_sent_at: null,
   scheduled_date: null,
   completed_at: null,
-  version_count: 4,
 }
 
 describe('quoteHomePresentation', () => {
@@ -71,7 +70,7 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.meta).toContain('Live / Revision · Updated')
   })
 
-  it('builds search result view models from shared search rows', () => {
+  it('builds search result view models from shared home version items', () => {
     expect(buildSearchResultVm(estimate)).toEqual({
       id: 'estimate-1',
       href: '/crm/quotes/estimate-1',

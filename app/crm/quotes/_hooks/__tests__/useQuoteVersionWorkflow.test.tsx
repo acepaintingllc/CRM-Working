@@ -33,8 +33,6 @@ describe('useQuoteVersionWorkflow', () => {
       .mockResolvedValueOnce({
         job_id: 'job-1',
         total_versions: 1,
-        limit: 25,
-        next_cursor: null,
         items: [
           {
             estimate_id: 'estimate-1',
@@ -56,8 +54,6 @@ describe('useQuoteVersionWorkflow', () => {
       .mockResolvedValueOnce({
         job_id: 'job-2',
         total_versions: 0,
-        limit: 25,
-        next_cursor: null,
         items: [],
       })
 
@@ -110,10 +106,7 @@ describe('useQuoteVersionWorkflow', () => {
       await result.current.actions.create()
     })
 
-    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1', {
-      cursor: undefined,
-      limit: 25,
-    })
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
     expect(createQuoteVersion).not.toHaveBeenCalled()
     expect(result.current.create.error).toBe('Select a job before creating a version.')
     expect(result.current.create.canCreate).toBe(false)
@@ -125,15 +118,11 @@ describe('useQuoteVersionWorkflow', () => {
       .mockResolvedValueOnce({
         job_id: 'job-1',
         total_versions: 0,
-        limit: 25,
-        next_cursor: null,
         items: [],
       })
       .mockResolvedValueOnce({
         job_id: 'job-1',
         total_versions: 1,
-        limit: 25,
-        next_cursor: null,
         items: [
           {
             estimate_id: 'estimate-2',

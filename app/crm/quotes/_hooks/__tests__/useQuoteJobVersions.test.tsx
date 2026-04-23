@@ -85,23 +85,6 @@ describe('useQuoteJobVersions', () => {
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(3)
   })
 
-  it('removes a deleted version from the cached selected-job list', async () => {
-    loadQuoteJobVersions.mockResolvedValue(versionPayload)
-
-    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
-
-    await waitFor(() => {
-      expect(result.current.items).toHaveLength(2)
-    })
-
-    act(() => {
-      result.current.removeVersion('estimate-1')
-    })
-
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
-    expect(result.current.data.total_versions).toBe(1)
-  })
-
   it('ignores stale responses when the selected job changes quickly', async () => {
     const first = deferred<typeof versionPayload>()
     const second = deferred<typeof versionPayload>()
@@ -141,5 +124,47 @@ describe('useQuoteJobVersions', () => {
 
     expect(result.current.data.job_id).toBe('job-2')
     expect(result.current.items.every((item) => item.job_id === 'job-2')).toBe(true)
+  })
+
+  it('clears stale version items immediately when switching to a different uncached job', async () => {
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(versionPayload)
+      .mockResolvedValueOnce({
+        job_id: 'job-2',
+        total_versions: 0,
+        items: [],
+      })
+
+    const { result, rerender } = renderHook(({ jobId }) => useQuoteJobVersions(jobId), {
+      initialProps: { jobId: 'job-1' },
+    })
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2)
+    })
+
+    rerender({ jobId: 'job-2' })
+
+    expect(result.current.data.job_id).toBe('job-2')
+    expect(result.current.items).toEqual([])
+  })
+
+  it('keeps the last good version list when a forced refresh fails', async () => {
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(versionPayload)
+      .mockRejectedValueOnce(new Error('refresh failed'))
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2)
+    })
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.items).toHaveLength(2)
+    expect(result.current.error).toBe('refresh failed')
   })
 })

@@ -2,9 +2,9 @@
 
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
-import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmResourceState } from '@/app/crm/_components/CrmResourceState'
 import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
+import { QuoteAdminPageBanner } from '@/app/crm/quotes/_components/QuoteAdminPageBanner'
 import { useQuoteRatesPage } from '@/app/crm/quotes/_hooks/useQuoteRatesPage'
 import { QuoteRatesCategorySection } from './QuoteRatesCategorySection'
 import { QuoteRatesDiscardDialog } from './QuoteRatesDiscardDialog'
@@ -56,11 +56,7 @@ export function QuoteRatesPageContent() {
         errorTitle="Rates and flags unavailable"
         onRetry={handleRetry}
       >
-        {controller.uiState.pageBanner ? (
-          <CrmNotice tone={controller.uiState.pageBanner.tone}>
-            {controller.uiState.pageBanner.message}
-          </CrmNotice>
-        ) : null}
+        <QuoteAdminPageBanner banner={controller.uiState.pageBanner} />
 
         <CrmDetailLayout
           main={

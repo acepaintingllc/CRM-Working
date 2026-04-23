@@ -26,6 +26,6 @@ export async function POST(
       token: token ?? '',
       reason: parsed.value.reason,
       origin: new URL(request.url).origin,
-    }),
+    })
   )
 }

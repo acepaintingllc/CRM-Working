@@ -14,7 +14,6 @@ export async function GET(
       { origin: new URL(request.url).origin },
       {
         metadata: {
-          route: 'estimate-public-api',
           user_agent: request.headers.get('user-agent') ?? '',
         },
       }

@@ -7,7 +7,7 @@ import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import type {
   QuoteProductsActions,
   QuoteProductsCatalogVm,
-} from '@/app/crm/quotes/_hooks/quoteProductsPageVm'
+} from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
 import type { ProductFamily } from '@/lib/quotes/productsForm'
 import { formatQuoteProductMeta, formatQuoteProductStats } from './quoteProductPresentation'
 
