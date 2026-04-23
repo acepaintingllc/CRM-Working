@@ -14,7 +14,7 @@ type Options = {
 export function useQuoteProductsData({ query }: Options) {
   const reloadKey = useMemo(
     () => JSON.stringify(query),
-    [query.family, query.search, query.status]
+    [query]
   )
 
   return useLoadableResource<QuoteProductRow[]>({

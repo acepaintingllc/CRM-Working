@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-type Options<TTransition> = {
+type Options = {
   isDirty: boolean
 }
 
-export function useDenseQuoteAdminDiscard<TTransition>({ isDirty }: Options<TTransition>) {
+export function useDenseQuoteAdminDiscard<TTransition>({ isDirty }: Options) {
   const [pendingDiscardTransition, setPendingDiscardTransition] = useState<TTransition | null>(null)
   const pendingDiscardTransitionRef = useRef<TTransition | null>(null)
   const hasPendingMutationRef = useRef(false)
