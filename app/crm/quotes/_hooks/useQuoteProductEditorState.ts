@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   createEmptyQuoteProductDraft,
+  createQuoteProductDraftSnapshot,
+  areQuoteProductDraftSnapshotsEqual,
   quoteProductRowToDraft,
+  normalizeQuoteProductDraft,
   validateQuoteProductDraft,
   type QuoteProductDraft,
   type QuoteProductRow,
@@ -17,15 +20,34 @@ type Options = {
 export function useQuoteProductEditorState({ selected }: Options) {
   const [draft, setDraft] = useState<QuoteProductDraft>(() => createEmptyQuoteProductDraft())
   const [isCreating, setIsCreating] = useState(false)
+  const [cleanSnapshot, setCleanSnapshot] = useState(() =>
+    createQuoteProductDraftSnapshot(createEmptyQuoteProductDraft())
+  )
+
+  function hydrateDraftFromRow(selected: QuoteProductRow | null) {
+    const nextDraft = selected ? quoteProductRowToDraft(selected) : createEmptyQuoteProductDraft()
+    const nextSnapshot = createQuoteProductDraftSnapshot(nextDraft)
+    setDraft(nextDraft)
+    setCleanSnapshot(nextSnapshot)
+  }
+
+  function syncDraftWithSnapshot(nextDraft: Partial<QuoteProductDraft>) {
+    const normalized = normalizeQuoteProductDraft(nextDraft)
+    const nextSnapshot = createQuoteProductDraftSnapshot(normalized)
+    setDraft(normalized)
+    setCleanSnapshot(nextSnapshot)
+  }
 
   useEffect(() => {
     if (isCreating) return
-    if (!selected) {
-      setDraft(createEmptyQuoteProductDraft())
-      return
-    }
-    setDraft(quoteProductRowToDraft(selected))
+    hydrateDraftFromRow(selected)
   }, [isCreating, selected])
+
+  const draftSnapshot = useMemo(() => createQuoteProductDraftSnapshot(draft), [draft])
+  const isDirty = useMemo(
+    () => !areQuoteProductDraftSnapshotsEqual(draftSnapshot, cleanSnapshot),
+    [draftSnapshot, cleanSnapshot]
+  )
 
   const validationResult = useMemo(() => validateQuoteProductDraft(draft), [draft])
   const validation: QuoteProductValidationState = validationResult.validation
@@ -41,36 +63,40 @@ export function useQuoteProductEditorState({ selected }: Options) {
   }
 
   function startCreate(defaultFamily: QuoteProductDraft['family']) {
-    setIsCreating(true)
-    setDraft({
+    const nextDraft = {
       ...createEmptyQuoteProductDraft(),
       family: defaultFamily,
-    })
+    }
+    setIsCreating(true)
+    syncDraftWithSnapshot(nextDraft)
   }
 
   function cancel(selectedFallback: QuoteProductRow | null) {
-    if (selectedFallback) {
-      setDraft(quoteProductRowToDraft(selectedFallback))
-    } else {
-      setDraft(createEmptyQuoteProductDraft())
-    }
+    hydrateDraftFromRow(selectedFallback)
     setIsCreating(false)
+  }
+
+  function setDraftFromRow(next: QuoteProductRow | null) {
+    hydrateDraftFromRow(next)
   }
 
   function finishCreate(nextSelected: QuoteProductRow) {
     setIsCreating(false)
-    setDraft(quoteProductRowToDraft(nextSelected))
+    hydrateDraftFromRow(nextSelected)
   }
 
   return {
     draft: validationResult.draft,
     isCreating,
+    isDirty,
     validation,
+    hydrateDraftFromRow,
     updateDraftField,
     startCreate,
     cancel,
+    setDraftFromRow,
     finishCreate,
-    resetDraft: () => setDraft(createEmptyQuoteProductDraft()),
+    resetDraft: () => syncDraftWithSnapshot(createEmptyQuoteProductDraft()),
     getValidatedDraft: () => {
       const validated = validateQuoteProductDraft(draft)
       setDraft(validated.draft)

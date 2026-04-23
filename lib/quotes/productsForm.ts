@@ -79,6 +79,10 @@ export type QuoteProductValidationState = {
   fields: QuoteProductValidationErrors
 }
 
+export type QuoteProductDraftSnapshot = {
+  key: string
+}
+
 type ParsedNumber = {
   valid: boolean
   value: number | null
@@ -130,6 +134,25 @@ const EMPTY_QUOTE_PRODUCT_DRAFT: QuoteProductDraft = {
 
 export function createEmptyQuoteProductDraft(): QuoteProductDraft {
   return { ...EMPTY_QUOTE_PRODUCT_DRAFT }
+}
+
+export function createQuoteProductDraftSnapshot(
+  draft: Partial<QuoteProductDraft> | null | undefined
+): QuoteProductDraftSnapshot {
+  const normalized = normalizeQuoteProductDraft(draft)
+  return {
+    key: JSON.stringify({
+      ...normalized,
+      default_scopes: [...normalized.default_scopes].sort(),
+    }),
+  }
+}
+
+export function areQuoteProductDraftSnapshotsEqual(
+  left: QuoteProductDraftSnapshot | null | undefined,
+  right: QuoteProductDraftSnapshot | null | undefined
+): boolean {
+  return (left?.key ?? '') === (right?.key ?? '')
 }
 
 export function isQuoteProductStatus(value: string | null | undefined): value is ProductStatus {
