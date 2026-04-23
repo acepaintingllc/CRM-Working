@@ -59,6 +59,7 @@ describe('useQuoteRatesEditorState', () => {
     })
 
     expect(result.current.isCreating).toBe(true)
+    expect(result.current.isDirty).toBe(false)
     expect(result.current.draft).toMatchObject({
       id: 'WALL_STD_COPY',
       display_name: 'Standard walls',
@@ -67,10 +68,16 @@ describe('useQuoteRatesEditorState', () => {
 
     act(() => {
       result.current.updateDraftValue('display_name', 'Copied walls')
+    })
+
+    expect(result.current.isDirty).toBe(true)
+
+    act(() => {
       result.current.cancelEdit()
     })
 
     expect(result.current.isCreating).toBe(false)
+    expect(result.current.isDirty).toBe(false)
     expect(result.current.selectedRow?.id).toBe('WALL_STD')
     expect(result.current.draft).toMatchObject({
       id: 'WALL_STD',
@@ -82,6 +89,7 @@ describe('useQuoteRatesEditorState', () => {
     })
 
     expect(result.current.selectedId).toBe('')
+    expect(result.current.isDirty).toBe(false)
     expect(result.current.draft).toMatchObject({
       id: '',
       scope_id: '',
@@ -164,6 +172,48 @@ describe('useQuoteRatesEditorState', () => {
           active: 'Y',
         },
       },
+    })
+  })
+
+  it('tracks dirty state for field and status edits, then clears on cancel or selection hydration', () => {
+    const { result, rerender } = renderHook(
+      ({ filteredRows }) =>
+        useQuoteRatesEditorState({ activeCategory: category, filteredRows }),
+      {
+        initialProps: { filteredRows: category.rows },
+      }
+    )
+
+    expect(result.current.isDirty).toBe(false)
+
+    act(() => {
+      result.current.updateDraftValue('display_name', 'Edited walls')
+    })
+
+    expect(result.current.isDirty).toBe(true)
+
+    act(() => {
+      result.current.cancelEdit()
+    })
+
+    expect(result.current.isDirty).toBe(false)
+
+    act(() => {
+      result.current.setDraftActive(false)
+    })
+
+    expect(result.current.isDirty).toBe(true)
+
+    act(() => {
+      result.current.setSelectedId('WALL_TALL')
+    })
+    rerender({ filteredRows: category.rows })
+
+    expect(result.current.selectedRow?.id).toBe('WALL_TALL')
+    expect(result.current.isDirty).toBe(false)
+    expect(result.current.draft).toMatchObject({
+      id: 'WALL_TALL',
+      display_name: 'Tall walls',
     })
   })
 })

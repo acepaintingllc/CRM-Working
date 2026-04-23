@@ -1,6 +1,7 @@
 import type {
   RatesFlagsCategory,
   RatesFlagsCategoryKey,
+  RatesFlagsDraft,
   RatesFlagsRow,
 } from '../../types/estimator/ratesFlags'
 
@@ -53,4 +54,32 @@ export function buildRatesFlagsSearchableText(
   }
 
   return parts.join(' ')
+}
+
+export type RatesFlagsDraftSnapshot = Record<string, string | number | boolean | null>
+
+export function createRatesFlagsDraftSnapshot(draft: RatesFlagsDraft | null) {
+  if (!draft) return {}
+
+  const snapshot: RatesFlagsDraftSnapshot = {}
+  for (const key of Object.keys(draft).sort()) {
+    snapshot[key] = draft[key as keyof typeof draft] ?? null
+  }
+  return snapshot
+}
+
+export function areRatesFlagsDraftSnapshotsEqual(
+  left: RatesFlagsDraftSnapshot,
+  right: RatesFlagsDraftSnapshot
+) {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+
+  for (const key of leftKeys) {
+    if (!(key in right)) return false
+    if (left[key] !== right[key]) return false
+  }
+
+  return true
 }

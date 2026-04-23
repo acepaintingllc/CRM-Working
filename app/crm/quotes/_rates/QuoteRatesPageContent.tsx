@@ -7,6 +7,7 @@ import { CrmResourceState } from '@/app/crm/_components/CrmResourceState'
 import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
 import { useQuoteRatesPage } from '@/app/crm/quotes/_hooks/useQuoteRatesPage'
 import { QuoteRatesCategorySection } from './QuoteRatesCategorySection'
+import { QuoteRatesDiscardDialog } from './QuoteRatesDiscardDialog'
 import { QuoteRatesEditorSection } from './QuoteRatesEditorSection'
 import { QuoteRatesTableSection } from './QuoteRatesTableSection'
 
@@ -99,6 +100,11 @@ export function QuoteRatesPageContent() {
               }}
             />
           }
+        />
+        <QuoteRatesDiscardDialog
+          vm={controller.discardVm}
+          onConfirm={() => void controller.actions.confirmDiscard()}
+          onCancel={controller.actions.cancelDiscard}
         />
       </CrmResourceState>
     </>

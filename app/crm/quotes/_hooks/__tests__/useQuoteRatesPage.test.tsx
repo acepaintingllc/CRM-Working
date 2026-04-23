@@ -577,4 +577,148 @@ describe('useQuoteRatesPage', () => {
     expect(result.current.uiState.notice).toBe('Reactivated row.')
     expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(true)
   })
+
+  it('exposes discard state and protects row selection changes until confirmed', async () => {
+    loadRatesFlags.mockResolvedValue({
+      source: 'db',
+      seeded: true,
+      template_version: 2,
+      categories: [
+        {
+          key: 'production_rates_walls',
+          tab: 'rates',
+          group: 'production_rates',
+          label: 'Wall Production',
+          table_title: 'Wall Production',
+          description: 'Wall rates',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+          ],
+          rows: [
+            { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
+            { id: 'wall-rate-2', display_name: 'Tall walls', notes: '', active: true },
+          ],
+        },
+      ],
+    })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Edited walls')
+      result.current.actions.setSelectedId('wall-rate-2')
+    })
+
+    expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.transitionType).toBe('setSelectedId')
+    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
+    expect(result.current.editorVm.isDirty).toBe(true)
+
+    act(() => {
+      result.current.actions.cancelDiscard()
+    })
+
+    expect(result.current.discardVm.isOpen).toBe(false)
+    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Edited walls',
+    })
+
+    act(() => {
+      result.current.actions.setSelectedId('wall-rate-2')
+    })
+
+    await act(async () => {
+      await result.current.actions.confirmDiscard()
+    })
+
+    expect(result.current.tableVm.selectedId).toBe('wall-rate-2')
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Tall walls',
+    })
+  })
+
+  it('protects category and filter transitions until discard is confirmed', async () => {
+    loadRatesFlags.mockResolvedValue({
+      source: 'db',
+      seeded: true,
+      template_version: 2,
+      categories: [
+        {
+          key: 'production_rates_walls',
+          tab: 'rates',
+          group: 'production_rates',
+          label: 'Wall Production',
+          table_title: 'Wall Production',
+          description: 'Wall rates',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+          ],
+          rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
+        },
+        {
+          key: 'condition_modifiers',
+          tab: 'flags',
+          group: 'condition_modifiers',
+          label: 'Condition Modifiers',
+          table_title: 'Condition Modifiers',
+          description: 'Flag rows',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+          ],
+          rows: [{ id: 'flag-1', display_name: 'High traffic', notes: '', active: true }],
+        },
+      ],
+    })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Dirty walls')
+      result.current.actions.setActiveTab('flags')
+    })
+
+    expect(result.current.discardVm.transitionType).toBe('setActiveTab')
+    expect(result.current.filtersVm.activeTab).toBe('rates')
+
+    await act(async () => {
+      await result.current.actions.confirmDiscard()
+    })
+
+    expect(result.current.filtersVm.activeTab).toBe('flags')
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.editorVm.selectedRow?.id).toBe('flag-1')
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Dirty flag')
+      result.current.actions.setStatusFilter('archived')
+    })
+
+    expect(result.current.discardVm.transitionType).toBe('setStatusFilter')
+    expect(result.current.filtersVm.statusFilter).toBe('active')
+
+    act(() => {
+      result.current.actions.cancelDiscard()
+    })
+
+    expect(result.current.filtersVm.statusFilter).toBe('active')
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Dirty flag',
+    })
+  })
 })

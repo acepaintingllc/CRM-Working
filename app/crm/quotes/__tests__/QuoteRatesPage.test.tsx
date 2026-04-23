@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentPropsWithoutRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import QuoteRatesPage from '../QuoteRatesPage'
@@ -101,6 +101,55 @@ describe('QuoteRatesPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Rates unavailable')).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+    })
+  })
+
+  it('shows a discard modal before replacing a dirty draft', async () => {
+    mockAuthedFetch.mockResolvedValueOnce(
+      createResponse({
+        data: {
+          source: 'db',
+          seeded: true,
+          template_version: 2,
+          categories: [
+            {
+              key: 'production_rates_walls',
+              tab: 'rates',
+              group: 'production_rates',
+              label: 'Wall Production',
+              table_title: 'Wall Production',
+              description: 'Wall rates',
+              columns: [{ key: 'display_name', label: 'Name' }],
+              fields: [
+                { key: 'id', label: 'ID', type: 'text', required: true },
+                { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+              ],
+              rows: [
+                { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
+                { id: 'wall-rate-2', display_name: 'Tall walls', notes: '', active: true },
+              ],
+            },
+          ],
+        },
+      })
+    )
+
+    render(<QuoteRatesPage />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Standard walls')).toHaveLength(2)
+    })
+
+    const nameInputs = screen.getAllByDisplayValue('Standard walls')
+    fireEvent.change(nameInputs[nameInputs.length - 1], { target: { value: 'Edited walls' } })
+
+    fireEvent.click(screen.getByText('Tall walls'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Discard unsaved changes?')).toBeTruthy()
+      expect(
+        screen.getByText('Switching to another row will discard unsaved edits in the current draft.')
+      ).toBeTruthy()
     })
   })
 })

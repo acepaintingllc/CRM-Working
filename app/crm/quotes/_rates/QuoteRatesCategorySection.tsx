@@ -52,10 +52,7 @@ export function QuoteRatesCategorySection({ filtersVm, tableVm, actions }: Props
                   key={section.key}
                   type="button"
                   tone={filtersVm.rateSection === section.key ? 'primary' : 'secondary'}
-                  onClick={() => {
-                    actions.setRateSection(section.key)
-                    actions.setRateCategory(RATE_SUBGROUPS[section.key][0].key)
-                  }}
+                  onClick={() => actions.setRateSection(section.key)}
                 >
                   {section.label}
                 </CrmButton>

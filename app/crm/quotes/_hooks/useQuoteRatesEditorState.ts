@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
+import {
+  areRatesFlagsDraftSnapshotsEqual,
+  createRatesFlagsDraftSnapshot,
+} from '@/lib/quotes/ratesFlagsForm'
 import type {
   RatesFlagsCategory,
   RatesFlagsCreateOrUpdateMutation,
@@ -19,6 +23,8 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
   const [isCreating, setIsCreating] = useState(false)
   const [draft, setDraft] = useState<RatesFlagsDraft | null>(null)
   const [draftActive, setDraftActive] = useState(true)
+  const [cleanSnapshot, setCleanSnapshot] = useState(() => createRatesFlagsDraftSnapshot(null))
+  const [cleanDraftActive, setCleanDraftActive] = useState(true)
   const adapter = useMemo(
     () =>
       activeCategory
@@ -26,6 +32,13 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
         : null,
     [activeCategory]
   )
+
+  function syncDraft(nextDraft: RatesFlagsDraft | null, nextDraftActive: boolean) {
+    setDraft(nextDraft)
+    setDraftActive(nextDraftActive)
+    setCleanSnapshot(createRatesFlagsDraftSnapshot(nextDraft))
+    setCleanDraftActive(nextDraftActive)
+  }
 
   useEffect(() => {
     if (!activeCategory || isCreating) return
@@ -47,13 +60,19 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
 
   useEffect(() => {
     if (!activeCategory || !adapter || isCreating || !selectedRow) return
-    setDraft(adapter.rowToDraft(activeCategory, selectedRow))
-    setDraftActive(selectedRow.active)
+    syncDraft(adapter.rowToDraft(activeCategory, selectedRow), selectedRow.active)
   }, [activeCategory, adapter, isCreating, selectedRow])
 
   const validationResult =
     activeCategory && adapter && draft ? adapter.validateDraft(activeCategory, draft as never) : null
   const validationError = validationResult && !validationResult.ok ? validationResult.error : null
+  const draftSnapshot = useMemo(() => createRatesFlagsDraftSnapshot(draft), [draft])
+  const isDirty = useMemo(
+    () =>
+      !areRatesFlagsDraftSnapshotsEqual(draftSnapshot, cleanSnapshot) ||
+      draftActive !== cleanDraftActive,
+    [cleanDraftActive, cleanSnapshot, draftActive, draftSnapshot]
+  )
 
   function updateDraftValue(fieldKey: string, rawInput: string) {
     if (!activeCategory || !adapter) return
@@ -66,8 +85,7 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
     if (!activeCategory || !adapter) return
     setIsCreating(true)
     setSelectedId('')
-    setDraft(adapter.createEmptyDraft(activeCategory))
-    setDraftActive(true)
+    syncDraft(adapter.createEmptyDraft(activeCategory), true)
   }
 
   function startDuplicate() {
@@ -78,19 +96,16 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
     )
     setIsCreating(true)
     setSelectedId('')
-    setDraft(next)
-    setDraftActive(selectedRow.active)
+    syncDraft(next, selectedRow.active)
   }
 
   function cancelEdit() {
     if (selectedRow && activeCategory && adapter) {
-      setDraft(adapter.rowToDraft(activeCategory, selectedRow))
-      setDraftActive(selectedRow.active)
+      syncDraft(adapter.rowToDraft(activeCategory, selectedRow), selectedRow.active)
       setIsCreating(false)
       return
     }
-    setDraft(null)
-    setDraftActive(true)
+    syncDraft(null, true)
     setIsCreating(false)
   }
 
@@ -119,6 +134,7 @@ export function useQuoteRatesEditorState({ activeCategory, filteredRows }: Optio
     isCreating,
     draft,
     draftActive,
+    isDirty,
     setDraftActive,
     selectedRow,
     validationResult,

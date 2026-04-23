@@ -44,6 +44,7 @@ export type QuoteRatesTableVm = {
 export type QuoteRatesEditorVm = {
   draft: ReturnType<typeof useQuoteRatesEditorState>['draft']
   draftActive: boolean
+  isDirty: boolean
   saving: boolean
   activeCategory: ReturnType<typeof useQuoteRatesFilters>['activeCategory']
   selectedRow: ReturnType<typeof useQuoteRatesEditorState>['selectedRow']
@@ -53,23 +54,43 @@ export type QuoteRatesEditorVm = {
   formatDraftValue: ReturnType<typeof useQuoteRatesEditorState>['formatDraftValue']
 }
 
+export type QuoteRatesDiscardVm = {
+  isOpen: boolean
+  transitionType:
+    | 'setActiveTab'
+    | 'setRateSection'
+    | 'setRateCategory'
+    | 'setFlagsSection'
+    | 'setRoomDefaultsSection'
+    | 'setStatusFilter'
+    | 'setSearch'
+    | 'setSelectedId'
+    | 'startCreate'
+    | 'startDuplicate'
+    | 'reload'
+    | 'archiveOrReactivate'
+    | null
+}
+
 export type QuoteRatesActions = {
-  setActiveTab: ReturnType<typeof useQuoteRatesFilters>['setActiveTab']
-  setRateSection: ReturnType<typeof useQuoteRatesFilters>['setRateSection']
-  setRateCategory: ReturnType<typeof useQuoteRatesFilters>['setRateCategory']
-  setFlagsSection: ReturnType<typeof useQuoteRatesFilters>['setFlagsSection']
-  setRoomDefaultsSection: ReturnType<typeof useQuoteRatesFilters>['setRoomDefaultsSection']
-  setStatusFilter: ReturnType<typeof useQuoteRatesFilters>['setStatusFilter']
-  setSearch: ReturnType<typeof useQuoteRatesFilters>['setSearch']
-  setSelectedId: ReturnType<typeof useQuoteRatesEditorState>['setSelectedId']
-  setDraftActive: ReturnType<typeof useQuoteRatesEditorState>['setDraftActive']
-  reload: (keepId?: string) => Promise<boolean>
-  saveCurrent: () => Promise<void>
-  archiveOrReactivate: (nextActive: boolean) => Promise<void>
-  startCreate: () => void
-  startDuplicate: () => void
-  cancelEdit: () => void
-  updateDraftValue: ReturnType<typeof useQuoteRatesEditorState>['updateDraftValue']
+  setActiveTab: ReturnType<typeof useQuoteRatesControllerActions>['setActiveTab']
+  setRateSection: ReturnType<typeof useQuoteRatesControllerActions>['setRateSection']
+  setRateCategory: ReturnType<typeof useQuoteRatesControllerActions>['setRateCategory']
+  setFlagsSection: ReturnType<typeof useQuoteRatesControllerActions>['setFlagsSection']
+  setRoomDefaultsSection: ReturnType<typeof useQuoteRatesControllerActions>['setRoomDefaultsSection']
+  setStatusFilter: ReturnType<typeof useQuoteRatesControllerActions>['setStatusFilter']
+  setSearch: ReturnType<typeof useQuoteRatesControllerActions>['setSearch']
+  setSelectedId: ReturnType<typeof useQuoteRatesControllerActions>['setSelectedId']
+  setDraftActive: ReturnType<typeof useQuoteRatesControllerActions>['setDraftActive']
+  reload: ReturnType<typeof useQuoteRatesControllerActions>['reload']
+  saveCurrent: ReturnType<typeof useQuoteRatesControllerActions>['saveCurrent']
+  archiveOrReactivate: ReturnType<typeof useQuoteRatesControllerActions>['archiveOrReactivate']
+  startCreate: ReturnType<typeof useQuoteRatesControllerActions>['startCreate']
+  startDuplicate: ReturnType<typeof useQuoteRatesControllerActions>['startDuplicate']
+  cancelEdit: ReturnType<typeof useQuoteRatesControllerActions>['cancelEdit']
+  confirmDiscard: ReturnType<typeof useQuoteRatesControllerActions>['confirmDiscard']
+  cancelDiscard: ReturnType<typeof useQuoteRatesControllerActions>['cancelDiscard']
+  updateDraftValue: ReturnType<typeof useQuoteRatesControllerActions>['updateDraftValue']
 }
 
 export function useQuoteRatesPage() {
@@ -145,6 +166,7 @@ export function useQuoteRatesPage() {
     editorVm: {
       draft: editor.draft,
       draftActive: editor.draftActive,
+      isDirty: editor.isDirty,
       saving: feedback.saving,
       activeCategory: filters.activeCategory,
       selectedRow: editor.selectedRow,
@@ -154,22 +176,25 @@ export function useQuoteRatesPage() {
       formatDraftValue: editor.formatDraftValue,
     } satisfies QuoteRatesEditorVm,
     actions: {
-      setActiveTab: filters.setActiveTab,
-      setRateSection: filters.setRateSection,
-      setRateCategory: filters.setRateCategory,
-      setFlagsSection: filters.setFlagsSection,
-      setRoomDefaultsSection: filters.setRoomDefaultsSection,
-      setStatusFilter: filters.setStatusFilter,
-      setSearch: filters.setSearch,
-      setSelectedId: editor.setSelectedId,
-      setDraftActive: editor.setDraftActive,
+      setActiveTab: controllerActions.setActiveTab,
+      setRateSection: controllerActions.setRateSection,
+      setRateCategory: controllerActions.setRateCategory,
+      setFlagsSection: controllerActions.setFlagsSection,
+      setRoomDefaultsSection: controllerActions.setRoomDefaultsSection,
+      setStatusFilter: controllerActions.setStatusFilter,
+      setSearch: controllerActions.setSearch,
+      setSelectedId: controllerActions.setSelectedId,
+      setDraftActive: controllerActions.setDraftActive,
       reload: controllerActions.reload,
       saveCurrent: controllerActions.saveCurrent,
       archiveOrReactivate: controllerActions.archiveOrReactivate,
       startCreate: controllerActions.startCreate,
       startDuplicate: controllerActions.startDuplicate,
       cancelEdit: controllerActions.cancelEdit,
-      updateDraftValue: editor.updateDraftValue,
+      confirmDiscard: controllerActions.confirmDiscard,
+      cancelDiscard: controllerActions.cancelDiscard,
+      updateDraftValue: controllerActions.updateDraftValue,
     } satisfies QuoteRatesActions,
+    discardVm: controllerActions.discardVm satisfies QuoteRatesDiscardVm,
   }
 }
