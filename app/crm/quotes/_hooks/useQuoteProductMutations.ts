@@ -6,20 +6,28 @@ import {
   deleteQuoteProduct,
   updateQuoteProduct,
 } from '@/lib/quotes/client'
-import type { QuoteProductRow } from '@/lib/quotes/productsForm'
+import {
+  quoteProductMatchesQuery,
+  type QuoteProductQuery,
+  type QuoteProductRow,
+} from '@/lib/quotes/productsForm'
 import type { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
 
 type Options = {
   setData: Dispatch<SetStateAction<QuoteProductRow[]>>
+  getQuery: () => QuoteProductQuery
   feedback: ReturnType<typeof useDenseQuoteAdminFeedback>
 }
 
-export function useQuoteProductMutations({ setData, feedback }: Options) {
+export function useQuoteProductMutations({ setData, getQuery, feedback }: Options) {
   async function createProduct(payload: Parameters<typeof createQuoteProduct<QuoteProductRow>>[0]) {
     feedback.beginAction()
     try {
       const created = await createQuoteProduct<QuoteProductRow>(payload)
-      setData((current) => [created.data, ...current])
+      const query = getQuery()
+      setData((current) =>
+        quoteProductMatchesQuery(created.data, query) ? [created.data, ...current] : current
+      )
       return {
         data: created.data,
         notice: created.notice ?? 'Product created.',
@@ -39,7 +47,19 @@ export function useQuoteProductMutations({ setData, feedback }: Options) {
     feedback.beginAction()
     try {
       const updated = await updateQuoteProduct<QuoteProductRow>(id, payload)
-      setData((current) => current.map((product) => (product.id === id ? updated.data : product)))
+      const query = getQuery()
+      setData((current) => {
+        const matchesQuery = quoteProductMatchesQuery(updated.data, query)
+        if (matchesQuery) {
+          const hasExisting = current.some((product) => product.id === id)
+          if (hasExisting) {
+            return current.map((product) => (product.id === id ? updated.data : product))
+          }
+          return [updated.data, ...current]
+        }
+
+        return current.filter((product) => product.id !== id)
+      })
       return {
         data: updated.data,
         notice: updated.notice ?? 'Product saved.',

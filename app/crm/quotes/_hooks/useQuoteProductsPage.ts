@@ -10,7 +10,10 @@ import { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
 import { useQuoteProductEditorState } from './useQuoteProductEditorState'
 import { useQuoteProductsControllerActions } from './useQuoteProductsControllerActions'
 import { useQuoteProductMutations } from './useQuoteProductMutations'
-import { useQuoteProductsCatalogState } from './useQuoteProductsCatalogState'
+import {
+  useQuoteProductsQueryState,
+  useQuoteProductsSelectionState,
+} from './useQuoteProductsCatalogState'
 import { useQuoteProductsData } from './useQuoteProductsData'
 
 export type QuoteProductsCatalogVm = {
@@ -18,14 +21,14 @@ export type QuoteProductsCatalogVm = {
   families: readonly ProductFamily[]
   statusFilter: QuoteProductStatusFilter
   search: string
-  filtered: ReturnType<typeof useQuoteProductsCatalogState>['filtered']
+  products: ReturnType<typeof useQuoteProductsSelectionState>['products']
   selectedId: string | null
-  selected: ReturnType<typeof useQuoteProductsCatalogState>['selected']
+  selected: ReturnType<typeof useQuoteProductsSelectionState>['selected']
 }
 
 export type QuoteProductsEditorVm = {
   draft: ReturnType<typeof useQuoteProductEditorState>['draft']
-  selected: ReturnType<typeof useQuoteProductsCatalogState>['selected']
+  selected: ReturnType<typeof useQuoteProductsSelectionState>['selected']
   saving: boolean
   isCreating: boolean
   isDirty: boolean
@@ -55,24 +58,31 @@ export type QuoteProductsActions = {
 }
 
 export function useQuoteProductsPage() {
-  const resource = useQuoteProductsData()
   const feedback = useDenseQuoteAdminFeedback()
 
-  const catalog = useQuoteProductsCatalogState({
+  const queryState = useQuoteProductsQueryState()
+
+  const resource = useQuoteProductsData({
+    query: queryState.query,
+  })
+
+  const selectionState = useQuoteProductsSelectionState({
     products: resource.data,
   })
 
   const editor = useQuoteProductEditorState({
-    selected: catalog.selected,
+    selected: selectionState.selected,
   })
 
   const mutations = useQuoteProductMutations({
     setData: resource.setData,
+    getQuery: () => queryState.query,
     feedback,
   })
 
   const controllerActions = useQuoteProductsControllerActions({
-    catalog,
+    queryState,
+    selectionState,
     editor,
     mutations,
     feedback,
@@ -91,25 +101,26 @@ export function useQuoteProductsPage() {
       !feedback.saving &&
       validation.ok &&
       !resource.error &&
-      (editor.isCreating || Boolean(catalog.selected)),
-    canDelete: Boolean(catalog.selected) && !editor.isCreating && !feedback.saving && !resource.error,
+      (editor.isCreating || Boolean(selectionState.selected)),
+    canDelete:
+      Boolean(selectionState.selected) && !editor.isCreating && !feedback.saving && !resource.error,
   })
 
   return {
     resource,
     uiState,
     catalogVm: {
-      activeFamily: catalog.activeFamily,
+      activeFamily: queryState.activeFamily,
       families: QUOTE_PRODUCT_FAMILIES,
-      statusFilter: catalog.statusFilter,
-      search: catalog.search,
-      filtered: catalog.filtered,
-      selectedId: catalog.selectedId,
-      selected: catalog.selected,
+      statusFilter: queryState.statusFilter,
+      search: queryState.search,
+      products: resource.data,
+      selectedId: selectionState.selectedId,
+      selected: selectionState.selected,
     } satisfies QuoteProductsCatalogVm,
     editorVm: {
       draft: editor.draft,
-      selected: catalog.selected,
+      selected: selectionState.selected,
       saving: feedback.saving,
       isCreating: editor.isCreating,
       isDirty: editor.isDirty,

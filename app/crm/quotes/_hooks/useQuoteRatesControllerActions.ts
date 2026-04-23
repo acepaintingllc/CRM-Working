@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
 import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type { RatesFlagsEditableCategoryKey, RatesFlagsTab } from '@/types/estimator/ratesFlags'
 import type { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
+import { useDenseQuoteAdminDiscard } from './useDenseQuoteAdminDiscard'
 import type {
   FlagsSectionKey,
   RateSectionKey,
@@ -48,33 +48,9 @@ export function useQuoteRatesControllerActions({
   feedback,
   reload,
 }: Options) {
-  const [pendingDiscardTransition, setPendingDiscardTransition] =
-    useState<DiscardCandidateTransition | null>(null)
-  const pendingDiscardTransitionRef = useRef<DiscardCandidateTransition | null>(null)
-  const hasPendingMutationRef = useRef(false)
-
-  useEffect(() => {
-    if (!editor.isDirty) {
-      setPendingDiscardTransition(null)
-      pendingDiscardTransitionRef.current = null
-      hasPendingMutationRef.current = false
-    }
-  }, [editor.isDirty])
-
-  function cancelDiscard() {
-    setPendingDiscardTransition(null)
-    pendingDiscardTransitionRef.current = null
-  }
-
-  function queueDiscardTransition(transition: DiscardCandidateTransition) {
-    if (pendingDiscardTransitionRef.current) return
-    pendingDiscardTransitionRef.current = transition
-    setPendingDiscardTransition(transition)
-  }
-
-  function shouldGuardTransition(changed: boolean) {
-    return (editor.isDirty || hasPendingMutationRef.current) && changed
-  }
+  const discard = useDenseQuoteAdminDiscard<DiscardCandidateTransition>({
+    isDirty: editor.isDirty,
+  })
 
   function discardCleanCreateDraftIfNeeded() {
     if (editor.isCreating) {
@@ -83,8 +59,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function setActiveTab(nextTab: RatesFlagsTab) {
-    if (shouldGuardTransition(nextTab !== filters.activeTab)) {
-      queueDiscardTransition({ type: 'setActiveTab', activeTab: nextTab })
+    if (discard.shouldGuardTransition(nextTab !== filters.activeTab)) {
+      discard.queueDiscardTransition({ type: 'setActiveTab', activeTab: nextTab })
       return
     }
     discardCleanCreateDraftIfNeeded()
@@ -92,8 +68,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function setRateSection(nextSection: RateSectionKey) {
-    if (shouldGuardTransition(nextSection !== filters.rateSection)) {
-      queueDiscardTransition({ type: 'setRateSection', rateSection: nextSection })
+    if (discard.shouldGuardTransition(nextSection !== filters.rateSection)) {
+      discard.queueDiscardTransition({ type: 'setRateSection', rateSection: nextSection })
       return
     }
     discardCleanCreateDraftIfNeeded()
@@ -102,8 +78,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function setRateCategory(nextCategory: string) {
-    if (shouldGuardTransition(nextCategory !== filters.rateCategory)) {
-      queueDiscardTransition({ type: 'setRateCategory', rateCategory: nextCategory })
+    if (discard.shouldGuardTransition(nextCategory !== filters.rateCategory)) {
+      discard.queueDiscardTransition({ type: 'setRateCategory', rateCategory: nextCategory })
       return
     }
     discardCleanCreateDraftIfNeeded()
@@ -111,8 +87,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function setFlagsSection(nextSection: FlagsSectionKey) {
-    if (shouldGuardTransition(nextSection !== filters.flagsSection)) {
-      queueDiscardTransition({ type: 'setFlagsSection', flagsSection: nextSection })
+    if (discard.shouldGuardTransition(nextSection !== filters.flagsSection)) {
+      discard.queueDiscardTransition({ type: 'setFlagsSection', flagsSection: nextSection })
       return
     }
     discardCleanCreateDraftIfNeeded()
@@ -120,8 +96,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function setRoomDefaultsSection(nextSection: RoomDefaultsSectionKey) {
-    if (shouldGuardTransition(nextSection !== filters.roomDefaultsSection)) {
-      queueDiscardTransition({
+    if (discard.shouldGuardTransition(nextSection !== filters.roomDefaultsSection)) {
+      discard.queueDiscardTransition({
         type: 'setRoomDefaultsSection',
         roomDefaultsSection: nextSection,
       })
@@ -132,8 +108,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function setStatusFilter(nextFilter: StatusFilter) {
-    if (shouldGuardTransition(nextFilter !== filters.statusFilter)) {
-      queueDiscardTransition({ type: 'setStatusFilter', statusFilter: nextFilter })
+    if (discard.shouldGuardTransition(nextFilter !== filters.statusFilter)) {
+      discard.queueDiscardTransition({ type: 'setStatusFilter', statusFilter: nextFilter })
       return
     }
     discardCleanCreateDraftIfNeeded()
@@ -141,8 +117,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function setSearch(nextSearch: string) {
-    if (shouldGuardTransition(nextSearch !== filters.search)) {
-      queueDiscardTransition({ type: 'setSearch', search: nextSearch })
+    if (discard.shouldGuardTransition(nextSearch !== filters.search)) {
+      discard.queueDiscardTransition({ type: 'setSearch', search: nextSearch })
       return
     }
     discardCleanCreateDraftIfNeeded()
@@ -150,8 +126,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function setSelectedId(nextId: string) {
-    if (shouldGuardTransition(nextId !== editor.selectedId)) {
-      queueDiscardTransition({ type: 'setSelectedId', selectedId: nextId })
+    if (discard.shouldGuardTransition(nextId !== editor.selectedId)) {
+      discard.queueDiscardTransition({ type: 'setSelectedId', selectedId: nextId })
       return
     }
     discardCleanCreateDraftIfNeeded()
@@ -196,16 +172,16 @@ export function useQuoteRatesControllerActions({
   }
 
   async function archiveOrReactivate(nextActive: boolean) {
-    if (shouldGuardTransition(true)) {
-      queueDiscardTransition({ type: 'archiveOrReactivate', nextActive })
+    if (discard.shouldGuardTransition(true)) {
+      discard.queueDiscardTransition({ type: 'archiveOrReactivate', nextActive })
       return
     }
     await runArchiveOrReactivate(nextActive)
   }
 
   function startCreate() {
-    if (shouldGuardTransition(true)) {
-      queueDiscardTransition({ type: 'startCreate' })
+    if (discard.shouldGuardTransition(true)) {
+      discard.queueDiscardTransition({ type: 'startCreate' })
       return
     }
     editor.startCreate()
@@ -213,8 +189,8 @@ export function useQuoteRatesControllerActions({
   }
 
   function startDuplicate() {
-    if (shouldGuardTransition(true)) {
-      queueDiscardTransition({ type: 'startDuplicate' })
+    if (discard.shouldGuardTransition(true)) {
+      discard.queueDiscardTransition({ type: 'startDuplicate' })
       return
     }
     editor.startDuplicate()
@@ -223,22 +199,20 @@ export function useQuoteRatesControllerActions({
 
   function cancelEdit() {
     editor.cancelEdit()
-    cancelDiscard()
+    discard.cancelDiscard()
     feedback.clearFeedback()
   }
 
   async function guardedReload(keepId?: string) {
-    if (shouldGuardTransition(true)) {
-      queueDiscardTransition({ type: 'reload', keepId })
+    if (discard.shouldGuardTransition(true)) {
+      discard.queueDiscardTransition({ type: 'reload', keepId })
       return false
     }
     return runReload(keepId)
   }
 
   async function confirmDiscard() {
-    const transition = pendingDiscardTransitionRef.current
-    setPendingDiscardTransition(null)
-    pendingDiscardTransitionRef.current = null
+    const transition = discard.consumePendingDiscardTransition()
     if (!transition) return false
 
     switch (transition.type) {
@@ -292,11 +266,6 @@ export function useQuoteRatesControllerActions({
     }
   }
 
-  const discardVm = {
-    isOpen: Boolean(pendingDiscardTransition),
-    transitionType: pendingDiscardTransition?.type ?? null,
-  }
-
   return {
     setActiveTab,
     setRateSection,
@@ -313,15 +282,18 @@ export function useQuoteRatesControllerActions({
     startDuplicate,
     cancelEdit,
     setDraftActive: (nextActive: boolean) => {
-      hasPendingMutationRef.current = true
+      discard.markPendingMutation()
       editor.setDraftActive(nextActive)
     },
     updateDraftValue: (fieldKey: string, rawInput: string) => {
-      hasPendingMutationRef.current = true
+      discard.markPendingMutation()
       editor.updateDraftValue(fieldKey, rawInput)
     },
     confirmDiscard,
-    cancelDiscard,
-    discardVm,
+    cancelDiscard: discard.cancelDiscard,
+    discardVm: {
+      isOpen: discard.discardVm.isOpen,
+      transitionType: discard.discardVm.transitionType?.type ?? null,
+    },
   }
 }

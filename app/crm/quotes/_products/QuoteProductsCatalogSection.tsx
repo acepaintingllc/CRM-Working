@@ -60,13 +60,13 @@ export function QuoteProductsCatalogSection({ vm, actions }: Props) {
           <CrmButton type="button" tone="secondary" onClick={actions.startCreate}>
             New product
           </CrmButton>
-          {vm.filtered.length === 0 ? (
+          {vm.products.length === 0 ? (
             <CrmEmptyState
               title="No products found"
               description="Try a different search, family, or status filter."
             />
           ) : (
-            vm.filtered.map((product) => (
+            vm.products.map((product) => (
               <button
                 key={product.id}
                 type="button"

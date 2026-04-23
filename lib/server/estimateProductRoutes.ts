@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import {
   createEmptyQuoteProductDraft,
+  isQuoteProductFamily,
+  normalizeQuoteProductSearch,
   normalizeQuoteProductStatusFilter,
   quoteProductPatchToDraft,
   quoteProductRowToDraft,
@@ -58,9 +60,12 @@ export async function handleEstimateProductsRouteGet(request?: Request) {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
-  const requestedStatus = request
-    ? normalizeQuoteProductStatusFilter(new URL(request.url).searchParams.get('status'), 'active')
+  const searchParams = request ? new URL(request.url).searchParams : null
+  const requestedStatus = searchParams
+    ? normalizeQuoteProductStatusFilter(searchParams.get('status'), 'active')
     : ('active' as QuoteProductStatusFilter)
+  const requestedFamily = searchParams?.get('family')
+  const requestedSearch = normalizeQuoteProductSearch(searchParams?.get('search'))
 
   try {
     let query = supabaseAdmin
@@ -75,6 +80,26 @@ export async function handleEstimateProductsRouteGet(request?: Request) {
         archived: 'Archived',
       } as const
       query = query.eq('status', statusMap[requestedStatus])
+    }
+
+    if (requestedFamily && isQuoteProductFamily(requestedFamily)) {
+      query = query.eq('family', requestedFamily)
+    }
+
+    if (requestedSearch) {
+      const sanitizedSearch = requestedSearch.replace(/[%_,]/g, '')
+      if (sanitizedSearch) {
+        const pattern = `%${sanitizedSearch}%`
+        query = query.or(
+          [
+            `name.ilike.${pattern}`,
+            `base.ilike.${pattern}`,
+            `subtype.ilike.${pattern}`,
+            `notes.ilike.${pattern}`,
+            `status.ilike.${pattern}`,
+          ].join(',')
+        )
+      }
     }
 
     const { data, error } = await query.order('created_at', { ascending: false })

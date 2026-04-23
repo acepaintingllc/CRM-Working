@@ -1,16 +1,27 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { loadQuoteProducts } from '@/lib/quotes/client'
-import type { QuoteProductRow } from '@/lib/quotes/productsForm'
+import type { QuoteProductQuery, QuoteProductRow } from '@/lib/quotes/productsForm'
 
 const emptyProductRows: QuoteProductRow[] = []
 
-export function useQuoteProductsData() {
+type Options = {
+  query: QuoteProductQuery
+}
+
+export function useQuoteProductsData({ query }: Options) {
+  const reloadKey = useMemo(
+    () => JSON.stringify(query),
+    [query]
+  )
+
   return useLoadableResource<QuoteProductRow[]>({
     initialData: emptyProductRows,
-    load: () => loadQuoteProducts<QuoteProductRow[]>({ status: 'all' }),
+    load: () => loadQuoteProducts<QuoteProductRow[]>(query),
     getErrorMessage: (loadError: unknown) =>
       loadError instanceof Error ? loadError.message : 'Failed to load quote products.',
+    reloadKey,
   })
 }

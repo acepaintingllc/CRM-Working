@@ -2,6 +2,7 @@
 
 import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
 import type {
+  ProductFamily,
   QuoteProductPayload,
   QuoteProductStatusFilter,
 } from '@/lib/quotes/productsForm'
@@ -50,8 +51,17 @@ export async function deleteQuoteVersion(id: string) {
   })
 }
 
-export async function loadQuoteProducts<T>(options: { status: QuoteProductStatusFilter }) {
-  return loadData<T>(`/api/quotes/products?status=${encodeURIComponent(options.status)}`, {
+export async function loadQuoteProducts<T>(options: {
+  status: QuoteProductStatusFilter
+  family?: ProductFamily | null
+  search?: string | null
+}) {
+  const params = new URLSearchParams()
+  params.set('status', options.status)
+  if (options.family) params.set('family', options.family)
+  if (options.search?.trim()) params.set('search', options.search.trim())
+
+  return loadData<T>(`/api/quotes/products?${params.toString()}`, {
     cache: 'no-store',
   })
 }

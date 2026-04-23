@@ -65,9 +65,11 @@ function createDeleteChain(result: unknown) {
 function createListChain(result: unknown) {
   const chain = {
     eq: vi.fn(),
+    or: vi.fn(),
     order: vi.fn().mockResolvedValue(result),
   }
   chain.eq.mockReturnValue(chain)
+  chain.or.mockReturnValue(chain)
   return chain
 }
 
@@ -151,6 +153,31 @@ describe('estimate product routes', () => {
         { id: 'product-1', status: 'Active' },
         { id: 'product-2', status: 'Archived' },
       ],
+    })
+  })
+
+  it('applies family and search filters when requested', async () => {
+    const filteredChain = createListChain({
+      data: [{ id: 'product-1', family: 'Paint', name: 'Super Paint' }],
+      error: null,
+    })
+
+    mocks.from.mockReturnValueOnce({ select: vi.fn(() => filteredChain) })
+
+    const response = await handleEstimateProductsRouteGet(
+      new Request(
+        'http://localhost/api/estimates/v2/products?status=active&family=Paint&search=super'
+      )
+    )
+
+    expect(filteredChain.eq).toHaveBeenNthCalledWith(1, 'org_id', 'org-1')
+    expect(filteredChain.eq).toHaveBeenNthCalledWith(2, 'status', 'Active')
+    expect(filteredChain.eq).toHaveBeenNthCalledWith(3, 'family', 'Paint')
+    expect(filteredChain.or).toHaveBeenCalledWith(
+      'name.ilike.%super%,base.ilike.%super%,subtype.ilike.%super%,notes.ilike.%super%,status.ilike.%super%'
+    )
+    await expect(response.json()).resolves.toEqual({
+      data: [{ id: 'product-1', family: 'Paint', name: 'Super Paint' }],
     })
   })
 
