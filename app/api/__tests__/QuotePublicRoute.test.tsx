@@ -1,22 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
-  mockLoadPublicEstimateByToken,
-  mockMarkPublicEstimateViewed,
-  mockAcceptPublicEstimate,
-  mockDeclinePublicEstimate,
+  mockLoadPublicEstimateWorkflow,
+  mockAcceptPublicEstimateWorkflow,
+  mockDeclinePublicEstimateWorkflow,
 } = vi.hoisted(() => ({
-  mockLoadPublicEstimateByToken: vi.fn(),
-  mockMarkPublicEstimateViewed: vi.fn(),
-  mockAcceptPublicEstimate: vi.fn(),
-  mockDeclinePublicEstimate: vi.fn(),
+  mockLoadPublicEstimateWorkflow: vi.fn(),
+  mockAcceptPublicEstimateWorkflow: vi.fn(),
+  mockDeclinePublicEstimateWorkflow: vi.fn(),
 }))
 
-vi.mock('@/lib/server/estimatePublicPortal', () => ({
-  loadPublicEstimateByToken: mockLoadPublicEstimateByToken,
-  markPublicEstimateViewed: mockMarkPublicEstimateViewed,
-  acceptPublicEstimate: mockAcceptPublicEstimate,
-  declinePublicEstimate: mockDeclinePublicEstimate,
+vi.mock('@/lib/server/estimatePublicPortalWorkflow', () => ({
+  loadPublicEstimateWorkflow: mockLoadPublicEstimateWorkflow,
+  acceptPublicEstimateWorkflow: mockAcceptPublicEstimateWorkflow,
+  declinePublicEstimateWorkflow: mockDeclinePublicEstimateWorkflow,
+  normalizePublicEstimateAcceptanceInput: vi.fn((input: Record<string, unknown>) => ({
+    legalName: String(input.legal_name ?? input.full_name ?? '').trim(),
+    signatureType: String(input.signature_type ?? 'typed').trim() || 'typed',
+    signatureValue: String(input.signature_value ?? input.signature ?? '').trim(),
+    acceptedTerms:
+      input.accepted_terms === true ||
+      input.accepted === true ||
+      input.agreement_checked === true,
+  })),
 }))
 
 import { GET } from '../quote-public/[token]/route'
@@ -25,10 +31,9 @@ import { POST as declineQuote } from '../quote-public/[token]/decline/route'
 
 describe('quote public routes', () => {
   beforeEach(() => {
-    mockLoadPublicEstimateByToken.mockReset()
-    mockMarkPublicEstimateViewed.mockReset()
-    mockAcceptPublicEstimate.mockReset()
-    mockDeclinePublicEstimate.mockReset()
+    mockLoadPublicEstimateWorkflow.mockReset()
+    mockAcceptPublicEstimateWorkflow.mockReset()
+    mockDeclinePublicEstimateWorkflow.mockReset()
   })
 
   it('returns 400 for invalid token input and 404 for missing public quotes', async () => {
@@ -38,32 +43,36 @@ describe('quote public routes', () => {
     expect(invalidResponse.status).toBe(400)
     await expect(invalidResponse.json()).resolves.toEqual({ error: 'Invalid token' })
 
-    mockLoadPublicEstimateByToken.mockResolvedValue({ error: 'Quote not found' })
+    mockLoadPublicEstimateWorkflow.mockResolvedValue({
+      ok: false,
+      kind: 'not_found',
+      message: 'Quote not found',
+    })
     const missingResponse = await GET(
       new Request('http://localhost/api/quote-public/missing'),
       {
         params: { token: 'missing' },
       }
     )
-    expect(mockLoadPublicEstimateByToken).toHaveBeenCalledWith(
-      'missing',
-      'http://localhost'
-    )
+    expect(mockLoadPublicEstimateWorkflow).toHaveBeenCalledWith({
+      token: 'missing',
+      origin: 'http://localhost',
+      userAgent: '',
+    })
     expect(missingResponse.status).toBe(404)
     await expect(missingResponse.json()).resolves.toEqual({ error: 'Quote not found' })
   })
 
-  it('marks the first eligible public view as viewed and returns the snapshot payload', async () => {
-    mockLoadPublicEstimateByToken.mockResolvedValue({
-      version: { org_id: 'org-1' },
-      snapshot: {
+  it('delegates the public read route to the workflow and preserves the snapshot envelope', async () => {
+    mockLoadPublicEstimateWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
         estimate_version_id: 'version-1',
         status: 'sent',
         viewed_at: null,
         public_token: 'token-1',
       },
     })
-    mockMarkPublicEstimateViewed.mockResolvedValue({ ok: true })
 
     const response = await GET(
       new Request('http://localhost/api/quote-public/token-1', {
@@ -74,12 +83,10 @@ describe('quote public routes', () => {
       }
     )
 
-    expect(mockMarkPublicEstimateViewed).toHaveBeenCalledWith({
-      versionId: 'version-1',
-      orgId: 'org-1',
-      metadata: {
-        user_agent: 'Vitest',
-      },
+    expect(mockLoadPublicEstimateWorkflow).toHaveBeenCalledWith({
+      token: 'token-1',
+      origin: 'http://localhost',
+      userAgent: 'Vitest',
     })
     await expect(response.json()).resolves.toEqual({
       ok: true,
@@ -90,29 +97,8 @@ describe('quote public routes', () => {
     })
   })
 
-  it('accept route validates required fields and writes acceptance metadata', async () => {
-    mockAcceptPublicEstimate.mockResolvedValueOnce({
-      ok: false,
-      kind: 'invalid_input',
-      message: 'Legal name is required',
-    })
-
-    const invalidResponse = await acceptQuote(
-      new Request('http://localhost/api/quote-public/token-1/accept', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accepted_terms: true }),
-      }),
-      {
-        params: { token: 'token-1' },
-      }
-    )
-    expect(invalidResponse.status).toBe(400)
-    await expect(invalidResponse.json()).resolves.toEqual({
-      error: 'Legal name is required',
-    })
-
-    mockAcceptPublicEstimate.mockResolvedValue({
+  it('accept route normalizes aliases, passes request metadata, and returns the mutation envelope', async () => {
+    mockAcceptPublicEstimateWorkflow.mockResolvedValue({
       ok: true,
       data: { id: 'version-1', status: 'accepted' },
     })
@@ -126,10 +112,9 @@ describe('quote public routes', () => {
           'x-forwarded-for': '127.0.0.1',
         },
         body: JSON.stringify({
-          legal_name: 'Taylor Smith',
-          accepted_terms: true,
-          signature_type: 'typed',
-          signature_value: 'Taylor Smith',
+          full_name: 'Taylor Smith',
+          signature: 'Taylor Smith',
+          agreement_checked: true,
         }),
       }),
       {
@@ -137,7 +122,7 @@ describe('quote public routes', () => {
       }
     )
 
-    expect(mockAcceptPublicEstimate).toHaveBeenCalledWith({
+    expect(mockAcceptPublicEstimateWorkflow).toHaveBeenCalledWith({
       token: 'token-1',
       legalName: 'Taylor Smith',
       signatureType: 'typed',
@@ -152,13 +137,7 @@ describe('quote public routes', () => {
     })
   })
 
-  it('accept route maps malformed input and invalid transitions clearly', async () => {
-    mockAcceptPublicEstimate.mockResolvedValueOnce({
-      ok: false,
-      kind: 'invalid_input',
-      message: 'Legal name is required',
-    })
-
+  it('accept route maps malformed input and workflow conflicts clearly', async () => {
     const malformedResponse = await acceptQuote(
       new Request('http://localhost/api/quote-public/token-1/accept', {
         method: 'POST',
@@ -173,10 +152,11 @@ describe('quote public routes', () => {
     )
     expect(malformedResponse.status).toBe(400)
     await expect(malformedResponse.json()).resolves.toEqual({
-      error: 'Legal name is required',
+      error: 'Invalid JSON body.',
     })
+    expect(mockAcceptPublicEstimateWorkflow).not.toHaveBeenCalled()
 
-    mockAcceptPublicEstimate.mockResolvedValue({
+    mockAcceptPublicEstimateWorkflow.mockResolvedValue({
       ok: false,
       kind: 'conflict',
       message: 'Cannot accept a declined quote',
@@ -202,8 +182,8 @@ describe('quote public routes', () => {
     })
   })
 
-  it('decline route records the decline state and event metadata', async () => {
-    mockDeclinePublicEstimate.mockResolvedValue({
+  it('decline route delegates to the workflow and maps conflicts', async () => {
+    mockDeclinePublicEstimateWorkflow.mockResolvedValueOnce({
       ok: true,
       data: { id: 'version-1', status: 'declined' },
     })
@@ -219,7 +199,7 @@ describe('quote public routes', () => {
       }
     )
 
-    expect(mockDeclinePublicEstimate).toHaveBeenCalledWith({
+    expect(mockDeclinePublicEstimateWorkflow).toHaveBeenCalledWith({
       token: 'token-1',
       reason: 'Going another direction',
     })
@@ -227,32 +207,8 @@ describe('quote public routes', () => {
       ok: true,
       version: { id: 'version-1', status: 'declined' },
     })
-  })
 
-  it('decline route maps idempotent retries and conflicts from the workflow service', async () => {
-    mockDeclinePublicEstimate.mockResolvedValueOnce({
-      ok: true,
-      data: { id: 'version-1', status: 'declined' },
-    })
-
-    const retryResponse = await declineQuote(
-      new Request('http://localhost/api/quote-public/token-1/decline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Still declining' }),
-      }),
-      {
-        params: { token: 'token-1' },
-      }
-    )
-
-    expect(retryResponse.status).toBe(200)
-    await expect(retryResponse.json()).resolves.toEqual({
-      ok: true,
-      version: { id: 'version-1', status: 'declined' },
-    })
-
-    mockDeclinePublicEstimate.mockResolvedValueOnce({
+    mockDeclinePublicEstimateWorkflow.mockResolvedValueOnce({
       ok: false,
       kind: 'conflict',
       message: 'Cannot decline an accepted quote',
