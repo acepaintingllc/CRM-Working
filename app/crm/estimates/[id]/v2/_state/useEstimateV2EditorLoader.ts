@@ -16,11 +16,7 @@ import type {
   EstimateV2GetResponse as EstimateResponse,
   EstimateV2JobMeta,
 } from '@/types/estimator/v2'
-import {
-  buildEstimateV2CustomerDraft,
-  mergeEstimateV2Catalogs,
-  sanitizeEstimateV2EditorLoad,
-} from './useEstimateV2Sanitizer'
+import { buildEstimateV2EditorLoadState } from './estimateV2EditorLoadOrchestration'
 
 export function useEstimateV2EditorLoader(params: {
   estimateId?: string
@@ -64,23 +60,11 @@ export function useEstimateV2EditorLoader(params: {
           return
         }
 
-        const nextCatalogs = mergeEstimateV2Catalogs({
-          currentCatalogs: store.getState().meta.catalogs,
-          catalogsPayload: catalogsRes.ok ? catalogsPayload : null,
-        })
-        const sanitized = sanitizeEstimateV2EditorLoad({
-          estimatePayload,
-          catalogs: nextCatalogs,
-          selectedRoomId: store.getState().meta.selectedRoomId,
-        })
-        const catalogsError =
+        const catalogsErrorMessage =
           catalogsRes.ok || catalogsPayload == null
             ? null
-            : createEstimateV2Error(
-                (catalogsPayload as { error?: string }).error ??
-                  getApiErrorMessage(catalogsRes, catalogsParsed, 'Failed to load catalogs'),
-                { retryable: true }
-              )
+            : (catalogsPayload as { error?: string }).error ??
+              getApiErrorMessage(catalogsRes, catalogsParsed, 'Failed to load catalogs')
 
         const jobRes = await authedFetch(`/api/jobs/${estimatePayload.estimate.job_id}`, {
           cache: 'no-store',
@@ -92,26 +76,20 @@ export function useEstimateV2EditorLoader(params: {
         if (!activeRef.current) return
 
         const nextState = store.getState()
-        nextState.setCollections(sanitized.collections)
+        const nextLoadState = buildEstimateV2EditorLoadState({
+          store,
+          estimatePayload,
+          catalogsPayload: catalogsRes.ok ? catalogsPayload : null,
+          catalogsOk: catalogsRes.ok,
+          catalogsErrorMessage,
+          job,
+        })
+        nextState.setCollections(nextLoadState.collections)
         nextState.setMeta((prev) => ({
           ...prev,
-          estimate: estimatePayload.estimate,
-          job,
-          catalogs: sanitized.catalogs,
-          wallCalculations: sanitized.meta.wallCalculations,
-          ceilingCalculations: sanitized.meta.ceilingCalculations,
-          trimCalculations: sanitized.meta.trimCalculations,
-          selectedRoomId: sanitized.meta.selectedRoomId,
-          error: catalogsError,
-          validationIssues: [],
-          lastSavedSnapshot: sanitized.meta.lastSavedSnapshot,
-          autoSaveHint: sanitized.meta.autoSaveHint,
-          jobSettingsDraft: sanitized.meta.jobSettingsDraft,
-          orgJobProductDefaults: sanitized.meta.orgJobProductDefaults,
-          customerDraft: buildEstimateV2CustomerDraft(job),
-          debugMeta: sanitized.meta.debugMeta,
+          ...nextLoadState.meta,
         }))
-        nextState.setSaveStatus(sanitized.meta.saveStatus)
+        nextState.setSaveStatus(nextLoadState.saveStatus)
         nextState.setLoading(false)
       } catch (error) {
         if (!activeRef.current) return

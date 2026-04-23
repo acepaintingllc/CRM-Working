@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import type {
   CompanyProfile,
   CustomerEstimateCustomer,
@@ -10,82 +11,37 @@ import type {
 } from './types.ts'
 import { buildDefaultTermsText, splitTermsText } from './presets.ts'
 import { reconcileWholeDollarRows } from '../estimator/pricingPolicies.ts'
+=======
+import type { BuiltCustomerEstimateDocument } from './types.ts'
+import { assembleCustomerEstimateBuild } from './documentAssembly.ts'
+import {
+  type CustomerEstimateInput,
+  normalizeCustomerEstimateInput,
+} from './inputNormalization.ts'
+import { extractScopeBuckets } from './scopeExtraction.ts'
+import { finalizeScopeBuckets } from './textGeneration.ts'
+>>>>>>> Stashed changes
 
-type CustomerEstimateRow = Unsafe
-type CustomerEstimateCatalogs = {
-  paint_products?: CustomerEstimateRow[]
-  trim_items?: CustomerEstimateRow[]
-}
+export type { CustomerEstimateInput } from './inputNormalization.ts'
+export { buildEstimatePublicSnapshot } from './publicSnapshot.ts'
 
-export interface CustomerEstimateInput {
-  estimate: CustomerEstimateRow
-  job: CustomerEstimateRow
-  customer?: CustomerEstimateRow | null
-  company: CompanyProfile
-  inputs: {
-    rooms?: CustomerEstimateRow[]
-    room_wall_scopes?: CustomerEstimateRow[]
-    room_ceiling_scopes?: CustomerEstimateRow[]
-    room_trim_scopes?: CustomerEstimateRow[]
-    trim_items?: CustomerEstimateRow[]
-    other?: CustomerEstimateRow[]
-    jobsettings?: CustomerEstimateRow | null
-  }
-  catalogs?: CustomerEstimateCatalogs | null
-  settings?: {
-    quote_validity_days?: number | null
-    terms_text?: string | null
-    default_template_key?: string | null
-  }
-  pricingSummary?: CustomerEstimatePricingSummary | null
-  overrides?: {
-    title?: string
-    intro_paragraph?: string
-    closing_paragraph?: string
-    scope_text_edits?: Partial<Record<CustomerEstimateSectionKey, string>>
-    quote_validity_days?: number | string | null
-    deposit_language?: string
-    card_fee_note?: string
-  }
-  publicMeta?: {
-    status?: string
-    sent_at?: string | null
-    viewed_at?: string | null
-    accepted_at?: string | null
-    declined_at?: string | null
-    public_token?: string | null
-  }
-}
-
-function asText(value: unknown) {
-  return value == null ? '' : String(value).trim()
-}
-
-function asNum(value: unknown) {
-  if (value == null || value === '') return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
-
-function round2(value: number) {
-  return Math.round(value * 100) / 100
-}
-
-function formatHumanDate(value: string) {
-  const raw = asText(value)
-  if (!raw) return ''
-  const isoDate = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(raw)
-  if (isoDate) {
-    const year = Number(isoDate[1])
-    const month = Number(isoDate[2])
-    const day = Number(isoDate[3])
-    const date = new Date(Date.UTC(year, month - 1, day))
-    return date.toLocaleDateString('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: 'numeric',
-      timeZone: 'UTC',
+export function buildCustomerEstimateDocument(
+  params: CustomerEstimateInput
+): BuiltCustomerEstimateDocument {
+  const normalized = normalizeCustomerEstimateInput(params)
+  const scoped = finalizeScopeBuckets(
+    extractScopeBuckets({
+      rooms: normalized.rooms,
+      roomWallScopes: normalized.roomWallScopes,
+      roomCeilingScopes: normalized.roomCeilingScopes,
+      roomTrimScopes: normalized.roomTrimScopes,
+      trimItems: normalized.trimItems,
+      otherRows: normalized.otherRows,
+      paintCatalogRows: normalized.paintCatalogRows,
+      trimCatalogRows: normalized.trimCatalogRows,
+      jobsettings: normalized.jobsettings,
     })
+<<<<<<< Updated upstream
   }
   const parsed = new Date(raw)
   if (!Number.isNaN(parsed.getTime())) {
@@ -747,10 +703,14 @@ export function buildCustomerEstimateDocument(params: CustomerEstimateInput): Cu
         depositLanguage,
         cardFeeNote,
       })
+=======
+>>>>>>> Stashed changes
   )
 
-  const sections = buildCustomerEstimateSections({
+  return assembleCustomerEstimateBuild({
+    normalized,
     scoped,
+<<<<<<< Updated upstream
     overrides: params.overrides,
   }).filter((section) => section.price != null && section.text.trim())
   const customer = buildCustomerProfile({ customer: params.customer ?? null, job })
@@ -819,4 +779,7 @@ export function buildEstimatePublicSnapshot(params: {
     declined_at: asText(params.version.declined_at) || null,
     locked_at: asText(params.version.locked_at) || null,
   }
+=======
+  })
+>>>>>>> Stashed changes
 }

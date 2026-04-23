@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildQuoteHomeBootstrapReadModel,
-  buildQuoteHomeJobVersionCountsReadModel,
+  buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSearchReadModel,
   buildQuoteHomeSummaryReadModel,
@@ -11,29 +11,6 @@ import {
 } from '../collectionData'
 
 const rows = [
-  {
-    id: 'estimate-3',
-    estimate_id: 'estimate-3',
-    job_id: 'job-2',
-    customer_id: 'customer-2',
-    status: 'draft',
-    raw_version_name: null,
-    raw_version_state: 'draft',
-    raw_version_kind: 'alternate',
-    raw_version_sort_order: 3,
-    version_name: 'Quote Version',
-    version_state: 'draft',
-    version_kind: 'alternate',
-    version_sort_order: 3,
-    job_title: 'Garage',
-    job_status: 'follow_up',
-    job_estimate_sent_at: null,
-    customer_name: 'Bob',
-    final_total: 500,
-    updated_at: '2026-04-22T09:00:00.000Z',
-    created_at: '2026-04-21T09:00:00.000Z',
-    is_sent_estimate: true,
-  },
   {
     id: 'estimate-2',
     estimate_id: 'estimate-2',
@@ -62,13 +39,13 @@ const rows = [
     estimate_id: 'estimate-1',
     job_id: 'job-1',
     customer_id: 'customer-1',
-    status: 'archived',
+    status: 'draft',
     raw_version_name: 'Kitchen Original',
-    raw_version_state: 'archived',
+    raw_version_state: 'draft',
     raw_version_kind: 'standard',
     raw_version_sort_order: 1,
     version_name: 'Kitchen Original',
-    version_state: 'archived',
+    version_state: 'draft',
     version_kind: 'standard',
     version_sort_order: 1,
     job_title: 'Kitchen',
@@ -85,73 +62,40 @@ const rows = [
 describe('quote collection data', () => {
   it('builds list payloads from decorated rows without re-deriving status flags', () => {
     expect(buildQuoteListPayload(rows).estimates[0]).toEqual({
-      id: 'estimate-3',
-      job_id: 'job-2',
-      customer_id: 'customer-2',
-      status: 'draft',
-      version_name: null,
-      version_state: 'draft',
-      version_kind: 'alternate',
-      version_sort_order: 3,
-      updated_at: '2026-04-22T09:00:00.000Z',
-      created_at: '2026-04-21T09:00:00.000Z',
-      job_title: 'Garage',
-      job_status: 'follow_up',
-      job_estimate_sent_at: null,
+      id: 'estimate-2',
+      job_id: 'job-1',
+      customer_id: 'customer-1',
+      status: 'live',
+      version_name: 'Kitchen Revision',
+      version_state: 'live',
+      version_kind: 'revision',
+      version_sort_order: 2,
+      updated_at: '2026-04-21T10:00:00.000Z',
+      created_at: '2026-04-20T10:00:00.000Z',
+      job_title: 'Kitchen',
+      job_status: 'estimate_sent',
+      job_estimate_sent_at: '2026-04-21T00:00:00.000Z',
       is_sent_estimate: true,
-      customer_name: 'Bob',
+      customer_name: 'Alice',
     })
   })
 
-  it('builds summary metrics without embedding per-job selection data', () => {
-    expect(
-      buildQuoteHomeSummaryReadModel(rows.map((row) => toQuoteHomeJobVersionItem(row)))
-    ).toEqual({
-      total_versions: 3,
+  it('builds summary metrics from version read models', () => {
+    expect(buildQuoteHomeSummaryReadModel(rows.map((row) => toQuoteHomeJobVersionItem(row)))).toEqual({
+      total_versions: 2,
       draft_count: 1,
-      sent_or_awaiting_count: 3,
+      sent_or_awaiting_count: 2,
       live_count: 1,
-      pipeline_total: 1800,
+      pipeline_total: 2200,
     })
   })
 
-  it('builds recent activity separately and caps it at 12 items', () => {
-    const expandedRows = Array.from({ length: 15 }, (_, index) => ({
-      ...rows[0],
-      id: `estimate-${index + 1}`,
-      estimate_id: `estimate-${index + 1}`,
-      updated_at: `2026-04-22T${String(index).padStart(2, '0')}:00:00.000Z`,
-    }))
-
-    const payload = buildQuoteHomeRecentActivityReadModel(expandedRows)
-
-    expect(payload.items).toHaveLength(12)
-    expect(payload.items[0]).toEqual({
-      estimate_id: 'estimate-1',
-      job_id: 'job-2',
-      version_name: 'Quote Version',
-      version_state: 'draft',
-      version_kind: 'alternate',
-      job_title: 'Garage',
-      customer_name: 'Bob',
-      final_total: 500,
-      updated_at: '2026-04-22T00:00:00.000Z',
-      is_sent_estimate: true,
-    })
-  })
-
-  it('builds dedicated per-job version counts for the job list boundary', () => {
-    expect(buildQuoteHomeJobVersionCountsReadModel(rows)).toEqual({
+  it('builds the jobs page, bootstrap payload, search payload, and job versions with explicit windows', () => {
+    const jobsPage = buildQuoteHomeJobsPageReadModel({
+      query: 'kit',
+      limit: 25,
+      nextCursor: 'cursor-2',
       items: [
-        { job_id: 'job-2', version_count: 1 },
-        { job_id: 'job-1', version_count: 2 },
-      ],
-    })
-  })
-
-  it('builds bootstrap payloads from the shared row builders without duplicating counts or summary logic', () => {
-    expect(
-      buildQuoteHomeBootstrapReadModel(rows, [
         {
           id: 'job-1',
           customer_id: 'customer-1',
@@ -161,35 +105,15 @@ describe('quote collection data', () => {
           description: null,
           status: 'estimate_scheduled',
           estimate_date: null,
-          estimate_sent_at: '2026-04-21T00:00:00.000Z',
+          estimate_sent_at: null,
           scheduled_date: null,
           completed_at: null,
+          version_count: 2,
         },
-      ])
-    ).toEqual({
-      summary: {
-        total_versions: 3,
-        draft_count: 1,
-        sent_or_awaiting_count: 3,
-        live_count: 1,
-        pipeline_total: 1800,
-      },
-      jobCounts: {
-        items: [
-          { job_id: 'job-2', version_count: 1 },
-          { job_id: 'job-1', version_count: 2 },
-        ],
-      },
-      jobs: [
-        expect.objectContaining({
-          id: 'job-1',
-          customer_id: 'customer-1',
-          title: 'Kitchen',
-        }),
       ],
     })
-  })
 
+<<<<<<< Updated upstream
   it('filters search results case-insensitively and caps them at 8', () => {
     const searchRows = Array.from({ length: 10 }, (_, index) => ({
       ...rows[0],
@@ -199,9 +123,35 @@ describe('quote collection data', () => {
       job_title: 'Kitchen',
       customer_name: 'Alice',
     }))
+=======
+    const versions = buildQuoteJobVersionsReadModel(rows, {
+      jobId: 'job-1',
+      totalVersions: 2,
+      limit: 25,
+      nextCursor: null,
+    })
+>>>>>>> Stashed changes
 
-    const payload = buildQuoteHomeSearchReadModel(searchRows, 'revision')
+    expect(
+      buildQuoteHomeBootstrapReadModel({
+        summary: buildQuoteHomeSummaryReadModel(rows.map((row) => toQuoteHomeJobVersionItem(row))),
+        jobs: jobsPage,
+        selectedJobVersions: versions,
+      })
+    ).toEqual({
+      summary: {
+        total_versions: 2,
+        draft_count: 1,
+        sent_or_awaiting_count: 2,
+        live_count: 1,
+        pipeline_total: 2200,
+      },
+      jobs: jobsPage,
+      selected_job_id: 'job-1',
+      selected_job_versions: versions,
+    })
 
+<<<<<<< Updated upstream
     expect(payload.query).toBe('revision')
     expect(payload.items).toHaveLength(8)
     expect(payload.items[0]).toEqual(toQuoteHomeJobVersionItem(searchRows[0]))
@@ -211,9 +161,15 @@ describe('quote collection data', () => {
     expect(buildQuoteHomeSearchReadModel(rows, '   ')).toEqual({
       query: '   ',
       items: [],
+=======
+    expect(buildQuoteHomeSearchReadModel(rows, 'revision', 8)).toEqual({
+      query: 'revision',
+      limit: 8,
+      items: rows.map(toQuoteHomeSearchResultReadModel),
+>>>>>>> Stashed changes
     })
-  })
 
+<<<<<<< Updated upstream
   it('returns full per-job versions even when search results are capped', () => {
     const expandedRows = Array.from({ length: 205 }, (_, index) => {
       const jobId = index < 201 ? 'job-a' : 'job-b'
@@ -252,5 +208,10 @@ describe('quote collection data', () => {
     expect(jobVersionsPayload.job_id).toBe('job-a')
     expect(jobVersionsPayload.total_versions).toBe(201)
     expect(jobVersionsPayload.items).toHaveLength(201)
+=======
+    expect(buildQuoteHomeRecentActivityReadModel(rows).items).toHaveLength(2)
+    expect(versions.total_versions).toBe(2)
+    expect(versions.limit).toBe(25)
+>>>>>>> Stashed changes
   })
 })

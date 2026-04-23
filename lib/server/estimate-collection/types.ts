@@ -32,3 +32,32 @@ export type EstimateCollectionRollupRow = {
   estimate_id: string
   final_total: number | null
 }
+
+export type QuoteHomeSummaryRow = {
+  total_versions: number | null
+  draft_count: number | null
+  sent_or_awaiting_count: number | null
+  live_count: number | null
+  pipeline_total: number | null
+}
+
+export type QuoteHomeJobsPageRow = {
+  id: string
+  customer_id: string | null
+  customer_name: string | null
+  customer_address: string | null
+  title: string | null
+  description: string | null
+  status: string | null
+  created_at: string | null
+  estimate_date: string | null
+  estimate_sent_at: string | null
+  scheduled_date: string | null
+  scheduled_end_date: string | null
+  scheduled_email_sent_at: string | null
+  completed_at: string | null
+  completed_email_sent_at: string | null
+  closeout_notes: string | null
+  linked_estimate_id: string | null
+  version_count: number | null
+}

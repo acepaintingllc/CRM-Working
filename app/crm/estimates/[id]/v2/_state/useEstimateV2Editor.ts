@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   createEstimateV2Store,
   estimateV2StoreSelectors,
@@ -12,6 +12,7 @@ import {
 } from '../../estimateRouteFamily'
 import { useEstimateV2BeforeUnload } from './useEstimateV2BeforeUnload'
 import { useEstimateV2CeilingActions } from './useEstimateV2CeilingActions'
+import { useEstimateV2DefaultScopeColorSync } from './useEstimateV2DefaultScopeColorSync'
 import { useEstimateV2DerivedState } from './useEstimateV2DerivedState'
 import { useEstimateV2EditorLoader } from './useEstimateV2EditorLoader'
 import { useEstimateV2EditorViewModels } from './useEstimateV2EditorViewModels'
@@ -36,6 +37,7 @@ export function useEstimateV2Editor({
   )
 
   const derived = useEstimateV2DerivedState({ store })
+  const derivedSections = derived.sections
 
   useEstimateV2EditorLoader({
     estimateId,
@@ -43,53 +45,44 @@ export function useEstimateV2Editor({
     store,
   })
   useEstimateV2BeforeUnload({ loading, dirty: derived.dirty })
-
-  useEffect(() => {
-    if (!derived.defaultColorCodeId) return
-    store.getState().setScopes((prev) => {
-      let changed = false
-      const next = prev.map((scope) => {
-        if (scope.colorId) return scope
-        changed = true
-        return { ...scope, colorId: derived.defaultColorCodeId }
-      })
-      return changed ? next : prev
-    })
-  }, [derived.defaultColorCodeId, store])
+  useEstimateV2DefaultScopeColorSync({
+    store,
+    defaultColorCodeId: derivedSections.catalog.defaultColorCodeId,
+  })
 
   const roomActions = useEstimateV2RoomActions({
     store,
-    roomModeById: derived.roomModeById,
-    trimTypeOptions: derived.trimTypeOptions,
+    roomModeById: derivedSections.room.roomModeById,
+    trimTypeOptions: derivedSections.catalog.trimTypeOptions,
   })
   const wallActions = useEstimateV2WallActions({
     store,
-    roomModeById: derived.roomModeById,
+    roomModeById: derivedSections.room.roomModeById,
   })
   const ceilingActions = useEstimateV2CeilingActions({
     store,
-    roomModeById: derived.roomModeById,
+    roomModeById: derivedSections.room.roomModeById,
   })
   const trimActions = useEstimateV2TrimActions({
     store,
-    trimTypeOptions: derived.trimTypeOptions,
-    roomModeById: derived.roomModeById,
-    roomHeightFactorByRoomId: derived.roomHeightFactorByRoomId,
+    trimTypeOptions: derivedSections.catalog.trimTypeOptions,
+    roomModeById: derivedSections.room.roomModeById,
+    roomHeightFactorByRoomId: derivedSections.room.roomHeightFactorByRoomId,
   })
   const settingsActions = useEstimateV2SettingsActions({ estimateId, routeFamily, store })
   const saveController = useEstimateV2SaveController({
     estimateId,
     routeFamily,
     store,
-    currentSnapshot: derived.currentSnapshot,
-    dirty: derived.dirty,
+    currentSnapshot: derivedSections.calculation.currentSnapshot,
+    dirty: derivedSections.calculation.dirty,
     effectiveJobProductDefaults,
   })
 
   return useEstimateV2EditorViewModels({
     estimateId,
     store,
-    derived,
+    derived: derivedSections,
     roomActions,
     wallActions,
     ceilingActions,

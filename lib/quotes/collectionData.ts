@@ -91,13 +91,6 @@ export type QuoteHomeSearchResultReadModel = {
   is_sent_estimate: boolean
 }
 
-export type QuoteHomeJobVersionCountsReadModel = {
-  items: Array<{
-    job_id: string
-    version_count: number
-  }>
-}
-
 export type QuoteHomeEligibleJobReadModel = {
   id: string
   customer_id: string
@@ -118,20 +111,36 @@ export type QuoteHomeEligibleJobReadModel = {
   linked_estimate_id?: string | null
 }
 
-export type QuoteHomeBootstrapReadModel = {
-  summary: QuoteHomeSummaryReadModel
-  jobCounts: QuoteHomeJobVersionCountsReadModel
-  jobs: QuoteHomeEligibleJobReadModel[]
+export type QuoteHomeJobListItemReadModel = QuoteHomeEligibleJobReadModel & {
+  version_count: number
 }
 
-export type QuoteJobVersionsReadModel = {
+export type QuoteHomePageWindow = {
+  limit: number
+  next_cursor: string | null
+}
+
+export type QuoteHomeJobsPageReadModel = QuoteHomePageWindow & {
+  query: string
+  items: QuoteHomeJobListItemReadModel[]
+}
+
+export type QuoteJobVersionsReadModel = QuoteHomePageWindow & {
   job_id: string
   total_versions: number
   items: QuoteHomeJobVersionItemReadModel[]
 }
 
+export type QuoteHomeBootstrapReadModel = {
+  summary: QuoteHomeSummaryReadModel
+  jobs: QuoteHomeJobsPageReadModel
+  selected_job_id: string | null
+  selected_job_versions: QuoteJobVersionsReadModel | null
+}
+
 export type QuoteHomeSearchResponse = {
   query: string
+  limit: number
   items: QuoteHomeSearchResultReadModel[]
 }
 
@@ -210,6 +219,7 @@ export function toQuoteHomeSearchResultReadModel(
   }
 }
 
+<<<<<<< Updated upstream
 export function buildQuoteHomeSearchHaystack(
   estimate:
     | QuoteHomeRecentActivityItemReadModel
@@ -235,12 +245,11 @@ export function buildQuoteHomeJobVersionCountsReadModel(
   }
 }
 
+=======
+>>>>>>> Stashed changes
 export function buildQuoteHomeSummaryReadModel(
   estimates: Array<
-    Pick<
-      QuoteHomeJobVersionItemReadModel,
-      'version_state' | 'final_total' | 'is_sent_estimate'
-    >
+    Pick<QuoteHomeJobVersionItemReadModel, 'version_state' | 'final_total' | 'is_sent_estimate'>
   >
 ): QuoteHomeSummaryReadModel {
   return {
@@ -255,20 +264,30 @@ export function buildQuoteHomeSummaryReadModel(
   }
 }
 
-export function buildQuoteHomeBootstrapReadModel(
-  rows: EstimateCollectionDecoratedRow[],
-  jobs: QuoteHomeEligibleJobReadModel[]
-): QuoteHomeBootstrapReadModel {
+export function buildQuoteHomeBootstrapReadModel(params: {
+  summary: QuoteHomeSummaryReadModel
+  jobs: QuoteHomeJobsPageReadModel
+  selectedJobVersions?: QuoteJobVersionsReadModel | null
+}): QuoteHomeBootstrapReadModel {
   return {
-    summary: buildQuoteHomeSummaryReadModel(
-      rows.map((row) => ({
-        version_state: row.version_state,
-        final_total: row.final_total,
-        is_sent_estimate: row.is_sent_estimate,
-      }))
-    ),
-    jobCounts: buildQuoteHomeJobVersionCountsReadModel(rows),
-    jobs,
+    summary: params.summary,
+    jobs: params.jobs,
+    selected_job_id: params.jobs.items[0]?.id ?? null,
+    selected_job_versions: params.selectedJobVersions ?? null,
+  }
+}
+
+export function buildQuoteHomeJobsPageReadModel(params: {
+  query: string
+  limit: number
+  nextCursor: string | null
+  items: QuoteHomeJobListItemReadModel[]
+}): QuoteHomeJobsPageReadModel {
+  return {
+    query: params.query,
+    limit: params.limit,
+    next_cursor: params.nextCursor,
+    items: params.items,
   }
 }
 
@@ -282,11 +301,13 @@ export function buildQuoteHomeRecentActivityReadModel(
 
 export function buildQuoteHomeSearchReadModel(
   rows: EstimateCollectionDecoratedRow[],
-  query: string
+  query: string,
+  limit: number
 ): QuoteHomeSearchResponse {
   const normalizedQuery = query.trim().toLowerCase()
   return {
     query,
+<<<<<<< Updated upstream
     items:
       normalizedQuery.length === 0
         ? []
@@ -294,6 +315,10 @@ export function buildQuoteHomeSearchReadModel(
             .map(toQuoteHomeSearchResultReadModel)
             .filter((estimate) => buildQuoteHomeSearchHaystack(estimate).includes(normalizedQuery))
             .slice(0, 8),
+=======
+    limit,
+    items: rows.map(toQuoteHomeSearchResultReadModel),
+>>>>>>> Stashed changes
   }
 }
 
@@ -305,14 +330,18 @@ export function buildQuoteListPayload(rows: EstimateCollectionDecoratedRow[]) {
 
 export function buildQuoteJobVersionsReadModel(
   rows: EstimateCollectionDecoratedRow[],
-  jobId: string
+  params: {
+    jobId: string
+    limit: number
+    nextCursor: string | null
+    totalVersions: number
+  }
 ): QuoteJobVersionsReadModel {
-  const items = rows
-    .map(toQuoteHomeJobVersionItem)
-    .filter((estimate) => estimate.job_id === jobId)
   return {
-    job_id: jobId,
-    total_versions: items.length,
-    items,
+    job_id: params.jobId,
+    total_versions: params.totalVersions,
+    limit: params.limit,
+    next_cursor: params.nextCursor,
+    items: rows.map(toQuoteHomeJobVersionItem).filter((estimate) => estimate.job_id === params.jobId),
   }
 }

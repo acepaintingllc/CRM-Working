@@ -24,11 +24,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 vi.mock('next/link', () => ({
-  default: ({
-    href,
-    children,
-    ...props
-  }: ComponentPropsWithoutRef<'a'> & { href: string }) => (
+  default: ({ href, children, ...props }: ComponentPropsWithoutRef<'a'> & { href: string }) => (
     <a href={href} {...props}>
       {children}
     </a>
@@ -83,6 +79,8 @@ describe('QuoteCreatePage', () => {
     loadQuoteJobVersions.mockResolvedValue({
       job_id: 'job-1',
       total_versions: 2,
+      limit: 25,
+      next_cursor: null,
       items: [
         {
           estimate_id: 'estimate-2',
@@ -126,8 +124,11 @@ describe('QuoteCreatePage', () => {
 
     expect(fetchJobList).not.toHaveBeenCalled()
     expect(loadJobRecord).toHaveBeenCalledWith('job-1')
-    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
-    expect(screen.getByText('Alice · 123 Main')).toBeInTheDocument()
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1', {
+      cursor: undefined,
+      limit: 25,
+    })
+    expect(screen.getByText(/Alice .*123 Main/)).toBeInTheDocument()
     expect(screen.getAllByText('Version B').length).toBeGreaterThan(0)
 
     fireEvent.change(screen.getByPlaceholderText('Leave blank for default name'), {
@@ -136,12 +137,12 @@ describe('QuoteCreatePage', () => {
     fireEvent.change(screen.getByDisplayValue('Standard'), {
       target: { value: 'split' },
     })
+
     const createButton = screen
       .getAllByRole('button', { name: 'Create version' })
       .find((button): button is HTMLButtonElement => button instanceof HTMLButtonElement && !button.disabled)
-    if (!createButton) {
-      throw new Error('Expected an enabled create button')
-    }
+    if (!createButton) throw new Error('Expected an enabled create button')
+
     fireEvent.click(createButton)
 
     await waitFor(() => {
@@ -176,7 +177,13 @@ describe('QuoteCreatePage', () => {
       closeout_notes: null,
       linked_estimates: [],
     })
-    loadQuoteJobVersions.mockResolvedValue({ job_id: 'job-1', total_versions: 0, items: [] })
+    loadQuoteJobVersions.mockResolvedValue({
+      job_id: 'job-1',
+      total_versions: 0,
+      limit: 25,
+      next_cursor: null,
+      items: [],
+    })
 
     render(<QuoteCreatePage />)
 
@@ -187,9 +194,8 @@ describe('QuoteCreatePage', () => {
     const disabledCreateButton = screen
       .getAllByRole('button', { name: 'Create version' })
       .find((button): button is HTMLButtonElement => button instanceof HTMLButtonElement && button.disabled)
-    if (!disabledCreateButton) {
-      throw new Error('Expected a disabled create button')
-    }
+    if (!disabledCreateButton) throw new Error('Expected a disabled create button')
+
     expect(disabledCreateButton).toBeDisabled()
     expect(createQuoteVersion).not.toHaveBeenCalled()
   })
@@ -239,6 +245,8 @@ describe('QuoteCreatePage', () => {
       .mockResolvedValueOnce({
         job_id: 'job-1',
         total_versions: 1,
+        limit: 25,
+        next_cursor: null,
         items: [
           {
             estimate_id: 'estimate-1',

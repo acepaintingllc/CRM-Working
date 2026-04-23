@@ -3,27 +3,28 @@ import { isJobStatus } from '../../jobs/types.ts'
 import type {
   EstimateCollectionDecoratedRow,
   QuoteHomeEligibleJobReadModel,
+  QuoteHomeJobListItemReadModel,
+  QuoteHomeSummaryReadModel,
 } from '../../quotes/collectionData.ts'
 import { hasUniqueConstraintConflict } from '../dbErrors.ts'
 import { isMissingSchemaErrorMessage } from '../schema.ts'
 import { supabaseAdmin } from '../org.ts'
-import {
-  errorResult,
-  okResult,
-  type ServiceResult,
-} from '../serviceResult.ts'
+import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import type {
   EstimateCollectionCustomerRow,
   EstimateCollectionJobRow,
   EstimateCollectionRollupRow,
   EstimateCollectionVersionCopy,
   EstimateCollectionVersionRow,
+  QuoteHomeJobsPageRow,
+  QuoteHomeSummaryRow,
 } from './types'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const VERSION_STATES = new Set(['draft', 'live', 'archived'])
+const quoteHomeCursorSeparator = '::'
 
 const estimateSelect =
   'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
@@ -41,6 +42,48 @@ function asTimestamp(value: string | null | undefined) {
   if (!value) return 0
   const time = new Date(value).getTime()
   return Number.isFinite(time) ? time : 0
+}
+
+function asPositiveInteger(value: number | null | undefined, fallback: number, maximum: number) {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return fallback
+  return Math.max(1, Math.min(maximum, Math.trunc(next)))
+}
+
+function encodeQuoteHomeCursor(value: { timestamp: string | null | undefined; id: string | null | undefined }) {
+  if (!value.timestamp || !value.id) return null
+  return `${value.timestamp}${quoteHomeCursorSeparator}${value.id}`
+}
+
+export function decodeQuoteHomeCursor(cursor: string | null | undefined) {
+  const rawCursor = String(cursor ?? '').trim()
+  if (!rawCursor) {
+    return { ok: true as const, value: null }
+  }
+
+  const separatorIndex = rawCursor.indexOf(quoteHomeCursorSeparator)
+  if (separatorIndex <= 0) {
+    return { ok: false as const, message: 'Invalid cursor.' }
+  }
+
+  const timestamp = rawCursor.slice(0, separatorIndex)
+  const id = rawCursor.slice(separatorIndex + quoteHomeCursorSeparator.length)
+  if (!timestamp || !uuid.test(id)) {
+    return { ok: false as const, message: 'Invalid cursor.' }
+  }
+
+  const parsedTimestamp = new Date(timestamp)
+  if (Number.isNaN(parsedTimestamp.getTime())) {
+    return { ok: false as const, message: 'Invalid cursor.' }
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      timestamp: parsedTimestamp.toISOString(),
+      id,
+    },
+  }
 }
 
 export function normalizeEstimateCollectionVersionState(value: string | null | undefined) {
@@ -78,6 +121,198 @@ export async function loadEstimateCollectionRowsForOrg(
   }
 
   return okResult((data ?? []) as EstimateCollectionVersionRow[])
+}
+
+export async function loadEstimateCollectionSummary(
+  orgId: string
+): Promise<ServiceResult<QuoteHomeSummaryReadModel>> {
+  const { data, error } = await supabaseAdmin.rpc('quote_home_summary', {
+    p_org_id: orgId,
+  })
+
+  if (error) {
+    if (isMissingSchemaErrorMessage(error.message)) {
+      return errorResult(
+        'server_error',
+        'quote_home_summary RPC is missing. Run the latest SQL migrations.'
+      )
+    }
+    return errorResult('server_error', error.message)
+  }
+
+  const row = Array.isArray(data) ? ((data[0] ?? null) as QuoteHomeSummaryRow | null) : null
+  return okResult({
+    total_versions: Number(row?.total_versions ?? 0),
+    draft_count: Number(row?.draft_count ?? 0),
+    sent_or_awaiting_count: Number(row?.sent_or_awaiting_count ?? 0),
+    live_count: Number(row?.live_count ?? 0),
+    pipeline_total: Number(row?.pipeline_total ?? 0),
+  })
+}
+
+export async function loadEstimateCollectionJobsPage(
+  orgId: string,
+  options?: {
+    query?: string
+    limit?: number
+    cursor?: string | null
+  }
+): Promise<
+  ServiceResult<{
+    query: string
+    limit: number
+    nextCursor: string | null
+    items: QuoteHomeJobListItemReadModel[]
+  }>
+> {
+  const limit = asPositiveInteger(options?.limit, 25, 100)
+  const query = asText(options?.query)
+  const cursorResult = decodeQuoteHomeCursor(options?.cursor)
+  if (!cursorResult.ok) {
+    return errorResult('invalid_input', cursorResult.message)
+  }
+
+  const { data, error } = await supabaseAdmin.rpc('quote_home_jobs_page', {
+    p_org_id: orgId,
+    p_search: query || null,
+    p_limit: limit + 1,
+    p_cursor_created_at: cursorResult.value?.timestamp ?? null,
+    p_cursor_id: cursorResult.value?.id ?? null,
+  })
+
+  if (error) {
+    if (isMissingSchemaErrorMessage(error.message)) {
+      return errorResult(
+        'server_error',
+        'quote_home_jobs_page RPC is missing. Run the latest SQL migrations.'
+      )
+    }
+    return errorResult('server_error', error.message)
+  }
+
+  const pageRows = ((data ?? []) as QuoteHomeJobsPageRow[]).slice(0, limit)
+  const nextCursor =
+    (data ?? []).length > limit
+      ? encodeQuoteHomeCursor({
+          timestamp: pageRows[pageRows.length - 1]?.created_at,
+          id: pageRows[pageRows.length - 1]?.id,
+        })
+      : null
+
+  return okResult({
+    query,
+    limit,
+    nextCursor,
+    items: pageRows
+      .filter((row) => row.customer_id)
+      .map((row) => ({
+        id: row.id,
+        customer_id: String(row.customer_id),
+        customer_name: asText(row.customer_name) || null,
+        customer_address: asText(row.customer_address) || null,
+        title: asText(row.title) || 'Untitled job',
+        description: row.description ?? null,
+        status: isJobStatus(row.status) ? row.status : 'estimate_scheduled',
+        created_at: row.created_at ?? null,
+        estimate_date: row.estimate_date ?? null,
+        estimate_sent_at: row.estimate_sent_at ?? null,
+        scheduled_date: row.scheduled_date ?? null,
+        scheduled_end_date: row.scheduled_end_date ?? null,
+        scheduled_email_sent_at: row.scheduled_email_sent_at ?? null,
+        completed_at: row.completed_at ?? null,
+        completed_email_sent_at: row.completed_email_sent_at ?? null,
+        closeout_notes: row.closeout_notes ?? null,
+        linked_estimate_id: row.linked_estimate_id ?? null,
+        version_count: Number(row.version_count ?? 0),
+      })),
+  })
+}
+
+export async function loadEstimateCollectionJobVersionsPage(
+  orgId: string,
+  jobId: string,
+  options?: {
+    limit?: number
+    cursor?: string | null
+  }
+): Promise<
+  ServiceResult<{
+    jobId: string
+    totalVersions: number
+    limit: number
+    nextCursor: string | null
+    items: EstimateCollectionVersionRow[]
+  }>
+> {
+  const limit = asPositiveInteger(options?.limit, 25, 100)
+  const cursorResult = decodeQuoteHomeCursor(options?.cursor)
+  if (!cursorResult.ok) {
+    return errorResult('invalid_input', cursorResult.message)
+  }
+
+  const [countRes, rowsRes] = await Promise.all([
+    supabaseAdmin
+      .from('estimates')
+      .select('id', { head: true, count: 'exact' })
+      .eq('org_id', orgId)
+      .eq('job_id', jobId),
+    (() => {
+      let query = supabaseAdmin
+        .from('estimates')
+        .select(estimateSelect)
+        .eq('org_id', orgId)
+        .eq('job_id', jobId)
+        .order('updated_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(limit + 1)
+
+      const cursor = cursorResult.value
+      if (cursor) {
+        query = query.lt('updated_at', cursor.timestamp)
+      }
+
+      return query
+    })(),
+  ])
+
+  if (countRes.error) {
+    return errorResult('server_error', countRes.error.message)
+  }
+  if (rowsRes.error) {
+    return errorResult('server_error', rowsRes.error.message)
+  }
+
+  const rawRows = ((rowsRes.data ?? []) as EstimateCollectionVersionRow[]).sort((left, right) => {
+    const updatedDiff = asTimestamp(right.updated_at) - asTimestamp(left.updated_at)
+    if (updatedDiff !== 0) return updatedDiff
+    return right.id.localeCompare(left.id)
+  })
+
+  const filteredRows = cursorResult.value
+    ? rawRows.filter((row) => {
+        const updatedAt = row.updated_at ?? ''
+        if (updatedAt < cursorResult.value!.timestamp) return true
+        if (updatedAt > cursorResult.value!.timestamp) return false
+        return row.id < cursorResult.value!.id
+      })
+    : rawRows
+
+  const pageRows = filteredRows.slice(0, limit)
+  const nextCursor =
+    filteredRows.length > limit
+      ? encodeQuoteHomeCursor({
+          timestamp: pageRows[pageRows.length - 1]?.updated_at,
+          id: pageRows[pageRows.length - 1]?.id,
+        })
+      : null
+
+  return okResult({
+    jobId,
+    totalVersions: Number(countRes.count ?? 0),
+    limit,
+    nextCursor,
+    items: pageRows,
+  })
 }
 
 async function loadEstimateCollectionRowsByLookup(
@@ -256,9 +491,7 @@ export async function decorateEstimateCollectionRows(
   const customersById = new Map(
     (customersRes.data ?? []).map((row) => [row.id, row as EstimateCollectionCustomerRow])
   )
-  const totalsByEstimateId = new Map(
-    rollupRows.map((row) => [row.estimate_id, asMoney(row.final_total)])
-  )
+  const totalsByEstimateId = new Map(rollupRows.map((row) => [row.estimate_id, asMoney(row.final_total)]))
 
   return okResult(
     estimateRows.map((row) => {
@@ -304,10 +537,12 @@ export async function createEstimateCollectionVersionRecord(params: {
   const { rpc, hasUniqueConstraintConflict: checkConflict } = {
     rpc: supabaseAdmin.rpc.bind(supabaseAdmin),
     hasUniqueConstraintConflict,
-    ...(params as { _deps?: Partial<{
-      rpc: typeof supabaseAdmin.rpc
-      hasUniqueConstraintConflict: typeof hasUniqueConstraintConflict
-    }> })._deps,
+    ...(params as {
+      _deps?: Partial<{
+        rpc: typeof supabaseAdmin.rpc
+        hasUniqueConstraintConflict: typeof hasUniqueConstraintConflict
+      }>
+    })._deps,
   }
 
   const jobId = asText(params.body.job_id)
@@ -380,11 +615,7 @@ export async function loadEstimateCollectionRollupSummary(params: {
 
   const [jobsRes, rollupsRes] = await Promise.all([
     jobIds.length
-      ? supabaseAdmin
-          .from('jobs')
-          .select('id, status')
-          .eq('org_id', params.orgId)
-          .in('id', jobIds)
+      ? supabaseAdmin.from('jobs').select('id, status').eq('org_id', params.orgId).in('id', jobIds)
       : Promise.resolve({ data: [], error: null }),
     estimateIds.length
       ? supabaseAdmin
@@ -415,86 +646,7 @@ export async function loadEstimateCollectionRollupSummary(params: {
 export async function loadEstimateCollectionEligibleJobs(
   orgId: string
 ): Promise<ServiceResult<QuoteHomeEligibleJobReadModel[]>> {
-  const { data: jobsData, error: jobsError } = await supabaseAdmin
-    .from('jobs')
-    .select(
-      'id, customer_id, title, description, status, created_at, estimate_date, estimate_sent_at, scheduled_date, scheduled_end_date, scheduled_email_sent_at, completed_at, completed_email_sent_at, closeout_notes, linked_estimate_id'
-    )
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: false })
-
-  if (jobsError) {
-    return errorResult('server_error', jobsError.message)
-  }
-
-  const jobs = (jobsData ?? []) as Array<{
-    id: string
-    customer_id: string | null
-    title: string | null
-    description: string | null
-    status: string | null
-    created_at?: string | null
-    estimate_date: string | null
-    estimate_sent_at: string | null
-    scheduled_date: string | null
-    scheduled_end_date?: string | null
-    scheduled_email_sent_at?: string | null
-    completed_at: string | null
-    completed_email_sent_at?: string | null
-    closeout_notes?: string | null
-    linked_estimate_id?: string | null
-  }>
-
-  const customerIds = Array.from(
-    new Set(jobs.map((job) => String(job.customer_id ?? '').trim()).filter(Boolean))
-  )
-
-  const customersRes = customerIds.length
-    ? await supabaseAdmin
-        .from('customers')
-        .select('id, name, address')
-        .eq('org_id', orgId)
-        .in('id', customerIds)
-    : { data: [], error: null }
-
-  if (customersRes.error) {
-    return errorResult('server_error', customersRes.error.message)
-  }
-
-  const customersById = new Map(
-    (customersRes.data ?? []).map((row) => [
-      String(row.id ?? ''),
-      {
-        name: String(row.name ?? '').trim() || null,
-        address: String(row.address ?? '').trim() || null,
-      },
-    ])
-  )
-
-  return okResult(
-    jobs
-      .filter((job) => String(job.customer_id ?? '').trim())
-      .map((job) => {
-        const customer = customersById.get(String(job.customer_id ?? ''))
-        return {
-          id: job.id,
-          customer_id: String(job.customer_id),
-          customer_name: customer?.name ?? null,
-          customer_address: customer?.address ?? null,
-          title: String(job.title ?? '').trim() || 'Untitled job',
-          description: job.description ?? null,
-          status: isJobStatus(job.status) ? job.status : 'estimate_scheduled',
-          created_at: job.created_at ?? null,
-          estimate_date: job.estimate_date ?? null,
-          estimate_sent_at: job.estimate_sent_at ?? null,
-          scheduled_date: job.scheduled_date ?? null,
-          scheduled_end_date: job.scheduled_end_date ?? null,
-          scheduled_email_sent_at: job.scheduled_email_sent_at ?? null,
-          completed_at: job.completed_at ?? null,
-          completed_email_sent_at: job.completed_email_sent_at ?? null,
-          closeout_notes: job.closeout_notes ?? null,
-          linked_estimate_id: job.linked_estimate_id ?? null,
-        } satisfies QuoteHomeEligibleJobReadModel
-      })
-  )
+  const jobsPage = await loadEstimateCollectionJobsPage(orgId, { limit: 100 })
+  if (!jobsPage.ok) return jobsPage
+  return okResult(jobsPage.data.items)
 }

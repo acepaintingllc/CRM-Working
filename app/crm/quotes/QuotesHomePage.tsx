@@ -116,6 +116,7 @@ export default function QuotesHomePage({ initialData }: Props) {
             renderMobile={false}
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
+            onLoadMore={() => void actions.loadMoreJobs()}
           />
 
           <section style={{ display: 'grid', gap: 22, alignSelf: 'start' }}>
@@ -129,7 +130,15 @@ export default function QuotesHomePage({ initialData }: Props) {
                 gap: 22,
               }}
             >
+<<<<<<< Updated upstream
               <QuotesHomeVersionList vm={versionListVm} onRequestDelete={actions.requestDeleteVersion} />
+=======
+              <QuotesHomeVersionList
+                vm={controller.versionList}
+                onRequestDelete={actions.requestDelete}
+                onLoadMore={() => void actions.loadMoreVersions()}
+              />
+>>>>>>> Stashed changes
 
               <QuotesHomeCreatePanel
                 vm={createVm}

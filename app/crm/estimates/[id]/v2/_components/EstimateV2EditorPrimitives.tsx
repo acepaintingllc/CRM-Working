@@ -1,11 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react'
 import type { EstimateV2EditorSectionChipVm } from '../_state/estimateV2EditorTypes'
+import type { EstimateV2SharedStyles } from './estimateV2EditorPageStyles'
 
-export type SharedStyles = {
-  label: CSSProperties
-  mono: CSSProperties
-  panel: CSSProperties
-}
+export type SharedStyles = EstimateV2SharedStyles
 
 export function Field({
   label,

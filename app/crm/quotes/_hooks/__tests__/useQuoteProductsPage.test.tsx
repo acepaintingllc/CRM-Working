@@ -256,6 +256,146 @@ describe('useQuoteProductsPage', () => {
     })
   })
 
+<<<<<<< Updated upstream
+=======
+  it('preserves an explicit selection across a reordered reload', async () => {
+    loadQuoteProducts
+      .mockResolvedValueOnce([
+        buildProduct({ id: 'paint-1', name: 'Super Paint' }),
+        buildProduct({ id: 'paint-2', name: 'Dormant Paint', base: 'B' }),
+      ])
+      .mockResolvedValueOnce([
+        buildProduct({ id: 'paint-2', name: 'Dormant Paint', base: 'B' }),
+        buildProduct({ id: 'paint-1', name: 'Super Paint' }),
+      ])
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.setSelectedId('paint-2')
+    })
+
+    await act(async () => {
+      await result.current.resource.refresh()
+    })
+
+    expect(result.current.catalogVm.selectedId).toBe('paint-2')
+    expect(result.current.catalogVm.selected?.id).toBe('paint-2')
+    expect(result.current.editorVm.selected?.id).toBe('paint-2')
+    expect(result.current.editorVm.draft.name).toBe('Dormant Paint')
+  })
+
+  it('keeps the editor on the explicit selection when search hides that row', async () => {
+    const products = [
+      buildProduct({ id: 'paint-1', name: 'Super Paint' }),
+      buildProduct({ id: 'paint-2', name: 'Dormant Paint', status: 'Inactive' }),
+    ]
+    loadQuoteProducts.mockImplementation(async (query: QuoteProductQuery) =>
+      products.filter((product) => matchesQuery(product, query))
+    )
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.setSelectedId('paint-2')
+    })
+
+    await waitFor(() => {
+      expect(result.current.editorVm.draft.name).toBe('Dormant Paint')
+    })
+
+    act(() => {
+      result.current.actions.setSearch('super')
+    })
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 350))
+    })
+
+    await waitFor(() => {
+      expect(result.current.catalogVm.products.map((product) => product.id)).toEqual(['paint-1'])
+    })
+
+    expect(result.current.catalogVm.selectedId).toBe('paint-2')
+    expect(result.current.catalogVm.selected).toBeNull()
+    expect(result.current.editorVm.selected?.id).toBe('paint-2')
+    expect(result.current.editorVm.draft.name).toBe('Dormant Paint')
+  })
+
+  it('refreshes a clean editor draft when the selected row changes on reload', async () => {
+    loadQuoteProducts
+      .mockResolvedValueOnce([
+        buildProduct({ id: 'paint-1', name: 'Super Paint', updated_at: '2026-01-01T00:00:00.000Z' }),
+      ])
+      .mockResolvedValueOnce([
+        buildProduct({
+          id: 'paint-1',
+          name: 'Super Paint Ultra',
+          updated_at: '2026-01-05T00:00:00.000Z',
+        }),
+      ])
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    expect(result.current.editorVm.draft.name).toBe('Super Paint')
+
+    await act(async () => {
+      await result.current.resource.refresh()
+    })
+
+    await waitFor(() => {
+      expect(result.current.editorVm.draft.name).toBe('Super Paint Ultra')
+    })
+
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.catalogVm.selected?.name).toBe('Super Paint Ultra')
+  })
+
+  it('keeps a dirty editor draft intact when reload changes the selected row', async () => {
+    loadQuoteProducts
+      .mockResolvedValueOnce([
+        buildProduct({ id: 'paint-1', name: 'Super Paint', updated_at: '2026-01-01T00:00:00.000Z' }),
+      ])
+      .mockResolvedValueOnce([
+        buildProduct({
+          id: 'paint-1',
+          name: 'Super Paint Ultra',
+          updated_at: '2026-01-05T00:00:00.000Z',
+        }),
+      ])
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftField('name', 'Local Draft Name')
+    })
+
+    await act(async () => {
+      await result.current.resource.refresh()
+    })
+
+    expect(result.current.editorVm.draft.name).toBe('Local Draft Name')
+    expect(result.current.editorVm.isDirty).toBe(true)
+    expect(result.current.catalogVm.selected?.name).toBe('Super Paint Ultra')
+  })
+
+>>>>>>> Stashed changes
   it('exposes structured validation state for invalid draft values', async () => {
     loadQuoteProducts.mockResolvedValue([buildProduct({ id: 'paint-1' })])
 

@@ -8,7 +8,7 @@ import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import type {
   QuoteProductsActions,
   QuoteProductsEditorVm,
-} from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
+} from '@/app/crm/quotes/_hooks/quoteProductsPageVm'
 import {
   QUOTE_PRODUCT_FAMILIES,
   QUOTE_PRODUCT_SCOPE_OPTIONS,

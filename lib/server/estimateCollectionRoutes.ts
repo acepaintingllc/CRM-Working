@@ -8,7 +8,7 @@ import {
 import {
   createEstimateCollectionVersion,
   loadEstimateCollectionBootstrapPayload,
-  loadEstimateCollectionJobCountsPayload,
+  loadEstimateCollectionJobsPayload,
   loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionPayload,
   loadEstimateCollectionRecentActivityPayload,
@@ -52,10 +52,29 @@ export async function handleEstimateHomeRecentActivityRouteGet() {
 }
 
 export async function handleEstimateHomeJobCountsRouteGet() {
+  return Response.json(
+    { error: 'Quote home job-counts has been replaced by the paged jobs read model.' },
+    { status: 410 }
+  )
+}
+
+export async function handleEstimateHomeJobsRouteGet(request: Request) {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
-  return serviceResultDataResponse(await loadEstimateCollectionJobCountsPayload(auth.session.orgId))
+  const url = new URL(request.url)
+  const query = url.searchParams.get('q') ?? ''
+  const cursor = url.searchParams.get('cursor')
+  const limitValue = url.searchParams.get('limit')
+  const limit = limitValue ? Number(limitValue) : undefined
+
+  return serviceResultDataResponse(
+    await loadEstimateCollectionJobsPayload(auth.session.orgId, {
+      query,
+      cursor,
+      limit,
+    })
+  )
 }
 
 export async function handleEstimateHomeSearchRouteGet(request: Request) {
@@ -73,7 +92,7 @@ export type EstimateJobVersionsRouteContext = {
 }
 
 export async function handleEstimateJobVersionsRouteGet(
-  _request: Request,
+  request: Request,
   context: EstimateJobVersionsRouteContext
 ) {
   const auth = await requireSessionUserOrg()
@@ -83,8 +102,16 @@ export async function handleEstimateJobVersionsRouteGet(
   const jobId = readUuidParam(params?.jobId, 'job id')
   if (!jobId.ok) return jobId.response
 
+  const url = new URL(request.url)
+  const cursor = url.searchParams.get('cursor')
+  const limitValue = url.searchParams.get('limit')
+  const limit = limitValue ? Number(limitValue) : undefined
+
   return serviceResultDataResponse(
-    await loadEstimateCollectionJobVersionsPayload(auth.session.orgId, jobId.value)
+    await loadEstimateCollectionJobVersionsPayload(auth.session.orgId, jobId.value, {
+      cursor,
+      limit,
+    })
   )
 }
 

@@ -2,27 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   buildQuoteHomeBootstrapReadModel: vi.fn(),
-  buildQuoteHomeJobVersionCountsReadModel: vi.fn(),
+  buildQuoteHomeJobsPageReadModel: vi.fn(),
   buildQuoteHomeRecentActivityReadModel: vi.fn(),
   buildQuoteHomeSearchReadModel: vi.fn(),
-  buildQuoteHomeSummaryReadModel: vi.fn(),
   buildQuoteJobVersionsReadModel: vi.fn(),
   buildQuoteListPayload: vi.fn(),
   createEstimateCollectionVersionRecord: vi.fn(),
   decorateEstimateCollectionRows: vi.fn(),
-  isSentEstimateCollectionJob: vi.fn(),
-  loadEstimateCollectionEligibleJobs: vi.fn(),
-  loadEstimateCollectionRollupSummary: vi.fn(),
+  loadEstimateCollectionJobVersionsPage: vi.fn(),
+  loadEstimateCollectionJobsPage: vi.fn(),
   loadEstimateCollectionRowsForOrg: vi.fn(),
-  normalizeEstimateCollectionVersionState: vi.fn(),
+  loadEstimateCollectionSummary: vi.fn(),
   searchEstimateCollectionRows: vi.fn(),
 }))
 
 import {
   createEstimateCollectionVersion,
   loadEstimateCollectionBootstrapPayload,
-  loadEstimateCollectionJobCountsPayload,
   loadEstimateCollectionJobVersionsPayload,
+  loadEstimateCollectionJobsPayload,
   loadEstimateCollectionPayload,
   loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload,
@@ -31,19 +29,17 @@ import {
 
 const deps = {
   buildQuoteHomeBootstrapReadModel: mocks.buildQuoteHomeBootstrapReadModel,
-  buildQuoteHomeJobVersionCountsReadModel: mocks.buildQuoteHomeJobVersionCountsReadModel,
+  buildQuoteHomeJobsPageReadModel: mocks.buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeRecentActivityReadModel: mocks.buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSearchReadModel: mocks.buildQuoteHomeSearchReadModel,
-  buildQuoteHomeSummaryReadModel: mocks.buildQuoteHomeSummaryReadModel,
   buildQuoteJobVersionsReadModel: mocks.buildQuoteJobVersionsReadModel,
   buildQuoteListPayload: mocks.buildQuoteListPayload,
   createEstimateCollectionVersionRecord: mocks.createEstimateCollectionVersionRecord,
   decorateEstimateCollectionRows: mocks.decorateEstimateCollectionRows,
-  isSentEstimateCollectionJob: mocks.isSentEstimateCollectionJob,
-  loadEstimateCollectionEligibleJobs: mocks.loadEstimateCollectionEligibleJobs,
-  loadEstimateCollectionRollupSummary: mocks.loadEstimateCollectionRollupSummary,
+  loadEstimateCollectionJobVersionsPage: mocks.loadEstimateCollectionJobVersionsPage,
+  loadEstimateCollectionJobsPage: mocks.loadEstimateCollectionJobsPage,
   loadEstimateCollectionRowsForOrg: mocks.loadEstimateCollectionRowsForOrg,
-  normalizeEstimateCollectionVersionState: mocks.normalizeEstimateCollectionVersionState,
+  loadEstimateCollectionSummary: mocks.loadEstimateCollectionSummary,
   searchEstimateCollectionRows: mocks.searchEstimateCollectionRows,
 }
 
@@ -53,105 +49,135 @@ describe('estimate collection service', () => {
   })
 
   it('builds the collection payload from decorated rows', async () => {
-    const rows = [{ id: 'estimate-1' }]
-    const decoratedRows = [{ estimate_id: 'estimate-1' }]
-    const payload = { estimates: [{ id: 'estimate-1' }] }
-    mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: rows })
-    mocks.decorateEstimateCollectionRows.mockResolvedValue({ ok: true, data: decoratedRows })
-    mocks.buildQuoteListPayload.mockReturnValue(payload)
+    mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: [{ id: 'estimate-1' }] })
+    mocks.decorateEstimateCollectionRows.mockResolvedValue({ ok: true, data: [{ estimate_id: 'estimate-1' }] })
+    mocks.buildQuoteListPayload.mockReturnValue({ estimates: [{ id: 'estimate-1' }] })
 
     await expect(loadEstimateCollectionPayload('org-1', deps)).resolves.toEqual({
       ok: true,
-      data: payload,
+      data: { estimates: [{ id: 'estimate-1' }] },
     })
-    expect(mocks.decorateEstimateCollectionRows).toHaveBeenCalledWith('org-1', rows, {
-      includeRollups: false,
-    })
-    expect(mocks.buildQuoteListPayload).toHaveBeenCalledWith(decoratedRows)
   })
 
-  it('builds the bootstrap payload from decorated rows and eligible jobs', async () => {
-    const rows = [{ id: 'estimate-1' }]
-    const decoratedRows = [{ estimate_id: 'estimate-1' }]
-    const jobs = [{ id: 'job-1' }]
-    const payload = { summary: {}, jobCounts: {}, jobs }
-    mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: rows })
-    mocks.loadEstimateCollectionEligibleJobs.mockResolvedValue({ ok: true, data: jobs })
-    mocks.decorateEstimateCollectionRows.mockResolvedValue({ ok: true, data: decoratedRows })
-    mocks.buildQuoteHomeBootstrapReadModel.mockReturnValue(payload)
-
-    await expect(loadEstimateCollectionBootstrapPayload('org-1', deps)).resolves.toEqual({
+  it('builds the bounded bootstrap payload from summary, jobs page, and selected-job versions', async () => {
+    mocks.loadEstimateCollectionSummary.mockResolvedValue({
       ok: true,
-      data: payload,
+      data: { total_versions: 3, draft_count: 1, sent_or_awaiting_count: 1, live_count: 1, pipeline_total: 1800 },
     })
-    expect(mocks.decorateEstimateCollectionRows).toHaveBeenCalledWith('org-1', rows, {
-      includeRollups: true,
-    })
-    expect(mocks.buildQuoteHomeBootstrapReadModel).toHaveBeenCalledWith(decoratedRows, jobs)
-  })
-
-  it('builds the summary payload from rows, rollups, and sent state lookups', async () => {
-    const rows = [
-      { id: 'estimate-1', job_id: 'job-1', version_state: 'draft' },
-      { id: 'estimate-2', job_id: 'job-2', version_state: 'live' },
-    ]
-    const rollupSummary = {
-      jobsById: new Map([
-        ['job-1', { id: 'job-1', status: 'estimate_sent' }],
-        ['job-2', { id: 'job-2', status: 'follow_up' }],
-      ]),
-      totalsByEstimateId: new Map([
-        ['estimate-1', 1000],
-        ['estimate-2', 1500],
-      ]),
-    }
-    const payload = { total_versions: 2 }
-    mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: rows })
-    mocks.loadEstimateCollectionRollupSummary.mockResolvedValue({ ok: true, data: rollupSummary })
-    mocks.normalizeEstimateCollectionVersionState.mockImplementation((value) => value ?? 'draft')
-    mocks.isSentEstimateCollectionJob.mockReturnValue(true)
-    mocks.buildQuoteHomeSummaryReadModel.mockReturnValue(payload)
-
-    await expect(loadEstimateCollectionSummaryPayload('org-1', deps)).resolves.toEqual({
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValue({
       ok: true,
-      data: payload,
+      data: {
+        query: '',
+        limit: 25,
+        nextCursor: 'cursor-2',
+        items: [{ id: 'job-1', version_count: 2 }],
+      },
     })
-    expect(mocks.buildQuoteHomeSummaryReadModel).toHaveBeenCalledWith([
-      { version_state: 'draft', final_total: 1000, is_sent_estimate: true },
-      { version_state: 'live', final_total: 1500, is_sent_estimate: true },
-    ])
+    mocks.loadEstimateCollectionJobVersionsPage.mockResolvedValue({
+      ok: true,
+      data: {
+        jobId: 'job-1',
+        totalVersions: 2,
+        limit: 25,
+        nextCursor: null,
+        items: [{ id: 'estimate-1' }],
+      },
+    })
+    mocks.decorateEstimateCollectionRows.mockResolvedValue({ ok: true, data: [{ estimate_id: 'estimate-1' }] })
+    mocks.buildQuoteHomeJobsPageReadModel.mockReturnValue({
+      query: '',
+      limit: 25,
+      next_cursor: 'cursor-2',
+      items: [{ id: 'job-1', version_count: 2 }],
+    })
+    mocks.buildQuoteJobVersionsReadModel.mockReturnValue({
+      job_id: 'job-1',
+      total_versions: 2,
+      limit: 25,
+      next_cursor: null,
+      items: [{ estimate_id: 'estimate-1' }],
+    })
+    mocks.buildQuoteHomeBootstrapReadModel.mockReturnValue({
+      summary: { total_versions: 3 },
+      jobs: { items: [{ id: 'job-1' }] },
+      selected_job_id: 'job-1',
+      selected_job_versions: { items: [{ estimate_id: 'estimate-1' }] },
+    })
+
+    const result = await loadEstimateCollectionBootstrapPayload('org-1', deps)
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        summary: { total_versions: 3 },
+        jobs: { items: [{ id: 'job-1' }] },
+        selected_job_id: 'job-1',
+        selected_job_versions: { items: [{ estimate_id: 'estimate-1' }] },
+      },
+    })
   })
 
-  it('builds recent activity, search, counts, and job versions through quote read-model builders', async () => {
-    const rows = [{ id: 'estimate-1', job_id: 'job-1' }]
-    const decoratedRows = [{ estimate_id: 'estimate-1', job_id: 'job-1' }]
-    mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: rows })
-    mocks.searchEstimateCollectionRows.mockResolvedValue({ ok: true, data: rows })
-    mocks.decorateEstimateCollectionRows.mockResolvedValue({ ok: true, data: decoratedRows })
-    mocks.buildQuoteHomeRecentActivityReadModel.mockReturnValue({ items: decoratedRows })
-    mocks.buildQuoteHomeSearchReadModel.mockReturnValue({ query: 'kitchen', items: decoratedRows })
-    mocks.buildQuoteHomeJobVersionCountsReadModel.mockReturnValue({ items: [{ job_id: 'job-1', version_count: 1 }] })
+  it('builds summary, jobs, recent activity, search, and job versions through the new read-model builders', async () => {
+    mocks.loadEstimateCollectionSummary.mockResolvedValue({
+      ok: true,
+      data: { total_versions: 2, draft_count: 1, sent_or_awaiting_count: 1, live_count: 1, pipeline_total: 1300 },
+    })
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValue({
+      ok: true,
+      data: { query: 'kit', limit: 25, nextCursor: null, items: [{ id: 'job-1', version_count: 2 }] },
+    })
+    mocks.buildQuoteHomeJobsPageReadModel.mockReturnValue({
+      query: 'kit',
+      limit: 25,
+      next_cursor: null,
+      items: [{ id: 'job-1', version_count: 2 }],
+    })
+    mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: [{ id: 'estimate-1' }] })
+    mocks.searchEstimateCollectionRows.mockResolvedValue({ ok: true, data: [{ id: 'estimate-1' }] })
+    mocks.decorateEstimateCollectionRows.mockResolvedValue({ ok: true, data: [{ estimate_id: 'estimate-1' }] })
+    mocks.buildQuoteHomeRecentActivityReadModel.mockReturnValue({ items: [{ estimate_id: 'estimate-1' }] })
+    mocks.buildQuoteHomeSearchReadModel.mockReturnValue({ query: 'kitchen', limit: 8, items: [{ estimate_id: 'estimate-1' }] })
+    mocks.loadEstimateCollectionJobVersionsPage.mockResolvedValue({
+      ok: true,
+      data: {
+        jobId: 'job-1',
+        totalVersions: 1,
+        limit: 25,
+        nextCursor: null,
+        items: [{ id: 'estimate-1' }],
+      },
+    })
     mocks.buildQuoteJobVersionsReadModel.mockReturnValue({
       job_id: 'job-1',
       total_versions: 1,
-      items: decoratedRows,
+      limit: 25,
+      next_cursor: null,
+      items: [{ estimate_id: 'estimate-1' }],
     })
 
+    await expect(loadEstimateCollectionSummaryPayload('org-1', deps)).resolves.toEqual({
+      ok: true,
+      data: { total_versions: 2, draft_count: 1, sent_or_awaiting_count: 1, live_count: 1, pipeline_total: 1300 },
+    })
+    await expect(loadEstimateCollectionJobsPayload('org-1', { query: 'kit' }, deps)).resolves.toEqual({
+      ok: true,
+      data: { query: 'kit', limit: 25, next_cursor: null, items: [{ id: 'job-1', version_count: 2 }] },
+    })
     await expect(loadEstimateCollectionRecentActivityPayload('org-1', deps)).resolves.toEqual({
       ok: true,
-      data: { items: decoratedRows },
+      data: { items: [{ estimate_id: 'estimate-1' }] },
     })
     await expect(loadEstimateCollectionSearchPayload('org-1', 'kitchen', deps)).resolves.toEqual({
       ok: true,
-      data: { query: 'kitchen', items: decoratedRows },
+      data: { query: 'kitchen', limit: 8, items: [{ estimate_id: 'estimate-1' }] },
     })
+<<<<<<< Updated upstream
     await expect(loadEstimateCollectionJobCountsPayload('org-1', deps)).resolves.toEqual({
+=======
+    await expect(loadEstimateCollectionJobVersionsPayload('org-1', 'job-1', {}, deps)).resolves.toEqual({
+>>>>>>> Stashed changes
       ok: true,
-      data: { items: [{ job_id: 'job-1', version_count: 1 }] },
-    })
-    await expect(loadEstimateCollectionJobVersionsPayload('org-1', 'job-1', deps)).resolves.toEqual({
-      ok: true,
-      data: { job_id: 'job-1', total_versions: 1, items: decoratedRows },
+      data: { job_id: 'job-1', total_versions: 1, limit: 25, next_cursor: null, items: [{ estimate_id: 'estimate-1' }] },
     })
   })
 

@@ -11,13 +11,17 @@ const {
   createQuoteVersion,
   deleteQuoteVersion,
   loadQuoteHomeBootstrap,
+  loadQuoteHomeJobs,
   loadQuoteHomeSearch,
+  loadQuoteHomeSummary,
   loadQuoteJobVersions,
 } = vi.hoisted(() => ({
   createQuoteVersion: vi.fn(),
   deleteQuoteVersion: vi.fn(),
   loadQuoteHomeBootstrap: vi.fn(),
+  loadQuoteHomeJobs: vi.fn(),
   loadQuoteHomeSearch: vi.fn(),
+  loadQuoteHomeSummary: vi.fn(),
   loadQuoteJobVersions: vi.fn(),
 }))
 
@@ -29,142 +33,94 @@ vi.mock('@/lib/quotes/client', () => ({
   createQuoteVersion,
   deleteQuoteVersion,
   loadQuoteHomeBootstrap,
+  loadQuoteHomeJobs,
   loadQuoteHomeSearch,
+  loadQuoteHomeSummary,
   loadQuoteJobVersions,
 }))
 
-const summaryPayload = {
-  total_versions: 3,
-  draft_count: 1,
-  sent_or_awaiting_count: 1,
-  live_count: 1,
-  pipeline_total: 1800,
-}
-
-const jobCountsPayload = {
-  items: [
-    { job_id: 'job-1', version_count: 2 },
-    { job_id: 'job-2', version_count: 1 },
-  ],
-}
-
 const bootstrapPayload = {
-  summary: summaryPayload,
-  jobCounts: jobCountsPayload,
-  jobs: [
-    {
-      id: 'job-1',
-      customer_id: 'customer-1',
-      customer_name: 'Alice',
-      customer_address: '123 Main',
-      title: 'Kitchen',
-      description: null,
-      status: 'estimate_pending',
-      estimate_date: null,
-      estimate_sent_at: null,
-      scheduled_date: null,
-      completed_at: null,
-    },
-    {
-      id: 'job-2',
-      customer_id: 'customer-2',
-      customer_name: 'Bob',
-      customer_address: '456 Oak',
-      title: 'Garage',
-      description: null,
-      status: 'estimate_sent',
-      estimate_date: null,
-      estimate_sent_at: null,
-      scheduled_date: null,
-      completed_at: null,
-    },
-  ],
-}
-
-const job1VersionsPayload = {
-  job_id: 'job-1',
-  total_versions: 2,
-  items: [
-    {
-      estimate_id: 'estimate-2',
-      job_id: 'job-1',
-      customer_id: 'customer-1',
-      version_name: 'Version B',
-      version_state: 'live',
-      version_kind: 'revision',
-      version_sort_order: 2,
-      job_title: 'Kitchen',
-      customer_name: 'Alice',
-      final_total: 1300,
-      updated_at: '2026-04-21T10:00:00.000Z',
-      created_at: '2026-04-20T10:00:00.000Z',
-      is_sent_estimate: true,
-    },
-    {
-      estimate_id: 'estimate-1',
-      job_id: 'job-1',
-      customer_id: 'customer-1',
-      version_name: 'Version A',
-      version_state: 'draft',
-      version_kind: 'standard',
-      version_sort_order: 1,
-      job_title: 'Kitchen',
-      customer_name: 'Alice',
-      final_total: 500,
-      updated_at: '2026-04-20T10:00:00.000Z',
-      created_at: '2026-04-19T10:00:00.000Z',
-      is_sent_estimate: false,
-    },
-  ],
-}
-
-const job2VersionsPayload = {
-  job_id: 'job-2',
-  total_versions: 1,
-  items: [
-    {
-      estimate_id: 'estimate-3',
-      job_id: 'job-2',
-      customer_id: 'customer-2',
-      version_name: 'Garage Alt',
-      version_state: 'archived',
-      version_kind: 'alternate',
-      version_sort_order: 1,
-      job_title: 'Garage',
-      customer_name: 'Bob',
-      final_total: 800,
-      updated_at: '2026-04-18T10:00:00.000Z',
-      created_at: '2026-04-17T10:00:00.000Z',
-      is_sent_estimate: true,
-    },
-  ],
-}
-
-const refreshedSummaryPayload = {
-  total_versions: 202,
-  draft_count: 0,
-  sent_or_awaiting_count: 1,
-  live_count: 1,
-  pipeline_total: 1300,
-}
-
-const refreshedJobCountsPayload = {
-  items: [
-    { job_id: 'job-1', version_count: 201 },
-    { job_id: 'job-2', version_count: 1 },
-  ],
-}
-
-const refreshedBootstrapPayload = {
-  summary: refreshedSummaryPayload,
-  jobCounts: refreshedJobCountsPayload,
-  jobs: bootstrapPayload.jobs,
-}
-
-const refreshedJob1VersionsPayload = {
-  job_id: 'job-1',
-  total_versions: 1,
-  items: [job1VersionsPayload.items[0]],
+  summary: {
+    total_versions: 3,
+    draft_count: 1,
+    sent_or_awaiting_count: 1,
+    live_count: 1,
+    pipeline_total: 1800,
+  },
+  jobs: {
+    query: '',
+    limit: 25,
+    next_cursor: 'cursor-2',
+    items: [
+      {
+        id: 'job-1',
+        customer_id: 'customer-1',
+        customer_name: 'Alice',
+        customer_address: '123 Main',
+        title: 'Kitchen',
+        description: null,
+        status: 'estimate_pending',
+        estimate_date: null,
+        estimate_sent_at: null,
+        scheduled_date: null,
+        completed_at: null,
+        version_count: 2,
+      },
+      {
+        id: 'job-2',
+        customer_id: 'customer-2',
+        customer_name: 'Bob',
+        customer_address: '456 Oak',
+        title: 'Garage',
+        description: null,
+        status: 'estimate_sent',
+        estimate_date: null,
+        estimate_sent_at: null,
+        scheduled_date: null,
+        completed_at: null,
+        version_count: 1,
+      },
+    ],
+  },
+  selected_job_id: 'job-1',
+  selected_job_versions: {
+    job_id: 'job-1',
+    total_versions: 2,
+    limit: 25,
+    next_cursor: null,
+    items: [
+      {
+        estimate_id: 'estimate-2',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Version B',
+        version_state: 'live',
+        version_kind: 'revision',
+        version_sort_order: 2,
+        job_title: 'Kitchen',
+        customer_name: 'Alice',
+        final_total: 1300,
+        updated_at: '2026-04-21T10:00:00.000Z',
+        created_at: '2026-04-20T10:00:00.000Z',
+        is_sent_estimate: true,
+      },
+      {
+        estimate_id: 'estimate-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Version A',
+        version_state: 'draft',
+        version_kind: 'standard',
+        version_sort_order: 1,
+        job_title: 'Kitchen',
+        customer_name: 'Alice',
+        final_total: 500,
+        updated_at: '2026-04-20T10:00:00.000Z',
+        created_at: '2026-04-19T10:00:00.000Z',
+        is_sent_estimate: false,
+      },
+    ],
+  },
 }
 
 describe('useQuotesHomePage', () => {
@@ -174,38 +130,54 @@ describe('useQuotesHomePage', () => {
     createQuoteVersion.mockReset()
     deleteQuoteVersion.mockReset()
     loadQuoteHomeBootstrap.mockReset()
+    loadQuoteHomeJobs.mockReset()
     loadQuoteHomeSearch.mockReset()
+    loadQuoteHomeSummary.mockReset()
     loadQuoteJobVersions.mockReset()
     loadQuoteHomeSearch.mockResolvedValue({
       query: '',
+      limit: 8,
       items: [],
     })
   })
 
-  it('loads bootstrap home data, selected-job versions, and server-driven search state', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
-    loadQuoteJobVersions.mockResolvedValue(job1VersionsPayload)
-    loadQuoteHomeSearch.mockResolvedValue({
-      query: 'revision',
+  it('builds the page state from the bounded bootstrap payload', async () => {
+    const { result } = renderHook(() => useQuotesHomePage(bootstrapPayload))
+
+    await waitFor(() => expect(result.current.feedback.loading).toBe(false))
+
+    expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    expect(result.current.jobList.hasMore).toBe(true)
+    expect(result.current.selectedJob.title).toBe('Kitchen')
+    expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
+      'estimate-2',
+      'estimate-1',
+    ])
+    expect(result.current.header.heroSummaryText).toBe(
+      '3 total versions · 1 drafts · 1 sent/awaiting · 1 live'
+    )
+  })
+
+  it('loads more jobs from the paged jobs endpoint', async () => {
+    loadQuoteHomeJobs.mockResolvedValue({
+      query: '',
+      limit: 25,
+      next_cursor: null,
       items: [
         {
-          estimate_id: 'estimate-2',
-          job_id: 'job-1',
-          customer_id: 'customer-1',
-          version_name: 'Version B',
-          version_state: 'live',
-          version_kind: 'revision',
-          job_title: 'Kitchen',
-          customer_name: 'Alice',
-          updated_at: '2026-04-21T10:00:00.000Z',
-          final_total: 1300,
-          is_sent_estimate: true,
+          ...bootstrapPayload.jobs.items[0],
+          id: 'job-3',
+          title: 'Exterior',
+          customer_id: 'customer-3',
+          customer_name: 'Casey',
+          version_count: 4,
         },
       ],
     })
 
-    const { result } = renderHook(() => useQuotesHomePage())
+    const { result } = renderHook(() => useQuotesHomePage(bootstrapPayload))
 
+<<<<<<< Updated upstream
     await waitFor(() => {
       expect(result.current.versionListVm.items.map((estimate) => estimate.id)).toEqual([
         'estimate-2',
@@ -233,15 +205,19 @@ describe('useQuotesHomePage', () => {
 
     expect(loadQuoteHomeSearch).toHaveBeenCalledWith('revision')
     expect(result.current.jobListVm.items.map((job) => job.id)).toEqual(['job-2'])
+=======
+    await act(async () => {
+      await result.current.actions.loadMoreJobs()
+    })
+
+    expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-1', 'job-2', 'job-3'])
+>>>>>>> Stashed changes
   })
 
-  it('resets version fields when the selected job changes and creates a version', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
-    loadQuoteJobVersions
-      .mockResolvedValueOnce(job1VersionsPayload)
-      .mockResolvedValueOnce(job2VersionsPayload)
+  it('creates a version under the selected job', async () => {
     createQuoteVersion.mockResolvedValue({ id: 'estimate-99' })
 
+<<<<<<< Updated upstream
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
@@ -250,10 +226,14 @@ describe('useQuotesHomePage', () => {
         'estimate-1',
       ])
     })
+=======
+    const { result } = renderHook(() => useQuotesHomePage(bootstrapPayload))
+>>>>>>> Stashed changes
 
     act(() => {
-      result.current.actions.setVersionName('  Custom Revision  ')
+      result.current.actions.setVersionName('  Kitchen Custom  ')
       result.current.actions.setVersionKind('revision')
+<<<<<<< Updated upstream
       result.current.actions.setSelectedJobId('job-2')
     })
 
@@ -263,6 +243,8 @@ describe('useQuotesHomePage', () => {
     act(() => {
       result.current.actions.setVersionName('  Garage Custom  ')
       result.current.actions.setVersionKind('split')
+=======
+>>>>>>> Stashed changes
     })
 
     await act(async () => {
@@ -270,14 +252,15 @@ describe('useQuotesHomePage', () => {
     })
 
     expect(createQuoteVersion).toHaveBeenCalledWith({
-      job_id: 'job-2',
-      customer_id: 'customer-2',
-      version_kind: 'split',
-      version_name: 'Garage Custom',
+      job_id: 'job-1',
+      customer_id: 'customer-1',
+      version_kind: 'revision',
+      version_name: 'Kitchen Custom',
     })
     expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-99')
   })
 
+<<<<<<< Updated upstream
   it('surfaces an error when creating without a selected job', async () => {
     loadQuoteHomeBootstrap.mockResolvedValue({
       summary: summaryPayload,
@@ -494,8 +477,12 @@ describe('useQuotesHomePage', () => {
     loadQuoteJobVersions
       .mockResolvedValueOnce(job1VersionsPayload)
       .mockResolvedValueOnce(refreshedJob1VersionsPayload)
+=======
+  it('searches versions independently from the paged job rail', async () => {
+>>>>>>> Stashed changes
     loadQuoteHomeSearch.mockResolvedValue({
       query: 'revision',
+      limit: 8,
       items: [
         {
           estimate_id: 'estimate-2',
@@ -513,6 +500,7 @@ describe('useQuotesHomePage', () => {
       ],
     })
 
+<<<<<<< Updated upstream
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
@@ -521,11 +509,15 @@ describe('useQuotesHomePage', () => {
         'estimate-1',
       ])
     })
+=======
+    const { result } = renderHook(() => useQuotesHomePage(bootstrapPayload))
+>>>>>>> Stashed changes
 
     act(() => {
       result.current.actions.setSearchQuery('revision')
     })
 
+<<<<<<< Updated upstream
     await waitFor(
       () => {
         expect(result.current.headerVm.searchResults).toHaveLength(1)
@@ -565,5 +557,13 @@ describe('useQuotesHomePage', () => {
     expect(result.current.selectedJobVm.title).toBeNull()
     expect(result.current.versionListVm.items).toEqual([])
     expect(result.current.createVm.canCreate).toBe(false)
+=======
+    await waitFor(() => expect(result.current.header.searchResults).toHaveLength(1), {
+      timeout: 1500,
+    })
+
+    expect(result.current.header.searchResults[0]?.id).toBe('estimate-2')
+    expect(result.current.jobList.items).toHaveLength(2)
+>>>>>>> Stashed changes
   })
 })

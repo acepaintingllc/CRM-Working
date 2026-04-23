@@ -1,18 +1,11 @@
 'use client'
 
-import type { CSSProperties } from 'react'
 import type {
   EstimateV2EditorPageVm,
   EstimateV2EditorSaveVm,
   EstimateV2EditorSummaryVm,
 } from '../_state/estimateV2EditorTypes'
-
-type FooterStyles = {
-  footer: CSSProperties
-  mono: CSSProperties
-  button: CSSProperties
-  buttonPrimary: CSSProperties
-}
+import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 
 export function EstimateV2EditorFooterBar({
   styles,
@@ -20,7 +13,7 @@ export function EstimateV2EditorFooterBar({
   saveVm,
   summaryVm,
 }: {
-  styles: FooterStyles
+  styles: EstimateV2EditorPageStyles
   pageVm: EstimateV2EditorPageVm
   saveVm: EstimateV2EditorSaveVm
   summaryVm: EstimateV2EditorSummaryVm

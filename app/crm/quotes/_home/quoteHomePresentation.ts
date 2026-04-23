@@ -1,13 +1,11 @@
+import type { QuoteHomeSearchResultReadModel, QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
 import type {
-  QuoteHomeSummaryReadModel,
-} from '@/lib/quotes/collectionData'
-import type {
-  QuoteHomeFeedbackVm,
   NavItem,
-  QuoteHomeJob,
-  QuoteHomeJobVersion,
-  QuoteHomeJobListItemVm,
   QuoteHomeFailureSource,
+  QuoteHomeFeedbackVm,
+  QuoteHomeJob,
+  QuoteHomeJobListItemVm,
+  QuoteHomeJobVersion,
   QuoteHomeVersionItemVm,
   QuotesHomeDeleteDialogVm,
   QuotesHomeSelectedJobVm,
@@ -30,6 +28,7 @@ const HOME_FAILURE_MESSAGES: Record<'bootstrap', string> = {
 
 const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
   bootstrap: 'bootstrap',
+  jobs: 'jobs',
   jobVersions: 'job versions',
   create: 'quote creation',
   delete: 'quote deletion',
@@ -80,7 +79,7 @@ export function estimateWorkspaceHref(estimateId: string) {
   return `/crm/quotes/${estimateId}`
 }
 
-export function buildSearchResultVm(estimate: QuoteHomeJobVersion): SearchResultVm {
+export function buildSearchResultVm(estimate: QuoteHomeSearchResultReadModel): SearchResultVm {
   return {
     id: estimate.estimate_id,
     href: estimateWorkspaceHref(estimate.estimate_id),
@@ -96,6 +95,7 @@ export function buildHomeLoadFailureDetail(source: 'bootstrap', message: string)
 
 export function buildQuotesHomeFeedbackVm(params: {
   homeFailures: Array<{ source: 'bootstrap'; message: string }>
+  jobsError: string | null
   jobVersionsError: string | null
   createError: string | null
   deleteError: string | null
@@ -104,6 +104,11 @@ export function buildQuotesHomeFeedbackVm(params: {
     buildHomeLoadFailureDetail(failure.source, failure.message)
   )
   const sources = params.homeFailures.map((failure) => failure.source as QuoteHomeFailureSource)
+
+  if (params.jobsError) {
+    details.push(`Job list failed to load. ${params.jobsError}`)
+    sources.push('jobs')
+  }
 
   if (params.jobVersionsError) {
     details.push(
@@ -127,10 +132,19 @@ export function buildQuotesHomeFeedbackVm(params: {
   if (details.length === 0) return null
 
   const actionError = Boolean(params.createError || params.deleteError)
+<<<<<<< Updated upstream
   const title =
     actionError
       ? 'Quote action failed'
       : params.jobVersionsError
+=======
+  const actionWarning = Boolean(params.actionWarning)
+  const title = actionError
+    ? 'Quote action failed'
+    : actionWarning
+      ? 'Quote action completed with refresh errors'
+      : params.jobsError || params.jobVersionsError
+>>>>>>> Stashed changes
         ? 'Quote home loaded with errors'
         : params.homeFailures.length > 1
           ? 'Some quote home data failed to load'
@@ -152,14 +166,13 @@ export function buildHeroSummaryText(summary: QuoteHomeSummaryReadModel | null) 
 
 export function buildQuoteHomeJobListItemVm(
   job: QuoteHomeJob,
-  versionCount: number,
   options?: { mobile?: boolean; selectedJobId?: string }
 ): QuoteHomeJobListItemVm {
   return {
     id: job.id,
     title: job.title,
     customerName: job.customer_name ?? 'Unknown customer',
-    versionCountLabel: `${versionCount} version${versionCount === 1 ? '' : 's'}`,
+    versionCountLabel: `${job.version_count} version${job.version_count === 1 ? '' : 's'}`,
     href: options?.mobile ? `/crm/quotes/create?job=${job.id}` : undefined,
     isSelected: options?.selectedJobId === job.id,
   }
@@ -173,9 +186,7 @@ export function buildQuotesHomeSelectedJobVm(
   if (!selectedJob) {
     return {
       loading,
-      emptyMessage: loading
-        ? null
-        : 'Select a job from the left to view versions and create the next one.',
+      emptyMessage: loading ? null : 'Select a job from the left to view versions and create the next one.',
       title: null,
       customerLine: null,
       jobHref: null,
@@ -206,10 +217,7 @@ export function buildQuoteHomeVersionItemVm(
   return {
     id: estimate.estimate_id,
     title: estimate.version_name || 'Quote Version',
-    total:
-      estimate.final_total != null && estimate.final_total > 0
-        ? formatCurrency(estimate.final_total)
-        : null,
+    total: estimate.final_total != null && estimate.final_total > 0 ? formatCurrency(estimate.final_total) : null,
     meta: `${formatVersionState(estimate.version_state)} / ${formatVersionState(
       estimate.version_kind
     )}${QUOTE_META_SEPARATOR}Updated ${formatDateTime(estimate.updated_at)}`,
@@ -218,19 +226,13 @@ export function buildQuoteHomeVersionItemVm(
   }
 }
 
-export function buildQuotesHomeVersionHeading(
-  selectedJob: QuoteHomeJob | null,
-  versions: QuoteHomeJobVersion[]
-) {
+export function buildQuotesHomeVersionHeading(selectedJob: QuoteHomeJob | null, versions: QuoteHomeJobVersion[]) {
   return selectedJob
-    ? `${versions.length} version${versions.length === 1 ? '' : 's'} under this job`
+    ? `${selectedJob.title} · ${versions.length} loaded / ${selectedJob.version_count} total`
     : 'Pick a job first'
 }
 
-export function buildQuotesHomeVersionEmptyMessage(
-  selectedJob: QuoteHomeJob | null,
-  versions: QuoteHomeJobVersion[]
-) {
+export function buildQuotesHomeVersionEmptyMessage(selectedJob: QuoteHomeJob | null, versions: QuoteHomeJobVersion[]) {
   if (!selectedJob) return 'Versions will appear here once a job is selected.'
   if (versions.length === 0) {
     return 'No quote versions exist under this job yet. Use the panel on the right to create the first one.'
@@ -262,10 +264,7 @@ export function buildSummaryCards(summary: QuoteHomeSummaryReadModel | null): Su
     {
       label: 'Drafts',
       value: String(nextSummary.draft_count),
-      subtext:
-        nextSummary.draft_count === 1
-          ? '1 draft version'
-          : `${nextSummary.draft_count} draft versions`,
+      subtext: nextSummary.draft_count === 1 ? '1 draft version' : `${nextSummary.draft_count} draft versions`,
     },
     {
       label: 'Sent / Awaiting',
@@ -278,8 +277,7 @@ export function buildSummaryCards(summary: QuoteHomeSummaryReadModel | null): Su
     {
       label: 'Live Versions',
       value: String(nextSummary.live_count),
-      subtext:
-        nextSummary.live_count === 1 ? '1 live version' : `${nextSummary.live_count} live versions`,
+      subtext: nextSummary.live_count === 1 ? '1 live version' : `${nextSummary.live_count} live versions`,
       valueColor: 'var(--v2-green-2)',
       subtextColor: 'var(--v2-green-2)',
     },

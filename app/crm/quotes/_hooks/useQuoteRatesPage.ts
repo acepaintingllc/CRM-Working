@@ -1,5 +1,6 @@
 'use client'
 
+<<<<<<< Updated upstream
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
 import { valueFromRatesFlagsRow } from '@/lib/quotes/ratesFlagsForm'
 import type { RatesFlagsTab } from '@/types/estimator/ratesFlags'
@@ -10,6 +11,13 @@ import { useQuoteRatesEditorState } from './useQuoteRatesEditorState'
 import { useQuoteRatesFilters } from './useQuoteRatesFilters'
 import { useQuoteRatesPersistence } from './useQuoteRatesPersistence'
 import { useQuoteRatesReload } from './useQuoteRatesReload'
+=======
+import {
+  useQuoteRatesPageController,
+} from './quoteRatesPageController'
+import { buildQuoteRatesPageVm } from './quoteRatesPageVm'
+
+>>>>>>> Stashed changes
 export {
   FLAGS_SECTIONS,
   RATE_SECTIONS,
@@ -20,6 +28,7 @@ export {
   type RoomDefaultsSectionKey,
   type StatusFilter,
 } from './quoteRatesPageConfig'
+<<<<<<< Updated upstream
 
 export type QuoteRatesFiltersVm = {
   search: string
@@ -71,6 +80,14 @@ export type QuoteRatesDiscardVm = {
     | 'archiveOrReactivate'
     | null
 }
+=======
+export type {
+  QuoteRatesDiscardVm,
+  QuoteRatesEditorVm,
+  QuoteRatesFiltersVm,
+  QuoteRatesTableVm,
+} from './quoteRatesPageVm'
+>>>>>>> Stashed changes
 
 export type QuoteRatesActions = {
   setActiveTab: ReturnType<typeof useQuoteRatesControllerActions>['setActiveTab']
@@ -94,6 +111,7 @@ export type QuoteRatesActions = {
 }
 
 export function useQuoteRatesPage() {
+<<<<<<< Updated upstream
   const resource = useQuoteRatesData()
   const feedback = useDenseQuoteAdminFeedback()
 
@@ -175,6 +193,20 @@ export function useQuoteRatesPage() {
       canSave: uiState.canSave,
       formatDraftValue: editor.formatDraftValue,
     } satisfies QuoteRatesEditorVm,
+=======
+  const controller = useQuoteRatesPageController()
+  const { resource, workflowState, derived } = controller
+  const pageVm = buildQuoteRatesPageVm({ resource, workflowState, derived })
+
+  return {
+    resource,
+    valueFromRow: controller.valueFromRow,
+    workflowVm: pageVm.workflowVm,
+    uiState: pageVm.uiState,
+    filtersVm: pageVm.filtersVm,
+    tableVm: pageVm.tableVm,
+    editorVm: pageVm.editorVm,
+>>>>>>> Stashed changes
     actions: {
       setActiveTab: controllerActions.setActiveTab,
       setRateSection: controllerActions.setRateSection,
@@ -195,6 +227,10 @@ export function useQuoteRatesPage() {
       cancelDiscard: controllerActions.cancelDiscard,
       updateDraftValue: controllerActions.updateDraftValue,
     } satisfies QuoteRatesActions,
+<<<<<<< Updated upstream
     discardVm: controllerActions.discardVm satisfies QuoteRatesDiscardVm,
+=======
+    discardVm: pageVm.discardVm,
+>>>>>>> Stashed changes
   }
 }

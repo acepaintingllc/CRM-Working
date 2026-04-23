@@ -11,6 +11,7 @@ type Props = {
   renderMobile?: boolean
   onJobQueryChange: (value: string) => void
   onSelectJob: (jobId: string) => void
+  onLoadMore?: () => void
 }
 
 export function QuotesHomeJobList({
@@ -19,6 +20,7 @@ export function QuotesHomeJobList({
   renderMobile = true,
   onJobQueryChange,
   onSelectJob,
+  onLoadMore,
 }: Props) {
   return (
     <>
@@ -58,6 +60,24 @@ export function QuotesHomeJobList({
                 </div>
               </Link>
             ))}
+            {vm.hasMore ? (
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={vm.loadingMore}
+                style={{
+                  borderRadius: 12,
+                  border: '1px solid var(--v2-line)',
+                  background: '#111111',
+                  color: 'var(--v2-ink)',
+                  padding: '12px 14px',
+                  fontWeight: 700,
+                  cursor: vm.loadingMore ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {vm.loadingMore ? 'Loading more jobs...' : 'Load more jobs'}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -190,6 +210,25 @@ export function QuotesHomeJobList({
                 </div>
               </button>
             ))}
+
+            {vm.hasMore ? (
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={vm.loadingMore}
+                style={{
+                  borderRadius: 12,
+                  border: '1px solid var(--v2-line)',
+                  background: '#111111',
+                  color: 'var(--v2-ink)',
+                  padding: '12px 14px',
+                  fontWeight: 700,
+                  cursor: vm.loadingMore ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {vm.loadingMore ? 'Loading more jobs...' : 'Load more jobs'}
+              </button>
+            ) : null}
           </div>
         </section>
       ) : null}

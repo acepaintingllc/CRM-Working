@@ -1,10 +1,9 @@
 'use client'
 
-import type { CSSProperties, Dispatch, MutableRefObject, SetStateAction } from 'react'
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import {
   ScopeAccordionList,
   ScopeSummaryChips,
-  type SharedStyles,
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2CeilingsSection } from './EstimateV2CeilingsSection'
 import { EstimateV2CeilingsSectionBody } from './EstimateV2CeilingsSectionBody'
@@ -19,13 +18,7 @@ import type {
   EstimateV2EditorTrimVm,
   EstimateV2EditorWallsVm,
 } from '../_state/estimateV2EditorTypes'
-
-type EditorStyles = SharedStyles & {
-  panel: CSSProperties
-  scopePill: CSSProperties
-  button: CSSProperties
-  input: CSSProperties
-}
+import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 
 export function EstimateV2EditorScopeSectionStack({
   styles,
@@ -49,7 +42,7 @@ export function EstimateV2EditorScopeSectionStack({
   setOpenTrimSection,
   toDisplayNumber,
 }: {
-  styles: EditorStyles
+  styles: EstimateV2EditorPageStyles
   roomVm: EstimateV2EditorRoomVm
   summaryVm: EstimateV2EditorSummaryVm
   wallsVm: EstimateV2EditorWallsVm

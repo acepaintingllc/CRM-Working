@@ -25,3 +25,7 @@ export function useQuoteProductsData({ query }: Options) {
     reloadKey,
   })
 }
+
+export const useQuoteProductsResourceAdapter = useQuoteProductsData
+
+export type QuoteProductsResourceAdapter = ReturnType<typeof useQuoteProductsResourceAdapter>

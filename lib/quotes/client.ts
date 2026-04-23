@@ -18,20 +18,39 @@ export async function loadQuoteHomeSummary<T>() {
   return loadData<T>('/api/quotes/home/summary', { cache: 'no-store' })
 }
 
-export async function loadQuoteHomeJobCounts<T>() {
-  return loadData<T>('/api/quotes/home/job-counts', { cache: 'no-store' })
-}
-
 export async function loadQuoteHomeBootstrap<T>() {
   return loadData<T>('/api/quotes/home/bootstrap', { cache: 'no-store' })
 }
 
-export async function loadQuoteHomeSearch<T>(query: string) {
-  return loadData<T>(`/api/quotes/home/search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
+export async function loadQuoteHomeJobs<T>(options?: {
+  query?: string
+  cursor?: string | null
+  limit?: number
+}) {
+  const params = new URLSearchParams()
+  if (options?.query?.trim()) params.set('q', options.query.trim())
+  if (options?.cursor) params.set('cursor', options.cursor)
+  if (options?.limit) params.set('limit', String(options.limit))
+  const suffix = params.toString() ? `?${params.toString()}` : ''
+  return loadData<T>(`/api/quotes/home/jobs${suffix}`, { cache: 'no-store' })
 }
 
-export async function loadQuoteJobVersions<T>(jobId: string) {
-  return loadData<T>(`/api/quotes/home/jobs/${encodeURIComponent(jobId)}/versions`, {
+export async function loadQuoteHomeSearch<T>(query: string, options?: { limit?: number }) {
+  const params = new URLSearchParams()
+  params.set('q', query)
+  if (options?.limit) params.set('limit', String(options.limit))
+  return loadData<T>(`/api/quotes/home/search?${params.toString()}`, { cache: 'no-store' })
+}
+
+export async function loadQuoteJobVersions<T>(
+  jobId: string,
+  options?: { cursor?: string | null; limit?: number }
+) {
+  const params = new URLSearchParams()
+  if (options?.cursor) params.set('cursor', options.cursor)
+  if (options?.limit) params.set('limit', String(options.limit))
+  const suffix = params.toString() ? `?${params.toString()}` : ''
+  return loadData<T>(`/api/quotes/home/jobs/${encodeURIComponent(jobId)}/versions${suffix}`, {
     cache: 'no-store',
   })
 }

@@ -19,3 +19,5 @@ export function useQuoteRatesData() {
       loadError instanceof Error ? loadError.message : 'Failed to load rates and flags.',
   })
 }
+
+export type QuoteRatesDataResource = ReturnType<typeof useQuoteRatesData>

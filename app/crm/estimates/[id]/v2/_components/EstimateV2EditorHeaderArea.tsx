@@ -7,14 +7,7 @@ import type {
   EstimateV2EditorHeaderVm,
   EstimateV2EditorSaveVm,
 } from '../_state/estimateV2EditorTypes'
-import type { CSSProperties } from 'react'
-
-type HeaderAreaStyles = {
-  header: CSSProperties
-  button: CSSProperties
-  buttonPrimary: CSSProperties
-  mono: CSSProperties
-}
+import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 
 export function EstimateV2EditorHeaderArea({
   styles,
@@ -24,7 +17,7 @@ export function EstimateV2EditorHeaderArea({
   saveVm,
   confirmNavigation,
 }: {
-  styles: HeaderAreaStyles
+  styles: EstimateV2EditorPageStyles
   estimateId?: string
   routeFamily: EstimateRouteFamily
   headerVm: EstimateV2EditorHeaderVm
