@@ -2,17 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   requireSessionUserOrg: vi.fn(),
+  readJsonBody: vi.fn(),
   loadDecoratedEstimateCollectionRows: vi.fn(),
   loadDecoratedEstimateRowsForJob: vi.fn(),
   loadDecoratedRecentEstimateRows: vi.fn(),
   loadQuoteHomeJobVersionCounts: vi.fn(),
   loadQuoteHomeSummary: vi.fn(),
   searchDecoratedEstimateRows: vi.fn(),
+  rpc: vi.fn(),
 }))
 
 vi.mock('@/lib/server/apiRoute', () => ({
   requireSessionUserOrg: mocks.requireSessionUserOrg,
-  readJsonBody: vi.fn(),
+  readJsonBody: mocks.readJsonBody,
   resolveParams: (context: { params: unknown }) => Promise.resolve(context.params),
   readUuidParam: (value: unknown, label: string) => {
     const text = String(value ?? '')
@@ -38,7 +40,15 @@ vi.mock('@/lib/server/estimateCollectionData', () => ({
   searchDecoratedEstimateRows: mocks.searchDecoratedEstimateRows,
 }))
 
+vi.mock('@/lib/server/org', () => ({
+  supabaseAdmin: {
+    rpc: mocks.rpc,
+  },
+}))
+
 import {
+  estimateCollectionCopy,
+  handleEstimateCollectionRoutePost,
   handleEstimateHomeJobCountsRouteGet,
   handleEstimateHomeRecentActivityRouteGet,
   handleEstimateHomeSearchRouteGet,
@@ -113,12 +123,14 @@ const jobCounts = {
 describe('estimate collection routes', () => {
   beforeEach(() => {
     mocks.requireSessionUserOrg.mockReset()
+    mocks.readJsonBody.mockReset()
     mocks.loadDecoratedEstimateCollectionRows.mockReset()
     mocks.loadDecoratedEstimateRowsForJob.mockReset()
     mocks.loadDecoratedRecentEstimateRows.mockReset()
     mocks.loadQuoteHomeJobVersionCounts.mockReset()
     mocks.loadQuoteHomeSummary.mockReset()
     mocks.searchDecoratedEstimateRows.mockReset()
+    mocks.rpc.mockReset()
 
     mocks.requireSessionUserOrg.mockResolvedValue({
       ok: true,
@@ -143,6 +155,15 @@ describe('estimate collection routes', () => {
     mocks.loadDecoratedEstimateRowsForJob.mockResolvedValue({
       ok: true,
       data: rows,
+    })
+    mocks.readJsonBody.mockResolvedValue({
+      ok: true,
+      value: {
+        job_id: '11111111-1111-4111-8111-111111111111',
+        customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        version_kind: 'revision',
+        version_name: 'Kitchen Revision 2',
+      },
     })
   })
 
@@ -240,6 +261,137 @@ describe('estimate collection routes', () => {
         total_versions: 0,
         items: [],
       },
+    })
+  })
+
+  it('creates versions through the transactional RPC path', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ok: true,
+        id: 'estimate-new',
+        estimate: {
+          id: 'estimate-new',
+          job_id: '11111111-1111-4111-8111-111111111111',
+          customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          status: 'draft',
+          version_name: 'Kitchen Revision 2',
+          version_state: 'draft',
+          version_kind: 'revision',
+          version_sort_order: 2,
+          created_at: '2026-04-23T16:00:00.000Z',
+          updated_at: '2026-04-23T16:00:00.000Z',
+        },
+      },
+      error: null,
+    })
+
+    const response = await handleEstimateCollectionRoutePost(
+      new Request('http://localhost/api/estimates', { method: 'POST' }),
+      estimateCollectionCopy
+    )
+
+    expect(mocks.rpc).toHaveBeenCalledWith('create_estimate_version', {
+      p_org_id: 'org-1',
+      p_user_id: 'user-1',
+      p_job_id: '11111111-1111-4111-8111-111111111111',
+      p_customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      p_version_state: 'draft',
+      p_version_kind: 'revision',
+      p_version_name: 'Kitchen Revision 2',
+      p_default_version_label: 'Estimate Version',
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        id: 'estimate-new',
+        estimate: expect.objectContaining({
+          id: 'estimate-new',
+          version_sort_order: 2,
+        }),
+      },
+      notice: 'Estimate version created.',
+    })
+  })
+
+  it('returns structured 404 failures from the transactional RPC without partial success', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ok: false,
+        error_kind: 'not_found',
+        error_message: 'Job not found',
+      },
+      error: null,
+    })
+
+    const response = await handleEstimateCollectionRoutePost(
+      new Request('http://localhost/api/estimates', { method: 'POST' }),
+      estimateCollectionCopy
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({ error: 'Job not found' })
+  })
+
+  it('maps transactional initializer failures to server errors', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ok: false,
+        error_kind: 'server_error',
+        error_message: 'Failed to initialize estimate_jobsettings',
+      },
+      error: null,
+    })
+
+    const response = await handleEstimateCollectionRoutePost(
+      new Request('http://localhost/api/estimates', { method: 'POST' }),
+      estimateCollectionCopy
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to initialize estimate_jobsettings',
+    })
+  })
+
+  it('maps pricing policy initialization failures to server errors', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ok: false,
+        error_kind: 'server_error',
+        error_message: 'Failed to initialize estimate_pricing_policies',
+      },
+      error: null,
+    })
+
+    const response = await handleEstimateCollectionRoutePost(
+      new Request('http://localhost/api/estimates', { method: 'POST' }),
+      estimateCollectionCopy
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to initialize estimate_pricing_policies',
+    })
+  })
+
+  it('maps bounded ordering collisions to 409 conflicts', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ok: false,
+        error_kind: 'conflict',
+        error_message: 'Another version was created at the same time. Please retry.',
+      },
+      error: null,
+    })
+
+    const response = await handleEstimateCollectionRoutePost(
+      new Request('http://localhost/api/estimates', { method: 'POST' }),
+      estimateCollectionCopy
+    )
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Another version was created at the same time. Please retry.',
     })
   })
 })
