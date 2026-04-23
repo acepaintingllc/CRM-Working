@@ -328,7 +328,8 @@ describe('useQuotesHomePage', () => {
     })
 
     expect(createQuoteVersion).not.toHaveBeenCalled()
-    expect(result.current.feedbackVm.error).toBe('Select a job before creating a version.')
+    expect(result.current.feedbackVm.title).toBe('Quote action failed')
+    expect(result.current.feedbackVm.details).toEqual(['Select a job before creating a version.'])
   })
 
   it('refreshes summary, counts, and selected-job versions after delete', async () => {
@@ -464,8 +465,153 @@ describe('useQuotesHomePage', () => {
     })
 
     expect(result.current.summaryCards[0].value).toBe('1')
-    expect(result.current.feedbackVm.error).toBe('counts failed')
+    expect(result.current.feedbackVm.title).toBe('Quote home job counts failed to load')
+    expect(result.current.feedbackVm.details).toEqual(['Job counts failed to load. counts failed'])
     expect(result.current.jobListVm.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+  })
+
+  it('surfaces search errors separately from home partial failures and retries search independently', async () => {
+    loadQuoteHomeSummary.mockResolvedValue(summaryPayload)
+    loadQuoteHomeJobCounts.mockRejectedValue(new Error('counts failed'))
+    loadQuoteJobVersions.mockResolvedValue(job1VersionsPayload)
+    loadQuoteHomeSearch
+      .mockRejectedValueOnce(new Error('search failed'))
+      .mockResolvedValueOnce({
+        query: 'revision',
+        items: [
+          {
+            estimate_id: 'estimate-2',
+            job_id: 'job-1',
+            customer_id: 'customer-1',
+            version_name: 'Version B',
+            version_state: 'live',
+            version_kind: 'revision',
+            job_title: 'Kitchen',
+            customer_name: 'Alice',
+            updated_at: '2026-04-21T10:00:00.000Z',
+            final_total: 1300,
+            is_sent_estimate: true,
+          },
+        ],
+      })
+    fetchJobList.mockResolvedValue(jobsPayload)
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.versionListVm.items.map((estimate) => estimate.id)).toEqual([
+        'estimate-2',
+        'estimate-1',
+      ])
+    })
+
+    act(() => {
+      result.current.actions.setSearchQuery('revision')
+    })
+
+    await waitFor(
+      () => {
+        expect(result.current.headerVm.searchErrorMessage).toBe('search failed')
+      },
+      { timeout: 1500 }
+    )
+
+    expect(result.current.feedbackVm.details).toEqual(['Job counts failed to load. counts failed'])
+
+    await act(async () => {
+      result.current.actions.retrySearch()
+    })
+
+    await waitFor(
+      () => {
+        expect(result.current.headerVm.searchResults.map((estimate) => estimate.id)).toEqual([
+          'estimate-2',
+        ])
+      },
+      { timeout: 1500 }
+    )
+
+    expect(loadQuoteHomeSummary).toHaveBeenCalledTimes(1)
+    expect(loadQuoteHomeJobCounts).toHaveBeenCalledTimes(1)
+    expect(loadQuoteHomeSearch).toHaveBeenCalledTimes(2)
+    expect(result.current.headerVm.searchErrorMessage).toBeNull()
+  })
+
+  it('keeps version-load failures separate from search and home failures', async () => {
+    loadQuoteHomeSummary.mockResolvedValue(summaryPayload)
+    loadQuoteHomeJobCounts.mockResolvedValue(jobCountsPayload)
+    loadQuoteJobVersions.mockRejectedValue(new Error('versions failed'))
+    fetchJobList.mockResolvedValue(jobsPayload)
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.feedbackVm.loading).toBe(false)
+    })
+
+    expect(result.current.feedbackVm.title).toBe('Quote home loaded with errors')
+    expect(result.current.feedbackVm.details).toContain('Job versions failed to load. versions failed')
+    expect(result.current.headerVm.searchErrorMessage).toBeNull()
+  })
+
+  it('page refresh retries home slices and versions without rerunning search', async () => {
+    loadQuoteHomeSummary
+      .mockResolvedValueOnce(summaryPayload)
+      .mockResolvedValueOnce(refreshedSummaryPayload)
+    loadQuoteHomeJobCounts
+      .mockResolvedValueOnce(jobCountsPayload)
+      .mockResolvedValueOnce(refreshedJobCountsPayload)
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(job1VersionsPayload)
+      .mockResolvedValueOnce(refreshedJob1VersionsPayload)
+    loadQuoteHomeSearch.mockResolvedValue({
+      query: 'revision',
+      items: [
+        {
+          estimate_id: 'estimate-2',
+          job_id: 'job-1',
+          customer_id: 'customer-1',
+          version_name: 'Version B',
+          version_state: 'live',
+          version_kind: 'revision',
+          job_title: 'Kitchen',
+          customer_name: 'Alice',
+          updated_at: '2026-04-21T10:00:00.000Z',
+          final_total: 1300,
+          is_sent_estimate: true,
+        },
+      ],
+    })
+    fetchJobList.mockResolvedValue(jobsPayload)
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.versionListVm.items.map((estimate) => estimate.id)).toEqual([
+        'estimate-2',
+        'estimate-1',
+      ])
+    })
+
+    act(() => {
+      result.current.actions.setSearchQuery('revision')
+    })
+
+    await waitFor(
+      () => {
+        expect(result.current.headerVm.searchResults).toHaveLength(1)
+      },
+      { timeout: 1500 }
+    )
+
+    await act(async () => {
+      await result.current.actions.refresh()
+    })
+
+    expect(loadQuoteHomeSummary).toHaveBeenCalledTimes(2)
+    expect(loadQuoteHomeJobCounts).toHaveBeenCalledTimes(2)
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
+    expect(loadQuoteHomeSearch).toHaveBeenCalledTimes(1)
   })
 
   it('preserves empty states when there are no eligible jobs or quote versions', async () => {

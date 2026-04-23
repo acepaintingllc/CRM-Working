@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs'
+import path from 'path'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import QuoteWorkspacePage from '../page'
@@ -44,7 +46,39 @@ vi.mock('@/app/crm/estimates/[id]/send/sendEstimateClient', () => ({
   ),
 }))
 
+function readSource(relativePath: string) {
+  return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
+}
+
+function getImportSpecifiers(source: string) {
+  return Array.from(source.matchAll(/from\s+['"]([^'"]+)['"]/g), (match) => match[1]).sort()
+}
+
 describe('quote route aliases', () => {
+  it('keeps quote route files as thin composition layers over canonical estimate modules', () => {
+    expect(
+      getImportSpecifiers(readSource('app/crm/quotes/[id]/page.tsx'))
+    ).toEqual([
+      '@/app/crm/estimates/[id]/estimateRouteFamily',
+      '@/app/crm/estimates/[id]/v2/_components/EstimateV2EditorPageContent',
+      '@/app/crm/estimates/[id]/v2/_components/EstimateV2ErrorBoundary',
+    ])
+
+    expect(
+      getImportSpecifiers(readSource('app/crm/quotes/[id]/summary/page.tsx'))
+    ).toEqual([
+      '@/app/crm/estimates/[id]/estimateRouteFamily',
+      '@/app/crm/estimates/[id]/v2/summary/_components/EstimateV2SummaryPageContent',
+    ])
+
+    expect(
+      getImportSpecifiers(readSource('app/crm/quotes/[id]/send/page.tsx'))
+    ).toEqual([
+      '@/app/crm/estimates/[id]/estimateRouteFamily',
+      '@/app/crm/estimates/[id]/send/sendEstimateClient',
+    ])
+  })
+
   it('mounts the canonical estimate v2 workspace content', async () => {
     render(await QuoteWorkspacePage({ params: { id: 'estimate-1' } }))
     expect(screen.getByText('editor:estimate-1:/crm/quotes/estimate-1/summary')).toBeTruthy()

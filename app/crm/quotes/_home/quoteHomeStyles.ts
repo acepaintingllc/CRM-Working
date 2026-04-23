@@ -170,6 +170,35 @@ export const S: Record<string, CSSProperties> = {
     textDecoration: 'none',
     background: 'rgba(255,255,255,0.02)',
   },
+  searchStatusPanel: {
+    padding: 14,
+    borderRadius: 10,
+    border: '1px solid var(--v2-line)',
+    background: 'rgba(255,255,255,0.02)',
+    display: 'grid',
+    gap: 10,
+  },
+  searchStatusTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: 'var(--v2-ink)',
+  },
+  searchStatusText: {
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: 'var(--v2-ink-3)',
+  },
+  searchRetryButton: {
+    justifySelf: 'start',
+    padding: '9px 12px',
+    borderRadius: 10,
+    border: '1px solid rgba(134,239,172,0.24)',
+    background: 'rgba(74,222,128,0.08)',
+    color: '#b7f3c9',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
   eyebrow: {
     fontFamily: 'var(--v2-mono)',
     fontSize: 11,
@@ -329,4 +358,3 @@ export const S: Record<string, CSSProperties> = {
     marginBottom: 8,
   },
 }
-

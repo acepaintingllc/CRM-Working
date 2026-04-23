@@ -18,6 +18,8 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateProductsRoutePost: vi.fn(),
   handleEstimateProductRoutePatch: vi.fn(),
   handleEstimateProductRouteDelete: vi.fn(),
+  loadPublicEstimateByToken: vi.fn(),
+  markPublicEstimateViewed: vi.fn(),
 }))
 
 vi.mock('@/lib/server/estimateResourceRoutes', () => ({
@@ -67,11 +69,18 @@ vi.mock('@/lib/server/estimateProductRoutes', () => ({
   handleEstimateProductRouteDelete: routeHandlerMocks.handleEstimateProductRouteDelete,
 }))
 
+vi.mock('@/lib/server/estimatePublicPortal', () => ({
+  loadPublicEstimateByToken: routeHandlerMocks.loadPublicEstimateByToken,
+  markPublicEstimateViewed: routeHandlerMocks.markPublicEstimateViewed,
+}))
+
 import { GET as getEstimateCustomerSend, POST as postEstimateCustomerSend, PUT as putEstimateCustomerSend } from '../estimates/[id]/customer-send/route'
+import { GET as getEstimatePublic } from '../estimate-public/[token]/route'
 import { DELETE as deleteEstimate } from '../estimates/[id]/route'
 import { GET as getEstimateVersion, POST as postEstimateVersion } from '../estimates/route'
 import { DELETE as deleteEstimateProduct, PATCH as patchEstimateProduct } from '../estimates/v2/products/[id]/route'
 import { GET as getEstimateProducts, POST as postEstimateProducts } from '../estimates/v2/products/route'
+import { GET as getQuotePublic } from '../quote-public/[token]/route'
 import { DELETE as deleteQuote } from '../quotes/[id]/route'
 import { GET as getQuoteCustomerSend, POST as postQuoteCustomerSend, PUT as putQuoteCustomerSend } from '../quotes/[id]/customer-send/route'
 import { GET as getQuoteHomeJobCounts } from '../quotes/home/job-counts/route'
@@ -100,6 +109,8 @@ describe('estimate and quote route delegation', () => {
     routeHandlerMocks.handleEstimateProductsRoutePost.mockReset()
     routeHandlerMocks.handleEstimateProductRoutePatch.mockReset()
     routeHandlerMocks.handleEstimateProductRouteDelete.mockReset()
+    routeHandlerMocks.loadPublicEstimateByToken.mockReset()
+    routeHandlerMocks.markPublicEstimateViewed.mockReset()
   })
 
   it('delegates delete routes to the shared estimate resource handler with family-specific notices', async () => {
@@ -253,5 +264,70 @@ describe('estimate and quote route delegation', () => {
       detailRequest,
       context
     )
+  })
+
+  it('delegates estimate and quote public read routes to the shared estimate portal service', async () => {
+    routeHandlerMocks.loadPublicEstimateByToken.mockResolvedValue({
+      version: { org_id: 'org-1' },
+      snapshot: {
+        estimate_version_id: 'version-1',
+        status: 'sent',
+        viewed_at: null,
+        public_token: 'token-1',
+      },
+    })
+    routeHandlerMocks.markPublicEstimateViewed.mockResolvedValue({ ok: true })
+
+    const estimateRequest = new Request('http://localhost/api/estimate-public/token-1', {
+      headers: { 'user-agent': 'Vitest' },
+    })
+    const quoteRequest = new Request('http://localhost/api/quote-public/token-1', {
+      headers: { 'user-agent': 'Vitest' },
+    })
+    const context = { params: { token: 'token-1' } }
+
+    const estimateResponse = await getEstimatePublic(estimateRequest, context)
+    const quoteResponse = await getQuotePublic(quoteRequest, context)
+
+    expect(routeHandlerMocks.loadPublicEstimateByToken).toHaveBeenNthCalledWith(
+      1,
+      'token-1',
+      'http://localhost'
+    )
+    expect(routeHandlerMocks.loadPublicEstimateByToken).toHaveBeenNthCalledWith(
+      2,
+      'token-1',
+      'http://localhost'
+    )
+    expect(routeHandlerMocks.markPublicEstimateViewed).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        versionId: 'version-1',
+        orgId: 'org-1',
+        metadata: { user_agent: 'Vitest' },
+      })
+    )
+    expect(routeHandlerMocks.markPublicEstimateViewed).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        versionId: 'version-1',
+        orgId: 'org-1',
+        metadata: { user_agent: 'Vitest' },
+      })
+    )
+    await expect(estimateResponse.json()).resolves.toEqual({
+      ok: true,
+      estimate_version_id: 'version-1',
+      status: 'sent',
+      viewed_at: null,
+      public_token: 'token-1',
+    })
+    await expect(quoteResponse.json()).resolves.toEqual({
+      ok: true,
+      estimate_version_id: 'version-1',
+      status: 'sent',
+      viewed_at: null,
+      public_token: 'token-1',
+    })
   })
 })

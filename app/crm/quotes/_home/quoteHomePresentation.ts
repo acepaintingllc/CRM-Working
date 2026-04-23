@@ -2,10 +2,12 @@ import type {
   QuoteHomeSummaryReadModel,
 } from '@/lib/quotes/collectionData'
 import type {
+  QuoteHomeFeedbackVm,
   NavItem,
   QuoteHomeJob,
   QuoteHomeJobVersion,
   QuoteHomeJobListItemVm,
+  QuoteHomeFailureSource,
   QuoteHomeSearchResult,
   QuoteHomeVersionItemVm,
   QuotesHomeDeleteDialogVm,
@@ -22,6 +24,21 @@ export const SETTINGS_LINKS: NavItem[] = [
 ]
 
 export const QUOTE_META_SEPARATOR = ' · '
+
+const HOME_FAILURE_MESSAGES: Record<'summary' | 'jobCounts' | 'jobs', string> = {
+  summary: 'Quote summary failed to load.',
+  jobCounts: 'Job counts failed to load.',
+  jobs: 'Eligible jobs failed to load.',
+}
+
+const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
+  summary: 'summary',
+  jobCounts: 'job counts',
+  jobs: 'eligible jobs',
+  jobVersions: 'job versions',
+  create: 'quote creation',
+  delete: 'quote deletion',
+}
 
 export function formatToday() {
   const now = new Date()
@@ -74,6 +91,61 @@ export function buildSearchResultVm(estimate: QuoteHomeSearchResult): SearchResu
     href: estimateWorkspaceHref(estimate.estimate_id),
     title: estimate.version_name,
     meta: `${estimate.job_title}\n${estimate.customer_name} / ${formatVersionState(estimate.version_state)}`,
+  }
+}
+
+export function buildHomeLoadFailureDetail(source: 'summary' | 'jobCounts' | 'jobs', message: string) {
+  const fallback = HOME_FAILURE_MESSAGES[source]
+  return message === fallback ? message : `${fallback} ${message}`
+}
+
+export function buildQuotesHomeFeedbackVm(params: {
+  homeFailures: Array<{ source: 'summary' | 'jobCounts' | 'jobs'; message: string }>
+  jobVersionsError: string | null
+  createError: string | null
+  deleteError: string | null
+}): QuoteHomeFeedbackVm | null {
+  const details = params.homeFailures.map((failure) =>
+    buildHomeLoadFailureDetail(failure.source, failure.message)
+  )
+  const sources = params.homeFailures.map((failure) => failure.source as QuoteHomeFailureSource)
+
+  if (params.jobVersionsError) {
+    details.push(
+      params.jobVersionsError === 'Failed to load job quote versions.'
+        ? 'Job versions failed to load.'
+        : `Job versions failed to load. ${params.jobVersionsError}`
+    )
+    sources.push('jobVersions')
+  }
+
+  if (params.createError) {
+    details.push(params.createError)
+    sources.push('create')
+  }
+
+  if (params.deleteError) {
+    details.push(params.deleteError)
+    sources.push('delete')
+  }
+
+  if (details.length === 0) return null
+
+  const actionError = Boolean(params.createError || params.deleteError)
+  const title =
+    actionError
+      ? 'Quote action failed'
+      : params.jobVersionsError
+        ? 'Quote home loaded with errors'
+        : params.homeFailures.length > 1
+          ? 'Some quote home data failed to load'
+          : `Quote home ${FAILURE_SOURCE_LABELS[sources[0]]} failed to load`
+
+  return {
+    tone: actionError ? 'error' : 'warning',
+    title,
+    details,
+    sources,
   }
 }
 

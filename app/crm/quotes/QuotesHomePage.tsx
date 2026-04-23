@@ -65,19 +65,33 @@ export default function QuotesHomePage() {
           vm={headerVm}
           onSearchFocusedChange={actions.setSearchFocused}
           onSearchQueryChange={actions.setSearchQuery}
+          onSearchRetry={actions.retrySearch}
         />
 
-        {feedbackVm.error ? (
+        {feedbackVm.title ? (
           <div
             style={{
               ...S.card,
-              color: 'var(--v2-red)',
               marginBottom: 18,
-              borderColor: 'rgba(248,113,113,0.28)',
-              background: 'rgba(127,29,29,0.18)',
+              color: feedbackVm.tone === 'error' ? 'var(--v2-red)' : '#f9e2b7',
+              borderColor:
+                feedbackVm.tone === 'error'
+                  ? 'rgba(248,113,113,0.28)'
+                  : 'rgba(249,226,183,0.22)',
+              background:
+                feedbackVm.tone === 'error'
+                  ? 'rgba(127,29,29,0.18)'
+                  : 'rgba(120,83,26,0.18)',
             }}
           >
-            {feedbackVm.error}
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: feedbackVm.details.length > 0 ? 8 : 0 }}>
+              {feedbackVm.title}
+            </div>
+            {feedbackVm.details.map((detail) => (
+              <div key={detail} style={{ fontSize: 14, lineHeight: 1.6 }}>
+                {detail}
+              </div>
+            ))}
           </div>
         ) : null}
 
