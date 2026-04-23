@@ -1,20 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
-  mockLoadPublicEstimateByToken,
-  mockMarkPublicEstimateViewed,
+  mockLoadPublicEstimateSnapshot,
   mockAcceptPublicEstimate,
   mockDeclinePublicEstimate,
 } = vi.hoisted(() => ({
-  mockLoadPublicEstimateByToken: vi.fn(),
-  mockMarkPublicEstimateViewed: vi.fn(),
+  mockLoadPublicEstimateSnapshot: vi.fn(),
   mockAcceptPublicEstimate: vi.fn(),
   mockDeclinePublicEstimate: vi.fn(),
 }))
 
 vi.mock('@/lib/server/estimatePublicPortal', () => ({
-  loadPublicEstimateByToken: mockLoadPublicEstimateByToken,
-  markPublicEstimateViewed: mockMarkPublicEstimateViewed,
+  loadPublicEstimateSnapshot: mockLoadPublicEstimateSnapshot,
   acceptPublicEstimate: mockAcceptPublicEstimate,
   declinePublicEstimate: mockDeclinePublicEstimate,
 }))
@@ -25,45 +22,53 @@ import { POST as declineQuote } from '../quote-public/[token]/decline/route'
 
 describe('quote public routes', () => {
   beforeEach(() => {
-    mockLoadPublicEstimateByToken.mockReset()
-    mockMarkPublicEstimateViewed.mockReset()
+    mockLoadPublicEstimateSnapshot.mockReset()
     mockAcceptPublicEstimate.mockReset()
     mockDeclinePublicEstimate.mockReset()
   })
 
   it('returns 400 for invalid token input and 404 for missing public quotes', async () => {
+    mockLoadPublicEstimateSnapshot.mockResolvedValueOnce({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Invalid token',
+    })
     const invalidResponse = await GET(new Request('http://localhost/api/quote-public/'), {
       params: { token: '' },
     })
     expect(invalidResponse.status).toBe(400)
     await expect(invalidResponse.json()).resolves.toEqual({ error: 'Invalid token' })
 
-    mockLoadPublicEstimateByToken.mockResolvedValue({ error: 'Quote not found' })
+    mockLoadPublicEstimateSnapshot.mockResolvedValue({
+      ok: false,
+      kind: 'not_found',
+      message: 'Quote not found',
+    })
     const missingResponse = await GET(
       new Request('http://localhost/api/quote-public/missing'),
       {
         params: { token: 'missing' },
       }
     )
-    expect(mockLoadPublicEstimateByToken).toHaveBeenCalledWith(
+    expect(mockLoadPublicEstimateSnapshot).toHaveBeenCalledWith(
       'missing',
-      'http://localhost'
+      { origin: 'http://localhost' },
+      { metadata: { user_agent: '' } }
     )
     expect(missingResponse.status).toBe(404)
     await expect(missingResponse.json()).resolves.toEqual({ error: 'Quote not found' })
   })
 
   it('marks the first eligible public view as viewed and returns the snapshot payload', async () => {
-    mockLoadPublicEstimateByToken.mockResolvedValue({
-      version: { org_id: 'org-1' },
-      snapshot: {
+    mockLoadPublicEstimateSnapshot.mockResolvedValue({
+      ok: true,
+      data: {
         estimate_version_id: 'version-1',
-        status: 'sent',
-        viewed_at: null,
+        status: 'viewed',
+        viewed_at: '2026-04-01T00:00:00.000Z',
         public_token: 'token-1',
       },
     })
-    mockMarkPublicEstimateViewed.mockResolvedValue({ ok: true })
 
     const response = await GET(
       new Request('http://localhost/api/quote-public/token-1', {
@@ -74,19 +79,18 @@ describe('quote public routes', () => {
       }
     )
 
-    expect(mockMarkPublicEstimateViewed).toHaveBeenCalledWith({
-      versionId: 'version-1',
-      orgId: 'org-1',
-      metadata: {
-        user_agent: 'Vitest',
-      },
-    })
+    expect(mockLoadPublicEstimateSnapshot).toHaveBeenCalledWith(
+      'token-1',
+      { origin: 'http://localhost' },
+      { metadata: { user_agent: 'Vitest' } }
+    )
     await expect(response.json()).resolves.toEqual({
-      ok: true,
-      estimate_version_id: 'version-1',
-      status: 'sent',
-      viewed_at: null,
-      public_token: 'token-1',
+      data: {
+        estimate_version_id: 'version-1',
+        status: 'viewed',
+        viewed_at: '2026-04-01T00:00:00.000Z',
+        public_token: 'token-1',
+      },
     })
   })
 
@@ -114,7 +118,7 @@ describe('quote public routes', () => {
 
     mockAcceptPublicEstimate.mockResolvedValue({
       ok: true,
-      data: { id: 'version-1', status: 'accepted' },
+      data: { estimate_version_id: 'version-1', status: 'accepted' },
     })
 
     const response = await acceptQuote(
@@ -147,8 +151,7 @@ describe('quote public routes', () => {
       ip: '127.0.0.1',
     })
     await expect(response.json()).resolves.toEqual({
-      ok: true,
-      version: { id: 'version-1', status: 'accepted' },
+      data: { estimate_version_id: 'version-1', status: 'accepted' },
     })
   })
 
@@ -205,7 +208,7 @@ describe('quote public routes', () => {
   it('decline route records the decline state and event metadata', async () => {
     mockDeclinePublicEstimate.mockResolvedValue({
       ok: true,
-      data: { id: 'version-1', status: 'declined' },
+      data: { estimate_version_id: 'version-1', status: 'declined' },
     })
 
     const response = await declineQuote(
@@ -224,15 +227,14 @@ describe('quote public routes', () => {
       reason: 'Going another direction',
     })
     await expect(response.json()).resolves.toEqual({
-      ok: true,
-      version: { id: 'version-1', status: 'declined' },
+      data: { estimate_version_id: 'version-1', status: 'declined' },
     })
   })
 
   it('decline route maps idempotent retries and conflicts from the workflow service', async () => {
     mockDeclinePublicEstimate.mockResolvedValueOnce({
       ok: true,
-      data: { id: 'version-1', status: 'declined' },
+      data: { estimate_version_id: 'version-1', status: 'declined' },
     })
 
     const retryResponse = await declineQuote(
@@ -248,8 +250,7 @@ describe('quote public routes', () => {
 
     expect(retryResponse.status).toBe(200)
     await expect(retryResponse.json()).resolves.toEqual({
-      ok: true,
-      version: { id: 'version-1', status: 'declined' },
+      data: { estimate_version_id: 'version-1', status: 'declined' },
     })
 
     mockDeclinePublicEstimate.mockResolvedValueOnce({

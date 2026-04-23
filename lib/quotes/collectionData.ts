@@ -210,15 +210,6 @@ export function toQuoteHomeSearchResultReadModel(
   }
 }
 
-export function buildQuoteHomeSearchHaystack(
-  estimate:
-    | QuoteHomeRecentActivityItemReadModel
-    | QuoteHomeJobVersionItemReadModel
-    | QuoteHomeSearchResultReadModel
-) {
-  return `${estimate.version_name} ${estimate.job_title} ${estimate.customer_name} ${estimate.version_kind} ${estimate.version_state}`.toLowerCase()
-}
-
 export function buildQuoteHomeJobVersionCountsReadModel(
   estimates: Array<Pick<EstimateCollectionDecoratedRow, 'job_id'>>
 ): QuoteHomeJobVersionCountsReadModel {
@@ -284,16 +275,9 @@ export function buildQuoteHomeSearchReadModel(
   rows: EstimateCollectionDecoratedRow[],
   query: string
 ): QuoteHomeSearchResponse {
-  const normalizedQuery = query.trim().toLowerCase()
   return {
     query,
-    items:
-      normalizedQuery.length === 0
-        ? []
-        : rows
-            .map(toQuoteHomeSearchResultReadModel)
-            .filter((estimate) => buildQuoteHomeSearchHaystack(estimate).includes(normalizedQuery))
-            .slice(0, 8),
+    items: rows.map(toQuoteHomeSearchResultReadModel),
   }
 }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { serviceResultResponse } from '@/lib/server/routeResult'
+import { serviceResultDataResponse } from '@/lib/server/routeResult'
 import { declinePublicEstimate } from '@/lib/server/estimatePublicPortal'
 
 function asText(value: unknown) {
@@ -17,11 +17,10 @@ export async function POST(
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
-  return serviceResultResponse(
+  return serviceResultDataResponse(
     await declinePublicEstimate({
       token,
       reason: asText(body?.reason),
-    }),
-    (version) => ({ ok: true, version })
+    })
   )
 }

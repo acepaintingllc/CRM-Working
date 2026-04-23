@@ -145,6 +145,8 @@ describe('estimate collection service', () => {
       ok: true,
       data: { query: 'kitchen', items: decoratedRows },
     })
+    expect(mocks.searchEstimateCollectionRows).toHaveBeenCalledWith('org-1', 'kitchen', 8)
+    expect(mocks.buildQuoteHomeSearchReadModel).toHaveBeenCalledWith(decoratedRows, 'kitchen')
     await expect(loadEstimateCollectionJobCountsPayload('org-1', deps)).resolves.toEqual({
       ok: true,
       data: { items: [{ job_id: 'job-1', version_count: 1 }] },

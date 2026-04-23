@@ -1,6 +1,6 @@
 'use client'
 
-import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { useResource } from '@/app/crm/_hooks/useResource'
 import { loadRatesFlags } from '@/lib/quotes/client'
 import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 
@@ -12,10 +12,11 @@ const emptyRatesFlags: RatesFlagsPayload = {
 }
 
 export function useQuoteRatesData() {
-  return useLoadableResource<RatesFlagsPayload>({
+  return useResource<RatesFlagsPayload>({
     initialData: emptyRatesFlags,
     load: () => loadRatesFlags(),
     getErrorMessage: (loadError: unknown) =>
       loadError instanceof Error ? loadError.message : 'Failed to load rates and flags.',
+    resetOnError: false,
   })
 }

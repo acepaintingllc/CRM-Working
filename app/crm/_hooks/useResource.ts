@@ -8,6 +8,8 @@ type UseResourceOptions<T> = {
   getErrorMessage: (error: unknown) => string
   reloadKey?: unknown
   resetOnError?: boolean
+  initialLoading?: boolean
+  skipInitialLoad?: boolean
 }
 
 export function useResource<T>({
@@ -16,13 +18,16 @@ export function useResource<T>({
   getErrorMessage,
   reloadKey,
   resetOnError = true,
+  initialLoading = true,
+  skipInitialLoad = false,
 }: UseResourceOptions<T>) {
   const [data, setData] = useState(initialData)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(initialLoading)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
   const loadRef = useRef(load)
   const getErrorMessageRef = useRef(getErrorMessage)
+  const skipInitialLoadRef = useRef(skipInitialLoad)
 
   useEffect(() => {
     loadRef.current = load
@@ -32,31 +37,59 @@ export function useResource<T>({
     getErrorMessageRef.current = getErrorMessage
   }, [getErrorMessage])
 
-  const refresh = useCallback(async () => {
-    const requestId = ++requestIdRef.current
-    setLoading(true)
-    setError(null)
+  const attemptRefresh = useCallback(
+    async (options?: { preserveDataOnError?: boolean; reportError?: boolean }) => {
+      const requestId = ++requestIdRef.current
+      const preserveDataOnError = options?.preserveDataOnError ?? false
+      const reportError = options?.reportError ?? true
 
-    try {
-      const nextData = await loadRef.current()
-      if (requestIdRef.current !== requestId) return false
-      setData(nextData)
-      return true
-    } catch (loadError) {
-      if (requestIdRef.current !== requestId) return false
-      if (resetOnError) {
-        setData(initialData)
+      setLoading(true)
+      if (reportError) {
+        setError(null)
       }
-      setError(getErrorMessageRef.current(loadError))
-      return false
-    } finally {
-      if (requestIdRef.current === requestId) {
-        setLoading(false)
+
+      try {
+        const nextData = await loadRef.current()
+        if (requestIdRef.current !== requestId) {
+          return { ok: false, error: null, data: null as T | null }
+        }
+        setData(nextData)
+        if (reportError) {
+          setError(null)
+        }
+        return { ok: true, error: null, data: nextData }
+      } catch (loadError) {
+        if (requestIdRef.current !== requestId) {
+          return { ok: false, error: null, data: null as T | null }
+        }
+
+        const nextError = getErrorMessageRef.current(loadError)
+        if (resetOnError && !preserveDataOnError) {
+          setData(initialData)
+        }
+        if (reportError) {
+          setError(nextError)
+        }
+        return { ok: false, error: nextError, data: null as T | null }
+      } finally {
+        if (requestIdRef.current === requestId) {
+          setLoading(false)
+        }
       }
-    }
-  }, [initialData, resetOnError])
+    },
+    [initialData, resetOnError]
+  )
+
+  const refresh = useCallback(async () => {
+    const result = await attemptRefresh()
+    return result.ok
+  }, [attemptRefresh])
 
   useEffect(() => {
+    if (skipInitialLoadRef.current) {
+      skipInitialLoadRef.current = false
+      return
+    }
     void refresh()
   }, [refresh, reloadKey])
 
@@ -67,5 +100,6 @@ export function useResource<T>({
     error,
     setError,
     refresh,
+    attemptRefresh,
   }
 }

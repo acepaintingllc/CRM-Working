@@ -29,22 +29,20 @@ const canonicalEstimateRuntimePaths = [
   'app/crm/estimates/[id]/send/_shared/customerSendWorkflow.ts',
   'app/crm/estimates/[id]/send/sendEstimateClient.tsx',
   'app/crm/estimates/[id]/send/sendEstimateReviewClient.tsx',
+  'app/quote/[token]/page.tsx',
+  'app/quote/[token]/QuotePortalClient.tsx',
+  'lib/customer-estimates/PublicEstimatePortal.tsx',
 ]
 
 const quoteAdminHookPaths = [
   'app/crm/quotes/_hooks/useQuoteDefaultsPage.ts',
-  'app/crm/quotes/_hooks/useQuoteProductEditorState.ts',
-  'app/crm/quotes/_hooks/useQuoteProductMutations.ts',
-  'app/crm/quotes/_hooks/useQuoteProductsCatalogState.ts',
   'app/crm/quotes/_hooks/useQuoteProductsPage.ts',
-  'app/crm/quotes/_hooks/useQuoteRatesEditorState.ts',
-  'app/crm/quotes/_hooks/useQuoteRatesFilters.ts',
+  'app/crm/quotes/_hooks/quoteProductsControllerUtils.ts',
+  'app/crm/quotes/_hooks/quoteRatesPageController.ts',
   'app/crm/quotes/_hooks/useQuoteRatesPage.ts',
-  'app/crm/quotes/_hooks/useQuoteRatesPersistence.ts',
   'app/crm/quotes/_hooks/useQuotesHomeData.ts',
   'app/crm/quotes/_hooks/useQuotesHomeDelete.ts',
   'app/crm/quotes/_hooks/useQuotesHomePage.ts',
-  'app/crm/quotes/_hooks/useQuotesHomeSelection.ts',
   'app/crm/quotes/_hooks/useQuoteVersionCreation.ts',
 ]
 
@@ -67,7 +65,9 @@ function isForbiddenQuoteAdminImport(specifier: string) {
 function isForbiddenCanonicalRuntimeImport(specifier: string) {
   return (
     specifier.startsWith('@/app/crm/quotes/[id]/') ||
-    specifier.startsWith('@/lib/quotes/client')
+    specifier.startsWith('@/lib/quotes/client') ||
+    specifier.startsWith('./_components/') ||
+    specifier.startsWith('./_hooks/')
   )
 }
 

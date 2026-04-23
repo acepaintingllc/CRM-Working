@@ -19,8 +19,7 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateProductsRoutePost: vi.fn(),
   handleEstimateProductRoutePatch: vi.fn(),
   handleEstimateProductRouteDelete: vi.fn(),
-  loadPublicEstimateByToken: vi.fn(),
-  markPublicEstimateViewed: vi.fn(),
+  loadPublicEstimateSnapshot: vi.fn(),
 }))
 
 vi.mock('@/lib/server/estimateResourceRoutes', () => ({
@@ -72,8 +71,7 @@ vi.mock('@/lib/server/estimateProductRoutes', () => ({
 }))
 
 vi.mock('@/lib/server/estimatePublicPortal', () => ({
-  loadPublicEstimateByToken: routeHandlerMocks.loadPublicEstimateByToken,
-  markPublicEstimateViewed: routeHandlerMocks.markPublicEstimateViewed,
+  loadPublicEstimateSnapshot: routeHandlerMocks.loadPublicEstimateSnapshot,
 }))
 
 import { GET as getEstimateCustomerSend, POST as postEstimateCustomerSend, PUT as putEstimateCustomerSend } from '../estimates/[id]/customer-send/route'
@@ -113,8 +111,7 @@ describe('estimate and quote route delegation', () => {
     routeHandlerMocks.handleEstimateProductsRoutePost.mockReset()
     routeHandlerMocks.handleEstimateProductRoutePatch.mockReset()
     routeHandlerMocks.handleEstimateProductRouteDelete.mockReset()
-    routeHandlerMocks.loadPublicEstimateByToken.mockReset()
-    routeHandlerMocks.markPublicEstimateViewed.mockReset()
+    routeHandlerMocks.loadPublicEstimateSnapshot.mockReset()
   })
 
   it('delegates delete routes to the shared estimate resource handler with family-specific notices', async () => {
@@ -273,16 +270,15 @@ describe('estimate and quote route delegation', () => {
   })
 
   it('delegates estimate and quote public read routes to the shared estimate portal service', async () => {
-    routeHandlerMocks.loadPublicEstimateByToken.mockResolvedValue({
-      version: { org_id: 'org-1' },
-      snapshot: {
+    routeHandlerMocks.loadPublicEstimateSnapshot.mockResolvedValue({
+      ok: true,
+      data: {
         estimate_version_id: 'version-1',
-        status: 'sent',
-        viewed_at: null,
+        status: 'viewed',
+        viewed_at: '2026-04-01T00:00:00.000Z',
         public_token: 'token-1',
       },
     })
-    routeHandlerMocks.markPublicEstimateViewed.mockResolvedValue({ ok: true })
 
     const estimateRequest = new Request('http://localhost/api/estimate-public/token-1', {
       headers: { 'user-agent': 'Vitest' },
@@ -295,45 +291,33 @@ describe('estimate and quote route delegation', () => {
     const estimateResponse = await getEstimatePublic(estimateRequest, context)
     const quoteResponse = await getQuotePublic(quoteRequest, context)
 
-    expect(routeHandlerMocks.loadPublicEstimateByToken).toHaveBeenNthCalledWith(
+    expect(routeHandlerMocks.loadPublicEstimateSnapshot).toHaveBeenNthCalledWith(
       1,
       'token-1',
-      'http://localhost'
+      { origin: 'http://localhost' },
+      { metadata: { user_agent: 'Vitest' } }
     )
-    expect(routeHandlerMocks.loadPublicEstimateByToken).toHaveBeenNthCalledWith(
+    expect(routeHandlerMocks.loadPublicEstimateSnapshot).toHaveBeenNthCalledWith(
       2,
       'token-1',
-      'http://localhost'
-    )
-    expect(routeHandlerMocks.markPublicEstimateViewed).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        versionId: 'version-1',
-        orgId: 'org-1',
-        metadata: { user_agent: 'Vitest' },
-      })
-    )
-    expect(routeHandlerMocks.markPublicEstimateViewed).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        versionId: 'version-1',
-        orgId: 'org-1',
-        metadata: { user_agent: 'Vitest' },
-      })
+      { origin: 'http://localhost' },
+      { metadata: { user_agent: 'Vitest' } }
     )
     await expect(estimateResponse.json()).resolves.toEqual({
-      ok: true,
-      estimate_version_id: 'version-1',
-      status: 'sent',
-      viewed_at: null,
-      public_token: 'token-1',
+      data: {
+        estimate_version_id: 'version-1',
+        status: 'viewed',
+        viewed_at: '2026-04-01T00:00:00.000Z',
+        public_token: 'token-1',
+      },
     })
     await expect(quoteResponse.json()).resolves.toEqual({
-      ok: true,
-      estimate_version_id: 'version-1',
-      status: 'sent',
-      viewed_at: null,
-      public_token: 'token-1',
+      data: {
+        estimate_version_id: 'version-1',
+        status: 'viewed',
+        viewed_at: '2026-04-01T00:00:00.000Z',
+        public_token: 'token-1',
+      },
     })
   })
 })

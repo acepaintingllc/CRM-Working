@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
+import { buildQuoteAdminPageStatus } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
 import { loadQuoteDefaults, loadQuoteProducts, saveQuoteDefaults } from '@/lib/quotes/client'
 import {
   areQuoteDefaultsEqual,
@@ -81,17 +82,19 @@ export function useQuoteDefaultsPage() {
   const validation = validateQuoteDefaults(resource.data.settings)
   const validationError = validation.ok ? null : validation.error
   const canSave = resource.hasLoaded && resource.dirty && !resource.saving && !validationError
-  const feedbackVm = {
-    error: resource.error,
-    notice: resource.notice,
+  const status = buildQuoteAdminPageStatus({
     loading: resource.loading,
-    hasLoaded: resource.hasLoaded,
-    saving: resource.saving,
-  }
-  const formVm = {
+    hasData: resource.hasLoaded,
+    loadError: resource.hasLoaded ? null : resource.error,
+    actionError: resource.hasLoaded ? resource.error : null,
+    validationError: resource.error ? null : validationError,
+    notice: resource.notice,
+    canRetry: !resource.loading,
+  })
+  const form = {
     settings: resource.data.settings,
     productDefaultFields,
-    validationError: resource.error ? null : validationError,
+    validationError: status.inlineValidation,
     canSave,
   }
   const actions = {
@@ -102,8 +105,12 @@ export function useQuoteDefaultsPage() {
   }
 
   return {
-    feedbackVm,
-    formVm,
+    feedback: {
+      ...status,
+      hasLoaded: resource.hasLoaded,
+      saving: resource.saving,
+    },
+    form,
     actions,
   }
 }

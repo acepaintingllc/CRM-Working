@@ -99,6 +99,7 @@ export function buildQuotesHomeFeedbackVm(params: {
   jobVersionsError: string | null
   createError: string | null
   deleteError: string | null
+  actionWarning: string | null
 }): QuoteHomeFeedbackVm | null {
   const details = params.homeFailures.map((failure) =>
     buildHomeLoadFailureDetail(failure.source, failure.message)
@@ -124,12 +125,20 @@ export function buildQuotesHomeFeedbackVm(params: {
     sources.push('delete')
   }
 
+  if (params.actionWarning) {
+    details.push(params.actionWarning)
+    sources.push('delete')
+  }
+
   if (details.length === 0) return null
 
   const actionError = Boolean(params.createError || params.deleteError)
+  const actionWarning = Boolean(params.actionWarning)
   const title =
     actionError
       ? 'Quote action failed'
+      : actionWarning
+        ? 'Quote action completed with refresh errors'
       : params.jobVersionsError
         ? 'Quote home loaded with errors'
         : params.homeFailures.length > 1

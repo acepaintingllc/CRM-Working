@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './org'
 import { writeEstimatePublicEvent } from './customer-send/repository'
 import { errorResult, okResult, type ServiceResult } from './serviceResult'
+import { ensureAssembledCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
 import type { EstimatePublicSnapshot, Unsafe } from '@/lib/customer-estimates/types'
 
 function asText(value: unknown) {
@@ -17,31 +18,8 @@ export async function loadPublicEstimateByToken(token: string, origin?: string) 
   if (!versionRes.data) return { error: 'Quote not found' } as const
 
   const version = versionRes.data as Unsafe
-  const snapshot = (version.snapshot_json ?? {}) as Record<string, unknown>
-  const document = (snapshot.document ?? null) as EstimatePublicSnapshot['document'] | null
-  if (!document) return { error: 'Quote snapshot missing' } as const
-  const normalizedSnapshot: Record<string, unknown> = {
-    ...snapshot,
-    document,
-  }
-
-  const publicUrl = origin ? `${origin}/quote/${token}` : null
-  const payload: EstimatePublicSnapshot = {
-    estimate_id: asText(version.estimate_id),
-    estimate_version_id: asText(version.id),
-    version_number: Number(version.version_number ?? 0),
-    status: (asText(version.status) || 'draft') as EstimatePublicSnapshot['status'],
-    public_token: asText(version.public_token) || null,
-    public_url: publicUrl,
-    draft: (normalizedSnapshot.draft ?? {}) as Record<string, unknown>,
-    document,
-    snapshot_json: normalizedSnapshot,
-    sent_at: asText(version.sent_at) || null,
-    viewed_at: asText(version.viewed_at) || null,
-    accepted_at: asText(version.accepted_at) || null,
-    declined_at: asText(version.declined_at) || null,
-    locked_at: asText(version.locked_at) || null,
-  }
+  const payload = buildEstimatePublicSnapshotFromVersion(version, origin)
+  if ('error' in payload) return payload
   return { version: version as Unsafe, snapshot: payload } as const
 }
 
@@ -61,6 +39,91 @@ type AcceptPublicEstimateParams = {
 type DeclinePublicEstimateParams = {
   token: string
   reason?: string
+}
+
+type PublicEstimateSnapshotOptions = {
+  origin?: string
+}
+
+type PublicEstimateViewOptions = {
+  actorType?: 'customer' | 'staff' | 'system'
+  metadata?: Record<string, unknown>
+}
+
+export function buildEstimatePublicSnapshotFromVersion(
+  version: Unsafe,
+  origin?: string
+) {
+  const token = asText(version.public_token)
+  const snapshot = (version.snapshot_json ?? {}) as Record<string, unknown>
+  const rawDocument = ((snapshot.document ?? snapshot) ?? null) as
+    | EstimatePublicSnapshot['document']
+    | Record<string, unknown>
+    | null
+  const document = rawDocument ? ensureAssembledCustomerEstimateDocument(rawDocument) : null
+  if (!document) return { error: 'Quote snapshot missing' } as const
+
+  const normalizedSnapshot: Record<string, unknown> = {
+    ...snapshot,
+    document,
+  }
+
+  return {
+    estimate_id: asText(version.estimate_id),
+    estimate_version_id: asText(version.id),
+    version_number: Number(version.version_number ?? 0),
+    status: (asText(version.status) || 'draft') as EstimatePublicSnapshot['status'],
+    public_token: token || null,
+    public_url: origin && token ? `${origin}/quote/${token}` : null,
+    draft: (normalizedSnapshot.draft ?? {}) as Record<string, unknown>,
+    document,
+    snapshot_json: normalizedSnapshot,
+    sent_at: asText(version.sent_at) || null,
+    viewed_at: asText(version.viewed_at) || null,
+    accepted_at: asText(version.accepted_at) || null,
+    declined_at: asText(version.declined_at) || null,
+    locked_at: asText(version.locked_at) || null,
+  } satisfies EstimatePublicSnapshot
+}
+
+function shouldMarkViewed(snapshot: EstimatePublicSnapshot) {
+  return (snapshot.status === 'sent' || snapshot.status === 'viewed') && !snapshot.viewed_at
+}
+
+export async function loadPublicEstimateSnapshot(
+  token: string,
+  snapshotOptions?: PublicEstimateSnapshotOptions,
+  viewOptions?: PublicEstimateViewOptions
+): Promise<ServiceResult<EstimatePublicSnapshot>> {
+  if (!token || typeof token !== 'string') {
+    return errorResult('invalid_input', 'Invalid token')
+  }
+
+  const loaded = await loadPublicEstimateByToken(token, snapshotOptions?.origin)
+  if (!isLoadedEstimate(loaded)) {
+    return errorResult('not_found', asText(loaded.error) || 'Quote not found')
+  }
+
+  if (!shouldMarkViewed(loaded.snapshot)) {
+    return okResult(loaded.snapshot)
+  }
+
+  const viewed = await markPublicEstimateViewed({
+    versionId: loaded.snapshot.estimate_version_id,
+    orgId: asText(loaded.version.org_id),
+    actorType: viewOptions?.actorType,
+    metadata: viewOptions?.metadata,
+  }).catch(() => null)
+
+  if (!viewed || 'error' in viewed || !viewed.ok) {
+    return okResult(loaded.snapshot)
+  }
+
+  return okResult({
+    ...loaded.snapshot,
+    status: 'viewed',
+    viewed_at: viewed.viewed_at,
+  })
 }
 
 function isLoadedEstimate(
@@ -107,7 +170,7 @@ async function loadTransitionableEstimate(token: string) {
 
   const loaded = await loadPublicEstimateByToken(token)
   if (!isLoadedEstimate(loaded)) {
-    return errorResult('not_found', loaded.error)
+    return errorResult('not_found', asText(loaded.error) || 'Quote not found')
   }
 
   return okResult(loaded)
@@ -138,7 +201,7 @@ async function updatePublicEstimateVersion(params: {
 
 export async function acceptPublicEstimate(
   params: AcceptPublicEstimateParams
-): Promise<ServiceResult<Unsafe>> {
+): Promise<ServiceResult<EstimatePublicSnapshot>> {
   const legalName = asText(params.legalName)
   if (!legalName) {
     return errorResult('invalid_input', 'Legal name is required')
@@ -156,7 +219,7 @@ export async function acceptPublicEstimate(
     return errorResult('conflict', transitionConflictMessage(currentStatus, 'accepted'))
   }
   if (currentStatus === 'accepted') {
-    return okResult(loaded.version)
+    return okResult(loaded.snapshot)
   }
 
   const signatureType = asText(params.signatureType) || 'typed'
@@ -196,12 +259,17 @@ export async function acceptPublicEstimate(
   })
   if (!eventResult.ok) return eventResult
 
-  return okResult(updateResult.data)
+  const snapshot = buildEstimatePublicSnapshotFromVersion(updateResult.data)
+  if ('error' in snapshot) {
+    return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
+  }
+
+  return okResult(snapshot)
 }
 
 export async function declinePublicEstimate(
   params: DeclinePublicEstimateParams
-): Promise<ServiceResult<Unsafe>> {
+): Promise<ServiceResult<EstimatePublicSnapshot>> {
   const loadedResult = await loadTransitionableEstimate(params.token)
   if (!loadedResult.ok) return loadedResult
 
@@ -211,7 +279,7 @@ export async function declinePublicEstimate(
     return errorResult('conflict', transitionConflictMessage(currentStatus, 'declined'))
   }
   if (currentStatus === 'declined') {
-    return okResult(loaded.version)
+    return okResult(loaded.snapshot)
   }
 
   const now = new Date().toISOString()
@@ -239,7 +307,12 @@ export async function declinePublicEstimate(
   })
   if (!eventResult.ok) return eventResult
 
-  return okResult(updateResult.data)
+  const snapshot = buildEstimatePublicSnapshotFromVersion(updateResult.data)
+  if ('error' in snapshot) {
+    return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
+  }
+
+  return okResult(snapshot)
 }
 
 export async function markPublicEstimateViewed(params: {

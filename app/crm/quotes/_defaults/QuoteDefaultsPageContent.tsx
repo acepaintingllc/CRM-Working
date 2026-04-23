@@ -2,6 +2,7 @@
 
 import { CrmEntityFormPage } from '@/app/crm/_components/CrmEntityFormPage'
 import { CrmResourceState } from '@/app/crm/_components/CrmResourceState'
+import { QuoteAdminPageBanner } from '@/app/crm/quotes/_components/QuoteAdminPageBanner'
 import { QuoteDefaultsForm } from '@/app/crm/quotes/_components/QuoteDefaultsForm'
 import { useQuoteDefaultsPage } from '@/app/crm/quotes/_hooks/useQuoteDefaultsPage'
 
@@ -10,29 +11,30 @@ export function QuoteDefaultsPageContent() {
 
   return (
     <CrmResourceState
-      loading={controller.feedbackVm.loading}
-      error={controller.feedbackVm.error}
-      hasData={controller.feedbackVm.hasLoaded}
+      loading={controller.feedback.loading}
+      error={controller.feedback.loadError}
+      hasData={controller.feedback.hasLoaded}
       loadingTitle="Loading quote defaults"
       loadingDescription="Loading quote defaults..."
       errorTitle="Quote defaults unavailable"
       onRetry={() => void controller.actions.reload()}
     >
+      <QuoteAdminPageBanner banner={controller.feedback.pageBanner} />
       <CrmEntityFormPage
         title="Quote defaults"
         description="Paint, primer, and labor defaults follow the shared CRM editable-resource pattern."
-        error={controller.feedbackVm.error}
-        notice={controller.feedbackVm.notice}
-        validationError={controller.formVm.validationError}
+        error={null}
+        notice={null}
+        validationError={controller.form.validationError}
         saveLabel="Save defaults"
         savingLabel="Saving..."
-        saving={controller.feedbackVm.saving}
-        canSave={controller.formVm.canSave}
+        saving={controller.feedback.saving}
+        canSave={controller.form.canSave}
         onSave={() => void controller.actions.save()}
       >
         <QuoteDefaultsForm
-          value={controller.formVm.settings}
-          productDefaultFields={controller.formVm.productDefaultFields}
+          value={controller.form.settings}
+          productDefaultFields={controller.form.productDefaultFields}
           onChange={controller.actions.setSettings}
         />
       </CrmEntityFormPage>

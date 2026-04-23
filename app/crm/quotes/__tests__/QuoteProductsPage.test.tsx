@@ -41,7 +41,7 @@ describe('QuoteProductsPage', () => {
     cleanup()
   })
 
-  it('loads products and saves through the standardized CRM admin shell', async () => {
+  it('loads products, saves, and deletes through the standardized CRM admin shell', async () => {
     mockAuthedFetch
       .mockResolvedValueOnce(
         createResponse({
@@ -88,11 +88,22 @@ describe('QuoteProductsPage', () => {
           notice: 'Product saved.',
         })
       )
+      .mockResolvedValueOnce(
+        createResponse({
+          data: true,
+          notice: 'Product deleted.',
+        })
+      )
 
     render(<QuoteProductsPage />)
 
     await waitFor(() => {
       expect(screen.getAllByText('Super Paint').length).toBeGreaterThan(0)
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: /Super Paint/ })[0])
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Product name')).toBeTruthy()
     })
 
     fireEvent.change(screen.getByLabelText('Product name'), {
@@ -103,5 +114,20 @@ describe('QuoteProductsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Product saved.')).toBeTruthy()
     })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete product' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('No products found')).toBeTruthy()
+      expect(screen.getByText('Select a product')).toBeTruthy()
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
   })
 })

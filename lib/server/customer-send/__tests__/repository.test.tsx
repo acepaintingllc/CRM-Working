@@ -105,6 +105,12 @@ describe('customer send repository', () => {
       expect.objectContaining({
         version_number: 2,
         public_token: 'existing-token',
+        snapshot_json: {
+          document: { document: true },
+          draft: expect.objectContaining({
+            to_email: 'customer@example.com',
+          }),
+        },
         acceptance_json: { signed: true },
         sent_at: '2026-04-01T00:00:00.000Z',
         locked_at: '2026-04-01T00:00:00.000Z',
@@ -178,6 +184,12 @@ describe('customer send repository', () => {
     expect(insertSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         version_number: 4,
+        snapshot_json: {
+          document: { document: true },
+          draft: expect.objectContaining({
+            to_email: 'customer@example.com',
+          }),
+        },
         public_token: null,
         acceptance_json: null,
       })

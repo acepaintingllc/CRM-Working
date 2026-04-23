@@ -1,14 +1,9 @@
 'use client'
 
-import type { ComponentProps } from 'react'
-import type { CrmNotice } from '@/app/crm/_components/CrmNotice'
-
-type CrmNoticeTone = ComponentProps<typeof CrmNotice>['tone']
-
-type DenseQuotePageBanner = {
-  tone: CrmNoticeTone
-  message: string
-}
+import {
+  buildQuoteAdminPageStatus,
+  type QuoteAdminPageStatus,
+} from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
 
 type BuildDenseQuotePageUiStateArgs = {
   loading: boolean
@@ -17,6 +12,7 @@ type BuildDenseQuotePageUiStateArgs = {
   actionError: string | null
   validationError: string | null
   notice: string | null
+  noticeTone?: 'success' | 'warning' | 'info' | 'error' | null
   canRetry: boolean
   canSave: boolean
   canDelete?: boolean
@@ -24,16 +20,7 @@ type BuildDenseQuotePageUiStateArgs = {
   canDuplicate?: boolean
 }
 
-export type DenseQuotePageUiState = {
-  loading: boolean
-  hasData: boolean
-  loadError: string | null
-  actionError: string | null
-  validationError: string | null
-  notice: string | null
-  pageBanner: DenseQuotePageBanner | null
-  inlineValidation: string | null
-  canRetry: boolean
+export type DenseQuotePageUiState = QuoteAdminPageStatus & {
   canSave: boolean
   canDelete: boolean
   canArchiveToggle: boolean
@@ -47,32 +34,26 @@ export function buildDenseQuotePageUiState({
   actionError,
   validationError,
   notice,
+  noticeTone,
   canRetry,
   canSave,
   canDelete = false,
   canArchiveToggle = false,
   canDuplicate = false,
 }: BuildDenseQuotePageUiStateArgs): DenseQuotePageUiState {
-  const pageBanner = loadError
-    ? { tone: 'error' as const, message: loadError }
-    : actionError
-      ? { tone: 'error' as const, message: actionError }
-      : validationError
-        ? null
-        : notice
-          ? { tone: 'success' as const, message: notice }
-          : null
-
-  return {
+  const status = buildQuoteAdminPageStatus({
     loading,
     hasData,
     loadError,
     actionError,
     validationError,
     notice,
-    pageBanner,
-    inlineValidation: loadError || actionError ? null : validationError,
+    noticeTone,
     canRetry,
+  })
+
+  return {
+    ...status,
     canSave,
     canDelete,
     canArchiveToggle,

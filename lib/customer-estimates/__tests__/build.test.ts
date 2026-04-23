@@ -105,6 +105,12 @@ test('buildCustomerEstimateDocument cleans scope copy and keeps only included se
   assert.doesNotMatch(document.quote_rows[0]?.description ?? '', /\$\d|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i)
   assert.equal(document.quote_rows[0]?.price, 1191)
   assert.deepEqual(document.terms, ['Terms line one.', 'Terms line two.'])
+  assert.equal(document.source_meta.company.business_name, true)
+  assert.equal(document.source_meta.company.main_phone, false)
+  assert.equal(document.source_meta.settings.quote_validity_days, true)
+  assert.equal(document.source_meta.settings.terms_text, true)
+  assert.equal(document.source_meta.overrides.deposit_language, false)
+  assert.equal(document.source_meta.overrides.card_fee_note, false)
 })
 
 test('buildCustomerEstimateDocument reconciles visible rows to the internal final total', () => {
@@ -477,4 +483,152 @@ test('buildCustomerEstimateDocument preserves manual scope wording overrides exa
   assert.equal(document.quote_rows.length, 1)
   assert.equal(document.quote_rows[0]?.description, 'Paint walls in Living Room, prep included')
   assert.equal(document.scopes[0]?.text, 'Paint walls in Living Room, prep included')
+  assert.equal(document.source_meta.overrides.deposit_language, false)
+  assert.equal(document.source_meta.overrides.card_fee_note, false)
+})
+
+test('buildCustomerEstimateDocument tracks explicit payment overrides in source metadata', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-5',
+      version_name: 'Kitchen Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Taylor Jones',
+      customer_address: '123 Main St',
+      estimate_date: '2026-04-20',
+    },
+    customer: {
+      name: 'Taylor Jones',
+      email: 'taylor@example.com',
+      phone: '812-555-0100',
+      address: '123 Main St\nNewburgh, IN 47630',
+      street: '123 Main St',
+      city: 'Newburgh',
+      state: 'IN',
+      zip: '47630',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [],
+      room_wall_scopes: [],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [],
+      other: [],
+    },
+    settings: {
+      quote_validity_days: 30,
+      terms_text: '',
+    },
+    overrides: {
+      deposit_language: 'Half down to schedule.',
+      card_fee_note: 'Cards add a 3% fee.',
+    },
+    pricingSummary: {
+      finalTotal: 0,
+    },
+  })
+
+  assert.equal(document.source_meta.overrides.deposit_language, true)
+  assert.equal(document.source_meta.overrides.card_fee_note, true)
+})
+
+test('buildCustomerEstimateDocument owns business composition and emits only built document fields', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-6',
+      version_name: 'Exterior Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Jordan Customer',
+      customer_address: '456 Customer Ave',
+      estimate_date: '2026-04-20',
+    },
+    customer: {
+      name: 'Jordan Customer',
+      email: 'jordan@example.com',
+      phone: '555-0100',
+      address: '456 Customer Ave\nLeland, IN 46052',
+      street: '456 Customer Ave',
+      city: 'Leland',
+      state: 'IN',
+      zip: '46052',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '111-111-1111',
+      business_email: 'hello@ace.com',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Exterior' }],
+      room_wall_scopes: [
+        {
+          id: 'W-1',
+          room_id: 'R001',
+          include: 'Y',
+          effective_total: 900,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+          prime_mode: 'FULL',
+          notes: 'special prep',
+          walls_prep_override: '',
+          scope_notes: '',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [],
+      other: [],
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-WALL', display_name: 'Duration Exterior', display_id: 'EXT-1' }],
+      trim_items: [],
+    },
+    settings: {
+      quote_validity_days: 45,
+      terms_text: '',
+    },
+    overrides: {
+      title: 'Exterior Quote',
+      deposit_language: 'Half down to schedule.',
+      card_fee_note: 'Cards add 3%.',
+    },
+    pricingSummary: {
+      finalTotal: 900,
+    },
+  })
+
+  assert.equal('header' in document, false)
+  assert.equal('pricing_block' in document, false)
+  assert.equal('terms_page' in document, false)
+  assert.equal('assembly_meta' in document, false)
+  assert.equal(document.meta.title, 'Exterior Quote')
+  assert.equal(document.quote_validity_days, 45)
+  assert.equal(document.deposit_language, 'Half down to schedule.')
+  assert.equal(document.card_fee_note, 'Cards add 3%.')
+  assert.equal(document.source_meta.overrides.title, true)
+  assert.equal(document.source_meta.overrides.deposit_language, true)
+  assert.equal(document.source_meta.overrides.card_fee_note, true)
+  assert.match(document.quote_rows[0]?.description ?? '', /Duration Exterior/i)
 })

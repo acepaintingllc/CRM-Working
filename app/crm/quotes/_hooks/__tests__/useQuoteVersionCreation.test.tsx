@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useQuoteVersionCreation } from '../useQuoteVersionCreation'
@@ -64,7 +64,7 @@ describe('useQuoteVersionCreation', () => {
     expect(result.current.error).toBe('Select a job before creating a version.')
   })
 
-  it('resets the draft fields when the selected job changes', async () => {
+  it('keeps draft fields intact until the page controller resets them', async () => {
     const firstJob = { id: 'job-1', customer_id: 'customer-1' }
     const nextJob = { id: 'job-2', customer_id: 'customer-2' }
 
@@ -79,10 +79,7 @@ describe('useQuoteVersionCreation', () => {
 
     rerender({ selectedJob: nextJob })
 
-    await waitFor(() => {
-      expect(result.current.versionName).toBe('')
-      expect(result.current.versionKind).toBe('standard')
-      expect(result.current.error).toBeNull()
-    })
+    expect(result.current.versionName).toBe('Custom')
+    expect(result.current.versionKind).toBe('revision')
   })
 })

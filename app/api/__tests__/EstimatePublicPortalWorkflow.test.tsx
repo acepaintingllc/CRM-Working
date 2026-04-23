@@ -73,7 +73,7 @@ describe('estimate public portal transitions', () => {
   it('accepts sent quotes and writes one accepted event', async () => {
     const updateSpy = vi.fn(() =>
       createMaybeSingleChain({
-        data: { id: 'version-1', status: 'accepted' },
+        data: createLoadedVersion('accepted'),
         error: null,
       })
     )
@@ -104,6 +104,14 @@ describe('estimate public portal transitions', () => {
     })
 
     expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('Expected accepted result')
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        estimate_version_id: 'version-1',
+        status: 'accepted',
+        accepted_at: '2026-04-01T00:00:00.000Z',
+      })
+    )
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'accepted',
@@ -141,6 +149,7 @@ describe('estimate public portal transitions', () => {
     expect(result).toEqual({
       ok: true,
       data: expect.objectContaining({
+        estimate_version_id: 'version-1',
         status: 'accepted',
       }),
     })
@@ -179,7 +188,7 @@ describe('estimate public portal transitions', () => {
   it('declines viewed quotes and writes one declined event', async () => {
     const updateSpy = vi.fn(() =>
       createMaybeSingleChain({
-        data: { id: 'version-1', status: 'declined' },
+        data: createLoadedVersion('declined'),
         error: null,
       })
     )
@@ -205,6 +214,14 @@ describe('estimate public portal transitions', () => {
     })
 
     expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('Expected declined result')
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        estimate_version_id: 'version-1',
+        status: 'declined',
+        declined_at: '2026-04-01T00:00:00.000Z',
+      })
+    )
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'declined',
@@ -241,6 +258,7 @@ describe('estimate public portal transitions', () => {
     expect(result).toEqual({
       ok: true,
       data: expect.objectContaining({
+        estimate_version_id: 'version-1',
         status: 'declined',
       }),
     })

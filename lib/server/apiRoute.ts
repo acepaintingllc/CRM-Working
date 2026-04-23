@@ -1,5 +1,4 @@
-import { NextResponse } from 'next/server'
-import { parseUuidParam } from '@/lib/server/routeUtils'
+import { parseUuidParam } from './routeUtils.ts'
 
 type SessionResult =
   | { userId: string; orgId: string }
@@ -7,7 +6,7 @@ type SessionResult =
 export type SessionOrg = Exclude<SessionResult, { error: string }>
 
 export function jsonError(error: string, status: number) {
-  return NextResponse.json({ error }, { status })
+  return Response.json({ error }, { status })
 }
 
 type GuardResult = { ok: true } | { ok: false; response: ReturnType<typeof jsonError> }
