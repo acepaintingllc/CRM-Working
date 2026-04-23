@@ -94,6 +94,9 @@ describe('QuoteProductsPage', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Super Paint').length).toBeGreaterThan(0)
     })
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /^Super Paint / })[0]
+    )
 
     fireEvent.change(screen.getByLabelText('Product name'), {
       target: { value: 'Super Paint Pro' },

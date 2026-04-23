@@ -2,13 +2,13 @@
 
 import type { ProductFamily } from '@/lib/quotes/productsForm'
 import type { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
-import { useGuardedEditorWorkflow } from './useGuardedEditorWorkflow'
 import type { useQuoteProductEditorState } from './useQuoteProductEditorState'
 import type { useQuoteProductMutations } from './useQuoteProductMutations'
 import type {
   useQuoteProductsQueryState,
   useQuoteProductsSelectionState,
 } from './useQuoteProductsCatalogState'
+import { useGuardedTransitionWorkflow } from './useGuardedTransitionWorkflow'
 
 type Options = {
   queryState: ReturnType<typeof useQuoteProductsQueryState>
@@ -32,121 +32,125 @@ export function useQuoteProductsControllerActions({
   mutations,
   feedback,
 }: Options) {
-  const workflow = useGuardedEditorWorkflow<DiscardCandidateTransition>({
+  const workflow = useGuardedTransitionWorkflow<DiscardCandidateTransition>({
     isDirty: editor.isDirty,
   })
-  const creating = editor.isCreating
 
-  function replayTransition(transition: DiscardCandidateTransition) {
-    switch (transition.type) {
-      case 'setSelectedId':
-        if (editor.isCreating) {
-          editor.cancel(selectionState.editorSelected)
-        }
-        selectionState.setSelectedId(transition.selectedId)
-        return true
-      case 'setActiveFamily':
-        queryState.setActiveFamily(transition.nextFamily)
-        return true
-      case 'setStatusFilter':
-        if (editor.isCreating) {
-          editor.cancel(selectionState.editorSelected)
-        }
-        queryState.setStatusFilter(transition.status)
-        return true
-      case 'setSearch':
-        if (editor.isCreating) {
-          editor.cancel(selectionState.editorSelected)
-        }
-        queryState.setSearch(transition.search)
-        return true
-      case 'startCreate':
-        editor.startCreate(queryState.activeFamily)
-        feedback.clearFeedback()
-        return true
-      default:
-        return false
-    }
+  function discardCreateDraftIfNeeded() {
+    if (!editor.isCreatingNow()) return
+    editor.cancel(selectionState.editorSelected)
   }
 
   function confirmDiscard() {
-    return workflow.confirmDiscard(replayTransition)
+    return workflow.confirmDiscard()
   }
 
   function setActiveFamily(nextFamily: ProductFamily) {
-    return workflow.runGuarded(
-      {
+    return workflow.runTransition({
+      transition: {
         type: 'setActiveFamily',
         nextFamily,
       },
-      {
-        changed: !creating && nextFamily !== queryState.activeFamily,
-        run: () => {
-          queryState.setActiveFamily(nextFamily)
-          if (creating) {
-            editor.updateDraftField('family', nextFamily)
-          }
-        },
-      })
+      changed: nextFamily !== queryState.activeFamily,
+      run: () => {
+        queryState.setActiveFamily(nextFamily)
+        if (editor.isCreatingNow()) {
+          editor.updateDraftField('family', nextFamily)
+        }
+      },
+      replay: (transition) => {
+        const nextFamilyTransition = transition as Extract<
+          DiscardCandidateTransition,
+          { type: 'setActiveFamily' }
+        >
+        queryState.setActiveFamily(nextFamilyTransition.nextFamily)
+        return true
+      },
+    })
   }
 
   function setSelectedId(id: string | null) {
-    return workflow.runGuarded(
-      {
+    return workflow.runTransition({
+      transition: {
         type: 'setSelectedId',
         selectedId: id,
       },
-      {
-        changed: id !== selectionState.selectedId,
-        run: () => {
-          if (creating) {
-            editor.cancel(selectionState.editorSelected)
-          }
-          selectionState.setSelectedId(id)
-        },
-      })
+      changed: id !== selectionState.selectedId,
+      run: () => {
+        discardCreateDraftIfNeeded()
+        selectionState.setSelectedId(id)
+      },
+      replay: (transition) => {
+        discardCreateDraftIfNeeded()
+        const selectedIdTransition = transition as Extract<
+          DiscardCandidateTransition,
+          { type: 'setSelectedId' }
+        >
+        selectionState.setSelectedId(selectedIdTransition.selectedId)
+        return true
+      },
+    })
   }
 
   function setStatusFilter(next: string) {
-    return workflow.runGuarded(
-      {
+    return workflow.runTransition({
+      transition: {
         type: 'setStatusFilter',
         status: next,
       },
-      {
-        changed: next !== queryState.statusFilter,
-        run: () => {
-          queryState.setStatusFilter(next)
-        },
-      })
+      changed: next !== queryState.statusFilter,
+      run: () => {
+        discardCreateDraftIfNeeded()
+        queryState.setStatusFilter(next)
+      },
+      replay: (transition) => {
+        discardCreateDraftIfNeeded()
+        const statusFilterTransition = transition as Extract<
+          DiscardCandidateTransition,
+          { type: 'setStatusFilter' }
+        >
+        queryState.setStatusFilter(statusFilterTransition.status)
+        return true
+      },
+    })
   }
 
   function setSearch(value: string) {
-    return workflow.runGuarded(
-      {
+    return workflow.runTransition({
+      transition: {
         type: 'setSearch',
         search: value,
       },
-      {
-        changed: value !== queryState.search,
-        run: () => {
-          queryState.setSearch(value)
-        },
-      })
+      changed: value !== queryState.search,
+      run: () => {
+        discardCreateDraftIfNeeded()
+        queryState.setSearch(value)
+      },
+      replay: (transition) => {
+        discardCreateDraftIfNeeded()
+        const searchTransition = transition as Extract<DiscardCandidateTransition, { type: 'setSearch' }>
+        queryState.setSearch(searchTransition.search)
+        return true
+      },
+    })
   }
 
   function startCreate() {
-    return workflow.runGuarded(
-      {
+    return workflow.runTransition({
+      transition: {
         type: 'startCreate',
       },
-      {
-        changed: !creating,
-        run: () => {
-          editor.startCreate(queryState.activeFamily)
-          feedback.clearFeedback()
-        },
-      })
+      changed: !editor.isCreatingNow(),
+      run: () => {
+        editor.startCreate(queryState.activeFamily)
+        feedback.clearFeedback()
+      },
+      replay: () => {
+        editor.startCreate(queryState.activeFamily)
+        feedback.clearFeedback()
+        return true
+      },
+    })
   }
 
   function cancelEdit() {
@@ -164,7 +168,9 @@ export function useQuoteProductsControllerActions({
       if (!created) return false
 
       feedback.setSuccessNotice(created.notice)
-      queryState.setActiveFamily((created.data.family as ProductFamily | null) ?? queryState.activeFamily)
+      queryState.setActiveFamily(
+        (created.data.family as ProductFamily | null) ?? queryState.activeFamily
+      )
       queryState.setStatusFilter('all')
       queryState.setSearch('')
       selectionState.setSelectedId(created.data.id)
@@ -177,7 +183,9 @@ export function useQuoteProductsControllerActions({
     if (!updated) return false
 
     feedback.setSuccessNotice(updated.notice)
-    queryState.setActiveFamily((updated.data.family as ProductFamily | null) ?? queryState.activeFamily)
+    queryState.setActiveFamily(
+      (updated.data.family as ProductFamily | null) ?? queryState.activeFamily
+    )
     selectionState.setSelectedId(updated.data.id)
     editor.setDraftFromRow(updated.data)
     return true
@@ -199,7 +207,10 @@ export function useQuoteProductsControllerActions({
     return true
   }
 
-  function updateDraftField(field: Parameters<typeof editor.updateDraftField>[0], value: Parameters<typeof editor.updateDraftField>[1]) {
+  function updateDraftField(
+    field: Parameters<typeof editor.updateDraftField>[0],
+    value: Parameters<typeof editor.updateDraftField>[1]
+  ) {
     workflow.markPendingMutation()
     editor.updateDraftField(field, value)
   }

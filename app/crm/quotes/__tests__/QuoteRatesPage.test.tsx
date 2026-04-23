@@ -140,10 +140,10 @@ describe('QuoteRatesPage', () => {
       expect(screen.getAllByText('Standard walls')).toHaveLength(2)
     })
 
-    const nameInputs = screen.getAllByDisplayValue('Standard walls')
-    fireEvent.change(nameInputs[nameInputs.length - 1], { target: { value: 'Edited walls' } })
+    const displayNameInput = screen.getByLabelText('Display Name *')
+    fireEvent.change(displayNameInput, { target: { value: 'Edited walls' } })
 
-    fireEvent.click(screen.getByText('Tall walls'))
+    fireEvent.click(screen.getByRole('row', { name: 'Tall walls' }))
 
     await waitFor(() => {
       expect(screen.getByText('Discard unsaved changes?')).toBeTruthy()

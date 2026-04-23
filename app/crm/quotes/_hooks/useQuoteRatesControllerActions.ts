@@ -175,7 +175,7 @@ export function useQuoteRatesControllerActions({
 
   const guardedReload = workflow.createGuardedAction(executeTransition, {
     getTransition: (keepId?: string) => ({ type: 'reload', keepId }),
-    changed: () => true,
+    changed: (_keepId?: string) => true,
   })
 
   const archiveOrReactivate = workflow.createGuardedAction(executeTransition, {

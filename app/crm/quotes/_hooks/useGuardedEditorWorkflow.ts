@@ -121,10 +121,10 @@ export function useGuardedEditorWorkflow<TTransition>({ isDirty }: Options) {
     try {
       const result = replayTransition(transition)
       if (
-        result !== null &&
         typeof result === 'object' &&
+        result !== null &&
         'then' in result &&
-        typeof result.then === 'function'
+        typeof (result as { then: unknown }).then === 'function'
       ) {
         return Promise.resolve(result).finally(finishReplay)
       }
@@ -143,9 +143,13 @@ export function useGuardedEditorWorkflow<TTransition>({ isDirty }: Options) {
   ) {
     return (...args: TArgs) => {
       const transition = options.getTransition(...args)
-      const run = options.run
-        ? () => options.run(...args)
-        : () => replayTransition(transition)
+      const run = () => {
+        if (options.run) {
+          return options.run(...args)
+        }
+
+        return replayTransition(transition)
+      }
 
       return runGuarded(transition, {
         changed: options.changed(...args),

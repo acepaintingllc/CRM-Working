@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createEmptyQuoteProductDraft,
   createQuoteProductDraftSnapshot,
@@ -23,12 +23,20 @@ export function useQuoteProductEditorState({ selected }: Options) {
   const [cleanSnapshot, setCleanSnapshot] = useState(() =>
     createQuoteProductDraftSnapshot(createEmptyQuoteProductDraft())
   )
+  const [hydratedRowId, setHydratedRowId] = useState<string | null>(null)
+  const isCreatingRef = useRef(false)
+
+  function setCreateMode(next: boolean) {
+    isCreatingRef.current = next
+    setIsCreating(next)
+  }
 
   function hydrateDraftFromRow(selected: QuoteProductRow | null) {
     const nextDraft = selected ? quoteProductRowToDraft(selected) : createEmptyQuoteProductDraft()
     const nextSnapshot = createQuoteProductDraftSnapshot(nextDraft)
     setDraft(nextDraft)
     setCleanSnapshot(nextSnapshot)
+    setHydratedRowId(selected?.id ?? null)
   }
 
   function syncDraftWithSnapshot(nextDraft: Partial<QuoteProductDraft>) {
@@ -40,8 +48,15 @@ export function useQuoteProductEditorState({ selected }: Options) {
 
   useEffect(() => {
     if (isCreating) return
+    if (!selected) {
+      if (hydratedRowId !== null) {
+        hydrateDraftFromRow(null)
+      }
+      return
+    }
+    if (selected.id === hydratedRowId) return
     hydrateDraftFromRow(selected)
-  }, [isCreating, selected])
+  }, [hydratedRowId, isCreating, selected])
 
   const draftSnapshot = useMemo(() => createQuoteProductDraftSnapshot(draft), [draft])
   const isDirty = useMemo(
@@ -67,13 +82,13 @@ export function useQuoteProductEditorState({ selected }: Options) {
       ...createEmptyQuoteProductDraft(),
       family: defaultFamily,
     }
-    setIsCreating(true)
+    setCreateMode(true)
     syncDraftWithSnapshot(nextDraft)
   }
 
   function cancel(selectedFallback: QuoteProductRow | null) {
     hydrateDraftFromRow(selectedFallback)
-    setIsCreating(false)
+    setCreateMode(false)
   }
 
   function setDraftFromRow(next: QuoteProductRow | null) {
@@ -81,13 +96,14 @@ export function useQuoteProductEditorState({ selected }: Options) {
   }
 
   function finishCreate(nextSelected: QuoteProductRow) {
-    setIsCreating(false)
+    setCreateMode(false)
     hydrateDraftFromRow(nextSelected)
   }
 
   return {
     draft: validationResult.draft,
     isCreating,
+    isCreatingNow: () => isCreatingRef.current,
     isDirty,
     validation,
     hydrateDraftFromRow,

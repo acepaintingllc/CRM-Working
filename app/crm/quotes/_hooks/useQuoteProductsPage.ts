@@ -101,9 +101,12 @@ export function useQuoteProductsPage() {
       !feedback.saving &&
       validation.ok &&
       !resource.error &&
-      (editor.isCreating || Boolean(selectionState.selected)),
+      (editor.isCreating || Boolean(selectionState.selectedId)),
     canDelete:
-      Boolean(selectionState.selected) && !editor.isCreating && !feedback.saving && !resource.error,
+      Boolean(selectionState.editorSelected) &&
+      !editor.isCreating &&
+      !feedback.saving &&
+      !resource.error,
   })
 
   return {

@@ -52,25 +52,35 @@ type SelectionOptions = {
 
 export function useQuoteProductsSelectionState({ products }: SelectionOptions) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [editorSelected, setEditorSelected] = useState<QuoteProductRow | null>(null)
 
   const selected = useMemo(() => {
-    return products.find((product) => product.id === selectedId) ?? products[0] ?? null
+    if (!selectedId) return null
+    return products.find((product) => product.id === selectedId) ?? null
   }, [products, selectedId])
 
   useEffect(() => {
-    if (!selected) {
-      setSelectedId(null)
+    if (!selectedId) {
+      const fallback = products[0] ?? null
+      if (!fallback) {
+        setEditorSelected(null)
+        return
+      }
+      setSelectedId(fallback.id)
+      setEditorSelected(fallback)
       return
     }
-    if (selected.id !== selectedId) {
-      setSelectedId(selected.id)
+
+    if (selected) {
+      setEditorSelected(selected)
     }
-  }, [selected, selectedId])
+  }, [products, selected, selectedId])
 
   return {
     products,
     selectedId,
     setSelectedId,
     selected,
+    editorSelected,
   }
 }

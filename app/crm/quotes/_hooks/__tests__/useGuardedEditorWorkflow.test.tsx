@@ -96,6 +96,59 @@ describe('useGuardedEditorWorkflow', () => {
     expect(result.current.workflowVm.pendingTransition).toBeNull()
   })
 
+  it('creates a guarded action that runs immediately when the editor is clean', () => {
+    const executeTransition = vi.fn((transition: { type: string; value: string }) => transition.value)
+    const { result } = renderHook(() =>
+      useGuardedEditorWorkflow<{ type: string; value: string }>({
+        isDirty: false,
+      })
+    )
+
+    const runAction = result.current.createGuardedAction(executeTransition, {
+      getTransition: (value: string) => ({ type: 'setValue', value }),
+      changed: (value: string) => value.length > 0,
+    })
+
+    let returned: string | Promise<string> | false = false
+    act(() => {
+      returned = runAction('ready')
+    })
+
+    expect(returned).toBe('ready')
+    expect(executeTransition).toHaveBeenCalledWith({ type: 'setValue', value: 'ready' })
+    expect(result.current.workflowVm.phase).toBe('idle')
+  })
+
+  it('creates a guarded action that queues and replays through the shared executor', async () => {
+    const executeTransition = vi.fn((transition: { type: string; value: string }) => transition.value === 'queued')
+    const { result } = renderHook(() =>
+      useGuardedEditorWorkflow<{ type: string; value: string }>({
+        isDirty: true,
+      })
+    )
+
+    const runAction = result.current.createGuardedAction(executeTransition, {
+      getTransition: (value: string) => ({ type: 'setValue', value }),
+      changed: (value: string) => value.length > 0,
+    })
+
+    act(() => {
+      runAction('queued')
+    })
+
+    expect(result.current.workflowVm.isOpen).toBe(true)
+    expect(executeTransition).not.toHaveBeenCalled()
+
+    let confirmed = false
+    await act(async () => {
+      confirmed = await result.current.confirmDiscard(executeTransition)
+    })
+
+    expect(confirmed).toBe(true)
+    expect(executeTransition).toHaveBeenCalledWith({ type: 'setValue', value: 'queued' })
+    expect(result.current.workflowVm.phase).toBe('idle')
+  })
+
   it('supports async replay and exposes replaying-transition', async () => {
     let resolveReplay: ((value: boolean) => void) | null = null
     const replay = vi.fn(
