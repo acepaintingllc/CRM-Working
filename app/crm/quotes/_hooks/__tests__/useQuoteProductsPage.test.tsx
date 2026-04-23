@@ -498,6 +498,241 @@ describe('useQuoteProductsPage', () => {
     expect(result.current.uiState.actionError).toBe('Save exploded.')
   })
 
+  it('prompts to discard unsaved edits when selection changes', async () => {
+    loadQuoteProducts.mockResolvedValue([
+      {
+        id: 'paint-1',
+        name: 'Super Paint',
+        family: 'Paint',
+        base: 'A',
+        subtype: 'Interior',
+        cost_per_unit: 30,
+        coverage_sqft_per_gal_per_coat: 350,
+        efficiency_pct: 90,
+        default_coats: 2,
+        default_sheen: 'Eggshell',
+        default_scopes: ['Walls'],
+        notes: '',
+        status: 'Active',
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'paint-2',
+        name: 'Dormant Paint',
+        family: 'Paint',
+        base: 'B',
+        subtype: 'Interior',
+        cost_per_unit: 27,
+        coverage_sqft_per_gal_per_coat: 300,
+        efficiency_pct: 80,
+        default_coats: 1,
+        default_sheen: 'Flat',
+        default_scopes: ['Walls'],
+        notes: '',
+        status: 'Inactive',
+        created_at: '2026-01-02T00:00:00.000Z',
+        updated_at: '2026-01-02T00:00:00.000Z',
+      },
+    ])
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftField('name', 'Edited Name')
+    })
+
+    act(() => {
+      result.current.actions.setSelectedId('paint-2')
+    })
+
+    expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.transitionType).toBe('setSelectedId')
+    expect(result.current.editorVm.draft.name).toBe('Edited Name')
+
+    act(() => {
+      result.current.actions.cancelDiscard()
+    })
+
+    expect(result.current.discardVm.isOpen).toBe(false)
+    expect(result.current.catalogVm.selected?.id).toBe('paint-1')
+    expect(result.current.editorVm.draft.name).toBe('Edited Name')
+    expect(result.current.editorVm.isDirty).toBe(true)
+
+    act(() => {
+      result.current.actions.setSelectedId('paint-2')
+    })
+
+    act(() => void result.current.actions.confirmDiscard())
+
+    expect(result.current.discardVm.isOpen).toBe(false)
+    expect(result.current.catalogVm.selected?.id).toBe('paint-2')
+    expect(result.current.editorVm.draft.name).toBe('Dormant Paint')
+    expect(result.current.editorVm.isDirty).toBe(false)
+  })
+
+  it('prompts to discard unsaved edits for family/status/search transitions', async () => {
+    loadQuoteProducts.mockResolvedValue([
+      {
+        id: 'paint-1',
+        name: 'Super Paint',
+        family: 'Paint',
+        base: 'A',
+        subtype: 'Interior',
+        cost_per_unit: 30,
+        coverage_sqft_per_gal_per_coat: 350,
+        efficiency_pct: 90,
+        default_coats: 2,
+        default_sheen: 'Eggshell',
+        default_scopes: ['Walls'],
+        notes: '',
+        status: 'Active',
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'paint-2',
+        name: 'Dormant Paint',
+        family: 'Paint',
+        base: 'B',
+        subtype: 'Interior',
+        cost_per_unit: 27,
+        coverage_sqft_per_gal_per_coat: 300,
+        efficiency_pct: 80,
+        default_coats: 1,
+        default_sheen: 'Flat',
+        default_scopes: ['Walls'],
+        notes: '',
+        status: 'Inactive',
+        created_at: '2026-01-02T00:00:00.000Z',
+        updated_at: '2026-01-02T00:00:00.000Z',
+      },
+      {
+        id: 'primer-1',
+        name: 'Prime Coat',
+        family: 'Primer',
+        base: 'B',
+        subtype: 'Exterior',
+        cost_per_unit: 25,
+        coverage_sqft_per_gal_per_coat: 300,
+        efficiency_pct: 85,
+        default_coats: 1,
+        default_sheen: 'Flat',
+        default_scopes: ['Walls'],
+        notes: '',
+        status: 'Active',
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ])
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftField('name', 'Edited Name')
+    })
+
+    act(() => {
+      result.current.actions.setActiveFamily('Primer')
+    })
+
+    expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.transitionType).toBe('setActiveFamily')
+
+    act(() => result.current.actions.cancelDiscard())
+
+    expect(result.current.catalogVm.activeFamily).toBe('Paint')
+    expect(result.current.editorVm.isDirty).toBe(true)
+
+    act(() => {
+      result.current.actions.setStatusFilter('inactive')
+    })
+    expect(result.current.discardVm.transitionType).toBe('setStatusFilter')
+
+    act(() => void result.current.actions.confirmDiscard())
+
+    expect(result.current.catalogVm.statusFilter).toBe('inactive')
+
+    act(() => {
+      result.current.actions.updateDraftField('name', 'Dirty Name')
+      result.current.actions.setSearch('prime')
+    })
+
+    expect(result.current.discardVm.transitionType).toBe('setSearch')
+
+    act(() => result.current.actions.cancelDiscard())
+
+    expect(result.current.catalogVm.search).toBe('')
+    expect(result.current.catalogVm.statusFilter).toBe('inactive')
+    expect(result.current.editorVm.draft.name).toBe('Dirty Name')
+  })
+
+  it('prompts to discard unsaved edits before entering create mode', async () => {
+    loadQuoteProducts.mockResolvedValue([
+      {
+        id: 'paint-1',
+        name: 'Super Paint',
+        family: 'Paint',
+        base: 'A',
+        subtype: 'Interior',
+        cost_per_unit: 30,
+        coverage_sqft_per_gal_per_coat: 350,
+        efficiency_pct: 90,
+        default_coats: 2,
+        default_sheen: 'Eggshell',
+        default_scopes: ['Walls'],
+        notes: '',
+        status: 'Active',
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ])
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftField('name', 'Unsaved Name')
+    })
+
+    act(() => {
+      result.current.actions.startCreate()
+    })
+
+    expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.transitionType).toBe('startCreate')
+
+    act(() => {
+      result.current.actions.cancelDiscard()
+    })
+
+    expect(result.current.editorVm.isCreating).toBe(false)
+    expect(result.current.editorVm.draft.name).toBe('Unsaved Name')
+    expect(result.current.editorVm.isDirty).toBe(true)
+
+    act(() => {
+      result.current.actions.startCreate()
+    })
+
+    act(() => void result.current.actions.confirmDiscard())
+
+    expect(result.current.editorVm.isCreating).toBe(true)
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.editorVm.draft.name).toBe('')
+    expect(result.current.editorVm.draft.family).toBe('Paint')
+  })
+
   it('clears a prior notice when validation or mutation failure takes precedence', async () => {
     loadQuoteProducts.mockResolvedValue([
       {

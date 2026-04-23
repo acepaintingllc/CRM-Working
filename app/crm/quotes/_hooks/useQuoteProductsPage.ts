@@ -28,10 +28,16 @@ export type QuoteProductsEditorVm = {
   selected: ReturnType<typeof useQuoteProductsCatalogState>['selected']
   saving: boolean
   isCreating: boolean
+  isDirty: boolean
   validation: ReturnType<typeof useQuoteProductEditorState>['validation']
   inlineValidation: string | null
   canSave: boolean
   canDelete: boolean
+}
+
+export type QuoteProductDiscardVm = {
+  isOpen: boolean
+  transitionType: 'setSelectedId' | 'setActiveFamily' | 'setStatusFilter' | 'setSearch' | 'startCreate' | null
 }
 
 export type QuoteProductsActions = {
@@ -44,6 +50,8 @@ export type QuoteProductsActions = {
   cancelEdit: () => void
   save: () => Promise<boolean>
   requestRemove: () => Promise<boolean>
+  confirmDiscard: () => boolean
+  cancelDiscard: () => void
 }
 
 export function useQuoteProductsPage() {
@@ -104,6 +112,7 @@ export function useQuoteProductsPage() {
       selected: catalog.selected,
       saving: feedback.saving,
       isCreating: editor.isCreating,
+      isDirty: editor.isDirty,
       validation,
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
@@ -111,14 +120,17 @@ export function useQuoteProductsPage() {
     } satisfies QuoteProductsEditorVm,
     actions: {
       setActiveFamily: controllerActions.setActiveFamily,
-      setStatusFilter: catalog.setStatusFilter,
-      setSearch: catalog.setSearch,
+      setStatusFilter: controllerActions.setStatusFilter,
+      setSearch: controllerActions.setSearch,
       setSelectedId: controllerActions.setSelectedId,
-      updateDraftField: editor.updateDraftField,
+      updateDraftField: controllerActions.updateDraftField,
       startCreate: controllerActions.startCreate,
       cancelEdit: controllerActions.cancelEdit,
       save: controllerActions.save,
       requestRemove: controllerActions.requestRemove,
+      confirmDiscard: controllerActions.confirmDiscard,
+      cancelDiscard: controllerActions.cancelDiscard,
     } satisfies QuoteProductsActions,
+    discardVm: controllerActions.discardVm,
   }
 }

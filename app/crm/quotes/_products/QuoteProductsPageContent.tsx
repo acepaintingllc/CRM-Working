@@ -5,6 +5,7 @@ import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmResourceState } from '@/app/crm/_components/CrmResourceState'
 import { useQuoteProductsPage } from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
 import { QuoteProductEditorSection } from './QuoteProductEditorSection'
+import { QuoteProductDiscardDialog } from './QuoteProductDiscardDialog'
 import { QuoteProductsCatalogSection } from './QuoteProductsCatalogSection'
 
 export function QuoteProductsPageContent() {
@@ -51,6 +52,11 @@ export function QuoteProductsPageContent() {
             }}
           />
         }
+      />
+      <QuoteProductDiscardDialog
+        vm={controller.discardVm}
+        onConfirm={() => void controller.actions.confirmDiscard()}
+        onCancel={controller.actions.cancelDiscard}
       />
     </CrmResourceState>
   )
