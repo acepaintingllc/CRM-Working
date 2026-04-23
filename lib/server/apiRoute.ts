@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getSessionUserOrg } from '@/lib/server/org'
 import { parseUuidParam } from '@/lib/server/routeUtils'
 
-type SessionResult = Awaited<ReturnType<typeof getSessionUserOrg>>
+type SessionResult =
+  | { userId: string; orgId: string }
+  | { error: string }
 export type SessionOrg = Exclude<SessionResult, { error: string }>
 
 export function jsonError(error: string, status: number) {
@@ -123,6 +124,7 @@ export function readUuidParam(value: unknown, label: string): ReadUuidResult {
 }
 
 export async function requireSessionUserOrg() {
+  const { getSessionUserOrg } = await import('./org')
   const session = await getSessionUserOrg()
   if ('error' in session) {
     const message = typeof session.error === 'string' ? session.error : 'Not authenticated'

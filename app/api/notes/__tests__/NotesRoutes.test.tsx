@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getDatePartsInTimeZone, getTodayBoundsInTimeZone, makeUtcDateForTimeZone } from '@/lib/notes/time'
 
 type QueryResult = { data: unknown; error: { message: string } | null }
 
@@ -75,6 +76,34 @@ const {
     mockDb: state,
   }
 })
+
+function buildExpectedSnoozeDate({
+  action,
+  now,
+  dueAtIso,
+  timeZone,
+}: {
+  action: 'tomorrow' | 'next_week'
+  now: Date
+  dueAtIso: string
+  timeZone: string
+}) {
+  const dueParts = getDatePartsInTimeZone(new Date(dueAtIso), timeZone)
+  const today = getTodayBoundsInTimeZone(now, timeZone)
+  const dayOffset = action === 'tomorrow' ? 1 : 7
+  const nextDayStart = new Date(today.start.getTime())
+  nextDayStart.setUTCDate(nextDayStart.getUTCDate() + dayOffset)
+  const nextParts = getDatePartsInTimeZone(nextDayStart, timeZone)
+
+  return makeUtcDateForTimeZone({
+    year: nextParts.year,
+    month: nextParts.month,
+    day: nextParts.day,
+    hour: dueParts.hour,
+    minute: dueParts.minute,
+    timeZone,
+  })
+}
 
 vi.mock('@/lib/server/org', () => ({
   getSessionUserOrg: mockServerGetSessionUserOrg,
@@ -359,6 +388,16 @@ describe('notes routes', () => {
       error: null,
     })
     mockDeriveReminderAt.mockReturnValue(null)
+    const now = new Date()
+    const expectedDue = buildExpectedSnoozeDate({
+      action: 'next_week',
+      now,
+      dueAtIso: '2026-04-21T15:00:00.000Z',
+      timeZone: 'America/Chicago',
+    })
+    const reminderDeltaMs =
+      new Date('2026-04-21T15:00:00.000Z').getTime() - new Date('2026-04-21T13:30:00.000Z').getTime()
+    const expectedReminderAt = new Date(expectedDue.getTime() - reminderDeltaMs).toISOString()
 
     const response = await snoozeTaskRoute(jsonRequest('POST', { action: 'next_week' }), {
       params: { id: 'd4e9f6ea-4ac6-4e8f-8e62-a4bc90f2d67d' },
@@ -368,10 +407,10 @@ describe('notes routes', () => {
     expect(mockDb.updates.at(-1)).toEqual({
       table: 'notes_tasks',
       payload: expect.objectContaining({
-        due_at: '2026-04-29T15:00:00.000Z',
+        due_at: expectedDue.toISOString(),
         is_all_day: false,
         has_due_time: true,
-        reminder_at: '2026-04-29T13:30:00.000Z',
+        reminder_at: expectedReminderAt,
         reminder_sent_at: null,
       }),
     })
