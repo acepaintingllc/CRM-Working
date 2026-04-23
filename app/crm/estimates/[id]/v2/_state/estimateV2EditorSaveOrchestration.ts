@@ -280,3 +280,7 @@ export function resolveEstimateV2SaveResponseState(params: {
     }),
   }
 }
+
+export type EstimateV2ResolvedSaveState = ReturnType<
+  typeof resolveEstimateV2SaveResponseState
+>

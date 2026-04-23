@@ -1,16 +1,11 @@
 'use client'
 
-<<<<<<< Updated upstream
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmFormActions } from '@/app/crm/_components/CrmFormActions'
 import { CrmModalHeader } from '@/app/crm/_components/CrmModalHeader'
 import { CrmModalShell } from '@/app/crm/_components/CrmModalShell'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
-import { QuoteProductDiscardVm } from '@/app/crm/quotes/_hooks/useQuoteProductsPage'
-=======
-import { QuoteAdminConfirmDialog } from '@/app/crm/quotes/_components/QuoteAdminConfirmDialog'
 import type { QuoteProductDiscardVm } from '@/app/crm/quotes/_hooks/quoteProductsPageVm'
->>>>>>> Stashed changes
 
 type Props = {
   vm: QuoteProductDiscardVm

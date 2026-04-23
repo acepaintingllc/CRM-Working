@@ -17,6 +17,7 @@ type BuildDenseQuotePageUiStateArgs = {
   actionError: string | null
   validationError: string | null
   notice: string | null
+  noticeTone?: CrmNoticeTone | null
   canRetry: boolean
   canSave: boolean
   canDelete?: boolean
@@ -47,6 +48,7 @@ export function buildDenseQuotePageUiState({
   actionError,
   validationError,
   notice,
+  noticeTone = 'success',
   canRetry,
   canSave,
   canDelete = false,
@@ -60,7 +62,7 @@ export function buildDenseQuotePageUiState({
       : validationError
         ? null
         : notice
-          ? { tone: 'success' as const, message: notice }
+          ? { tone: noticeTone ?? 'success', message: notice }
           : null
 
   return {

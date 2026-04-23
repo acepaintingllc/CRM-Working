@@ -20,6 +20,10 @@ import {
   resolveEstimateV2SaveResponseState,
   validateEstimateV2PreparedSave,
 } from './estimateV2EditorSaveOrchestration'
+import {
+  applyEstimateV2PreparedSaveCollections,
+  applyEstimateV2SuccessfulSaveState,
+} from './estimateV2EditorStoreMutations'
 
 const AUTO_SAVE_DELAY_MS = 900
 
@@ -56,11 +60,7 @@ export function useEstimateV2SaveController(params: {
       }
 
       const preparedSave = prepareEstimateV2SaveState(currentState)
-      currentState.setScopes(preparedSave.collections.scopes)
-      currentState.setSegments(preparedSave.collections.segments)
-      currentState.setCeilingScopes(preparedSave.collections.ceilingScopes)
-      currentState.setCeilingSegments(preparedSave.collections.ceilingSegments)
-      currentState.setTrimScopes(preparedSave.collections.trimScopes)
+      applyEstimateV2PreparedSaveCollections(store, preparedSave)
 
       const issues = validateEstimateV2PreparedSave({
         currentState,
@@ -143,17 +143,7 @@ export function useEstimateV2SaveController(params: {
         currentState: store.getState(),
         effectiveJobProductDefaults,
       })
-      store.getState().setScopes(responseState.collections.scopes)
-      store.getState().setSegments(responseState.collections.segments)
-      store.getState().setCeilingScopes(responseState.collections.ceilingScopes)
-      store.getState().setCeilingSegments(responseState.collections.ceilingSegments)
-      store.getState().setTrimScopes(responseState.collections.trimScopes)
-      meta.setWallCalculations(responseState.calculations.wallCalculations)
-      meta.setCeilingCalculations(responseState.calculations.ceilingCalculations)
-      meta.setTrimCalculations(responseState.calculations.trimCalculations)
-
-      meta.setEstimate((prev) => (prev ? { ...prev, updated_at: new Date().toISOString() } : prev))
-      meta.setLastSavedSnapshot(responseState.lastSavedSnapshot)
+      applyEstimateV2SuccessfulSaveState(store, responseState)
       meta.setSaveStatus('saved')
       return true
     },

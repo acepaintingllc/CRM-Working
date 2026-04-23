@@ -42,13 +42,16 @@ async function persistRatesFlagsMutation(params: PersistParams) {
 
   await mutateRatesFlags(request as never)
 
-  const nextPayload = reconcileRatesFlagsPayload(resource.data, request)
-  resource.setData(nextPayload)
-
   const verification = await resource.attemptRefresh({
     preserveDataOnError: true,
     reportError: false,
   })
+  const nextPayload =
+    (verification.ok && verification.data) ||
+    reconcileRatesFlagsPayload(resource.data, request)
+  if (!verification.ok) {
+    resource.setData(nextPayload)
+  }
 
   return {
     nextPayload,

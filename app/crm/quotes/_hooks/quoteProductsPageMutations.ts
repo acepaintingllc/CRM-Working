@@ -44,11 +44,17 @@ export async function saveQuoteProductMutation(params: {
       search: null,
     }
 
-    resource.setData((existing) => [
+    const sourceProducts = resource.allKnownData ?? resource.data
+    const nextProducts = [
       created.data,
-      ...existing.filter(
+      ...sourceProducts.filter(
         (product) => product.id !== created.data.id && quoteProductMatchesQuery(product, postCreateQuery)
       ),
+    ]
+    resource.setData(() => nextProducts)
+    resource.setAllKnownData?.(() => [
+      created.data,
+      ...sourceProducts.filter((product) => product.id !== created.data.id),
     ])
 
     return {
@@ -57,6 +63,7 @@ export async function saveQuoteProductMutation(params: {
         type: 'saveSuccess',
         row: created.data,
         notice: created.notice ?? 'Product created.',
+        products: nextProducts,
       },
     }
   }
@@ -74,21 +81,24 @@ export async function saveQuoteProductMutation(params: {
     validationResult.payload
   )
 
-  resource.setData((existing) =>
-    upsertProductIntoVisibleSlice(
-      existing,
-      updated.data,
-      buildCurrentQuery(state),
-      editEditor.targetId
-    )
+  const nextProducts = upsertProductIntoVisibleSlice(
+    resource.data,
+    updated.data,
+    buildCurrentQuery(state),
+    editEditor.targetId
+  )
+  resource.setData(() => nextProducts)
+  resource.setAllKnownData?.((existing) =>
+    upsertProductIntoVisibleSlice(existing, updated.data, { family: null, search: null, status: 'all' }, editEditor.targetId)
   )
 
   return {
     ok: true,
     action: {
       type: 'saveSuccess',
-      row: updated.data,
+      row: quoteProductMatchesQuery(updated.data, buildCurrentQuery(state)) ? updated.data : null,
       notice: updated.notice ?? 'Product saved.',
+      products: nextProducts,
     },
   }
 }
@@ -110,6 +120,7 @@ export async function deleteQuoteProductMutation(params: {
   await deleteQuoteProduct(deleteTarget.id)
   const nextProducts = removeProductFromVisibleSlice(resource.data, deleteTarget.id)
   resource.setData(() => nextProducts)
+  resource.setAllKnownData?.((existing) => removeProductFromVisibleSlice(existing, deleteTarget.id))
 
   return {
     ok: true,

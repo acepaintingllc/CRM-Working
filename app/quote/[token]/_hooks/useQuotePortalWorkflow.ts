@@ -13,6 +13,7 @@ type SnapshotDecisionPayload = {
 
 type SnapshotMessage = {
   error?: string
+  data?: EstimatePublicSnapshot
 }
 
 export function useQuotePortalWorkflow({
@@ -56,7 +57,7 @@ export function useQuotePortalWorkflow({
         return
       }
 
-      setStatus('accepted')
+      setStatus((payload as SnapshotMessage | null)?.data?.status ?? 'accepted')
       setMessage(`${documentLabel} accepted and locked.`)
     } finally {
       setBusy(false)
@@ -81,7 +82,7 @@ export function useQuotePortalWorkflow({
         return
       }
 
-      setStatus('declined')
+      setStatus((payload as SnapshotMessage | null)?.data?.status ?? 'declined')
       setMessage(`${documentLabel} marked declined.`)
     } finally {
       setBusy(false)

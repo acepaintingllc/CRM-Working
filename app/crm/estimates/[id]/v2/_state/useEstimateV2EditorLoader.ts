@@ -16,6 +16,7 @@ import type {
   EstimateV2GetResponse as EstimateResponse,
   EstimateV2JobMeta,
 } from '@/types/estimator/v2'
+import { applyEstimateV2EditorLoadState } from './estimateV2EditorStoreMutations'
 import { buildEstimateV2EditorLoadState } from './estimateV2EditorLoadOrchestration'
 
 export function useEstimateV2EditorLoader(params: {
@@ -75,7 +76,6 @@ export function useEstimateV2EditorLoader(params: {
 
         if (!activeRef.current) return
 
-        const nextState = store.getState()
         const nextLoadState = buildEstimateV2EditorLoadState({
           store,
           estimatePayload,
@@ -84,13 +84,7 @@ export function useEstimateV2EditorLoader(params: {
           catalogsErrorMessage,
           job,
         })
-        nextState.setCollections(nextLoadState.collections)
-        nextState.setMeta((prev) => ({
-          ...prev,
-          ...nextLoadState.meta,
-        }))
-        nextState.setSaveStatus(nextLoadState.saveStatus)
-        nextState.setLoading(false)
+        applyEstimateV2EditorLoadState(store, nextLoadState)
       } catch (error) {
         if (!activeRef.current) return
         console.error('Estimate V2 editor load crashed', {

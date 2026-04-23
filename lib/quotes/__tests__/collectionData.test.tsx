@@ -7,6 +7,7 @@ import {
   buildQuoteHomeSummaryReadModel,
   buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
+  toQuoteHomeSearchResultReadModel,
   toQuoteHomeJobVersionItem,
 } from '../collectionData'
 
@@ -113,24 +114,12 @@ describe('quote collection data', () => {
       ],
     })
 
-<<<<<<< Updated upstream
-  it('filters search results case-insensitively and caps them at 8', () => {
-    const searchRows = Array.from({ length: 10 }, (_, index) => ({
-      ...rows[0],
-      id: `estimate-${index + 1}`,
-      estimate_id: `estimate-${index + 1}`,
-      version_name: `Kitchen Revision ${index + 1}`,
-      job_title: 'Kitchen',
-      customer_name: 'Alice',
-    }))
-=======
     const versions = buildQuoteJobVersionsReadModel(rows, {
       jobId: 'job-1',
       totalVersions: 2,
       limit: 25,
       nextCursor: null,
     })
->>>>>>> Stashed changes
 
     expect(
       buildQuoteHomeBootstrapReadModel({
@@ -151,67 +140,14 @@ describe('quote collection data', () => {
       selected_job_versions: versions,
     })
 
-<<<<<<< Updated upstream
-    expect(payload.query).toBe('revision')
-    expect(payload.items).toHaveLength(8)
-    expect(payload.items[0]).toEqual(toQuoteHomeJobVersionItem(searchRows[0]))
-  })
-
-  it('returns an empty item list for blank search queries', () => {
-    expect(buildQuoteHomeSearchReadModel(rows, '   ')).toEqual({
-      query: '   ',
-      items: [],
-=======
     expect(buildQuoteHomeSearchReadModel(rows, 'revision', 8)).toEqual({
       query: 'revision',
       limit: 8,
       items: rows.map(toQuoteHomeSearchResultReadModel),
->>>>>>> Stashed changes
     })
 
-<<<<<<< Updated upstream
-  it('returns full per-job versions even when search results are capped', () => {
-    const expandedRows = Array.from({ length: 205 }, (_, index) => {
-      const jobId = index < 201 ? 'job-a' : 'job-b'
-      const state = index < 100 ? 'draft' : index < 180 ? 'live' : 'archived'
-      const total = state === 'archived' ? 1000 + index : 2000 + index
-
-      return {
-        id: `estimate-${index + 1}`,
-        estimate_id: `estimate-${index + 1}`,
-        job_id: jobId,
-        customer_id: `customer-${jobId}`,
-        status: state,
-        raw_version_name: `Version ${index + 1}`,
-        raw_version_state: state,
-        raw_version_kind: 'standard',
-        raw_version_sort_order: index + 1,
-        version_name: `Version ${index + 1}`,
-        version_state: state,
-        version_kind: 'standard',
-        version_sort_order: index + 1,
-        job_title: jobId === 'job-a' ? 'Kitchen' : 'Garage',
-        job_status: 'estimate_sent',
-        job_estimate_sent_at: '2026-04-21T00:00:00.000Z',
-        customer_name: jobId === 'job-a' ? 'Alice' : 'Bob',
-        final_total: total,
-        updated_at: `2026-04-22T${String(index % 24).padStart(2, '0')}:00:00.000Z`,
-        created_at: `2026-04-21T${String(index % 24).padStart(2, '0')}:00:00.000Z`,
-        is_sent_estimate: index < 150,
-      }
-    })
-
-    const searchPayload = buildQuoteHomeSearchReadModel(expandedRows, 'version')
-    const jobVersionsPayload = buildQuoteJobVersionsReadModel(expandedRows, 'job-a')
-
-    expect(searchPayload.items).toHaveLength(8)
-    expect(jobVersionsPayload.job_id).toBe('job-a')
-    expect(jobVersionsPayload.total_versions).toBe(201)
-    expect(jobVersionsPayload.items).toHaveLength(201)
-=======
     expect(buildQuoteHomeRecentActivityReadModel(rows).items).toHaveLength(2)
     expect(versions.total_versions).toBe(2)
     expect(versions.limit).toBe(25)
->>>>>>> Stashed changes
   })
 })

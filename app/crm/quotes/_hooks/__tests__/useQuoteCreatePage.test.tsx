@@ -79,8 +79,6 @@ describe('useQuoteCreatePage', () => {
     expect(result.current.feedbackVm.error).toBe('Load failed')
     expect(createQuoteVersion).not.toHaveBeenCalled()
   })
-<<<<<<< Updated upstream
-=======
 
   it('loads job data only for the requested job param and enables creation for eligible jobs', async () => {
     getSearchParam.mockReturnValue('job-1')
@@ -282,5 +280,4 @@ describe('useQuoteCreatePage', () => {
     expect(result.current.create.versionName).toBe('Keep me')
     expect(result.current.create.versionKind).toBe('revision')
   })
->>>>>>> Stashed changes
 })

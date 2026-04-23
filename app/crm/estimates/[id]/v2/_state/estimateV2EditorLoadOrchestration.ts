@@ -59,3 +59,5 @@ export function buildEstimateV2EditorLoadState(params: {
     saveStatus: sanitized.meta.saveStatus,
   }
 }
+
+export type EstimateV2EditorLoadState = ReturnType<typeof buildEstimateV2EditorLoadState>

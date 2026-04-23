@@ -256,8 +256,6 @@ describe('useQuoteProductsPage', () => {
     })
   })
 
-<<<<<<< Updated upstream
-=======
   it('preserves an explicit selection across a reordered reload', async () => {
     loadQuoteProducts
       .mockResolvedValueOnce([
@@ -395,7 +393,6 @@ describe('useQuoteProductsPage', () => {
     expect(result.current.catalogVm.selected?.name).toBe('Super Paint Ultra')
   })
 
->>>>>>> Stashed changes
   it('exposes structured validation state for invalid draft values', async () => {
     loadQuoteProducts.mockResolvedValue([buildProduct({ id: 'paint-1' })])
 

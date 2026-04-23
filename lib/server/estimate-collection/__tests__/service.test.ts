@@ -171,11 +171,7 @@ describe('estimate collection service', () => {
       ok: true,
       data: { query: 'kitchen', limit: 8, items: [{ estimate_id: 'estimate-1' }] },
     })
-<<<<<<< Updated upstream
-    await expect(loadEstimateCollectionJobCountsPayload('org-1', deps)).resolves.toEqual({
-=======
     await expect(loadEstimateCollectionJobVersionsPayload('org-1', 'job-1', {}, deps)).resolves.toEqual({
->>>>>>> Stashed changes
       ok: true,
       data: { job_id: 'job-1', total_versions: 1, limit: 25, next_cursor: null, items: [{ estimate_id: 'estimate-1' }] },
     })

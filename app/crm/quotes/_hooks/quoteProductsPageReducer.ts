@@ -129,7 +129,7 @@ export function quoteProductsPageReducer(
     case 'syncProducts':
       return syncStateWithProducts(state, action.products)
     case 'saveSuccess':
-      return buildSaveSuccessState(state, action.row, action.notice)
+      return buildSaveSuccessState(state, action.row, action.notice, action.products)
     case 'deleteSuccess': {
       const shouldClearEditor =
         state.editor.mode === 'edit' && state.editor.targetId === action.deletedId

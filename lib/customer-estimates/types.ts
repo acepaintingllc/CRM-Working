@@ -90,6 +90,31 @@ export type CustomerEstimateDocument = {
   terms: string[]
 }
 
+export type BuiltCustomerEstimateDocument = CustomerEstimateDocument & {
+  source_meta: {
+    company: {
+      business_name: boolean
+      main_phone: boolean
+      business_email: boolean
+      address: boolean
+      website: boolean
+      sender_signature: boolean
+      logo_url: boolean
+    }
+    settings: {
+      quote_validity_days: boolean
+      terms_text: boolean
+    }
+    overrides: {
+      title: boolean
+      intro_paragraph: boolean
+      closing_paragraph: boolean
+      deposit_language: boolean
+      card_fee_note: boolean
+    }
+  }
+}
+
 export type EstimatePublicSnapshot = {
   estimate_id: string
   estimate_version_id: string

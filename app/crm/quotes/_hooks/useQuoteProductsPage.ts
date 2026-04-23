@@ -1,152 +1,8 @@
 'use client'
 
-<<<<<<< Updated upstream
-import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
-  QUOTE_PRODUCT_FAMILIES,
-  type ProductFamily,
-  type QuoteProductStatusFilter,
-} from '@/lib/quotes/productsForm'
-import { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
-import { useQuoteProductEditorState } from './useQuoteProductEditorState'
-import { useQuoteProductsControllerActions } from './useQuoteProductsControllerActions'
-import { useQuoteProductMutations } from './useQuoteProductMutations'
-import {
-  useQuoteProductsQueryState,
-  useQuoteProductsSelectionState,
-} from './useQuoteProductsCatalogState'
-import { useQuoteProductsData } from './useQuoteProductsData'
-
-export type QuoteProductsCatalogVm = {
-  activeFamily: ProductFamily
-  families: readonly ProductFamily[]
-  statusFilter: QuoteProductStatusFilter
-  search: string
-  products: ReturnType<typeof useQuoteProductsSelectionState>['products']
-  selectedId: string | null
-  selected: ReturnType<typeof useQuoteProductsSelectionState>['selected']
-}
-
-export type QuoteProductsEditorVm = {
-  draft: ReturnType<typeof useQuoteProductEditorState>['draft']
-  selected: ReturnType<typeof useQuoteProductsSelectionState>['selected']
-  saving: boolean
-  isCreating: boolean
-  isDirty: boolean
-  validation: ReturnType<typeof useQuoteProductEditorState>['validation']
-  inlineValidation: string | null
-  canSave: boolean
-  canDelete: boolean
-}
-
-export type QuoteProductDiscardVm = {
-  isOpen: boolean
-  transitionType: 'setSelectedId' | 'setActiveFamily' | 'setStatusFilter' | 'setSearch' | 'startCreate' | null
-}
-
-export type QuoteProductsActions = {
-  setActiveFamily: (nextFamily: ProductFamily) => void
-  setStatusFilter: (next: string) => void
-  setSearch: (value: string) => void
-  setSelectedId: (id: string | null) => void
-  updateDraftField: ReturnType<typeof useQuoteProductEditorState>['updateDraftField']
-  startCreate: () => void
-  cancelEdit: () => void
-  save: () => Promise<boolean>
-  requestRemove: () => Promise<boolean>
-  confirmDiscard: () => boolean
-  cancelDiscard: () => void
-}
-
-export function useQuoteProductsPage() {
-  const feedback = useDenseQuoteAdminFeedback()
-
-  const queryState = useQuoteProductsQueryState()
-
-  const resource = useQuoteProductsData({
-    query: queryState.query,
-  })
-
-  const selectionState = useQuoteProductsSelectionState({
-    products: resource.data,
-  })
-
-  const editor = useQuoteProductEditorState({
-    selected: selectionState.selected,
-  })
-
-  const mutations = useQuoteProductMutations({
-    setData: resource.setData,
-    getQuery: () => queryState.query,
-    feedback,
-  })
-
-  const controllerActions = useQuoteProductsControllerActions({
-    queryState,
-    selectionState,
-    editor,
-    mutations,
-    feedback,
-  })
-
-  const validation = editor.validation
-  const uiState = buildDenseQuotePageUiState({
-    loading: resource.loading,
-    hasData: resource.data.length > 0 || (!resource.loading && !resource.error),
-    loadError: resource.error,
-    actionError: feedback.actionError,
-    validationError: validation.ok ? null : validation.summary,
-    notice: feedback.notice,
-    canRetry: !resource.loading,
-    canSave:
-      !feedback.saving &&
-      validation.ok &&
-      !resource.error &&
-      (editor.isCreating || Boolean(selectionState.selected)),
-    canDelete:
-      Boolean(selectionState.selected) && !editor.isCreating && !feedback.saving && !resource.error,
-  })
-
-  return {
-    resource,
-    uiState,
-    catalogVm: {
-      activeFamily: queryState.activeFamily,
-      families: QUOTE_PRODUCT_FAMILIES,
-      statusFilter: queryState.statusFilter,
-      search: queryState.search,
-      products: resource.data,
-      selectedId: selectionState.selectedId,
-      selected: selectionState.selected,
-    } satisfies QuoteProductsCatalogVm,
-    editorVm: {
-      draft: editor.draft,
-      selected: selectionState.selected,
-      saving: feedback.saving,
-      isCreating: editor.isCreating,
-      isDirty: editor.isDirty,
-      validation,
-      inlineValidation: uiState.inlineValidation,
-      canSave: uiState.canSave,
-      canDelete: uiState.canDelete,
-    } satisfies QuoteProductsEditorVm,
-    actions: {
-      setActiveFamily: controllerActions.setActiveFamily,
-      setStatusFilter: controllerActions.setStatusFilter,
-      setSearch: controllerActions.setSearch,
-      setSelectedId: controllerActions.setSelectedId,
-      updateDraftField: controllerActions.updateDraftField,
-      startCreate: controllerActions.startCreate,
-      cancelEdit: controllerActions.cancelEdit,
-      save: controllerActions.save,
-      requestRemove: controllerActions.requestRemove,
-      confirmDiscard: controllerActions.confirmDiscard,
-      cancelDiscard: controllerActions.cancelDiscard,
-    } satisfies QuoteProductsActions,
-    discardVm: controllerActions.discardVm,
-=======
-import { useEffect, useMemo, useReducer, useRef } from 'react'
-import {
+  type QuoteProductRow,
   normalizeQuoteProductStatusFilter,
   type QuoteProductDraft,
 } from '@/lib/quotes/productsForm'
@@ -166,6 +22,7 @@ import {
   type QuoteProductsPageController,
 } from './quoteProductsPageVm'
 import {
+  createEditorFromRow,
   getSelectedId,
   initialQuoteProductsPageState,
   type QuoteProductsControllerAction,
@@ -196,12 +53,31 @@ export function useQuoteProductsPage(): QuoteProductsPageController {
 
   const query = useMemo(() => buildCurrentQuery(state), [state])
   const resource = useQuoteProductsResourceAdapter({ query })
+  const [allKnownData, setAllKnownData] = useState<QuoteProductRow[]>([])
+  const selectionPending = !resource.loading && resource.data.length > 0 && state.editor.mode === 'none'
 
   useEffect(() => {
     applyAction({ type: 'syncProducts', products: resource.data })
   }, [resource.data])
 
-  const pageVm = buildQuoteProductsPageVm({ state, resource })
+  useEffect(() => {
+    setAllKnownData((current) => {
+      const nextById = new Map(current.map((product) => [product.id, product]))
+      for (const product of resource.data) {
+        nextById.set(product.id, product)
+      }
+      return Array.from(nextById.values())
+    })
+  }, [resource.data])
+
+  useEffect(() => {
+    if (!selectionPending) return
+    applyAction({ type: 'syncProducts', products: resource.data })
+  }, [selectionPending, resource.data])
+
+  const effectiveResource = selectionPending ? { ...resource, loading: true } : resource
+  const resourceAdapter = { ...effectiveResource, allKnownData, setAllKnownData }
+  const pageVm = buildQuoteProductsPageVm({ state, resource: resourceAdapter })
 
   function requestTransition(transition: QuoteProductsPendingTransition, changed: boolean) {
     if (!changed) return true
@@ -222,12 +98,18 @@ export function useQuoteProductsPage(): QuoteProductsPageController {
 
   function updateDraftField<K extends keyof QuoteProductDraft>(field: K, value: QuoteProductDraft[K]) {
     const currentState = stateRef.current
-    if (currentState.editor.mode === 'none') return
+    let draftSource = currentState.editor
+    if (currentState.editor.mode === 'none') {
+      const fallback = resource.data[0] ?? null
+      if (!fallback) return
+      applyAction({ type: 'syncProducts', products: resource.data })
+      draftSource = createEditorFromRow(fallback)
+    }
 
     applyAction({
       type: 'updateDraft',
       draft: {
-        ...currentState.editor.draft,
+        ...draftSource.draft,
         [field]: value,
       },
     })
@@ -251,7 +133,7 @@ export function useQuoteProductsPage(): QuoteProductsPageController {
     try {
       const result = await saveQuoteProductMutation({
         state: currentState,
-        resource,
+        resource: resourceAdapter,
         validationResult,
       })
 
@@ -300,7 +182,7 @@ export function useQuoteProductsPage(): QuoteProductsPageController {
     try {
       const result = await deleteQuoteProductMutation({
         state: currentState,
-        resource,
+        resource: resourceAdapter,
       })
 
       if (!result.ok) {
@@ -351,6 +233,12 @@ export function useQuoteProductsPage(): QuoteProductsPageController {
 
   function cancelEdit() {
     applyAction({ type: 'cancelEdit', products: resource.data })
+  }
+
+  async function requestRemove() {
+    const requested = requestDelete()
+    if (!requested) return false
+    return confirmDelete()
   }
 
   const actions: QuoteProductsActions = {
@@ -408,6 +296,7 @@ export function useQuoteProductsPage(): QuoteProductsPageController {
     cancelEdit,
     save,
     requestDelete,
+    requestRemove,
     confirmDelete,
     cancelDelete,
     confirmDiscard,
@@ -415,14 +304,13 @@ export function useQuoteProductsPage(): QuoteProductsPageController {
   }
 
   return {
-    resource,
+    resource: resourceAdapter,
     uiState: pageVm.uiState,
     catalogVm: pageVm.catalogVm,
     editorVm: pageVm.editorVm,
     actions,
     discardVm: pageVm.discardVm,
     deleteVm: pageVm.deleteVm,
->>>>>>> Stashed changes
   }
 }
 

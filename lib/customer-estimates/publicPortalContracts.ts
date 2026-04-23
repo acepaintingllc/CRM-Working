@@ -5,7 +5,17 @@ import type {
   EstimatePublicSnapshot,
 } from './types'
 
-export type PublicEstimateSnapshotResponse = EstimatePublicSnapshot
+export type PublicEstimateSnapshotResponse = {
+  data: EstimatePublicSnapshot
+}
+
+export type PublicEstimateMutationResponse = {
+  data: EstimatePublicSnapshot
+}
+
+export type PublicEstimateErrorResponse = {
+  error: string
+}
 
 export type PublicEstimateAcceptRequest = {
   legalName: string

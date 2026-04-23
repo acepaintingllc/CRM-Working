@@ -17,18 +17,16 @@ type Props = {
 
 export default function QuotesHomePage({ initialData }: Props) {
   const controller = useQuotesHomePage(initialData)
-  const {
-    actions,
-    createVm,
-    deleteDialogVm,
-    feedbackVm,
-    headerVm,
-    jobListVm,
-    mobileVm,
-    selectedJobVm,
-    summaryCards,
-    versionListVm,
-  } = controller
+  const actions = controller.actions
+  const createVm = controller.createVm ?? controller.create
+  const deleteDialogVm = controller.deleteDialogVm ?? controller.dialogs?.delete
+  const feedbackVm = controller.feedbackVm ?? controller.feedback
+  const headerVm = controller.headerVm ?? controller.header
+  const jobListVm = controller.jobListVm ?? controller.jobList
+  const mobileSummaryCards = controller.mobileVm?.summaryCards ?? controller.mobileSummaryCards ?? []
+  const selectedJobVm = controller.selectedJobVm ?? controller.selectedJob
+  const summaryCards = controller.summaryCards ?? []
+  const versionListVm = controller.versionListVm ?? controller.versionList
 
   return (
     <div className="ace-v2-shell" style={S.main}>
@@ -48,7 +46,7 @@ export default function QuotesHomePage({ initialData }: Props) {
           </div>
 
           <div style={S.mobileStats}>
-            {mobileVm.summaryCards.map((card) => (
+            {mobileSummaryCards.map((card) => (
               <div key={`mobile-${card.label}`} style={S.mobileStatCard}>
                 <div style={S.cardLabel}>{card.label}</div>
                 <div style={{ ...S.statValue, fontSize: 18, marginBottom: 0 }}>{card.value}</div>
@@ -56,12 +54,14 @@ export default function QuotesHomePage({ initialData }: Props) {
             ))}
           </div>
 
-          <QuotesHomeJobList
-            vm={jobListVm}
-            renderDesktop={false}
-            onJobQueryChange={actions.setJobQuery}
-            onSelectJob={actions.setSelectedJobId}
-          />
+          {mobileSummaryCards.length > 0 ? (
+            <QuotesHomeJobList
+              vm={jobListVm}
+              renderDesktop={false}
+              onJobQueryChange={actions.setJobQuery}
+              onSelectJob={actions.setSelectedJobId}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -130,19 +130,15 @@ export default function QuotesHomePage({ initialData }: Props) {
                 gap: 22,
               }}
             >
-<<<<<<< Updated upstream
-              <QuotesHomeVersionList vm={versionListVm} onRequestDelete={actions.requestDeleteVersion} />
-=======
               <QuotesHomeVersionList
-                vm={controller.versionList}
+                vm={versionListVm}
                 onRequestDelete={actions.requestDelete}
                 onLoadMore={() => void actions.loadMoreVersions()}
               />
->>>>>>> Stashed changes
 
               <QuotesHomeCreatePanel
                 vm={createVm}
-                onCreate={() => void actions.createVersion()}
+                onCreate={() => void (actions.createVersion?.() ?? actions.create?.())}
                 onVersionKindChange={actions.setVersionKind}
                 onVersionNameChange={actions.setVersionName}
               />
@@ -170,7 +166,7 @@ export default function QuotesHomePage({ initialData }: Props) {
       <QuotesHomeDeleteDialog
         vm={deleteDialogVm}
         onCancel={actions.cancelDelete}
-        onConfirm={() => void actions.confirmDeleteVersion()}
+        onConfirm={() => void (actions.confirmDeleteVersion?.() ?? actions.confirmDelete?.())}
       />
     </div>
   )

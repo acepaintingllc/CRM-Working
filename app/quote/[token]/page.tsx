@@ -1,8 +1,5 @@
 import QuotePortalClient from './QuotePortalClient'
-import {
-  loadPublicEstimateByToken,
-  markPublicEstimateViewed,
-} from '@/lib/server/estimatePublicPortal'
+import { loadPublicEstimateSnapshot } from '@/lib/server/estimatePublicPortal'
 
 export default async function PublicQuotePage({
   params,
@@ -13,23 +10,19 @@ export default async function PublicQuotePage({
 }) {
   const { token } = await params
   const resolvedSearchParams = searchParams ? await searchParams : {}
-  const loaded = await loadPublicEstimateByToken(token)
+  const loaded = await loadPublicEstimateSnapshot(
+    token,
+    undefined,
+    { metadata: { route: 'public-page' } }
+  )
 
-  if ('error' in loaded) {
-    return <div style={{ padding: 24, fontFamily: 'system-ui' }}>{loaded.error}</div>
-  }
-
-  if (loaded.snapshot.status === 'sent') {
-    await markPublicEstimateViewed({
-      versionId: loaded.snapshot.estimate_version_id,
-      orgId: loaded.version.org_id as string,
-      metadata: { route: 'public-page' },
-    }).catch(() => null)
+  if (!loaded.ok) {
+    return <div style={{ padding: 24, fontFamily: 'system-ui' }}>{loaded.message}</div>
   }
 
   return (
     <QuotePortalClient
-      snapshot={loaded.snapshot}
+      snapshot={loaded.data}
       printMode={resolvedSearchParams.print === '1'}
     />
   )

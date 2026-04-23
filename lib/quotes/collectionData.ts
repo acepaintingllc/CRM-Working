@@ -131,6 +131,13 @@ export type QuoteJobVersionsReadModel = QuoteHomePageWindow & {
   items: QuoteHomeJobVersionItemReadModel[]
 }
 
+export type QuoteHomeJobVersionCountsReadModel = {
+  items: Array<{
+    job_id: string
+    version_count: number
+  }>
+}
+
 export type QuoteHomeBootstrapReadModel = {
   summary: QuoteHomeSummaryReadModel
   jobs: QuoteHomeJobsPageReadModel
@@ -219,34 +226,6 @@ export function toQuoteHomeSearchResultReadModel(
   }
 }
 
-<<<<<<< Updated upstream
-export function buildQuoteHomeSearchHaystack(
-  estimate:
-    | QuoteHomeRecentActivityItemReadModel
-    | QuoteHomeJobVersionItemReadModel
-    | QuoteHomeSearchResultReadModel
-) {
-  return `${estimate.version_name} ${estimate.job_title} ${estimate.customer_name} ${estimate.version_kind} ${estimate.version_state}`.toLowerCase()
-}
-
-export function buildQuoteHomeJobVersionCountsReadModel(
-  estimates: Array<Pick<EstimateCollectionDecoratedRow, 'job_id'>>
-): QuoteHomeJobVersionCountsReadModel {
-  const counts = estimates.reduce<Record<string, number>>((nextCounts, estimate) => {
-    nextCounts[estimate.job_id] = (nextCounts[estimate.job_id] ?? 0) + 1
-    return nextCounts
-  }, {})
-
-  return {
-    items: Object.entries(counts).map(([job_id, version_count]) => ({
-      job_id,
-      version_count,
-    })),
-  }
-}
-
-=======
->>>>>>> Stashed changes
 export function buildQuoteHomeSummaryReadModel(
   estimates: Array<
     Pick<QuoteHomeJobVersionItemReadModel, 'version_state' | 'final_total' | 'is_sent_estimate'>
@@ -304,21 +283,10 @@ export function buildQuoteHomeSearchReadModel(
   query: string,
   limit: number
 ): QuoteHomeSearchResponse {
-  const normalizedQuery = query.trim().toLowerCase()
   return {
     query,
-<<<<<<< Updated upstream
-    items:
-      normalizedQuery.length === 0
-        ? []
-        : rows
-            .map(toQuoteHomeSearchResultReadModel)
-            .filter((estimate) => buildQuoteHomeSearchHaystack(estimate).includes(normalizedQuery))
-            .slice(0, 8),
-=======
     limit,
     items: rows.map(toQuoteHomeSearchResultReadModel),
->>>>>>> Stashed changes
   }
 }
 

@@ -169,12 +169,14 @@ export function syncStateWithProducts(
 
 export function buildSaveSuccessState(
   state: QuoteProductsControllerState,
-  row: QuoteProductRow,
-  notice: string | null
+  row: QuoteProductRow | null,
+  notice: string | null,
+  products: QuoteProductRow[] = []
 ): QuoteProductsControllerState {
+  const fallback = products[0] ?? null
   return {
     ...state,
-    activeFamily: normalizeQuoteProductFamily(row.family, state.activeFamily),
+    activeFamily: normalizeQuoteProductFamily(row?.family ?? state.activeFamily, state.activeFamily),
     statusFilter: state.editor.mode === 'create' ? 'all' : state.statusFilter,
     search: state.editor.mode === 'create' ? '' : state.search,
     debouncedSearch: state.editor.mode === 'create' ? '' : state.debouncedSearch,
@@ -184,6 +186,6 @@ export function buildSaveSuccessState(
       notice,
       actionError: null,
     },
-    editor: createEditorFromRow(row),
+    editor: row ? createEditorFromRow(row) : fallback ? createEditorFromRow(fallback) : createEmptyEditor(),
   }
 }

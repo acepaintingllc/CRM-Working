@@ -9,9 +9,17 @@ type Options = {
   setDeleteError: (value: string | null) => void
 }
 
-export function useQuotesHomeDelete({ refresh, setDeleteError }: Options) {
+export function useQuotesHomeDelete(options?: Partial<Options>) {
+  const refresh = options?.refresh ?? (async () => true)
+  const externalSetDeleteError = options?.setDeleteError
   const [confirmingDelete, setConfirmingDelete] = useState<QuoteHomeJobVersionItemReadModel | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function setDeleteError(value: string | null) {
+    setError(value)
+    externalSetDeleteError?.(value)
+  }
 
   function requestDeleteVersion(estimate: QuoteHomeJobVersionItemReadModel) {
     setConfirmingDelete(estimate)
@@ -45,6 +53,7 @@ export function useQuotesHomeDelete({ refresh, setDeleteError }: Options) {
   return {
     confirmingDelete,
     deletingId,
+    error,
     requestDeleteVersion,
     cancelDelete,
     confirmDeleteVersion,

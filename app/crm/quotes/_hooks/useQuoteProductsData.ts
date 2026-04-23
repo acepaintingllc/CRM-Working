@@ -1,5 +1,6 @@
 'use client'
 
+import type { Dispatch, SetStateAction } from 'react'
 import { useMemo } from 'react'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { loadQuoteProducts } from '@/lib/quotes/client'
@@ -28,4 +29,7 @@ export function useQuoteProductsData({ query }: Options) {
 
 export const useQuoteProductsResourceAdapter = useQuoteProductsData
 
-export type QuoteProductsResourceAdapter = ReturnType<typeof useQuoteProductsResourceAdapter>
+export type QuoteProductsResourceAdapter = ReturnType<typeof useQuoteProductsResourceAdapter> & {
+  allKnownData?: QuoteProductRow[]
+  setAllKnownData?: Dispatch<SetStateAction<QuoteProductRow[]>>
+}

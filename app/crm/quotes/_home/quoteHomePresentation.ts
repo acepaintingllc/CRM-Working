@@ -132,19 +132,9 @@ export function buildQuotesHomeFeedbackVm(params: {
   if (details.length === 0) return null
 
   const actionError = Boolean(params.createError || params.deleteError)
-<<<<<<< Updated upstream
-  const title =
-    actionError
-      ? 'Quote action failed'
-      : params.jobVersionsError
-=======
-  const actionWarning = Boolean(params.actionWarning)
   const title = actionError
     ? 'Quote action failed'
-    : actionWarning
-      ? 'Quote action completed with refresh errors'
-      : params.jobsError || params.jobVersionsError
->>>>>>> Stashed changes
+    : params.jobsError || params.jobVersionsError
         ? 'Quote home loaded with errors'
         : params.homeFailures.length > 1
           ? 'Some quote home data failed to load'

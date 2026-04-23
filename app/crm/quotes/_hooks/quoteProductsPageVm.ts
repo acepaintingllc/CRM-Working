@@ -3,6 +3,7 @@
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
 import { QUOTE_PRODUCT_FAMILIES, validateQuoteProductDraft, type QuoteProductDraft, type QuoteProductRow, type QuoteProductValidationState } from '@/lib/quotes/productsForm'
 import { getSelectionVisibility } from './quoteProductsPageTransitions'
+import { createEditorFromRow } from './quoteProductsPageState'
 import type { QuoteProductsControllerState, QuoteProductsPendingTransition } from './quoteProductsPageState'
 import type { QuoteProductsResourceAdapter } from './useQuoteProductsData'
 
@@ -52,6 +53,7 @@ export type QuoteProductsActions = {
   cancelEdit: () => void
   save: () => Promise<boolean>
   requestDelete: () => boolean
+  requestRemove: () => Promise<boolean>
   confirmDelete: () => Promise<boolean>
   cancelDelete: () => void
   confirmDiscard: () => boolean
@@ -83,13 +85,15 @@ export function buildQuoteProductsPageVm(params: {
   resource: QuoteProductsResourceAdapter
 }) {
   const { state, resource } = params
-  const selectedId = state.editor.mode === 'edit' ? state.editor.targetId : null
+  const effectiveEditor =
+    state.editor.mode === 'none' && resource.data[0] ? createEditorFromRow(resource.data[0]) : state.editor
+  const selectedId = effectiveEditor.mode === 'edit' ? effectiveEditor.targetId : null
   const selectedVisible = selectedId
     ? resource.data.find((product) => product.id === selectedId) ?? null
     : null
-  const editorSelected = state.editor.mode === 'edit' ? state.editor.targetRow : null
+  const editorSelected = effectiveEditor.mode === 'edit' ? effectiveEditor.targetRow : null
   const selectionVisibility = getSelectionVisibility(state, selectedVisible)
-  const validationResult = validateQuoteProductDraft(state.editor.draft)
+  const validationResult = validateQuoteProductDraft(effectiveEditor.draft)
   const validation = validationResult.validation
 
   const uiState = buildDenseQuotePageUiState({
@@ -104,11 +108,11 @@ export function buildQuoteProductsPageVm(params: {
       !state.feedback.saving &&
       !resource.error &&
       validation.ok &&
-      (state.editor.mode === 'create' || state.editor.mode === 'edit'),
+      (effectiveEditor.mode === 'create' || effectiveEditor.mode === 'edit'),
     canDelete:
       !state.feedback.saving &&
       !resource.error &&
-      state.editor.mode === 'edit',
+      effectiveEditor.mode === 'edit',
   })
 
   return {
@@ -125,11 +129,11 @@ export function buildQuoteProductsPageVm(params: {
       selected: selectedVisible,
     },
     editorVm: {
-      draft: state.editor.draft,
+      draft: effectiveEditor.draft,
       selected: editorSelected,
       saving: state.feedback.saving,
-      isCreating: state.editor.mode === 'create',
-      isDirty: state.editor.dirty,
+      isCreating: effectiveEditor.mode === 'create',
+      isDirty: effectiveEditor.dirty,
       validation,
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,

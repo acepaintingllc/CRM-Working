@@ -71,7 +71,12 @@ export type QuoteProductsControllerAction =
   | { type: 'applyTransition'; transition: QuoteProductsPendingTransition; products: QuoteProductRow[] }
   | { type: 'cancelEdit'; products: QuoteProductRow[] }
   | { type: 'syncProducts'; products: QuoteProductRow[] }
-  | { type: 'saveSuccess'; row: QuoteProductRow; notice: string | null }
+  | {
+      type: 'saveSuccess'
+      row: QuoteProductRow | null
+      notice: string | null
+      products: QuoteProductRow[]
+    }
   | {
       type: 'deleteSuccess'
       deletedId: string

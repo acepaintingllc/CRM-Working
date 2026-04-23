@@ -3,21 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   QuoteHomeBootstrapReadModel,
-<<<<<<< Updated upstream
-  QuoteHomeJobVersionCountsReadModel,
-  QuoteHomeSummaryReadModel,
-} from '@/lib/quotes/collectionData'
-import {
-  loadQuoteHomeBootstrap,
-} from '@/lib/quotes/client'
-import { buildQuotesHomeFeedbackVm } from '../_home/quoteHomePresentation'
-
-type QuoteHomeEligibleJob = QuoteHomeBootstrapReadModel['jobs'][number]
-type QuoteHomeSliceSource = 'bootstrap'
-type QuoteHomeSliceFailure = {
-  source: QuoteHomeSliceSource
-  message: string
-=======
   QuoteHomeJobsPageReadModel,
   QuoteHomeSummaryReadModel,
 } from '@/lib/quotes/collectionData'
@@ -36,43 +21,33 @@ const EMPTY_JOBS: QuoteHomeJobsPageReadModel = {
   limit: 25,
   next_cursor: null,
   items: [],
->>>>>>> Stashed changes
 }
-
-const EMPTY_SUMMARY: QuoteHomeSummaryReadModel = {
-  total_versions: 0,
-  draft_count: 0,
-  sent_or_awaiting_count: 0,
-  live_count: 0,
-  pipeline_total: 0,
-}
-
-const EMPTY_JOB_COUNTS: QuoteHomeJobVersionCountsReadModel = {
-  items: [],
-}
-
-const EMPTY_FAILURES: Record<QuoteHomeSliceSource, QuoteHomeSliceFailure | null> = { bootstrap: null }
 
 function toLoadErrorMessage(scope: string, loadError: unknown) {
   return loadError instanceof Error ? loadError.message : `Failed to load ${scope}.`
 }
 
-<<<<<<< Updated upstream
-function resolveFailure(
-  source: QuoteHomeSliceSource,
-  scope: string,
-  result: PromiseSettledResult<unknown>
-): QuoteHomeSliceFailure | null {
-  if (result.status !== 'rejected') return null
-
+function normalizeSummary(
+  summary: QuoteHomeSummaryReadModel,
+  jobs: QuoteHomeJobsPageReadModel
+): QuoteHomeSummaryReadModel {
+  const jobsTotalVersions = jobs.items.reduce((sum, job) => sum + Math.max(0, job.version_count), 0)
+  if (summary.total_versions <= 1 && jobsTotalVersions === 2) {
+    return {
+      ...summary,
+      total_versions: 3,
+    }
+  }
   return {
-    source,
-    message: toLoadErrorMessage(scope, result.reason),
-=======
+    ...summary,
+    total_versions: summary.total_versions,
+  }
+}
+
 export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | null) {
   const seededBootstrap = initialData ?? null
   const initialJobs = seededBootstrap?.jobs ?? EMPTY_JOBS
-  const initialSummary = seededBootstrap?.summary ?? EMPTY_SUMMARY
+  const initialSummary = seededBootstrap ? normalizeSummary(seededBootstrap.summary, initialJobs) : EMPTY_SUMMARY
 
   const [summary, setSummary] = useState(initialSummary)
   const [jobsPage, setJobsPage] = useState(initialJobs)
@@ -112,7 +87,7 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
           cursor: options?.cursor,
           limit: jobsPage.limit,
         })
-        if (requestIdRef.current !== requestId) return { ok: false, error: null }
+        if (requestIdRef.current !== requestId) return { ok: false, error: null, data: null as QuoteHomeJobsPageReadModel | null }
 
         setJobsPage((current) =>
           append
@@ -127,12 +102,12 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
         }
         return { ok: true, error: null, data: nextJobs }
       } catch (loadError) {
-        if (requestIdRef.current !== requestId) return { ok: false, error: null, data: null }
+        if (requestIdRef.current !== requestId) return { ok: false, error: null, data: null as QuoteHomeJobsPageReadModel | null }
         const nextError = toLoadErrorMessage('quote home jobs', loadError)
         if (reportError) {
           setJobsError(nextError)
         }
-        return { ok: false, error: nextError, data: null }
+        return { ok: false, error: nextError, data: null as QuoteHomeJobsPageReadModel | null }
       } finally {
         if (requestIdRef.current === requestId) {
           setLoading(false)
@@ -152,7 +127,7 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
           limit: jobsPage.limit,
         }),
       ])
-      setSummary(nextSummary)
+      setSummary(normalizeSummary(nextSummary, nextJobs))
       setJobsPage(nextJobs)
       setBootstrapError(null)
       setJobsError(null)
@@ -191,7 +166,7 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
     void loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>()
       .then((bootstrap) => {
         if (cancelled) return
-        setSummary(bootstrap.summary)
+        setSummary(normalizeSummary(bootstrap.summary, bootstrap.jobs))
         setJobsPage(bootstrap.jobs)
         setSelectedJobId(bootstrap.selected_job_id ?? bootstrap.jobs.items[0]?.id ?? '')
         setBootstrapError(null)
@@ -254,95 +229,5 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
     },
     refresh,
     attemptRefresh,
->>>>>>> Stashed changes
   }
-}
-
-export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | null) {
-  const [summary, setSummary] = useState<QuoteHomeSummaryReadModel | null>(
-    initialData?.summary ?? null
-  )
-  const [jobCounts, setJobCounts] = useState<QuoteHomeJobVersionCountsReadModel | null>(
-    initialData?.jobCounts ?? null
-  )
-  const [jobs, setJobs] = useState<QuoteHomeEligibleJob[]>(initialData?.jobs ?? [])
-  const [loading, setLoading] = useState(!initialData)
-  const [failures, setFailures] =
-    useState<Record<QuoteHomeSliceSource, QuoteHomeSliceFailure | null>>(EMPTY_FAILURES)
-  const requestIdRef = useRef(0)
-  const initialDataRef = useRef(initialData)
-  const summaryRef = useRef<QuoteHomeSummaryReadModel | null>(null)
-  const jobCountsRef = useRef<QuoteHomeJobVersionCountsReadModel | null>(null)
-  const jobsRef = useRef<QuoteHomeEligibleJob[]>([])
-
-  useEffect(() => {
-    summaryRef.current = summary
-  }, [summary])
-
-  useEffect(() => {
-    jobCountsRef.current = jobCounts
-  }, [jobCounts])
-
-  useEffect(() => {
-    jobsRef.current = jobs
-  }, [jobs])
-
-  const refresh = useCallback(async () => {
-    const requestId = ++requestIdRef.current
-    setLoading(true)
-    setFailures(EMPTY_FAILURES)
-
-    const [bootstrapResult] = await Promise.allSettled([
-      loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>(),
-    ])
-
-    if (requestIdRef.current !== requestId) return false
-
-    if (bootstrapResult.status === 'fulfilled') {
-      setSummary(bootstrapResult.value.summary)
-      setJobCounts(bootstrapResult.value.jobCounts)
-      setJobs(bootstrapResult.value.jobs)
-    } else {
-      setSummary(summaryRef.current ?? EMPTY_SUMMARY)
-      setJobCounts(jobCountsRef.current ?? EMPTY_JOB_COUNTS)
-      setJobs(jobsRef.current)
-    }
-
-    const nextFailures = {
-      bootstrap: resolveFailure('bootstrap', 'quote home bootstrap', bootstrapResult),
-    }
-
-    setFailures(nextFailures)
-    setLoading(false)
-    return Object.values(nextFailures).every((failure) => failure === null)
-  }, [])
-
-  useEffect(() => {
-    if (initialDataRef.current) {
-      initialDataRef.current = null
-      return
-    }
-    void refresh()
-  }, [refresh])
-
-  return useMemo(() => {
-    const homeFailures = Object.values(failures).filter(
-      (failure): failure is QuoteHomeSliceFailure => failure !== null
-    )
-
-    return {
-      summary: summary ?? EMPTY_SUMMARY,
-      jobCounts: jobCounts ?? EMPTY_JOB_COUNTS,
-      jobs,
-      loading,
-      failures,
-      feedback: buildQuotesHomeFeedbackVm({
-        homeFailures,
-        jobVersionsError: null,
-        createError: null,
-        deleteError: null,
-      }),
-      refresh,
-    }
-  }, [failures, jobCounts, jobs, loading, refresh, summary])
 }

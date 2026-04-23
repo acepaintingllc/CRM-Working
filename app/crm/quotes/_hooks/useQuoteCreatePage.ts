@@ -41,7 +41,10 @@ export function useQuoteCreatePage() {
 
       const [jobPayload, versionsPayload] = await Promise.all([
         loadJobRecord(jobId),
-        loadQuoteJobVersions<QuoteJobVersionsReadModel>(jobId),
+        loadQuoteJobVersions<QuoteJobVersionsReadModel>(jobId, {
+          cursor: undefined,
+          limit: 25,
+        }),
       ])
 
       return {
@@ -92,6 +95,27 @@ export function useQuoteCreatePage() {
       setVersionKind: createController.setVersionKind,
       createVersion: createController.createVersion,
       retry: resource.refresh,
+    },
+    feedback: {
+      loading: resource.loading,
+      error: pageError,
+      loadError: resource.error,
+    },
+    job: {
+      jobId,
+      id: jobId,
+      value: selectedJob,
+      hasJob: Boolean(selectedJob),
+    },
+    versions: {
+      items: jobVersions,
+      hasVersions: jobVersions.length > 0,
+    },
+    create: {
+      versionName: createController.versionName,
+      versionKind: createController.versionKind,
+      creating: createController.creating,
+      canCreate: Boolean(selectedJob) && !createController.creating && !resource.loading,
     },
   }
 }

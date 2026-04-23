@@ -9,6 +9,11 @@ import { loadQuoteJobVersions } from '@/lib/quotes/client'
 
 const DEFAULT_LIMIT = 25
 
+type LoadJobVersionsResult = {
+  ok: boolean
+  error: string | null
+}
+
 const emptyJobVersions = (jobId: string): QuoteJobVersionsReadModel => ({
   job_id: jobId,
   total_versions: 0,
@@ -17,9 +22,6 @@ const emptyJobVersions = (jobId: string): QuoteJobVersionsReadModel => ({
   items: [],
 })
 
-<<<<<<< Updated upstream
-export function useQuoteJobVersions(jobId: string) {
-=======
 type UseQuoteJobVersionsOptions = {
   enabled?: boolean
   initialData?: QuoteJobVersionsReadModel | null
@@ -29,7 +31,6 @@ type UseQuoteJobVersionsOptions = {
 export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersionsOptions) {
   const enabled = options?.enabled ?? true
   const limit = options?.limit ?? DEFAULT_LIMIT
->>>>>>> Stashed changes
   const cacheRef = useRef<Record<string, QuoteJobVersionsReadModel>>({})
   const requestIdRef = useRef(0)
   const [data, setData] = useState<QuoteJobVersionsReadModel>(
@@ -39,11 +40,6 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-<<<<<<< Updated upstream
-  const load = useCallback(
-    async (targetJobId: string, options?: { force?: boolean }) => {
-      if (!targetJobId) {
-=======
   const commitData = useCallback((nextData: QuoteJobVersionsReadModel) => {
     cacheRef.current[nextData.job_id] = nextData
     setData(nextData)
@@ -70,41 +66,23 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
       }
     ) => {
       if (!targetJobId || !enabled) {
->>>>>>> Stashed changes
         setData(emptyJobVersions(''))
         setLoading(false)
         setLoadingMore(false)
         setError(null)
-        return false
+        return { ok: false, error: null }
       }
 
       const cached = cacheRef.current[targetJobId]
-<<<<<<< Updated upstream
-      if (cached && !options?.force) {
-=======
       if (cached && !loadOptions?.force && !loadOptions?.append) {
->>>>>>> Stashed changes
         setData(cached)
         setLoading(false)
         setLoadingMore(false)
         setError(null)
-        return true
+        return { ok: true, error: null }
       }
 
       const requestId = ++requestIdRef.current
-<<<<<<< Updated upstream
-      setLoading(true)
-      setError(null)
-
-      try {
-        // Versions stay on their own request path so a selected job can render
-        // its full version list without being capped by home search or summary data.
-        const response = await loadQuoteJobVersions<QuoteJobVersionsReadModel>(targetJobId)
-        if (requestIdRef.current !== requestId) return false
-        cacheRef.current[targetJobId] = response
-        setData(response)
-        return true
-=======
       const preserveDataOnError = loadOptions?.preserveDataOnError ?? false
       const reportError = loadOptions?.reportError ?? true
       if (!preserveDataOnError && !loadOptions?.append) {
@@ -134,14 +112,13 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
           setError(null)
         }
         return { ok: true, error: null }
->>>>>>> Stashed changes
       } catch (loadError) {
-        if (requestIdRef.current !== requestId) return false
-        setData(emptyJobVersions(targetJobId))
-        setError(
+        if (requestIdRef.current !== requestId) return { ok: false, error: null }
+        const nextError =
           loadError instanceof Error ? loadError.message : 'Failed to load job quote versions.'
-        )
-        return false
+        setData(emptyJobVersions(targetJobId))
+        setError(nextError)
+        return { ok: false, error: nextError }
       } finally {
         if (requestIdRef.current === requestId) {
           setLoading(false)
@@ -149,12 +126,6 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
         }
       }
     },
-<<<<<<< Updated upstream
-    []
-  )
-
-  useEffect(() => {
-=======
     [commitData, enabled, limit]
   )
 
@@ -174,27 +145,14 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
       setLoadingMore(false)
       return
     }
->>>>>>> Stashed changes
     void load(jobId)
+  }, [enabled, jobId, load])
+
+  const refresh = useCallback(async () => {
+    const result = await load(jobId, { force: true })
+    return result.ok
   }, [jobId, load])
 
-  const refresh = useCallback(async () => load(jobId, { force: true }), [jobId, load])
-
-<<<<<<< Updated upstream
-  const removeVersion = useCallback((estimateId: string) => {
-    if (!jobId) return
-    const cached = cacheRef.current[jobId]
-    const current = cached ?? emptyJobVersions(jobId)
-    const nextItems = current.items.filter((item) => item.estimate_id !== estimateId)
-    const nextValue: QuoteJobVersionsReadModel = {
-      job_id: jobId,
-      total_versions: nextItems.length,
-      items: nextItems,
-    }
-    cacheRef.current[jobId] = nextValue
-    setData(nextValue)
-  }, [jobId])
-=======
   const attemptRefresh = useCallback(
     async (loadOptions?: { preserveDataOnError?: boolean; reportError?: boolean }) => {
       if (!enabled) {
@@ -211,7 +169,7 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
 
   const loadMore = useCallback(async () => {
     if (!enabled || !data.next_cursor || loading || loadingMore) return false
-    const result = await load(jobId, {
+    const result: LoadJobVersionsResult = await load(jobId, {
       append: true,
       cursor: data.next_cursor,
       preserveDataOnError: true,
@@ -240,7 +198,6 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
     },
     [jobId]
   )
->>>>>>> Stashed changes
 
   return {
     data,
@@ -250,11 +207,8 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
     error,
     hasMore: Boolean(data.next_cursor),
     refresh,
-<<<<<<< Updated upstream
-=======
     attemptRefresh,
     loadMore,
->>>>>>> Stashed changes
     removeVersion,
   }
 }

@@ -1,70 +1,10 @@
 'use client'
 
-import {
-  estimateV2StoreSelectors,
-  useEstimateV2Store,
-  type EstimateV2EditorStoreApi,
-} from '@/lib/estimates/v2/store/estimateV2Store'
-import { useEstimateV2CalculationDerived } from './useEstimateV2CalculationDerived'
-import { useEstimateV2CatalogDerived } from './useEstimateV2CatalogDerived'
-import { useEstimateV2ProductLabels } from './useEstimateV2ProductLabels'
-import { useEstimateV2RoomDerived } from './useEstimateV2RoomDerived'
-import { useEstimateV2SaveDerived } from './useEstimateV2SaveDerived'
-
-export type EstimateV2EditorDerivedSections = {
-  catalog: ReturnType<typeof useEstimateV2CatalogDerived>
-  room: ReturnType<typeof useEstimateV2RoomDerived>
-  calculation: ReturnType<typeof useEstimateV2CalculationDerived>
-  productLabels: ReturnType<typeof useEstimateV2ProductLabels>
-  save: ReturnType<typeof useEstimateV2SaveDerived>
-}
+import type { EstimateV2EditorStoreApi } from '@/lib/estimates/v2/store/estimateV2Store'
+import { useEstimateV2EditorDerivedSections } from './useEstimateV2EditorDerivedSections'
 
 export function useEstimateV2DerivedState(params: { store: EstimateV2EditorStoreApi }) {
-  const { store } = params
-  const collections = useEstimateV2Store(store, estimateV2StoreSelectors.collections)
-  const meta = useEstimateV2Store(store, estimateV2StoreSelectors.meta)
-
-  // Catalog room-type fallback depends on the currently selected room draft.
-  const initialSelectedRoom =
-    collections.rooms.find((room) => room.roomId === meta.selectedRoomId) ?? null
-  const catalogDerived = useEstimateV2CatalogDerived({
-    collections,
-    meta,
-    selectedRoom: initialSelectedRoom,
-  })
-  const roomDerived = useEstimateV2RoomDerived({
-    collections,
-    meta,
-    wallProductionRateById: catalogDerived.wallProductionRateById,
-    roomFlagById: catalogDerived.roomFlagById,
-  })
-  const calculationDerived = useEstimateV2CalculationDerived({
-    collections,
-    meta,
-    selectedRoom: roomDerived.selectedRoom,
-    firstScope: roomDerived.firstScope,
-    selectedRoomCeilingScopes: roomDerived.selectedRoomCeilingScopes,
-    selectedRoomTrimScopes: roomDerived.selectedRoomTrimScopes,
-  })
-  const productLabelDerived = useEstimateV2ProductLabels({
-    meta,
-    productLabelById: catalogDerived.productLabelById,
-    firstScope: roomDerived.firstScope,
-    firstCeilingScope: roomDerived.firstCeilingScope,
-    firstTrimScope: roomDerived.firstTrimScope,
-  })
-  const saveDerived = useEstimateV2SaveDerived({
-    meta,
-    dirty: calculationDerived.dirty,
-  })
-
-  const sections: EstimateV2EditorDerivedSections = {
-    catalog: catalogDerived,
-    room: roomDerived,
-    calculation: calculationDerived,
-    productLabels: productLabelDerived,
-    save: saveDerived,
-  }
+  const sections = useEstimateV2EditorDerivedSections(params)
 
   return {
     sections,

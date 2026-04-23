@@ -70,12 +70,8 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.deleting).toBe(true)
     expect(versionVm.meta).toContain('Live / Revision · Updated')
   })
-<<<<<<< Updated upstream
-  it('builds search result view models from shared home version items', () => {
-=======
 
   it('builds search result view models from shared search rows', () => {
->>>>>>> Stashed changes
     expect(buildSearchResultVm(estimate)).toEqual({
       id: 'estimate-1',
       href: '/crm/quotes/estimate-1',

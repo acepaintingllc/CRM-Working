@@ -198,7 +198,9 @@ describe('QuotePortalClient', () => {
   })
 
   it('submits decline reasons and locks the portal on success', async () => {
-    mockFetch.mockResolvedValue(createResponse({ data: createWorkflowSnapshot('declined') }))
+    mockFetch.mockResolvedValue(
+      createResponse({ data: createPublicSnapshot({ status: 'declined' }) })
+    )
 
     render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
 
