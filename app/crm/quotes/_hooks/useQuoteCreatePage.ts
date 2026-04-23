@@ -1,22 +1,16 @@
 'use client'
 
-import { useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { buildQuoteAdminPageStatus } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
 import { loadJobRecord } from '@/lib/jobs/client'
-import type {
-  QuoteHomeJobVersionItemReadModel,
-  QuoteJobVersionsReadModel,
-} from '@/lib/quotes/collectionData'
-import { loadQuoteJobVersions } from '@/lib/quotes/client'
 import { QUOTE_META_SEPARATOR } from '../_home/quoteHomePresentation'
 import {
   buildQuoteCreatePageResource,
   EMPTY_QUOTE_CREATE_RESOURCE,
   type QuoteCreatePageResource,
 } from './quoteCreatePagePolicy'
-import { useQuoteVersionCreation } from './useQuoteVersionCreation'
+import { useQuoteVersionWorkflow } from './useQuoteVersionWorkflow'
 
 export function useQuoteCreatePage() {
   const searchParams = useSearchParams()
@@ -29,37 +23,32 @@ export function useQuoteCreatePage() {
         return EMPTY_QUOTE_CREATE_RESOURCE
       }
 
-      const [jobPayload, versionsPayload] = await Promise.all([
-        loadJobRecord(jobId),
-        loadQuoteJobVersions<QuoteJobVersionsReadModel>(jobId),
-      ])
+      const jobPayload = await loadJobRecord(jobId)
 
-      return jobPayload
-        ? buildQuoteCreatePageResource(jobPayload, versionsPayload)
-        : EMPTY_QUOTE_CREATE_RESOURCE
+      return jobPayload ? buildQuoteCreatePageResource(jobPayload) : EMPTY_QUOTE_CREATE_RESOURCE
     },
     getErrorMessage: (loadError: unknown) =>
       loadError instanceof Error ? loadError.message : 'Failed to load quote creation data.',
     reloadKey: jobId,
   })
   const selectedJob = resource.data.job
-  const createController = useQuoteVersionCreation(selectedJob)
-  const jobVersions = resource.data.versions as QuoteHomeJobVersionItemReadModel[]
-  const { setError, setVersionKind, setVersionName } = createController
-
-  useEffect(() => {
-    setVersionName('')
-    setVersionKind('standard')
-    setError(null)
-  }, [selectedJob?.id, setError, setVersionKind, setVersionName])
-
+  const workflow = useQuoteVersionWorkflow({
+    jobId,
+    selectedJob,
+    loading: resource.loading,
+    blockCreateWhileVersionsLoading: true,
+    onRefresh: resource.refresh,
+  })
+  const jobVersions = workflow.versions.items
   const hasLoadedJobData = shouldLoadJobData && (Boolean(selectedJob) || jobVersions.length > 0)
+  const loadError = resource.error ?? workflow.versions.error
+  const loading = shouldLoadJobData && !loadError && (resource.loading || workflow.versions.loading)
   const status = buildQuoteAdminPageStatus({
-    loading: resource.loading && shouldLoadJobData,
+    loading,
     hasData: hasLoadedJobData,
-    loadError: resource.error,
-    actionError: createController.error,
-    canRetry: shouldLoadJobData && !resource.loading,
+    loadError,
+    actionError: workflow.create.error,
+    canRetry: shouldLoadJobData && !loading,
   })
 
   return {
@@ -84,16 +73,16 @@ export function useQuoteCreatePage() {
       hasVersions: jobVersions.length > 0,
     },
     create: {
-      versionName: createController.versionName,
-      versionKind: createController.versionKind,
-      creating: createController.creating,
-      canCreate: Boolean(selectedJob) && !createController.creating && !resource.loading,
+      versionName: workflow.create.versionName,
+      versionKind: workflow.create.versionKind,
+      creating: workflow.create.creating,
+      canCreate: workflow.create.canCreate,
     },
     actions: {
-      setVersionName: createController.setVersionName,
-      setVersionKind: createController.setVersionKind,
-      create: createController.createVersion,
-      retry: resource.refresh,
+      setVersionName: workflow.actions.setVersionName,
+      setVersionKind: workflow.actions.setVersionKind,
+      create: workflow.actions.create,
+      retry: workflow.actions.refresh,
     },
   }
 }

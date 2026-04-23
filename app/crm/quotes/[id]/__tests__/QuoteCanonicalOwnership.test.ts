@@ -36,7 +36,6 @@ const canonicalEstimateRuntimePaths = [
 
 const quoteAdminHookPaths = [
   'app/crm/quotes/_hooks/useQuoteDefaultsPage.ts',
-  'app/crm/quotes/_hooks/useQuoteProductEditorState.ts',
   'app/crm/quotes/_hooks/useQuoteProductsPage.ts',
   'app/crm/quotes/_hooks/quoteProductsControllerUtils.ts',
   'app/crm/quotes/_hooks/quoteRatesPageController.ts',

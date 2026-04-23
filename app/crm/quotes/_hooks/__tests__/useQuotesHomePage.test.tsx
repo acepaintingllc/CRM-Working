@@ -349,6 +349,51 @@ describe('useQuotesHomePage', () => {
     ])
   })
 
+  it('keeps a successful delete explicit when follow-up refresh fails', async () => {
+    loadQuoteHomeBootstrap
+      .mockResolvedValueOnce(bootstrapPayload)
+      .mockRejectedValueOnce(new Error('bootstrap refresh failed'))
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(job1VersionsPayload)
+      .mockRejectedValueOnce(new Error('versions refresh failed'))
+    deleteQuoteVersion.mockResolvedValue({ data: { ok: true } })
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
+        'estimate-2',
+        'estimate-1',
+      ])
+    })
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
+    await act(async () => {
+      await result.current.actions.confirmDelete()
+    })
+
+    await waitFor(() => {
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual(['estimate-2'])
+    })
+
+    expect(result.current.summaryCards[0].value).toBe('0')
+    expect(result.current.header.heroSummaryText).toBe(
+      '2 total versions · 0 drafts · 1 sent/awaiting · 1 live'
+    )
+    expect(result.current.selectedJob.stats).toEqual([
+      { label: 'Customer', value: 'Alice' },
+      { label: 'Job Status', value: 'Estimate Pending' },
+      { label: 'Versions', value: '1' },
+    ])
+    expect(result.current.feedback.title).toBe('Quote action completed with refresh errors')
+    expect(result.current.feedback.details).toEqual([
+      'Quote deleted, but follow-up refresh failed. Showing locally reconciled data. Home refresh failed. bootstrap refresh failed Versions refresh failed. versions refresh failed',
+    ])
+  })
+
   it('keeps selected-job browsing independent from capped search results', async () => {
     const largeJobVersionsPayload = {
       job_id: 'job-1',

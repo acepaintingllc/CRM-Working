@@ -312,6 +312,72 @@ describe('useQuoteRatesPage', () => {
     expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
   })
 
+  it('keeps a successful save explicit when refresh verification fails', async () => {
+    loadRatesFlags.mockResolvedValueOnce({
+      source: 'db',
+      seeded: true,
+      template_version: 2,
+      categories: [
+        {
+          key: 'production_rates_walls',
+          tab: 'rates',
+          group: 'production_rates',
+          label: 'Wall Production',
+          table_title: 'Wall Production',
+          description: 'Wall rates',
+          columns: [],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
+          ],
+          rows: [
+            {
+              id: 'wall-rate-1',
+              display_name: 'Standard walls',
+              notes: '',
+              active: true,
+              sqft_per_hr: '150',
+            },
+          ],
+        },
+      ],
+    })
+    loadRatesFlags.mockRejectedValueOnce(new Error('verification failed'))
+    mutateRatesFlags.mockResolvedValue({ data: true })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Updated walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '165')
+    })
+
+    await act(async () => {
+      await result.current.actions.saveCurrent()
+    })
+
+    expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
+    expect(result.current.resource.data.categories[0]?.rows[0]).toMatchObject({
+      id: 'wall-rate-1',
+      display_name: 'Updated walls',
+      sqft_per_hr: '165',
+    })
+    expect(result.current.uiState.notice).toBe(
+      'Saved Wall Production, but refresh failed. Showing locally updated data. verification failed'
+    )
+    expect(result.current.uiState.pageBanner).toEqual({
+      tone: 'warning',
+      message:
+        'Saved Wall Production, but refresh failed. Showing locally updated data. verification failed',
+    })
+    expect(result.current.uiState.actionError).toBeNull()
+  })
+
   it('uses load errors as the shell-level status until retry succeeds', async () => {
     loadRatesFlags
       .mockRejectedValueOnce(new Error('Rates unavailable.'))

@@ -125,4 +125,46 @@ describe('useQuoteJobVersions', () => {
     expect(result.current.data.job_id).toBe('job-2')
     expect(result.current.items.every((item) => item.job_id === 'job-2')).toBe(true)
   })
+
+  it('clears stale version items immediately when switching to a different uncached job', async () => {
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(versionPayload)
+      .mockResolvedValueOnce({
+        job_id: 'job-2',
+        total_versions: 0,
+        items: [],
+      })
+
+    const { result, rerender } = renderHook(({ jobId }) => useQuoteJobVersions(jobId), {
+      initialProps: { jobId: 'job-1' },
+    })
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2)
+    })
+
+    rerender({ jobId: 'job-2' })
+
+    expect(result.current.data.job_id).toBe('job-2')
+    expect(result.current.items).toEqual([])
+  })
+
+  it('keeps the last good version list when a forced refresh fails', async () => {
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(versionPayload)
+      .mockRejectedValueOnce(new Error('refresh failed'))
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2)
+    })
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.items).toHaveLength(2)
+    expect(result.current.error).toBe('refresh failed')
+  })
 })

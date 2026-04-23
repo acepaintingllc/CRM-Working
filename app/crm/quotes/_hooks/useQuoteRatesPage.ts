@@ -1,26 +1,17 @@
 'use client'
 
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
-import { valueFromRatesFlagsRow } from '@/lib/quotes/ratesFlagsForm'
 import type {
   RatesFlagsCategory,
   RatesFlagsDraft,
   RatesFlagsEditableCategory,
   RatesFlagsEditableCategoryKey,
   RatesFlagsRow,
-  RatesFlagsTab,
 } from '@/types/estimator/ratesFlags'
-import { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
 import {
-  getDefaultRateCategory,
-  type QuoteRatesNavigationState,
+  type QuoteRatesPendingTransition,
+  useQuoteRatesPageController,
 } from './quoteRatesPageController'
-import { useQuoteRatesData } from './useQuoteRatesData'
-import { useQuoteRatesDiscard } from './useQuoteRatesDiscard'
-import { useQuoteRatesEditor } from './useQuoteRatesEditor'
-import { useQuoteRatesMutations } from './useQuoteRatesMutations'
-import { useQuoteRatesNavigation } from './useQuoteRatesNavigation'
-import type { QuoteRatesPendingTransition } from './useQuoteRatesPageControllerTypes'
 
 export {
   FLAGS_SECTIONS,
@@ -36,7 +27,7 @@ export {
 export type QuoteRatesFiltersVm = {
   search: string
   statusFilter: import('./quoteRatesPageConfig').StatusFilter
-  activeTab: RatesFlagsTab
+  activeTab: import('@/types/estimator/ratesFlags').RatesFlagsTab
   rateSection: import('./quoteRatesPageConfig').RateSectionKey
   rateCategory: import('@/types/estimator/ratesFlags').RatesFlagsCategoryKey
   flagsSection: import('./quoteRatesPageConfig').FlagsSectionKey
@@ -69,24 +60,13 @@ export type QuoteRatesEditorVm = {
 export type QuoteRatesDiscardVm = {
   status: 'idle' | 'confirming' | 'applying'
   isOpen: boolean
-  transitionType:
-    | 'setActiveTab'
-    | 'setRateSection'
-    | 'setRateCategory'
-    | 'setFlagsSection'
-    | 'setRoomDefaultsSection'
-    | 'setStatusFilter'
-    | 'setSearch'
-    | 'setSelectedId'
-    | 'startCreate'
-    | 'startDuplicate'
-    | 'reload'
-    | 'archiveOrReactivate'
-    | null
+  transitionType: QuoteRatesPendingTransition['type'] | null
 }
 
 export type QuoteRatesActions = {
-  setActiveTab: (activeTab: RatesFlagsTab) => boolean | Promise<boolean>
+  setActiveTab: (
+    activeTab: import('@/types/estimator/ratesFlags').RatesFlagsTab
+  ) => boolean | Promise<boolean>
   setRateSection: (
     rateSection: import('./quoteRatesPageConfig').RateSectionKey
   ) => boolean | Promise<boolean>
@@ -109,196 +89,93 @@ export type QuoteRatesActions = {
   startCreate: () => boolean | Promise<boolean>
   startDuplicate: () => boolean | Promise<boolean>
   cancelEdit: () => void
-  confirmDiscard: () => Promise<boolean> | boolean
+  confirmDiscard: () => Promise<boolean>
   cancelDiscard: () => void
   updateDraftValue: (fieldKey: string, rawInput: string) => void
 }
 
 export function useQuoteRatesPage() {
-  const resource = useQuoteRatesData()
-  const feedback = useDenseQuoteAdminFeedback()
-  const navigation = useQuoteRatesNavigation(resource.data)
-  const editor = useQuoteRatesEditor({
-    activeCategory: navigation.activeCategory,
-    filteredRows: navigation.filteredRows,
-  })
-
-  function setNavigationAndSelection(
-    nextNavigation: QuoteRatesNavigationState,
-    preferredId?: string
-  ) {
-    const { nextCategory, nextSelectedId } = navigation.getSelectionForNavigation(
-      nextNavigation,
-      preferredId
-    )
-
-    navigation.setNavigation(nextNavigation)
-    editor.setSelectionState(nextCategory, nextSelectedId)
-  }
-
-  const mutations = useQuoteRatesMutations({
-    resource,
-    feedback,
-    activeCategory: navigation.activeCategory,
-    selectedRow: editor.selectedRow,
-    editor: editor.editor,
-    validationOk: Boolean(editor.validationResult?.ok),
-    scheduleRefreshSelection: editor.scheduleRefreshSelection,
-    clearScheduledRefreshSelection: editor.clearScheduledRefreshSelection,
-  })
-
-  function applyTransition(intent: QuoteRatesPendingTransition) {
-    switch (intent.type) {
-      case 'setActiveTab':
-        setNavigationAndSelection({
-          ...navigation.navigation,
-          activeTab: intent.activeTab,
-        })
-        return true
-      case 'setRateSection': {
-        const rateCategory = getDefaultRateCategory(intent.rateSection)
-        setNavigationAndSelection({
-          ...navigation.navigation,
-          activeTab: 'rates',
-          rateSection: intent.rateSection,
-          rateCategory,
-        })
-        return true
-      }
-      case 'setRateCategory':
-        setNavigationAndSelection({
-          ...navigation.navigation,
-          activeTab: 'rates',
-          rateCategory: intent.rateCategory as QuoteRatesNavigationState['rateCategory'],
-        })
-        return true
-      case 'setFlagsSection':
-        setNavigationAndSelection({
-          ...navigation.navigation,
-          activeTab: 'flags',
-          flagsSection: intent.flagsSection,
-        })
-        return true
-      case 'setRoomDefaultsSection':
-        setNavigationAndSelection({
-          ...navigation.navigation,
-          activeTab: 'room_defaults',
-          roomDefaultsSection: intent.roomDefaultsSection,
-        })
-        return true
-      case 'setStatusFilter':
-        setNavigationAndSelection(
-          {
-            ...navigation.navigation,
-            statusFilter: intent.statusFilter,
-          },
-          editor.editor.selectedId
-        )
-        return true
-      case 'setSearch':
-        setNavigationAndSelection(
-          {
-            ...navigation.navigation,
-            search: intent.search,
-          },
-          editor.editor.selectedId
-        )
-        return true
-      case 'setSelectedId':
-        editor.setSelectionState(navigation.activeCategory, intent.selectedId)
-        return true
-      case 'startCreate': {
-        const started = editor.beginCreate()
-        if (started) feedback.clearFeedback()
-        return started
-      }
-      case 'startDuplicate': {
-        const started = editor.beginDuplicate()
-        if (started) feedback.clearFeedback()
-        return started
-      }
-      case 'reload':
-        return mutations.performReload(intent.keepId)
-      case 'archiveOrReactivate':
-        return mutations.archiveOrReactivate(intent.nextActive)
-      default:
-        return false
-    }
-  }
-
-  const discard = useQuoteRatesDiscard({
-    isDirtyRef: editor.isDirtyRef,
-    applyTransition,
-  })
-
-  function cancelEdit() {
-    editor.cancelEdit()
-    discard.cancelDiscard()
-    feedback.clearFeedback()
-  }
+  const controller = useQuoteRatesPageController()
+  const { resource, workflowState, derived } = controller
 
   const hasData = resource.data.categories.length > 0 || (!resource.loading && !resource.error)
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
     hasData,
     loadError: resource.error,
-    actionError: feedback.actionError,
-    validationError: editor.validationError,
-    notice: feedback.notice,
+    actionError: workflowState.actionError,
+    validationError: derived.validationError,
+    notice: workflowState.notice,
+    noticeTone: workflowState.noticeTone,
     canRetry: !resource.loading,
     canSave:
-      Boolean(navigation.activeCategory) &&
-      !feedback.saving &&
+      Boolean(derived.activeCategory) &&
+      workflowState.actionStatus !== 'saving' &&
       !resource.error &&
-      Boolean(editor.validationResult?.ok),
+      Boolean(derived.validationResult?.ok),
     canArchiveToggle:
-      Boolean(editor.selectedRow) &&
-      !editor.editor.isCreating &&
-      !feedback.saving &&
+      Boolean(derived.selectedRow) &&
+      workflowState.editorMode !== 'create' &&
+      workflowState.actionStatus === 'idle' &&
       !resource.loading &&
       !resource.error,
     canDuplicate:
-      Boolean(editor.selectedRow) && !feedback.saving && !resource.loading && !resource.error,
+      Boolean(derived.selectedRow) &&
+      workflowState.actionStatus === 'idle' &&
+      !resource.loading &&
+      !resource.error,
   })
+
+  const filtersVm = {
+    search: workflowState.navigation.search,
+    statusFilter: workflowState.navigation.statusFilter,
+    activeTab: workflowState.navigation.activeTab,
+    rateSection: workflowState.navigation.rateSection,
+    rateCategory: workflowState.navigation.rateCategory,
+    flagsSection: workflowState.navigation.flagsSection,
+    roomDefaultsSection: workflowState.navigation.roomDefaultsSection,
+  } satisfies QuoteRatesFiltersVm
 
   return {
     resource,
-    valueFromRow: valueFromRatesFlagsRow,
+    valueFromRow: controller.valueFromRow,
+    workflowVm: {
+      navigation: workflowState.navigation,
+      selectedId: workflowState.selectedId,
+      editorMode: workflowState.editorMode,
+      dirty: derived.isDirty,
+      pendingTransition: workflowState.pendingTransition,
+      actionStatus: workflowState.actionStatus,
+      refreshSelectionId: workflowState.refreshSelectionId,
+      forceRefreshRehydrate: workflowState.forceRefreshRehydrate,
+    },
     uiState,
-    filtersVm: {
-      search: navigation.navigation.search,
-      statusFilter: navigation.navigation.statusFilter,
-      activeTab: navigation.navigation.activeTab,
-      rateSection: navigation.navigation.rateSection,
-      rateCategory: navigation.navigation.rateCategory,
-      flagsSection: navigation.navigation.flagsSection,
-      roomDefaultsSection: navigation.navigation.roomDefaultsSection,
-    } satisfies QuoteRatesFiltersVm,
+    filtersVm,
     tableVm: {
-      activeCategory: navigation.activeCategory,
-      filteredRows: navigation.filteredRows,
-      selectedRow: editor.selectedRow,
-      selectedId: editor.editor.selectedId,
-      isCreating: editor.editor.isCreating,
+      activeCategory: derived.activeCategory,
+      filteredRows: derived.filteredRows,
+      selectedRow: derived.selectedRow,
+      selectedId: workflowState.selectedId,
+      isCreating: workflowState.editorMode === 'create',
       canDuplicate: uiState.canDuplicate,
       canArchiveToggle: uiState.canArchiveToggle,
     } satisfies QuoteRatesTableVm,
     editorVm: {
-      draft: editor.editor.draft,
-      draftActive: editor.editor.draftActive,
-      isDirty: editor.isDirty,
-      saving: feedback.saving,
-      activeCategory: navigation.activeCategory,
-      selectedRow: editor.selectedRow,
-      isCreating: editor.editor.isCreating,
+      draft: workflowState.draft,
+      draftActive: workflowState.draftActive,
+      isDirty: derived.isDirty,
+      saving: workflowState.actionStatus === 'saving',
+      activeCategory: derived.activeCategory,
+      selectedRow: derived.selectedRow,
+      isCreating: workflowState.editorMode === 'create',
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
-      formatDraftValue: navigation.activeCategory
+      formatDraftValue: derived.activeCategory
         ? (fieldKey: string) =>
-            editor.editor.draft && editor.adapter
-              ? editor.adapter.formatDraftValue(
-                  navigation.activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
-                  editor.editor.draft as never,
+            workflowState.draft && derived.adapter
+              ? derived.adapter.formatDraftValue(
+                  derived.activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
+                  workflowState.draft as never,
                   fieldKey
                 )
               : ''
@@ -306,57 +183,63 @@ export function useQuoteRatesPage() {
     } satisfies QuoteRatesEditorVm,
     actions: {
       setActiveTab: (activeTab) =>
-        discard.requestTransition(
+        controller.actions.requestTransition(
           { type: 'setActiveTab', activeTab },
-          activeTab !== navigation.navigation.activeTab
+          activeTab !== workflowState.navigation.activeTab
         ),
       setRateSection: (rateSection) =>
-        discard.requestTransition(
+        controller.actions.requestTransition(
           { type: 'setRateSection', rateSection },
-          rateSection !== navigation.navigation.rateSection
+          rateSection !== workflowState.navigation.rateSection
         ),
       setRateCategory: (rateCategory) =>
-        discard.requestTransition(
+        controller.actions.requestTransition(
           { type: 'setRateCategory', rateCategory },
-          rateCategory !== navigation.navigation.rateCategory
+          rateCategory !== workflowState.navigation.rateCategory
         ),
       setFlagsSection: (flagsSection) =>
-        discard.requestTransition(
+        controller.actions.requestTransition(
           { type: 'setFlagsSection', flagsSection },
-          flagsSection !== navigation.navigation.flagsSection
+          flagsSection !== workflowState.navigation.flagsSection
         ),
       setRoomDefaultsSection: (roomDefaultsSection) =>
-        discard.requestTransition(
+        controller.actions.requestTransition(
           { type: 'setRoomDefaultsSection', roomDefaultsSection },
-          roomDefaultsSection !== navigation.navigation.roomDefaultsSection
+          roomDefaultsSection !== workflowState.navigation.roomDefaultsSection
         ),
       setStatusFilter: (statusFilter) =>
-        discard.requestTransition(
+        controller.actions.requestTransition(
           { type: 'setStatusFilter', statusFilter },
-          statusFilter !== navigation.navigation.statusFilter
+          statusFilter !== workflowState.navigation.statusFilter
         ),
       setSearch: (search) =>
-        discard.requestTransition(
+        controller.actions.requestTransition(
           { type: 'setSearch', search },
-          search !== navigation.navigation.search
+          search !== workflowState.navigation.search
         ),
       setSelectedId: (selectedId) =>
-        discard.requestTransition(
+        controller.actions.requestTransition(
           { type: 'setSelectedId', selectedId },
-          selectedId !== editor.editor.selectedId
+          selectedId !== workflowState.selectedId
         ),
-      setDraftActive: editor.setDraftActive,
-      reload: (keepId?: string) => discard.requestTransition({ type: 'reload', keepId }, true),
-      saveCurrent: mutations.saveCurrent,
+      setDraftActive: controller.actions.setDraftActive,
+      reload: (keepId?: string) =>
+        controller.actions.requestTransition({ type: 'reload', keepId }, true),
+      saveCurrent: controller.actions.saveCurrent,
       archiveOrReactivate: (nextActive: boolean) =>
-        discard.requestTransition({ type: 'archiveOrReactivate', nextActive }, true),
-      startCreate: () => discard.requestTransition({ type: 'startCreate' }, true),
-      startDuplicate: () => discard.requestTransition({ type: 'startDuplicate' }, true),
-      cancelEdit,
-      confirmDiscard: discard.confirmDiscard,
-      cancelDiscard: discard.cancelDiscard,
-      updateDraftValue: editor.updateDraftValue,
+        controller.actions.requestTransition({ type: 'archiveOrReactivate', nextActive }, true),
+      startCreate: () => controller.actions.requestTransition({ type: 'startCreate' }, true),
+      startDuplicate: () => controller.actions.requestTransition({ type: 'startDuplicate' }, true),
+      cancelEdit: controller.actions.cancelEdit,
+      confirmDiscard: controller.actions.confirmDiscard,
+      cancelDiscard: controller.actions.cancelDiscard,
+      updateDraftValue: controller.actions.updateDraftValue,
     } satisfies QuoteRatesActions,
-    discardVm: discard.discardVm satisfies QuoteRatesDiscardVm,
+    discardVm: {
+      isOpen:
+        workflowState.discardStatus === 'confirming' && Boolean(workflowState.pendingTransition),
+      status: workflowState.discardStatus,
+      transitionType: workflowState.pendingTransition?.type ?? null,
+    } satisfies QuoteRatesDiscardVm,
   }
 }

@@ -54,4 +54,19 @@ describe('buildQuoteAdminPageFeedback', () => {
       pageBanner: { tone: 'success', message: 'Saved.' },
     })
   })
+
+  it('supports warning notices for persisted writes that failed follow-up refresh', () => {
+    expect(
+      buildQuoteAdminPageStatus({
+        loading: false,
+        hasData: true,
+        canRetry: true,
+        notice: 'Saved, but refresh failed.',
+        noticeTone: 'warning',
+      })
+    ).toMatchObject({
+      noticeTone: 'warning',
+      pageBanner: { tone: 'warning', message: 'Saved, but refresh failed.' },
+    })
+  })
 })

@@ -100,9 +100,11 @@ describe('QuoteProductsPage', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Super Paint').length).toBeGreaterThan(0)
     })
-    fireEvent.click(
-      screen.getAllByRole('button', { name: /^Super Paint / })[0]
-    )
+    fireEvent.click(screen.getAllByRole('button', { name: /Super Paint/ })[0])
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Product name')).toBeTruthy()
+    })
 
     fireEvent.change(screen.getByLabelText('Product name'), {
       target: { value: 'Super Paint Pro' },
@@ -122,7 +124,10 @@ describe('QuoteProductsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete product' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Product deleted.')).toBeTruthy()
+      expect(screen.getByText('No products found')).toBeTruthy()
+      expect(screen.getByText('Select a product')).toBeTruthy()
     })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
   })
 })

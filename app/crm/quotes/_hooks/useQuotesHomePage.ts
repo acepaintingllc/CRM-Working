@@ -2,11 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
-import { useQuoteJobVersions } from './useQuoteJobVersions'
-import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
+import { useQuoteVersionWorkflow } from './useQuoteVersionWorkflow'
 import { filterQuoteHomeJobs, resolveQuoteHomeSelectedJobId } from './quoteHomePagePolicy'
 import {
   buildHeroSummaryText,
@@ -24,6 +23,8 @@ import type { QuotesHomeJobListVm, QuotesHomePageSections } from '../_home/quote
 
 export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | null) {
   const homeResource = useQuotesHomeData(initialData)
+  const [actionWarning, setActionWarning] = useState<string | null>(null)
+  const [deletedEstimateIds, setDeletedEstimateIds] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [jobQuery, setJobQuery] = useState('')
@@ -34,10 +35,13 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
     () => filterQuoteHomeJobs(homeResource.jobs, jobQuery),
     [homeResource.jobs, jobQuery]
   )
-  const jobVersionsState = useQuoteJobVersions(selectedJobId)
-  const createController = useQuoteVersionCreation(selectedJob)
+  const workflow = useQuoteVersionWorkflow({
+    jobId: selectedJobId,
+    selectedJob,
+    loading: homeResource.loading,
+    onRefresh: homeResource.refresh,
+  })
   const deleteController = useQuotesHomeDelete()
-  const { setError, setVersionKind, setVersionName } = createController
 
   useEffect(() => {
     const nextSelectedJobId = resolveQuoteHomeSelectedJobId(homeResource.jobs, selectedJobId)
@@ -47,10 +51,14 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
   }, [homeResource.jobs, selectedJobId])
 
   useEffect(() => {
-    setVersionName('')
-    setVersionKind('standard')
-    setError(null)
-  }, [selectedJob?.id, setError, setVersionKind, setVersionName])
+    setDeletedEstimateIds([])
+  }, [selectedJobId])
+
+  const visibleVersions = useMemo(
+    () =>
+      workflow.versions.items.filter((estimate) => !deletedEstimateIds.includes(estimate.estimate_id)),
+    [deletedEstimateIds, workflow.versions.items]
+  )
 
   const summaryCards = buildSummaryCards(homeResource.summary)
   const jobListItems = filteredJobs.map((job) =>
@@ -65,16 +73,17 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
         mobile: true,
       })
     )
-  const versionItems = jobVersionsState.items.map((estimate) =>
+  const versionItems = visibleVersions.map((estimate) =>
     buildQuoteHomeVersionItemVm(estimate, deleteController.deletingId)
   )
   const feedbackVm = buildQuotesHomeFeedbackVm({
     homeFailures: homeResource.bootstrapError
       ? [{ source: 'bootstrap', message: homeResource.bootstrapError }]
       : [],
-    jobVersionsError: jobVersionsState.error,
-    createError: createController.error,
+    jobVersionsError: workflow.versions.error,
+    createError: workflow.create.error,
     deleteError: deleteController.error,
+    actionWarning,
   })
   const resolvedFeedbackVm = feedbackVm ?? {
     tone: 'warning' as const,
@@ -82,11 +91,10 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
     details: [],
     sources: [],
   }
-  const versionCount =
-    homeResource.versionCountByJob[selectedJobId] ?? jobVersionsState.data.total_versions
+  const versionCount = homeResource.versionCountByJob[selectedJobId] ?? visibleVersions.length
   const deleteTargetsById = useMemo(() => {
-    return new Map(jobVersionsState.items.map((item) => [item.estimate_id, item]))
-  }, [jobVersionsState.items])
+    return new Map(visibleVersions.map((item) => [item.estimate_id, item]))
+  }, [visibleVersions])
 
   const sections: QuotesHomePageSections = {
     headerVm: {
@@ -119,17 +127,17 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
     } satisfies QuotesHomeJobListVm,
     selectedJobVm: buildQuotesHomeSelectedJobVm(selectedJob, versionCount, homeResource.loading),
     versionListVm: {
-      heading: buildQuotesHomeVersionHeading(selectedJob, jobVersionsState.items),
-      emptyMessage: buildQuotesHomeVersionEmptyMessage(selectedJob, jobVersionsState.items),
+      heading: buildQuotesHomeVersionHeading(selectedJob, visibleVersions),
+      emptyMessage: buildQuotesHomeVersionEmptyMessage(selectedJob, visibleVersions),
       items: versionItems,
     },
     createVm: {
-      creating: createController.creating,
+      creating: workflow.create.creating,
       loading: homeResource.loading,
       selectedJobName: selectedJob?.title ?? null,
-      versionName: createController.versionName,
-      versionKind: createController.versionKind,
-      canCreate: Boolean(selectedJob) && !createController.creating && !homeResource.loading,
+      versionName: workflow.create.versionName,
+      versionKind: workflow.create.versionKind,
+      canCreate: workflow.create.canCreate,
     },
     mobileSummaryCards: [summaryCards[0], summaryCards[3]].filter(Boolean),
     deleteDialogVm: buildQuotesHomeDeleteDialogVm(
@@ -155,11 +163,12 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
       setSearchFocused,
       setJobQuery,
       setSelectedJobId,
-      setVersionName: createController.setVersionName,
-      setVersionKind: createController.setVersionKind,
-      create: createController.createVersion,
+      setVersionName: workflow.actions.setVersionName,
+      setVersionKind: workflow.actions.setVersionKind,
+      create: workflow.actions.create,
       retrySearch: searchState.retry,
       requestDelete: (value: string | { estimate_id: string }) => {
+        setActionWarning(null)
         const estimateId = typeof value === 'string' ? value : value.estimate_id
         const estimate = deleteTargetsById.get(estimateId) ?? null
         if (estimate) {
@@ -168,16 +177,54 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
       },
       cancelDelete: deleteController.cancelDelete,
       confirmDelete: async () => {
+        const deletedEstimate = deleteController.confirmingDelete
         const deleted = await deleteController.confirmDeleteVersion()
-        if (deleted) {
-          const [bootstrap] = await Promise.all([homeResource.refresh(), jobVersionsState.refresh()])
-          return Boolean(bootstrap)
+        if (!deleted || !deletedEstimate) {
+          return false
         }
-        return false
+
+        setActionWarning(null)
+        homeResource.applyDeletedVersion(deletedEstimate)
+        setDeletedEstimateIds((current) =>
+          current.includes(deletedEstimate.estimate_id)
+            ? current
+            : [...current, deletedEstimate.estimate_id]
+        )
+        workflow.versions.removeVersion(deletedEstimate.estimate_id)
+
+        const [bootstrapRefresh, versionsRefresh] = await Promise.all([
+          homeResource.attemptRefresh({
+            preserveDataOnError: true,
+            reportError: false,
+          }),
+          workflow.versions.attemptRefresh({
+            preserveDataOnError: true,
+            reportError: false,
+          }),
+        ])
+
+        if (bootstrapRefresh.ok && versionsRefresh.ok) {
+          setDeletedEstimateIds([])
+          return true
+        }
+
+        const refreshFailures: string[] = []
+        if (!bootstrapRefresh.ok && bootstrapRefresh.error) {
+          refreshFailures.push(`Home refresh failed. ${bootstrapRefresh.error}`)
+        }
+        if (!versionsRefresh.ok && versionsRefresh.error) {
+          refreshFailures.push(`Versions refresh failed. ${versionsRefresh.error}`)
+        }
+
+        setActionWarning(
+          `Quote deleted, but follow-up refresh failed. Showing locally reconciled data. ${refreshFailures.join(' ')}`
+        )
+        return true
       },
       refresh: async () => {
-        const [bootstrap] = await Promise.all([homeResource.refresh(), jobVersionsState.refresh()])
-        return Boolean(bootstrap)
+        setActionWarning(null)
+        setDeletedEstimateIds([])
+        return workflow.actions.refresh()
       },
     },
   }

@@ -12,6 +12,7 @@ type BuildDenseQuotePageUiStateArgs = {
   actionError: string | null
   validationError: string | null
   notice: string | null
+  noticeTone?: 'success' | 'warning' | 'info' | 'error' | null
   canRetry: boolean
   canSave: boolean
   canDelete?: boolean
@@ -33,6 +34,7 @@ export function buildDenseQuotePageUiState({
   actionError,
   validationError,
   notice,
+  noticeTone,
   canRetry,
   canSave,
   canDelete = false,
@@ -46,6 +48,7 @@ export function buildDenseQuotePageUiState({
     actionError,
     validationError,
     notice,
+    noticeTone,
     canRetry,
   })
 

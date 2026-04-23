@@ -17,6 +17,7 @@ export type QuoteAdminPageFeedback = {
   actionError: string | null
   validationError: string | null
   notice: string | null
+  noticeTone: CrmNoticeTone | null
   pageBanner: QuoteAdminPageBanner | null
   inlineValidation: string | null
 }
@@ -32,6 +33,7 @@ type BuildQuoteAdminPageFeedbackArgs = {
   actionError?: string | null
   validationError?: string | null
   notice?: string | null
+  noticeTone?: CrmNoticeTone | null
   loadErrorTitle?: string
   actionErrorTitle?: string
   noticeTitle?: string
@@ -44,6 +46,7 @@ export function buildQuoteAdminPageFeedback({
   actionError = null,
   validationError = null,
   notice = null,
+  noticeTone = 'success',
   loadErrorTitle,
   actionErrorTitle,
   noticeTitle,
@@ -56,7 +59,7 @@ export function buildQuoteAdminPageFeedback({
       : validationError
         ? null
         : notice
-          ? { tone: 'success' as const, title: noticeTitle, message: notice }
+          ? { tone: noticeTone ?? 'success', title: noticeTitle, message: notice }
           : null
 
   return {
@@ -65,6 +68,7 @@ export function buildQuoteAdminPageFeedback({
     actionError,
     validationError,
     notice,
+    noticeTone,
     pageBanner,
     inlineValidation: loadError || actionError ? null : validationError,
   }

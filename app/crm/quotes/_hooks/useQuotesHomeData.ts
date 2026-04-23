@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import { useResource } from '@/app/crm/_hooks/useResource'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import type {
+  QuoteHomeBootstrapReadModel,
+  QuoteHomeJobVersionItemReadModel,
+} from '@/lib/quotes/collectionData'
 import { loadQuoteHomeBootstrap } from '@/lib/quotes/client'
 
 const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
@@ -58,9 +61,53 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
     loading: resource.loading,
     bootstrapError: resource.error,
     versionCountByJob,
+    applyDeletedVersion: (estimate: QuoteHomeJobVersionItemReadModel) => {
+      resource.setData((current) => {
+        const nextBootstrap = {
+          ...current,
+          summary: {
+            ...current.summary,
+            total_versions: Math.max(0, current.summary.total_versions - 1),
+            draft_count:
+              estimate.version_state === 'draft'
+                ? Math.max(0, current.summary.draft_count - 1)
+                : current.summary.draft_count,
+            sent_or_awaiting_count: estimate.is_sent_estimate
+              ? Math.max(0, current.summary.sent_or_awaiting_count - 1)
+              : current.summary.sent_or_awaiting_count,
+            live_count:
+              estimate.version_state === 'live'
+                ? Math.max(0, current.summary.live_count - 1)
+                : current.summary.live_count,
+            pipeline_total: Math.max(0, current.summary.pipeline_total - (estimate.final_total ?? 0)),
+          },
+          jobCounts: {
+            ...current.jobCounts,
+            items: current.jobCounts.items.map((item) =>
+              item.job_id === estimate.job_id
+                ? {
+                    ...item,
+                    version_count: Math.max(0, item.version_count - 1),
+                  }
+                : item
+            ),
+          },
+        }
+        latestLoadedBootstrapRef.current = nextBootstrap
+        return nextBootstrap
+      })
+    },
     refresh: async () => {
       const ok = await resource.refresh()
       return ok ? latestLoadedBootstrapRef.current : null
+    },
+    attemptRefresh: async (options?: { preserveDataOnError?: boolean; reportError?: boolean }) => {
+      const result = await resource.attemptRefresh(options)
+      return {
+        ok: result.ok,
+        error: result.error,
+        data: result.ok ? latestLoadedBootstrapRef.current : null,
+      }
     },
   }
 }

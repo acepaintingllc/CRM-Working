@@ -76,6 +76,12 @@ export function QuoteProductEditorSection({ vm, actions }: Props) {
             </CrmNotice>
           ) : null}
 
+          {vm.selectionNotice ? (
+            <CrmNotice tone="info" compact>
+              {vm.selectionNotice}
+            </CrmNotice>
+          ) : null}
+
           <CrmField label="Product name" error={fieldErrors.name}>
             <input
               aria-label="Product name"
