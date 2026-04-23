@@ -5,7 +5,6 @@ import { CrmDenseActionRow } from '@/app/crm/_components/CrmDenseActionRow'
 import type { JobWorkflowResolvedAction } from '@/lib/jobs/types'
 import {
   CalendarCheck,
-  Camera,
   CheckCircle2,
   FileText,
   Mail,
@@ -31,8 +30,6 @@ type JobActionRailProps = {
 
 function actionIcon(action: JobWorkflowResolvedAction): LucideIcon {
   switch (action.id) {
-    case 'open_field_camera':
-      return Camera
     case 'send_quote_scheduled':
     case 'send_follow_up':
     case 'send_scheduled_email':

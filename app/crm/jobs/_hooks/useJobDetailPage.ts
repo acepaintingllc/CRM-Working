@@ -13,13 +13,10 @@ import {
 import {
   deleteJob as deleteJobRequest,
   listPaintLogs,
-  listPhotos,
   patchJobDateFields,
   patchJobStatus,
   type EstimateDriveFile,
   type JobDetail,
-  type JobPhoto,
-  type SitePhoto,
 } from '@/lib/jobs/client'
 import {
   isStageEmailStage,
@@ -37,8 +34,6 @@ type JobDetailResource = {
   estimateFile: EstimateDriveFile | null
   estimateFileError: string | null
   paintLogs: PaintLogRow[]
-  afterPhotos: JobPhoto[]
-  sitePhotos: SitePhoto[]
 }
 
 type EstimateFilePayload = {
@@ -94,8 +89,6 @@ export function useJobDetailPage() {
   const [estimateFile, setEstimateFile] = useState<EstimateDriveFile | null>(null)
   const [estimateFileError, setEstimateFileError] = useState<string | null>(null)
   const [paintLogs, setPaintLogs] = useState<PaintLogRow[]>([])
-  const [afterPhotos, setAfterPhotos] = useState<JobPhoto[]>([])
-  const [sitePhotos, setSitePhotos] = useState<SitePhoto[]>([])
   const [secondaryLoading, setSecondaryLoading] = useState(false)
   const secondaryRequestIdRef = useRef(0)
 
@@ -119,8 +112,6 @@ export function useJobDetailPage() {
       setEstimateFile(null)
       setEstimateFileError(null)
       setPaintLogs([])
-      setAfterPhotos([])
-      setSitePhotos([])
       setSecondaryLoading(false)
       return false
     }
@@ -129,10 +120,9 @@ export function useJobDetailPage() {
     setSecondaryLoading(true)
 
     try {
-      const [estimateState, paintLogRows, photoBundle] = await Promise.all([
+      const [estimateState, paintLogRows] = await Promise.all([
         loadEstimateFile(id),
         listPaintLogs(id),
-        listPhotos(id),
       ])
 
       if (secondaryRequestIdRef.current !== requestId) return false
@@ -140,16 +130,12 @@ export function useJobDetailPage() {
       setEstimateFile(estimateState.estimateFile)
       setEstimateFileError(estimateState.estimateFileError)
       setPaintLogs(paintLogRows)
-      setAfterPhotos(photoBundle.afterPhotos)
-      setSitePhotos(photoBundle.sitePhotos)
       return true
     } catch {
       if (secondaryRequestIdRef.current !== requestId) return false
       setEstimateFile(null)
       setEstimateFileError('Failed to load job support data.')
       setPaintLogs([])
-      setAfterPhotos([])
-      setSitePhotos([])
       return false
     } finally {
       if (secondaryRequestIdRef.current === requestId) {
@@ -181,8 +167,6 @@ export function useJobDetailPage() {
         estimateFile,
         estimateFileError,
         paintLogs,
-        afterPhotos,
-        sitePhotos,
       },
       loading:
         (jobKey ? jobResource.loading : false) || secondaryLoading,
@@ -197,8 +181,6 @@ export function useJobDetailPage() {
           estimateFile,
           estimateFileError,
           paintLogs,
-          afterPhotos,
-          sitePhotos,
         }
         const next =
           typeof value === 'function'
@@ -209,14 +191,11 @@ export function useJobDetailPage() {
         setEstimateFile(next.estimateFile)
         setEstimateFileError(next.estimateFileError)
         setPaintLogs(next.paintLogs)
-        setAfterPhotos(next.afterPhotos)
-        setSitePhotos(next.sitePhotos)
         setResourceError(null)
       },
       setError,
     }),
     [
-      afterPhotos,
       estimateFile,
       estimateFileError,
       job,
@@ -227,7 +206,6 @@ export function useJobDetailPage() {
       resourceError,
       secondaryLoading,
       setError,
-      sitePhotos,
     ]
   )
 
@@ -443,8 +421,6 @@ export function useJobDetailPage() {
     estimateFile: resource.data.estimateFile,
     estimateFileError: resource.data.estimateFileError,
     paintLogs: resource.data.paintLogs,
-    afterPhotos: resource.data.afterPhotos,
-    sitePhotos: resource.data.sitePhotos,
     copy: detailActions.copyValue,
     patchJob,
     deleteJob: detailActions.confirmAndDelete,

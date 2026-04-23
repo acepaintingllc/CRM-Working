@@ -32,7 +32,7 @@ export function useQuotesHomePage() {
   })
   const createController = useQuoteVersionCreation(selection.selectedJob)
   const deleteController = useQuotesHomeDelete({
-    setData: dataState.setData,
+    refresh: dataState.refresh,
     setError: dataState.setError,
   })
 
@@ -81,7 +81,8 @@ export function useQuotesHomePage() {
     } satisfies QuotesHomeJobListVm,
     selectedJobVm: buildQuotesHomeSelectedJobVm(
       selection.selectedJob,
-      selection.selectedJobVersions.length,
+      selection.versionCountByJob[selection.selectedJobId] ??
+        selection.selectedJobVersions.length,
       dataState.loading
     ),
     versionListVm: {

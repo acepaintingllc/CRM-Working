@@ -35,8 +35,6 @@ export type JobSummary = {
   completed_email_sent_at?: string | null
   closeout_notes?: string | null
   linked_estimate_id?: string | null
-  site_photo_count?: number
-  has_site_photos?: boolean
 }
 
 export type JobDetail = {
@@ -79,22 +77,6 @@ export type EstimateDriveFile = {
   webViewLink?: string | null
 }
 
-export type JobPhoto = {
-  id: string
-  url: string
-  caption: string | null
-  captured_at: string | null
-  uploaded_at: string | null
-  created_at: string | null
-}
-
-export type SitePhoto = {
-  id: string
-  url: string
-  caption: string | null
-  captured_at: string | null
-}
-
 export type ScheduleRow = {
   id: string
   start_at: string
@@ -129,46 +111,6 @@ export type CalendarAddResult = {
   scheduleId: string
   eventId?: string | null
   skipped?: boolean
-}
-
-export type UploadPhotoPayload = {
-  file: File
-  clientLocalId: string
-  capturedAt?: string
-  caption?: string | null
-}
-
-export type JobPhotoBundle = {
-  afterPhotos: JobPhoto[]
-  sitePhotos: SitePhoto[]
-}
-
-function normalizePhotos(rows: JobPhoto[]) {
-  return rows.map((row) => ({
-    id: row.id,
-    url: row.url,
-    caption: row.caption ?? null,
-    captured_at: row.captured_at ?? null,
-    uploaded_at: row.uploaded_at ?? null,
-    created_at: row.created_at ?? null,
-  }))
-}
-
-function toSitePhotos(rows: JobPhoto[]): SitePhoto[] {
-  return rows.map((row) => ({
-    id: row.id,
-    url: row.url,
-    caption: row.caption,
-    captured_at: row.captured_at,
-  }))
-}
-
-function normalizePhotoBundle(rows: JobPhoto[]): JobPhotoBundle {
-  const afterPhotos = normalizePhotos(rows)
-  return {
-    afterPhotos,
-    sitePhotos: toSitePhotos(afterPhotos),
-  }
 }
 
 export async function fetchJobList() {
@@ -226,36 +168,6 @@ export async function addScheduleRow(
 
 export async function deleteScheduleRow(jobId: string, scheduleId: string) {
   await mutateData<boolean>(`/api/jobs/${jobId}/schedules/${scheduleId}`, { method: 'DELETE' })
-}
-
-export async function listPhotos(jobId: string) {
-  const photos = await loadData<JobPhoto[]>(`/api/jobs/${jobId}/site-photos`, {
-    cache: 'no-store',
-  })
-  return normalizePhotoBundle(photos)
-}
-
-export async function uploadPhoto(jobId: string, payload: UploadPhotoPayload) {
-  const form = new FormData()
-  form.append('file', payload.file)
-  form.append('client_local_id', payload.clientLocalId)
-  form.append('captured_at', payload.capturedAt ?? new Date().toISOString())
-  if (payload.caption) {
-    form.append('caption', payload.caption)
-  }
-
-  const result = await mutateData<{ photo?: JobPhoto | null; duplicate?: boolean }>(
-    `/api/jobs/${jobId}/site-photos`,
-    {
-      method: 'POST',
-      body: form,
-    }
-  )
-
-  return {
-    duplicate: Boolean(result.data?.duplicate),
-    photo: (result.data?.photo ?? null) as JobPhoto | null,
-  }
 }
 
 export async function listPaintLogs(jobId: string) {

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   buildQuoteHomeData,
   buildQuoteListPayload,
-  removeQuoteEstimateFromHomeData,
 } from '../collectionData'
 
 const rows = [
@@ -107,6 +106,11 @@ describe('quote collection data', () => {
       live_count: 1,
       pipeline_total: 1800,
     })
+    expect(payload.total_versions).toBe(3)
+    expect(payload.version_counts_by_job).toEqual({
+      'job-2': 1,
+      'job-1': 2,
+    })
     expect(payload.snapshot).toEqual({
       estimate_id: 'estimate-3',
       job_id: 'job-2',
@@ -127,19 +131,59 @@ describe('quote collection data', () => {
     expect(payload.search_estimates).toHaveLength(3)
   })
 
-  it('recomputes optimistic home state from the shared helper after a delete', () => {
-    const next = removeQuoteEstimateFromHomeData(buildQuoteHomeData(rows), 'estimate-3')
+  it('keeps authoritative aggregates on the full dataset when the visible search subset is capped', () => {
+    const expandedRows = Array.from({ length: 205 }, (_, index) => {
+      const jobId = index < 120 ? 'job-a' : 'job-b'
+      const state =
+        index < 100 ? 'draft' : index < 180 ? 'live' : 'archived'
+      const total =
+        state === 'archived'
+          ? 1000 + index
+          : 2000 + index
 
-    expect(next.summary).toEqual({
-      draft_count: 0,
-      sent_or_awaiting_count: 2,
-      live_count: 1,
-      pipeline_total: 1300,
+      return {
+        id: `estimate-${index + 1}`,
+        estimate_id: `estimate-${index + 1}`,
+        job_id: jobId,
+        customer_id: `customer-${jobId}`,
+        status: state,
+        raw_version_name: `Version ${index + 1}`,
+        raw_version_state: state,
+        raw_version_kind: 'standard',
+        raw_version_sort_order: index + 1,
+        version_name: `Version ${index + 1}`,
+        version_state: state,
+        version_kind: 'standard',
+        version_sort_order: index + 1,
+        job_title: jobId === 'job-a' ? 'Kitchen' : 'Garage',
+        job_status: 'estimate_sent',
+        job_estimate_sent_at: '2026-04-21T00:00:00.000Z',
+        customer_name: jobId === 'job-a' ? 'Alice' : 'Bob',
+        final_total: total,
+        updated_at: `2026-04-22T${String(index % 24).padStart(2, '0')}:00:00.000Z`,
+        created_at: `2026-04-21T${String(index % 24).padStart(2, '0')}:00:00.000Z`,
+        is_sent_estimate: index < 150,
+      }
     })
-    expect(next.snapshot?.estimate_id).toBe('estimate-2')
-    expect(next.recent_estimates.map((row) => row.estimate_id)).toEqual([
-      'estimate-2',
-      'estimate-1',
-    ])
+
+    const payload = buildQuoteHomeData(expandedRows)
+    const expectedPipelineTotal = expandedRows.reduce((sum, row) => {
+      return row.version_state === 'archived' ? sum : sum + (row.final_total ?? 0)
+    }, 0)
+
+    expect(payload.summary).toEqual({
+      draft_count: 100,
+      sent_or_awaiting_count: 150,
+      live_count: 80,
+      pipeline_total: expectedPipelineTotal,
+    })
+    expect(payload.total_versions).toBe(205)
+    expect(payload.version_counts_by_job).toEqual({
+      'job-a': 120,
+      'job-b': 85,
+    })
+    expect(payload.snapshot?.estimate_id).toBe('estimate-1')
+    expect(payload.snapshot?.total_versions).toBe(205)
+    expect(payload.search_estimates).toHaveLength(200)
   })
 })

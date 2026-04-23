@@ -16,12 +16,9 @@ import { makeIdempotencyKey } from '@/lib/jobs/idempotency'
 import { mapPaintLogRow, type PaintLogRow } from '@/lib/jobs/paintLog'
 import {
   listPaintLogs,
-  listPhotos,
   loadJobRecord,
   type EstimateDriveFile,
   type JobDetail,
-  type JobPhoto,
-  type SitePhoto,
 } from '@/lib/jobs/client'
 import type { StageEmailStage } from '@/lib/jobs/types'
 
@@ -60,8 +57,6 @@ export type CloseoutData = {
   job: JobDetail
   template: StageEmailTemplate | null
   paintLogs: PaintLogRow[]
-  afterPhotos: JobPhoto[]
-  sitePhotos: SitePhoto[]
 }
 
 export type SaveCloseoutPayload = {
@@ -124,11 +119,10 @@ export function getResponseErrorMessage(
 }
 
 export async function fetchJobDetail(jobId: string) {
-  const [job, estimateResponse, paintLogs, photos] = await Promise.all([
+  const [job, estimateResponse, paintLogs] = await Promise.all([
     loadJobRecord(jobId),
     authedFetch(`/api/jobs/${jobId}/estimate-file`, { cache: 'no-store' }),
     listPaintLogs(jobId),
-    listPhotos(jobId),
   ])
 
   const estimatePayload = await parseResponseBody(estimateResponse)
@@ -150,8 +144,6 @@ export async function fetchJobDetail(jobId: string) {
         ? estimateFilePayload?.error ?? 'No matching estimate in Drive folder'
         : null,
     paintLogs,
-    afterPhotos: photos.afterPhotos,
-    sitePhotos: photos.sitePhotos,
   }
 }
 
@@ -281,11 +273,10 @@ export async function sendStageEmail(jobId: string, payload: StageEmailSendPaylo
 }
 
 export async function fetchCloseoutData(jobId: string) {
-  const [templates, job, paintLogs, photos] = await Promise.all([
+  const [templates, job, paintLogs] = await Promise.all([
     loadEmailTemplates().catch((error) => error),
     loadJobRecord(jobId),
     listPaintLogs(jobId),
-    listPhotos(jobId),
   ])
   const templateList = templates instanceof Error ? [] : (templates as StageEmailTemplate[])
   const template = templateList.find((row) => row.stage === 'completed') ?? null
@@ -297,8 +288,6 @@ export async function fetchCloseoutData(jobId: string) {
     job,
     template,
     paintLogs,
-    afterPhotos: photos.afterPhotos,
-    sitePhotos: photos.sitePhotos,
   } satisfies CloseoutData
 }
 

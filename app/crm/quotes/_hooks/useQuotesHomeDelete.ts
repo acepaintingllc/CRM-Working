@@ -1,20 +1,15 @@
 'use client'
 
-import type { Dispatch, SetStateAction } from 'react'
 import { useState } from 'react'
-import {
-  removeQuoteEstimateFromHomeData,
-  type QuoteHomeData,
-  type QuoteHomeEstimate,
-} from '@/lib/quotes/collectionData'
+import { type QuoteHomeEstimate } from '@/lib/quotes/collectionData'
 import { deleteQuoteVersion } from '@/lib/quotes/client'
 
 type Options = {
-  setData: Dispatch<SetStateAction<QuoteHomeData | null>>
+  refresh: () => Promise<boolean>
   setError: (value: string | null) => void
 }
 
-export function useQuotesHomeDelete({ setData, setError }: Options) {
+export function useQuotesHomeDelete({ refresh, setError }: Options) {
   const [confirmingDelete, setConfirmingDelete] = useState<QuoteHomeEstimate | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -36,11 +31,8 @@ export function useQuotesHomeDelete({ setData, setError }: Options) {
 
     try {
       await deleteQuoteVersion(deletedId)
-      setData((previous) => {
-        if (!previous) return previous
-        return removeQuoteEstimateFromHomeData(previous, deletedId)
-      })
       setConfirmingDelete(null)
+      await refresh()
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete quote.')
     } finally {

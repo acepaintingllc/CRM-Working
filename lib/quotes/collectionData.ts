@@ -65,6 +65,8 @@ export type QuoteHomeSummary = {
 
 export type QuoteHomeData = {
   summary: QuoteHomeSummary
+  total_versions: number
+  version_counts_by_job: Record<string, number>
   recent_estimates: QuoteHomeEstimate[]
   snapshot: (QuoteHomeEstimate & { total_versions: number }) | null
   search_estimates: QuoteHomeEstimate[]
@@ -120,6 +122,13 @@ export function buildQuoteHomeSummary(estimates: QuoteHomeEstimate[]): QuoteHome
   }
 }
 
+export function buildQuoteHomeVersionCountsByJob(estimates: QuoteHomeEstimate[]) {
+  return estimates.reduce<Record<string, number>>((counts, estimate) => {
+    counts[estimate.job_id] = (counts[estimate.job_id] ?? 0) + 1
+    return counts
+  }, {})
+}
+
 export function buildQuoteHomeSnapshot(
   estimates: QuoteHomeEstimate[],
   totalVersions = estimates.length
@@ -140,24 +149,14 @@ export function buildQuoteListPayload(rows: EstimateCollectionDecoratedRow[]) {
 
 export function buildQuoteHomeData(rows: EstimateCollectionDecoratedRow[]): QuoteHomeData {
   const estimates = rows.map(toQuoteHomeEstimate)
+  const totalVersions = rows.length
   return {
     summary: buildQuoteHomeSummary(estimates),
+    total_versions: totalVersions,
+    version_counts_by_job: buildQuoteHomeVersionCountsByJob(estimates),
     recent_estimates: estimates.slice(0, 12),
-    snapshot: buildQuoteHomeSnapshot(estimates, rows.length),
+    snapshot: buildQuoteHomeSnapshot(estimates, totalVersions),
+    // Visible/search subset only. Authoritative aggregates must come from full-dataset fields above.
     search_estimates: estimates.slice(0, 200),
-  }
-}
-
-export function removeQuoteEstimateFromHomeData(
-  data: QuoteHomeData,
-  estimateId: string
-): QuoteHomeData {
-  const remainingSearch = data.search_estimates.filter((row) => row.estimate_id !== estimateId)
-  return {
-    ...data,
-    summary: buildQuoteHomeSummary(remainingSearch),
-    recent_estimates: remainingSearch.slice(0, 12),
-    snapshot: buildQuoteHomeSnapshot(remainingSearch),
-    search_estimates: remainingSearch,
   }
 }

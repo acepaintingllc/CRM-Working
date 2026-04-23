@@ -11,8 +11,8 @@ import { CrmModalShell } from '@/app/crm/_components/CrmModalShell'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import { useCloseoutForm } from '@/app/crm/jobs/_components/hooks/useCloseoutForm'
-import { Mail, Plus, Send, Trash2, Upload } from 'lucide-react'
-import { useCallback, useRef, type ChangeEvent } from 'react'
+import { Mail, Plus, Send, Trash2 } from 'lucide-react'
+import { useCallback } from 'react'
 
 export type { PaintLogRow } from '@/lib/jobs/paintLog'
 
@@ -50,8 +50,6 @@ export default function JobCompletionCloseoutModal({
   onClose,
   onSaved,
 }: JobCompletionCloseoutModalProps) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-
   const loadCatalogs = useCallback(
     async (linkedEstimateId: string) =>
       loadQuoteCatalogs<EstimateCatalogPayload>(linkedEstimateId).catch(() => null),
@@ -63,7 +61,6 @@ export default function JobCompletionCloseoutModal({
     loading,
     saving,
     sendingEmail,
-    uploadingPhoto,
     subject,
     setSubject,
     body,
@@ -74,18 +71,15 @@ export default function JobCompletionCloseoutModal({
     updateRow,
     removeRow,
     addRow,
-    afterPhotos,
     paintOptions,
     colorOptions,
     error,
     emailNotice,
-    photoNotice,
     templateMissing,
     emailSkipped,
     canSendEmail,
     sendReviewEmail,
     skipEmail,
-    uploadCloseoutPhoto,
     saveAndClose,
     defaultWhereUsedOptions,
     defaultSheenOptions,
@@ -97,15 +91,6 @@ export default function JobCompletionCloseoutModal({
   })
 
   if (!open || !jobId) return null
-
-  const handlePhotoPick = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null
-    if (!file) return
-    const uploaded = await uploadCloseoutPhoto(file)
-    if (uploaded) {
-      event.target.value = ''
-    }
-  }
 
   const handleSaveAndClose = async () => {
     const saved = await saveAndClose()
@@ -126,223 +111,185 @@ export default function JobCompletionCloseoutModal({
       />
 
       <div className="max-h-[78vh] overflow-y-auto px-5 py-4">
-          {error ? <CrmNotice tone="error" compact>{error}</CrmNotice> : null}
+        {error ? <CrmNotice tone="error" compact>{error}</CrmNotice> : null}
 
-          <CrmModalSection
-            title="Review email"
-            description={job?.customer_email ? `To: ${job.customer_email}` : 'Customer email missing'}
-            tone="muted"
-          >
-            {templateMissing ? (
-              <CrmNotice tone="warning" compact>
-                Missing completed/review email template.
-              </CrmNotice>
-            ) : null}
-            {loading ? (
-              <div className="mt-3 text-sm text-[color:var(--crm-ui-muted)]">Loading composer...</div>
-            ) : (
-              <div className="mt-3 grid gap-3">
-                <CrmField label="Subject">
-                  <input
-                    value={subject}
-                    onChange={(event) => setSubject(event.target.value)}
-                    placeholder="Subject"
-                    className={crmInputClassName()}
-                  />
-                </CrmField>
-                <CrmField label="Body">
-                  <textarea
-                    value={body}
-                    onChange={(event) => setBody(event.target.value)}
-                    placeholder="Body"
-                    className={crmInputClassName('min-h-[120px]')}
-                  />
-                </CrmField>
-                <div className="flex flex-wrap items-center gap-2">
-                  <CrmButton onClick={() => void sendReviewEmail()} disabled={!canSendEmail} tone="primary">
-                    <Send size={14} />
-                    <span>{sendingEmail ? 'Sending...' : 'Send review email'}</span>
-                  </CrmButton>
-                  <CrmButton onClick={skipEmail}>
-                    <Mail size={14} />
-                    <span>Skip for now</span>
-                  </CrmButton>
-                  {job?.completed_email_sent_at ? (
-                    <span className="text-xs text-[color:var(--crm-ui-success-text)]">
-                      Sent: {formatDate(job.completed_email_sent_at)}
-                    </span>
-                  ) : null}
-                </div>
-                {emailNotice || emailSkipped ? (
-                  <CrmNotice tone="success" compact>
-                    {emailNotice ?? 'Review email skipped for now.'}
-                  </CrmNotice>
+        <CrmModalSection
+          title="Review email"
+          description={job?.customer_email ? `To: ${job.customer_email}` : 'Customer email missing'}
+          tone="muted"
+        >
+          {templateMissing ? (
+            <CrmNotice tone="warning" compact>
+              Missing completed/review email template.
+            </CrmNotice>
+          ) : null}
+          {loading ? (
+            <div className="mt-3 text-sm text-[color:var(--crm-ui-muted)]">Loading composer...</div>
+          ) : (
+            <div className="mt-3 grid gap-3">
+              <CrmField label="Subject">
+                <input
+                  value={subject}
+                  onChange={(event) => setSubject(event.target.value)}
+                  placeholder="Subject"
+                  className={crmInputClassName()}
+                />
+              </CrmField>
+              <CrmField label="Body">
+                <textarea
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
+                  placeholder="Body"
+                  className={crmInputClassName('min-h-[120px]')}
+                />
+              </CrmField>
+              <div className="flex flex-wrap items-center gap-2">
+                <CrmButton onClick={() => void sendReviewEmail()} disabled={!canSendEmail} tone="primary">
+                  <Send size={14} />
+                  <span>{sendingEmail ? 'Sending...' : 'Send review email'}</span>
+                </CrmButton>
+                <CrmButton onClick={skipEmail}>
+                  <Mail size={14} />
+                  <span>Skip for now</span>
+                </CrmButton>
+                {job?.completed_email_sent_at ? (
+                  <span className="text-xs text-[color:var(--crm-ui-success-text)]">
+                    Sent: {formatDate(job.completed_email_sent_at)}
+                  </span>
                 ) : null}
               </div>
-            )}
-          </CrmModalSection>
-
-          <CrmModalSection
-            title="Paint log"
-            className="mt-4"
-            actions={
-              <CrmButton onClick={addRow} className="min-h-0 px-2.5 py-1.5 text-xs">
-                <Plus size={14} />
-                <span>Add row</span>
-              </CrmButton>
-            }
-          >
-
-            <datalist id={`closeout-where-${jobId}`}>
-              {defaultWhereUsedOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-            <datalist id={`closeout-product-${jobId}`}>
-              {paintOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-            <datalist id={`closeout-sheen-${jobId}`}>
-              {defaultSheenOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-            <datalist id={`closeout-color-${jobId}`}>
-              {colorOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-
-            <div className="grid gap-2">
-              {paintRows.map((row, index) => (
-                <div
-                  key={row.id ?? `row-${index}`}
-                  className="ace-crm-surface-muted rounded-[14px] px-3 py-3"
-                >
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="text-xs font-extrabold text-[color:var(--crm-ui-muted)] uppercase">
-                      Row {index + 1}
-                    </div>
-                    {index > 0 && (
-                      <CrmButton
-                        onClick={() => removeRow(index)}
-                        tone="danger"
-                        className="min-h-0 px-2 py-1 text-xs"
-                      >
-                        <Trash2 size={12} />
-                        <span>Remove</span>
-                      </CrmButton>
-                    )}
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <CrmField label="Where used">
-                      <input
-                        value={row.where_used}
-                        onChange={(event) => updateRow(index, { where_used: event.target.value })}
-                        list={`closeout-where-${jobId}`}
-                        placeholder="Where used"
-                        className={crmInputClassName()}
-                      />
-                    </CrmField>
-                    <CrmField label="Paint product">
-                      <input
-                        value={row.paint_product}
-                        onChange={(event) => updateRow(index, { paint_product: event.target.value })}
-                        list={`closeout-product-${jobId}`}
-                        placeholder="Paint product"
-                        className={crmInputClassName()}
-                      />
-                    </CrmField>
-                    <CrmField label="Sheen">
-                      <input
-                        value={row.sheen}
-                        onChange={(event) => updateRow(index, { sheen: event.target.value })}
-                        list={`closeout-sheen-${jobId}`}
-                        placeholder="Sheen"
-                        className={crmInputClassName()}
-                      />
-                    </CrmField>
-                    <CrmField label="Color">
-                      <input
-                        value={row.color}
-                        onChange={(event) => updateRow(index, { color: event.target.value })}
-                        list={`closeout-color-${jobId}`}
-                        placeholder="Color"
-                        className={crmInputClassName()}
-                      />
-                    </CrmField>
-                    <CrmField label="Notes">
-                      <textarea
-                        value={row.notes}
-                        onChange={(event) => updateRow(index, { notes: event.target.value })}
-                        placeholder="Notes"
-                        className={crmInputClassName('min-h-[70px] md:col-span-2')}
-                      />
-                    </CrmField>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CrmModalSection>
-
-          <CrmModalSection title="Optional photo" className="mt-4" tone="muted">
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => void handlePhotoPick(event)}
-              />
-              <CrmButton
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingPhoto}
-              >
-                <Upload size={14} />
-                <span>{uploadingPhoto ? 'Uploading...' : 'Add photo'}</span>
-              </CrmButton>
-              {photoNotice ? (
-                <span className="text-xs text-[color:var(--crm-ui-success-text)]">{photoNotice}</span>
+              {emailNotice || emailSkipped ? (
+                <CrmNotice tone="success" compact>
+                  {emailNotice ?? 'Review email skipped for now.'}
+                </CrmNotice>
               ) : null}
             </div>
-            {afterPhotos.length > 0 && (
-              <div className="mt-2 grid gap-1 text-xs">
-                {afterPhotos.map((photo) => (
-                  <a
-                    key={photo.id}
-                    href={photo.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-gray-700 underline"
-                  >
-                    After photo · {formatDate(photo.captured_at ?? photo.created_at ?? photo.uploaded_at)}
-                  </a>
-                ))}
-              </div>
-            )}
-          </CrmModalSection>
+          )}
+        </CrmModalSection>
 
-          <CrmModalSection title="Closeout notes" className="mt-4">
-            <CrmField label="Internal closeout notes">
-              <textarea
-                value={closeoutNotes}
-                onChange={(event) => setCloseoutNotes(event.target.value)}
-                placeholder="Internal closeout notes..."
-                className={crmInputClassName('min-h-[120px]')}
-              />
-            </CrmField>
-          </CrmModalSection>
-        </div>
-
-        <div className="border-t border-[color:var(--crm-ui-border)] px-5 py-4">
-          <CrmFormActions className="justify-end">
-            <CrmButton onClick={onClose}>Cancel</CrmButton>
-            <CrmButton onClick={() => void handleSaveAndClose()} disabled={saving || loading} tone="primary">
-              {saving ? 'Saving...' : 'Save & Close'}
+        <CrmModalSection
+          title="Paint log"
+          className="mt-4"
+          actions={
+            <CrmButton onClick={addRow} className="min-h-0 px-2.5 py-1.5 text-xs">
+              <Plus size={14} />
+              <span>Add row</span>
             </CrmButton>
-          </CrmFormActions>
-        </div>
+          }
+        >
+          <datalist id={`closeout-where-${jobId}`}>
+            {defaultWhereUsedOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+          <datalist id={`closeout-product-${jobId}`}>
+            {paintOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+          <datalist id={`closeout-sheen-${jobId}`}>
+            {defaultSheenOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+          <datalist id={`closeout-color-${jobId}`}>
+            {colorOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+
+          <div className="grid gap-2">
+            {paintRows.map((row, index) => (
+              <div
+                key={row.id ?? `row-${index}`}
+                className="ace-crm-surface-muted rounded-[14px] px-3 py-3"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-xs font-extrabold text-[color:var(--crm-ui-muted)] uppercase">
+                    Row {index + 1}
+                  </div>
+                  {index > 0 && (
+                    <CrmButton
+                      onClick={() => removeRow(index)}
+                      tone="danger"
+                      className="min-h-0 px-2 py-1 text-xs"
+                    >
+                      <Trash2 size={12} />
+                      <span>Remove</span>
+                    </CrmButton>
+                  )}
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <CrmField label="Where used">
+                    <input
+                      value={row.where_used}
+                      onChange={(event) => updateRow(index, { where_used: event.target.value })}
+                      list={`closeout-where-${jobId}`}
+                      placeholder="Where used"
+                      className={crmInputClassName()}
+                    />
+                  </CrmField>
+                  <CrmField label="Paint product">
+                    <input
+                      value={row.paint_product}
+                      onChange={(event) => updateRow(index, { paint_product: event.target.value })}
+                      list={`closeout-product-${jobId}`}
+                      placeholder="Paint product"
+                      className={crmInputClassName()}
+                    />
+                  </CrmField>
+                  <CrmField label="Sheen">
+                    <input
+                      value={row.sheen}
+                      onChange={(event) => updateRow(index, { sheen: event.target.value })}
+                      list={`closeout-sheen-${jobId}`}
+                      placeholder="Sheen"
+                      className={crmInputClassName()}
+                    />
+                  </CrmField>
+                  <CrmField label="Color">
+                    <input
+                      value={row.color}
+                      onChange={(event) => updateRow(index, { color: event.target.value })}
+                      list={`closeout-color-${jobId}`}
+                      placeholder="Color"
+                      className={crmInputClassName()}
+                    />
+                  </CrmField>
+                  <CrmField label="Notes">
+                    <textarea
+                      value={row.notes}
+                      onChange={(event) => updateRow(index, { notes: event.target.value })}
+                      placeholder="Notes"
+                      className={crmInputClassName('min-h-[70px] md:col-span-2')}
+                    />
+                  </CrmField>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CrmModalSection>
+
+        <CrmModalSection title="Closeout notes" className="mt-4">
+          <CrmField label="Internal closeout notes">
+            <textarea
+              value={closeoutNotes}
+              onChange={(event) => setCloseoutNotes(event.target.value)}
+              placeholder="Internal closeout notes..."
+              className={crmInputClassName('min-h-[120px]')}
+            />
+          </CrmField>
+        </CrmModalSection>
+      </div>
+
+      <div className="border-t border-[color:var(--crm-ui-border)] px-5 py-4">
+        <CrmFormActions className="justify-end">
+          <CrmButton onClick={onClose}>Cancel</CrmButton>
+          <CrmButton onClick={() => void handleSaveAndClose()} disabled={saving || loading} tone="primary">
+            {saving ? 'Saving...' : 'Save & Close'}
+          </CrmButton>
+        </CrmFormActions>
+      </div>
     </CrmModalShell>
   )
 }

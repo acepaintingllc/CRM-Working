@@ -50,7 +50,6 @@ export type JobWorkflowActionId =
   | 'mark_lost'
   | 'open_closeout'
   | 'open_quote'
-  | 'open_field_camera'
 
 type JobWorkflowActions = Record<JobWorkflowSurface, JobWorkflowActionId[]>
 
@@ -128,7 +127,6 @@ export const JOB_WORKFLOW: Record<JobStatus, JobWorkflowStatusConfig> = {
     actions: {
       board: ['review_send_quote', 'mark_quote_sent', 'set_quote_date'],
       detail: [
-        'open_field_camera',
         'send_quote_scheduled',
         'open_quote',
         'send_scheduled_email',
@@ -141,7 +139,6 @@ export const JOB_WORKFLOW: Record<JobStatus, JobWorkflowStatusConfig> = {
     actions: {
       board: ['move_to_follow_up', 'schedule_job', 'send_follow_up', 'mark_lost'],
       detail: [
-        'open_field_camera',
         'edit_send_quote',
         'open_quote',
         'schedule_job',
@@ -157,7 +154,6 @@ export const JOB_WORKFLOW: Record<JobStatus, JobWorkflowStatusConfig> = {
     actions: {
       board: ['schedule_job', 'send_follow_up', 'mark_lost'],
       detail: [
-        'open_field_camera',
         'edit_send_quote',
         'open_quote',
         'schedule_job',
@@ -172,7 +168,6 @@ export const JOB_WORKFLOW: Record<JobStatus, JobWorkflowStatusConfig> = {
     actions: {
       board: ['send_scheduled_email', 'mark_completed', 'change_scheduled_date'],
       detail: [
-        'open_field_camera',
         'edit_send_quote',
         'open_quote',
         'schedule_job',
@@ -185,14 +180,14 @@ export const JOB_WORKFLOW: Record<JobStatus, JobWorkflowStatusConfig> = {
     columnTitle: 'Completed',
     actions: {
       board: ['open_closeout'],
-      detail: ['open_field_camera', 'open_quote', 'open_closeout'],
+      detail: ['open_quote', 'open_closeout'],
     },
   },
   lost: {
     columnTitle: 'Lost',
     actions: {
       board: [],
-      detail: ['open_field_camera', 'open_quote', 'send_scheduled_email'],
+      detail: ['open_quote', 'send_scheduled_email'],
     },
   },
 }
@@ -280,11 +275,6 @@ const JOB_WORKFLOW_ACTION_DESCRIPTORS: Record<JobWorkflowActionId, JobWorkflowAc
         ? `/crm/quotes/${job.linked_estimate_id}`
         : `/crm/quotes/create?job=${job.id}`,
     getLabel: () => 'Open quote',
-  },
-  open_field_camera: {
-    kind: 'navigate',
-    getHref: (job) => `/field/jobs/${job.id}`,
-    getLabel: () => 'Open field camera',
   },
 }
 

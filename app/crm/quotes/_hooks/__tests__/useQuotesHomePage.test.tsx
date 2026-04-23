@@ -42,6 +42,11 @@ const homePayload = {
     live_count: 1,
     pipeline_total: 1800,
   },
+  total_versions: 3,
+  version_counts_by_job: {
+    'job-1': 2,
+    'job-2': 1,
+  },
   recent_estimates: [
     {
       estimate_id: 'estimate-1',
@@ -119,6 +124,70 @@ const homePayload = {
       final_total: 800,
       updated_at: '2026-04-18T10:00:00.000Z',
       created_at: '2026-04-17T10:00:00.000Z',
+      is_sent_estimate: true,
+    },
+  ],
+}
+
+const refreshedHomePayload = {
+  summary: {
+    draft_count: 0,
+    sent_or_awaiting_count: 1,
+    live_count: 1,
+    pipeline_total: 1300,
+  },
+  total_versions: 202,
+  version_counts_by_job: {
+    'job-1': 201,
+    'job-2': 1,
+  },
+  recent_estimates: [
+    {
+      estimate_id: 'estimate-2',
+      job_id: 'job-1',
+      customer_id: 'customer-1',
+      version_name: 'Version B',
+      version_state: 'live',
+      version_kind: 'revision',
+      version_sort_order: 2,
+      job_title: 'Kitchen',
+      customer_name: 'Alice',
+      final_total: 1300,
+      updated_at: '2026-04-21T10:00:00.000Z',
+      created_at: '2026-04-20T10:00:00.000Z',
+      is_sent_estimate: true,
+    },
+  ],
+  snapshot: {
+    estimate_id: 'estimate-2',
+    job_id: 'job-1',
+    customer_id: 'customer-1',
+    version_name: 'Version B',
+    version_state: 'live',
+    version_kind: 'revision',
+    version_sort_order: 2,
+    job_title: 'Kitchen',
+    customer_name: 'Alice',
+    final_total: 1300,
+    updated_at: '2026-04-21T10:00:00.000Z',
+    created_at: '2026-04-20T10:00:00.000Z',
+    is_sent_estimate: true,
+    total_versions: 202,
+  },
+  search_estimates: [
+    {
+      estimate_id: 'estimate-2',
+      job_id: 'job-1',
+      customer_id: 'customer-1',
+      version_name: 'Version B',
+      version_state: 'live',
+      version_kind: 'revision',
+      version_sort_order: 2,
+      job_title: 'Kitchen',
+      customer_name: 'Alice',
+      final_total: 1300,
+      updated_at: '2026-04-21T10:00:00.000Z',
+      created_at: '2026-04-20T10:00:00.000Z',
       is_sent_estimate: true,
     },
   ],
@@ -273,7 +342,7 @@ describe('useQuotesHomePage', () => {
   })
 
   it('optimistically removes a deleted version and recomputes summary data', async () => {
-    loadQuoteHome.mockResolvedValue(homePayload)
+    loadQuoteHome.mockResolvedValueOnce(homePayload).mockResolvedValueOnce(refreshedHomePayload)
     fetchJobList.mockResolvedValue(jobsPayload)
     deleteQuoteVersion.mockResolvedValue({ data: { ok: true } })
 
@@ -292,11 +361,20 @@ describe('useQuotesHomePage', () => {
     })
 
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
+    expect(loadQuoteHome).toHaveBeenCalledTimes(2)
     expect(result.current.deleteDialogVm.estimateId).toBeNull()
     expect(result.current.versionListVm.items.map((estimate) => estimate.id)).toEqual(['estimate-2'])
     expect(result.current.summaryCards[0].value).toBe('0')
-    expect(result.current.summaryCards[1].value).toBe('2')
+    expect(result.current.summaryCards[1].value).toBe('1')
     expect(result.current.summaryCards[2].value).toBe('1')
     expect(result.current.summaryCards[3].value).toBe('$1,300')
+    expect(result.current.headerVm.heroSummaryText).toBe(
+      '202 total versions | 0 drafts | 1 sent/awaiting | 1 live'
+    )
+    expect(result.current.selectedJobVm.stats).toEqual([
+      { label: 'Customer', value: 'Alice' },
+      { label: 'Job Status', value: 'Estimate Pending' },
+      { label: 'Versions', value: '201' },
+    ])
   })
 })

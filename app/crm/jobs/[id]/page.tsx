@@ -80,10 +80,7 @@ export default function JobDetailPage() {
                     <JobCloseoutPanel
                       job={controller.job}
                       paintLogs={controller.paintLogs}
-                      afterPhotos={controller.afterPhotos}
-                      sitePhotos={controller.sitePhotos}
                       detailActions={detailActions}
-                      formatDate={controller.formatDate}
                     />
                   </CrmSectionCard>
                   <CrmSectionCard title="Actions" variant="compact">

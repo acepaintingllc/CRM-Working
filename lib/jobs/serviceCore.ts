@@ -71,8 +71,6 @@ export type JobSummaryRecord = {
   completed_email_sent_at?: string | null
   closeout_notes?: string | null
   linked_estimate_id?: string | null
-  site_photo_count?: number
-  has_site_photos?: boolean
 }
 
 export type JobDetailRecord = JobSummaryRecord & {
@@ -124,7 +122,6 @@ export function buildJobSummaryRecord(params: {
   optionalColumns: string[]
   customer?: CustomerRow | null
   scheduleRange?: JobScheduleRange | null
-  sitePhotoCount?: number
   withOptionalJobColumns?: (
     row: JobRow,
     optionalColumns: string[]
@@ -135,7 +132,6 @@ export function buildJobSummaryRecord(params: {
   const scheduledDate = asString(safeRow.scheduled_date) ?? params.scheduleRange?.scheduled_date ?? null
   const scheduledEndDate =
     asString(safeRow.scheduled_end_date) ?? params.scheduleRange?.scheduled_end_date ?? null
-  const sitePhotoCount = params.sitePhotoCount ?? 0
 
   return {
     ...(safeRow as Record<string, unknown>),
@@ -156,8 +152,6 @@ export function buildJobSummaryRecord(params: {
     closeout_notes: asString(safeRow.closeout_notes),
     created_at: asString(safeRow.created_at),
     linked_estimate_id: null,
-    site_photo_count: sitePhotoCount,
-    has_site_photos: sitePhotoCount > 0,
   }
 }
 

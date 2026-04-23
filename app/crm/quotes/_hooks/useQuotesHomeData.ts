@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { fetchJobList, type JobSummary } from '@/lib/jobs/client'
 import { type QuoteHomeData } from '@/lib/quotes/collectionData'
 import { loadQuoteHome } from '@/lib/quotes/client'
@@ -11,50 +12,56 @@ import {
 
 type QuoteHomeEligibleJob = EligibleQuoteVersionJob<JobSummary>
 
+type QuotesHomeResource = {
+  data: QuoteHomeData | null
+  jobs: QuoteHomeEligibleJob[]
+}
+
+const emptyQuotesHomeResource: QuotesHomeResource = {
+  data: null,
+  jobs: [],
+}
+
 export function useQuotesHomeData() {
-  const [data, setData] = useState<QuoteHomeData | null>(null)
-  const [jobs, setJobs] = useState<QuoteHomeEligibleJob[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const resource = useLoadableResource<QuotesHomeResource>({
+    initialData: emptyQuotesHomeResource,
+    load: async () => {
+      const [homePayload, jobsPayload] = await Promise.all([
+        loadQuoteHome<QuoteHomeData>(),
+        fetchJobList(),
+      ])
 
-  async function load(active = true) {
-    setLoading(true)
-    setError(null)
-    try {
-      const [homePayload, jobsPayload] = await Promise.all([loadQuoteHome<QuoteHomeData>(), fetchJobList()])
+      return {
+        data: homePayload,
+        jobs: filterEligibleQuoteVersionJobs(jobsPayload),
+      }
+    },
+    getErrorMessage: (loadError: unknown) =>
+      loadError instanceof Error ? loadError.message : 'Failed to load quotes home.',
+  })
 
-      if (!active) return false
-
-      setData(homePayload)
-      setJobs(filterEligibleQuoteVersionJobs(jobsPayload))
-      return true
-    } catch (loadError) {
-      if (!active) return false
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load quotes home.')
-      setData(null)
-      setJobs([])
-      return false
-    } finally {
-      if (active) setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    let active = true
-
-    void load(active)
-    return () => {
-      active = false
-    }
-  }, [])
+  const setData = useCallback(
+    (
+      next:
+        | QuoteHomeData
+        | null
+        | ((current: QuoteHomeData | null) => QuoteHomeData | null)
+    ) => {
+      resource.setData((current) => ({
+        ...current,
+        data: typeof next === 'function' ? next(current.data) : next,
+      }))
+    },
+    [resource]
+  )
 
   return {
-    data,
+    data: resource.data.data,
     setData,
-    jobs,
-    loading,
-    error,
-    setError,
-    refresh: () => load(true),
+    jobs: resource.data.jobs,
+    loading: resource.loading,
+    error: resource.error,
+    setError: resource.setError,
+    refresh: resource.refresh,
   }
 }

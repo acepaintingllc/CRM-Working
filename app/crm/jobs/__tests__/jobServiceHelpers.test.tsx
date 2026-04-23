@@ -72,14 +72,12 @@ describe('job service helpers', () => {
         scheduled_date: '2026-04-22T14:00:00.000Z',
         scheduled_end_date: '2026-04-22T18:00:00.000Z',
       },
-      sitePhotoCount: 2,
     })
 
     expect(summary.title).toBe('Untitled job')
     expect(summary.status).toBe('estimate_scheduled')
     expect(summary.customer_name).toBe('Alice')
     expect(summary.scheduled_date).toBe('2026-04-22T14:00:00.000Z')
-    expect(summary.has_site_photos).toBe(true)
 
     const detail = buildJobDetailRecord({
       row: { ...summary, customer_id: 'customer-1' },
