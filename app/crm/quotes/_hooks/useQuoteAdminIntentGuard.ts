@@ -51,7 +51,7 @@ export function useQuoteAdminIntentGuard<TIntent>({
       stateRef.current = nextState
       setState(nextState)
     }
-  }, [hasUnsavedChanges])
+  }, [hasUnsavedChanges, getHasUnsavedChanges])
 
   function requestIntent<TResult>(
     intent: TIntent,

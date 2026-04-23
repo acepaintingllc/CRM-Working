@@ -2,7 +2,6 @@
 
 import {
   buildQuoteAdminPageStatus,
-  type QuoteAdminPageBanner,
   type QuoteAdminPageStatus,
 } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
 

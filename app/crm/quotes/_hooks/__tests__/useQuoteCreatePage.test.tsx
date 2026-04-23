@@ -204,4 +204,73 @@ describe('useQuoteCreatePage', () => {
     expect(result.current.create.versionName).toBe('')
     expect(result.current.create.versionKind).toBe('standard')
   })
+
+  it('keeps the draft when the same job reloads through the resource boundary', async () => {
+    getSearchParam.mockReturnValue('job-1')
+    loadJobRecord.mockResolvedValue({
+      id: 'job-1',
+      customer_id: 'customer-1',
+      customer_name: 'Alice',
+      customer_address: '123 Main',
+      customer_email: null,
+      customer_phone: null,
+      title: 'Kitchen',
+      description: null,
+      status: 'estimate_pending',
+      estimate_date: null,
+      estimate_sent_at: null,
+      scheduled_date: null,
+      scheduled_end_date: null,
+      completed_at: null,
+      linked_estimate_id: null,
+      closeout_notes: null,
+      linked_estimates: [],
+    })
+    loadQuoteJobVersions
+      .mockResolvedValueOnce({ job_id: 'job-1', total_versions: 0, items: [] })
+      .mockResolvedValueOnce({
+        job_id: 'job-1',
+        total_versions: 1,
+        items: [
+          {
+            estimate_id: 'estimate-2',
+            job_id: 'job-1',
+            customer_id: 'customer-1',
+            version_name: 'Revision B',
+            version_state: 'draft',
+            version_kind: 'revision',
+            version_sort_order: 2,
+            job_title: 'Kitchen',
+            customer_name: 'Alice',
+            final_total: 700,
+            updated_at: '2026-04-21T10:00:00.000Z',
+            created_at: '2026-04-21T09:00:00.000Z',
+            is_sent_estimate: false,
+          },
+        ],
+      })
+
+    const { result } = renderHook(() => useQuoteCreatePage())
+
+    await waitFor(() => {
+      expect(result.current.feedback.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.setVersionName('Keep me')
+      result.current.actions.setVersionKind('revision')
+    })
+
+    await act(async () => {
+      await result.current.actions.retry()
+    })
+
+    await waitFor(() => {
+      expect(result.current.versions.items).toHaveLength(1)
+    })
+
+    expect(result.current.job.jobId).toBe('job-1')
+    expect(result.current.create.versionName).toBe('Keep me')
+    expect(result.current.create.versionKind).toBe('revision')
+  })
 })

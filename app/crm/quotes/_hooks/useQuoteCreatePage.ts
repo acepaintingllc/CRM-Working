@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { buildQuoteAdminPageStatus } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
@@ -21,6 +21,7 @@ import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 export function useQuoteCreatePage() {
   const searchParams = useSearchParams()
   const jobId = searchParams.get('job') ?? ''
+  const shouldLoadJobData = Boolean(jobId)
   const resource = useLoadableResource<QuoteCreatePageResource>({
     initialData: EMPTY_QUOTE_CREATE_RESOURCE,
     load: async () => {
@@ -41,21 +42,18 @@ export function useQuoteCreatePage() {
       loadError instanceof Error ? loadError.message : 'Failed to load quote creation data.',
     reloadKey: jobId,
   })
-  const selectedJob = useMemo(() => resource.data.job, [resource.data.job])
+  const selectedJob = resource.data.job
   const createController = useQuoteVersionCreation(selectedJob)
-  const jobVersions = useMemo(
-    () => resource.data.versions as QuoteHomeJobVersionItemReadModel[],
-    [resource.data.versions]
-  )
+  const jobVersions = resource.data.versions as QuoteHomeJobVersionItemReadModel[]
+  const { setError, setVersionKind, setVersionName } = createController
 
   useEffect(() => {
-    createController.setVersionName('')
-    createController.setVersionKind('standard')
-    createController.setError(null)
-  }, [selectedJob?.id])
+    setVersionName('')
+    setVersionKind('standard')
+    setError(null)
+  }, [selectedJob?.id, setError, setVersionKind, setVersionName])
 
-  const shouldLoadJobData = Boolean(jobId)
-  const hasLoadedJobData = shouldLoadJobData && (Boolean(resource.data.job) || resource.data.versions.length > 0)
+  const hasLoadedJobData = shouldLoadJobData && (Boolean(selectedJob) || jobVersions.length > 0)
   const status = buildQuoteAdminPageStatus({
     loading: resource.loading && shouldLoadJobData,
     hasData: hasLoadedJobData,

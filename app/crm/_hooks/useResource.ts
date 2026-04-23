@@ -8,6 +8,8 @@ type UseResourceOptions<T> = {
   getErrorMessage: (error: unknown) => string
   reloadKey?: unknown
   resetOnError?: boolean
+  initialLoading?: boolean
+  skipInitialLoad?: boolean
 }
 
 export function useResource<T>({
@@ -16,13 +18,16 @@ export function useResource<T>({
   getErrorMessage,
   reloadKey,
   resetOnError = true,
+  initialLoading = true,
+  skipInitialLoad = false,
 }: UseResourceOptions<T>) {
   const [data, setData] = useState(initialData)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(initialLoading)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
   const loadRef = useRef(load)
   const getErrorMessageRef = useRef(getErrorMessage)
+  const skipInitialLoadRef = useRef(skipInitialLoad)
 
   useEffect(() => {
     loadRef.current = load
@@ -57,6 +62,10 @@ export function useResource<T>({
   }, [initialData, resetOnError])
 
   useEffect(() => {
+    if (skipInitialLoadRef.current) {
+      skipInitialLoadRef.current = false
+      return
+    }
     void refresh()
   }, [refresh, reloadKey])
 

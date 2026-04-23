@@ -177,6 +177,26 @@ describe('useQuotesHomeData', () => {
     expect(refreshed).toBeNull()
   })
 
+  it('returns the refreshed bootstrap payload after a successful reload', async () => {
+    loadQuoteHomeBootstrap
+      .mockResolvedValueOnce(firstPayload)
+      .mockResolvedValueOnce(secondPayload)
+
+    const { result } = renderHook(() => useQuotesHomeData())
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let refreshed: Awaited<ReturnType<typeof result.current.refresh>> = null
+    await act(async () => {
+      refreshed = await result.current.refresh()
+    })
+
+    expect(refreshed).toEqual(secondPayload)
+    expect(result.current.summary.total_versions).toBe(2)
+    expect(result.current.versionCountByJob).toEqual({ 'job-2': 2 })
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
+  })
+
   it('keeps empty fallback data when the first bootstrap load fails', async () => {
     loadQuoteHomeBootstrap.mockRejectedValue(new Error('bootstrap failed'))
 

@@ -215,6 +215,8 @@ describe('QuotesHomePage', () => {
 
     render(<QuotesHomePage />)
 
+    expect(screen.getByText('Quote Home')).toBeInTheDocument()
+    expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
     expect(screen.getByText('header:3 total versions')).toBeInTheDocument()
     expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:false')).toBeInTheDocument()
     expect(screen.getByText('selected-job:Kitchen')).toBeInTheDocument()
@@ -223,8 +225,6 @@ describe('QuotesHomePage', () => {
     expect(screen.getByText('delete-dialog:estimate-2')).toBeInTheDocument()
     expect(screen.getByText('Quote action failed')).toBeInTheDocument()
     expect(screen.getByText('Select a job before creating a version.')).toBeInTheDocument()
-    expect(screen.getByText('Drafts')).toBeInTheDocument()
-    expect(screen.getByText('$1,800')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'focus search' }))
     fireEvent.click(screen.getByRole('button', { name: 'change search' }))

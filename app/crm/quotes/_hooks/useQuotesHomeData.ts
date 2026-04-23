@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { useResource } from '@/app/crm/_hooks/useResource'
 import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeBootstrap } from '@/lib/quotes/client'
 
@@ -23,49 +24,26 @@ function toLoadErrorMessage(scope: string, loadError: unknown) {
 }
 
 export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | null) {
-  const [bootstrap, setBootstrap] = useState<QuoteHomeBootstrapReadModel | null>(initialData ?? null)
-  const [loading, setLoading] = useState(!initialData)
-  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
-  const requestIdRef = useRef(0)
-  const initialDataRef = useRef(initialData)
-  const bootstrapRef = useRef<QuoteHomeBootstrapReadModel | null>(initialData ?? null)
+  const latestLoadedBootstrapRef = useRef(initialData ?? EMPTY_BOOTSTRAP)
+  const resource = useResource<QuoteHomeBootstrapReadModel>({
+    initialData: initialData ?? EMPTY_BOOTSTRAP,
+    initialLoading: !initialData,
+    skipInitialLoad: Boolean(initialData),
+    resetOnError: false,
+    load: async () => {
+      const nextBootstrap = await loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>()
+      latestLoadedBootstrapRef.current = nextBootstrap
+      return nextBootstrap
+    },
+    getErrorMessage: (loadError) => toLoadErrorMessage('quote home bootstrap', loadError),
+  })
+  const bootstrapRef = useRef(resource.data)
 
   useEffect(() => {
-    bootstrapRef.current = bootstrap
-  }, [bootstrap])
+    bootstrapRef.current = resource.data
+  }, [resource.data])
 
-  const refresh = useCallback(async () => {
-    const requestId = ++requestIdRef.current
-    setLoading(true)
-    setBootstrapError(null)
-
-    const [bootstrapResult] = await Promise.allSettled([
-      loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>(),
-    ])
-
-    if (requestIdRef.current !== requestId) return false
-
-    if (bootstrapResult.status === 'fulfilled') {
-      setBootstrap(bootstrapResult.value)
-      setLoading(false)
-      return bootstrapResult.value
-    } else {
-      setBootstrap(bootstrapRef.current ?? EMPTY_BOOTSTRAP)
-      setBootstrapError(toLoadErrorMessage('quote home bootstrap', bootstrapResult.reason))
-      setLoading(false)
-      return null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (initialDataRef.current) {
-      initialDataRef.current = null
-      return
-    }
-    void refresh()
-  }, [refresh])
-
-  const resolvedBootstrap = bootstrap ?? EMPTY_BOOTSTRAP
+  const resolvedBootstrap = resource.data
   const versionCountByJob = useMemo(() => {
     return resolvedBootstrap.jobCounts.items.reduce<Record<string, number>>((counts, item) => {
       counts[item.job_id] = item.version_count
@@ -77,9 +55,12 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
     summary: resolvedBootstrap.summary,
     jobCounts: resolvedBootstrap.jobCounts,
     jobs: resolvedBootstrap.jobs,
-    loading,
-    bootstrapError,
+    loading: resource.loading,
+    bootstrapError: resource.error,
     versionCountByJob,
-    refresh,
+    refresh: async () => {
+      const ok = await resource.refresh()
+      return ok ? latestLoadedBootstrapRef.current : null
+    },
   }
 }

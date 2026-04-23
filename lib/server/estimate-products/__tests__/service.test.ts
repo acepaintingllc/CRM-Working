@@ -152,6 +152,30 @@ describe('estimate product service', () => {
     )
   })
 
+  it('returns validation failures for invalid updates without calling the write repository', async () => {
+    mocks.loadEstimateProductRecord.mockResolvedValue({
+      ok: true,
+      data: existingRow,
+    })
+
+    await expect(
+      updateEstimateProduct('org-1', existingRow.id, {
+        name: '   ',
+        efficiency_pct: 120,
+      })
+    ).resolves.toEqual({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Product name is required.',
+      fields: {
+        name: 'Product name is required.',
+        efficiency_pct: 'Efficiency must be 100 or less.',
+      },
+    })
+
+    expect(mocks.updateEstimateProductRecord).not.toHaveBeenCalled()
+  })
+
   it('propagates not-found reads and delete boundaries without duplicating rules', async () => {
     mocks.loadEstimateProductRecord
       .mockResolvedValueOnce({

@@ -37,6 +37,7 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
   const jobVersionsState = useQuoteJobVersions(selectedJobId)
   const createController = useQuoteVersionCreation(selectedJob)
   const deleteController = useQuotesHomeDelete()
+  const { setError, setVersionKind, setVersionName } = createController
 
   useEffect(() => {
     const nextSelectedJobId = resolveQuoteHomeSelectedJobId(homeResource.jobs, selectedJobId)
@@ -46,10 +47,10 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
   }, [homeResource.jobs, selectedJobId])
 
   useEffect(() => {
-    createController.setVersionName('')
-    createController.setVersionKind('standard')
-    createController.setError(null)
-  }, [selectedJob?.id])
+    setVersionName('')
+    setVersionKind('standard')
+    setError(null)
+  }, [selectedJob?.id, setError, setVersionKind, setVersionName])
 
   const summaryCards = buildSummaryCards(homeResource.summary)
   const jobListItems = filteredJobs.map((job) =>

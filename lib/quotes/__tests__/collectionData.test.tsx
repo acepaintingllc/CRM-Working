@@ -8,6 +8,7 @@ import {
   buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
   toQuoteHomeJobVersionItem,
+  toQuoteHomeSearchResultReadModel,
 } from '../collectionData'
 
 const rows = [
@@ -190,8 +191,8 @@ describe('quote collection data', () => {
     })
   })
 
-  it('filters search results case-insensitively and caps them at 8', () => {
-    const searchRows = Array.from({ length: 10 }, (_, index) => ({
+  it('maps already-selected search rows without re-filtering or re-capping them', () => {
+    const searchRows = Array.from({ length: 3 }, (_, index) => ({
       ...rows[0],
       id: `estimate-${index + 1}`,
       estimate_id: `estimate-${index + 1}`,
@@ -203,14 +204,14 @@ describe('quote collection data', () => {
     const payload = buildQuoteHomeSearchReadModel(searchRows, 'revision')
 
     expect(payload.query).toBe('revision')
-    expect(payload.items).toHaveLength(8)
-    expect(payload.items[0]).toEqual(toQuoteHomeJobVersionItem(searchRows[0]))
+    expect(payload.items).toHaveLength(3)
+    expect(payload.items[0]).toEqual(toQuoteHomeSearchResultReadModel(searchRows[0]))
   })
 
-  it('returns an empty item list for blank search queries', () => {
+  it('preserves selected rows even for blank queries because search ownership lives upstream', () => {
     expect(buildQuoteHomeSearchReadModel(rows, '   ')).toEqual({
       query: '   ',
-      items: [],
+      items: rows.map(toQuoteHomeSearchResultReadModel),
     })
   })
 
@@ -245,7 +246,7 @@ describe('quote collection data', () => {
       }
     })
 
-    const searchPayload = buildQuoteHomeSearchReadModel(expandedRows, 'version')
+    const searchPayload = buildQuoteHomeSearchReadModel(expandedRows.slice(0, 8), 'version')
     const jobVersionsPayload = buildQuoteJobVersionsReadModel(expandedRows, 'job-a')
 
     expect(searchPayload.items).toHaveLength(8)

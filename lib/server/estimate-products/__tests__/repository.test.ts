@@ -116,6 +116,28 @@ describe('estimate product repository', () => {
     )
   })
 
+  it('does not add a search clause when sanitizing removes all wildcard-only input', async () => {
+    const listChain = createListChain({
+      data: [existingRow],
+      error: null,
+    })
+    fromMock.mockReturnValue({ select: vi.fn(() => listChain) })
+
+    await expect(
+      listEstimateProductRecords(
+        'org-1',
+        { status: 'all', family: null, search: '%__,' },
+        { client }
+      )
+    ).resolves.toEqual({
+      ok: true,
+      data: [existingRow],
+    })
+
+    expect(listChain.or).not.toHaveBeenCalled()
+    expect(listChain.eq).toHaveBeenCalledWith('org_id', 'org-1')
+  })
+
   it('maps missing scoped rows to a stable not-found service result', async () => {
     fromMock.mockReturnValue({
       select: vi.fn(() =>
