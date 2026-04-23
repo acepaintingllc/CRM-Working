@@ -28,7 +28,7 @@ export type QuoteProductsCatalogVm = {
 
 export type QuoteProductsEditorVm = {
   draft: ReturnType<typeof useQuoteProductEditorState>['draft']
-  selected: ReturnType<typeof useQuoteProductsSelectionState>['selected']
+  selected: ReturnType<typeof useQuoteProductsSelectionState>['editorSelected']
   saving: boolean
   isCreating: boolean
   isDirty: boolean
@@ -53,7 +53,7 @@ export type QuoteProductsActions = {
   cancelEdit: () => void
   save: () => Promise<boolean>
   requestRemove: () => Promise<boolean>
-  confirmDiscard: () => boolean
+  confirmDiscard: () => boolean | Promise<boolean>
   cancelDiscard: () => void
 }
 
@@ -71,7 +71,7 @@ export function useQuoteProductsPage() {
   })
 
   const editor = useQuoteProductEditorState({
-    selected: selectionState.selected,
+    selected: selectionState.editorSelected,
   })
 
   const mutations = useQuoteProductMutations({
@@ -120,7 +120,7 @@ export function useQuoteProductsPage() {
     } satisfies QuoteProductsCatalogVm,
     editorVm: {
       draft: editor.draft,
-      selected: selectionState.selected,
+      selected: selectionState.editorSelected,
       saving: feedback.saving,
       isCreating: editor.isCreating,
       isDirty: editor.isDirty,

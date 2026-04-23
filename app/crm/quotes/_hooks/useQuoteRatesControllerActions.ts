@@ -3,7 +3,7 @@
 import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type { RatesFlagsEditableCategoryKey, RatesFlagsTab } from '@/types/estimator/ratesFlags'
 import type { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
-import { useDenseQuoteAdminDiscard } from './useDenseQuoteAdminDiscard'
+import { useGuardedEditorWorkflow } from './useGuardedEditorWorkflow'
 import type {
   FlagsSectionKey,
   RateSectionKey,
@@ -48,7 +48,7 @@ export function useQuoteRatesControllerActions({
   feedback,
   reload,
 }: Options) {
-  const discard = useDenseQuoteAdminDiscard<DiscardCandidateTransition>({
+  const workflow = useGuardedEditorWorkflow<DiscardCandidateTransition>({
     isDirty: editor.isDirty,
   })
 
@@ -56,82 +56,6 @@ export function useQuoteRatesControllerActions({
     if (editor.isCreating) {
       editor.cancelEdit()
     }
-  }
-
-  function setActiveTab(nextTab: RatesFlagsTab) {
-    if (discard.shouldGuardTransition(nextTab !== filters.activeTab)) {
-      discard.queueDiscardTransition({ type: 'setActiveTab', activeTab: nextTab })
-      return
-    }
-    discardCleanCreateDraftIfNeeded()
-    filters.setActiveTab(nextTab)
-  }
-
-  function setRateSection(nextSection: RateSectionKey) {
-    if (discard.shouldGuardTransition(nextSection !== filters.rateSection)) {
-      discard.queueDiscardTransition({ type: 'setRateSection', rateSection: nextSection })
-      return
-    }
-    discardCleanCreateDraftIfNeeded()
-    filters.setRateSection(nextSection)
-    filters.setRateCategory(categoryForSection(nextSection))
-  }
-
-  function setRateCategory(nextCategory: string) {
-    if (discard.shouldGuardTransition(nextCategory !== filters.rateCategory)) {
-      discard.queueDiscardTransition({ type: 'setRateCategory', rateCategory: nextCategory })
-      return
-    }
-    discardCleanCreateDraftIfNeeded()
-    filters.setRateCategory(nextCategory as typeof filters.rateCategory)
-  }
-
-  function setFlagsSection(nextSection: FlagsSectionKey) {
-    if (discard.shouldGuardTransition(nextSection !== filters.flagsSection)) {
-      discard.queueDiscardTransition({ type: 'setFlagsSection', flagsSection: nextSection })
-      return
-    }
-    discardCleanCreateDraftIfNeeded()
-    filters.setFlagsSection(nextSection)
-  }
-
-  function setRoomDefaultsSection(nextSection: RoomDefaultsSectionKey) {
-    if (discard.shouldGuardTransition(nextSection !== filters.roomDefaultsSection)) {
-      discard.queueDiscardTransition({
-        type: 'setRoomDefaultsSection',
-        roomDefaultsSection: nextSection,
-      })
-      return
-    }
-    discardCleanCreateDraftIfNeeded()
-    filters.setRoomDefaultsSection(nextSection)
-  }
-
-  function setStatusFilter(nextFilter: StatusFilter) {
-    if (discard.shouldGuardTransition(nextFilter !== filters.statusFilter)) {
-      discard.queueDiscardTransition({ type: 'setStatusFilter', statusFilter: nextFilter })
-      return
-    }
-    discardCleanCreateDraftIfNeeded()
-    filters.setStatusFilter(nextFilter)
-  }
-
-  function setSearch(nextSearch: string) {
-    if (discard.shouldGuardTransition(nextSearch !== filters.search)) {
-      discard.queueDiscardTransition({ type: 'setSearch', search: nextSearch })
-      return
-    }
-    discardCleanCreateDraftIfNeeded()
-    filters.setSearch(nextSearch)
-  }
-
-  function setSelectedId(nextId: string) {
-    if (discard.shouldGuardTransition(nextId !== editor.selectedId)) {
-      discard.queueDiscardTransition({ type: 'setSelectedId', selectedId: nextId })
-      return
-    }
-    discardCleanCreateDraftIfNeeded()
-    editor.setSelectedId(nextId)
   }
 
   async function runReload(keepId?: string) {
@@ -153,68 +77,7 @@ export function useQuoteRatesControllerActions({
     })
   }
 
-  async function saveCurrent() {
-    if (!filters.activeCategory) return
-
-    const mutation = editor.buildMutation({
-      action: editor.isCreating ? 'create' : 'update',
-    })
-    if (!mutation) return
-
-    const ok = await persistence.saveMutation({
-      request: mutation.request,
-      keepId: mutation.keepId,
-      notice: `${editor.isCreating ? 'Created' : 'Saved'} ${filters.activeCategory.label}.`,
-    })
-    if (ok) {
-      editor.finishCreate()
-    }
-  }
-
-  async function archiveOrReactivate(nextActive: boolean) {
-    if (discard.shouldGuardTransition(true)) {
-      discard.queueDiscardTransition({ type: 'archiveOrReactivate', nextActive })
-      return
-    }
-    await runArchiveOrReactivate(nextActive)
-  }
-
-  function startCreate() {
-    if (discard.shouldGuardTransition(true)) {
-      discard.queueDiscardTransition({ type: 'startCreate' })
-      return
-    }
-    editor.startCreate()
-    feedback.clearFeedback()
-  }
-
-  function startDuplicate() {
-    if (discard.shouldGuardTransition(true)) {
-      discard.queueDiscardTransition({ type: 'startDuplicate' })
-      return
-    }
-    editor.startDuplicate()
-    feedback.clearFeedback()
-  }
-
-  function cancelEdit() {
-    editor.cancelEdit()
-    discard.cancelDiscard()
-    feedback.clearFeedback()
-  }
-
-  async function guardedReload(keepId?: string) {
-    if (discard.shouldGuardTransition(true)) {
-      discard.queueDiscardTransition({ type: 'reload', keepId })
-      return false
-    }
-    return runReload(keepId)
-  }
-
-  async function confirmDiscard() {
-    const transition = discard.consumePendingDiscardTransition()
-    if (!transition) return false
-
+  function executeTransition(transition: DiscardCandidateTransition) {
     switch (transition.type) {
       case 'setActiveTab':
         discardCleanCreateDraftIfNeeded()
@@ -266,6 +129,98 @@ export function useQuoteRatesControllerActions({
     }
   }
 
+  const setActiveTab = workflow.createGuardedAction(executeTransition, {
+    getTransition: (activeTab: RatesFlagsTab) => ({ type: 'setActiveTab', activeTab }),
+    changed: (activeTab: RatesFlagsTab) => activeTab !== filters.activeTab,
+  })
+
+  const setRateSection = workflow.createGuardedAction(executeTransition, {
+    getTransition: (rateSection: RateSectionKey) => ({ type: 'setRateSection', rateSection }),
+    changed: (rateSection: RateSectionKey) => rateSection !== filters.rateSection,
+  })
+
+  const setRateCategory = workflow.createGuardedAction(executeTransition, {
+    getTransition: (rateCategory: string) => ({ type: 'setRateCategory', rateCategory }),
+    changed: (rateCategory: string) => rateCategory !== filters.rateCategory,
+  })
+
+  const setFlagsSection = workflow.createGuardedAction(executeTransition, {
+    getTransition: (flagsSection: FlagsSectionKey) => ({ type: 'setFlagsSection', flagsSection }),
+    changed: (flagsSection: FlagsSectionKey) => flagsSection !== filters.flagsSection,
+  })
+
+  const setRoomDefaultsSection = workflow.createGuardedAction(executeTransition, {
+    getTransition: (roomDefaultsSection: RoomDefaultsSectionKey) => ({
+      type: 'setRoomDefaultsSection',
+      roomDefaultsSection,
+    }),
+    changed: (roomDefaultsSection: RoomDefaultsSectionKey) =>
+      roomDefaultsSection !== filters.roomDefaultsSection,
+  })
+
+  const setStatusFilter = workflow.createGuardedAction(executeTransition, {
+    getTransition: (statusFilter: StatusFilter) => ({ type: 'setStatusFilter', statusFilter }),
+    changed: (statusFilter: StatusFilter) => statusFilter !== filters.statusFilter,
+  })
+
+  const setSearch = workflow.createGuardedAction(executeTransition, {
+    getTransition: (search: string) => ({ type: 'setSearch', search }),
+    changed: (search: string) => search !== filters.search,
+  })
+
+  const setSelectedId = workflow.createGuardedAction(executeTransition, {
+    getTransition: (selectedId: string) => ({ type: 'setSelectedId', selectedId }),
+    changed: (selectedId: string) => selectedId !== editor.selectedId,
+  })
+
+  const guardedReload = workflow.createGuardedAction(executeTransition, {
+    getTransition: (keepId?: string) => ({ type: 'reload', keepId }),
+    changed: () => true,
+  })
+
+  const archiveOrReactivate = workflow.createGuardedAction(executeTransition, {
+    getTransition: (nextActive: boolean) => ({ type: 'archiveOrReactivate', nextActive }),
+    changed: () => true,
+  })
+
+  const startCreate = workflow.createGuardedAction(executeTransition, {
+    getTransition: () => ({ type: 'startCreate' }),
+    changed: () => true,
+  })
+
+  const startDuplicate = workflow.createGuardedAction(executeTransition, {
+    getTransition: () => ({ type: 'startDuplicate' }),
+    changed: () => true,
+  })
+
+  async function saveCurrent() {
+    if (!filters.activeCategory) return
+
+    const mutation = editor.buildMutation({
+      action: editor.isCreating ? 'create' : 'update',
+    })
+    if (!mutation) return
+
+    const ok = await persistence.saveMutation({
+      request: mutation.request,
+      keepId: mutation.keepId,
+      notice: `${editor.isCreating ? 'Created' : 'Saved'} ${filters.activeCategory.label}.`,
+    })
+    if (ok) {
+      editor.finishCreate()
+    }
+  }
+
+  function cancelEdit() {
+    editor.cancelEdit()
+    workflow.cancelDiscard()
+    feedback.clearFeedback()
+  }
+
+  async function confirmDiscard() {
+    return workflow.confirmDiscard(executeTransition)
+  }
+
   return {
     setActiveTab,
     setRateSection,
@@ -282,18 +237,21 @@ export function useQuoteRatesControllerActions({
     startDuplicate,
     cancelEdit,
     setDraftActive: (nextActive: boolean) => {
-      discard.markPendingMutation()
+      workflow.markPendingMutation()
       editor.setDraftActive(nextActive)
     },
     updateDraftValue: (fieldKey: string, rawInput: string) => {
-      discard.markPendingMutation()
+      workflow.markPendingMutation()
       editor.updateDraftValue(fieldKey, rawInput)
     },
     confirmDiscard,
-    cancelDiscard: discard.cancelDiscard,
+    cancelDiscard: workflow.cancelDiscard,
     discardVm: {
-      isOpen: discard.discardVm.isOpen,
-      transitionType: discard.discardVm.transitionType?.type ?? null,
+      isOpen: workflow.workflowVm.isOpen,
+      phase: workflow.workflowVm.phase,
+      transitionType: workflow.workflowVm.pendingTransitionType as
+        | DiscardCandidateTransition['type']
+        | null,
     },
   }
 }

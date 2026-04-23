@@ -421,6 +421,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.phase).toBe('confirming-discard')
     expect(result.current.discardVm.transitionType).toBe('setSelectedId')
     expect(result.current.editorVm.draft.name).toBe('Edited Name')
 
@@ -457,6 +458,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     expect(result.current.discardVm.transitionType).toBe('setActiveFamily')
+    expect(result.current.discardVm.phase).toBe('confirming-discard')
 
     act(() => result.current.actions.cancelDiscard())
 
@@ -500,6 +502,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     expect(result.current.discardVm.transitionType).toBe('startCreate')
+    expect(result.current.discardVm.phase).toBe('confirming-discard')
 
     act(() => {
       result.current.actions.cancelDiscard()

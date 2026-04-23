@@ -2,7 +2,7 @@
 
 import type { ProductFamily } from '@/lib/quotes/productsForm'
 import type { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
-import { useDenseQuoteAdminDiscard } from './useDenseQuoteAdminDiscard'
+import { useGuardedEditorWorkflow } from './useGuardedEditorWorkflow'
 import type { useQuoteProductEditorState } from './useQuoteProductEditorState'
 import type { useQuoteProductMutations } from './useQuoteProductMutations'
 import type {
@@ -32,19 +32,16 @@ export function useQuoteProductsControllerActions({
   mutations,
   feedback,
 }: Options) {
-  const discard = useDenseQuoteAdminDiscard<DiscardCandidateTransition>({
+  const workflow = useGuardedEditorWorkflow<DiscardCandidateTransition>({
     isDirty: editor.isDirty,
   })
   const creating = editor.isCreating
 
-  function confirmDiscard() {
-    const transition = discard.consumePendingDiscardTransition()
-    if (!transition) return false
-
+  function replayTransition(transition: DiscardCandidateTransition) {
     switch (transition.type) {
       case 'setSelectedId':
         if (editor.isCreating) {
-          editor.cancel(selectionState.selected)
+          editor.cancel(selectionState.editorSelected)
         }
         selectionState.setSelectedId(transition.selectedId)
         return true
@@ -53,13 +50,13 @@ export function useQuoteProductsControllerActions({
         return true
       case 'setStatusFilter':
         if (editor.isCreating) {
-          editor.cancel(selectionState.selected)
+          editor.cancel(selectionState.editorSelected)
         }
         queryState.setStatusFilter(transition.status)
         return true
       case 'setSearch':
         if (editor.isCreating) {
-          editor.cancel(selectionState.selected)
+          editor.cancel(selectionState.editorSelected)
         }
         queryState.setSearch(transition.search)
         return true
@@ -72,75 +69,89 @@ export function useQuoteProductsControllerActions({
     }
   }
 
+  function confirmDiscard() {
+    return workflow.confirmDiscard(replayTransition)
+  }
+
   function setActiveFamily(nextFamily: ProductFamily) {
-    if (discard.hasUnsavedChanges() && !creating && nextFamily !== queryState.activeFamily) {
-      discard.queueDiscardTransition({
+    return workflow.runGuarded(
+      {
         type: 'setActiveFamily',
         nextFamily,
+      },
+      {
+        changed: !creating && nextFamily !== queryState.activeFamily,
+        run: () => {
+          queryState.setActiveFamily(nextFamily)
+          if (creating) {
+            editor.updateDraftField('family', nextFamily)
+          }
+        },
       })
-      return
-    }
-
-    queryState.setActiveFamily(nextFamily)
-    if (creating) {
-      editor.updateDraftField('family', nextFamily)
-    }
   }
 
   function setSelectedId(id: string | null) {
-    if (discard.hasUnsavedChanges() && id !== selectionState.selectedId) {
-      discard.queueDiscardTransition({
+    return workflow.runGuarded(
+      {
         type: 'setSelectedId',
         selectedId: id,
+      },
+      {
+        changed: id !== selectionState.selectedId,
+        run: () => {
+          if (creating) {
+            editor.cancel(selectionState.editorSelected)
+          }
+          selectionState.setSelectedId(id)
+        },
       })
-      return
-    }
-
-    if (creating) {
-      editor.cancel(selectionState.selected)
-    }
-    selectionState.setSelectedId(id)
   }
 
   function setStatusFilter(next: string) {
-    if (discard.hasUnsavedChanges() && next !== queryState.statusFilter) {
-      discard.queueDiscardTransition({
+    return workflow.runGuarded(
+      {
         type: 'setStatusFilter',
         status: next,
+      },
+      {
+        changed: next !== queryState.statusFilter,
+        run: () => {
+          queryState.setStatusFilter(next)
+        },
       })
-      return
-    }
-
-    queryState.setStatusFilter(next)
   }
 
   function setSearch(value: string) {
-    if (discard.hasUnsavedChanges() && value !== queryState.search) {
-      discard.queueDiscardTransition({
+    return workflow.runGuarded(
+      {
         type: 'setSearch',
         search: value,
+      },
+      {
+        changed: value !== queryState.search,
+        run: () => {
+          queryState.setSearch(value)
+        },
       })
-      return
-    }
-
-    queryState.setSearch(value)
   }
 
   function startCreate() {
-    if (discard.hasUnsavedChanges() && !creating) {
-      discard.queueDiscardTransition({
+    return workflow.runGuarded(
+      {
         type: 'startCreate',
+      },
+      {
+        changed: !creating,
+        run: () => {
+          editor.startCreate(queryState.activeFamily)
+          feedback.clearFeedback()
+        },
       })
-      return
-    }
-
-    editor.startCreate(queryState.activeFamily)
-    feedback.clearFeedback()
   }
 
   function cancelEdit() {
-    editor.cancel(selectionState.selected)
-    discard.cancelDiscard()
+    editor.cancel(selectionState.editorSelected)
+    workflow.cancelDiscard()
     feedback.clearFeedback()
   }
 
@@ -161,8 +172,8 @@ export function useQuoteProductsControllerActions({
       return true
     }
 
-    if (!selectionState.selected) return false
-    const updated = await mutations.updateProduct(selectionState.selected.id, validated.payload)
+    if (!selectionState.selectedId) return false
+    const updated = await mutations.updateProduct(selectionState.selectedId, validated.payload)
     if (!updated) return false
 
     feedback.setSuccessNotice(updated.notice)
@@ -173,12 +184,12 @@ export function useQuoteProductsControllerActions({
   }
 
   async function requestRemove() {
-    if (!selectionState.selected || feedback.saving) return false
-    const ok = window.confirm(`Delete "${selectionState.selected.name}"?`)
+    if (!selectionState.editorSelected || feedback.saving) return false
+    const ok = window.confirm(`Delete "${selectionState.editorSelected.name}"?`)
     if (!ok) return false
 
-    const removedId = selectionState.selected.id
-    const removed = await mutations.removeProduct(selectionState.selected)
+    const removedId = selectionState.editorSelected.id
+    const removed = await mutations.removeProduct(selectionState.editorSelected)
     if (!removed) return false
 
     feedback.setSuccessNotice(removed.notice)
@@ -189,7 +200,7 @@ export function useQuoteProductsControllerActions({
   }
 
   function updateDraftField(field: Parameters<typeof editor.updateDraftField>[0], value: Parameters<typeof editor.updateDraftField>[1]) {
-    discard.markPendingMutation()
+    workflow.markPendingMutation()
     editor.updateDraftField(field, value)
   }
 
@@ -202,12 +213,15 @@ export function useQuoteProductsControllerActions({
     cancelEdit,
     updateDraftField,
     confirmDiscard,
-    cancelDiscard: discard.cancelDiscard,
+    cancelDiscard: workflow.cancelDiscard,
     save,
     requestRemove,
     discardVm: {
-      isOpen: discard.discardVm.isOpen,
-      transitionType: discard.discardVm.transitionType?.type ?? null,
+      isOpen: workflow.workflowVm.isOpen,
+      phase: workflow.workflowVm.phase,
+      transitionType: workflow.workflowVm.pendingTransitionType as
+        | DiscardCandidateTransition['type']
+        | null,
     },
   }
 }

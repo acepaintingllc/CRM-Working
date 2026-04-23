@@ -123,6 +123,7 @@ describe('useQuoteRatesControllerActions', () => {
     })
 
     expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.phase).toBe('confirming-discard')
     expect(result.current.discardVm.transitionType).toBe('setSelectedId')
     expect(editor.setSelectedId).not.toHaveBeenCalled()
 
@@ -263,6 +264,7 @@ describe('useQuoteRatesControllerActions', () => {
     await act(async () => {
       await result.current.reload('WALL_STD')
     })
+    expect(result.current.discardVm.phase).toBe('confirming-discard')
     expect(result.current.discardVm.transitionType).toBe('reload')
     expect(reload).not.toHaveBeenCalled()
 
@@ -287,6 +289,46 @@ describe('useQuoteRatesControllerActions', () => {
         rowId: 'WALL_STD',
       },
     })
+  })
+
+  it('exposes replaying-transition while an async discard replay is in flight', async () => {
+    let resolveReload: ((value: boolean) => void) | null = null
+    const reload = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveReload = resolve
+        })
+    )
+    const { result } = renderHook(() =>
+      useQuoteRatesControllerActions({
+        filters: createFilters() as never,
+        editor: createEditor({ isDirty: true }) as never,
+        persistence: { archiveToggle: vi.fn() } as never,
+        feedback: { clearFeedback: vi.fn() } as never,
+        reload,
+      })
+    )
+
+    await act(async () => {
+      await result.current.reload('WALL_STD')
+    })
+
+    let confirmPromise: Promise<boolean | false> | null = null
+    await act(async () => {
+      confirmPromise = result.current.confirmDiscard()
+      await Promise.resolve()
+    })
+
+    expect(result.current.discardVm.phase).toBe('replaying-transition')
+    expect(result.current.discardVm.transitionType).toBe('reload')
+
+    await act(async () => {
+      resolveReload?.(true)
+      await confirmPromise
+    })
+
+    expect(result.current.discardVm.phase).toBe('idle')
+    expect(result.current.discardVm.isOpen).toBe(false)
   })
 
   it('applies a queued transition only once', async () => {

@@ -616,6 +616,7 @@ describe('useQuoteRatesPage', () => {
     })
 
     expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.phase).toBe('confirming-discard')
     expect(result.current.discardVm.transitionType).toBe('setSelectedId')
     expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
     expect(result.current.editorVm.isDirty).toBe(true)
@@ -694,6 +695,7 @@ describe('useQuoteRatesPage', () => {
     })
 
     expect(result.current.discardVm.transitionType).toBe('setActiveTab')
+    expect(result.current.discardVm.phase).toBe('confirming-discard')
     expect(result.current.filtersVm.activeTab).toBe('rates')
 
     await act(async () => {
@@ -710,6 +712,7 @@ describe('useQuoteRatesPage', () => {
     })
 
     expect(result.current.discardVm.transitionType).toBe('setStatusFilter')
+    expect(result.current.discardVm.phase).toBe('confirming-discard')
     expect(result.current.filtersVm.statusFilter).toBe('active')
 
     act(() => {

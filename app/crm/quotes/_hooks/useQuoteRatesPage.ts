@@ -55,6 +55,7 @@ export type QuoteRatesEditorVm = {
 }
 
 export type QuoteRatesDiscardVm = {
+  phase: 'idle' | 'confirming-discard' | 'replaying-transition'
   isOpen: boolean
   transitionType:
     | 'setActiveTab'
