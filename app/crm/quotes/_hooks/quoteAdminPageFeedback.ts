@@ -21,6 +21,11 @@ export type QuoteAdminPageFeedback = {
   inlineValidation: string | null
 }
 
+export type QuoteAdminPageStatus = QuoteAdminPageFeedback & {
+  hasData: boolean
+  canRetry: boolean
+}
+
 type BuildQuoteAdminPageFeedbackArgs = {
   loading: boolean
   loadError?: string | null
@@ -62,5 +67,22 @@ export function buildQuoteAdminPageFeedback({
     notice,
     pageBanner,
     inlineValidation: loadError || actionError ? null : validationError,
+  }
+}
+
+type BuildQuoteAdminPageStatusArgs = BuildQuoteAdminPageFeedbackArgs & {
+  hasData: boolean
+  canRetry: boolean
+}
+
+export function buildQuoteAdminPageStatus({
+  hasData,
+  canRetry,
+  ...feedbackArgs
+}: BuildQuoteAdminPageStatusArgs): QuoteAdminPageStatus {
+  return {
+    ...buildQuoteAdminPageFeedback(feedbackArgs),
+    hasData,
+    canRetry,
   }
 }

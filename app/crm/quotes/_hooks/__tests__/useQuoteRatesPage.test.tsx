@@ -983,4 +983,81 @@ describe('useQuoteRatesPage', () => {
     expect(result.current.editorVm.selectedRow?.id).toBe('flag-1')
     expect(result.current.editorVm.isDirty).toBe(false)
   })
+
+  it('guards reload behind discard confirmation and rehydrates from refreshed data', async () => {
+    loadRatesFlags
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 2,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [],
+            fields: [
+              { key: 'id', label: 'ID', type: 'text', required: true },
+              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            ],
+            rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        source: 'db',
+        seeded: true,
+        template_version: 3,
+        categories: [
+          {
+            key: 'production_rates_walls',
+            tab: 'rates',
+            group: 'production_rates',
+            label: 'Wall Production',
+            table_title: 'Wall Production',
+            description: 'Wall rates',
+            columns: [],
+            fields: [
+              { key: 'id', label: 'ID', type: 'text', required: true },
+              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            ],
+            rows: [{ id: 'wall-rate-1', display_name: 'Reloaded walls', notes: '', active: true }],
+          },
+        ],
+      })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Dirty walls')
+      result.current.actions.reload('wall-rate-1')
+    })
+
+    expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.transitionType).toBe('reload')
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Dirty walls',
+    })
+
+    await act(async () => {
+      await result.current.actions.confirmDiscard()
+    })
+
+    await waitFor(() => {
+      expect(result.current.resource.data.template_version).toBe(3)
+    })
+
+    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Reloaded walls',
+    })
+  })
 })

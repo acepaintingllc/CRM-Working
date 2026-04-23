@@ -1,0 +1,329 @@
+import { supabaseAdmin } from '../org.ts'
+import { calculateWalls } from '../../estimator/walls.ts'
+import { calculateCeilings } from '../../estimator/ceilings.ts'
+import { calculateTrim } from '../../estimator/trim.ts'
+import { buildEstimatePricingSummary } from '../../estimator/pricingPolicies.ts'
+import {
+  DEFAULT_DAY_HOURS,
+  DEFAULT_JOB_MINIMUM_AMOUNT,
+  DEFAULT_ROUNDING_INCREMENT_HOURS,
+} from '../../estimator/defaults.ts'
+import { productMap } from '../../estimator/wallsHelpers.ts'
+import { asNullableNumber, asNullableNumberFromKeys, asText, type UnsafeRecord as Unsafe } from '../../estimator/parsing.ts'
+import { buildTrimPaintInput } from '../trimPaint.ts'
+import {
+  loadEstimateV2CalculationCatalogs,
+  loadEstimateV2RoomModesForTrimFromDb,
+  resolveEstimateV2RoomModeById,
+} from '../estimateV2Catalogs.ts'
+import type {
+  V2CeilingScopeSaveRow,
+  V2CeilingSegmentSaveRow,
+  V2RoomRosterRow,
+  V2TrimScopeSaveRow,
+  V2WallScopeSaveRow,
+  V2WallSegmentSaveRow,
+} from '../estimateV2RoutePayload.ts'
+import type { EstimateTemplateSettingsRow } from '../estimateTemplateSettings.ts'
+
+export async function loadCalculatedEstimateV2Artifacts(params: {
+  requestOrigin: string
+  orgId: string
+  userId: string
+  estimateId: string
+  jobsettings: Unsafe | null
+  rooms: Unsafe[]
+  roomWallScopes: Unsafe[]
+  wallSegments: Unsafe[]
+  roomCeilingScopes: Unsafe[]
+  ceilingScopeSegments: Unsafe[]
+  roomTrimScopes: Unsafe[]
+  orgDefaults: EstimateTemplateSettingsRow | null
+}) {
+  const js = params.jobsettings
+  const orgDefaults = params.orgDefaults
+  const wallDefaultPaintId =
+    asText(js?.walls_paint_id ?? js?.wall_paint_id) || orgDefaults?.walls_paint_id || null
+  const wallDefaultPrimerId =
+    asText(js?.walls_primer_id ?? js?.primer_id) || orgDefaults?.walls_primer_id || null
+  const ceilingDefaultPaintId = asText(js?.ceiling_paint_id) || orgDefaults?.ceiling_paint_id || null
+  const ceilingDefaultPrimerId =
+    asText(js?.ceiling_primer_id ?? js?.primer_id) || orgDefaults?.ceiling_primer_id || null
+  const trimDefaultPaintId = asText(js?.trim_paint_id) || orgDefaults?.trim_paint_id || null
+  const trimDefaultPrimerId =
+    asText(js?.trim_primer_id ?? js?.primer_id) || orgDefaults?.trim_primer_id || null
+  const effectiveLaborRate =
+    asNullableNumber(js?.override_labor_rate) ?? orgDefaults?.override_labor_rate ?? null
+  const effectiveLaborDayEnabled =
+    typeof js?.labor_day_policy_enabled === 'boolean'
+      ? js.labor_day_policy_enabled
+      : orgDefaults?.labor_day_policy_enabled
+  const effectiveDayhours = asNullableNumber(js?.dayhours) ?? orgDefaults?.dayhours ?? null
+  const effectiveRoundingIncrement =
+    asNullableNumber(js?.rounding_increment_hours) ?? orgDefaults?.rounding_increment_hours ?? null
+  const effectiveJobMinimumEnabled =
+    typeof js?.job_minimum_enabled === 'boolean'
+      ? js.job_minimum_enabled
+      : orgDefaults?.job_minimum_enabled
+  const effectiveJobMinimumAmount =
+    asNullableNumber(js?.job_minimum_amount) ?? orgDefaults?.job_minimum_amount ?? null
+
+  const calculationCatalogs = await loadEstimateV2CalculationCatalogs({
+    requestOrigin: params.requestOrigin,
+    orgId: params.orgId,
+    userId: params.userId,
+    estimateId: params.estimateId,
+  })
+
+  const wallScopeRowsForSave = params.roomWallScopes as unknown as V2WallScopeSaveRow[]
+  const wallScopePaintById = new Map<string, string | null>()
+  const wallScopePrimerById = new Map<string, string | null>()
+  const wallScopeRowsForCalc = wallScopeRowsForSave.map((row) => {
+    const rowId = asText(row.id)
+    const paintProductId = asText((row as unknown as Unsafe).paint_product_id) || null
+    const primerProductId = asText((row as unknown as Unsafe).primer_product_id) || null
+    if (rowId) wallScopePaintById.set(rowId, paintProductId)
+    if (rowId) wallScopePrimerById.set(rowId, primerProductId)
+    return {
+      ...row,
+      paint_product_id: paintProductId || wallDefaultPaintId,
+      primer_product_id: primerProductId || wallDefaultPrimerId,
+      paint_coats: asNullableNumberFromKeys(row as unknown as Unsafe, ['paint_coats', 'wall_coats', 'walls_topcoats']),
+      primer_coats: asNullableNumberFromKeys(row as unknown as Unsafe, ['primer_coats', 'wall_primer_coats']),
+      spot_prime_percent: asNullableNumberFromKeys(row as unknown as Unsafe, ['spot_prime_percent', 'wall_spot_prime_pct']),
+    }
+  })
+  const wallCalculations = calculateWalls({
+    scopes: wallScopeRowsForCalc,
+    segments: params.wallSegments as unknown as V2WallSegmentSaveRow[],
+    settings: { labor_rate_per_hour: effectiveLaborRate },
+    catalogs: calculationCatalogs.wall,
+  })
+  const quoteWallScopes = ((wallCalculations.scopes ?? []) as Unsafe[]).map((row) => {
+    const rowId = asText((row as Unsafe).id)
+    const originalPaintProductId = rowId ? wallScopePaintById.get(rowId) : null
+    const originalPrimerProductId = rowId ? wallScopePrimerById.get(rowId) : null
+    return {
+      ...row,
+      paint_product_id: originalPaintProductId ?? (asText((row as Unsafe).paint_product_id) || null),
+      primer_product_id: originalPrimerProductId ?? (asText((row as Unsafe).primer_product_id) || null),
+    }
+  })
+
+  const ceilingScopeRowsForSave = params.roomCeilingScopes as unknown as V2CeilingScopeSaveRow[]
+  const ceilingScopePaintById = new Map<string, string | null>()
+  const ceilingScopePrimerById = new Map<string, string | null>()
+  const ceilingScopeRowsForCalc = ceilingScopeRowsForSave.map((row) => {
+    const rowId = asText(row.id)
+    const paintProductId = asText((row as unknown as Unsafe).paint_product_id) || null
+    const primerProductId = asText((row as unknown as Unsafe).primer_product_id) || null
+    if (rowId) ceilingScopePaintById.set(rowId, paintProductId)
+    if (rowId) ceilingScopePrimerById.set(rowId, primerProductId)
+    return {
+      ...row,
+      paint_product_id: paintProductId || ceilingDefaultPaintId,
+      primer_product_id: primerProductId || ceilingDefaultPrimerId,
+    }
+  })
+  const ceilingCalculations = calculateCeilings({
+    scopes: ceilingScopeRowsForCalc,
+    segments: params.ceilingScopeSegments as unknown as V2CeilingSegmentSaveRow[],
+    settings: { labor_rate_per_hour: effectiveLaborRate },
+    catalogs: calculationCatalogs.ceiling ?? undefined,
+  })
+  const quoteCeilingScopes = ((ceilingCalculations.scopes ?? []) as Unsafe[]).map((row) => {
+    const rowId = asText((row as Unsafe).id)
+    const originalPaintProductId = rowId ? ceilingScopePaintById.get(rowId) : null
+    const originalPrimerProductId = rowId ? ceilingScopePrimerById.get(rowId) : null
+    return {
+      ...row,
+      paint_product_id: originalPaintProductId ?? (asText((row as Unsafe).paint_product_id) || null),
+      primer_product_id: originalPrimerProductId ?? (asText((row as Unsafe).primer_product_id) || null),
+    }
+  })
+
+  const roomModeById = resolveEstimateV2RoomModeById({
+    rooms: params.rooms,
+    wallScopes: params.roomWallScopes,
+    ceilingScopes: params.roomCeilingScopes,
+  })
+  const trimScopeRowsForSave = params.roomTrimScopes as unknown as V2TrimScopeSaveRow[]
+  const trimScopePaintById = new Map<string, string | null>()
+  const trimScopePrimerById = new Map<string, string | null>()
+  const trimScopeRowsForCalc = trimScopeRowsForSave.map((row) => {
+    const rowId = asText(row.id)
+    const paintProductId = asText((row as unknown as Unsafe).paint_product_id) || null
+    const primerProductId = asText((row as unknown as Unsafe).primer_product_id) || null
+    if (rowId) trimScopePaintById.set(rowId, paintProductId)
+    if (rowId) trimScopePrimerById.set(rowId, primerProductId)
+    return {
+      ...row,
+      paint_product_id: paintProductId || trimDefaultPaintId,
+      primer_product_id: primerProductId || trimDefaultPrimerId,
+    }
+  })
+  const trimCalculations = calculateTrim({
+    scopes: trimScopeRowsForCalc,
+    rooms: params.rooms.map((row) => {
+      const roomId = asText(row.room_id).toUpperCase()
+      return {
+        room_id: roomId,
+        length_in: asNullableNumber(row.length_in),
+        width_in: asNullableNumber(row.width_in),
+        mode: roomModeById.get(roomId) ?? 'RECT',
+      }
+    }),
+    settings: { labor_rate_per_hour: effectiveLaborRate },
+    catalogs: calculationCatalogs.trim ?? undefined,
+  })
+  const quoteTrimScopes = ((trimCalculations.scopes ?? []) as Unsafe[]).map((row) => {
+    const rowId = asText((row as Unsafe).id)
+    const originalPaintProductId = rowId ? trimScopePaintById.get(rowId) : null
+    const originalPrimerProductId = rowId ? trimScopePrimerById.get(rowId) : null
+    return {
+      ...row,
+      paint_product_id: originalPaintProductId ?? (asText((row as Unsafe).paint_product_id) || null),
+      primer_product_id: originalPrimerProductId ?? (asText((row as Unsafe).primer_product_id) || null),
+    }
+  })
+
+  const trimPaintInput = buildTrimPaintInput({
+    jobsettings: js,
+    catalogs: calculationCatalogs.trim ? productMap(calculationCatalogs.trim) : null,
+  })
+  const pricingSummary = buildEstimatePricingSummary(
+    [wallCalculations, ceilingCalculations, trimCalculations],
+    {
+      enabled: effectiveLaborDayEnabled !== false,
+      dayhours: effectiveDayhours ?? DEFAULT_DAY_HOURS,
+      roundingIncrementHours: effectiveRoundingIncrement ?? DEFAULT_ROUNDING_INCREMENT_HOURS,
+    },
+    {
+      enabled: effectiveJobMinimumEnabled === true,
+      amount: effectiveJobMinimumAmount ?? DEFAULT_JOB_MINIMUM_AMOUNT,
+    },
+    trimPaintInput
+  )
+
+  return {
+    calculationCatalogs,
+    quoteWallScopes,
+    quoteCeilingScopes,
+    quoteTrimScopes,
+    wallCalculations,
+    ceilingCalculations,
+    trimCalculations,
+    trimPaintInput,
+    pricingSummary,
+  }
+}
+
+export async function loadEffectiveLaborRate(orgId: string, estimateId: string, fromBody: Unsafe | undefined) {
+  const laborRateFromBody = fromBody ? asNullableNumber(fromBody.override_labor_rate) : null
+  if (laborRateFromBody != null) return laborRateFromBody
+
+  const existingJobsettings = await supabaseAdmin
+    .from('estimate_jobsettings')
+    .select('override_labor_rate')
+    .eq('org_id', orgId)
+    .eq('estimate_id', estimateId)
+    .maybeSingle()
+  if (existingJobsettings.error) return null
+  return asNullableNumber(existingJobsettings.data?.override_labor_rate)
+}
+
+export function createCalculationCatalogsLoader(params: {
+  requestOrigin: string
+  orgId: string
+  userId: string
+  estimateId: string
+}) {
+  let calculationCatalogs: Awaited<ReturnType<typeof loadEstimateV2CalculationCatalogs>> | null = null
+  return async () => {
+    if (calculationCatalogs) return calculationCatalogs
+    calculationCatalogs = await loadEstimateV2CalculationCatalogs(params)
+    return calculationCatalogs
+  }
+}
+
+export async function calculateWallsForSave(params: {
+  requestOrigin: string
+  orgId: string
+  userId: string
+  estimateId: string
+  scopes: V2WallScopeSaveRow[]
+  segments: V2WallSegmentSaveRow[]
+  jobsettings: Unsafe | undefined
+  ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
+}) {
+  const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
+  const catalogs = await params.ensureCatalogs()
+  const wallCalculations = calculateWalls({
+    scopes: params.scopes,
+    segments: params.segments,
+    settings: { labor_rate_per_hour: laborRate },
+    catalogs: catalogs.wall,
+  })
+  return {
+    wallCalculations,
+    wallSegmentRows: wallCalculations.segments,
+  }
+}
+
+export async function calculateCeilingsForSave(params: {
+  orgId: string
+  estimateId: string
+  scopes: V2CeilingScopeSaveRow[]
+  segments: V2CeilingSegmentSaveRow[]
+  jobsettings: Unsafe | undefined
+  ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
+}) {
+  const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
+  const catalogs = await params.ensureCatalogs()
+  const ceilingCalculations = calculateCeilings({
+    scopes: params.scopes,
+    segments: params.segments,
+    settings: { labor_rate_per_hour: laborRate },
+    catalogs: catalogs.ceiling ?? undefined,
+  })
+  return {
+    ceilingCalculations,
+    ceilingSegmentRows: ceilingCalculations.segments as V2CeilingSegmentSaveRow[],
+  }
+}
+
+export async function calculateTrimForSave(params: {
+  orgId: string
+  estimateId: string
+  scopes: V2TrimScopeSaveRow[]
+  roomRows: V2RoomRosterRow[]
+  wallScopeRows: V2WallScopeSaveRow[] | null
+  ceilingScopeRows: V2CeilingScopeSaveRow[] | null
+  jobsettings: Unsafe | undefined
+  ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
+}) {
+  const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
+  const trimRoomModeById =
+    params.wallScopeRows || params.ceilingScopeRows
+      ? resolveEstimateV2RoomModeById({
+          rooms: params.roomRows as unknown as Unsafe[],
+          wallScopes: (params.wallScopeRows ?? []) as unknown as Unsafe[],
+          ceilingScopes: (params.ceilingScopeRows ?? []) as unknown as Unsafe[],
+        })
+      : await loadEstimateV2RoomModesForTrimFromDb({
+          orgId: params.orgId,
+          estimateId: params.estimateId,
+        })
+  const catalogs = await params.ensureCatalogs()
+  return calculateTrim({
+    scopes: params.scopes,
+    rooms: params.roomRows.map((room) => ({
+      room_id: room.room_id,
+      length_in: room.length_in,
+      width_in: room.width_in,
+      mode: trimRoomModeById.get(room.room_id) ?? 'RECT',
+    })),
+    settings: { labor_rate_per_hour: laborRate },
+    catalogs: catalogs.trim ?? undefined,
+  })
+}

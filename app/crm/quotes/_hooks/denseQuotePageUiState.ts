@@ -1,8 +1,9 @@
 'use client'
 
 import {
-  buildQuoteAdminPageFeedback,
+  buildQuoteAdminPageStatus,
   type QuoteAdminPageBanner,
+  type QuoteAdminPageStatus,
 } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
 
 type BuildDenseQuotePageUiStateArgs = {
@@ -19,16 +20,7 @@ type BuildDenseQuotePageUiStateArgs = {
   canDuplicate?: boolean
 }
 
-export type DenseQuotePageUiState = {
-  loading: boolean
-  hasData: boolean
-  loadError: string | null
-  actionError: string | null
-  validationError: string | null
-  notice: string | null
-  pageBanner: QuoteAdminPageBanner | null
-  inlineValidation: string | null
-  canRetry: boolean
+export type DenseQuotePageUiState = QuoteAdminPageStatus & {
   canSave: boolean
   canDelete: boolean
   canArchiveToggle: boolean
@@ -48,24 +40,18 @@ export function buildDenseQuotePageUiState({
   canArchiveToggle = false,
   canDuplicate = false,
 }: BuildDenseQuotePageUiStateArgs): DenseQuotePageUiState {
-  const feedback = buildQuoteAdminPageFeedback({
-    loading,
-    loadError,
-    actionError,
-    validationError,
-    notice,
-  })
-
-  return {
+  const status = buildQuoteAdminPageStatus({
     loading,
     hasData,
     loadError,
     actionError,
     validationError,
     notice,
-    pageBanner: feedback.pageBanner,
-    inlineValidation: feedback.inlineValidation,
     canRetry,
+  })
+
+  return {
+    ...status,
     canSave,
     canDelete,
     canArchiveToggle,

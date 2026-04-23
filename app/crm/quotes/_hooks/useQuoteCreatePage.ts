@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { buildQuoteAdminPageFeedback } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
+import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
+import { buildQuoteAdminPageStatus } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
 import { loadJobRecord } from '@/lib/jobs/client'
 import type {
   QuoteHomeJobVersionItemReadModel,
@@ -20,15 +21,31 @@ import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 export function useQuoteCreatePage() {
   const searchParams = useSearchParams()
   const jobId = searchParams.get('job') ?? ''
-  const requestIdRef = useRef(0)
-  const [resource, setResource] = useState<QuoteCreatePageResource>(EMPTY_QUOTE_CREATE_RESOURCE)
-  const [loading, setLoading] = useState(Boolean(jobId))
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const selectedJob = useMemo(() => resource.job, [resource.job])
+  const resource = useLoadableResource<QuoteCreatePageResource>({
+    initialData: EMPTY_QUOTE_CREATE_RESOURCE,
+    load: async () => {
+      if (!jobId) {
+        return EMPTY_QUOTE_CREATE_RESOURCE
+      }
+
+      const [jobPayload, versionsPayload] = await Promise.all([
+        loadJobRecord(jobId),
+        loadQuoteJobVersions<QuoteJobVersionsReadModel>(jobId),
+      ])
+
+      return jobPayload
+        ? buildQuoteCreatePageResource(jobPayload, versionsPayload)
+        : EMPTY_QUOTE_CREATE_RESOURCE
+    },
+    getErrorMessage: (loadError: unknown) =>
+      loadError instanceof Error ? loadError.message : 'Failed to load quote creation data.',
+    reloadKey: jobId,
+  })
+  const selectedJob = useMemo(() => resource.data.job, [resource.data.job])
   const createController = useQuoteVersionCreation(selectedJob)
   const jobVersions = useMemo(
-    () => resource.versions as QuoteHomeJobVersionItemReadModel[],
-    [resource.versions]
+    () => resource.data.versions as QuoteHomeJobVersionItemReadModel[],
+    [resource.data.versions]
   )
 
   useEffect(() => {
@@ -37,66 +54,25 @@ export function useQuoteCreatePage() {
     createController.setError(null)
   }, [selectedJob?.id])
 
-  const refresh = async () => {
-    if (!jobId) {
-      setResource(EMPTY_QUOTE_CREATE_RESOURCE)
-      setLoading(false)
-      setLoadError(null)
-      return false
-    }
-
-    const requestId = ++requestIdRef.current
-    setLoading(true)
-    setLoadError(null)
-
-    try {
-      const [jobPayload, versionsPayload] = await Promise.all([
-        loadJobRecord(jobId),
-        loadQuoteJobVersions<QuoteJobVersionsReadModel>(jobId),
-      ])
-      if (requestIdRef.current !== requestId) return false
-
-      setResource(
-        jobPayload
-          ? buildQuoteCreatePageResource(jobPayload, versionsPayload)
-          : EMPTY_QUOTE_CREATE_RESOURCE
-      )
-      return true
-    } catch (nextLoadError) {
-      if (requestIdRef.current !== requestId) return false
-      setResource(EMPTY_QUOTE_CREATE_RESOURCE)
-      setLoadError(
-        nextLoadError instanceof Error
-          ? nextLoadError.message
-          : 'Failed to load quote creation data.'
-      )
-      return false
-    } finally {
-      if (requestIdRef.current === requestId) {
-        setLoading(false)
-      }
-    }
-  }
-
-  useEffect(() => {
-    void refresh()
-  }, [jobId])
-
-  const feedback = buildQuoteAdminPageFeedback({
-    loading,
-    loadError,
+  const shouldLoadJobData = Boolean(jobId)
+  const hasLoadedJobData = shouldLoadJobData && (Boolean(resource.data.job) || resource.data.versions.length > 0)
+  const status = buildQuoteAdminPageStatus({
+    loading: resource.loading && shouldLoadJobData,
+    hasData: hasLoadedJobData,
+    loadError: resource.error,
     actionError: createController.error,
+    canRetry: shouldLoadJobData && !resource.loading,
   })
 
   return {
     feedback: {
-      ...feedback,
-      hasLoadedJobData: Boolean(jobId) && (Boolean(resource.job) || resource.versions.length > 0),
-      shouldLoadJobData: Boolean(jobId),
+      ...status,
+      hasLoadedJobData,
+      shouldLoadJobData,
     },
     job: {
       jobId,
-      title: loading ? '...' : selectedJob?.title ?? 'Unknown job',
+      title: resource.loading && shouldLoadJobData ? '...' : selectedJob?.title ?? 'Unknown job',
       customerLine: selectedJob
         ? `${selectedJob.customer_name ?? 'Unknown customer'}${
             selectedJob.customer_address ? `${QUOTE_META_SEPARATOR}${selectedJob.customer_address}` : ''
@@ -113,13 +89,13 @@ export function useQuoteCreatePage() {
       versionName: createController.versionName,
       versionKind: createController.versionKind,
       creating: createController.creating,
-      canCreate: Boolean(selectedJob) && !createController.creating && !loading,
+      canCreate: Boolean(selectedJob) && !createController.creating && !resource.loading,
     },
     actions: {
       setVersionName: createController.setVersionName,
       setVersionKind: createController.setVersionKind,
       create: createController.createVersion,
-      retry: refresh,
+      retry: resource.refresh,
     },
   }
 }

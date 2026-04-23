@@ -1,14 +1,13 @@
-import { NextResponse } from 'next/server'
-import { jsonError } from '@/lib/server/apiRoute'
-import { serviceErrorStatus } from '@/lib/server/routeError'
-import type { ServiceError, ServiceResult } from '@/lib/server/serviceResult'
+import { jsonError } from './apiRoute.ts'
+import { serviceErrorStatus } from './routeError.ts'
+import type { ServiceError, ServiceResult } from './serviceResult.ts'
 
 export function dataResponse<T>(data: T, init?: ResponseInit) {
-  return NextResponse.json({ data }, init)
+  return Response.json({ data }, init)
 }
 
 export function mutationResponse<T>(data: T, notice?: string | null, init?: ResponseInit) {
-  return NextResponse.json(notice ? { data, notice } : { data }, init)
+  return Response.json(notice ? { data, notice } : { data }, init)
 }
 
 export function serviceErrorResponse(error: ServiceError) {
@@ -20,7 +19,7 @@ export function serviceResultResponse<T>(
   toBody: (data: T) => unknown
 ) {
   if (!result.ok) return serviceErrorResponse(result)
-  return NextResponse.json(toBody(result.data))
+  return Response.json(toBody(result.data))
 }
 
 export function serviceResultDataResponse<T>(result: ServiceResult<T>, init?: ResponseInit) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildQuoteAdminPageFeedback } from '../quoteAdminPageFeedback'
+import { buildQuoteAdminPageFeedback, buildQuoteAdminPageStatus } from '../quoteAdminPageFeedback'
 
 describe('buildQuoteAdminPageFeedback', () => {
   it('prefers load and action banners over validation messages', () => {
@@ -37,6 +37,21 @@ describe('buildQuoteAdminPageFeedback', () => {
       pageBanner: null,
       inlineValidation: 'Invalid field.',
       notice: 'Saved.',
+    })
+  })
+
+  it('adds shared hasData and canRetry state for quote admin pages', () => {
+    expect(
+      buildQuoteAdminPageStatus({
+        loading: false,
+        hasData: true,
+        canRetry: true,
+        notice: 'Saved.',
+      })
+    ).toMatchObject({
+      hasData: true,
+      canRetry: true,
+      pageBanner: { tone: 'success', message: 'Saved.' },
     })
   })
 })
