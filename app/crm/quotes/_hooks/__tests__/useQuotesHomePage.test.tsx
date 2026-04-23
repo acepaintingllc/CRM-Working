@@ -369,7 +369,7 @@ describe('useQuotesHomePage', () => {
     expect(result.current.summaryCards[2].value).toBe('1')
     expect(result.current.summaryCards[3].value).toBe('$1,300')
     expect(result.current.headerVm.heroSummaryText).toBe(
-      '202 total versions | 0 drafts | 1 sent/awaiting | 1 live'
+      '202 total versions · 0 drafts · 1 sent/awaiting · 1 live'
     )
     expect(result.current.selectedJobVm.stats).toEqual([
       { label: 'Customer', value: 'Alice' },

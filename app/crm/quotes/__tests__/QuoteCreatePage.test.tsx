@@ -122,7 +122,9 @@ describe('QuoteCreatePage', () => {
       expect(screen.getByText('Existing Quotes (2)')).toBeInTheDocument()
     })
 
+    expect(screen.getByText('Alice · 123 Main')).toBeInTheDocument()
     expect(screen.getAllByText('Version B').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Garage Alt')).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('Leave blank for default name'), {
       target: { value: '  Kitchen Split  ' },
@@ -182,5 +184,65 @@ describe('QuoteCreatePage', () => {
     }
     expect(disabledCreateButton).toBeDisabled()
     expect(createQuoteVersion).not.toHaveBeenCalled()
+  })
+
+  it('shows the disabled create flow when no job query param is present', async () => {
+    getSearchParam.mockReturnValue(null)
+
+    render(<QuoteCreatePage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Unknown job')).toBeInTheDocument()
+    })
+
+    expect(fetchJobList).not.toHaveBeenCalled()
+    expect(loadQuoteList).not.toHaveBeenCalled()
+    expect(
+      screen.getByText('Open this page from quote home or pass a job query parameter to create a version.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create version' })).toBeDisabled()
+  })
+
+  it('shows the load error and retries quote creation data loading', async () => {
+    fetchJobList.mockRejectedValueOnce(new Error('Load failed')).mockResolvedValueOnce([
+      {
+        id: 'job-1',
+        customer_id: 'customer-1',
+        customer_name: 'Alice',
+        customer_address: '123 Main',
+        title: 'Kitchen',
+        description: null,
+        status: 'estimate_pending',
+        estimate_date: null,
+        estimate_sent_at: null,
+        scheduled_date: null,
+        completed_at: null,
+      },
+    ])
+    loadQuoteList.mockRejectedValueOnce(new Error('Load failed')).mockResolvedValueOnce({
+      estimates: [
+        {
+          id: 'estimate-1',
+          job_id: 'job-1',
+          version_name: 'Version A',
+          version_state: 'draft',
+          version_kind: 'standard',
+          updated_at: '2026-04-20T10:00:00.000Z',
+        },
+      ],
+    })
+
+    render(<QuoteCreatePage />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Load failed').length).toBeGreaterThan(0)
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Existing Quotes (1)')).toBeInTheDocument()
+    })
   })
 })

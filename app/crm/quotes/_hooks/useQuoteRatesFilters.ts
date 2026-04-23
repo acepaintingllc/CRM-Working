@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { categoryByKey } from '@/lib/quotes/ratesFlagsForm'
+import { buildRatesFlagsSearchableText, categoryByKey } from '@/lib/quotes/ratesFlagsForm'
 import type { RatesFlagsCategoryKey, RatesFlagsPayload, RatesFlagsTab } from '@/types/estimator/ratesFlags'
 import type {
   FlagsSectionKey,
@@ -53,8 +53,7 @@ export function useQuoteRatesFilters({ payload }: Options) {
         (statusFilter === 'archived' && !row.active)
       if (!statusMatch) return false
       if (!q) return true
-      const haystack = `${row.id} ${row.display_name} ${JSON.stringify(row)}`.toLowerCase()
-      return haystack.includes(q)
+      return buildRatesFlagsSearchableText(activeCategory, row).includes(q)
     })
   }, [activeCategory, search, statusFilter])
 

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { QUOTE_META_SEPARATOR } from './quoteHomePresentation'
 import type { QuotesHomeJobListVm } from './quoteHomeTypes'
 import { S } from './quoteHomeStyles'
 
@@ -51,7 +52,9 @@ export function QuotesHomeJobList({
               >
                 <div style={{ fontSize: 14, marginBottom: 3 }}>{job.title}</div>
                 <div style={{ fontSize: 14, color: 'var(--v2-ink-3)' }}>
-                  {job.customerName} · {job.versionCountLabel}
+                  {job.customerName}
+                  {QUOTE_META_SEPARATOR}
+                  {job.versionCountLabel}
                 </div>
               </Link>
             ))}
