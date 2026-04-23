@@ -1,9 +1,12 @@
 'use client'
 
+import { useMemo } from 'react'
+import { useQuoteJobVersions } from './useQuoteJobVersions'
 import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSelection } from './useQuotesHomeSelection'
+import { useQuotesHomeSearch } from './useQuotesHomeSearch'
 import {
   buildHeroSummaryText,
   buildQuoteHomeJobListItemVm,
@@ -17,26 +20,21 @@ import {
 } from '../_home/quoteHomePresentation'
 import type { QuotesHomeJobListVm } from '../_home/quoteHomeTypes'
 
-const EMPTY_SUMMARY = {
-  draft_count: 0,
-  sent_or_awaiting_count: 0,
-  live_count: 0,
-  pipeline_total: 0,
-}
-
 export function useQuotesHomePage() {
   const dataState = useQuotesHomeData()
   const selection = useQuotesHomeSelection({
-    data: dataState.data,
+    jobCounts: dataState.jobCounts,
     jobs: dataState.jobs,
   })
+  const searchState = useQuotesHomeSearch(selection.searchQuery)
+  const jobVersionsState = useQuoteJobVersions(selection.selectedJobId)
   const createController = useQuoteVersionCreation(selection.selectedJob)
   const deleteController = useQuotesHomeDelete({
     refresh: dataState.refresh,
     setError: dataState.setError,
   })
 
-  const summaryCards = buildSummaryCards(dataState.data)
+  const summaryCards = buildSummaryCards(dataState.summary)
   const jobListItems = selection.filteredJobs.map((job) =>
     buildQuoteHomeJobListItemVm(job, selection.versionCountByJob[job.id] ?? 0, {
       selectedJobId: selection.selectedJobId,
@@ -45,22 +43,27 @@ export function useQuotesHomePage() {
   const mobileItems = dataState.jobs
     .slice(0, 10)
     .map((job) => buildQuoteHomeJobListItemVm(job, selection.versionCountByJob[job.id] ?? 0, { mobile: true }))
-  const versionItems = selection.selectedJobVersions.map((estimate) =>
+  const versionItems = jobVersionsState.items.map((estimate) =>
     buildQuoteHomeVersionItemVm(estimate, deleteController.deletingId)
   )
+  const feedbackError = dataState.error ?? jobVersionsState.error ?? createController.error
+  const versionCount = selection.versionCountByJob[selection.selectedJobId] ?? jobVersionsState.data.total_versions
+  const deleteTargetsById = useMemo(() => {
+    return new Map(jobVersionsState.items.map((item) => [item.estimate_id, item]))
+  }, [jobVersionsState.items])
 
   return {
     feedbackVm: {
       loading: dataState.loading,
-      error: dataState.error ?? createController.error,
-      hasData: Boolean(dataState.data),
-      summary: dataState.data?.summary ?? EMPTY_SUMMARY,
+      error: feedbackError,
+      hasData: true,
+      summary: dataState.summary,
     },
     headerVm: {
-      heroSummaryText: buildHeroSummaryText(dataState.data),
+      heroSummaryText: buildHeroSummaryText(dataState.summary),
       searchQuery: selection.searchQuery,
       searchFocused: selection.searchFocused,
-      searchResults: selection.searchResults.map(buildSearchResultVm),
+      searchResults: searchState.results.map(buildSearchResultVm),
     },
     summaryCards,
     mobileVm: {
@@ -81,13 +84,12 @@ export function useQuotesHomePage() {
     } satisfies QuotesHomeJobListVm,
     selectedJobVm: buildQuotesHomeSelectedJobVm(
       selection.selectedJob,
-      selection.versionCountByJob[selection.selectedJobId] ??
-        selection.selectedJobVersions.length,
+      versionCount,
       dataState.loading
     ),
     versionListVm: {
-      heading: buildQuotesHomeVersionHeading(selection.selectedJob, selection.selectedJobVersions),
-      emptyMessage: buildQuotesHomeVersionEmptyMessage(selection.selectedJob, selection.selectedJobVersions),
+      heading: buildQuotesHomeVersionHeading(selection.selectedJob, jobVersionsState.items),
+      emptyMessage: buildQuotesHomeVersionEmptyMessage(selection.selectedJob, jobVersionsState.items),
       items: versionItems,
     },
     createVm: {
@@ -112,15 +114,24 @@ export function useQuotesHomePage() {
       createVersion: createController.createVersion,
       requestDeleteVersion: (value: string | { estimate_id: string }) => {
         const estimateId = typeof value === 'string' ? value : value.estimate_id
-        const estimate =
-          dataState.data?.search_estimates.find((entry) => entry.estimate_id === estimateId) ?? null
+        const estimate = deleteTargetsById.get(estimateId) ?? null
         if (estimate) {
           deleteController.requestDeleteVersion(estimate)
         }
       },
       cancelDelete: deleteController.cancelDelete,
-      confirmDeleteVersion: deleteController.confirmDeleteVersion,
-      refresh: dataState.refresh,
+      confirmDeleteVersion: async () => {
+        const deletedId = deleteController.confirmingDelete?.estimate_id ?? null
+        const deleted = await deleteController.confirmDeleteVersion()
+        if (deletedId && deleted) {
+          jobVersionsState.removeVersion(deletedId)
+          await jobVersionsState.refresh()
+        }
+      },
+      refresh: async () => {
+        const [homeRefreshed] = await Promise.all([dataState.refresh(), jobVersionsState.refresh()])
+        return homeRefreshed
+      },
     },
   }
 }

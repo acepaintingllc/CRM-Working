@@ -1,4 +1,4 @@
-import type { CategoryConfig } from './categoryTypes.ts'
+import type { CategoryConfig, RatesFlagsEditableCategoryKey } from './categoryTypes.ts'
 import { CEILINGS_CATEGORY_CONFIGS } from './ceilingsCategory.ts'
 import { DOORS_CATEGORY_CONFIGS } from './doorsCategory.ts'
 import { DRYWALL_CATEGORY_CONFIGS } from './drywallCategory.ts'
@@ -15,6 +15,6 @@ export const CATEGORY_CONFIGS: CategoryConfig[] = [
   ...OTHER_CATEGORY_CONFIGS,
 ]
 
-export function getCategoryConfig(key: CategoryConfig['key']) {
-  return CATEGORY_CONFIGS.find((config) => config.key === key) ?? null
+export function getCategoryConfig<TKey extends RatesFlagsEditableCategoryKey>(key: TKey) {
+  return (CATEGORY_CONFIGS.find((config) => config.key === key) as CategoryConfig<TKey> | undefined) ?? null
 }

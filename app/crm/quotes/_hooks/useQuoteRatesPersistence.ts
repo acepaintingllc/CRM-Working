@@ -1,83 +1,62 @@
 'use client'
 
-import { useState } from 'react'
 import { mutateRatesFlags } from '@/lib/quotes/client'
-import type { RatesFlagsMutationAction } from '@/types/estimator/ratesFlags'
+import type {
+  RatesFlagsArchiveMutation,
+  RatesFlagsCreateOrUpdateMutation,
+} from '@/types/estimator/ratesFlags'
+import type { useDenseQuoteAdminFeedback } from './useDenseQuoteAdminFeedback'
 
 type Options = {
-  categoryKey: string | null
   refresh: (keepId?: string) => Promise<boolean>
+  feedback: ReturnType<typeof useDenseQuoteAdminFeedback>
 }
 
-export function useQuoteRatesPersistence({ categoryKey, refresh }: Options) {
-  const [saving, setSaving] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-
+export function useQuoteRatesPersistence({ refresh, feedback }: Options) {
   async function persist(
-    action: RatesFlagsMutationAction,
-    values: Record<string, unknown>,
-    originalId?: string
+    request: RatesFlagsCreateOrUpdateMutation | RatesFlagsArchiveMutation
   ) {
-    if (!categoryKey) return false
-    setSaving(true)
-    setNotice(null)
-    setActionError(null)
+    feedback.beginAction()
     try {
-      await mutateRatesFlags({
-        category: categoryKey,
-        action,
-        values,
-        original_id: originalId,
-      })
+      await mutateRatesFlags(request)
       return true
     } catch (mutationError) {
-      setActionError(
+      feedback.setErrorMessage(
         mutationError instanceof Error ? mutationError.message : 'Failed to save changes.'
       )
       return false
     } finally {
-      setSaving(false)
+      feedback.finishAction()
     }
   }
 
   async function saveMutation(params: {
-    action: RatesFlagsMutationAction
-    values: Record<string, unknown>
-    originalId?: string
+    request: RatesFlagsCreateOrUpdateMutation
     keepId?: string
     notice: string
   }) {
-    const ok = await persist(params.action, params.values, params.originalId)
+    const ok = await persist(params.request)
     if (!ok) return false
     const reloaded = await refresh(params.keepId)
     if (!reloaded) return false
-    setNotice(params.notice)
+    feedback.setSuccessNotice(params.notice)
     return true
   }
 
   async function archiveToggle(params: {
-    selectedId: string
-    nextActive: boolean
+    request: RatesFlagsArchiveMutation
   }) {
-    const ok = await persist(
-      params.nextActive ? 'reactivate' : 'archive',
-      { id: params.selectedId },
-      params.selectedId
-    )
+    const ok = await persist(params.request)
     if (!ok) return false
-    const reloaded = await refresh(params.selectedId)
+    const reloaded = await refresh(params.request.rowId)
     if (!reloaded) return false
-    setNotice(params.nextActive ? 'Reactivated row.' : 'Archived row.')
+    feedback.setSuccessNotice(
+      params.request.action === 'reactivate' ? 'Reactivated row.' : 'Archived row.'
+    )
     return true
   }
 
   return {
-    saving,
-    actionError,
-    notice,
-    setActionError,
-    setNotice,
     saveMutation,
     archiveToggle,
   }

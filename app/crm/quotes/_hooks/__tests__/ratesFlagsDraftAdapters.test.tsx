@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createEmptyDraft,
-  draftToMutationValues,
-  formatDraftValue,
-  rowToDraft,
-  updateDraftField,
-  validateDraft,
+  getRatesFlagsDraftAdapter,
 } from '@/lib/quotes/ratesFlagsDraftAdapters'
-import type { RatesFlagsCategory } from '@/types/estimator/ratesFlags'
+import type {
+  RatesFlagsEditableCategory,
+  ScopeDefaultDraft,
+  SupplyRateDraft,
+} from '@/types/estimator/ratesFlags'
 
-const baseCategory: RatesFlagsCategory = {
+const baseCategory: RatesFlagsEditableCategory<'scope_defaults'> = {
   key: 'scope_defaults',
   tab: 'room_defaults',
   group: 'scope_defaults',
@@ -30,7 +29,8 @@ const baseCategory: RatesFlagsCategory = {
 
 describe('ratesFlagsDraftAdapters', () => {
   it('converts rows into typed drafts and formats values for the UI', () => {
-    const draft = rowToDraft(baseCategory, {
+    const adapter = getRatesFlagsDraftAdapter(baseCategory.key)
+    const draft = adapter.rowToDraft(baseCategory, {
       id: 'ROOM_A',
       display_name: 'Room A',
       notes: '',
@@ -45,18 +45,18 @@ describe('ratesFlagsDraftAdapters', () => {
       include_doors: 'N',
       include_drywall: 'N',
       system_group: 'template',
-    } as never)
+    } as never) as ScopeDefaultDraft
 
     expect(draft.id).toBe('ROOM_A')
     expect(draft.typical_height_ft).toBe(9.5)
     expect(draft.default_wall_mode).toBe('SEG')
     expect(draft.include_walls).toBe(true)
-    expect(formatDraftValue(baseCategory, draft, 'include_walls')).toBe('Y')
-    expect(formatDraftValue(baseCategory, draft, 'typical_height_ft')).toBe('9.5')
+    expect(adapter.formatDraftValue(baseCategory, draft, 'include_walls')).toBe('Y')
+    expect(adapter.formatDraftValue(baseCategory, draft, 'typical_height_ft')).toBe('9.5')
   })
 
   it('builds empty drafts with category defaults and typed blanks', () => {
-    const draft = createEmptyDraft({
+    const category = {
       ...baseCategory,
       key: 'supply_rates_area_based',
       tab: 'rates',
@@ -66,7 +66,8 @@ describe('ratesFlagsDraftAdapters', () => {
         { key: 'unit', label: 'Unit', type: 'select', options: ['$/sqft'] },
         { key: 'cost_per', label: 'Cost Per', type: 'number' },
       ],
-    })
+    } as RatesFlagsEditableCategory<'supply_rates_area_based'>
+    const draft = getRatesFlagsDraftAdapter(category.key).createEmptyDraft(category) as SupplyRateDraft
 
     expect(draft.id).toBe('')
     expect(draft.unit).toBe('$/sqft')
@@ -74,18 +75,27 @@ describe('ratesFlagsDraftAdapters', () => {
   })
 
   it('updates typed fields, rejects read-only edits, and validates required/select rules', () => {
-    const empty = createEmptyDraft(baseCategory)
-    const next = updateDraftField(baseCategory, empty, 'typical_height_ft', '10.25')
-    const withSelect = updateDraftField(baseCategory, next, 'default_wall_mode', 'SEG')
-    const withBoolean = updateDraftField(baseCategory, withSelect, 'include_walls', 'N')
-    const readOnlyAttempt = updateDraftField(baseCategory, withBoolean, 'system_group', 'other')
+    const adapter = getRatesFlagsDraftAdapter(baseCategory.key)
+    const empty = adapter.createEmptyDraft(baseCategory) as ScopeDefaultDraft & { system_group?: string }
+    const next = adapter.updateDraftField(baseCategory, empty, 'typical_height_ft', '10.25') as ScopeDefaultDraft & {
+      system_group?: string
+    }
+    const withSelect = adapter.updateDraftField(baseCategory, next, 'default_wall_mode', 'SEG') as ScopeDefaultDraft & {
+      system_group?: string
+    }
+    const withBoolean = adapter.updateDraftField(baseCategory, withSelect, 'include_walls', 'N') as ScopeDefaultDraft & {
+      system_group?: string
+    }
+    const readOnlyAttempt = adapter.updateDraftField(baseCategory, withBoolean, 'system_group', 'other') as ScopeDefaultDraft & {
+      system_group?: string
+    }
 
     expect(withBoolean.typical_height_ft).toBe(10.25)
     expect(withBoolean.default_wall_mode).toBe('SEG')
     expect(withBoolean.include_walls).toBe(false)
     expect(readOnlyAttempt.system_group).toBe('template')
 
-    const invalidSelect = validateDraft(baseCategory, {
+    const invalidSelect = adapter.validateDraft(baseCategory, {
       ...withBoolean,
       id: 'ROOM_A',
       display_name: 'Room A',
@@ -97,7 +107,7 @@ describe('ratesFlagsDraftAdapters', () => {
       fieldKey: 'default_wall_mode',
     })
 
-    const missingRequired = validateDraft(baseCategory, {
+    const missingRequired = adapter.validateDraft(baseCategory, {
       ...withBoolean,
       id: '',
       display_name: '',
@@ -109,36 +119,112 @@ describe('ratesFlagsDraftAdapters', () => {
     })
   })
 
-  it('serializes typed drafts back to mutation values', () => {
-    const values = draftToMutationValues(
-      baseCategory,
-      {
+  it('builds category-specific mutation requests from drafts', () => {
+    const adapter = getRatesFlagsDraftAdapter(baseCategory.key)
+    const request = adapter.toMutationRequest({
+      action: 'update',
+      draft: {
         id: 'ROOM_A',
         display_name: 'Room A',
         typical_height_ft: 8.5,
         default_wall_mode: 'RECT',
         include_walls: true,
-        system_group: 'template',
+        include_ceilings: false,
+        include_trim: false,
+        include_doors: false,
+        include_drywall: false,
+        top_cut_in_factor: 1.1,
+        bot_cut_in_factor: 1,
+        notes: '',
       },
-      false
-    )
+      draftActive: false,
+      originalId: 'ROOM_A',
+    })
 
-    expect(values).toEqual({
-      id: 'ROOM_A',
-      display_name: 'Room A',
-      typical_height_ft: '8.5',
-      default_wall_mode: 'RECT',
-      include_walls: 'Y',
-      system_group: 'template',
-      active: 'N',
+    expect(request).toEqual({
+      category: 'scope_defaults',
+      action: 'update',
+      original_id: 'ROOM_A',
+      values: {
+        id: 'ROOM_A',
+        display_name: 'Room A',
+        default_wall_mode: 'RECT',
+        top_cut_in_factor: '1.1',
+        bot_cut_in_factor: '1',
+        typical_height_ft: '8.5',
+        include_walls: 'Y',
+        include_ceilings: 'N',
+        include_trim: 'N',
+        include_doors: 'N',
+        include_drywall: 'N',
+        notes: '',
+        active: 'N',
+      },
+    })
+  })
+
+  it('builds explicit discriminator values and archive requests for non-default categories', () => {
+    const category = {
+      ...baseCategory,
+      key: 'access_fees_scaffolding',
+      tab: 'rates',
+      group: 'access_fees',
+      fields: [
+        { key: 'id', label: 'ID', type: 'text', required: true },
+        { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+        { key: 'fee_type', label: 'Fee Type', type: 'select', options: ['Labor', 'Other'] },
+        { key: 'amount', label: 'Amount', type: 'number', required: true },
+        { key: 'unit', label: 'Unit', type: 'text' },
+        { key: 'notes', label: 'Notes', type: 'text' },
+      ],
+    } as RatesFlagsEditableCategory<'access_fees_scaffolding'>
+    const adapter = getRatesFlagsDraftAdapter(category.key)
+    const accessRequest = adapter.toMutationRequest({
+      action: 'create',
+      draft: {
+        id: 'ROLLING_SCAFFOLD',
+        display_name: 'Rolling Scaffold',
+        fee_type: 'Labor',
+        amount: 250,
+        unit: 'each',
+        notes: '',
+      } as never,
+      draftActive: true,
+    })
+
+    expect(accessRequest).toEqual({
+      category: 'access_fees_scaffolding',
+      action: 'create',
+      values: {
+        access_group: 'scaffolding',
+        id: 'ROLLING_SCAFFOLD',
+        display_name: 'Rolling Scaffold',
+        fee_type: 'Labor',
+        amount: '250',
+        unit: 'each',
+        notes: '',
+        active: 'Y',
+      },
+    })
+
+    expect(
+      adapter.toArchiveRequest({
+        action: 'reactivate',
+        rowId: 'ROLLING_SCAFFOLD',
+      })
+    ).toEqual({
+      category: 'access_fees_scaffolding',
+      action: 'reactivate',
+      rowId: 'ROLLING_SCAFFOLD',
     })
   })
 
   it('normalizes number parsing edge cases', () => {
-    const empty = createEmptyDraft(baseCategory)
-    const blank = updateDraftField(baseCategory, empty, 'typical_height_ft', ' ')
-    const currency = updateDraftField(baseCategory, blank, 'typical_height_ft', '$1,250.50')
-    const invalid = updateDraftField(baseCategory, currency, 'typical_height_ft', 'abc')
+    const adapter = getRatesFlagsDraftAdapter(baseCategory.key)
+    const empty = adapter.createEmptyDraft(baseCategory) as ScopeDefaultDraft
+    const blank = adapter.updateDraftField(baseCategory, empty, 'typical_height_ft', ' ') as ScopeDefaultDraft
+    const currency = adapter.updateDraftField(baseCategory, blank, 'typical_height_ft', '$1,250.50') as ScopeDefaultDraft
+    const invalid = adapter.updateDraftField(baseCategory, currency, 'typical_height_ft', 'abc') as ScopeDefaultDraft
 
     expect(blank.typical_height_ft).toBeNull()
     expect(currency.typical_height_ft).toBe(1250.5)

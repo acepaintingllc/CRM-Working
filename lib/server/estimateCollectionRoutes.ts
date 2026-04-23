@@ -2,13 +2,27 @@ import {
   buildDefaultQuoteVersionName,
   normalizeQuoteVersionKind,
 } from '@/lib/quotes/versionCreation'
-import { buildQuoteHomeData, buildQuoteListPayload } from '@/lib/quotes/collectionData'
+import {
+  buildQuoteHomeRecentActivityReadModel,
+  buildQuoteHomeSearchReadModel,
+  buildQuoteJobVersionsReadModel,
+  buildQuoteListPayload,
+} from '@/lib/quotes/collectionData'
 import {
   jsonError,
   readJsonBody,
+  resolveParams,
+  readUuidParam,
   requireSessionUserOrg,
 } from '@/lib/server/apiRoute'
-import { loadDecoratedEstimateCollectionRows } from '@/lib/server/estimateCollectionData'
+import {
+  loadDecoratedEstimateCollectionRows,
+  loadDecoratedEstimateRowsForJob,
+  loadDecoratedRecentEstimateRows,
+  loadQuoteHomeJobVersionCounts,
+  loadQuoteHomeSummary,
+  searchDecoratedEstimateRows,
+} from '@/lib/server/estimateCollectionData'
 import { loadEstimateTemplateSettings } from '@/lib/server/estimateTemplateSettings'
 import { supabaseAdmin } from '@/lib/server/org'
 import {
@@ -62,12 +76,30 @@ async function loadEstimateCollectionPayload(
   return okResult(buildQuoteListPayload(rowsResult.data))
 }
 
-async function loadEstimateHomePayload(
-  orgId: string
-): Promise<ServiceResult<ReturnType<typeof buildQuoteHomeData>>> {
-  const rowsResult = await loadDecoratedEstimateCollectionRows(orgId, { includeRollups: true })
+async function loadEstimateHomeSummaryPayload(orgId: string) {
+  return loadQuoteHomeSummary(orgId)
+}
+
+async function loadEstimateHomeRecentActivityPayload(orgId: string) {
+  const rowsResult = await loadDecoratedRecentEstimateRows(orgId, { includeRollups: true })
   if (!rowsResult.ok) return rowsResult
-  return okResult(buildQuoteHomeData(rowsResult.data))
+  return okResult(buildQuoteHomeRecentActivityReadModel(rowsResult.data))
+}
+
+async function loadEstimateHomeSearchPayload(orgId: string, query: string) {
+  const rowsResult = await searchDecoratedEstimateRows(orgId, query, { includeRollups: true })
+  if (!rowsResult.ok) return rowsResult
+  return okResult(buildQuoteHomeSearchReadModel(rowsResult.data, query))
+}
+
+async function loadEstimateHomeJobCountsPayload(orgId: string) {
+  return loadQuoteHomeJobVersionCounts(orgId)
+}
+
+async function loadEstimateJobVersionsPayload(orgId: string, jobId: string) {
+  const rowsResult = await loadDecoratedEstimateRowsForJob(orgId, jobId, { includeRollups: true })
+  if (!rowsResult.ok) return rowsResult
+  return okResult(buildQuoteJobVersionsReadModel(rowsResult.data, jobId))
 }
 
 async function createEstimateCollectionVersion(params: {
@@ -201,11 +233,55 @@ export async function handleEstimateCollectionRouteGet() {
   return serviceResultDataResponse(await loadEstimateCollectionPayload(auth.session.orgId))
 }
 
-export async function handleEstimateHomeRouteGet() {
+export async function handleEstimateHomeSummaryRouteGet() {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
-  return serviceResultDataResponse(await loadEstimateHomePayload(auth.session.orgId))
+  return serviceResultDataResponse(await loadEstimateHomeSummaryPayload(auth.session.orgId))
+}
+
+export async function handleEstimateHomeRecentActivityRouteGet() {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  return serviceResultDataResponse(await loadEstimateHomeRecentActivityPayload(auth.session.orgId))
+}
+
+export async function handleEstimateHomeJobCountsRouteGet() {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  return serviceResultDataResponse(await loadEstimateHomeJobCountsPayload(auth.session.orgId))
+}
+
+export async function handleEstimateHomeSearchRouteGet(request: Request) {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  const query = new URL(request.url).searchParams.get('q') ?? ''
+  return serviceResultDataResponse(
+    await loadEstimateHomeSearchPayload(auth.session.orgId, query)
+  )
+}
+
+export type EstimateJobVersionsRouteContext = {
+  params: { jobId: string } | Promise<{ jobId: string }>
+}
+
+export async function handleEstimateJobVersionsRouteGet(
+  _request: Request,
+  context: EstimateJobVersionsRouteContext
+) {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  const params = await resolveParams(context)
+  const jobId = readUuidParam(params?.jobId, 'job id')
+  if (!jobId.ok) return jobId.response
+
+  return serviceResultDataResponse(
+    await loadEstimateJobVersionsPayload(auth.session.orgId, jobId.value)
+  )
 }
 
 export async function handleEstimateCollectionRoutePost(

@@ -133,20 +133,20 @@ describe('useQuoteProductsPage', () => {
       expect(result.current.resource.loading).toBe(false)
     })
 
-    expect(result.current.selected?.id).toBe('paint-1')
+    expect(result.current.catalogVm.selected?.id).toBe('paint-1')
     expect(loadQuoteProducts).toHaveBeenCalledWith({ status: 'all' })
 
     act(() => {
       result.current.actions.setStatusFilter('inactive')
     })
 
-    expect(result.current.filtered.map((product) => product.id)).toEqual(['paint-2'])
+    expect(result.current.catalogVm.filtered.map((product) => product.id)).toEqual(['paint-2'])
 
     act(() => {
       result.current.actions.setStatusFilter('all')
-      result.current.setSearch('super')
+      result.current.actions.setSearch('super')
     })
-    expect(result.current.filtered).toHaveLength(1)
+    expect(result.current.catalogVm.filtered).toHaveLength(1)
 
     act(() => {
       result.current.actions.startCreate()
@@ -163,7 +163,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     await act(async () => {
-      await result.current.save()
+      await result.current.actions.save()
     })
 
     expect(createQuoteProduct).toHaveBeenCalledWith(
@@ -172,7 +172,7 @@ describe('useQuoteProductsPage', () => {
         status: 'Archived',
       })
     )
-    expect(result.current.selectedId).toBe('paint-3')
+    expect(result.current.catalogVm.selectedId).toBe('paint-3')
     expect(result.current.uiState.notice).toBe('Product created.')
 
     act(() => {
@@ -180,7 +180,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.draft.name).toBe('Super Paint')
+      expect(result.current.editorVm.draft.name).toBe('Super Paint')
     })
 
     act(() => {
@@ -188,7 +188,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     await act(async () => {
-      await result.current.save()
+      await result.current.actions.save()
     })
 
     expect(updateQuoteProduct).toHaveBeenCalledWith(
@@ -202,7 +202,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     await act(async () => {
-      await result.current.remove()
+      await result.current.actions.requestRemove()
     })
 
     expect(deleteQuoteProduct).toHaveBeenCalledWith('paint-1')
@@ -248,9 +248,9 @@ describe('useQuoteProductsPage', () => {
       result.current.actions.updateDraftField('efficiency_pct', '120')
     })
 
-    expect(result.current.validation.ok).toBe(false)
-    expect(result.current.validation.fields.name).toBe('Product name is required.')
-    expect(result.current.validation.fields.efficiency_pct).toBe(
+    expect(result.current.editorVm.validation.ok).toBe(false)
+    expect(result.current.editorVm.validation.fields.name).toBe('Product name is required.')
+    expect(result.current.editorVm.validation.fields.efficiency_pct).toBe(
       'Efficiency must be 100 or less.'
     )
     expect(result.current.uiState.validationError).toBe('Product name is required.')
@@ -303,7 +303,7 @@ describe('useQuoteProductsPage', () => {
       expect(result.current.uiState.loadError).toBeNull()
     })
 
-    expect(result.current.selected?.id).toBe('paint-1')
+    expect(result.current.catalogVm.selected?.id).toBe('paint-1')
   })
 
   it('keeps the current filtered selection coherent when rows disappear', async () => {
@@ -355,15 +355,15 @@ describe('useQuoteProductsPage', () => {
       result.current.actions.setStatusFilter('inactive')
     })
 
-    expect(result.current.selected?.id).toBe('paint-2')
+    expect(result.current.catalogVm.selected?.id).toBe('paint-2')
 
     await act(async () => {
-      await result.current.remove()
+      await result.current.actions.requestRemove()
     })
 
-    expect(result.current.filtered).toEqual([])
-    expect(result.current.selected).toBeNull()
-    expect(result.current.selectedId).toBeNull()
+    expect(result.current.catalogVm.filtered).toEqual([])
+    expect(result.current.catalogVm.selected).toBeNull()
+    expect(result.current.catalogVm.selectedId).toBeNull()
   })
 
   it('recomputes filtered selection coherently when an update changes the current status bucket', async () => {
@@ -434,19 +434,19 @@ describe('useQuoteProductsPage', () => {
       result.current.actions.setStatusFilter('inactive')
     })
 
-    expect(result.current.selected?.id).toBe('paint-2')
+    expect(result.current.catalogVm.selected?.id).toBe('paint-2')
 
     act(() => {
       result.current.actions.updateDraftField('status', 'Archived')
     })
 
     await act(async () => {
-      await result.current.save()
+      await result.current.actions.save()
     })
 
-    expect(result.current.filtered).toEqual([])
-    expect(result.current.selected).toBeNull()
-    expect(result.current.selectedId).toBeNull()
+    expect(result.current.catalogVm.filtered).toEqual([])
+    expect(result.current.catalogVm.selected).toBeNull()
+    expect(result.current.catalogVm.selectedId).toBeNull()
     expect(result.current.resource.data.find((product) => product.id === 'paint-2')?.status).toBe(
       'Archived'
     )
@@ -485,7 +485,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     await act(async () => {
-      await result.current.save()
+      await result.current.actions.save()
     })
 
     expect(result.current.resource.data).toEqual([
@@ -494,7 +494,7 @@ describe('useQuoteProductsPage', () => {
         name: 'Super Paint',
       }),
     ])
-    expect(result.current.selected?.name).toBe('Super Paint')
+    expect(result.current.catalogVm.selected?.name).toBe('Super Paint')
     expect(result.current.uiState.actionError).toBe('Save exploded.')
   })
 
@@ -548,7 +548,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     await act(async () => {
-      await result.current.save()
+      await result.current.actions.save()
     })
 
     expect(result.current.uiState.notice).toBe('Product saved.')
@@ -567,7 +567,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     await act(async () => {
-      await result.current.save()
+      await result.current.actions.save()
     })
 
     expect(result.current.uiState.notice).toBeNull()

@@ -1,9 +1,12 @@
 import type {
-  HomeData,
-  HomeEstimate,
+  QuoteHomeSummaryReadModel,
+} from '@/lib/quotes/collectionData'
+import type {
   NavItem,
   QuoteHomeJob,
+  QuoteHomeJobVersion,
   QuoteHomeJobListItemVm,
+  QuoteHomeSearchResult,
   QuoteHomeVersionItemVm,
   QuotesHomeDeleteDialogVm,
   QuotesHomeSelectedJobVm,
@@ -61,15 +64,11 @@ export function formatVersionState(value: string | null | undefined) {
     .replace(/\b\w/g, (match) => match.toUpperCase())
 }
 
-export function buildSearchHaystack(estimate: HomeEstimate) {
-  return `${estimate.version_name} ${estimate.job_title} ${estimate.customer_name} ${estimate.version_kind} ${estimate.version_state}`.toLowerCase()
-}
-
 export function estimateWorkspaceHref(estimateId: string) {
   return `/crm/quotes/${estimateId}`
 }
 
-export function buildSearchResultVm(estimate: HomeEstimate): SearchResultVm {
+export function buildSearchResultVm(estimate: QuoteHomeSearchResult): SearchResultVm {
   return {
     id: estimate.estimate_id,
     href: estimateWorkspaceHref(estimate.estimate_id),
@@ -78,9 +77,9 @@ export function buildSearchResultVm(estimate: HomeEstimate): SearchResultVm {
   }
 }
 
-export function buildHeroSummaryText(data: HomeData | null) {
-  return data
-    ? `${data.total_versions} total versions${QUOTE_META_SEPARATOR}${data.summary.draft_count} drafts${QUOTE_META_SEPARATOR}${data.summary.sent_or_awaiting_count} sent/awaiting${QUOTE_META_SEPARATOR}${data.summary.live_count} live`
+export function buildHeroSummaryText(summary: QuoteHomeSummaryReadModel | null) {
+  return summary
+    ? `${summary.total_versions} total versions${QUOTE_META_SEPARATOR}${summary.draft_count} drafts${QUOTE_META_SEPARATOR}${summary.sent_or_awaiting_count} sent/awaiting${QUOTE_META_SEPARATOR}${summary.live_count} live`
     : 'Build and track quote versions with live status, totals, and search.'
 }
 
@@ -134,12 +133,12 @@ export function buildQuotesHomeSelectedJobVm(
 }
 
 export function buildQuoteHomeVersionItemVm(
-  estimate: HomeEstimate,
+  estimate: QuoteHomeJobVersion,
   deletingId: string | null
 ): QuoteHomeVersionItemVm {
   return {
     id: estimate.estimate_id,
-    title: estimate.version_name ?? 'Quote Version',
+    title: estimate.version_name || 'Quote Version',
     total:
       estimate.final_total != null && estimate.final_total > 0
         ? formatCurrency(estimate.final_total)
@@ -152,7 +151,10 @@ export function buildQuoteHomeVersionItemVm(
   }
 }
 
-export function buildQuotesHomeVersionHeading(selectedJob: QuoteHomeJob | null, versions: HomeEstimate[]) {
+export function buildQuotesHomeVersionHeading(
+  selectedJob: QuoteHomeJob | null,
+  versions: QuoteHomeJobVersion[]
+) {
   return selectedJob
     ? `${versions.length} version${versions.length === 1 ? '' : 's'} under this job`
     : 'Pick a job first'
@@ -160,7 +162,7 @@ export function buildQuotesHomeVersionHeading(selectedJob: QuoteHomeJob | null, 
 
 export function buildQuotesHomeVersionEmptyMessage(
   selectedJob: QuoteHomeJob | null,
-  versions: HomeEstimate[]
+  versions: QuoteHomeJobVersion[]
 ) {
   if (!selectedJob) return 'Versions will appear here once a job is selected.'
   if (versions.length === 0) {
@@ -170,7 +172,7 @@ export function buildQuotesHomeVersionEmptyMessage(
 }
 
 export function buildQuotesHomeDeleteDialogVm(
-  estimate: HomeEstimate | null,
+  estimate: QuoteHomeJobVersion | null,
   deletingId: string | null
 ): QuotesHomeDeleteDialogVm {
   return {
@@ -181,8 +183,8 @@ export function buildQuotesHomeDeleteDialogVm(
   }
 }
 
-export function buildSummaryCards(data: HomeData | null): SummaryCardVm[] {
-  const summary = data?.summary ?? {
+export function buildSummaryCards(summary: QuoteHomeSummaryReadModel | null): SummaryCardVm[] {
+  const nextSummary = summary ?? {
     draft_count: 0,
     sent_or_awaiting_count: 0,
     live_count: 0,
@@ -192,27 +194,31 @@ export function buildSummaryCards(data: HomeData | null): SummaryCardVm[] {
   return [
     {
       label: 'Drafts',
-      value: String(summary.draft_count),
-      subtext: summary.draft_count === 1 ? '1 draft version' : `${summary.draft_count} draft versions`,
+      value: String(nextSummary.draft_count),
+      subtext:
+        nextSummary.draft_count === 1
+          ? '1 draft version'
+          : `${nextSummary.draft_count} draft versions`,
     },
     {
       label: 'Sent / Awaiting',
-      value: String(summary.sent_or_awaiting_count),
+      value: String(nextSummary.sent_or_awaiting_count),
       subtext:
-        summary.sent_or_awaiting_count === 1
+        nextSummary.sent_or_awaiting_count === 1
           ? '1 version attached to sent jobs'
-          : `${summary.sent_or_awaiting_count} versions attached to sent jobs`,
+          : `${nextSummary.sent_or_awaiting_count} versions attached to sent jobs`,
     },
     {
       label: 'Live Versions',
-      value: String(summary.live_count),
-      subtext: summary.live_count === 1 ? '1 live version' : `${summary.live_count} live versions`,
+      value: String(nextSummary.live_count),
+      subtext:
+        nextSummary.live_count === 1 ? '1 live version' : `${nextSummary.live_count} live versions`,
       valueColor: 'var(--v2-green-2)',
       subtextColor: 'var(--v2-green-2)',
     },
     {
       label: 'Pipeline',
-      value: formatCurrency(summary.pipeline_total),
+      value: formatCurrency(nextSummary.pipeline_total),
       subtext: 'Rollup-backed total',
       valueColor: '#f9e2b7',
       subtextColor: 'var(--v2-ink-3)',

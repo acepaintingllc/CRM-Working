@@ -3,28 +3,29 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
-import type { JobSummary } from '@/lib/jobs/client'
-import { fetchJobList } from '@/lib/jobs/client'
-import type { QuoteListEstimate } from '@/lib/quotes/collectionData'
-import { loadQuoteList } from '@/lib/quotes/client'
+import { loadJobRecord, type JobDetail } from '@/lib/jobs/client'
+import type {
+  QuoteHomeJobVersionItemReadModel,
+  QuoteJobVersionsReadModel,
+} from '@/lib/quotes/collectionData'
+import { loadQuoteJobVersions } from '@/lib/quotes/client'
 import {
-  deriveQuoteVersionsForJob,
-  filterEligibleQuoteVersionJobs,
+  isEligibleQuoteVersionJob,
   type EligibleQuoteVersionJob,
 } from '@/lib/quotes/versionCreation'
 import { QUOTE_META_SEPARATOR } from '../_home/quoteHomePresentation'
 import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 
-type QuoteCreatePageJob = EligibleQuoteVersionJob<JobSummary>
+type QuoteCreatePageJob = EligibleQuoteVersionJob<JobDetail>
 
 type QuoteCreateResource = {
-  jobs: QuoteCreatePageJob[]
-  estimates: QuoteListEstimate[]
+  job: QuoteCreatePageJob | null
+  versions: QuoteHomeJobVersionItemReadModel[]
 }
 
 const EMPTY_RESOURCE: QuoteCreateResource = {
-  jobs: [],
-  estimates: [],
+  job: null,
+  versions: [],
 }
 
 export function useQuoteCreatePage() {
@@ -38,29 +39,23 @@ export function useQuoteCreatePage() {
         return EMPTY_RESOURCE
       }
 
-      const [jobsPayload, estimatesPayload] = await Promise.all([
-        fetchJobList(),
-        loadQuoteList<{ estimates?: QuoteListEstimate[] }>(),
+      const [jobPayload, versionsPayload] = await Promise.all([
+        loadJobRecord(jobId),
+        loadQuoteJobVersions<QuoteJobVersionsReadModel>(jobId),
       ])
 
       return {
-        jobs: filterEligibleQuoteVersionJobs(jobsPayload),
-        estimates: (estimatesPayload?.estimates ?? []) as QuoteListEstimate[],
+        job: isEligibleQuoteVersionJob(jobPayload) ? jobPayload : null,
+        versions: versionsPayload.items,
       }
     },
     getErrorMessage: (loadError: unknown) =>
       loadError instanceof Error ? loadError.message : 'Failed to load quote creation data.',
   })
 
-  const selectedJob = useMemo(
-    () => resource.data.jobs.find((candidate) => candidate.id === jobId) ?? null,
-    [resource.data.jobs, jobId]
-  )
+  const selectedJob = useMemo(() => resource.data.job, [resource.data.job])
   const createController = useQuoteVersionCreation(selectedJob)
-  const jobVersions = useMemo(
-    () => deriveQuoteVersionsForJob(resource.data.estimates, jobId),
-    [resource.data.estimates, jobId]
-  )
+  const jobVersions = useMemo(() => resource.data.versions, [resource.data.versions])
   const pageError = resource.error ?? createController.error
 
   return {
@@ -68,7 +63,7 @@ export function useQuoteCreatePage() {
       loading: resource.loading,
       error: pageError,
       loadError: resource.error,
-      hasLoadedJobData: Boolean(jobId) && (resource.data.jobs.length > 0 || resource.data.estimates.length > 0),
+      hasLoadedJobData: Boolean(jobId) && (Boolean(resource.data.job) || resource.data.versions.length > 0),
       shouldLoadJobData: Boolean(jobId),
     },
     selectedJobVm: {

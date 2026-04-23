@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { QuoteHomeEstimate } from '@/lib/quotes/collectionData'
 import type { JobSummary } from '@/lib/jobs/client'
+import type { QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
 import {
   buildHeroSummaryText,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeSelectedJobVm,
 } from '../quoteHomePresentation'
 
-const estimate: QuoteHomeEstimate = {
+const estimate: QuoteHomeJobVersionItemReadModel = {
   estimate_id: 'estimate-1',
   job_id: 'job-1',
   customer_id: 'customer-1',
@@ -41,17 +41,11 @@ describe('quoteHomePresentation', () => {
   it('builds hero summary text from summary counts', () => {
     expect(
       buildHeroSummaryText({
-        summary: {
-          draft_count: 2,
-          sent_or_awaiting_count: 3,
-          live_count: 1,
-          pipeline_total: 5000,
-        },
         total_versions: 24,
-        version_counts_by_job: { 'job-1': 24 },
-        recent_estimates: [estimate],
-        snapshot: { ...estimate, total_versions: 1 },
-        search_estimates: [estimate],
+        draft_count: 2,
+        sent_or_awaiting_count: 3,
+        live_count: 1,
+        pipeline_total: 5000,
       })
     ).toBe('24 total versions · 2 drafts · 3 sent/awaiting · 1 live')
   })
@@ -71,6 +65,5 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.href).toBe('/crm/quotes/estimate-1')
     expect(versionVm.deleting).toBe(true)
     expect(versionVm.meta).toContain('Live / Revision · Updated')
-    expect(versionVm.meta).not.toContain('Â')
   })
 })

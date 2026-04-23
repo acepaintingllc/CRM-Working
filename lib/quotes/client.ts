@@ -8,12 +8,27 @@ import type {
 import type { CreateQuoteVersionInput } from '@/lib/quotes/versionCreation'
 import type { QuoteDefaults } from '@/lib/settings/types'
 import type {
-  RatesFlagsMutationAction,
+  RatesFlagsMutationRequestByCategory,
   RatesFlagsPayload,
+  RatesFlagsEditableCategoryKey,
 } from '@/types/estimator/ratesFlags'
 
-export async function loadQuoteHome<T>() {
-  return loadData<T>('/api/quotes/home', { cache: 'no-store' })
+export async function loadQuoteHomeSummary<T>() {
+  return loadData<T>('/api/quotes/home/summary', { cache: 'no-store' })
+}
+
+export async function loadQuoteHomeJobCounts<T>() {
+  return loadData<T>('/api/quotes/home/job-counts', { cache: 'no-store' })
+}
+
+export async function loadQuoteHomeSearch<T>(query: string) {
+  return loadData<T>(`/api/quotes/home/search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
+}
+
+export async function loadQuoteJobVersions<T>(jobId: string) {
+  return loadData<T>(`/api/quotes/home/jobs/${encodeURIComponent(jobId)}/versions`, {
+    cache: 'no-store',
+  })
 }
 
 export async function loadQuoteList<T>() {
@@ -80,12 +95,9 @@ export async function loadRatesFlags() {
   return loadData<RatesFlagsPayload>('/api/quotes/rates-flags', { cache: 'no-store' })
 }
 
-export async function mutateRatesFlags(payload: {
-  category: string
-  action: RatesFlagsMutationAction
-  values: Record<string, unknown>
-  original_id?: string
-}) {
+export async function mutateRatesFlags<
+  TCategory extends RatesFlagsEditableCategoryKey,
+>(payload: RatesFlagsMutationRequestByCategory<TCategory>) {
   return mutateData<boolean>('/api/quotes/rates-flags', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

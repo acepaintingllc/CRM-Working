@@ -1,6 +1,11 @@
-import type { RatesFlagsMutationRequest, RatesFlagsPayload } from '../../../types/estimator/ratesFlags'
+import type {
+  RatesFlagsCreateOrUpdateMutationRequest,
+  RatesFlagsMutationRequest,
+  RatesFlagsPayload,
+} from '../../../types/estimator/ratesFlags'
 import { CATEGORY_CONFIGS, getCategoryConfig } from './categories.ts'
-import { buildCategory, buildCategoryFromStoredRows, buildMutationPlan, sanitizeMutationValues } from './categoryHelpers.ts'
+import { buildCategory, buildCategoryFromStoredRows, buildMutationPlan } from './categoryHelpers.ts'
+import { parseRatesFlagsMutationRequest } from './mutationParser.ts'
 import { type RatesFlagsCatalogOverlay, isAreaBasedUnit } from './shared.ts'
 import { buildOverlayFromRows } from './overlay.ts'
 import { findCategoryTablesDetailed, findTableDetailed, getHeaderIndex, parseConstantsTablesDetailed, parseSchemaVersion } from './tableParsing.ts'
@@ -8,6 +13,7 @@ import { bumpTemplateVersion, ensureTemplateState, fetchTemplateState, getSupaba
 import { asText, normalizeId, toYN } from './shared.ts'
 
 export { parseConstantsTablesDetailed, type RatesFlagsCatalogOverlay }
+export { parseRatesFlagsMutationRequest }
 
 export async function readRatesFlagsPayload(params: {
   origin: string
@@ -75,18 +81,13 @@ export async function applyRatesFlagsMutation(params: {
     return { ok: false as const, error: 'Template initialization failed.', status: 500 }
   }
 
-  const originalId = normalizeId(params.request.original_id || asText(params.request.values.id))
-  if (!originalId) {
-    return { ok: false as const, error: 'Missing row id.', status: 400 }
-  }
-
   try {
     if (params.request.action === 'archive' || params.request.action === 'reactivate') {
       const existing = await getTemplateRowById({
         orgId: params.orgId,
         templateId: template.id,
         categoryKey: config.key,
-        rowId: originalId,
+        rowId: params.request.rowId,
       })
       if (!existing) return { ok: false as const, error: 'Row not found.', status: 404 }
       const update = await supabaseAdmin
@@ -99,20 +100,24 @@ export async function applyRatesFlagsMutation(params: {
       await bumpTemplateVersion(params.orgId, template)
       return { ok: true as const }
     }
-
-    const sanitized = sanitizeMutationValues(config, params.request.values)
-    if (!sanitized.ok) {
-      return { ok: false as const, error: sanitized.error, status: 400 }
+    const mutation: RatesFlagsCreateOrUpdateMutationRequest = params.request
+    const originalId = normalizeId(
+      mutation.action === 'update' ? mutation.original_id : mutation.values.id
+    ) || normalizeId(mutation.values.id)
+    if (!originalId) {
+      return { ok: false as const, error: 'Missing row id.', status: 400 }
     }
-    const nextId = normalizeId(sanitized.values.id)
-    const nextDisplayName = asText(sanitized.values.display_name) || asText(sanitized.values.id)
+    const nextId = normalizeId(mutation.values.id)
+    const nextDisplayName =
+      asText(mutation.values.display_name) || asText(mutation.values.id)
     const nextActive = toYN(
-      params.request.values.active,
-      params.request.action === 'create' ? 'Y' : 'N'
+      mutation.values.active,
+      mutation.action === 'create' ? 'Y' : 'N'
     ) as 'Y' | 'N'
-    const valuesJson = { ...sanitized.values }
+    const { active, ...valuesJson } = mutation.values
+    void active
 
-    if (params.request.action === 'create') {
+    if (mutation.action === 'create') {
       const collision = await getTemplateRowById({
         orgId: params.orgId,
         templateId: template.id,
@@ -150,7 +155,7 @@ export async function applyRatesFlagsMutation(params: {
       return { ok: true as const }
     }
 
-    if (params.request.action === 'update') {
+    if (mutation.action === 'update') {
       const existing = await getTemplateRowById({
         orgId: params.orgId,
         templateId: template.id,
@@ -222,5 +227,6 @@ export const _test = {
   findTableDetailed,
   getHeaderIndex,
   isAreaBasedUnit,
+  parseRatesFlagsMutationRequest,
   setSupabaseAdminProvider,
 }

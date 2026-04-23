@@ -1,15 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import {
-  deriveQuoteVersionsForJob,
-  type EligibleQuoteVersionJob,
-} from '@/lib/quotes/versionCreation'
-import { buildSearchHaystack } from '../_home/quoteHomePresentation'
-import type { QuoteHomeData, QuoteHomeEstimate } from '@/lib/quotes/collectionData'
+import { type EligibleQuoteVersionJob } from '@/lib/quotes/versionCreation'
+import type { QuoteHomeJobVersionCountsReadModel } from '@/lib/quotes/collectionData'
 
 type Options<TJob extends EligibleQuoteVersionJob> = {
-  data: QuoteHomeData | null
+  jobCounts: QuoteHomeJobVersionCountsReadModel
   jobs: TJob[]
 }
 
@@ -20,7 +16,7 @@ type SearchableQuoteHomeJob = EligibleQuoteVersionJob & {
 }
 
 export function useQuotesHomeSelection<TJob extends SearchableQuoteHomeJob>({
-  data,
+  jobCounts,
   jobs,
 }: Options<TJob>) {
   const [searchQuery, setSearchQuery] = useState('')
@@ -37,14 +33,6 @@ export function useQuotesHomeSelection<TJob extends SearchableQuoteHomeJob>({
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? null
 
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return [] as QuoteHomeEstimate[]
-    return (data?.search_estimates ?? [])
-      .filter((estimate) => buildSearchHaystack(estimate).includes(q))
-      .slice(0, 8)
-  }, [data, searchQuery])
-
   const filteredJobs = useMemo(() => {
     const q = jobQuery.trim().toLowerCase()
     if (!q) return jobs
@@ -54,28 +42,24 @@ export function useQuotesHomeSelection<TJob extends SearchableQuoteHomeJob>({
     })
   }, [jobQuery, jobs])
 
-  const selectedJobVersions = useMemo(
-    () => deriveQuoteVersionsForJob(data?.search_estimates ?? [], selectedJobId),
-    [data, selectedJobId]
-  )
-
   const versionCountByJob = useMemo(() => {
-    return data?.version_counts_by_job ?? {}
-  }, [data])
+    return jobCounts.items.reduce<Record<string, number>>((counts, item) => {
+      counts[item.job_id] = item.version_count
+      return counts
+    }, {})
+  }, [jobCounts.items])
 
   return {
     searchQuery,
     setSearchQuery,
     searchFocused,
     setSearchFocused,
-    searchResults,
     jobQuery,
     setJobQuery,
     selectedJobId,
     setSelectedJobId,
     selectedJob,
     filteredJobs,
-    selectedJobVersions,
     versionCountByJob,
   }
 }
