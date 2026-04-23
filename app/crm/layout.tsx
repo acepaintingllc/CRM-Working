@@ -9,7 +9,6 @@ import { usePathname } from "next/navigation";
 import { SWRConfig } from 'swr'
 import type { LucideIcon } from "lucide-react";
 import {
-  Camera,
   CalendarDays,
   Calculator,
   Cog,
@@ -47,7 +46,6 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       { href: "/crm/quotes", label: "Quotes", Icon: Calculator },
       { href: "/crm/notes", label: "Notes", Icon: FileText },
       { href: "/crm/calendar", label: "Calendar", Icon: CalendarDays },
-      { href: "/field/jobs", label: "Field Cam", Icon: Camera },
       { href: "/crm/settings", label: "Settings", Icon: Cog },
     ],
     []

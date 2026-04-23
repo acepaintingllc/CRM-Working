@@ -63,10 +63,6 @@ type JobScheduleRow = {
   end_at: string | null
 }
 
-type JobSitePhotoRow = {
-  job_id: string
-}
-
 type LinkedEstimateRow = {
   id: string
   status: string | null
@@ -223,33 +219,6 @@ async function loadScheduleRangeByJobId(orgId: string, jobIds: string[]) {
   return okResult(rangeByJobId)
 }
 
-async function loadSitePhotoCountsByJobId(orgId: string, jobIds: string[]) {
-  const countByJobId = new Map<string, number>()
-  if (jobIds.length === 0) {
-    return okResult(countByJobId)
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from('job_site_photos')
-    .select('job_id')
-    .eq('org_id', orgId)
-    .in('job_id', jobIds)
-
-  if (error) {
-    if (isMissingSchemaErrorMessage(error.message)) {
-      return okResult(countByJobId)
-    }
-    return errorResult('server_error', error.message)
-  }
-
-  for (const row of (data ?? []) as JobSitePhotoRow[]) {
-    const current = countByJobId.get(row.job_id) ?? 0
-    countByJobId.set(row.job_id, current + 1)
-  }
-
-  return okResult(countByJobId)
-}
-
 async function loadLinkedEstimates(orgId: string, jobId: string) {
   const { data, error } = await supabaseAdmin
     .from('estimates')
@@ -286,15 +255,13 @@ export async function listJobs(orgId: string): Promise<ServiceResult<JobSummaryR
     .map((row) => asString(row.customer_id))
     .filter((value): value is string => Boolean(value))
 
-  const [customersResult, scheduleResult, photoCountResult] = await Promise.all([
+  const [customersResult, scheduleResult] = await Promise.all([
     loadCustomersById(orgId, customerIds),
     loadScheduleRangeByJobId(orgId, jobIds),
-    loadSitePhotoCountsByJobId(orgId, jobIds),
   ])
 
   if (!customersResult.ok) return customersResult
   if (!scheduleResult.ok) return scheduleResult
-  if (!photoCountResult.ok) return photoCountResult
 
   return okResult(
     rows.map((row) =>
@@ -305,7 +272,6 @@ export async function listJobs(orgId: string): Promise<ServiceResult<JobSummaryR
           ? customersResult.data.get(asString(row.customer_id) as string) ?? null
           : null,
         scheduleRange: asString(row.id) ? scheduleResult.data.get(asString(row.id) as string) ?? null : null,
-        sitePhotoCount: asString(row.id) ? photoCountResult.data.get(asString(row.id) as string) ?? 0 : 0,
         withOptionalJobColumns: (sourceRow, availableColumns) =>
           ((withOptionalJobColumns(
             sourceRow as Record<string, unknown>,
@@ -362,7 +328,6 @@ export async function createJob(
       optionalColumns,
       customer: customersResult.data.get(input.customer_id) ?? null,
       scheduleRange: null,
-      sitePhotoCount: 0,
       withOptionalJobColumns: (sourceRow, availableColumns) =>
         ((withOptionalJobColumns(
           sourceRow as Record<string, unknown>,

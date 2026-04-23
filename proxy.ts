@@ -108,10 +108,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  const isFieldPath = path === '/field' || path.startsWith('/field/')
-  const permissionsPolicy = isFieldPath
-    ? 'camera=(self), microphone=(), geolocation=()'
-    : 'camera=(), microphone=(), geolocation=()'
+  const permissionsPolicy = 'camera=(), microphone=(), geolocation=()'
 
   if (isRateLimitedPublicTokenPath(path) && !enforcePublicTokenRateLimit(request)) {
     return applyPermissionsPolicy(

@@ -6,11 +6,7 @@ import {
   saveCloseout,
   sendStageEmail,
 } from '@/lib/jobs/actions'
-import {
-  uploadPhoto,
-  type JobDetail,
-  type JobPhoto,
-} from '@/lib/jobs/client'
+import { type JobDetail } from '@/lib/jobs/client'
 import { applyTemplate, buildJobEmailTemplateVars } from '@/lib/jobs/emailTemplate'
 import {
   createDefaultPaintLogRow,
@@ -81,20 +77,17 @@ export function useCloseoutForm({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
-  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   const [job, setJob] = useState<JobDetail | null>(null)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [closeoutNotes, setCloseoutNotes] = useState('')
   const [paintRows, setPaintRows] = useState<PaintLogRow[]>([createDefaultPaintLogRow()])
-  const [afterPhotos, setAfterPhotos] = useState<JobPhoto[]>([])
 
   const [paintOptions, setPaintOptions] = useState<string[]>([])
   const [colorOptions, setColorOptions] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [emailNotice, setEmailNotice] = useState<string | null>(null)
-  const [photoNotice, setPhotoNotice] = useState<string | null>(null)
   const [templateMissing, setTemplateMissing] = useState(false)
   const [emailSkipped, setEmailSkipped] = useState(false)
 
@@ -114,14 +107,11 @@ export function useCloseoutForm({
       setLoading(true)
       setSaving(false)
       setSendingEmail(false)
-      setUploadingPhoto(false)
       setError(null)
       setEmailNotice(null)
-      setPhotoNotice(null)
       setTemplateMissing(false)
       setEmailSkipped(false)
       setPaintRows([createDefaultPaintLogRow()])
-      setAfterPhotos([])
       setPaintOptions([])
       setColorOptions([])
       setJob(null)
@@ -160,9 +150,6 @@ export function useCloseoutForm({
 
         const rows = closeoutData.paintLogs
         setPaintRows(rows.length > 0 ? rows : [createDefaultPaintLogRow()])
-
-        const photoRows = closeoutData.afterPhotos
-        setAfterPhotos(photoRows)
 
         const nextPaintOptions = new Set<string>()
         const nextColorOptions = new Set<string>()
@@ -279,37 +266,6 @@ export function useCloseoutForm({
     setEmailNotice('Review email skipped for now.')
   }
 
-  const uploadCloseoutPhoto = async (file: File) => {
-    if (!jobId) return false
-
-    setUploadingPhoto(true)
-    setPhotoNotice(null)
-    setError(null)
-
-    const localId =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    try {
-      const result = await uploadPhoto(jobId, {
-        file,
-        clientLocalId: `closeout-${localId}`,
-        capturedAt: new Date().toISOString(),
-      })
-
-      if (result.photo) {
-        setAfterPhotos((prev) => [result.photo as JobPhoto, ...prev])
-      }
-      setPhotoNotice('Photo added.')
-      setUploadingPhoto(false)
-      return true
-    } catch (uploadError) {
-      setUploadingPhoto(false)
-      setError(uploadError instanceof Error ? uploadError.message : 'Failed to upload photo.')
-      return false
-    }
-  }
-
   const saveAndClose = async () => {
     if (!jobId || saving) return false
 
@@ -350,7 +306,6 @@ export function useCloseoutForm({
     loading,
     saving,
     sendingEmail,
-    uploadingPhoto,
     subject,
     setSubject,
     body,
@@ -361,18 +316,15 @@ export function useCloseoutForm({
     updateRow,
     removeRow,
     addRow,
-    afterPhotos,
     paintOptions,
     colorOptions,
     error,
     emailNotice,
-    photoNotice,
     templateMissing,
     emailSkipped,
     canSendEmail,
     sendReviewEmail,
     skipEmail,
-    uploadCloseoutPhoto,
     saveAndClose,
     defaultWhereUsedOptions,
     defaultSheenOptions,

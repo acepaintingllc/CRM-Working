@@ -66,14 +66,12 @@ test('jobs service helpers build enriched summary and detail records', () => {
       scheduled_date: '2026-04-22T14:00:00.000Z',
       scheduled_end_date: '2026-04-22T18:00:00.000Z',
     },
-    sitePhotoCount: 2,
   })
 
   assert.equal(summary.title, 'Untitled job')
   assert.equal(summary.status, 'estimate_scheduled')
   assert.equal(summary.customer_name, 'Alice')
   assert.equal(summary.scheduled_date, '2026-04-22T14:00:00.000Z')
-  assert.equal(summary.has_site_photos, true)
 
   const detail = buildJobDetailRecord({
     row: { ...summary, customer_id: 'customer-1' },
