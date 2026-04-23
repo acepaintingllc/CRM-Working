@@ -13,6 +13,7 @@ const quoteInternalPaths = [
 ]
 
 const canonicalEstimateRuntimePaths = [
+  'app/crm/estimates/[id]/v2/page.tsx',
   'app/crm/estimates/[id]/v2/_components/EstimateV2EditorPageContent.tsx',
   'app/crm/estimates/[id]/v2/_components/EstimateV2EditorHeaderArea.tsx',
   'app/crm/estimates/[id]/v2/_components/EstimateV2Header.tsx',
@@ -23,6 +24,7 @@ const canonicalEstimateRuntimePaths = [
   'app/crm/estimates/[id]/v2/_state/useEstimateV2SummaryLoader.ts',
   'app/crm/estimates/[id]/v2/_state/useEstimateV2SummaryPolicyController.ts',
   'app/crm/estimates/[id]/v2/_state/useEstimateV2TrimPaintController.ts',
+  'app/crm/estimates/[id]/v2/summary/page.tsx',
   'app/crm/estimates/[id]/v2/summary/_components/EstimateV2SummaryPageContent.tsx',
   'app/crm/estimates/[id]/send/_shared/customerSendWorkflow.ts',
   'app/crm/estimates/[id]/send/sendEstimateClient.tsx',
@@ -46,12 +48,28 @@ const quoteAdminHookPaths = [
   'app/crm/quotes/_hooks/useQuoteVersionCreation.ts',
 ]
 
-const forbiddenQuoteAdminImports = [
-  "@/app/crm/estimates",
-  "@/lib/server/estimate",
-  "app/crm/estimates/[id]/v2",
-  "app/crm/estimates/[id]/send",
-]
+function readSource(relativePath: string) {
+  return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
+}
+
+function getImportSpecifiers(source: string) {
+  return Array.from(source.matchAll(/from\s+['"]([^'"]+)['"]/g), (match) => match[1])
+}
+
+function isForbiddenQuoteAdminImport(specifier: string) {
+  return (
+    specifier.startsWith('@/app/crm/estimates/[id]/v2') ||
+    specifier.startsWith('@/app/crm/estimates/[id]/send') ||
+    specifier.startsWith('@/lib/server/estimate')
+  )
+}
+
+function isForbiddenCanonicalRuntimeImport(specifier: string) {
+  return (
+    specifier.startsWith('@/app/crm/quotes/[id]/') ||
+    specifier.startsWith('@/lib/quotes/client')
+  )
+}
 
 describe('quote canonical ownership guardrails', () => {
   it('does not keep quote-side V2 implementation files after canonicalization', () => {
@@ -62,19 +80,19 @@ describe('quote canonical ownership guardrails', () => {
 
   it('keeps canonical estimate runtime code free of hardcoded quote route strings', () => {
     for (const relativePath of canonicalEstimateRuntimePaths) {
-      const source = readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
+      const source = readSource(relativePath)
+      const imports = getImportSpecifiers(source)
+
       expect(source.includes('/api/quotes')).toBe(false)
       expect(source.includes('/crm/quotes')).toBe(false)
-      expect(source.includes('@/lib/quotes/client')).toBe(false)
+      expect(imports.some(isForbiddenCanonicalRuntimeImport)).toBe(false)
     }
   })
 
   it('keeps quote admin hooks isolated from estimate runtime and server internals', () => {
     for (const relativePath of quoteAdminHookPaths) {
-      const source = readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
-      for (const forbiddenImport of forbiddenQuoteAdminImports) {
-        expect(source.includes(forbiddenImport)).toBe(false)
-      }
+      const imports = getImportSpecifiers(readSource(relativePath))
+      expect(imports.some(isForbiddenQuoteAdminImport)).toBe(false)
     }
   })
 })

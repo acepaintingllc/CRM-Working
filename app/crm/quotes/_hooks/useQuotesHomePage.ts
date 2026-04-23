@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuoteJobVersions } from './useQuoteJobVersions'
 import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 import { useQuotesHomeData } from './useQuotesHomeData'
@@ -12,6 +12,7 @@ import {
   buildQuoteHomeJobListItemVm,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeDeleteDialogVm,
+  buildQuotesHomeFeedbackVm,
   buildQuotesHomeSelectedJobVm,
   buildQuotesHomeVersionEmptyMessage,
   buildQuotesHomeVersionHeading,
@@ -29,9 +30,10 @@ export function useQuotesHomePage() {
   const searchState = useQuotesHomeSearch(selection.searchQuery)
   const jobVersionsState = useQuoteJobVersions(selection.selectedJobId)
   const createController = useQuoteVersionCreation(selection.selectedJob)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const deleteController = useQuotesHomeDelete({
     refresh: dataState.refresh,
-    setError: dataState.setError,
+    setDeleteError,
   })
 
   const summaryCards = buildSummaryCards(dataState.summary)
@@ -46,7 +48,22 @@ export function useQuotesHomePage() {
   const versionItems = jobVersionsState.items.map((estimate) =>
     buildQuoteHomeVersionItemVm(estimate, deleteController.deletingId)
   )
-  const feedbackError = dataState.error ?? jobVersionsState.error ?? createController.error
+  const homeFailures = Object.values(dataState.failures).filter(
+    (failure): failure is NonNullable<(typeof dataState.failures)[keyof typeof dataState.failures]> =>
+      failure !== null
+  )
+  const feedbackVm = buildQuotesHomeFeedbackVm({
+    homeFailures,
+    jobVersionsError: jobVersionsState.error,
+    createError: createController.error,
+    deleteError,
+  })
+  const resolvedFeedbackVm = feedbackVm ?? {
+    tone: 'warning' as const,
+    title: null,
+    details: [],
+    sources: [],
+  }
   const versionCount = selection.versionCountByJob[selection.selectedJobId] ?? jobVersionsState.data.total_versions
   const deleteTargetsById = useMemo(() => {
     return new Map(jobVersionsState.items.map((item) => [item.estimate_id, item]))
@@ -55,7 +72,7 @@ export function useQuotesHomePage() {
   return {
     feedbackVm: {
       loading: dataState.loading,
-      error: feedbackError,
+      ...resolvedFeedbackVm,
       hasData: true,
       summary: dataState.summary,
     },
@@ -63,6 +80,10 @@ export function useQuotesHomePage() {
       heroSummaryText: buildHeroSummaryText(dataState.summary),
       searchQuery: selection.searchQuery,
       searchFocused: selection.searchFocused,
+      searchLoading: searchState.loading,
+      searchEmptyMessage: searchState.emptyMessage,
+      searchErrorMessage: searchState.error,
+      searchCanRetry: searchState.canRetry,
       searchResults: searchState.results.map(buildSearchResultVm),
     },
     summaryCards,
@@ -112,6 +133,7 @@ export function useQuotesHomePage() {
       setVersionName: createController.setVersionName,
       setVersionKind: createController.setVersionKind,
       createVersion: createController.createVersion,
+      retrySearch: searchState.retry,
       requestDeleteVersion: (value: string | { estimate_id: string }) => {
         const estimateId = typeof value === 'string' ? value : value.estimate_id
         const estimate = deleteTargetsById.get(estimateId) ?? null

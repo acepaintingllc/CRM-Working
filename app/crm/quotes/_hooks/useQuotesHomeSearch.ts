@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type QuoteHomeSearchResponse,
   type QuoteHomeSearchResultReadModel,
@@ -17,6 +17,7 @@ export function useQuotesHomeSearch(query: string) {
   const [data, setData] = useState<QuoteHomeSearchResponse>(emptySearchResponse)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -61,6 +62,11 @@ export function useQuotesHomeSearch(query: string) {
     return () => {
       cancelled = true
     }
+  }, [attempt, debouncedQuery])
+
+  const retry = useCallback(() => {
+    if (!debouncedQuery) return
+    setAttempt((value) => value + 1)
   }, [debouncedQuery])
 
   return useMemo(
@@ -69,7 +75,14 @@ export function useQuotesHomeSearch(query: string) {
       results: data.items as QuoteHomeSearchResultReadModel[],
       loading,
       error,
+      hasQuery: debouncedQuery.length > 0,
+      emptyMessage:
+        debouncedQuery && !loading && !error && data.items.length === 0
+          ? `No quote versions match "${debouncedQuery}".`
+          : null,
+      canRetry: Boolean(debouncedQuery) && !loading,
+      retry,
     }),
-    [data, error, loading]
+    [data, debouncedQuery, error, loading, retry]
   )
 }

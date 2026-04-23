@@ -30,10 +30,31 @@ export type SearchResultVm = {
   meta: string
 }
 
+export type QuoteHomeFeedbackTone = 'warning' | 'error'
+
+export type QuoteHomeFailureSource =
+  | 'summary'
+  | 'jobCounts'
+  | 'jobs'
+  | 'jobVersions'
+  | 'create'
+  | 'delete'
+
+export type QuoteHomeFeedbackVm = {
+  tone: QuoteHomeFeedbackTone
+  title: string
+  details: string[]
+  sources: QuoteHomeFailureSource[]
+}
+
 export type QuotesHomeHeaderVm = {
   heroSummaryText: string
   searchFocused: boolean
   searchQuery: string
+  searchLoading: boolean
+  searchEmptyMessage: string | null
+  searchErrorMessage: string | null
+  searchCanRetry: boolean
   searchResults: SearchResultVm[]
 }
 

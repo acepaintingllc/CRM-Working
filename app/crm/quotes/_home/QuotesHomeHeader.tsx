@@ -9,9 +9,15 @@ type Props = {
   vm: QuotesHomeHeaderVm
   onSearchFocusedChange: (focused: boolean) => void
   onSearchQueryChange: (value: string) => void
+  onSearchRetry: () => void
 }
 
-export function QuotesHomeHeader({ vm, onSearchFocusedChange, onSearchQueryChange }: Props) {
+export function QuotesHomeHeader({
+  vm,
+  onSearchFocusedChange,
+  onSearchQueryChange,
+  onSearchRetry,
+}: Props) {
   return (
     <>
       <div style={S.topRow}>
@@ -37,14 +43,44 @@ export function QuotesHomeHeader({ vm, onSearchFocusedChange, onSearchQueryChang
               style={S.search}
               aria-label="Search quote versions"
             />
-            {vm.searchFocused && vm.searchResults.length > 0 ? (
+            {vm.searchFocused && vm.searchQuery.trim() ? (
               <div style={S.searchResults}>
-                {vm.searchResults.map((estimate) => (
-                  <Link key={estimate.id} href={estimate.href} style={S.searchResultLink}>
-                    <div style={S.estimateTitle}>{estimate.title}</div>
-                    <div style={S.estimateMeta}>{estimate.meta}</div>
-                  </Link>
-                ))}
+                {vm.searchLoading ? (
+                  <div style={S.searchStatusPanel}>
+                    <div style={S.searchStatusTitle}>Searching quote versions</div>
+                    <div style={S.searchStatusText}>
+                      Looking up versions that match &quot;{vm.searchQuery.trim()}&quot;.
+                    </div>
+                  </div>
+                ) : null}
+
+                {!vm.searchLoading && vm.searchErrorMessage ? (
+                  <div style={S.searchStatusPanel}>
+                    <div style={S.searchStatusTitle}>Search results failed to load</div>
+                    <div style={S.searchStatusText}>{vm.searchErrorMessage}</div>
+                    {vm.searchCanRetry ? (
+                      <button type="button" style={S.searchRetryButton} onClick={onSearchRetry}>
+                        Retry search
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {!vm.searchLoading && !vm.searchErrorMessage && vm.searchResults.length > 0
+                  ? vm.searchResults.map((estimate) => (
+                      <Link key={estimate.id} href={estimate.href} style={S.searchResultLink}>
+                        <div style={S.estimateTitle}>{estimate.title}</div>
+                        <div style={S.estimateMeta}>{estimate.meta}</div>
+                      </Link>
+                    ))
+                  : null}
+
+                {!vm.searchLoading && !vm.searchErrorMessage && vm.searchEmptyMessage ? (
+                  <div style={S.searchStatusPanel}>
+                    <div style={S.searchStatusTitle}>No matching quote versions</div>
+                    <div style={S.searchStatusText}>{vm.searchEmptyMessage}</div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <details style={S.settingsMenu}>

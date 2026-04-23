@@ -57,6 +57,7 @@ describe('useQuotesHomeSearch', () => {
     expect(result.current.query).toBe('')
     expect(result.current.results).toEqual([])
     expect(result.current.error).toBeNull()
+    expect(result.current.emptyMessage).toBeNull()
     expect(result.current.loading).toBe(false)
   })
 
@@ -113,5 +114,52 @@ describe('useQuotesHomeSearch', () => {
     expect(result.current.query).toBe('broken')
     expect(result.current.results).toEqual([])
     expect(result.current.error).toBe('search failed')
+    expect(result.current.emptyMessage).toBeNull()
+    expect(result.current.canRetry).toBe(true)
+  })
+
+  it('retries the current query after a search failure', async () => {
+    loadQuoteHomeSearch
+      .mockRejectedValueOnce(new Error('search failed'))
+      .mockResolvedValueOnce({
+        query: 'broken',
+        items: [{ estimate_id: 'estimate-9' }],
+      })
+
+    const { result } = renderHook(() => useQuotesHomeSearch('broken'))
+
+    await sleep(170)
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+
+    await act(async () => {
+      result.current.retry()
+    })
+
+    await waitFor(() => {
+      expect(result.current.results).toEqual([{ estimate_id: 'estimate-9' }])
+    })
+
+    expect(loadQuoteHomeSearch).toHaveBeenCalledTimes(2)
+    expect(loadQuoteHomeSearch).toHaveBeenNthCalledWith(2, 'broken')
+    expect(result.current.error).toBeNull()
+  })
+
+  it('distinguishes empty search results from a failed search', async () => {
+    loadQuoteHomeSearch.mockResolvedValue({
+      query: 'missing',
+      items: [],
+    })
+
+    const { result } = renderHook(() => useQuotesHomeSearch('missing'))
+
+    await sleep(170)
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+
+    expect(result.current.error).toBeNull()
+    expect(result.current.emptyMessage).toBe('No quote versions match "missing".')
   })
 })

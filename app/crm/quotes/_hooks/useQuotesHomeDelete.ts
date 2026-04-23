@@ -6,10 +6,10 @@ import { deleteQuoteVersion } from '@/lib/quotes/client'
 
 type Options = {
   refresh: () => Promise<boolean>
-  setError: (value: string | null) => void
+  setDeleteError: (value: string | null) => void
 }
 
-export function useQuotesHomeDelete({ refresh, setError }: Options) {
+export function useQuotesHomeDelete({ refresh, setDeleteError }: Options) {
   const [confirmingDelete, setConfirmingDelete] = useState<QuoteHomeJobVersionItemReadModel | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -27,7 +27,7 @@ export function useQuotesHomeDelete({ refresh, setError }: Options) {
 
     const deletedId = confirmingDelete.estimate_id
     setDeletingId(deletedId)
-    setError(null)
+    setDeleteError(null)
 
     try {
       await deleteQuoteVersion(deletedId)
@@ -35,7 +35,7 @@ export function useQuotesHomeDelete({ refresh, setError }: Options) {
       await refresh()
       return true
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete quote.')
+      setDeleteError(deleteError instanceof Error ? deleteError.message : 'Failed to delete quote.')
       return false
     } finally {
       setDeletingId(null)

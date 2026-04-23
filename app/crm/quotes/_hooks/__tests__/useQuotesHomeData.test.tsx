@@ -173,7 +173,10 @@ describe('useQuotesHomeData', () => {
     expect(result.current.summary.total_versions).toBe(2)
     expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-2', version_count: 2 }])
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
-    expect(result.current.error).toBeNull()
+    expect(result.current.failures.summary).toBeNull()
+    expect(result.current.failures.jobCounts).toBeNull()
+    expect(result.current.failures.jobs).toBeNull()
+    expect(result.current.feedback).toBeNull()
   })
 
   it('keeps prior summary when only summary reload fails', async () => {
@@ -193,7 +196,13 @@ describe('useQuotesHomeData', () => {
       await result.current.refresh()
     })
 
-    expect(result.current.error).toBe('summary failed')
+    expect(result.current.failures.summary).toEqual({
+      source: 'summary',
+      message: 'summary failed',
+    })
+    expect(result.current.failures.jobCounts).toBeNull()
+    expect(result.current.failures.jobs).toBeNull()
+    expect(result.current.feedback?.details).toEqual(['Quote summary failed to load. summary failed'])
     expect(result.current.summary.total_versions).toBe(1)
     expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-2', version_count: 2 }])
   })
@@ -215,7 +224,13 @@ describe('useQuotesHomeData', () => {
       await result.current.refresh()
     })
 
-    expect(result.current.error).toBe('counts failed')
+    expect(result.current.failures.summary).toBeNull()
+    expect(result.current.failures.jobCounts).toEqual({
+      source: 'jobCounts',
+      message: 'counts failed',
+    })
+    expect(result.current.failures.jobs).toBeNull()
+    expect(result.current.feedback?.details).toEqual(['Job counts failed to load. counts failed'])
     expect(result.current.summary.total_versions).toBe(2)
     expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-1', version_count: 1 }])
   })
@@ -232,6 +247,29 @@ describe('useQuotesHomeData', () => {
     expect(result.current.summary.total_versions).toBe(1)
     expect(result.current.jobCounts.items).toEqual([])
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
-    expect(result.current.error).toBe('counts failed')
+    expect(result.current.failures.jobCounts).toEqual({
+      source: 'jobCounts',
+      message: 'counts failed',
+    })
+    expect(result.current.feedback?.title).toBe('Quote home job counts failed to load')
+  })
+
+  it('keeps partial data when eligible jobs fail on first load', async () => {
+    loadQuoteHomeSummary.mockResolvedValue(firstPayload.summary)
+    loadQuoteHomeJobCounts.mockResolvedValue(firstPayload.jobCounts)
+    fetchJobList.mockRejectedValue(new Error('jobs failed'))
+
+    const { result } = renderHook(() => useQuotesHomeData())
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.summary.total_versions).toBe(1)
+    expect(result.current.jobCounts.items).toEqual([{ job_id: 'job-1', version_count: 1 }])
+    expect(result.current.jobs).toEqual([])
+    expect(result.current.failures.jobs).toEqual({
+      source: 'jobs',
+      message: 'jobs failed',
+    })
+    expect(result.current.feedback?.details).toEqual(['Eligible jobs failed to load. jobs failed'])
   })
 })
