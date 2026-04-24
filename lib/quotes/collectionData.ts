@@ -22,6 +22,14 @@ export type EstimateCollectionDecoratedRow = {
   is_sent_estimate: boolean
 }
 
+export const QUOTE_HOME_FALLBACK_VERSION_NAME = 'Quote Version'
+export const QUOTE_HOME_FALLBACK_VERSION_STATE = 'draft'
+export const QUOTE_HOME_FALLBACK_VERSION_KIND = 'standard'
+export const QUOTE_HOME_FALLBACK_JOB_TITLE = 'Untitled job'
+export const QUOTE_HOME_FALLBACK_CUSTOMER_NAME = 'Unknown customer'
+
+type EstimateCollectionDecoratedRowInput = Partial<EstimateCollectionDecoratedRow>
+
 export type QuoteListEstimate = {
   id: string
   job_id: string
@@ -145,99 +153,168 @@ export type QuoteHomeSearchResponse = {
   items: QuoteHomeSearchResultReadModel[]
 }
 
-export function toQuoteListEstimate(row: EstimateCollectionDecoratedRow): QuoteListEstimate {
+function asRequiredText(value: unknown, fallback: string): string {
+  const text = typeof value === 'string' ? value.trim() : String(value ?? '').trim()
+  return text || fallback
+}
+
+function asNullableText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  return value
+}
+
+function asNullableNumber(value: unknown): number | null {
+  if (value == null) return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount : null
+}
+
+function asNumber(value: unknown, fallback: number): number {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount : fallback
+}
+
+function asBoolean(value: unknown): boolean {
+  return value === true
+}
+
+function asPipelineTotal(value: unknown): number {
+  const amount = asNullableNumber(value)
+  if (amount == null || amount < 0) return 0
+  return amount
+}
+
+function getEstimateId(row: EstimateCollectionDecoratedRowInput): string {
+  return asRequiredText(row.estimate_id, asRequiredText(row.id, ''))
+}
+
+function getVersionName(row: EstimateCollectionDecoratedRowInput): string {
+  return asRequiredText(row.version_name, QUOTE_HOME_FALLBACK_VERSION_NAME)
+}
+
+function getVersionState(row: EstimateCollectionDecoratedRowInput): string {
+  return asRequiredText(row.version_state, QUOTE_HOME_FALLBACK_VERSION_STATE)
+}
+
+function getVersionKind(row: EstimateCollectionDecoratedRowInput): string {
+  return asRequiredText(row.version_kind, QUOTE_HOME_FALLBACK_VERSION_KIND)
+}
+
+function getJobTitle(row: EstimateCollectionDecoratedRowInput): string {
+  return asRequiredText(row.job_title, QUOTE_HOME_FALLBACK_JOB_TITLE)
+}
+
+function getCustomerName(row: EstimateCollectionDecoratedRowInput): string {
+  return asRequiredText(row.customer_name, QUOTE_HOME_FALLBACK_CUSTOMER_NAME)
+}
+
+export function toQuoteListEstimate(row: EstimateCollectionDecoratedRowInput): QuoteListEstimate {
   return {
-    id: row.id,
-    job_id: row.job_id,
-    customer_id: row.customer_id,
-    status: row.status,
-    version_name: row.raw_version_name,
-    version_state: row.raw_version_state,
-    version_kind: row.raw_version_kind,
-    version_sort_order: row.raw_version_sort_order,
-    updated_at: row.updated_at,
-    created_at: row.created_at,
-    job_title: row.job_title,
-    job_status: row.job_status,
-    job_estimate_sent_at: row.job_estimate_sent_at,
-    is_sent_estimate: row.is_sent_estimate,
-    customer_name: row.customer_name,
+    id: asRequiredText(row.id, getEstimateId(row)),
+    job_id: asRequiredText(row.job_id, ''),
+    customer_id: asRequiredText(row.customer_id, ''),
+    status: asNullableText(row.status),
+    version_name: asNullableText(row.raw_version_name),
+    version_state: asNullableText(row.raw_version_state),
+    version_kind: asNullableText(row.raw_version_kind),
+    version_sort_order: asNullableNumber(row.raw_version_sort_order),
+    updated_at: asNullableText(row.updated_at),
+    created_at: asNullableText(row.created_at),
+    job_title: getJobTitle(row),
+    job_status: asNullableText(row.job_status),
+    job_estimate_sent_at: asNullableText(row.job_estimate_sent_at),
+    is_sent_estimate: asBoolean(row.is_sent_estimate),
+    customer_name: getCustomerName(row),
   }
 }
 
 export function toQuoteHomeRecentActivityItem(
-  row: EstimateCollectionDecoratedRow
+  row: EstimateCollectionDecoratedRowInput
 ): QuoteHomeRecentActivityItemReadModel {
   return {
-    estimate_id: row.estimate_id,
-    job_id: row.job_id,
-    version_name: row.version_name,
-    version_state: row.version_state,
-    version_kind: row.version_kind,
-    job_title: row.job_title,
-    customer_name: row.customer_name,
-    final_total: row.final_total,
-    updated_at: row.updated_at,
-    is_sent_estimate: row.is_sent_estimate,
+    estimate_id: getEstimateId(row),
+    job_id: asRequiredText(row.job_id, ''),
+    version_name: getVersionName(row),
+    version_state: getVersionState(row),
+    version_kind: getVersionKind(row),
+    job_title: getJobTitle(row),
+    customer_name: getCustomerName(row),
+    final_total: asNullableNumber(row.final_total),
+    updated_at: asNullableText(row.updated_at),
+    is_sent_estimate: asBoolean(row.is_sent_estimate),
   }
 }
 
 export function toQuoteHomeJobVersionItem(
-  row: EstimateCollectionDecoratedRow
+  row: EstimateCollectionDecoratedRowInput
 ): QuoteHomeJobVersionItemReadModel {
   return {
-    estimate_id: row.estimate_id,
-    job_id: row.job_id,
-    customer_id: row.customer_id,
-    version_name: row.version_name,
-    version_state: row.version_state,
-    version_kind: row.version_kind,
-    version_sort_order: row.version_sort_order,
-    job_title: row.job_title,
-    customer_name: row.customer_name,
-    final_total: row.final_total,
-    updated_at: row.updated_at,
-    created_at: row.created_at,
-    is_sent_estimate: row.is_sent_estimate,
+    estimate_id: getEstimateId(row),
+    job_id: asRequiredText(row.job_id, ''),
+    customer_id: asRequiredText(row.customer_id, ''),
+    version_name: getVersionName(row),
+    version_state: getVersionState(row),
+    version_kind: getVersionKind(row),
+    version_sort_order: asNumber(row.version_sort_order, 0),
+    job_title: getJobTitle(row),
+    customer_name: getCustomerName(row),
+    final_total: asNullableNumber(row.final_total),
+    updated_at: asNullableText(row.updated_at),
+    created_at: asNullableText(row.created_at),
+    is_sent_estimate: asBoolean(row.is_sent_estimate),
   }
 }
 
 export function toQuoteHomeSearchResultReadModel(
-  row: EstimateCollectionDecoratedRow
+  row: EstimateCollectionDecoratedRowInput
 ): QuoteHomeSearchResultReadModel {
   return {
-    estimate_id: row.estimate_id,
-    job_id: row.job_id,
-    customer_id: row.customer_id,
-    version_name: row.version_name,
-    version_state: row.version_state,
-    version_kind: row.version_kind,
-    job_title: row.job_title,
-    customer_name: row.customer_name,
-    updated_at: row.updated_at,
-    final_total: row.final_total,
-    is_sent_estimate: row.is_sent_estimate,
+    estimate_id: getEstimateId(row),
+    job_id: asRequiredText(row.job_id, ''),
+    customer_id: asRequiredText(row.customer_id, ''),
+    version_name: getVersionName(row),
+    version_state: getVersionState(row),
+    version_kind: getVersionKind(row),
+    job_title: getJobTitle(row),
+    customer_name: getCustomerName(row),
+    updated_at: asNullableText(row.updated_at),
+    final_total: asNullableNumber(row.final_total),
+    is_sent_estimate: asBoolean(row.is_sent_estimate),
   }
 }
 
 export function buildQuoteHomeSummaryReadModel(
   estimates: Array<
-    Pick<
-      QuoteHomeJobVersionItemReadModel,
-      'version_state' | 'final_total' | 'is_sent_estimate'
-    >
+    Partial<Pick<QuoteHomeJobVersionItemReadModel, 'version_state' | 'is_sent_estimate'>> & {
+      final_total?: unknown
+    }
   >
 ): QuoteHomeSummaryReadModel {
-  return {
-    total_versions: estimates.length,
-    draft_count: estimates.filter((row) => row.version_state === 'draft').length,
-    sent_or_awaiting_count: estimates.filter((row) => row.is_sent_estimate).length,
-    live_count: estimates.filter((row) => row.version_state === 'live').length,
-    pipeline_total: estimates.reduce((sum, row) => {
-      if (row.version_state === 'archived') return sum
-      return sum + (row.final_total ?? 0)
-    }, 0),
-  }
+  return estimates.reduce<QuoteHomeSummaryReadModel>(
+    (summary, row) => {
+      const versionState = asRequiredText(row.version_state, QUOTE_HOME_FALLBACK_VERSION_STATE)
+
+      return {
+        total_versions: summary.total_versions + 1,
+        draft_count: summary.draft_count + (versionState === 'draft' ? 1 : 0),
+        sent_or_awaiting_count:
+          summary.sent_or_awaiting_count + (row.is_sent_estimate === true ? 1 : 0),
+        live_count: summary.live_count + (versionState === 'live' ? 1 : 0),
+        pipeline_total:
+          versionState === 'archived'
+            ? summary.pipeline_total
+            : summary.pipeline_total + asPipelineTotal(row.final_total),
+      }
+    },
+    {
+      total_versions: 0,
+      draft_count: 0,
+      sent_or_awaiting_count: 0,
+      live_count: 0,
+      pipeline_total: 0,
+    }
+  )
 }
 
 export function buildQuoteHomeBootstrapReadModel(params: {
@@ -245,16 +322,19 @@ export function buildQuoteHomeBootstrapReadModel(params: {
   jobs: QuoteHomeJobsPageReadModel
   selectedJobVersions: QuoteJobVersionsPageReadModel | null
 }): QuoteHomeBootstrapReadModel {
+  const firstJobId = asRequiredText(params.jobs.items[0]?.id, '')
+
   return {
     summary: params.summary,
     jobs: params.jobs,
-    selected_job_id: params.selectedJobVersions?.job_id ?? params.jobs.items[0]?.id ?? null,
+    selected_job_id:
+      asRequiredText(params.selectedJobVersions?.job_id, firstJobId) || null,
     selected_job_versions: params.selectedJobVersions,
   }
 }
 
 export function buildQuoteHomeRecentActivityReadModel(
-  rows: EstimateCollectionDecoratedRow[]
+  rows: EstimateCollectionDecoratedRowInput[]
 ): QuoteHomeRecentActivityReadModel {
   return {
     items: rows.map(toQuoteHomeRecentActivityItem).slice(0, 12),
@@ -262,7 +342,7 @@ export function buildQuoteHomeRecentActivityReadModel(
 }
 
 export function buildQuoteHomeSearchReadModel(
-  rows: EstimateCollectionDecoratedRow[],
+  rows: EstimateCollectionDecoratedRowInput[],
   query: string
 ): QuoteHomeSearchResponse {
   return {
@@ -285,14 +365,14 @@ export function buildQuoteHomeJobsPageReadModel(params: {
   }
 }
 
-export function buildQuoteListPayload(rows: EstimateCollectionDecoratedRow[]) {
+export function buildQuoteListPayload(rows: EstimateCollectionDecoratedRowInput[]) {
   return {
     estimates: rows.map(toQuoteListEstimate),
   }
 }
 
 export function buildQuoteJobVersionsReadModel(
-  rows: EstimateCollectionDecoratedRow[],
+  rows: EstimateCollectionDecoratedRowInput[],
   params: {
     jobId: string
     totalVersions: number

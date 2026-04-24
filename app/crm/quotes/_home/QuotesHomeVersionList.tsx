@@ -3,6 +3,7 @@
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import { S } from './quoteHomeStyles'
 import type { QuotesHomeVersionListVm } from './quoteHomeTypes'
 
@@ -19,6 +20,30 @@ export function QuotesHomeVersionList({
   onRetry,
   onRequestDelete,
 }: Props) {
+  const [retrying, setRetrying] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadMoreBusy = vm.loadingMore || loadingMore
+
+  const handleRetry = async () => {
+    if (retrying) return
+    setRetrying(true)
+    try {
+      await onRetry()
+    } finally {
+      setRetrying(false)
+    }
+  }
+
+  const handleLoadMore = async () => {
+    if (loadMoreBusy) return
+    setLoadingMore(true)
+    try {
+      await onLoadMore()
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   return (
     <CrmSectionCard
       className="self-start"
@@ -34,8 +59,13 @@ export function QuotesHomeVersionList({
             <div style={S.bodyText}>{vm.errorMessage}</div>
             {vm.canRetry ? (
               <div style={S.rowWrap}>
-                <CrmButton onClick={() => void onRetry()} tone="primary">
-                  Retry versions
+                <CrmButton
+                  onClick={() => void handleRetry()}
+                  tone="primary"
+                  disabled={retrying}
+                  aria-busy={retrying}
+                >
+                  {retrying ? 'Retrying versions...' : 'Retry versions'}
                 </CrmButton>
               </div>
             ) : null}
@@ -72,6 +102,8 @@ export function QuotesHomeVersionList({
                     tone="danger"
                     onClick={() => onRequestDelete(estimate.id)}
                     disabled={estimate.deleting}
+                    aria-disabled={estimate.deleting}
+                    aria-busy={estimate.deleting || undefined}
                     aria-label={`Delete quote version ${estimate.title}`}
                   >
                     <Trash2 size={14} aria-hidden="true" />
@@ -86,12 +118,12 @@ export function QuotesHomeVersionList({
         {vm.hasMore ? (
           <CrmButton
             type="button"
-            onClick={() => void onLoadMore()}
-            disabled={vm.loadingMore}
-            aria-busy={vm.loadingMore}
+            onClick={() => void handleLoadMore()}
+            disabled={loadMoreBusy}
+            aria-busy={loadMoreBusy}
             aria-live="polite"
           >
-            {vm.loadingMore ? 'Loading more versions...' : 'Load more versions'}
+            {loadMoreBusy ? 'Loading more versions...' : 'Load more versions'}
           </CrmButton>
         ) : null}
       </div>

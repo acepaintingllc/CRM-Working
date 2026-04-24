@@ -20,10 +20,14 @@ type RefreshAttemptResult = {
   error: string | null
 }
 
+type BootstrapRefreshAttemptResult = RefreshAttemptResult & {
+  data: QuoteHomeBootstrapReadModel | null
+}
+
 type QuoteHomePageControllerHomeResource = {
   attemptRefresh: (
     options?: RefreshAttemptOptions
-  ) => Promise<{ ok: boolean; error: string | null; data: QuoteHomeBootstrapReadModel | null }>
+  ) => Promise<BootstrapRefreshAttemptResult>
   retryJobs: () => Promise<boolean>
 }
 
@@ -79,6 +83,26 @@ function bootstrapVersionsCoverActiveJob(
       bootstrap?.selected_job_id === activeJobId &&
       bootstrap.selected_job_versions?.job_id === activeJobId
   )
+}
+
+async function refreshAfterDelete(
+  refreshBootstrap: QuoteHomePageControllerHomeResource['attemptRefresh'],
+  refreshVersions: QuoteHomePageControllerVersionsResource['attemptRefresh']
+): Promise<{
+  bootstrapRefresh: BootstrapRefreshAttemptResult
+  versionsRefresh: RefreshAttemptResult
+}> {
+  const refreshOptions = {
+    preserveDataOnError: true,
+    reportError: false,
+  }
+  const bootstrapRefresh = await refreshBootstrap(refreshOptions)
+  const versionsRefresh = await refreshVersions(refreshOptions)
+
+  return {
+    bootstrapRefresh,
+    versionsRefresh,
+  }
 }
 
 export function useQuoteHomePageController({
@@ -143,16 +167,10 @@ export function useQuoteHomePageController({
     }
 
     setActionWarning(null)
-    const bootstrapRefresh = await refreshBootstrap({
-      preserveDataOnError: true,
-      reportError: false,
-    })
-    const versionsRefresh = bootstrapVersionsCoverActiveJob(bootstrapRefresh.data, activeVersionsJobId)
-      ? { ok: true, error: null }
-      : await refreshVersions({
-          preserveDataOnError: true,
-          reportError: false,
-        })
+    const { bootstrapRefresh, versionsRefresh } = await refreshAfterDelete(
+      refreshBootstrap,
+      refreshVersions
+    )
 
     if (bootstrapRefresh.ok && versionsRefresh.ok) {
       return true
@@ -169,7 +187,6 @@ export function useQuoteHomePageController({
     setActionWarning(buildDeleteRefreshWarning(refreshFailures))
     return true
   }, [
-    activeVersionsJobId,
     confirmDeleteVersion,
     refreshBootstrap,
     refreshVersions,

@@ -124,6 +124,52 @@ describe('useQuotesHomePage', () => {
     expect(loadQuoteJobVersions).not.toHaveBeenCalled()
   })
 
+  it('keeps the public facade wired to state, resource, workflow, search, delete, and controller actions', () => {
+    loadQuoteHomeJobs.mockResolvedValue({
+      query: 'garage',
+      limit: 25,
+      next_cursor: null,
+      items: [quoteHomeJobs[1]],
+    })
+
+    const { result } = renderHook(() => useQuotesHomePage(quoteHomeBootstrap))
+
+    expect(Object.keys(result.current.actions).sort()).toEqual([
+      'cancelDelete',
+      'confirmDelete',
+      'create',
+      'loadMore',
+      'loadMoreVersions',
+      'refresh',
+      'requestDelete',
+      'retryJobs',
+      'retrySearch',
+      'retryVersions',
+      'setJobQuery',
+      'setSearchFocused',
+      'setSearchQuery',
+      'setSelectedJobId',
+      'setVersionKind',
+      'setVersionName',
+    ])
+
+    act(() => {
+      result.current.actions.setSearchQuery('revision')
+      result.current.actions.setSearchFocused(true)
+      result.current.actions.setJobQuery('garage')
+      result.current.actions.setVersionName('Revision A')
+      result.current.actions.setVersionKind('revision')
+      result.current.actions.requestDelete('estimate-1')
+    })
+
+    expect(result.current.header.searchQuery).toBe('revision')
+    expect(result.current.header.searchFocused).toBe(true)
+    expect(result.current.jobList.searchQuery).toBe('garage')
+    expect(result.current.create.versionName).toBe('Revision A')
+    expect(result.current.create.versionKind).toBe('revision')
+    expect(result.current.dialogs.delete.estimateId).toBe('estimate-1')
+  })
+
   it('fetches bootstrap data on first load when SSR data is unavailable', async () => {
     loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
 
@@ -420,7 +466,7 @@ describe('useQuotesHomePage', () => {
     })
   })
 
-  it('reuses bootstrap-selected versions after delete without a duplicate versions fetch', async () => {
+  it('refreshes active job versions after delete even when bootstrap includes selected versions', async () => {
     loadQuoteHomeBootstrap
       .mockResolvedValueOnce(quoteHomeBootstrap)
       .mockResolvedValueOnce(refreshedQuoteHomeBootstrap)
@@ -446,7 +492,7 @@ describe('useQuotesHomePage', () => {
 
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
     expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(2)
-    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
     expect(result.current.dialogs.delete.estimateId).toBeNull()
     expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
       'estimate-2',

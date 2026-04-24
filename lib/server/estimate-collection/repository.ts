@@ -25,6 +25,9 @@ const uuid =
 
 const VERSION_STATES = new Set(['draft', 'live', 'archived'])
 const quoteHomeCursorSeparator = '::'
+const quoteHomeNullCursorTimestamp = 'null'
+const quoteHomeDefaultPageLimit = 25
+const quoteHomeMaxPageLimit = 100
 
 const estimateSelect =
   'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
@@ -55,8 +58,8 @@ function escapeLikePattern(value: string) {
 }
 
 function encodeQuoteHomeCursor(value: { timestamp: string | null | undefined; id: string | null | undefined }) {
-  if (!value.timestamp || !value.id) return null
-  return `${value.timestamp}${quoteHomeCursorSeparator}${value.id}`
+  if (!value.id) return null
+  return `${value.timestamp ?? quoteHomeNullCursorTimestamp}${quoteHomeCursorSeparator}${value.id}`
 }
 
 export function decodeQuoteHomeCursor(cursor: string | null | undefined) {
@@ -65,15 +68,24 @@ export function decodeQuoteHomeCursor(cursor: string | null | undefined) {
     return { ok: true as const, value: null }
   }
 
-  const separatorIndex = rawCursor.indexOf(quoteHomeCursorSeparator)
-  if (separatorIndex <= 0) {
+  const parts = rawCursor.split(quoteHomeCursorSeparator)
+  if (parts.length !== 2) {
     return { ok: false as const, message: 'Invalid cursor.' }
   }
 
-  const timestamp = rawCursor.slice(0, separatorIndex)
-  const id = rawCursor.slice(separatorIndex + quoteHomeCursorSeparator.length)
+  const [timestamp, id] = parts
   if (!timestamp || !uuid.test(id)) {
     return { ok: false as const, message: 'Invalid cursor.' }
+  }
+
+  if (timestamp === quoteHomeNullCursorTimestamp) {
+    return {
+      ok: true as const,
+      value: {
+        timestamp: null,
+        id,
+      },
+    }
   }
 
   const parsedTimestamp = new Date(timestamp)
@@ -88,6 +100,29 @@ export function decodeQuoteHomeCursor(cursor: string | null | undefined) {
       id,
     },
   }
+}
+
+function compareQuoteHomeCursorKeys(
+  left: { timestamp: string | null | undefined; id: string },
+  right: { timestamp: string | null | undefined; id: string }
+) {
+  const leftHasTimestamp = Boolean(left.timestamp)
+  const rightHasTimestamp = Boolean(right.timestamp)
+  if (leftHasTimestamp && rightHasTimestamp) {
+    const timestampDiff = asTimestamp(right.timestamp) - asTimestamp(left.timestamp)
+    if (timestampDiff !== 0) return timestampDiff
+  } else if (leftHasTimestamp !== rightHasTimestamp) {
+    return leftHasTimestamp ? -1 : 1
+  }
+
+  return right.id.localeCompare(left.id)
+}
+
+function isAfterQuoteHomeCursor(
+  row: { timestamp: string | null | undefined; id: string },
+  cursor: { timestamp: string | null; id: string }
+) {
+  return compareQuoteHomeCursorKeys(row, cursor) > 0
 }
 
 export function normalizeEstimateCollectionVersionState(value: string | null | undefined) {
@@ -169,11 +204,14 @@ export async function loadEstimateCollectionJobsPage(
     items: QuoteHomeJobListItemReadModel[]
   }>
 > {
-  const limit = asPositiveInteger(options?.limit, 25, 100)
+  const limit = asPositiveInteger(options?.limit, quoteHomeDefaultPageLimit, quoteHomeMaxPageLimit)
   const query = asText(options?.query)
   const cursorResult = decodeQuoteHomeCursor(options?.cursor)
   if (!cursorResult.ok) {
     return errorResult('invalid_input', cursorResult.message)
+  }
+  if (cursorResult.value?.timestamp === null) {
+    return errorResult('invalid_input', 'Invalid cursor.')
   }
 
   const { data, error } = await supabaseAdmin.rpc('quote_home_jobs_page', {
@@ -194,9 +232,15 @@ export async function loadEstimateCollectionJobsPage(
     return errorResult('server_error', error.message)
   }
 
-  const pageRows = ((data ?? []) as QuoteHomeJobsPageRow[]).slice(0, limit)
+  const sortedRows = ((data ?? []) as QuoteHomeJobsPageRow[]).sort((left, right) =>
+    compareQuoteHomeCursorKeys(
+      { timestamp: left.created_at, id: left.id },
+      { timestamp: right.created_at, id: right.id }
+    )
+  )
+  const pageRows = sortedRows.slice(0, limit)
   const nextCursor =
-    (data ?? []).length > limit
+    sortedRows.length > limit && pageRows[pageRows.length - 1]?.created_at
       ? encodeQuoteHomeCursor({
           timestamp: pageRows[pageRows.length - 1]?.created_at,
           id: pageRows[pageRows.length - 1]?.id,
@@ -248,7 +292,7 @@ export async function loadEstimateCollectionJobVersionsPage(
     items: EstimateCollectionVersionRow[]
   }>
 > {
-  const limit = asPositiveInteger(options?.limit, 25, 100)
+  const limit = asPositiveInteger(options?.limit, quoteHomeDefaultPageLimit, quoteHomeMaxPageLimit)
   const cursorResult = decodeQuoteHomeCursor(options?.cursor)
   if (!cursorResult.ok) {
     return errorResult('invalid_input', cursorResult.message)
@@ -272,9 +316,16 @@ export async function loadEstimateCollectionJobVersionsPage(
 
       const cursor = cursorResult.value
       if (cursor) {
-        query = query.or(
-          `updated_at.lt.${cursor.timestamp},and(updated_at.eq.${cursor.timestamp},id.lt.${cursor.id})`
-        )
+        query =
+          cursor.timestamp === null
+            ? query.or(`and(updated_at.is.null,id.lt.${cursor.id})`)
+            : query.or(
+                [
+                  `updated_at.lt.${cursor.timestamp}`,
+                  'updated_at.is.null',
+                  `and(updated_at.eq.${cursor.timestamp},id.lt.${cursor.id})`,
+                ].join(',')
+              )
       }
 
       return query
@@ -288,19 +339,20 @@ export async function loadEstimateCollectionJobVersionsPage(
     return errorResult('server_error', rowsRes.error.message)
   }
 
-  const rawRows = ((rowsRes.data ?? []) as EstimateCollectionVersionRow[]).sort((left, right) => {
-    const updatedDiff = asTimestamp(right.updated_at) - asTimestamp(left.updated_at)
-    if (updatedDiff !== 0) return updatedDiff
-    return right.id.localeCompare(left.id)
-  })
+  const rawRows = ((rowsRes.data ?? []) as EstimateCollectionVersionRow[]).sort((left, right) =>
+    compareQuoteHomeCursorKeys(
+      { timestamp: left.updated_at, id: left.id },
+      { timestamp: right.updated_at, id: right.id }
+    )
+  )
 
   const filteredRows = cursorResult.value
-    ? rawRows.filter((row) => {
-        const updatedAt = row.updated_at ?? ''
-        if (updatedAt < cursorResult.value!.timestamp) return true
-        if (updatedAt > cursorResult.value!.timestamp) return false
-        return row.id < cursorResult.value!.id
-      })
+    ? rawRows.filter((row) =>
+        isAfterQuoteHomeCursor(
+          { timestamp: row.updated_at, id: row.id },
+          cursorResult.value!
+        )
+      )
     : rawRows
 
   const pageRows = filteredRows.slice(0, limit)

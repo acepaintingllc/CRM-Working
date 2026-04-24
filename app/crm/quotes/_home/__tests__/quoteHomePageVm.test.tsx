@@ -559,7 +559,12 @@ describe('buildQuoteHomePageVm', () => {
 
     expect(vm.versionList.errorMessage).toBe('versions failed')
     expect(vm.versionList.canRetry).toBe(true)
-    expect(vm.feedback).toBeNull()
+    expect(vm.feedback).toEqual({
+      tone: 'warning',
+      title: 'Quote home loaded with errors',
+      details: ['Job versions failed to load. versions failed'],
+      sources: ['jobVersions'],
+    })
   })
 
   it('keeps jobs-page failures inside the jobs pane when prior job data exists', () => {
@@ -576,6 +581,59 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.jobList.errorMessage).toBe('jobs failed')
     expect(vm.jobList.canRetry).toBe(true)
     expect(vm.jobList.items).toHaveLength(2)
+  })
+
+  it('derives the filtered job-list empty state when jobs exist but none are visible', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        jobQuery: 'missing',
+        visibleJobs: [],
+      }),
+      buildResources()
+    )
+
+    expect(vm.jobList.emptyState).toBe('no_matches')
+    expect(vm.jobList.emptyStateBody).toBeNull()
+    expect(vm.jobList.errorMessage).toBeNull()
+    expect(vm.jobList.canRetry).toBe(false)
+  })
+
+  it('surfaces create failures as deterministic action feedback', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        workflow: {
+          create: {
+            error: 'Create failed.',
+          },
+        },
+      })
+    )
+
+    expect(vm.feedback).toEqual({
+      tone: 'error',
+      title: 'Quote action failed',
+      details: ['Create failed.'],
+      sources: ['create'],
+    })
+  })
+
+  it('surfaces delete failures as deterministic action feedback', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        delete: {
+          error: 'Delete failed.',
+        },
+      })
+    )
+
+    expect(vm.feedback).toEqual({
+      tone: 'error',
+      title: 'Quote action failed',
+      details: ['Delete failed.'],
+      sources: ['delete'],
+    })
   })
 
   it('keeps job-list loading scoped to the jobs pane during server-backed queries', () => {

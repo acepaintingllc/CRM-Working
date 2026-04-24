@@ -82,8 +82,8 @@ describe('estimate collection routes', () => {
   })
 
   it('keeps bootstrap, summary, recent-activity, jobs, and search routes thin', async () => {
-    const jobsRequest = new Request('http://localhost/api/quotes/home/jobs?q=kit&cursor=abc&limit=10')
-    const searchRequest = new Request('http://localhost/api/quotes/home/search?q=garage')
+    const jobsRequest = new Request('http://localhost/api/quotes/home/jobs?q=%20kit%20&cursor=abc&limit=10')
+    const searchRequest = new Request('http://localhost/api/quotes/home/search?q=%20garage%20')
 
     await handleEstimateHomeBootstrapRouteGet()
     await handleEstimateHomeSummaryRouteGet()
@@ -100,6 +100,34 @@ describe('estimate collection routes', () => {
       limit: 10,
     })
     expect(mocks.loadEstimateCollectionSearchPayload).toHaveBeenCalledWith('org-1', 'garage')
+  })
+
+  it('rejects invalid limits before calling paged route services', async () => {
+    const jobsResponse = await handleEstimateHomeJobsRouteGet(
+      new Request('http://localhost/api/quotes/home/jobs?limit=1.5')
+    )
+    expect(jobsResponse.status).toBe(400)
+    await expect(jobsResponse.json()).resolves.toEqual({ error: 'Invalid limit.' })
+
+    const versionsResponse = await handleEstimateJobVersionsRouteGet(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/versions?limit=0'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+    expect(versionsResponse.status).toBe(400)
+    await expect(versionsResponse.json()).resolves.toEqual({ error: 'Invalid limit.' })
+
+    expect(mocks.loadEstimateCollectionJobsPayload).not.toHaveBeenCalled()
+    expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
+  })
+
+  it('normalizes empty search requests through the shared service contract', async () => {
+    await handleEstimateHomeSearchRouteGet(
+      new Request('http://localhost/api/quotes/home/search?q=%20%20')
+    )
+
+    expect(mocks.loadEstimateCollectionSearchPayload).toHaveBeenCalledWith('org-1', '')
   })
 
   it('marks the old job-counts route as gone', async () => {

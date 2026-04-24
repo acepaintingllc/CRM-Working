@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
 import type { QuotesHomeHeaderVm } from './quoteHomeTypes'
@@ -27,30 +27,57 @@ export function QuotesHomeHeader({
     searchResultsId,
     settingsPanelId,
     settingsOpen,
+    closeSearch,
+    closeSettings,
     openSearch,
+    openSettings,
     toggleSettings,
     handleSearchBlur,
     handleSearchKeyDown,
-    handleSettingsKeyDown,
   } = useQuotesHomeHeaderInteractions({
     searchFocused: vm.searchFocused,
     onSearchFocusedChange,
   })
-  const firstSettingsItemRef = useRef<HTMLElement | null>(null)
+  const settingsPanelRef = useRef<HTMLDivElement | null>(null)
+  const [settingsFocusTarget, setSettingsFocusTarget] = useState<'first' | 'last'>('first')
 
   const searchOpen = vm.searchFocused && Boolean(vm.searchQuery.trim())
   useEffect(() => {
     if (!settingsOpen) return
-    firstSettingsItemRef.current?.focus()
-  }, [settingsOpen])
+    focusSettingsItem(settingsPanelRef.current, settingsFocusTarget)
+  }, [settingsFocusTarget, settingsOpen])
+
+  const openSettingsWithFocus = (target: 'first' | 'last') => {
+    setSettingsFocusTarget(target)
+    openSettings()
+  }
+
+  const handleSettingsButtonKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Escape' && settingsOpen) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeSettings({ restoreFocus: true })
+      return
+    }
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      openSettingsWithFocus(event.key === 'ArrowUp' ? 'last' : 'first')
+    }
+  }
 
   const handleSettingsMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeSettings({ restoreFocus: true })
+      return
+    }
+
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
 
     event.preventDefault()
-    const menuItems = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')
-    ).filter((item) => item.getAttribute('aria-disabled') !== 'true')
+    const menuItems = getEnabledSettingsItems(event.currentTarget)
     if (menuItems.length === 0) return
 
     const currentIndex = menuItems.indexOf(document.activeElement as HTMLElement)
@@ -60,8 +87,10 @@ export function QuotesHomeHeader({
         : event.key === 'End'
           ? menuItems.length - 1
           : event.key === 'ArrowDown'
-            ? Math.min(currentIndex + 1, menuItems.length - 1)
-            : Math.max(currentIndex - 1, 0)
+            ? (currentIndex + 1) % menuItems.length
+            : currentIndex <= 0
+              ? menuItems.length - 1
+              : currentIndex - 1
 
     menuItems[nextIndex]?.focus()
   }
@@ -140,6 +169,7 @@ export function QuotesHomeHeader({
                           style={S.searchResultLink}
                           role="option"
                           aria-selected="false"
+                          onClick={closeSearch}
                         >
                           <div style={S.estimateTitle}>{estimate.title}</div>
                           <div style={S.estimateMeta}>{estimate.meta}</div>
@@ -170,7 +200,7 @@ export function QuotesHomeHeader({
                 type="button"
                 style={S.settingsToggle}
                 onClick={toggleSettings}
-                onKeyDown={handleSettingsKeyDown}
+                onKeyDown={handleSettingsButtonKeyDown}
                 aria-expanded={settingsOpen}
                 aria-controls={settingsOpen ? settingsPanelId : undefined}
                 aria-haspopup="menu"
@@ -179,19 +209,17 @@ export function QuotesHomeHeader({
               </button>
               {settingsOpen ? (
                 <div
+                  ref={settingsPanelRef}
                   id={settingsPanelId}
                   style={S.settingsPanel}
                   role="menu"
                   aria-label="Quote settings"
                   onKeyDown={handleSettingsMenuKeyDown}
                 >
-                  {SETTINGS_LINKS.map((item, index) =>
+                  {SETTINGS_LINKS.map((item) =>
                     item.disabled ? (
                       <span
                         key={item.label}
-                        ref={(element) => {
-                          if (index === 0) firstSettingsItemRef.current = element
-                        }}
                         style={S.settingsDisabled}
                         role="menuitem"
                         aria-disabled="true"
@@ -202,9 +230,6 @@ export function QuotesHomeHeader({
                     ) : (
                       <Link
                         key={item.label}
-                        ref={(element) => {
-                          if (index === 0) firstSettingsItemRef.current = element
-                        }}
                         href={item.href ?? '#'}
                         style={S.settingsLink}
                         role="menuitem"
@@ -222,4 +247,23 @@ export function QuotesHomeHeader({
       </div>
     </div>
   )
+}
+
+function getEnabledSettingsItems(container: HTMLElement | null) {
+  if (!container) return []
+
+  return Array.from(
+    container.querySelectorAll<HTMLElement>('[role="menuitem"]')
+  ).filter((item) => item.getAttribute('aria-disabled') !== 'true')
+}
+
+function focusSettingsItem(
+  container: HTMLElement | null,
+  target: 'first' | 'last',
+) {
+  const menuItems = getEnabledSettingsItems(container)
+  if (menuItems.length === 0) return
+
+  const nextIndex = target === 'first' ? 0 : menuItems.length - 1
+  menuItems[nextIndex]?.focus()
 }

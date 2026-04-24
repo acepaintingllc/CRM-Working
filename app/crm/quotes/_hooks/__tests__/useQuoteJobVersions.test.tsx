@@ -3,6 +3,7 @@ import { act, StrictMode, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createJobVersionsCache, mergeJobVersionsPages } from '../jobVersionsCache'
 import { useQuoteJobVersions } from '../useQuoteJobVersions'
+import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/collectionData'
 
 const { loadQuoteJobVersions } = vi.hoisted(() => ({
   loadQuoteJobVersions: vi.fn(),
@@ -22,7 +23,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-const versionPayload = {
+const versionPayload: QuoteJobVersionsPageReadModel = {
   job_id: 'job-1',
   total_versions: 2,
   limit: 25,
@@ -129,6 +130,117 @@ describe('useQuoteJobVersions', () => {
     expect(result.current.hasMore).toBe(false)
   })
 
+  it('coalesces rapid duplicate loadMore calls into one cursor request', async () => {
+    const nextPage = deferred<typeof versionPayload>()
+
+    loadQuoteJobVersions
+      .mockResolvedValueOnce({
+        ...versionPayload,
+        total_versions: 3,
+        next_cursor: 'cursor-2',
+        items: [versionPayload.items[0]],
+      })
+      .mockImplementationOnce(() => nextPage.promise)
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1)
+    })
+
+    let firstLoadMore!: Promise<boolean>
+    let secondLoadMore!: Promise<boolean>
+
+    await act(async () => {
+      firstLoadMore = result.current.loadMore()
+      secondLoadMore = result.current.loadMore()
+      await Promise.resolve()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
+    expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(2, 'job-1', {
+      cursor: 'cursor-2',
+    })
+    await expect(secondLoadMore).resolves.toBe(false)
+
+    nextPage.resolve({
+      ...versionPayload,
+      total_versions: 3,
+      next_cursor: null,
+      items: [versionPayload.items[1]],
+    })
+
+    await act(async () => {
+      await firstLoadMore
+    })
+
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+  })
+
+  it('allows loadMore again after the previous cursor request settles', async () => {
+    const firstNextPage = deferred<typeof versionPayload>()
+
+    loadQuoteJobVersions
+      .mockResolvedValueOnce({
+        ...versionPayload,
+        total_versions: 3,
+        next_cursor: 'cursor-2',
+        items: [versionPayload.items[0]],
+      })
+      .mockImplementationOnce(() => firstNextPage.promise)
+      .mockResolvedValueOnce({
+        ...versionPayload,
+        total_versions: 3,
+        next_cursor: null,
+        items: [
+          {
+            ...versionPayload.items[0],
+            estimate_id: 'estimate-3',
+            version_name: 'Version C',
+          },
+        ],
+      })
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1)
+    })
+
+    let firstLoadMore!: Promise<boolean>
+
+    await act(async () => {
+      firstLoadMore = result.current.loadMore()
+      await Promise.resolve()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
+
+    firstNextPage.resolve({
+      ...versionPayload,
+      total_versions: 3,
+      next_cursor: 'cursor-3',
+      items: [versionPayload.items[1]],
+    })
+
+    await act(async () => {
+      await firstLoadMore
+    })
+
+    expect(result.current.hasMore).toBe(true)
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(3)
+    expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(3, 'job-1', {
+      cursor: 'cursor-3',
+    })
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2', 'estimate-3'])
+    expect(result.current.hasMore).toBe(false)
+  })
+
   it('uses cached data until a forced refresh is requested', async () => {
     loadQuoteJobVersions.mockResolvedValue(versionPayload)
 
@@ -149,6 +261,36 @@ describe('useQuoteJobVersions', () => {
     })
 
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(3)
+  })
+
+  it('bypasses the cached versions page when refresh forces a reload', async () => {
+    const refreshedPayload = {
+      ...versionPayload,
+      total_versions: 1,
+      items: [
+        {
+          ...versionPayload.items[0],
+          estimate_id: 'estimate-refreshed',
+          version_name: 'Version Refreshed',
+        },
+      ],
+    }
+
+    loadQuoteJobVersions.mockResolvedValueOnce(versionPayload).mockResolvedValueOnce(refreshedPayload)
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+    })
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
+    expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(2, 'job-1')
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-refreshed'])
   })
 
   it('uses cached data when switching back to a previously loaded job', async () => {

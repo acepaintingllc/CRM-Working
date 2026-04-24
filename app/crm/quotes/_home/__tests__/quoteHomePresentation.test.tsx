@@ -9,13 +9,16 @@ import {
   buildHeroSummaryText,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeFeedbackVm,
+  buildQuotesHomeJobListEmptyState,
   buildQuotesHomeSearchCanRetry,
   buildQuotesHomeSearchEmptyMessage,
+  buildQuotesHomeSelectedJobVersionCount,
   buildQuotesHomeSelectedJobVm,
   buildQuotesHomeVersionDetail,
   buildQuotesHomeVersionHeading,
   buildSearchResultVm,
   buildSummaryCards,
+  formatVersionCount,
   formatToday,
   QUOTE_META_SEPARATOR,
   SETTINGS_LINKS,
@@ -130,6 +133,38 @@ describe('quoteHomePresentation', () => {
     expect(buildQuotesHomeVersionHeading(job, 30)).toBe(
       '30 versions under this job'
     )
+  })
+
+  it('formats version counts consistently across quote home labels', () => {
+    expect(formatVersionCount(0)).toBe('0 versions')
+    expect(formatVersionCount(1)).toBe('1 version')
+    expect(formatVersionCount(2)).toBe('2 versions')
+  })
+
+  it('derives selected-job version count from resolved resources or job fallback', () => {
+    expect(
+      buildQuotesHomeSelectedJobVersionCount({
+        selectedJob: job,
+        totalVersions: 30,
+        hasResolved: true,
+      })
+    ).toBe(30)
+
+    expect(
+      buildQuotesHomeSelectedJobVersionCount({
+        selectedJob: job,
+        totalVersions: 0,
+        hasResolved: false,
+      })
+    ).toBe(4)
+
+    expect(
+      buildQuotesHomeSelectedJobVersionCount({
+        selectedJob: null,
+        totalVersions: 7,
+        hasResolved: false,
+      })
+    ).toBe(7)
   })
 
   it('returns null version detail when no job is selected', () => {
@@ -279,6 +314,16 @@ describe('quoteHomePresentation', () => {
     )
   })
 
+  it('formats jobs load failure details without doubling the fallback prefix', () => {
+    expect(
+      buildHomeLoadFailureDetail('jobs', 'Quote home jobs failed to load.')
+    ).toBe('Quote home jobs failed to load.')
+
+    expect(buildHomeLoadFailureDetail('jobs', 'Server unavailable.')).toBe(
+      'Quote home jobs failed to load. Server unavailable.'
+    )
+  })
+
   it('builds feedback for each individual error source and the null case', () => {
     expect(
       buildQuotesHomeFeedbackVm({
@@ -389,6 +434,46 @@ describe('quoteHomePresentation', () => {
     ).toBeNull()
   })
 
+  it('builds feedback for the jobs load error branch', () => {
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [{ source: 'jobs', message: 'Jobs timed out.' }],
+        jobVersionsError: null,
+        createError: null,
+        deleteError: null,
+        actionWarning: null,
+      })
+    ).toEqual({
+      tone: 'warning',
+      title: 'Quote home jobs failed to load',
+      details: ['Quote home jobs failed to load. Jobs timed out.'],
+      sources: ['jobs'],
+    })
+  })
+
+  it('builds feedback for multiple home load failures', () => {
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [
+          { source: 'bootstrap', message: 'Bootstrap timed out.' },
+          { source: 'jobs', message: 'Jobs timed out.' },
+        ],
+        jobVersionsError: null,
+        createError: null,
+        deleteError: null,
+        actionWarning: null,
+      })
+    ).toEqual({
+      tone: 'warning',
+      title: 'Some quote home data failed to load',
+      details: [
+        'Quote home failed to load. Bootstrap timed out.',
+        'Quote home jobs failed to load. Jobs timed out.',
+      ],
+      sources: ['bootstrap', 'jobs'],
+    })
+  })
+
   it('builds combined feedback details in source order', () => {
     expect(
       buildQuotesHomeFeedbackVm({
@@ -409,6 +494,40 @@ describe('quoteHomePresentation', () => {
       ],
       sources: ['bootstrap', 'jobVersions', 'create', 'delete'],
     })
+  })
+
+  it('derives every job-list empty-state branch', () => {
+    expect(
+      buildQuotesHomeJobListEmptyState({
+        hasLoadError: true,
+        totalJobCount: 0,
+        visibleJobCount: 0,
+      })
+    ).toBe('none')
+
+    expect(
+      buildQuotesHomeJobListEmptyState({
+        hasLoadError: false,
+        totalJobCount: 0,
+        visibleJobCount: 0,
+      })
+    ).toBe('no_jobs')
+
+    expect(
+      buildQuotesHomeJobListEmptyState({
+        hasLoadError: false,
+        totalJobCount: 2,
+        visibleJobCount: 0,
+      })
+    ).toBe('no_matches')
+
+    expect(
+      buildQuotesHomeJobListEmptyState({
+        hasLoadError: false,
+        totalJobCount: 2,
+        visibleJobCount: 1,
+      })
+    ).toBe('none')
   })
 
   it('builds summary cards for zero, non-zero, and null summaries', () => {

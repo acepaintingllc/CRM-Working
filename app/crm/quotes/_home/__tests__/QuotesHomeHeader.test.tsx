@@ -214,6 +214,33 @@ describe('QuotesHomeHeader', () => {
     expect(onSearchFocusedChange).not.toHaveBeenCalledWith(false)
   })
 
+  it('closes search results after a result is activated', () => {
+    const onSearchFocusedChange = vi.fn()
+
+    render(
+      <QuotesHomeHeader
+        vm={{
+          ...baseVm,
+          searchResults: [
+            {
+              id: 'estimate-1',
+              href: '/crm/quotes/estimate-1',
+              title: 'Kitchen revision',
+              meta: 'Job 101',
+            },
+          ],
+        }}
+        onSearchFocusedChange={onSearchFocusedChange}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('option', { name: /Kitchen revision/i }))
+
+    expect(onSearchFocusedChange).toHaveBeenCalledWith(false)
+  })
+
   it('keeps the dropdown open long enough for retry clicks to register', () => {
     const onSearchFocusedChange = vi.fn()
     const onSearchRetry = vi.fn()
@@ -303,6 +330,47 @@ describe('QuotesHomeHeader', () => {
     fireEvent.keyDown(defaults, { key: 'ArrowDown' })
 
     expect(products).toHaveFocus()
+  })
+
+  it('opens the settings menu from arrow keys and supports Home, End, and wrapping', () => {
+    render(
+      <QuotesHomeHeader
+        vm={{ ...baseVm, searchFocused: false }}
+        onSearchFocusedChange={() => {}}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    const settingsToggle = screen.getByRole('button', { name: 'Settings & Constants' })
+
+    fireEvent.keyDown(settingsToggle, { key: 'ArrowUp' })
+
+    const defaults = screen.getByRole('menuitem', { name: 'Defaults' })
+    const products = screen.getByRole('menuitem', { name: 'Products' })
+    const rates = screen.getByRole('menuitem', { name: 'Rates & Flags' })
+    const settings = screen.getByRole('menuitem', { name: 'Settings' })
+
+    expect(settings).toHaveFocus()
+
+    fireEvent.keyDown(settings, { key: 'Home' })
+    expect(defaults).toHaveFocus()
+
+    fireEvent.keyDown(defaults, { key: 'End' })
+    expect(settings).toHaveFocus()
+
+    fireEvent.keyDown(settings, { key: 'ArrowDown' })
+    expect(defaults).toHaveFocus()
+
+    fireEvent.keyDown(defaults, { key: 'ArrowUp' })
+    expect(settings).toHaveFocus()
+
+    fireEvent.keyDown(settings, { key: 'Home' })
+    fireEvent.keyDown(defaults, { key: 'ArrowDown' })
+    expect(products).toHaveFocus()
+
+    fireEvent.keyDown(products, { key: 'ArrowDown' })
+    expect(rates).toHaveFocus()
   })
 
   it('opens and closes the settings panel on toggle button click', () => {

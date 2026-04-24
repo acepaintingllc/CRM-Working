@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { QuoteHomeJobsPageReadModel } from '@/lib/quotes/collectionData'
 import {
   useQuotesHomeBootstrap,
   useQuotesHomeData,
@@ -287,6 +288,119 @@ describe('useQuotesHomeData', () => {
     })
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2', 'job-3'])
     expect(result.current.jobsPage.next_cursor).toBeNull()
+    expect(result.current.hasMore).toBe(false)
+  })
+
+  it('issues one jobs-page request for rapid duplicate loadMore calls', async () => {
+    const nextPage = deferred<QuoteHomeJobsPageReadModel>()
+    loadQuoteHomeJobs.mockImplementationOnce(() => nextPage.promise)
+
+    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let firstLoadMore: Promise<void> = Promise.resolve()
+    let secondLoadMore: Promise<void> = Promise.resolve()
+    await act(async () => {
+      firstLoadMore = result.current.loadMore()
+      secondLoadMore = result.current.loadMore()
+      await Promise.resolve()
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenCalledTimes(1)
+    expect(loadQuoteHomeJobs).toHaveBeenCalledWith({
+      query: '',
+      limit: 25,
+      cursor: 'cursor-2',
+    })
+
+    await act(async () => {
+      nextPage.resolve({
+        query: '',
+        limit: 25,
+        next_cursor: null,
+        items: [
+          {
+            ...seededPayload.jobs.items[1],
+            id: 'job-3',
+            customer_id: 'customer-3',
+            customer_name: 'Charlie',
+            customer_address: '789 Pine',
+            title: 'Bath',
+          },
+        ],
+      })
+      await firstLoadMore
+      await secondLoadMore
+    })
+
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2', 'job-3'])
+    expect(result.current.hasMore).toBe(false)
+  })
+
+  it('allows loadMore to run again after the prior jobs-page request settles', async () => {
+    loadQuoteHomeJobs
+      .mockResolvedValueOnce({
+        query: '',
+        limit: 25,
+        next_cursor: 'cursor-3',
+        items: [
+          {
+            ...seededPayload.jobs.items[1],
+            id: 'job-3',
+            customer_id: 'customer-3',
+            customer_name: 'Charlie',
+            customer_address: '789 Pine',
+            title: 'Bath',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        query: '',
+        limit: 25,
+        next_cursor: null,
+        items: [
+          {
+            ...seededPayload.jobs.items[1],
+            id: 'job-4',
+            customer_id: 'customer-4',
+            customer_name: 'Dana',
+            customer_address: '321 Cedar',
+            title: 'Exterior',
+          },
+        ],
+      })
+
+    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(1, {
+      query: '',
+      limit: 25,
+      cursor: 'cursor-2',
+    })
+    expect(result.current.jobsPage.next_cursor).toBe('cursor-3')
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(2, {
+      query: '',
+      limit: 25,
+      cursor: 'cursor-3',
+    })
+    expect(result.current.jobs.map((job) => job.id)).toEqual([
+      'job-1',
+      'job-2',
+      'job-3',
+      'job-4',
+    ])
     expect(result.current.hasMore).toBe(false)
   })
 

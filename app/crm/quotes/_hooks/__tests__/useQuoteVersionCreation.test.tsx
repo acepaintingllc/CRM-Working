@@ -19,6 +19,22 @@ vi.mock('@/lib/quotes/client', () => ({
   createQuoteVersion,
 }))
 
+function createControlledPromise<T>() {
+  let resolve: (value: T) => void
+  let reject: (reason?: unknown) => void
+
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return {
+    promise,
+    resolve: resolve!,
+    reject: reject!,
+  }
+}
+
 describe('useQuoteVersionCreation', () => {
   beforeEach(() => {
     push.mockReset()
@@ -109,5 +125,80 @@ describe('useQuoteVersionCreation', () => {
       version_kind: 'alternate',
       version_name: 'Garage',
     })
+  })
+
+  it('coalesces rapid duplicate create calls into one request', async () => {
+    const pendingCreate = createControlledPromise<{ id: string }>()
+    createQuoteVersion.mockReturnValue(pendingCreate.promise)
+
+    const { result } = renderHook(() =>
+      useQuoteVersionCreation({
+        id: 'job-1',
+        customer_id: 'customer-1',
+      })
+    )
+    const createCalls: Array<Promise<{ id: string } | null>> = []
+
+    act(() => {
+      createCalls.push(result.current.createVersion())
+      createCalls.push(result.current.createVersion())
+    })
+
+    expect(createQuoteVersion).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      pendingCreate.resolve({ id: 'estimate-99' })
+      await Promise.all(createCalls)
+    })
+
+    expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-99')
+  })
+
+  it('allows a new create call after a successful create settles', async () => {
+    createQuoteVersion.mockResolvedValueOnce({ id: 'estimate-1' }).mockResolvedValueOnce({ id: 'estimate-2' })
+
+    const { result } = renderHook(() =>
+      useQuoteVersionCreation({
+        id: 'job-1',
+        customer_id: 'customer-1',
+      })
+    )
+
+    await act(async () => {
+      await result.current.createVersion()
+    })
+
+    await act(async () => {
+      await result.current.createVersion()
+    })
+
+    expect(createQuoteVersion).toHaveBeenCalledTimes(2)
+    expect(push).toHaveBeenNthCalledWith(1, '/crm/quotes/estimate-1')
+    expect(push).toHaveBeenNthCalledWith(2, '/crm/quotes/estimate-2')
+  })
+
+  it('allows a new create call after a failed create settles', async () => {
+    createQuoteVersion.mockRejectedValueOnce(new Error('Creation failed')).mockResolvedValueOnce({ id: 'estimate-2' })
+
+    const { result } = renderHook(() =>
+      useQuoteVersionCreation({
+        id: 'job-1',
+        customer_id: 'customer-1',
+      })
+    )
+
+    await act(async () => {
+      await result.current.createVersion()
+    })
+
+    expect(result.current.error).toBe('Creation failed')
+
+    await act(async () => {
+      await result.current.createVersion()
+    })
+
+    expect(createQuoteVersion).toHaveBeenCalledTimes(2)
+    expect(result.current.error).toBeNull()
+    expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-2')
   })
 })

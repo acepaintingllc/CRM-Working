@@ -233,6 +233,7 @@ describe('useQuotesHomeDelete', () => {
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
     expect(deleted).toBe(false)
     expect(result.current.error).toBe('delete failed')
+    expect(result.current.confirmingDelete).toBe(estimate)
     expect(result.current.deletingId).toBeNull()
   })
 })

@@ -4,12 +4,14 @@ import {
   buildHeroSummaryText,
   buildQuoteHomeJobListItemVm,
   buildQuotesHomeCreateVm,
+  buildQuotesHomeJobListEmptyState,
   buildQuotesHomeJobListEmptyStateBody,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeDeleteDialogVm,
   buildQuotesHomeFeedbackVm,
   buildQuotesHomeSearchCanRetry,
   buildQuotesHomeSearchEmptyMessage,
+  buildQuotesHomeSelectedJobVersionCount,
   buildQuotesHomeSelectedJobVm,
   buildQuotesHomeVersionDetail,
   buildQuotesHomeVersionEmptyMessage,
@@ -119,54 +121,37 @@ export type QuoteHomePageVm = {
 
 export function buildQuoteHomePageVm(
   state: QuoteHomePageVmState,
-  resources: QuoteHomePageVmResources
+  resources: QuoteHomePageVmResources,
+  options: { includeVersionFailureInFeedback?: boolean } = {}
 ): QuoteHomePageVm {
+  const jobListErrorMessage = buildQuotesHomeJobListErrorMessage(resources)
+  const hasJobListLoadError = Boolean(jobListErrorMessage)
+  const selectedJobVersionCount = buildQuotesHomeSelectedJobVersionCount({
+    selectedJob: state.selectedJob,
+    totalVersions: resources.workflow.versions.totalVersions,
+    hasResolved: resources.workflow.versions.hasResolved,
+  })
+  const jobListEmptyState = buildQuotesHomeJobListEmptyState({
+    hasLoadError: hasJobListLoadError,
+    totalJobCount: resources.home.jobs.length,
+    visibleJobCount: state.visibleJobs.length,
+  })
+  const searchState = buildQuoteHomeSearchState(resources)
+  const feedbackVm = buildQuotesHomeFeedbackVm({
+    homeFailures: buildQuoteHomeLoadFailures(resources),
+    jobVersionsError: options.includeVersionFailureInFeedback === false
+      ? null
+      : resources.workflow.versions.error,
+    createError: resources.workflow.create.error,
+    deleteError: resources.delete.error,
+    actionWarning: state.actionWarning,
+  })
   const summaryCards = buildSummaryCards(resources.home.summary).map((card) => ({
     ...card,
     displayValue: resources.home.loading
       ? '...'
       : card.value,
   }))
-  const bootstrapBlocksJobList =
-    !resources.home.loading &&
-    resources.home.jobs.length === 0 &&
-    Boolean(resources.home.bootstrapError)
-  const jobListErrorMessage =
-    resources.home.jobsError ??
-    (bootstrapBlocksJobList ? resources.home.bootstrapError : null)
-  const hasJobListLoadError = Boolean(jobListErrorMessage)
-  const feedbackVm = buildQuotesHomeFeedbackVm({
-    homeFailures: resources.home.bootstrapError
-      ? [{ source: 'bootstrap', message: resources.home.bootstrapError }]
-      : [],
-    jobVersionsError: null,
-    createError: resources.workflow.create.error,
-    deleteError: resources.delete.error,
-    actionWarning: state.actionWarning,
-  })
-  const versionCount = state.selectedJob
-    ? resources.workflow.versions.hasResolved
-      ? resources.workflow.versions.totalVersions
-      : state.selectedJob.version_count
-    : resources.workflow.versions.totalVersions
-  const searchEmptyMessage = buildQuotesHomeSearchEmptyMessage({
-    query: resources.search.query,
-    loading: resources.search.loading,
-    error: resources.search.error,
-    resultCount: resources.search.results.length,
-  })
-  const searchCanRetry = buildQuotesHomeSearchCanRetry({
-    query: resources.search.query,
-    loading: resources.search.loading,
-  })
-
-  const jobListEmptyState = hasJobListLoadError
-    ? 'none'
-    : resources.home.jobs.length === 0
-      ? 'no_jobs'
-      : state.visibleJobs.length === 0
-        ? 'no_matches'
-        : 'none'
 
   return {
     header: {
@@ -174,9 +159,9 @@ export function buildQuoteHomePageVm(
       searchQuery: state.searchQuery,
       searchFocused: state.searchFocused,
       searchLoading: resources.search.loading,
-      searchEmptyMessage,
+      searchEmptyMessage: searchState.emptyMessage,
       searchErrorMessage: resources.search.error,
-      searchCanRetry,
+      searchCanRetry: searchState.canRetry,
       searchResults: resources.search.results.map(buildSearchResultVm),
     },
     loading: resources.home.loading,
@@ -199,14 +184,17 @@ export function buildQuoteHomePageVm(
     },
     selectedJob: buildQuotesHomeSelectedJobVm(
       state.selectedJob,
-      versionCount,
+      selectedJobVersionCount,
       resources.home.loading
     ),
     versionList: {
-      heading: buildQuotesHomeVersionHeading(state.selectedJob, versionCount),
+      heading: buildQuotesHomeVersionHeading(
+        state.selectedJob,
+        selectedJobVersionCount
+      ),
       detail: buildQuotesHomeVersionDetail(state.selectedJob, {
         loadedVersions: resources.workflow.versions.items.length,
-        totalVersions: versionCount,
+        totalVersions: selectedJobVersionCount,
         hasMore: resources.workflow.versions.hasMore,
       }),
       emptyMessage: buildQuotesHomeVersionEmptyMessage(
@@ -236,5 +224,41 @@ export function buildQuoteHomePageVm(
       ),
     },
     actions: state.actions,
+  }
+}
+
+function buildQuoteHomeLoadFailures(
+  resources: QuoteHomePageVmResources
+): Array<{ source: 'bootstrap'; message: string }> {
+  return resources.home.bootstrapError
+    ? [{ source: 'bootstrap', message: resources.home.bootstrapError }]
+    : []
+}
+
+function buildQuotesHomeJobListErrorMessage(
+  resources: QuoteHomePageVmResources
+) {
+  if (resources.home.jobsError) return resources.home.jobsError
+
+  const bootstrapBlocksJobList =
+    !resources.home.loading &&
+    resources.home.jobs.length === 0 &&
+    Boolean(resources.home.bootstrapError)
+
+  return bootstrapBlocksJobList ? resources.home.bootstrapError : null
+}
+
+function buildQuoteHomeSearchState(resources: QuoteHomePageVmResources) {
+  return {
+    emptyMessage: buildQuotesHomeSearchEmptyMessage({
+      query: resources.search.query,
+      loading: resources.search.loading,
+      error: resources.search.error,
+      resultCount: resources.search.results.length,
+    }),
+    canRetry: buildQuotesHomeSearchCanRetry({
+      query: resources.search.query,
+      loading: resources.search.loading,
+    }),
   }
 }

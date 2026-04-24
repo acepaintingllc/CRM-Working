@@ -2,6 +2,7 @@
 
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { QuotesHomeJobListVm } from './quoteHomeTypes'
 import { S } from './quoteHomeStyles'
@@ -21,6 +22,32 @@ export function QuotesHomeJobList({
   onLoadMore,
   onRetry,
 }: Props) {
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [retrying, setRetrying] = useState(false)
+  const selectedJobOptionId = vm.items.some((job) => job.id === vm.selectedJobId)
+    ? `quote-home-job-${vm.selectedJobId}`
+    : undefined
+
+  const handleLoadMore = async () => {
+    if (loadingMore) return
+    setLoadingMore(true)
+    try {
+      await onLoadMore()
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const handleRetry = async () => {
+    if (retrying) return
+    setRetrying(true)
+    try {
+      await onRetry()
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   const handleJobOptionKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
     jobId: string
@@ -81,8 +108,13 @@ export function QuotesHomeJobList({
               <div style={S.bodyText}>{vm.errorMessage}</div>
               {vm.canRetry ? (
                 <div style={S.rowWrap}>
-                  <CrmButton onClick={() => void onRetry()} tone="primary">
-                    Retry jobs
+                  <CrmButton
+                    onClick={() => void handleRetry()}
+                    tone="primary"
+                    disabled={retrying}
+                    aria-busy={retrying}
+                  >
+                    {retrying ? 'Retrying jobs...' : 'Retry jobs'}
                   </CrmButton>
                 </div>
               ) : null}
@@ -112,6 +144,7 @@ export function QuotesHomeJobList({
             style={S.jobListItems}
             role="listbox"
             aria-label="Jobs"
+            aria-activedescendant={selectedJobOptionId}
           >
             {vm.items.map((job) => (
               <li key={job.id} role="presentation">
@@ -122,6 +155,7 @@ export function QuotesHomeJobList({
                   onClick={() => onSelectJob(job.id)}
                   onKeyDown={(event) => handleJobOptionKeyDown(event, job.id)}
                   aria-selected={Boolean(job.isSelected)}
+                  aria-current={job.isSelected ? 'true' : undefined}
                   aria-label={`${job.title}, ${job.customerName}, ${job.versionCountLabel}${
                     job.isSelected ? ', selected' : ''
                   }`}
@@ -138,7 +172,14 @@ export function QuotesHomeJobList({
           </ul>
 
           {vm.hasMore ? (
-            <CrmButton onClick={() => void onLoadMore()}>Load more jobs</CrmButton>
+            <CrmButton
+              onClick={() => void handleLoadMore()}
+              disabled={loadingMore}
+              aria-busy={loadingMore}
+              aria-live="polite"
+            >
+              {loadingMore ? 'Loading more jobs...' : 'Load more jobs'}
+            </CrmButton>
           ) : null}
         </div>
       </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createQuoteVersion } from '@/lib/quotes/client'
 import {
   buildCreateQuoteVersionInput,
@@ -18,13 +18,19 @@ export function useQuoteVersionCreation(selectedJob: EligibleQuoteVersionJob | n
   const [versionKind, setVersionKind] = useState<QuoteVersionKind>('standard')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const createInFlightRef = useRef(false)
 
   async function createVersion() {
+    if (createInFlightRef.current) {
+      return null
+    }
+
     if (!selectedJob) {
       setError(QUOTE_VERSION_REQUIRED_JOB_ERROR)
       return null
     }
 
+    createInFlightRef.current = true
     setCreating(true)
     setError(null)
 
@@ -38,6 +44,7 @@ export function useQuoteVersionCreation(selectedJob: EligibleQuoteVersionJob | n
       setError(createError instanceof Error ? createError.message : QUOTE_VERSION_CREATE_ERROR)
       return null
     } finally {
+      createInFlightRef.current = false
       setCreating(false)
     }
   }

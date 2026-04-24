@@ -35,6 +35,7 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
   const enabled = options?.enabled ?? true
   const cacheRef = useRef(createJobVersionsCache())
   const requestIdRef = useRef(0)
+  const loadMoreRequestIdRef = useRef<number | null>(null)
   const initialData = options?.initialData ?? null
 
   const initialPageData = initialJobVersionsPage(jobId, enabled, initialData)
@@ -60,6 +61,7 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
 
     if (initialData?.job_id === jobId) {
       startJobVersionsRequest(requestIdRef)
+      loadMoreRequestIdRef.current = null
       setCurrentData(initialData)
       setError(null); setLoading(false); setLoadingMore(false)
     }
@@ -72,12 +74,14 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
       })
 
       if (cachedPage) {
+        loadMoreRequestIdRef.current = null
         setCurrentData(cachedPage)
         setLoading(false); setLoadingMore(false); setError(null)
         return { ok: true, error: null }
       }
 
       const requestId = startJobVersionsRequest(requestIdRef)
+      loadMoreRequestIdRef.current = null
       const preserveDataOnError = loadOptions?.preserveDataOnError ?? false
       const reportError = loadOptions?.reportError ?? true
 
@@ -111,8 +115,10 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
     async (targetJobId: string, loadOptions?: LoadOptions): Promise<LoadResult> => {
       const cursor = loadOptions?.cursor ?? null
       if (!cursor) return { ok: false, error: null }
+      if (loadMoreRequestIdRef.current !== null) return { ok: false, error: null }
 
       const requestId = startJobVersionsRequest(requestIdRef)
+      loadMoreRequestIdRef.current = requestId
       const preserveDataOnError = loadOptions?.preserveDataOnError ?? true
       const reportError = loadOptions?.reportError ?? true
       const currentData = dataRef.current.job_id === targetJobId ? dataRef.current : emptyJobVersions(targetJobId)
@@ -136,6 +142,9 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
         if (isCurrentJobVersionsRequest(requestIdRef, requestId)) {
           setLoadingMore(false)
         }
+        if (loadMoreRequestIdRef.current === requestId) {
+          loadMoreRequestIdRef.current = null
+        }
       }
     },
     [commitData, setCurrentData]
@@ -144,6 +153,7 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
   const load = useCallback(
     async (targetJobId: string, loadOptions?: LoadOptions) => {
       if (!targetJobId || !enabled) {
+        loadMoreRequestIdRef.current = null
         setCurrentData(emptyJobVersions(''))
         setLoading(false); setLoadingMore(false); setError(null)
         return { ok: false, error: null }
@@ -173,7 +183,7 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
   )
 
   const loadMore = useCallback(async () => {
-    if (!enabled || loading || loadingMore || !dataRef.current.next_cursor) return false
+    if (!enabled || loading || loadingMore || loadMoreRequestIdRef.current !== null || !dataRef.current.next_cursor) return false
     const result = await load(jobId, { append: true, cursor: dataRef.current.next_cursor, preserveDataOnError: true })
     return result.ok
   }, [enabled, jobId, load, loading, loadingMore])

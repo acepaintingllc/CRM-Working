@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentPropsWithoutRef } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QuotesHomeCreatePanel } from '../QuotesHomeCreatePanel'
@@ -58,8 +58,14 @@ describe('Quotes home panels', () => {
     expect(openJobs).toHaveClass('ace-crm-btn', 'ace-crm-btn-secondary')
   })
 
-  it('renders a retryable error panel instead of the no-jobs CTA when loading failed', () => {
-    const onRetry = vi.fn(async () => true)
+  it('renders a retryable error panel instead of the no-jobs CTA when loading failed', async () => {
+    let resolveRetry: (value: boolean) => void = () => {}
+    const onRetry = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveRetry = resolve
+        }),
+    )
 
     render(
       <QuotesHomeJobList
@@ -89,6 +95,17 @@ describe('Quotes home panels', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry jobs' }))
 
     expect(onRetry).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Retrying jobs...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Retrying jobs...' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+
+    resolveRetry(true)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Retry jobs' })).not.toBeDisabled()
+    })
   })
 
   it('announces job loading without making the whole list live', () => {
@@ -153,9 +170,14 @@ describe('Quotes home panels', () => {
 
     const jobList = screen.getByRole('listbox', { name: 'Jobs' })
     expect(jobList).toBeInTheDocument()
+    expect(jobList).toHaveAttribute('aria-activedescendant', 'quote-home-job-job-1')
     expect(jobList.parentElement).toHaveAttribute('aria-busy', 'false')
     expect(screen.getByRole('option', { name: /Kitchen Remodel.*selected/i })).toHaveAttribute(
       'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('option', { name: /Kitchen Remodel.*selected/i })).toHaveAttribute(
+      'aria-current',
       'true',
     )
     expect(
@@ -246,6 +268,113 @@ describe('Quotes home panels', () => {
     expect(onSelectJob).toHaveBeenCalledTimes(2)
   })
 
+  it('supports Home, End, and edge-safe movement in the job listbox', () => {
+    render(
+      <QuotesHomeJobList
+        vm={{
+          loading: false,
+          searchQuery: '',
+          selectedJobId: 'job-2',
+          hasMore: false,
+          items: [
+            {
+              id: 'job-1',
+              title: 'Kitchen Remodel',
+              customerName: 'Alice',
+              versionCountLabel: '2 versions',
+              isSelected: false,
+            },
+            {
+              id: 'job-2',
+              title: 'Exterior Paint',
+              customerName: 'Bob',
+              versionCountLabel: '1 version',
+              isSelected: true,
+            },
+          ],
+          errorMessage: null,
+          canRetry: false,
+          emptyState: 'none',
+          emptyStateBody: null,
+        }}
+        onJobQueryChange={() => {}}
+        onSelectJob={() => {}}
+        onLoadMore={async () => {}}
+        onRetry={async () => true}
+      />,
+    )
+
+    const kitchen = screen.getByRole('option', { name: /Kitchen Remodel/i })
+    const exterior = screen.getByRole('option', { name: /Exterior Paint.*selected/i })
+
+    exterior.focus()
+    fireEvent.keyDown(exterior, { key: 'Home' })
+    expect(kitchen).toHaveFocus()
+
+    fireEvent.keyDown(kitchen, { key: 'End' })
+    expect(exterior).toHaveFocus()
+
+    fireEvent.keyDown(exterior, { key: 'ArrowDown' })
+    expect(exterior).toHaveFocus()
+
+    kitchen.focus()
+    fireEvent.keyDown(kitchen, { key: 'ArrowUp' })
+    expect(kitchen).toHaveFocus()
+  })
+
+  it('disables the job load-more button while its request is pending', async () => {
+    let resolveLoadMore: () => void = () => {}
+    const onLoadMore = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLoadMore = resolve
+        }),
+    )
+
+    render(
+      <QuotesHomeJobList
+        vm={{
+          loading: false,
+          searchQuery: '',
+          selectedJobId: 'job-1',
+          hasMore: true,
+          items: [
+            {
+              id: 'job-1',
+              title: 'Kitchen Remodel',
+              customerName: 'Alice',
+              versionCountLabel: '2 versions',
+              isSelected: true,
+            },
+          ],
+          errorMessage: null,
+          canRetry: false,
+          emptyState: 'none',
+          emptyStateBody: null,
+        }}
+        onJobQueryChange={() => {}}
+        onSelectJob={() => {}}
+        onLoadMore={onLoadMore}
+        onRetry={async () => true}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more jobs' }))
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Loading more jobs...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Loading more jobs...' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+
+    resolveLoadMore()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Load more jobs' })).not.toBeDisabled()
+    })
+  })
+
   it('uses CRM button actions for version open and delete', () => {
     const onLoadMore = vi.fn(async () => {})
     const onRequestDelete = vi.fn()
@@ -322,7 +451,13 @@ describe('Quotes home panels', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: /delete/i })).toBeDisabled()
+    const deleteButton = screen.getByRole('button', {
+      name: 'Delete quote version Version A',
+    })
+    expect(deleteButton).toBeDisabled()
+    expect(deleteButton).toHaveAttribute('aria-disabled', 'true')
+    expect(deleteButton).toHaveAttribute('aria-busy', 'true')
+    expect(deleteButton).toHaveTextContent('Delete')
   })
 
   it('uses the version name in delete confirmation labels', () => {
@@ -348,8 +483,14 @@ describe('Quotes home panels', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1)
   })
 
-  it('renders a retryable error panel when versions fail to load', () => {
-    const onRetry = vi.fn(async () => true)
+  it('renders a retryable error panel when versions fail to load', async () => {
+    let resolveRetry: (value: boolean) => void = () => {}
+    const onRetry = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveRetry = resolve
+        }),
+    )
 
     render(
       <QuotesHomeVersionList
@@ -379,6 +520,60 @@ describe('Quotes home panels', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry versions' }))
 
     expect(onRetry).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Retrying versions...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Retrying versions...' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+
+    resolveRetry(true)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Retry versions' })).not.toBeDisabled()
+    })
+  })
+
+  it('disables the version load-more button while pending', async () => {
+    let resolveLoadMore: () => void = () => {}
+    const onLoadMore = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLoadMore = resolve
+        }),
+    )
+
+    render(
+      <QuotesHomeVersionList
+        vm={{
+          heading: '1 version under this job',
+          detail: 'Showing all 1 versions.',
+          emptyMessage: null,
+          items: [],
+          hasMore: true,
+          loadingMore: false,
+          errorMessage: null,
+          canRetry: false,
+        }}
+        onLoadMore={onLoadMore}
+        onRetry={async () => true}
+        onRequestDelete={() => {}}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more versions' }))
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Loading more versions...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Loading more versions...' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+
+    resolveLoadMore()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Load more versions' })).not.toBeDisabled()
+    })
   })
 
   it('uses the CRM primary button for create version and keeps the local field controls', () => {

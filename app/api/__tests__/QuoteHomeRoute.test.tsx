@@ -224,6 +224,56 @@ describe('quote home API routes', () => {
     await expect(errorResponse.json()).resolves.toEqual({ error: 'Invalid cursor.' })
   })
 
+  it('rejects invalid job ids after auth and before service work', async () => {
+    const response = await getQuoteJobVersions(
+      new Request('http://localhost/api/quotes/home/jobs/not-a-uuid/versions'),
+      { params: { jobId: 'not-a-uuid' } }
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid job id' })
+    expect(mocks.requireSessionUserOrg).toHaveBeenCalledTimes(1)
+    expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid limits after auth and before service work', async () => {
+    const jobsResponse = await getQuoteHomeJobs(
+      new Request('http://localhost/api/quotes/home/jobs?limit=bogus')
+    )
+    expect(jobsResponse.status).toBe(400)
+    await expect(jobsResponse.json()).resolves.toEqual({ error: 'Invalid limit.' })
+
+    const versionsResponse = await getQuoteJobVersions(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/versions?limit=0'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+    expect(versionsResponse.status).toBe(400)
+    await expect(versionsResponse.json()).resolves.toEqual({ error: 'Invalid limit.' })
+
+    expect(mocks.requireSessionUserOrg).toHaveBeenCalledTimes(2)
+    expect(mocks.loadEstimateCollectionJobsPayload).not.toHaveBeenCalled()
+    expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
+  })
+
+  it('treats empty search as a successful empty query read', async () => {
+    mocks.loadEstimateCollectionSearchPayload.mockResolvedValueOnce({
+      ok: true,
+      data: { query: '', items: [] },
+    })
+
+    const response = await getQuoteHomeSearch(
+      new Request('http://localhost/api/quotes/home/search?q=%20%20')
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      data: { query: '', items: [] },
+    })
+    expect(mocks.loadEstimateCollectionSearchPayload).toHaveBeenCalledWith('org-1', '')
+  })
+
   it('authenticates job-version reads before validating route params', async () => {
     mocks.requireSessionUserOrg.mockResolvedValueOnce({
       ok: false,

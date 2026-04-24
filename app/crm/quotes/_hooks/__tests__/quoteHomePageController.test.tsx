@@ -1,24 +1,58 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type {
+  QuoteHomeBootstrapReadModel,
+  QuoteHomeJobVersionItemReadModel,
+  QuoteJobVersionsPageReadModel,
+} from '@/lib/quotes/collectionData'
 import { useQuoteHomePageController } from '../quoteHomePageController'
 
-const versionItem = {
-  estimate_id: 'estimate-1',
-  job_id: 'job-1',
-  customer_id: 'customer-1',
-  version_name: 'Version A',
-  version_state: 'draft',
-  version_kind: 'standard',
-  version_sort_order: 1,
-  job_title: 'Kitchen',
-  customer_name: 'Alice',
-  final_total: 500,
-  updated_at: '2026-04-20T10:00:00.000Z',
-  created_at: '2026-04-19T10:00:00.000Z',
-  is_sent_estimate: false,
-} as const
+function makeVersionItem(
+  estimateId: string,
+  jobId: string,
+  overrides: Partial<QuoteHomeJobVersionItemReadModel> = {}
+): QuoteHomeJobVersionItemReadModel {
+  return {
+    estimate_id: estimateId,
+    job_id: jobId,
+    customer_id: 'customer-1',
+    version_name: 'Version A',
+    version_state: 'draft',
+    version_kind: 'standard',
+    version_sort_order: 1,
+    job_title: 'Kitchen',
+    customer_name: 'Alice',
+    final_total: 500,
+    updated_at: '2026-04-20T10:00:00.000Z',
+    created_at: '2026-04-19T10:00:00.000Z',
+    is_sent_estimate: false,
+    ...overrides,
+  }
+}
 
-const bootstrapWithActiveVersions = {
+function makeVersionsPage(
+  jobId: string,
+  items: QuoteHomeJobVersionItemReadModel[]
+): QuoteJobVersionsPageReadModel {
+  return {
+    job_id: jobId,
+    total_versions: items.length,
+    limit: 25,
+    next_cursor: null,
+    items,
+  }
+}
+
+const versionItem = makeVersionItem('estimate-1', 'job-1')
+const nonBootstrapVersionItem = makeVersionItem('estimate-2', 'job-2', {
+  customer_id: 'customer-2',
+  job_title: 'Garage',
+  customer_name: 'Bob',
+  version_name: 'Version B',
+  version_sort_order: 1,
+})
+
+const bootstrapWithActiveVersions: QuoteHomeBootstrapReadModel = {
   summary: {
     total_versions: 1,
     draft_count: 1,
@@ -33,22 +67,26 @@ const bootstrapWithActiveVersions = {
     items: [],
   },
   selected_job_id: 'job-1',
-  selected_job_versions: {
-    job_id: 'job-1',
-    total_versions: 1,
-    limit: 25,
-    next_cursor: null,
-    items: [versionItem],
-  },
+  selected_job_versions: makeVersionsPage('job-1', [versionItem]),
 }
 
-function buildController() {
+function buildController(
+  overrides: {
+    bootstrapData?: QuoteHomeBootstrapReadModel
+    versionsPageData?: QuoteJobVersionsPageReadModel
+    versionItems?: QuoteHomeJobVersionItemReadModel[]
+  } = {}
+) {
+  const bootstrapData = overrides.bootstrapData ?? bootstrapWithActiveVersions
+  const versionsPageData =
+    overrides.versionsPageData ?? bootstrapWithActiveVersions.selected_job_versions!
+  const versionItems = overrides.versionItems ?? versionsPageData.items
   const homeAttemptRefresh = vi.fn<
     (options?: {
       preserveDataOnError?: boolean
       reportError?: boolean
-    }) => Promise<{ ok: boolean; error: string | null; data: typeof bootstrapWithActiveVersions | null }>
-  >(async () => ({ ok: true, error: null, data: bootstrapWithActiveVersions }))
+    }) => Promise<{ ok: boolean; error: string | null; data: QuoteHomeBootstrapReadModel | null }>
+  >(async () => ({ ok: true, error: null, data: bootstrapData }))
   const versionsAttemptRefresh = vi.fn<
     (options?: {
       preserveDataOnError?: boolean
@@ -60,8 +98,8 @@ function buildController() {
     retryJobs: vi.fn(async () => true),
   }
   const versions = {
-    pageData: bootstrapWithActiveVersions.selected_job_versions,
-    items: [versionItem],
+    pageData: versionsPageData,
+    items: versionItems,
     refresh: vi.fn(async () => true),
     attemptRefresh: versionsAttemptRefresh,
   }
@@ -211,6 +249,57 @@ describe('useQuoteHomePageController', () => {
     expect(result.current.actionWarning).toBeNull()
   })
 
+  it('refreshes home data then active job versions after deleting a bootstrap-selected job version', async () => {
+    const { result, homeResource, versions } = buildController()
+
+    await act(async () => {
+      expect(await result.current.actions.confirmDelete()).toBe(true)
+    })
+
+    expect(homeResource.attemptRefresh).toHaveBeenCalledWith({
+      preserveDataOnError: true,
+      reportError: false,
+    })
+    expect(versions.attemptRefresh).toHaveBeenCalledWith({
+      preserveDataOnError: true,
+      reportError: false,
+    })
+    expect(homeResource.attemptRefresh.mock.invocationCallOrder[0]).toBeLessThan(
+      versions.attemptRefresh.mock.invocationCallOrder[0]
+    )
+    expect(result.current.actionWarning).toBeNull()
+  })
+
+  it('refreshes home data then active job versions after deleting a non-bootstrap selected job version', async () => {
+    const activeVersionsPage = makeVersionsPage('job-2', [nonBootstrapVersionItem])
+    const { result, homeResource, versions, deleteController } = buildController({
+      versionsPageData: activeVersionsPage,
+      versionItems: activeVersionsPage.items,
+    })
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-2')
+    })
+
+    await act(async () => {
+      expect(await result.current.actions.confirmDelete()).toBe(true)
+    })
+
+    expect(deleteController.requestDeleteVersion).toHaveBeenCalledWith(nonBootstrapVersionItem)
+    expect(homeResource.attemptRefresh).toHaveBeenCalledWith({
+      preserveDataOnError: true,
+      reportError: false,
+    })
+    expect(versions.attemptRefresh).toHaveBeenCalledWith({
+      preserveDataOnError: true,
+      reportError: false,
+    })
+    expect(homeResource.attemptRefresh.mock.invocationCallOrder[0]).toBeLessThan(
+      versions.attemptRefresh.mock.invocationCallOrder[0]
+    )
+    expect(result.current.actionWarning).toBeNull()
+  })
+
   it('skips manual versions refresh when bootstrap includes the active job versions', async () => {
     const { result, homeResource, versions } = buildController()
 
@@ -238,7 +327,7 @@ describe('useQuoteHomePageController', () => {
     expect(versions.refresh).not.toHaveBeenCalled()
   })
 
-  it('skips delete follow-up versions refresh when bootstrap includes the active job versions', async () => {
+  it('does not rely on bootstrap-selected versions as delete follow-up refresh coverage', async () => {
     const { result, homeResource, versions } = buildController()
     homeResource.attemptRefresh.mockResolvedValue({
       ok: true,
@@ -254,7 +343,10 @@ describe('useQuoteHomePageController', () => {
       preserveDataOnError: true,
       reportError: false,
     })
-    expect(versions.attemptRefresh).not.toHaveBeenCalled()
+    expect(versions.attemptRefresh).toHaveBeenCalledWith({
+      preserveDataOnError: true,
+      reportError: false,
+    })
     expect(result.current.actionWarning).toBeNull()
   })
 

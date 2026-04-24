@@ -42,6 +42,10 @@ export function useQuotesHomeHeaderInteractions({
     onSearchFocusedChange(true)
   }, [onSearchFocusedChange])
 
+  const openSettings = useCallback(() => {
+    setSettingsOpen(true)
+  }, [])
+
   const toggleSettings = useCallback(() => {
     setSettingsOpen((open) => !open)
   }, [])
@@ -115,7 +119,10 @@ export function useQuotesHomeHeaderInteractions({
     searchResultsId,
     settingsPanelId,
     settingsOpen,
+    closeSearch,
+    closeSettings,
     openSearch,
+    openSettings,
     toggleSettings,
     handleSearchBlur,
     handleSearchKeyDown,

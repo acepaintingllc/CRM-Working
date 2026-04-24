@@ -72,9 +72,16 @@ export const SETTINGS_LINKS: NavItem[] = [
   { label: 'Settings', href: '/crm/settings' },
 ]
 
-const HOME_FAILURE_MESSAGES: Record<'bootstrap', string> = {
+const HOME_FAILURE_MESSAGES: Record<
+  Extract<QuoteHomeFailureSource, 'bootstrap' | 'jobs'>,
+  string
+> = {
   bootstrap: 'Quote home failed to load.',
+  jobs: 'Quote home jobs failed to load.',
 }
+
+const QUOTE_HOME_JOB_VERSIONS_FAILURE_MESSAGE =
+  'Job versions failed to load.'
 
 const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
   bootstrap: 'bootstrap',
@@ -84,7 +91,12 @@ const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
   delete: 'quote deletion',
 }
 
-function formatVersionCount(value: number) {
+type QuoteHomeLoadFailure = {
+  source: Extract<QuoteHomeFailureSource, 'bootstrap' | 'jobs'>
+  message: string
+}
+
+export function formatVersionCount(value: number) {
   return `${value} version${value === 1 ? '' : 's'}`
 }
 
@@ -165,7 +177,7 @@ export function buildQuotesHomeSearchCanRetry(params: {
 }
 
 export function buildHomeLoadFailureDetail(
-  source: 'bootstrap',
+  source: Extract<QuoteHomeFailureSource, 'bootstrap' | 'jobs'>,
   message: string,
 ) {
   const fallback = HOME_FAILURE_MESSAGES[source]
@@ -173,63 +185,103 @@ export function buildHomeLoadFailureDetail(
   return message.startsWith(fallback) ? message : `${fallback} ${message}`
 }
 
+function buildJobVersionsFailureDetail(message: string) {
+  if (message === 'Failed to load job quote versions.') {
+    return QUOTE_HOME_JOB_VERSIONS_FAILURE_MESSAGE
+  }
+
+  return `${QUOTE_HOME_JOB_VERSIONS_FAILURE_MESSAGE} ${message}`
+}
+
+function appendFeedbackDetail(
+  feedback: Pick<QuoteHomeFeedbackVm, 'details' | 'sources'>,
+  source: QuoteHomeFailureSource,
+  detail: string,
+) {
+  feedback.details.push(detail)
+  feedback.sources.push(source)
+}
+
+function buildQuotesHomeFeedbackTitle(params: {
+  homeFailureCount: number
+  sources: QuoteHomeFailureSource[]
+  hasJobVersionsError: boolean
+  hasActionError: boolean
+  hasActionWarning: boolean
+}) {
+  if (params.hasActionError) return 'Quote action failed'
+  if (params.hasActionWarning) {
+    return 'Quote action completed with refresh errors'
+  }
+  if (params.hasJobVersionsError) return 'Quote home loaded with errors'
+  if (params.homeFailureCount > 1) {
+    return 'Some quote home data failed to load'
+  }
+
+  return `Quote home ${FAILURE_SOURCE_LABELS[params.sources[0]]} failed to load`
+}
+
 export function buildQuotesHomeFeedbackVm(params: {
-  homeFailures: Array<{ source: 'bootstrap'; message: string }>
+  homeFailures: QuoteHomeLoadFailure[]
   jobVersionsError: string | null
   createError: string | null
   deleteError: string | null
   actionWarning: QuoteHomeActionWarning | null
 }): QuoteHomeFeedbackVm | null {
-  const details = params.homeFailures.map((failure) =>
-    buildHomeLoadFailureDetail(failure.source, failure.message),
-  )
-  const sources = params.homeFailures.map(
-    (failure) => failure.source as QuoteHomeFailureSource,
-  )
+  const feedback: Pick<QuoteHomeFeedbackVm, 'details' | 'sources'> = {
+    details: [],
+    sources: [],
+  }
+
+  params.homeFailures.forEach((failure) => {
+    appendFeedbackDetail(
+      feedback,
+      failure.source,
+      buildHomeLoadFailureDetail(failure.source, failure.message),
+    )
+  })
 
   if (params.jobVersionsError) {
-    details.push(
-      params.jobVersionsError === 'Failed to load job quote versions.'
-        ? 'Job versions failed to load.'
-        : `Job versions failed to load. ${params.jobVersionsError}`,
+    appendFeedbackDetail(
+      feedback,
+      'jobVersions',
+      buildJobVersionsFailureDetail(params.jobVersionsError),
     )
-    sources.push('jobVersions')
   }
 
   if (params.createError) {
-    details.push(params.createError)
-    sources.push('create')
+    appendFeedbackDetail(feedback, 'create', params.createError)
   }
 
   if (params.deleteError) {
-    details.push(params.deleteError)
-    sources.push('delete')
+    appendFeedbackDetail(feedback, 'delete', params.deleteError)
   }
 
   if (params.actionWarning) {
-    details.push(params.actionWarning.message)
-    sources.push(params.actionWarning.source) // actionWarning currently only produced by delete-refresh path
+    appendFeedbackDetail(
+      feedback,
+      params.actionWarning.source,
+      params.actionWarning.message,
+    )
   }
 
-  if (details.length === 0) return null
+  if (feedback.details.length === 0) return null
 
   const actionError = Boolean(params.createError || params.deleteError)
   const actionWarning = Boolean(params.actionWarning)
-  const title = actionError
-    ? 'Quote action failed'
-    : actionWarning
-      ? 'Quote action completed with refresh errors'
-      : params.jobVersionsError
-        ? 'Quote home loaded with errors'
-        : params.homeFailures.length > 1
-          ? 'Some quote home data failed to load'
-          : `Quote home ${FAILURE_SOURCE_LABELS[sources[0]]} failed to load`
+  const title = buildQuotesHomeFeedbackTitle({
+    homeFailureCount: params.homeFailures.length,
+    sources: feedback.sources,
+    hasJobVersionsError: Boolean(params.jobVersionsError),
+    hasActionError: actionError,
+    hasActionWarning: actionWarning,
+  })
 
   return {
     tone: actionError ? 'error' : 'warning',
     title,
-    details,
-    sources,
+    details: feedback.details,
+    sources: feedback.sources,
   }
 }
 
@@ -253,6 +305,17 @@ export function buildQuoteHomeJobListItemVm(
     versionCountLabel: `${versionCount} version${versionCount === 1 ? '' : 's'}`,
     isSelected: options?.selectedJobId === job.id,
   }
+}
+
+export function buildQuotesHomeJobListEmptyState(params: {
+  hasLoadError: boolean
+  totalJobCount: number
+  visibleJobCount: number
+}): 'none' | 'no_jobs' | 'no_matches' {
+  if (params.hasLoadError) return 'none'
+  if (params.totalJobCount === 0) return 'no_jobs'
+  if (params.visibleJobCount === 0) return 'no_matches'
+  return 'none'
 }
 
 export function buildQuotesHomeJobListEmptyStateBody(
@@ -323,6 +386,17 @@ export function buildQuotesHomeVersionHeading(
   return selectedJob
     ? `${formatVersionCount(totalVersions)} under this job`
     : 'Pick a job first'
+}
+
+export function buildQuotesHomeSelectedJobVersionCount(params: {
+  selectedJob: QuoteHomeJob | null
+  totalVersions: number
+  hasResolved: boolean
+}) {
+  if (!params.selectedJob) return params.totalVersions
+  return params.hasResolved
+    ? params.totalVersions
+    : params.selectedJob.version_count
 }
 
 export function buildQuotesHomeVersionDetail(

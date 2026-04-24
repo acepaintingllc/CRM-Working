@@ -27,6 +27,10 @@ const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
   selected_job_versions: null,
 }
 
+function getJobsPaginationRequestKey(query: string, cursor: string) {
+  return JSON.stringify([query, cursor])
+}
+
 function toLoadErrorMessage(scope: string, loadError: unknown) {
   return loadError instanceof Error ? loadError.message : `Failed to load ${scope}.`
 }
@@ -69,6 +73,7 @@ export function useQuotesHomeJobs(
   const [jobsError, setJobsError] = useState<string | null>(null)
   const jobsPageRef = useRef(bootstrapData.jobs)
   const jobsRequestIdRef = useRef(0)
+  const jobPaginationInFlightKeysRef = useRef(new Set<string>())
 
   const commitJobsPage = useCallback((nextJobsPage: QuoteHomeJobsPageReadModel) => {
     jobsPageRef.current = nextJobsPage
@@ -189,16 +194,26 @@ export function useQuotesHomeJobs(
   const loadMoreJobs = useCallback(async () => {
     const currentJobsPage = jobsPageRef.current
     const cursor = currentJobsPage.next_cursor
-    if (!cursor || jobsLoading) {
+    if (!cursor) {
       return
     }
 
-    await loadJobsPage({
-      query: currentJobsPage.query,
-      cursor,
-      append: true,
-    })
-  }, [jobsLoading, loadJobsPage])
+    const paginationRequestKey = getJobsPaginationRequestKey(currentJobsPage.query, cursor)
+    if (jobPaginationInFlightKeysRef.current.has(paginationRequestKey)) {
+      return
+    }
+
+    jobPaginationInFlightKeysRef.current.add(paginationRequestKey)
+    try {
+      await loadJobsPage({
+        query: currentJobsPage.query,
+        cursor,
+        append: true,
+      })
+    } finally {
+      jobPaginationInFlightKeysRef.current.delete(paginationRequestKey)
+    }
+  }, [loadJobsPage])
 
   return {
     jobsPage,
