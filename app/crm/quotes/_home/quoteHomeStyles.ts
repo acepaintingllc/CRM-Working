@@ -39,6 +39,27 @@ export const S: Record<string, CSSProperties> = {
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
   },
+  headerCard: {
+    background: 'var(--v2-bg-2)',
+    border: '1px solid var(--v2-line)',
+    borderRadius: 16,
+    padding: 20,
+    display: 'grid',
+    gap: 18,
+    marginBottom: 24,
+  },
+  headerRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 18,
+    flexWrap: 'wrap',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 700,
+    letterSpacing: '-0.02em',
+  },
   settingsMenu: {
     position: 'relative',
   },

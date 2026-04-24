@@ -2,9 +2,28 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
-import type { QuotesHomeHeaderVm } from './quoteHomeTypes'
+import type { NavItem, QuotesHomeHeaderVm } from './quoteHomeTypes'
+
+const SETTINGS_LINKS: NavItem[] = [
+  { label: 'Defaults', href: '/crm/quotes/defaults' },
+  { label: 'Products', href: '/crm/quotes/products' },
+  { label: 'Rates & Flags', href: '/crm/quotes/rates' },
+  { label: 'Settings', href: '/crm/settings' },
+]
+
+function formatToday() {
+  const now = new Date()
+  return now
+    .toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    })
+    .replace(',', ' /')
+    .toUpperCase()
+}
 
 type Props = {
   vm: QuotesHomeHeaderVm
@@ -54,26 +73,11 @@ export function QuotesHomeHeader({
   }
 
   return (
-    <div
-      style={{
-        ...S.card,
-        display: 'grid',
-        gap: 18,
-        marginBottom: 24,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 18,
-          flexWrap: 'wrap',
-        }}
-      >
+    <div style={S.headerCard}>
+      <div style={S.headerRow}>
         <div>
           <div style={S.eyebrow}>{formatToday()}</div>
-          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>Quote home overview</div>
+          <div style={S.headerTitle}>Quote home overview</div>
           <div style={S.subhead}>{vm.heroSummaryText}</div>
         </div>
 

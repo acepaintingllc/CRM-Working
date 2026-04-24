@@ -279,7 +279,7 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.versionList).toEqual(
       expect.objectContaining({
         heading: '99 versions under this job',
-        detail: 'Showing 2 of 99 versions.',
+        detail: 'Showing 2 of 99 versions - reload to see all.',
       })
     )
     expect(vm.create).toEqual({

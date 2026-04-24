@@ -86,10 +86,43 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.meta).toContain('Live / Revision \u00B7 Updated')
   })
 
-  it('builds version-history totals from the full count, not the loaded page length', () => {
+  it('builds version-history heading from the full count, not the loaded page length', () => {
     expect(buildQuotesHomeVersionHeading(job, 30)).toBe(
       '30 versions under this job'
     )
+  })
+
+  it('returns null version detail when no job is selected', () => {
+    expect(
+      buildQuotesHomeVersionDetail(null, {
+        loadedVersions: 25,
+        totalVersions: 30,
+        hasMore: true,
+      })
+    ).toBeNull()
+  })
+
+  it('returns null version detail when the selected job has no versions', () => {
+    expect(
+      buildQuotesHomeVersionDetail(job, {
+        loadedVersions: 0,
+        totalVersions: 0,
+        hasMore: false,
+      })
+    ).toBeNull()
+  })
+
+  it('returns null version detail when no versions are loaded yet', () => {
+    expect(
+      buildQuotesHomeVersionDetail(job, {
+        loadedVersions: 0,
+        totalVersions: 30,
+        hasMore: false,
+      })
+    ).toBeNull()
+  })
+
+  it('builds paginated version detail when more versions can be loaded', () => {
     expect(
       buildQuotesHomeVersionDetail(job, {
         loadedVersions: 25,
@@ -97,6 +130,9 @@ describe('quoteHomePresentation', () => {
         hasMore: true,
       })
     ).toBe('Showing 25 of 30 versions.')
+  })
+
+  it('builds all-loaded version detail when loaded and total counts match', () => {
     expect(
       buildQuotesHomeVersionDetail(job, {
         loadedVersions: 30,
@@ -104,6 +140,16 @@ describe('quoteHomePresentation', () => {
         hasMore: false,
       })
     ).toBe('Showing all 30 versions.')
+  })
+
+  it('builds reload version detail when no more pages exist but counts differ', () => {
+    expect(
+      buildQuotesHomeVersionDetail(job, {
+        loadedVersions: 25,
+        totalVersions: 30,
+        hasMore: false,
+      })
+    ).toBe('Showing 25 of 30 versions - reload to see all.')
   })
 
   it('builds search result view models from shared home version items', () => {

@@ -2,7 +2,6 @@ import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
 import type {
   QuoteHomeActionWarning,
   QuoteHomeFeedbackVm,
-  NavItem,
   QuoteHomeJob,
   QuoteHomeJobVersion,
   QuoteHomeJobListItemVm,
@@ -13,13 +12,6 @@ import type {
   SearchResultVm,
   SummaryCardVm,
 } from './quoteHomeTypes'
-
-export const SETTINGS_LINKS: NavItem[] = [
-  { label: 'Defaults', href: '/crm/quotes/defaults' },
-  { label: 'Products', href: '/crm/quotes/products' },
-  { label: 'Rates & Flags', href: '/crm/quotes/rates' },
-  { label: 'Settings', href: '/crm/settings' },
-]
 
 export const QUOTE_META_SEPARATOR = ' \u00B7 '
 
@@ -36,19 +28,6 @@ const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
 
 function formatVersionCount(value: number) {
   return `${value} version${value === 1 ? '' : 's'}`
-}
-
-export function formatToday() {
-  const now = new Date()
-  return now
-    .toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-    .replace(',', ' /')
-    .toUpperCase()
 }
 
 export function formatCurrency(value: number | null | undefined) {
@@ -173,14 +152,13 @@ export function buildHeroSummaryText(
 export function buildQuoteHomeJobListItemVm(
   job: QuoteHomeJob,
   versionCount: number,
-  options?: { mobile?: boolean; selectedJobId?: string },
+  options?: { selectedJobId?: string },
 ): QuoteHomeJobListItemVm {
   return {
     id: job.id,
     title: job.title,
     customerName: job.customer_name ?? 'Unknown customer',
     versionCountLabel: `${versionCount} version${versionCount === 1 ? '' : 's'}`,
-    href: options?.mobile ? `/crm/quotes/create?job=${job.id}` : undefined,
     isSelected: options?.selectedJobId === job.id,
   }
 }
@@ -266,7 +244,7 @@ export function buildQuotesHomeVersionDetail(
   }
 
   if (params.loadedVersions !== params.totalVersions) {
-    return `Showing ${params.loadedVersions} of ${formatVersionCount(params.totalVersions)}.`
+    return `Showing ${params.loadedVersions} of ${formatVersionCount(params.totalVersions)} - reload to see all.`
   }
 
   return `Showing all ${formatVersionCount(params.totalVersions)}.`

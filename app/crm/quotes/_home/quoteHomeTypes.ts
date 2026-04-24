@@ -66,7 +66,6 @@ export type QuoteHomeJobListItemVm = {
   title: string
   customerName: string
   versionCountLabel: string
-  href?: string
   isSelected?: boolean
 }
 

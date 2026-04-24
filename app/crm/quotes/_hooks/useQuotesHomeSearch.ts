@@ -7,6 +7,8 @@ import {
 } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeSearch } from '@/lib/quotes/client'
 
+const SEARCH_DEBOUNCE_MS = 150
+
 const emptySearchResponse: QuoteHomeSearchResponse = {
   query: '',
   items: [],
@@ -23,7 +25,7 @@ export function useQuotesHomeSearch(query: string) {
   useEffect(() => {
     const timeout = setTimeout(() => {
       setDebouncedQuery(query.trim())
-    }, 150)
+    }, SEARCH_DEBOUNCE_MS)
 
     return () => clearTimeout(timeout)
   }, [query])
