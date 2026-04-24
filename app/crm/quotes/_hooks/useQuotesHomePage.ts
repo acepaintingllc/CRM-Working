@@ -2,24 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import { buildQuoteHomePageVm, type QuoteHomePageActions } from '../_home/quoteHomePageVm'
 import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
 import { useQuoteVersionWorkflow } from './useQuoteVersionWorkflow'
 import { filterQuoteHomeJobs, resolveQuoteHomeSelectedJobId } from './quoteHomePagePolicy'
-import {
-  buildHeroSummaryText,
-  buildQuoteHomeJobListItemVm,
-  buildQuoteHomeVersionItemVm,
-  buildQuotesHomeDeleteDialogVm,
-  buildQuotesHomeFeedbackVm,
-  buildQuotesHomeSelectedJobVm,
-  buildQuotesHomeVersionEmptyMessage,
-  buildQuotesHomeVersionHeading,
-  buildSearchResultVm,
-  buildSummaryCards,
-} from '../_home/quoteHomePresentation'
-import type { QuotesHomeJobListVm, QuotesHomePageSections } from '../_home/quoteHomeTypes'
 
 export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | null) {
   const homeResource = useQuotesHomeData(initialData)
@@ -53,157 +41,110 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
     }
   }, [homeResource.jobs, selectedJobId])
 
-  const summaryCards = buildSummaryCards(homeResource.summary)
-  const jobListItems = filteredJobs.map((job) =>
-    buildQuoteHomeJobListItemVm(job, job.version_count, {
-      selectedJobId,
-    })
-  )
-  const mobileItems = homeResource.jobs
-    .slice(0, 10)
-    .map((job) => buildQuoteHomeJobListItemVm(job, job.version_count, { mobile: true }))
-  const versionItems = workflow.versions.items.map((estimate) =>
-    buildQuoteHomeVersionItemVm(estimate, deleteController.deletingId)
-  )
-  const feedbackVm = buildQuotesHomeFeedbackVm({
-    homeFailures: homeResource.bootstrapError
-      ? [{ source: 'bootstrap', message: homeResource.bootstrapError }]
-      : [],
-    jobVersionsError: workflow.versions.error,
-    createError: workflow.create.error,
-    deleteError: deleteController.error,
-    actionWarning,
-  })
-  const resolvedFeedbackVm = feedbackVm ?? {
-    tone: 'warning' as const,
-    title: '',
-    details: [],
-    sources: [],
-  }
-  const versionCount = selectedJob?.version_count ?? workflow.versions.pageData.total_versions
-  const deleteTargetsById = useMemo(() => {
-    return new Map(workflow.versions.items.map((item) => [item.estimate_id, item]))
-  }, [workflow.versions.items])
+  const actions: QuoteHomePageActions = {
+    setSearchQuery,
+    setSearchFocused,
+    setJobQuery,
+    setSelectedJobId,
+    setVersionName: workflow.actions.setVersionName,
+    setVersionKind: workflow.actions.setVersionKind,
+    create: workflow.actions.create,
+    retrySearch: searchState.retry,
+    requestDelete: (value: string | { estimate_id: string }) => {
+      setActionWarning(null)
+      const estimateId = typeof value === 'string' ? value : value.estimate_id
+      const estimate =
+        workflow.versions.items.find((item) => item.estimate_id === estimateId) ?? null
+      if (estimate) {
+        deleteController.requestDeleteVersion(estimate)
+      }
+    },
+    cancelDelete: deleteController.cancelDelete,
+    confirmDelete: async () => {
+      const deleted = await deleteController.confirmDeleteVersion()
+      if (!deleted) {
+        return false
+      }
 
-  const sections: QuotesHomePageSections = {
-    headerVm: {
-      heroSummaryText: buildHeroSummaryText(homeResource.summary),
+      setActionWarning(null)
+      const [bootstrapRefresh, versionsRefresh] = await Promise.all([
+        homeResource.attemptRefresh({
+          preserveDataOnError: true,
+          reportError: false,
+        }),
+        workflow.versions.attemptRefresh({
+          preserveDataOnError: true,
+          reportError: false,
+        }),
+      ])
+
+      if (bootstrapRefresh.ok && versionsRefresh.ok) {
+        return true
+      }
+
+      const refreshFailures: string[] = []
+      if (!bootstrapRefresh.ok && bootstrapRefresh.error) {
+        refreshFailures.push(`Home refresh failed. ${bootstrapRefresh.error}`)
+      }
+      if (!versionsRefresh.ok && versionsRefresh.error) {
+        refreshFailures.push(`Versions refresh failed. ${versionsRefresh.error}`)
+      }
+
+      setActionWarning(
+        `Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. ${refreshFailures.join(' ')}`
+      )
+      return true
+    },
+    refresh: async () => {
+      setActionWarning(null)
+      return workflow.actions.refresh()
+    },
+  }
+
+  return buildQuoteHomePageVm(
+    {
+      actionWarning,
       searchQuery,
       searchFocused,
-      searchLoading: searchState.loading,
-      searchEmptyMessage: searchState.emptyMessage,
-      searchErrorMessage: searchState.error,
-      searchCanRetry: searchState.canRetry,
-      searchResults: searchState.results.map(buildSearchResultVm),
-    },
-    feedbackVm: {
-      loading: homeResource.loading,
-      ...resolvedFeedbackVm,
-    },
-    summaryCards,
-    jobListVm: {
-      loading: homeResource.loading,
-      searchQuery: jobQuery,
+      jobQuery,
       selectedJobId,
-      items: jobListItems,
-      mobileItems,
-      emptyState:
-        homeResource.jobs.length === 0
-          ? 'no_jobs'
-          : jobListItems.length === 0
-            ? 'no_matches'
-            : 'none',
-    } satisfies QuotesHomeJobListVm,
-    selectedJobVm: buildQuotesHomeSelectedJobVm(selectedJob, versionCount, homeResource.loading),
-    versionListVm: {
-      heading: buildQuotesHomeVersionHeading(selectedJob, workflow.versions.items),
-      emptyMessage: buildQuotesHomeVersionEmptyMessage(selectedJob, workflow.versions.items),
-      items: versionItems,
+      selectedJob,
+      filteredJobs,
+      actions,
     },
-    createVm: {
-      creating: workflow.create.creating,
-      loading: homeResource.loading,
-      selectedJobName: selectedJob?.title ?? null,
-      versionName: workflow.create.versionName,
-      versionKind: workflow.create.versionKind,
-      canCreate: workflow.create.canCreate,
-    },
-    mobileSummaryCards: [summaryCards[0], summaryCards[3]].filter(Boolean),
-    deleteDialogVm: buildQuotesHomeDeleteDialogVm(
-      deleteController.confirmingDelete,
-      deleteController.deletingId
-    ),
-  }
-
-  return {
-    header: sections.headerVm,
-    feedback: sections.feedbackVm,
-    summaryCards: sections.summaryCards,
-    jobList: sections.jobListVm,
-    selectedJob: sections.selectedJobVm,
-    versionList: sections.versionListVm,
-    create: sections.createVm,
-    mobileSummaryCards: sections.mobileSummaryCards,
-    dialogs: {
-      delete: sections.deleteDialogVm,
-    },
-    actions: {
-      setSearchQuery,
-      setSearchFocused,
-      setJobQuery,
-      setSelectedJobId,
-      setVersionName: workflow.actions.setVersionName,
-      setVersionKind: workflow.actions.setVersionKind,
-      create: workflow.actions.create,
-      retrySearch: searchState.retry,
-      requestDelete: (value: string | { estimate_id: string }) => {
-        setActionWarning(null)
-        const estimateId = typeof value === 'string' ? value : value.estimate_id
-        const estimate = deleteTargetsById.get(estimateId) ?? null
-        if (estimate) {
-          deleteController.requestDeleteVersion(estimate)
-        }
+    {
+      home: {
+        summary: homeResource.summary,
+        jobs: homeResource.jobs,
+        loading: homeResource.loading,
+        bootstrapError: homeResource.bootstrapError,
       },
-      cancelDelete: deleteController.cancelDelete,
-      confirmDelete: async () => {
-        const deleted = await deleteController.confirmDeleteVersion()
-        if (!deleted) {
-          return false
-        }
-
-        setActionWarning(null)
-        const [bootstrapRefresh, versionsRefresh] = await Promise.all([
-          homeResource.attemptRefresh({
-            preserveDataOnError: true,
-            reportError: false,
-          }),
-          workflow.versions.attemptRefresh({
-            preserveDataOnError: true,
-            reportError: false,
-          }),
-        ])
-
-        if (bootstrapRefresh.ok && versionsRefresh.ok) {
-          return true
-        }
-
-        const refreshFailures: string[] = []
-        if (!bootstrapRefresh.ok && bootstrapRefresh.error) {
-          refreshFailures.push(`Home refresh failed. ${bootstrapRefresh.error}`)
-        }
-        if (!versionsRefresh.ok && versionsRefresh.error) {
-          refreshFailures.push(`Versions refresh failed. ${versionsRefresh.error}`)
-        }
-
-        setActionWarning(
-          `Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. ${refreshFailures.join(' ')}`
-        )
-        return true
+      search: {
+        loading: searchState.loading,
+        emptyMessage: searchState.emptyMessage,
+        error: searchState.error,
+        canRetry: searchState.canRetry,
+        results: searchState.results,
       },
-      refresh: async () => {
-        setActionWarning(null)
-        return workflow.actions.refresh()
+      workflow: {
+        versions: {
+          items: workflow.versions.items,
+          error: workflow.versions.error,
+          totalVersions: workflow.versions.pageData.total_versions,
+        },
+        create: {
+          creating: workflow.create.creating,
+          error: workflow.create.error,
+          versionName: workflow.create.versionName,
+          versionKind: workflow.create.versionKind,
+          canCreate: workflow.create.canCreate,
+        },
       },
-    },
-  }
+      delete: {
+        confirmingDelete: deleteController.confirmingDelete,
+        deletingId: deleteController.deletingId,
+        error: deleteController.error,
+      },
+    }
+  )
 }

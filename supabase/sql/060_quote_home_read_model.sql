@@ -91,76 +91,86 @@ create or replace function public.quote_home_jobs_page(
   linked_estimate_id uuid,
   version_count bigint
 )
-language sql
+language plpgsql
 stable
 set search_path = public
 as $$
-  with filtered_jobs as (
+begin
+  if (p_cursor_created_at is null) <> (p_cursor_id is null) then
+    raise exception
+      using
+        errcode = '22023',
+        message = 'Invalid cursor: p_cursor_created_at and p_cursor_id must be provided together.';
+  end if;
+
+  return query
+    with filtered_jobs as (
+      select
+        j.id,
+        j.customer_id,
+        c.name as customer_name,
+        c.address as customer_address,
+        j.title,
+        j.description,
+        j.status,
+        j.created_at,
+        j.estimate_date,
+        j.estimate_sent_at,
+        j.scheduled_date,
+        j.scheduled_end_date,
+        j.scheduled_email_sent_at,
+        j.completed_at,
+        j.completed_email_sent_at,
+        j.closeout_notes,
+        j.linked_estimate_id
+      from public.jobs j
+      join public.customers c
+        on c.org_id = p_org_id
+       and c.id = j.customer_id
+      where j.org_id = p_org_id
+        and (
+          nullif(btrim(coalesce(p_search, '')), '') is null
+          or coalesce(j.title, '') ilike '%' || btrim(p_search) || '%'
+          or coalesce(c.name, '') ilike '%' || btrim(p_search) || '%'
+          or coalesce(c.address, '') ilike '%' || btrim(p_search) || '%'
+        )
+        and (
+          p_cursor_created_at is null
+          or (j.created_at, j.id) < (p_cursor_created_at, p_cursor_id)
+        )
+      order by j.created_at desc, j.id desc
+      limit least(greatest(coalesce(p_limit, 25), 1), 100)
+    ),
+    version_counts as (
+      select e.job_id, count(*)::bigint as version_count
+      from public.estimates e
+      where e.org_id = p_org_id
+        and e.job_id in (select filtered_jobs.id from filtered_jobs)
+      group by e.job_id
+    )
     select
-      j.id,
-      j.customer_id,
-      c.name as customer_name,
-      c.address as customer_address,
-      j.title,
-      j.description,
-      j.status,
-      j.created_at,
-      j.estimate_date,
-      j.estimate_sent_at,
-      j.scheduled_date,
-      j.scheduled_end_date,
-      j.scheduled_email_sent_at,
-      j.completed_at,
-      j.completed_email_sent_at,
-      j.closeout_notes,
-      j.linked_estimate_id
-    from public.jobs j
-    join public.customers c
-      on c.org_id = p_org_id
-     and c.id = j.customer_id
-    where j.org_id = p_org_id
-      and (
-        nullif(btrim(coalesce(p_search, '')), '') is null
-        or coalesce(j.title, '') ilike '%' || btrim(p_search) || '%'
-        or coalesce(c.name, '') ilike '%' || btrim(p_search) || '%'
-        or coalesce(c.address, '') ilike '%' || btrim(p_search) || '%'
-      )
-      and (
-        p_cursor_created_at is null
-        or (j.created_at, j.id) < (p_cursor_created_at, p_cursor_id)
-      )
-    order by j.created_at desc, j.id desc
-    limit greatest(coalesce(p_limit, 25), 1)
-  ),
-  version_counts as (
-    select e.job_id, count(*)::bigint as version_count
-    from public.estimates e
-    where e.org_id = p_org_id
-      and e.job_id in (select filtered_jobs.id from filtered_jobs)
-    group by e.job_id
-  )
-  select
-    filtered_jobs.id,
-    filtered_jobs.customer_id,
-    filtered_jobs.customer_name,
-    filtered_jobs.customer_address,
-    filtered_jobs.title,
-    filtered_jobs.description,
-    filtered_jobs.status,
-    filtered_jobs.created_at,
-    filtered_jobs.estimate_date,
-    filtered_jobs.estimate_sent_at,
-    filtered_jobs.scheduled_date,
-    filtered_jobs.scheduled_end_date,
-    filtered_jobs.scheduled_email_sent_at,
-    filtered_jobs.completed_at,
-    filtered_jobs.completed_email_sent_at,
-    filtered_jobs.closeout_notes,
-    filtered_jobs.linked_estimate_id,
-    coalesce(version_counts.version_count, 0) as version_count
-  from filtered_jobs
-  left join version_counts on version_counts.job_id = filtered_jobs.id
-  order by filtered_jobs.created_at desc, filtered_jobs.id desc;
+      filtered_jobs.id,
+      filtered_jobs.customer_id,
+      filtered_jobs.customer_name,
+      filtered_jobs.customer_address,
+      filtered_jobs.title,
+      filtered_jobs.description,
+      filtered_jobs.status,
+      filtered_jobs.created_at,
+      filtered_jobs.estimate_date,
+      filtered_jobs.estimate_sent_at,
+      filtered_jobs.scheduled_date,
+      filtered_jobs.scheduled_end_date,
+      filtered_jobs.scheduled_email_sent_at,
+      filtered_jobs.completed_at,
+      filtered_jobs.completed_email_sent_at,
+      filtered_jobs.closeout_notes,
+      filtered_jobs.linked_estimate_id,
+      coalesce(version_counts.version_count, 0) as version_count
+    from filtered_jobs
+    left join version_counts on version_counts.job_id = filtered_jobs.id
+    order by filtered_jobs.created_at desc, filtered_jobs.id desc;
+end;
 $$;
 
 revoke all on function public.quote_home_summary(uuid) from public;

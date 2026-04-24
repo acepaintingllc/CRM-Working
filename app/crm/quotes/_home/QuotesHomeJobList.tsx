@@ -1,5 +1,7 @@
 'use client'
 
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import Link from 'next/link'
 import { QUOTE_META_SEPARATOR } from './quoteHomePresentation'
 import type { QuotesHomeJobListVm } from './quoteHomeTypes'
@@ -25,33 +27,33 @@ export function QuotesHomeJobList({
       {renderMobile ? (
         <div>
           <div style={S.mobileSectionLabel}>Jobs</div>
-          <div style={{ display: 'grid', gap: 10 }}>
-            {vm.loading ? <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>Loading...</div> : null}
+          <div style={S.grid10}>
+            {vm.loading ? <div style={S.mutedText}>Loading...</div> : null}
+            {!vm.loading && vm.emptyState === 'no_matches' ? (
+              <div style={S.mutedText}>No jobs match this search.</div>
+            ) : null}
             {!vm.loading && vm.emptyState === 'no_jobs' ? (
-              <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>
-                No eligible jobs yet.{' '}
-                <Link href="/crm/customers/new" style={{ color: 'var(--v2-green-2)' }}>
-                  Add a contact
-                </Link>{' '}
-                first.
+              <div style={S.emptyPanel}>
+                <div style={S.bodyText}>
+                  No eligible jobs yet. Quote creation starts from a job with a
+                  linked customer.
+                </div>
+                <div style={S.rowWrap}>
+                  <CrmButton href="/crm/customers/new" tone="primary">
+                    Add contact
+                  </CrmButton>
+                  <CrmButton href="/crm/jobs">Open jobs</CrmButton>
+                </div>
               </div>
             ) : null}
             {vm.mobileItems.map((job) => (
               <Link
                 key={job.id}
                 href={job.href ?? '#'}
-                style={{
-                  display: 'block',
-                  borderRadius: 14,
-                  border: '1px solid var(--v2-line)',
-                  background: '#111111',
-                  padding: 14,
-                  color: 'var(--v2-ink)',
-                  textDecoration: 'none',
-                }}
+                style={S.mobileLinkCard}
               >
-                <div style={{ fontSize: 14, marginBottom: 3 }}>{job.title}</div>
-                <div style={{ fontSize: 14, color: 'var(--v2-ink-3)' }}>
+                <div style={S.itemSubtleTitle}>{job.title}</div>
+                <div style={S.itemMeta}>
                   {job.customerName}
                   {QUOTE_META_SEPARATOR}
                   {job.versionCountLabel}
@@ -63,135 +65,60 @@ export function QuotesHomeJobList({
       ) : null}
 
       {renderDesktop ? (
-        <section
-          style={{
-            borderRadius: 18,
-            border: '1px solid var(--v2-line)',
-            background: 'var(--v2-bg-2)',
-            padding: 18,
-            display: 'grid',
-            gap: 16,
-            alignSelf: 'start',
-          }}
-        >
-          <div>
-            <div style={{ ...S.cardLabel, marginBottom: 10 }}>Jobs</div>
+        <CrmSectionCard className="self-start" eyebrow="Jobs">
+          <div style={S.grid16}>
             <input
               value={vm.searchQuery}
               onChange={(event) => onJobQueryChange(event.target.value)}
               placeholder="Search jobs by title, customer, or address"
               aria-label="Search jobs"
-              style={{
-                width: '100%',
-                padding: '13px 14px',
-                borderRadius: 12,
-                border: '1px solid var(--v2-line)',
-                background: '#111111',
-                color: 'var(--v2-ink)',
-                fontSize: 14,
-              }}
+              className="ace-crm-input text-sm"
             />
-          </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gap: 10,
-              maxHeight: 620,
-              overflowY: 'auto',
-              paddingRight: 4,
-            }}
-          >
-            {vm.loading ? <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>Loading jobs...</div> : null}
+            <div style={S.jobListScroll}>
+              {vm.loading ? (
+                <div style={S.mutedText}>Loading jobs...</div>
+              ) : null}
 
-            {!vm.loading && vm.emptyState === 'no_matches' ? (
-              <div style={{ color: 'var(--v2-ink-3)', fontSize: 14 }}>No jobs match this search.</div>
-            ) : null}
+              {!vm.loading && vm.emptyState === 'no_matches' ? (
+                <div style={S.mutedText}>No jobs match this search.</div>
+              ) : null}
 
-            {!vm.loading && vm.emptyState === 'no_jobs' ? (
-              <div
-                style={{
-                  borderRadius: 14,
-                  border: '1px solid var(--v2-line)',
-                  background: '#111111',
-                  padding: 16,
-                  display: 'grid',
-                  gap: 12,
-                }}
-              >
-                <div style={{ fontSize: 15, fontWeight: 700 }}>No eligible jobs yet</div>
-                <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--v2-ink-3)' }}>
-                  Quote creation starts from a job with a linked customer. Add the contact first, then
-                  create the job in the normal CRM flow.
+              {!vm.loading && vm.emptyState === 'no_jobs' ? (
+                <div style={S.emptyPanel}>
+                  <div style={S.emptyPanelTitle}>No eligible jobs yet</div>
+                  <div style={S.bodyText}>
+                    Quote creation starts from a job with a linked customer. Add
+                    the contact first, then create the job in the normal CRM
+                    flow.
+                  </div>
+                  <div style={S.rowWrap}>
+                    <CrmButton href="/crm/customers/new" tone="primary">
+                      Add contact
+                    </CrmButton>
+                    <CrmButton href="/crm/jobs">Open jobs</CrmButton>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <Link
-                    href="/crm/customers/new"
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      border: '1px solid rgba(134,239,172,0.24)',
-                      background: 'rgba(74,222,128,0.08)',
-                      color: '#b7f3c9',
-                      textDecoration: 'none',
-                      fontSize: 13,
-                      fontWeight: 700,
-                    }}
-                  >
-                    Add contact
-                  </Link>
-                  <Link
-                    href="/crm/jobs"
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      border: '1px solid var(--v2-line)',
-                      background: 'transparent',
-                      color: 'var(--v2-ink-2)',
-                      textDecoration: 'none',
-                      fontSize: 13,
-                      fontWeight: 700,
-                    }}
-                  >
-                    Open jobs
-                  </Link>
-                </div>
-              </div>
-            ) : null}
+              ) : null}
 
-            {vm.items.map((job) => (
-              <button
-                key={job.id}
-                type="button"
-                onClick={() => onSelectJob(job.id)}
-                style={{
-                  textAlign: 'left',
-                  borderRadius: 14,
-                  border: `1px solid ${
-                    job.isSelected ? 'rgba(134,239,172,0.28)' : 'var(--v2-line)'
-                  }`,
-                  background: job.isSelected ? 'rgba(74,222,128,0.08)' : '#111111',
-                  padding: 14,
-                  color: 'var(--v2-ink)',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{job.title}</div>
-                <div style={{ fontSize: 14, color: 'var(--v2-ink-3)' }}>{job.customerName}</div>
-                <div
-                  style={{
-                    fontFamily: 'var(--v2-mono)',
-                    fontSize: 11,
-                    color: 'var(--v2-ink-3)',
-                    marginTop: 4,
-                  }}
+              {vm.items.map((job) => (
+                <button
+                  key={job.id}
+                  type="button"
+                  onClick={() => onSelectJob(job.id)}
+                  aria-pressed={Boolean(job.isSelected)}
+                  style={
+                    job.isSelected ? S.selectableItemSelected : S.selectableItem
+                  }
                 >
-                  {job.versionCountLabel}
-                </div>
-              </button>
-            ))}
+                  <div style={S.itemTitleSpaced}>{job.title}</div>
+                  <div style={S.itemMeta}>{job.customerName}</div>
+                  <div style={S.itemMetaMono}>{job.versionCountLabel}</div>
+                </button>
+              ))}
+            </div>
           </div>
-        </section>
+        </CrmSectionCard>
       ) : null}
     </>
   )

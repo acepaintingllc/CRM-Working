@@ -52,9 +52,12 @@ export default function QuotesHomePage({ initialData }: Props) {
         />
 
         {controller.feedback.title ? (
-          <div style={{ marginBottom: 18 }}>
-            <CrmNotice tone={controller.feedback.tone} title={controller.feedback.title}>
-              <div style={{ display: 'grid', gap: 6 }}>
+          <div style={S.feedbackWrap}>
+            <CrmNotice
+              tone={controller.feedback.tone}
+              title={controller.feedback.title}
+            >
+              <div style={S.feedbackDetails}>
                 {controller.feedback.details.map((detail) => (
                   <div key={detail}>{detail}</div>
                 ))}
@@ -64,18 +67,18 @@ export default function QuotesHomePage({ initialData }: Props) {
         ) : null}
 
         <QuotesHomeSummaryCards
-          cards={controller.feedback.loading ? controller.mobileSummaryCards : controller.summaryCards}
+          cards={
+            controller.feedback.loading
+              ? controller.mobileSummaryCards
+              : controller.summaryCards
+          }
           loading={controller.feedback.loading}
         />
 
         <div
           id="job-hub"
-          className="v2-hub-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(320px, 420px) minmax(0, 1fr)',
-            gap: 22,
-          }}
+          className="quotes-home-job-hub-grid"
+          style={S.jobHubGrid}
         >
           <QuotesHomeJobList
             vm={controller.jobList}
@@ -84,18 +87,17 @@ export default function QuotesHomePage({ initialData }: Props) {
             onSelectJob={actions.setSelectedJobId}
           />
 
-          <section style={{ display: 'grid', gap: 22, alignSelf: 'start' }}>
+          <section style={S.sectionStackLg}>
             <QuotesHomeSelectedJobPanel vm={controller.selectedJob} />
 
             <div
-              className="v2-hub-detail-grid"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1.15fr) minmax(320px, 0.85fr)',
-                gap: 22,
-              }}
+              className="quotes-home-job-hub-detail-grid"
+              style={S.jobHubDetailGrid}
             >
-              <QuotesHomeVersionList vm={controller.versionList} onRequestDelete={actions.requestDelete} />
+              <QuotesHomeVersionList
+                vm={controller.versionList}
+                onRequestDelete={actions.requestDelete}
+              />
 
               <QuotesHomeCreatePanel
                 vm={controller.create}
@@ -107,17 +109,12 @@ export default function QuotesHomePage({ initialData }: Props) {
           </section>
         </div>
 
-        <style>{`
+        <style jsx>{`
           @media (max-width: 980px) {
-            .v2-hub-grid {
+            .quotes-home-job-hub-grid {
               grid-template-columns: 1fr !important;
             }
-            .v2-hub-detail-grid {
-              grid-template-columns: 1fr !important;
-            }
-          }
-          @media (max-width: 720px) {
-            .v2-hub-job-stats {
+            .quotes-home-job-hub-detail-grid {
               grid-template-columns: 1fr !important;
             }
           }

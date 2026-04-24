@@ -1,6 +1,4 @@
-import type {
-  QuoteHomeSummaryReadModel,
-} from '@/lib/quotes/collectionData'
+import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
 import type {
   QuoteHomeFeedbackVm,
   NavItem,
@@ -80,7 +78,9 @@ export function estimateWorkspaceHref(estimateId: string) {
   return `/crm/quotes/${estimateId}`
 }
 
-export function buildSearchResultVm(estimate: QuoteHomeJobVersion): SearchResultVm {
+export function buildSearchResultVm(
+  estimate: QuoteHomeJobVersion,
+): SearchResultVm {
   return {
     id: estimate.estimate_id,
     href: estimateWorkspaceHref(estimate.estimate_id),
@@ -89,7 +89,10 @@ export function buildSearchResultVm(estimate: QuoteHomeJobVersion): SearchResult
   }
 }
 
-export function buildHomeLoadFailureDetail(source: 'bootstrap', message: string) {
+export function buildHomeLoadFailureDetail(
+  source: 'bootstrap',
+  message: string,
+) {
   const fallback = HOME_FAILURE_MESSAGES[source]
   return message === fallback ? message : `${fallback} ${message}`
 }
@@ -102,15 +105,17 @@ export function buildQuotesHomeFeedbackVm(params: {
   actionWarning: string | null
 }): QuoteHomeFeedbackVm | null {
   const details = params.homeFailures.map((failure) =>
-    buildHomeLoadFailureDetail(failure.source, failure.message)
+    buildHomeLoadFailureDetail(failure.source, failure.message),
   )
-  const sources = params.homeFailures.map((failure) => failure.source as QuoteHomeFailureSource)
+  const sources = params.homeFailures.map(
+    (failure) => failure.source as QuoteHomeFailureSource,
+  )
 
   if (params.jobVersionsError) {
     details.push(
       params.jobVersionsError === 'Failed to load job quote versions.'
         ? 'Job versions failed to load.'
-        : `Job versions failed to load. ${params.jobVersionsError}`
+        : `Job versions failed to load. ${params.jobVersionsError}`,
     )
     sources.push('jobVersions')
   }
@@ -134,11 +139,10 @@ export function buildQuotesHomeFeedbackVm(params: {
 
   const actionError = Boolean(params.createError || params.deleteError)
   const actionWarning = Boolean(params.actionWarning)
-  const title =
-    actionError
-      ? 'Quote action failed'
-      : actionWarning
-        ? 'Quote action completed with refresh errors'
+  const title = actionError
+    ? 'Quote action failed'
+    : actionWarning
+      ? 'Quote action completed with refresh errors'
       : params.jobVersionsError
         ? 'Quote home loaded with errors'
         : params.homeFailures.length > 1
@@ -153,7 +157,9 @@ export function buildQuotesHomeFeedbackVm(params: {
   }
 }
 
-export function buildHeroSummaryText(summary: QuoteHomeSummaryReadModel | null) {
+export function buildHeroSummaryText(
+  summary: QuoteHomeSummaryReadModel | null,
+) {
   return summary
     ? `${summary.total_versions} total versions${QUOTE_META_SEPARATOR}${summary.draft_count} drafts${QUOTE_META_SEPARATOR}${summary.sent_or_awaiting_count} sent/awaiting${QUOTE_META_SEPARATOR}${summary.live_count} live`
     : 'Build and track quote versions with live status, totals, and search.'
@@ -162,7 +168,7 @@ export function buildHeroSummaryText(summary: QuoteHomeSummaryReadModel | null) 
 export function buildQuoteHomeJobListItemVm(
   job: QuoteHomeJob,
   versionCount: number,
-  options?: { mobile?: boolean; selectedJobId?: string }
+  options?: { mobile?: boolean; selectedJobId?: string },
 ): QuoteHomeJobListItemVm {
   return {
     id: job.id,
@@ -177,7 +183,7 @@ export function buildQuoteHomeJobListItemVm(
 export function buildQuotesHomeSelectedJobVm(
   selectedJob: QuoteHomeJob | null,
   selectedJobVersionsCount: number,
-  loading: boolean
+  loading: boolean,
 ): QuotesHomeSelectedJobVm {
   if (!selectedJob) {
     return {
@@ -197,7 +203,9 @@ export function buildQuotesHomeSelectedJobVm(
     emptyMessage: null,
     title: selectedJob.title,
     customerLine: `${selectedJob.customer_name ?? 'Unknown customer'}${
-      selectedJob.customer_address ? `${QUOTE_META_SEPARATOR}${selectedJob.customer_address}` : ''
+      selectedJob.customer_address
+        ? `${QUOTE_META_SEPARATOR}${selectedJob.customer_address}`
+        : ''
     }`,
     jobHref: `/crm/jobs/${selectedJob.id}`,
     stats: [
@@ -210,7 +218,7 @@ export function buildQuotesHomeSelectedJobVm(
 
 export function buildQuoteHomeVersionItemVm(
   estimate: QuoteHomeJobVersion,
-  deletingId: string | null
+  deletingId: string | null,
 ): QuoteHomeVersionItemVm {
   return {
     id: estimate.estimate_id,
@@ -220,7 +228,7 @@ export function buildQuoteHomeVersionItemVm(
         ? formatCurrency(estimate.final_total)
         : null,
     meta: `${formatVersionState(estimate.version_state)} / ${formatVersionState(
-      estimate.version_kind
+      estimate.version_kind,
     )}${QUOTE_META_SEPARATOR}Updated ${formatDateTime(estimate.updated_at)}`,
     href: estimateWorkspaceHref(estimate.estimate_id),
     deleting: deletingId === estimate.estimate_id,
@@ -229,7 +237,7 @@ export function buildQuoteHomeVersionItemVm(
 
 export function buildQuotesHomeVersionHeading(
   selectedJob: QuoteHomeJob | null,
-  versions: QuoteHomeJobVersion[]
+  versions: QuoteHomeJobVersion[],
 ) {
   return selectedJob
     ? `${versions.length} version${versions.length === 1 ? '' : 's'} under this job`
@@ -238,7 +246,7 @@ export function buildQuotesHomeVersionHeading(
 
 export function buildQuotesHomeVersionEmptyMessage(
   selectedJob: QuoteHomeJob | null,
-  versions: QuoteHomeJobVersion[]
+  versions: QuoteHomeJobVersion[],
 ) {
   if (!selectedJob) return 'Versions will appear here once a job is selected.'
   if (versions.length === 0) {
@@ -249,7 +257,7 @@ export function buildQuotesHomeVersionEmptyMessage(
 
 export function buildQuotesHomeDeleteDialogVm(
   estimate: QuoteHomeJobVersion | null,
-  deletingId: string | null
+  deletingId: string | null,
 ): QuotesHomeDeleteDialogVm {
   return {
     estimateId: estimate?.estimate_id ?? null,
@@ -259,7 +267,9 @@ export function buildQuotesHomeDeleteDialogVm(
   }
 }
 
-export function buildSummaryCards(summary: QuoteHomeSummaryReadModel | null): SummaryCardVm[] {
+export function buildSummaryCards(
+  summary: QuoteHomeSummaryReadModel | null,
+): SummaryCardVm[] {
   const nextSummary = summary ?? {
     draft_count: 0,
     sent_or_awaiting_count: 0,
@@ -288,7 +298,9 @@ export function buildSummaryCards(summary: QuoteHomeSummaryReadModel | null): Su
       label: 'Live Versions',
       value: String(nextSummary.live_count),
       subtext:
-        nextSummary.live_count === 1 ? '1 live version' : `${nextSummary.live_count} live versions`,
+        nextSummary.live_count === 1
+          ? '1 live version'
+          : `${nextSummary.live_count} live versions`,
       valueColor: 'var(--v2-green-2)',
       subtextColor: 'var(--v2-green-2)',
     },
@@ -296,7 +308,7 @@ export function buildSummaryCards(summary: QuoteHomeSummaryReadModel | null): Su
       label: 'Pipeline',
       value: formatCurrency(nextSummary.pipeline_total),
       subtext: 'Rollup-backed total',
-      valueColor: '#f9e2b7',
+      valueColor: 'var(--v2-amber)',
       subtextColor: 'var(--v2-ink-3)',
     },
   ]
