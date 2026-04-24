@@ -1,5 +1,3 @@
-'use client'
-
 import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
 
 export function resolveQuoteHomeSelectedJobId(

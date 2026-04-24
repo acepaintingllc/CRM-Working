@@ -13,6 +13,7 @@ import {
   buildSummaryCards,
 } from './quoteHomePresentation'
 import type {
+  QuoteHomeActionWarning,
   QuoteHomeJob,
   QuoteHomeJobVersion,
   QuotesHomeCreateVm,
@@ -32,6 +33,7 @@ export type QuoteHomePageActions = {
   setSearchFocused: (value: boolean) => void
   setJobQuery: (value: string) => void
   setSelectedJobId: (value: string) => void
+  loadMore: () => Promise<void>
   setVersionName: (value: string) => void
   setVersionKind: (value: QuoteVersionKind) => void
   create: () => Promise<unknown>
@@ -43,7 +45,7 @@ export type QuoteHomePageActions = {
 }
 
 export type QuoteHomePageVmState = {
-  actionWarning: string | null
+  actionWarning: QuoteHomeActionWarning | null
   searchQuery: string
   searchFocused: boolean
   jobQuery: string
@@ -57,6 +59,7 @@ export type QuoteHomePageVmResources = {
   home: {
     summary: QuoteHomeSummaryReadModel | null
     jobs: QuoteHomeJob[]
+    hasMore: boolean
     loading: boolean
     bootstrapError: string | null
   }
@@ -117,6 +120,8 @@ export function buildQuoteHomePageVm(
     deleteError: resources.delete.error,
     actionWarning: state.actionWarning,
   })
+  // version_count from the job list item (bootstrap); falls back to the fetched page total
+  // These diverge briefly between a create/delete and the next bootstrap refresh
   const versionCount =
     state.selectedJob?.version_count ?? resources.workflow.versions.totalVersions
 
@@ -138,6 +143,7 @@ export function buildQuoteHomePageVm(
       loading: resources.home.loading,
       searchQuery: state.jobQuery,
       selectedJobId: state.selectedJobId,
+      hasMore: resources.home.hasMore,
       items: state.filteredJobs.map((job) =>
         buildQuoteHomeJobListItemVm(job, job.version_count, {
           selectedJobId: state.selectedJobId,

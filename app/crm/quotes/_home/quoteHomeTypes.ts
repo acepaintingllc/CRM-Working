@@ -36,6 +36,11 @@ export type QuoteHomeFailureSource =
   | 'create'
   | 'delete'
 
+export type QuoteHomeActionWarning = {
+  source: QuoteHomeFailureSource
+  message: string
+}
+
 export type QuoteHomeFeedbackVm = {
   tone: QuoteHomeFeedbackTone
   title: string
@@ -69,6 +74,7 @@ export type QuotesHomeJobListVm = {
   loading: boolean
   searchQuery: string
   selectedJobId: string
+  hasMore: boolean
   items: QuoteHomeJobListItemVm[]
   emptyState: 'none' | 'no_jobs' | 'no_matches'
 }
@@ -116,16 +122,4 @@ export type QuotesHomeDeleteDialogVm = {
   versionName: string | null
   jobTitle: string | null
   deleting: boolean
-}
-
-export type QuotesHomePageSections = {
-  headerVm: QuotesHomeHeaderVm
-  loading: boolean
-  feedbackVm: QuotesHomeFeedbackBannerVm
-  summaryCards: SummaryCardVm[]
-  jobListVm: QuotesHomeJobListVm
-  selectedJobVm: QuotesHomeSelectedJobVm
-  versionListVm: QuotesHomeVersionListVm
-  createVm: QuotesHomeCreateVm
-  deleteDialogVm: QuotesHomeDeleteDialogVm
 }

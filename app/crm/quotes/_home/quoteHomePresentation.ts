@@ -1,5 +1,6 @@
 import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
 import type {
+  QuoteHomeActionWarning,
   QuoteHomeFeedbackVm,
   NavItem,
   QuoteHomeJob,
@@ -102,7 +103,7 @@ export function buildQuotesHomeFeedbackVm(params: {
   jobVersionsError: string | null
   createError: string | null
   deleteError: string | null
-  actionWarning: string | null
+  actionWarning: QuoteHomeActionWarning | null
 }): QuoteHomeFeedbackVm | null {
   const details = params.homeFailures.map((failure) =>
     buildHomeLoadFailureDetail(failure.source, failure.message),
@@ -131,8 +132,8 @@ export function buildQuotesHomeFeedbackVm(params: {
   }
 
   if (params.actionWarning) {
-    details.push(params.actionWarning)
-    sources.push('delete')
+    details.push(params.actionWarning.message)
+    sources.push(params.actionWarning.source) // actionWarning currently only produced by delete-refresh path
   }
 
   if (details.length === 0) return null

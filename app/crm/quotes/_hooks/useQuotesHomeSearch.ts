@@ -21,11 +21,11 @@ export function useQuotesHomeSearch(query: string) {
   const requestIdRef = useRef(0)
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
+    const timeout = setTimeout(() => {
       setDebouncedQuery(query.trim())
     }, 150)
 
-    return () => window.clearTimeout(timeout)
+    return () => clearTimeout(timeout)
   }, [query])
 
   useEffect(() => {
