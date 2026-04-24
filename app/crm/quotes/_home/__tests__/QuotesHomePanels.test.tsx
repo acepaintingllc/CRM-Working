@@ -27,10 +27,8 @@ describe('Quotes home panels', () => {
           searchQuery: '',
           selectedJobId: '',
           items: [],
-          mobileItems: [],
           emptyState: 'no_jobs',
         }}
-        renderMobile={false}
         onJobQueryChange={() => {}}
         onSelectJob={() => {}}
       />,

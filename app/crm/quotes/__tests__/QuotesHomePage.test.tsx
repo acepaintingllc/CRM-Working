@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import QuotesHomePage from '../QuotesHomePage'
 
 type MockHeaderProps = {
@@ -15,8 +15,6 @@ type MockJobListProps = {
   vm: {
     emptyState: string
   }
-  renderDesktop?: boolean
-  renderMobile?: boolean
   onJobQueryChange: (query: string) => void
   onSelectJob: (jobId: string) => void
 }
@@ -79,9 +77,9 @@ vi.mock('../_home/QuotesHomeHeader', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeJobList', () => ({
-  QuotesHomeJobList: ({ vm, renderDesktop = true, renderMobile = true, onJobQueryChange, onSelectJob }: MockJobListProps) => (
+  QuotesHomeJobList: ({ vm, onJobQueryChange, onSelectJob }: MockJobListProps) => (
     <div>
-      <div>job-list:{renderDesktop ? 'desktop' : 'mobile'}:{renderMobile ? 'mobile' : 'desktop'}</div>
+      <div>job-list:desktop</div>
       <div>job-empty:{vm.emptyState}</div>
       <button onClick={() => onJobQueryChange('garage')}>change job query</button>
       <button onClick={() => onSelectJob('job-2')}>select job</button>
@@ -132,6 +130,11 @@ vi.mock('../_home/QuotesHomeDeleteDialog', () => ({
 }))
 
 describe('QuotesHomePage', () => {
+  beforeEach(() => {
+    cleanup()
+    useQuotesHomePage.mockReset()
+  })
+
   it('renders grouped sections and wires child callbacks through the page shell', () => {
     const actions = {
       setSearchFocused: vi.fn(),
@@ -149,6 +152,7 @@ describe('QuotesHomePage', () => {
 
     useQuotesHomePage.mockReturnValue({
       actions,
+      loading: false,
       header: {
         heroSummaryText: '3 total versions',
         searchFocused: false,
@@ -160,7 +164,6 @@ describe('QuotesHomePage', () => {
         searchResults: [],
       },
       feedback: {
-        loading: false,
         tone: 'error',
         title: 'Quote action failed',
         details: ['Select a job before creating a version.'],
@@ -175,7 +178,6 @@ describe('QuotesHomePage', () => {
         searchQuery: '',
         selectedJobId: 'job-1',
         items: [],
-        mobileItems: [],
         emptyState: 'none',
       },
       selectedJob: {
@@ -199,10 +201,6 @@ describe('QuotesHomePage', () => {
         versionName: '',
         canCreate: true,
       },
-      mobileSummaryCards: [
-        { label: 'Drafts', value: '1', subtext: '1 draft version' },
-        { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
-      ],
       dialogs: {
         delete: {
           estimateId: 'estimate-2',
@@ -249,5 +247,79 @@ describe('QuotesHomePage', () => {
     expect(actions.create).toHaveBeenCalledTimes(1)
     expect(actions.cancelDelete).toHaveBeenCalledTimes(1)
     expect(actions.confirmDelete).toHaveBeenCalledTimes(1)
+  })
+
+  it('omits the feedback notice when the controller returns null feedback', () => {
+    useQuotesHomePage.mockReturnValue({
+      actions: {
+        setSearchFocused: vi.fn(),
+        setSearchQuery: vi.fn(),
+        retrySearch: vi.fn(),
+        setJobQuery: vi.fn(),
+        setSelectedJobId: vi.fn(),
+        requestDelete: vi.fn(),
+        setVersionKind: vi.fn(),
+        setVersionName: vi.fn(),
+        create: vi.fn(),
+        cancelDelete: vi.fn(),
+        confirmDelete: vi.fn(),
+      },
+      loading: false,
+      header: {
+        heroSummaryText: '3 total versions',
+        searchFocused: false,
+        searchQuery: '',
+        searchLoading: false,
+        searchEmptyMessage: null,
+        searchErrorMessage: null,
+        searchCanRetry: false,
+        searchResults: [],
+      },
+      feedback: null,
+      summaryCards: [
+        { label: 'Drafts', value: '1', subtext: '1 draft version' },
+        { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
+      ],
+      jobList: {
+        loading: false,
+        searchQuery: '',
+        selectedJobId: 'job-1',
+        items: [],
+        emptyState: 'none',
+      },
+      selectedJob: {
+        loading: false,
+        emptyMessage: null,
+        title: 'Kitchen',
+        customerLine: 'Alice',
+        jobHref: '/crm/jobs/job-1',
+        stats: [],
+      },
+      versionList: {
+        heading: '2 versions under this job',
+        emptyMessage: null,
+        items: [],
+      },
+      create: {
+        creating: false,
+        loading: false,
+        selectedJobName: 'Kitchen',
+        versionKind: 'standard',
+        versionName: '',
+        canCreate: true,
+      },
+      dialogs: {
+        delete: {
+          estimateId: null,
+          versionName: null,
+          jobTitle: null,
+          deleting: false,
+        },
+      },
+    })
+
+    render(<QuotesHomePage />)
+
+    expect(screen.queryByText('Quote action failed')).not.toBeInTheDocument()
   })
 })

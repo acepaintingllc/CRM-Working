@@ -2,16 +2,22 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
-import { buildQuoteHomePageVm, type QuoteHomePageActions } from '../_home/quoteHomePageVm'
+import {
+  buildQuoteHomePageVm,
+  type QuoteHomePageActions,
+  type QuoteHomePageVm,
+} from '../_home/quoteHomePageVm'
+import { useQuoteHomePageController } from './quoteHomePageController'
 import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
 import { useQuoteVersionWorkflow } from './useQuoteVersionWorkflow'
 import { filterQuoteHomeJobs, resolveQuoteHomeSelectedJobId } from './quoteHomePagePolicy'
 
-export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | null) {
+export function useQuotesHomePage(
+  initialData?: QuoteHomeBootstrapReadModel | null
+): QuoteHomePageVm {
   const homeResource = useQuotesHomeData(initialData)
-  const [actionWarning, setActionWarning] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [jobQuery, setJobQuery] = useState('')
@@ -33,6 +39,11 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
         : null,
   })
   const deleteController = useQuotesHomeDelete()
+  const controller = useQuoteHomePageController({
+    homeResource,
+    versions: workflow.versions,
+    deleteController,
+  })
 
   useEffect(() => {
     const nextSelectedJobId = resolveQuoteHomeSelectedJobId(homeResource.jobs, selectedJobId)
@@ -50,60 +61,15 @@ export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | nu
     setVersionKind: workflow.actions.setVersionKind,
     create: workflow.actions.create,
     retrySearch: searchState.retry,
-    requestDelete: (value: string | { estimate_id: string }) => {
-      setActionWarning(null)
-      const estimateId = typeof value === 'string' ? value : value.estimate_id
-      const estimate =
-        workflow.versions.items.find((item) => item.estimate_id === estimateId) ?? null
-      if (estimate) {
-        deleteController.requestDeleteVersion(estimate)
-      }
-    },
-    cancelDelete: deleteController.cancelDelete,
-    confirmDelete: async () => {
-      const deleted = await deleteController.confirmDeleteVersion()
-      if (!deleted) {
-        return false
-      }
-
-      setActionWarning(null)
-      const [bootstrapRefresh, versionsRefresh] = await Promise.all([
-        homeResource.attemptRefresh({
-          preserveDataOnError: true,
-          reportError: false,
-        }),
-        workflow.versions.attemptRefresh({
-          preserveDataOnError: true,
-          reportError: false,
-        }),
-      ])
-
-      if (bootstrapRefresh.ok && versionsRefresh.ok) {
-        return true
-      }
-
-      const refreshFailures: string[] = []
-      if (!bootstrapRefresh.ok && bootstrapRefresh.error) {
-        refreshFailures.push(`Home refresh failed. ${bootstrapRefresh.error}`)
-      }
-      if (!versionsRefresh.ok && versionsRefresh.error) {
-        refreshFailures.push(`Versions refresh failed. ${versionsRefresh.error}`)
-      }
-
-      setActionWarning(
-        `Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. ${refreshFailures.join(' ')}`
-      )
-      return true
-    },
-    refresh: async () => {
-      setActionWarning(null)
-      return workflow.actions.refresh()
-    },
+    requestDelete: controller.actions.requestDelete,
+    cancelDelete: controller.actions.cancelDelete,
+    confirmDelete: controller.actions.confirmDelete,
+    refresh: controller.actions.refresh,
   }
 
   return buildQuoteHomePageVm(
     {
-      actionWarning,
+      actionWarning: controller.actionWarning,
       searchQuery,
       searchFocused,
       jobQuery,

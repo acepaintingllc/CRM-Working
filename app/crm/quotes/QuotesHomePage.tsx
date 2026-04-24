@@ -30,7 +30,7 @@ export default function QuotesHomePage({ initialData }: Props) {
         <CrmPageHeader
           eyebrow="Quotes"
           title="Quote Home"
-          description="Quote home follows the standard CRM page shell. Keep page framing on shared CRM primitives; keep only the job/version workflow panels route-local."
+          description="Search jobs, review quote versions, and start a new quote from one place."
           badge={<CrmChip tone="accent">Shared CRM shell</CrmChip>}
           actions={
             <>
@@ -51,7 +51,7 @@ export default function QuotesHomePage({ initialData }: Props) {
           onSearchRetry={actions.retrySearch}
         />
 
-        {controller.feedback.title ? (
+        {controller.feedback ? (
           <div style={S.feedbackWrap}>
             <CrmNotice
               tone={controller.feedback.tone}
@@ -67,12 +67,8 @@ export default function QuotesHomePage({ initialData }: Props) {
         ) : null}
 
         <QuotesHomeSummaryCards
-          cards={
-            controller.feedback.loading
-              ? controller.mobileSummaryCards
-              : controller.summaryCards
-          }
-          loading={controller.feedback.loading}
+          cards={controller.summaryCards}
+          loading={controller.loading}
         />
 
         <div
@@ -82,7 +78,6 @@ export default function QuotesHomePage({ initialData }: Props) {
         >
           <QuotesHomeJobList
             vm={controller.jobList}
-            renderMobile={false}
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
           />

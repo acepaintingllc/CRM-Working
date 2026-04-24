@@ -323,7 +323,7 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.feedback.loading).toBe(false)
+      expect(result.current.loading).toBe(false)
     })
 
     await act(async () => {
@@ -331,8 +331,10 @@ describe('useQuotesHomePage', () => {
     })
 
     expect(createQuoteVersion).not.toHaveBeenCalled()
-    expect(result.current.feedback.title).toBe('Quote action failed')
-    expect(result.current.feedback.details).toEqual(['Select a job before creating a version.'])
+    expect(result.current.feedback).toMatchObject({
+      title: 'Quote action failed',
+      details: ['Select a job before creating a version.'],
+    })
   })
 
   it('refreshes bootstrap data and selected-job versions after delete', async () => {
@@ -408,10 +410,12 @@ describe('useQuotesHomePage', () => {
       'estimate-2',
       'estimate-1',
     ])
-    expect(result.current.feedback.title).toBe('Quote action completed with refresh errors')
-    expect(result.current.feedback.details).toEqual([
-      'Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. Home refresh failed. bootstrap refresh failed Versions refresh failed. versions refresh failed',
-    ])
+    expect(result.current.feedback).toMatchObject({
+      title: 'Quote action completed with refresh errors',
+      details: [
+        'Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. Home refresh failed. bootstrap refresh failed Versions refresh failed. versions refresh failed',
+      ],
+    })
   })
 
   it('surfaces search errors separately from bootstrap data and retries search independently', async () => {
@@ -485,11 +489,13 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.feedback.loading).toBe(false)
+      expect(result.current.loading).toBe(false)
     })
 
-    expect(result.current.feedback.title).toBe('Quote home loaded with errors')
-    expect(result.current.feedback.details).toContain('Job versions failed to load. versions failed')
+    expect(result.current.feedback).toMatchObject({
+      title: 'Quote home loaded with errors',
+    })
+    expect(result.current.feedback?.details).toContain('Job versions failed to load. versions failed')
     expect(result.current.header.searchErrorMessage).toBeNull()
   })
 
@@ -499,11 +505,13 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.feedback.loading).toBe(false)
+      expect(result.current.loading).toBe(false)
     })
 
-    expect(result.current.feedback.title).toBe('Quote home bootstrap failed to load')
-    expect(result.current.feedback.details).toEqual(['Quote home failed to load. bootstrap failed'])
+    expect(result.current.feedback).toMatchObject({
+      title: 'Quote home bootstrap failed to load',
+      details: ['Quote home failed to load. bootstrap failed'],
+    })
     expect(result.current.jobList.emptyState).toBe('no_jobs')
   })
 
@@ -582,9 +590,10 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.feedback.loading).toBe(false)
+      expect(result.current.loading).toBe(false)
     })
 
+    expect(result.current.feedback).toBeNull()
     expect(result.current.jobList.emptyState).toBe('no_jobs')
     expect(result.current.selectedJob.title).toBeNull()
     expect(result.current.versionList.items).toEqual([])

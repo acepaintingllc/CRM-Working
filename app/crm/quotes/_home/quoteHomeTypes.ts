@@ -43,9 +43,7 @@ export type QuoteHomeFeedbackVm = {
   sources: QuoteHomeFailureSource[]
 }
 
-export type QuotesHomeFeedbackBannerVm = QuoteHomeFeedbackVm & {
-  loading: boolean
-}
+export type QuotesHomeFeedbackBannerVm = QuoteHomeFeedbackVm | null
 
 export type QuotesHomeHeaderVm = {
   heroSummaryText: string
@@ -72,7 +70,6 @@ export type QuotesHomeJobListVm = {
   searchQuery: string
   selectedJobId: string
   items: QuoteHomeJobListItemVm[]
-  mobileItems: QuoteHomeJobListItemVm[]
   emptyState: 'none' | 'no_jobs' | 'no_matches'
 }
 
@@ -123,12 +120,12 @@ export type QuotesHomeDeleteDialogVm = {
 
 export type QuotesHomePageSections = {
   headerVm: QuotesHomeHeaderVm
+  loading: boolean
   feedbackVm: QuotesHomeFeedbackBannerVm
   summaryCards: SummaryCardVm[]
   jobListVm: QuotesHomeJobListVm
   selectedJobVm: QuotesHomeSelectedJobVm
   versionListVm: QuotesHomeVersionListVm
   createVm: QuotesHomeCreateVm
-  mobileSummaryCards: SummaryCardVm[]
   deleteDialogVm: QuotesHomeDeleteDialogVm
 }

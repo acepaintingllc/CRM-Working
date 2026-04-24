@@ -90,30 +90,17 @@ export type QuoteHomePageVmResources = {
 
 export type QuoteHomePageVm = {
   header: QuotesHomeHeaderVm
+  loading: boolean
   feedback: QuotesHomeFeedbackBannerVm
   summaryCards: SummaryCardVm[]
   jobList: QuotesHomeJobListVm
   selectedJob: QuotesHomeSelectedJobVm
   versionList: QuotesHomeVersionListVm
   create: QuotesHomeCreateVm
-  mobileSummaryCards: SummaryCardVm[]
   dialogs: {
     delete: QuotesHomeDeleteDialogVm
   }
   actions: QuoteHomePageActions
-}
-
-const EMPTY_FEEDBACK_VM = {
-  tone: 'warning' as const,
-  title: '',
-  details: [],
-  sources: [],
-}
-
-function buildMobileSummaryCards(summaryCards: SummaryCardVm[]) {
-  return [summaryCards[0], summaryCards[3]].filter(
-    (card): card is SummaryCardVm => card != null
-  )
 }
 
 export function buildQuoteHomePageVm(
@@ -121,16 +108,15 @@ export function buildQuoteHomePageVm(
   resources: QuoteHomePageVmResources
 ): QuoteHomePageVm {
   const summaryCards = buildSummaryCards(resources.home.summary)
-  const feedbackVm =
-    buildQuotesHomeFeedbackVm({
-      homeFailures: resources.home.bootstrapError
-        ? [{ source: 'bootstrap', message: resources.home.bootstrapError }]
-        : [],
-      jobVersionsError: resources.workflow.versions.error,
-      createError: resources.workflow.create.error,
-      deleteError: resources.delete.error,
-      actionWarning: state.actionWarning,
-    }) ?? EMPTY_FEEDBACK_VM
+  const feedbackVm = buildQuotesHomeFeedbackVm({
+    homeFailures: resources.home.bootstrapError
+      ? [{ source: 'bootstrap', message: resources.home.bootstrapError }]
+      : [],
+    jobVersionsError: resources.workflow.versions.error,
+    createError: resources.workflow.create.error,
+    deleteError: resources.delete.error,
+    actionWarning: state.actionWarning,
+  })
   const versionCount =
     state.selectedJob?.version_count ?? resources.workflow.versions.totalVersions
 
@@ -145,10 +131,8 @@ export function buildQuoteHomePageVm(
       searchCanRetry: resources.search.canRetry,
       searchResults: resources.search.results.map(buildSearchResultVm),
     },
-    feedback: {
-      loading: resources.home.loading,
-      ...feedbackVm,
-    },
+    loading: resources.home.loading,
+    feedback: feedbackVm,
     summaryCards,
     jobList: {
       loading: resources.home.loading,
@@ -159,9 +143,6 @@ export function buildQuoteHomePageVm(
           selectedJobId: state.selectedJobId,
         })
       ),
-      mobileItems: resources.home.jobs
-        .slice(0, 10)
-        .map((job) => buildQuoteHomeJobListItemVm(job, job.version_count, { mobile: true })),
       emptyState:
         resources.home.jobs.length === 0
           ? 'no_jobs'
@@ -195,7 +176,6 @@ export function buildQuoteHomePageVm(
       versionKind: resources.workflow.create.versionKind,
       canCreate: resources.workflow.create.canCreate,
     },
-    mobileSummaryCards: buildMobileSummaryCards(summaryCards),
     dialogs: {
       delete: buildQuotesHomeDeleteDialogVm(
         resources.delete.confirmingDelete,

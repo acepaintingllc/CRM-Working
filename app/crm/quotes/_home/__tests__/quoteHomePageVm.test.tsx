@@ -176,14 +176,8 @@ describe('buildQuoteHomePageVm', () => {
       'Build and track quote versions with live status, totals, and search.'
     )
     expect(vm.summaryCards.map((card) => card.value)).toEqual(['0', '0', '0', '$0'])
-    expect(vm.mobileSummaryCards.map((card) => card.label)).toEqual(['Drafts', 'Pipeline'])
-    expect(vm.feedback).toEqual({
-      loading: false,
-      tone: 'warning',
-      title: '',
-      details: [],
-      sources: [],
-    })
+    expect(vm.loading).toBe(false)
+    expect(vm.feedback).toBeNull()
   })
 
   it('preserves empty-jobs state when no eligible jobs exist', () => {
@@ -216,7 +210,6 @@ describe('buildQuoteHomePageVm', () => {
       searchQuery: '',
       selectedJobId: '',
       items: [],
-      mobileItems: [],
       emptyState: 'no_jobs',
     })
     expect(vm.selectedJob.emptyMessage).toBe(
@@ -307,5 +300,63 @@ describe('buildQuoteHomePageVm', () => {
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.create.canCreate).toBe(false)
+  })
+
+  it('surfaces feedback when resource or action issues are present', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        actionWarning: 'Quote deleted, but the list refresh failed.',
+      }),
+      buildResources({
+        home: {
+          bootstrapError: 'Network request timed out.',
+        },
+      })
+    )
+
+    expect(vm.feedback).toEqual({
+      tone: 'warning',
+      title: 'Quote action completed with refresh errors',
+      details: [
+        'Quote home failed to load. Network request timed out.',
+        'Quote deleted, but the list refresh failed.',
+      ],
+      sources: ['bootstrap', 'delete'],
+    })
+  })
+
+  it('propagates loading state without showing empty selected-job messaging', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        selectedJobId: '',
+        selectedJob: null,
+      }),
+      buildResources({
+        home: {
+          loading: true,
+        },
+        workflow: {
+          versions: {
+            items: [],
+            totalVersions: 0,
+          },
+          create: {
+            canCreate: false,
+          },
+        },
+      })
+    )
+
+    expect(vm.loading).toBe(true)
+    expect(vm.jobList.loading).toBe(true)
+    expect(vm.selectedJob).toEqual({
+      loading: true,
+      emptyMessage: null,
+      title: null,
+      customerLine: null,
+      jobHref: null,
+      stats: [],
+    })
+    expect(vm.create.loading).toBe(true)
   })
 })

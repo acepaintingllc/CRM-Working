@@ -199,8 +199,7 @@ function buildActivityVm(
 
 function buildSignalsVm(
   data: CrmHomeData,
-  sources: CrmHomeSourceStateMap,
-  summary: CrmHomeSummary
+  sources: CrmHomeSourceStateMap
 ): HomeSignalsVm {
   const calendarErrors = [sources.calendarStatus.errorMessage, sources.calendarEvents.errorMessage].filter(
     (error): error is string => Boolean(error)
@@ -213,8 +212,7 @@ function buildSignalsVm(
     remindersTabLabel: 'Reminders',
     calendar: {
       loading:
-        summary.isInitialLoading &&
-        (sources.calendarStatus.status === 'loading' || sources.calendarEvents.status === 'loading'),
+        sources.calendarStatus.status === 'loading' || sources.calendarEvents.status === 'loading',
       errors: calendarErrors,
       disconnected: calendarStatusReady && data.signals.calendarConnected === false,
       disconnectedMessage: 'Google Calendar is not connected.',
@@ -229,7 +227,7 @@ function buildSignalsVm(
       })),
     },
     reminders: {
-      loading: summary.isInitialLoading && sources.notes.status === 'loading',
+      loading: sources.notes.status === 'loading',
       isEmpty: data.signals.notesReminders.length === 0,
       errors: notesErrors,
       emptyMessage: 'No reminders today.',
@@ -289,13 +287,13 @@ export function buildCrmHomePageViewModel(params: {
     }),
     metrics: {
       metrics: data.metrics,
-      isLoading: summary.isInitialLoading && sources.jobs.status === 'loading',
+      isLoading: sources.jobs.status === 'loading',
       isUnavailable:
         !summary.isInitialLoading &&
         (sources.jobs.status === 'error' || sources.jobs.status === 'degraded'),
     },
     activity: buildActivityVm(data, sources, summary),
-    signals: buildSignalsVm(data, sources, summary),
+    signals: buildSignalsVm(data, sources),
     quickActions: buildQuickActionsVm(),
   }
 }
