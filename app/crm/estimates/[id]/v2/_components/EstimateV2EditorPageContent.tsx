@@ -77,7 +77,7 @@ export function EstimateV2EditorPageContent({
             </div>
           )}
 
-          {pageVm.validationIssues.length > 1 && (
+          {pageVm.validationIssues.length > 0 && (
             <div style={estimateV2EditorPageStyles.panel}>
               <div style={estimateV2EditorPageStyles.mono}>Validation</div>
               <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>

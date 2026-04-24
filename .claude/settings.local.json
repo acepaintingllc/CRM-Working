@@ -25,7 +25,8 @@
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\); console.log\\('devDeps:', JSON.stringify\\(Object.keys\\(p.devDependencies || {}\\)\\)\\)\")",
       "Bash(node --experimental-specifier-resolution=node --test \"lib/estimator/__tests__/ceilings.test.ts\")",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(gh pr *)"
     ]
   }
 }
