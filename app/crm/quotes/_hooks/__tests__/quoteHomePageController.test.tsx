@@ -78,6 +78,17 @@ const bootstrapWithActiveVersions: QuoteHomeBootstrapReadModel = {
   selected_job_versions: makeVersionsPage('job-1', [versionItem]),
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve
+    reject = nextReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 function buildController(
   overrides: {
     bootstrapData?: QuoteHomeBootstrapReadModel
@@ -111,18 +122,6 @@ function buildController(
     refresh: vi.fn(async () => true),
     attemptRefresh: versionsAttemptRefresh,
   }
-  const deleteController = {
-    confirmingDelete: null,
-    deletingId: null,
-    error: null,
-    requestDeleteVersion: vi.fn(),
-    cancelDelete: vi.fn<() => boolean>(() => true),
-    beginDelete: vi.fn<() => QuoteHomeJobVersionItemReadModel | null>(
-      () => versionItems[0] ?? null
-    ),
-    completeDelete: vi.fn(),
-    failDelete: vi.fn(),
-  }
   const stateActions = {
     setSearchQuery: vi.fn(),
     setSearchFocused: vi.fn(),
@@ -143,7 +142,6 @@ function buildController(
     useQuoteHomePageController({
       homeResource,
       versions,
-      deleteController,
       stateActions,
       loadMoreJobs,
       workflowActions,
@@ -155,7 +153,6 @@ function buildController(
     ...hook,
     homeResource,
     versions,
-    deleteController,
     stateActions,
     loadMoreJobs,
     workflowActions,
@@ -191,7 +188,6 @@ describe('useQuoteHomePageController', () => {
       loadMoreJobs,
       workflowActions,
       retrySearch,
-      deleteController,
       homeResource,
     } = buildController()
 
@@ -203,6 +199,7 @@ describe('useQuoteHomePageController', () => {
       result.current.actions.setVersionName('Custom')
       result.current.actions.setVersionKind('revision')
       result.current.actions.retrySearch()
+      result.current.actions.requestDelete('estimate-1')
       result.current.actions.cancelDelete()
     })
 
@@ -226,17 +223,24 @@ describe('useQuoteHomePageController', () => {
     expect(homeResource.retryJobs).toHaveBeenCalledTimes(1)
     expect(workflowActions.retryVersions).toHaveBeenCalledTimes(1)
     expect(retrySearch).toHaveBeenCalledTimes(1)
-    expect(deleteController.cancelDelete).toHaveBeenCalledTimes(1)
+    expect(result.current.deleteState.status).toBe('idle')
   })
 
   it('requests delete for the matching version item', () => {
-    const { result, deleteController } = buildController()
+    const { result } = buildController()
 
     act(() => {
       result.current.actions.requestDelete('estimate-1')
     })
 
-    expect(deleteController.requestDeleteVersion).toHaveBeenCalledWith(versionItem)
+    expect(result.current.deleteState).toMatchObject({
+      status: 'confirming',
+      confirmingDelete: versionItem,
+      deletingId: null,
+      error: null,
+      canCancel: true,
+      canConfirm: true,
+    })
     expect(result.current.actionWarning).toBeNull()
   })
 
@@ -257,8 +261,7 @@ describe('useQuoteHomePageController', () => {
   })
 
   it('does not refresh when there is no confirmed delete target', async () => {
-    const { result, deleteController, homeResource, versions } = buildController()
-    deleteController.beginDelete.mockReturnValue(null)
+    const { result, homeResource, versions } = buildController()
 
     await act(async () => {
       expect(await result.current.actions.confirmDelete()).toBe(false)
@@ -271,30 +274,138 @@ describe('useQuoteHomePageController', () => {
   })
 
   it('surfaces delete mutation failures without refreshing', async () => {
-    const { result, deleteController, homeResource, versions } = buildController()
+    const { result, homeResource, versions } = buildController()
     deleteQuoteVersion.mockRejectedValueOnce(new Error('delete failed'))
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
 
     await act(async () => {
       expect(await result.current.actions.confirmDelete()).toBe(false)
     })
 
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
-    expect(deleteController.failDelete).toHaveBeenCalledWith('delete failed')
-    expect(deleteController.completeDelete).not.toHaveBeenCalled()
     expect(homeResource.attemptRefresh).not.toHaveBeenCalled()
     expect(versions.attemptRefresh).not.toHaveBeenCalled()
+    expect(result.current.deleteState).toMatchObject({
+      status: 'failed',
+      confirmingDelete: versionItem,
+      deletingId: null,
+      error: 'delete failed',
+      canCancel: true,
+      canConfirm: true,
+    })
     expect(result.current.actionWarning).toBeNull()
   })
 
+  it('retries a failed delete from the preserved confirmation dialog', async () => {
+    const { result, homeResource, versions } = buildController()
+    deleteQuoteVersion
+      .mockRejectedValueOnce(new Error('delete failed'))
+      .mockResolvedValueOnce({ data: { ok: true } })
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
+    await act(async () => {
+      expect(await result.current.actions.confirmDelete()).toBe(false)
+    })
+
+    expect(result.current.deleteState.status).toBe('failed')
+
+    await act(async () => {
+      expect(await result.current.actions.confirmDelete()).toBe(true)
+    })
+
+    expect(deleteQuoteVersion).toHaveBeenCalledTimes(2)
+    expect(deleteQuoteVersion).toHaveBeenNthCalledWith(2, 'estimate-1')
+    expect(homeResource.attemptRefresh).toHaveBeenCalledTimes(1)
+    expect(versions.attemptRefresh).toHaveBeenCalledTimes(1)
+    expect(result.current.deleteState.status).toBe('idle')
+  })
+
+  it('does not confirm the same delete twice while the mutation is in flight', async () => {
+    const pendingDelete = deferred<{ data: { ok: boolean } }>()
+    const { result } = buildController()
+    deleteQuoteVersion.mockReturnValueOnce(pendingDelete.promise)
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
+    let firstConfirm!: Promise<boolean>
+    let secondConfirm!: Promise<boolean>
+    await act(async () => {
+      firstConfirm = result.current.actions.confirmDelete()
+      secondConfirm = result.current.actions.confirmDelete()
+      await Promise.resolve()
+    })
+
+    expect(deleteQuoteVersion).toHaveBeenCalledTimes(1)
+    expect(result.current.deleteState).toMatchObject({
+      status: 'deleting',
+      deletingId: 'estimate-1',
+      canCancel: false,
+      canConfirm: false,
+    })
+    await expect(secondConfirm).resolves.toBe(false)
+
+    pendingDelete.resolve({ data: { ok: true } })
+
+    await act(async () => {
+      await firstConfirm
+    })
+
+    await expect(firstConfirm).resolves.toBe(true)
+    expect(result.current.deleteState.status).toBe('idle')
+  })
+
+  it('blocks cancel while a delete mutation is in flight', async () => {
+    const pendingDelete = deferred<{ data: { ok: boolean } }>()
+    const { result } = buildController()
+    deleteQuoteVersion.mockReturnValueOnce(pendingDelete.promise)
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
+    let confirm!: Promise<boolean>
+    await act(async () => {
+      confirm = result.current.actions.confirmDelete()
+      await Promise.resolve()
+    })
+
+    act(() => {
+      result.current.actions.cancelDelete()
+    })
+
+    expect(result.current.deleteState).toMatchObject({
+      status: 'deleting',
+      confirmingDelete: versionItem,
+      deletingId: 'estimate-1',
+    })
+
+    pendingDelete.resolve({ data: { ok: true } })
+
+    await act(async () => {
+      await confirm
+    })
+  })
+
   it('refreshes home data then active job versions after deleting a bootstrap-selected job version', async () => {
-    const { result, homeResource, versions, deleteController } = buildController()
+    const { result, homeResource, versions } = buildController()
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
 
     await act(async () => {
       expect(await result.current.actions.confirmDelete()).toBe(true)
     })
 
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
-    expect(deleteController.completeDelete).toHaveBeenCalledTimes(1)
     expect(homeResource.attemptRefresh).toHaveBeenCalledWith({
       preserveDataOnError: true,
       reportError: false,
@@ -306,12 +417,13 @@ describe('useQuoteHomePageController', () => {
     expect(homeResource.attemptRefresh.mock.invocationCallOrder[0]).toBeLessThan(
       versions.attemptRefresh.mock.invocationCallOrder[0]
     )
+    expect(result.current.deleteState.status).toBe('idle')
     expect(result.current.actionWarning).toBeNull()
   })
 
   it('refreshes home data then active job versions after deleting a non-bootstrap selected job version', async () => {
     const activeVersionsPage = makeVersionsPage('job-2', [nonBootstrapVersionItem])
-    const { result, homeResource, versions, deleteController } = buildController({
+    const { result, homeResource, versions } = buildController({
       versionsPageData: activeVersionsPage,
       versionItems: activeVersionsPage.items,
     })
@@ -324,9 +436,7 @@ describe('useQuoteHomePageController', () => {
       expect(await result.current.actions.confirmDelete()).toBe(true)
     })
 
-    expect(deleteController.requestDeleteVersion).toHaveBeenCalledWith(nonBootstrapVersionItem)
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-2')
-    expect(deleteController.completeDelete).toHaveBeenCalledTimes(1)
     expect(homeResource.attemptRefresh).toHaveBeenCalledWith({
       preserveDataOnError: true,
       reportError: false,
@@ -338,6 +448,7 @@ describe('useQuoteHomePageController', () => {
     expect(homeResource.attemptRefresh.mock.invocationCallOrder[0]).toBeLessThan(
       versions.attemptRefresh.mock.invocationCallOrder[0]
     )
+    expect(result.current.deleteState.status).toBe('idle')
     expect(result.current.actionWarning).toBeNull()
   })
 
@@ -376,6 +487,10 @@ describe('useQuoteHomePageController', () => {
       data: bootstrapWithActiveVersions,
     })
 
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
     await act(async () => {
       expect(await result.current.actions.confirmDelete()).toBe(true)
     })
@@ -403,6 +518,10 @@ describe('useQuoteHomePageController', () => {
       error: 'versions refresh failed',
     })
 
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
     await act(async () => {
       expect(await result.current.actions.confirmDelete()).toBe(true)
     })
@@ -422,6 +541,37 @@ describe('useQuoteHomePageController', () => {
     })
   })
 
+  it('warns clearly when only the versions refresh fails after a successful delete', async () => {
+    const { result, homeResource, versions } = buildController()
+    versions.attemptRefresh.mockResolvedValue({
+      ok: false,
+      error: 'versions refresh failed',
+    })
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
+    await act(async () => {
+      expect(await result.current.actions.confirmDelete()).toBe(true)
+    })
+
+    expect(homeResource.attemptRefresh).toHaveBeenCalledWith({
+      preserveDataOnError: true,
+      reportError: false,
+    })
+    expect(versions.attemptRefresh).toHaveBeenCalledWith({
+      preserveDataOnError: true,
+      reportError: false,
+    })
+    expect(result.current.deleteState.status).toBe('idle')
+    expect(result.current.actionWarning).toEqual({
+      source: 'delete',
+      message:
+        'Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. Versions refresh failed. versions refresh failed',
+    })
+  })
+
   it('clears prior warnings when running a manual refresh', async () => {
     const { result, homeResource, versions } = buildController()
     homeResource.attemptRefresh.mockResolvedValueOnce({
@@ -432,6 +582,10 @@ describe('useQuoteHomePageController', () => {
       ok: true,
       error: null,
       data: bootstrapWithActiveVersions,
+    })
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
     })
 
     await act(async () => {

@@ -709,6 +709,52 @@ describe('useQuotesHomePage', () => {
     expect(result.current.versionList.heading).toBe('1 version under this job')
   })
 
+  it('blocks duplicate public delete confirms while the first delete is in flight', async () => {
+    const pendingDelete = deferred<{ data: { ok: boolean } }>()
+
+    loadQuoteHomeBootstrap
+      .mockResolvedValueOnce(quoteHomeBootstrap)
+      .mockResolvedValueOnce(refreshedQuoteHomeBootstrap)
+    loadQuoteJobVersions.mockResolvedValue(refreshedQuoteHomeJob1Versions)
+    deleteQuoteVersion.mockReturnValueOnce(pendingDelete.promise)
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
+        'estimate-2',
+        'estimate-1',
+      ])
+    })
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
+    let firstConfirm!: Promise<boolean>
+    let secondConfirm!: Promise<boolean>
+    await act(async () => {
+      firstConfirm = result.current.actions.confirmDelete()
+      secondConfirm = result.current.actions.confirmDelete()
+      await Promise.resolve()
+    })
+
+    expect(deleteQuoteVersion).toHaveBeenCalledTimes(1)
+    expect(result.current.dialogs.delete.deleting).toBe(true)
+    expect(result.current.dialogs.delete.cancelDisabled).toBe(true)
+    expect(result.current.dialogs.delete.confirmDisabled).toBe(true)
+    await expect(secondConfirm).resolves.toBe(false)
+
+    pendingDelete.resolve({ data: { ok: true } })
+
+    await act(async () => {
+      await firstConfirm
+    })
+
+    await expect(firstConfirm).resolves.toBe(true)
+    expect(result.current.dialogs.delete.estimateId).toBeNull()
+  })
+
   it('surfaces delete failures without refreshing home data', async () => {
     loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
     deleteQuoteVersion.mockRejectedValueOnce(new Error('delete failed'))

@@ -27,6 +27,19 @@ function makeEstimate(
 }
 
 describe('useQuotesHomeDelete', () => {
+  it('starts in an explicit idle delete state', () => {
+    const { result } = renderHook(() => useQuotesHomeDelete())
+
+    expect(result.current).toMatchObject({
+      status: 'idle',
+      confirmingDelete: null,
+      deletingId: null,
+      error: null,
+      canCancel: true,
+      canConfirm: false,
+    })
+  })
+
   it('sets confirmingDelete to the requested estimate and clears any prior error', async () => {
     const failedEstimate = makeEstimate('estimate-1')
     const nextEstimate = makeEstimate('estimate-2', {
@@ -52,6 +65,8 @@ describe('useQuotesHomeDelete', () => {
 
     expect(result.current.confirmingDelete).toBe(nextEstimate)
     expect(result.current.error).toBeNull()
+    expect(result.current.status).toBe('confirming')
+    expect(result.current.canConfirm).toBe(true)
   })
 
   it('clears confirmingDelete when cancelDelete runs without a delete in flight', () => {
@@ -71,6 +86,7 @@ describe('useQuotesHomeDelete', () => {
 
     expect(canceled).toBe(true)
     expect(result.current.confirmingDelete).toBeNull()
+    expect(result.current.status).toBe('idle')
   })
 
   it('clears a failed delete error when cancelDelete runs without a delete in flight', async () => {
@@ -112,6 +128,8 @@ describe('useQuotesHomeDelete', () => {
     })
 
     expect(result.current.deletingId).toBe('estimate-1')
+    expect(result.current.status).toBe('deleting')
+    expect(result.current.canCancel).toBe(false)
 
     act(() => {
       canceled = result.current.cancelDelete()
@@ -119,6 +137,7 @@ describe('useQuotesHomeDelete', () => {
 
     expect(canceled).toBe(false)
     expect(result.current.confirmingDelete).toBe(estimate)
+    expect(result.current.status).toBe('deleting')
   })
 
   it('returns null from beginDelete when there is no confirmed estimate', async () => {
@@ -133,6 +152,7 @@ describe('useQuotesHomeDelete', () => {
     expect(result.current.confirmingDelete).toBeNull()
     expect(result.current.deletingId).toBeNull()
     expect(result.current.error).toBeNull()
+    expect(result.current.status).toBe('idle')
   })
 
   it('returns null from beginDelete while a delete is in flight', async () => {
@@ -155,6 +175,7 @@ describe('useQuotesHomeDelete', () => {
     })
 
     expect(secondBeginResult).toBeNull()
+    expect(result.current.status).toBe('deleting')
   })
 
   it('returns the confirmed estimate from beginDelete and clears delete state on completeDelete', async () => {
@@ -172,6 +193,7 @@ describe('useQuotesHomeDelete', () => {
 
     expect(deletingEstimate).toBe(estimate)
     expect(result.current.deletingId).toBe('estimate-1')
+    expect(result.current.status).toBe('deleting')
 
     act(() => {
       result.current.completeDelete()
@@ -180,6 +202,7 @@ describe('useQuotesHomeDelete', () => {
     expect(result.current.confirmingDelete).toBeNull()
     expect(result.current.deletingId).toBeNull()
     expect(result.current.error).toBeNull()
+    expect(result.current.status).toBe('idle')
   })
 
   it('surfaces delete failures and clears deletingId', () => {
@@ -198,5 +221,27 @@ describe('useQuotesHomeDelete', () => {
     expect(result.current.error).toBe('delete failed')
     expect(result.current.confirmingDelete).toBe(estimate)
     expect(result.current.deletingId).toBeNull()
+    expect(result.current.status).toBe('failed')
+    expect(result.current.canConfirm).toBe(true)
+  })
+
+  it('allows a failed delete to be retried for the same estimate', () => {
+    const estimate = makeEstimate('estimate-1')
+    const { result } = renderHook(() => useQuotesHomeDelete())
+    let retryEstimate: QuoteHomeJobVersionItemReadModel | null = null
+
+    act(() => {
+      result.current.requestDeleteVersion(estimate)
+      result.current.beginDelete()
+      result.current.failDelete('delete failed')
+    })
+
+    act(() => {
+      retryEstimate = result.current.beginDelete()
+    })
+
+    expect(retryEstimate).toBe(estimate)
+    expect(result.current.status).toBe('deleting')
+    expect(result.current.deletingId).toBe('estimate-1')
   })
 })

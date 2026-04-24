@@ -12,7 +12,6 @@ import { buildQuoteHomePageVmResources } from './quoteHomePageVmResources'
 import { useQuoteHomePageState } from './useQuoteHomePageState'
 import { useQuoteVersionWorkflow } from './useQuoteVersionWorkflow'
 import { useQuotesHomeData } from './useQuotesHomeData'
-import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
 
 type QuoteHomeStateActions = Pick<
@@ -59,7 +58,6 @@ export function useQuoteHomePageResources(
     initialVersions: initialVersionsForSelectedJob,
   })
 
-  const deleteController = useQuotesHomeDelete()
   const { reconcileLoadedJobs } = pageState
 
   useEffect(() => {
@@ -108,7 +106,6 @@ export function useQuoteHomePageResources(
   const controller = useQuoteHomePageController({
     homeResource,
     versions: workflow.versions,
-    deleteController,
     stateActions,
     loadMoreJobs: homeResource.loadMore,
     workflowActions,
