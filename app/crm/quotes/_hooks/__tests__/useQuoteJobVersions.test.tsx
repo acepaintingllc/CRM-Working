@@ -24,6 +24,8 @@ function deferred<T>() {
 const versionPayload = {
   job_id: 'job-1',
   total_versions: 2,
+  limit: 25,
+  next_cursor: null,
   items: [
     {
       estimate_id: 'estimate-1',
@@ -132,6 +134,8 @@ describe('useQuoteJobVersions', () => {
       .mockResolvedValueOnce({
         job_id: 'job-2',
         total_versions: 0,
+        limit: 25,
+        next_cursor: null,
         items: [],
       })
 
@@ -166,5 +170,25 @@ describe('useQuoteJobVersions', () => {
 
     expect(result.current.items).toHaveLength(2)
     expect(result.current.error).toBe('refresh failed')
+  })
+
+  it('uses seeded selected-job versions before issuing a fetch', async () => {
+    const seededPayload = {
+      ...versionPayload,
+      items: [versionPayload.items[0]],
+      total_versions: 1,
+    }
+
+    const { result } = renderHook(() =>
+      useQuoteJobVersions('job-1', {
+        initialData: seededPayload,
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1)
+    })
+
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
   })
 })

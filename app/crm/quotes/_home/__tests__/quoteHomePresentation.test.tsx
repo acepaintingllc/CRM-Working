@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type {
-  QuoteHomeEligibleJobReadModel,
+  QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import {
@@ -26,7 +26,7 @@ const estimate: QuoteHomeJobVersionItemReadModel = {
   is_sent_estimate: true,
 }
 
-const job: QuoteHomeEligibleJobReadModel = {
+const job: QuoteHomeJobListItemReadModel = {
   id: 'job-1',
   customer_id: 'customer-1',
   customer_name: 'Alice',
@@ -34,10 +34,17 @@ const job: QuoteHomeEligibleJobReadModel = {
   title: 'Kitchen',
   description: null,
   status: 'estimate_sent',
+  created_at: null,
   estimate_date: null,
   estimate_sent_at: null,
   scheduled_date: null,
+  scheduled_end_date: null,
+  scheduled_email_sent_at: null,
   completed_at: null,
+  completed_email_sent_at: null,
+  closeout_notes: null,
+  linked_estimate_id: null,
+  version_count: 4,
 }
 
 describe('quoteHomePresentation', () => {

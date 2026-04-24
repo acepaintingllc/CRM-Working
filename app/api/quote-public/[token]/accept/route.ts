@@ -28,6 +28,7 @@ export async function POST(
       signatureType: parsed.value.signatureType,
       signatureValue: parsed.value.signatureValue,
       acceptedTerms: parsed.value.acceptedTerms,
+      origin: new URL(request.url).origin,
       userAgent: request.headers.get('user-agent') ?? '',
       ip: request.headers.get('x-forwarded-for') ?? '',
     })

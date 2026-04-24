@@ -1,16 +1,19 @@
 'use client'
 
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
-import { QUOTE_PRODUCT_FAMILIES, validateQuoteProductDraft, type QuoteProductDraft, type QuoteProductRow, type QuoteProductValidationState } from '@/lib/quotes/productsForm'
-import { getSelectionVisibility } from './quoteProductsPageTransitions'
-import { createEditorFromRow } from './quoteProductsPageState'
-import type { QuoteProductsControllerState, QuoteProductsPendingTransition } from './quoteProductsPageState'
+import {
+  QUOTE_PRODUCT_FAMILIES,
+  type QuoteProductDraft,
+  type QuoteProductRow,
+  type QuoteProductValidationState,
+} from '@/lib/quotes/productsForm'
+import type { QuoteProductsPendingTransition, QuoteProductsWorkflowState } from './quoteProductsPageState'
 import type { QuoteProductsResourceAdapter } from './useQuoteProductsData'
 
 export type QuoteProductsCatalogVm = {
-  activeFamily: QuoteProductsControllerState['activeFamily']
+  activeFamily: QuoteProductsWorkflowState['navigation']['activeFamily']
   families: typeof QUOTE_PRODUCT_FAMILIES
-  statusFilter: QuoteProductsControllerState['statusFilter']
+  statusFilter: QuoteProductsWorkflowState['navigation']['statusFilter']
   search: string
   products: QuoteProductRow[]
   selectedId: string | null
@@ -44,7 +47,7 @@ export type QuoteProductDeleteVm = {
 }
 
 export type QuoteProductsActions = {
-  setActiveFamily: (nextFamily: QuoteProductsControllerState['activeFamily']) => boolean
+  setActiveFamily: (nextFamily: QuoteProductsWorkflowState['navigation']['activeFamily']) => boolean
   setStatusFilter: (next: string) => boolean
   setSearch: (value: string) => boolean
   setSelectedId: (id: string | null) => boolean
@@ -60,80 +63,79 @@ export type QuoteProductsActions = {
   cancelDiscard: () => void
 }
 
-export type QuoteProductsPageController = {
-  resource: QuoteProductsResourceAdapter
-  uiState: ReturnType<typeof buildDenseQuotePageUiState>
-  catalogVm: QuoteProductsCatalogVm
-  editorVm: QuoteProductsEditorVm
-  actions: QuoteProductsActions
-  discardVm: QuoteProductDiscardVm
-  deleteVm: QuoteProductDeleteVm
-}
-
 function buildDeleteStatus(params: {
-  saving: boolean
-  deleteTarget: QuoteProductsControllerState['deleteTarget']
+  actionStatus: QuoteProductsWorkflowState['actionStatus']
+  deleteTargetId: string | null
 }): QuoteProductDeleteVm['status'] {
-  const { saving, deleteTarget } = params
-  if (saving && deleteTarget) return 'deleting'
-  if (deleteTarget) return 'confirming'
+  const { actionStatus, deleteTargetId } = params
+  if (actionStatus === 'deleting' && deleteTargetId) return 'deleting'
+  if (deleteTargetId) return 'confirming'
   return 'idle'
 }
 
 export function buildQuoteProductsPageVm(params: {
-  state: QuoteProductsControllerState
+  workflowState: QuoteProductsWorkflowState
   resource: QuoteProductsResourceAdapter
+  derived: {
+    selectedRow: QuoteProductRow | null
+    visibleSelectedRow: QuoteProductRow | null
+    validationResult:
+      | ReturnType<typeof import('@/lib/quotes/productsForm').validateQuoteProductDraft>
+      | null
+    validationError: string | null
+    isDirty: boolean
+  }
 }) {
-  const { state, resource } = params
-  const effectiveEditor =
-    state.editor.mode === 'none' && resource.data[0] ? createEditorFromRow(resource.data[0]) : state.editor
-  const selectedId = effectiveEditor.mode === 'edit' ? effectiveEditor.targetId : null
-  const selectedVisible = selectedId
-    ? resource.data.find((product) => product.id === selectedId) ?? null
-    : null
-  const editorSelected = effectiveEditor.mode === 'edit' ? effectiveEditor.targetRow : null
-  const selectionVisibility = getSelectionVisibility(state, selectedVisible)
-  const validationResult = validateQuoteProductDraft(effectiveEditor.draft)
-  const validation = validationResult.validation
+  const { workflowState, resource, derived } = params
+  const validation =
+    derived.validationResult?.validation ?? ({
+      ok: true,
+      summary: null,
+      fields: {},
+    } satisfies QuoteProductValidationState)
+  const selectionVisibility =
+    workflowState.editorMode !== 'edit'
+      ? ('none' as const)
+      : derived.visibleSelectedRow
+        ? ('visible' as const)
+        : ('hidden' as const)
 
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
     hasData: resource.data.length > 0 || (!resource.loading && !resource.error),
     loadError: resource.error,
-    actionError: state.feedback.actionError,
-    validationError: validation.ok ? null : validation.summary,
-    notice: state.feedback.notice,
+    actionError: workflowState.actionError,
+    validationError: validation.ok ? null : derived.validationError,
+    notice: workflowState.notice,
     canRetry: !resource.loading,
     canSave:
-      !state.feedback.saving &&
+      workflowState.actionStatus === 'idle' &&
       !resource.error &&
       validation.ok &&
-      (effectiveEditor.mode === 'create' || effectiveEditor.mode === 'edit'),
+      workflowState.editorMode !== 'none',
     canDelete:
-      !state.feedback.saving &&
+      workflowState.actionStatus === 'idle' &&
       !resource.error &&
-      effectiveEditor.mode === 'edit',
+      workflowState.editorMode === 'edit',
   })
 
   return {
     uiState,
-    validationResult,
-    selectedId,
     catalogVm: {
-      activeFamily: state.activeFamily,
+      activeFamily: workflowState.navigation.activeFamily,
       families: QUOTE_PRODUCT_FAMILIES,
-      statusFilter: state.statusFilter,
-      search: state.search,
+      statusFilter: workflowState.navigation.statusFilter,
+      search: workflowState.navigation.search,
       products: resource.data,
-      selectedId,
-      selected: selectedVisible,
+      selectedId: workflowState.selectedId,
+      selected: derived.visibleSelectedRow,
     },
     editorVm: {
-      draft: effectiveEditor.draft,
-      selected: editorSelected,
-      saving: state.feedback.saving,
-      isCreating: effectiveEditor.mode === 'create',
-      isDirty: effectiveEditor.dirty,
+      draft: workflowState.draft,
+      selected: derived.selectedRow,
+      saving: workflowState.actionStatus === 'saving',
+      isCreating: workflowState.editorMode === 'create',
+      isDirty: derived.isDirty,
       validation,
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
@@ -145,17 +147,22 @@ export function buildQuoteProductsPageVm(params: {
           : null,
     },
     discardVm: {
-      isOpen: state.discard.status === 'confirming' && Boolean(state.discard.transition),
-      status: state.discard.status,
-      transitionType: state.discard.transition?.type ?? null,
+      isOpen:
+        workflowState.discardStatus === 'confirming' && Boolean(workflowState.pendingTransition),
+      status: workflowState.discardStatus,
+      transitionType: workflowState.pendingTransition?.type ?? null,
     },
     deleteVm: {
-      isOpen: Boolean(state.deleteTarget),
+      isOpen: Boolean(workflowState.deleteTargetId),
       status: buildDeleteStatus({
-        saving: state.feedback.saving,
-        deleteTarget: state.deleteTarget,
+        actionStatus: workflowState.actionStatus,
+        deleteTargetId: workflowState.deleteTargetId,
       }),
-      productName: state.deleteTarget?.name ?? null,
+      productName:
+        workflowState.deleteTargetId == null
+          ? null
+          : resource.allKnownData.find((product) => product.id === workflowState.deleteTargetId)?.name ??
+            null,
     },
   }
 }

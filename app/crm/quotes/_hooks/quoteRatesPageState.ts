@@ -1,6 +1,9 @@
 'use client'
 
-import { createRatesFlagsDraftSnapshot } from '@/lib/quotes/ratesFlagsForm'
+import {
+  areRatesFlagsDraftSnapshotsEqual,
+  createRatesFlagsDraftSnapshot,
+} from '@/lib/quotes/ratesFlagsForm'
 import type { RatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
   RatesFlagsCategory,
@@ -147,6 +150,14 @@ export function createInitialQuoteRatesWorkflowState(): QuoteRatesWorkflowState 
     refreshSelectionId: null,
     forceRefreshRehydrate: false,
   }
+}
+
+export function getQuoteRatesHasUnsavedChanges(state: QuoteRatesWorkflowState) {
+  const draftSnapshot = createRatesFlagsDraftSnapshot(state.draft)
+  return (
+    !areRatesFlagsDraftSnapshotsEqual(draftSnapshot, state.cleanSnapshot) ||
+    state.draftActive !== state.cleanDraftActive
+  )
 }
 
 function applyEditorSnapshot(

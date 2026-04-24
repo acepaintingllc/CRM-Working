@@ -170,6 +170,27 @@ describe('customer hooks', () => {
     expect(result.current.error).toBe('List exploded')
   })
 
+  it('useCustomerList stays idle until enabled and then fetches once', async () => {
+    authedFetch.mockResolvedValue(createCustomerListPage([{ id: '1', name: 'First' }]))
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useCustomerList({ enabled }),
+      {
+        initialProps: { enabled: false },
+        wrapper: createSWRWrapper(),
+      }
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.customers).toEqual([])
+    expect(authedFetch).not.toHaveBeenCalled()
+
+    rerender({ enabled: true })
+
+    await waitFor(() => expect(result.current.customers[0]?.id).toBe('1'))
+    expect(authedFetch).toHaveBeenCalledTimes(1)
+  })
+
   it('useCustomerList updates the key when search or page changes and resets page on new search', async () => {
     authedFetch
       .mockResolvedValueOnce(createCustomerListPage([{ id: '1', name: 'First' }], 1, 60))

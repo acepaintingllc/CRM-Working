@@ -15,8 +15,10 @@ import { useCustomerList } from '@/app/crm/customers/_hooks/useCustomerList'
 import { useOrg } from '@/app/crm/customers/customers-orgproviders'
 
 export default function CustomersPage() {
-  const { orgId } = useOrg();
-  const { customers, total, page, pageSize, search, setSearch, setPage, loading, error } = useCustomerList();
+  const { orgId, loading: orgLoading, error: orgError } = useOrg();
+  const { customers, total, page, pageSize, search, setSearch, setPage, loading, error } = useCustomerList({
+    enabled: !orgLoading && !orgError && Boolean(orgId),
+  });
   const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export default function CustomersPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageLabel = useMemo(() => `Page ${page} of ${totalPages}`, [page, totalPages]);
+  const customersLoading = orgLoading || loading;
 
   return (
     <CrmPageShell>
@@ -58,14 +61,14 @@ export default function CustomersPage() {
         placeholder="Search customers by name, email, or phone..."
         actions={
           <div className="flex items-center gap-2">
-            <CrmButton type="button" onClick={() => setPage(page - 1)} disabled={page <= 1 || loading}>
+            <CrmButton type="button" onClick={() => setPage(page - 1)} disabled={page <= 1 || customersLoading}>
               Prev
             </CrmButton>
             <div className="text-sm font-semibold text-[color:var(--crm-ui-muted)]">{pageLabel}</div>
             <CrmButton
               type="button"
               onClick={() => setPage(page + 1)}
-              disabled={page >= totalPages || loading}
+              disabled={page >= totalPages || customersLoading}
             >
               Next
             </CrmButton>
@@ -75,13 +78,13 @@ export default function CustomersPage() {
 
       {error ? <CrmNotice tone="error" emoji="⚠️">{error}</CrmNotice> : null}
 
-      {loading ? (
+      {customersLoading ? (
         <CrmSectionCard title="Loading customers" emoji="⏳">
           <p className="text-sm text-[color:var(--crm-ui-muted)]">Pulling the latest customer profiles.</p>
         </CrmSectionCard>
       ) : null}
 
-      {!loading && !error && total === 0 && !search.trim() ? (
+      {!customersLoading && !error && !orgError && total === 0 && !search.trim() ? (
         <CrmEmptyState
           emoji="🪴"
           title="No customers yet"
@@ -90,7 +93,7 @@ export default function CustomersPage() {
         />
       ) : null}
 
-      {!loading && !error && (total === 0 ? Boolean(search.trim()) : customers.length === 0) ? (
+      {!customersLoading && !error && !orgError && (total === 0 ? Boolean(search.trim()) : customers.length === 0) ? (
         <CrmEmptyState
           emoji="🔎"
           title="No matching customers"

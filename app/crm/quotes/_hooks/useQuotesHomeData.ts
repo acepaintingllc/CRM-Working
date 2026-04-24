@@ -1,12 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useRef } from 'react'
 import { useResource } from '@/app/crm/_hooks/useResource'
-import type {
-  QuoteHomeBootstrapPageReadModel,
-  QuoteHomeBootstrapReadModel,
-  QuoteHomeJobVersionItemReadModel,
-} from '@/lib/quotes/collectionData'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeBootstrap } from '@/lib/quotes/client'
 
 const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
@@ -17,45 +13,22 @@ const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
     live_count: 0,
     pipeline_total: 0,
   },
-  jobCounts: {
+  jobs: {
+    query: '',
+    limit: 25,
+    next_cursor: null,
     items: [],
   },
-  jobs: [],
-}
-
-function isLegacyBootstrap(
-  payload: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel
-): payload is QuoteHomeBootstrapReadModel {
-  return 'jobCounts' in payload && Array.isArray(payload.jobs)
-}
-
-function normalizeBootstrap(
-  payload: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel
-): QuoteHomeBootstrapReadModel {
-  if (isLegacyBootstrap(payload)) {
-    return payload
-  }
-
-  return {
-    summary: payload.summary,
-    jobCounts: {
-      items: payload.jobs.items.map((job) => ({
-        job_id: job.id,
-        version_count: job.version_count,
-      })),
-    },
-    jobs: payload.jobs.items.map(({ version_count: _versionCount, ...job }) => job),
-  }
+  selected_job_id: null,
+  selected_job_versions: null,
 }
 
 function toLoadErrorMessage(scope: string, loadError: unknown) {
   return loadError instanceof Error ? loadError.message : `Failed to load ${scope}.`
 }
 
-export function useQuotesHomeData(
-  initialData?: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel | null
-) {
-  const resolvedInitialData = initialData ? normalizeBootstrap(initialData) : EMPTY_BOOTSTRAP
+export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | null) {
+  const resolvedInitialData = initialData ?? EMPTY_BOOTSTRAP
   const latestLoadedBootstrapRef = useRef(resolvedInitialData)
   const resource = useResource<QuoteHomeBootstrapReadModel>({
     initialData: resolvedInitialData,
@@ -63,71 +36,22 @@ export function useQuotesHomeData(
     skipInitialLoad: Boolean(initialData),
     resetOnError: false,
     load: async () => {
-      const nextBootstrap = normalizeBootstrap(
-        await loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel>()
-      )
+      const nextBootstrap = await loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>()
       latestLoadedBootstrapRef.current = nextBootstrap
       return nextBootstrap
     },
     getErrorMessage: (loadError) => toLoadErrorMessage('quote home bootstrap', loadError),
   })
-  const bootstrapRef = useRef(resource.data)
-
-  useEffect(() => {
-    bootstrapRef.current = resource.data
-  }, [resource.data])
-
-  const resolvedBootstrap = resource.data
-  const versionCountByJob = useMemo(() => {
-    return resolvedBootstrap.jobCounts.items.reduce<Record<string, number>>((counts, item) => {
-      counts[item.job_id] = item.version_count
-      return counts
-    }, {})
-  }, [resolvedBootstrap.jobCounts.items])
 
   return {
-    summary: resolvedBootstrap.summary,
-    jobCounts: resolvedBootstrap.jobCounts,
-    jobs: resolvedBootstrap.jobs,
+    bootstrap: resource.data,
+    summary: resource.data.summary,
+    jobsPage: resource.data.jobs,
+    jobs: resource.data.jobs.items,
+    initialSelectedJobId: resource.data.selected_job_id,
+    initialSelectedJobVersions: resource.data.selected_job_versions,
     loading: resource.loading,
     bootstrapError: resource.error,
-    versionCountByJob,
-    applyDeletedVersion: (estimate: QuoteHomeJobVersionItemReadModel) => {
-      resource.setData((current) => {
-        const nextBootstrap = {
-          ...current,
-          summary: {
-            ...current.summary,
-            total_versions: Math.max(0, current.summary.total_versions - 1),
-            draft_count:
-              estimate.version_state === 'draft'
-                ? Math.max(0, current.summary.draft_count - 1)
-                : current.summary.draft_count,
-            sent_or_awaiting_count: estimate.is_sent_estimate
-              ? Math.max(0, current.summary.sent_or_awaiting_count - 1)
-              : current.summary.sent_or_awaiting_count,
-            live_count:
-              estimate.version_state === 'live'
-                ? Math.max(0, current.summary.live_count - 1)
-                : current.summary.live_count,
-            pipeline_total: Math.max(0, current.summary.pipeline_total - (estimate.final_total ?? 0)),
-          },
-          jobCounts: {
-            ...current.jobCounts,
-            items: current.jobCounts.items.map((item) =>
-              item.job_id === estimate.job_id
-                ? {
-                    ...item,
-                    version_count: Math.max(0, item.version_count - 1),
-                  }
-                : item
-            ),
-          },
-        }
-        latestLoadedBootstrapRef.current = nextBootstrap
-        return nextBootstrap
-      })
-    },
     refresh: async () => {
       const ok = await resource.refresh()
       return ok ? latestLoadedBootstrapRef.current : null

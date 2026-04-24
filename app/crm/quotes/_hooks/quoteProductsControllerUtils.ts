@@ -1,6 +1,35 @@
 'use client'
 
-import { quoteProductMatchesQuery, type QuoteProductQuery, type QuoteProductRow } from '@/lib/quotes/productsForm'
+import {
+  quoteProductMatchesQuery,
+  type QuoteProductQuery,
+  type QuoteProductRow,
+} from '@/lib/quotes/productsForm'
+
+export function mergeKnownQuoteProducts(
+  current: QuoteProductRow[],
+  incoming: QuoteProductRow[]
+) {
+  if (incoming.length === 0) return current
+
+  const merged = new Map<string, QuoteProductRow>()
+  for (const product of current) {
+    merged.set(product.id, product)
+  }
+  for (const product of incoming) {
+    merged.set(product.id, product)
+  }
+
+  return [...merged.values()]
+}
+
+export function findQuoteProductById(
+  current: QuoteProductRow[],
+  id: string | null | undefined
+) {
+  if (!id) return null
+  return current.find((product) => product.id === id) ?? null
+}
 
 export function upsertProductIntoVisibleSlice(
   current: QuoteProductRow[],
@@ -24,5 +53,9 @@ export function upsertProductIntoVisibleSlice(
 
 export function removeProductFromVisibleSlice(current: QuoteProductRow[], id: string) {
   return current.filter((product) => product.id !== id)
+}
+
+export function chooseQuoteProductsFallbackId(current: QuoteProductRow[]) {
+  return current[0]?.id ?? null
 }
 

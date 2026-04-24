@@ -1,10 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import type {
-  QuoteHomeBootstrapPageReadModel,
-  QuoteHomeBootstrapReadModel,
-} from '@/lib/quotes/collectionData'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
 import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
@@ -24,16 +21,13 @@ import {
 } from '../_home/quoteHomePresentation'
 import type { QuotesHomeJobListVm, QuotesHomePageSections } from '../_home/quoteHomeTypes'
 
-export function useQuotesHomePage(
-  initialData?: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel | null
-) {
+export function useQuotesHomePage(initialData?: QuoteHomeBootstrapReadModel | null) {
   const homeResource = useQuotesHomeData(initialData)
   const [actionWarning, setActionWarning] = useState<string | null>(null)
-  const [deletedEstimateIds, setDeletedEstimateIds] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [jobQuery, setJobQuery] = useState('')
-  const [selectedJobId, setSelectedJobId] = useState('')
+  const [selectedJobId, setSelectedJobId] = useState(homeResource.initialSelectedJobId ?? '')
   const searchState = useQuotesHomeSearch(searchQuery)
   const selectedJob = homeResource.jobs.find((job) => job.id === selectedJobId) ?? null
   const filteredJobs = useMemo(
@@ -45,6 +39,10 @@ export function useQuotesHomePage(
     selectedJob,
     loading: homeResource.loading,
     onRefresh: homeResource.refresh,
+    initialVersions:
+      homeResource.initialSelectedJobVersions?.job_id === selectedJobId
+        ? homeResource.initialSelectedJobVersions
+        : null,
   })
   const deleteController = useQuotesHomeDelete()
 
@@ -55,30 +53,16 @@ export function useQuotesHomePage(
     }
   }, [homeResource.jobs, selectedJobId])
 
-  useEffect(() => {
-    setDeletedEstimateIds([])
-  }, [selectedJobId])
-
-  const visibleVersions = useMemo(
-    () =>
-      workflow.versions.items.filter((estimate) => !deletedEstimateIds.includes(estimate.estimate_id)),
-    [deletedEstimateIds, workflow.versions.items]
-  )
-
   const summaryCards = buildSummaryCards(homeResource.summary)
   const jobListItems = filteredJobs.map((job) =>
-    buildQuoteHomeJobListItemVm(job, homeResource.versionCountByJob[job.id] ?? 0, {
+    buildQuoteHomeJobListItemVm(job, job.version_count, {
       selectedJobId,
     })
   )
   const mobileItems = homeResource.jobs
     .slice(0, 10)
-    .map((job) =>
-      buildQuoteHomeJobListItemVm(job, homeResource.versionCountByJob[job.id] ?? 0, {
-        mobile: true,
-      })
-    )
-  const versionItems = visibleVersions.map((estimate) =>
+    .map((job) => buildQuoteHomeJobListItemVm(job, job.version_count, { mobile: true }))
+  const versionItems = workflow.versions.items.map((estimate) =>
     buildQuoteHomeVersionItemVm(estimate, deleteController.deletingId)
   )
   const feedbackVm = buildQuotesHomeFeedbackVm({
@@ -96,10 +80,10 @@ export function useQuotesHomePage(
     details: [],
     sources: [],
   }
-  const versionCount = homeResource.versionCountByJob[selectedJobId] ?? visibleVersions.length
+  const versionCount = selectedJob?.version_count ?? workflow.versions.pageData.total_versions
   const deleteTargetsById = useMemo(() => {
-    return new Map(visibleVersions.map((item) => [item.estimate_id, item]))
-  }, [visibleVersions])
+    return new Map(workflow.versions.items.map((item) => [item.estimate_id, item]))
+  }, [workflow.versions.items])
 
   const sections: QuotesHomePageSections = {
     headerVm: {
@@ -132,8 +116,8 @@ export function useQuotesHomePage(
     } satisfies QuotesHomeJobListVm,
     selectedJobVm: buildQuotesHomeSelectedJobVm(selectedJob, versionCount, homeResource.loading),
     versionListVm: {
-      heading: buildQuotesHomeVersionHeading(selectedJob, visibleVersions),
-      emptyMessage: buildQuotesHomeVersionEmptyMessage(selectedJob, visibleVersions),
+      heading: buildQuotesHomeVersionHeading(selectedJob, workflow.versions.items),
+      emptyMessage: buildQuotesHomeVersionEmptyMessage(selectedJob, workflow.versions.items),
       items: versionItems,
     },
     createVm: {
@@ -182,21 +166,12 @@ export function useQuotesHomePage(
       },
       cancelDelete: deleteController.cancelDelete,
       confirmDelete: async () => {
-        const deletedEstimate = deleteController.confirmingDelete
         const deleted = await deleteController.confirmDeleteVersion()
-        if (!deleted || !deletedEstimate) {
+        if (!deleted) {
           return false
         }
 
         setActionWarning(null)
-        homeResource.applyDeletedVersion(deletedEstimate)
-        setDeletedEstimateIds((current) =>
-          current.includes(deletedEstimate.estimate_id)
-            ? current
-            : [...current, deletedEstimate.estimate_id]
-        )
-        workflow.versions.removeVersion(deletedEstimate.estimate_id)
-
         const [bootstrapRefresh, versionsRefresh] = await Promise.all([
           homeResource.attemptRefresh({
             preserveDataOnError: true,
@@ -209,7 +184,6 @@ export function useQuotesHomePage(
         ])
 
         if (bootstrapRefresh.ok && versionsRefresh.ok) {
-          setDeletedEstimateIds([])
           return true
         }
 
@@ -222,13 +196,12 @@ export function useQuotesHomePage(
         }
 
         setActionWarning(
-          `Quote deleted, but follow-up refresh failed. Showing locally reconciled data. ${refreshFailures.join(' ')}`
+          `Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. ${refreshFailures.join(' ')}`
         )
         return true
       },
       refresh: async () => {
         setActionWarning(null)
-        setDeletedEstimateIds([])
         return workflow.actions.refresh()
       },
     },

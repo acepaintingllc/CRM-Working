@@ -91,13 +91,6 @@ export type QuoteHomeSearchResultReadModel = {
   is_sent_estimate: boolean
 }
 
-export type QuoteHomeJobVersionCountsReadModel = {
-  items: Array<{
-    job_id: string
-    version_count: number
-  }>
-}
-
 export type QuoteHomeEligibleJobReadModel = {
   id: string
   customer_id: string
@@ -106,16 +99,16 @@ export type QuoteHomeEligibleJobReadModel = {
   title: string
   description: string | null
   status: string
-  created_at?: string | null
+  created_at: string | null
   estimate_date: string | null
   estimate_sent_at: string | null
   scheduled_date: string | null
-  scheduled_end_date?: string | null
-  scheduled_email_sent_at?: string | null
+  scheduled_end_date: string | null
+  scheduled_email_sent_at: string | null
   completed_at: string | null
-  completed_email_sent_at?: string | null
-  closeout_notes?: string | null
-  linked_estimate_id?: string | null
+  completed_email_sent_at: string | null
+  closeout_notes: string | null
+  linked_estimate_id: string | null
 }
 
 export type QuoteHomeJobListItemReadModel = QuoteHomeEligibleJobReadModel & {
@@ -129,12 +122,6 @@ export type QuoteHomeJobsPageReadModel = {
   items: QuoteHomeJobListItemReadModel[]
 }
 
-export type QuoteHomeBootstrapReadModel = {
-  summary: QuoteHomeSummaryReadModel
-  jobCounts: QuoteHomeJobVersionCountsReadModel
-  jobs: QuoteHomeEligibleJobReadModel[]
-}
-
 export type QuoteJobVersionsReadModel = {
   job_id: string
   total_versions: number
@@ -146,7 +133,7 @@ export type QuoteJobVersionsPageReadModel = QuoteJobVersionsReadModel & {
   next_cursor: string | null
 }
 
-export type QuoteHomeBootstrapPageReadModel = {
+export type QuoteHomeBootstrapReadModel = {
   summary: QuoteHomeSummaryReadModel
   jobs: QuoteHomeJobsPageReadModel
   selected_job_id: string | null
@@ -233,22 +220,6 @@ export function toQuoteHomeSearchResultReadModel(
   }
 }
 
-export function buildQuoteHomeJobVersionCountsReadModel(
-  estimates: Array<Pick<EstimateCollectionDecoratedRow, 'job_id'>>
-): QuoteHomeJobVersionCountsReadModel {
-  const counts = estimates.reduce<Record<string, number>>((nextCounts, estimate) => {
-    nextCounts[estimate.job_id] = (nextCounts[estimate.job_id] ?? 0) + 1
-    return nextCounts
-  }, {})
-
-  return {
-    items: Object.entries(counts).map(([job_id, version_count]) => ({
-      job_id,
-      version_count,
-    })),
-  }
-}
-
 export function buildQuoteHomeSummaryReadModel(
   estimates: Array<
     Pick<
@@ -269,47 +240,16 @@ export function buildQuoteHomeSummaryReadModel(
   }
 }
 
-export function buildQuoteHomeBootstrapReadModel(
-  params: {
-    summary: QuoteHomeSummaryReadModel
-    jobs: QuoteHomeJobsPageReadModel
-    selectedJobVersions: QuoteJobVersionsPageReadModel | null
-  }
-): QuoteHomeBootstrapPageReadModel
-export function buildQuoteHomeBootstrapReadModel(
-  rows: EstimateCollectionDecoratedRow[],
-  jobs: QuoteHomeEligibleJobReadModel[]
-): QuoteHomeBootstrapReadModel
-export function buildQuoteHomeBootstrapReadModel(
-  rowsOrParams:
-    | EstimateCollectionDecoratedRow[]
-    | {
-        summary: QuoteHomeSummaryReadModel
-        jobs: QuoteHomeJobsPageReadModel
-        selectedJobVersions: QuoteJobVersionsPageReadModel | null
-      },
-  jobs: QuoteHomeEligibleJobReadModel[] = []
-): QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel {
-  if (!Array.isArray(rowsOrParams)) {
-    return {
-      summary: rowsOrParams.summary,
-      jobs: rowsOrParams.jobs,
-      selected_job_id:
-        rowsOrParams.selectedJobVersions?.job_id ?? rowsOrParams.jobs.items[0]?.id ?? null,
-      selected_job_versions: rowsOrParams.selectedJobVersions,
-    }
-  }
-
+export function buildQuoteHomeBootstrapReadModel(params: {
+  summary: QuoteHomeSummaryReadModel
+  jobs: QuoteHomeJobsPageReadModel
+  selectedJobVersions: QuoteJobVersionsPageReadModel | null
+}): QuoteHomeBootstrapReadModel {
   return {
-    summary: buildQuoteHomeSummaryReadModel(
-      rowsOrParams.map((row) => ({
-        version_state: row.version_state,
-        final_total: row.final_total,
-        is_sent_estimate: row.is_sent_estimate,
-      }))
-    ),
-    jobCounts: buildQuoteHomeJobVersionCountsReadModel(rowsOrParams),
-    jobs,
+    summary: params.summary,
+    jobs: params.jobs,
+    selected_job_id: params.selectedJobVersions?.job_id ?? params.jobs.items[0]?.id ?? null,
+    selected_job_versions: params.selectedJobVersions,
   }
 }
 
@@ -323,8 +263,7 @@ export function buildQuoteHomeRecentActivityReadModel(
 
 export function buildQuoteHomeSearchReadModel(
   rows: EstimateCollectionDecoratedRow[],
-  query: string,
-  _limit?: number
+  query: string
 ): QuoteHomeSearchResponse {
   return {
     query,
@@ -360,41 +299,14 @@ export function buildQuoteJobVersionsReadModel(
     limit: number
     nextCursor: string | null
   }
-): QuoteJobVersionsPageReadModel
-export function buildQuoteJobVersionsReadModel(
-  rows: EstimateCollectionDecoratedRow[],
-  jobId: string
-): QuoteJobVersionsReadModel
-export function buildQuoteJobVersionsReadModel(
-  rows: EstimateCollectionDecoratedRow[],
-  jobIdOrParams:
-    | string
-    | {
-        jobId: string
-        totalVersions: number
-        limit: number
-        nextCursor: string | null
-      }
-): QuoteJobVersionsReadModel | QuoteJobVersionsPageReadModel {
-  if (typeof jobIdOrParams !== 'string') {
-    const items = rows
-      .map(toQuoteHomeJobVersionItem)
-      .filter((estimate) => estimate.job_id === jobIdOrParams.jobId)
-    return {
-      job_id: jobIdOrParams.jobId,
-      total_versions: jobIdOrParams.totalVersions,
-      limit: jobIdOrParams.limit,
-      next_cursor: jobIdOrParams.nextCursor,
-      items,
-    }
-  }
-
-  const items = rows
-    .map(toQuoteHomeJobVersionItem)
-    .filter((estimate) => estimate.job_id === jobIdOrParams)
+): QuoteJobVersionsPageReadModel {
   return {
-    job_id: jobIdOrParams,
-    total_versions: items.length,
-    items,
+    job_id: params.jobId,
+    total_versions: params.totalVersions,
+    limit: params.limit,
+    next_cursor: params.nextCursor,
+    items: rows
+      .map(toQuoteHomeJobVersionItem)
+      .filter((estimate) => estimate.job_id === params.jobId),
   }
 }

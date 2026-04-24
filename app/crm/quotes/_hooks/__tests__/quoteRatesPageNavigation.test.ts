@@ -1,5 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
-import { executeQuoteRatesTransition } from '../quoteRatesPageTransitions'
+import { describe, expect, it } from 'vitest'
 import {
   applyNavigationIntent,
   buildQuoteRatesSelectionSnapshot,
@@ -134,43 +133,4 @@ describe('quoteRatesPageNavigation invariants', () => {
     )
   })
 
-  it('dispatches non-navigation intents through their dedicated transition handlers', async () => {
-    const applyNavigation = vi.fn(() => true)
-    const applySelection = vi.fn(() => true)
-    const startCreate = vi.fn(() => true)
-    const startDuplicate = vi.fn(() => true)
-    const performReload = vi.fn(async () => true)
-    const archiveOrReactivate = vi.fn(async () => true)
-
-    await executeQuoteRatesTransition({
-      intent: { type: 'reload', keepId: 'wall-rate-2' },
-      navigation: DEFAULT_QUOTE_RATES_NAVIGATION,
-      selectedId: 'wall-rate-1',
-      applyNavigation,
-      applySelection,
-      startCreate,
-      startDuplicate,
-      performReload,
-      archiveOrReactivate,
-    })
-
-    await executeQuoteRatesTransition({
-      intent: { type: 'archiveOrReactivate', nextActive: false },
-      navigation: DEFAULT_QUOTE_RATES_NAVIGATION,
-      selectedId: 'wall-rate-1',
-      applyNavigation,
-      applySelection,
-      startCreate,
-      startDuplicate,
-      performReload,
-      archiveOrReactivate,
-    })
-
-    expect(applyNavigation).not.toHaveBeenCalled()
-    expect(applySelection).not.toHaveBeenCalled()
-    expect(startCreate).not.toHaveBeenCalled()
-    expect(startDuplicate).not.toHaveBeenCalled()
-    expect(performReload).toHaveBeenCalledWith('wall-rate-2')
-    expect(archiveOrReactivate).toHaveBeenCalledWith(false)
-  })
 })

@@ -3,6 +3,18 @@
 -- 1) org-scoped quote-home KPI aggregation
 -- 2) paged quote-home job browsing with version counts
 
+alter table public.jobs
+  add column if not exists scheduled_email_sent_at timestamptz;
+
+alter table public.jobs
+  add column if not exists completed_email_sent_at timestamptz;
+
+alter table public.jobs
+  add column if not exists closeout_notes text;
+
+alter table public.jobs
+  add column if not exists linked_estimate_id uuid;
+
 create or replace function public.quote_home_summary(
   p_org_id uuid
 ) returns table (

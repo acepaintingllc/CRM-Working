@@ -32,6 +32,7 @@ type AcceptPublicEstimateParams = {
   signatureType?: string
   signatureValue?: string
   acceptedTerms: boolean
+  origin?: string
   userAgent?: string
   ip?: string
 }
@@ -39,6 +40,7 @@ type AcceptPublicEstimateParams = {
 type DeclinePublicEstimateParams = {
   token: string
   reason?: string
+  origin?: string
 }
 
 type PublicEstimateSnapshotOptions = {
@@ -242,6 +244,7 @@ export async function acceptPublicEstimate(
         accepted_at: now,
         user_agent: asText(params.userAgent),
         ip: asText(params.ip),
+        origin: asText(params.origin),
       },
     },
   })
@@ -255,6 +258,7 @@ export async function acceptPublicEstimate(
     metadata: {
       legal_name: legalName,
       signature_type: signatureType,
+      ...(params.origin ? { origin: asText(params.origin) } : {}),
     },
   })
   if (!eventResult.ok) return eventResult
@@ -303,6 +307,7 @@ export async function declinePublicEstimate(
     actorType: 'customer',
     metadata: {
       reason: asText(params.reason),
+      ...(params.origin ? { origin: asText(params.origin) } : {}),
     },
   })
   if (!eventResult.ok) return eventResult

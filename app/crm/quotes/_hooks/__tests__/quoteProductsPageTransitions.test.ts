@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { QuoteProductRow } from '@/lib/quotes/productsForm'
 import {
-  applyTransitionToState,
-  buildCurrentQuery,
-  buildSaveSuccessState,
-  syncStateWithProducts,
-} from '../quoteProductsPageTransitions'
-import { createCreateEditor, createEditorFromRow, initialQuoteProductsPageState } from '../quoteProductsPageState'
-import type { QuoteProductEditorState } from '../quoteProductsPageState'
+  mergeKnownQuoteProducts,
+  upsertProductIntoVisibleSlice,
+} from '../quoteProductsControllerUtils'
+import {
+  buildQuoteProductsIntentState,
+  buildQuoteProductsQuery,
+  buildQuoteProductsSavedState,
+  createInitialQuoteProductsWorkflowState,
+  createQuoteProductsCreateDraft,
+  createQuoteProductsDraftFromRow,
+  reconcileQuoteProductsStateFromResource,
+} from '../quoteProductsPageState'
 
 function buildProduct(overrides: Partial<QuoteProductRow> = {}): QuoteProductRow {
   return {
@@ -33,8 +38,7 @@ function buildProduct(overrides: Partial<QuoteProductRow> = {}): QuoteProductRow
 describe('quoteProductsPageTransitions invariants', () => {
   it('builds the resource query from debounced search only', () => {
     expect(
-      buildCurrentQuery({
-        ...initialQuoteProductsPageState,
+      buildQuoteProductsQuery({
         activeFamily: 'Primer',
         statusFilter: 'inactive',
         search: 'raw input',
@@ -48,54 +52,58 @@ describe('quoteProductsPageTransitions invariants', () => {
   })
 
   it('keeps a clean create editor aligned to the next family transition', () => {
-    const createEditor = createCreateEditor('Paint', 'product-2')
-    const nextState = applyTransitionToState(
+    const createDraft = createQuoteProductsCreateDraft('Paint')
+    const nextState = buildQuoteProductsIntentState(
       {
-        ...initialQuoteProductsPageState,
-        editor: createEditor,
+        ...createInitialQuoteProductsWorkflowState(),
+        selectedId: 'product-2',
+        editorMode: 'create',
+        draft: createDraft.draft,
+        cleanSnapshot: createDraft.cleanSnapshot,
+        returnSelectionId: 'product-2',
       },
-      { type: 'setActiveFamily', nextFamily: 'Primer' },
-      []
+      { type: 'setActiveFamily', nextFamily: 'Primer' }
     )
 
-    expect(nextState.activeFamily).toBe('Primer')
-    expect(nextState.editor.mode).toBe('create')
-    if (nextState.editor.mode !== 'create') throw new Error('Expected create editor')
-    expect(nextState.editor.draft.family).toBe('Primer')
-    expect(nextState.editor.dirty).toBe(false)
-    expect(nextState.editor.returnSelectionId).toBe('product-2')
+    expect(nextState.navigation.activeFamily).toBe('Primer')
+    expect(nextState.editorMode).toBe('create')
+    expect(nextState.draft.family).toBe('Primer')
+    expect(nextState.returnSelectionId).toBe('product-2')
   })
 
   it('never rehydrates a dirty selected editor from refreshed resource rows', () => {
     const row = buildProduct()
-    const editor = createEditorFromRow(row)
-    const dirtyEditor: Extract<QuoteProductEditorState, { mode: 'edit' }> = {
-      mode: 'edit',
-      targetId: row.id,
-      targetRow: row,
-      dirty: true,
-      cleanSnapshotKey: editor.cleanSnapshotKey,
+    const draftState = createQuoteProductsDraftFromRow(row)
+    const dirtyState = {
+      ...createInitialQuoteProductsWorkflowState(),
+      selectedId: row.id,
+      editorMode: 'edit' as const,
       draft: {
-        ...editor.draft,
+        ...draftState.draft,
         name: 'Local draft',
       },
-    }
-    const dirtyState = {
-      ...initialQuoteProductsPageState,
-      editor: dirtyEditor,
+      cleanSnapshot: draftState.cleanSnapshot,
     }
 
-    const nextState = syncStateWithProducts(dirtyState, [
-      buildProduct({
-        id: 'product-1',
-        name: 'Server rename',
-        updated_at: '2026-01-05T00:00:00.000Z',
-      }),
-    ])
+    const nextState = reconcileQuoteProductsStateFromResource(dirtyState, {
+      visibleRows: [
+        buildProduct({
+          id: 'product-1',
+          name: 'Server rename',
+          updated_at: '2026-01-05T00:00:00.000Z',
+        }),
+      ],
+      knownRows: [
+        buildProduct({
+          id: 'product-1',
+          name: 'Server rename',
+          updated_at: '2026-01-05T00:00:00.000Z',
+        }),
+      ],
+    })
 
-    expect(nextState.editor).toBe(dirtyState.editor)
-    if (nextState.editor.mode !== 'edit') throw new Error('Expected edit editor')
-    expect(nextState.editor.draft.name).toBe('Local draft')
+    expect(nextState).toBeNull()
+    expect(dirtyState.draft.name).toBe('Local draft')
   })
 
   it('preserves the explicit hidden selection after a save moves the row out of the filtered slice', () => {
@@ -104,27 +112,47 @@ describe('quoteProductsPageTransitions invariants', () => {
       name: 'Dormant Paint',
       status: 'Inactive',
     })
-    const state = {
-      ...initialQuoteProductsPageState,
-      statusFilter: 'inactive' as const,
-      editor: createEditorFromRow(selected),
-    }
-
-    const nextState = buildSaveSuccessState(
-      state,
+    const nextKnownRows = mergeKnownQuoteProducts([], [selected])
+    const nextVisibleRows = upsertProductIntoVisibleSlice(
+      [selected],
       buildProduct({
         id: 'paint-2',
         name: 'Dormant Paint',
         status: 'Archived',
       }),
-      'Product saved.'
+      { family: 'Paint', status: 'inactive', search: null },
+      'paint-2'
     )
 
-    expect(nextState.statusFilter).toBe('inactive')
-    expect(nextState.editor.mode).toBe('edit')
-    if (nextState.editor.mode !== 'edit') throw new Error('Expected edit editor')
-    expect(nextState.editor.targetId).toBe('paint-2')
-    expect(nextState.editor.draft.status).toBe('Archived')
-    expect(nextState.feedback.notice).toBe('Product saved.')
+    expect(nextKnownRows[0]?.id).toBe('paint-2')
+    expect(nextVisibleRows).toEqual([])
+
+    const nextState = buildQuoteProductsSavedState({
+      state: {
+        ...createInitialQuoteProductsWorkflowState(),
+        navigation: {
+          activeFamily: 'Paint',
+          statusFilter: 'inactive',
+          search: '',
+          debouncedSearch: '',
+        },
+        selectedId: 'paint-2',
+        editorMode: 'edit',
+        draft: createQuoteProductsDraftFromRow(selected).draft,
+        cleanSnapshot: createQuoteProductsDraftFromRow(selected).cleanSnapshot,
+      },
+      row: buildProduct({
+        id: 'paint-2',
+        name: 'Dormant Paint',
+        status: 'Archived',
+      }),
+      notice: 'Product saved.',
+    })
+
+    expect(nextState.navigation.statusFilter).toBe('inactive')
+    expect(nextState.editorMode).toBe('edit')
+    expect(nextState.selectedId).toBe('paint-2')
+    expect(nextState.draft.status).toBe('Archived')
+    expect(nextState.notice).toBe('Product saved.')
   })
 })

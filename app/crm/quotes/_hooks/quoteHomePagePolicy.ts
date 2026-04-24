@@ -1,9 +1,9 @@
 'use client'
 
-import type { QuoteHomeEligibleJobReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
 
 export function resolveQuoteHomeSelectedJobId(
-  jobs: QuoteHomeEligibleJobReadModel[],
+  jobs: QuoteHomeJobListItemReadModel[],
   currentJobId: string
 ) {
   if (currentJobId && jobs.some((job) => job.id === currentJobId)) {
@@ -14,7 +14,7 @@ export function resolveQuoteHomeSelectedJobId(
 }
 
 export function filterQuoteHomeJobs(
-  jobs: QuoteHomeEligibleJobReadModel[],
+  jobs: QuoteHomeJobListItemReadModel[],
   query: string
 ) {
   const normalizedQuery = query.trim().toLowerCase()

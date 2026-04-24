@@ -28,7 +28,7 @@ describe('CustomersPage', () => {
     const setSearch = vi.fn()
     const setPage = vi.fn()
 
-    mockUseOrg.mockReturnValue({ orgId: 'org-123' })
+    mockUseOrg.mockReturnValue({ orgId: 'org-123', loading: false, error: null })
     mockUseCustomerList.mockReturnValue({
       customers: [
         { id: '1', name: 'Alice Painter', email: 'alice@example.com', phone: '555-1111', address: '123 Main St' },

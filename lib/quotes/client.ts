@@ -18,10 +18,6 @@ export async function loadQuoteHomeSummary<T>() {
   return loadData<T>('/api/quotes/home/summary', { cache: 'no-store' })
 }
 
-export async function loadQuoteHomeJobCounts<T>() {
-  return loadData<T>('/api/quotes/home/job-counts', { cache: 'no-store' })
-}
-
 export async function loadQuoteHomeBootstrap<T>() {
   return loadData<T>('/api/quotes/home/bootstrap', { cache: 'no-store' })
 }

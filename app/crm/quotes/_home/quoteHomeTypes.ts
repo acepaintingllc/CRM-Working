@@ -1,10 +1,10 @@
 import type {
-  QuoteHomeEligibleJobReadModel,
+  QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 
-export type QuoteHomeJob = QuoteHomeEligibleJobReadModel
+export type QuoteHomeJob = QuoteHomeJobListItemReadModel
 export type QuoteHomeJobVersion = QuoteHomeJobVersionItemReadModel
 
 export type NavItem = {
