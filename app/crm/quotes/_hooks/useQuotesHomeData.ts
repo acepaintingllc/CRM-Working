@@ -10,7 +10,9 @@ import { loadQuoteHomeBootstrap, loadQuoteHomeJobs } from '@/lib/quotes/client'
 import {
   normalizeQuoteHomeJobQuery,
   resolveQuoteHomeBootstrapJobsSync,
+  resolveQuoteHomeJobsPageAfterRequest,
   resolveQuoteHomeJobsRefresh,
+  resolveQuoteHomeLoadMoreJobs,
   resolveQuoteHomeQueryJobsSync,
 } from './quoteHomePagePolicy'
 
@@ -39,6 +41,24 @@ function getJobsPaginationRequestKey(query: string, cursor: string) {
 function toLoadErrorMessage(scope: string, loadError: unknown) {
   return loadError instanceof Error ? loadError.message : `Failed to load ${scope}.`
 }
+
+type QuoteHomeJobsRequestPurpose = 'query_change' | 'refresh' | 'pagination'
+
+type QuoteHomeJobsOperation = {
+  requestId: number
+  query: string
+  purpose: QuoteHomeJobsRequestPurpose
+}
+
+type QuoteHomeJobsLoadResult =
+  | {
+      ok: true
+      error: null
+    }
+  | {
+      ok: false
+      error: string | null
+    }
 
 type UseQuotesHomeDataOptions = {
   jobQuery?: string
@@ -73,16 +93,60 @@ export function useQuotesHomeJobs(
   const latestLoadedBootstrapRef = useRef(bootstrapData)
   const activeJobQueryRef = useRef(activeJobQuery)
   const [jobsPage, setJobsPage] = useState<QuoteHomeJobsPageReadModel>(bootstrapData.jobs)
-  const [jobsLoading, setJobsLoading] = useState(false)
+  const [jobsOperation, setJobsOperation] = useState<QuoteHomeJobsOperation | null>(null)
   const [jobsError, setJobsError] = useState<string | null>(null)
   const jobsPageRef = useRef(bootstrapData.jobs)
   const jobsRequestIdRef = useRef(0)
+  const jobsOperationRef = useRef<QuoteHomeJobsOperation | null>(null)
   const jobPaginationInFlightKeysRef = useRef(new Set<string>())
 
   const commitJobsPage = useCallback((nextJobsPage: QuoteHomeJobsPageReadModel) => {
     jobsPageRef.current = nextJobsPage
     setJobsPage(nextJobsPage)
   }, [])
+
+  const setActiveJobsOperation = useCallback(
+    (nextOperation: QuoteHomeJobsOperation | null) => {
+      jobsOperationRef.current = nextOperation
+      setJobsOperation(nextOperation)
+    },
+    []
+  )
+
+  const isActiveJobsRequest = useCallback(
+    (operation: QuoteHomeJobsOperation) =>
+      jobsRequestIdRef.current === operation.requestId &&
+      jobsOperationRef.current?.requestId === operation.requestId &&
+      activeJobQueryRef.current === operation.query,
+    []
+  )
+
+  const cancelJobsRequestsForQuery = useCallback(
+    (queryForLoadedPage: string) => {
+      const normalizedQuery = normalizeQuoteHomeJobQuery(queryForLoadedPage)
+      const activeOperation = jobsOperationRef.current
+      if (!activeOperation || activeOperation.query === normalizedQuery) {
+        return
+      }
+
+      jobsRequestIdRef.current += 1
+      jobPaginationInFlightKeysRef.current.clear()
+      setActiveJobsOperation(null)
+      setJobsError(null)
+    },
+    [setActiveJobsOperation]
+  )
+
+  const adoptJobsPage = useCallback(
+    (nextJobsPage: QuoteHomeJobsPageReadModel) => {
+      jobsRequestIdRef.current += 1
+      jobPaginationInFlightKeysRef.current.clear()
+      setActiveJobsOperation(null)
+      setJobsError(null)
+      commitJobsPage(nextJobsPage)
+    },
+    [commitJobsPage, setActiveJobsOperation]
+  )
 
   useEffect(() => {
     activeJobQueryRef.current = activeJobQuery
@@ -99,11 +163,8 @@ export function useQuotesHomeJobs(
       return
     }
 
-    jobsRequestIdRef.current += 1
-    setJobsLoading(false)
-    setJobsError(null)
-    commitJobsPage(syncDecision.jobsPage)
-  }, [bootstrapData, commitJobsPage])
+    adoptJobsPage(syncDecision.jobsPage)
+  }, [adoptJobsPage, bootstrapData])
 
   const loadJobsPage = useCallback(
     async (params: {
@@ -111,23 +172,29 @@ export function useQuotesHomeJobs(
       cursor?: string | null
       append?: boolean
       reportError?: boolean
-    }) => {
-      const requestId = ++jobsRequestIdRef.current
+      purpose: QuoteHomeJobsRequestPurpose
+    }): Promise<QuoteHomeJobsLoadResult> => {
+      const normalizedQuery = normalizeQuoteHomeJobQuery(params.query)
+      const operation = {
+        requestId: ++jobsRequestIdRef.current,
+        query: normalizedQuery,
+        purpose: params.purpose,
+      }
       const reportError = params.reportError ?? true
 
-      setJobsLoading(true)
+      setActiveJobsOperation(operation)
       if (reportError) {
         setJobsError(null)
       }
 
       try {
         const nextPage = await loadQuoteHomeJobs<QuoteHomeJobsPageReadModel>({
-          query: params.query,
+          query: normalizedQuery,
           limit: jobsPageRef.current.limit,
           cursor: params.cursor,
         })
 
-        if (jobsRequestIdRef.current !== requestId) {
+        if (!isActiveJobsRequest(operation)) {
           return { ok: false as const, error: null }
         }
 
@@ -135,22 +202,17 @@ export function useQuotesHomeJobs(
           setJobsError(null)
         }
 
-        if (params.append) {
-          const existingIds = new Set(jobsPageRef.current.items.map((job) => job.id))
-          commitJobsPage({
-            ...nextPage,
-            items: [
-              ...jobsPageRef.current.items,
-              ...nextPage.items.filter((job) => !existingIds.has(job.id)),
-            ],
+        commitJobsPage(
+          resolveQuoteHomeJobsPageAfterRequest({
+            currentJobsPage: jobsPageRef.current,
+            loadedJobsPage: nextPage,
+            mergeMode: params.append ? 'append' : 'replace',
           })
-        } else {
-          commitJobsPage(nextPage)
-        }
+        )
 
         return { ok: true as const, error: null }
       } catch (loadError) {
-        if (jobsRequestIdRef.current !== requestId) {
+        if (!isActiveJobsRequest(operation)) {
           return { ok: false as const, error: null }
         }
 
@@ -160,12 +222,12 @@ export function useQuotesHomeJobs(
         }
         return { ok: false as const, error: nextError }
       } finally {
-        if (jobsRequestIdRef.current === requestId) {
-          setJobsLoading(false)
+        if (jobsOperationRef.current?.requestId === operation.requestId) {
+          setActiveJobsOperation(null)
         }
       }
     },
-    [commitJobsPage]
+    [commitJobsPage, isActiveJobsRequest, setActiveJobsOperation]
   )
 
   useEffect(() => {
@@ -175,11 +237,12 @@ export function useQuotesHomeJobs(
     })
 
     if (syncDecision.action === 'keep_current_jobs') {
+      cancelJobsRequestsForQuery(activeJobQuery)
       return
     }
 
-    void loadJobsPage({ query: syncDecision.query })
-  }, [activeJobQuery, loadJobsPage])
+    void loadJobsPage({ query: syncDecision.query, purpose: 'query_change' })
+  }, [activeJobQuery, cancelJobsRequestsForQuery, loadJobsPage])
 
   const refreshJobs = useCallback(
     async (
@@ -193,29 +256,34 @@ export function useQuotesHomeJobs(
       })
 
       if (refreshDecision.action === 'adopt_bootstrap_jobs') {
-        jobsRequestIdRef.current += 1
-        setJobsLoading(false)
-        setJobsError(null)
-        commitJobsPage(refreshDecision.jobsPage)
+        adoptJobsPage(refreshDecision.jobsPage)
         return { ok: true as const, error: null }
       }
 
       return loadJobsPage({
         query: refreshDecision.query,
         reportError: options?.reportError,
+        purpose: 'refresh',
       })
     },
-    [commitJobsPage, loadJobsPage]
+    [adoptJobsPage, loadJobsPage]
   )
 
   const loadMoreJobs = useCallback(async () => {
     const currentJobsPage = jobsPageRef.current
-    const cursor = currentJobsPage.next_cursor
-    if (!cursor) {
+    const loadMoreDecision = resolveQuoteHomeLoadMoreJobs({
+      currentJobsPage,
+      jobsRequestInFlight: Boolean(jobsOperationRef.current),
+    })
+
+    if (loadMoreDecision.action === 'skip_load_more') {
       return
     }
 
-    const paginationRequestKey = getJobsPaginationRequestKey(currentJobsPage.query, cursor)
+    const paginationRequestKey = getJobsPaginationRequestKey(
+      loadMoreDecision.query,
+      loadMoreDecision.cursor
+    )
     if (jobPaginationInFlightKeysRef.current.has(paginationRequestKey)) {
       return
     }
@@ -223,9 +291,10 @@ export function useQuotesHomeJobs(
     jobPaginationInFlightKeysRef.current.add(paginationRequestKey)
     try {
       await loadJobsPage({
-        query: currentJobsPage.query,
-        cursor,
+        query: loadMoreDecision.query,
+        cursor: loadMoreDecision.cursor,
         append: true,
+        purpose: 'pagination',
       })
     } finally {
       jobPaginationInFlightKeysRef.current.delete(paginationRequestKey)
@@ -235,7 +304,7 @@ export function useQuotesHomeJobs(
   return {
     jobsPage,
     jobs: jobsPage.items,
-    jobsLoading,
+    jobsLoading: Boolean(jobsOperation),
     jobsError,
     loadMoreJobs,
     hasMoreJobs: Boolean(jobsPage.next_cursor),
@@ -263,12 +332,7 @@ export function useQuotesHomeData(
     await loadMoreJobs()
   }, [bootstrapLoading, loadMoreJobs])
 
-  const retryJobs = useCallback(async () => {
-    if (jobsError) {
-      const result = await refreshJobs()
-      return result.ok
-    }
-
+  const retryBootstrapThenJobs = useCallback(async () => {
     const bootstrapRefresh = await refreshBootstrap()
     if (!bootstrapRefresh.ok || !bootstrapRefresh.data) {
       return false
@@ -276,7 +340,20 @@ export function useQuotesHomeData(
 
     const jobsRefresh = await refreshJobs(undefined, bootstrapRefresh.data)
     return jobsRefresh.ok
-  }, [jobsError, refreshBootstrap, refreshJobs])
+  }, [refreshBootstrap, refreshJobs])
+
+  const retryJobsPage = useCallback(async () => {
+    const result = await refreshJobs()
+    return result.ok
+  }, [refreshJobs])
+
+  const retryJobs = useCallback(async () => {
+    if (jobsError) {
+      return retryJobsPage()
+    }
+
+    return retryBootstrapThenJobs()
+  }, [jobsError, retryBootstrapThenJobs, retryJobsPage])
 
   const bootstrap = {
     ...bootstrapResource.bootstrapData,

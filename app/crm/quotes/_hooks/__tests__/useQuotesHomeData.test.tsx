@@ -160,6 +160,23 @@ describe('useQuotesHomeData', () => {
     expect(result.current.initialSelectedJobVersions).toEqual(seededPayload.selected_job_versions)
   })
 
+  it('loads initial bootstrap data when no initial data is provided', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValueOnce(firstPayload)
+
+    const { result } = renderHook(() => useQuotesHomeData())
+
+    expect(result.current.loading).toBe(true)
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(1)
+    expect(loadQuoteHomeJobs).not.toHaveBeenCalled()
+    expect(result.current.summary.total_versions).toBe(1)
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1'])
+    expect(result.current.bootstrapError).toBeNull()
+    expect(result.current.jobsError).toBeNull()
+  })
+
   it('ignores stale responses from older refresh calls and keeps the latest final state', async () => {
     const initial = deferred<typeof firstPayload>()
     const stale = deferred<typeof firstPayload>()
@@ -253,6 +270,127 @@ describe('useQuotesHomeData', () => {
     expect(result.current.jobsError).toBeNull()
   })
 
+  it('ignores stale jobs-page responses after a newer query wins', async () => {
+    const staleGarage = deferred<QuoteHomeJobsPageReadModel>()
+    const latestKitchen = deferred<QuoteHomeJobsPageReadModel>()
+    loadQuoteHomeJobs
+      .mockImplementationOnce(() => staleGarage.promise)
+      .mockImplementationOnce(() => latestKitchen.promise)
+
+    const { result, rerender } = renderHook(
+      ({ jobQuery }) => useQuotesHomeData(seededPayload, { jobQuery }),
+      {
+        initialProps: {
+          jobQuery: '',
+        },
+      }
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    rerender({ jobQuery: 'garage' })
+    await waitFor(() => expect(loadQuoteHomeJobs).toHaveBeenCalledTimes(1))
+
+    rerender({ jobQuery: 'kitchen' })
+    await waitFor(() => expect(loadQuoteHomeJobs).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      latestKitchen.resolve({
+        query: 'kitchen',
+        limit: 25,
+        next_cursor: null,
+        items: [seededPayload.jobs.items[0]],
+      })
+    })
+
+    await waitFor(() => expect(result.current.jobsPage.query).toBe('kitchen'))
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1'])
+
+    await act(async () => {
+      staleGarage.resolve({
+        query: 'garage',
+        limit: 25,
+        next_cursor: null,
+        items: [seededPayload.jobs.items[1]],
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(result.current.jobsPage.query).toBe('kitchen')
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1'])
+    expect(result.current.jobsError).toBeNull()
+  })
+
+  it('lets a query change supersede an in-flight loadMore page', async () => {
+    const staleNextPage = deferred<QuoteHomeJobsPageReadModel>()
+    const latestGarage = deferred<QuoteHomeJobsPageReadModel>()
+    loadQuoteHomeJobs
+      .mockImplementationOnce(() => staleNextPage.promise)
+      .mockImplementationOnce(() => latestGarage.promise)
+
+    const { result, rerender } = renderHook(
+      ({ jobQuery }) => useQuotesHomeData(seededPayload, { jobQuery }),
+      {
+        initialProps: {
+          jobQuery: '',
+        },
+      }
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let loadMorePromise: Promise<void> = Promise.resolve()
+    await act(async () => {
+      loadMorePromise = result.current.loadMore()
+      await Promise.resolve()
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenCalledWith({
+      query: '',
+      limit: 25,
+      cursor: 'cursor-2',
+    })
+
+    rerender({ jobQuery: 'garage' })
+    await waitFor(() => expect(loadQuoteHomeJobs).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      latestGarage.resolve({
+        query: 'garage',
+        limit: 25,
+        next_cursor: null,
+        items: [seededPayload.jobs.items[1]],
+      })
+    })
+
+    await waitFor(() => expect(result.current.jobsPage.query).toBe('garage'))
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
+
+    await act(async () => {
+      staleNextPage.resolve({
+        query: '',
+        limit: 25,
+        next_cursor: null,
+        items: [
+          {
+            ...seededPayload.jobs.items[1],
+            id: 'job-3',
+            customer_id: 'customer-3',
+            customer_name: 'Charlie',
+            customer_address: '789 Pine',
+            title: 'Bath',
+          },
+        ],
+      })
+      await loadMorePromise
+    })
+
+    expect(result.current.jobsPage.query).toBe('garage')
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
+    expect(result.current.jobsError).toBeNull()
+  })
+
   it('appends another jobs page when loadMore runs', async () => {
     const { result } = renderHook(() => useQuotesHomeData(seededPayload))
 
@@ -288,6 +426,47 @@ describe('useQuotesHomeData', () => {
     })
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2', 'job-3'])
     expect(result.current.jobsPage.next_cursor).toBeNull()
+    expect(result.current.hasMore).toBe(false)
+  })
+
+  it('keeps the existing jobs page and releases loadMore after a failed page load', async () => {
+    loadQuoteHomeJobs
+      .mockRejectedValueOnce(new Error('jobs page failed'))
+      .mockResolvedValueOnce({
+        query: '',
+        limit: 25,
+        next_cursor: null,
+        items: [
+          {
+            ...seededPayload.jobs.items[1],
+            id: 'job-3',
+            customer_id: 'customer-3',
+            customer_name: 'Charlie',
+            customer_address: '789 Pine',
+            title: 'Bath',
+          },
+        ],
+      })
+
+    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    expect(result.current.jobsError).toBe('jobs page failed')
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    expect(result.current.hasMore).toBe(true)
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenCalledTimes(2)
+    expect(result.current.jobsError).toBeNull()
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2', 'job-3'])
     expect(result.current.hasMore).toBe(false)
   })
 

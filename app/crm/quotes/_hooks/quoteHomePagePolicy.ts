@@ -12,6 +12,8 @@ export type QuoteHomeSelectedJobState = {
   selectedJob: QuoteHomeJobListItemReadModel | null
 }
 
+export type QuoteHomeLoadedJobsChangeKind = 'jobs_replaced' | 'jobs_appended'
+
 export type QuoteHomeSelectionPolicyInput =
   | {
       event: 'initialize'
@@ -19,10 +21,22 @@ export type QuoteHomeSelectionPolicyInput =
       selectedJobId: string | null | undefined
     }
   | {
-      event: 'loaded_jobs_changed'
+      event: 'bootstrap_jobs_loaded'
+      jobs: QuoteHomeJobListItemReadModel[]
+      currentSelection: QuoteHomeSelectedJobState
+      selectedJobId: string | null | undefined
+    }
+  | {
+      event: 'jobs_replaced'
       jobs: QuoteHomeJobListItemReadModel[]
       currentSelection: QuoteHomeSelectedJobState
       jobQuery: string
+      preferredSelectedJobId?: string | null | undefined
+    }
+  | {
+      event: 'jobs_appended'
+      jobs: QuoteHomeJobListItemReadModel[]
+      currentSelection: QuoteHomeSelectedJobState
     }
   | {
       event: 'manual_select'
@@ -60,6 +74,19 @@ export type QuoteHomeJobsRefreshDecision =
       query: string
     }
 
+export type QuoteHomeJobsPageMergeMode = 'replace' | 'append'
+
+export type QuoteHomeJobsLoadMoreDecision =
+  | {
+      action: 'load_next_jobs_page'
+      query: string
+      cursor: string
+    }
+  | {
+      action: 'skip_load_more'
+      reason: 'jobs_request_in_flight' | 'no_next_cursor'
+    }
+
 export function resolveQuoteHomeSelectedJobId(
   jobs: QuoteHomeJobListItemReadModel[],
   currentJobId: string
@@ -82,13 +109,80 @@ export function resolveQuoteHomeSelectedJob(
   }
 }
 
-export function resolveQuoteHomeSelectionAfterJobsLoaded(params: {
+function findQuoteHomeJobById(
+  jobs: QuoteHomeJobListItemReadModel[],
+  selectedJobId: string | null | undefined
+) {
+  return jobs.find((job) => job.id === selectedJobId) ?? null
+}
+
+function isQuoteHomeJobsPageAppend(params: {
+  previousJobs: QuoteHomeJobListItemReadModel[]
+  jobs: QuoteHomeJobListItemReadModel[]
+}) {
+  if (params.previousJobs.length === 0) {
+    return false
+  }
+
+  if (params.jobs.length <= params.previousJobs.length) {
+    return false
+  }
+
+  return params.previousJobs.every(
+    (previousJob, index) => params.jobs[index]?.id === previousJob.id
+  )
+}
+
+export function resolveQuoteHomeLoadedJobsChangeKind(params: {
+  previousJobs: QuoteHomeJobListItemReadModel[]
+  previousJobQuery: string
+  jobs: QuoteHomeJobListItemReadModel[]
+  jobQuery: string
+}): QuoteHomeLoadedJobsChangeKind {
+  if (
+    normalizeQuoteHomeJobQuery(params.previousJobQuery) !==
+    normalizeQuoteHomeJobQuery(params.jobQuery)
+  ) {
+    return 'jobs_replaced'
+  }
+
+  return isQuoteHomeJobsPageAppend({
+    previousJobs: params.previousJobs,
+    jobs: params.jobs,
+  })
+    ? 'jobs_appended'
+    : 'jobs_replaced'
+}
+
+export function resolveQuoteHomeSelectionAfterBootstrapJobsLoaded(params: {
+  jobs: QuoteHomeJobListItemReadModel[]
+  currentSelection: QuoteHomeSelectedJobState
+  selectedJobId: string | null | undefined
+}): QuoteHomeSelectedJobState {
+  const selectedJob = findQuoteHomeJobById(
+    params.jobs,
+    params.currentSelection.selectedJobId
+  )
+
+  if (selectedJob) {
+    return {
+      selectedJobId: selectedJob.id,
+      selectedJob,
+    }
+  }
+
+  return resolveQuoteHomeSelectedJob(params.jobs, params.selectedJobId)
+}
+
+export function resolveQuoteHomeSelectionAfterJobsReplaced(params: {
   jobs: QuoteHomeJobListItemReadModel[]
   currentSelection: QuoteHomeSelectedJobState
   jobQuery: string
+  preferredSelectedJobId?: string | null | undefined
 }): QuoteHomeSelectedJobState {
-  const selectedJob = params.jobs.find(
-    (job) => job.id === params.currentSelection.selectedJobId
+  const selectedJob = findQuoteHomeJobById(
+    params.jobs,
+    params.currentSelection.selectedJobId
   )
 
   if (selectedJob) {
@@ -106,6 +200,33 @@ export function resolveQuoteHomeSelectionAfterJobsLoaded(params: {
     return params.currentSelection
   }
 
+  if (!params.currentSelection.selectedJobId && params.preferredSelectedJobId) {
+    return resolveQuoteHomeSelectedJob(params.jobs, params.preferredSelectedJobId)
+  }
+
+  return resolveQuoteHomeSelectedJob(params.jobs, params.currentSelection.selectedJobId)
+}
+
+export function resolveQuoteHomeSelectionAfterJobsAppended(params: {
+  jobs: QuoteHomeJobListItemReadModel[]
+  currentSelection: QuoteHomeSelectedJobState
+}): QuoteHomeSelectedJobState {
+  const selectedJob = findQuoteHomeJobById(
+    params.jobs,
+    params.currentSelection.selectedJobId
+  )
+
+  if (selectedJob) {
+    return {
+      selectedJobId: selectedJob.id,
+      selectedJob,
+    }
+  }
+
+  if (params.currentSelection.selectedJobId && params.currentSelection.selectedJob) {
+    return params.currentSelection
+  }
+
   return resolveQuoteHomeSelectedJob(params.jobs, params.currentSelection.selectedJobId)
 }
 
@@ -113,8 +234,7 @@ export function resolveQuoteHomeManualSelection(params: {
   jobs: QuoteHomeJobListItemReadModel[]
   selectedJobId: string
 }): QuoteHomeSelectedJobState {
-  const selectedJob =
-    params.jobs.find((job) => job.id === params.selectedJobId) ?? null
+  const selectedJob = findQuoteHomeJobById(params.jobs, params.selectedJobId)
 
   return {
     selectedJobId: selectedJob?.id ?? '',
@@ -136,10 +256,26 @@ export function resolveQuoteHomeSelection(
     })
   }
 
-  return resolveQuoteHomeSelectionAfterJobsLoaded({
+  if (input.event === 'bootstrap_jobs_loaded') {
+    return resolveQuoteHomeSelectionAfterBootstrapJobsLoaded({
+      jobs: input.jobs,
+      currentSelection: input.currentSelection,
+      selectedJobId: input.selectedJobId,
+    })
+  }
+
+  if (input.event === 'jobs_appended') {
+    return resolveQuoteHomeSelectionAfterJobsAppended({
+      jobs: input.jobs,
+      currentSelection: input.currentSelection,
+    })
+  }
+
+  return resolveQuoteHomeSelectionAfterJobsReplaced({
     jobs: input.jobs,
     currentSelection: input.currentSelection,
     jobQuery: input.jobQuery,
+    preferredSelectedJobId: input.preferredSelectedJobId,
   })
 }
 
@@ -197,5 +333,50 @@ export function resolveQuoteHomeJobsRefresh(params: {
   return {
     action: 'load_active_query_jobs',
     query: normalizeQuoteHomeJobQuery(params.activeJobQuery),
+  }
+}
+
+export function resolveQuoteHomeJobsPageAfterRequest(params: {
+  currentJobsPage: QuoteHomeJobsPageReadModel
+  loadedJobsPage: QuoteHomeJobsPageReadModel
+  mergeMode: QuoteHomeJobsPageMergeMode
+}): QuoteHomeJobsPageReadModel {
+  if (params.mergeMode === 'replace') {
+    return params.loadedJobsPage
+  }
+
+  const existingIds = new Set(params.currentJobsPage.items.map((job) => job.id))
+  return {
+    ...params.loadedJobsPage,
+    items: [
+      ...params.currentJobsPage.items,
+      ...params.loadedJobsPage.items.filter((job) => !existingIds.has(job.id)),
+    ],
+  }
+}
+
+export function resolveQuoteHomeLoadMoreJobs(params: {
+  currentJobsPage: QuoteHomeJobsPageReadModel
+  jobsRequestInFlight: boolean
+}): QuoteHomeJobsLoadMoreDecision {
+  if (params.jobsRequestInFlight) {
+    return {
+      action: 'skip_load_more',
+      reason: 'jobs_request_in_flight',
+    }
+  }
+
+  const cursor = params.currentJobsPage.next_cursor
+  if (!cursor) {
+    return {
+      action: 'skip_load_more',
+      reason: 'no_next_cursor',
+    }
+  }
+
+  return {
+    action: 'load_next_jobs_page',
+    query: normalizeQuoteHomeJobQuery(params.currentJobsPage.query),
+    cursor,
   }
 }

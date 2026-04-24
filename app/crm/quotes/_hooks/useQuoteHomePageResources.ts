@@ -34,8 +34,15 @@ export function useQuoteHomePageResources(
   const { reconcileLoadedJobs } = pageState
 
   useEffect(() => {
-    reconcileLoadedJobs(homeResource.jobs, homeResource.jobsPage.query)
-  }, [homeResource.jobs, homeResource.jobsPage.query, reconcileLoadedJobs])
+    reconcileLoadedJobs(homeResource.jobs, homeResource.jobsPage.query, {
+      preferredSelectedJobId: homeResource.initialSelectedJobId,
+    })
+  }, [
+    homeResource.initialSelectedJobId,
+    homeResource.jobs,
+    homeResource.jobsPage.query,
+    reconcileLoadedJobs,
+  ])
 
   const workflowActions = useMemo(
     () => ({
