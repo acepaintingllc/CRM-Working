@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
 import QuotesHomePage from '../QuotesHomePage'
 
 type MockHeaderProps = {
@@ -146,6 +147,100 @@ vi.mock('../_home/QuotesHomeDeleteDialog', () => ({
     </div>
   ),
 }))
+
+type MockFeedback =
+  | {
+      tone: 'error'
+      title: string
+      details: string[]
+      sources: string[]
+    }
+  | null
+
+function createQuotesHomePageVm({
+  feedback = null,
+  loading = false,
+}: {
+  feedback?: MockFeedback
+  loading?: boolean
+} = {}) {
+  return {
+    actions: {
+      setSearchFocused: vi.fn(),
+      setSearchQuery: vi.fn(),
+      retrySearch: vi.fn(),
+      setJobQuery: vi.fn(),
+      setSelectedJobId: vi.fn(),
+      loadMore: vi.fn(async () => undefined),
+      refresh: vi.fn(async () => true),
+      loadMoreVersions: vi.fn(async () => false),
+      requestDelete: vi.fn(),
+      setVersionKind: vi.fn(),
+      setVersionName: vi.fn(),
+      create: vi.fn(),
+      cancelDelete: vi.fn(),
+      confirmDelete: vi.fn(),
+    },
+    loading,
+    header: {
+      heroSummaryText: '3 total versions',
+      searchFocused: false,
+      searchQuery: '',
+      searchLoading: false,
+      searchEmptyMessage: null,
+      searchErrorMessage: null,
+      searchCanRetry: false,
+      searchResults: [],
+    },
+    feedback,
+    summaryCards: [
+      { label: 'Drafts', value: '1', subtext: '1 draft version' },
+      { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
+    ],
+    jobList: {
+      loading: false,
+      searchQuery: '',
+      selectedJobId: 'job-1',
+      hasMore: false,
+      items: [],
+      errorMessage: null,
+      canRetry: false,
+      emptyState: 'none',
+    },
+    selectedJob: {
+      loading: false,
+      emptyMessage: null,
+      title: 'Kitchen',
+      customerLine: 'Alice',
+      jobHref: '/crm/jobs/job-1',
+      stats: [],
+    },
+    versionList: {
+      heading: '2 versions under this job',
+      detail: null,
+      emptyMessage: null,
+      items: [],
+      hasMore: false,
+      loadingMore: false,
+    },
+    create: {
+      creating: false,
+      loading: false,
+      selectedJobName: 'Kitchen',
+      versionKind: 'standard',
+      versionName: '',
+      canCreate: true,
+    },
+    dialogs: {
+      delete: {
+        estimateId: null,
+        versionName: null,
+        jobTitle: null,
+        deleting: false,
+      },
+    },
+  }
+}
 
 describe('QuotesHomePage', () => {
   beforeEach(() => {
@@ -366,5 +461,37 @@ describe('QuotesHomePage', () => {
     render(<QuotesHomePage />)
 
     expect(screen.queryByText('Quote action failed')).not.toBeInTheDocument()
+  })
+
+  it('passes initialData through to the controller hook', () => {
+    const seedPayload = {
+      summary: {
+        total_versions: 5,
+        draft_count: 2,
+        sent_or_awaiting_count: 1,
+        live_count: 2,
+        pipeline_total: 3000,
+      },
+      jobs: { query: '', limit: 25, next_cursor: null, items: [] },
+      selected_job_id: null,
+      selected_job_versions: null,
+    } satisfies QuoteHomeBootstrapReadModel
+
+    useQuotesHomePage.mockReturnValue(createQuotesHomePageVm())
+
+    render(<QuotesHomePage initialData={seedPayload} />)
+
+    expect(useQuotesHomePage).toHaveBeenCalledWith(seedPayload)
+  })
+
+  it('renders the loading state without feedback while keeping lists mounted', () => {
+    useQuotesHomePage.mockReturnValue(createQuotesHomePageVm({ loading: true, feedback: null }))
+
+    render(<QuotesHomePage />)
+
+    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:true')).toBeInTheDocument()
+    expect(screen.queryByText('Quote action failed')).not.toBeInTheDocument()
+    expect(screen.getByText('job-list:desktop')).toBeInTheDocument()
+    expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
   })
 })

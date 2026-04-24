@@ -48,7 +48,7 @@ function buildController() {
       preserveDataOnError?: boolean
       reportError?: boolean
     }) => Promise<{ ok: boolean; error: string | null; data: typeof bootstrapWithActiveVersions | null }>
-  >(async () => ({ ok: true, error: null, data: null }))
+  >(async () => ({ ok: true, error: null, data: bootstrapWithActiveVersions }))
   const versionsAttemptRefresh = vi.fn<
     (options?: {
       preserveDataOnError?: boolean
@@ -56,7 +56,6 @@ function buildController() {
     }) => Promise<{ ok: boolean; error: string | null }>
   >(async () => ({ ok: true, error: null }))
   const homeResource = {
-    refresh: vi.fn(async () => bootstrapWithActiveVersions),
     attemptRefresh: homeAttemptRefresh,
   }
   const versions = {
@@ -119,7 +118,7 @@ describe('useQuoteHomePageController', () => {
       expect(await result.current.actions.refresh()).toBe(true)
     })
 
-    expect(homeResource.refresh).toHaveBeenCalledTimes(1)
+    expect(homeResource.attemptRefresh).toHaveBeenCalledTimes(1)
     expect(versions.refresh).not.toHaveBeenCalled()
   })
 
@@ -176,10 +175,14 @@ describe('useQuoteHomePageController', () => {
 
   it('clears prior warnings when running a manual refresh', async () => {
     const { result, homeResource, versions } = buildController()
-    homeResource.attemptRefresh.mockResolvedValue({
+    homeResource.attemptRefresh.mockResolvedValueOnce({
       ok: false,
       error: 'bootstrap refresh failed',
       data: null,
+    }).mockResolvedValue({
+      ok: true,
+      error: null,
+      data: bootstrapWithActiveVersions,
     })
 
     await act(async () => {
@@ -192,7 +195,7 @@ describe('useQuoteHomePageController', () => {
       expect(await result.current.actions.refresh()).toBe(true)
     })
 
-    expect(homeResource.refresh).toHaveBeenCalledTimes(1)
+    expect(homeResource.attemptRefresh).toHaveBeenCalledTimes(2)
     expect(versions.refresh).not.toHaveBeenCalled()
     expect(result.current.actionWarning).toBeNull()
   })

@@ -4,6 +4,7 @@ import type {
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import {
+  buildHomeLoadFailureDetail,
   buildHeroSummaryText,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeFeedbackVm,
@@ -159,6 +160,27 @@ describe('quoteHomePresentation', () => {
       title: 'Kitchen Revision',
       meta: 'Kitchen\nAlice / Live',
     })
+  })
+
+  it('formats bootstrap load failure details without doubling the fallback prefix', () => {
+    expect(
+      buildHomeLoadFailureDetail('bootstrap', 'Quote home failed to load.')
+    ).toBe('Quote home failed to load.')
+
+    expect(
+      buildHomeLoadFailureDetail(
+        'bootstrap',
+        'Quote home failed to load. Network request timed out.'
+      )
+    ).toBe('Quote home failed to load. Network request timed out.')
+
+    expect(buildHomeLoadFailureDetail('bootstrap', 'Server unavailable.')).toBe(
+      'Quote home failed to load. Server unavailable.'
+    )
+
+    expect(buildHomeLoadFailureDetail('bootstrap', '')).toBe(
+      'Quote home failed to load.'
+    )
   })
 
   it('builds feedback for each individual error source and the null case', () => {

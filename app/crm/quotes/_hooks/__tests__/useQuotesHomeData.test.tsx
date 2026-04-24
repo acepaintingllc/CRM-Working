@@ -168,8 +168,8 @@ describe('useQuotesHomeData', () => {
     const { result } = renderHook(() => useQuotesHomeData())
 
     await act(async () => {
-      void result.current.refresh()
-      void result.current.refresh()
+      void result.current.attemptRefresh()
+      void result.current.attemptRefresh()
     })
 
     latest.resolve(secondPayload)
@@ -204,18 +204,22 @@ describe('useQuotesHomeData', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    let refreshed: Awaited<ReturnType<typeof result.current.refresh>> = null
+    let refreshed: Awaited<ReturnType<typeof result.current.attemptRefresh>> | null = null
     await act(async () => {
-      refreshed = await result.current.refresh()
+      refreshed = await result.current.attemptRefresh()
     })
 
     expect(result.current.bootstrapError).toBe('bootstrap failed')
     expect(result.current.summary.total_versions).toBe(1)
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1'])
-    expect(refreshed).toBeNull()
+    expect(refreshed).toEqual({
+      ok: false,
+      error: 'bootstrap failed',
+      data: null,
+    })
   })
 
-  it('returns the refreshed bootstrap payload after a successful reload', async () => {
+  it('returns the successful attempt result after a refreshed bootstrap reload', async () => {
     loadQuoteHomeBootstrap
       .mockResolvedValueOnce(firstPayload)
       .mockResolvedValueOnce(secondPayload)
@@ -224,12 +228,16 @@ describe('useQuotesHomeData', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    let refreshed: Awaited<ReturnType<typeof result.current.refresh>> = null
+    let refreshed: Awaited<ReturnType<typeof result.current.attemptRefresh>> | null = null
     await act(async () => {
-      refreshed = await result.current.refresh()
+      refreshed = await result.current.attemptRefresh()
     })
 
-    expect(refreshed).toEqual(secondPayload)
+    expect(refreshed).toEqual({
+      ok: true,
+      error: null,
+      data: secondPayload,
+    })
     expect(result.current.summary.total_versions).toBe(2)
     expect(result.current.jobsPage.next_cursor).toBe('cursor-3')
     expect(result.current.initialSelectedJobId).toBe('job-2')

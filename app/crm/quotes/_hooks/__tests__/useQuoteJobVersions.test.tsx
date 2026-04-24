@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createJobVersionsCache } from '../jobVersionsCache'
 import { useQuoteJobVersions } from '../useQuoteJobVersions'
 
 const { loadQuoteJobVersions } = vi.hoisted(() => ({
@@ -132,6 +133,23 @@ describe('useQuoteJobVersions', () => {
     })
 
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(3)
+  })
+
+  it('initializes empty and does not fetch when disabled', async () => {
+    const { result } = renderHook(() => useQuoteJobVersions('job-1', { enabled: false }))
+
+    expect(result.current.data.job_id).toBe('')
+    expect(result.current.items).toEqual([])
+    expect(result.current.loading).toBe(false)
+    expect(result.current.loadingMore).toBe(false)
+    expect(result.current.error).toBeNull()
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await expect(result.current.refresh()).resolves.toBe(false)
+    })
+
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
   })
 
   it('ignores stale responses when the selected job changes quickly', async () => {
@@ -275,5 +293,28 @@ describe('useQuoteJobVersions', () => {
 
     expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
     expect(result.current.pageData.total_versions).toBe(1)
+  })
+})
+
+describe('createJobVersionsCache', () => {
+  it('stores, reads, checks, and overwrites pages by job id', () => {
+    const cache = createJobVersionsCache()
+    const replacementPayload = {
+      ...versionPayload,
+      total_versions: 1,
+      items: [versionPayload.items[1]],
+    }
+
+    expect(cache.has('job-1')).toBe(false)
+    expect(cache.get('job-1')).toBeNull()
+
+    cache.set('job-1', versionPayload)
+
+    expect(cache.has('job-1')).toBe(true)
+    expect(cache.get('job-1')).toBe(versionPayload)
+
+    cache.set('job-1', replacementPayload)
+
+    expect(cache.get('job-1')).toBe(replacementPayload)
   })
 })

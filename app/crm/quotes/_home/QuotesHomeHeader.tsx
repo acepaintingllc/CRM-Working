@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { S } from './quoteHomeStyles'
 import type { NavItem, QuotesHomeHeaderVm } from './quoteHomeTypes'
 
@@ -38,20 +38,24 @@ export function QuotesHomeHeader({
   onSearchQueryChange,
   onSearchRetry,
 }: Props) {
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const searchContainerRef = useRef<HTMLDivElement | null>(null)
-  const settingsMenuRef = useRef<HTMLDetailsElement | null>(null)
-  const settingsSummaryRef = useRef<HTMLElement | null>(null)
+  const settingsContainerRef = useRef<HTMLDivElement | null>(null)
+  const settingsButtonRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
-    if (!vm.searchFocused) return
+    if (!vm.searchFocused && !settingsOpen) return
 
     const handleDocumentMouseDown = (event: MouseEvent) => {
       if (!(event.target instanceof Node)) return
       if (searchContainerRef.current?.contains(event.target)) return
-      onSearchFocusedChange(false)
+      if (settingsContainerRef.current?.contains(event.target)) return
+      if (vm.searchFocused) onSearchFocusedChange(false)
+      if (settingsOpen) setSettingsOpen(false)
     }
 
     const handleDocumentFocusIn = (event: FocusEvent) => {
+      if (!vm.searchFocused) return
       if (!(event.target instanceof Node)) return
       if (searchContainerRef.current?.contains(event.target)) return
       onSearchFocusedChange(false)
@@ -63,13 +67,13 @@ export function QuotesHomeHeader({
       document.removeEventListener('mousedown', handleDocumentMouseDown)
       document.removeEventListener('focusin', handleDocumentFocusIn)
     }
-  }, [onSearchFocusedChange, vm.searchFocused])
+  }, [onSearchFocusedChange, settingsOpen, vm.searchFocused])
 
-  const handleSettingsKeyDown = (event: ReactKeyboardEvent<HTMLDetailsElement>) => {
-    if (event.key !== 'Escape' || !settingsMenuRef.current?.open) return
+  const handleSettingsButtonKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'Escape' || !settingsOpen) return
     event.preventDefault()
-    settingsMenuRef.current.open = false
-    settingsSummaryRef.current?.focus()
+    setSettingsOpen(false)
+    settingsButtonRef.current?.focus()
   }
 
   return (
@@ -133,29 +137,32 @@ export function QuotesHomeHeader({
                 </div>
               ) : null}
             </div>
-            <details ref={settingsMenuRef} style={S.settingsMenu} onKeyDown={handleSettingsKeyDown}>
-              <summary
-                ref={(node) => {
-                  settingsSummaryRef.current = node
-                }}
-                style={S.settingsSummary}
+            <div ref={settingsContainerRef} style={{ position: 'relative' }}>
+              <button
+                ref={settingsButtonRef}
+                type="button"
+                style={S.settingsToggle}
+                onClick={() => setSettingsOpen((open) => !open)}
+                onKeyDown={handleSettingsButtonKeyDown}
               >
                 Settings & Constants
-              </summary>
-              <div style={S.settingsPanel}>
-                {SETTINGS_LINKS.map((item) =>
-                  item.disabled ? (
-                    <span key={item.label} style={S.settingsDisabled}>
-                      {item.label}
-                    </span>
-                  ) : (
-                    <Link key={item.label} href={item.href ?? '#'} style={S.settingsLink}>
-                      {item.label}
-                    </Link>
-                  )
-                )}
-              </div>
-            </details>
+              </button>
+              {settingsOpen ? (
+                <div style={S.settingsPanel}>
+                  {SETTINGS_LINKS.map((item) =>
+                    item.disabled ? (
+                      <span key={item.label} style={S.settingsDisabled}>
+                        {item.label}
+                      </span>
+                    ) : (
+                      <Link key={item.label} href={item.href ?? '#'} style={S.settingsLink}>
+                        {item.label}
+                      </Link>
+                    )
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

@@ -78,7 +78,8 @@ export function buildHomeLoadFailureDetail(
   message: string,
 ) {
   const fallback = HOME_FAILURE_MESSAGES[source]
-  return message === fallback ? message : `${fallback} ${message}`
+  if (!message) return fallback
+  return message.startsWith(fallback) ? message : `${fallback} ${message}`
 }
 
 export function buildQuotesHomeFeedbackVm(params: {

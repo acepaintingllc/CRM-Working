@@ -33,6 +33,7 @@ function toLoadErrorMessage(scope: string, loadError: unknown) {
 
 type UseQuotesHomeDataOptions = {
   jobQuery?: string
+  onJobsChange?: (jobs: QuoteHomeJobsPageReadModel['items']) => void
 }
 
 export function useQuotesHomeData(
@@ -43,6 +44,7 @@ export function useQuotesHomeData(
   const activeJobQuery = normalizeQuoteHomeJobQuery(options?.jobQuery ?? resolvedInitialData.jobs.query)
   const latestLoadedBootstrapRef = useRef(resolvedInitialData)
   const activeJobQueryRef = useRef(activeJobQuery)
+  const onJobsChangeRef = useRef(options?.onJobsChange ?? null)
   const resource = useResource<QuoteHomeBootstrapReadModel>({
     initialData: resolvedInitialData,
     initialLoading: !initialData,
@@ -62,11 +64,16 @@ export function useQuotesHomeData(
   const commitJobsPage = useCallback((nextJobsPage: QuoteHomeJobsPageReadModel) => {
     jobsPageRef.current = nextJobsPage
     setJobsPage(nextJobsPage)
+    onJobsChangeRef.current?.(nextJobsPage.items)
   }, [])
 
   useEffect(() => {
     activeJobQueryRef.current = activeJobQuery
   }, [activeJobQuery])
+
+  useEffect(() => {
+    onJobsChangeRef.current = options?.onJobsChange ?? null
+  }, [options?.onJobsChange])
 
   useEffect(() => {
     latestLoadedBootstrapRef.current = resource.data
@@ -204,16 +211,6 @@ export function useQuotesHomeData(
     loading: resource.loading,
     bootstrapError: resource.error,
     loadMore,
-    refresh: async () => {
-      const result = await resource.attemptRefresh()
-      if (!result.ok || !result.data) {
-        return null
-      }
-
-      latestLoadedBootstrapRef.current = result.data
-      const jobsRefresh = await refreshActiveJobsPage(undefined, result.data)
-      return jobsRefresh.ok ? result.data : null
-    },
     attemptRefresh: async (options?: { preserveDataOnError?: boolean; reportError?: boolean }) => {
       const result = await resource.attemptRefresh(options)
       if (!result.ok || !result.data) {

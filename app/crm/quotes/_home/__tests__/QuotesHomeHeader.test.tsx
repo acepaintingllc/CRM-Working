@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QuotesHomeHeader } from '../QuotesHomeHeader'
 
 const baseVm = {
@@ -14,6 +14,10 @@ const baseVm = {
 }
 
 describe('QuotesHomeHeader', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   it('shows a loading state for search results', () => {
     render(
       <QuotesHomeHeader
@@ -107,7 +111,7 @@ describe('QuotesHomeHeader', () => {
   })
 
   it('closes the settings menu on Escape', () => {
-    const { container } = render(
+    render(
       <QuotesHomeHeader
         vm={{ ...baseVm }}
         onSearchFocusedChange={() => {}}
@@ -116,11 +120,120 @@ describe('QuotesHomeHeader', () => {
       />
     )
 
-    const settingsMenu = container.querySelector('details') as HTMLDetailsElement
+    const settingsToggle = screen.getByRole('button', { name: 'Settings & Constants' })
 
-    settingsMenu.open = true
-    fireEvent.keyDown(settingsMenu, { key: 'Escape' })
+    fireEvent.click(settingsToggle)
 
-    expect(settingsMenu.open).toBe(false)
+    expect(screen.getByRole('link', { name: 'Defaults' })).toBeInTheDocument()
+
+    fireEvent.keyDown(settingsToggle, { key: 'Escape' })
+
+    expect(screen.queryByRole('link', { name: 'Defaults' })).not.toBeInTheDocument()
+    expect(settingsToggle).toHaveFocus()
+  })
+
+  it('opens and closes the settings panel on toggle button click', () => {
+    render(
+      <QuotesHomeHeader
+        vm={{ ...baseVm }}
+        onSearchFocusedChange={() => {}}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    const settingsToggle = screen.getByRole('button', { name: 'Settings & Constants' })
+
+    expect(screen.queryByRole('link', { name: 'Defaults' })).not.toBeInTheDocument()
+
+    fireEvent.click(settingsToggle)
+
+    expect(screen.getByRole('link', { name: 'Defaults' })).toBeInTheDocument()
+
+    fireEvent.click(settingsToggle)
+
+    expect(screen.queryByRole('link', { name: 'Defaults' })).not.toBeInTheDocument()
+  })
+
+  it('closes the settings panel on outside mousedown', () => {
+    render(
+      <QuotesHomeHeader
+        vm={{ ...baseVm, searchFocused: false }}
+        onSearchFocusedChange={() => {}}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings & Constants' }))
+
+    expect(screen.getByRole('link', { name: 'Defaults' })).toBeInTheDocument()
+
+    fireEvent.mouseDown(document.body)
+
+    expect(screen.queryByRole('link', { name: 'Defaults' })).not.toBeInTheDocument()
+  })
+
+  it('keeps settings and search overlays independent when either is opened', () => {
+    const onSearchFocusedChange = vi.fn()
+
+    const { rerender } = render(
+      <QuotesHomeHeader
+        vm={{ ...baseVm, searchLoading: true }}
+        onSearchFocusedChange={onSearchFocusedChange}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings & Constants' }))
+
+    expect(screen.getByText('Searching quote versions')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Defaults' })).toBeInTheDocument()
+    expect(onSearchFocusedChange).not.toHaveBeenCalledWith(false)
+
+    rerender(
+      <QuotesHomeHeader
+        vm={{ ...baseVm, searchFocused: false }}
+        onSearchFocusedChange={onSearchFocusedChange}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    fireEvent.focus(screen.getByRole('textbox', { name: 'Search quote versions' }))
+
+    expect(onSearchFocusedChange).toHaveBeenCalledWith(true)
+    expect(screen.getByRole('link', { name: 'Defaults' })).toBeInTheDocument()
+  })
+
+  it('renders all settings links when the panel is open', () => {
+    render(
+      <QuotesHomeHeader
+        vm={{ ...baseVm, searchFocused: false }}
+        onSearchFocusedChange={() => {}}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings & Constants' }))
+
+    expect(screen.getByRole('link', { name: 'Defaults' })).toHaveAttribute(
+      'href',
+      '/crm/quotes/defaults'
+    )
+    expect(screen.getByRole('link', { name: 'Products' })).toHaveAttribute(
+      'href',
+      '/crm/quotes/products'
+    )
+    expect(screen.getByRole('link', { name: 'Rates & Flags' })).toHaveAttribute(
+      'href',
+      '/crm/quotes/rates'
+    )
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/crm/settings'
+    )
   })
 })

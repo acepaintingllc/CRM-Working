@@ -20,7 +20,6 @@ type RefreshAttemptResult = {
 }
 
 type QuoteHomePageControllerHomeResource = {
-  refresh: () => Promise<QuoteHomeBootstrapReadModel | null>
   attemptRefresh: (
     options?: RefreshAttemptOptions
   ) => Promise<{ ok: boolean; error: string | null; data: QuoteHomeBootstrapReadModel | null }>
@@ -80,12 +79,12 @@ export function useQuoteHomePageController({
 
   async function refresh() {
     setActionWarning(null)
-    const bootstrap = await homeResource.refresh()
-    if (!bootstrap) {
+    const bootstrapRefresh = await homeResource.attemptRefresh()
+    if (!bootstrapRefresh.ok || !bootstrapRefresh.data) {
       await versions.refresh()
       return false
     }
-    if (bootstrapVersionsCoverActiveJob(bootstrap, versions.pageData.job_id)) {
+    if (bootstrapVersionsCoverActiveJob(bootstrapRefresh.data, versions.pageData.job_id)) {
       return true
     }
     return versions.refresh()

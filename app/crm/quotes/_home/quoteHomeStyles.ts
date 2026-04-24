@@ -60,11 +60,8 @@ export const S: Record<string, CSSProperties> = {
     fontWeight: 700,
     letterSpacing: '-0.02em',
   },
-  settingsMenu: {
-    position: 'relative',
-  },
-  settingsSummary: {
-    listStyle: 'none',
+  settingsToggle: {
+    appearance: 'none',
     display: 'inline-flex',
     alignItems: 'center',
     gap: 10,
@@ -73,6 +70,7 @@ export const S: Record<string, CSSProperties> = {
     border: '1px solid var(--v2-line)',
     background: 'var(--v2-bg-2)',
     color: 'var(--v2-ink)',
+    fontFamily: 'inherit',
     fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
