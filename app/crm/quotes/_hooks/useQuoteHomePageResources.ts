@@ -36,103 +36,104 @@ type QuoteHomePageResources = {
 export function useQuoteHomePageResources(
   initialData?: QuoteHomeBootstrapReadModel | null
 ): QuoteHomePageResources {
-  const pageState = useQuoteHomePageState(
+  const interactionState = useQuoteHomePageState(
     initialData?.jobs.items ?? [],
     initialData?.selected_job_id ?? ''
   )
 
-  const homeResource = useQuotesHomeData(initialData, {
-    jobQuery: pageState.jobQuery,
+  const homeData = useQuotesHomeData(initialData, {
+    jobQuery: interactionState.jobQuery,
   })
 
-  const searchState = useQuotesHomeSearch(pageState.searchQuery)
-  const initialVersionsForSelectedJob =
-    homeResource.initialSelectedJobVersions?.job_id === pageState.selectedJobId
-      ? homeResource.initialSelectedJobVersions
+  const searchResource = useQuotesHomeSearch(interactionState.searchQuery)
+  const selectedJobBootstrapVersions =
+    homeData.initialSelectedJobVersions?.job_id === interactionState.selectedJobId
+      ? homeData.initialSelectedJobVersions
       : null
 
-  const workflow = useQuoteVersionWorkflow({
-    jobId: pageState.selectedJobId,
-    selectedJob: pageState.selectedJob,
-    loading: homeResource.loading,
-    initialVersions: initialVersionsForSelectedJob,
+  const versionWorkflow = useQuoteVersionWorkflow({
+    jobId: interactionState.selectedJobId,
+    selectedJob: interactionState.selectedJob,
+    loading: homeData.loading,
+    initialVersions: selectedJobBootstrapVersions,
   })
 
-  const { reconcileLoadedJobs } = pageState
+  const { reconcileLoadedJobs } = interactionState
 
   useEffect(() => {
-    reconcileLoadedJobs(homeResource.jobs, homeResource.jobsPage.query, {
-      preferredSelectedJobId: homeResource.initialSelectedJobId,
+    reconcileLoadedJobs(homeData.jobs, homeData.jobsPage.query, {
+      preferredSelectedJobId: homeData.initialSelectedJobId,
     })
   }, [
-    homeResource.initialSelectedJobId,
-    homeResource.jobs,
-    homeResource.jobsPage.query,
+    homeData.initialSelectedJobId,
+    homeData.jobs,
+    homeData.jobsPage.query,
     reconcileLoadedJobs,
   ])
 
   const stateActions = useMemo<QuoteHomeStateActions>(
     () => ({
-      setSearchQuery: pageState.actions.setSearchQuery,
-      setSearchFocused: pageState.actions.setSearchFocused,
-      setJobQuery: pageState.actions.setJobQuery,
-      setSelectedJobId: pageState.actions.setSelectedJobId,
+      setSearchQuery: interactionState.actions.setSearchQuery,
+      setSearchFocused: interactionState.actions.setSearchFocused,
+      setJobQuery: interactionState.actions.setJobQuery,
+      setSelectedJobId: interactionState.actions.setSelectedJobId,
     }),
     [
-      pageState.actions.setSearchQuery,
-      pageState.actions.setSearchFocused,
-      pageState.actions.setJobQuery,
-      pageState.actions.setSelectedJobId,
+      interactionState.actions.setSearchQuery,
+      interactionState.actions.setSearchFocused,
+      interactionState.actions.setJobQuery,
+      interactionState.actions.setSelectedJobId,
     ]
   )
 
   const workflowActions = useMemo<QuoteHomeWorkflowActions>(
     () => ({
-      setVersionName: workflow.actions.setVersionName,
-      setVersionKind: workflow.actions.setVersionKind,
-      create: workflow.actions.create,
-      loadMoreVersions: workflow.actions.loadMoreVersions,
-      retryVersions: workflow.actions.refreshVersions,
+      setVersionName: versionWorkflow.actions.setVersionName,
+      setVersionKind: versionWorkflow.actions.setVersionKind,
+      create: versionWorkflow.actions.create,
+      loadMoreVersions: versionWorkflow.actions.loadMoreVersions,
+      retryVersions: versionWorkflow.actions.refreshVersions,
     }),
     [
-      workflow.actions.setVersionName,
-      workflow.actions.setVersionKind,
-      workflow.actions.create,
-      workflow.actions.loadMoreVersions,
-      workflow.actions.refreshVersions,
+      versionWorkflow.actions.setVersionName,
+      versionWorkflow.actions.setVersionKind,
+      versionWorkflow.actions.create,
+      versionWorkflow.actions.loadMoreVersions,
+      versionWorkflow.actions.refreshVersions,
     ]
   )
 
-  const controller = useQuoteHomePageController({
-    homeResource,
-    versions: workflow.versions,
+  const pageController = useQuoteHomePageController({
+    homeResource: homeData,
+    versions: versionWorkflow.versions,
     stateActions,
-    loadMoreJobs: homeResource.loadMore,
+    loadMoreJobs: homeData.loadMore,
     workflowActions,
-    retrySearch: searchState.retry,
+    retrySearch: searchResource.retry,
   })
-  const { confirmingDelete, deletingId, error: deleteError } = controller.deleteState
+  const { confirmingDelete, deletingId, error: deleteError } =
+    pageController.deleteState
 
   const vmState = useMemo<QuoteHomePageVmState>(
     () => ({
-      actionWarning: controller.actionWarning,
-      searchQuery: pageState.searchQuery,
-      searchFocused: pageState.searchFocused,
-      jobQuery: pageState.jobQuery,
-      selectedJobId: pageState.selectedJobId,
-      selectedJob: pageState.selectedJob,
-      visibleJobs: homeResource.jobs,
-      actions: controller.actions,
+      actionWarning: pageController.actionWarning,
+      searchQuery: interactionState.searchQuery,
+      searchFocused: interactionState.searchFocused,
+      jobQuery: interactionState.jobQuery,
+      selectedJobId: interactionState.selectedJobId,
+      selectedJob: interactionState.selectedJob,
+      visibleJobs: homeData.jobs,
+      actions: pageController.actions,
     }),
     [
-      controller.actionWarning,
-      controller.actions,
-      homeResource.jobs,
-      pageState.jobQuery,
-      pageState.searchFocused,
-      pageState.searchQuery,
-      pageState.selectedJob,
-      pageState.selectedJobId,
+      homeData.jobs,
+      interactionState.jobQuery,
+      interactionState.searchFocused,
+      interactionState.searchQuery,
+      interactionState.selectedJob,
+      interactionState.selectedJobId,
+      pageController.actionWarning,
+      pageController.actions,
     ]
   )
 
@@ -140,34 +141,34 @@ export function useQuoteHomePageResources(
     () =>
       buildQuoteHomePageVmResources({
         home: {
-          summary: homeResource.summary,
-          jobs: homeResource.jobs,
-          hasMore: homeResource.hasMore,
-          jobsLoading: homeResource.jobsLoading,
-          loading: homeResource.loading,
-          bootstrapError: homeResource.bootstrapError,
-          jobsError: homeResource.jobsError,
+          summary: homeData.summary,
+          jobs: homeData.jobs,
+          hasMore: homeData.hasMore,
+          jobsLoading: homeData.jobsLoading,
+          loading: homeData.loading,
+          bootstrapError: homeData.bootstrapError,
+          jobsError: homeData.jobsError,
         },
         search: {
-          query: searchState.query,
-          loading: searchState.loading,
-          error: searchState.error,
-          results: searchState.results,
+          query: searchResource.query,
+          loading: searchResource.loading,
+          error: searchResource.error,
+          results: searchResource.results,
         },
         versions: {
-          items: workflow.versions.items,
-          error: workflow.versions.error,
-          totalVersions: workflow.versions.pageData.total_versions,
-          hasMore: workflow.versions.hasMore,
-          loadingMore: workflow.versions.loadingMore,
-          hasResolved: workflow.versions.hasResolved,
+          items: versionWorkflow.versions.items,
+          error: versionWorkflow.versions.error,
+          totalVersions: versionWorkflow.versions.pageData.total_versions,
+          hasMore: versionWorkflow.versions.hasMore,
+          loadingMore: versionWorkflow.versions.loadingMore,
+          hasResolved: versionWorkflow.versions.hasResolved,
         },
         create: {
-          creating: workflow.create.creating,
-          error: workflow.create.error,
-          versionName: workflow.create.versionName,
-          versionKind: workflow.create.versionKind,
-          canCreate: workflow.create.canCreate,
+          creating: versionWorkflow.create.creating,
+          error: versionWorkflow.create.error,
+          versionName: versionWorkflow.create.versionName,
+          versionKind: versionWorkflow.create.versionKind,
+          canCreate: versionWorkflow.create.canCreate,
         },
         delete: {
           confirmingDelete,
@@ -179,28 +180,28 @@ export function useQuoteHomePageResources(
       confirmingDelete,
       deleteError,
       deletingId,
-      homeResource.bootstrapError,
-      homeResource.hasMore,
-      homeResource.jobs,
-      homeResource.jobsError,
-      homeResource.jobsLoading,
-      homeResource.loading,
-      homeResource.summary,
-      searchState.error,
-      searchState.loading,
-      searchState.query,
-      searchState.results,
-      workflow.create.canCreate,
-      workflow.create.creating,
-      workflow.create.error,
-      workflow.create.versionKind,
-      workflow.create.versionName,
-      workflow.versions.error,
-      workflow.versions.hasMore,
-      workflow.versions.hasResolved,
-      workflow.versions.items,
-      workflow.versions.loadingMore,
-      workflow.versions.pageData.total_versions,
+      homeData.bootstrapError,
+      homeData.hasMore,
+      homeData.jobs,
+      homeData.jobsError,
+      homeData.jobsLoading,
+      homeData.loading,
+      homeData.summary,
+      searchResource.error,
+      searchResource.loading,
+      searchResource.query,
+      searchResource.results,
+      versionWorkflow.create.canCreate,
+      versionWorkflow.create.creating,
+      versionWorkflow.create.error,
+      versionWorkflow.create.versionKind,
+      versionWorkflow.create.versionName,
+      versionWorkflow.versions.error,
+      versionWorkflow.versions.hasMore,
+      versionWorkflow.versions.hasResolved,
+      versionWorkflow.versions.items,
+      versionWorkflow.versions.loadingMore,
+      versionWorkflow.versions.pageData.total_versions,
     ]
   )
 
