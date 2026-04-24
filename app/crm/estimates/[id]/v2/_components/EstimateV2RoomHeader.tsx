@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from 'react'
 import type { EstimateV2EditorRoomVm } from '../_state/estimateV2EditorTypes'
-import { buildRoomFlagModifierHint } from '../_lib/estimateV2EditorPresentation'
+import { buildRoomFlagChipVms } from '../_lib/estimateV2EditorPresentation'
 import {
   Field,
   RoomHeaderSetup,
@@ -29,6 +29,11 @@ export function EstimateV2RoomHeader({
 }) {
   const room = roomVm.selectedRoom
   if (!room) return null
+  const roomFlagChips = buildRoomFlagChipVms({
+    roomId: room.roomId,
+    flags: roomVm.roomFlagsCatalog,
+    selectedFlags: roomVm.roomFlags,
+  })
 
   return (
     <>
@@ -88,10 +93,12 @@ export function EstimateV2RoomHeader({
                 <button
                   key={mode}
                   type="button"
+                  disabled={roomVm.selectedRoomGeometryMode === mode}
                   onClick={() => roomVm.switchSelectedRoomGeometryMode(mode)}
                   style={{
                     ...styles.button,
                     flex: 1,
+                    cursor: roomVm.selectedRoomGeometryMode === mode ? 'default' : 'pointer',
                     borderColor: roomVm.selectedRoomGeometryMode === mode ? 'rgba(134,239,172,0.34)' : 'var(--v2-line)',
                     background: roomVm.selectedRoomGeometryMode === mode ? 'rgba(74,222,128,0.08)' : '#111111',
                     color: roomVm.selectedRoomGeometryMode === mode ? 'var(--v2-green-2)' : 'var(--v2-ink)',
@@ -127,34 +134,31 @@ export function EstimateV2RoomHeader({
             <span style={{ ...styles.mono, color: 'var(--v2-ink-3)' }}>room-wide defaults and conditions</span>
           </div>
           <div className="modifier-grid">
-            {roomVm.roomFlagsCatalog.map((flag) => {
-              const active = roomVm.roomFlags.some((entry) => entry.roomId === room.roomId && entry.flagId === flag.id)
-              const multiplierHint = buildRoomFlagModifierHint(flag)
-
+            {roomFlagChips.map((flag) => {
               return (
                 <button
                   key={flag.id}
                   type="button"
-                  className={`flag-chip${active ? ' flag-chip-active' : ''}`}
+                  className={`flag-chip${flag.active ? ' flag-chip-active' : ''}`}
                   onClick={() => roomVm.toggleSelectedRoomFlag(flag.id)}
                   style={{
                     ...styles.flagChip,
-                    borderColor: active ? 'rgba(134,239,172,0.4)' : 'var(--v2-line)',
-                    background: active ? 'rgba(74,222,128,0.1)' : '#0d0d0d',
-                    color: active ? 'var(--v2-ink)' : 'var(--v2-ink-2)',
+                    borderColor: flag.active ? 'rgba(134,239,172,0.4)' : 'var(--v2-line)',
+                    background: flag.active ? 'rgba(74,222,128,0.1)' : '#0d0d0d',
+                    color: flag.active ? 'var(--v2-ink)' : 'var(--v2-ink-2)',
                   }}
                 >
-                  <span style={{ fontWeight: active ? 600 : 500 }}>{flag.label}</span>
-                  {multiplierHint || active ? (
+                  <span style={{ fontWeight: flag.active ? 600 : 500 }}>{flag.label}</span>
+                  {flag.modifierHint || flag.active ? (
                     <span
                       style={{
                         ...styles.mono,
-                        color: active ? 'var(--v2-green-2)' : 'var(--v2-ink-3)',
+                        color: flag.active ? 'var(--v2-green-2)' : 'var(--v2-ink-3)',
                         fontSize: 'calc(10px + 4pt)',
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {multiplierHint ?? 'on'}
+                      {flag.modifierHint ?? 'on'}
                     </span>
                   ) : null}
                 </button>

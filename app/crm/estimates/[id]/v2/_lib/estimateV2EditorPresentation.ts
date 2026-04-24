@@ -1,4 +1,4 @@
-import type { EstimateV2RoomFlagOption } from '@/types/estimator/v2'
+import type { EstimateV2RoomFlagDraft, EstimateV2RoomFlagOption } from '@/types/estimator/v2'
 import type {
   EstimateV2EditorSectionChipVm,
   EstimateV2EditorSectionSummaryVm,
@@ -49,6 +49,25 @@ export function buildRoomFlagModifierHint(flag: EstimateV2RoomFlagOption) {
   return factorHints.length > 0
     ? factorHints.join(', ')
     : parseFlagMultiplierHintFromLabel(flag.label)
+}
+
+export function buildRoomFlagChipVms(params: {
+  roomId: string
+  flags: EstimateV2RoomFlagOption[]
+  selectedFlags: EstimateV2RoomFlagDraft[]
+}) {
+  const selectedFlagIds = new Set(
+    params.selectedFlags
+      .filter((flag) => flag.roomId === params.roomId)
+      .map((flag) => flag.flagId)
+  )
+
+  return params.flags.map((flag) => ({
+    id: flag.id,
+    label: flag.label,
+    active: selectedFlagIds.has(flag.id),
+    modifierHint: buildRoomFlagModifierHint(flag),
+  }))
 }
 
 export function buildHeaderSubtitle(job: {

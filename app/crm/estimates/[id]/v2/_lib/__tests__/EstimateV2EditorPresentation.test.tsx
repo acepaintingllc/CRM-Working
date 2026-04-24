@@ -3,6 +3,7 @@ import {
   buildCalculationState,
   buildHeaderSubtitle,
   buildIncludedScopeLabels,
+  buildRoomFlagChipVms,
   buildRoomFlagModifierHint,
   buildRoomSubtitle,
   buildRunningTotalLabel,
@@ -163,5 +164,46 @@ describe('estimateV2EditorPresentation', () => {
         trim_factor: null,
       })
     ).toBe('walls x1.3')
+  })
+
+  it('builds room flag chip state from selected flags and canonical modifier hints', () => {
+    expect(
+      buildRoomFlagChipVms({
+        roomId: 'R001',
+        selectedFlags: [
+          { id: 'selected-1', roomId: 'R001', flagId: 'wall-flag', position: 0 },
+          { id: 'selected-2', roomId: 'R002', flagId: 'trim-flag', position: 0 },
+        ],
+        flags: [
+          {
+            id: 'wall-flag',
+            label: 'Wall prep',
+            wall_factor: 1.2,
+            ceil_factor: 1,
+            trim_factor: 1,
+          },
+          {
+            id: 'trim-flag',
+            label: 'Trim detail',
+            wall_factor: 1,
+            ceil_factor: 1,
+            trim_factor: 1.1,
+          },
+        ],
+      })
+    ).toEqual([
+      {
+        id: 'wall-flag',
+        label: 'Wall prep',
+        active: true,
+        modifierHint: 'Walls x1.2',
+      },
+      {
+        id: 'trim-flag',
+        label: 'Trim detail',
+        active: false,
+        modifierHint: 'Trim x1.1',
+      },
+    ])
   })
 })

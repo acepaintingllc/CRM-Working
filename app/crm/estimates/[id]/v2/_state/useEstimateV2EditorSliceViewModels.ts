@@ -60,7 +60,7 @@ function usePageVm(store: EstimateV2EditorStoreApi): EstimateV2EditorPageVm {
       saving: pageState.saving,
       error: pageState.error,
       validationIssues: pageState.validationIssues,
-      emptySelectionMessage: 'Add a room or select one from the roster to start editing walls.',
+      emptySelectionMessage: 'Add a room or select one from the roster to start editing room inputs.',
       roomsCount: pageState.roomsCount,
     }),
     [

@@ -1,5 +1,5 @@
-import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EstimateV2EditorRoomVm } from '../../_state/estimateV2EditorTypes'
 import { estimateV2EditorPageStyles } from '../estimateV2EditorPageStyles'
 import { EstimateV2RoomHeader } from '../EstimateV2RoomHeader'
@@ -84,6 +84,10 @@ function makeRoomVm(
 }
 
 describe('EstimateV2RoomHeader', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   it('renders room flag chip hints from scoped wall, ceiling, and trim factors', () => {
     render(
       <EstimateV2RoomHeader
@@ -107,5 +111,27 @@ describe('EstimateV2RoomHeader', () => {
         'Walls x1.2, Ceilings x1.15, Trim x1.1'
       )
     ).toBeInTheDocument()
+  })
+
+  it('disables the active geometry mode so no-op clicks do not dispatch mode changes', () => {
+    const switchSelectedRoomGeometryMode = vi.fn()
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ switchSelectedRoomGeometryMode })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    const rectButton = screen.getByText('RECT').closest('button') as HTMLButtonElement
+    const segButton = screen.getByRole('button', { name: 'SEG' })
+
+    expect(rectButton).toBeDisabled()
+    fireEvent.click(rectButton)
+    expect(switchSelectedRoomGeometryMode).not.toHaveBeenCalled()
+
+    fireEvent.click(segButton)
+    expect(switchSelectedRoomGeometryMode).toHaveBeenCalledWith('SEG')
   })
 })
