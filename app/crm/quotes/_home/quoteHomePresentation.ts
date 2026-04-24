@@ -26,6 +26,21 @@ export const QUOTES_HOME_JOB_LIST_NO_JOBS_BODY =
 export const QUOTES_HOME_SUMMARY_LOADING_VALUE = '...'
 export const QUOTES_HOME_SUMMARY_DEFAULT_VALUE_COLOR = 'var(--v2-ink)'
 export const QUOTES_HOME_SUMMARY_DEFAULT_SUBTEXT_COLOR = 'var(--v2-ink-3)'
+export const QUOTES_HOME_PAGE_COPY = {
+  header: {
+    eyebrow: 'Quotes',
+    title: 'Quote Home',
+    description:
+      'Search jobs, review quote versions, and start a new quote from one place.',
+    badge: 'Shared CRM shell',
+    createJobAction: 'Create job',
+    newQuoteAction: 'New quote',
+  },
+  errorBoundary: {
+    title: 'Something went wrong loading quotes',
+    reloadAction: 'Reload',
+  },
+} as const
 export const QUOTES_HOME_CREATE_PANEL_COPY = {
   eyebrow: 'Create Version',
   title: 'Add the next quote version',
