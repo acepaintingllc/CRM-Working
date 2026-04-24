@@ -62,15 +62,6 @@ export function formatDateTime(value: string | null | undefined) {
   })
 }
 
-export function getFlagMultiplierHint(label: string) {
-  const normalized = label.replace(/\u00D7/g, 'x')
-  const scoped = normalized.match(/\b(?:walls?|ceil(?:ing)?|trim|doors?)\s*x\s*\d+(?:\.\d+)?\b/i)
-  if (scoped) return scoped[0].replace(/\s+/g, ' ')
-  const simple = normalized.match(/\bx\s*\d+(?:\.\d+)?\b/i)
-  if (simple) return simple[0].replace(/\s+/g, '')
-  return null
-}
-
 export function toPositiveFactorString(value: unknown, fallback = '1') {
   const parsed = unknownNumberOrNull(value)
   if (parsed == null || parsed <= 0) return fallback

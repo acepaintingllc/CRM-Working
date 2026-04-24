@@ -3,6 +3,7 @@ import {
   buildCalculationState,
   buildHeaderSubtitle,
   buildIncludedScopeLabels,
+  buildRoomFlagModifierHint,
   buildRoomSubtitle,
   buildRunningTotalLabel,
   buildScopeToggleLabels,
@@ -92,5 +93,75 @@ describe('estimateV2EditorPresentation', () => {
       { label: 'Subtotal: $180.00' },
       { label: '1 issue(s)', tone: 'warning' },
     ])
+  })
+
+  it('builds wall-only room flag modifier hints from canonical factors', () => {
+    expect(
+      buildRoomFlagModifierHint({
+        id: 'wall-flag',
+        label: 'Difficult x1.4',
+        wall_factor: 1.2,
+        ceil_factor: 1,
+        trim_factor: 1,
+      })
+    ).toBe('Walls x1.2')
+  })
+
+  it('builds ceiling-only room flag modifier hints from canonical factors', () => {
+    expect(
+      buildRoomFlagModifierHint({
+        id: 'ceiling-flag',
+        label: 'Walls x1.2',
+        wall_factor: 1,
+        ceil_factor: 1.15,
+        trim_factor: 1,
+      })
+    ).toBe('Ceilings x1.15')
+  })
+
+  it('builds trim-only room flag modifier hints from canonical factors', () => {
+    expect(
+      buildRoomFlagModifierHint({
+        id: 'trim-flag',
+        label: 'Fine trim',
+        wall_factor: 1,
+        ceil_factor: null,
+        trim_factor: 1.1,
+      })
+    ).toBe('Trim x1.1')
+  })
+
+  it('builds multi-factor room flag modifier hints from canonical factors', () => {
+    expect(
+      buildRoomFlagModifierHint({
+        id: 'multi-flag',
+        label: 'High complexity',
+        wall_factor: 1.2,
+        ceil_factor: 1.15,
+        trim_factor: 1.1,
+      })
+    ).toBe('Walls x1.2, Ceilings x1.15, Trim x1.1')
+  })
+
+  it('omits no-factor room flag modifier hints unless the label has a fallback multiplier', () => {
+    expect(
+      buildRoomFlagModifierHint({
+        id: 'no-factor',
+        label: 'Standard condition',
+        wall_factor: null,
+        ceil_factor: 1,
+        trim_factor: 0,
+      })
+    ).toBeNull()
+
+    expect(
+      buildRoomFlagModifierHint({
+        id: 'fallback-factor',
+        label: 'Legacy walls x1.3',
+        wall_factor: null,
+        ceil_factor: null,
+        trim_factor: null,
+      })
+    ).toBe('walls x1.3')
   })
 })

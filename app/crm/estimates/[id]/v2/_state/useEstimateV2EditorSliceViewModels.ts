@@ -6,7 +6,7 @@ import {
   useEstimateV2Store,
   type EstimateV2EditorStoreApi,
 } from '@/lib/estimates/v2/store/estimateV2Store'
-import { getFlagMultiplierHint, toDisplayNumber } from '../_lib/estimateV2EditorNormalize'
+import { toDisplayNumber } from '../_lib/estimateV2EditorNormalize'
 import {
   buildCalculationState,
   buildHeaderSubtitle,
@@ -154,7 +154,6 @@ function useRoomVm(
       selectedRoomIssueCount: derived.room.selectedRoomIssueCount,
       roomFlagsEnabled: roomState.roomFlagsCatalog.length > 0,
       roomFlagsCatalog: roomState.roomFlagsCatalog,
-      getFlagMultiplierHint,
       addRoom,
       deleteRoom,
       updateRoom,

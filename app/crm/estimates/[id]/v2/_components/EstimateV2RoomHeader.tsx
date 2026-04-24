@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from 'react'
 import type { EstimateV2EditorRoomVm } from '../_state/estimateV2EditorTypes'
+import { buildRoomFlagModifierHint } from '../_lib/estimateV2EditorPresentation'
 import {
   Field,
   RoomHeaderSetup,
@@ -128,10 +129,7 @@ export function EstimateV2RoomHeader({
           <div className="modifier-grid">
             {roomVm.roomFlagsCatalog.map((flag) => {
               const active = roomVm.roomFlags.some((entry) => entry.roomId === room.roomId && entry.flagId === flag.id)
-              const multiplierHint =
-                flag.wall_factor != null && Number.isFinite(flag.wall_factor) && flag.wall_factor > 0
-                  ? `x${flag.wall_factor}`
-                  : roomVm.getFlagMultiplierHint(flag.label)
+              const multiplierHint = buildRoomFlagModifierHint(flag)
 
               return (
                 <button
