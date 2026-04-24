@@ -93,6 +93,7 @@ export function QuoteRatesPageContent() {
                 cancelEdit: controller.actions.cancelEdit,
                 setDraftActive: controller.actions.setDraftActive,
                 updateDraftValue: controller.actions.updateDraftValue,
+                formatDraftValue: controller.actions.formatDraftValue,
               }}
             />
           }

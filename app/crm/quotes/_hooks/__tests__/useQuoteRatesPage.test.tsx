@@ -19,8 +19,6 @@ describe('useQuoteRatesPage', () => {
     mutateRatesFlags.mockReset()
   })
 
-<<<<<<< Updated upstream
-=======
   it('treats a successful empty categories response as no data', async () => {
     loadRatesFlags.mockResolvedValueOnce({
       source: 'db',
@@ -90,7 +88,6 @@ describe('useQuoteRatesPage', () => {
     expect(result.current.actions.formatDraftValue).toBe(formatDraftValue)
   })
 
->>>>>>> Stashed changes
   it('loads, filters, duplicates, and saves dense rates rows', async () => {
     loadRatesFlags
       .mockResolvedValueOnce({

@@ -13,7 +13,7 @@ type Props = {
   templateVersion: number | null
   actions: Pick<
     QuoteRatesActions,
-    'saveCurrent' | 'cancelEdit' | 'setDraftActive' | 'updateDraftValue'
+    'saveCurrent' | 'cancelEdit' | 'setDraftActive' | 'updateDraftValue' | 'formatDraftValue'
   >
 }
 
@@ -81,7 +81,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
                 <select
                   className="ace-crm-input text-sm"
                   disabled={field.readOnly}
-                  value={vm.formatDraftValue(field.key)}
+                  value={actions.formatDraftValue(field.key)}
                   onChange={(event) => actions.updateDraftValue(field.key, event.target.value)}
                 >
                   {(field.options ?? ['']).map((option) => (
@@ -95,7 +95,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
                   className="ace-crm-input text-sm"
                   type={field.type === 'number' ? 'number' : 'text'}
                   readOnly={field.readOnly}
-                  value={vm.formatDraftValue(field.key)}
+                  value={actions.formatDraftValue(field.key)}
                   onChange={(event) => actions.updateDraftValue(field.key, event.target.value)}
                 />
               )}

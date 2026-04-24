@@ -20,6 +20,28 @@ import type {
 type RatesFlagsArchiveAction = 'archive' | 'reactivate'
 type RatesFlagsCreateOrUpdateAction = 'create' | 'update'
 type DraftValue = string | number | boolean | null
+const editableCategoryKeys = new Set<RatesFlagsEditableCategoryKey>([
+  'production_rates_walls',
+  'production_rates_ceilings',
+  'production_rates_trim',
+  'unit_rates_doors',
+  'unit_rates_trim',
+  'unit_rates_drywall',
+  'access_fees_ladders',
+  'access_fees_scaffolding',
+  'access_fees_specialty',
+  'supply_rates_per_color',
+  'supply_rates_area_based',
+  'supply_rates_per_job',
+  'supply_rates_roller_covers',
+  'wall_complexity',
+  'height_factors',
+  'ceiling_types',
+  'condition_modifiers',
+  'room_types',
+  'room_templates',
+  'scope_defaults',
+])
 
 export type RatesFlagsDraftAdapter<
   TKey extends RatesFlagsEditableCategoryKey,
@@ -94,6 +116,10 @@ function asDraftNumberString(value: string | number | boolean | null | undefined
 
 function asDraftYN(value: string | number | boolean | null | undefined) {
   return value ? 'Y' : 'N'
+}
+
+function asRollerCoverScope(value: string | number | boolean | null | undefined) {
+  return asDraftString(value)
 }
 
 function buildFieldDraft<TDraft extends RatesFlagsDraft>(
@@ -565,20 +591,7 @@ export const ratesFlagsDraftAdapters = {
   }),
   supply_rates_roller_covers: buildAdapter({
     key: 'supply_rates_roller_covers',
-<<<<<<< Updated upstream
-    toValues: (draft, draftActive) => ({
-      supply_group: 'roller_covers',
-      id: asDraftString(draft.id),
-      display_name: asDraftString(draft.display_name),
-      scope: asDraftString(draft.scope),
-      size_in: asDraftNumberString(draft.size_in),
-      price_each: asDraftNumberString(draft.price_each),
-      notes: asDraftString(draft.notes),
-      active: draftActive ? 'Y' : 'N',
-    }),
-=======
     toValues: (draft, draftActive) => buildRollerCoverValues(draft, draftActive),
->>>>>>> Stashed changes
   }),
   wall_complexity: buildAdapter({
     key: 'wall_complexity',
@@ -617,4 +630,16 @@ export function getRatesFlagsDraftAdapter<TKey extends RatesFlagsEditableCategor
   key: TKey
 ): RatesFlagsDraftAdapter<TKey> {
   return ratesFlagsDraftAdapters[key] as unknown as RatesFlagsDraftAdapter<TKey>
+}
+
+export function isRatesFlagsEditableCategoryKey(
+  key: string
+): key is RatesFlagsEditableCategoryKey {
+  return editableCategoryKeys.has(key as RatesFlagsEditableCategoryKey)
+}
+
+export function isRatesFlagsEditableCategory(
+  category: RatesFlagsCategory
+): category is RatesFlagsCategory & { key: RatesFlagsEditableCategoryKey } {
+  return isRatesFlagsEditableCategoryKey(category.key)
 }

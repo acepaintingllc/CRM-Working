@@ -1,6 +1,7 @@
 'use client'
 
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
+import type { RatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
   RatesFlagsCategory,
   RatesFlagsDraft,
@@ -45,7 +46,6 @@ export type QuoteRatesEditorVm = {
   isCreating: boolean
   inlineValidation: string | null
   canSave: boolean
-  formatDraftValue: (fieldKey: string) => string
 }
 
 export type QuoteRatesDiscardVm = {
@@ -54,8 +54,6 @@ export type QuoteRatesDiscardVm = {
   transitionType: QuoteRatesPendingTransition['type'] | null
 }
 
-<<<<<<< Updated upstream
-=======
 export function formatRatesDraftValue<TKey extends RatesFlagsEditableCategoryKey>(
   adapter: RatesFlagsDraftAdapter<TKey> | null,
   category: RatesFlagsEditableCategory<TKey> | null,
@@ -67,7 +65,6 @@ export function formatRatesDraftValue<TKey extends RatesFlagsEditableCategoryKey
   return adapter.formatDraftValue(category, draft, fieldKey)
 }
 
->>>>>>> Stashed changes
 export function buildQuoteRatesPageVm(params: {
   resource: QuoteRatesDataResource
   workflowState: QuoteRatesWorkflowState
@@ -145,16 +142,6 @@ export function buildQuoteRatesPageVm(params: {
       isCreating: workflowState.editorMode === 'create',
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
-      formatDraftValue: derived.activeCategory
-        ? (fieldKey: string) =>
-            workflowState.draft && derived.adapter
-              ? derived.adapter.formatDraftValue(
-                  derived.activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
-                  workflowState.draft as never,
-                  fieldKey
-                )
-              : ''
-        : () => '',
     } satisfies QuoteRatesEditorVm,
     discardVm: {
       isOpen:

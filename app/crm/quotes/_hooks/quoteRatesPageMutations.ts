@@ -3,10 +3,9 @@
 import { mutateRatesFlags } from '@/lib/quotes/client'
 import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
-  RatesFlagsActivationMutationRequest,
-  RatesFlagsCreateOrUpdateMutation,
   RatesFlagsEditableCategory,
   RatesFlagsEditableCategoryKey,
+  RatesFlagsMutationRequestByCategory,
 } from '@/types/estimator/ratesFlags'
 import { findReconciledRatesRow, reconcileRatesFlagsPayload } from './quoteRatesMutationReconciliation'
 import { buildQuoteRatesMutationSnapshot } from './quoteRatesPageNavigation'
@@ -32,15 +31,19 @@ type MutationSuccessResult = {
 
 type MutationResult = MutationErrorResult | MutationSuccessResult
 
+type SaveQuoteRatesDraft = Parameters<
+  ReturnType<typeof getRatesFlagsDraftAdapter<RatesFlagsEditableCategoryKey>>['toMutationRequest']
+>[0]['draft']
+
 type PersistParams = {
-  request: RatesFlagsCreateOrUpdateMutation | RatesFlagsActivationMutationRequest
+  request: RatesFlagsMutationRequestByCategory<RatesFlagsEditableCategoryKey>
   resource: QuoteRatesDataResource
 }
 
 async function persistRatesFlagsMutation(params: PersistParams) {
   const { request, resource } = params
 
-  await mutateRatesFlags(request as never)
+  await mutateRatesFlags(request)
 
   const verification = await resource.attemptRefresh({
     preserveDataOnError: true,
@@ -63,7 +66,7 @@ export async function saveQuoteRatesMutation(params: {
   resource: QuoteRatesDataResource
   navigation: QuoteRatesNavigationState
   activeCategory: RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>
-  draft: NonNullable<ReturnType<typeof buildQuoteRatesMutationSnapshot>['editor']['draft']>
+  draft: SaveQuoteRatesDraft
   draftActive: boolean
   editorMode: QuoteRatesEditorMode
   selectedRowId?: string
@@ -71,13 +74,13 @@ export async function saveQuoteRatesMutation(params: {
   const { resource, navigation, activeCategory, draft, draftActive, editorMode, selectedRowId } = params
 
   try {
-    const adapter = getRatesFlagsDraftAdapter(activeCategory.key as RatesFlagsEditableCategoryKey)
+    const adapter = getRatesFlagsDraftAdapter(activeCategory.key)
     const request = adapter.toMutationRequest({
       action: editorMode === 'create' ? 'create' : 'update',
-      draft: draft as never,
+      draft,
       draftActive,
       originalId: editorMode === 'create' ? undefined : selectedRowId,
-    }) as RatesFlagsCreateOrUpdateMutation
+    })
     const keepId = typeof draft.id === 'string' && draft.id ? draft.id : selectedRowId ?? ''
     const { nextPayload, verification } = await persistRatesFlagsMutation({ request, resource })
     const mutationSnapshot = buildQuoteRatesMutationSnapshot(nextPayload, navigation, keepId)
@@ -110,11 +113,11 @@ export async function archiveOrReactivateQuoteRatesMutation(params: {
   const { resource, navigation, categoryKey, selectedRowId, nextActive } = params
 
   try {
-    const request: RatesFlagsActivationMutationRequest = {
+    const request: RatesFlagsMutationRequestByCategory<RatesFlagsEditableCategoryKey> = {
       category: categoryKey,
       action: nextActive ? 'reactivate' : 'archive',
       rowId: selectedRowId,
-    } as RatesFlagsActivationMutationRequest
+    }
     const { nextPayload, verification } = await persistRatesFlagsMutation({ request, resource })
     const preferredRow =
       findReconciledRatesRow(nextPayload, request.category, selectedRowId)?.id ?? selectedRowId
