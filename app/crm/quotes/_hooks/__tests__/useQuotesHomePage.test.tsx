@@ -192,7 +192,13 @@ const refreshedBootstrapPayload = {
     ],
   },
   selected_job_id: 'job-1',
-  selected_job_versions: null,
+  selected_job_versions: {
+    job_id: 'job-1',
+    total_versions: 1,
+    limit: 25,
+    next_cursor: null,
+    items: [job1VersionsPayload.items[0]],
+  },
 }
 
 const refreshedJob1VersionsPayload = {
@@ -485,7 +491,7 @@ describe('useQuotesHomePage', () => {
     })
   })
 
-  it('refreshes bootstrap data and selected-job versions after delete', async () => {
+  it('reuses bootstrap-selected versions after delete without a duplicate versions fetch', async () => {
     loadQuoteHomeBootstrap
       .mockResolvedValueOnce(bootstrapPayload)
       .mockResolvedValueOnce(refreshedBootstrapPayload)
@@ -511,7 +517,7 @@ describe('useQuotesHomePage', () => {
 
     expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
     expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(2)
-    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(1)
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
     expect(result.current.dialogs.delete.estimateId).toBeNull()
     expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
       'estimate-2',
@@ -661,10 +667,12 @@ describe('useQuotesHomePage', () => {
       title: 'Quote home bootstrap failed to load',
       details: ['Quote home failed to load. bootstrap failed'],
     })
-    expect(result.current.jobList.emptyState).toBe('no_jobs')
+    expect(result.current.jobList.emptyState).toBe('none')
+    expect(result.current.jobList.errorMessage).toBe('bootstrap failed')
+    expect(result.current.jobList.canRetry).toBe(true)
   })
 
-  it('page refresh retries bootstrap and versions without rerunning search', async () => {
+  it('page refresh reuses bootstrap-selected versions without rerunning search or duplicate version fetches', async () => {
     loadQuoteHomeBootstrap
       .mockResolvedValueOnce(bootstrapPayload)
       .mockResolvedValueOnce(refreshedBootstrapPayload)
@@ -713,7 +721,7 @@ describe('useQuotesHomePage', () => {
     })
 
     expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(2)
-    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(1)
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
     expect(loadQuoteHomeSearch).toHaveBeenCalledTimes(1)
   })
 
@@ -744,6 +752,8 @@ describe('useQuotesHomePage', () => {
 
     expect(result.current.feedback).toBeNull()
     expect(result.current.jobList.emptyState).toBe('no_jobs')
+    expect(result.current.jobList.errorMessage).toBeNull()
+    expect(result.current.jobList.canRetry).toBe(false)
     expect(result.current.jobList.hasMore).toBe(false)
     expect(result.current.selectedJob.title).toBeNull()
     expect(result.current.versionList.items).toEqual([])

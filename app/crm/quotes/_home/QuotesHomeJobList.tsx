@@ -10,6 +10,7 @@ type Props = {
   onJobQueryChange: (value: string) => void
   onSelectJob: (jobId: string) => void
   onLoadMore: () => Promise<void>
+  onRetry: () => Promise<boolean>
 }
 
 export function QuotesHomeJobList({
@@ -17,6 +18,7 @@ export function QuotesHomeJobList({
   onJobQueryChange,
   onSelectJob,
   onLoadMore,
+  onRetry,
 }: Props) {
   return (
     <CrmSectionCard className="self-start" eyebrow="Jobs">
@@ -32,11 +34,25 @@ export function QuotesHomeJobList({
         <div style={S.jobListScroll}>
           {vm.loading ? <div style={S.mutedText}>Loading jobs...</div> : null}
 
+          {!vm.loading && vm.errorMessage ? (
+            <div style={S.emptyPanel}>
+              <div style={S.emptyPanelTitle}>Jobs failed to load</div>
+              <div style={S.bodyText}>{vm.errorMessage}</div>
+              {vm.canRetry ? (
+                <div style={S.rowWrap}>
+                  <CrmButton onClick={() => void onRetry()} tone="primary">
+                    Retry jobs
+                  </CrmButton>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {!vm.loading && vm.emptyState === 'no_matches' ? (
             <div style={S.mutedText}>No jobs match this search.</div>
           ) : null}
 
-          {!vm.loading && vm.emptyState === 'no_jobs' ? (
+          {!vm.loading && !vm.errorMessage && vm.emptyState === 'no_jobs' ? (
             <div style={S.emptyPanel}>
               <div style={S.emptyPanelTitle}>No eligible jobs yet</div>
               <div style={S.bodyText}>

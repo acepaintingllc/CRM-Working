@@ -76,6 +76,8 @@ export type QuotesHomeJobListVm = {
   selectedJobId: string
   hasMore: boolean
   items: QuoteHomeJobListItemVm[]
+  errorMessage: string | null
+  canRetry: boolean
   emptyState: 'none' | 'no_jobs' | 'no_matches'
 }
 

@@ -221,6 +221,8 @@ describe('buildQuoteHomePageVm', () => {
       selectedJobId: '',
       hasMore: false,
       items: [],
+      errorMessage: null,
+      canRetry: false,
       emptyState: 'no_jobs',
     })
     expect(vm.selectedJob.emptyMessage).toBe(
@@ -313,6 +315,8 @@ describe('buildQuoteHomePageVm', () => {
     )
 
     expect(vm.jobList.emptyState).toBe('none')
+    expect(vm.jobList.errorMessage).toBeNull()
+    expect(vm.jobList.canRetry).toBe(false)
     expect(vm.selectedJob.title).toBeNull()
     expect(vm.selectedJob.emptyMessage).toBe(
       'Select a job from the left to view versions and create the next one.'
@@ -439,6 +443,45 @@ describe('buildQuoteHomePageVm', () => {
         'Quote deleted, but the list refresh failed.',
       ],
       sources: ['bootstrap', 'delete'],
+    })
+  })
+
+  it('maps bootstrap failures with no job data into a retryable job-list error state', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        selectedJobId: '',
+        selectedJob: null,
+        visibleJobs: [],
+      }),
+      buildResources({
+        home: {
+          jobs: [],
+          bootstrapError: 'Network request timed out.',
+        },
+        workflow: {
+          versions: {
+            items: [],
+            totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: false,
+          },
+          create: {
+            canCreate: false,
+          },
+        },
+      })
+    )
+
+    expect(vm.jobList).toEqual({
+      loading: false,
+      searchQuery: '',
+      selectedJobId: '',
+      hasMore: false,
+      items: [],
+      errorMessage: 'Network request timed out.',
+      canRetry: true,
+      emptyState: 'none',
     })
   })
 

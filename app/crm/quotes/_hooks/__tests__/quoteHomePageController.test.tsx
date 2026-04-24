@@ -18,12 +18,36 @@ const versionItem = {
   is_sent_estimate: false,
 } as const
 
+const bootstrapWithActiveVersions = {
+  summary: {
+    total_versions: 1,
+    draft_count: 1,
+    sent_or_awaiting_count: 0,
+    live_count: 0,
+    pipeline_total: 500,
+  },
+  jobs: {
+    query: '',
+    limit: 25,
+    next_cursor: null,
+    items: [],
+  },
+  selected_job_id: 'job-1',
+  selected_job_versions: {
+    job_id: 'job-1',
+    total_versions: 1,
+    limit: 25,
+    next_cursor: null,
+    items: [versionItem],
+  },
+}
+
 function buildController() {
   const homeAttemptRefresh = vi.fn<
     (options?: {
       preserveDataOnError?: boolean
       reportError?: boolean
-    }) => Promise<{ ok: boolean; error: string | null; data: null }>
+    }) => Promise<{ ok: boolean; error: string | null; data: typeof bootstrapWithActiveVersions | null }>
   >(async () => ({ ok: true, error: null, data: null }))
   const versionsAttemptRefresh = vi.fn<
     (options?: {
@@ -32,10 +56,11 @@ function buildController() {
     }) => Promise<{ ok: boolean; error: string | null }>
   >(async () => ({ ok: true, error: null }))
   const homeResource = {
-    refresh: vi.fn(async () => true),
+    refresh: vi.fn(async () => bootstrapWithActiveVersions),
     attemptRefresh: homeAttemptRefresh,
   }
   const versions = {
+    pageData: bootstrapWithActiveVersions.selected_job_versions,
     items: [versionItem],
     refresh: vi.fn(async () => true),
     attemptRefresh: versionsAttemptRefresh,
@@ -83,6 +108,37 @@ describe('useQuoteHomePageController', () => {
     })
 
     expect(homeResource.attemptRefresh).not.toHaveBeenCalled()
+    expect(versions.attemptRefresh).not.toHaveBeenCalled()
+    expect(result.current.actionWarning).toBeNull()
+  })
+
+  it('skips manual versions refresh when bootstrap includes the active job versions', async () => {
+    const { result, homeResource, versions } = buildController()
+
+    await act(async () => {
+      expect(await result.current.actions.refresh()).toBe(true)
+    })
+
+    expect(homeResource.refresh).toHaveBeenCalledTimes(1)
+    expect(versions.refresh).not.toHaveBeenCalled()
+  })
+
+  it('skips delete follow-up versions refresh when bootstrap includes the active job versions', async () => {
+    const { result, homeResource, versions } = buildController()
+    homeResource.attemptRefresh.mockResolvedValue({
+      ok: true,
+      error: null,
+      data: bootstrapWithActiveVersions,
+    })
+
+    await act(async () => {
+      expect(await result.current.actions.confirmDelete()).toBe(true)
+    })
+
+    expect(homeResource.attemptRefresh).toHaveBeenCalledWith({
+      preserveDataOnError: true,
+      reportError: false,
+    })
     expect(versions.attemptRefresh).not.toHaveBeenCalled()
     expect(result.current.actionWarning).toBeNull()
   })
@@ -137,7 +193,7 @@ describe('useQuoteHomePageController', () => {
     })
 
     expect(homeResource.refresh).toHaveBeenCalledTimes(1)
-    expect(versions.refresh).toHaveBeenCalledTimes(1)
+    expect(versions.refresh).not.toHaveBeenCalled()
     expect(result.current.actionWarning).toBeNull()
   })
 })

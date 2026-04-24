@@ -14,11 +14,14 @@ type MockHeaderProps = {
 type MockJobListProps = {
   vm: {
     emptyState: string
+    errorMessage: string | null
+    canRetry: boolean
     hasMore: boolean
   }
   onJobQueryChange: (query: string) => void
   onSelectJob: (jobId: string) => void
   onLoadMore: () => Promise<void>
+  onRetry: () => Promise<boolean>
 }
 
 type MockSummaryCard = {
@@ -80,14 +83,23 @@ vi.mock('../_home/QuotesHomeHeader', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeJobList', () => ({
-  QuotesHomeJobList: ({ vm, onJobQueryChange, onSelectJob, onLoadMore }: MockJobListProps) => (
+  QuotesHomeJobList: ({
+    vm,
+    onJobQueryChange,
+    onSelectJob,
+    onLoadMore,
+    onRetry,
+  }: MockJobListProps) => (
     <div>
       <div>job-list:desktop</div>
       <div>job-empty:{vm.emptyState}</div>
+      <div>job-error:{vm.errorMessage ?? 'none'}</div>
+      <div>job-can-retry:{String(vm.canRetry)}</div>
       <div>job-has-more:{String(vm.hasMore)}</div>
       <button onClick={() => onJobQueryChange('garage')}>change job query</button>
       <button onClick={() => onSelectJob('job-2')}>select job</button>
       <button onClick={() => void onLoadMore()}>load more jobs</button>
+      <button onClick={() => void onRetry()}>retry jobs</button>
     </div>
   ),
 }))
@@ -149,6 +161,7 @@ describe('QuotesHomePage', () => {
       setJobQuery: vi.fn(),
       setSelectedJobId: vi.fn(),
       loadMore: vi.fn(async () => undefined),
+      refresh: vi.fn(async () => true),
       loadMoreVersions: vi.fn(async () => false),
       requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
@@ -187,6 +200,8 @@ describe('QuotesHomePage', () => {
         selectedJobId: 'job-1',
         hasMore: true,
         items: [],
+        errorMessage: null,
+        canRetry: false,
         emptyState: 'none',
       },
       selectedJob: {
@@ -229,6 +244,8 @@ describe('QuotesHomePage', () => {
     expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
     expect(screen.getByText('header:3 total versions')).toBeInTheDocument()
     expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:false')).toBeInTheDocument()
+    expect(screen.getByText('job-error:none')).toBeInTheDocument()
+    expect(screen.getByText('job-can-retry:false')).toBeInTheDocument()
     expect(screen.getByText('job-has-more:true')).toBeInTheDocument()
     expect(screen.getByText('selected-job:Kitchen')).toBeInTheDocument()
     expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
@@ -243,6 +260,7 @@ describe('QuotesHomePage', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'change job query' })[0])
     fireEvent.click(screen.getAllByRole('button', { name: 'select job' })[0])
     fireEvent.click(screen.getByRole('button', { name: 'load more jobs' }))
+    fireEvent.click(screen.getByRole('button', { name: 'retry jobs' }))
     fireEvent.click(screen.getByRole('button', { name: 'load more versions' }))
     fireEvent.click(screen.getByRole('button', { name: 'request delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'change kind' }))
@@ -257,6 +275,7 @@ describe('QuotesHomePage', () => {
     expect(actions.setJobQuery).toHaveBeenCalledWith('garage')
     expect(actions.setSelectedJobId).toHaveBeenCalledWith('job-2')
     expect(actions.loadMore).toHaveBeenCalledTimes(1)
+    expect(actions.refresh).toHaveBeenCalledTimes(1)
     expect(actions.loadMoreVersions).toHaveBeenCalledTimes(1)
     expect(actions.requestDelete).toHaveBeenCalledWith('estimate-2')
     expect(actions.setVersionKind).toHaveBeenCalledWith('revision')
@@ -275,6 +294,7 @@ describe('QuotesHomePage', () => {
         setJobQuery: vi.fn(),
         setSelectedJobId: vi.fn(),
         loadMore: vi.fn(async () => undefined),
+        refresh: vi.fn(async () => true),
         loadMoreVersions: vi.fn(async () => false),
         requestDelete: vi.fn(),
         setVersionKind: vi.fn(),
@@ -305,6 +325,8 @@ describe('QuotesHomePage', () => {
         selectedJobId: 'job-1',
         hasMore: false,
         items: [],
+        errorMessage: null,
+        canRetry: false,
         emptyState: 'none',
       },
       selectedJob: {

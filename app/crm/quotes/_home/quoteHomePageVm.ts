@@ -117,6 +117,10 @@ export function buildQuoteHomePageVm(
   resources: QuoteHomePageVmResources
 ): QuoteHomePageVm {
   const summaryCards = buildSummaryCards(resources.home.summary)
+  const hasJobListLoadError =
+    !resources.home.loading &&
+    resources.home.jobs.length === 0 &&
+    Boolean(resources.home.bootstrapError)
   const feedbackVm = buildQuotesHomeFeedbackVm({
     homeFailures: resources.home.bootstrapError
       ? [{ source: 'bootstrap', message: resources.home.bootstrapError }]
@@ -156,9 +160,13 @@ export function buildQuoteHomePageVm(
           selectedJobId: state.selectedJobId,
         })
       ),
+      errorMessage: hasJobListLoadError ? resources.home.bootstrapError : null,
+      canRetry: hasJobListLoadError,
       emptyState:
-        resources.home.jobs.length === 0
-          ? 'no_jobs'
+        hasJobListLoadError
+          ? 'none'
+          : resources.home.jobs.length === 0
+            ? 'no_jobs'
           : state.visibleJobs.length === 0
             ? 'no_matches'
             : 'none',

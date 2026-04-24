@@ -238,4 +238,42 @@ describe('useQuoteJobVersions', () => {
 
     expect(loadQuoteJobVersions).not.toHaveBeenCalled()
   })
+
+  it('lets refreshed seed data invalidate an older in-flight versions fetch', async () => {
+    const stale = deferred<typeof versionPayload>()
+    const seededPayload = {
+      ...versionPayload,
+      total_versions: 1,
+      items: [versionPayload.items[1]],
+    }
+
+    loadQuoteJobVersions.mockImplementationOnce(() => stale.promise)
+
+    const { result, rerender } = renderHook(
+      ({ initialData }) =>
+        useQuoteJobVersions('job-1', {
+          initialData,
+        }),
+      {
+        initialProps: {
+          initialData: null as typeof seededPayload | null,
+        },
+      }
+    )
+
+    rerender({ initialData: seededPayload })
+
+    await waitFor(() => {
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
+    })
+
+    stale.resolve(versionPayload)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
+    expect(result.current.pageData.total_versions).toBe(1)
+  })
 })

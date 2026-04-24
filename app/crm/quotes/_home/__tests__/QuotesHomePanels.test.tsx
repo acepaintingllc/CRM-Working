@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentPropsWithoutRef } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QuotesHomeCreatePanel } from '../QuotesHomeCreatePanel'
 import { QuotesHomeJobList } from '../QuotesHomeJobList'
 import { QuotesHomeSelectedJobPanel } from '../QuotesHomeSelectedJobPanel'
@@ -19,6 +19,10 @@ vi.mock('next/link', () => ({
 }))
 
 describe('Quotes home panels', () => {
+  beforeEach(() => {
+    cleanup()
+  })
+
   it('uses CRM button actions for the job-list empty state', () => {
     render(
       <QuotesHomeJobList
@@ -28,11 +32,14 @@ describe('Quotes home panels', () => {
           selectedJobId: '',
           hasMore: false,
           items: [],
+          errorMessage: null,
+          canRetry: false,
           emptyState: 'no_jobs',
         }}
         onJobQueryChange={() => {}}
         onSelectJob={() => {}}
         onLoadMore={async () => {}}
+        onRetry={async () => true}
       />,
     )
 
@@ -41,6 +48,37 @@ describe('Quotes home panels', () => {
 
     expect(addContact).toHaveClass('ace-crm-btn', 'ace-crm-btn-primary')
     expect(openJobs).toHaveClass('ace-crm-btn', 'ace-crm-btn-secondary')
+  })
+
+  it('renders a retryable error panel instead of the no-jobs CTA when loading failed', () => {
+    const onRetry = vi.fn(async () => true)
+
+    render(
+      <QuotesHomeJobList
+        vm={{
+          loading: false,
+          searchQuery: '',
+          selectedJobId: '',
+          hasMore: false,
+          items: [],
+          errorMessage: 'bootstrap failed',
+          canRetry: true,
+          emptyState: 'none',
+        }}
+        onJobQueryChange={() => {}}
+        onSelectJob={() => {}}
+        onLoadMore={async () => {}}
+        onRetry={onRetry}
+      />,
+    )
+
+    expect(screen.getByText('Jobs failed to load')).toBeInTheDocument()
+    expect(screen.getByText('bootstrap failed')).toBeInTheDocument()
+    expect(screen.queryByText('No eligible jobs yet')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry jobs' }))
+
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
   it('renders a load-more button when the vm reports more jobs', () => {
@@ -62,11 +100,14 @@ describe('Quotes home panels', () => {
               isSelected: true,
             },
           ],
+          errorMessage: null,
+          canRetry: false,
           emptyState: 'none',
         }}
         onJobQueryChange={() => {}}
         onSelectJob={() => {}}
         onLoadMore={onLoadMore}
+        onRetry={async () => true}
       />,
     )
 

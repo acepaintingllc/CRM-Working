@@ -65,7 +65,7 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
 
   const commitData = useCallback(
     (nextData: QuoteJobVersionsPageReadModel) => {
-    cacheRef.current[nextData.job_id] = nextData
+      cacheRef.current[nextData.job_id] = nextData
       setCurrentData(nextData)
     },
     [setCurrentData]
@@ -78,6 +78,7 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
     }
     cacheRef.current[seededData.job_id] = seededData
     if (seededInitialDataRef.current !== seededData && seededData.job_id === jobId) {
+      requestIdRef.current += 1
       seededInitialDataRef.current = seededData
       setCurrentData(seededData)
       setError(null)

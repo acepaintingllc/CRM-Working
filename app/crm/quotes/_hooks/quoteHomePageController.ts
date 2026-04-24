@@ -1,7 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import type { QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
+import type {
+  QuoteHomeBootstrapReadModel,
+  QuoteHomeJobVersionItemReadModel,
+  QuoteJobVersionsPageReadModel,
+} from '@/lib/quotes/collectionData'
 import type { QuoteHomePageActions } from '../_home/quoteHomePageVm'
 import type { QuoteHomeActionWarning } from '../_home/quoteHomeTypes'
 
@@ -16,13 +20,14 @@ type RefreshAttemptResult = {
 }
 
 type QuoteHomePageControllerHomeResource = {
-  refresh: () => Promise<unknown>
+  refresh: () => Promise<QuoteHomeBootstrapReadModel | null>
   attemptRefresh: (
     options?: RefreshAttemptOptions
-  ) => Promise<RefreshAttemptResult | { ok: boolean; error: string | null; data: unknown }>
+  ) => Promise<{ ok: boolean; error: string | null; data: QuoteHomeBootstrapReadModel | null }>
 }
 
 type QuoteHomePageControllerVersionsResource = {
+  pageData: QuoteJobVersionsPageReadModel
   items: QuoteHomeJobVersionItemReadModel[]
   refresh: () => Promise<boolean>
   attemptRefresh: (options?: RefreshAttemptOptions) => Promise<RefreshAttemptResult>
@@ -52,6 +57,17 @@ function buildDeleteRefreshWarning(refreshFailures: string[]) {
   } satisfies QuoteHomeActionWarning
 }
 
+function bootstrapVersionsCoverActiveJob(
+  bootstrap: QuoteHomeBootstrapReadModel | null,
+  activeJobId: string
+) {
+  return Boolean(
+    activeJobId &&
+      bootstrap?.selected_job_id === activeJobId &&
+      bootstrap.selected_job_versions?.job_id === activeJobId
+  )
+}
+
 export function useQuoteHomePageController({
   homeResource,
   versions,
@@ -64,11 +80,15 @@ export function useQuoteHomePageController({
 
   async function refresh() {
     setActionWarning(null)
-    const [bootstrapOk, versionsOk] = await Promise.all([
-      homeResource.refresh(),
-      versions.refresh(),
-    ])
-    return Boolean(bootstrapOk && versionsOk)
+    const bootstrap = await homeResource.refresh()
+    if (!bootstrap) {
+      await versions.refresh()
+      return false
+    }
+    if (bootstrapVersionsCoverActiveJob(bootstrap, versions.pageData.job_id)) {
+      return true
+    }
+    return versions.refresh()
   }
 
   const actions: QuoteHomePageControllerActions = {
@@ -88,16 +108,19 @@ export function useQuoteHomePageController({
       }
 
       setActionWarning(null)
-      const [bootstrapRefresh, versionsRefresh] = await Promise.all([
-        homeResource.attemptRefresh({
+      const bootstrapRefresh = await homeResource.attemptRefresh({
+        preserveDataOnError: true,
+        reportError: false,
+      })
+      const versionsRefresh = bootstrapVersionsCoverActiveJob(
+        bootstrapRefresh.data,
+        versions.pageData.job_id
+      )
+        ? { ok: true, error: null }
+        : await versions.attemptRefresh({
           preserveDataOnError: true,
           reportError: false,
-        }),
-        versions.attemptRefresh({
-          preserveDataOnError: true,
-          reportError: false,
-        }),
-      ])
+        })
 
       if (bootstrapRefresh.ok && versionsRefresh.ok) {
         return true

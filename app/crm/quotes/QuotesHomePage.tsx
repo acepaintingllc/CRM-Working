@@ -81,6 +81,7 @@ export default function QuotesHomePage({ initialData }: Props) {
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
             onLoadMore={actions.loadMore}
+            onRetry={actions.refresh}
           />
 
           <section style={S.sectionStackLg}>
