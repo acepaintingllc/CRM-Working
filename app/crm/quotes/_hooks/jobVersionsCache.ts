@@ -6,6 +6,10 @@ export type JobVersionsCache = {
   has(jobId: string): boolean
 }
 
+type CacheReadOptions = {
+  force?: boolean
+}
+
 export function emptyJobVersions(jobId: string): QuoteJobVersionsPageReadModel {
   return {
     job_id: jobId,
@@ -14,6 +18,12 @@ export function emptyJobVersions(jobId: string): QuoteJobVersionsPageReadModel {
     next_cursor: null,
     items: [],
   }
+}
+
+export function isHydratableJobVersionsPage(
+  page: QuoteJobVersionsPageReadModel | null
+): page is QuoteJobVersionsPageReadModel {
+  return Boolean(page?.job_id)
 }
 
 export function initialJobVersionsPage(
@@ -31,7 +41,10 @@ export function mergeJobVersionsPages(
 ): QuoteJobVersionsPageReadModel {
   const seenEstimateIds = new Set<string>()
   const items = [...currentData.items, ...nextPage.items].filter((item) => {
-    if (seenEstimateIds.has(item.estimate_id)) return false
+    if (seenEstimateIds.has(item.estimate_id)) {
+      return false
+    }
+
     seenEstimateIds.add(item.estimate_id)
     return true
   })
@@ -42,9 +55,12 @@ export function mergeJobVersionsPages(
 export function getCachedJobVersionsPage(
   cache: JobVersionsCache,
   jobId: string,
-  options?: { force?: boolean }
+  options?: CacheReadOptions
 ): QuoteJobVersionsPageReadModel | null {
-  if (options?.force || !cache.has(jobId)) return null
+  if (options?.force || !cache.has(jobId)) {
+    return null
+  }
+
   return cache.get(jobId) ?? emptyJobVersions(jobId)
 }
 
@@ -52,7 +68,10 @@ export function hydrateJobVersionsCache(
   cache: JobVersionsCache,
   page: QuoteJobVersionsPageReadModel | null
 ): boolean {
-  if (!page?.job_id) return false
+  if (!isHydratableJobVersionsPage(page)) {
+    return false
+  }
+
   cache.set(page.job_id, page)
   return true
 }

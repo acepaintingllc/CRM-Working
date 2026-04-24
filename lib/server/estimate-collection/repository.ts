@@ -1,11 +1,4 @@
 import { normalizeQuoteVersionKind } from '../../quotes/versionCreation.ts'
-import { isJobStatus } from '../../jobs/types.ts'
-import type {
-  EstimateCollectionDecoratedRow,
-  QuoteHomeEligibleJobReadModel,
-  QuoteHomeJobListItemReadModel,
-  QuoteHomeSummaryReadModel,
-} from '../../quotes/collectionData.ts'
 import { hasUniqueConstraintConflict } from '../dbErrors.ts'
 import { isMissingSchemaErrorMessage } from '../schema.ts'
 import { supabaseAdmin } from '../org.ts'
@@ -13,6 +6,7 @@ import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import type {
   EstimateCollectionCustomerRow,
   EstimateCollectionJobRow,
+  EstimateCollectionRelatedRows,
   EstimateCollectionRollupRow,
   EstimateCollectionVersionCopy,
   EstimateCollectionVersionRow,
@@ -57,7 +51,10 @@ function escapeLikePattern(value: string) {
   return value.replace(/[\\%_]/g, '\\$&')
 }
 
-function encodeQuoteHomeCursor(value: { timestamp: string | null | undefined; id: string | null | undefined }) {
+export function encodeQuoteHomeCursor(value: {
+  timestamp: string | null | undefined
+  id: string | null | undefined
+}) {
   if (!value.id) return null
   return `${value.timestamp ?? quoteHomeNullCursorTimestamp}${quoteHomeCursorSeparator}${value.id}`
 }
@@ -164,7 +161,7 @@ export async function loadEstimateCollectionRowsForOrg(
 
 export async function loadEstimateCollectionSummary(
   orgId: string
-): Promise<ServiceResult<QuoteHomeSummaryReadModel>> {
+): Promise<ServiceResult<QuoteHomeSummaryRow | null>> {
   const { data, error } = await supabaseAdmin.rpc('quote_home_summary', {
     p_org_id: orgId,
   })
@@ -179,14 +176,7 @@ export async function loadEstimateCollectionSummary(
     return errorResult('server_error', error.message)
   }
 
-  const row = Array.isArray(data) ? ((data[0] ?? null) as QuoteHomeSummaryRow | null) : null
-  return okResult({
-    total_versions: Number(row?.total_versions ?? 0),
-    draft_count: Number(row?.draft_count ?? 0),
-    sent_or_awaiting_count: Number(row?.sent_or_awaiting_count ?? 0),
-    live_count: Number(row?.live_count ?? 0),
-    pipeline_total: Number(row?.pipeline_total ?? 0),
-  })
+  return okResult(Array.isArray(data) ? ((data[0] ?? null) as QuoteHomeSummaryRow | null) : null)
 }
 
 export async function loadEstimateCollectionJobsPage(
@@ -200,8 +190,7 @@ export async function loadEstimateCollectionJobsPage(
   ServiceResult<{
     query: string
     limit: number
-    nextCursor: string | null
-    items: QuoteHomeJobListItemReadModel[]
+    rows: QuoteHomeJobsPageRow[]
   }>
 > {
   const limit = asPositiveInteger(options?.limit, quoteHomeDefaultPageLimit, quoteHomeMaxPageLimit)
@@ -238,41 +227,10 @@ export async function loadEstimateCollectionJobsPage(
       { timestamp: right.created_at, id: right.id }
     )
   )
-  const pageRows = sortedRows.slice(0, limit)
-  const nextCursor =
-    sortedRows.length > limit && pageRows[pageRows.length - 1]?.created_at
-      ? encodeQuoteHomeCursor({
-          timestamp: pageRows[pageRows.length - 1]?.created_at,
-          id: pageRows[pageRows.length - 1]?.id,
-        })
-      : null
-
   return okResult({
     query,
     limit,
-    nextCursor,
-    items: pageRows
-      .filter((row) => row.customer_id)
-      .map((row) => ({
-        id: row.id,
-        customer_id: String(row.customer_id),
-        customer_name: asText(row.customer_name) || null,
-        customer_address: asText(row.customer_address) || null,
-        title: asText(row.title) || 'Untitled job',
-        description: row.description ?? null,
-        status: isJobStatus(row.status) ? row.status : 'estimate_scheduled',
-        created_at: row.created_at ?? null,
-        estimate_date: row.estimate_date ?? null,
-        estimate_sent_at: row.estimate_sent_at ?? null,
-        scheduled_date: row.scheduled_date ?? null,
-        scheduled_end_date: row.scheduled_end_date ?? null,
-        scheduled_email_sent_at: row.scheduled_email_sent_at ?? null,
-        completed_at: row.completed_at ?? null,
-        completed_email_sent_at: row.completed_email_sent_at ?? null,
-        closeout_notes: row.closeout_notes ?? null,
-        linked_estimate_id: row.linked_estimate_id ?? null,
-        version_count: Number(row.version_count ?? 0),
-      })),
+    rows: sortedRows,
   })
 }
 
@@ -407,9 +365,19 @@ export async function searchEstimateCollectionRows(
   orgId: string,
   rawQuery: string,
   limit: number
-): Promise<ServiceResult<EstimateCollectionVersionRow[]>> {
+): Promise<
+  ServiceResult<{
+    query: string
+    limit: number
+    versionRows: EstimateCollectionVersionRow[]
+    jobRows: EstimateCollectionVersionRow[]
+    customerRows: EstimateCollectionVersionRow[]
+  }>
+> {
   const query = rawQuery.trim()
-  if (!query) return okResult([])
+  if (!query) {
+    return okResult({ query, limit, versionRows: [], jobRows: [], customerRows: [] })
+  }
 
   const pattern = `%${escapeLikePattern(query)}%`
   const estimateSearchPattern = `%${escapeLikePattern(query.replace(/[(),]/g, ' ').trim())}%`
@@ -457,57 +425,38 @@ export async function searchEstimateCollectionRows(
     .map((row) => String(row.id ?? ''))
     .filter(Boolean)
 
-  const lookupRequests: Array<Promise<ServiceResult<EstimateCollectionVersionRow[]>>> = []
-  if (matchedJobIds.length) {
-    lookupRequests.push(
-      loadEstimateCollectionRowsByLookup(orgId, {
-        jobIds: matchedJobIds,
-        limit,
-      })
-    )
-  }
-  if (matchedCustomerIds.length) {
-    lookupRequests.push(
-      loadEstimateCollectionRowsByLookup(orgId, {
-        customerIds: matchedCustomerIds,
-        limit,
-      })
-    )
-  }
+  const [jobRowsResult, customerRowsResult] = await Promise.all([
+    matchedJobIds.length
+      ? loadEstimateCollectionRowsByLookup(orgId, {
+          jobIds: matchedJobIds,
+          limit,
+        })
+      : Promise.resolve(okResult([] as EstimateCollectionVersionRow[])),
+    matchedCustomerIds.length
+      ? loadEstimateCollectionRowsByLookup(orgId, {
+          customerIds: matchedCustomerIds,
+          limit,
+        })
+      : Promise.resolve(okResult([] as EstimateCollectionVersionRow[])),
+  ])
 
-  const lookupResults = await Promise.all(lookupRequests)
-  for (const result of lookupResults) {
-    if (!result.ok) return result
-  }
+  if (!jobRowsResult.ok) return jobRowsResult
+  if (!customerRowsResult.ok) return customerRowsResult
 
-  const deduped = new Map<string, EstimateCollectionVersionRow>()
-  for (const row of (versionMatchesRes.data ?? []) as EstimateCollectionVersionRow[]) {
-    deduped.set(row.id, row)
-  }
-  for (const result of lookupResults) {
-    if (result.ok) {
-      for (const row of result.data) {
-        deduped.set(row.id, row)
-      }
-    }
-  }
-
-  return okResult(
-    Array.from(deduped.values())
-      .sort((a, b) => {
-        const updatedDiff = asTimestamp(b.updated_at) - asTimestamp(a.updated_at)
-        if (updatedDiff !== 0) return updatedDiff
-        return b.id.localeCompare(a.id)
-      })
-      .slice(0, limit)
-  )
+  return okResult({
+    query,
+    limit,
+    versionRows: (versionMatchesRes.data ?? []) as EstimateCollectionVersionRow[],
+    jobRows: jobRowsResult.data,
+    customerRows: customerRowsResult.data,
+  })
 }
 
-export async function decorateEstimateCollectionRows(
+export async function loadEstimateCollectionRelatedRows(
   orgId: string,
   estimateRows: EstimateCollectionVersionRow[],
   options: { includeRollups: boolean }
-): Promise<ServiceResult<EstimateCollectionDecoratedRow[]>> {
+): Promise<ServiceResult<EstimateCollectionRelatedRows>> {
   const jobIds = Array.from(new Set(estimateRows.map((row) => row.job_id).filter(Boolean)))
   const customerIds = Array.from(new Set(estimateRows.map((row) => row.customer_id).filter(Boolean)))
   const estimateIds = estimateRows.map((row) => row.id)
@@ -549,41 +498,11 @@ export async function decorateEstimateCollectionRows(
     }
   }
 
-  const jobsById = new Map((jobsRes.data ?? []).map((row) => [row.id, row as EstimateCollectionJobRow]))
-  const customersById = new Map(
-    (customersRes.data ?? []).map((row) => [row.id, row as EstimateCollectionCustomerRow])
-  )
-  const totalsByEstimateId = new Map(rollupRows.map((row) => [row.estimate_id, asMoney(row.final_total)]))
-
-  return okResult(
-    estimateRows.map((row) => {
-      const job = jobsById.get(row.job_id)
-      const customer = customersById.get(row.customer_id)
-      return {
-        id: row.id,
-        estimate_id: row.id,
-        job_id: row.job_id,
-        customer_id: row.customer_id,
-        status: row.status,
-        raw_version_name: row.version_name,
-        raw_version_state: row.version_state,
-        raw_version_kind: row.version_kind,
-        raw_version_sort_order: row.version_sort_order,
-        version_name: row.version_name?.trim() || 'Quote Version',
-        version_state: normalizeEstimateCollectionVersionState(row.version_state),
-        version_kind: row.version_kind?.trim() || 'standard',
-        version_sort_order: row.version_sort_order ?? 0,
-        job_title: job?.title?.trim() || 'Untitled job',
-        job_status: job?.status ?? null,
-        job_estimate_sent_at: job?.estimate_sent_at ?? null,
-        customer_name: customer?.name?.trim() || 'Unknown customer',
-        final_total: totalsByEstimateId.get(row.id) ?? null,
-        updated_at: row.updated_at,
-        created_at: row.created_at,
-        is_sent_estimate: isSentEstimateCollectionJob(job),
-      } satisfies EstimateCollectionDecoratedRow
-    })
-  )
+  return okResult({
+    jobs: (jobsRes.data ?? []) as EstimateCollectionJobRow[],
+    customers: (customersRes.data ?? []) as EstimateCollectionCustomerRow[],
+    rollups: rollupRows,
+  })
 }
 
 export async function createEstimateCollectionVersionRecord(params: {
@@ -707,8 +626,8 @@ export async function loadEstimateCollectionRollupSummary(params: {
 
 export async function loadEstimateCollectionEligibleJobs(
   orgId: string
-): Promise<ServiceResult<QuoteHomeEligibleJobReadModel[]>> {
+): Promise<ServiceResult<QuoteHomeJobsPageRow[]>> {
   const jobsPage = await loadEstimateCollectionJobsPage(orgId, { limit: 100 })
   if (!jobsPage.ok) return jobsPage
-  return okResult(jobsPage.data.items)
+  return okResult(jobsPage.data.rows)
 }

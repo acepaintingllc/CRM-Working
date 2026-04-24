@@ -10,6 +10,8 @@ type Props = {
 }
 
 export function QuotesHomeSelectedJobPanel({ vm }: Props) {
+  const state = vm.state ?? (vm.title ? 'selected' : vm.loading ? 'loading' : 'empty')
+
   return (
     <CrmSectionCard
       className="self-start"
@@ -22,12 +24,12 @@ export function QuotesHomeSelectedJobPanel({ vm }: Props) {
         ) : null
       }
     >
-      <div aria-live="polite">
-        {vm.emptyMessage ? (
+      <div aria-live="polite" aria-busy={state === 'loading' || undefined}>
+        {state === 'empty' && vm.emptyMessage ? (
           <div style={S.mutedText}>{vm.emptyMessage}</div>
         ) : null}
 
-        {vm.title ? (
+        {state === 'selected' && vm.title ? (
           <div style={S.grid18}>
             <div style={S.grid12}>
               <div>

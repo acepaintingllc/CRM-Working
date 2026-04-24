@@ -31,11 +31,11 @@ export function useQuoteHomePageResources(
         : null,
   })
   const deleteController = useQuotesHomeDelete()
-  const { setJobsForSelection } = pageState
+  const { reconcileLoadedJobs } = pageState
 
   useEffect(() => {
-    setJobsForSelection(homeResource.jobs, homeResource.jobsPage.query)
-  }, [homeResource.jobs, homeResource.jobsPage.query, setJobsForSelection])
+    reconcileLoadedJobs(homeResource.jobs, homeResource.jobsPage.query)
+  }, [homeResource.jobs, homeResource.jobsPage.query, reconcileLoadedJobs])
 
   const workflowActions = useMemo(
     () => ({
@@ -83,9 +83,9 @@ export function useQuoteHomePageResources(
         homeResource,
         searchState,
         workflow,
-        deleteController,
+        deleteController: controller.deleteState,
       }),
-    [homeResource, searchState, workflow, deleteController]
+    [homeResource, searchState, workflow, controller.deleteState]
   )
 
   return {

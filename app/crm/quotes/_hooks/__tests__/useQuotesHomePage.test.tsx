@@ -91,6 +91,17 @@ const pagedQuoteHomeJob1Versions = makePagedQuoteHomeVersions({
   nextCursor: 'cursor-2',
 })
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve
+    reject = nextReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('useQuotesHomePage', () => {
   beforeEach(() => {
     vi.useRealTimers()
@@ -297,6 +308,83 @@ describe('useQuotesHomePage', () => {
       expect(result.current.versionList.items).toHaveLength(30)
     })
     expect(result.current.versionList.heading).toBe('30 versions under this job')
+  })
+
+  it('preserves selected-job versions when loading the next page fails', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue({
+      ...quoteHomeBootstrap,
+      selected_job_versions: pagedQuoteHomeJob1Versions,
+    })
+    loadQuoteJobVersions.mockRejectedValueOnce(new Error('next page failed'))
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.versionList.items).toHaveLength(25)
+    })
+
+    await act(async () => {
+      await result.current.actions.loadMoreVersions()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1', {
+      cursor: 'cursor-2',
+    })
+    expect(result.current.versionList.items).toHaveLength(25)
+    expect(result.current.versionList.errorMessage).toBe('next page failed')
+    expect(result.current.versionList.canRetry).toBe(true)
+    expect(result.current.versionList.hasMore).toBe(true)
+  })
+
+  it('does not overlap selected-job version load-more requests for the same cursor', async () => {
+    const nextPage = deferred<typeof pagedQuoteHomeJob1Versions>()
+
+    loadQuoteHomeBootstrap.mockResolvedValue({
+      ...quoteHomeBootstrap,
+      selected_job_versions: pagedQuoteHomeJob1Versions,
+    })
+    loadQuoteJobVersions.mockImplementationOnce(() => nextPage.promise)
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.versionList.items).toHaveLength(25)
+    })
+
+    let firstLoadMore!: Promise<boolean>
+    let secondLoadMore!: Promise<boolean>
+
+    await act(async () => {
+      firstLoadMore = result.current.actions.loadMoreVersions()
+      secondLoadMore = result.current.actions.loadMoreVersions()
+      await Promise.resolve()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(1)
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1', {
+      cursor: 'cursor-2',
+    })
+    await expect(secondLoadMore).resolves.toBe(false)
+
+    nextPage.resolve({
+      ...pagedQuoteHomeJob1Versions,
+      next_cursor: null,
+      items: [
+        {
+          ...quoteHomeJob1Versions.items[0],
+          estimate_id: 'estimate-26',
+          version_name: 'Version 26',
+          version_sort_order: 1,
+        },
+      ],
+    })
+
+    await act(async () => {
+      await firstLoadMore
+    })
+
+    expect(result.current.versionList.items).toHaveLength(26)
+    expect(result.current.versionList.hasMore).toBe(false)
   })
 
   it('keeps pagination inside the active server query and preserves selected job when filters hide it', async () => {

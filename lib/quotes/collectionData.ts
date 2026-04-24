@@ -1,3 +1,13 @@
+import { isJobStatus } from '../jobs/types'
+import type {
+  EstimateCollectionCustomerRow,
+  EstimateCollectionJobRow,
+  EstimateCollectionRollupRow,
+  EstimateCollectionVersionRow,
+  QuoteHomeJobsPageRow,
+  QuoteHomeSummaryRow,
+} from '../server/estimate-collection/types'
+
 export type EstimateCollectionDecoratedRow = {
   id: string
   estimate_id: string
@@ -27,6 +37,32 @@ export const QUOTE_HOME_FALLBACK_VERSION_STATE = 'draft'
 export const QUOTE_HOME_FALLBACK_VERSION_KIND = 'standard'
 export const QUOTE_HOME_FALLBACK_JOB_TITLE = 'Untitled job'
 export const QUOTE_HOME_FALLBACK_CUSTOMER_NAME = 'Unknown customer'
+
+export type EstimateCollectionRowRelations = {
+  jobs: EstimateCollectionJobRow[]
+  customers: EstimateCollectionCustomerRow[]
+  rollups: EstimateCollectionRollupRow[]
+}
+
+export type QuoteHomeJobsPageRows = {
+  query: string
+  limit: number
+  rows: QuoteHomeJobsPageRow[]
+}
+
+export type QuoteHomeSearchRows = {
+  query: string
+  limit: number
+  versionRows: EstimateCollectionVersionRow[]
+  jobRows: EstimateCollectionVersionRow[]
+  customerRows: EstimateCollectionVersionRow[]
+}
+
+export const QUOTE_HOME_SEARCH_SOURCE_RANK = {
+  version: 0,
+  job: 1,
+  customer: 2,
+} as const
 
 type EstimateCollectionDecoratedRowInput = Partial<EstimateCollectionDecoratedRow>
 
@@ -185,6 +221,39 @@ function asPipelineTotal(value: unknown): number {
   return amount
 }
 
+function asMoney(value: unknown) {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount : null
+}
+
+function asTimestamp(value: string | null | undefined) {
+  if (!value) return 0
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function normalizeEstimateCollectionVersionState(value: string | null | undefined) {
+  return value?.trim() || QUOTE_HOME_FALLBACK_VERSION_STATE
+}
+
+function isSentEstimateCollectionJob(job: EstimateCollectionJobRow | undefined) {
+  if (!job) return false
+  return job.status === 'estimate_sent' || job.status === 'follow_up'
+}
+
+function compareEstimateRowsBySearchPolicy(
+  left: { row: EstimateCollectionVersionRow; rank: number },
+  right: { row: EstimateCollectionVersionRow; rank: number }
+) {
+  const rankDiff = left.rank - right.rank
+  if (rankDiff !== 0) return rankDiff
+
+  const updatedDiff = asTimestamp(right.row.updated_at) - asTimestamp(left.row.updated_at)
+  if (updatedDiff !== 0) return updatedDiff
+
+  return right.row.id.localeCompare(left.row.id)
+}
+
 function getEstimateId(row: EstimateCollectionDecoratedRowInput): string {
   return asRequiredText(row.estimate_id, asRequiredText(row.id, ''))
 }
@@ -282,6 +351,103 @@ export function toQuoteHomeSearchResultReadModel(
     final_total: asNullableNumber(row.final_total),
     is_sent_estimate: asBoolean(row.is_sent_estimate),
   }
+}
+
+export function buildQuoteHomeSummaryFromRow(
+  row: QuoteHomeSummaryRow | null | undefined
+): QuoteHomeSummaryReadModel {
+  return {
+    total_versions: Number(row?.total_versions ?? 0),
+    draft_count: Number(row?.draft_count ?? 0),
+    sent_or_awaiting_count: Number(row?.sent_or_awaiting_count ?? 0),
+    live_count: Number(row?.live_count ?? 0),
+    pipeline_total: Number(row?.pipeline_total ?? 0),
+  }
+}
+
+export function decorateEstimateCollectionRows(
+  estimateRows: EstimateCollectionVersionRow[],
+  relations: EstimateCollectionRowRelations
+): EstimateCollectionDecoratedRow[] {
+  const jobsById = new Map(relations.jobs.map((row) => [row.id, row]))
+  const customersById = new Map(relations.customers.map((row) => [row.id, row]))
+  const totalsByEstimateId = new Map(
+    relations.rollups.map((row) => [row.estimate_id, asMoney(row.final_total)])
+  )
+
+  return estimateRows.map((row) => {
+    const job = jobsById.get(row.job_id)
+    const customer = customersById.get(row.customer_id)
+    return {
+      id: row.id,
+      estimate_id: row.id,
+      job_id: row.job_id,
+      customer_id: row.customer_id,
+      status: row.status,
+      raw_version_name: row.version_name,
+      raw_version_state: row.version_state,
+      raw_version_kind: row.version_kind,
+      raw_version_sort_order: row.version_sort_order,
+      version_name: row.version_name?.trim() || QUOTE_HOME_FALLBACK_VERSION_NAME,
+      version_state: normalizeEstimateCollectionVersionState(row.version_state),
+      version_kind: row.version_kind?.trim() || QUOTE_HOME_FALLBACK_VERSION_KIND,
+      version_sort_order: row.version_sort_order ?? 0,
+      job_title: job?.title?.trim() || QUOTE_HOME_FALLBACK_JOB_TITLE,
+      job_status: job?.status ?? null,
+      job_estimate_sent_at: job?.estimate_sent_at ?? null,
+      customer_name: customer?.name?.trim() || QUOTE_HOME_FALLBACK_CUSTOMER_NAME,
+      final_total: totalsByEstimateId.get(row.id) ?? null,
+      updated_at: row.updated_at,
+      created_at: row.created_at,
+      is_sent_estimate: isSentEstimateCollectionJob(job),
+    }
+  })
+}
+
+export function toQuoteHomeEligibleJobReadModel(
+  row: QuoteHomeJobsPageRow
+): QuoteHomeJobListItemReadModel | null {
+  const customerId = asRequiredText(row.customer_id, '')
+  if (!customerId) return null
+
+  return {
+    id: asRequiredText(row.id, ''),
+    customer_id: customerId,
+    customer_name: asRequiredText(row.customer_name, '') || null,
+    customer_address: asRequiredText(row.customer_address, '') || null,
+    title: asRequiredText(row.title, QUOTE_HOME_FALLBACK_JOB_TITLE),
+    description: asNullableText(row.description),
+    status: isJobStatus(row.status) ? row.status : 'estimate_scheduled',
+    created_at: asNullableText(row.created_at),
+    estimate_date: asNullableText(row.estimate_date),
+    estimate_sent_at: asNullableText(row.estimate_sent_at),
+    scheduled_date: asNullableText(row.scheduled_date),
+    scheduled_end_date: asNullableText(row.scheduled_end_date),
+    scheduled_email_sent_at: asNullableText(row.scheduled_email_sent_at),
+    completed_at: asNullableText(row.completed_at),
+    completed_email_sent_at: asNullableText(row.completed_email_sent_at),
+    closeout_notes: asNullableText(row.closeout_notes),
+    linked_estimate_id: asNullableText(row.linked_estimate_id),
+    version_count: asNumber(row.version_count, 0),
+  }
+}
+
+export function selectQuoteHomeSearchRows(params: QuoteHomeSearchRows): EstimateCollectionVersionRow[] {
+  const candidates = [
+    ...params.versionRows.map((row) => ({ row, rank: QUOTE_HOME_SEARCH_SOURCE_RANK.version })),
+    ...params.jobRows.map((row) => ({ row, rank: QUOTE_HOME_SEARCH_SOURCE_RANK.job })),
+    ...params.customerRows.map((row) => ({ row, rank: QUOTE_HOME_SEARCH_SOURCE_RANK.customer })),
+  ].sort(compareEstimateRowsBySearchPolicy)
+
+  const selected = new Map<string, EstimateCollectionVersionRow>()
+  for (const candidate of candidates) {
+    if (!selected.has(candidate.row.id)) {
+      selected.set(candidate.row.id, candidate.row)
+    }
+    if (selected.size >= params.limit) break
+  }
+
+  return Array.from(selected.values())
 }
 
 export function buildQuoteHomeSummaryReadModel(

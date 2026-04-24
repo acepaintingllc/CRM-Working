@@ -19,6 +19,10 @@ export function QuotesHomeCreatePanel({
   onVersionKindChange,
   onVersionNameChange,
 }: Props) {
+  const disabledReasonId = vm.disabledReason
+    ? 'quote-home-create-disabled-reason'
+    : undefined
+
   return (
     <CrmSectionCard
       className="self-start"
@@ -31,6 +35,8 @@ export function QuotesHomeCreatePanel({
           tone="primary"
           onClick={() => void onCreate()}
           disabled={!vm.canCreate}
+          aria-busy={vm.creating || undefined}
+          aria-describedby={disabledReasonId}
         >
           {vm.createButtonLabel}
         </CrmButton>
@@ -66,6 +72,12 @@ export function QuotesHomeCreatePanel({
             ))}
           </select>
         </CrmField>
+
+        {vm.disabledReason ? (
+          <div id={disabledReasonId} style={S.mutedText}>
+            {vm.disabledReason}
+          </div>
+        ) : null}
       </div>
     </CrmSectionCard>
   )

@@ -1,11 +1,19 @@
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   QuoteHomeBootstrapReadModel,
   QuoteHomeJobVersionItemReadModel,
   QuoteJobVersionsPageReadModel,
 } from '@/lib/quotes/collectionData'
 import { useQuoteHomePageController } from '../quoteHomePageController'
+
+const { deleteQuoteVersion } = vi.hoisted(() => ({
+  deleteQuoteVersion: vi.fn(),
+}))
+
+vi.mock('@/lib/quotes/client', () => ({
+  deleteQuoteVersion,
+}))
 
 function makeVersionItem(
   estimateId: string,
@@ -104,9 +112,16 @@ function buildController(
     attemptRefresh: versionsAttemptRefresh,
   }
   const deleteController = {
+    confirmingDelete: null,
+    deletingId: null,
+    error: null,
     requestDeleteVersion: vi.fn(),
-    cancelDelete: vi.fn(),
-    confirmDeleteVersion: vi.fn(async () => true),
+    cancelDelete: vi.fn<() => boolean>(() => true),
+    beginDelete: vi.fn<() => QuoteHomeJobVersionItemReadModel | null>(
+      () => versionItems[0] ?? null
+    ),
+    completeDelete: vi.fn(),
+    failDelete: vi.fn(),
   }
   const stateActions = {
     setSearchQuery: vi.fn(),
@@ -149,6 +164,11 @@ function buildController(
 }
 
 describe('useQuoteHomePageController', () => {
+  beforeEach(() => {
+    deleteQuoteVersion.mockReset()
+    deleteQuoteVersion.mockResolvedValue({ data: { ok: true } })
+  })
+
   it('keeps action references stable when dependencies are unchanged', () => {
     const { result, rerender } = buildController()
     const actions = result.current.actions
@@ -236,26 +256,45 @@ describe('useQuoteHomePageController', () => {
     expect(retrySearch).not.toHaveBeenCalled()
   })
 
-  it('does not refresh when delete confirmation fails', async () => {
+  it('does not refresh when there is no confirmed delete target', async () => {
     const { result, deleteController, homeResource, versions } = buildController()
-    deleteController.confirmDeleteVersion.mockResolvedValue(false)
+    deleteController.beginDelete.mockReturnValue(null)
 
     await act(async () => {
       expect(await result.current.actions.confirmDelete()).toBe(false)
     })
 
+    expect(deleteQuoteVersion).not.toHaveBeenCalled()
+    expect(homeResource.attemptRefresh).not.toHaveBeenCalled()
+    expect(versions.attemptRefresh).not.toHaveBeenCalled()
+    expect(result.current.actionWarning).toBeNull()
+  })
+
+  it('surfaces delete mutation failures without refreshing', async () => {
+    const { result, deleteController, homeResource, versions } = buildController()
+    deleteQuoteVersion.mockRejectedValueOnce(new Error('delete failed'))
+
+    await act(async () => {
+      expect(await result.current.actions.confirmDelete()).toBe(false)
+    })
+
+    expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
+    expect(deleteController.failDelete).toHaveBeenCalledWith('delete failed')
+    expect(deleteController.completeDelete).not.toHaveBeenCalled()
     expect(homeResource.attemptRefresh).not.toHaveBeenCalled()
     expect(versions.attemptRefresh).not.toHaveBeenCalled()
     expect(result.current.actionWarning).toBeNull()
   })
 
   it('refreshes home data then active job versions after deleting a bootstrap-selected job version', async () => {
-    const { result, homeResource, versions } = buildController()
+    const { result, homeResource, versions, deleteController } = buildController()
 
     await act(async () => {
       expect(await result.current.actions.confirmDelete()).toBe(true)
     })
 
+    expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
+    expect(deleteController.completeDelete).toHaveBeenCalledTimes(1)
     expect(homeResource.attemptRefresh).toHaveBeenCalledWith({
       preserveDataOnError: true,
       reportError: false,
@@ -286,6 +325,8 @@ describe('useQuoteHomePageController', () => {
     })
 
     expect(deleteController.requestDeleteVersion).toHaveBeenCalledWith(nonBootstrapVersionItem)
+    expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-2')
+    expect(deleteController.completeDelete).toHaveBeenCalledTimes(1)
     expect(homeResource.attemptRefresh).toHaveBeenCalledWith({
       preserveDataOnError: true,
       reportError: false,

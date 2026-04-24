@@ -122,12 +122,84 @@ describe('estimate collection routes', () => {
     expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
   })
 
+  it('keeps invalid cursor service failures in error envelopes', async () => {
+    mocks.loadEstimateCollectionJobsPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Invalid cursor.',
+    })
+
+    const jobsResponse = await handleEstimateHomeJobsRouteGet(
+      new Request('http://localhost/api/quotes/home/jobs?cursor=bad')
+    )
+
+    expect(jobsResponse.status).toBe(400)
+    await expect(jobsResponse.json()).resolves.toEqual({ error: 'Invalid cursor.' })
+
+    mocks.loadEstimateCollectionJobVersionsPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Invalid cursor.',
+    })
+
+    const versionsResponse = await handleEstimateJobVersionsRouteGet(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/versions?cursor=bad'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+
+    expect(versionsResponse.status).toBe(400)
+    await expect(versionsResponse.json()).resolves.toEqual({ error: 'Invalid cursor.' })
+  })
+
   it('normalizes empty search requests through the shared service contract', async () => {
     await handleEstimateHomeSearchRouteGet(
       new Request('http://localhost/api/quotes/home/search?q=%20%20')
     )
 
     expect(mocks.loadEstimateCollectionSearchPayload).toHaveBeenCalledWith('org-1', '')
+  })
+
+  it('keeps search service failures in error envelopes', async () => {
+    mocks.loadEstimateCollectionSearchPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'server_error',
+      message: 'search failed',
+    })
+
+    const response = await handleEstimateHomeSearchRouteGet(
+      new Request('http://localhost/api/quotes/home/search?q=garage')
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'search failed' })
+  })
+
+  it('keeps under-filled jobs pages in the route data envelope', async () => {
+    mocks.loadEstimateCollectionJobsPayload.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        query: 'kit',
+        limit: 2,
+        next_cursor: '2026-04-24T11:00:00.000Z::33333333-3333-4333-8333-333333333333',
+        items: [{ id: 'job-1' }],
+      },
+    })
+
+    const response = await handleEstimateHomeJobsRouteGet(
+      new Request('http://localhost/api/quotes/home/jobs?q=kit&limit=2')
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        query: 'kit',
+        limit: 2,
+        next_cursor: '2026-04-24T11:00:00.000Z::33333333-3333-4333-8333-333333333333',
+        items: [{ id: 'job-1' }],
+      },
+    })
   })
 
   it('marks the old job-counts route as gone', async () => {

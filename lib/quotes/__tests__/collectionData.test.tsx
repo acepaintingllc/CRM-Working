@@ -7,11 +7,15 @@ import {
   buildQuoteHomeSummaryReadModel,
   buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
+  decorateEstimateCollectionRows,
   QUOTE_HOME_FALLBACK_CUSTOMER_NAME,
   QUOTE_HOME_FALLBACK_JOB_TITLE,
   QUOTE_HOME_FALLBACK_VERSION_KIND,
   QUOTE_HOME_FALLBACK_VERSION_NAME,
   QUOTE_HOME_FALLBACK_VERSION_STATE,
+  QUOTE_HOME_SEARCH_SOURCE_RANK,
+  selectQuoteHomeSearchRows,
+  toQuoteHomeEligibleJobReadModel,
   toQuoteHomeJobVersionItem,
   toQuoteHomeSearchResultReadModel,
 } from '../collectionData'
@@ -113,6 +117,115 @@ function makeJob(id: string): QuoteHomeJobsPageReadModel['items'][number] {
 }
 
 describe('quote collection data', () => {
+  it('decorates DB estimate rows with DB relation rows in the quote domain layer', () => {
+    const decorated = decorateEstimateCollectionRows(
+      [
+        {
+          id: 'estimate-1',
+          job_id: 'job-1',
+          customer_id: 'customer-1',
+          status: 'draft',
+          version_name: ' Kitchen ',
+          version_state: null,
+          version_kind: null,
+          version_sort_order: null,
+          created_at: '2026-04-21T10:00:00.000Z',
+          updated_at: '2026-04-22T10:00:00.000Z',
+        },
+      ],
+      {
+        jobs: [{ id: 'job-1', title: ' Kitchen repaint ', status: 'follow_up', estimate_sent_at: null }],
+        customers: [{ id: 'customer-1', name: ' Taylor Smith ' }],
+        rollups: [{ estimate_id: 'estimate-1', final_total: 1200 }],
+      }
+    )
+
+    expect(decorated).toEqual([
+      expect.objectContaining({
+        estimate_id: 'estimate-1',
+        version_name: 'Kitchen',
+        version_state: QUOTE_HOME_FALLBACK_VERSION_STATE,
+        version_kind: QUOTE_HOME_FALLBACK_VERSION_KIND,
+        version_sort_order: 0,
+        job_title: 'Kitchen repaint',
+        customer_name: 'Taylor Smith',
+        final_total: 1200,
+        is_sent_estimate: true,
+      }),
+    ])
+  })
+
+  it('normalizes eligible jobs and rejects rows without a customer before paging slots are consumed', () => {
+    expect(
+      toQuoteHomeEligibleJobReadModel({
+        id: 'job-ineligible',
+        customer_id: null,
+        customer_name: null,
+        customer_address: null,
+        title: 'No customer',
+        description: null,
+        status: 'estimate_scheduled',
+        created_at: null,
+        estimate_date: null,
+        estimate_sent_at: null,
+        scheduled_date: null,
+        scheduled_end_date: null,
+        scheduled_email_sent_at: null,
+        completed_at: null,
+        completed_email_sent_at: null,
+        closeout_notes: null,
+        linked_estimate_id: null,
+        version_count: 0,
+      })
+    ).toBeNull()
+
+    expect(
+      toQuoteHomeEligibleJobReadModel({
+        id: 'job-1',
+        customer_id: 'customer-1',
+        customer_name: 'Taylor',
+        customer_address: null,
+        title: '',
+        description: null,
+        status: 'not-real',
+        created_at: null,
+        estimate_date: null,
+        estimate_sent_at: null,
+        scheduled_date: null,
+        scheduled_end_date: null,
+        scheduled_email_sent_at: null,
+        completed_at: null,
+        completed_email_sent_at: null,
+        closeout_notes: null,
+        linked_estimate_id: null,
+        version_count: null,
+      })
+    ).toEqual(expect.objectContaining({
+      id: 'job-1',
+      customer_id: 'customer-1',
+      title: QUOTE_HOME_FALLBACK_JOB_TITLE,
+      status: 'estimate_scheduled',
+      version_count: 0,
+    }))
+  })
+
+  it('makes search ranking and dedupe policy explicit', () => {
+    const directOld = { ...rows[2], id: 'estimate-direct-old', updated_at: '2026-04-20T10:00:00.000Z' }
+    const jobNew = { ...rows[1], id: 'estimate-job-new', updated_at: '2026-04-24T10:00:00.000Z' }
+    const duplicate = { ...rows[0], id: 'estimate-duplicate', updated_at: '2026-04-22T10:00:00.000Z' }
+
+    expect(QUOTE_HOME_SEARCH_SOURCE_RANK).toEqual({ version: 0, job: 1, customer: 2 })
+    expect(
+      selectQuoteHomeSearchRows({
+        query: 'kitchen',
+        limit: 3,
+        versionRows: [directOld, duplicate],
+        jobRows: [jobNew, duplicate],
+        customerRows: [duplicate],
+      }).map((row) => row.id)
+    ).toEqual(['estimate-duplicate', 'estimate-direct-old', 'estimate-job-new'])
+  })
+
   it('builds list payloads from decorated rows without re-deriving status flags', () => {
     expect(buildQuoteListPayload(rows).estimates[0]).toEqual({
       id: 'estimate-3',

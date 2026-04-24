@@ -1,26 +1,8 @@
 import { renderHook } from '@testing-library/react'
 import { act } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { type QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
 import { useQuotesHomeDelete } from '../useQuotesHomeDelete'
-
-const { deleteQuoteVersion } = vi.hoisted(() => ({
-  deleteQuoteVersion: vi.fn(),
-}))
-
-vi.mock('@/lib/quotes/client', () => ({
-  deleteQuoteVersion,
-}))
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve
-    reject = nextReject
-  })
-  return { promise, resolve, reject }
-}
 
 function makeEstimate(
   estimateId: string,
@@ -45,12 +27,7 @@ function makeEstimate(
 }
 
 describe('useQuotesHomeDelete', () => {
-  beforeEach(() => {
-    deleteQuoteVersion.mockReset()
-  })
-
   it('sets confirmingDelete to the requested estimate and clears any prior error', async () => {
-    deleteQuoteVersion.mockRejectedValueOnce(new Error('delete failed'))
     const failedEstimate = makeEstimate('estimate-1')
     const nextEstimate = makeEstimate('estimate-2', {
       version_name: 'Version B',
@@ -62,8 +39,9 @@ describe('useQuotesHomeDelete', () => {
       result.current.requestDeleteVersion(failedEstimate)
     })
 
-    await act(async () => {
-      await result.current.confirmDeleteVersion()
+    act(() => {
+      result.current.beginDelete()
+      result.current.failDelete('delete failed')
     })
 
     expect(result.current.error).toBe('delete failed')
@@ -76,9 +54,10 @@ describe('useQuotesHomeDelete', () => {
     expect(result.current.error).toBeNull()
   })
 
-  it('clears confirmingDelete when cancelDelete runs without a deletion in flight', () => {
+  it('clears confirmingDelete when cancelDelete runs without a delete in flight', () => {
     const estimate = makeEstimate('estimate-1')
     const { result } = renderHook(() => useQuotesHomeDelete())
+    let canceled = false
 
     act(() => {
       result.current.requestDeleteVersion(estimate)
@@ -87,14 +66,14 @@ describe('useQuotesHomeDelete', () => {
     expect(result.current.confirmingDelete).toBe(estimate)
 
     act(() => {
-      result.current.cancelDelete()
+      canceled = result.current.cancelDelete()
     })
 
+    expect(canceled).toBe(true)
     expect(result.current.confirmingDelete).toBeNull()
   })
 
-  it('clears a failed delete error when cancelDelete runs without a deletion in flight', async () => {
-    deleteQuoteVersion.mockRejectedValueOnce(new Error('delete failed'))
+  it('clears a failed delete error when cancelDelete runs without a delete in flight', async () => {
     const failedEstimate = makeEstimate('estimate-1')
     const nextEstimate = makeEstimate('estimate-2')
     const { result } = renderHook(() => useQuotesHomeDelete())
@@ -103,8 +82,9 @@ describe('useQuotesHomeDelete', () => {
       result.current.requestDeleteVersion(failedEstimate)
     })
 
-    await act(async () => {
-      await result.current.confirmDeleteVersion()
+    act(() => {
+      result.current.beginDelete()
+      result.current.failDelete('delete failed')
     })
 
     expect(result.current.error).toBe('delete failed')
@@ -118,120 +98,103 @@ describe('useQuotesHomeDelete', () => {
     expect(result.current.error).toBeNull()
   })
 
-  it('does nothing when cancelDelete runs while a deletion is in flight', async () => {
-    const pendingDelete = deferred<{ data: { ok: boolean } }>()
-    deleteQuoteVersion.mockReturnValueOnce(pendingDelete.promise)
+  it('blocks cancelDelete while a delete is in flight', async () => {
     const estimate = makeEstimate('estimate-1')
     const { result } = renderHook(() => useQuotesHomeDelete())
+    let canceled = true
 
     act(() => {
       result.current.requestDeleteVersion(estimate)
     })
 
-    let confirmPromise!: Promise<boolean>
-    await act(async () => {
-      confirmPromise = result.current.confirmDeleteVersion()
-      await Promise.resolve()
+    act(() => {
+      result.current.beginDelete()
     })
 
     expect(result.current.deletingId).toBe('estimate-1')
 
     act(() => {
-      result.current.cancelDelete()
+      canceled = result.current.cancelDelete()
     })
 
+    expect(canceled).toBe(false)
     expect(result.current.confirmingDelete).toBe(estimate)
-
-    await act(async () => {
-      pendingDelete.resolve({ data: { ok: true } })
-      await confirmPromise
-    })
   })
 
-  it('returns false without deleting when confirmDeleteVersion has no confirmed estimate', async () => {
+  it('returns null from beginDelete when there is no confirmed estimate', async () => {
     const { result } = renderHook(() => useQuotesHomeDelete())
-    let deleted = true
+    let estimate: QuoteHomeJobVersionItemReadModel | null = makeEstimate('estimate-1')
 
-    await act(async () => {
-      deleted = await result.current.confirmDeleteVersion()
+    act(() => {
+      estimate = result.current.beginDelete()
     })
 
-    expect(deleted).toBe(false)
-    expect(deleteQuoteVersion).not.toHaveBeenCalled()
+    expect(estimate).toBeNull()
     expect(result.current.confirmingDelete).toBeNull()
     expect(result.current.deletingId).toBeNull()
     expect(result.current.error).toBeNull()
   })
 
-  it('returns false without deleting again when confirmDeleteVersion runs while a deletion is in flight', async () => {
-    const pendingDelete = deferred<{ data: { ok: boolean } }>()
-    deleteQuoteVersion.mockReturnValueOnce(pendingDelete.promise)
+  it('returns null from beginDelete while a delete is in flight', async () => {
     const estimate = makeEstimate('estimate-1')
     const { result } = renderHook(() => useQuotesHomeDelete())
+    let secondBeginResult: QuoteHomeJobVersionItemReadModel | null = estimate
 
     act(() => {
       result.current.requestDeleteVersion(estimate)
     })
 
-    let firstConfirmPromise!: Promise<boolean>
-    await act(async () => {
-      firstConfirmPromise = result.current.confirmDeleteVersion()
-      await Promise.resolve()
+    act(() => {
+      result.current.beginDelete()
     })
 
     expect(result.current.deletingId).toBe('estimate-1')
 
-    let secondConfirmResult = true
-    await act(async () => {
-      secondConfirmResult = await result.current.confirmDeleteVersion()
+    act(() => {
+      secondBeginResult = result.current.beginDelete()
     })
 
-    expect(secondConfirmResult).toBe(false)
-    expect(deleteQuoteVersion).toHaveBeenCalledTimes(1)
-
-    await act(async () => {
-      pendingDelete.resolve({ data: { ok: true } })
-      await firstConfirmPromise
-    })
+    expect(secondBeginResult).toBeNull()
   })
 
-  it('deletes the confirmed estimate and clears delete state on success', async () => {
-    deleteQuoteVersion.mockResolvedValueOnce({ data: { ok: true } })
+  it('returns the confirmed estimate from beginDelete and clears delete state on completeDelete', async () => {
     const estimate = makeEstimate('estimate-1')
     const { result } = renderHook(() => useQuotesHomeDelete())
-    let deleted = false
+    let deletingEstimate: QuoteHomeJobVersionItemReadModel | null = null
 
     act(() => {
       result.current.requestDeleteVersion(estimate)
     })
 
-    await act(async () => {
-      deleted = await result.current.confirmDeleteVersion()
+    act(() => {
+      deletingEstimate = result.current.beginDelete()
     })
 
-    expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
-    expect(deleted).toBe(true)
+    expect(deletingEstimate).toBe(estimate)
+    expect(result.current.deletingId).toBe('estimate-1')
+
+    act(() => {
+      result.current.completeDelete()
+    })
+
     expect(result.current.confirmingDelete).toBeNull()
     expect(result.current.deletingId).toBeNull()
     expect(result.current.error).toBeNull()
   })
 
-  it('surfaces delete failures and clears deletingId', async () => {
-    deleteQuoteVersion.mockRejectedValueOnce(new Error('delete failed'))
+  it('surfaces delete failures and clears deletingId', () => {
     const estimate = makeEstimate('estimate-1')
     const { result } = renderHook(() => useQuotesHomeDelete())
-    let deleted = true
 
     act(() => {
       result.current.requestDeleteVersion(estimate)
     })
 
-    await act(async () => {
-      deleted = await result.current.confirmDeleteVersion()
+    act(() => {
+      result.current.beginDelete()
+      result.current.failDelete('delete failed')
     })
 
-    expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
-    expect(deleted).toBe(false)
     expect(result.current.error).toBe('delete failed')
     expect(result.current.confirmingDelete).toBe(estimate)
     expect(result.current.deletingId).toBeNull()

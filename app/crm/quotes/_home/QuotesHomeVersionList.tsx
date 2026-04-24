@@ -43,6 +43,36 @@ export function QuotesHomeVersionList({
       setLoadingMore(false)
     }
   }
+  const status = vm.status ?? buildLegacyVersionStatus(vm)
+
+  const renderStatus = () => {
+    if (status.kind === 'error') {
+      return (
+        <div style={S.emptyPanel} role="alert">
+          <div style={S.emptyPanelTitle}>{status.title}</div>
+          <div style={S.bodyText}>{status.message}</div>
+          {status.canRetry ? (
+            <div style={S.rowWrap}>
+              <CrmButton
+                onClick={() => void handleRetry()}
+                tone="primary"
+                disabled={retrying}
+                aria-busy={retrying}
+              >
+                {retrying ? status.retryingLabel : status.retryLabel}
+              </CrmButton>
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    if (status.kind === 'empty') {
+      return <div style={S.emptyState}>{status.message}</div>
+    }
+
+    return null
+  }
 
   return (
     <CrmSectionCard
@@ -53,28 +83,7 @@ export function QuotesHomeVersionList({
       <div style={S.grid14}>
         {vm.detail ? <div style={S.bodyText}>{vm.detail}</div> : null}
 
-        {vm.errorMessage ? (
-          <div style={S.emptyPanel} role="alert">
-            <div style={S.emptyPanelTitle}>Versions failed to load</div>
-            <div style={S.bodyText}>{vm.errorMessage}</div>
-            {vm.canRetry ? (
-              <div style={S.rowWrap}>
-                <CrmButton
-                  onClick={() => void handleRetry()}
-                  tone="primary"
-                  disabled={retrying}
-                  aria-busy={retrying}
-                >
-                  {retrying ? 'Retrying versions...' : 'Retry versions'}
-                </CrmButton>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!vm.errorMessage && vm.emptyMessage ? (
-          <div style={S.emptyState}>{vm.emptyMessage}</div>
-        ) : null}
+        {renderStatus()}
 
         {vm.items.length > 0 ? (
           <ul style={S.versionList}>
@@ -123,10 +132,31 @@ export function QuotesHomeVersionList({
             aria-busy={loadMoreBusy}
             aria-live="polite"
           >
-            {loadMoreBusy ? 'Loading more versions...' : 'Load more versions'}
+            {loadMoreBusy
+              ? (vm.loadingMoreLabel ?? 'Loading more versions...')
+              : (vm.loadMoreLabel ?? 'Load more versions')}
           </CrmButton>
         ) : null}
       </div>
     </CrmSectionCard>
   )
+}
+
+function buildLegacyVersionStatus(
+  vm: QuotesHomeVersionListVm,
+): NonNullable<QuotesHomeVersionListVm['status']> {
+  if (vm.errorMessage) {
+    return {
+      kind: 'error',
+      title: 'Versions failed to load',
+      message: vm.errorMessage,
+      canRetry: vm.canRetry,
+      retryLabel: 'Retry versions',
+      retryingLabel: 'Retrying versions...',
+    }
+  }
+  if (vm.emptyMessage) {
+    return { kind: 'empty', message: vm.emptyMessage }
+  }
+  return { kind: 'ready' }
 }

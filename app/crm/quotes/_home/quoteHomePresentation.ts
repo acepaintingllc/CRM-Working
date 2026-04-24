@@ -15,6 +15,9 @@ import type {
   SummaryCardVm,
   NavItem,
   QuotesHomeCreateVm,
+  QuotesHomeJobListVm,
+  QuotesHomeSearchStatusVm,
+  QuotesHomeVersionListVm,
 } from './quoteHomeTypes'
 
 export const QUOTE_META_SEPARATOR = ' \u00B7 '
@@ -34,6 +37,19 @@ export const QUOTES_HOME_CREATE_PANEL_COPY = {
   versionNameHelp: 'Leave blank for the next default version name.',
   versionNamePlaceholder: 'Leave blank for the next default version name',
   versionKindLabel: 'Version Kind',
+} as const
+
+export const QUOTES_HOME_LOADING_COPY = {
+  jobs: 'Loading jobs...',
+  jobSearch: 'No jobs match this search.',
+  jobRetry: 'Retry jobs',
+  jobRetrying: 'Retrying jobs...',
+  versionsRetry: 'Retry versions',
+  versionsRetrying: 'Retrying versions...',
+  versionsLoadMore: 'Load more versions',
+  versionsLoadingMore: 'Loading more versions...',
+  jobsLoadMore: 'Load more jobs',
+  jobsLoadingMore: 'Loading more jobs...',
 } as const
 
 export function buildQuotesHomeCreateVm(params: {
@@ -62,7 +78,21 @@ export function buildQuotesHomeCreateVm(params: {
     versionName: params.versionName,
     versionKind: params.versionKind,
     canCreate: params.canCreate,
+    disabledReason: buildQuotesHomeCreateDisabledReason(params),
   }
+}
+
+function buildQuotesHomeCreateDisabledReason(params: {
+  creating: boolean
+  loading: boolean
+  selectedJobName: string | null
+  canCreate: boolean
+}) {
+  if (params.creating) return 'A quote version is already being created.'
+  if (params.loading) return 'Quote home is still loading.'
+  if (!params.selectedJobName) return 'Select a job before creating a quote version.'
+  if (!params.canCreate) return 'Quote version creation is not available right now.'
+  return null
 }
 
 export const SETTINGS_LINKS: NavItem[] = [
@@ -174,6 +204,46 @@ export function buildQuotesHomeSearchCanRetry(params: {
   loading: boolean
 }) {
   return Boolean(params.query) && !params.loading
+}
+
+export function buildQuotesHomeSearchStatus(params: {
+  query: string
+  loading: boolean
+  error: string | null
+  resultCount: number
+}): QuotesHomeSearchStatusVm {
+  const query = params.query.trim()
+  if (!query) return { kind: 'idle' }
+
+  if (params.loading) {
+    return {
+      kind: 'loading',
+      title: 'Searching quote versions',
+      message: `Looking up versions that match "${query}".`,
+    }
+  }
+
+  if (params.error) {
+    return {
+      kind: 'error',
+      title: 'Search results failed to load',
+      message: params.error,
+      canRetry: buildQuotesHomeSearchCanRetry({
+        query,
+        loading: params.loading,
+      }),
+    }
+  }
+
+  if (params.resultCount === 0) {
+    return {
+      kind: 'empty',
+      title: 'No matching quote versions',
+      message: `No quote versions match "${query}".`,
+    }
+  }
+
+  return { kind: 'results' }
 }
 
 export function buildHomeLoadFailureDetail(
@@ -324,6 +394,52 @@ export function buildQuotesHomeJobListEmptyStateBody(
   return emptyState === 'no_jobs' ? QUOTES_HOME_JOB_LIST_NO_JOBS_BODY : null
 }
 
+export function buildQuotesHomeJobListStatus(params: {
+  loading: boolean
+  errorMessage: string | null
+  canRetry: boolean
+  emptyState: QuotesHomeJobListVm['emptyState']
+  emptyStateBody: string | null
+}): QuotesHomeJobListVm['status'] {
+  if (params.loading) {
+    return {
+      kind: 'loading',
+      message: QUOTES_HOME_LOADING_COPY.jobs,
+    }
+  }
+
+  if (params.errorMessage) {
+    return {
+      kind: 'error',
+      title: 'Jobs failed to load',
+      message: params.errorMessage,
+      canRetry: params.canRetry,
+      retryLabel: QUOTES_HOME_LOADING_COPY.jobRetry,
+      retryingLabel: QUOTES_HOME_LOADING_COPY.jobRetrying,
+    }
+  }
+
+  if (params.emptyState === 'no_jobs') {
+    return {
+      kind: 'empty',
+      emptyState: 'no_jobs',
+      title: 'No eligible jobs yet',
+      body: params.emptyStateBody,
+    }
+  }
+
+  if (params.emptyState === 'no_matches') {
+    return {
+      kind: 'empty',
+      emptyState: 'no_matches',
+      title: QUOTES_HOME_LOADING_COPY.jobSearch,
+      body: null,
+    }
+  }
+
+  return { kind: 'ready' }
+}
+
 export function buildQuotesHomeSelectedJobVm(
   selectedJob: QuoteHomeJob | null,
   selectedJobVersionsCount: number,
@@ -332,6 +448,7 @@ export function buildQuotesHomeSelectedJobVm(
   if (!selectedJob) {
     return {
       loading,
+      state: loading ? 'loading' : 'empty',
       emptyMessage: loading
         ? null
         : 'Select a job from the left to view versions and create the next one.',
@@ -344,6 +461,7 @@ export function buildQuotesHomeSelectedJobVm(
 
   return {
     loading,
+    state: 'selected',
     emptyMessage: null,
     title: selectedJob.title,
     customerLine: `${selectedJob.customer_name ?? 'Unknown customer'}${
@@ -433,15 +551,53 @@ export function buildQuotesHomeVersionEmptyMessage(
   return null
 }
 
+export function buildQuotesHomeVersionListStatus(params: {
+  errorMessage: string | null
+  canRetry: boolean
+  emptyMessage: string | null
+}): QuotesHomeVersionListVm['status'] {
+  if (params.errorMessage) {
+    return {
+      kind: 'error',
+      title: 'Versions failed to load',
+      message: params.errorMessage,
+      canRetry: params.canRetry,
+      retryLabel: QUOTES_HOME_LOADING_COPY.versionsRetry,
+      retryingLabel: QUOTES_HOME_LOADING_COPY.versionsRetrying,
+    }
+  }
+
+  if (params.emptyMessage) {
+    return {
+      kind: 'empty',
+      message: params.emptyMessage,
+    }
+  }
+
+  return { kind: 'ready' }
+}
+
 export function buildQuotesHomeDeleteDialogVm(
   estimate: QuoteHomeJobVersion | null,
   deletingId: string | null,
 ): QuotesHomeDeleteDialogVm {
+  const versionName = estimate?.version_name ?? 'this version'
+  const jobTitle = estimate?.job_title ?? 'the selected job'
+
   return {
+    isOpen: Boolean(estimate?.estimate_id),
     estimateId: estimate?.estimate_id ?? null,
     versionName: estimate?.version_name ?? null,
     jobTitle: estimate?.job_title ?? null,
     deleting: Boolean(deletingId),
+    title: 'Delete version?',
+    description: `Delete ${versionName} from ${jobTitle}.`,
+    closeLabel: 'Close delete confirmation',
+    warning: 'This permanently deletes the quote version. This cannot be undone.',
+    info:
+      'The home page will refresh job counts and the selected job version list after delete.',
+    confirmLabel: `Delete ${versionName}`,
+    confirmingLabel: 'Deleting...',
   }
 }
 

@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
 import {
   normalizeQuoteHomeJobQuery,
+  resolveQuoteHomeBootstrapJobsSync,
+  resolveQuoteHomeJobsRefresh,
   resolveQuoteHomeManualSelection,
+  resolveQuoteHomeQueryJobsSync,
   resolveQuoteHomeSelectedJob,
   resolveQuoteHomeSelectedJobId,
+  resolveQuoteHomeSelection,
   resolveQuoteHomeSelectionAfterJobsLoaded,
 } from '../quoteHomePagePolicy'
 
@@ -74,6 +78,44 @@ describe('quoteHomePagePolicy', () => {
 
   it('resolves the selected job and id together', () => {
     expect(resolveQuoteHomeSelectedJob([kitchenJob, exteriorJob], 'job-2')).toEqual({
+      selectedJobId: 'job-2',
+      selectedJob: exteriorJob,
+    })
+  })
+
+  it('centralizes initial, loaded-jobs, and manual selection events', () => {
+    const hiddenSelection = {
+      selectedJobId: 'job-1',
+      selectedJob: kitchenJob,
+    }
+
+    expect(
+      resolveQuoteHomeSelection({
+        event: 'initialize',
+        jobs: [kitchenJob, exteriorJob],
+        selectedJobId: null,
+      })
+    ).toEqual({
+      selectedJobId: 'job-1',
+      selectedJob: kitchenJob,
+    })
+
+    expect(
+      resolveQuoteHomeSelection({
+        event: 'loaded_jobs_changed',
+        jobs: [exteriorJob],
+        currentSelection: hiddenSelection,
+        jobQuery: 'exterior',
+      })
+    ).toEqual(hiddenSelection)
+
+    expect(
+      resolveQuoteHomeSelection({
+        event: 'manual_select',
+        jobs: [kitchenJob, exteriorJob],
+        selectedJobId: 'job-2',
+      })
+    ).toEqual({
       selectedJobId: 'job-2',
       selectedJob: exteriorJob,
     })
@@ -152,6 +194,93 @@ describe('quoteHomePagePolicy', () => {
     ).toEqual({
       selectedJobId: '',
       selectedJob: null,
+    })
+  })
+
+  it('adopts refreshed bootstrap jobs only when they match the active query', () => {
+    const bootstrapJobsPage = {
+      query: '',
+      limit: 25,
+      next_cursor: null,
+      items: [kitchenJob],
+    }
+
+    expect(
+      resolveQuoteHomeBootstrapJobsSync({
+        activeJobQuery: '',
+        bootstrapJobsPage,
+      })
+    ).toEqual({
+      action: 'adopt_bootstrap_jobs',
+      jobsPage: bootstrapJobsPage,
+    })
+
+    expect(
+      resolveQuoteHomeBootstrapJobsSync({
+        activeJobQuery: 'garage',
+        bootstrapJobsPage,
+      })
+    ).toEqual({
+      action: 'keep_active_jobs',
+      reason: 'bootstrap_query_mismatch',
+    })
+  })
+
+  it('loads jobs when the active query differs from the current page', () => {
+    const currentJobsPage = {
+      query: '',
+      limit: 25,
+      next_cursor: null,
+      items: [kitchenJob],
+    }
+
+    expect(
+      resolveQuoteHomeQueryJobsSync({
+        activeJobQuery: '',
+        currentJobsPage,
+      })
+    ).toEqual({
+      action: 'keep_current_jobs',
+      reason: 'query_already_loaded',
+    })
+
+    expect(
+      resolveQuoteHomeQueryJobsSync({
+        activeJobQuery: ' garage ',
+        currentJobsPage,
+      })
+    ).toEqual({
+      action: 'load_query_jobs',
+      query: 'garage',
+    })
+  })
+
+  it('makes bootstrap refresh behavior explicit for filtered and unfiltered jobs', () => {
+    const refreshedBootstrapJobsPage = {
+      query: '',
+      limit: 25,
+      next_cursor: null,
+      items: [kitchenJob],
+    }
+
+    expect(
+      resolveQuoteHomeJobsRefresh({
+        activeJobQuery: '',
+        refreshedBootstrapJobsPage,
+      })
+    ).toEqual({
+      action: 'adopt_bootstrap_jobs',
+      jobsPage: refreshedBootstrapJobsPage,
+    })
+
+    expect(
+      resolveQuoteHomeJobsRefresh({
+        activeJobQuery: 'garage',
+        refreshedBootstrapJobsPage,
+      })
+    ).toEqual({
+      action: 'load_active_query_jobs',
+      query: 'garage',
     })
   })
 })

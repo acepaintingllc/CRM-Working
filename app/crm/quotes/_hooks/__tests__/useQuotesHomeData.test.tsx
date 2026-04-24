@@ -464,6 +464,61 @@ describe('useQuotesHomeData', () => {
     expect(result.current.hasMore).toBe(false)
   })
 
+  it('refreshes bootstrap and then reloads active filtered jobs when queries differ', async () => {
+    const refreshedBootstrap = {
+      ...secondPayload,
+      jobs: {
+        query: '',
+        limit: 10,
+        next_cursor: null,
+        items: [seededPayload.jobs.items[0]],
+      },
+    }
+
+    loadQuoteHomeBootstrap.mockResolvedValueOnce(refreshedBootstrap)
+    loadQuoteHomeJobs
+      .mockResolvedValueOnce({
+        query: 'garage',
+        limit: 25,
+        next_cursor: null,
+        items: [seededPayload.jobs.items[1]],
+      })
+      .mockResolvedValueOnce({
+        query: 'garage',
+        limit: 25,
+        next_cursor: null,
+        items: [seededPayload.jobs.items[1]],
+      })
+
+    const { result } = renderHook(() =>
+      useQuotesHomeData(seededPayload, { jobQuery: ' garage ' })
+    )
+
+    await waitFor(() => expect(result.current.jobsPage.query).toBe('garage'))
+
+    let refreshed: Awaited<ReturnType<typeof result.current.attemptRefresh>> | null = null
+    await act(async () => {
+      refreshed = await result.current.attemptRefresh()
+    })
+
+    expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(1)
+    expect(loadQuoteHomeJobs).toHaveBeenCalledTimes(2)
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(2, {
+      query: 'garage',
+      limit: 25,
+      cursor: undefined,
+    })
+    expect(refreshed).toEqual({
+      ok: true,
+      error: null,
+      data: refreshedBootstrap,
+    })
+    expect(result.current.summary.total_versions).toBe(2)
+    expect(result.current.jobsPage.query).toBe('garage')
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
+    expect(result.current.jobsError).toBeNull()
+  })
+
   it('keeps empty fallback data when the first bootstrap load fails', async () => {
     loadQuoteHomeBootstrap.mockRejectedValue(new Error('bootstrap failed'))
 

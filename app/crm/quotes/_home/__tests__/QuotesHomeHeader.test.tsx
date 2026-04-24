@@ -165,6 +165,35 @@ describe('QuotesHomeHeader', () => {
     expect(onSearchFocusedChange).toHaveBeenCalledWith(false)
   })
 
+  it('moves focus from search input into results with ArrowDown', () => {
+    render(
+      <QuotesHomeHeader
+        vm={{
+          ...baseVm,
+          searchResults: [
+            {
+              id: 'estimate-1',
+              href: '/crm/quotes/estimate-1',
+              title: 'Kitchen revision',
+              meta: 'Job 101',
+            },
+          ],
+        }}
+        onSearchFocusedChange={() => {}}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    const searchInput = screen.getByRole('combobox', { name: 'Search quote versions' })
+    const option = screen.getByRole('option', { name: /Kitchen revision/i })
+
+    searchInput.focus()
+    fireEvent.keyDown(searchInput, { key: 'ArrowDown' })
+
+    expect(option).toHaveFocus()
+  })
+
   it('closes search results when focus leaves the search container', () => {
     const onSearchFocusedChange = vi.fn()
 

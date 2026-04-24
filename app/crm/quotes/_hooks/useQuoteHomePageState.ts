@@ -3,9 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { QuoteHomeJob } from '../_home/quoteHomeTypes'
 import {
-  resolveQuoteHomeManualSelection,
-  resolveQuoteHomeSelectedJob,
-  resolveQuoteHomeSelectionAfterJobsLoaded,
+  resolveQuoteHomeSelection,
 } from './quoteHomePagePolicy'
 
 export function useQuoteHomePageState(
@@ -18,12 +16,17 @@ export function useQuoteHomePageState(
   const [searchFocused, setSearchFocusedState] = useState(false)
   const [jobQuery, setJobQueryState] = useState('')
   const [selection, setSelection] = useState(() =>
-    resolveQuoteHomeSelectedJob(jobs, initialSelectedJobId)
+    resolveQuoteHomeSelection({
+      event: 'initialize',
+      jobs,
+      selectedJobId: initialSelectedJobId,
+    })
   )
 
   useEffect(() => {
     setSelection((currentSelection) =>
-      resolveQuoteHomeSelectionAfterJobsLoaded({
+      resolveQuoteHomeSelection({
+        event: 'loaded_jobs_changed',
         jobs: jobsForSelection,
         currentSelection,
         jobQuery: jobsForSelectionQuery,
@@ -45,15 +48,18 @@ export function useQuoteHomePageState(
 
   const setSelectedJobId = useCallback(
     (value: string) => {
-      setSelection(resolveQuoteHomeManualSelection({
-        jobs: jobsForSelection,
-        selectedJobId: value,
-      }))
+      setSelection(
+        resolveQuoteHomeSelection({
+          event: 'manual_select',
+          jobs: jobsForSelection,
+          selectedJobId: value,
+        })
+      )
     },
     [jobsForSelection]
   )
 
-  const setJobsForSelection = useCallback((value: QuoteHomeJob[], query = '') => {
+  const reconcileLoadedJobs = useCallback((value: QuoteHomeJob[], query = '') => {
     setJobsForSelectionState(value)
     setJobsForSelectionQuery(query)
   }, [])
@@ -64,11 +70,11 @@ export function useQuoteHomePageState(
       setSearchFocused,
       setJobQuery,
       setSelectedJobId,
-      setJobsForSelection,
+      reconcileLoadedJobs,
     }),
     [
       setJobQuery,
-      setJobsForSelection,
+      reconcileLoadedJobs,
       setSearchFocused,
       setSearchQuery,
       setSelectedJobId,
@@ -82,6 +88,6 @@ export function useQuoteHomePageState(
     selectedJobId: selection.selectedJobId,
     selectedJob: selection.selectedJob,
     actions,
-    setJobsForSelection,
+    reconcileLoadedJobs,
   }
 }

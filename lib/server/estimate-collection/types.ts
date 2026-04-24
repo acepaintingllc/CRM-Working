@@ -33,6 +33,12 @@ export type EstimateCollectionRollupRow = {
   final_total: number | null
 }
 
+export type EstimateCollectionRelatedRows = {
+  jobs: EstimateCollectionJobRow[]
+  customers: EstimateCollectionCustomerRow[]
+  rollups: EstimateCollectionRollupRow[]
+}
+
 export type QuoteHomeSummaryRow = {
   total_versions: number | null
   draft_count: number | null

@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from 'react'
 import { type QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
-import { deleteQuoteVersion } from '@/lib/quotes/client'
 
 export function useQuotesHomeDelete() {
   const [confirmingDelete, setConfirmingDelete] = useState<QuoteHomeJobVersionItemReadModel | null>(null)
@@ -15,29 +14,30 @@ export function useQuotesHomeDelete() {
   }, [])
 
   const cancelDelete = useCallback(() => {
-    if (deletingId) return
+    if (deletingId) return false
     setError(null)
     setConfirmingDelete(null)
+    return true
   }, [deletingId])
 
-  const confirmDeleteVersion = useCallback(async () => {
-    if (deletingId || !confirmingDelete) return false
+  const beginDelete = useCallback(() => {
+    if (deletingId || !confirmingDelete) return null
 
-    const deletedId = confirmingDelete.estimate_id
-    setDeletingId(deletedId)
+    setDeletingId(confirmingDelete.estimate_id)
     setError(null)
-
-    try {
-      await deleteQuoteVersion(deletedId)
-      setConfirmingDelete(null)
-      return true
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete quote.')
-      return false
-    } finally {
-      setDeletingId(null)
-    }
+    return confirmingDelete
   }, [confirmingDelete, deletingId])
+
+  const completeDelete = useCallback(() => {
+    setConfirmingDelete(null)
+    setDeletingId(null)
+    setError(null)
+  }, [])
+
+  const failDelete = useCallback((message: string) => {
+    setError(message)
+    setDeletingId(null)
+  }, [])
 
   return {
     confirmingDelete,
@@ -45,6 +45,8 @@ export function useQuotesHomeDelete() {
     error,
     requestDeleteVersion,
     cancelDelete,
-    confirmDeleteVersion,
+    beginDelete,
+    completeDelete,
+    failDelete,
   }
 }

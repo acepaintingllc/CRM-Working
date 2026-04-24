@@ -16,8 +16,8 @@ vi.mock('../../org.ts', () => ({
 
 import {
   createEstimateCollectionVersionRecord,
-  decorateEstimateCollectionRows,
   decodeQuoteHomeCursor,
+  loadEstimateCollectionRelatedRows,
   loadEstimateCollectionJobsPage,
   loadEstimateCollectionJobVersionsPage,
   searchEstimateCollectionRows,
@@ -441,7 +441,7 @@ describe('estimate collection repository', () => {
     expect(mocks.supabaseRpc).not.toHaveBeenCalled()
   })
 
-  it('sorts job page rows with duplicate timestamps before slicing and cursoring', async () => {
+  it('returns sorted DB-shaped job page rows with duplicate timestamps', async () => {
     const duplicateTimestamp = '2026-04-24T12:00:00.000Z'
     mocks.supabaseRpc.mockResolvedValue({
       data: [
@@ -514,10 +514,10 @@ describe('estimate collection repository', () => {
     expect(result).toEqual({
       ok: true,
       data: expect.objectContaining({
-        nextCursor: `${duplicateTimestamp}::22222222-2222-4222-8222-222222222222`,
-        items: [
+        rows: [
           expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
           expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
+          expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
         ],
       }),
     })
@@ -570,8 +570,7 @@ describe('estimate collection repository', () => {
       data: expect.objectContaining({
         query: 'kitchen',
         limit: 100,
-        nextCursor: null,
-        items: [expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' })],
+        rows: [expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' })],
       }),
     })
   })
@@ -633,8 +632,10 @@ describe('estimate collection repository', () => {
       ok: true,
       data: expect.objectContaining({
         limit: 1,
-        nextCursor: '2026-04-24T12:00:00.000Z::22222222-2222-4222-8222-222222222222',
-        items: [expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' })],
+        rows: [
+          expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
+          expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
+        ],
       }),
     })
   })
@@ -687,7 +688,7 @@ describe('estimate collection repository', () => {
     })
   })
 
-  it('escapes wildcard search characters and returns deduped sorted rows', async () => {
+  it('escapes wildcard search characters and returns DB-shaped search buckets', async () => {
     const newest = makeEstimateRow('33333333-3333-4333-8333-333333333333', '2026-04-24T13:00:00.000Z')
     const tieHigh = makeEstimateRow('22222222-2222-4222-8222-222222222222', '2026-04-24T12:00:00.000Z')
     const tieLow = makeEstimateRow('11111111-1111-4111-8111-111111111111', '2026-04-24T12:00:00.000Z')
@@ -712,18 +713,28 @@ describe('estimate collection repository', () => {
     expect(customersQuery.ilike).toHaveBeenCalledWith('name', '%100\\%\\_ready\\\\now%')
     expect(result).toEqual({
       ok: true,
-      data: [
-        expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
-        expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
-        expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
-      ],
+      data: {
+        query: '100%_ready\\now',
+        limit: 10,
+        versionRows: [
+          expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
+          expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
+        ],
+        jobRows: [
+          expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
+          expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
+        ],
+        customerRows: [
+          expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
+        ],
+      },
     })
   })
 
   it('decorates empty data and missing rollup rows without failing', async () => {
     await expect(
-      decorateEstimateCollectionRows('org-1', [], { includeRollups: true })
-    ).resolves.toEqual({ ok: true, data: [] })
+      loadEstimateCollectionRelatedRows('org-1', [], { includeRollups: true })
+    ).resolves.toEqual({ ok: true, data: { jobs: [], customers: [], rollups: [] } })
     expect(mocks.from).not.toHaveBeenCalled()
 
     const jobQuery = makeQuery({
@@ -735,19 +746,18 @@ describe('estimate collection repository', () => {
     mocks.from.mockReturnValueOnce(jobQuery).mockReturnValueOnce(customerQuery).mockReturnValueOnce(rollupQuery)
 
     await expect(
-      decorateEstimateCollectionRows(
+      loadEstimateCollectionRelatedRows(
         'org-1',
         [makeEstimateRow('11111111-1111-4111-8111-111111111111', '2026-04-24T12:00:00.000Z')],
         { includeRollups: true }
       )
     ).resolves.toEqual({
       ok: true,
-      data: [
-        expect.objectContaining({
-          estimate_id: '11111111-1111-4111-8111-111111111111',
-          final_total: null,
-        }),
-      ],
+      data: {
+        jobs: [{ id: 'job-1', title: 'Kitchen', status: 'estimate_sent', estimate_sent_at: null }],
+        customers: [{ id: 'customer-1', name: 'Taylor Smith' }],
+        rollups: [],
+      },
     })
   })
 })

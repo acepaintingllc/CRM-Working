@@ -7,7 +7,12 @@ import type {
   QuoteHomeJobsPageReadModel,
 } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeBootstrap, loadQuoteHomeJobs } from '@/lib/quotes/client'
-import { normalizeQuoteHomeJobQuery } from './quoteHomePagePolicy'
+import {
+  normalizeQuoteHomeJobQuery,
+  resolveQuoteHomeBootstrapJobsSync,
+  resolveQuoteHomeJobsRefresh,
+  resolveQuoteHomeQueryJobsSync,
+} from './quoteHomePagePolicy'
 
 const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
   summary: {
@@ -37,7 +42,6 @@ function toLoadErrorMessage(scope: string, loadError: unknown) {
 
 type UseQuotesHomeDataOptions = {
   jobQuery?: string
-  onJobsChange?: (jobs: QuoteHomeJobsPageReadModel['items']) => void
 }
 
 export function useQuotesHomeBootstrap(initialData?: QuoteHomeBootstrapReadModel | null) {
@@ -86,14 +90,19 @@ export function useQuotesHomeJobs(
 
   useEffect(() => {
     latestLoadedBootstrapRef.current = bootstrapData
-    if (normalizeQuoteHomeJobQuery(bootstrapData.jobs.query) !== activeJobQueryRef.current) {
+    const syncDecision = resolveQuoteHomeBootstrapJobsSync({
+      activeJobQuery: activeJobQueryRef.current,
+      bootstrapJobsPage: bootstrapData.jobs,
+    })
+
+    if (syncDecision.action === 'keep_active_jobs') {
       return
     }
 
     jobsRequestIdRef.current += 1
     setJobsLoading(false)
     setJobsError(null)
-    commitJobsPage(bootstrapData.jobs)
+    commitJobsPage(syncDecision.jobsPage)
   }, [bootstrapData, commitJobsPage])
 
   const loadJobsPage = useCallback(
@@ -160,11 +169,16 @@ export function useQuotesHomeJobs(
   )
 
   useEffect(() => {
-    if (activeJobQuery === normalizeQuoteHomeJobQuery(jobsPageRef.current.query)) {
+    const syncDecision = resolveQuoteHomeQueryJobsSync({
+      activeJobQuery,
+      currentJobsPage: jobsPageRef.current,
+    })
+
+    if (syncDecision.action === 'keep_current_jobs') {
       return
     }
 
-    void loadJobsPage({ query: activeJobQuery })
+    void loadJobsPage({ query: syncDecision.query })
   }, [activeJobQuery, loadJobsPage])
 
   const refreshJobs = useCallback(
@@ -173,18 +187,21 @@ export function useQuotesHomeJobs(
       refreshedBootstrap: QuoteHomeBootstrapReadModel = latestLoadedBootstrapRef.current
     ) => {
       const currentQuery = activeJobQueryRef.current
-      const bootstrapQuery = normalizeQuoteHomeJobQuery(refreshedBootstrap.jobs.query)
+      const refreshDecision = resolveQuoteHomeJobsRefresh({
+        activeJobQuery: currentQuery,
+        refreshedBootstrapJobsPage: refreshedBootstrap.jobs,
+      })
 
-      if (currentQuery === bootstrapQuery) {
+      if (refreshDecision.action === 'adopt_bootstrap_jobs') {
         jobsRequestIdRef.current += 1
         setJobsLoading(false)
         setJobsError(null)
-        commitJobsPage(refreshedBootstrap.jobs)
+        commitJobsPage(refreshDecision.jobsPage)
         return { ok: true as const, error: null }
       }
 
       return loadJobsPage({
-        query: currentQuery,
+        query: refreshDecision.query,
         reportError: options?.reportError,
       })
     },
@@ -230,7 +247,6 @@ export function useQuotesHomeData(
   initialData?: QuoteHomeBootstrapReadModel | null,
   options?: UseQuotesHomeDataOptions
 ) {
-  const onJobsChangeRef = useRef(options?.onJobsChange ?? null)
   const bootstrapResource = useQuotesHomeBootstrap(initialData)
   const activeJobQuery = normalizeQuoteHomeJobQuery(
     options?.jobQuery ?? bootstrapResource.bootstrapData.jobs.query
@@ -238,14 +254,6 @@ export function useQuotesHomeData(
   const jobsResource = useQuotesHomeJobs(bootstrapResource.bootstrapData, activeJobQuery)
   const { bootstrapLoading, refreshBootstrap } = bootstrapResource
   const { jobsError, loadMoreJobs, refreshJobs } = jobsResource
-
-  useEffect(() => {
-    onJobsChangeRef.current = options?.onJobsChange ?? null
-  }, [options?.onJobsChange])
-
-  useEffect(() => {
-    onJobsChangeRef.current?.(jobsResource.jobs)
-  }, [jobsResource.jobs])
 
   const loadMore = useCallback(async () => {
     if (bootstrapLoading) {

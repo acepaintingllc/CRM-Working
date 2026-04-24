@@ -6,6 +6,7 @@ import type {
   QuoteHomeJobVersionItemReadModel,
   QuoteJobVersionsPageReadModel,
 } from '@/lib/quotes/collectionData'
+import { deleteQuoteVersion } from '@/lib/quotes/client'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import type { QuoteHomePageActions } from '../_home/quoteHomePageVm'
 import type { QuoteHomeActionWarning } from '../_home/quoteHomeTypes'
@@ -39,9 +40,14 @@ type QuoteHomePageControllerVersionsResource = {
 }
 
 type QuoteHomePageDeleteController = {
+  confirmingDelete: QuoteHomeJobVersionItemReadModel | null
+  deletingId: string | null
+  error: string | null
   requestDeleteVersion: (estimate: QuoteHomeJobVersionItemReadModel) => void
-  cancelDelete: () => void
-  confirmDeleteVersion: () => Promise<boolean>
+  cancelDelete: () => boolean
+  beginDelete: () => QuoteHomeJobVersionItemReadModel | null
+  completeDelete: () => void
+  failDelete: (message: string) => void
 }
 
 type QuoteHomeStateActions = Pick<
@@ -115,6 +121,10 @@ export function useQuoteHomePageController({
   retrySearch,
 }: UseQuoteHomePageControllerParams): {
   actionWarning: QuoteHomeActionWarning | null
+  deleteState: Pick<
+    QuoteHomePageDeleteController,
+    'confirmingDelete' | 'deletingId' | 'error'
+  >
   actions: QuoteHomePageActions
 } {
   const [actionWarning, setActionWarning] = useState<QuoteHomeActionWarning | null>(null)
@@ -126,8 +136,10 @@ export function useQuoteHomePageController({
     refresh: refreshVersionsList,
   } = versions
   const {
+    beginDelete,
     cancelDelete: cancelDeleteVersion,
-    confirmDeleteVersion,
+    completeDelete,
+    failDelete,
     requestDeleteVersion,
   } = deleteController
   const activeVersionsJobId = pageData.job_id
@@ -161,36 +173,63 @@ export function useQuoteHomePageController({
   }, [cancelDeleteVersion])
 
   const confirmDelete = useCallback(async () => {
-    const deleted = await confirmDeleteVersion()
-    if (!deleted) {
+    const estimate = beginDelete()
+    if (!estimate) {
       return false
     }
 
-    setActionWarning(null)
-    const { bootstrapRefresh, versionsRefresh } = await refreshAfterDelete(
-      refreshBootstrap,
-      refreshVersions
-    )
+    try {
+      setActionWarning(null)
+      await deleteQuoteVersion(estimate.estimate_id)
+      completeDelete()
 
-    if (bootstrapRefresh.ok && versionsRefresh.ok) {
+      const { bootstrapRefresh, versionsRefresh } = await refreshAfterDelete(
+        refreshBootstrap,
+        refreshVersions
+      )
+
+      if (bootstrapRefresh.ok && versionsRefresh.ok) {
+        return true
+      }
+
+      const refreshFailures: string[] = []
+      if (!bootstrapRefresh.ok && bootstrapRefresh.error) {
+        refreshFailures.push(`Home refresh failed. ${bootstrapRefresh.error}`)
+      }
+      if (!versionsRefresh.ok && versionsRefresh.error) {
+        refreshFailures.push(`Versions refresh failed. ${versionsRefresh.error}`)
+      }
+
+      setActionWarning(buildDeleteRefreshWarning(refreshFailures))
       return true
+    } catch (deleteError) {
+      failDelete(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Failed to delete quote.'
+      )
+      return false
     }
-
-    const refreshFailures: string[] = []
-    if (!bootstrapRefresh.ok && bootstrapRefresh.error) {
-      refreshFailures.push(`Home refresh failed. ${bootstrapRefresh.error}`)
-    }
-    if (!versionsRefresh.ok && versionsRefresh.error) {
-      refreshFailures.push(`Versions refresh failed. ${versionsRefresh.error}`)
-    }
-
-    setActionWarning(buildDeleteRefreshWarning(refreshFailures))
-    return true
   }, [
-    confirmDeleteVersion,
+    beginDelete,
+    completeDelete,
+    failDelete,
     refreshBootstrap,
     refreshVersions,
   ])
+
+  const deleteState = useMemo(
+    () => ({
+      confirmingDelete: deleteController.confirmingDelete,
+      deletingId: deleteController.deletingId,
+      error: deleteController.error,
+    }),
+    [
+      deleteController.confirmingDelete,
+      deleteController.deletingId,
+      deleteController.error,
+    ]
+  )
 
   const actions = useMemo(
     () => ({
@@ -227,6 +266,7 @@ export function useQuoteHomePageController({
 
   return {
     actionWarning,
+    deleteState,
     actions,
   }
 }

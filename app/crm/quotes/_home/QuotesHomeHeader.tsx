@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
-import type { QuotesHomeHeaderVm } from './quoteHomeTypes'
+import type { QuotesHomeHeaderVm, QuotesHomeSearchStatusVm } from './quoteHomeTypes'
 import { useQuotesHomeHeaderInteractions } from './useQuotesHomeHeaderInteractions'
 
 type Props = {
@@ -39,9 +39,20 @@ export function QuotesHomeHeader({
     onSearchFocusedChange,
   })
   const settingsPanelRef = useRef<HTMLDivElement | null>(null)
+  const searchResultsPanelRef = useRef<HTMLDivElement | null>(null)
   const [settingsFocusTarget, setSettingsFocusTarget] = useState<'first' | 'last'>('first')
 
-  const searchOpen = vm.searchFocused && Boolean(vm.searchQuery.trim())
+  const searchStatus =
+    vm.searchStatus ??
+    buildLegacySearchStatus({
+      query: vm.searchQuery,
+      loading: vm.searchLoading,
+      errorMessage: vm.searchErrorMessage,
+      emptyMessage: vm.searchEmptyMessage,
+      resultCount: vm.searchResults.length,
+      canRetry: vm.searchCanRetry,
+    })
+  const searchOpen = vm.searchFocused && searchStatus.kind !== 'idle'
   useEffect(() => {
     if (!settingsOpen) return
     focusSettingsItem(settingsPanelRef.current, settingsFocusTarget)
@@ -64,6 +75,21 @@ export function QuotesHomeHeader({
       event.preventDefault()
       openSettingsWithFocus(event.key === 'ArrowUp' ? 'last' : 'first')
     }
+  }
+
+  const handleSearchInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' && searchOpen) {
+      const firstResult = searchResultsPanelRef.current?.querySelector<HTMLElement>(
+        '[role="option"], button',
+      )
+      if (firstResult) {
+        event.preventDefault()
+        firstResult.focus()
+        return
+      }
+    }
+
+    handleSearchKeyDown(event)
   }
 
   const handleSettingsMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -116,7 +142,7 @@ export function QuotesHomeHeader({
                 value={vm.searchQuery}
                 onChange={(event) => onSearchQueryChange(event.target.value)}
                 onFocus={openSearch}
-                onKeyDown={handleSearchKeyDown}
+                onKeyDown={handleSearchInputKeyDown}
                 placeholder="Search quote versions"
                 style={S.search}
                 aria-label="Search quote versions"
@@ -129,31 +155,32 @@ export function QuotesHomeHeader({
               />
               {searchOpen ? (
                 <div
+                  ref={searchResultsPanelRef}
                   id={searchResultsId}
                   style={S.searchResults}
                   role="listbox"
                   aria-label="Quote search results"
                   aria-busy={vm.searchLoading || undefined}
                 >
-                  {vm.searchLoading ? (
+                  {searchStatus.kind === 'loading' ? (
                     <div
                       style={S.searchStatusPanel}
                       role="status"
                       aria-live="polite"
                       aria-atomic="true"
                     >
-                      <div style={S.searchStatusTitle}>Searching quote versions</div>
+                      <div style={S.searchStatusTitle}>{searchStatus.title}</div>
                       <div style={S.searchStatusText}>
-                        Looking up versions that match &quot;{vm.searchQuery.trim()}&quot;.
+                        {searchStatus.message}
                       </div>
                     </div>
                   ) : null}
 
-                  {!vm.searchLoading && vm.searchErrorMessage ? (
+                  {searchStatus.kind === 'error' ? (
                     <div style={S.searchStatusPanel} role="alert">
-                      <div style={S.searchStatusTitle}>Search results failed to load</div>
-                      <div style={S.searchStatusText}>{vm.searchErrorMessage}</div>
-                      {vm.searchCanRetry ? (
+                      <div style={S.searchStatusTitle}>{searchStatus.title}</div>
+                      <div style={S.searchStatusText}>{searchStatus.message}</div>
+                      {searchStatus.canRetry ? (
                         <button type="button" style={S.searchRetryButton} onClick={onSearchRetry}>
                           Retry search
                         </button>
@@ -161,7 +188,7 @@ export function QuotesHomeHeader({
                     </div>
                   ) : null}
 
-                  {!vm.searchLoading && !vm.searchErrorMessage && vm.searchResults.length > 0
+                  {searchStatus.kind === 'results'
                     ? vm.searchResults.map((estimate) => (
                         <Link
                           key={estimate.id}
@@ -177,15 +204,15 @@ export function QuotesHomeHeader({
                       ))
                     : null}
 
-                  {!vm.searchLoading && !vm.searchErrorMessage && vm.searchEmptyMessage ? (
+                  {searchStatus.kind === 'empty' ? (
                     <div
                       style={S.searchStatusPanel}
                       role="status"
                       aria-live="polite"
                       aria-atomic="true"
                     >
-                      <div style={S.searchStatusTitle}>No matching quote versions</div>
-                      <div style={S.searchStatusText}>{vm.searchEmptyMessage}</div>
+                      <div style={S.searchStatusTitle}>{searchStatus.title}</div>
+                      <div style={S.searchStatusText}>{searchStatus.message}</div>
                     </div>
                   ) : null}
                 </div>
@@ -247,6 +274,41 @@ export function QuotesHomeHeader({
       </div>
     </div>
   )
+}
+
+function buildLegacySearchStatus(params: {
+  query: string
+  loading: boolean
+  errorMessage: string | null
+  emptyMessage: string | null
+  resultCount: number
+  canRetry: boolean
+}): QuotesHomeSearchStatusVm {
+  const query = params.query.trim()
+  if (!query) return { kind: 'idle' }
+  if (params.loading) {
+    return {
+      kind: 'loading',
+      title: 'Searching quote versions',
+      message: `Looking up versions that match "${query}".`,
+    }
+  }
+  if (params.errorMessage) {
+    return {
+      kind: 'error',
+      title: 'Search results failed to load',
+      message: params.errorMessage,
+      canRetry: params.canRetry,
+    }
+  }
+  if (params.emptyMessage) {
+    return {
+      kind: 'empty',
+      title: 'No matching quote versions',
+      message: params.emptyMessage,
+    }
+  }
+  return params.resultCount > 0 ? { kind: 'results' } : { kind: 'idle' }
 }
 
 function getEnabledSettingsItems(container: HTMLElement | null) {

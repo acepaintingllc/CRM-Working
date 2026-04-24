@@ -224,6 +224,32 @@ describe('quote home API routes', () => {
     await expect(errorResponse.json()).resolves.toEqual({ error: 'Invalid cursor.' })
   })
 
+  it('returns under-filled jobs pages in the standard data envelope', async () => {
+    mocks.loadEstimateCollectionJobsPayload.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        query: 'kit',
+        limit: 2,
+        next_cursor: '2026-04-24T11:00:00.000Z::33333333-3333-4333-8333-333333333333',
+        items: [quoteHomeJobs[0]],
+      },
+    })
+
+    const response = await getQuoteHomeJobs(
+      new Request('http://localhost/api/quotes/home/jobs?q=kit&limit=2')
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        query: 'kit',
+        limit: 2,
+        next_cursor: '2026-04-24T11:00:00.000Z::33333333-3333-4333-8333-333333333333',
+        items: [quoteHomeJobs[0]],
+      },
+    })
+  })
+
   it('rejects invalid job ids after auth and before service work', async () => {
     const response = await getQuoteJobVersions(
       new Request('http://localhost/api/quotes/home/jobs/not-a-uuid/versions'),

@@ -6,17 +6,20 @@ import {
   buildQuotesHomeCreateVm,
   buildQuotesHomeJobListEmptyState,
   buildQuotesHomeJobListEmptyStateBody,
+  buildQuotesHomeJobListStatus,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeDeleteDialogVm,
   buildQuotesHomeFeedbackVm,
-  buildQuotesHomeSearchCanRetry,
   buildQuotesHomeSearchEmptyMessage,
+  buildQuotesHomeSearchStatus,
   buildQuotesHomeSelectedJobVersionCount,
   buildQuotesHomeSelectedJobVm,
+  buildQuotesHomeVersionListStatus,
   buildQuotesHomeVersionDetail,
   buildQuotesHomeVersionEmptyMessage,
   buildQuotesHomeVersionHeading,
   buildSearchResultVm,
+  QUOTES_HOME_LOADING_COPY,
   buildSummaryCards,
 } from './quoteHomePresentation'
 import type {
@@ -136,7 +139,28 @@ export function buildQuoteHomePageVm(
     totalJobCount: resources.home.jobs.length,
     visibleJobCount: state.visibleJobs.length,
   })
+  const jobListEmptyStateBody =
+    buildQuotesHomeJobListEmptyStateBody(jobListEmptyState)
+  const jobListLoading = resources.home.loading || resources.home.jobsLoading
+  const jobListStatus = buildQuotesHomeJobListStatus({
+    loading: jobListLoading,
+    errorMessage: jobListErrorMessage,
+    canRetry: hasJobListLoadError,
+    emptyState: jobListEmptyState,
+    emptyStateBody: jobListEmptyStateBody,
+  })
   const searchState = buildQuoteHomeSearchState(resources)
+  const versionEmptyMessage = buildQuotesHomeVersionEmptyMessage(
+    state.selectedJob,
+    resources.workflow.versions.items
+  )
+  const versionErrorMessage = resources.workflow.versions.error
+  const versionCanRetry = Boolean(versionErrorMessage)
+  const versionStatus = buildQuotesHomeVersionListStatus({
+    errorMessage: versionErrorMessage,
+    canRetry: versionCanRetry,
+    emptyMessage: versionEmptyMessage,
+  })
   const feedbackVm = buildQuotesHomeFeedbackVm({
     homeFailures: buildQuoteHomeLoadFailures(resources),
     jobVersionsError: options.includeVersionFailureInFeedback === false
@@ -163,12 +187,13 @@ export function buildQuoteHomePageVm(
       searchErrorMessage: resources.search.error,
       searchCanRetry: searchState.canRetry,
       searchResults: resources.search.results.map(buildSearchResultVm),
+      searchStatus: searchState.status,
     },
     loading: resources.home.loading,
     feedback: feedbackVm,
     summaryCards,
     jobList: {
-      loading: resources.home.loading || resources.home.jobsLoading,
+      loading: jobListLoading,
       searchQuery: state.jobQuery,
       selectedJobId: state.selectedJobId,
       hasMore: resources.home.hasMore,
@@ -180,7 +205,10 @@ export function buildQuoteHomePageVm(
       errorMessage: jobListErrorMessage,
       canRetry: hasJobListLoadError,
       emptyState: jobListEmptyState,
-      emptyStateBody: buildQuotesHomeJobListEmptyStateBody(jobListEmptyState),
+      emptyStateBody: jobListEmptyStateBody,
+      status: jobListStatus,
+      loadMoreLabel: QUOTES_HOME_LOADING_COPY.jobsLoadMore,
+      loadingMoreLabel: QUOTES_HOME_LOADING_COPY.jobsLoadingMore,
     },
     selectedJob: buildQuotesHomeSelectedJobVm(
       state.selectedJob,
@@ -197,17 +225,17 @@ export function buildQuoteHomePageVm(
         totalVersions: selectedJobVersionCount,
         hasMore: resources.workflow.versions.hasMore,
       }),
-      emptyMessage: buildQuotesHomeVersionEmptyMessage(
-        state.selectedJob,
-        resources.workflow.versions.items
-      ),
+      emptyMessage: versionEmptyMessage,
       items: resources.workflow.versions.items.map((estimate) =>
         buildQuoteHomeVersionItemVm(estimate, resources.delete.deletingId)
       ),
       hasMore: resources.workflow.versions.hasMore,
       loadingMore: resources.workflow.versions.loadingMore,
-      errorMessage: resources.workflow.versions.error,
-      canRetry: Boolean(resources.workflow.versions.error),
+      errorMessage: versionErrorMessage,
+      canRetry: versionCanRetry,
+      status: versionStatus,
+      loadMoreLabel: QUOTES_HOME_LOADING_COPY.versionsLoadMore,
+      loadingMoreLabel: QUOTES_HOME_LOADING_COPY.versionsLoadingMore,
     },
     create: buildQuotesHomeCreateVm({
       creating: resources.workflow.create.creating,
@@ -249,16 +277,20 @@ function buildQuotesHomeJobListErrorMessage(
 }
 
 function buildQuoteHomeSearchState(resources: QuoteHomePageVmResources) {
+  const params = {
+    query: resources.search.query,
+    loading: resources.search.loading,
+    error: resources.search.error,
+    resultCount: resources.search.results.length,
+  }
+  const status = buildQuotesHomeSearchStatus(params)
+
   return {
-    emptyMessage: buildQuotesHomeSearchEmptyMessage({
-      query: resources.search.query,
-      loading: resources.search.loading,
-      error: resources.search.error,
-      resultCount: resources.search.results.length,
-    }),
-    canRetry: buildQuotesHomeSearchCanRetry({
-      query: resources.search.query,
-      loading: resources.search.loading,
-    }),
+    emptyMessage: buildQuotesHomeSearchEmptyMessage(params),
+    canRetry:
+      status.kind === 'error'
+        ? status.canRetry
+        : Boolean(resources.search.query) && !resources.search.loading,
+    status,
   }
 }

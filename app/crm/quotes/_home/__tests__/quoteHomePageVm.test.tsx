@@ -235,7 +235,7 @@ describe('buildQuoteHomePageVm', () => {
       })
     )
 
-    expect(vm.jobList).toEqual({
+    expect(vm.jobList).toEqual(expect.objectContaining({
       loading: false,
       searchQuery: '',
       selectedJobId: '',
@@ -245,11 +245,17 @@ describe('buildQuoteHomePageVm', () => {
       canRetry: false,
       emptyState: 'no_jobs',
       emptyStateBody: QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
+    }))
+    expect(vm.jobList.status).toEqual({
+      kind: 'empty',
+      emptyState: 'no_jobs',
+      title: 'No eligible jobs yet',
+      body: QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
     })
     expect(vm.selectedJob.emptyMessage).toBe(
       'Select a job from the left to view versions and create the next one.'
     )
-    expect(vm.versionList).toEqual({
+    expect(vm.versionList).toEqual(expect.objectContaining({
       heading: 'Pick a job first',
       detail: null,
       emptyMessage: 'Versions will appear here once a job is selected.',
@@ -258,6 +264,10 @@ describe('buildQuoteHomePageVm', () => {
       loadingMore: false,
       errorMessage: null,
       canRetry: false,
+    }))
+    expect(vm.versionList.status).toEqual({
+      kind: 'empty',
+      message: 'Versions will appear here once a job is selected.',
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.actions).toBe(actions)
@@ -289,6 +299,7 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.jobList.hasMore).toBe(false)
     expect(vm.selectedJob).toEqual({
       loading: false,
+      state: 'selected',
       emptyMessage: null,
       title: 'Kitchen',
       customerLine: `Alice${QUOTE_META_SEPARATOR}123 Main`,
@@ -455,7 +466,7 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.selectedJob.emptyMessage).toBe(
       'Select a job from the left to view versions and create the next one.'
     )
-    expect(vm.versionList).toEqual({
+    expect(vm.versionList).toEqual(expect.objectContaining({
       heading: 'Pick a job first',
       detail: null,
       emptyMessage: 'Versions will appear here once a job is selected.',
@@ -464,6 +475,10 @@ describe('buildQuoteHomePageVm', () => {
       loadingMore: false,
       errorMessage: null,
       canRetry: false,
+    }))
+    expect(vm.versionList.status).toEqual({
+      kind: 'empty',
+      message: 'Versions will appear here once a job is selected.',
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.create.canCreate).toBe(false)
@@ -705,7 +720,7 @@ describe('buildQuoteHomePageVm', () => {
       })
     )
 
-    expect(vm.jobList).toEqual({
+    expect(vm.jobList).toEqual(expect.objectContaining({
       loading: false,
       searchQuery: '',
       selectedJobId: '',
@@ -715,6 +730,14 @@ describe('buildQuoteHomePageVm', () => {
       canRetry: true,
       emptyState: 'none',
       emptyStateBody: null,
+    }))
+    expect(vm.jobList.status).toEqual({
+      kind: 'error',
+      title: 'Jobs failed to load',
+      message: 'Network request timed out.',
+      canRetry: true,
+      retryLabel: 'Retry jobs',
+      retryingLabel: 'Retrying jobs...',
     })
   })
 
@@ -785,6 +808,7 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.jobList.loading).toBe(true)
     expect(vm.selectedJob).toEqual({
       loading: true,
+      state: 'loading',
       emptyMessage: null,
       title: null,
       customerLine: null,

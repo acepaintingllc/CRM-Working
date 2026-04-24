@@ -10,12 +10,15 @@ import {
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeFeedbackVm,
   buildQuotesHomeJobListEmptyState,
+  buildQuotesHomeJobListStatus,
   buildQuotesHomeSearchCanRetry,
   buildQuotesHomeSearchEmptyMessage,
+  buildQuotesHomeSearchStatus,
   buildQuotesHomeSelectedJobVersionCount,
   buildQuotesHomeSelectedJobVm,
   buildQuotesHomeVersionDetail,
   buildQuotesHomeVersionHeading,
+  buildQuotesHomeVersionListStatus,
   buildSearchResultVm,
   buildSummaryCards,
   formatVersionCount,
@@ -293,6 +296,44 @@ describe('quoteHomePresentation', () => {
     )
   })
 
+  it('builds display-ready search status states', () => {
+    expect(
+      buildQuotesHomeSearchStatus({
+        query: '',
+        loading: false,
+        error: null,
+        resultCount: 0,
+      })
+    ).toEqual({ kind: 'idle' })
+
+    expect(
+      buildQuotesHomeSearchStatus({
+        query: 'kitchen',
+        loading: true,
+        error: null,
+        resultCount: 0,
+      })
+    ).toEqual({
+      kind: 'loading',
+      title: 'Searching quote versions',
+      message: 'Looking up versions that match "kitchen".',
+    })
+
+    expect(
+      buildQuotesHomeSearchStatus({
+        query: 'kitchen',
+        loading: false,
+        error: 'search failed',
+        resultCount: 0,
+      })
+    ).toEqual({
+      kind: 'error',
+      title: 'Search results failed to load',
+      message: 'search failed',
+      canRetry: true,
+    })
+  })
+
   it('formats bootstrap load failure details without doubling the fallback prefix', () => {
     expect(
       buildHomeLoadFailureDetail('bootstrap', 'Quote home failed to load.')
@@ -528,6 +569,33 @@ describe('quoteHomePresentation', () => {
         visibleJobCount: 1,
       })
     ).toBe('none')
+  })
+
+  it('builds display-ready list status states', () => {
+    expect(
+      buildQuotesHomeJobListStatus({
+        loading: true,
+        errorMessage: null,
+        canRetry: false,
+        emptyState: 'none',
+        emptyStateBody: null,
+      })
+    ).toEqual({ kind: 'loading', message: 'Loading jobs...' })
+
+    expect(
+      buildQuotesHomeVersionListStatus({
+        errorMessage: 'versions failed',
+        canRetry: true,
+        emptyMessage: 'No versions.',
+      })
+    ).toEqual({
+      kind: 'error',
+      title: 'Versions failed to load',
+      message: 'versions failed',
+      canRetry: true,
+      retryLabel: 'Retry versions',
+      retryingLabel: 'Retrying versions...',
+    })
   })
 
   it('builds summary cards for zero, non-zero, and null summaries', () => {

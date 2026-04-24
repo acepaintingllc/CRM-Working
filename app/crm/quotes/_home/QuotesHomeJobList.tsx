@@ -47,6 +47,61 @@ export function QuotesHomeJobList({
       setRetrying(false)
     }
   }
+  const status = vm.status ?? buildLegacyJobListStatus(vm)
+
+  const renderStatus = () => {
+    if (status.kind === 'loading') {
+      return (
+        <div style={S.mutedText} role="status" aria-live="polite" aria-atomic="true">
+          {status.message}
+        </div>
+      )
+    }
+
+    if (status.kind === 'error') {
+      return (
+        <div style={S.emptyPanel} role="alert">
+          <div style={S.emptyPanelTitle}>{status.title}</div>
+          <div style={S.bodyText}>{status.message}</div>
+          {status.canRetry ? (
+            <div style={S.rowWrap}>
+              <CrmButton
+                onClick={() => void handleRetry()}
+                tone="primary"
+                disabled={retrying}
+                aria-busy={retrying}
+              >
+                {retrying ? status.retryingLabel : status.retryLabel}
+              </CrmButton>
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    if (status.kind === 'empty' && status.emptyState === 'no_matches') {
+      return <div style={S.mutedText}>{status.title}</div>
+    }
+
+    if (status.kind === 'empty') {
+      return (
+        <div style={S.emptyPanel}>
+          <div style={S.emptyPanelTitle}>{status.title}</div>
+          {status.body ? (
+            <div style={S.bodyText}>{status.body}</div>
+          ) : null}
+          <div style={S.rowWrap}>
+            <CrmButton href="/crm/customers/new" tone="primary">
+              Add contact
+            </CrmButton>
+            <CrmButton href="/crm/jobs">Open jobs</CrmButton>
+          </div>
+        </div>
+      )
+    }
+
+    return null
+  }
 
   const handleJobOptionKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -96,49 +151,7 @@ export function QuotesHomeJobList({
           style={S.jobListScroll}
           aria-busy={vm.loading}
         >
-          {vm.loading ? (
-            <div style={S.mutedText} role="status" aria-live="polite" aria-atomic="true">
-              Loading jobs...
-            </div>
-          ) : null}
-
-          {!vm.loading && vm.errorMessage ? (
-            <div style={S.emptyPanel} role="alert">
-              <div style={S.emptyPanelTitle}>Jobs failed to load</div>
-              <div style={S.bodyText}>{vm.errorMessage}</div>
-              {vm.canRetry ? (
-                <div style={S.rowWrap}>
-                  <CrmButton
-                    onClick={() => void handleRetry()}
-                    tone="primary"
-                    disabled={retrying}
-                    aria-busy={retrying}
-                  >
-                    {retrying ? 'Retrying jobs...' : 'Retry jobs'}
-                  </CrmButton>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {!vm.loading && vm.emptyState === 'no_matches' ? (
-            <div style={S.mutedText}>No jobs match this search.</div>
-          ) : null}
-
-          {!vm.loading && !vm.errorMessage && vm.emptyState === 'no_jobs' ? (
-            <div style={S.emptyPanel}>
-              <div style={S.emptyPanelTitle}>No eligible jobs yet</div>
-              {vm.emptyStateBody ? (
-                <div style={S.bodyText}>{vm.emptyStateBody}</div>
-              ) : null}
-              <div style={S.rowWrap}>
-                <CrmButton href="/crm/customers/new" tone="primary">
-                  Add contact
-                </CrmButton>
-                <CrmButton href="/crm/jobs">Open jobs</CrmButton>
-              </div>
-            </div>
-          ) : null}
+          {renderStatus()}
 
           <ul
             style={S.jobListItems}
@@ -178,11 +191,44 @@ export function QuotesHomeJobList({
               aria-busy={loadingMore}
               aria-live="polite"
             >
-              {loadingMore ? 'Loading more jobs...' : 'Load more jobs'}
+              {loadingMore
+                ? (vm.loadingMoreLabel ?? 'Loading more jobs...')
+                : (vm.loadMoreLabel ?? 'Load more jobs')}
             </CrmButton>
           ) : null}
         </div>
       </div>
     </CrmSectionCard>
   )
+}
+
+function buildLegacyJobListStatus(vm: QuotesHomeJobListVm): NonNullable<QuotesHomeJobListVm['status']> {
+  if (vm.loading) return { kind: 'loading', message: 'Loading jobs...' }
+  if (vm.errorMessage) {
+    return {
+      kind: 'error',
+      title: 'Jobs failed to load',
+      message: vm.errorMessage,
+      canRetry: vm.canRetry,
+      retryLabel: 'Retry jobs',
+      retryingLabel: 'Retrying jobs...',
+    }
+  }
+  if (vm.emptyState === 'no_jobs') {
+    return {
+      kind: 'empty',
+      emptyState: 'no_jobs',
+      title: 'No eligible jobs yet',
+      body: vm.emptyStateBody,
+    }
+  }
+  if (vm.emptyState === 'no_matches') {
+    return {
+      kind: 'empty',
+      emptyState: 'no_matches',
+      title: 'No jobs match this search.',
+      body: null,
+    }
+  }
+  return { kind: 'ready' }
 }

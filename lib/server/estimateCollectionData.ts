@@ -1,6 +1,6 @@
 export {
-  decorateEstimateCollectionRows as loadDecoratedEstimateCollectionRows,
   loadEstimateCollectionEligibleJobs,
+  loadEstimateCollectionRelatedRows,
   loadEstimateCollectionRollupSummary,
   loadEstimateCollectionRowsForOrg,
   searchEstimateCollectionRows,
