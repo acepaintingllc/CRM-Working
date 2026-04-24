@@ -16,12 +16,12 @@ vi.mock('../../org.ts', () => ({
 
 import {
   createEstimateCollectionVersionRecord,
-  decodeQuoteHomeCursor,
   loadEstimateCollectionRelatedRows,
   loadEstimateCollectionJobsPage,
   loadEstimateCollectionJobVersionsPage,
   searchEstimateCollectionRows,
 } from '../repository.ts'
+import { decodeQuoteHomeCursor } from '@/lib/quotes/collectionData'
 import type { EstimateCollectionVersionRow } from '../types.ts'
 
 type QueryResponse = {
@@ -276,7 +276,7 @@ describe('estimate collection repository', () => {
 
     const result = await loadEstimateCollectionJobVersionsPage('org-1', 'job-1', {
       limit: 2,
-      cursor: `${duplicateTimestamp}::${cursorId}`,
+      cursor: { timestamp: duplicateTimestamp, id: cursorId },
     })
 
     expect(result).toEqual({
@@ -285,8 +285,7 @@ describe('estimate collection repository', () => {
         jobId: 'job-1',
         totalVersions: 4,
         limit: 2,
-        nextCursor: null,
-        items: [
+        rows: [
           expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
           expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
         ],
@@ -317,10 +316,10 @@ describe('estimate collection repository', () => {
     expect(firstPage).toEqual({
       ok: true,
       data: expect.objectContaining({
-        nextCursor: `${duplicateTimestamp}::44444444-4444-4444-8444-444444444444`,
-        items: [
+        rows: [
           expect.objectContaining({ id: '55555555-5555-4555-8555-555555555555' }),
           expect.objectContaining({ id: '44444444-4444-4444-8444-444444444444' }),
+          expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
         ],
       }),
     })
@@ -331,16 +330,19 @@ describe('estimate collection repository', () => {
 
     const secondPage = await loadEstimateCollectionJobVersionsPage('org-1', 'job-1', {
       limit: 2,
-      cursor: firstPage.ok ? firstPage.data.nextCursor : null,
+      cursor: {
+        timestamp: duplicateTimestamp,
+        id: '44444444-4444-4444-8444-444444444444',
+      },
     })
 
     expect(secondPage).toEqual({
       ok: true,
       data: expect.objectContaining({
-        nextCursor: `${duplicateTimestamp}::22222222-2222-4222-8222-222222222222`,
-        items: [
+        rows: [
           expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
           expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
+          expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
         ],
       }),
     })
@@ -364,10 +366,10 @@ describe('estimate collection repository', () => {
     expect(firstPage).toEqual({
       ok: true,
       data: expect.objectContaining({
-        nextCursor: 'null::33333333-3333-4333-8333-333333333333',
-        items: [
+        rows: [
           expect.objectContaining({ id: '44444444-4444-4444-8444-444444444444' }),
           expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
+          expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
         ],
       }),
     })
@@ -384,7 +386,10 @@ describe('estimate collection repository', () => {
 
     const secondPage = await loadEstimateCollectionJobVersionsPage('org-1', 'job-1', {
       limit: 2,
-      cursor: firstPage.ok ? firstPage.data.nextCursor : null,
+      cursor: {
+        timestamp: null,
+        id: '33333333-3333-4333-8333-333333333333',
+      },
     })
 
     expect(secondRowsQuery.or).toHaveBeenCalledWith(
@@ -393,8 +398,7 @@ describe('estimate collection repository', () => {
     expect(secondPage).toEqual({
       ok: true,
       data: expect.objectContaining({
-        nextCursor: null,
-        items: [
+        rows: [
           expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
           expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
         ],
@@ -402,35 +406,12 @@ describe('estimate collection repository', () => {
     })
   })
 
-  it('preserves invalid job-version cursor behavior', async () => {
-    const result = await loadEstimateCollectionJobVersionsPage('org-1', 'job-1', {
-      cursor: 'not-a-valid-cursor',
-    })
-
-    expect(result).toEqual({
-      ok: false,
-      kind: 'invalid_input',
-      message: 'Invalid cursor.',
-    })
-    expect(mocks.from).not.toHaveBeenCalled()
-  })
-
-  it('rejects invalid job cursors before calling the jobs-page rpc', async () => {
-    const result = await loadEstimateCollectionJobsPage('org-1', {
-      cursor: 'not-a-valid-cursor',
-    })
-
-    expect(result).toEqual({
-      ok: false,
-      kind: 'invalid_input',
-      message: 'Invalid cursor.',
-    })
-    expect(mocks.supabaseRpc).not.toHaveBeenCalled()
-  })
-
   it('rejects null-timestamp job cursors because the jobs rpc requires created_at boundaries', async () => {
     const result = await loadEstimateCollectionJobsPage('org-1', {
-      cursor: 'null::33333333-3333-4333-8333-333333333333',
+      cursor: {
+        timestamp: null,
+        id: '33333333-3333-4333-8333-333333333333',
+      },
     })
 
     expect(result).toEqual({
@@ -523,7 +504,7 @@ describe('estimate collection repository', () => {
     })
   })
 
-  it('clamps job page limits and forwards cursor tie-break boundaries to the rpc', async () => {
+  it('forwards normalized job page inputs and cursor tie-break boundaries to the rpc', async () => {
     const cursorTimestamp = '2026-04-24T12:00:00.000Z'
     const cursorId = '33333333-3333-4333-8333-333333333333'
     mocks.supabaseRpc.mockResolvedValue({
@@ -553,9 +534,9 @@ describe('estimate collection repository', () => {
     })
 
     const result = await loadEstimateCollectionJobsPage('org-1', {
-      query: ' kitchen ',
-      limit: 999,
-      cursor: `${cursorTimestamp}::${cursorId}`,
+      query: 'kitchen',
+      limit: 100,
+      cursor: { timestamp: cursorTimestamp, id: cursorId },
     })
 
     expect(mocks.supabaseRpc).toHaveBeenCalledWith('quote_home_jobs_page', {
@@ -575,7 +556,7 @@ describe('estimate collection repository', () => {
     })
   })
 
-  it('clamps low job page limits consistently', async () => {
+  it('forwards job page limits without presentation clamping', async () => {
     mocks.supabaseRpc.mockResolvedValue({
       data: [
         {
@@ -626,12 +607,12 @@ describe('estimate collection repository', () => {
 
     expect(mocks.supabaseRpc).toHaveBeenCalledWith(
       'quote_home_jobs_page',
-      expect.objectContaining({ p_limit: 2 })
+      expect.objectContaining({ p_limit: 1 })
     )
     expect(result).toEqual({
       ok: true,
       data: expect.objectContaining({
-        limit: 1,
+        limit: 0,
         rows: [
           expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
           expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
@@ -640,7 +621,7 @@ describe('estimate collection repository', () => {
     })
   })
 
-  it('clamps job-version page limits', async () => {
+  it('forwards job-version page limits without presentation clamping', async () => {
     const countQuery = makeQuery({ data: null, error: null, count: 1 })
     const rowsQuery = makeQuery({
       data: [makeEstimateRow('11111111-1111-4111-8111-111111111111', '2026-04-24T12:00:00.000Z')],
@@ -649,7 +630,7 @@ describe('estimate collection repository', () => {
     mocks.from.mockReturnValueOnce(countQuery).mockReturnValueOnce(rowsQuery)
 
     const result = await loadEstimateCollectionJobVersionsPage('org-1', 'job-1', {
-      limit: 999,
+      limit: 100,
     })
 
     expect(rowsQuery.limit).toHaveBeenCalledWith(101)
@@ -657,12 +638,12 @@ describe('estimate collection repository', () => {
       ok: true,
       data: expect.objectContaining({
         limit: 100,
-        items: [expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' })],
+        rows: [expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' })],
       }),
     })
   })
 
-  it('clamps low job-version page limits consistently', async () => {
+  it('forwards low job-version page limits without building cursors', async () => {
     const countQuery = makeQuery({ data: null, error: null, count: 2 })
     const rowsQuery = makeQuery({
       data: [
@@ -677,13 +658,15 @@ describe('estimate collection repository', () => {
       limit: 0,
     })
 
-    expect(rowsQuery.limit).toHaveBeenCalledWith(2)
+    expect(rowsQuery.limit).toHaveBeenCalledWith(1)
     expect(result).toEqual({
       ok: true,
       data: expect.objectContaining({
-        limit: 1,
-        nextCursor: '2026-04-24T12:00:00.000Z::22222222-2222-4222-8222-222222222222',
-        items: [expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' })],
+        limit: 0,
+        rows: [
+          expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
+          expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
+        ],
       }),
     })
   })
@@ -715,7 +698,7 @@ describe('estimate collection repository', () => {
       ok: true,
       data: {
         query: '100%_ready\\now',
-        limit: 10,
+        candidateLimit: 10,
         versionRows: [
           expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
           expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
@@ -728,6 +711,25 @@ describe('estimate collection repository', () => {
           expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
         ],
       },
+    })
+  })
+
+  it('returns a server error when a quote home search DB query fails', async () => {
+    const versionMatchesQuery = makeQuery({
+      data: null,
+      error: { message: 'search query failed' },
+    })
+    const jobsQuery = makeQuery({ data: [], error: null })
+    const customersQuery = makeQuery({ data: [], error: null })
+    mocks.from
+      .mockReturnValueOnce(versionMatchesQuery)
+      .mockReturnValueOnce(jobsQuery)
+      .mockReturnValueOnce(customersQuery)
+
+    await expect(searchEstimateCollectionRows('org-1', 'kitchen', 10)).resolves.toEqual({
+      ok: false,
+      kind: 'server_error',
+      message: 'search query failed',
     })
   })
 

@@ -7,12 +7,15 @@ import {
   buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
   decorateEstimateCollectionRows,
+  decodeQuoteHomeCursor,
+  encodeQuoteHomeCursor,
+  normalizeQuoteHomePageLimit,
+  normalizeQuoteHomeSearchQuery,
   selectQuoteHomeSearchRows,
   toQuoteHomeEligibleJobReadModel,
 } from '../../quotes/collectionData.ts'
 import {
   createEstimateCollectionVersionRecord,
-  encodeQuoteHomeCursor,
   loadEstimateCollectionJobVersionsPage,
   loadEstimateCollectionJobsPage,
   loadEstimateCollectionRelatedRows,
@@ -21,7 +24,16 @@ import {
   searchEstimateCollectionRows,
 } from './repository.ts'
 import { serverLog } from '@/lib/server/log'
-import type { EstimateCollectionVersionCopy, EstimateCollectionVersionRow, QuoteHomeJobsPageRow } from './types'
+import { errorResult, okResult, type ServiceResult } from '../serviceResult'
+import type {
+  EstimateCollectionJobVersionsDbPage,
+  EstimateCollectionVersionCopy,
+  EstimateCollectionVersionRow,
+} from './types'
+import type {
+  QuoteHomeCursorKey,
+  QuoteHomeJobListItemReadModel,
+} from '../../quotes/collectionData.ts'
 
 type EstimateCollectionServiceDeps = {
   buildQuoteHomeBootstrapReadModel: typeof buildQuoteHomeBootstrapReadModel
@@ -32,6 +44,7 @@ type EstimateCollectionServiceDeps = {
   buildQuoteJobVersionsReadModel: typeof buildQuoteJobVersionsReadModel
   buildQuoteListPayload: typeof buildQuoteListPayload
   createEstimateCollectionVersionRecord: typeof createEstimateCollectionVersionRecord
+  decodeQuoteHomeCursor: typeof decodeQuoteHomeCursor
   decorateEstimateCollectionRows: typeof decorateEstimateCollectionRows
   encodeQuoteHomeCursor: typeof encodeQuoteHomeCursor
   loadEstimateCollectionJobVersionsPage: typeof loadEstimateCollectionJobVersionsPage
@@ -39,6 +52,8 @@ type EstimateCollectionServiceDeps = {
   loadEstimateCollectionRelatedRows: typeof loadEstimateCollectionRelatedRows
   loadEstimateCollectionRowsForOrg: typeof loadEstimateCollectionRowsForOrg
   loadEstimateCollectionSummary: typeof loadEstimateCollectionSummary
+  normalizeQuoteHomePageLimit: typeof normalizeQuoteHomePageLimit
+  normalizeQuoteHomeSearchQuery: typeof normalizeQuoteHomeSearchQuery
   selectQuoteHomeSearchRows: typeof selectQuoteHomeSearchRows
   searchEstimateCollectionRows: typeof searchEstimateCollectionRows
   toQuoteHomeEligibleJobReadModel: typeof toQuoteHomeEligibleJobReadModel
@@ -53,6 +68,7 @@ const defaultDeps: EstimateCollectionServiceDeps = {
   buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
   createEstimateCollectionVersionRecord,
+  decodeQuoteHomeCursor,
   decorateEstimateCollectionRows,
   encodeQuoteHomeCursor,
   loadEstimateCollectionJobVersionsPage,
@@ -60,6 +76,8 @@ const defaultDeps: EstimateCollectionServiceDeps = {
   loadEstimateCollectionRelatedRows,
   loadEstimateCollectionRowsForOrg,
   loadEstimateCollectionSummary,
+  normalizeQuoteHomePageLimit,
+  normalizeQuoteHomeSearchQuery,
   selectQuoteHomeSearchRows,
   searchEstimateCollectionRows,
   toQuoteHomeEligibleJobReadModel,
@@ -68,6 +86,7 @@ const defaultDeps: EstimateCollectionServiceDeps = {
 const HOME_BOOTSTRAP_JOB_LIMIT = 25
 const HOME_VERSIONS_LIMIT = 25
 const HOME_SEARCH_LIMIT = 8
+const HOME_SEARCH_CANDIDATE_LIMIT = HOME_SEARCH_LIMIT * 4
 
 function withDeps(overrides?: Partial<EstimateCollectionServiceDeps>): EstimateCollectionServiceDeps {
   return {
@@ -110,36 +129,37 @@ async function loadEligibleJobsPage(
   options: { query?: string; limit?: number; cursor?: string | null },
   deps: EstimateCollectionServiceDeps
 ) {
-  const firstPageResult = await deps.loadEstimateCollectionJobsPage(orgId, options)
+  const pageOptions = parseQuoteHomePageOptions(options, false, deps)
+  if (!pageOptions.ok) return pageOptions
+
+  const firstPageResult = await deps.loadEstimateCollectionJobsPage(orgId, pageOptions.data)
   if (!firstPageResult.ok) return firstPageResult
 
   const limit = firstPageResult.data.limit
   const query = firstPageResult.data.query
-  const eligible: QuoteHomeJobsPageRow[] = []
+  const eligibleItems: QuoteHomeJobListItemReadModel[] = []
   let scannedRows = firstPageResult.data.rows
   let lastRawRow = scannedRows[scannedRows.length - 1] ?? null
   let hasMoreRawRows = scannedRows.length > limit
 
   while (true) {
     for (const row of scannedRows) {
-      if (deps.toQuoteHomeEligibleJobReadModel(row)) {
-        eligible.push(row)
+      const item = deps.toQuoteHomeEligibleJobReadModel(row)
+      if (item) {
+        eligibleItems.push(item)
       }
-      if (eligible.length > limit) break
+      if (eligibleItems.length > limit) break
     }
 
-    if (eligible.length > limit || !hasMoreRawRows || !lastRawRow?.created_at) break
-
-    const nextScanCursor = deps.encodeQuoteHomeCursor({
-      timestamp: lastRawRow.created_at,
-      id: lastRawRow.id,
-    })
-    if (!nextScanCursor) break
+    if (eligibleItems.length > limit || !hasMoreRawRows || !lastRawRow?.created_at) break
 
     const nextPageResult = await deps.loadEstimateCollectionJobsPage(orgId, {
       query,
       limit,
-      cursor: nextScanCursor,
+      cursor: {
+        timestamp: lastRawRow.created_at,
+        id: lastRawRow.id,
+      },
     })
     if (!nextPageResult.ok) return nextPageResult
 
@@ -148,24 +168,68 @@ async function loadEligibleJobsPage(
     hasMoreRawRows = scannedRows.length > limit
   }
 
-  const pageRows = eligible.slice(0, limit)
-  const lastReturnedRow = pageRows[pageRows.length - 1] ?? null
+  const pageItems = eligibleItems.slice(0, limit)
+  const lastReturnedItem = pageItems[pageItems.length - 1] ?? null
   return {
     ok: true as const,
     data: {
       query,
       limit,
       nextCursor:
-        eligible.length > limit && lastReturnedRow?.created_at
+        eligibleItems.length > limit && lastReturnedItem?.created_at
           ? deps.encodeQuoteHomeCursor({
-              timestamp: lastReturnedRow.created_at,
-              id: lastReturnedRow.id,
+              timestamp: lastReturnedItem.created_at,
+              id: lastReturnedItem.id,
             })
           : null,
-      items: pageRows
-        .map((row) => deps.toQuoteHomeEligibleJobReadModel(row))
-        .filter((row) => row !== null),
+      items: pageItems,
     },
+  }
+}
+
+function parseQuoteHomePageOptions(
+  options: { query?: string; limit?: number; cursor?: string | null },
+  allowNullTimestampCursor: boolean,
+  deps: EstimateCollectionServiceDeps
+): ServiceResult<{
+  query: string
+  limit: number
+  cursor: QuoteHomeCursorKey | null
+}> {
+  const cursorResult = deps.decodeQuoteHomeCursor(options.cursor)
+  if (!cursorResult.ok) {
+    return errorResult('invalid_input', cursorResult.message)
+  }
+  if (!allowNullTimestampCursor && cursorResult.value?.timestamp === null) {
+    return errorResult('invalid_input', 'Invalid cursor.')
+  }
+
+  return okResult({
+    query: deps.normalizeQuoteHomeSearchQuery(options.query),
+    limit: deps.normalizeQuoteHomePageLimit(options.limit),
+    cursor: cursorResult.value,
+  })
+}
+
+function buildJobVersionsPageData(
+  page: EstimateCollectionJobVersionsDbPage,
+  deps: EstimateCollectionServiceDeps
+) {
+  const items = page.rows.slice(0, page.limit)
+  const lastReturnedRow = items[items.length - 1] ?? null
+
+  return {
+    jobId: page.jobId,
+    totalVersions: page.totalVersions,
+    limit: page.limit,
+    nextCursor:
+      page.rows.length > page.limit && lastReturnedRow
+        ? deps.encodeQuoteHomeCursor({
+            timestamp: lastReturnedRow.updated_at,
+            id: lastReturnedRow.id,
+          })
+        : null,
+    items,
   }
 }
 
@@ -236,24 +300,33 @@ export async function loadEstimateCollectionBootstrapPayload(
   let selectedJobVersions = null
 
   if (selectedJobId) {
+    const versionPageOptions = parseQuoteHomePageOptions(
+      { limit: HOME_VERSIONS_LIMIT },
+      true,
+      resolvedDeps
+    )
+    if (!versionPageOptions.ok) return versionPageOptions
+
     const versionsResult = await loadEstimateCollectionJobVersionsPage(orgId, selectedJobId, {
-      limit: HOME_VERSIONS_LIMIT,
+      limit: versionPageOptions.data.limit,
+      cursor: versionPageOptions.data.cursor,
     })
     if (!versionsResult.ok) return versionsResult
 
+    const versionsPage = buildJobVersionsPageData(versionsResult.data, resolvedDeps)
     const decoratedRowsResult = await decorateRowsForReadModel(
       orgId,
-      versionsResult.data.items,
+      versionsPage.items,
       true,
       resolvedDeps
     )
     if (!decoratedRowsResult.ok) return decoratedRowsResult
 
     selectedJobVersions = buildQuoteJobVersionsReadModel(decoratedRowsResult.data, {
-      jobId: versionsResult.data.jobId,
-      totalVersions: versionsResult.data.totalVersions,
-      limit: versionsResult.data.limit,
-      nextCursor: versionsResult.data.nextCursor,
+      jobId: versionsPage.jobId,
+      totalVersions: versionsPage.totalVersions,
+      limit: versionsPage.limit,
+      nextCursor: versionsPage.nextCursor,
     })
   }
 
@@ -325,10 +398,34 @@ export async function loadEstimateCollectionSearchPayload(
   } = resolvedDeps
 
   const startedAt = Date.now()
-  const rowsResult = await searchEstimateCollectionRows(orgId, query, HOME_SEARCH_LIMIT)
+  const normalizedQuery = resolvedDeps.normalizeQuoteHomeSearchQuery(query)
+  if (!normalizedQuery) {
+    const payload = buildQuoteHomeSearchReadModel([], normalizedQuery)
+    logQuoteHomeRead('search', {
+      orgId,
+      durationMs: Date.now() - startedAt,
+      query: normalizedQuery,
+      items: payload.items.length,
+      payloadBytes: bytesForLog(payload),
+    })
+
+    return {
+      ok: true as const,
+      data: payload,
+    }
+  }
+
+  const rowsResult = await searchEstimateCollectionRows(
+    orgId,
+    normalizedQuery,
+    HOME_SEARCH_CANDIDATE_LIMIT
+  )
   if (!rowsResult.ok) return rowsResult
 
-  const selectedRows = selectQuoteHomeSearchRows(rowsResult.data)
+  const selectedRows = selectQuoteHomeSearchRows({
+    ...rowsResult.data,
+    limit: HOME_SEARCH_LIMIT,
+  })
   const decoratedRowsResult = await decorateRowsForReadModel(orgId, selectedRows, true, resolvedDeps)
   if (!decoratedRowsResult.ok) return decoratedRowsResult
 
@@ -391,22 +488,29 @@ export async function loadEstimateCollectionJobVersionsPayload(
   const { buildQuoteJobVersionsReadModel, loadEstimateCollectionJobVersionsPage } = resolvedDeps
 
   const startedAt = Date.now()
-  const rowsResult = await loadEstimateCollectionJobVersionsPage(orgId, jobId, options)
+  const pageOptions = parseQuoteHomePageOptions(options, true, resolvedDeps)
+  if (!pageOptions.ok) return pageOptions
+
+  const rowsResult = await loadEstimateCollectionJobVersionsPage(orgId, jobId, {
+    limit: pageOptions.data.limit,
+    cursor: pageOptions.data.cursor,
+  })
   if (!rowsResult.ok) return rowsResult
 
+  const versionsPage = buildJobVersionsPageData(rowsResult.data, resolvedDeps)
   const decoratedRowsResult = await decorateRowsForReadModel(
     orgId,
-    rowsResult.data.items,
+    versionsPage.items,
     true,
     resolvedDeps
   )
   if (!decoratedRowsResult.ok) return decoratedRowsResult
 
   const payload = buildQuoteJobVersionsReadModel(decoratedRowsResult.data, {
-    jobId: rowsResult.data.jobId,
-    totalVersions: rowsResult.data.totalVersions,
-    limit: rowsResult.data.limit,
-    nextCursor: rowsResult.data.nextCursor,
+    jobId: versionsPage.jobId,
+    totalVersions: versionsPage.totalVersions,
+    limit: versionsPage.limit,
+    nextCursor: versionsPage.nextCursor,
   })
 
   logQuoteHomeRead('job-versions', {
@@ -436,6 +540,16 @@ export async function createEstimateCollectionVersion(
 ) {
   const { createEstimateCollectionVersionRecord } = withDeps(deps)
   return createEstimateCollectionVersionRecord(params)
+}
+
+export async function loadEstimateCollectionEligibleJobs(
+  orgId: string,
+  deps: Partial<EstimateCollectionServiceDeps> = {}
+) {
+  const resolvedDeps = withDeps(deps)
+  const jobsResult = await loadEligibleJobsPage(orgId, { limit: 100 }, resolvedDeps)
+  if (!jobsResult.ok) return jobsResult
+  return okResult(jobsResult.data.items)
 }
 
 export type { EstimateCollectionVersionCopy } from './types'

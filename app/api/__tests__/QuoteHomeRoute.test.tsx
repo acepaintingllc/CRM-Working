@@ -5,6 +5,11 @@ import {
   quoteHomeBootstrap,
   quoteHomeJobs,
 } from '@/test-support/quoteHomeFixtures'
+import {
+  QUOTE_HOME_SEARCH_SOURCE_RANK,
+  selectQuoteHomeSearchRows,
+} from '@/lib/quotes/collectionData'
+import type { EstimateCollectionVersionRow } from '@/lib/server/estimate-collection/types'
 
 const mocks = vi.hoisted(() => ({
   requireSessionUserOrg: vi.fn(),
@@ -57,6 +62,26 @@ import { GET as getQuoteJobVersions } from '../quotes/home/jobs/[jobId]/versions
 const authedSession = {
   ok: true as const,
   session: { orgId: 'org-1', userId: 'user-1' },
+}
+
+function makeSearchRow(
+  id: string,
+  updatedAt: string,
+  overrides: Partial<EstimateCollectionVersionRow> = {}
+): EstimateCollectionVersionRow {
+  return {
+    id,
+    job_id: 'job-1',
+    customer_id: 'customer-1',
+    status: 'draft',
+    version_name: 'Version',
+    version_state: 'draft',
+    version_kind: 'standard',
+    version_sort_order: 1,
+    created_at: '2026-04-20T10:00:00.000Z',
+    updated_at: updatedAt,
+    ...overrides,
+  }
 }
 
 describe('quote home API routes', () => {
@@ -123,13 +148,20 @@ describe('quote home API routes', () => {
     expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
   })
 
-  it('keeps bootstrap, jobs, search, and job-version reads in data envelopes', async () => {
+  it('keeps bootstrap, summary, jobs, search, and job-version reads in data envelopes', async () => {
     const bootstrapResponse = await getQuoteHomeBootstrap()
     expect(bootstrapResponse.status).toBe(200)
     await expect(bootstrapResponse.json()).resolves.toEqual({
       data: quoteHomeBootstrap,
     })
     expect(mocks.loadEstimateCollectionBootstrapPayload).toHaveBeenCalledWith('org-1')
+
+    const summaryResponse = await getQuoteHomeSummary()
+    expect(summaryResponse.status).toBe(200)
+    await expect(summaryResponse.json()).resolves.toEqual({
+      data: { total_versions: 0 },
+    })
+    expect(mocks.loadEstimateCollectionSummaryPayload).toHaveBeenCalledWith('org-1')
 
     const jobsResponse = await getQuoteHomeJobs(
       new Request('http://localhost/api/quotes/home/jobs?q=kit&cursor=next&limit=10')
@@ -185,6 +217,15 @@ describe('quote home API routes', () => {
     const bootstrapResponse = await getQuoteHomeBootstrap()
     expect(bootstrapResponse.status).toBe(500)
     await expect(bootstrapResponse.json()).resolves.toEqual({ error: 'bootstrap failed' })
+
+    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'server_error',
+      message: 'summary failed',
+    })
+    const summaryResponse = await getQuoteHomeSummary()
+    expect(summaryResponse.status).toBe(500)
+    await expect(summaryResponse.json()).resolves.toEqual({ error: 'summary failed' })
 
     mocks.loadEstimateCollectionJobsPayload.mockResolvedValueOnce({
       ok: false,
@@ -298,6 +339,61 @@ describe('quote home API routes', () => {
       data: { query: '', items: [] },
     })
     expect(mocks.loadEstimateCollectionSearchPayload).toHaveBeenCalledWith('org-1', '')
+  })
+
+  it('returns quote home search DB failures in the standard error envelope', async () => {
+    mocks.loadEstimateCollectionSearchPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'server_error',
+      message: 'database unavailable',
+    })
+
+    const response = await getQuoteHomeSearch(
+      new Request('http://localhost/api/quotes/home/search?q=revision')
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'database unavailable' })
+  })
+
+  it('ranks version, job, and customer quote home search matches by explicit source policy', () => {
+    const versionMatch = makeSearchRow('estimate-version', '2026-04-20T10:00:00.000Z')
+    const jobMatch = makeSearchRow('estimate-job', '2026-04-24T10:00:00.000Z')
+    const customerMatch = makeSearchRow('estimate-customer', '2026-04-23T10:00:00.000Z')
+
+    expect(QUOTE_HOME_SEARCH_SOURCE_RANK).toEqual({ version: 0, job: 1, customer: 2 })
+    expect(
+      selectQuoteHomeSearchRows({
+        query: 'kitchen',
+        candidateLimit: 6,
+        limit: 6,
+        versionRows: [versionMatch],
+        jobRows: [jobMatch],
+        customerRows: [customerMatch],
+      }).map((row) => row.id)
+    ).toEqual(['estimate-version', 'estimate-job', 'estimate-customer'])
+  })
+
+  it('dedupes duplicate quote home search rows deterministically before capping', () => {
+    const duplicateFromVersion = makeSearchRow('estimate-duplicate', '2026-04-20T10:00:00.000Z', {
+      version_name: 'Version source wins',
+    })
+    const duplicateFromJob = makeSearchRow('estimate-duplicate', '2026-04-24T10:00:00.000Z', {
+      version_name: 'Job source loses',
+    })
+    const customerMatch = makeSearchRow('estimate-customer', '2026-04-23T10:00:00.000Z')
+
+    const selected = selectQuoteHomeSearchRows({
+      query: 'kitchen',
+      candidateLimit: 6,
+      limit: 2,
+      versionRows: [duplicateFromVersion],
+      jobRows: [duplicateFromJob],
+      customerRows: [customerMatch],
+    })
+
+    expect(selected.map((row) => row.id)).toEqual(['estimate-duplicate', 'estimate-customer'])
+    expect(selected[0]?.version_name).toBe('Version source wins')
   })
 
   it('authenticates job-version reads before validating route params', async () => {

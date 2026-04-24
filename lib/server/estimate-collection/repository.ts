@@ -5,23 +5,22 @@ import { supabaseAdmin } from '../org.ts'
 import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import type {
   EstimateCollectionCustomerRow,
+  EstimateCollectionCursorBoundary,
+  EstimateCollectionJobPageDbRow,
+  EstimateCollectionJobVersionsDbPage,
   EstimateCollectionJobRow,
   EstimateCollectionRelatedRows,
   EstimateCollectionRollupRow,
+  EstimateCollectionSearchDbRows,
+  EstimateCollectionSummaryDbRow,
   EstimateCollectionVersionCopy,
   EstimateCollectionVersionRow,
-  QuoteHomeJobsPageRow,
-  QuoteHomeSummaryRow,
 } from './types'
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const VERSION_STATES = new Set(['draft', 'live', 'archived'])
-const quoteHomeCursorSeparator = '::'
-const quoteHomeNullCursorTimestamp = 'null'
-const quoteHomeDefaultPageLimit = 25
-const quoteHomeMaxPageLimit = 100
 
 const estimateSelect =
   'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
@@ -41,65 +40,10 @@ function asTimestamp(value: string | null | undefined) {
   return Number.isFinite(time) ? time : 0
 }
 
-function asPositiveInteger(value: number | null | undefined, fallback: number, maximum: number) {
-  const next = Number(value)
-  if (!Number.isFinite(next)) return fallback
-  return Math.max(1, Math.min(maximum, Math.trunc(next)))
-}
-
 function escapeLikePattern(value: string) {
   return value.replace(/[\\%_]/g, '\\$&')
 }
-
-export function encodeQuoteHomeCursor(value: {
-  timestamp: string | null | undefined
-  id: string | null | undefined
-}) {
-  if (!value.id) return null
-  return `${value.timestamp ?? quoteHomeNullCursorTimestamp}${quoteHomeCursorSeparator}${value.id}`
-}
-
-export function decodeQuoteHomeCursor(cursor: string | null | undefined) {
-  const rawCursor = String(cursor ?? '').trim()
-  if (!rawCursor) {
-    return { ok: true as const, value: null }
-  }
-
-  const parts = rawCursor.split(quoteHomeCursorSeparator)
-  if (parts.length !== 2) {
-    return { ok: false as const, message: 'Invalid cursor.' }
-  }
-
-  const [timestamp, id] = parts
-  if (!timestamp || !uuid.test(id)) {
-    return { ok: false as const, message: 'Invalid cursor.' }
-  }
-
-  if (timestamp === quoteHomeNullCursorTimestamp) {
-    return {
-      ok: true as const,
-      value: {
-        timestamp: null,
-        id,
-      },
-    }
-  }
-
-  const parsedTimestamp = new Date(timestamp)
-  if (Number.isNaN(parsedTimestamp.getTime())) {
-    return { ok: false as const, message: 'Invalid cursor.' }
-  }
-
-  return {
-    ok: true as const,
-    value: {
-      timestamp: parsedTimestamp.toISOString(),
-      id,
-    },
-  }
-}
-
-function compareQuoteHomeCursorKeys(
+function compareNullableTimestampDescIdDesc(
   left: { timestamp: string | null | undefined; id: string },
   right: { timestamp: string | null | undefined; id: string }
 ) {
@@ -115,20 +59,11 @@ function compareQuoteHomeCursorKeys(
   return right.id.localeCompare(left.id)
 }
 
-function isAfterQuoteHomeCursor(
+function isAfterNullableTimestampDescIdCursor(
   row: { timestamp: string | null | undefined; id: string },
   cursor: { timestamp: string | null; id: string }
 ) {
-  return compareQuoteHomeCursorKeys(row, cursor) > 0
-}
-
-export function normalizeEstimateCollectionVersionState(value: string | null | undefined) {
-  return value?.trim() || 'draft'
-}
-
-export function isSentEstimateCollectionJob(job: EstimateCollectionJobRow | undefined) {
-  if (!job) return false
-  return job.status === 'estimate_sent' || job.status === 'follow_up'
+  return compareNullableTimestampDescIdDesc(row, cursor) > 0
 }
 
 export async function loadEstimateCollectionRowsForOrg(
@@ -161,7 +96,7 @@ export async function loadEstimateCollectionRowsForOrg(
 
 export async function loadEstimateCollectionSummary(
   orgId: string
-): Promise<ServiceResult<QuoteHomeSummaryRow | null>> {
+): Promise<ServiceResult<EstimateCollectionSummaryDbRow | null>> {
   const { data, error } = await supabaseAdmin.rpc('quote_home_summary', {
     p_org_id: orgId,
   })
@@ -176,7 +111,9 @@ export async function loadEstimateCollectionSummary(
     return errorResult('server_error', error.message)
   }
 
-  return okResult(Array.isArray(data) ? ((data[0] ?? null) as QuoteHomeSummaryRow | null) : null)
+  return okResult(
+    Array.isArray(data) ? ((data[0] ?? null) as EstimateCollectionSummaryDbRow | null) : null
+  )
 }
 
 export async function loadEstimateCollectionJobsPage(
@@ -184,22 +121,19 @@ export async function loadEstimateCollectionJobsPage(
   options?: {
     query?: string
     limit?: number
-    cursor?: string | null
+    cursor?: EstimateCollectionCursorBoundary | null
   }
 ): Promise<
   ServiceResult<{
     query: string
     limit: number
-    rows: QuoteHomeJobsPageRow[]
+    rows: EstimateCollectionJobPageDbRow[]
   }>
 > {
-  const limit = asPositiveInteger(options?.limit, quoteHomeDefaultPageLimit, quoteHomeMaxPageLimit)
-  const query = asText(options?.query)
-  const cursorResult = decodeQuoteHomeCursor(options?.cursor)
-  if (!cursorResult.ok) {
-    return errorResult('invalid_input', cursorResult.message)
-  }
-  if (cursorResult.value?.timestamp === null) {
+  const limit = options?.limit ?? 25
+  const query = options?.query ?? ''
+  const cursor = options?.cursor ?? null
+  if (cursor?.timestamp === null) {
     return errorResult('invalid_input', 'Invalid cursor.')
   }
 
@@ -207,8 +141,8 @@ export async function loadEstimateCollectionJobsPage(
     p_org_id: orgId,
     p_search: query || null,
     p_limit: limit + 1,
-    p_cursor_created_at: cursorResult.value?.timestamp ?? null,
-    p_cursor_id: cursorResult.value?.id ?? null,
+    p_cursor_created_at: cursor?.timestamp ?? null,
+    p_cursor_id: cursor?.id ?? null,
   })
 
   if (error) {
@@ -221,8 +155,8 @@ export async function loadEstimateCollectionJobsPage(
     return errorResult('server_error', error.message)
   }
 
-  const sortedRows = ((data ?? []) as QuoteHomeJobsPageRow[]).sort((left, right) =>
-    compareQuoteHomeCursorKeys(
+  const sortedRows = ((data ?? []) as EstimateCollectionJobPageDbRow[]).sort((left, right) =>
+    compareNullableTimestampDescIdDesc(
       { timestamp: left.created_at, id: left.id },
       { timestamp: right.created_at, id: right.id }
     )
@@ -233,28 +167,16 @@ export async function loadEstimateCollectionJobsPage(
     rows: sortedRows,
   })
 }
-
 export async function loadEstimateCollectionJobVersionsPage(
   orgId: string,
   jobId: string,
   options?: {
     limit?: number
-    cursor?: string | null
+    cursor?: EstimateCollectionCursorBoundary | null
   }
-): Promise<
-  ServiceResult<{
-    jobId: string
-    totalVersions: number
-    limit: number
-    nextCursor: string | null
-    items: EstimateCollectionVersionRow[]
-  }>
-> {
-  const limit = asPositiveInteger(options?.limit, quoteHomeDefaultPageLimit, quoteHomeMaxPageLimit)
-  const cursorResult = decodeQuoteHomeCursor(options?.cursor)
-  if (!cursorResult.ok) {
-    return errorResult('invalid_input', cursorResult.message)
-  }
+): Promise<ServiceResult<EstimateCollectionJobVersionsDbPage>> {
+  const limit = options?.limit ?? 25
+  const cursor = options?.cursor ?? null
 
   const [countRes, rowsRes] = await Promise.all([
     supabaseAdmin
@@ -272,7 +194,6 @@ export async function loadEstimateCollectionJobVersionsPage(
         .order('id', { ascending: false })
         .limit(limit + 1)
 
-      const cursor = cursorResult.value
       if (cursor) {
         query =
           cursor.timestamp === null
@@ -298,36 +219,26 @@ export async function loadEstimateCollectionJobVersionsPage(
   }
 
   const rawRows = ((rowsRes.data ?? []) as EstimateCollectionVersionRow[]).sort((left, right) =>
-    compareQuoteHomeCursorKeys(
+    compareNullableTimestampDescIdDesc(
       { timestamp: left.updated_at, id: left.id },
       { timestamp: right.updated_at, id: right.id }
     )
   )
 
-  const filteredRows = cursorResult.value
+  const filteredRows = cursor
     ? rawRows.filter((row) =>
-        isAfterQuoteHomeCursor(
+        isAfterNullableTimestampDescIdCursor(
           { timestamp: row.updated_at, id: row.id },
-          cursorResult.value!
+          cursor
         )
       )
     : rawRows
-
-  const pageRows = filteredRows.slice(0, limit)
-  const nextCursor =
-    filteredRows.length > limit
-      ? encodeQuoteHomeCursor({
-          timestamp: pageRows[pageRows.length - 1]?.updated_at,
-          id: pageRows[pageRows.length - 1]?.id,
-        })
-      : null
 
   return okResult({
     jobId,
     totalVersions: Number(countRes.count ?? 0),
     limit,
-    nextCursor,
-    items: pageRows,
+    rows: filteredRows,
   })
 }
 
@@ -361,81 +272,95 @@ async function loadEstimateCollectionRowsByLookup(
   return okResult((data ?? []) as EstimateCollectionVersionRow[])
 }
 
+async function searchEstimateCollectionVersionRows(
+  orgId: string,
+  query: string,
+  candidateLimit: number
+) {
+  const estimateSearchPattern = `%${escapeLikePattern(query.replace(/[(),]/g, ' ').trim())}%`
+
+  const { data, error } = await supabaseAdmin
+    .from('estimates')
+    .select(estimateSelect)
+    .eq('org_id', orgId)
+    .or(
+      [
+        `version_name.ilike.${estimateSearchPattern}`,
+        `version_kind.ilike.${estimateSearchPattern}`,
+        `version_state.ilike.${estimateSearchPattern}`,
+      ].join(',')
+    )
+    .order('updated_at', { ascending: false })
+    .limit(candidateLimit)
+
+  if (error) {
+    return errorResult('server_error', error.message)
+  }
+
+  return okResult((data ?? []) as EstimateCollectionVersionRow[])
+}
+
+async function searchEstimateCollectionLookupIds(
+  orgId: string,
+  table: 'jobs' | 'customers',
+  column: 'title' | 'name',
+  query: string,
+  candidateLimit: number
+): Promise<ServiceResult<string[]>> {
+  const pattern = `%${escapeLikePattern(query)}%`
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .select('id')
+    .eq('org_id', orgId)
+    .ilike(column, pattern)
+    .limit(candidateLimit)
+
+  if (error) {
+    return errorResult('server_error', error.message)
+  }
+
+  return okResult((data ?? []).map((row) => String(row.id ?? '')).filter(Boolean))
+}
+
 export async function searchEstimateCollectionRows(
   orgId: string,
   rawQuery: string,
-  limit: number
+  candidateLimit: number
 ): Promise<
-  ServiceResult<{
-    query: string
-    limit: number
-    versionRows: EstimateCollectionVersionRow[]
-    jobRows: EstimateCollectionVersionRow[]
-    customerRows: EstimateCollectionVersionRow[]
-  }>
+  ServiceResult<EstimateCollectionSearchDbRows>
 > {
   const query = rawQuery.trim()
   if (!query) {
-    return okResult({ query, limit, versionRows: [], jobRows: [], customerRows: [] })
+    return okResult({
+      query,
+      candidateLimit,
+      versionRows: [],
+      jobRows: [],
+      customerRows: [],
+    })
   }
 
-  const pattern = `%${escapeLikePattern(query)}%`
-  const estimateSearchPattern = `%${escapeLikePattern(query.replace(/[(),]/g, ' ').trim())}%`
-
-  const [versionMatchesRes, jobsRes, customersRes] = await Promise.all([
-    supabaseAdmin
-      .from('estimates')
-      .select(estimateSelect)
-      .eq('org_id', orgId)
-      .or(
-        [
-          `version_name.ilike.${estimateSearchPattern}`,
-          `version_kind.ilike.${estimateSearchPattern}`,
-          `version_state.ilike.${estimateSearchPattern}`,
-        ].join(',')
-      )
-      .order('updated_at', { ascending: false })
-      .limit(limit),
-    supabaseAdmin
-      .from('jobs')
-      .select('id')
-      .eq('org_id', orgId)
-      .ilike('title', pattern)
-      .limit(limit),
-    supabaseAdmin
-      .from('customers')
-      .select('id')
-      .eq('org_id', orgId)
-      .ilike('name', pattern)
-      .limit(limit),
+  const [versionRowsResult, jobIdsResult, customerIdsResult] = await Promise.all([
+    searchEstimateCollectionVersionRows(orgId, query, candidateLimit),
+    searchEstimateCollectionLookupIds(orgId, 'jobs', 'title', query, candidateLimit),
+    searchEstimateCollectionLookupIds(orgId, 'customers', 'name', query, candidateLimit),
   ])
 
-  if (versionMatchesRes.error) {
-    return errorResult('server_error', versionMatchesRes.error.message)
-  }
-  if (jobsRes.error) {
-    return errorResult('server_error', jobsRes.error.message)
-  }
-  if (customersRes.error) {
-    return errorResult('server_error', customersRes.error.message)
-  }
-
-  const matchedJobIds = (jobsRes.data ?? []).map((row) => String(row.id ?? '')).filter(Boolean)
-  const matchedCustomerIds = (customersRes.data ?? [])
-    .map((row) => String(row.id ?? ''))
-    .filter(Boolean)
+  if (!versionRowsResult.ok) return versionRowsResult
+  if (!jobIdsResult.ok) return jobIdsResult
+  if (!customerIdsResult.ok) return customerIdsResult
 
   const [jobRowsResult, customerRowsResult] = await Promise.all([
-    matchedJobIds.length
+    jobIdsResult.data.length
       ? loadEstimateCollectionRowsByLookup(orgId, {
-          jobIds: matchedJobIds,
-          limit,
+          jobIds: jobIdsResult.data,
+          limit: candidateLimit,
         })
       : Promise.resolve(okResult([] as EstimateCollectionVersionRow[])),
-    matchedCustomerIds.length
+    customerIdsResult.data.length
       ? loadEstimateCollectionRowsByLookup(orgId, {
-          customerIds: matchedCustomerIds,
-          limit,
+          customerIds: customerIdsResult.data,
+          limit: candidateLimit,
         })
       : Promise.resolve(okResult([] as EstimateCollectionVersionRow[])),
   ])
@@ -445,8 +370,8 @@ export async function searchEstimateCollectionRows(
 
   return okResult({
     query,
-    limit,
-    versionRows: (versionMatchesRes.data ?? []) as EstimateCollectionVersionRow[],
+    candidateLimit,
+    versionRows: versionRowsResult.data,
     jobRows: jobRowsResult.data,
     customerRows: customerRowsResult.data,
   })
@@ -622,12 +547,4 @@ export async function loadEstimateCollectionRollupSummary(params: {
       )
     ),
   })
-}
-
-export async function loadEstimateCollectionEligibleJobs(
-  orgId: string
-): Promise<ServiceResult<QuoteHomeJobsPageRow[]>> {
-  const jobsPage = await loadEstimateCollectionJobsPage(orgId, { limit: 100 })
-  if (!jobsPage.ok) return jobsPage
-  return okResult(jobsPage.data.rows)
 }

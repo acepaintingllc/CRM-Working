@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   buildQuoteJobVersionsReadModel: vi.fn(),
   buildQuoteListPayload: vi.fn(),
   createEstimateCollectionVersionRecord: vi.fn(),
+  decodeQuoteHomeCursor: vi.fn(),
   decorateEstimateCollectionRows: vi.fn(),
   encodeQuoteHomeCursor: vi.fn(),
   loadEstimateCollectionJobVersionsPage: vi.fn(),
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   loadEstimateCollectionRelatedRows: vi.fn(),
   loadEstimateCollectionRowsForOrg: vi.fn(),
   loadEstimateCollectionSummary: vi.fn(),
+  normalizeQuoteHomePageLimit: vi.fn(),
+  normalizeQuoteHomeSearchQuery: vi.fn(),
   selectQuoteHomeSearchRows: vi.fn(),
   searchEstimateCollectionRows: vi.fn(),
   toQuoteHomeEligibleJobReadModel: vi.fn(),
@@ -41,6 +44,7 @@ const deps = {
   buildQuoteJobVersionsReadModel: mocks.buildQuoteJobVersionsReadModel,
   buildQuoteListPayload: mocks.buildQuoteListPayload,
   createEstimateCollectionVersionRecord: mocks.createEstimateCollectionVersionRecord,
+  decodeQuoteHomeCursor: mocks.decodeQuoteHomeCursor,
   decorateEstimateCollectionRows: mocks.decorateEstimateCollectionRows,
   encodeQuoteHomeCursor: mocks.encodeQuoteHomeCursor,
   loadEstimateCollectionJobVersionsPage: mocks.loadEstimateCollectionJobVersionsPage,
@@ -48,9 +52,25 @@ const deps = {
   loadEstimateCollectionRelatedRows: mocks.loadEstimateCollectionRelatedRows,
   loadEstimateCollectionRowsForOrg: mocks.loadEstimateCollectionRowsForOrg,
   loadEstimateCollectionSummary: mocks.loadEstimateCollectionSummary,
+  normalizeQuoteHomePageLimit: mocks.normalizeQuoteHomePageLimit,
+  normalizeQuoteHomeSearchQuery: mocks.normalizeQuoteHomeSearchQuery,
   selectQuoteHomeSearchRows: mocks.selectQuoteHomeSearchRows,
   searchEstimateCollectionRows: mocks.searchEstimateCollectionRows,
   toQuoteHomeEligibleJobReadModel: mocks.toQuoteHomeEligibleJobReadModel,
+}
+
+function makeJobRow(
+  id: string,
+  createdAt: string,
+  customerId: string | null = `customer-${id}`
+) {
+  return {
+    id,
+    customer_id: customerId,
+    created_at: createdAt,
+    title: `Job ${id}`,
+    version_count: 0,
+  }
 }
 
 describe('estimate collection service', () => {
@@ -64,6 +84,22 @@ describe('estimate collection service', () => {
     mocks.encodeQuoteHomeCursor.mockImplementation((value) =>
       value?.id ? `${value.timestamp ?? 'null'}::${value.id}` : null
     )
+    mocks.decodeQuoteHomeCursor.mockImplementation((cursor) => {
+      const raw = String(cursor ?? '').trim()
+      if (!raw) return { ok: true, value: null }
+      const [timestamp, id] = raw.split('::')
+      return { ok: true, value: { timestamp: timestamp === 'null' ? null : timestamp, id } }
+    })
+    mocks.normalizeQuoteHomePageLimit.mockImplementation((value) =>
+      Math.max(1, Math.min(100, Math.trunc(Number(value ?? 25))))
+    )
+    mocks.normalizeQuoteHomeSearchQuery.mockImplementation((value) => String(value ?? '').trim())
+    mocks.buildQuoteHomeJobsPageReadModel.mockImplementation((params) => ({
+      query: params.query,
+      limit: params.limit,
+      next_cursor: params.nextCursor,
+      items: params.items,
+    }))
   })
 
   it('builds the collection payload from decorated rows', async () => {
@@ -123,8 +159,7 @@ describe('estimate collection service', () => {
       jobId: 'job-1',
       totalVersions: 2,
       limit: 25,
-      nextCursor: null,
-      items: [{ id: 'estimate-1', job_id: 'job-1' }],
+      rows: [{ id: 'estimate-1', job_id: 'job-1' }],
     }
     const decoratedRows = [{ estimate_id: 'estimate-1', job_id: 'job-1' }]
     const selectedJobVersions = {
@@ -156,11 +191,16 @@ describe('estimate collection service', () => {
       data: payload,
     })
     expect(mocks.loadEstimateCollectionSummary).toHaveBeenCalledWith('org-1')
-    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenCalledWith('org-1', { limit: 25 })
+    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenCalledWith('org-1', {
+      query: '',
+      limit: 25,
+      cursor: null,
+    })
     expect(mocks.loadEstimateCollectionJobVersionsPage).toHaveBeenCalledWith('org-1', 'job-1', {
       limit: 25,
+      cursor: null,
     })
-    expect(mocks.loadEstimateCollectionRelatedRows).toHaveBeenCalledWith('org-1', versionsPage.items, {
+    expect(mocks.loadEstimateCollectionRelatedRows).toHaveBeenCalledWith('org-1', versionsPage.rows, {
       includeRollups: true,
     })
     expect(mocks.buildQuoteHomeJobsPageReadModel).toHaveBeenCalledWith({
@@ -191,7 +231,7 @@ describe('estimate collection service', () => {
     mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: rows })
     mocks.searchEstimateCollectionRows.mockResolvedValue({
       ok: true,
-      data: { query: 'kitchen', limit: 8, versionRows: rows, jobRows: [], customerRows: [] },
+      data: { query: 'kitchen', candidateLimit: 32, versionRows: rows, jobRows: [], customerRows: [] },
     })
     mocks.selectQuoteHomeSearchRows.mockReturnValue(rows)
     mocks.decorateEstimateCollectionRows.mockReturnValue(decoratedRows)
@@ -208,15 +248,30 @@ describe('estimate collection service', () => {
       ok: true,
       data: searchPayload,
     })
-    expect(mocks.searchEstimateCollectionRows).toHaveBeenCalledWith('org-1', 'kitchen', 8)
+    expect(mocks.searchEstimateCollectionRows).toHaveBeenCalledWith('org-1', 'kitchen', 32)
     expect(mocks.selectQuoteHomeSearchRows).toHaveBeenCalledWith({
       query: 'kitchen',
+      candidateLimit: 32,
       limit: 8,
       versionRows: rows,
       jobRows: [],
       customerRows: [],
     })
     expect(mocks.buildQuoteHomeSearchReadModel).toHaveBeenCalledWith(decoratedRows, 'kitchen')
+  })
+
+  it('returns an empty search read model without repository work for blank queries', async () => {
+    const payload = { query: '', items: [] }
+    mocks.buildQuoteHomeSearchReadModel.mockReturnValue(payload)
+
+    await expect(loadEstimateCollectionSearchPayload('org-1', '   ', deps)).resolves.toEqual({
+      ok: true,
+      data: payload,
+    })
+
+    expect(mocks.searchEstimateCollectionRows).not.toHaveBeenCalled()
+    expect(mocks.selectQuoteHomeSearchRows).not.toHaveBeenCalled()
+    expect(mocks.buildQuoteHomeSearchReadModel).toHaveBeenCalledWith([], '')
   })
 
   it('builds jobs and job version payloads through the paging read-model builders', async () => {
@@ -236,15 +291,14 @@ describe('estimate collection service', () => {
       jobId: 'job-1',
       totalVersions: 1,
       limit: 10,
-      nextCursor: 'cursor-4',
-      items: [{ id: 'estimate-1', job_id: 'job-1' }],
+      rows: [{ id: 'estimate-1', job_id: 'job-1' }],
     }
     const decoratedRows = [{ estimate_id: 'estimate-1', job_id: 'job-1' }]
     const versionsPayload = {
       job_id: 'job-1',
       total_versions: 1,
       limit: 10,
-      next_cursor: 'cursor-4',
+      next_cursor: null,
       items: decoratedRows,
     }
 
@@ -258,7 +312,11 @@ describe('estimate collection service', () => {
     await expect(
       loadEstimateCollectionJobsPayload(
         'org-1',
-        { query: 'kit', limit: 10, cursor: 'cursor-2' },
+        {
+          query: 'kit',
+          limit: 10,
+          cursor: '2026-04-24T12:00:00.000Z::33333333-3333-4333-8333-333333333333',
+        },
         deps
       )
     ).resolves.toEqual({
@@ -268,7 +326,10 @@ describe('estimate collection service', () => {
     expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenCalledWith('org-1', {
       query: 'kit',
       limit: 10,
-      cursor: 'cursor-2',
+      cursor: {
+        timestamp: '2026-04-24T12:00:00.000Z',
+        id: '33333333-3333-4333-8333-333333333333',
+      },
     })
     expect(mocks.buildQuoteHomeJobsPageReadModel).toHaveBeenCalledWith({
       query: 'kit',
@@ -281,7 +342,10 @@ describe('estimate collection service', () => {
       loadEstimateCollectionJobVersionsPayload(
         'org-1',
         'job-1',
-        { limit: 10, cursor: 'cursor-3' },
+        {
+          limit: 10,
+          cursor: '2026-04-24T11:00:00.000Z::22222222-2222-4222-8222-222222222222',
+        },
         deps
       )
     ).resolves.toEqual({
@@ -290,12 +354,15 @@ describe('estimate collection service', () => {
     })
     expect(mocks.loadEstimateCollectionJobVersionsPage).toHaveBeenCalledWith('org-1', 'job-1', {
       limit: 10,
-      cursor: 'cursor-3',
+      cursor: {
+        timestamp: '2026-04-24T11:00:00.000Z',
+        id: '22222222-2222-4222-8222-222222222222',
+      },
     })
-    expect(mocks.loadEstimateCollectionRelatedRows).toHaveBeenCalledWith('org-1', versionsPage.items, {
+    expect(mocks.loadEstimateCollectionRelatedRows).toHaveBeenCalledWith('org-1', versionsPage.rows, {
       includeRollups: true,
     })
-    expect(mocks.decorateEstimateCollectionRows).toHaveBeenCalledWith(versionsPage.items, {
+    expect(mocks.decorateEstimateCollectionRows).toHaveBeenCalledWith(versionsPage.rows, {
       jobs: [],
       customers: [],
       rollups: [],
@@ -304,7 +371,7 @@ describe('estimate collection service', () => {
       jobId: 'job-1',
       totalVersions: 1,
       limit: 10,
-      nextCursor: 'cursor-4',
+      nextCursor: null,
     })
   })
 
@@ -323,8 +390,18 @@ describe('estimate collection service', () => {
       limit: 2,
       next_cursor: '2026-04-24T11:00:00.000Z::job-1',
       items: [
-        { id: 'job-3', customer_id: 'customer-3', title: 'Kitchen' },
-        { id: 'job-1', customer_id: 'customer-1', title: 'Garage' },
+        {
+          id: 'job-3',
+          customer_id: 'customer-3',
+          title: 'Kitchen',
+          created_at: '2026-04-24T13:00:00.000Z',
+        },
+        {
+          id: 'job-1',
+          customer_id: 'customer-1',
+          title: 'Garage',
+          created_at: '2026-04-24T11:00:00.000Z',
+        },
       ],
     }
 
@@ -332,7 +409,9 @@ describe('estimate collection service', () => {
       .mockResolvedValueOnce({ ok: true, data: { query: '', limit: 2, rows: firstRows } })
       .mockResolvedValueOnce({ ok: true, data: { query: '', limit: 2, rows: secondRows } })
     mocks.toQuoteHomeEligibleJobReadModel.mockImplementation((row) =>
-      row.customer_id ? { id: row.id, customer_id: row.customer_id, title: row.title } : null
+      row.customer_id
+        ? { id: row.id, customer_id: row.customer_id, title: row.title, created_at: row.created_at }
+        : null
     )
     mocks.buildQuoteHomeJobsPageReadModel.mockReturnValue(pagePayload)
 
@@ -341,11 +420,18 @@ describe('estimate collection service', () => {
       data: pagePayload,
     })
 
-    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenNthCalledWith(1, 'org-1', { limit: 2 })
+    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenNthCalledWith(1, 'org-1', {
+      query: '',
+      limit: 2,
+      cursor: null,
+    })
     expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenNthCalledWith(2, 'org-1', {
       query: '',
       limit: 2,
-      cursor: '2026-04-24T12:00:00.000Z::job-2',
+      cursor: {
+        timestamp: '2026-04-24T12:00:00.000Z',
+        id: 'job-2',
+      },
     })
     expect(mocks.buildQuoteHomeJobsPageReadModel).toHaveBeenCalledWith({
       query: '',
@@ -353,6 +439,173 @@ describe('estimate collection service', () => {
       nextCursor: '2026-04-24T11:00:00.000Z::job-1',
       items: pagePayload.items,
     })
+  })
+
+  it('returns an empty jobs page without a next cursor', async () => {
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValueOnce({
+      ok: true,
+      data: { query: '', limit: 2, rows: [] },
+    })
+
+    await expect(loadEstimateCollectionJobsPayload('org-1', { limit: 2 }, deps)).resolves.toEqual({
+      ok: true,
+      data: {
+        query: '',
+        limit: 2,
+        next_cursor: null,
+        items: [],
+      },
+    })
+  })
+
+  it('returns a partial final jobs page after eligibility filtering', async () => {
+    const rows = [
+      makeJobRow('job-3', '2026-04-24T13:00:00.000Z', null),
+      makeJobRow('job-2', '2026-04-24T12:00:00.000Z', 'customer-2'),
+    ]
+
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValueOnce({
+      ok: true,
+      data: { query: 'kit', limit: 3, rows },
+    })
+
+    const result = await loadEstimateCollectionJobsPayload('org-1', {
+      query: 'kit',
+      limit: 3,
+    }, deps)
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        query: 'kit',
+        limit: 3,
+        next_cursor: null,
+        items: [expect.objectContaining({ id: 'job-2' })],
+      },
+    })
+  })
+
+  it('returns an exact-limit final jobs page without a next cursor', async () => {
+    const rows = [
+      makeJobRow('job-3', '2026-04-24T13:00:00.000Z', 'customer-3'),
+      makeJobRow('job-2', '2026-04-24T12:00:00.000Z', 'customer-2'),
+    ]
+
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValueOnce({
+      ok: true,
+      data: { query: '', limit: 2, rows },
+    })
+
+    const result = await loadEstimateCollectionJobsPayload('org-1', { limit: 2 }, deps)
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        query: '',
+        limit: 2,
+        next_cursor: null,
+        items: [
+          expect.objectContaining({ id: 'job-3' }),
+          expect.objectContaining({ id: 'job-2' }),
+        ],
+      },
+    })
+  })
+
+  it('returns over-limit jobs pages with a cursor from the last returned eligible job', async () => {
+    const rows = [
+      makeJobRow('job-4', '2026-04-24T14:00:00.000Z', 'customer-4'),
+      makeJobRow('job-3', '2026-04-24T13:00:00.000Z', 'customer-3'),
+      makeJobRow('job-2', '2026-04-24T12:00:00.000Z', 'customer-2'),
+    ]
+
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValueOnce({
+      ok: true,
+      data: { query: '', limit: 2, rows },
+    })
+
+    const result = await loadEstimateCollectionJobsPayload('org-1', { limit: 2 }, deps)
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        query: '',
+        limit: 2,
+        next_cursor: '2026-04-24T13:00:00.000Z::job-3',
+        items: [
+          expect.objectContaining({ id: 'job-4' }),
+          expect.objectContaining({ id: 'job-3' }),
+        ],
+      },
+    })
+  })
+
+  it('returns an exact-limit final page when only ineligible raw rows remain', async () => {
+    const firstRows = [
+      makeJobRow('job-4', '2026-04-24T14:00:00.000Z', 'customer-4'),
+      makeJobRow('job-3', '2026-04-24T13:00:00.000Z', 'customer-3'),
+      makeJobRow('job-2', '2026-04-24T12:00:00.000Z', null),
+    ]
+    const secondRows = [
+      makeJobRow('job-1', '2026-04-24T11:00:00.000Z', null),
+    ]
+
+    mocks.loadEstimateCollectionJobsPage
+      .mockResolvedValueOnce({ ok: true, data: { query: '', limit: 2, rows: firstRows } })
+      .mockResolvedValueOnce({ ok: true, data: { query: '', limit: 2, rows: secondRows } })
+
+    const result = await loadEstimateCollectionJobsPayload('org-1', { limit: 2 }, deps)
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        query: '',
+        limit: 2,
+        next_cursor: null,
+        items: [
+          expect.objectContaining({ id: 'job-4' }),
+          expect.objectContaining({ id: 'job-3' }),
+        ],
+      },
+    })
+    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenNthCalledWith(2, 'org-1', {
+      query: '',
+      limit: 2,
+      cursor: {
+        timestamp: '2026-04-24T12:00:00.000Z',
+        id: 'job-2',
+      },
+    })
+  })
+
+  it('rejects invalid page cursors before repository work', async () => {
+    mocks.decodeQuoteHomeCursor.mockReturnValueOnce({
+      ok: false,
+      message: 'Invalid cursor.',
+    })
+
+    await expect(
+      loadEstimateCollectionJobsPayload('org-1', { cursor: 'bad' }, deps)
+    ).resolves.toEqual({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Invalid cursor.',
+    })
+    expect(mocks.loadEstimateCollectionJobsPage).not.toHaveBeenCalled()
+
+    mocks.decodeQuoteHomeCursor.mockReturnValueOnce({
+      ok: false,
+      message: 'Invalid cursor.',
+    })
+
+    await expect(
+      loadEstimateCollectionJobVersionsPayload('org-1', 'job-1', { cursor: 'bad' }, deps)
+    ).resolves.toEqual({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Invalid cursor.',
+    })
+    expect(mocks.loadEstimateCollectionJobVersionsPage).not.toHaveBeenCalled()
   })
 
   it('delegates version creation to the repository write boundary', async () => {

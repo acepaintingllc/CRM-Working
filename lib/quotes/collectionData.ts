@@ -1,11 +1,12 @@
 import { isJobStatus } from '../jobs/types'
 import type {
   EstimateCollectionCustomerRow,
+  EstimateCollectionJobPageDbRow,
   EstimateCollectionJobRow,
   EstimateCollectionRollupRow,
+  EstimateCollectionSearchDbRows,
+  EstimateCollectionSummaryDbRow,
   EstimateCollectionVersionRow,
-  QuoteHomeJobsPageRow,
-  QuoteHomeSummaryRow,
 } from '../server/estimate-collection/types'
 
 export type EstimateCollectionDecoratedRow = {
@@ -47,15 +48,11 @@ export type EstimateCollectionRowRelations = {
 export type QuoteHomeJobsPageRows = {
   query: string
   limit: number
-  rows: QuoteHomeJobsPageRow[]
+  rows: EstimateCollectionJobPageDbRow[]
 }
 
-export type QuoteHomeSearchRows = {
-  query: string
+export type QuoteHomeSearchRows = EstimateCollectionSearchDbRows & {
   limit: number
-  versionRows: EstimateCollectionVersionRow[]
-  jobRows: EstimateCollectionVersionRow[]
-  customerRows: EstimateCollectionVersionRow[]
 }
 
 export const QUOTE_HOME_SEARCH_SOURCE_RANK = {
@@ -63,6 +60,95 @@ export const QUOTE_HOME_SEARCH_SOURCE_RANK = {
   job: 1,
   customer: 2,
 } as const
+
+export const QUOTE_HOME_SEARCH_SORT_POLICY = [
+  'source rank ascending',
+  'updated_at descending',
+  'id descending',
+] as const
+
+export type QuoteHomeSearchSource = keyof typeof QUOTE_HOME_SEARCH_SOURCE_RANK
+
+export type QuoteHomeSearchCandidate = {
+  row: EstimateCollectionVersionRow
+  source: QuoteHomeSearchSource
+  rank: number
+}
+
+export const quoteHomeDefaultPageLimit = 25
+export const quoteHomeMaxPageLimit = 100
+
+const uuid =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const quoteHomeCursorSeparator = '::'
+const quoteHomeNullCursorTimestamp = 'null'
+
+export type QuoteHomeCursorKey = {
+  timestamp: string | null
+  id: string
+}
+
+export function normalizeQuoteHomeSearchQuery(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+export function normalizeQuoteHomePageLimit(
+  value: number | null | undefined,
+  fallback = quoteHomeDefaultPageLimit,
+  maximum = quoteHomeMaxPageLimit
+): number {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return fallback
+  return Math.max(1, Math.min(maximum, Math.trunc(next)))
+}
+
+export function encodeQuoteHomeCursor(value: {
+  timestamp: string | null | undefined
+  id: string | null | undefined
+}) {
+  if (!value.id) return null
+  return `${value.timestamp ?? quoteHomeNullCursorTimestamp}${quoteHomeCursorSeparator}${value.id}`
+}
+
+export function decodeQuoteHomeCursor(cursor: string | null | undefined) {
+  const rawCursor = normalizeQuoteHomeSearchQuery(cursor)
+  if (!rawCursor) {
+    return { ok: true as const, value: null }
+  }
+
+  const parts = rawCursor.split(quoteHomeCursorSeparator)
+  if (parts.length !== 2) {
+    return { ok: false as const, message: 'Invalid cursor.' }
+  }
+
+  const [timestamp, id] = parts
+  if (!timestamp || !uuid.test(id)) {
+    return { ok: false as const, message: 'Invalid cursor.' }
+  }
+
+  if (timestamp === quoteHomeNullCursorTimestamp) {
+    return {
+      ok: true as const,
+      value: {
+        timestamp: null,
+        id,
+      },
+    }
+  }
+
+  const parsedTimestamp = new Date(timestamp)
+  if (Number.isNaN(parsedTimestamp.getTime())) {
+    return { ok: false as const, message: 'Invalid cursor.' }
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      timestamp: parsedTimestamp.toISOString(),
+      id,
+    },
+  }
+}
 
 type EstimateCollectionDecoratedRowInput = Partial<EstimateCollectionDecoratedRow>
 
@@ -241,9 +327,9 @@ function isSentEstimateCollectionJob(job: EstimateCollectionJobRow | undefined) 
   return job.status === 'estimate_sent' || job.status === 'follow_up'
 }
 
-function compareEstimateRowsBySearchPolicy(
-  left: { row: EstimateCollectionVersionRow; rank: number },
-  right: { row: EstimateCollectionVersionRow; rank: number }
+function compareQuoteHomeSearchCandidatesByPolicy(
+  left: QuoteHomeSearchCandidate,
+  right: QuoteHomeSearchCandidate
 ) {
   const rankDiff = left.rank - right.rank
   if (rankDiff !== 0) return rankDiff
@@ -252,6 +338,28 @@ function compareEstimateRowsBySearchPolicy(
   if (updatedDiff !== 0) return updatedDiff
 
   return right.row.id.localeCompare(left.row.id)
+}
+
+export function toQuoteHomeSearchCandidates(
+  params: EstimateCollectionSearchDbRows
+): QuoteHomeSearchCandidate[] {
+  return [
+    ...params.versionRows.map((row) => ({
+      row,
+      source: 'version' as const,
+      rank: QUOTE_HOME_SEARCH_SOURCE_RANK.version,
+    })),
+    ...params.jobRows.map((row) => ({
+      row,
+      source: 'job' as const,
+      rank: QUOTE_HOME_SEARCH_SOURCE_RANK.job,
+    })),
+    ...params.customerRows.map((row) => ({
+      row,
+      source: 'customer' as const,
+      rank: QUOTE_HOME_SEARCH_SOURCE_RANK.customer,
+    })),
+  ]
 }
 
 function getEstimateId(row: EstimateCollectionDecoratedRowInput): string {
@@ -354,7 +462,7 @@ export function toQuoteHomeSearchResultReadModel(
 }
 
 export function buildQuoteHomeSummaryFromRow(
-  row: QuoteHomeSummaryRow | null | undefined
+  row: EstimateCollectionSummaryDbRow | null | undefined
 ): QuoteHomeSummaryReadModel {
   return {
     total_versions: Number(row?.total_versions ?? 0),
@@ -405,7 +513,7 @@ export function decorateEstimateCollectionRows(
 }
 
 export function toQuoteHomeEligibleJobReadModel(
-  row: QuoteHomeJobsPageRow
+  row: EstimateCollectionJobPageDbRow
 ): QuoteHomeJobListItemReadModel | null {
   const customerId = asRequiredText(row.customer_id, '')
   if (!customerId) return null
@@ -433,11 +541,9 @@ export function toQuoteHomeEligibleJobReadModel(
 }
 
 export function selectQuoteHomeSearchRows(params: QuoteHomeSearchRows): EstimateCollectionVersionRow[] {
-  const candidates = [
-    ...params.versionRows.map((row) => ({ row, rank: QUOTE_HOME_SEARCH_SOURCE_RANK.version })),
-    ...params.jobRows.map((row) => ({ row, rank: QUOTE_HOME_SEARCH_SOURCE_RANK.job })),
-    ...params.customerRows.map((row) => ({ row, rank: QUOTE_HOME_SEARCH_SOURCE_RANK.customer })),
-  ].sort(compareEstimateRowsBySearchPolicy)
+  const candidates = toQuoteHomeSearchCandidates(params).sort(
+    compareQuoteHomeSearchCandidatesByPolicy
+  )
 
   const selected = new Map<string, EstimateCollectionVersionRow>()
   for (const candidate of candidates) {

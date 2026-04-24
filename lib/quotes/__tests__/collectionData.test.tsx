@@ -218,6 +218,7 @@ describe('quote collection data', () => {
     expect(
       selectQuoteHomeSearchRows({
         query: 'kitchen',
+        candidateLimit: 3,
         limit: 3,
         versionRows: [directOld, duplicate],
         jobRows: [jobNew, duplicate],

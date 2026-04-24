@@ -39,7 +39,7 @@ export type EstimateCollectionRelatedRows = {
   rollups: EstimateCollectionRollupRow[]
 }
 
-export type QuoteHomeSummaryRow = {
+export type EstimateCollectionSummaryDbRow = {
   total_versions: number | null
   draft_count: number | null
   sent_or_awaiting_count: number | null
@@ -47,7 +47,7 @@ export type QuoteHomeSummaryRow = {
   pipeline_total: number | null
 }
 
-export type QuoteHomeJobsPageRow = {
+export type EstimateCollectionJobPageDbRow = {
   id: string
   customer_id: string | null
   customer_name: string | null
@@ -66,4 +66,24 @@ export type QuoteHomeJobsPageRow = {
   closeout_notes: string | null
   linked_estimate_id: string | null
   version_count: number | null
+}
+
+export type EstimateCollectionJobVersionsDbPage = {
+  jobId: string
+  totalVersions: number
+  limit: number
+  rows: EstimateCollectionVersionRow[]
+}
+
+export type EstimateCollectionSearchDbRows = {
+  query: string
+  candidateLimit: number
+  versionRows: EstimateCollectionVersionRow[]
+  jobRows: EstimateCollectionVersionRow[]
+  customerRows: EstimateCollectionVersionRow[]
+}
+
+export type EstimateCollectionCursorBoundary = {
+  timestamp: string | null
+  id: string
 }
