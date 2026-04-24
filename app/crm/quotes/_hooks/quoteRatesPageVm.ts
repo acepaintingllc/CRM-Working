@@ -1,6 +1,7 @@
 'use client'
 
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
+import type { RatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
   RatesFlagsCategory,
   RatesFlagsDraft,
@@ -45,13 +46,23 @@ export type QuoteRatesEditorVm = {
   isCreating: boolean
   inlineValidation: string | null
   canSave: boolean
-  formatDraftValue: (fieldKey: string) => string
 }
 
 export type QuoteRatesDiscardVm = {
   status: 'idle' | 'confirming' | 'applying'
   isOpen: boolean
   transitionType: QuoteRatesPendingTransition['type'] | null
+}
+
+export function formatRatesDraftValue<TKey extends RatesFlagsEditableCategoryKey>(
+  adapter: RatesFlagsDraftAdapter<TKey> | null,
+  category: RatesFlagsEditableCategory<TKey> | null,
+  draft: RatesFlagsDraft<TKey> | null,
+  fieldKey: string
+) {
+  if (!adapter || !category || !draft) return ''
+
+  return adapter.formatDraftValue(category, draft, fieldKey)
 }
 
 export function buildQuoteRatesPageVm(params: {
@@ -61,7 +72,7 @@ export function buildQuoteRatesPageVm(params: {
 }) {
   const { resource, workflowState, derived } = params
 
-  const hasData = resource.data.categories.length > 0 || (!resource.loading && !resource.error)
+  const hasData = resource.data.categories.length > 0
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
     hasData,
@@ -131,16 +142,6 @@ export function buildQuoteRatesPageVm(params: {
       isCreating: workflowState.editorMode === 'create',
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
-      formatDraftValue: derived.activeCategory
-        ? (fieldKey: string) =>
-            workflowState.draft && derived.adapter
-              ? derived.adapter.formatDraftValue(
-                  derived.activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
-                  workflowState.draft as never,
-                  fieldKey
-                )
-              : ''
-        : () => '',
     } satisfies QuoteRatesEditorVm,
     discardVm: {
       isOpen:

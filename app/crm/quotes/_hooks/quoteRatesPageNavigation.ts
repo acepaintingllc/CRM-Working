@@ -5,9 +5,13 @@ import {
   categoryByKey,
   createRatesFlagsDraftSnapshot,
 } from '@/lib/quotes/ratesFlagsForm'
-import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
+import {
+  getRatesFlagsDraftAdapter,
+  isRatesFlagsEditableCategoryKey,
+} from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
   RatesFlagsCategory,
+  RatesFlagsCategoryKey,
   RatesFlagsEditableCategory,
   RatesFlagsEditableCategoryKey,
   RatesFlagsPayload,
@@ -133,10 +137,14 @@ export function applyNavigationIntent(
         rateCategory: getDefaultRateCategory(intent.rateSection),
       }
     case 'setRateCategory':
+      const rateCategory = intent.rateCategory as RatesFlagsCategoryKey
+      if (!isRatesFlagsEditableCategoryKey(rateCategory)) {
+        return navigation
+      }
       return {
         ...navigation,
         activeTab: 'rates',
-        rateCategory: intent.rateCategory as QuoteRatesNavigationState['rateCategory'],
+        rateCategory,
       }
     case 'setFlagsSection':
       return {

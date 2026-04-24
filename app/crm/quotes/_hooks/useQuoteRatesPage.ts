@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { valueFromRatesFlagsRow } from '@/lib/quotes/ratesFlagsForm'
-import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
-import type {
-  RatesFlagsDraftValidationResult,
-  RatesFlagsEditableCategory,
-  RatesFlagsEditableCategoryKey,
-} from '@/types/estimator/ratesFlags'
+import {
+  getRatesFlagsDraftAdapter,
+  isRatesFlagsEditableCategory,
+} from '@/lib/quotes/ratesFlagsDraftAdapters'
+import type { RatesFlagsDraftValidationResult } from '@/types/estimator/ratesFlags'
 import {
   archiveOrReactivateQuoteRatesMutation,
   saveQuoteRatesMutation,
@@ -29,6 +28,7 @@ import {
 } from './quoteRatesPageState'
 import {
   buildQuoteRatesPageVm,
+  formatRatesDraftValue,
   type QuoteRatesDiscardVm,
   type QuoteRatesEditorVm,
   type QuoteRatesFiltersVm,
@@ -79,6 +79,7 @@ export type QuoteRatesActions = {
   confirmDiscard: () => boolean | Promise<boolean>
   cancelDiscard: () => void
   updateDraftValue: (fieldKey: string, rawInput: string) => void
+  formatDraftValue: (fieldKey: string) => string
 }
 
 export function useQuoteRatesPage() {
@@ -144,20 +145,18 @@ export function useQuoteRatesPage() {
     return activeCategory.rows.find((row) => row.id === state.selectedId) ?? null
   }, [activeCategory, state.selectedId])
 
-  const adapter = useMemo(
-    () =>
-      activeCategory
-        ? getRatesFlagsDraftAdapter(activeCategory.key as RatesFlagsEditableCategoryKey)
-        : null,
+  const editableActiveCategory = useMemo(
+    () => (activeCategory && isRatesFlagsEditableCategory(activeCategory) ? activeCategory : null),
     [activeCategory]
+  )
+  const adapter = useMemo(
+    () => (editableActiveCategory ? getRatesFlagsDraftAdapter(editableActiveCategory.key) : null),
+    [editableActiveCategory]
   )
 
   const validationResult: RatesFlagsDraftValidationResult | null =
-    activeCategory && adapter && state.draft
-      ? adapter.validateDraft(
-          activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
-          state.draft as never
-        )
+    editableActiveCategory && adapter && state.draft
+      ? adapter.validateDraft(editableActiveCategory, state.draft)
       : null
   const validationError = validationResult && !validationResult.ok ? validationResult.error : null
   const isDirty = getQuoteRatesHasUnsavedChanges(state)
@@ -195,23 +194,18 @@ export function useQuoteRatesPage() {
   }
 
   function startCreate() {
-    if (!activeCategory || !adapter) return false
+    if (!editableActiveCategory || !adapter) return false
 
-    const draft = adapter.createEmptyDraft(
-      activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>
-    )
+    const draft = adapter.createEmptyDraft(editableActiveCategory)
     applyAction({ type: 'startCreate', draft })
     return true
   }
 
   function startDuplicate() {
-    if (!activeCategory || !adapter || !selectedRow) return false
+    if (!editableActiveCategory || !adapter || !selectedRow) return false
 
     const draft = adapter.withDuplicateId(
-      adapter.rowToDraft(
-        activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
-        selectedRow
-      ) as never,
+      adapter.rowToDraft(editableActiveCategory, selectedRow),
       selectedRow.id
     )
 
@@ -254,14 +248,14 @@ export function useQuoteRatesPage() {
 
   async function saveCurrent() {
     const currentState = stateRef.current
-    if (!activeCategory || !currentState.draft || !validationResult?.ok) return
+    if (!editableActiveCategory || !currentState.draft || !validationResult?.ok) return
 
     applyAction({ type: 'beginAction', status: 'saving' })
 
     const result = await saveQuoteRatesMutation({
       resource,
       navigation: currentState.navigation,
-      activeCategory: activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
+      activeCategory: editableActiveCategory,
       draft: currentState.draft,
       draftActive: currentState.draftActive,
       editorMode: currentState.editorMode,
@@ -288,14 +282,14 @@ export function useQuoteRatesPage() {
   }
 
   async function archiveOrReactivate(nextActive: boolean) {
-    if (!activeCategory || !selectedRow) return false
+    if (!editableActiveCategory || !selectedRow) return false
 
     applyAction({ type: 'beginAction', status: 'archiving' })
 
     const result = await archiveOrReactivateQuoteRatesMutation({
       resource,
       navigation: stateRef.current.navigation,
-      categoryKey: activeCategory.key as RatesFlagsEditableCategoryKey,
+      categoryKey: editableActiveCategory.key,
       selectedRowId: selectedRow.id,
       nextActive,
     })
@@ -332,11 +326,11 @@ export function useQuoteRatesPage() {
 
   function updateDraftValue(fieldKey: string, rawInput: string) {
     const currentState = stateRef.current
-    if (!activeCategory || !adapter || !currentState.draft) return
+    if (!editableActiveCategory || !adapter || !currentState.draft) return
 
     const nextDraft = adapter.updateDraftField(
-      activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
-      currentState.draft as never,
+      editableActiveCategory,
+      currentState.draft,
       fieldKey,
       rawInput
     )
@@ -346,6 +340,12 @@ export function useQuoteRatesPage() {
   function setDraftActive(nextActive: boolean) {
     applyAction({ type: 'setDraftActive', draftActive: nextActive })
   }
+
+  const formatDraftValue = useCallback(
+    (fieldKey: string) =>
+      formatRatesDraftValue(adapter, editableActiveCategory, state.draft, fieldKey),
+    [adapter, editableActiveCategory, state.draft]
+  )
 
   function runIntent(intent: QuoteRatesPendingTransition) {
     switch (intent.type) {
@@ -499,6 +499,7 @@ export function useQuoteRatesPage() {
       }),
     cancelDiscard,
     updateDraftValue,
+    formatDraftValue,
   }
 
   return {

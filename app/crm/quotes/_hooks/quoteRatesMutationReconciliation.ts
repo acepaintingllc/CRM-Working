@@ -1,21 +1,24 @@
 import { categoryByKey } from '@/lib/quotes/ratesFlagsForm'
 import type {
-  RatesFlagsActivationMutationRequest,
-  RatesFlagsCreateOrUpdateMutation,
+  RatesFlagsCreateOrUpdateRequest,
+  RatesFlagsEditableCategoryKey,
+  RatesFlagsMutationRequestByCategory,
   RatesFlagsPayload,
   RatesFlagsRow,
 } from '@/types/estimator/ratesFlags'
 
-function buildRowFromMutation(request: RatesFlagsCreateOrUpdateMutation): RatesFlagsRow {
+function buildRowFromMutation(
+  request: RatesFlagsCreateOrUpdateRequest<RatesFlagsEditableCategoryKey>
+): RatesFlagsRow {
   return {
     ...request.values,
     active: request.values.active === 'Y',
-  } as RatesFlagsRow
+  } satisfies Partial<RatesFlagsRow> as RatesFlagsRow
 }
 
 export function reconcileRatesFlagsPayload(
   payload: RatesFlagsPayload,
-  request: RatesFlagsCreateOrUpdateMutation | RatesFlagsActivationMutationRequest
+  request: RatesFlagsMutationRequestByCategory<RatesFlagsEditableCategoryKey>
 ) {
   return {
     ...payload,
@@ -69,7 +72,7 @@ export function reconcileRatesFlagsPayload(
 
 export function findReconciledRatesRow(
   payload: RatesFlagsPayload,
-  categoryKey: RatesFlagsCreateOrUpdateMutation['category'],
+  categoryKey: RatesFlagsEditableCategoryKey,
   rowId: string
 ) {
   return categoryByKey(payload.categories, categoryKey)?.rows.find((row) => row.id === rowId) ?? null

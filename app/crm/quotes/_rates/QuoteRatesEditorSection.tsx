@@ -6,17 +6,24 @@ import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import type { QuoteRatesActions, QuoteRatesEditorVm } from '@/app/crm/quotes/_hooks/useQuoteRatesPage'
+import { isRatesFlagsEditableCategory } from '@/lib/quotes/ratesFlagsDraftAdapters'
 
 type Props = {
   vm: QuoteRatesEditorVm
   templateVersion: number | null
   actions: Pick<
     QuoteRatesActions,
-    'saveCurrent' | 'cancelEdit' | 'setDraftActive' | 'updateDraftValue'
+    'saveCurrent' | 'cancelEdit' | 'setDraftActive' | 'updateDraftValue' | 'formatDraftValue'
   >
 }
 
 export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props) {
+  const showLegacyCategoryNotice =
+    vm.activeCategory !== null &&
+    !isRatesFlagsEditableCategory(vm.activeCategory) &&
+    !vm.isCreating &&
+    vm.draft === null
+
   return (
     <CrmSectionCard
       title={vm.isCreating ? 'New row' : vm.selectedRow ? vm.selectedRow.display_name || vm.selectedRow.id : 'No selection'}
@@ -24,23 +31,29 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
         vm.activeCategory ? `${vm.activeCategory.label} | template v${templateVersion ?? 'n/a'}` : 'No active category.'
       }
       actions={
-        <div className="flex flex-wrap gap-2">
-          <CrmButton
-            type="button"
-            tone="primary"
-            onClick={() => void actions.saveCurrent()}
-            disabled={!vm.canSave}
-          >
-            {vm.saving ? 'Saving...' : vm.isCreating ? 'Create row' : 'Save changes'}
-          </CrmButton>
-          <CrmButton type="button" onClick={actions.cancelEdit}>
-            Cancel
-          </CrmButton>
-        </div>
+        showLegacyCategoryNotice ? null : (
+          <div className="flex flex-wrap gap-2">
+            <CrmButton
+              type="button"
+              tone="primary"
+              onClick={() => void actions.saveCurrent()}
+              disabled={!vm.canSave}
+            >
+              {vm.saving ? 'Saving...' : vm.isCreating ? 'Create row' : 'Save changes'}
+            </CrmButton>
+            <CrmButton type="button" onClick={actions.cancelEdit}>
+              Cancel
+            </CrmButton>
+          </div>
+        )
       }
     >
       {!vm.activeCategory ? (
         <CrmEmptyState title="No active category" description="Select a tab and category." />
+      ) : showLegacyCategoryNotice ? (
+        <CrmNotice tone="info">
+          This category is a legacy data type and cannot be edited here.
+        </CrmNotice>
       ) : (
         <div className="grid gap-4">
           {vm.inlineValidation ? (
@@ -68,7 +81,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
                 <select
                   className="ace-crm-input text-sm"
                   disabled={field.readOnly}
-                  value={vm.formatDraftValue(field.key)}
+                  value={actions.formatDraftValue(field.key)}
                   onChange={(event) => actions.updateDraftValue(field.key, event.target.value)}
                 >
                   {(field.options ?? ['']).map((option) => (
@@ -82,7 +95,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
                   className="ace-crm-input text-sm"
                   type={field.type === 'number' ? 'number' : 'text'}
                   readOnly={field.readOnly}
-                  value={vm.formatDraftValue(field.key)}
+                  value={actions.formatDraftValue(field.key)}
                   onChange={(event) => actions.updateDraftValue(field.key, event.target.value)}
                 />
               )}

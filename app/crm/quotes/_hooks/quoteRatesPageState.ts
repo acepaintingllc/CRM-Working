@@ -123,7 +123,11 @@ export const DEFAULT_QUOTE_RATES_NAVIGATION: QuoteRatesNavigationState = {
 }
 
 export function getDefaultRateCategory(rateSection: RateSectionKey): RatesFlagsCategoryKey {
-  return RATE_SUBGROUPS[rateSection][0]?.key ?? 'production_rates_walls'
+  const key = RATE_SUBGROUPS[rateSection][0]?.key
+  if (key == null) {
+    throw new Error(`No subgroups configured for rate section: ${rateSection}`)
+  }
+  return key
 }
 
 export function emptyQuoteRatesEditorSnapshot(): QuoteRatesEditorSnapshot {

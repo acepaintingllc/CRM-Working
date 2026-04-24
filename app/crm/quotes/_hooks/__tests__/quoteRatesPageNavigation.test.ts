@@ -7,9 +7,11 @@ import {
 } from '../quoteRatesPageNavigation'
 import {
   DEFAULT_QUOTE_RATES_NAVIGATION,
+  getDefaultRateCategory,
   transitionNeedsDiscardReset,
   type QuoteRatesNavigationState,
 } from '../quoteRatesPageState'
+import { RATE_SUBGROUPS } from '../quoteRatesPageConfig'
 import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 
 const payload: RatesFlagsPayload = {
@@ -110,6 +112,28 @@ describe('quoteRatesPageNavigation invariants', () => {
     expect(ratesNavigation.activeTab).toBe('rates')
     expect(ratesNavigation.rateSection).toBe('unit_rates')
     expect(ratesNavigation.rateCategory).toBe('unit_rates_doors')
+  })
+
+  it('throws when a rate section has no configured subgroups', () => {
+    const originalSubgroups = RATE_SUBGROUPS.production
+    RATE_SUBGROUPS.production = []
+
+    try {
+      expect(() => getDefaultRateCategory('production')).toThrow(
+        'No subgroups configured for rate section: production'
+      )
+    } finally {
+      RATE_SUBGROUPS.production = originalSubgroups
+    }
+  })
+
+  it('ignores setRateCategory intents with unknown category keys', () => {
+    const nextNavigation = applyNavigationIntent(DEFAULT_QUOTE_RATES_NAVIGATION, {
+      type: 'setRateCategory',
+      rateCategory: 'not_a_real_category',
+    })
+
+    expect(nextNavigation).toBe(DEFAULT_QUOTE_RATES_NAVIGATION)
   })
 
   it('rebuilds the editor snapshot from the selected visible row', () => {

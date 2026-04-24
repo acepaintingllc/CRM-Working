@@ -56,7 +56,6 @@ export type QuoteProductsActions = {
   cancelEdit: () => void
   save: () => Promise<boolean>
   requestDelete: () => boolean
-  requestRemove: () => Promise<boolean>
   confirmDelete: () => Promise<boolean>
   cancelDelete: () => void
   confirmDiscard: () => boolean
@@ -100,9 +99,10 @@ export function buildQuoteProductsPageVm(params: {
         ? ('visible' as const)
         : ('hidden' as const)
 
+  const hasData = resource.data.length > 0
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
-    hasData: resource.data.length > 0 || (!resource.loading && !resource.error),
+    hasData,
     loadError: resource.error,
     actionError: workflowState.actionError,
     validationError: validation.ok ? null : derived.validationError,
