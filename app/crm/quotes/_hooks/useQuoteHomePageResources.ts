@@ -122,11 +122,9 @@ export function useQuoteHomePageResources(
       jobQuery: interactionState.jobQuery,
       selectedJobId: interactionState.selectedJobId,
       selectedJob: interactionState.selectedJob,
-      visibleJobs: homeData.jobs,
       actions: pageController.actions,
     }),
     [
-      homeData.jobs,
       interactionState.jobQuery,
       interactionState.searchFocused,
       interactionState.searchQuery,
