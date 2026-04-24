@@ -4,25 +4,22 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateProductsRouteGet: vi.fn(),
   handleEstimateProductsRoutePost: vi.fn(),
   handleEstimateProductRoutePatch: vi.fn(),
-  handleEstimateProductRouteDelete: vi.fn(),
 }))
 
 vi.mock('@/lib/server/estimateProductRoutes', () => ({
   handleEstimateProductsRouteGet: routeHandlerMocks.handleEstimateProductsRouteGet,
   handleEstimateProductsRoutePost: routeHandlerMocks.handleEstimateProductsRoutePost,
   handleEstimateProductRoutePatch: routeHandlerMocks.handleEstimateProductRoutePatch,
-  handleEstimateProductRouteDelete: routeHandlerMocks.handleEstimateProductRouteDelete,
 }))
 
 import { GET, POST } from '../quotes/products/route'
-import { DELETE, PATCH } from '../quotes/products/[id]/route'
+import * as quoteProductDetailRoute from '../quotes/products/[id]/route'
 
 describe('quote product route wrappers', () => {
   beforeEach(() => {
     routeHandlerMocks.handleEstimateProductsRouteGet.mockReset()
     routeHandlerMocks.handleEstimateProductsRoutePost.mockReset()
     routeHandlerMocks.handleEstimateProductRoutePatch.mockReset()
-    routeHandlerMocks.handleEstimateProductRouteDelete.mockReset()
   })
 
   it('delegates collection routes to the canonical estimate product handlers', async () => {
@@ -35,20 +32,19 @@ describe('quote product route wrappers', () => {
     expect(routeHandlerMocks.handleEstimateProductsRoutePost).toHaveBeenCalledWith(request)
   })
 
-  it('delegates detail routes to the canonical estimate product handlers', async () => {
+  it('delegates product detail PATCH to the canonical estimate product handler', async () => {
     const request = new Request('http://localhost/api/quotes/products/test')
     const context = { params: { id: 'product-1' } }
 
-    await PATCH(request, context)
-    await DELETE(request, context)
+    await quoteProductDetailRoute.PATCH(request, context)
 
     expect(routeHandlerMocks.handleEstimateProductRoutePatch).toHaveBeenCalledWith(
       request,
       context
     )
-    expect(routeHandlerMocks.handleEstimateProductRouteDelete).toHaveBeenCalledWith(
-      request,
-      context
-    )
+  })
+
+  it('does not expose quote product DELETE as a supported lifecycle action', () => {
+    expect(quoteProductDetailRoute).not.toHaveProperty('DELETE')
   })
 })

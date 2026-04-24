@@ -95,7 +95,7 @@ import { GET as getQuoteHomeSearch } from '../quotes/home/search/route'
 import { GET as getQuoteHomeSummary } from '../quotes/home/summary/route'
 import { GET as getQuoteCreateContext } from '../quotes/home/jobs/[jobId]/create-context/route'
 import { GET as getQuoteJobVersions } from '../quotes/home/jobs/[jobId]/versions/route'
-import { DELETE as deleteQuoteProduct, PATCH as patchQuoteProduct } from '../quotes/products/[id]/route'
+import * as quoteProductDetailRoute from '../quotes/products/[id]/route'
 import { GET as getQuoteProducts, POST as postQuoteProducts } from '../quotes/products/route'
 import { GET as getQuoteVersion, POST as postQuoteVersion } from '../quotes/route'
 
@@ -247,7 +247,7 @@ describe('estimate and quote route delegation', () => {
     )
   })
 
-  it('delegates estimate and quote product routes to the shared product handlers', async () => {
+  it('delegates estimate product routes and quote product archive/update routes to shared product handlers', async () => {
     const collectionRequest = new Request('http://localhost/api/quotes/products', { method: 'POST' })
     const detailRequest = new Request('http://localhost/api/quotes/products/test', { method: 'PATCH' })
     const context = { params: { id: 'product-1' } }
@@ -257,9 +257,8 @@ describe('estimate and quote route delegation', () => {
     await postEstimateProducts(collectionRequest)
     await postQuoteProducts(collectionRequest)
     await patchEstimateProduct(detailRequest, context)
-    await patchQuoteProduct(detailRequest, context)
+    await quoteProductDetailRoute.PATCH(detailRequest, context)
     await deleteEstimateProduct(detailRequest, context)
-    await deleteQuoteProduct(detailRequest, context)
 
     expect(routeHandlerMocks.handleEstimateProductsRouteGet).toHaveBeenNthCalledWith(1, collectionRequest)
     expect(routeHandlerMocks.handleEstimateProductsRouteGet).toHaveBeenNthCalledWith(2, collectionRequest)
@@ -280,11 +279,8 @@ describe('estimate and quote route delegation', () => {
       detailRequest,
       context
     )
-    expect(routeHandlerMocks.handleEstimateProductRouteDelete).toHaveBeenNthCalledWith(
-      2,
-      detailRequest,
-      context
-    )
+    expect(routeHandlerMocks.handleEstimateProductRouteDelete).toHaveBeenCalledTimes(1)
+    expect(quoteProductDetailRoute).not.toHaveProperty('DELETE')
   })
 
   it('delegates estimate and quote public read routes to the shared estimate portal service', async () => {

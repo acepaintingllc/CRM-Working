@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { QuoteProductRow } from '@/lib/quotes/productsForm'
 import {
+  buildArchivedQuoteProductResourcePatch,
+  buildCreatedQuoteProductResourcePatch,
+  buildUpdatedQuoteProductResourcePatch,
   chooseQuoteProductsFallbackId,
   findQuoteProductById,
   mergeKnownQuoteProducts,
@@ -14,6 +17,7 @@ import {
   createInitialQuoteProductsWorkflowState,
   createQuoteProductsCreateDraft,
   createQuoteProductsDraftFromRow,
+  quoteProductsPageReducer,
   reconcileQuoteProductsStateFromResource,
 } from '../quoteProductsPageState'
 
@@ -51,6 +55,43 @@ describe('quoteProductsPageTransitions invariants', () => {
       family: 'Primer',
       status: 'inactive',
       search: 'committed',
+    })
+  })
+
+  it('reduces raw and committed search state independently', () => {
+    const searchedState = quoteProductsPageReducer(createInitialQuoteProductsWorkflowState(), {
+      type: 'setSearchInput',
+      search: '  trim later  ',
+    })
+
+    expect(searchedState.navigation.search).toBe('  trim later  ')
+    expect(searchedState.navigation.debouncedSearch).toBe('')
+
+    const committedState = quoteProductsPageReducer(searchedState, {
+      type: 'commitSearch',
+      search: searchedState.navigation.search,
+    })
+
+    expect(committedState.navigation.search).toBe('  trim later  ')
+    expect(committedState.navigation.debouncedSearch).toBe('trim later')
+  })
+
+  it('keeps the first pending discard transition in the products reducer', () => {
+    const firstQueuedState = quoteProductsPageReducer(createInitialQuoteProductsWorkflowState(), {
+      type: 'openDiscard',
+      transition: { type: 'setStatusFilter', status: 'inactive' },
+    })
+
+    const secondQueuedState = quoteProductsPageReducer(firstQueuedState, {
+      type: 'openDiscard',
+      transition: { type: 'setSearch', search: 'primer' },
+    })
+
+    expect(secondQueuedState).toBe(firstQueuedState)
+    expect(secondQueuedState.discardStatus).toBe('confirming')
+    expect(secondQueuedState.pendingTransition).toEqual({
+      type: 'setStatusFilter',
+      status: 'inactive',
     })
   })
 
@@ -157,6 +198,110 @@ describe('quoteProductsPageTransitions invariants', () => {
     expect(nextState.selectedId).toBe('paint-2')
     expect(nextState.draft.status).toBe('Archived')
     expect(nextState.notice).toBe('Product saved.')
+  })
+
+  it('builds a create resource patch that resets filters and keeps matching known rows visible', () => {
+    const existingActive = buildProduct({ id: 'paint-1', name: 'Existing Paint' })
+    const existingInactive = buildProduct({
+      id: 'paint-2',
+      name: 'Dormant Paint',
+      status: 'Inactive',
+    })
+    const created = buildProduct({ id: 'paint-3', name: 'Fresh Paint' })
+
+    const patch = buildCreatedQuoteProductResourcePatch({
+      knownRows: [existingActive, existingInactive],
+      createdRow: created,
+      navigation: {
+        activeFamily: 'Paint',
+        statusFilter: 'inactive',
+        search: 'dormant',
+        debouncedSearch: 'dormant',
+      },
+    })
+
+    expect(patch.navigation).toEqual({
+      activeFamily: 'Paint',
+      statusFilter: 'all',
+      search: '',
+      debouncedSearch: '',
+    })
+    expect(patch.visibleRows.map((product) => product.id)).toEqual([
+      'paint-3',
+      'paint-1',
+      'paint-2',
+    ])
+    expect(patch.knownRows.map((product) => product.id)).toEqual([
+      'paint-1',
+      'paint-2',
+      'paint-3',
+    ])
+  })
+
+  it('builds an update resource patch that hides rows no longer matching the filter', () => {
+    const selected = buildProduct({
+      id: 'paint-2',
+      name: 'Dormant Paint',
+      status: 'Inactive',
+    })
+
+    const patch = buildUpdatedQuoteProductResourcePatch({
+      visibleRows: [selected],
+      knownRows: [selected],
+      updatedRow: buildProduct({
+        id: 'paint-2',
+        name: 'Dormant Paint',
+        status: 'Archived',
+      }),
+      navigation: {
+        activeFamily: 'Paint',
+        statusFilter: 'inactive',
+        search: '',
+        debouncedSearch: '',
+      },
+      previousId: 'paint-2',
+    })
+
+    expect(patch.visibleRows).toEqual([])
+    expect(patch.knownRows).toEqual([
+      expect.objectContaining({
+        id: 'paint-2',
+        status: 'Archived',
+      }),
+    ])
+  })
+
+  it('builds an archive resource patch that keeps the archived row known when hidden', () => {
+    const selected = buildProduct({
+      id: 'paint-2',
+      name: 'Dormant Paint',
+      status: 'Inactive',
+    })
+
+    const patch = buildArchivedQuoteProductResourcePatch({
+      visibleRows: [selected],
+      knownRows: [selected],
+      archivedRow: buildProduct({
+        id: 'paint-2',
+        name: 'Dormant Paint',
+        status: 'Archived',
+      }),
+      navigation: {
+        activeFamily: 'Paint',
+        statusFilter: 'inactive',
+        search: '',
+        debouncedSearch: '',
+      },
+      archivedId: 'paint-2',
+    })
+
+    expect(patch.visibleRows).toEqual([])
+    expect(patch.knownRows).toEqual([
+      expect.objectContaining({
+        id: 'paint-2',
+        status: 'Archived',
+      }),
+    ])
   })
 
   it('removes a product from the visible slice when the id is present', () => {

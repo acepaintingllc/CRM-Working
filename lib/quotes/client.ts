@@ -147,12 +147,6 @@ export async function archiveQuoteProduct<T>(id: string) {
   })
 }
 
-export async function deleteQuoteProduct(id: string) {
-  return requestApi<ApiMutationEnvelope<boolean>>(`/api/quotes/products/${id}`, {
-    method: 'DELETE',
-  })
-}
-
 export async function loadQuoteDefaults() {
   return loadData<QuoteDefaults>('/api/settings/quote-defaults', { cache: 'no-store' })
 }

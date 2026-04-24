@@ -2,31 +2,22 @@
 
 import { useEffect, useMemo } from 'react'
 import {
-  archiveQuoteProduct,
-  createQuoteProduct,
-  updateQuoteProduct,
-} from '@/lib/quotes/client'
-import {
   normalizeQuoteProductStatusFilter,
-  quoteProductMatchesQuery,
   validateQuoteProductDraft,
   type QuoteProductDraft,
-  type QuoteProductRow,
 } from '@/lib/quotes/productsForm'
 import {
-  mergeKnownQuoteProducts,
-  removeProductFromVisibleSlice,
-  upsertProductIntoVisibleSlice,
-} from './quoteProductsControllerUtils'
+  archiveQuoteProductsMutation,
+  saveQuoteProductsMutation,
+} from './quoteProductsPageMutations'
 import {
-  buildQuoteProductsIntentState,
   buildQuoteProductsQuery,
-  buildQuoteProductsSavedState,
   buildQuoteProductsSelection,
   createInitialQuoteProductsWorkflowState,
   createQuoteProductsDraftFromRow,
   getQuoteProductsHasUnsavedChanges,
   getQuoteProductsSelectedRow,
+  quoteProductsPageReducer,
   reconcileQuoteProductsStateFromResource,
   type QuoteProductsPendingTransition,
   type QuoteProductsWorkflowAction,
@@ -34,138 +25,6 @@ import {
 } from './quoteProductsPageState'
 import { useDenseQuoteAdminOrchestrator } from './useDenseQuoteAdminOrchestrator'
 import { useQuoteProductsData } from './useQuoteProductsData'
-
-function quoteProductsPageReducer(
-  state: QuoteProductsWorkflowState,
-  action: QuoteProductsWorkflowAction
-): QuoteProductsWorkflowState {
-  switch (action.type) {
-    case 'setSearchInput':
-      return {
-        ...state,
-        navigation: {
-          ...state.navigation,
-          search: action.search,
-        },
-      }
-    case 'commitSearch':
-      return {
-        ...state,
-        navigation: {
-          ...state.navigation,
-          debouncedSearch: action.search.trim(),
-        },
-      }
-    case 'setDraft':
-      return {
-        ...state,
-        draft: action.draft,
-      }
-    case 'beginAction':
-      return {
-        ...state,
-        actionStatus: action.status,
-        notice: null,
-        actionError: null,
-      }
-    case 'finishAction':
-      return {
-        ...state,
-        actionStatus: 'idle',
-      }
-    case 'setNotice':
-      return {
-        ...state,
-        notice: action.notice,
-        actionError: null,
-      }
-    case 'setActionError':
-      return {
-        ...state,
-        notice: null,
-        actionError: action.error,
-      }
-    case 'clearFeedback':
-      return {
-        ...state,
-        notice: null,
-        actionError: null,
-      }
-    case 'openDiscard':
-      if (state.pendingTransition) return state
-      return {
-        ...state,
-        discardStatus: 'confirming',
-        pendingTransition: action.transition,
-      }
-    case 'setDiscardStatus':
-      return {
-        ...state,
-        discardStatus: action.status,
-      }
-    case 'clearDiscard':
-      return {
-        ...state,
-        discardStatus: 'idle',
-        pendingTransition: null,
-      }
-    case 'setDeleteTargetId':
-      return {
-        ...state,
-        deleteTargetId: action.id,
-      }
-    case 'applyIntent':
-      return buildQuoteProductsIntentState(state, action.intent)
-    case 'cancelEdit':
-      return {
-        ...state,
-        selectedId: action.selectedId,
-        editorMode: action.selectedId ? 'edit' : 'none',
-        deleteTargetId: null,
-        discardStatus: 'idle',
-        pendingTransition: null,
-        notice: null,
-        actionError: null,
-      }
-    case 'reconcileFromResource':
-      return {
-        ...state,
-        selectedId: action.selectedId,
-        editorMode: action.editorMode,
-        draft: action.draft,
-        cleanSnapshot: action.cleanSnapshot,
-        deleteTargetId: state.deleteTargetId === action.selectedId ? state.deleteTargetId : null,
-      }
-    case 'commitSave':
-      return buildQuoteProductsSavedState({
-        state: {
-          ...state,
-          navigation: action.navigation,
-        },
-        row: action.row,
-        notice: action.notice,
-      })
-    case 'commitDelete': {
-      const shouldResetEditor = state.selectedId === action.deletedId
-      return {
-        ...state,
-        selectedId: shouldResetEditor ? action.nextSelectedId : state.selectedId,
-        editorMode:
-          shouldResetEditor && !action.nextSelectedId
-            ? 'none'
-            : shouldResetEditor
-              ? 'edit'
-              : state.editorMode,
-        deleteTargetId: null,
-        actionStatus: 'idle',
-        notice: action.notice,
-        actionError: null,
-      }
-    }
-    default:
-      return state
-  }
-}
 
 export function useQuoteProductsPageController() {
   const orchestrator = useDenseQuoteAdminOrchestrator<
@@ -366,72 +225,24 @@ export function useQuoteProductsPageController() {
 
     applyAction({ type: 'beginAction', status: 'saving' })
 
-    try {
-      if (currentState.editorMode === 'create') {
-        const created = await createQuoteProduct<QuoteProductRow>(nextValidation.payload)
-        const nextNavigation = {
-          activeFamily: currentState.navigation.activeFamily,
-          statusFilter: 'all' as const,
-          search: '',
-          debouncedSearch: '',
-        }
-        const postCreateQuery = buildQuoteProductsQuery(nextNavigation)
-        const nextKnownRows = mergeKnownQuoteProducts(resource.allKnownData, [created.data])
-        const nextVisibleRows = [
-          created.data,
-          ...nextKnownRows.filter(
-            (product) =>
-              product.id !== created.data.id && quoteProductMatchesQuery(product, postCreateQuery)
-          ),
-        ]
-
-        resource.setAllKnownData(() => nextKnownRows)
-        resource.setData(() => nextVisibleRows)
-        applyAction({
-          type: 'commitSave',
-          row: created.data,
-          notice: created.notice ?? 'Product created.',
-          navigation: nextNavigation,
-        })
-        return true
-      }
-
-      const selectedId = currentState.selectedId
-      if (!selectedId) {
-        applyAction({ type: 'setActionError', error: 'Failed to save product.' })
-        applyAction({ type: 'finishAction' })
-        return false
-      }
-
-      const updated = await updateQuoteProduct<QuoteProductRow>(selectedId, nextValidation.payload)
-      const nextVisibleRows = upsertProductIntoVisibleSlice(
-        resource.data,
-        updated.data,
-        buildQuoteProductsQuery(currentState.navigation),
-        selectedId
-      )
-      const nextKnownRows = mergeKnownQuoteProducts(
-        removeProductFromVisibleSlice(resource.allKnownData, selectedId),
-        [updated.data]
-      )
-
-      resource.setData(() => nextVisibleRows)
-      resource.setAllKnownData(() => nextKnownRows)
-      applyAction({
-        type: 'commitSave',
-        row: updated.data,
-        notice: updated.notice ?? 'Product saved.',
-        navigation: currentState.navigation,
-      })
-      return true
-    } catch (error) {
-      applyAction({
-        type: 'setActionError',
-        error: error instanceof Error ? error.message : 'Failed to save product.',
-      })
+    const result = await saveQuoteProductsMutation({
+      resource,
+      state: currentState,
+      payload: nextValidation.payload,
+    })
+    if (!result.ok) {
+      applyAction({ type: 'setActionError', error: result.error })
       applyAction({ type: 'finishAction' })
       return false
     }
+
+    applyAction({
+      type: 'commitSave',
+      row: result.row,
+      notice: result.notice,
+      navigation: result.navigation,
+    })
+    return true
   }
 
   function requestDelete() {
@@ -450,38 +261,24 @@ export function useQuoteProductsPageController() {
 
     applyAction({ type: 'beginAction', status: 'deleting' })
 
-    try {
-      const archived = await archiveQuoteProduct<QuoteProductRow>(deleteTargetId)
-
-      const nextVisibleRows = upsertProductIntoVisibleSlice(
-        resource.data,
-        archived.data,
-        buildQuoteProductsQuery(currentState.navigation),
-        deleteTargetId
-      )
-      const nextKnownRows = mergeKnownQuoteProducts(resource.allKnownData, [archived.data])
-      const nextSelectedId =
-        currentState.selectedId === deleteTargetId
-          ? deleteTargetId
-          : currentState.selectedId
-
-      resource.setData(() => nextVisibleRows)
-      resource.setAllKnownData(() => nextKnownRows)
-      applyAction({
-        type: 'commitDelete',
-        deletedId: deleteTargetId,
-        notice: 'Product archived.',
-        nextSelectedId,
-      })
-      return true
-    } catch (error) {
-      applyAction({
-        type: 'setActionError',
-        error: error instanceof Error ? error.message : 'Failed to archive product.',
-      })
+    const result = await archiveQuoteProductsMutation({
+      resource,
+      state: currentState,
+      deleteTargetId,
+    })
+    if (!result.ok) {
+      applyAction({ type: 'setActionError', error: result.error })
       applyAction({ type: 'finishAction' })
       return false
     }
+
+    applyAction({
+      type: 'commitDelete',
+      deletedId: result.deletedId,
+      notice: result.notice,
+      nextSelectedId: result.nextSelectedId,
+    })
+    return true
   }
 
   function cancelDelete() {

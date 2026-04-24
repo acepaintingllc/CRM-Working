@@ -50,7 +50,7 @@ function toLoadErrorMessage(scope: string, loadError: unknown) {
   return loadError instanceof Error ? loadError.message : `Failed to load ${scope}.`
 }
 
-type QuoteHomeJobsRequestPurpose = 'query_change' | 'refresh' | 'pagination'
+export type QuoteHomeJobsRequestPurpose = 'query_change' | 'refresh' | 'pagination'
 
 type QuoteHomeJobsOperation = QuoteHomeAsyncRequest<{
   query: string
@@ -67,11 +67,65 @@ type QuoteHomeJobsLoadResult =
       error: string | null
     }
 
+export type QuoteHomeRefreshAttemptOptions = {
+  preserveDataOnError?: boolean
+  reportError?: boolean
+}
+
+export type QuoteHomeRefreshAttemptResult<TData = null> = {
+  ok: boolean
+  error: string | null
+  data: TData | null
+}
+
+export type QuoteHomeBootstrapResourceContract = {
+  bootstrapData: QuoteHomeBootstrapReadModel
+  bootstrapLoading: boolean
+  bootstrapError: string | null
+  refreshBootstrap: (
+    options?: QuoteHomeRefreshAttemptOptions
+  ) => Promise<QuoteHomeRefreshAttemptResult<QuoteHomeBootstrapReadModel>>
+}
+
+export type QuoteHomeJobsPageResourceContract = {
+  jobsPage: QuoteHomeJobsPageReadModel
+  jobs: QuoteHomeJobsPageReadModel['items']
+  jobsLoading: boolean
+  jobsError: string | null
+  loadMoreJobs: () => Promise<void>
+  hasMoreJobs: boolean
+  refreshJobs: (
+    options?: Pick<QuoteHomeRefreshAttemptOptions, 'reportError'>,
+    refreshedBootstrap?: QuoteHomeBootstrapReadModel
+  ) => Promise<QuoteHomeJobsLoadResult>
+}
+
+export type QuoteHomeDataResourceContract = {
+  bootstrap: QuoteHomeBootstrapReadModel
+  summary: QuoteHomeBootstrapReadModel['summary']
+  jobsPage: QuoteHomeJobsPageReadModel
+  jobs: QuoteHomeJobsPageReadModel['items']
+  hasMore: boolean
+  initialSelectedJobId: string | null
+  initialSelectedJobVersions: QuoteHomeBootstrapReadModel['selected_job_versions']
+  jobsLoading: boolean
+  loading: boolean
+  bootstrapError: string | null
+  jobsError: string | null
+  loadMore: () => Promise<void>
+  retryJobs: () => Promise<boolean>
+  attemptRefresh: (
+    options?: QuoteHomeRefreshAttemptOptions
+  ) => Promise<QuoteHomeRefreshAttemptResult<QuoteHomeBootstrapReadModel>>
+}
+
 type UseQuotesHomeDataOptions = {
   jobQuery?: string
 }
 
-export function useQuotesHomeBootstrap(initialData?: QuoteHomeBootstrapReadModel | null) {
+export function useQuoteHomeBootstrapResource(
+  initialData?: QuoteHomeBootstrapReadModel | null
+): QuoteHomeBootstrapResourceContract {
   const resolvedInitialData = initialData ?? EMPTY_BOOTSTRAP
   const resource = useResource<QuoteHomeBootstrapReadModel>({
     initialData: resolvedInitialData,
@@ -89,13 +143,13 @@ export function useQuotesHomeBootstrap(initialData?: QuoteHomeBootstrapReadModel
     bootstrapLoading: resource.loading,
     bootstrapError: resource.error,
     refreshBootstrap: resource.attemptRefresh,
-  }
+  } satisfies QuoteHomeBootstrapResourceContract
 }
 
-export function useQuotesHomeJobs(
+export function useQuoteHomeJobsPageResource(
   bootstrapData: QuoteHomeBootstrapReadModel,
   query?: string
-) {
+): QuoteHomeJobsPageResourceContract {
   const activeJobQuery = normalizeQuoteHomeJobQuery(query ?? bootstrapData.jobs.query)
   const latestLoadedBootstrapRef = useRef(bootstrapData)
   const activeJobQueryRef = useRef(activeJobQuery)
@@ -323,18 +377,18 @@ export function useQuotesHomeJobs(
     loadMoreJobs,
     hasMoreJobs: Boolean(jobsPage.next_cursor),
     refreshJobs,
-  }
+  } satisfies QuoteHomeJobsPageResourceContract
 }
 
 export function useQuotesHomeData(
   initialData?: QuoteHomeBootstrapReadModel | null,
   options?: UseQuotesHomeDataOptions
-) {
-  const bootstrapResource = useQuotesHomeBootstrap(initialData)
+): QuoteHomeDataResourceContract {
+  const bootstrapResource = useQuoteHomeBootstrapResource(initialData)
   const activeJobQuery = normalizeQuoteHomeJobQuery(
     options?.jobQuery ?? bootstrapResource.bootstrapData.jobs.query
   )
-  const jobsResource = useQuotesHomeJobs(bootstrapResource.bootstrapData, activeJobQuery)
+  const jobsResource = useQuoteHomeJobsPageResource(bootstrapResource.bootstrapData, activeJobQuery)
   const { bootstrapLoading, refreshBootstrap } = bootstrapResource
   const { jobsError, loadMoreJobs, refreshJobs } = jobsResource
 
@@ -407,5 +461,8 @@ export function useQuotesHomeData(
         data: jobsRefresh.ok ? result.data : null,
       }
     },
-  }
+  } satisfies QuoteHomeDataResourceContract
 }
+
+export const useQuotesHomeBootstrap = useQuoteHomeBootstrapResource
+export const useQuotesHomeJobs = useQuoteHomeJobsPageResource

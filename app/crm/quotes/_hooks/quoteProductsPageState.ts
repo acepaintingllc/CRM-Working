@@ -298,6 +298,128 @@ export function buildQuoteProductsIntentState(
   }
 }
 
+export function quoteProductsPageReducer(
+  state: QuoteProductsWorkflowState,
+  action: QuoteProductsWorkflowAction
+): QuoteProductsWorkflowState {
+  switch (action.type) {
+    case 'setSearchInput':
+      return {
+        ...state,
+        navigation: {
+          ...state.navigation,
+          search: action.search,
+        },
+      }
+    case 'commitSearch':
+      return {
+        ...state,
+        navigation: {
+          ...state.navigation,
+          debouncedSearch: action.search.trim(),
+        },
+      }
+    case 'setDraft':
+      return {
+        ...state,
+        draft: action.draft,
+      }
+    case 'beginAction':
+      return {
+        ...state,
+        actionStatus: action.status,
+        notice: null,
+        actionError: null,
+      }
+    case 'finishAction':
+      return {
+        ...state,
+        actionStatus: 'idle',
+      }
+    case 'setNotice':
+      return {
+        ...state,
+        notice: action.notice,
+        actionError: null,
+      }
+    case 'setActionError':
+      return {
+        ...state,
+        notice: null,
+        actionError: action.error,
+      }
+    case 'clearFeedback':
+      return {
+        ...state,
+        notice: null,
+        actionError: null,
+      }
+    case 'openDiscard':
+      if (state.pendingTransition) return state
+      return {
+        ...state,
+        discardStatus: 'confirming',
+        pendingTransition: action.transition,
+      }
+    case 'setDiscardStatus':
+      return {
+        ...state,
+        discardStatus: action.status,
+      }
+    case 'clearDiscard':
+      return {
+        ...state,
+        discardStatus: 'idle',
+        pendingTransition: null,
+      }
+    case 'setDeleteTargetId':
+      return {
+        ...state,
+        deleteTargetId: action.id,
+      }
+    case 'applyIntent':
+      return buildQuoteProductsIntentState(state, action.intent)
+    case 'cancelEdit':
+      return {
+        ...state,
+        selectedId: action.selectedId,
+        editorMode: action.selectedId ? 'edit' : 'none',
+        deleteTargetId: null,
+        discardStatus: 'idle',
+        pendingTransition: null,
+        notice: null,
+        actionError: null,
+      }
+    case 'reconcileFromResource':
+      return {
+        ...state,
+        selectedId: action.selectedId,
+        editorMode: action.editorMode,
+        draft: action.draft,
+        cleanSnapshot: action.cleanSnapshot,
+        deleteTargetId: state.deleteTargetId === action.selectedId ? state.deleteTargetId : null,
+      }
+    case 'commitSave':
+      return buildQuoteProductsSavedState({
+        state: {
+          ...state,
+          navigation: action.navigation,
+        },
+        row: action.row,
+        notice: action.notice,
+      })
+    case 'commitDelete':
+      return buildQuoteProductsDeletedState({
+        state,
+        deletedId: action.deletedId,
+        notice: action.notice,
+        nextSelectedId: action.nextSelectedId,
+      })
+    default:
+      return state
+  }
+}
+
 export function buildQuoteProductsSavedState(params: {
   state: QuoteProductsWorkflowState
   row: QuoteProductRow

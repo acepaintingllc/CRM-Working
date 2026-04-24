@@ -40,7 +40,9 @@ type LoadOptions = {
 
 type FreshLoadOptions = Pick<LoadOptions, 'force' | 'preserveDataOnError' | 'reportError'>
 type LoadMoreOptions = Pick<LoadOptions, 'cursor' | 'preserveDataOnError' | 'reportError'>
-type LoadResult = { ok: true; error: null } | { ok: false; error: string | null }
+export type QuoteHomeVersionsLoadResult =
+  | { ok: true; error: null }
+  | { ok: false; error: string | null }
 type JobVersionsRequestPurpose = 'fresh' | 'load_more'
 type JobVersionsOperationDetails = {
   jobId: string
@@ -77,6 +79,22 @@ type LoadMoreRequest = {
   lifecycle: JobVersionsRequestLifecycle
   actions: JobVersionsStateActions
   options?: LoadMoreOptions
+}
+
+export type QuoteHomeVersionsResourceContract = {
+  data: QuoteJobVersionsReadModel
+  pageData: QuoteJobVersionsPageReadModel
+  items: QuoteHomeJobVersionItemReadModel[]
+  loading: boolean
+  loadingMore: boolean
+  error: string | null
+  hasMore: boolean
+  hasResolved: boolean
+  loadMore: () => Promise<boolean>
+  refresh: () => Promise<boolean>
+  attemptRefresh: (
+    options?: Pick<LoadOptions, 'preserveDataOnError' | 'reportError'>
+  ) => Promise<QuoteHomeVersionsLoadResult>
 }
 
 export function beginFreshJobVersionsRequest(
@@ -149,7 +167,7 @@ async function loadFreshJobVersionsPage({
   lifecycle,
   actions,
   options,
-}: FreshLoadRequest): Promise<LoadResult> {
+}: FreshLoadRequest): Promise<QuoteHomeVersionsLoadResult> {
   const request = beginFreshJobVersionsRequest(lifecycle, jobId)
   const cachedPage = getCachedJobVersionsPage(cache, jobId, {
     force: options?.force,
@@ -223,7 +241,7 @@ async function loadMoreJobVersionsPage({
   lifecycle,
   actions,
   options,
-}: LoadMoreRequest): Promise<LoadResult> {
+}: LoadMoreRequest): Promise<QuoteHomeVersionsLoadResult> {
   const cursor = options?.cursor ?? null
   const request = beginLoadMoreJobVersionsRequest(lifecycle, jobId, cursor)
 
@@ -409,7 +427,10 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
   )
 
   const load = useCallback(
-    async (targetJobId: string, loadOptions?: LoadOptions): Promise<LoadResult> => {
+    async (
+      targetJobId: string,
+      loadOptions?: LoadOptions
+    ): Promise<QuoteHomeVersionsLoadResult> => {
       if (!targetJobId || !enabled) {
         cancelQuoteHomeAsyncRequests(lifecycle)
         lifecycle.activeLoadMoreRequestRef.current = null
@@ -488,5 +509,5 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
     loadMore,
     refresh,
     attemptRefresh,
-  }
+  } satisfies QuoteHomeVersionsResourceContract
 }

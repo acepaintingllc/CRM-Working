@@ -27,6 +27,6 @@ Out of scope:
 - [non-goal]
 ```
 
-**For a review:** Read the scoped files, score them using the review prompt, and produce a ranked list of rewrite targets with ready-to-paste prompts.
+**For a review:** Read the scoped files, score them using the review prompt, and produce a ranked list of rewrite targets.
 
 **For a build / refactor / rewrite:** Read the architecture constraints first, identify what already exists and can be reused, then implement with minimal scope. Follow the definition of done in the architecture file before declaring anything complete.
