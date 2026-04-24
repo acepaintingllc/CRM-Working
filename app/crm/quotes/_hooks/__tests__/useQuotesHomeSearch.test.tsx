@@ -57,8 +57,27 @@ describe('useQuotesHomeSearch', () => {
     expect(result.current.query).toBe('')
     expect(result.current.results).toEqual([])
     expect(result.current.error).toBeNull()
-    expect(result.current.emptyMessage).toBeNull()
     expect(result.current.loading).toBe(false)
+    expect(result.current).not.toHaveProperty('emptyMessage')
+    expect(result.current).not.toHaveProperty('canRetry')
+  })
+
+  it('cleans up the pending debounce timeout on unmount', () => {
+    vi.useFakeTimers()
+    loadQuoteHomeSearch.mockResolvedValue({
+      query: 'revision',
+      items: [{ estimate_id: 'estimate-1' }],
+    })
+
+    const { unmount } = renderHook(() => useQuotesHomeSearch('revision'))
+
+    unmount()
+
+    act(() => {
+      vi.advanceTimersByTime(170)
+    })
+
+    expect(loadQuoteHomeSearch).not.toHaveBeenCalled()
   })
 
   it('keeps only the latest response when queries change quickly', async () => {
@@ -114,8 +133,8 @@ describe('useQuotesHomeSearch', () => {
     expect(result.current.query).toBe('broken')
     expect(result.current.results).toEqual([])
     expect(result.current.error).toBe('search failed')
-    expect(result.current.emptyMessage).toBeNull()
-    expect(result.current.canRetry).toBe(true)
+    expect(result.current).not.toHaveProperty('emptyMessage')
+    expect(result.current).not.toHaveProperty('canRetry')
   })
 
   it('retries the current query after a search failure', async () => {
@@ -146,7 +165,7 @@ describe('useQuotesHomeSearch', () => {
     expect(result.current.error).toBeNull()
   })
 
-  it('distinguishes empty search results from a failed search', async () => {
+  it('returns empty result resource state without display-only messaging', async () => {
     loadQuoteHomeSearch.mockResolvedValue({
       query: 'missing',
       items: [],
@@ -160,6 +179,9 @@ describe('useQuotesHomeSearch', () => {
     })
 
     expect(result.current.error).toBeNull()
-    expect(result.current.emptyMessage).toBe('No quote versions match "missing".')
+    expect(result.current.query).toBe('missing')
+    expect(result.current.results).toEqual([])
+    expect(result.current).not.toHaveProperty('emptyMessage')
+    expect(result.current).not.toHaveProperty('canRetry')
   })
 })

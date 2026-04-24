@@ -1,8 +1,10 @@
 export {
-  decorateEstimateCollectionRows as loadDecoratedEstimateCollectionRows,
-  loadEstimateCollectionEligibleJobs,
+  loadEstimateCollectionRelatedRows,
   loadEstimateCollectionRollupSummary,
   loadEstimateCollectionRowsForOrg,
   searchEstimateCollectionRows,
 } from '@/lib/server/estimate-collection/repository'
-export { loadEstimateCollectionBootstrapPayload as loadQuoteHomeBootstrap } from '@/lib/server/estimate-collection/service'
+export {
+  loadEstimateCollectionBootstrapPayload as loadQuoteHomeBootstrap,
+  loadEstimateCollectionEligibleJobs,
+} from '@/lib/server/estimate-collection/service'

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
+  QuoteHomeSearchResultReadModel,
 } from '@/lib/quotes/collectionData'
 import {
   buildQuoteHomePageVm,
@@ -9,7 +10,10 @@ import {
   type QuoteHomePageVmResources,
   type QuoteHomePageVmState,
 } from '../quoteHomePageVm'
-import { QUOTE_META_SEPARATOR } from '../quoteHomePresentation'
+import {
+  QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
+  QUOTE_META_SEPARATOR,
+} from '../quoteHomePresentation'
 
 type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends readonly unknown[]
@@ -80,6 +84,20 @@ const versionTwo: QuoteHomeJobVersionItemReadModel = {
   is_sent_estimate: true,
 }
 
+const searchResult: QuoteHomeSearchResultReadModel = {
+  estimate_id: 'estimate-search-1',
+  job_id: 'job-1',
+  customer_id: 'customer-1',
+  version_name: 'Search Match',
+  version_state: 'live',
+  version_kind: 'revision',
+  job_title: 'Kitchen',
+  customer_name: 'Alice',
+  final_total: 900,
+  updated_at: '2026-04-22T10:00:00.000Z',
+  is_sent_estimate: true,
+}
+
 function buildActions(): QuoteHomePageActions {
   return {
     setSearchQuery: vi.fn(),
@@ -91,6 +109,8 @@ function buildActions(): QuoteHomePageActions {
     setVersionKind: vi.fn(),
     create: vi.fn(async () => null),
     loadMoreVersions: vi.fn(async () => false),
+    retryJobs: vi.fn(async () => true),
+    retryVersions: vi.fn(async () => true),
     retrySearch: vi.fn(),
     requestDelete: vi.fn(),
     cancelDelete: vi.fn(),
@@ -116,13 +136,13 @@ function buildResources(
       jobsLoading: false,
       loading: false,
       bootstrapError: null,
+      jobsError: null,
       ...overrides?.home,
     },
     search: {
+      query: '',
       loading: false,
-      emptyMessage: null,
       error: null,
-      canRetry: false,
       results: [],
       ...overrides?.search,
     },
@@ -215,24 +235,39 @@ describe('buildQuoteHomePageVm', () => {
       })
     )
 
-    expect(vm.jobList).toEqual({
+    expect(vm.jobList).toEqual(expect.objectContaining({
       loading: false,
       searchQuery: '',
       selectedJobId: '',
       hasMore: false,
       items: [],
+      errorMessage: null,
+      canRetry: false,
       emptyState: 'no_jobs',
+      emptyStateBody: QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
+    }))
+    expect(vm.jobList.status).toEqual({
+      kind: 'empty',
+      emptyState: 'no_jobs',
+      title: 'No eligible jobs yet',
+      body: QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
     })
     expect(vm.selectedJob.emptyMessage).toBe(
       'Select a job from the left to view versions and create the next one.'
     )
-    expect(vm.versionList).toEqual({
+    expect(vm.versionList).toEqual(expect.objectContaining({
       heading: 'Pick a job first',
       detail: null,
       emptyMessage: 'Versions will appear here once a job is selected.',
       items: [],
       hasMore: false,
       loadingMore: false,
+      errorMessage: null,
+      canRetry: false,
+    }))
+    expect(vm.versionList.status).toEqual({
+      kind: 'empty',
+      message: 'Versions will appear here once a job is selected.',
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.actions).toBe(actions)
@@ -264,6 +299,7 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.jobList.hasMore).toBe(false)
     expect(vm.selectedJob).toEqual({
       loading: false,
+      state: 'selected',
       emptyMessage: null,
       title: 'Kitchen',
       customerLine: `Alice${QUOTE_META_SEPARATOR}123 Main`,
@@ -277,17 +313,127 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.versionList).toEqual(
       expect.objectContaining({
         heading: '99 versions under this job',
-        detail: 'Showing 2 of 99 versions.',
+        detail: 'Showing 2 of 99 versions - reload to see all.',
       })
     )
-    expect(vm.create).toEqual({
-      creating: false,
-      loading: false,
-      selectedJobName: 'Kitchen',
-      versionName: 'Kitchen Revision',
-      versionKind: 'revision',
-      canCreate: true,
-    })
+    expect(vm.create).toEqual(
+      expect.objectContaining({
+        creating: false,
+        loading: false,
+        selectedJobName: 'Kitchen',
+        versionName: 'Kitchen Revision',
+        versionKind: 'revision',
+        canCreate: true,
+        createButtonLabel: 'Create version',
+        versionKindOptions: expect.arrayContaining([
+          { value: 'standard', label: 'Standard' },
+          { value: 'revision', label: 'Revision' },
+        ]),
+      })
+    )
+  })
+
+  it('builds header search result view models from search result resources', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'search',
+        searchFocused: true,
+      }),
+      buildResources({
+        search: {
+          results: [searchResult],
+        },
+      })
+    )
+
+    expect(vm.header.searchResults).toEqual([
+      {
+        id: 'estimate-search-1',
+        href: '/crm/quotes/estimate-search-1',
+        title: 'Search Match',
+        meta: 'Kitchen\nAlice / Live',
+      },
+    ])
+  })
+
+  it('derives search loading state without empty or retry display affordances', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'kitchen',
+        searchFocused: true,
+      }),
+      buildResources({
+        search: {
+          query: 'kitchen',
+          loading: true,
+          results: [],
+        },
+      })
+    )
+
+    expect(vm.header.searchLoading).toBe(true)
+    expect(vm.header.searchEmptyMessage).toBeNull()
+    expect(vm.header.searchErrorMessage).toBeNull()
+    expect(vm.header.searchCanRetry).toBe(false)
+    expect(vm.header.searchResults).toEqual([])
+  })
+
+  it('derives search error state as retryable when a query is active', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'broken',
+      }),
+      buildResources({
+        search: {
+          query: 'broken',
+          error: 'search failed',
+          results: [],
+        },
+      })
+    )
+
+    expect(vm.header.searchEmptyMessage).toBeNull()
+    expect(vm.header.searchErrorMessage).toBe('search failed')
+    expect(vm.header.searchCanRetry).toBe(true)
+    expect(vm.header.searchResults).toEqual([])
+  })
+
+  it('derives search empty state from resource query and result count', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'missing',
+      }),
+      buildResources({
+        search: {
+          query: 'missing',
+          results: [],
+        },
+      })
+    )
+
+    expect(vm.header.searchEmptyMessage).toBe('No quote versions match "missing".')
+    expect(vm.header.searchErrorMessage).toBeNull()
+    expect(vm.header.searchCanRetry).toBe(true)
+    expect(vm.header.searchResults).toEqual([])
+  })
+
+  it('derives search result state without empty messaging', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'search',
+      }),
+      buildResources({
+        search: {
+          query: 'search',
+          results: [searchResult],
+        },
+      })
+    )
+
+    expect(vm.header.searchEmptyMessage).toBeNull()
+    expect(vm.header.searchErrorMessage).toBeNull()
+    expect(vm.header.searchCanRetry).toBe(true)
+    expect(vm.header.searchResults).toHaveLength(1)
   })
 
   it('builds the no-selected-job state without hiding the available job list', () => {
@@ -313,17 +459,26 @@ describe('buildQuoteHomePageVm', () => {
     )
 
     expect(vm.jobList.emptyState).toBe('none')
+    expect(vm.jobList.emptyStateBody).toBeNull()
+    expect(vm.jobList.errorMessage).toBeNull()
+    expect(vm.jobList.canRetry).toBe(false)
     expect(vm.selectedJob.title).toBeNull()
     expect(vm.selectedJob.emptyMessage).toBe(
       'Select a job from the left to view versions and create the next one.'
     )
-    expect(vm.versionList).toEqual({
+    expect(vm.versionList).toEqual(expect.objectContaining({
       heading: 'Pick a job first',
       detail: null,
       emptyMessage: 'Versions will appear here once a job is selected.',
       items: [],
       hasMore: false,
       loadingMore: false,
+      errorMessage: null,
+      canRetry: false,
+    }))
+    expect(vm.versionList.status).toEqual({
+      kind: 'empty',
+      message: 'Versions will appear here once a job is selected.',
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.create.canCreate).toBe(false)
@@ -400,6 +555,167 @@ describe('buildQuoteHomePageVm', () => {
     )
   })
 
+  it('threads delete busy state into version row actions', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        delete: {
+          deletingId: 'estimate-1',
+        },
+      })
+    )
+
+    expect(vm.versionList.items).toEqual([
+      expect.objectContaining({
+        id: 'estimate-2',
+        deleting: false,
+        deleteDisabled: true,
+        deleteBusy: false,
+        deleteButtonLabel: 'Delete',
+        deleteButtonAriaLabel:
+          'Delete quote version Version B unavailable while another version is deleting',
+      }),
+      expect.objectContaining({
+        id: 'estimate-1',
+        deleting: true,
+        deleteDisabled: true,
+        deleteBusy: true,
+        deleteButtonLabel: 'Deleting...',
+        deleteButtonAriaLabel: 'Deleting quote version Version A',
+      }),
+    ])
+  })
+
+  it('builds accessible destructive dialog state from the confirming version', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        delete: {
+          confirmingDelete: versionOne,
+          deletingId: 'estimate-1',
+        },
+      })
+    )
+
+    expect(vm.dialogs.delete).toEqual({
+      isOpen: true,
+      estimateId: 'estimate-1',
+      versionName: 'Version A',
+      jobTitle: 'Kitchen',
+      deleting: true,
+      title: 'Delete Version A?',
+      description: 'Permanently delete quote version Version A from Kitchen.',
+      closeLabel: 'Close delete confirmation',
+      warning: 'This permanently deletes the quote version. This cannot be undone.',
+      info:
+        'The home page will refresh job counts and the selected job version list after delete.',
+      cancelLabel: 'Cancel',
+      cancelAriaLabel: 'Cancel deleting quote version Version A',
+      confirmLabel: 'Delete Version A',
+      confirmAriaLabel: 'Permanently delete quote version Version A from Kitchen',
+      confirmingLabel: 'Deleting Version A...',
+      confirmingAriaLabel: 'Deleting quote version Version A from Kitchen',
+      confirmDisabled: true,
+      cancelDisabled: true,
+    })
+  })
+
+  it('threads selected-job version load failures into the version list vm', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        workflow: {
+          versions: {
+            items: [],
+            error: 'versions failed',
+            totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: true,
+          },
+        },
+      })
+    )
+
+    expect(vm.versionList.errorMessage).toBe('versions failed')
+    expect(vm.versionList.canRetry).toBe(true)
+    expect(vm.feedback).toEqual({
+      tone: 'warning',
+      title: 'Quote home loaded with errors',
+      details: ['Job versions failed to load. versions failed'],
+      sources: ['jobVersions'],
+    })
+  })
+
+  it('keeps jobs-page failures inside the jobs pane when prior job data exists', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        home: {
+          jobsError: 'jobs failed',
+        },
+      })
+    )
+
+    expect(vm.feedback).toBeNull()
+    expect(vm.jobList.errorMessage).toBe('jobs failed')
+    expect(vm.jobList.canRetry).toBe(true)
+    expect(vm.jobList.items).toHaveLength(2)
+  })
+
+  it('derives the filtered job-list empty state when jobs exist but none are visible', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        jobQuery: 'missing',
+        visibleJobs: [],
+      }),
+      buildResources()
+    )
+
+    expect(vm.jobList.emptyState).toBe('no_matches')
+    expect(vm.jobList.emptyStateBody).toBeNull()
+    expect(vm.jobList.errorMessage).toBeNull()
+    expect(vm.jobList.canRetry).toBe(false)
+  })
+
+  it('surfaces create failures as deterministic action feedback', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        workflow: {
+          create: {
+            error: 'Create failed.',
+          },
+        },
+      })
+    )
+
+    expect(vm.feedback).toEqual({
+      tone: 'error',
+      title: 'Quote action failed',
+      details: ['Create failed.'],
+      sources: ['create'],
+    })
+  })
+
+  it('surfaces delete failures as deterministic action feedback', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        delete: {
+          error: 'Delete failed.',
+        },
+      })
+    )
+
+    expect(vm.feedback).toEqual({
+      tone: 'error',
+      title: 'Quote action failed',
+      details: ['Delete failed.'],
+      sources: ['delete'],
+    })
+  })
+
   it('keeps job-list loading scoped to the jobs pane during server-backed queries', () => {
     const vm = buildQuoteHomePageVm(
       buildState(),
@@ -442,6 +758,92 @@ describe('buildQuoteHomePageVm', () => {
     })
   })
 
+  it('maps bootstrap failures with no job data into a retryable job-list error state', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        selectedJobId: '',
+        selectedJob: null,
+        visibleJobs: [],
+      }),
+      buildResources({
+        home: {
+          jobs: [],
+          bootstrapError: 'Network request timed out.',
+        },
+        workflow: {
+          versions: {
+            items: [],
+            totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: false,
+          },
+          create: {
+            canCreate: false,
+          },
+        },
+      })
+    )
+
+    expect(vm.jobList).toEqual(expect.objectContaining({
+      loading: false,
+      searchQuery: '',
+      selectedJobId: '',
+      hasMore: false,
+      items: [],
+      errorMessage: 'Network request timed out.',
+      canRetry: true,
+      emptyState: 'none',
+      emptyStateBody: null,
+    }))
+    expect(vm.jobList.status).toEqual({
+      kind: 'error',
+      title: 'Jobs failed to load',
+      message: 'Network request timed out.',
+      canRetry: true,
+      retryLabel: 'Retry jobs',
+      retryingLabel: 'Retrying jobs...',
+    })
+  })
+
+  it('keeps combined bootstrap and jobs-page failures distinct without duplicate feedback', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        selectedJobId: '',
+        selectedJob: null,
+        visibleJobs: [],
+      }),
+      buildResources({
+        home: {
+          jobs: [],
+          bootstrapError: 'Bootstrap timed out.',
+          jobsError: 'Jobs page timed out.',
+        },
+        workflow: {
+          versions: {
+            items: [],
+            totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: false,
+          },
+          create: {
+            canCreate: false,
+          },
+        },
+      })
+    )
+
+    expect(vm.feedback).toEqual({
+      tone: 'warning',
+      title: 'Quote home bootstrap failed to load',
+      details: ['Quote home failed to load. Bootstrap timed out.'],
+      sources: ['bootstrap'],
+    })
+    expect(vm.jobList.errorMessage).toBe('Jobs page timed out.')
+    expect(vm.jobList.canRetry).toBe(true)
+  })
+
   it('propagates loading state without showing empty selected-job messaging', () => {
     const vm = buildQuoteHomePageVm(
       buildState({
@@ -471,6 +873,7 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.jobList.loading).toBe(true)
     expect(vm.selectedJob).toEqual({
       loading: true,
+      state: 'loading',
       emptyMessage: null,
       title: null,
       customerLine: null,

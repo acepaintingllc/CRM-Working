@@ -1,11 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  type QuoteHomeSearchResponse,
-  type QuoteHomeJobVersionItemReadModel,
-} from '@/lib/quotes/collectionData'
+import { type QuoteHomeSearchResponse } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeSearch } from '@/lib/quotes/client'
+
+const SEARCH_DEBOUNCE_MS = 150
 
 const emptySearchResponse: QuoteHomeSearchResponse = {
   query: '',
@@ -23,7 +22,7 @@ export function useQuotesHomeSearch(query: string) {
   useEffect(() => {
     const timeout = setTimeout(() => {
       setDebouncedQuery(query.trim())
-    }, 150)
+    }, SEARCH_DEBOUNCE_MS)
 
     return () => clearTimeout(timeout)
   }, [query])
@@ -69,16 +68,10 @@ export function useQuotesHomeSearch(query: string) {
 
   return useMemo(
     () => ({
-      query: data.query,
-      results: data.items as QuoteHomeJobVersionItemReadModel[],
+      query: debouncedQuery,
+      results: data.items,
       loading,
       error,
-      hasQuery: debouncedQuery.length > 0,
-      emptyMessage:
-        debouncedQuery && !loading && !error && data.items.length === 0
-          ? `No quote versions match "${debouncedQuery}".`
-          : null,
-      canRetry: Boolean(debouncedQuery) && !loading,
       retry,
     }),
     [data, debouncedQuery, error, loading, retry]

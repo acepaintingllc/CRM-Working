@@ -1,203 +1,423 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   QuoteJobVersionsPageReadModel,
   QuoteJobVersionsReadModel,
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import { loadQuoteJobVersions } from '@/lib/quotes/client'
-
-const emptyJobVersions = (jobId: string): QuoteJobVersionsPageReadModel => ({
-  job_id: jobId,
-  total_versions: 0,
-  limit: 25,
-  next_cursor: null,
-  items: [],
-})
-
-function mergeJobVersionsPages(
-  currentData: QuoteJobVersionsPageReadModel,
-  nextPage: QuoteJobVersionsPageReadModel
-): QuoteJobVersionsPageReadModel {
-  const seenEstimateIds = new Set<string>()
-  const items = [...currentData.items, ...nextPage.items].filter((item) => {
-    if (seenEstimateIds.has(item.estimate_id)) return false
-    seenEstimateIds.add(item.estimate_id)
-    return true
-  })
-
-  return {
-    job_id: nextPage.job_id,
-    total_versions: nextPage.total_versions,
-    limit: nextPage.limit,
-    next_cursor: nextPage.next_cursor,
-    items,
-  }
-}
+import {
+  createJobVersionsCache,
+  emptyJobVersions,
+  getCachedJobVersionsPage,
+  hydrateJobVersionsCache,
+  mergeJobVersionsPages,
+  resolveInitialJobVersionsPage,
+  type JobVersionsCache,
+} from './jobVersionsCache'
 
 type UseQuoteJobVersionsOptions = {
   enabled?: boolean
   initialData?: QuoteJobVersionsPageReadModel | null
 }
 
+type LoadOptions = {
+  force?: boolean
+  preserveDataOnError?: boolean
+  reportError?: boolean
+  cursor?: string | null
+  append?: boolean
+}
+
+type FreshLoadOptions = Pick<LoadOptions, 'force' | 'preserveDataOnError' | 'reportError'>
+type LoadMoreOptions = Pick<LoadOptions, 'cursor' | 'preserveDataOnError' | 'reportError'>
+type LoadResult = { ok: true; error: null } | { ok: false; error: string | null }
+type RequestState = { current: number }
+type LoadMoreRequestState = { current: number | null }
+
+type JobVersionsRequestLifecycle = {
+  currentRequest: RequestState
+  activeLoadMoreRequest: LoadMoreRequestState
+}
+
+type JobVersionsStateActions = {
+  replaceData(nextData: QuoteJobVersionsPageReadModel): void
+  commitData(nextData: QuoteJobVersionsPageReadModel): void
+  setLoading(nextLoading: boolean): void
+  setLoadingMore(nextLoading: boolean): void
+  setError(nextError: string | null): void
+}
+
+type FreshLoadRequest = {
+  jobId: string
+  cache: JobVersionsCache
+  lifecycle: JobVersionsRequestLifecycle
+  actions: JobVersionsStateActions
+  options?: FreshLoadOptions
+}
+
+type LoadMoreRequest = {
+  jobId: string
+  currentData: QuoteJobVersionsPageReadModel
+  lifecycle: JobVersionsRequestLifecycle
+  actions: JobVersionsStateActions
+  options?: LoadMoreOptions
+}
+
+export function startJobVersionsRequest(requestState: RequestState): number {
+  requestState.current += 1
+  return requestState.current
+}
+
+export function beginFreshJobVersionsRequest(
+  lifecycle: JobVersionsRequestLifecycle
+): number {
+  const requestId = startJobVersionsRequest(lifecycle.currentRequest)
+  lifecycle.activeLoadMoreRequest.current = null
+  return requestId
+}
+
+export function beginLoadMoreJobVersionsRequest(
+  lifecycle: JobVersionsRequestLifecycle,
+  cursor: string | null
+): number | null {
+  if (!canStartJobVersionsLoadMore(lifecycle, cursor)) {
+    return null
+  }
+
+  const requestId = startJobVersionsRequest(lifecycle.currentRequest)
+  lifecycle.activeLoadMoreRequest.current = requestId
+  return requestId
+}
+
+export function isCurrentJobVersionsRequest(
+  lifecycle: JobVersionsRequestLifecycle,
+  requestId: number
+): boolean {
+  return lifecycle.currentRequest.current === requestId
+}
+
+export function canStartJobVersionsLoadMore(
+  lifecycle: JobVersionsRequestLifecycle,
+  cursor: string | null
+): boolean {
+  return Boolean(cursor) && lifecycle.activeLoadMoreRequest.current === null
+}
+
+export function finishJobVersionsLoadMoreRequest(
+  lifecycle: JobVersionsRequestLifecycle,
+  requestId: number
+) {
+  if (lifecycle.activeLoadMoreRequest.current === requestId) {
+    lifecycle.activeLoadMoreRequest.current = null
+  }
+}
+
+export function jobVersionsErrorMessage(loadError: unknown): string {
+  return loadError instanceof Error ? loadError.message : 'Failed to load job quote versions.'
+}
+
+function resetJobVersionsState(actions: JobVersionsStateActions, jobId: string) {
+  actions.replaceData(emptyJobVersions(jobId))
+  actions.setLoading(false)
+  actions.setLoadingMore(false)
+  actions.setError(null)
+}
+
+async function loadFreshJobVersionsPage({
+  jobId,
+  cache,
+  lifecycle,
+  actions,
+  options,
+}: FreshLoadRequest): Promise<LoadResult> {
+  const requestId = beginFreshJobVersionsRequest(lifecycle)
+  const cachedPage = getCachedJobVersionsPage(cache, jobId, {
+    force: options?.force,
+  })
+
+  if (cachedPage) {
+    actions.commitData(cachedPage)
+    actions.setLoading(false)
+    actions.setLoadingMore(false)
+    actions.setError(null)
+    return { ok: true, error: null }
+  }
+
+  const preserveDataOnError = options?.preserveDataOnError ?? false
+  const reportError = options?.reportError ?? true
+
+  actions.setLoadingMore(false)
+
+  if (!preserveDataOnError) {
+    actions.replaceData(emptyJobVersions(jobId))
+  }
+
+  actions.setLoading(true)
+
+  if (reportError) {
+    actions.setError(null)
+  }
+
+  try {
+    const response = await loadQuoteJobVersions<QuoteJobVersionsPageReadModel>(jobId)
+
+    if (!isCurrentJobVersionsRequest(lifecycle, requestId)) {
+      return { ok: false, error: null }
+    }
+
+    actions.commitData(response)
+
+    if (reportError) {
+      actions.setError(null)
+    }
+
+    return { ok: true, error: null }
+  } catch (loadError) {
+    if (!isCurrentJobVersionsRequest(lifecycle, requestId)) {
+      return { ok: false, error: null }
+    }
+
+    const nextError = jobVersionsErrorMessage(loadError)
+
+    if (!preserveDataOnError) {
+      actions.replaceData(emptyJobVersions(jobId))
+    }
+
+    if (reportError) {
+      actions.setError(nextError)
+    }
+
+    return { ok: false, error: nextError }
+  } finally {
+    if (isCurrentJobVersionsRequest(lifecycle, requestId)) {
+      actions.setLoading(false)
+    }
+  }
+}
+
+async function loadMoreJobVersionsPage({
+  jobId,
+  currentData,
+  lifecycle,
+  actions,
+  options,
+}: LoadMoreRequest): Promise<LoadResult> {
+  const cursor = options?.cursor ?? null
+  const requestId = beginLoadMoreJobVersionsRequest(lifecycle, cursor)
+
+  if (requestId === null) {
+    return { ok: false, error: null }
+  }
+
+  const preserveDataOnError = options?.preserveDataOnError ?? true
+  const reportError = options?.reportError ?? true
+
+  actions.setLoadingMore(true)
+
+  if (reportError) {
+    actions.setError(null)
+  }
+
+  try {
+    const response = await loadQuoteJobVersions<QuoteJobVersionsPageReadModel>(jobId, {
+      cursor,
+    })
+
+    if (!isCurrentJobVersionsRequest(lifecycle, requestId)) {
+      return { ok: false, error: null }
+    }
+
+    actions.commitData(mergeJobVersionsPages(currentData, response))
+
+    if (reportError) {
+      actions.setError(null)
+    }
+
+    return { ok: true, error: null }
+  } catch (loadError) {
+    if (!isCurrentJobVersionsRequest(lifecycle, requestId)) {
+      return { ok: false, error: null }
+    }
+
+    const nextError = jobVersionsErrorMessage(loadError)
+
+    if (!preserveDataOnError) {
+      actions.replaceData(emptyJobVersions(jobId))
+    }
+
+    if (reportError) {
+      actions.setError(nextError)
+    }
+
+    return { ok: false, error: nextError }
+  } finally {
+    if (isCurrentJobVersionsRequest(lifecycle, requestId)) {
+      actions.setLoadingMore(false)
+    }
+
+    finishJobVersionsLoadMoreRequest(lifecycle, requestId)
+  }
+}
+
 export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersionsOptions) {
   const enabled = options?.enabled ?? true
-  const cacheRef = useRef<Record<string, QuoteJobVersionsPageReadModel>>({})
+  const initialData = options?.initialData ?? null
+  const cacheRef = useRef(createJobVersionsCache())
   const requestIdRef = useRef(0)
-  const seededInitialDataRef = useRef(options?.initialData ?? null)
-  const dataRef = useRef<QuoteJobVersionsPageReadModel>(options?.initialData ?? emptyJobVersions(jobId))
-  const [data, setData] = useState<QuoteJobVersionsPageReadModel>(() => {
-    const initialData = options?.initialData
-    if (initialData?.job_id) {
-      cacheRef.current[initialData.job_id] = initialData
-    }
-    return initialData ?? emptyJobVersions(jobId)
+  const loadMoreRequestIdRef = useRef<number | null>(null)
+
+  const initialPageData = resolveInitialJobVersionsPage({
+    jobId,
+    enabled,
+    initialData,
   })
+
+  const dataRef = useRef<QuoteJobVersionsPageReadModel>(initialPageData)
+  const [data, setData] = useState<QuoteJobVersionsPageReadModel>(initialPageData)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resolvedJobIds, setResolvedJobIds] = useState<ReadonlySet<string>>(() => {
+    if (!enabled || !initialData?.job_id) {
+      return new Set()
+    }
 
-  const setCurrentData = useCallback((nextData: QuoteJobVersionsPageReadModel) => {
+    return new Set([initialData.job_id])
+  })
+
+  const replaceData = useCallback((nextData: QuoteJobVersionsPageReadModel) => {
     dataRef.current = nextData
     setData(nextData)
   }, [])
 
+  const markResolved = useCallback((resolvedJobId: string) => {
+    setResolvedJobIds((currentResolvedJobIds) => {
+      if (currentResolvedJobIds.has(resolvedJobId)) {
+        return currentResolvedJobIds
+      }
+
+      const nextResolvedJobIds = new Set(currentResolvedJobIds)
+      nextResolvedJobIds.add(resolvedJobId)
+      return nextResolvedJobIds
+    })
+  }, [])
+
   const commitData = useCallback(
     (nextData: QuoteJobVersionsPageReadModel) => {
-    cacheRef.current[nextData.job_id] = nextData
-      setCurrentData(nextData)
+      cacheRef.current.set(nextData.job_id, nextData)
+      markResolved(nextData.job_id)
+      replaceData(nextData)
     },
-    [setCurrentData]
+    [markResolved, replaceData]
+  )
+
+  const lifecycle = useMemo<JobVersionsRequestLifecycle>(
+    () => ({
+      currentRequest: requestIdRef,
+      activeLoadMoreRequest: loadMoreRequestIdRef,
+    }),
+    []
+  )
+
+  const actions = useMemo<JobVersionsStateActions>(
+    () => ({
+      replaceData,
+      commitData,
+      setLoading,
+      setLoadingMore,
+      setError,
+    }),
+    [commitData, replaceData]
   )
 
   useEffect(() => {
-    const seededData = options?.initialData
-    if (!seededData?.job_id) {
+    const didHydrate = enabled
+      ? hydrateJobVersionsCache(cacheRef.current, initialData)
+      : false
+
+    if (didHydrate && initialData?.job_id) {
+      markResolved(initialData.job_id)
+    }
+
+    if (!enabled || initialData?.job_id !== jobId) {
       return
     }
-    cacheRef.current[seededData.job_id] = seededData
-    if (seededInitialDataRef.current !== seededData && seededData.job_id === jobId) {
-      seededInitialDataRef.current = seededData
-      setCurrentData(seededData)
-      setError(null)
-      setLoading(false)
-      setLoadingMore(false)
-    }
-  }, [jobId, options?.initialData, setCurrentData])
+
+    beginFreshJobVersionsRequest(lifecycle)
+    actions.replaceData(initialData)
+    actions.setError(null)
+    actions.setLoading(false)
+    actions.setLoadingMore(false)
+  }, [actions, enabled, initialData, jobId, lifecycle, markResolved])
+
+  const loadFresh = useCallback(
+    async (targetJobId: string, loadOptions?: FreshLoadOptions) =>
+      loadFreshJobVersionsPage({
+        jobId: targetJobId,
+        cache: cacheRef.current,
+        lifecycle,
+        actions,
+        options: loadOptions,
+      }),
+    [actions, lifecycle]
+  )
+
+  const loadNextPage = useCallback(
+    async (targetJobId: string, loadOptions?: LoadMoreOptions) => {
+      const currentData =
+        dataRef.current.job_id === targetJobId
+          ? dataRef.current
+          : emptyJobVersions(targetJobId)
+
+      return loadMoreJobVersionsPage({
+        jobId: targetJobId,
+        currentData,
+        lifecycle,
+        actions,
+        options: loadOptions,
+      })
+    },
+    [actions, lifecycle]
+  )
 
   const load = useCallback(
-    async (
-      targetJobId: string,
-      loadOptions?: {
-        force?: boolean
-        preserveDataOnError?: boolean
-        reportError?: boolean
-        cursor?: string | null
-        append?: boolean
-      }
-    ) => {
+    async (targetJobId: string, loadOptions?: LoadOptions): Promise<LoadResult> => {
       if (!targetJobId || !enabled) {
-        setCurrentData(emptyJobVersions(''))
-        setLoading(false)
-        setLoadingMore(false)
-        setError(null)
-        return { ok: false as const, error: null }
+        beginFreshJobVersionsRequest(lifecycle)
+        resetJobVersionsState(actions, '')
+        return { ok: false, error: null }
       }
 
-      const append = loadOptions?.append ?? false
-      const cursor = loadOptions?.cursor ?? null
-      const cached = cacheRef.current[targetJobId]
-      if (!append && cached && !loadOptions?.force) {
-        setCurrentData(cached)
-        setLoading(false)
-        setLoadingMore(false)
-        setError(null)
-        return { ok: true as const, error: null }
-      }
-      if (append && !cursor) {
-        return { ok: false as const, error: null }
+      if (loadOptions?.append) {
+        return loadNextPage(targetJobId, loadOptions)
       }
 
-      const requestId = ++requestIdRef.current
-      const preserveDataOnError = loadOptions?.preserveDataOnError ?? append
-      const reportError = loadOptions?.reportError ?? true
-      const currentData =
-        dataRef.current.job_id === targetJobId ? dataRef.current : emptyJobVersions(targetJobId)
-
-      if (append) {
-        setLoadingMore(true)
-      } else {
-        setLoadingMore(false)
-        if (!preserveDataOnError) {
-          setCurrentData(emptyJobVersions(targetJobId))
-        }
-        setLoading(true)
-      }
-      if (reportError) {
-        setError(null)
-      }
-
-      try {
-        const response = cursor
-          ? await loadQuoteJobVersions<QuoteJobVersionsPageReadModel>(targetJobId, { cursor })
-          : await loadQuoteJobVersions<QuoteJobVersionsPageReadModel>(targetJobId)
-        if (requestIdRef.current !== requestId) {
-          return { ok: false as const, error: null }
-        }
-        commitData(append ? mergeJobVersionsPages(currentData, response) : response)
-        if (reportError) {
-          setError(null)
-        }
-        return { ok: true as const, error: null }
-      } catch (loadError) {
-        if (requestIdRef.current !== requestId) {
-          return { ok: false as const, error: null }
-        }
-        const nextError =
-          loadError instanceof Error ? loadError.message : 'Failed to load job quote versions.'
-        if (!preserveDataOnError) {
-          setCurrentData(emptyJobVersions(targetJobId))
-        }
-        if (reportError) {
-          setError(nextError)
-        }
-        return { ok: false as const, error: nextError }
-      } finally {
-        if (requestIdRef.current === requestId) {
-          if (append) {
-            setLoadingMore(false)
-          } else {
-            setLoading(false)
-          }
-        }
-      }
+      return loadFresh(targetJobId, loadOptions)
     },
-    [commitData, enabled, setCurrentData]
+    [actions, enabled, lifecycle, loadFresh, loadNextPage]
   )
 
   useEffect(() => {
-    if (!enabled) {
-      setCurrentData(emptyJobVersions(''))
-      setLoading(false)
-      setLoadingMore(false)
-      setError(null)
-      return
-    }
     void load(jobId)
-  }, [enabled, jobId, load, setCurrentData])
+  }, [jobId, load])
 
   const refresh = useCallback(async () => {
     if (!enabled) return false
-    const result = await load(jobId, { force: true, preserveDataOnError: true })
+
+    const result = await load(jobId, {
+      force: true,
+      preserveDataOnError: true,
+    })
+
     return result.ok
   }, [enabled, jobId, load])
 
   const attemptRefresh = useCallback(
     async (loadOptions?: { preserveDataOnError?: boolean; reportError?: boolean }) => {
-      if (!enabled) {
-        return { ok: false as const, error: null }
-      }
+      if (!enabled) return { ok: false as const, error: null }
+
       return load(jobId, {
         force: true,
         preserveDataOnError: loadOptions?.preserveDataOnError,
@@ -208,18 +428,26 @@ export function useQuoteJobVersions(jobId: string, options?: UseQuoteJobVersions
   )
 
   const loadMore = useCallback(async () => {
-    if (!enabled || loading || loadingMore || !dataRef.current.next_cursor) {
+    const cursor = dataRef.current.next_cursor
+
+    if (!enabled || loading || loadingMore) {
       return false
     }
+
+    if (!canStartJobVersionsLoadMore(lifecycle, cursor)) {
+      return false
+    }
+
     const result = await load(jobId, {
       append: true,
-      cursor: dataRef.current.next_cursor,
+      cursor,
       preserveDataOnError: true,
     })
-    return result.ok
-  }, [enabled, jobId, load, loading, loadingMore])
 
-  const hasResolved = Boolean(jobId && cacheRef.current[jobId])
+    return result.ok
+  }, [enabled, jobId, lifecycle, load, loading, loadingMore])
+
+  const hasResolved = Boolean(enabled && jobId && resolvedJobIds.has(jobId))
 
   return {
     data: data as QuoteJobVersionsReadModel,

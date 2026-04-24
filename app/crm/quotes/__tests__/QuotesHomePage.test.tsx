@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { quoteHomeBootstrap } from '@/test-support/quoteHomeFixtures'
 import QuotesHomePage from '../QuotesHomePage'
 
 type MockHeaderProps = {
@@ -14,22 +15,25 @@ type MockHeaderProps = {
 type MockJobListProps = {
   vm: {
     emptyState: string
+    errorMessage: string | null
+    canRetry: boolean
     hasMore: boolean
   }
   onJobQueryChange: (query: string) => void
   onSelectJob: (jobId: string) => void
   onLoadMore: () => Promise<void>
+  onRetry: () => Promise<boolean>
 }
 
 type MockSummaryCard = {
   label: string
   value: string
+  displayValue: string
   subtext?: string
 }
 
 type MockSummaryCardsProps = {
   cards: MockSummaryCard[]
-  loading: boolean
 }
 
 type MockSelectedJobPanelProps = {
@@ -38,7 +42,8 @@ type MockSelectedJobPanelProps = {
 
 type MockVersionListProps = {
   vm: { heading: string }
-  onLoadMore: () => void
+  onLoadMore: () => Promise<unknown>
+  onRetry: () => Promise<boolean>
   onRequestDelete: (id: string) => void
 }
 
@@ -60,7 +65,8 @@ type MockDeleteDialogProps = {
   onConfirm: () => void
 }
 
-const { useQuotesHomePage } = vi.hoisted(() => ({
+const { shouldThrowSummaryCards, useQuotesHomePage } = vi.hoisted(() => ({
+  shouldThrowSummaryCards: vi.fn(() => false),
   useQuotesHomePage: vi.fn(),
 }))
 
@@ -80,24 +86,39 @@ vi.mock('../_home/QuotesHomeHeader', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeJobList', () => ({
-  QuotesHomeJobList: ({ vm, onJobQueryChange, onSelectJob, onLoadMore }: MockJobListProps) => (
+  QuotesHomeJobList: ({
+    vm,
+    onJobQueryChange,
+    onSelectJob,
+    onLoadMore,
+    onRetry,
+  }: MockJobListProps) => (
     <div>
       <div>job-list:desktop</div>
       <div>job-empty:{vm.emptyState}</div>
+      <div>job-error:{vm.errorMessage ?? 'none'}</div>
+      <div>job-can-retry:{String(vm.canRetry)}</div>
       <div>job-has-more:{String(vm.hasMore)}</div>
       <button onClick={() => onJobQueryChange('garage')}>change job query</button>
       <button onClick={() => onSelectJob('job-2')}>select job</button>
       <button onClick={() => void onLoadMore()}>load more jobs</button>
+      <button onClick={() => void onRetry()}>retry jobs</button>
     </div>
   ),
 }))
 
 vi.mock('../_home/QuotesHomeSummaryCards', () => ({
-  QuotesHomeSummaryCards: ({ cards, loading }: MockSummaryCardsProps) => (
-    <div>
-      summary-cards:{cards.map((card) => `${card.label}:${card.value}`).join('|')}:{String(loading)}
-    </div>
-  ),
+  QuotesHomeSummaryCards: ({ cards }: MockSummaryCardsProps) => {
+    if (shouldThrowSummaryCards()) {
+      throw new Error('summary cards crashed')
+    }
+
+    return (
+      <div>
+        summary-cards:{cards.map((card) => `${card.label}:${card.displayValue ?? card.value}`).join('|')}
+      </div>
+    )
+  },
 }))
 
 vi.mock('../_home/QuotesHomeSelectedJobPanel', () => ({
@@ -105,10 +126,11 @@ vi.mock('../_home/QuotesHomeSelectedJobPanel', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeVersionList', () => ({
-  QuotesHomeVersionList: ({ vm, onLoadMore, onRequestDelete }: MockVersionListProps) => (
+  QuotesHomeVersionList: ({ vm, onLoadMore, onRetry, onRequestDelete }: MockVersionListProps) => (
     <div>
       <div>version-list:{vm.heading}</div>
-      <button onClick={onLoadMore}>load more versions</button>
+      <button onClick={() => void onLoadMore()}>load more versions</button>
+      <button onClick={() => void onRetry()}>retry versions</button>
       <button onClick={() => onRequestDelete('estimate-2')}>request delete</button>
     </div>
   ),
@@ -135,9 +157,110 @@ vi.mock('../_home/QuotesHomeDeleteDialog', () => ({
   ),
 }))
 
+type MockFeedback =
+  | {
+      tone: 'error'
+      title: string
+      details: string[]
+      sources: string[]
+    }
+  | null
+
+function createQuotesHomePageVm({
+  feedback = null,
+  loading = false,
+}: {
+  feedback?: MockFeedback
+  loading?: boolean
+} = {}) {
+  return {
+    actions: {
+      setSearchFocused: vi.fn(),
+      setSearchQuery: vi.fn(),
+      retrySearch: vi.fn(),
+      setJobQuery: vi.fn(),
+      setSelectedJobId: vi.fn(),
+      loadMore: vi.fn(async () => undefined),
+      refresh: vi.fn(async () => true),
+      retryJobs: vi.fn(async () => true),
+      retryVersions: vi.fn(async () => true),
+      loadMoreVersions: vi.fn(async () => false),
+      requestDelete: vi.fn(),
+      setVersionKind: vi.fn(),
+      setVersionName: vi.fn(),
+      create: vi.fn(),
+      cancelDelete: vi.fn(),
+      confirmDelete: vi.fn(),
+    },
+    loading,
+    header: {
+      heroSummaryText: '3 total versions',
+      searchFocused: false,
+      searchQuery: '',
+      searchLoading: false,
+      searchEmptyMessage: null,
+      searchErrorMessage: null,
+      searchCanRetry: false,
+      searchResults: [],
+    },
+    feedback,
+    summaryCards: [
+      { label: 'Drafts', value: '1', subtext: '1 draft version' },
+      { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
+    ],
+    jobList: {
+      loading: false,
+      searchQuery: '',
+      selectedJobId: 'job-1',
+      hasMore: false,
+      items: [],
+      errorMessage: null,
+      canRetry: false,
+      emptyState: 'none',
+      emptyStateBody: null,
+    },
+    selectedJob: {
+      loading: false,
+      emptyMessage: null,
+      title: 'Kitchen',
+      customerLine: 'Alice',
+      jobHref: '/crm/jobs/job-1',
+      stats: [],
+    },
+    versionList: {
+      heading: '2 versions under this job',
+      detail: null,
+      emptyMessage: null,
+      items: [],
+      hasMore: false,
+      loadingMore: false,
+      errorMessage: null,
+      canRetry: false,
+    },
+    create: {
+      creating: false,
+      loading: false,
+      selectedJobName: 'Kitchen',
+      versionKind: 'standard',
+      versionName: '',
+      canCreate: true,
+    },
+    dialogs: {
+      delete: {
+        estimateId: null,
+        versionName: null,
+        jobTitle: null,
+        deleting: false,
+      },
+    },
+  }
+}
+
 describe('QuotesHomePage', () => {
   beforeEach(() => {
     cleanup()
+    shouldThrowSummaryCards.mockReset()
+    shouldThrowSummaryCards.mockReturnValue(false)
     useQuotesHomePage.mockReset()
   })
 
@@ -149,6 +272,9 @@ describe('QuotesHomePage', () => {
       setJobQuery: vi.fn(),
       setSelectedJobId: vi.fn(),
       loadMore: vi.fn(async () => undefined),
+      refresh: vi.fn(async () => true),
+      retryJobs: vi.fn(async () => true),
+      retryVersions: vi.fn(async () => true),
       loadMoreVersions: vi.fn(async () => false),
       requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
@@ -187,7 +313,10 @@ describe('QuotesHomePage', () => {
         selectedJobId: 'job-1',
         hasMore: true,
         items: [],
+        errorMessage: null,
+        canRetry: false,
         emptyState: 'none',
+        emptyStateBody: null,
       },
       selectedJob: {
         loading: false,
@@ -204,6 +333,8 @@ describe('QuotesHomePage', () => {
         items: [],
         hasMore: false,
         loadingMore: false,
+        errorMessage: null,
+        canRetry: false,
       },
       create: {
         creating: false,
@@ -228,7 +359,9 @@ describe('QuotesHomePage', () => {
     expect(screen.getByText('Quote Home')).toBeInTheDocument()
     expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
     expect(screen.getByText('header:3 total versions')).toBeInTheDocument()
-    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:false')).toBeInTheDocument()
+    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800')).toBeInTheDocument()
+    expect(screen.getByText('job-error:none')).toBeInTheDocument()
+    expect(screen.getByText('job-can-retry:false')).toBeInTheDocument()
     expect(screen.getByText('job-has-more:true')).toBeInTheDocument()
     expect(screen.getByText('selected-job:Kitchen')).toBeInTheDocument()
     expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
@@ -243,7 +376,9 @@ describe('QuotesHomePage', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'change job query' })[0])
     fireEvent.click(screen.getAllByRole('button', { name: 'select job' })[0])
     fireEvent.click(screen.getByRole('button', { name: 'load more jobs' }))
+    fireEvent.click(screen.getByRole('button', { name: 'retry jobs' }))
     fireEvent.click(screen.getByRole('button', { name: 'load more versions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'retry versions' }))
     fireEvent.click(screen.getByRole('button', { name: 'request delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'change kind' }))
     fireEvent.click(screen.getByRole('button', { name: 'change name' }))
@@ -257,6 +392,9 @@ describe('QuotesHomePage', () => {
     expect(actions.setJobQuery).toHaveBeenCalledWith('garage')
     expect(actions.setSelectedJobId).toHaveBeenCalledWith('job-2')
     expect(actions.loadMore).toHaveBeenCalledTimes(1)
+    expect(actions.retryJobs).toHaveBeenCalledTimes(1)
+    expect(actions.retryVersions).toHaveBeenCalledTimes(1)
+    expect(actions.refresh).not.toHaveBeenCalled()
     expect(actions.loadMoreVersions).toHaveBeenCalledTimes(1)
     expect(actions.requestDelete).toHaveBeenCalledWith('estimate-2')
     expect(actions.setVersionKind).toHaveBeenCalledWith('revision')
@@ -275,6 +413,9 @@ describe('QuotesHomePage', () => {
         setJobQuery: vi.fn(),
         setSelectedJobId: vi.fn(),
         loadMore: vi.fn(async () => undefined),
+        refresh: vi.fn(async () => true),
+        retryJobs: vi.fn(async () => true),
+        retryVersions: vi.fn(async () => true),
         loadMoreVersions: vi.fn(async () => false),
         requestDelete: vi.fn(),
         setVersionKind: vi.fn(),
@@ -305,7 +446,10 @@ describe('QuotesHomePage', () => {
         selectedJobId: 'job-1',
         hasMore: false,
         items: [],
+        errorMessage: null,
+        canRetry: false,
         emptyState: 'none',
+        emptyStateBody: null,
       },
       selectedJob: {
         loading: false,
@@ -322,6 +466,8 @@ describe('QuotesHomePage', () => {
         items: [],
         hasMore: false,
         loadingMore: false,
+        errorMessage: null,
+        canRetry: false,
       },
       create: {
         creating: false,
@@ -344,5 +490,40 @@ describe('QuotesHomePage', () => {
     render(<QuotesHomePage />)
 
     expect(screen.queryByText('Quote action failed')).not.toBeInTheDocument()
+  })
+
+  it('passes initialData through to the controller hook', () => {
+    useQuotesHomePage.mockReturnValue(createQuotesHomePageVm())
+
+    render(<QuotesHomePage initialData={quoteHomeBootstrap} />)
+
+    expect(useQuotesHomePage).toHaveBeenCalledWith(quoteHomeBootstrap)
+  })
+
+  it('renders the loading state without feedback while keeping lists mounted', () => {
+    useQuotesHomePage.mockReturnValue(createQuotesHomePageVm({ loading: true, feedback: null }))
+
+    render(<QuotesHomePage />)
+
+    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800')).toBeInTheDocument()
+    expect(screen.queryByText('Quote action failed')).not.toBeInTheDocument()
+    expect(screen.getByText('job-list:desktop')).toBeInTheDocument()
+    expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
+  })
+
+  it('shows a recovery fallback while keeping the page shell visible when quote content crashes', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    shouldThrowSummaryCards.mockReturnValue(true)
+    useQuotesHomePage.mockReturnValue(createQuotesHomePageVm())
+
+    render(<QuotesHomePage />)
+
+    expect(screen.getByText('Quote Home')).toBeInTheDocument()
+    expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
+    expect(screen.getByText('Something went wrong loading quotes')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+    expect(screen.queryByText('job-list:desktop')).not.toBeInTheDocument()
+
+    consoleError.mockRestore()
   })
 })

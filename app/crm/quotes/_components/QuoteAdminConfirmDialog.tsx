@@ -14,9 +14,15 @@ type Props = {
   closeLabel: string
   warning: string
   info?: string | null
+  cancelLabel?: string
+  cancelAriaLabel?: string
+  cancelDisabled?: boolean
   confirmLabel: string
+  confirmAriaLabel?: string
+  confirmingAriaLabel?: string
   confirmingLabel?: string
   confirming?: boolean
+  confirmDisabled?: boolean
   confirmTone?: 'danger' | 'primary'
   onConfirm: () => void
   onCancel: () => void
@@ -30,16 +36,23 @@ export function QuoteAdminConfirmDialog({
   closeLabel,
   warning,
   info = null,
+  cancelLabel = 'Cancel',
+  cancelAriaLabel,
+  cancelDisabled = false,
   confirmLabel,
+  confirmAriaLabel,
+  confirmingAriaLabel,
   confirmingLabel,
   confirming = false,
+  confirmDisabled = false,
   confirmTone = 'danger',
   onConfirm,
   onCancel,
 }: Props) {
   if (!isOpen) return null
 
-  const canCancel = !confirming
+  const canCancel = !confirming && !cancelDisabled
+  const canConfirm = !confirming && !confirmDisabled
   const handleCancel = () => {
     if (!canCancel) return
     onCancel()
@@ -68,10 +81,22 @@ export function QuoteAdminConfirmDialog({
 
       <div className="border-t border-[color:var(--crm-ui-border)] px-5 py-4">
         <CrmFormActions>
-          <CrmButton type="button" onClick={handleCancel} disabled={!canCancel}>
-            Cancel
+          <CrmButton
+            type="button"
+            onClick={handleCancel}
+            disabled={!canCancel}
+            aria-label={cancelAriaLabel}
+          >
+            {cancelLabel}
           </CrmButton>
-          <CrmButton type="button" tone={confirmTone} onClick={onConfirm} disabled={!canCancel}>
+          <CrmButton
+            type="button"
+            tone={confirmTone}
+            onClick={onConfirm}
+            disabled={!canConfirm}
+            aria-label={confirming ? confirmingAriaLabel ?? confirmAriaLabel : confirmAriaLabel}
+            aria-busy={confirming || undefined}
+          >
             {confirming ? confirmingLabel ?? confirmLabel : confirmLabel}
           </CrmButton>
         </CrmFormActions>

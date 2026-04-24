@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
-import type { QuotesHomeHeaderVm } from './quoteHomeTypes'
+import type { QuotesHomeHeaderVm, QuotesHomeSearchStatusVm } from './quoteHomeTypes'
+import { useQuotesHomeHeaderInteractions } from './useQuotesHomeHeaderInteractions'
 
 type Props = {
   vm: QuotesHomeHeaderVm
@@ -19,91 +20,167 @@ export function QuotesHomeHeader({
   onSearchQueryChange,
   onSearchRetry,
 }: Props) {
-  const searchContainerRef = useRef<HTMLDivElement | null>(null)
-  const settingsMenuRef = useRef<HTMLDetailsElement | null>(null)
-  const settingsSummaryRef = useRef<HTMLElement | null>(null)
+  const {
+    searchContainerRef,
+    settingsContainerRef,
+    settingsButtonRef,
+    searchResultsId,
+    settingsPanelId,
+    settingsOpen,
+    closeSearch,
+    closeSettings,
+    openSearch,
+    openSettings,
+    toggleSettings,
+    handleSearchBlur,
+    handleSearchKeyDown,
+  } = useQuotesHomeHeaderInteractions({
+    searchFocused: vm.searchFocused,
+    onSearchFocusedChange,
+  })
+  const settingsPanelRef = useRef<HTMLDivElement | null>(null)
+  const searchResultsPanelRef = useRef<HTMLDivElement | null>(null)
+  const [settingsFocusTarget, setSettingsFocusTarget] = useState<'first' | 'last'>('first')
 
+  const searchStatus =
+    vm.searchStatus ??
+    buildLegacySearchStatus({
+      query: vm.searchQuery,
+      loading: vm.searchLoading,
+      errorMessage: vm.searchErrorMessage,
+      emptyMessage: vm.searchEmptyMessage,
+      resultCount: vm.searchResults.length,
+      canRetry: vm.searchCanRetry,
+    })
+  const searchOpen = vm.searchFocused && searchStatus.kind !== 'idle'
   useEffect(() => {
-    if (!vm.searchFocused) return
+    if (!settingsOpen) return
+    focusSettingsItem(settingsPanelRef.current, settingsFocusTarget)
+  }, [settingsFocusTarget, settingsOpen])
 
-    const handleDocumentMouseDown = (event: MouseEvent) => {
-      if (!(event.target instanceof Node)) return
-      if (searchContainerRef.current?.contains(event.target)) return
-      onSearchFocusedChange(false)
+  const openSettingsWithFocus = (target: 'first' | 'last') => {
+    setSettingsFocusTarget(target)
+    openSettings()
+  }
+
+  const handleSettingsButtonKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Escape' && settingsOpen) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeSettings({ restoreFocus: true })
+      return
     }
 
-    const handleDocumentFocusIn = (event: FocusEvent) => {
-      if (!(event.target instanceof Node)) return
-      if (searchContainerRef.current?.contains(event.target)) return
-      onSearchFocusedChange(false)
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      openSettingsWithFocus(event.key === 'ArrowUp' ? 'last' : 'first')
+    }
+  }
+
+  const handleSearchInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' && searchOpen) {
+      const firstResult = searchResultsPanelRef.current?.querySelector<HTMLElement>(
+        '[role="option"], button',
+      )
+      if (firstResult) {
+        event.preventDefault()
+        firstResult.focus()
+        return
+      }
     }
 
-    document.addEventListener('mousedown', handleDocumentMouseDown)
-    document.addEventListener('focusin', handleDocumentFocusIn)
-    return () => {
-      document.removeEventListener('mousedown', handleDocumentMouseDown)
-      document.removeEventListener('focusin', handleDocumentFocusIn)
-    }
-  }, [onSearchFocusedChange, vm.searchFocused])
+    handleSearchKeyDown(event)
+  }
 
-  const handleSettingsKeyDown = (event: ReactKeyboardEvent<HTMLDetailsElement>) => {
-    if (event.key !== 'Escape' || !settingsMenuRef.current?.open) return
+  const handleSettingsMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeSettings({ restoreFocus: true })
+      return
+    }
+
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+
     event.preventDefault()
-    settingsMenuRef.current.open = false
-    settingsSummaryRef.current?.focus()
+    const menuItems = getEnabledSettingsItems(event.currentTarget)
+    if (menuItems.length === 0) return
+
+    const currentIndex = menuItems.indexOf(document.activeElement as HTMLElement)
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? menuItems.length - 1
+          : event.key === 'ArrowDown'
+            ? (currentIndex + 1) % menuItems.length
+            : currentIndex <= 0
+              ? menuItems.length - 1
+              : currentIndex - 1
+
+    menuItems[nextIndex]?.focus()
   }
 
   return (
-    <div
-      style={{
-        ...S.card,
-        display: 'grid',
-        gap: 18,
-        marginBottom: 24,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 18,
-          flexWrap: 'wrap',
-        }}
-      >
+    <div style={S.headerCard}>
+      <div style={S.headerRow}>
         <div>
           <div style={S.eyebrow}>{formatToday()}</div>
-          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>Quote home overview</div>
+          <div style={S.headerTitle}>Quote home overview</div>
           <div style={S.subhead}>{vm.heroSummaryText}</div>
         </div>
 
         <div style={S.topControls}>
           <div style={S.searchWrap}>
-            <div ref={searchContainerRef}>
+            <div
+              ref={searchContainerRef}
+              onBlur={handleSearchBlur}
+              style={S.searchBox}
+            >
               <input
+                type="search"
                 value={vm.searchQuery}
                 onChange={(event) => onSearchQueryChange(event.target.value)}
-                onFocus={() => onSearchFocusedChange(true)}
+                onFocus={openSearch}
+                onKeyDown={handleSearchInputKeyDown}
                 placeholder="Search quote versions"
                 style={S.search}
                 aria-label="Search quote versions"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={searchOpen}
+                aria-haspopup="listbox"
+                aria-controls={searchOpen ? searchResultsId : undefined}
+                aria-busy={vm.searchLoading || undefined}
               />
-              {vm.searchFocused && vm.searchQuery.trim() ? (
-                <div style={S.searchResults}>
-                  {vm.searchLoading ? (
-                    <div style={S.searchStatusPanel}>
-                      <div style={S.searchStatusTitle}>Searching quote versions</div>
+              {searchOpen ? (
+                <div
+                  ref={searchResultsPanelRef}
+                  id={searchResultsId}
+                  style={S.searchResults}
+                  role="listbox"
+                  aria-label="Quote search results"
+                  aria-busy={vm.searchLoading || undefined}
+                >
+                  {searchStatus.kind === 'loading' ? (
+                    <div
+                      style={S.searchStatusPanel}
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      <div style={S.searchStatusTitle}>{searchStatus.title}</div>
                       <div style={S.searchStatusText}>
-                        Looking up versions that match &quot;{vm.searchQuery.trim()}&quot;.
+                        {searchStatus.message}
                       </div>
                     </div>
                   ) : null}
 
-                  {!vm.searchLoading && vm.searchErrorMessage ? (
-                    <div style={S.searchStatusPanel}>
-                      <div style={S.searchStatusTitle}>Search results failed to load</div>
-                      <div style={S.searchStatusText}>{vm.searchErrorMessage}</div>
-                      {vm.searchCanRetry ? (
+                  {searchStatus.kind === 'error' ? (
+                    <div style={S.searchStatusPanel} role="alert">
+                      <div style={S.searchStatusTitle}>{searchStatus.title}</div>
+                      <div style={S.searchStatusText}>{searchStatus.message}</div>
+                      {searchStatus.canRetry ? (
                         <button type="button" style={S.searchRetryButton} onClick={onSearchRetry}>
                           Retry search
                         </button>
@@ -111,50 +188,144 @@ export function QuotesHomeHeader({
                     </div>
                   ) : null}
 
-                  {!vm.searchLoading && !vm.searchErrorMessage && vm.searchResults.length > 0
+                  {searchStatus.kind === 'results'
                     ? vm.searchResults.map((estimate) => (
-                        <Link key={estimate.id} href={estimate.href} style={S.searchResultLink}>
+                        <Link
+                          key={estimate.id}
+                          href={estimate.href}
+                          style={S.searchResultLink}
+                          role="option"
+                          aria-selected="false"
+                          onClick={closeSearch}
+                        >
                           <div style={S.estimateTitle}>{estimate.title}</div>
                           <div style={S.estimateMeta}>{estimate.meta}</div>
                         </Link>
                       ))
                     : null}
 
-                  {!vm.searchLoading && !vm.searchErrorMessage && vm.searchEmptyMessage ? (
-                    <div style={S.searchStatusPanel}>
-                      <div style={S.searchStatusTitle}>No matching quote versions</div>
-                      <div style={S.searchStatusText}>{vm.searchEmptyMessage}</div>
+                  {searchStatus.kind === 'empty' ? (
+                    <div
+                      style={S.searchStatusPanel}
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      <div style={S.searchStatusTitle}>{searchStatus.title}</div>
+                      <div style={S.searchStatusText}>{searchStatus.message}</div>
                     </div>
                   ) : null}
                 </div>
               ) : null}
             </div>
-            <details ref={settingsMenuRef} style={S.settingsMenu} onKeyDown={handleSettingsKeyDown}>
-              <summary
-                ref={(node) => {
-                  settingsSummaryRef.current = node
-                }}
-                style={S.settingsSummary}
+            <div
+              ref={settingsContainerRef}
+              style={{ position: 'relative', minWidth: 0 }}
+            >
+              <button
+                ref={settingsButtonRef}
+                type="button"
+                style={S.settingsToggle}
+                onClick={toggleSettings}
+                onKeyDown={handleSettingsButtonKeyDown}
+                aria-expanded={settingsOpen}
+                aria-controls={settingsOpen ? settingsPanelId : undefined}
+                aria-haspopup="menu"
               >
                 Settings & Constants
-              </summary>
-              <div style={S.settingsPanel}>
-                {SETTINGS_LINKS.map((item) =>
-                  item.disabled ? (
-                    <span key={item.label} style={S.settingsDisabled}>
-                      {item.label}
-                    </span>
-                  ) : (
-                    <Link key={item.label} href={item.href ?? '#'} style={S.settingsLink}>
-                      {item.label}
-                    </Link>
-                  )
-                )}
-              </div>
-            </details>
+              </button>
+              {settingsOpen ? (
+                <div
+                  ref={settingsPanelRef}
+                  id={settingsPanelId}
+                  style={S.settingsPanel}
+                  role="menu"
+                  aria-label="Quote settings"
+                  onKeyDown={handleSettingsMenuKeyDown}
+                >
+                  {SETTINGS_LINKS.map((item) =>
+                    item.disabled ? (
+                      <span
+                        key={item.label}
+                        style={S.settingsDisabled}
+                        role="menuitem"
+                        aria-disabled="true"
+                        tabIndex={-1}
+                      >
+                        {item.label}
+                      </span>
+                    ) : (
+                      <Link
+                        key={item.label}
+                        href={item.href ?? '#'}
+                        style={S.settingsLink}
+                        role="menuitem"
+                        tabIndex={-1}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
     </div>
   )
+}
+
+function buildLegacySearchStatus(params: {
+  query: string
+  loading: boolean
+  errorMessage: string | null
+  emptyMessage: string | null
+  resultCount: number
+  canRetry: boolean
+}): QuotesHomeSearchStatusVm {
+  const query = params.query.trim()
+  if (!query) return { kind: 'idle' }
+  if (params.loading) {
+    return {
+      kind: 'loading',
+      title: 'Searching quote versions',
+      message: `Looking up versions that match "${query}".`,
+    }
+  }
+  if (params.errorMessage) {
+    return {
+      kind: 'error',
+      title: 'Search results failed to load',
+      message: params.errorMessage,
+      canRetry: params.canRetry,
+    }
+  }
+  if (params.emptyMessage) {
+    return {
+      kind: 'empty',
+      title: 'No matching quote versions',
+      message: params.emptyMessage,
+    }
+  }
+  return params.resultCount > 0 ? { kind: 'results' } : { kind: 'idle' }
+}
+
+function getEnabledSettingsItems(container: HTMLElement | null) {
+  if (!container) return []
+
+  return Array.from(
+    container.querySelectorAll<HTMLElement>('[role="menuitem"]')
+  ).filter((item) => item.getAttribute('aria-disabled') !== 'true')
+}
+
+function focusSettingsItem(
+  container: HTMLElement | null,
+  target: 'first' | 'last',
+) {
+  const menuItems = getEnabledSettingsItems(container)
+  if (menuItems.length === 0) return
+
+  const nextIndex = target === 'first' ? 0 : menuItems.length - 1
+  menuItems[nextIndex]?.focus()
 }

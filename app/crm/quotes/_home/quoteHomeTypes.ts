@@ -1,11 +1,16 @@
 import type {
   QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
+  QuoteHomeSearchResultReadModel,
 } from '@/lib/quotes/collectionData'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 
 export type QuoteHomeJob = QuoteHomeJobListItemReadModel
 export type QuoteHomeJobVersion = QuoteHomeJobVersionItemReadModel
+export type QuoteHomeSearchResult = Pick<
+  QuoteHomeSearchResultReadModel,
+  'estimate_id' | 'version_name' | 'version_state' | 'job_title' | 'customer_name'
+>
 
 export type NavItem = {
   label: string
@@ -16,9 +21,10 @@ export type NavItem = {
 export type SummaryCardVm = {
   label: string
   value: string
+  displayValue: string
   subtext: string
-  valueColor?: string
-  subtextColor?: string
+  valueColor: string
+  subtextColor: string
 }
 
 export type SearchResultVm = {
@@ -28,10 +34,23 @@ export type SearchResultVm = {
   meta: string
 }
 
+export type QuotesHomeSearchStatusVm =
+  | { kind: 'idle' }
+  | { kind: 'loading'; title: string; message: string }
+  | {
+      kind: 'error'
+      title: string
+      message: string
+      canRetry: boolean
+    }
+  | { kind: 'empty'; title: string; message: string }
+  | { kind: 'results' }
+
 export type QuoteHomeFeedbackTone = 'warning' | 'error'
 
 export type QuoteHomeFailureSource =
   | 'bootstrap'
+  | 'jobs'
   | 'jobVersions'
   | 'create'
   | 'delete'
@@ -59,6 +78,7 @@ export type QuotesHomeHeaderVm = {
   searchErrorMessage: string | null
   searchCanRetry: boolean
   searchResults: SearchResultVm[]
+  searchStatus?: QuotesHomeSearchStatusVm
 }
 
 export type QuoteHomeJobListItemVm = {
@@ -66,7 +86,6 @@ export type QuoteHomeJobListItemVm = {
   title: string
   customerName: string
   versionCountLabel: string
-  href?: string
   isSelected?: boolean
 }
 
@@ -76,7 +95,29 @@ export type QuotesHomeJobListVm = {
   selectedJobId: string
   hasMore: boolean
   items: QuoteHomeJobListItemVm[]
+  errorMessage: string | null
+  canRetry: boolean
   emptyState: 'none' | 'no_jobs' | 'no_matches'
+  emptyStateBody: string | null
+  status?:
+    | { kind: 'loading'; message: string }
+    | {
+        kind: 'error'
+        title: string
+        message: string
+        canRetry: boolean
+        retryLabel: string
+        retryingLabel: string
+      }
+    | {
+        kind: 'empty'
+        emptyState: 'no_jobs' | 'no_matches'
+        title: string
+        body: string | null
+      }
+    | { kind: 'ready' }
+  loadMoreLabel?: string
+  loadingMoreLabel?: string
 }
 
 export type QuotesHomeSelectedJobStatVm = {
@@ -86,6 +127,7 @@ export type QuotesHomeSelectedJobStatVm = {
 
 export type QuotesHomeSelectedJobVm = {
   loading: boolean
+  state?: 'loading' | 'empty' | 'selected'
   emptyMessage: string | null
   title: string | null
   customerLine: string | null
@@ -100,6 +142,10 @@ export type QuoteHomeVersionItemVm = {
   meta: string
   href: string
   deleting: boolean
+  deleteDisabled: boolean
+  deleteBusy: boolean
+  deleteButtonLabel: string
+  deleteButtonAriaLabel: string
 }
 
 export type QuotesHomeVersionListVm = {
@@ -109,20 +155,62 @@ export type QuotesHomeVersionListVm = {
   items: QuoteHomeVersionItemVm[]
   hasMore: boolean
   loadingMore: boolean
+  errorMessage: string | null
+  canRetry: boolean
+  status:
+    | {
+        kind: 'error'
+        title: string
+        message: string
+        canRetry: boolean
+        retryLabel: string
+        retryingLabel: string
+      }
+    | { kind: 'empty'; message: string }
+    | { kind: 'ready' }
+  loadMoreLabel?: string
+  loadingMoreLabel?: string
 }
 
 export type QuotesHomeCreateVm = {
+  eyebrow: string
+  title: string
+  description: string
+  createButtonLabel: string
+  versionNameLabel: string
+  versionNameHelp: string
+  versionNamePlaceholder: string
+  versionKindLabel: string
+  versionKindOptions: ReadonlyArray<{
+    value: QuoteVersionKind
+    label: string
+  }>
   creating: boolean
   loading: boolean
   selectedJobName: string | null
   versionKind: QuoteVersionKind
   versionName: string
   canCreate: boolean
+  disabledReason?: string | null
 }
 
 export type QuotesHomeDeleteDialogVm = {
+  isOpen: boolean
   estimateId: string | null
   versionName: string | null
   jobTitle: string | null
   deleting: boolean
+  title: string
+  description: string
+  closeLabel: string
+  warning: string
+  info: string
+  cancelLabel: string
+  cancelAriaLabel: string
+  confirmLabel: string
+  confirmAriaLabel: string
+  confirmingLabel: string
+  confirmingAriaLabel: string
+  confirmDisabled: boolean
+  cancelDisabled: boolean
 }

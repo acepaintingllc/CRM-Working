@@ -5,19 +5,28 @@ import type { SummaryCardVm } from './quoteHomeTypes'
 
 type Props = {
   cards: SummaryCardVm[]
-  loading: boolean
 }
 
-export function QuotesHomeSummaryCards({ cards, loading }: Props) {
+export function QuotesHomeSummaryCards({ cards }: Props) {
   return (
     <div className="ace-v2-home-stats">
       {cards.map((card) => (
         <div key={card.label} style={S.card}>
           <div style={S.cardLabel}>{card.label}</div>
-          <div style={{ ...S.statValue, color: card.valueColor ?? 'var(--v2-ink)' }}>
-            {loading ? '...' : card.value}
+          <div
+            style={{
+              ...S.statValue,
+              color: card.valueColor,
+            }}
+          >
+            {card.displayValue}
           </div>
-          <div style={{ ...S.statSub, color: card.subtextColor ?? 'var(--v2-ink-3)' }}>
+          <div
+            style={{
+              ...S.statSub,
+              color: card.subtextColor,
+            }}
+          >
             {card.subtext}
           </div>
         </div>
@@ -25,4 +34,3 @@ export function QuotesHomeSummaryCards({ cards, loading }: Props) {
     </div>
   )
 }
-

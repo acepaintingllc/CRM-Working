@@ -12,16 +12,22 @@ type Props = {
 export function QuotesHomeDeleteDialog({ vm, onCancel, onConfirm }: Props) {
   return (
     <QuoteAdminConfirmDialog
-      isOpen={Boolean(vm.estimateId)}
+      isOpen={vm.isOpen}
       labelledBy="quote-home-delete-title"
-      title="Delete version?"
-      description={`Delete ${vm.versionName ?? 'this version'} from ${vm.jobTitle ?? 'the selected job'}.`}
-      closeLabel="Close delete confirmation"
-      warning="This permanently deletes the quote version. This cannot be undone."
-      info="The home page will refresh job counts and the selected job version list after delete."
-      confirmLabel="Delete version"
-      confirmingLabel="Deleting..."
+      title={vm.title}
+      description={vm.description}
+      closeLabel={vm.closeLabel}
+      warning={vm.warning}
+      info={vm.info}
+      cancelLabel={vm.cancelLabel}
+      cancelAriaLabel={vm.cancelAriaLabel}
+      cancelDisabled={vm.cancelDisabled}
+      confirmLabel={vm.confirmLabel}
+      confirmAriaLabel={vm.confirmAriaLabel}
+      confirmingLabel={vm.confirmingLabel}
+      confirmingAriaLabel={vm.confirmingAriaLabel}
       confirming={vm.deleting}
+      confirmDisabled={vm.confirmDisabled}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />

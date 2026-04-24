@@ -21,6 +21,32 @@ import {
   serviceResultMutationResponse,
 } from '@/lib/server/routeResult'
 
+type RouteParamResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; response: ReturnType<typeof jsonError> }
+
+function readOptionalPositiveIntegerParam(
+  params: URLSearchParams,
+  name: string
+): RouteParamResult<number | undefined> {
+  const rawValue = params.get(name)
+  if (rawValue == null || rawValue.trim() === '') {
+    return { ok: true, value: undefined }
+  }
+
+  const normalizedValue = rawValue.trim()
+  const value = Number(normalizedValue)
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    String(value) !== normalizedValue
+  ) {
+    return { ok: false, response: jsonError(`Invalid ${name}.`, 400) }
+  }
+
+  return { ok: true, value }
+}
+
 export async function handleEstimateCollectionRouteGet() {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
@@ -52,6 +78,9 @@ export async function handleEstimateHomeRecentActivityRouteGet() {
 }
 
 export async function handleEstimateHomeJobCountsRouteGet() {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
   return Response.json(
     { error: 'Quote home job-counts has been replaced by the paged jobs read model.' },
     { status: 410 }
@@ -63,16 +92,16 @@ export async function handleEstimateHomeJobsRouteGet(request: Request) {
   if (!auth.ok) return auth.response
 
   const url = new URL(request.url)
-  const query = url.searchParams.get('q') ?? ''
+  const query = (url.searchParams.get('q') ?? '').trim()
   const cursor = url.searchParams.get('cursor')
-  const limitValue = url.searchParams.get('limit')
-  const limit = limitValue ? Number(limitValue) : undefined
+  const limit = readOptionalPositiveIntegerParam(url.searchParams, 'limit')
+  if (!limit.ok) return limit.response
 
   return serviceResultDataResponse(
     await loadEstimateCollectionJobsPayload(auth.session.orgId, {
       query,
       cursor,
-      limit,
+      limit: limit.value,
     })
   )
 }
@@ -81,7 +110,7 @@ export async function handleEstimateHomeSearchRouteGet(request: Request) {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
-  const query = new URL(request.url).searchParams.get('q') ?? ''
+  const query = (new URL(request.url).searchParams.get('q') ?? '').trim()
   return serviceResultDataResponse(
     await loadEstimateCollectionSearchPayload(auth.session.orgId, query)
   )
@@ -104,13 +133,13 @@ export async function handleEstimateJobVersionsRouteGet(
 
   const url = new URL(request.url)
   const cursor = url.searchParams.get('cursor')
-  const limitValue = url.searchParams.get('limit')
-  const limit = limitValue ? Number(limitValue) : undefined
+  const limit = readOptionalPositiveIntegerParam(url.searchParams, 'limit')
+  if (!limit.ok) return limit.response
 
   return serviceResultDataResponse(
     await loadEstimateCollectionJobVersionsPayload(auth.session.orgId, jobId.value, {
       cursor,
-      limit,
+      limit: limit.value,
     })
   )
 }

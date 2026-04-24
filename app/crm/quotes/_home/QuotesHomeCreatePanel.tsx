@@ -3,17 +3,13 @@
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
-import {
-  QUOTE_VERSION_KIND_OPTIONS,
-  type QuoteVersionKind,
-} from '@/lib/quotes/versionCreation'
 import type { QuotesHomeCreateVm } from './quoteHomeTypes'
 import { S } from './quoteHomeStyles'
 
 type Props = {
   vm: QuotesHomeCreateVm
-  onCreate: () => void
-  onVersionKindChange: (value: QuoteVersionKind) => void
+  onCreate: () => void | Promise<unknown>
+  onVersionKindChange: (value: QuotesHomeCreateVm['versionKind']) => void
   onVersionNameChange: (value: string) => void
 }
 
@@ -23,51 +19,65 @@ export function QuotesHomeCreatePanel({
   onVersionKindChange,
   onVersionNameChange,
 }: Props) {
+  const disabledReasonId = vm.disabledReason
+    ? 'quote-home-create-disabled-reason'
+    : undefined
+
   return (
     <CrmSectionCard
       className="self-start"
-      eyebrow="Create Version"
-      title="Add the next quote version"
-      description="Creates a new quote version linked to this job, then opens it in the workspace."
+      eyebrow={vm.eyebrow}
+      title={vm.title}
+      description={vm.description}
       actions={
         <CrmButton
           type="button"
           tone="primary"
-          onClick={onCreate}
+          onClick={() => void onCreate()}
           disabled={!vm.canCreate}
+          aria-busy={vm.creating || undefined}
+          aria-describedby={disabledReasonId}
         >
-          {vm.creating ? 'Creating version...' : 'Create version'}
+          {vm.createButtonLabel}
         </CrmButton>
       }
     >
       <div style={S.createFields}>
         <CrmField
-          label="Version Name"
-          help="Leave blank for the next default version name."
+          label={vm.versionNameLabel}
+          help={vm.versionNameHelp}
         >
           <input
             value={vm.versionName}
             onChange={(event) => onVersionNameChange(event.target.value)}
-            placeholder="Leave blank for the next default version name"
+            placeholder={vm.versionNamePlaceholder}
             className="ace-crm-input text-sm"
           />
         </CrmField>
 
-        <CrmField label="Version Kind">
+        <CrmField label={vm.versionKindLabel}>
           <select
             value={vm.versionKind}
             onChange={(event) =>
-              onVersionKindChange(event.target.value as QuoteVersionKind)
+              onVersionKindChange(
+                event.target.value as QuotesHomeCreateVm['versionKind']
+              )
             }
             className="ace-crm-input text-sm"
           >
-            {QUOTE_VERSION_KIND_OPTIONS.map((option) => (
+            {vm.versionKindOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
         </CrmField>
+
+        {vm.disabledReason ? (
+          <div id={disabledReasonId} style={S.mutedText}>
+            {vm.disabledReason}
+          </div>
+        ) : null}
       </div>
     </CrmSectionCard>
   )
