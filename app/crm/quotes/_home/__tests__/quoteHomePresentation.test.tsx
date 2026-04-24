@@ -162,13 +162,34 @@ describe('quoteHomePresentation', () => {
         jobVersionsError: null,
         createError: null,
         deleteError: null,
-        actionWarning: 'Quote deleted, but refresh failed.',
+        actionWarning: {
+          source: 'delete',
+          message: 'Quote deleted, but refresh failed.',
+        },
       })
     ).toEqual({
       tone: 'warning',
       title: 'Quote action completed with refresh errors',
       details: ['Quote deleted, but refresh failed.'],
       sources: ['delete'],
+    })
+
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [],
+        jobVersionsError: null,
+        createError: null,
+        deleteError: null,
+        actionWarning: {
+          source: 'create',
+          message: 'Quote created, but refresh failed.',
+        },
+      })
+    ).toEqual({
+      tone: 'warning',
+      title: 'Quote action completed with refresh errors',
+      details: ['Quote created, but refresh failed.'],
+      sources: ['create'],
     })
 
     expect(

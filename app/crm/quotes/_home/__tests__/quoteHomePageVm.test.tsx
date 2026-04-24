@@ -86,6 +86,7 @@ function buildActions(): QuoteHomePageActions {
     setSearchFocused: vi.fn(),
     setJobQuery: vi.fn(),
     setSelectedJobId: vi.fn(),
+    loadMore: vi.fn(async () => undefined),
     setVersionName: vi.fn(),
     setVersionKind: vi.fn(),
     create: vi.fn(async () => null),
@@ -110,6 +111,7 @@ function buildResources(
         pipeline_total: 1800,
       },
       jobs: [jobOne, jobTwo],
+      hasMore: false,
       loading: false,
       bootstrapError: null,
       ...overrides?.home,
@@ -209,6 +211,7 @@ describe('buildQuoteHomePageVm', () => {
       loading: false,
       searchQuery: '',
       selectedJobId: '',
+      hasMore: false,
       items: [],
       emptyState: 'no_jobs',
     })
@@ -246,6 +249,7 @@ describe('buildQuoteHomePageVm', () => {
       expect.objectContaining({ id: 'job-1', isSelected: true }),
       expect.objectContaining({ id: 'job-2', isSelected: false }),
     ])
+    expect(vm.jobList.hasMore).toBe(false)
     expect(vm.selectedJob).toEqual({
       loading: false,
       emptyMessage: null,
@@ -302,10 +306,26 @@ describe('buildQuoteHomePageVm', () => {
     expect(vm.create.canCreate).toBe(false)
   })
 
+  it('threads job pagination affordances into the job list vm', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        home: {
+          hasMore: true,
+        },
+      })
+    )
+
+    expect(vm.jobList.hasMore).toBe(true)
+  })
+
   it('surfaces feedback when resource or action issues are present', () => {
     const vm = buildQuoteHomePageVm(
       buildState({
-        actionWarning: 'Quote deleted, but the list refresh failed.',
+        actionWarning: {
+          source: 'delete',
+          message: 'Quote deleted, but the list refresh failed.',
+        },
       }),
       buildResources({
         home: {

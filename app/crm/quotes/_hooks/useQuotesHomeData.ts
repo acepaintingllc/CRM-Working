@@ -1,9 +1,12 @@
 'use client'
 
-import { useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useResource } from '@/app/crm/_hooks/useResource'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
-import { loadQuoteHomeBootstrap } from '@/lib/quotes/client'
+import type {
+  QuoteHomeBootstrapReadModel,
+  QuoteHomeJobsPageReadModel,
+} from '@/lib/quotes/collectionData'
+import { loadQuoteHomeBootstrap, loadQuoteHomeJobs } from '@/lib/quotes/client'
 
 const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
   summary: {
@@ -42,16 +45,82 @@ export function useQuotesHomeData(initialData?: QuoteHomeBootstrapReadModel | nu
     },
     getErrorMessage: (loadError) => toLoadErrorMessage('quote home bootstrap', loadError),
   })
+  const [jobsPage, setJobsPage] = useState<QuoteHomeJobsPageReadModel>(resolvedInitialData.jobs)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadMoreRequestIdRef = useRef(0)
+
+  useEffect(() => {
+    loadMoreRequestIdRef.current += 1
+    setJobsPage(resource.data.jobs)
+    setLoadingMore(false)
+  }, [resource.data.jobs])
+
+  const loadMore = useCallback(async () => {
+    const cursor = jobsPage.next_cursor
+    if (!cursor || resource.loading || loadingMore) {
+      return
+    }
+
+    const requestId = ++loadMoreRequestIdRef.current
+    setLoadingMore(true)
+
+    try {
+      const nextPage = await loadQuoteHomeJobs<QuoteHomeJobsPageReadModel>({
+        query: jobsPage.query,
+        limit: jobsPage.limit,
+        cursor,
+      })
+
+      if (loadMoreRequestIdRef.current !== requestId) {
+        return
+      }
+
+      resource.setError(null)
+      setJobsPage((current) => {
+        const existingIds = new Set(current.items.map((job) => job.id))
+        return {
+          ...nextPage,
+          items: [
+            ...current.items,
+            ...nextPage.items.filter((job) => !existingIds.has(job.id)),
+          ],
+        }
+      })
+    } catch (loadError) {
+      if (loadMoreRequestIdRef.current !== requestId) {
+        return
+      }
+      resource.setError(toLoadErrorMessage('quote home jobs', loadError))
+    } finally {
+      if (loadMoreRequestIdRef.current === requestId) {
+        setLoadingMore(false)
+      }
+    }
+  }, [
+    jobsPage.limit,
+    jobsPage.next_cursor,
+    jobsPage.query,
+    loadingMore,
+    resource.loading,
+    resource.setError,
+  ])
+
+  const bootstrap = {
+    ...resource.data,
+    jobs: jobsPage,
+  }
 
   return {
-    bootstrap: resource.data,
+    bootstrap,
     summary: resource.data.summary,
-    jobsPage: resource.data.jobs,
-    jobs: resource.data.jobs.items,
-    initialSelectedJobId: resource.data.selected_job_id,
-    initialSelectedJobVersions: resource.data.selected_job_versions,
+    jobsPage,
+    jobs: jobsPage.items,
+    hasMore: Boolean(jobsPage.next_cursor),
+    initialSelectedJobId: bootstrap.selected_job_id,
+    initialSelectedJobVersions: bootstrap.selected_job_versions,
     loading: resource.loading,
     bootstrapError: resource.error,
+    loadMore,
     refresh: async () => {
       const ok = await resource.refresh()
       return ok ? latestLoadedBootstrapRef.current : null

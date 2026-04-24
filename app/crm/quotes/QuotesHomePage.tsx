@@ -80,6 +80,7 @@ export default function QuotesHomePage({ initialData }: Props) {
             vm={controller.jobList}
             onJobQueryChange={actions.setJobQuery}
             onSelectJob={actions.setSelectedJobId}
+            onLoadMore={actions.loadMore}
           />
 
           <section style={S.sectionStackLg}>

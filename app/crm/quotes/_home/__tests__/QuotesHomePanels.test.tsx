@@ -26,11 +26,13 @@ describe('Quotes home panels', () => {
           loading: false,
           searchQuery: '',
           selectedJobId: '',
+          hasMore: false,
           items: [],
           emptyState: 'no_jobs',
         }}
         onJobQueryChange={() => {}}
         onSelectJob={() => {}}
+        onLoadMore={async () => {}}
       />,
     )
 
@@ -39,6 +41,38 @@ describe('Quotes home panels', () => {
 
     expect(addContact).toHaveClass('ace-crm-btn', 'ace-crm-btn-primary')
     expect(openJobs).toHaveClass('ace-crm-btn', 'ace-crm-btn-secondary')
+  })
+
+  it('renders a load-more button when the vm reports more jobs', () => {
+    const onLoadMore = vi.fn(async () => {})
+
+    render(
+      <QuotesHomeJobList
+        vm={{
+          loading: false,
+          searchQuery: '',
+          selectedJobId: 'job-1',
+          hasMore: true,
+          items: [
+            {
+              id: 'job-1',
+              title: 'Kitchen Remodel',
+              customerName: 'Alice',
+              versionCountLabel: '2 versions',
+              isSelected: true,
+            },
+          ],
+          emptyState: 'none',
+        }}
+        onJobQueryChange={() => {}}
+        onSelectJob={() => {}}
+        onLoadMore={onLoadMore}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more jobs' }))
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
   })
 
   it('uses CRM button actions for version open and delete', () => {

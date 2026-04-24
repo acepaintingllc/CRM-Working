@@ -111,9 +111,11 @@ describe('useQuoteHomePageController', () => {
       preserveDataOnError: true,
       reportError: false,
     })
-    expect(result.current.actionWarning).toBe(
-      'Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. Home refresh failed. bootstrap refresh failed Versions refresh failed. versions refresh failed'
-    )
+    expect(result.current.actionWarning).toEqual({
+      source: 'delete',
+      message:
+        'Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. Home refresh failed. bootstrap refresh failed Versions refresh failed. versions refresh failed',
+    })
   })
 
   it('clears prior warnings when running a manual refresh', async () => {

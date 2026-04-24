@@ -14,9 +14,11 @@ type MockHeaderProps = {
 type MockJobListProps = {
   vm: {
     emptyState: string
+    hasMore: boolean
   }
   onJobQueryChange: (query: string) => void
   onSelectJob: (jobId: string) => void
+  onLoadMore: () => Promise<void>
 }
 
 type MockSummaryCard = {
@@ -77,12 +79,14 @@ vi.mock('../_home/QuotesHomeHeader', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeJobList', () => ({
-  QuotesHomeJobList: ({ vm, onJobQueryChange, onSelectJob }: MockJobListProps) => (
+  QuotesHomeJobList: ({ vm, onJobQueryChange, onSelectJob, onLoadMore }: MockJobListProps) => (
     <div>
       <div>job-list:desktop</div>
       <div>job-empty:{vm.emptyState}</div>
+      <div>job-has-more:{String(vm.hasMore)}</div>
       <button onClick={() => onJobQueryChange('garage')}>change job query</button>
       <button onClick={() => onSelectJob('job-2')}>select job</button>
+      <button onClick={() => void onLoadMore()}>load more jobs</button>
     </div>
   ),
 }))
@@ -142,6 +146,7 @@ describe('QuotesHomePage', () => {
       retrySearch: vi.fn(),
       setJobQuery: vi.fn(),
       setSelectedJobId: vi.fn(),
+      loadMore: vi.fn(async () => undefined),
       requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
       setVersionName: vi.fn(),
@@ -177,6 +182,7 @@ describe('QuotesHomePage', () => {
         loading: false,
         searchQuery: '',
         selectedJobId: 'job-1',
+        hasMore: true,
         items: [],
         emptyState: 'none',
       },
@@ -217,6 +223,7 @@ describe('QuotesHomePage', () => {
     expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
     expect(screen.getByText('header:3 total versions')).toBeInTheDocument()
     expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:false')).toBeInTheDocument()
+    expect(screen.getByText('job-has-more:true')).toBeInTheDocument()
     expect(screen.getByText('selected-job:Kitchen')).toBeInTheDocument()
     expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
     expect(screen.getByText('create-panel:standard:')).toBeInTheDocument()
@@ -229,6 +236,7 @@ describe('QuotesHomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'retry search' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'change job query' })[0])
     fireEvent.click(screen.getAllByRole('button', { name: 'select job' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'load more jobs' }))
     fireEvent.click(screen.getByRole('button', { name: 'request delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'change kind' }))
     fireEvent.click(screen.getByRole('button', { name: 'change name' }))
@@ -241,6 +249,7 @@ describe('QuotesHomePage', () => {
     expect(actions.retrySearch).toHaveBeenCalledTimes(1)
     expect(actions.setJobQuery).toHaveBeenCalledWith('garage')
     expect(actions.setSelectedJobId).toHaveBeenCalledWith('job-2')
+    expect(actions.loadMore).toHaveBeenCalledTimes(1)
     expect(actions.requestDelete).toHaveBeenCalledWith('estimate-2')
     expect(actions.setVersionKind).toHaveBeenCalledWith('revision')
     expect(actions.setVersionName).toHaveBeenCalledWith('Custom Revision')
@@ -257,6 +266,7 @@ describe('QuotesHomePage', () => {
         retrySearch: vi.fn(),
         setJobQuery: vi.fn(),
         setSelectedJobId: vi.fn(),
+        loadMore: vi.fn(async () => undefined),
         requestDelete: vi.fn(),
         setVersionKind: vi.fn(),
         setVersionName: vi.fn(),
@@ -284,6 +294,7 @@ describe('QuotesHomePage', () => {
         loading: false,
         searchQuery: '',
         selectedJobId: 'job-1',
+        hasMore: false,
         items: [],
         emptyState: 'none',
       },

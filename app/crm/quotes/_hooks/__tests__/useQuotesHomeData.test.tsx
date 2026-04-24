@@ -3,12 +3,14 @@ import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useQuotesHomeData } from '../useQuotesHomeData'
 
-const { loadQuoteHomeBootstrap } = vi.hoisted(() => ({
+const { loadQuoteHomeBootstrap, loadQuoteHomeJobs } = vi.hoisted(() => ({
   loadQuoteHomeBootstrap: vi.fn(),
+  loadQuoteHomeJobs: vi.fn(),
 }))
 
 vi.mock('@/lib/quotes/client', () => ({
   loadQuoteHomeBootstrap,
+  loadQuoteHomeJobs,
 }))
 
 function deferred<T>() {
@@ -137,6 +139,7 @@ const secondPayload = {
 describe('useQuotesHomeData', () => {
   beforeEach(() => {
     loadQuoteHomeBootstrap.mockReset()
+    loadQuoteHomeJobs.mockReset()
   })
 
   it('uses seeded bootstrap data without immediately refetching', async () => {
@@ -230,6 +233,44 @@ describe('useQuotesHomeData', () => {
     expect(result.current.summary.total_versions).toBe(2)
     expect(result.current.jobsPage.next_cursor).toBe('cursor-3')
     expect(result.current.initialSelectedJobId).toBe('job-2')
+  })
+
+  it('appends another jobs page when loadMore runs', async () => {
+    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    expect(result.current.hasMore).toBe(true)
+
+    loadQuoteHomeJobs.mockResolvedValue({
+      query: '',
+      limit: 25,
+      next_cursor: null,
+      items: [
+        {
+          ...seededPayload.jobs.items[1],
+          id: 'job-3',
+          customer_id: 'customer-3',
+          customer_name: 'Charlie',
+          customer_address: '789 Pine',
+          title: 'Bath',
+        },
+      ],
+    })
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenCalledWith({
+      query: '',
+      limit: 25,
+      cursor: 'cursor-2',
+    })
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2', 'job-3'])
+    expect(result.current.jobsPage.next_cursor).toBeNull()
+    expect(result.current.hasMore).toBe(false)
   })
 
   it('keeps empty fallback data when the first bootstrap load fails', async () => {

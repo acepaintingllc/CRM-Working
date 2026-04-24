@@ -9,12 +9,14 @@ type Props = {
   vm: QuotesHomeJobListVm
   onJobQueryChange: (value: string) => void
   onSelectJob: (jobId: string) => void
+  onLoadMore: () => Promise<void>
 }
 
 export function QuotesHomeJobList({
   vm,
   onJobQueryChange,
   onSelectJob,
+  onLoadMore,
 }: Props) {
   return (
     <CrmSectionCard className="self-start" eyebrow="Jobs">
@@ -65,6 +67,10 @@ export function QuotesHomeJobList({
               <div style={S.itemMetaMono}>{job.versionCountLabel}</div>
             </button>
           ))}
+
+          {vm.hasMore ? (
+            <CrmButton onClick={() => void onLoadMore()}>Load more jobs</CrmButton>
+          ) : null}
         </div>
       </div>
     </CrmSectionCard>

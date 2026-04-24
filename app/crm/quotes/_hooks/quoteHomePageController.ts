@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
 import type { QuoteHomePageActions } from '../_home/quoteHomePageVm'
+import type { QuoteHomeActionWarning } from '../_home/quoteHomeTypes'
 
 type RefreshAttemptOptions = {
   preserveDataOnError?: boolean
@@ -45,7 +46,10 @@ type QuoteHomePageControllerActions = Pick<
 >
 
 function buildDeleteRefreshWarning(refreshFailures: string[]) {
-  return `Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. ${refreshFailures.join(' ')}`
+  return {
+    source: 'delete',
+    message: `Quote deleted, but follow-up refresh failed. Reload the page if the quote still appears. ${refreshFailures.join(' ')}`,
+  } satisfies QuoteHomeActionWarning
 }
 
 export function useQuoteHomePageController({
@@ -53,10 +57,10 @@ export function useQuoteHomePageController({
   versions,
   deleteController,
 }: UseQuoteHomePageControllerParams): {
-  actionWarning: string | null
+  actionWarning: QuoteHomeActionWarning | null
   actions: QuoteHomePageControllerActions
 } {
-  const [actionWarning, setActionWarning] = useState<string | null>(null)
+  const [actionWarning, setActionWarning] = useState<QuoteHomeActionWarning | null>(null)
 
   async function refresh() {
     setActionWarning(null)

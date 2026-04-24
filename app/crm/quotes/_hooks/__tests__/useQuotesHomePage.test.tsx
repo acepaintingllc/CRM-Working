@@ -11,12 +11,14 @@ const {
   createQuoteVersion,
   deleteQuoteVersion,
   loadQuoteHomeBootstrap,
+  loadQuoteHomeJobs,
   loadQuoteHomeSearch,
   loadQuoteJobVersions,
 } = vi.hoisted(() => ({
   createQuoteVersion: vi.fn(),
   deleteQuoteVersion: vi.fn(),
   loadQuoteHomeBootstrap: vi.fn(),
+  loadQuoteHomeJobs: vi.fn(),
   loadQuoteHomeSearch: vi.fn(),
   loadQuoteJobVersions: vi.fn(),
 }))
@@ -29,6 +31,7 @@ vi.mock('@/lib/quotes/client', () => ({
   createQuoteVersion,
   deleteQuoteVersion,
   loadQuoteHomeBootstrap,
+  loadQuoteHomeJobs,
   loadQuoteHomeSearch,
   loadQuoteJobVersions,
 }))
@@ -83,6 +86,15 @@ const bootstrapJobs = [
     version_count: 1,
   },
 ]
+
+const jobThree = {
+  ...bootstrapJobs[1],
+  id: 'job-3',
+  customer_id: 'customer-3',
+  customer_name: 'Charlie',
+  customer_address: '789 Pine',
+  title: 'Bath',
+}
 
 const job1VersionsPayload = {
   job_id: 'job-1',
@@ -198,6 +210,7 @@ describe('useQuotesHomePage', () => {
     createQuoteVersion.mockReset()
     deleteQuoteVersion.mockReset()
     loadQuoteHomeBootstrap.mockReset()
+    loadQuoteHomeJobs.mockReset()
     loadQuoteHomeSearch.mockReset()
     loadQuoteJobVersions.mockReset()
     loadQuoteHomeSearch.mockResolvedValue({
@@ -257,6 +270,40 @@ describe('useQuotesHomePage', () => {
 
     expect(loadQuoteHomeSearch).toHaveBeenCalledWith('revision')
     expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-2'])
+  })
+
+  it('threads job pagination through the page vm and appends the next page', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
+    loadQuoteHomeJobs.mockResolvedValue({
+      query: '',
+      limit: 25,
+      next_cursor: null,
+      items: [jobThree],
+    })
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    })
+
+    expect(result.current.jobList.hasMore).toBe(true)
+
+    await act(async () => {
+      await result.current.actions.loadMore()
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenCalledWith({
+      query: '',
+      limit: 25,
+      cursor: 'cursor-2',
+    })
+    expect(result.current.jobList.items.map((job) => job.id)).toEqual([
+      'job-1',
+      'job-2',
+      'job-3',
+    ])
+    expect(result.current.jobList.hasMore).toBe(false)
   })
 
   it('loads versions for a newly selected job and creates a version', async () => {
@@ -595,6 +642,7 @@ describe('useQuotesHomePage', () => {
 
     expect(result.current.feedback).toBeNull()
     expect(result.current.jobList.emptyState).toBe('no_jobs')
+    expect(result.current.jobList.hasMore).toBe(false)
     expect(result.current.selectedJob.title).toBeNull()
     expect(result.current.versionList.items).toEqual([])
     expect(result.current.create.canCreate).toBe(false)

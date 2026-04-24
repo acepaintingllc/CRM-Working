@@ -22,6 +22,26 @@ export async function loadQuoteHomeBootstrap<T>() {
   return loadData<T>('/api/quotes/home/bootstrap', { cache: 'no-store' })
 }
 
+export async function loadQuoteHomeJobs<T>(options?: {
+  query?: string
+  limit?: number
+  cursor?: string | null
+}) {
+  const params = new URLSearchParams()
+  if (options?.query?.trim()) {
+    params.set('q', options.query.trim())
+  }
+  if (options?.limit) {
+    params.set('limit', String(options.limit))
+  }
+  if (options?.cursor) {
+    params.set('cursor', options.cursor)
+  }
+
+  const suffix = params.toString()
+  return loadData<T>(`/api/quotes/home/jobs${suffix ? `?${suffix}` : ''}`, { cache: 'no-store' })
+}
+
 export async function loadQuoteHomeSearch<T>(query: string) {
   return loadData<T>(`/api/quotes/home/search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
 }

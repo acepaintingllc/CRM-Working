@@ -54,21 +54,36 @@ export function useQuotesHomePage(
     }
   }, [homeResource.jobs, selectedJobId])
 
-  const actions: QuoteHomePageActions = {
-    setSearchQuery,
-    setSearchFocused,
-    setJobQuery,
-    setSelectedJobId,
-    loadMore: homeResource.loadMore,
-    setVersionName: workflow.actions.setVersionName,
-    setVersionKind: workflow.actions.setVersionKind,
-    create: workflow.actions.create,
-    retrySearch: searchState.retry,
-    requestDelete: controller.actions.requestDelete,
-    cancelDelete: controller.actions.cancelDelete,
-    confirmDelete: controller.actions.confirmDelete,
-    refresh: controller.actions.refresh,
-  }
+  const actions: QuoteHomePageActions = useMemo(
+    () => ({
+      setSearchQuery,
+      setSearchFocused,
+      setJobQuery,
+      setSelectedJobId,
+      loadMore: homeResource.loadMore,
+      setVersionName: workflow.actions.setVersionName,
+      setVersionKind: workflow.actions.setVersionKind,
+      create: workflow.actions.create,
+      retrySearch: searchState.retry,
+      requestDelete: controller.actions.requestDelete,
+      cancelDelete: controller.actions.cancelDelete,
+      confirmDelete: controller.actions.confirmDelete,
+      refresh: controller.actions.refresh,
+    }),
+    // setState functions (setSearchQuery etc.) are stable by React guarantee, excluded from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      homeResource.loadMore,
+      workflow.actions.setVersionName,
+      workflow.actions.setVersionKind,
+      workflow.actions.create,
+      searchState.retry,
+      controller.actions.requestDelete,
+      controller.actions.cancelDelete,
+      controller.actions.confirmDelete,
+      controller.actions.refresh,
+    ]
+  )
 
   return useMemo(
     () =>
