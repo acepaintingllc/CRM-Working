@@ -7,6 +7,7 @@ import {
   QUOTE_VERSION_KIND_OPTIONS,
   type QuoteVersionKind,
 } from '@/lib/quotes/versionCreation'
+import { QUOTES_HOME_CREATE_PANEL_COPY } from './quoteHomePresentation'
 import type { QuotesHomeCreateVm } from './quoteHomeTypes'
 import { S } from './quoteHomeStyles'
 
@@ -26,9 +27,9 @@ export function QuotesHomeCreatePanel({
   return (
     <CrmSectionCard
       className="self-start"
-      eyebrow="Create Version"
-      title="Add the next quote version"
-      description="Creates a new quote version linked to this job, then opens it in the workspace."
+      eyebrow={QUOTES_HOME_CREATE_PANEL_COPY.eyebrow}
+      title={QUOTES_HOME_CREATE_PANEL_COPY.title}
+      description={QUOTES_HOME_CREATE_PANEL_COPY.description}
       actions={
         <CrmButton
           type="button"
@@ -36,24 +37,26 @@ export function QuotesHomeCreatePanel({
           onClick={onCreate}
           disabled={!vm.canCreate}
         >
-          {vm.creating ? 'Creating version...' : 'Create version'}
+          {vm.creating
+            ? QUOTES_HOME_CREATE_PANEL_COPY.creatingButton
+            : QUOTES_HOME_CREATE_PANEL_COPY.createButton}
         </CrmButton>
       }
     >
       <div style={S.createFields}>
         <CrmField
-          label="Version Name"
-          help="Leave blank for the next default version name."
+          label={QUOTES_HOME_CREATE_PANEL_COPY.versionNameLabel}
+          help={QUOTES_HOME_CREATE_PANEL_COPY.versionNameHelp}
         >
           <input
             value={vm.versionName}
             onChange={(event) => onVersionNameChange(event.target.value)}
-            placeholder="Leave blank for the next default version name"
+            placeholder={QUOTES_HOME_CREATE_PANEL_COPY.versionNamePlaceholder}
             className="ace-crm-input text-sm"
           />
         </CrmField>
 
-        <CrmField label="Version Kind">
+        <CrmField label={QUOTES_HOME_CREATE_PANEL_COPY.versionKindLabel}>
           <select
             value={vm.versionKind}
             onChange={(event) =>

@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type {
   QuoteHomeBootstrapReadModel,
   QuoteHomeJobVersionItemReadModel,
   QuoteJobVersionsPageReadModel,
 } from '@/lib/quotes/collectionData'
+import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import type { QuoteHomePageActions } from '../_home/quoteHomePageVm'
 import type { QuoteHomeActionWarning } from '../_home/quoteHomeTypes'
 
@@ -38,16 +39,27 @@ type QuoteHomePageDeleteController = {
   confirmDeleteVersion: () => Promise<boolean>
 }
 
+type QuoteHomeStateActions = Pick<
+  QuoteHomePageActions,
+  'setSearchQuery' | 'setSearchFocused' | 'setJobQuery' | 'setSelectedJobId'
+>
+
+type QuoteHomeWorkflowActions = {
+  setVersionName: (value: string) => void
+  setVersionKind: (value: QuoteVersionKind) => void
+  create: () => Promise<unknown>
+  loadMoreVersions: () => Promise<boolean>
+}
+
 type UseQuoteHomePageControllerParams = {
   homeResource: QuoteHomePageControllerHomeResource
   versions: QuoteHomePageControllerVersionsResource
   deleteController: QuoteHomePageDeleteController
+  stateActions: QuoteHomeStateActions
+  loadMoreJobs: () => Promise<void>
+  workflowActions: QuoteHomeWorkflowActions
+  retrySearch: () => void
 }
-
-type QuoteHomePageControllerActions = Pick<
-  QuoteHomePageActions,
-  'requestDelete' | 'cancelDelete' | 'confirmDelete' | 'refresh'
->
 
 function buildDeleteRefreshWarning(refreshFailures: string[]) {
   return {
@@ -71,73 +83,124 @@ export function useQuoteHomePageController({
   homeResource,
   versions,
   deleteController,
+  stateActions,
+  loadMoreJobs,
+  workflowActions,
+  retrySearch,
 }: UseQuoteHomePageControllerParams): {
   actionWarning: QuoteHomeActionWarning | null
-  actions: QuoteHomePageControllerActions
+  actions: QuoteHomePageActions
 } {
   const [actionWarning, setActionWarning] = useState<QuoteHomeActionWarning | null>(null)
+  const { attemptRefresh: refreshBootstrap } = homeResource
+  const {
+    attemptRefresh: refreshVersions,
+    items: versionItems,
+    pageData,
+    refresh: refreshVersionsList,
+  } = versions
+  const {
+    cancelDelete: cancelDeleteVersion,
+    confirmDeleteVersion,
+    requestDeleteVersion,
+  } = deleteController
+  const activeVersionsJobId = pageData.job_id
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setActionWarning(null)
-    const bootstrapRefresh = await homeResource.attemptRefresh()
+    const bootstrapRefresh = await refreshBootstrap()
     if (!bootstrapRefresh.ok || !bootstrapRefresh.data) {
-      await versions.refresh()
       return false
     }
-    if (bootstrapVersionsCoverActiveJob(bootstrapRefresh.data, versions.pageData.job_id)) {
+    if (bootstrapVersionsCoverActiveJob(bootstrapRefresh.data, activeVersionsJobId)) {
       return true
     }
-    return versions.refresh()
-  }
+    return refreshVersionsList()
+  }, [activeVersionsJobId, refreshBootstrap, refreshVersionsList])
 
-  const actions: QuoteHomePageControllerActions = {
-    requestDelete: (value) => {
+  const requestDelete = useCallback(
+    (value: string | { estimate_id: string }) => {
       setActionWarning(null)
       const estimateId = typeof value === 'string' ? value : value.estimate_id
-      const estimate = versions.items.find((item) => item.estimate_id === estimateId) ?? null
+      const estimate = versionItems.find((item) => item.estimate_id === estimateId) ?? null
       if (estimate) {
-        deleteController.requestDeleteVersion(estimate)
+        requestDeleteVersion(estimate)
       }
     },
-    cancelDelete: deleteController.cancelDelete,
-    confirmDelete: async () => {
-      const deleted = await deleteController.confirmDeleteVersion()
-      if (!deleted) {
-        return false
-      }
+    [requestDeleteVersion, versionItems]
+  )
 
-      setActionWarning(null)
-      const bootstrapRefresh = await homeResource.attemptRefresh({
-        preserveDataOnError: true,
-        reportError: false,
-      })
-      const versionsRefresh = bootstrapVersionsCoverActiveJob(
-        bootstrapRefresh.data,
-        versions.pageData.job_id
-      )
-        ? { ok: true, error: null }
-        : await versions.attemptRefresh({
+  const cancelDelete = useCallback(() => {
+    cancelDeleteVersion()
+  }, [cancelDeleteVersion])
+
+  const confirmDelete = useCallback(async () => {
+    const deleted = await confirmDeleteVersion()
+    if (!deleted) {
+      return false
+    }
+
+    setActionWarning(null)
+    const bootstrapRefresh = await refreshBootstrap({
+      preserveDataOnError: true,
+      reportError: false,
+    })
+    const versionsRefresh = bootstrapVersionsCoverActiveJob(bootstrapRefresh.data, activeVersionsJobId)
+      ? { ok: true, error: null }
+      : await refreshVersions({
           preserveDataOnError: true,
           reportError: false,
         })
 
-      if (bootstrapRefresh.ok && versionsRefresh.ok) {
-        return true
-      }
-
-      const refreshFailures: string[] = []
-      if (!bootstrapRefresh.ok && bootstrapRefresh.error) {
-        refreshFailures.push(`Home refresh failed. ${bootstrapRefresh.error}`)
-      }
-      if (!versionsRefresh.ok && versionsRefresh.error) {
-        refreshFailures.push(`Versions refresh failed. ${versionsRefresh.error}`)
-      }
-
-      setActionWarning(buildDeleteRefreshWarning(refreshFailures))
+    if (bootstrapRefresh.ok && versionsRefresh.ok) {
       return true
-    },
-    refresh,
-  }
+    }
+
+    const refreshFailures: string[] = []
+    if (!bootstrapRefresh.ok && bootstrapRefresh.error) {
+      refreshFailures.push(`Home refresh failed. ${bootstrapRefresh.error}`)
+    }
+    if (!versionsRefresh.ok && versionsRefresh.error) {
+      refreshFailures.push(`Versions refresh failed. ${versionsRefresh.error}`)
+    }
+
+    setActionWarning(buildDeleteRefreshWarning(refreshFailures))
+    return true
+  }, [
+    activeVersionsJobId,
+    confirmDeleteVersion,
+    refreshBootstrap,
+    refreshVersions,
+  ])
+
+  const actions = useMemo(
+    () => ({
+      ...stateActions,
+      loadMore: loadMoreJobs,
+      setVersionName: workflowActions.setVersionName,
+      setVersionKind: workflowActions.setVersionKind,
+      create: workflowActions.create,
+      loadMoreVersions: workflowActions.loadMoreVersions,
+      retrySearch,
+      requestDelete,
+      cancelDelete,
+      confirmDelete,
+      refresh,
+    }),
+    [
+      stateActions,
+      loadMoreJobs,
+      workflowActions.setVersionName,
+      workflowActions.setVersionKind,
+      workflowActions.create,
+      workflowActions.loadMoreVersions,
+      retrySearch,
+      requestDelete,
+      cancelDelete,
+      confirmDelete,
+      refresh,
+    ]
+  )
 
   return {
     actionWarning,

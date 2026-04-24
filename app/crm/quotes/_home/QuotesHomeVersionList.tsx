@@ -8,11 +8,17 @@ import type { QuotesHomeVersionListVm } from './quoteHomeTypes'
 
 type Props = {
   vm: QuotesHomeVersionListVm
-  onLoadMore: () => void
+  onLoadMore: () => Promise<void>
+  onRetry: () => Promise<boolean>
   onRequestDelete: (estimateId: string) => void
 }
 
-export function QuotesHomeVersionList({ vm, onLoadMore, onRequestDelete }: Props) {
+export function QuotesHomeVersionList({
+  vm,
+  onLoadMore,
+  onRetry,
+  onRequestDelete,
+}: Props) {
   return (
     <CrmSectionCard
       className="self-start"
@@ -22,40 +28,67 @@ export function QuotesHomeVersionList({ vm, onLoadMore, onRequestDelete }: Props
       <div style={S.grid14}>
         {vm.detail ? <div style={S.bodyText}>{vm.detail}</div> : null}
 
-        {vm.emptyMessage ? (
+        {vm.errorMessage ? (
+          <div style={S.emptyPanel}>
+            <div style={S.emptyPanelTitle}>Versions failed to load</div>
+            <div style={S.bodyText}>{vm.errorMessage}</div>
+            {vm.canRetry ? (
+              <div style={S.rowWrap}>
+                <CrmButton onClick={() => void onRetry()} tone="primary">
+                  Retry versions
+                </CrmButton>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!vm.errorMessage && vm.emptyMessage ? (
           <div style={S.emptyState}>{vm.emptyMessage}</div>
         ) : null}
 
-        {vm.items.map((estimate) => (
-          <div key={estimate.id} style={S.versionRow}>
-            <div>
-              <div style={S.inlineMetaRow}>
-                <div style={S.estimateTitle}>{estimate.title}</div>
-                {estimate.total ? (
-                  <div style={S.versionTotal}>{estimate.total}</div>
-                ) : null}
-              </div>
-              <div style={S.estimateMeta}>{estimate.meta}</div>
-            </div>
-            <div style={S.rowWrapEnd}>
-              <CrmButton href={estimate.href} prefetch={false} tone="primary">
-                Open version
-              </CrmButton>
-              <CrmButton
-                type="button"
-                tone="danger"
-                onClick={() => onRequestDelete(estimate.id)}
-                disabled={estimate.deleting}
-              >
-                <Trash2 size={14} aria-hidden="true" />
-                Delete
-              </CrmButton>
-            </div>
-          </div>
-        ))}
+        {vm.items.length > 0 ? (
+          <ul style={S.versionList}>
+            {vm.items.map((estimate) => (
+              <li key={estimate.id} style={S.versionRow}>
+                <div>
+                  <div style={S.inlineMetaRow}>
+                    <div style={S.estimateTitle}>{estimate.title}</div>
+                    {estimate.total ? (
+                      <div style={S.versionTotal}>{estimate.total}</div>
+                    ) : null}
+                  </div>
+                  <div style={S.estimateMeta}>{estimate.meta}</div>
+                </div>
+                <div style={S.rowWrapEnd}>
+                  <CrmButton
+                    href={estimate.href}
+                    prefetch={false}
+                    tone="primary"
+                  >
+                    Open version
+                  </CrmButton>
+                  <CrmButton
+                    type="button"
+                    tone="danger"
+                    onClick={() => onRequestDelete(estimate.id)}
+                    disabled={estimate.deleting}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                    Delete
+                  </CrmButton>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         {vm.hasMore ? (
-          <CrmButton type="button" onClick={onLoadMore} disabled={vm.loadingMore}>
+          <CrmButton
+            type="button"
+            onClick={() => void onLoadMore()}
+            disabled={vm.loadingMore}
+            aria-busy={vm.loadingMore}
+          >
             {vm.loadingMore ? 'Loading more versions...' : 'Load more versions'}
           </CrmButton>
         ) : null}

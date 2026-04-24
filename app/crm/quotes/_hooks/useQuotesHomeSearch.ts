@@ -1,10 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  type QuoteHomeSearchResponse,
-  type QuoteHomeJobVersionItemReadModel,
-} from '@/lib/quotes/collectionData'
+import { type QuoteHomeSearchResponse } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeSearch } from '@/lib/quotes/client'
 
 const SEARCH_DEBOUNCE_MS = 150
@@ -72,10 +69,11 @@ export function useQuotesHomeSearch(query: string) {
   return useMemo(
     () => ({
       query: data.query,
-      results: data.items as QuoteHomeJobVersionItemReadModel[],
+      results: data.items,
       loading,
       error,
       hasQuery: debouncedQuery.length > 0,
+      // TODO: Move display-only emptyMessage and canRetry derivation into quoteHomePageVm.ts.
       emptyMessage:
         debouncedQuery && !loading && !error && data.items.length === 0
           ? `No quote versions match "${debouncedQuery}".`

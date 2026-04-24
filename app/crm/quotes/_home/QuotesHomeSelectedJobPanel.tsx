@@ -22,34 +22,36 @@ export function QuotesHomeSelectedJobPanel({ vm }: Props) {
         ) : null
       }
     >
-      {vm.emptyMessage ? (
-        <div style={S.mutedText}>{vm.emptyMessage}</div>
-      ) : null}
+      <div aria-live="polite">
+        {vm.emptyMessage ? (
+          <div style={S.mutedText}>{vm.emptyMessage}</div>
+        ) : null}
 
-      {vm.title ? (
-        <div style={S.grid18}>
-          <div style={S.grid12}>
-            <div>
-              <div style={S.selectedJobTitle}>{vm.title}</div>
-              {vm.customerLine ? (
-                <div style={S.bodyTextStrong}>{vm.customerLine}</div>
-              ) : null}
+        {vm.title ? (
+          <div style={S.grid18}>
+            <div style={S.grid12}>
+              <div>
+                <div style={S.selectedJobTitle}>{vm.title}</div>
+                {vm.customerLine ? (
+                  <div style={S.bodyTextStrong}>{vm.customerLine}</div>
+                ) : null}
+              </div>
+            </div>
+
+            <div
+              className="quotes-home-selected-job-stats"
+              style={S.selectedJobStatsGrid}
+            >
+              {vm.stats.map((stat) => (
+                <div key={stat.label} style={S.selectedJobStatCard}>
+                  <div style={S.selectedJobStatLabel}>{stat.label}</div>
+                  <div style={S.selectedJobStatValue}>{stat.value}</div>
+                </div>
+              ))}
             </div>
           </div>
-
-          <div
-            className="quotes-home-selected-job-stats"
-            style={S.selectedJobStatsGrid}
-          >
-            {vm.stats.map((stat) => (
-              <div key={stat.label} style={S.selectedJobStatCard}>
-                <div style={S.selectedJobStatLabel}>{stat.label}</div>
-                <div style={S.selectedJobStatValue}>{stat.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       <style jsx>{`
         @media (max-width: 720px) {
           .quotes-home-selected-job-stats {

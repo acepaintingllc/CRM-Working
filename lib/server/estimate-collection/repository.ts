@@ -268,7 +268,9 @@ export async function loadEstimateCollectionJobVersionsPage(
 
       const cursor = cursorResult.value
       if (cursor) {
-        query = query.lt('updated_at', cursor.timestamp)
+        query = query.or(
+          `updated_at.lt.${cursor.timestamp},and(updated_at.eq.${cursor.timestamp},id.lt.${cursor.id})`
+        )
       }
 
       return query

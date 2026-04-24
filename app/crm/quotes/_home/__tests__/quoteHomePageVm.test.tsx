@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
+  QuoteHomeSearchResultReadModel,
 } from '@/lib/quotes/collectionData'
 import {
   buildQuoteHomePageVm,
@@ -9,7 +10,10 @@ import {
   type QuoteHomePageVmResources,
   type QuoteHomePageVmState,
 } from '../quoteHomePageVm'
-import { QUOTE_META_SEPARATOR } from '../quoteHomePresentation'
+import {
+  QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
+  QUOTE_META_SEPARATOR,
+} from '../quoteHomePresentation'
 
 type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends readonly unknown[]
@@ -77,6 +81,20 @@ const versionTwo: QuoteHomeJobVersionItemReadModel = {
   final_total: 1300,
   updated_at: '2026-04-21T10:00:00.000Z',
   created_at: '2026-04-20T10:00:00.000Z',
+  is_sent_estimate: true,
+}
+
+const searchResult: QuoteHomeSearchResultReadModel = {
+  estimate_id: 'estimate-search-1',
+  job_id: 'job-1',
+  customer_id: 'customer-1',
+  version_name: 'Search Match',
+  version_state: 'live',
+  version_kind: 'revision',
+  job_title: 'Kitchen',
+  customer_name: 'Alice',
+  final_total: 900,
+  updated_at: '2026-04-22T10:00:00.000Z',
   is_sent_estimate: true,
 }
 
@@ -224,6 +242,7 @@ describe('buildQuoteHomePageVm', () => {
       errorMessage: null,
       canRetry: false,
       emptyState: 'no_jobs',
+      emptyStateBody: QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
     })
     expect(vm.selectedJob.emptyMessage).toBe(
       'Select a job from the left to view versions and create the next one.'
@@ -235,6 +254,8 @@ describe('buildQuoteHomePageVm', () => {
       items: [],
       hasMore: false,
       loadingMore: false,
+      errorMessage: null,
+      canRetry: false,
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.actions).toBe(actions)
@@ -292,6 +313,29 @@ describe('buildQuoteHomePageVm', () => {
     })
   })
 
+  it('builds header search result view models from search result resources', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'search',
+        searchFocused: true,
+      }),
+      buildResources({
+        search: {
+          results: [searchResult],
+        },
+      })
+    )
+
+    expect(vm.header.searchResults).toEqual([
+      {
+        id: 'estimate-search-1',
+        href: '/crm/quotes/estimate-search-1',
+        title: 'Search Match',
+        meta: 'Kitchen\nAlice / Live',
+      },
+    ])
+  })
+
   it('builds the no-selected-job state without hiding the available job list', () => {
     const vm = buildQuoteHomePageVm(
       buildState({
@@ -315,6 +359,7 @@ describe('buildQuoteHomePageVm', () => {
     )
 
     expect(vm.jobList.emptyState).toBe('none')
+    expect(vm.jobList.emptyStateBody).toBeNull()
     expect(vm.jobList.errorMessage).toBeNull()
     expect(vm.jobList.canRetry).toBe(false)
     expect(vm.selectedJob.title).toBeNull()
@@ -328,6 +373,8 @@ describe('buildQuoteHomePageVm', () => {
       items: [],
       hasMore: false,
       loadingMore: false,
+      errorMessage: null,
+      canRetry: false,
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.create.canCreate).toBe(false)
@@ -402,6 +449,27 @@ describe('buildQuoteHomePageVm', () => {
         loadingMore: true,
       })
     )
+  })
+
+  it('threads selected-job version load failures into the version list vm', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        workflow: {
+          versions: {
+            items: [],
+            error: 'versions failed',
+            totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: true,
+          },
+        },
+      })
+    )
+
+    expect(vm.versionList.errorMessage).toBe('versions failed')
+    expect(vm.versionList.canRetry).toBe(true)
   })
 
   it('keeps job-list loading scoped to the jobs pane during server-backed queries', () => {
@@ -482,6 +550,7 @@ describe('buildQuoteHomePageVm', () => {
       errorMessage: 'Network request timed out.',
       canRetry: true,
       emptyState: 'none',
+      emptyStateBody: null,
     })
   })
 

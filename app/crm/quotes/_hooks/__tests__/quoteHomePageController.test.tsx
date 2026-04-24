@@ -69,12 +69,30 @@ function buildController() {
     cancelDelete: vi.fn(),
     confirmDeleteVersion: vi.fn(async () => true),
   }
+  const stateActions = {
+    setSearchQuery: vi.fn(),
+    setSearchFocused: vi.fn(),
+    setJobQuery: vi.fn(),
+    setSelectedJobId: vi.fn(),
+  }
+  const loadMoreJobs = vi.fn(async () => undefined)
+  const workflowActions = {
+    setVersionName: vi.fn(),
+    setVersionKind: vi.fn(),
+    create: vi.fn(async () => ({ id: 'estimate-created' })),
+    loadMoreVersions: vi.fn(async () => true),
+  }
+  const retrySearch = vi.fn()
 
   const hook = renderHook(() =>
     useQuoteHomePageController({
       homeResource,
       versions,
       deleteController,
+      stateActions,
+      loadMoreJobs,
+      workflowActions,
+      retrySearch,
     })
   )
 
@@ -83,10 +101,67 @@ function buildController() {
     homeResource,
     versions,
     deleteController,
+    stateActions,
+    loadMoreJobs,
+    workflowActions,
+    retrySearch,
   }
 }
 
 describe('useQuoteHomePageController', () => {
+  it('keeps action references stable when dependencies are unchanged', () => {
+    const { result, rerender } = buildController()
+    const actions = result.current.actions
+
+    rerender()
+
+    expect(result.current.actions).toBe(actions)
+    expect(result.current.actions.refresh).toBe(actions.refresh)
+    expect(result.current.actions.requestDelete).toBe(actions.requestDelete)
+    expect(result.current.actions.cancelDelete).toBe(actions.cancelDelete)
+    expect(result.current.actions.confirmDelete).toBe(actions.confirmDelete)
+  })
+
+  it('wires public page actions to their owning hook actions', async () => {
+    const {
+      result,
+      stateActions,
+      loadMoreJobs,
+      workflowActions,
+      retrySearch,
+      deleteController,
+    } = buildController()
+
+    act(() => {
+      result.current.actions.setSearchQuery('revision')
+      result.current.actions.setSearchFocused(true)
+      result.current.actions.setJobQuery('garage')
+      result.current.actions.setSelectedJobId('job-2')
+      result.current.actions.setVersionName('Custom')
+      result.current.actions.setVersionKind('revision')
+      result.current.actions.retrySearch()
+      result.current.actions.cancelDelete()
+    })
+
+    await act(async () => {
+      await result.current.actions.loadMore()
+      await result.current.actions.create()
+      await result.current.actions.loadMoreVersions()
+    })
+
+    expect(stateActions.setSearchQuery).toHaveBeenCalledWith('revision')
+    expect(stateActions.setSearchFocused).toHaveBeenCalledWith(true)
+    expect(stateActions.setJobQuery).toHaveBeenCalledWith('garage')
+    expect(stateActions.setSelectedJobId).toHaveBeenCalledWith('job-2')
+    expect(loadMoreJobs).toHaveBeenCalledTimes(1)
+    expect(workflowActions.setVersionName).toHaveBeenCalledWith('Custom')
+    expect(workflowActions.setVersionKind).toHaveBeenCalledWith('revision')
+    expect(workflowActions.create).toHaveBeenCalledTimes(1)
+    expect(workflowActions.loadMoreVersions).toHaveBeenCalledTimes(1)
+    expect(retrySearch).toHaveBeenCalledTimes(1)
+    expect(deleteController.cancelDelete).toHaveBeenCalledTimes(1)
+  })
+
   it('requests delete for the matching version item', () => {
     const { result, deleteController } = buildController()
 
@@ -116,6 +191,22 @@ describe('useQuoteHomePageController', () => {
 
     await act(async () => {
       expect(await result.current.actions.refresh()).toBe(true)
+    })
+
+    expect(homeResource.attemptRefresh).toHaveBeenCalledTimes(1)
+    expect(versions.refresh).not.toHaveBeenCalled()
+  })
+
+  it('does not trigger versions refresh when manual bootstrap refresh fails', async () => {
+    const { result, homeResource, versions } = buildController()
+    homeResource.attemptRefresh.mockResolvedValue({
+      ok: false,
+      error: 'bootstrap refresh failed',
+      data: null,
+    })
+
+    await act(async () => {
+      expect(await result.current.actions.refresh()).toBe(false)
     })
 
     expect(homeResource.attemptRefresh).toHaveBeenCalledTimes(1)

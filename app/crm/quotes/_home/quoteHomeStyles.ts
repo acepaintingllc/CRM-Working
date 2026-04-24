@@ -322,6 +322,13 @@ export const S: Record<string, CSSProperties> = {
     overflowY: 'auto',
     paddingRight: 4,
   },
+  jobListItems: {
+    display: 'grid',
+    gap: 10,
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+  },
   emptyPanel: {
     borderRadius: 14,
     border: '1px solid var(--v2-line)',
@@ -336,6 +343,7 @@ export const S: Record<string, CSSProperties> = {
     color: 'var(--v2-ink)',
   },
   selectableItem: {
+    width: '100%',
     textAlign: 'left',
     borderRadius: 14,
     border: '1px solid var(--v2-line)',
@@ -345,6 +353,7 @@ export const S: Record<string, CSSProperties> = {
     cursor: 'pointer',
   },
   selectableItemSelected: {
+    width: '100%',
     textAlign: 'left',
     borderRadius: 14,
     border: '1px solid var(--v2-green)',
@@ -386,6 +395,13 @@ export const S: Record<string, CSSProperties> = {
     alignItems: 'center',
     borderTop: '1px solid var(--v2-line)',
     paddingTop: 14,
+  },
+  versionList: {
+    display: 'grid',
+    gap: 0,
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
   },
   versionTotal: {
     fontSize: 14,

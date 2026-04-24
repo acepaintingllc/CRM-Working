@@ -31,7 +31,11 @@ export function QuotesHomeJobList({
           className="ace-crm-input text-sm"
         />
 
-        <div style={S.jobListScroll}>
+        <div
+          style={S.jobListScroll}
+          aria-live="polite"
+          aria-busy={vm.loading}
+        >
           {vm.loading ? <div style={S.mutedText}>Loading jobs...</div> : null}
 
           {!vm.loading && vm.errorMessage ? (
@@ -55,10 +59,9 @@ export function QuotesHomeJobList({
           {!vm.loading && !vm.errorMessage && vm.emptyState === 'no_jobs' ? (
             <div style={S.emptyPanel}>
               <div style={S.emptyPanelTitle}>No eligible jobs yet</div>
-              <div style={S.bodyText}>
-                Quote creation starts from a job with a linked customer. Add
-                the contact first, then create the job in the normal CRM flow.
-              </div>
+              {vm.emptyStateBody ? (
+                <div style={S.bodyText}>{vm.emptyStateBody}</div>
+              ) : null}
               <div style={S.rowWrap}>
                 <CrmButton href="/crm/customers/new" tone="primary">
                   Add contact
@@ -68,21 +71,24 @@ export function QuotesHomeJobList({
             </div>
           ) : null}
 
-          {vm.items.map((job) => (
-            <button
-              key={job.id}
-              type="button"
-              onClick={() => onSelectJob(job.id)}
-              aria-pressed={Boolean(job.isSelected)}
-              style={
-                job.isSelected ? S.selectableItemSelected : S.selectableItem
-              }
-            >
-              <div style={S.itemTitleSpaced}>{job.title}</div>
-              <div style={S.itemMeta}>{job.customerName}</div>
-              <div style={S.itemMetaMono}>{job.versionCountLabel}</div>
-            </button>
-          ))}
+          <ul style={S.jobListItems}>
+            {vm.items.map((job) => (
+              <li key={job.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectJob(job.id)}
+                  aria-pressed={Boolean(job.isSelected)}
+                  style={
+                    job.isSelected ? S.selectableItemSelected : S.selectableItem
+                  }
+                >
+                  <div style={S.itemTitleSpaced}>{job.title}</div>
+                  <div style={S.itemMeta}>{job.customerName}</div>
+                  <div style={S.itemMetaMono}>{job.versionCountLabel}</div>
+                </button>
+              </li>
+            ))}
+          </ul>
 
           {vm.hasMore ? (
             <CrmButton onClick={() => void onLoadMore()}>Load more jobs</CrmButton>

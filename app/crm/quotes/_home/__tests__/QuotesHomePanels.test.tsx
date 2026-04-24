@@ -5,6 +5,7 @@ import { QuotesHomeCreatePanel } from '../QuotesHomeCreatePanel'
 import { QuotesHomeJobList } from '../QuotesHomeJobList'
 import { QuotesHomeSelectedJobPanel } from '../QuotesHomeSelectedJobPanel'
 import { QuotesHomeVersionList } from '../QuotesHomeVersionList'
+import { QUOTES_HOME_JOB_LIST_NO_JOBS_BODY } from '../quoteHomePresentation'
 
 vi.mock('next/link', () => ({
   default: ({
@@ -35,12 +36,17 @@ describe('Quotes home panels', () => {
           errorMessage: null,
           canRetry: false,
           emptyState: 'no_jobs',
+          emptyStateBody: QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
         }}
         onJobQueryChange={() => {}}
         onSelectJob={() => {}}
         onLoadMore={async () => {}}
         onRetry={async () => true}
       />,
+    )
+
+    expect(screen.getByText('No eligible jobs yet').parentElement).toHaveTextContent(
+      QUOTES_HOME_JOB_LIST_NO_JOBS_BODY,
     )
 
     const addContact = screen.getByRole('link', { name: 'Add contact' })
@@ -64,6 +70,7 @@ describe('Quotes home panels', () => {
           errorMessage: 'bootstrap failed',
           canRetry: true,
           emptyState: 'none',
+          emptyStateBody: null,
         }}
         onJobQueryChange={() => {}}
         onSelectJob={() => {}}
@@ -103,6 +110,7 @@ describe('Quotes home panels', () => {
           errorMessage: null,
           canRetry: false,
           emptyState: 'none',
+          emptyStateBody: null,
         }}
         onJobQueryChange={() => {}}
         onSelectJob={() => {}}
@@ -113,11 +121,22 @@ describe('Quotes home panels', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Load more jobs' }))
 
+    const jobList = screen.getByRole('list')
+    expect(jobList).toBeInTheDocument()
+    expect(jobList.parentElement).toHaveAttribute('aria-live', 'polite')
+    expect(jobList.parentElement).toHaveAttribute('aria-busy', 'false')
+    expect(screen.getByRole('listitem')).toContainElement(
+      screen.getByRole('button', { name: /Kitchen Remodel/ }),
+    )
+    expect(
+      screen.getByRole('button', { name: /Kitchen Remodel/ }),
+    ).toHaveAttribute('aria-pressed', 'true')
+
     expect(onLoadMore).toHaveBeenCalledTimes(1)
   })
 
   it('uses CRM button actions for version open and delete', () => {
-    const onLoadMore = vi.fn()
+    const onLoadMore = vi.fn(async () => {})
     const onRequestDelete = vi.fn()
 
     render(
@@ -138,12 +157,17 @@ describe('Quotes home panels', () => {
           ],
           hasMore: true,
           loadingMore: false,
+          errorMessage: null,
+          canRetry: false,
         }}
         onLoadMore={onLoadMore}
+        onRetry={async () => true}
         onRequestDelete={onRequestDelete}
       />,
     )
 
+    expect(screen.getByRole('list')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Open version' })).toHaveClass(
       'ace-crm-btn',
       'ace-crm-btn-primary',
@@ -157,6 +181,38 @@ describe('Quotes home panels', () => {
 
     expect(onRequestDelete).toHaveBeenCalledWith('estimate-1')
     expect(onLoadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders a retryable error panel when versions fail to load', () => {
+    const onRetry = vi.fn(async () => true)
+
+    render(
+      <QuotesHomeVersionList
+        vm={{
+          heading: '2 versions under this job',
+          detail: null,
+          emptyMessage: 'No quote versions exist under this job yet.',
+          items: [],
+          hasMore: false,
+          loadingMore: false,
+          errorMessage: 'versions failed',
+          canRetry: true,
+        }}
+        onLoadMore={async () => {}}
+        onRetry={onRetry}
+        onRequestDelete={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('Versions failed to load')).toBeInTheDocument()
+    expect(screen.getByText('versions failed')).toBeInTheDocument()
+    expect(
+      screen.queryByText('No quote versions exist under this job yet.'),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry versions' }))
+
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
   it('uses the CRM primary button for create version and keeps the local field controls', () => {

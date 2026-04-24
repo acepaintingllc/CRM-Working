@@ -2,28 +2,9 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
-import type { NavItem, QuotesHomeHeaderVm } from './quoteHomeTypes'
-
-const SETTINGS_LINKS: NavItem[] = [
-  { label: 'Defaults', href: '/crm/quotes/defaults' },
-  { label: 'Products', href: '/crm/quotes/products' },
-  { label: 'Rates & Flags', href: '/crm/quotes/rates' },
-  { label: 'Settings', href: '/crm/settings' },
-]
-
-function formatToday() {
-  const now = new Date()
-  return now
-    .toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-    .replace(',', ' /')
-    .toUpperCase()
-}
+import type { QuotesHomeHeaderVm } from './quoteHomeTypes'
 
 type Props = {
   vm: QuotesHomeHeaderVm
@@ -144,11 +125,12 @@ export function QuotesHomeHeader({
                 style={S.settingsToggle}
                 onClick={() => setSettingsOpen((open) => !open)}
                 onKeyDown={handleSettingsButtonKeyDown}
+                aria-expanded={settingsOpen}
               >
                 Settings & Constants
               </button>
               {settingsOpen ? (
-                <div style={S.settingsPanel}>
+                <div style={S.settingsPanel} role="navigation" aria-label="Quote settings">
                   {SETTINGS_LINKS.map((item) =>
                     item.disabled ? (
                       <span key={item.label} style={S.settingsDisabled}>

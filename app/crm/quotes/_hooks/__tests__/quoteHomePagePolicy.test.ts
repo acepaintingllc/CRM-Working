@@ -55,7 +55,17 @@ describe('quoteHomePagePolicy', () => {
     ).toBe('job-1')
   })
 
-  it('returns an empty string when no jobs are available', () => {
+  it('falls back to the first job id when the initial selected job id is empty', () => {
+    expect(resolveQuoteHomeSelectedJobId([kitchenJob, exteriorJob], '')).toBe(
+      'job-1'
+    )
+  })
+
+  it('returns an empty string for an empty jobs array', () => {
     expect(resolveQuoteHomeSelectedJobId([], 'job-1')).toBe('')
+  })
+
+  it('returns an empty string when no current match and no fallback job exist', () => {
+    expect(resolveQuoteHomeSelectedJobId([], 'missing-job')).toBe('')
   })
 })

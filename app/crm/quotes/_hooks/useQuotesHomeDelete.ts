@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { type QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
 import { deleteQuoteVersion } from '@/lib/quotes/client'
 
@@ -9,18 +9,19 @@ export function useQuotesHomeDelete() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  function requestDeleteVersion(estimate: QuoteHomeJobVersionItemReadModel) {
+  const requestDeleteVersion = useCallback((estimate: QuoteHomeJobVersionItemReadModel) => {
     setError(null)
     setConfirmingDelete(estimate)
-  }
+  }, [])
 
-  function cancelDelete() {
+  const cancelDelete = useCallback(() => {
     if (deletingId) return
+    setError(null)
     setConfirmingDelete(null)
-  }
+  }, [deletingId])
 
-  async function confirmDeleteVersion() {
-    if (!confirmingDelete) return false
+  const confirmDeleteVersion = useCallback(async () => {
+    if (deletingId || !confirmingDelete) return false
 
     const deletedId = confirmingDelete.estimate_id
     setDeletingId(deletedId)
@@ -36,7 +37,7 @@ export function useQuotesHomeDelete() {
     } finally {
       setDeletingId(null)
     }
-  }
+  }, [confirmingDelete, deletingId])
 
   return {
     confirmingDelete,

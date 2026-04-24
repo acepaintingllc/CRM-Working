@@ -1,11 +1,16 @@
 import type {
   QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
+  QuoteHomeSearchResultReadModel,
 } from '@/lib/quotes/collectionData'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 
 export type QuoteHomeJob = QuoteHomeJobListItemReadModel
 export type QuoteHomeJobVersion = QuoteHomeJobVersionItemReadModel
+export type QuoteHomeSearchResult = Pick<
+  QuoteHomeSearchResultReadModel,
+  'estimate_id' | 'version_name' | 'version_state' | 'job_title' | 'customer_name'
+>
 
 export type NavItem = {
   label: string
@@ -78,6 +83,7 @@ export type QuotesHomeJobListVm = {
   errorMessage: string | null
   canRetry: boolean
   emptyState: 'none' | 'no_jobs' | 'no_matches'
+  emptyStateBody: string | null
 }
 
 export type QuotesHomeSelectedJobStatVm = {
@@ -110,6 +116,8 @@ export type QuotesHomeVersionListVm = {
   items: QuoteHomeVersionItemVm[]
   hasMore: boolean
   loadingMore: boolean
+  errorMessage: string | null
+  canRetry: boolean
 }
 
 export type QuotesHomeCreateVm = {

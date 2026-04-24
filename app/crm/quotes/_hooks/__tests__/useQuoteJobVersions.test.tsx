@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react'
-import { act } from 'react'
+import { act, StrictMode, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createJobVersionsCache } from '../jobVersionsCache'
 import { useQuoteJobVersions } from '../useQuoteJobVersions'
@@ -252,6 +252,47 @@ describe('useQuoteJobVersions', () => {
 
     await waitFor(() => {
       expect(result.current.items).toHaveLength(1)
+    })
+
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
+  })
+
+  it('writes refreshed seed data to cache under Strict Mode effect replay', async () => {
+    const firstSeed = {
+      ...versionPayload,
+      total_versions: 1,
+      items: [versionPayload.items[0]],
+    }
+    const refreshedSeed = {
+      ...versionPayload,
+      total_versions: 1,
+      items: [versionPayload.items[1]],
+    }
+    const wrapper = ({ children }: { children: ReactNode }) => <StrictMode>{children}</StrictMode>
+
+    const { result, rerender } = renderHook(
+      ({ initialData }) =>
+        useQuoteJobVersions('job-1', {
+          initialData,
+        }),
+      {
+        initialProps: {
+          initialData: firstSeed,
+        },
+        wrapper,
+      }
+    )
+
+    await waitFor(() => {
+      expect(result.current.hasResolved).toBe(true)
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1'])
+    })
+
+    rerender({ initialData: refreshedSeed })
+
+    await waitFor(() => {
+      expect(result.current.hasResolved).toBe(true)
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
     })
 
     expect(loadQuoteJobVersions).not.toHaveBeenCalled()

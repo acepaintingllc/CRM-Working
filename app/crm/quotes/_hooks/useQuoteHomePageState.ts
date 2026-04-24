@@ -49,8 +49,15 @@ export function useQuoteHomePageState(
       setSearchFocused,
       setJobQuery,
       setSelectedJobId,
+      setJobsForSelection,
     }),
-    [setJobQuery, setSearchFocused, setSearchQuery, setSelectedJobId]
+    [
+      setJobQuery,
+      setJobsForSelection,
+      setSearchFocused,
+      setSearchQuery,
+      setSelectedJobId,
+    ]
   )
 
   return {

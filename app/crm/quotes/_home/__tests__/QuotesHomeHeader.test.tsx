@@ -124,10 +124,12 @@ describe('QuotesHomeHeader', () => {
 
     fireEvent.click(settingsToggle)
 
+    expect(settingsToggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('link', { name: 'Defaults' })).toBeInTheDocument()
 
     fireEvent.keyDown(settingsToggle, { key: 'Escape' })
 
+    expect(settingsToggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('link', { name: 'Defaults' })).not.toBeInTheDocument()
     expect(settingsToggle).toHaveFocus()
   })
@@ -144,14 +146,18 @@ describe('QuotesHomeHeader', () => {
 
     const settingsToggle = screen.getByRole('button', { name: 'Settings & Constants' })
 
+    expect(settingsToggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('link', { name: 'Defaults' })).not.toBeInTheDocument()
 
     fireEvent.click(settingsToggle)
 
+    expect(settingsToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('navigation', { name: 'Quote settings' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Defaults' })).toBeInTheDocument()
 
     fireEvent.click(settingsToggle)
 
+    expect(settingsToggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('link', { name: 'Defaults' })).not.toBeInTheDocument()
   })
 

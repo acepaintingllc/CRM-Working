@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { EligibleQuoteVersionJob } from '@/lib/quotes/versionCreation'
 import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/collectionData'
 import { useQuoteJobVersions } from './useQuoteJobVersions'
@@ -13,6 +13,18 @@ type UseQuoteVersionWorkflowOptions = {
   blockCreateWhileVersionsLoading?: boolean
   onRefresh?: (() => Promise<unknown>) | null
   initialVersions?: QuoteJobVersionsPageReadModel | null
+}
+
+function useLatestCallback<TArgs extends unknown[], TResult>(
+  callback: (...args: TArgs) => TResult
+): (...args: TArgs) => TResult {
+  const callbackRef = useRef(callback)
+
+  useEffect(() => {
+    callbackRef.current = callback
+  }, [callback])
+
+  return useCallback((...args: TArgs) => callbackRef.current(...args), [])
 }
 
 export function useQuoteVersionWorkflow({
@@ -29,6 +41,21 @@ export function useQuoteVersionWorkflow({
   })
   const createController = useQuoteVersionCreation(selectedJob)
   const { setError, setVersionKind, setVersionName } = createController
+  const {
+    data: versionsData,
+    pageData: versionsPageData,
+    items: versionsItems,
+    loading: versionsLoading,
+    loadingMore: versionsLoadingMore,
+    error: versionsError,
+    hasMore: versionsHasMore,
+    hasResolved: versionsHasResolved,
+    loadMore: loadMoreVersions,
+    refresh: refreshVersions,
+    attemptRefresh: attemptRefreshVersions,
+  } = versions
+  const hasJobContext = Boolean(jobId)
+  const hasSelectedJob = Boolean(selectedJob)
 
   useEffect(() => {
     setVersionName('')
@@ -36,34 +63,105 @@ export function useQuoteVersionWorkflow({
     setError(null)
   }, [jobId, setError, setVersionKind, setVersionName])
 
-  const refresh = async () => {
+  const createVersion = useLatestCallback(createController.createVersion)
+
+  const refresh = useCallback(async () => {
     const [contextResult, versionsResult] = await Promise.all([
       onRefresh ? onRefresh() : Promise.resolve(true),
-      versions.refresh(),
+      refreshVersions(),
     ])
 
     return Boolean(contextResult && versionsResult)
-  }
+  }, [onRefresh, refreshVersions])
 
-  return {
-    hasJobContext: Boolean(jobId),
-    hasSelectedJob: Boolean(selectedJob),
-    versions,
-    create: {
-      ...createController,
+  const versionsState = useMemo(
+    () => ({
+      data: versionsData,
+      pageData: versionsPageData,
+      items: versionsItems,
+      loading: versionsLoading,
+      loadingMore: versionsLoadingMore,
+      error: versionsError,
+      hasMore: versionsHasMore,
+      hasResolved: versionsHasResolved,
+      loadMore: loadMoreVersions,
+      refresh: refreshVersions,
+      attemptRefresh: attemptRefreshVersions,
+    }),
+    [
+      attemptRefreshVersions,
+      loadMoreVersions,
+      refreshVersions,
+      versionsData,
+      versionsError,
+      versionsHasMore,
+      versionsHasResolved,
+      versionsItems,
+      versionsLoading,
+      versionsLoadingMore,
+      versionsPageData,
+    ]
+  )
+
+  const createState = useMemo(
+    () => ({
+      creating: createController.creating,
+      error: createController.error,
+      versionKind: createController.versionKind,
+      versionName: createController.versionName,
+      setVersionKind: createController.setVersionKind,
+      setVersionName: createController.setVersionName,
+      setError: createController.setError,
+      createVersion,
       canCreate:
-        Boolean(selectedJob) &&
+        hasSelectedJob &&
         !createController.creating &&
         !loading &&
-        (!blockCreateWhileVersionsLoading || !versions.loading),
-    },
-    actions: {
+        (!blockCreateWhileVersionsLoading || !versionsState.loading),
+    }),
+    [
+      blockCreateWhileVersionsLoading,
+      createController.creating,
+      createController.error,
+      createController.setError,
+      createController.setVersionKind,
+      createController.setVersionName,
+      createController.versionKind,
+      createController.versionName,
+      createVersion,
+      hasSelectedJob,
+      loading,
+      versionsState.loading,
+    ]
+  )
+
+  const actions = useMemo(
+    () => ({
       setVersionName: createController.setVersionName,
       setVersionKind: createController.setVersionKind,
-      create: createController.createVersion,
+      create: createVersion,
       refresh,
-      refreshVersions: versions.refresh,
-      loadMoreVersions: versions.loadMore,
-    },
-  }
+      refreshVersions,
+      loadMoreVersions,
+    }),
+    [
+      createController.setVersionKind,
+      createController.setVersionName,
+      createVersion,
+      loadMoreVersions,
+      refresh,
+      refreshVersions,
+    ]
+  )
+
+  return useMemo(
+    () => ({
+      hasJobContext,
+      hasSelectedJob,
+      versions: versionsState,
+      create: createState,
+      actions,
+    }),
+    [actions, createState, hasJobContext, hasSelectedJob, versionsState]
+  )
 }

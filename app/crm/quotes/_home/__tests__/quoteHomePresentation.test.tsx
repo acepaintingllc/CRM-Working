@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
+  QuoteHomeSearchResultReadModel,
 } from '@/lib/quotes/collectionData'
 import {
   buildHomeLoadFailureDetail,
@@ -13,7 +14,9 @@ import {
   buildQuotesHomeVersionHeading,
   buildSearchResultVm,
   buildSummaryCards,
+  formatToday,
   QUOTE_META_SEPARATOR,
+  SETTINGS_LINKS,
 } from '../quoteHomePresentation'
 
 const estimate: QuoteHomeJobVersionItemReadModel = {
@@ -53,9 +56,43 @@ const job: QuoteHomeJobListItemReadModel = {
   version_count: 4,
 }
 
+const searchResult: QuoteHomeSearchResultReadModel = {
+  estimate_id: 'estimate-search-1',
+  job_id: 'job-1',
+  customer_id: 'customer-1',
+  version_name: 'Kitchen Search Result',
+  version_state: 'draft',
+  version_kind: 'standard',
+  job_title: 'Kitchen',
+  customer_name: 'Alice',
+  updated_at: '2026-04-21T10:00:00.000Z',
+  final_total: 1250,
+  is_sent_estimate: false,
+}
+
 describe('quoteHomePresentation', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('locks the quote meta separator to a middle dot', () => {
     expect(QUOTE_META_SEPARATOR).toBe(' \u00B7 ')
+  })
+
+  it('exports the settings links used by the header', () => {
+    expect(SETTINGS_LINKS).toEqual([
+      { label: 'Defaults', href: '/crm/quotes/defaults' },
+      { label: 'Products', href: '/crm/quotes/products' },
+      { label: 'Rates & Flags', href: '/crm/quotes/rates' },
+      { label: 'Settings', href: '/crm/settings' },
+    ])
+  })
+
+  it('formats today for the header eyebrow', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 3, 24))
+
+    expect(formatToday()).toBe('FRIDAY / APRIL 24, 2026')
   })
 
   it('builds hero summary text from summary counts', () => {
@@ -153,12 +190,12 @@ describe('quoteHomePresentation', () => {
     ).toBe('Showing 25 of 30 versions - reload to see all.')
   })
 
-  it('builds search result view models from shared home version items', () => {
-    expect(buildSearchResultVm(estimate)).toEqual({
-      id: 'estimate-1',
-      href: '/crm/quotes/estimate-1',
-      title: 'Kitchen Revision',
-      meta: 'Kitchen\nAlice / Live',
+  it('builds search result view models from search result read models', () => {
+    expect(buildSearchResultVm(searchResult)).toEqual({
+      id: 'estimate-search-1',
+      href: '/crm/quotes/estimate-search-1',
+      title: 'Kitchen Search Result',
+      meta: 'Kitchen\nAlice / Draft',
     })
   })
 

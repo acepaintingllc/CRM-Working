@@ -61,6 +61,24 @@ describe('useQuotesHomeSearch', () => {
     expect(result.current.loading).toBe(false)
   })
 
+  it('cleans up the pending debounce timeout on unmount', () => {
+    vi.useFakeTimers()
+    loadQuoteHomeSearch.mockResolvedValue({
+      query: 'revision',
+      items: [{ estimate_id: 'estimate-1' }],
+    })
+
+    const { unmount } = renderHook(() => useQuotesHomeSearch('revision'))
+
+    unmount()
+
+    act(() => {
+      vi.advanceTimersByTime(170)
+    })
+
+    expect(loadQuoteHomeSearch).not.toHaveBeenCalled()
+  })
+
   it('keeps only the latest response when queries change quickly', async () => {
     const slow = deferred<{ query: string; items: Array<{ estimate_id: string }> }>()
     const fast = deferred<{ query: string; items: Array<{ estimate_id: string }> }>()

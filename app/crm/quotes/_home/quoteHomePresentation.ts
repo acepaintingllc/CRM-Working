@@ -6,14 +6,40 @@ import type {
   QuoteHomeJobVersion,
   QuoteHomeJobListItemVm,
   QuoteHomeFailureSource,
+  QuoteHomeSearchResult,
   QuoteHomeVersionItemVm,
   QuotesHomeDeleteDialogVm,
   QuotesHomeSelectedJobVm,
   SearchResultVm,
   SummaryCardVm,
+  NavItem,
 } from './quoteHomeTypes'
 
 export const QUOTE_META_SEPARATOR = ' \u00B7 '
+export const QUOTES_HOME_JOB_LIST_NO_JOBS_BODY =
+  'Quote creation starts from a job with a linked customer. Add the contact first, then create the job in the normal CRM flow.'
+export const QUOTES_HOME_SUMMARY_LOADING_VALUE = '...'
+export const QUOTES_HOME_SUMMARY_DEFAULT_VALUE_COLOR = 'var(--v2-ink)'
+export const QUOTES_HOME_SUMMARY_DEFAULT_SUBTEXT_COLOR = 'var(--v2-ink-3)'
+export const QUOTES_HOME_CREATE_PANEL_COPY = {
+  eyebrow: 'Create Version',
+  title: 'Add the next quote version',
+  description:
+    'Creates a new quote version linked to this job, then opens it in the workspace.',
+  createButton: 'Create version',
+  creatingButton: 'Creating version...',
+  versionNameLabel: 'Version Name',
+  versionNameHelp: 'Leave blank for the next default version name.',
+  versionNamePlaceholder: 'Leave blank for the next default version name',
+  versionKindLabel: 'Version Kind',
+} as const
+
+export const SETTINGS_LINKS: NavItem[] = [
+  { label: 'Defaults', href: '/crm/quotes/defaults' },
+  { label: 'Products', href: '/crm/quotes/products' },
+  { label: 'Rates & Flags', href: '/crm/quotes/rates' },
+  { label: 'Settings', href: '/crm/settings' },
+]
 
 const HOME_FAILURE_MESSAGES: Record<'bootstrap', string> = {
   bootstrap: 'Quote home failed to load.',
@@ -28,6 +54,19 @@ const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
 
 function formatVersionCount(value: number) {
   return `${value} version${value === 1 ? '' : 's'}`
+}
+
+export function formatToday() {
+  const now = new Date()
+  return now
+    .toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    })
+    .replace(',', ' /')
+    .toUpperCase()
 }
 
 export function formatCurrency(value: number | null | undefined) {
@@ -63,7 +102,7 @@ export function estimateWorkspaceHref(estimateId: string) {
 }
 
 export function buildSearchResultVm(
-  estimate: QuoteHomeJobVersion,
+  estimate: QuoteHomeSearchResult,
 ): SearchResultVm {
   return {
     id: estimate.estimate_id,
@@ -162,6 +201,12 @@ export function buildQuoteHomeJobListItemVm(
     versionCountLabel: `${versionCount} version${versionCount === 1 ? '' : 's'}`,
     isSelected: options?.selectedJobId === job.id,
   }
+}
+
+export function buildQuotesHomeJobListEmptyStateBody(
+  emptyState: 'none' | 'no_jobs' | 'no_matches',
+) {
+  return emptyState === 'no_jobs' ? QUOTES_HOME_JOB_LIST_NO_JOBS_BODY : null
 }
 
 export function buildQuotesHomeSelectedJobVm(

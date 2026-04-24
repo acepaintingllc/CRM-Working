@@ -42,7 +42,8 @@ type MockSelectedJobPanelProps = {
 
 type MockVersionListProps = {
   vm: { heading: string }
-  onLoadMore: () => void
+  onLoadMore: () => Promise<void>
+  onRetry: () => Promise<boolean>
   onRequestDelete: (id: string) => void
 }
 
@@ -64,7 +65,8 @@ type MockDeleteDialogProps = {
   onConfirm: () => void
 }
 
-const { useQuotesHomePage } = vi.hoisted(() => ({
+const { shouldThrowSummaryCards, useQuotesHomePage } = vi.hoisted(() => ({
+  shouldThrowSummaryCards: vi.fn(() => false),
   useQuotesHomePage: vi.fn(),
 }))
 
@@ -106,11 +108,17 @@ vi.mock('../_home/QuotesHomeJobList', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeSummaryCards', () => ({
-  QuotesHomeSummaryCards: ({ cards, loading }: MockSummaryCardsProps) => (
-    <div>
-      summary-cards:{cards.map((card) => `${card.label}:${card.value}`).join('|')}:{String(loading)}
-    </div>
-  ),
+  QuotesHomeSummaryCards: ({ cards, loading }: MockSummaryCardsProps) => {
+    if (shouldThrowSummaryCards()) {
+      throw new Error('summary cards crashed')
+    }
+
+    return (
+      <div>
+        summary-cards:{cards.map((card) => `${card.label}:${card.value}`).join('|')}:{String(loading)}
+      </div>
+    )
+  },
 }))
 
 vi.mock('../_home/QuotesHomeSelectedJobPanel', () => ({
@@ -118,10 +126,11 @@ vi.mock('../_home/QuotesHomeSelectedJobPanel', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeVersionList', () => ({
-  QuotesHomeVersionList: ({ vm, onLoadMore, onRequestDelete }: MockVersionListProps) => (
+  QuotesHomeVersionList: ({ vm, onLoadMore, onRetry, onRequestDelete }: MockVersionListProps) => (
     <div>
       <div>version-list:{vm.heading}</div>
-      <button onClick={onLoadMore}>load more versions</button>
+      <button onClick={() => void onLoadMore()}>load more versions</button>
+      <button onClick={() => void onRetry()}>retry versions</button>
       <button onClick={() => onRequestDelete('estimate-2')}>request delete</button>
     </div>
   ),
@@ -206,6 +215,7 @@ function createQuotesHomePageVm({
       errorMessage: null,
       canRetry: false,
       emptyState: 'none',
+      emptyStateBody: null,
     },
     selectedJob: {
       loading: false,
@@ -222,6 +232,8 @@ function createQuotesHomePageVm({
       items: [],
       hasMore: false,
       loadingMore: false,
+      errorMessage: null,
+      canRetry: false,
     },
     create: {
       creating: false,
@@ -245,6 +257,8 @@ function createQuotesHomePageVm({
 describe('QuotesHomePage', () => {
   beforeEach(() => {
     cleanup()
+    shouldThrowSummaryCards.mockReset()
+    shouldThrowSummaryCards.mockReturnValue(false)
     useQuotesHomePage.mockReset()
   })
 
@@ -298,6 +312,7 @@ describe('QuotesHomePage', () => {
         errorMessage: null,
         canRetry: false,
         emptyState: 'none',
+        emptyStateBody: null,
       },
       selectedJob: {
         loading: false,
@@ -314,6 +329,8 @@ describe('QuotesHomePage', () => {
         items: [],
         hasMore: false,
         loadingMore: false,
+        errorMessage: null,
+        canRetry: false,
       },
       create: {
         creating: false,
@@ -423,6 +440,7 @@ describe('QuotesHomePage', () => {
         errorMessage: null,
         canRetry: false,
         emptyState: 'none',
+        emptyStateBody: null,
       },
       selectedJob: {
         loading: false,
@@ -439,6 +457,8 @@ describe('QuotesHomePage', () => {
         items: [],
         hasMore: false,
         loadingMore: false,
+        errorMessage: null,
+        canRetry: false,
       },
       create: {
         creating: false,
@@ -493,5 +513,21 @@ describe('QuotesHomePage', () => {
     expect(screen.queryByText('Quote action failed')).not.toBeInTheDocument()
     expect(screen.getByText('job-list:desktop')).toBeInTheDocument()
     expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
+  })
+
+  it('shows a recovery fallback while keeping the page shell visible when quote content crashes', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    shouldThrowSummaryCards.mockReturnValue(true)
+    useQuotesHomePage.mockReturnValue(createQuotesHomePageVm())
+
+    render(<QuotesHomePage />)
+
+    expect(screen.getByText('Quote Home')).toBeInTheDocument()
+    expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
+    expect(screen.getByText('Something went wrong loading quotes')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+    expect(screen.queryByText('job-list:desktop')).not.toBeInTheDocument()
+
+    consoleError.mockRestore()
   })
 })

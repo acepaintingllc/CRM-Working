@@ -1,6 +1,11 @@
 'use client'
 
 import { S } from './quoteHomeStyles'
+import {
+  QUOTES_HOME_SUMMARY_DEFAULT_SUBTEXT_COLOR,
+  QUOTES_HOME_SUMMARY_DEFAULT_VALUE_COLOR,
+  QUOTES_HOME_SUMMARY_LOADING_VALUE,
+} from './quoteHomePresentation'
 import type { SummaryCardVm } from './quoteHomeTypes'
 
 type Props = {
@@ -14,10 +19,22 @@ export function QuotesHomeSummaryCards({ cards, loading }: Props) {
       {cards.map((card) => (
         <div key={card.label} style={S.card}>
           <div style={S.cardLabel}>{card.label}</div>
-          <div style={{ ...S.statValue, color: card.valueColor ?? 'var(--v2-ink)' }}>
-            {loading ? '...' : card.value}
+          <div
+            style={{
+              ...S.statValue,
+              color: card.valueColor ?? QUOTES_HOME_SUMMARY_DEFAULT_VALUE_COLOR,
+            }}
+          >
+            {loading ? QUOTES_HOME_SUMMARY_LOADING_VALUE : card.value}
           </div>
-          <div style={{ ...S.statSub, color: card.subtextColor ?? 'var(--v2-ink-3)' }}>
+          <div
+            style={{
+              ...S.statSub,
+              color:
+                card.subtextColor ??
+                QUOTES_HOME_SUMMARY_DEFAULT_SUBTEXT_COLOR,
+            }}
+          >
             {card.subtext}
           </div>
         </div>
@@ -25,4 +42,3 @@ export function QuotesHomeSummaryCards({ cards, loading }: Props) {
     </div>
   )
 }
-

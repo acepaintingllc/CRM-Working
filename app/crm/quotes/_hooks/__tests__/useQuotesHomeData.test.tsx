@@ -1,7 +1,11 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useQuotesHomeData } from '../useQuotesHomeData'
+import {
+  useQuotesHomeBootstrap,
+  useQuotesHomeData,
+  useQuotesHomeJobs,
+} from '../useQuotesHomeData'
 
 const { loadQuoteHomeBootstrap, loadQuoteHomeJobs } = vi.hoisted(() => ({
   loadQuoteHomeBootstrap: vi.fn(),
@@ -352,5 +356,97 @@ describe('useQuotesHomeData', () => {
     expect(result.current.jobsPage.items).toEqual([])
     expect(result.current.initialSelectedJobId).toBeNull()
     expect(result.current.bootstrapError).toBe('bootstrap failed')
+  })
+})
+
+describe('useQuotesHomeBootstrap', () => {
+  beforeEach(() => {
+    loadQuoteHomeBootstrap.mockReset()
+    loadQuoteHomeJobs.mockReset()
+  })
+
+  it('uses seeded bootstrap data without pagination dependencies', async () => {
+    const { result } = renderHook(() => useQuotesHomeBootstrap(seededPayload))
+
+    await waitFor(() => expect(result.current.bootstrapLoading).toBe(false))
+
+    expect(loadQuoteHomeBootstrap).not.toHaveBeenCalled()
+    expect(loadQuoteHomeJobs).not.toHaveBeenCalled()
+    expect(result.current.bootstrapData).toEqual(seededPayload)
+    expect(result.current.bootstrapError).toBeNull()
+  })
+
+  it('loads bootstrap data and exposes bootstrap-specific errors', async () => {
+    loadQuoteHomeBootstrap.mockRejectedValue(new Error('bootstrap failed'))
+
+    const { result } = renderHook(() => useQuotesHomeBootstrap())
+
+    await waitFor(() => expect(result.current.bootstrapLoading).toBe(false))
+
+    expect(result.current.bootstrapData.summary.total_versions).toBe(0)
+    expect(result.current.bootstrapData.jobs.items).toEqual([])
+    expect(result.current.bootstrapError).toBe('bootstrap failed')
+    expect(loadQuoteHomeJobs).not.toHaveBeenCalled()
+  })
+})
+
+describe('useQuotesHomeJobs', () => {
+  beforeEach(() => {
+    loadQuoteHomeBootstrap.mockReset()
+    loadQuoteHomeJobs.mockReset()
+  })
+
+  it('seeds jobs from bootstrap data without loading bootstrap', async () => {
+    const { result } = renderHook(() => useQuotesHomeJobs(seededPayload, ''))
+
+    await waitFor(() => expect(result.current.jobsLoading).toBe(false))
+
+    expect(loadQuoteHomeBootstrap).not.toHaveBeenCalled()
+    expect(loadQuoteHomeJobs).not.toHaveBeenCalled()
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    expect(result.current.hasMoreJobs).toBe(true)
+    expect(result.current.jobsError).toBeNull()
+  })
+
+  it('loads query-specific pages and reports jobs errors independently', async () => {
+    loadQuoteHomeJobs.mockRejectedValueOnce(new Error('jobs failed')).mockResolvedValueOnce({
+      query: 'garage',
+      limit: 25,
+      next_cursor: null,
+      items: [seededPayload.jobs.items[1]],
+    })
+
+    const { result, rerender } = renderHook(
+      ({ jobQuery }) => useQuotesHomeJobs(seededPayload, jobQuery),
+      {
+        initialProps: {
+          jobQuery: '',
+        },
+      }
+    )
+
+    rerender({ jobQuery: ' garage ' })
+
+    await waitFor(() => expect(result.current.jobsError).toBe('jobs failed'))
+
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+
+    await act(async () => {
+      const refreshed = await result.current.refreshJobs()
+      expect(refreshed).toEqual({ ok: true, error: null })
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(1, {
+      query: 'garage',
+      limit: 25,
+      cursor: undefined,
+    })
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(2, {
+      query: 'garage',
+      limit: 25,
+      cursor: undefined,
+    })
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
+    expect(result.current.jobsError).toBeNull()
   })
 })

@@ -3,6 +3,7 @@ import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import {
   buildHeroSummaryText,
   buildQuoteHomeJobListItemVm,
+  buildQuotesHomeJobListEmptyStateBody,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeDeleteDialogVm,
   buildQuotesHomeFeedbackVm,
@@ -17,6 +18,7 @@ import type {
   QuoteHomeActionWarning,
   QuoteHomeJob,
   QuoteHomeJobVersion,
+  QuoteHomeSearchResult,
   QuotesHomeCreateVm,
   QuotesHomeDeleteDialogVm,
   QuotesHomeFeedbackBannerVm,
@@ -26,8 +28,6 @@ import type {
   QuotesHomeVersionListVm,
   SummaryCardVm,
 } from './quoteHomeTypes'
-
-type SearchResultSource = Parameters<typeof buildSearchResultVm>[0]
 
 export type QuoteHomePageActions = {
   setSearchQuery: (value: string) => void
@@ -71,7 +71,7 @@ export type QuoteHomePageVmResources = {
     emptyMessage: string | null
     error: string | null
     canRetry: boolean
-    results: SearchResultSource[]
+    results: QuoteHomeSearchResult[]
   }
   workflow: {
     versions: {
@@ -136,6 +136,14 @@ export function buildQuoteHomePageVm(
       : state.selectedJob.version_count
     : resources.workflow.versions.totalVersions
 
+  const jobListEmptyState = hasJobListLoadError
+    ? 'none'
+    : resources.home.jobs.length === 0
+      ? 'no_jobs'
+      : state.visibleJobs.length === 0
+        ? 'no_matches'
+        : 'none'
+
   return {
     header: {
       heroSummaryText: buildHeroSummaryText(resources.home.summary),
@@ -162,14 +170,8 @@ export function buildQuoteHomePageVm(
       ),
       errorMessage: hasJobListLoadError ? resources.home.bootstrapError : null,
       canRetry: hasJobListLoadError,
-      emptyState:
-        hasJobListLoadError
-          ? 'none'
-          : resources.home.jobs.length === 0
-            ? 'no_jobs'
-          : state.visibleJobs.length === 0
-            ? 'no_matches'
-            : 'none',
+      emptyState: jobListEmptyState,
+      emptyStateBody: buildQuotesHomeJobListEmptyStateBody(jobListEmptyState),
     },
     selectedJob: buildQuotesHomeSelectedJobVm(
       state.selectedJob,
@@ -192,6 +194,8 @@ export function buildQuoteHomePageVm(
       ),
       hasMore: resources.workflow.versions.hasMore,
       loadingMore: resources.workflow.versions.loadingMore,
+      errorMessage: resources.workflow.versions.error,
+      canRetry: Boolean(resources.workflow.versions.error),
     },
     create: {
       creating: resources.workflow.create.creating,
