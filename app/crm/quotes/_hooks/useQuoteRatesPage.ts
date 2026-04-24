@@ -347,6 +347,15 @@ export function useQuoteRatesPage() {
     applyAction({ type: 'setDraftActive', draftActive: nextActive })
   }
 
+<<<<<<< Updated upstream
+=======
+  const formatDraftValue = useCallback(
+    (fieldKey: string) =>
+      formatRatesDraftValue(adapter, editableActiveCategory, state.draft, fieldKey),
+    [adapter, editableActiveCategory, state.draft]
+  )
+
+>>>>>>> Stashed changes
   function runIntent(intent: QuoteRatesPendingTransition) {
     switch (intent.type) {
       case 'setActiveTab':

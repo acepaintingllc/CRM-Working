@@ -386,6 +386,22 @@ function buildSupplyValues<TKey extends 'supply_rates_per_color' | 'supply_rates
   } as RatesFlagsCategoryValueMap[TKey]
 }
 
+function buildRollerCoverValues(
+  draft: RatesFlagsDraftByCategory['supply_rates_roller_covers'],
+  draftActive: boolean
+): RatesFlagsCategoryValueMap['supply_rates_roller_covers'] {
+  return {
+    supply_group: 'roller_covers',
+    id: asDraftString(draft.id),
+    display_name: asDraftString(draft.display_name),
+    scope: asRollerCoverScope(draft.scope),
+    size_in: asDraftNumberString(draft.size_in),
+    price_each: asDraftNumberString(draft.price_each),
+    notes: asDraftString(draft.notes),
+    active: draftActive ? 'Y' : 'N',
+  }
+}
+
 function buildMultiplierValues<TKey extends 'wall_complexity' | 'height_factors' | 'ceiling_types' | 'condition_modifiers'>(
   categoryKey: TKey,
   draft: RatesFlagsDraftByCategory[TKey] | HeightFactorDraft,
@@ -549,6 +565,7 @@ export const ratesFlagsDraftAdapters = {
   }),
   supply_rates_roller_covers: buildAdapter({
     key: 'supply_rates_roller_covers',
+<<<<<<< Updated upstream
     toValues: (draft, draftActive) => ({
       supply_group: 'roller_covers',
       id: asDraftString(draft.id),
@@ -559,6 +576,9 @@ export const ratesFlagsDraftAdapters = {
       notes: asDraftString(draft.notes),
       active: draftActive ? 'Y' : 'N',
     }),
+=======
+    toValues: (draft, draftActive) => buildRollerCoverValues(draft, draftActive),
+>>>>>>> Stashed changes
   }),
   wall_complexity: buildAdapter({
     key: 'wall_complexity',

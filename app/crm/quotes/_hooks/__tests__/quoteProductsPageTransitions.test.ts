@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { QuoteProductRow } from '@/lib/quotes/productsForm'
 import {
+  chooseQuoteProductsFallbackId,
+  findQuoteProductById,
   mergeKnownQuoteProducts,
+  removeProductFromVisibleSlice,
   upsertProductIntoVisibleSlice,
 } from '../quoteProductsControllerUtils'
 import {
@@ -154,5 +157,63 @@ describe('quoteProductsPageTransitions invariants', () => {
     expect(nextState.selectedId).toBe('paint-2')
     expect(nextState.draft.status).toBe('Archived')
     expect(nextState.notice).toBe('Product saved.')
+  })
+
+  it('removes a product from the visible slice when the id is present', () => {
+    const product = buildProduct({ id: 'product-1', name: 'First Product' })
+    const remainingProduct = buildProduct({ id: 'product-2', name: 'Second Product' })
+
+    expect(removeProductFromVisibleSlice([product, remainingProduct], 'product-1')).toEqual([
+      remainingProduct,
+    ])
+  })
+
+  it('leaves the visible slice unchanged when the removed id is not present', () => {
+    const products = [
+      buildProduct({ id: 'product-1', name: 'First Product' }),
+      buildProduct({ id: 'product-2', name: 'Second Product' }),
+    ]
+
+    expect(removeProductFromVisibleSlice(products, 'product-3')).toEqual(products)
+  })
+
+  it('returns an empty visible slice when removing from an empty list', () => {
+    expect(removeProductFromVisibleSlice([], 'product-1')).toEqual([])
+  })
+
+  it('chooses the first product id as the fallback selection', () => {
+    expect(
+      chooseQuoteProductsFallbackId([
+        buildProduct({ id: 'product-1' }),
+        buildProduct({ id: 'product-2' }),
+      ])
+    ).toBe('product-1')
+  })
+
+  it('returns null when choosing a fallback selection from an empty list', () => {
+    expect(chooseQuoteProductsFallbackId([])).toBeNull()
+  })
+
+  it('finds a quote product by id', () => {
+    const product = buildProduct({ id: 'product-1' })
+    const matchingProduct = buildProduct({ id: 'product-2', name: 'Matching Product' })
+
+    expect(findQuoteProductById([product, matchingProduct], 'product-2')).toBe(matchingProduct)
+  })
+
+  it('returns null when no quote product id matches', () => {
+    expect(findQuoteProductById([buildProduct({ id: 'product-1' })], 'product-2')).toBeNull()
+  })
+
+  it('returns null when finding a quote product with a null id', () => {
+    expect(findQuoteProductById([buildProduct({ id: 'product-1' })], null)).toBeNull()
+  })
+
+  it('returns null when finding a quote product with an undefined id', () => {
+    expect(findQuoteProductById([buildProduct({ id: 'product-1' })], undefined)).toBeNull()
+  })
+
+  it('returns null when finding a quote product in an empty list', () => {
+    expect(findQuoteProductById([], 'product-1')).toBeNull()
   })
 })

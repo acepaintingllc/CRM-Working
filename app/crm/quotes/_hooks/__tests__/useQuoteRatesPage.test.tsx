@@ -19,6 +19,78 @@ describe('useQuoteRatesPage', () => {
     mutateRatesFlags.mockReset()
   })
 
+<<<<<<< Updated upstream
+=======
+  it('treats a successful empty categories response as no data', async () => {
+    loadRatesFlags.mockResolvedValueOnce({
+      source: 'db',
+      seeded: false,
+      template_version: 2,
+      categories: [],
+    })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    expect(result.current.uiState.hasData).toBe(false)
+    expect(result.current.uiState.loadError).toBeNull()
+  })
+
+  it('exposes a stable draft formatter through actions instead of the editor VM', async () => {
+    loadRatesFlags.mockResolvedValueOnce({
+      source: 'db',
+      seeded: true,
+      template_version: 2,
+      categories: [
+        {
+          key: 'production_rates_walls',
+          tab: 'rates',
+          group: 'production_rates',
+          label: 'Wall Production',
+          table_title: 'Wall Production',
+          description: 'Wall rates',
+          columns: [
+            { key: 'display_name', label: 'Name' },
+            { key: 'active', label: 'Status' },
+          ],
+          fields: [
+            { key: 'id', label: 'ID', type: 'text', required: true },
+            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+            { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
+          ],
+          rows: [
+            {
+              id: 'WALL_RATE_1',
+              display_name: 'Standard walls',
+              notes: '',
+              active: true,
+              sqft_per_hr: '150',
+            },
+          ],
+        },
+      ],
+    })
+
+    const { result, rerender } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    const formatDraftValue = result.current.actions.formatDraftValue
+
+    expect('formatDraftValue' in result.current.editorVm).toBe(false)
+    expect(formatDraftValue('sqft_per_hr')).toBe('150')
+
+    rerender()
+
+    expect(result.current.actions.formatDraftValue).toBe(formatDraftValue)
+  })
+
+>>>>>>> Stashed changes
   it('loads, filters, duplicates, and saves dense rates rows', async () => {
     loadRatesFlags
       .mockResolvedValueOnce({

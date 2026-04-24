@@ -10,7 +10,7 @@ function buildRowFromMutation(request: RatesFlagsCreateOrUpdateMutation): RatesF
   return {
     ...request.values,
     active: request.values.active === 'Y',
-  } as RatesFlagsRow
+  } satisfies Partial<RatesFlagsRow> as RatesFlagsRow
 }
 
 export function reconcileRatesFlagsPayload(

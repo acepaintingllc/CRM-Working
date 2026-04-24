@@ -54,6 +54,20 @@ export type QuoteRatesDiscardVm = {
   transitionType: QuoteRatesPendingTransition['type'] | null
 }
 
+<<<<<<< Updated upstream
+=======
+export function formatRatesDraftValue<TKey extends RatesFlagsEditableCategoryKey>(
+  adapter: RatesFlagsDraftAdapter<TKey> | null,
+  category: RatesFlagsEditableCategory<TKey> | null,
+  draft: RatesFlagsDraft<TKey> | null,
+  fieldKey: string
+) {
+  if (!adapter || !category || !draft) return ''
+
+  return adapter.formatDraftValue(category, draft, fieldKey)
+}
+
+>>>>>>> Stashed changes
 export function buildQuoteRatesPageVm(params: {
   resource: QuoteRatesDataResource
   workflowState: QuoteRatesWorkflowState
@@ -61,7 +75,7 @@ export function buildQuoteRatesPageVm(params: {
 }) {
   const { resource, workflowState, derived } = params
 
-  const hasData = resource.data.categories.length > 0 || (!resource.loading && !resource.error)
+  const hasData = resource.data.categories.length > 0
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
     hasData,

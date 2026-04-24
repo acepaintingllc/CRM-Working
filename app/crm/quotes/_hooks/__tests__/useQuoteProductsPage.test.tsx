@@ -66,6 +66,19 @@ describe('useQuoteProductsPage', () => {
     vi.useRealTimers()
   })
 
+  it('treats a successful empty products response as no data', async () => {
+    loadQuoteProducts.mockResolvedValueOnce([])
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    expect(result.current.uiState.hasData).toBe(false)
+    expect(result.current.uiState.loadError).toBeNull()
+  })
+
   it('loads query-driven product slices, creates, saves, and deletes product rows', async () => {
     const products = [
       buildProduct({ id: 'paint-1', name: 'Super Paint' }),

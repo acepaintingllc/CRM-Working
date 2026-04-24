@@ -31,7 +31,6 @@ export function useQuoteProductsPage() {
     cancelEdit: controller.actions.cancelEdit,
     save: controller.actions.saveCurrent,
     requestDelete: controller.actions.requestDelete,
-    requestRemove: controller.actions.confirmDelete,
     confirmDelete: controller.actions.confirmDelete,
     cancelDelete: controller.actions.cancelDelete,
     confirmDiscard: controller.actions.confirmDiscard,
