@@ -7,6 +7,7 @@ import {
   buildQuotesHomeDeleteDialogVm,
   buildQuotesHomeFeedbackVm,
   buildQuotesHomeSelectedJobVm,
+  buildQuotesHomeVersionDetail,
   buildQuotesHomeVersionEmptyMessage,
   buildQuotesHomeVersionHeading,
   buildSearchResultVm,
@@ -37,6 +38,7 @@ export type QuoteHomePageActions = {
   setVersionName: (value: string) => void
   setVersionKind: (value: QuoteVersionKind) => void
   create: () => Promise<unknown>
+  loadMoreVersions: () => Promise<boolean>
   retrySearch: () => void
   requestDelete: (value: string | { estimate_id: string }) => void
   cancelDelete: () => void
@@ -51,7 +53,7 @@ export type QuoteHomePageVmState = {
   jobQuery: string
   selectedJobId: string
   selectedJob: QuoteHomeJob | null
-  filteredJobs: QuoteHomeJob[]
+  visibleJobs: QuoteHomeJob[]
   actions: QuoteHomePageActions
 }
 
@@ -60,6 +62,7 @@ export type QuoteHomePageVmResources = {
     summary: QuoteHomeSummaryReadModel | null
     jobs: QuoteHomeJob[]
     hasMore: boolean
+    jobsLoading: boolean
     loading: boolean
     bootstrapError: string | null
   }
@@ -75,6 +78,9 @@ export type QuoteHomePageVmResources = {
       items: QuoteHomeJobVersion[]
       error: string | null
       totalVersions: number
+      hasMore: boolean
+      loadingMore: boolean
+      hasResolved: boolean
     }
     create: {
       creating: boolean
@@ -120,10 +126,11 @@ export function buildQuoteHomePageVm(
     deleteError: resources.delete.error,
     actionWarning: state.actionWarning,
   })
-  // version_count from the job list item (bootstrap); falls back to the fetched page total
-  // These diverge briefly between a create/delete and the next bootstrap refresh
-  const versionCount =
-    state.selectedJob?.version_count ?? resources.workflow.versions.totalVersions
+  const versionCount = state.selectedJob
+    ? resources.workflow.versions.hasResolved
+      ? resources.workflow.versions.totalVersions
+      : state.selectedJob.version_count
+    : resources.workflow.versions.totalVersions
 
   return {
     header: {
@@ -140,11 +147,11 @@ export function buildQuoteHomePageVm(
     feedback: feedbackVm,
     summaryCards,
     jobList: {
-      loading: resources.home.loading,
+      loading: resources.home.loading || resources.home.jobsLoading,
       searchQuery: state.jobQuery,
       selectedJobId: state.selectedJobId,
       hasMore: resources.home.hasMore,
-      items: state.filteredJobs.map((job) =>
+      items: state.visibleJobs.map((job) =>
         buildQuoteHomeJobListItemVm(job, job.version_count, {
           selectedJobId: state.selectedJobId,
         })
@@ -152,7 +159,7 @@ export function buildQuoteHomePageVm(
       emptyState:
         resources.home.jobs.length === 0
           ? 'no_jobs'
-          : state.filteredJobs.length === 0
+          : state.visibleJobs.length === 0
             ? 'no_matches'
             : 'none',
     },
@@ -162,10 +169,12 @@ export function buildQuoteHomePageVm(
       resources.home.loading
     ),
     versionList: {
-      heading: buildQuotesHomeVersionHeading(
-        state.selectedJob,
-        resources.workflow.versions.items
-      ),
+      heading: buildQuotesHomeVersionHeading(state.selectedJob, versionCount),
+      detail: buildQuotesHomeVersionDetail(state.selectedJob, {
+        loadedVersions: resources.workflow.versions.items.length,
+        totalVersions: versionCount,
+        hasMore: resources.workflow.versions.hasMore,
+      }),
       emptyMessage: buildQuotesHomeVersionEmptyMessage(
         state.selectedJob,
         resources.workflow.versions.items
@@ -173,6 +182,8 @@ export function buildQuoteHomePageVm(
       items: resources.workflow.versions.items.map((estimate) =>
         buildQuoteHomeVersionItemVm(estimate, resources.delete.deletingId)
       ),
+      hasMore: resources.workflow.versions.hasMore,
+      loadingMore: resources.workflow.versions.loadingMore,
     },
     create: {
       creating: resources.workflow.create.creating,

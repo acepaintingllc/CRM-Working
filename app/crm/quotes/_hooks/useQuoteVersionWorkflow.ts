@@ -63,6 +63,7 @@ export function useQuoteVersionWorkflow({
       create: createController.createVersion,
       refresh,
       refreshVersions: versions.refresh,
+      loadMoreVersions: versions.loadMore,
     },
   }
 }

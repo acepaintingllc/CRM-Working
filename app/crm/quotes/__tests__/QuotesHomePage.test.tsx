@@ -38,6 +38,7 @@ type MockSelectedJobPanelProps = {
 
 type MockVersionListProps = {
   vm: { heading: string }
+  onLoadMore: () => void
   onRequestDelete: (id: string) => void
 }
 
@@ -104,9 +105,10 @@ vi.mock('../_home/QuotesHomeSelectedJobPanel', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeVersionList', () => ({
-  QuotesHomeVersionList: ({ vm, onRequestDelete }: MockVersionListProps) => (
+  QuotesHomeVersionList: ({ vm, onLoadMore, onRequestDelete }: MockVersionListProps) => (
     <div>
       <div>version-list:{vm.heading}</div>
+      <button onClick={onLoadMore}>load more versions</button>
       <button onClick={() => onRequestDelete('estimate-2')}>request delete</button>
     </div>
   ),
@@ -147,6 +149,7 @@ describe('QuotesHomePage', () => {
       setJobQuery: vi.fn(),
       setSelectedJobId: vi.fn(),
       loadMore: vi.fn(async () => undefined),
+      loadMoreVersions: vi.fn(async () => false),
       requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
       setVersionName: vi.fn(),
@@ -196,8 +199,11 @@ describe('QuotesHomePage', () => {
       },
       versionList: {
         heading: '2 versions under this job',
+        detail: null,
         emptyMessage: null,
         items: [],
+        hasMore: false,
+        loadingMore: false,
       },
       create: {
         creating: false,
@@ -237,6 +243,7 @@ describe('QuotesHomePage', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'change job query' })[0])
     fireEvent.click(screen.getAllByRole('button', { name: 'select job' })[0])
     fireEvent.click(screen.getByRole('button', { name: 'load more jobs' }))
+    fireEvent.click(screen.getByRole('button', { name: 'load more versions' }))
     fireEvent.click(screen.getByRole('button', { name: 'request delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'change kind' }))
     fireEvent.click(screen.getByRole('button', { name: 'change name' }))
@@ -250,6 +257,7 @@ describe('QuotesHomePage', () => {
     expect(actions.setJobQuery).toHaveBeenCalledWith('garage')
     expect(actions.setSelectedJobId).toHaveBeenCalledWith('job-2')
     expect(actions.loadMore).toHaveBeenCalledTimes(1)
+    expect(actions.loadMoreVersions).toHaveBeenCalledTimes(1)
     expect(actions.requestDelete).toHaveBeenCalledWith('estimate-2')
     expect(actions.setVersionKind).toHaveBeenCalledWith('revision')
     expect(actions.setVersionName).toHaveBeenCalledWith('Custom Revision')
@@ -267,6 +275,7 @@ describe('QuotesHomePage', () => {
         setJobQuery: vi.fn(),
         setSelectedJobId: vi.fn(),
         loadMore: vi.fn(async () => undefined),
+        loadMoreVersions: vi.fn(async () => false),
         requestDelete: vi.fn(),
         setVersionKind: vi.fn(),
         setVersionName: vi.fn(),
@@ -308,8 +317,11 @@ describe('QuotesHomePage', () => {
       },
       versionList: {
         heading: '2 versions under this job',
+        detail: null,
         emptyMessage: null,
         items: [],
+        hasMore: false,
+        loadingMore: false,
       },
       create: {
         creating: false,

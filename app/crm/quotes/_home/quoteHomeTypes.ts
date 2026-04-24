@@ -104,8 +104,11 @@ export type QuoteHomeVersionItemVm = {
 
 export type QuotesHomeVersionListVm = {
   heading: string
+  detail: string | null
   emptyMessage: string | null
   items: QuoteHomeVersionItemVm[]
+  hasMore: boolean
+  loadingMore: boolean
 }
 
 export type QuotesHomeCreateVm = {

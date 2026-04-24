@@ -8,10 +8,11 @@ import type { QuotesHomeVersionListVm } from './quoteHomeTypes'
 
 type Props = {
   vm: QuotesHomeVersionListVm
+  onLoadMore: () => void
   onRequestDelete: (estimateId: string) => void
 }
 
-export function QuotesHomeVersionList({ vm, onRequestDelete }: Props) {
+export function QuotesHomeVersionList({ vm, onLoadMore, onRequestDelete }: Props) {
   return (
     <CrmSectionCard
       className="self-start"
@@ -19,6 +20,8 @@ export function QuotesHomeVersionList({ vm, onRequestDelete }: Props) {
       title={vm.heading}
     >
       <div style={S.grid14}>
+        {vm.detail ? <div style={S.bodyText}>{vm.detail}</div> : null}
+
         {vm.emptyMessage ? (
           <div style={S.emptyState}>{vm.emptyMessage}</div>
         ) : null}
@@ -50,6 +53,12 @@ export function QuotesHomeVersionList({ vm, onRequestDelete }: Props) {
             </div>
           </div>
         ))}
+
+        {vm.hasMore ? (
+          <CrmButton type="button" onClick={onLoadMore} disabled={vm.loadingMore}>
+            {vm.loadingMore ? 'Loading more versions...' : 'Load more versions'}
+          </CrmButton>
+        ) : null}
       </div>
     </CrmSectionCard>
   )

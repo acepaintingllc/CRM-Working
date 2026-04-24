@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
 import {
-  filterQuoteHomeJobs,
+  normalizeQuoteHomeJobQuery,
   resolveQuoteHomeSelectedJobId,
 } from '../quoteHomePagePolicy'
 
@@ -38,23 +38,9 @@ const exteriorJob: QuoteHomeJobListItemReadModel = {
 }
 
 describe('quoteHomePagePolicy', () => {
-  it('returns the original jobs list when the query is empty', () => {
-    const jobs = [kitchenJob, exteriorJob]
-
-    expect(filterQuoteHomeJobs(jobs, '   ')).toBe(jobs)
-  })
-
-  it('filters jobs by matching title, customer, or address text', () => {
-    expect(filterQuoteHomeJobs([kitchenJob, exteriorJob], ' alice ')).toEqual([
-      kitchenJob,
-    ])
-    expect(filterQuoteHomeJobs([kitchenJob, exteriorJob], 'oak')).toEqual([
-      exteriorJob,
-    ])
-  })
-
-  it('returns an empty list when no jobs match the query', () => {
-    expect(filterQuoteHomeJobs([kitchenJob, exteriorJob], 'basement')).toEqual([])
+  it('normalizes the server-backed job query before requests are made', () => {
+    expect(normalizeQuoteHomeJobQuery('  garage  ')).toBe('garage')
+    expect(normalizeQuoteHomeJobQuery('   ')).toBe('')
   })
 
   it('keeps the current selected job id when it still exists', () => {

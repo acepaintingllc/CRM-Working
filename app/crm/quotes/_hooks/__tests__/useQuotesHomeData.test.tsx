@@ -121,7 +121,7 @@ const secondPayload = {
     pipeline_total: 1300,
   },
   jobs: {
-    query: 'garage',
+    query: '',
     limit: 10,
     next_cursor: 'cursor-3',
     items: [seededPayload.jobs.items[1]],
@@ -176,7 +176,7 @@ describe('useQuotesHomeData', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.summary.total_versions).toBe(2)
-    expect(result.current.jobsPage.query).toBe('garage')
+    expect(result.current.jobsPage.query).toBe('')
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
     expect(result.current.initialSelectedJobId).toBe('job-2')
     expect(result.current.bootstrapError).toBeNull()
@@ -190,7 +190,7 @@ describe('useQuotesHomeData', () => {
     })
 
     expect(result.current.summary.total_versions).toBe(2)
-    expect(result.current.jobsPage.query).toBe('garage')
+    expect(result.current.jobsPage.query).toBe('')
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
     expect(result.current.bootstrapError).toBeNull()
   })
@@ -270,6 +270,66 @@ describe('useQuotesHomeData', () => {
     })
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2', 'job-3'])
     expect(result.current.jobsPage.next_cursor).toBeNull()
+    expect(result.current.hasMore).toBe(false)
+  })
+
+  it('reloads jobs from the server when the job query changes and paginates inside that query', async () => {
+    loadQuoteHomeJobs
+      .mockResolvedValueOnce({
+        query: 'garage',
+        limit: 25,
+        next_cursor: 'cursor-3',
+        items: [seededPayload.jobs.items[1]],
+      })
+      .mockResolvedValueOnce({
+        query: 'garage',
+        limit: 25,
+        next_cursor: null,
+        items: [
+          {
+            ...seededPayload.jobs.items[1],
+            id: 'job-3',
+            customer_id: 'customer-3',
+            customer_name: 'Charlie',
+            customer_address: '789 Pine',
+            title: 'Garage Addition',
+          },
+        ],
+      })
+
+    const { result, rerender } = renderHook(
+      ({ jobQuery }) => useQuotesHomeData(seededPayload, { jobQuery }),
+      {
+        initialProps: {
+          jobQuery: '',
+        },
+      }
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    rerender({ jobQuery: ' garage ' })
+
+    await waitFor(() => expect(result.current.jobsPage.query).toBe('garage'))
+
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(1, {
+      query: 'garage',
+      limit: 25,
+      cursor: undefined,
+    })
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
+    expect(result.current.hasMore).toBe(true)
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(2, {
+      query: 'garage',
+      limit: 25,
+      cursor: 'cursor-3',
+    })
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2', 'job-3'])
     expect(result.current.hasMore).toBe(false)
   })
 

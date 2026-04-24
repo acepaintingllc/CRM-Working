@@ -203,6 +203,19 @@ const refreshedJob1VersionsPayload = {
   items: [job1VersionsPayload.items[0]],
 }
 
+const pagedJob1VersionsPayload = {
+  job_id: 'job-1',
+  total_versions: 30,
+  limit: 25,
+  next_cursor: 'cursor-2',
+  items: Array.from({ length: 25 }, (_, index) => ({
+    ...job1VersionsPayload.items[0],
+    estimate_id: `estimate-${index + 1}`,
+    version_name: `Version ${index + 1}`,
+    version_sort_order: 30 - index,
+  })),
+}
+
 describe('useQuotesHomePage', () => {
   beforeEach(() => {
     vi.useRealTimers()
@@ -221,6 +234,12 @@ describe('useQuotesHomePage', () => {
 
   it('uses bootstrap-selected versions without an immediate duplicate fetch and keeps search separate', async () => {
     loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
+    loadQuoteHomeJobs.mockResolvedValue({
+      query: 'garage',
+      limit: 25,
+      next_cursor: null,
+      items: [bootstrapJobs[1]],
+    })
     loadQuoteHomeSearch.mockResolvedValue({
       query: 'revision',
       items: [
@@ -269,17 +288,78 @@ describe('useQuotesHomePage', () => {
     )
 
     expect(loadQuoteHomeSearch).toHaveBeenCalledWith('revision')
+    expect(loadQuoteHomeJobs).toHaveBeenCalledWith({
+      query: 'garage',
+      limit: 25,
+      cursor: undefined,
+    })
     expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-2'])
+    expect(result.current.jobList.selectedJobId).toBe('job-2')
+    expect(result.current.selectedJob.title).toBe('Garage')
   })
 
-  it('threads job pagination through the page vm and appends the next page', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
-    loadQuoteHomeJobs.mockResolvedValue({
-      query: '',
-      limit: 25,
-      next_cursor: null,
-      items: [jobThree],
+  it('loads additional selected-job version pages beyond the first 25 records', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue({
+      ...bootstrapPayload,
+      selected_job_versions: pagedJob1VersionsPayload,
     })
+    loadQuoteJobVersions.mockResolvedValue({
+      ...pagedJob1VersionsPayload,
+      next_cursor: null,
+      items: Array.from({ length: 5 }, (_, index) => ({
+        ...job1VersionsPayload.items[0],
+        estimate_id: `estimate-${index + 26}`,
+        version_name: `Version ${index + 26}`,
+        version_sort_order: 5 - index,
+      })),
+    })
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.versionList.items).toHaveLength(25)
+    })
+
+    expect(result.current.selectedJob.stats).toContainEqual({
+      label: 'Versions',
+      value: '30',
+    })
+    expect(result.current.versionList.heading).toBe('30 versions under this job')
+
+    await act(async () => {
+      await result.current.actions.loadMoreVersions()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1', {
+      cursor: 'cursor-2',
+    })
+    await waitFor(() => {
+      expect(result.current.versionList.items).toHaveLength(30)
+    })
+    expect(result.current.versionList.heading).toBe('30 versions under this job')
+  })
+
+  it('keeps pagination inside the active server query and preserves selection when results expand', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
+    loadQuoteHomeJobs
+      .mockResolvedValueOnce({
+        query: 'garage',
+        limit: 25,
+        next_cursor: 'cursor-3',
+        items: [bootstrapJobs[1]],
+      })
+      .mockResolvedValueOnce({
+        query: 'garage',
+        limit: 25,
+        next_cursor: null,
+        items: [jobThree],
+      })
+      .mockResolvedValueOnce({
+        query: 'ga',
+        limit: 25,
+        next_cursor: null,
+        items: [bootstrapJobs[1], jobThree],
+      })
 
     const { result } = renderHook(() => useQuotesHomePage())
 
@@ -287,23 +367,44 @@ describe('useQuotesHomePage', () => {
       expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
     })
 
+    act(() => {
+      result.current.actions.setJobQuery('garage')
+    })
+
+    await waitFor(() => {
+      expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-2'])
+    })
+
+    expect(result.current.jobList.selectedJobId).toBe('job-2')
     expect(result.current.jobList.hasMore).toBe(true)
 
     await act(async () => {
       await result.current.actions.loadMore()
     })
 
-    expect(loadQuoteHomeJobs).toHaveBeenCalledWith({
-      query: '',
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(2, {
+      query: 'garage',
       limit: 25,
-      cursor: 'cursor-2',
+      cursor: 'cursor-3',
     })
-    expect(result.current.jobList.items.map((job) => job.id)).toEqual([
-      'job-1',
-      'job-2',
-      'job-3',
-    ])
+    expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-2', 'job-3'])
     expect(result.current.jobList.hasMore).toBe(false)
+
+    act(() => {
+      result.current.actions.setJobQuery('ga')
+    })
+
+    await waitFor(() => {
+      expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-2', 'job-3'])
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(3, {
+      query: 'ga',
+      limit: 25,
+      cursor: undefined,
+    })
+    expect(result.current.jobList.selectedJobId).toBe('job-2')
+    expect(result.current.selectedJob.title).toBe('Garage')
   })
 
   it('loads versions for a newly selected job and creates a version', async () => {
@@ -420,13 +521,14 @@ describe('useQuotesHomePage', () => {
     expect(result.current.summaryCards[2].value).toBe('1')
     expect(result.current.summaryCards[3].value).toBe('$1,300')
     expect(result.current.header.heroSummaryText).toBe(
-      '202 total versions · 0 drafts · 1 sent/awaiting · 1 live'
+      '202 total versions \u00B7 0 drafts \u00B7 1 sent/awaiting \u00B7 1 live'
     )
     expect(result.current.selectedJob.stats).toEqual([
       { label: 'Customer', value: 'Alice' },
       { label: 'Job Status', value: 'Estimate Pending' },
-      { label: 'Versions', value: '201' },
+      { label: 'Versions', value: '1' },
     ])
+    expect(result.current.versionList.heading).toBe('1 version under this job')
   })
 
   it('keeps delete success explicit when follow-up refresh fails without local shadow mutation', async () => {

@@ -8,6 +8,8 @@ import {
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeFeedbackVm,
   buildQuotesHomeSelectedJobVm,
+  buildQuotesHomeVersionDetail,
+  buildQuotesHomeVersionHeading,
   buildSearchResultVm,
   buildSummaryCards,
   QUOTE_META_SEPARATOR,
@@ -51,6 +53,10 @@ const job: QuoteHomeJobListItemReadModel = {
 }
 
 describe('quoteHomePresentation', () => {
+  it('locks the quote meta separator to a middle dot', () => {
+    expect(QUOTE_META_SEPARATOR).toBe(' \u00B7 ')
+  })
+
   it('builds hero summary text from summary counts', () => {
     expect(
       buildHeroSummaryText({
@@ -60,15 +66,13 @@ describe('quoteHomePresentation', () => {
         live_count: 1,
         pipeline_total: 5000,
       })
-    ).toBe(
-      `24 total versions${QUOTE_META_SEPARATOR}2 drafts${QUOTE_META_SEPARATOR}3 sent/awaiting${QUOTE_META_SEPARATOR}1 live`
-    )
+    ).toBe('24 total versions \u00B7 2 drafts \u00B7 3 sent/awaiting \u00B7 1 live')
   })
 
   it('builds selected-job and version item view models', () => {
     const selectedVm = buildQuotesHomeSelectedJobVm(job, 4, false)
     expect(selectedVm.title).toBe('Kitchen')
-    expect(selectedVm.customerLine).toBe(`Alice${QUOTE_META_SEPARATOR}123 Main`)
+    expect(selectedVm.customerLine).toBe('Alice \u00B7 123 Main')
     expect(selectedVm.stats).toEqual([
       { label: 'Customer', value: 'Alice' },
       { label: 'Job Status', value: 'Estimate Sent' },
@@ -79,9 +83,27 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.total).toBe('$1,250')
     expect(versionVm.href).toBe('/crm/quotes/estimate-1')
     expect(versionVm.deleting).toBe(true)
-    expect(versionVm.meta).toContain(
-      `Live / Revision${QUOTE_META_SEPARATOR}Updated`
+    expect(versionVm.meta).toContain('Live / Revision \u00B7 Updated')
+  })
+
+  it('builds version-history totals from the full count, not the loaded page length', () => {
+    expect(buildQuotesHomeVersionHeading(job, 30)).toBe(
+      '30 versions under this job'
     )
+    expect(
+      buildQuotesHomeVersionDetail(job, {
+        loadedVersions: 25,
+        totalVersions: 30,
+        hasMore: true,
+      })
+    ).toBe('Showing 25 of 30 versions.')
+    expect(
+      buildQuotesHomeVersionDetail(job, {
+        loadedVersions: 30,
+        totalVersions: 30,
+        hasMore: false,
+      })
+    ).toBe('Showing all 30 versions.')
   })
 
   it('builds search result view models from shared home version items', () => {

@@ -33,6 +33,8 @@ describe('useQuoteVersionWorkflow', () => {
       .mockResolvedValueOnce({
         job_id: 'job-1',
         total_versions: 1,
+        limit: 25,
+        next_cursor: null,
         items: [
           {
             estimate_id: 'estimate-1',
@@ -54,6 +56,8 @@ describe('useQuoteVersionWorkflow', () => {
       .mockResolvedValueOnce({
         job_id: 'job-2',
         total_versions: 0,
+        limit: 25,
+        next_cursor: null,
         items: [],
       })
 
@@ -118,11 +122,15 @@ describe('useQuoteVersionWorkflow', () => {
       .mockResolvedValueOnce({
         job_id: 'job-1',
         total_versions: 0,
+        limit: 25,
+        next_cursor: null,
         items: [],
       })
       .mockResolvedValueOnce({
         job_id: 'job-1',
         total_versions: 1,
+        limit: 25,
+        next_cursor: null,
         items: [
           {
             estimate_id: 'estimate-2',
@@ -164,5 +172,76 @@ describe('useQuoteVersionWorkflow', () => {
     await waitFor(() => {
       expect(result.current.versions.items).toHaveLength(1)
     })
+  })
+
+  it('loads additional version pages for the selected job', async () => {
+    loadQuoteJobVersions
+      .mockResolvedValueOnce({
+        job_id: 'job-1',
+        total_versions: 30,
+        limit: 25,
+        next_cursor: 'cursor-2',
+        items: Array.from({ length: 25 }, (_, index) => ({
+          estimate_id: `estimate-${index + 1}`,
+          job_id: 'job-1',
+          customer_id: 'customer-1',
+          version_name: `Version ${index + 1}`,
+          version_state: 'draft',
+          version_kind: 'standard',
+          version_sort_order: 30 - index,
+          job_title: 'Kitchen',
+          customer_name: 'Alice',
+          final_total: 500,
+          updated_at: '2026-04-20T10:00:00.000Z',
+          created_at: '2026-04-19T10:00:00.000Z',
+          is_sent_estimate: false,
+        })),
+      })
+      .mockResolvedValueOnce({
+        job_id: 'job-1',
+        total_versions: 30,
+        limit: 25,
+        next_cursor: null,
+        items: Array.from({ length: 5 }, (_, index) => ({
+          estimate_id: `estimate-${index + 26}`,
+          job_id: 'job-1',
+          customer_id: 'customer-1',
+          version_name: `Version ${index + 26}`,
+          version_state: 'draft',
+          version_kind: 'standard',
+          version_sort_order: 5 - index,
+          job_title: 'Kitchen',
+          customer_name: 'Alice',
+          final_total: 500,
+          updated_at: '2026-04-20T10:00:00.000Z',
+          created_at: '2026-04-19T10:00:00.000Z',
+          is_sent_estimate: false,
+        })),
+      })
+
+    const { result } = renderHook(() =>
+      useQuoteVersionWorkflow({
+        jobId: 'job-1',
+        selectedJob: { id: 'job-1', customer_id: 'customer-1' },
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.versions.items).toHaveLength(25)
+    })
+
+    expect(result.current.versions.pageData.total_versions).toBe(30)
+    expect(result.current.versions.hasMore).toBe(true)
+
+    await act(async () => {
+      await result.current.actions.loadMoreVersions()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(1, 'job-1')
+    expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(2, 'job-1', {
+      cursor: 'cursor-2',
+    })
+    expect(result.current.versions.items).toHaveLength(30)
+    expect(result.current.versions.hasMore).toBe(false)
   })
 })

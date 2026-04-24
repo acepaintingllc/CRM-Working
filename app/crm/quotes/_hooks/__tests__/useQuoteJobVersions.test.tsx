@@ -65,6 +65,53 @@ describe('useQuoteJobVersions', () => {
     loadQuoteJobVersions.mockReset()
   })
 
+  it('appends the next versions page and keeps the authoritative total count', async () => {
+    loadQuoteJobVersions
+      .mockResolvedValueOnce({
+        ...versionPayload,
+        total_versions: 30,
+        next_cursor: 'cursor-2',
+        items: Array.from({ length: 25 }, (_, index) => ({
+          ...versionPayload.items[0],
+          estimate_id: `estimate-${index + 1}`,
+          version_name: `Version ${index + 1}`,
+          version_sort_order: 30 - index,
+        })),
+      })
+      .mockResolvedValueOnce({
+        ...versionPayload,
+        total_versions: 30,
+        next_cursor: null,
+        items: Array.from({ length: 5 }, (_, index) => ({
+          ...versionPayload.items[0],
+          estimate_id: `estimate-${index + 26}`,
+          version_name: `Version ${index + 26}`,
+          version_sort_order: 5 - index,
+        })),
+      })
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(25)
+    })
+
+    expect(result.current.pageData.total_versions).toBe(30)
+    expect(result.current.hasMore).toBe(true)
+
+    await act(async () => {
+      await result.current.loadMore()
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(1, 'job-1')
+    expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(2, 'job-1', {
+      cursor: 'cursor-2',
+    })
+    expect(result.current.items).toHaveLength(30)
+    expect(result.current.pageData.total_versions).toBe(30)
+    expect(result.current.hasMore).toBe(false)
+  })
+
   it('uses cached data until a forced refresh is requested', async () => {
     loadQuoteJobVersions.mockResolvedValue(versionPayload)
 

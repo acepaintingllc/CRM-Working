@@ -90,6 +90,7 @@ function buildActions(): QuoteHomePageActions {
     setVersionName: vi.fn(),
     setVersionKind: vi.fn(),
     create: vi.fn(async () => null),
+    loadMoreVersions: vi.fn(async () => false),
     retrySearch: vi.fn(),
     requestDelete: vi.fn(),
     cancelDelete: vi.fn(),
@@ -112,6 +113,7 @@ function buildResources(
       },
       jobs: [jobOne, jobTwo],
       hasMore: false,
+      jobsLoading: false,
       loading: false,
       bootstrapError: null,
       ...overrides?.home,
@@ -129,6 +131,9 @@ function buildResources(
         items: [versionTwo, versionOne],
         error: null,
         totalVersions: 2,
+        hasMore: false,
+        loadingMore: false,
+        hasResolved: true,
         ...overrides?.workflow?.versions,
       },
       create: {
@@ -157,7 +162,7 @@ function buildState(overrides?: Partial<QuoteHomePageVmState>): QuoteHomePageVmS
     jobQuery: '',
     selectedJobId: 'job-1',
     selectedJob: jobOne,
-    filteredJobs: [jobOne, jobTwo],
+    visibleJobs: [jobOne, jobTwo],
     actions: buildActions(),
     ...overrides,
   }
@@ -188,7 +193,7 @@ describe('buildQuoteHomePageVm', () => {
       buildState({
         selectedJobId: '',
         selectedJob: null,
-        filteredJobs: [],
+        visibleJobs: [],
         actions,
       }),
       buildResources({
@@ -199,6 +204,9 @@ describe('buildQuoteHomePageVm', () => {
           versions: {
             items: [],
             totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: false,
           },
           create: {
             canCreate: false,
@@ -220,8 +228,11 @@ describe('buildQuoteHomePageVm', () => {
     )
     expect(vm.versionList).toEqual({
       heading: 'Pick a job first',
+      detail: null,
       emptyMessage: 'Versions will appear here once a job is selected.',
       items: [],
+      hasMore: false,
+      loadingMore: false,
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.actions).toBe(actions)
@@ -236,6 +247,7 @@ describe('buildQuoteHomePageVm', () => {
         workflow: {
           versions: {
             totalVersions: 99,
+            hasResolved: true,
           },
           create: {
             versionName: 'Kitchen Revision',
@@ -259,10 +271,15 @@ describe('buildQuoteHomePageVm', () => {
       stats: [
         { label: 'Customer', value: 'Alice' },
         { label: 'Job Status', value: 'Estimate Pending' },
-        { label: 'Versions', value: '2' },
+        { label: 'Versions', value: '99' },
       ],
     })
-    expect(vm.versionList.heading).toBe('2 versions under this job')
+    expect(vm.versionList).toEqual(
+      expect.objectContaining({
+        heading: '99 versions under this job',
+        detail: 'Showing 2 of 99 versions.',
+      })
+    )
     expect(vm.create).toEqual({
       creating: false,
       loading: false,
@@ -284,6 +301,9 @@ describe('buildQuoteHomePageVm', () => {
           versions: {
             items: [],
             totalVersions: 4,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: false,
           },
           create: {
             canCreate: false,
@@ -299,8 +319,11 @@ describe('buildQuoteHomePageVm', () => {
     )
     expect(vm.versionList).toEqual({
       heading: 'Pick a job first',
+      detail: null,
       emptyMessage: 'Versions will appear here once a job is selected.',
       items: [],
+      hasMore: false,
+      loadingMore: false,
     })
     expect(vm.create.selectedJobName).toBeNull()
     expect(vm.create.canCreate).toBe(false)
@@ -317,6 +340,80 @@ describe('buildQuoteHomePageVm', () => {
     )
 
     expect(vm.jobList.hasMore).toBe(true)
+  })
+
+  it('falls back to the selected job count until the versions page resolves', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        workflow: {
+          versions: {
+            items: [],
+            totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: false,
+          },
+        },
+      })
+    )
+
+    expect(vm.selectedJob.stats).toContainEqual({
+      label: 'Versions',
+      value: '2',
+    })
+    expect(vm.versionList.heading).toBe('2 versions under this job')
+    expect(vm.versionList.detail).toBeNull()
+  })
+
+  it('threads selected-job version pagination affordances into the version list vm', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        workflow: {
+          versions: {
+            items: Array.from({ length: 25 }, (_, index) => ({
+              ...versionOne,
+              estimate_id: `estimate-${index + 1}`,
+              version_name: `Version ${index + 1}`,
+            })),
+            totalVersions: 30,
+            hasMore: true,
+            loadingMore: true,
+            hasResolved: true,
+          },
+        },
+      })
+    )
+
+    expect(vm.selectedJob.stats).toContainEqual({
+      label: 'Versions',
+      value: '30',
+    })
+    expect(vm.versionList).toEqual(
+      expect.objectContaining({
+        heading: '30 versions under this job',
+        detail: 'Showing 25 of 30 versions.',
+        hasMore: true,
+        loadingMore: true,
+      })
+    )
+  })
+
+  it('keeps job-list loading scoped to the jobs pane during server-backed queries', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        home: {
+          jobsLoading: true,
+        },
+      })
+    )
+
+    expect(vm.loading).toBe(false)
+    expect(vm.jobList.loading).toBe(true)
+    expect(vm.selectedJob.loading).toBe(false)
+    expect(vm.create.loading).toBe(false)
   })
 
   it('surfaces feedback when resource or action issues are present', () => {
@@ -359,6 +456,9 @@ describe('buildQuoteHomePageVm', () => {
           versions: {
             items: [],
             totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: false,
           },
           create: {
             canCreate: false,

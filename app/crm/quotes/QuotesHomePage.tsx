@@ -92,6 +92,7 @@ export default function QuotesHomePage({ initialData }: Props) {
             >
               <QuotesHomeVersionList
                 vm={controller.versionList}
+                onLoadMore={() => void actions.loadMoreVersions()}
                 onRequestDelete={actions.requestDelete}
               />
 

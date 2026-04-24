@@ -12,24 +12,21 @@ import { useQuotesHomeData } from './useQuotesHomeData'
 import { useQuotesHomeDelete } from './useQuotesHomeDelete'
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
 import { useQuoteVersionWorkflow } from './useQuoteVersionWorkflow'
-import { filterQuoteHomeJobs, resolveQuoteHomeSelectedJobId } from './quoteHomePagePolicy'
+import { resolveQuoteHomeSelectedJobId } from './quoteHomePagePolicy'
 
 export function useQuotesHomePage(
   initialData?: QuoteHomeBootstrapReadModel | null
 ): QuoteHomePageVm {
-  const homeResource = useQuotesHomeData(initialData)
+  const initialJobQuery = initialData?.jobs.query ?? ''
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
-  const [jobQuery, setJobQuery] = useState('')
+  const [jobQuery, setJobQuery] = useState(initialJobQuery)
+  const homeResource = useQuotesHomeData(initialData, { jobQuery })
   const [selectedJobId, setSelectedJobId] = useState(
     () => resolveQuoteHomeSelectedJobId(homeResource.jobs, homeResource.initialSelectedJobId ?? '')
   )
   const searchState = useQuotesHomeSearch(searchQuery)
   const selectedJob = homeResource.jobs.find((job) => job.id === selectedJobId) ?? null
-  const filteredJobs = useMemo(
-    () => filterQuoteHomeJobs(homeResource.jobs, jobQuery),
-    [homeResource.jobs, jobQuery]
-  )
   const workflow = useQuoteVersionWorkflow({
     jobId: selectedJobId,
     selectedJob,
@@ -64,6 +61,7 @@ export function useQuotesHomePage(
       setVersionName: workflow.actions.setVersionName,
       setVersionKind: workflow.actions.setVersionKind,
       create: workflow.actions.create,
+      loadMoreVersions: workflow.actions.loadMoreVersions,
       retrySearch: searchState.retry,
       requestDelete: controller.actions.requestDelete,
       cancelDelete: controller.actions.cancelDelete,
@@ -77,6 +75,7 @@ export function useQuotesHomePage(
       workflow.actions.setVersionName,
       workflow.actions.setVersionKind,
       workflow.actions.create,
+      workflow.actions.loadMoreVersions,
       searchState.retry,
       controller.actions.requestDelete,
       controller.actions.cancelDelete,
@@ -95,7 +94,7 @@ export function useQuotesHomePage(
           jobQuery,
           selectedJobId,
           selectedJob,
-          filteredJobs,
+          visibleJobs: homeResource.jobs,
           actions,
         },
         {
@@ -103,6 +102,7 @@ export function useQuotesHomePage(
             summary: homeResource.summary,
             jobs: homeResource.jobs,
             hasMore: homeResource.hasMore,
+            jobsLoading: homeResource.jobsLoading,
             loading: homeResource.loading,
             bootstrapError: homeResource.bootstrapError,
           },
@@ -118,6 +118,9 @@ export function useQuotesHomePage(
               items: workflow.versions.items,
               error: workflow.versions.error,
               totalVersions: workflow.versions.pageData.total_versions,
+              hasMore: workflow.versions.hasMore,
+              loadingMore: workflow.versions.loadingMore,
+              hasResolved: workflow.versions.hasResolved,
             },
             create: {
               creating: workflow.create.creating,
@@ -141,11 +144,11 @@ export function useQuotesHomePage(
       jobQuery,
       selectedJobId,
       selectedJob,
-      filteredJobs,
+      homeResource.jobs,
       actions,
       homeResource.summary,
-      homeResource.jobs,
       homeResource.hasMore,
+      homeResource.jobsLoading,
       homeResource.loading,
       homeResource.bootstrapError,
       searchState.loading,
@@ -156,6 +159,9 @@ export function useQuotesHomePage(
       workflow.versions.items,
       workflow.versions.error,
       workflow.versions.pageData.total_versions,
+      workflow.versions.hasMore,
+      workflow.versions.loadingMore,
+      workflow.versions.hasResolved,
       workflow.create.creating,
       workflow.create.error,
       workflow.create.versionName,

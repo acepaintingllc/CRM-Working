@@ -76,12 +76,14 @@ describe('Quotes home panels', () => {
   })
 
   it('uses CRM button actions for version open and delete', () => {
+    const onLoadMore = vi.fn()
     const onRequestDelete = vi.fn()
 
     render(
       <QuotesHomeVersionList
         vm={{
           heading: '1 version under this job',
+          detail: 'Showing all 1 versions.',
           emptyMessage: null,
           items: [
             {
@@ -93,7 +95,10 @@ describe('Quotes home panels', () => {
               deleting: false,
             },
           ],
+          hasMore: true,
+          loadingMore: false,
         }}
+        onLoadMore={onLoadMore}
         onRequestDelete={onRequestDelete}
       />,
     )
@@ -107,8 +112,10 @@ describe('Quotes home panels', () => {
     expect(deleteButton).toHaveClass('ace-crm-btn', 'ace-crm-btn-danger')
 
     fireEvent.click(deleteButton)
+    fireEvent.click(screen.getByRole('button', { name: 'Load more versions' }))
 
     expect(onRequestDelete).toHaveBeenCalledWith('estimate-1')
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
   })
 
   it('uses the CRM primary button for create version and keeps the local field controls', () => {

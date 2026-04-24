@@ -21,7 +21,7 @@ export const SETTINGS_LINKS: NavItem[] = [
   { label: 'Settings', href: '/crm/settings' },
 ]
 
-export const QUOTE_META_SEPARATOR = ' · '
+export const QUOTE_META_SEPARATOR = ' \u00B7 '
 
 const HOME_FAILURE_MESSAGES: Record<'bootstrap', string> = {
   bootstrap: 'Quote home failed to load.',
@@ -32,6 +32,10 @@ const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
   jobVersions: 'job versions',
   create: 'quote creation',
   delete: 'quote deletion',
+}
+
+function formatVersionCount(value: number) {
+  return `${value} version${value === 1 ? '' : 's'}`
 }
 
 export function formatToday() {
@@ -238,11 +242,34 @@ export function buildQuoteHomeVersionItemVm(
 
 export function buildQuotesHomeVersionHeading(
   selectedJob: QuoteHomeJob | null,
-  versions: QuoteHomeJobVersion[],
+  totalVersions: number,
 ) {
   return selectedJob
-    ? `${versions.length} version${versions.length === 1 ? '' : 's'} under this job`
+    ? `${formatVersionCount(totalVersions)} under this job`
     : 'Pick a job first'
+}
+
+export function buildQuotesHomeVersionDetail(
+  selectedJob: QuoteHomeJob | null,
+  params: {
+    loadedVersions: number
+    totalVersions: number
+    hasMore: boolean
+  },
+) {
+  if (!selectedJob || params.totalVersions === 0 || params.loadedVersions === 0) {
+    return null
+  }
+
+  if (params.hasMore) {
+    return `Showing ${params.loadedVersions} of ${formatVersionCount(params.totalVersions)}.`
+  }
+
+  if (params.loadedVersions !== params.totalVersions) {
+    return `Showing ${params.loadedVersions} of ${formatVersionCount(params.totalVersions)}.`
+  }
+
+  return `Showing all ${formatVersionCount(params.totalVersions)}.`
 }
 
 export function buildQuotesHomeVersionEmptyMessage(
