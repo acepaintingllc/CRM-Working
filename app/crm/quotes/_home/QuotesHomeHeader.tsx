@@ -2,10 +2,13 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { normalizeQuoteHomeSearchQuery } from '@/lib/quotes/collectionData'
-import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
+import {
+  SETTINGS_LINKS,
+  buildQuotesHomeHeaderSearchStatus,
+  formatToday,
+} from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
-import type { QuotesHomeHeaderVm, QuotesHomeSearchStatusVm } from './quoteHomeTypes'
+import type { QuotesHomeHeaderVm } from './quoteHomeTypes'
 import { useQuotesHomeHeaderInteractions } from './useQuotesHomeHeaderInteractions'
 
 type Props = {
@@ -45,7 +48,7 @@ export function QuotesHomeHeader({
 
   const searchStatus =
     vm.searchStatus ??
-    buildLegacySearchStatus({
+    buildQuotesHomeHeaderSearchStatus({
       query: vm.searchQuery,
       loading: vm.searchLoading,
       errorMessage: vm.searchErrorMessage,
@@ -275,41 +278,6 @@ export function QuotesHomeHeader({
       </div>
     </div>
   )
-}
-
-function buildLegacySearchStatus(params: {
-  query: string
-  loading: boolean
-  errorMessage: string | null
-  emptyMessage: string | null
-  resultCount: number
-  canRetry: boolean
-}): QuotesHomeSearchStatusVm {
-  const query = normalizeQuoteHomeSearchQuery(params.query)
-  if (!query) return { kind: 'idle' }
-  if (params.loading) {
-    return {
-      kind: 'loading',
-      title: 'Searching quote versions',
-      message: `Looking up versions that match "${query}".`,
-    }
-  }
-  if (params.errorMessage) {
-    return {
-      kind: 'error',
-      title: 'Search results failed to load',
-      message: params.errorMessage,
-      canRetry: params.canRetry,
-    }
-  }
-  if (params.emptyMessage) {
-    return {
-      kind: 'empty',
-      title: 'No matching quote versions',
-      message: params.emptyMessage,
-    }
-  }
-  return params.resultCount > 0 ? { kind: 'results' } : { kind: 'idle' }
 }
 
 function getEnabledSettingsItems(container: HTMLElement | null) {

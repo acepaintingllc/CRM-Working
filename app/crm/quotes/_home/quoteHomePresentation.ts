@@ -65,6 +65,11 @@ export const QUOTES_HOME_DELETE_COPY = {
   cancelLabel: 'Cancel',
 } as const
 
+export const QUOTES_HOME_RECOVERY_COPY = {
+  title: 'Something went wrong loading quotes',
+  reloadLabel: 'Reload',
+} as const
+
 export function buildQuotesHomeCreateVm(params: {
   creating: boolean
   loading: boolean
@@ -259,6 +264,41 @@ export function buildQuotesHomeSearchStatus(params: {
   return { kind: 'results' }
 }
 
+export function buildQuotesHomeHeaderSearchStatus(params: {
+  query: string
+  loading: boolean
+  errorMessage: string | null
+  emptyMessage: string | null
+  resultCount: number
+  canRetry: boolean
+}): QuotesHomeSearchStatusVm {
+  const query = normalizeQuoteHomeSearchQuery(params.query)
+  if (!query) return { kind: 'idle' }
+  if (params.loading) {
+    return {
+      kind: 'loading',
+      title: 'Searching quote versions',
+      message: `Looking up versions that match "${query}".`,
+    }
+  }
+  if (params.errorMessage) {
+    return {
+      kind: 'error',
+      title: 'Search results failed to load',
+      message: params.errorMessage,
+      canRetry: params.canRetry,
+    }
+  }
+  if (params.emptyMessage) {
+    return {
+      kind: 'empty',
+      title: 'No matching quote versions',
+      message: params.emptyMessage,
+    }
+  }
+  return params.resultCount > 0 ? { kind: 'results' } : { kind: 'idle' }
+}
+
 export function buildHomeLoadFailureDetail(
   source: Extract<QuoteHomeFailureSource, 'bootstrap' | 'jobs'>,
   message: string,
@@ -451,6 +491,18 @@ export function buildQuotesHomeJobListStatus(params: {
   }
 
   return { kind: 'ready' }
+}
+
+export function buildQuotesHomeJobListStatusFromVm(
+  vm: QuotesHomeJobListVm,
+): NonNullable<QuotesHomeJobListVm['status']> {
+  return buildQuotesHomeJobListStatus({
+    loading: vm.loading,
+    errorMessage: vm.errorMessage,
+    canRetry: vm.canRetry,
+    emptyState: vm.emptyState,
+    emptyStateBody: vm.emptyStateBody,
+  })
 }
 
 export function buildQuotesHomeSelectedJobVm(

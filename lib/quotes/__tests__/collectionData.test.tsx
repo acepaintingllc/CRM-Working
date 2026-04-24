@@ -126,6 +126,9 @@ describe('quote collection data', () => {
     expect(normalizeQuoteHomeQuery(null)).toBe('')
     expect(normalizeQuoteHomeSearchQuery('  kitchen  ')).toBe('kitchen')
     expect(normalizeQuoteHomeJobQuery('  exterior  ')).toBe('exterior')
+    expect(normalizeQuoteHomeJobQuery('\n  exterior trim\t ')).toBe('exterior trim')
+    expect(normalizeQuoteHomeJobQuery('   ')).toBe('')
+    expect(normalizeQuoteHomeJobQuery(undefined)).toBe('')
   })
 
   it('decorates DB estimate rows with DB relation rows in the quote domain layer', () => {

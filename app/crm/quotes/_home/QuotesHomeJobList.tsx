@@ -6,6 +6,7 @@ import { useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { QuotesHomeJobListVm } from './quoteHomeTypes'
 import { S } from './quoteHomeStyles'
+import { buildQuotesHomeJobListStatusFromVm } from './quoteHomePresentation'
 
 type Props = {
   vm: QuotesHomeJobListVm
@@ -47,7 +48,7 @@ export function QuotesHomeJobList({
       setRetrying(false)
     }
   }
-  const status = vm.status ?? buildLegacyJobListStatus(vm)
+  const status = vm.status ?? buildQuotesHomeJobListStatusFromVm(vm)
 
   const renderStatus = () => {
     if (status.kind === 'loading') {
@@ -200,35 +201,4 @@ export function QuotesHomeJobList({
       </div>
     </CrmSectionCard>
   )
-}
-
-function buildLegacyJobListStatus(vm: QuotesHomeJobListVm): NonNullable<QuotesHomeJobListVm['status']> {
-  if (vm.loading) return { kind: 'loading', message: 'Loading jobs...' }
-  if (vm.errorMessage) {
-    return {
-      kind: 'error',
-      title: 'Jobs failed to load',
-      message: vm.errorMessage,
-      canRetry: vm.canRetry,
-      retryLabel: 'Retry jobs',
-      retryingLabel: 'Retrying jobs...',
-    }
-  }
-  if (vm.emptyState === 'no_jobs') {
-    return {
-      kind: 'empty',
-      emptyState: 'no_jobs',
-      title: 'No eligible jobs yet',
-      body: vm.emptyStateBody,
-    }
-  }
-  if (vm.emptyState === 'no_matches') {
-    return {
-      kind: 'empty',
-      emptyState: 'no_matches',
-      title: 'No jobs match this search.',
-      body: null,
-    }
-  }
-  return { kind: 'ready' }
 }
