@@ -1,6 +1,7 @@
 import { isJobStatus } from '../jobs/types'
 import type {
   EstimateCollectionCustomerRow,
+  EstimateCollectionJobContextDbRow,
   EstimateCollectionJobPageDbRow,
   EstimateCollectionJobRow,
   EstimateCollectionRollupRow,
@@ -275,6 +276,24 @@ export type QuoteHomeSearchResponse = {
   items: QuoteHomeSearchResultReadModel[]
 }
 
+export type QuoteCreateJobEligibilityReason = 'eligible' | 'missing_customer'
+
+export type QuoteCreateJobReadModel = {
+  id: string
+  customer_id: string | null
+  customer_name: string | null
+  customer_address: string | null
+  title: string
+  eligibility: {
+    eligible: boolean
+    reason: QuoteCreateJobEligibilityReason
+  }
+}
+
+export type QuoteCreateJobContextReadModel = {
+  job: QuoteCreateJobReadModel
+}
+
 function asRequiredText(value: unknown, fallback: string): string {
   const text = typeof value === 'string' ? value.trim() : String(value ?? '').trim()
   return text || fallback
@@ -540,6 +559,24 @@ export function toQuoteHomeEligibleJobReadModel(
   }
 }
 
+export function toQuoteCreateJobReadModel(
+  row: EstimateCollectionJobContextDbRow
+): QuoteCreateJobReadModel {
+  const customerId = asRequiredText(row.customer_id, '') || null
+
+  return {
+    id: asRequiredText(row.id, ''),
+    customer_id: customerId,
+    customer_name: asRequiredText(row.customer_name, '') || null,
+    customer_address: asRequiredText(row.customer_address, '') || null,
+    title: asRequiredText(row.title, QUOTE_HOME_FALLBACK_JOB_TITLE),
+    eligibility: {
+      eligible: Boolean(customerId),
+      reason: customerId ? 'eligible' : 'missing_customer',
+    },
+  }
+}
+
 export function selectQuoteHomeSearchRows(params: QuoteHomeSearchRows): EstimateCollectionVersionRow[] {
   const candidates = toQuoteHomeSearchCandidates(params).sort(
     compareQuoteHomeSearchCandidatesByPolicy
@@ -660,5 +697,13 @@ export function buildQuoteJobVersionsReadModel(
     items: rows
       .map(toQuoteHomeJobVersionItem)
       .filter((estimate) => estimate.job_id === params.jobId),
+  }
+}
+
+export function buildQuoteCreateJobContextReadModel(
+  row: EstimateCollectionJobContextDbRow
+): QuoteCreateJobContextReadModel {
+  return {
+    job: toQuoteCreateJobReadModel(row),
   }
 }

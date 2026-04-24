@@ -7,6 +7,7 @@ import { loadQuoteDefaults, loadQuoteProducts, saveQuoteDefaults } from '@/lib/q
 import {
   areQuoteDefaultsEqual,
   normalizeQuoteDefaults,
+  quoteDefaultsProductFields,
   validateQuoteDefaults,
 } from '@/lib/quotes/defaultsForm'
 import type { QuoteDefaults } from '@/lib/settings/types'
@@ -15,6 +16,8 @@ type ProductRow = {
   id: string
   name: string
   family?: string | null
+  status?: string | null
+  missing?: boolean
 }
 
 type QuoteDefaultsResource = {
@@ -32,7 +35,7 @@ export function useQuoteDefaultsPage() {
     initialData: emptyResource,
     load: async () => {
       const [products, settings] = await Promise.all([
-        loadQuoteProducts<ProductRow[]>({ status: 'active' }),
+        loadQuoteProducts<ProductRow[]>({ status: 'all' }),
         loadQuoteDefaults(),
       ])
 
@@ -42,7 +45,7 @@ export function useQuoteDefaultsPage() {
       }
     },
     save: async (current) => {
-      const validated = validateQuoteDefaults(current.settings)
+      const validated = validateQuoteDefaults(current.settings, { products: current.products })
       if (!validated.ok) {
         throw new Error(validated.error)
       }
@@ -62,24 +65,17 @@ export function useQuoteDefaultsPage() {
   })
 
   const productDefaultFields = useMemo(() => {
-    const paintProducts = resource.data.products.filter(
-      (product) => (product.family ?? '').toLowerCase() === 'paint'
-    )
-    const primerProducts = resource.data.products.filter(
-      (product) => (product.family ?? '').toLowerCase() === 'primer'
-    )
+    return quoteDefaultsProductFields.map((field) => ({
+      ...field,
+      options: buildProductOptionsForDefaultField(
+        resource.data.products,
+        resource.data.settings[field.key],
+        field.expectedFamily
+      ),
+    }))
+  }, [resource.data.products, resource.data.settings])
 
-    return [
-      { label: 'Walls default paint', key: 'walls_paint_id', options: paintProducts },
-      { label: 'Walls default primer', key: 'walls_primer_id', options: primerProducts },
-      { label: 'Ceilings default paint', key: 'ceiling_paint_id', options: paintProducts },
-      { label: 'Ceilings default primer', key: 'ceiling_primer_id', options: primerProducts },
-      { label: 'Trim default paint', key: 'trim_paint_id', options: paintProducts },
-      { label: 'Trim default primer', key: 'trim_primer_id', options: primerProducts },
-    ] as const
-  }, [resource.data.products])
-
-  const validation = validateQuoteDefaults(resource.data.settings)
+  const validation = validateQuoteDefaults(resource.data.settings, { products: resource.data.products })
   const validationError = validation.ok ? null : validation.error
   const canSave = resource.hasLoaded && resource.dirty && !resource.saving && !validationError
   const status = buildQuoteAdminPageStatus({
@@ -94,6 +90,7 @@ export function useQuoteDefaultsPage() {
   const form = {
     settings: resource.data.settings,
     productDefaultFields,
+    productDefaultErrors: validation.fields,
     validationError: status.inlineValidation,
     canSave,
   }
@@ -113,4 +110,46 @@ export function useQuoteDefaultsPage() {
     form,
     actions,
   }
+}
+
+function buildProductOptionsForDefaultField(
+  products: ProductRow[],
+  selectedProductId: string | null,
+  expectedFamily: string
+) {
+  const activeOptions = products.filter(
+    (product) =>
+      productMatchesFamily(product, expectedFamily) && productIsActive(product)
+  )
+
+  if (!selectedProductId) return activeOptions
+
+  const selectedProduct = products.find((product) => product.id === selectedProductId)
+  const selectedAlreadyVisible = activeOptions.some((product) => product.id === selectedProductId)
+
+  if (selectedAlreadyVisible) return activeOptions
+
+  if (selectedProduct) {
+    return [selectedProduct, ...activeOptions]
+  }
+
+  return [
+    {
+      id: selectedProductId,
+      name: `Missing product (${selectedProductId})`,
+      family: null,
+      status: 'Missing',
+      missing: true,
+    },
+    ...activeOptions,
+  ]
+}
+
+function productMatchesFamily(product: ProductRow, expectedFamily: string) {
+  return String(product.family ?? '').trim().toLowerCase() === expectedFamily.toLowerCase()
+}
+
+function productIsActive(product: ProductRow) {
+  if (product.status == null) return true
+  return String(product.status).trim().toLowerCase() === 'active'
 }

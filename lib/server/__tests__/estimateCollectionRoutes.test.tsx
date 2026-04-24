@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   loadEstimateCollectionJobVersionsPayload: vi.fn(),
   loadEstimateCollectionJobsPayload: vi.fn(),
   loadEstimateCollectionPayload: vi.fn(),
+  loadEstimateCollectionQuoteCreateContextPayload: vi.fn(),
   loadEstimateCollectionRecentActivityPayload: vi.fn(),
   loadEstimateCollectionSearchPayload: vi.fn(),
   loadEstimateCollectionSummaryPayload: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock('@/lib/server/estimate-collection/service', () => ({
   loadEstimateCollectionJobVersionsPayload: mocks.loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionJobsPayload: mocks.loadEstimateCollectionJobsPayload,
   loadEstimateCollectionPayload: mocks.loadEstimateCollectionPayload,
+  loadEstimateCollectionQuoteCreateContextPayload: mocks.loadEstimateCollectionQuoteCreateContextPayload,
   loadEstimateCollectionRecentActivityPayload: mocks.loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload: mocks.loadEstimateCollectionSearchPayload,
   loadEstimateCollectionSummaryPayload: mocks.loadEstimateCollectionSummaryPayload,
@@ -53,6 +55,7 @@ import {
   handleEstimateHomeSearchRouteGet,
   handleEstimateHomeSummaryRouteGet,
   handleEstimateJobVersionsRouteGet,
+  handleEstimateQuoteCreateContextRouteGet,
 } from '../estimateCollectionRoutes'
 
 describe('estimate collection routes', () => {
@@ -74,6 +77,19 @@ describe('estimate collection routes', () => {
     mocks.loadEstimateCollectionJobVersionsPayload.mockResolvedValue({
       ok: true,
       data: { job_id: 'job-1', total_versions: 1, limit: 25, next_cursor: null, items: [] },
+    })
+    mocks.loadEstimateCollectionQuoteCreateContextPayload.mockResolvedValue({
+      ok: true,
+      data: {
+        job: {
+          id: '33333333-3333-4333-8333-333333333333',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
+      },
     })
     mocks.createEstimateCollectionVersion.mockResolvedValue({
       ok: true,
@@ -224,6 +240,57 @@ describe('estimate collection routes', () => {
       '33333333-3333-4333-8333-333333333333',
       { cursor: 'next', limit: 50 }
     )
+  })
+
+  it('validates job ids and forwards quote-create context reads', async () => {
+    const invalidResponse = await handleEstimateQuoteCreateContextRouteGet(
+      new Request('http://localhost/api/quotes/home/jobs/not-a-uuid/create-context'),
+      { params: { jobId: 'not-a-uuid' } }
+    )
+    expect(invalidResponse.status).toBe(400)
+
+    const response = await handleEstimateQuoteCreateContextRouteGet(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        job: {
+          id: '33333333-3333-4333-8333-333333333333',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
+      },
+    })
+    expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).toHaveBeenCalledWith(
+      'org-1',
+      '33333333-3333-4333-8333-333333333333'
+    )
+  })
+
+  it('keeps missing quote-create context jobs in error envelopes', async () => {
+    mocks.loadEstimateCollectionQuoteCreateContextPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'not_found',
+      message: 'Job not found.',
+    })
+
+    const response = await handleEstimateQuoteCreateContextRouteGet(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({ error: 'Job not found.' })
   })
 
   it('delegates version creation to the shared write service', async () => {

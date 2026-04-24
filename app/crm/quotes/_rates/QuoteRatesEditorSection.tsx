@@ -41,7 +41,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
             >
               {vm.saving ? 'Saving...' : vm.isCreating ? 'Create row' : 'Save changes'}
             </CrmButton>
-            <CrmButton type="button" onClick={actions.cancelEdit}>
+            <CrmButton type="button" onClick={actions.cancelEdit} disabled={vm.busy}>
               Cancel
             </CrmButton>
           </div>
@@ -64,6 +64,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
           <CrmField label="Status">
             <select
               className="ace-crm-input text-sm"
+              disabled={vm.busy}
               value={vm.draftActive ? 'Y' : 'N'}
               onChange={(event) => actions.setDraftActive(event.target.value === 'Y')}
             >
@@ -80,7 +81,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
               {field.type === 'select' ? (
                 <select
                   className="ace-crm-input text-sm"
-                  disabled={field.readOnly}
+                  disabled={field.readOnly || vm.busy}
                   value={actions.formatDraftValue(field.key)}
                   onChange={(event) => actions.updateDraftValue(field.key, event.target.value)}
                 >
@@ -94,7 +95,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
                 <input
                   className="ace-crm-input text-sm"
                   type={field.type === 'number' ? 'number' : 'text'}
-                  readOnly={field.readOnly}
+                  readOnly={field.readOnly || vm.busy}
                   value={actions.formatDraftValue(field.key)}
                   onChange={(event) => actions.updateDraftValue(field.key, event.target.value)}
                 />

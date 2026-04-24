@@ -6,6 +6,7 @@ import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import type {
   EstimateCollectionCustomerRow,
   EstimateCollectionCursorBoundary,
+  EstimateCollectionJobContextDbRow,
   EstimateCollectionJobPageDbRow,
   EstimateCollectionJobVersionsDbPage,
   EstimateCollectionJobRow,
@@ -165,6 +166,59 @@ export async function loadEstimateCollectionJobsPage(
     query,
     limit,
     rows: sortedRows,
+  })
+}
+
+export async function loadEstimateCollectionJobContext(
+  orgId: string,
+  jobId: string
+): Promise<ServiceResult<EstimateCollectionJobContextDbRow | null>> {
+  const { data: jobData, error: jobError } = await supabaseAdmin
+    .from('jobs')
+    .select('id, customer_id, title')
+    .eq('org_id', orgId)
+    .eq('id', jobId)
+    .limit(1)
+
+  if (jobError) {
+    return errorResult('server_error', jobError.message)
+  }
+
+  const job = ((jobData ?? []) as Array<{
+    id: string
+    customer_id: string | null
+    title: string | null
+  }>)[0]
+
+  if (!job) {
+    return okResult(null)
+  }
+
+  let customer: { name: string | null; address: string | null } | null = null
+  if (job.customer_id) {
+    const { data: customerData, error: customerError } = await supabaseAdmin
+      .from('customers')
+      .select('name, address')
+      .eq('org_id', orgId)
+      .eq('id', job.customer_id)
+      .limit(1)
+
+    if (customerError) {
+      return errorResult('server_error', customerError.message)
+    }
+
+    customer = ((customerData ?? []) as Array<{
+      name: string | null
+      address: string | null
+    }>)[0] ?? null
+  }
+
+  return okResult({
+    id: job.id,
+    customer_id: job.customer_id,
+    customer_name: customer?.name ?? null,
+    customer_address: customer?.address ?? null,
+    title: job.title,
   })
 }
 export async function loadEstimateCollectionJobVersionsPage(

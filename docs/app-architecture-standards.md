@@ -47,6 +47,8 @@ This is the default architecture for ordinary CRM features. Follow these rules u
 ## Allowed exception
 
 - Estimator V2 may keep its custom state architecture where its complexity materially exceeds standard CRUD flows.
-- Quote product and rates/flags editors are allowed dense-admin exceptions:
+- Quote home, products, and rates/flags editors are allowed dense-admin exceptions:
   - they still use CRM page shells, resource states, and hook-owned orchestration
   - they may keep split catalog/editor layouts because they manage dense tabbed collections and inline editing across many row types
+  - they use reducer-based state machines, unsaved-changes guards, and pure VM builder functions — this is the documented dense-admin pattern
+  - see [quote-estimate-architecture.md](./quote-estimate-architecture.md) for the full pattern description

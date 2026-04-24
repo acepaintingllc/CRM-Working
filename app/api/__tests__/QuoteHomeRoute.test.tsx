@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   loadEstimateCollectionBootstrapPayload: vi.fn(),
   loadEstimateCollectionJobVersionsPayload: vi.fn(),
   loadEstimateCollectionJobsPayload: vi.fn(),
+  loadEstimateCollectionQuoteCreateContextPayload: vi.fn(),
   loadEstimateCollectionRecentActivityPayload: vi.fn(),
   loadEstimateCollectionSearchPayload: vi.fn(),
   loadEstimateCollectionSummaryPayload: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('@/lib/server/estimate-collection/service', () => ({
   loadEstimateCollectionBootstrapPayload: mocks.loadEstimateCollectionBootstrapPayload,
   loadEstimateCollectionJobVersionsPayload: mocks.loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionJobsPayload: mocks.loadEstimateCollectionJobsPayload,
+  loadEstimateCollectionQuoteCreateContextPayload: mocks.loadEstimateCollectionQuoteCreateContextPayload,
   loadEstimateCollectionRecentActivityPayload: mocks.loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload: mocks.loadEstimateCollectionSearchPayload,
   loadEstimateCollectionSummaryPayload: mocks.loadEstimateCollectionSummaryPayload,
@@ -57,6 +59,7 @@ import { GET as getQuoteHomeJobs } from '../quotes/home/jobs/route'
 import { GET as getQuoteHomeRecentActivity } from '../quotes/home/recent-activity/route'
 import { GET as getQuoteHomeSearch } from '../quotes/home/search/route'
 import { GET as getQuoteHomeSummary } from '../quotes/home/summary/route'
+import { GET as getQuoteCreateContext } from '../quotes/home/jobs/[jobId]/create-context/route'
 import { GET as getQuoteJobVersions } from '../quotes/home/jobs/[jobId]/versions/route'
 
 const authedSession = {
@@ -112,6 +115,19 @@ describe('quote home API routes', () => {
       ok: true,
       data: makePagedQuoteHomeVersions({ jobId: '33333333-3333-4333-8333-333333333333', count: 2 }),
     })
+    mocks.loadEstimateCollectionQuoteCreateContextPayload.mockResolvedValue({
+      ok: true,
+      data: {
+        job: {
+          id: '33333333-3333-4333-8333-333333333333',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
+      },
+    })
   })
 
   it('requires auth before quote home service work', async () => {
@@ -120,6 +136,7 @@ describe('quote home API routes', () => {
       response: Response.json({ error: 'Not authenticated' }, { status: 401 }),
     }))
     const versionContext = { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    const createContext = { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
 
     const responses = await Promise.all([
       getQuoteHomeBootstrap(),
@@ -134,9 +151,15 @@ describe('quote home API routes', () => {
         ),
         versionContext
       ),
+      getQuoteCreateContext(
+        new Request(
+          'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+        ),
+        createContext
+      ),
     ])
 
-    expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401, 401, 401, 401])
+    expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401, 401, 401, 401, 401])
     for (const response of responses) {
       await expect(response.json()).resolves.toEqual({ error: 'Not authenticated' })
     }
@@ -146,6 +169,7 @@ describe('quote home API routes', () => {
     expect(mocks.loadEstimateCollectionJobsPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionSearchPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
+    expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).not.toHaveBeenCalled()
   })
 
   it('keeps bootstrap, summary, jobs, search, and job-version reads in data envelopes', async () => {
@@ -206,6 +230,30 @@ describe('quote home API routes', () => {
         limit: 5,
       }
     )
+
+    const createContextResponse = await getQuoteCreateContext(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+    expect(createContextResponse.status).toBe(200)
+    await expect(createContextResponse.json()).resolves.toEqual({
+      data: {
+        job: {
+          id: '33333333-3333-4333-8333-333333333333',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
+      },
+    })
+    expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).toHaveBeenCalledWith(
+      'org-1',
+      '33333333-3333-4333-8333-333333333333'
+    )
   })
 
   it('keeps quote home service and validation errors in error envelopes', async () => {
@@ -263,6 +311,21 @@ describe('quote home API routes', () => {
 
     expect(errorResponse.status).toBe(400)
     await expect(errorResponse.json()).resolves.toEqual({ error: 'Invalid cursor.' })
+
+    mocks.loadEstimateCollectionQuoteCreateContextPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'not_found',
+      message: 'Job not found.',
+    })
+    const createContextResponse = await getQuoteCreateContext(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+
+    expect(createContextResponse.status).toBe(404)
+    await expect(createContextResponse.json()).resolves.toEqual({ error: 'Job not found.' })
   })
 
   it('returns under-filled jobs pages in the standard data envelope', async () => {
@@ -301,6 +364,15 @@ describe('quote home API routes', () => {
     await expect(response.json()).resolves.toEqual({ error: 'Invalid job id' })
     expect(mocks.requireSessionUserOrg).toHaveBeenCalledTimes(1)
     expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
+
+    const createContextResponse = await getQuoteCreateContext(
+      new Request('http://localhost/api/quotes/home/jobs/not-a-uuid/create-context'),
+      { params: { jobId: 'not-a-uuid' } }
+    )
+
+    expect(createContextResponse.status).toBe(400)
+    await expect(createContextResponse.json()).resolves.toEqual({ error: 'Invalid job id' })
+    expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).not.toHaveBeenCalled()
   })
 
   it('rejects invalid limits after auth and before service work', async () => {

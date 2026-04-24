@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  archiveEstimateProductRecord,
   createEstimateProductRecord,
   deleteEstimateProductRecord,
+  findEstimateProductReferences,
   listEstimateProductRecords,
   loadEstimateProductRecord,
   updateEstimateProductRecord,
@@ -45,6 +47,24 @@ function createUpdateChain(result: unknown) {
   }
   chain.eq.mockReturnValue(chain)
   chain.select.mockReturnValue(chain)
+  return chain
+}
+
+function createReferenceChain(result: unknown) {
+  const chain = {
+    eq: vi.fn(),
+    or: vi.fn(),
+    limit: vi.fn().mockResolvedValue(result),
+  }
+  chain.eq.mockReturnValue(chain)
+  chain.or.mockReturnValue(chain)
+  return chain
+}
+
+function createSnapshotChain(result: unknown) {
+  const chain = {
+    eq: vi.fn().mockResolvedValue(result),
+  }
   return chain
 }
 
@@ -112,11 +132,11 @@ describe('estimate product repository', () => {
     expect(listChain.eq).toHaveBeenNthCalledWith(2, 'status', 'Active')
     expect(listChain.eq).toHaveBeenNthCalledWith(3, 'family', 'Paint')
     expect(listChain.or).toHaveBeenCalledWith(
-      'name.ilike.%super%,base.ilike.%super%,subtype.ilike.%super%,notes.ilike.%super%,status.ilike.%super%'
+      'name.ilike."%\\\\%super\\\\_%",base.ilike."%\\\\%super\\\\_%",subtype.ilike."%\\\\%super\\\\_%",notes.ilike."%\\\\%super\\\\_%",status.ilike."%\\\\%super\\\\_%"'
     )
   })
 
-  it('does not add a search clause when sanitizing removes all wildcard-only input', async () => {
+  it('keeps wildcard-only input searchable by escaping LIKE wildcards', async () => {
     const listChain = createListChain({
       data: [existingRow],
       error: null,
@@ -134,8 +154,93 @@ describe('estimate product repository', () => {
       data: [existingRow],
     })
 
-    expect(listChain.or).not.toHaveBeenCalled()
+    expect(listChain.or).toHaveBeenCalledWith(
+      'name.ilike."%\\\\%\\\\_\\\\_,%",base.ilike."%\\\\%\\\\_\\\\_,%",subtype.ilike."%\\\\%\\\\_\\\\_,%",notes.ilike."%\\\\%\\\\_\\\\_,%",status.ilike."%\\\\%\\\\_\\\\_,%"'
+    )
     expect(listChain.eq).toHaveBeenCalledWith('org_id', 'org-1')
+  })
+
+  it('quotes PostgREST search values so punctuation cannot split the or filter', async () => {
+    const listChain = createListChain({
+      data: [existingRow],
+      error: null,
+    })
+    fromMock.mockReturnValue({ select: vi.fn(() => listChain) })
+
+    await expect(
+      listEstimateProductRecords(
+        'org-1',
+        { status: 'all', family: null, search: String.raw`Ultra, satin (A.B): "two" \ path` },
+        { client }
+      )
+    ).resolves.toEqual({
+      ok: true,
+      data: [existingRow],
+    })
+
+    const expectedPattern = String.raw`"%Ultra, satin (A.B): \"two\" \\\\ path%"`
+    expect(listChain.or).toHaveBeenCalledWith(
+      [
+        `name.ilike.${expectedPattern}`,
+        `base.ilike.${expectedPattern}`,
+        `subtype.ilike.${expectedPattern}`,
+        `notes.ilike.${expectedPattern}`,
+        `status.ilike.${expectedPattern}`,
+      ].join(',')
+    )
+  })
+
+  it('detects product references across defaults, saved scopes, materials, and catalog snapshots', async () => {
+    const emptyReferenceChain = createReferenceChain({ data: [], error: null })
+    const quoteDefaultsChain = createReferenceChain({ data: [{ id: 'settings-1' }], error: null })
+    const wallScopesChain = createReferenceChain({ data: [{ id: 'scope-1' }], error: null })
+    const snapshotsChain = createSnapshotChain({
+      data: [
+        {
+          id: 'snapshot-1',
+          payload_json: {
+            paint_products: [{ id: existingRow.id, name: 'Super Paint' }],
+          },
+        },
+      ],
+      error: null,
+    })
+    const selectByRelation = new Map<string, unknown>([
+      ['estimate_template_settings', quoteDefaultsChain],
+      ['estimate_jobsettings', emptyReferenceChain],
+      ['estimate_room_wall_scopes', wallScopesChain],
+      ['estimate_room_ceiling_scopes', emptyReferenceChain],
+      ['estimate_room_trim_scopes', emptyReferenceChain],
+      ['estimate_material_requirements', emptyReferenceChain],
+      ['estimate_material_purchase_groups', emptyReferenceChain],
+      ['v2_catalog_snapshots', snapshotsChain],
+    ])
+
+    fromMock.mockImplementation((relation: string) => ({
+      select: vi.fn(() => selectByRelation.get(relation)),
+    }))
+
+    await expect(findEstimateProductReferences('org-1', existingRow.id, { client })).resolves.toEqual({
+      ok: true,
+      data: [
+        { source: 'quote_defaults', label: 'quote defaults' },
+        { source: 'wall_scopes', label: 'wall scope product selections' },
+        { source: 'catalog_snapshots', label: 'catalog snapshots' },
+      ],
+    })
+
+    expect(quoteDefaultsChain.eq).toHaveBeenCalledWith('org_id', 'org-1')
+    expect(quoteDefaultsChain.or).toHaveBeenCalledWith(
+      [
+        `walls_paint_id.eq."${existingRow.id}"`,
+        `walls_primer_id.eq."${existingRow.id}"`,
+        `ceiling_paint_id.eq."${existingRow.id}"`,
+        `ceiling_primer_id.eq."${existingRow.id}"`,
+        `trim_paint_id.eq."${existingRow.id}"`,
+        `trim_primer_id.eq."${existingRow.id}"`,
+      ].join(',')
+    )
+    expect(snapshotsChain.eq).toHaveBeenCalledWith('org_id', 'org-1')
   })
 
   it('maps missing scoped rows to a stable not-found service result', async () => {
@@ -152,10 +257,16 @@ describe('estimate product repository', () => {
     })
   })
 
-  it('persists create, update, and delete mutations through the org-scoped table boundary', async () => {
+  it('persists create, archive, update, and hard delete mutations through the org-scoped table boundary', async () => {
     const insertSpy = vi.fn(() =>
       createInsertChain({
         data: existingRow,
+        error: null,
+      })
+    )
+    const archiveSpy = vi.fn(() =>
+      createUpdateChain({
+        data: { ...existingRow, status: 'Archived' },
         error: null,
       })
     )
@@ -169,6 +280,7 @@ describe('estimate product repository', () => {
 
     fromMock
       .mockReturnValueOnce({ insert: insertSpy })
+      .mockReturnValueOnce({ update: archiveSpy })
       .mockReturnValueOnce({ update: updateSpy })
       .mockReturnValueOnce({ delete: deleteSpy })
 
@@ -194,6 +306,11 @@ describe('estimate product repository', () => {
     ).resolves.toEqual({
       ok: true,
       data: existingRow,
+    })
+
+    await expect(archiveEstimateProductRecord('org-1', existingRow.id, { client })).resolves.toEqual({
+      ok: true,
+      data: { ...existingRow, status: 'Archived' },
     })
 
     await expect(
@@ -235,6 +352,12 @@ describe('estimate product repository', () => {
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Super Paint Pro',
+        updated_at: expect.any(String),
+      })
+    )
+    expect(archiveSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'Archived',
         updated_at: expect.any(String),
       })
     )

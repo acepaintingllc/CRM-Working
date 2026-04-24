@@ -8,13 +8,9 @@ const { push, getSearchParam } = vi.hoisted(() => ({
   getSearchParam: vi.fn(),
 }))
 
-const { fetchJobList, loadJobRecord } = vi.hoisted(() => ({
-  fetchJobList: vi.fn(),
-  loadJobRecord: vi.fn(),
-}))
-
-const { createQuoteVersion, loadQuoteJobVersions } = vi.hoisted(() => ({
+const { createQuoteVersion, loadQuoteCreateJobContext, loadQuoteJobVersions } = vi.hoisted(() => ({
   createQuoteVersion: vi.fn(),
+  loadQuoteCreateJobContext: vi.fn(),
   loadQuoteJobVersions: vi.fn(),
 }))
 
@@ -35,13 +31,9 @@ vi.mock('next/link', () => ({
   ),
 }))
 
-vi.mock('@/lib/jobs/client', () => ({
-  fetchJobList,
-  loadJobRecord,
-}))
-
 vi.mock('@/lib/quotes/client', () => ({
   createQuoteVersion,
+  loadQuoteCreateJobContext,
   loadQuoteJobVersions,
 }))
 
@@ -49,9 +41,8 @@ describe('QuoteCreatePage', () => {
   beforeEach(() => {
     push.mockReset()
     getSearchParam.mockReset()
-    fetchJobList.mockReset()
-    loadJobRecord.mockReset()
     createQuoteVersion.mockReset()
+    loadQuoteCreateJobContext.mockReset()
     loadQuoteJobVersions.mockReset()
     getSearchParam.mockReturnValue('job-1')
   })
@@ -61,24 +52,15 @@ describe('QuoteCreatePage', () => {
   })
 
   it('loads the selected job, loads only that job versions, and creates through shared rules', async () => {
-    loadJobRecord.mockResolvedValue({
-      id: 'job-1',
-      customer_id: 'customer-1',
-      customer_name: 'Alice',
-      customer_address: '123 Main',
-      customer_email: null,
-      customer_phone: null,
-      title: 'Kitchen',
-      description: null,
-      status: 'estimate_pending',
-      estimate_date: null,
-      estimate_sent_at: null,
-      scheduled_date: null,
-      scheduled_end_date: null,
-      completed_at: null,
-      linked_estimate_id: null,
-      closeout_notes: null,
-      linked_estimates: [],
+    loadQuoteCreateJobContext.mockResolvedValue({
+      job: {
+        id: 'job-1',
+        customer_id: 'customer-1',
+        customer_name: 'Alice',
+        customer_address: '123 Main',
+        title: 'Kitchen',
+        eligibility: { eligible: true, reason: 'eligible' },
+      },
     })
     loadQuoteJobVersions.mockResolvedValue({
       job_id: 'job-1',
@@ -124,8 +106,7 @@ describe('QuoteCreatePage', () => {
       expect(screen.getByText('Existing Quotes (2)')).toBeInTheDocument()
     })
 
-    expect(fetchJobList).not.toHaveBeenCalled()
-    expect(loadJobRecord).toHaveBeenCalledWith('job-1')
+    expect(loadQuoteCreateJobContext).toHaveBeenCalledWith('job-1')
     expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
     expect(screen.getByText('Alice · 123 Main')).toBeInTheDocument()
     expect(screen.getAllByText('Version B').length).toBeGreaterThan(0)
@@ -157,31 +138,22 @@ describe('QuoteCreatePage', () => {
   })
 
   it('disables creation when the selected job is not eligible', async () => {
-    loadJobRecord.mockResolvedValue({
-      id: 'job-1',
-      customer_id: null,
-      customer_name: 'Alice',
-      customer_address: '123 Main',
-      customer_email: null,
-      customer_phone: null,
-      title: 'Kitchen',
-      description: null,
-      status: 'lead',
-      estimate_date: null,
-      estimate_sent_at: null,
-      scheduled_date: null,
-      scheduled_end_date: null,
-      completed_at: null,
-      linked_estimate_id: null,
-      closeout_notes: null,
-      linked_estimates: [],
+    loadQuoteCreateJobContext.mockResolvedValue({
+      job: {
+        id: 'job-1',
+        customer_id: null,
+        customer_name: 'Alice',
+        customer_address: '123 Main',
+        title: 'Kitchen',
+        eligibility: { eligible: false, reason: 'missing_customer' },
+      },
     })
     loadQuoteJobVersions.mockResolvedValue({ job_id: 'job-1', total_versions: 0, items: [] })
 
     render(<QuoteCreatePage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Unknown job')).toBeInTheDocument()
+      expect(screen.getByText('Kitchen')).toBeInTheDocument()
     })
 
     const disabledCreateButton = screen
@@ -203,8 +175,7 @@ describe('QuoteCreatePage', () => {
       expect(screen.getByText('Unknown job')).toBeInTheDocument()
     })
 
-    expect(fetchJobList).not.toHaveBeenCalled()
-    expect(loadJobRecord).not.toHaveBeenCalled()
+    expect(loadQuoteCreateJobContext).not.toHaveBeenCalled()
     expect(loadQuoteJobVersions).not.toHaveBeenCalled()
     expect(
       screen.getByText('Open this page from quote home or pass a job query parameter to create a version.')
@@ -212,27 +183,31 @@ describe('QuoteCreatePage', () => {
     expect(screen.getByRole('button', { name: 'Create version' })).toBeDisabled()
   })
 
+  it('shows missing jobs as quote-create data errors', async () => {
+    loadQuoteCreateJobContext.mockRejectedValue(new Error('Job not found.'))
+    loadQuoteJobVersions.mockResolvedValue({ job_id: 'job-1', total_versions: 0, items: [] })
+
+    render(<QuoteCreatePage />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Job not found.').length).toBeGreaterThan(0)
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Create version' })).toBeDisabled()
+  })
+
   it('shows the load error and retries quote creation data loading', async () => {
-    loadJobRecord
+    loadQuoteCreateJobContext
       .mockRejectedValueOnce(new Error('Load failed'))
       .mockResolvedValueOnce({
-        id: 'job-1',
-        customer_id: 'customer-1',
-        customer_name: 'Alice',
-        customer_address: '123 Main',
-        customer_email: null,
-        customer_phone: null,
-        title: 'Kitchen',
-        description: null,
-        status: 'estimate_pending',
-        estimate_date: null,
-        estimate_sent_at: null,
-        scheduled_date: null,
-        scheduled_end_date: null,
-        completed_at: null,
-        linked_estimate_id: null,
-        closeout_notes: null,
-        linked_estimates: [],
+        job: {
+          id: 'job-1',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
       })
     loadQuoteJobVersions
       .mockRejectedValueOnce(new Error('Load failed'))

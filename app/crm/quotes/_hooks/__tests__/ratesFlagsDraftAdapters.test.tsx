@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   getRatesFlagsDraftAdapter,
+  ratesFlagsEditableCategoryKeys,
 } from '@/lib/quotes/ratesFlagsDraftAdapters'
+import {
+  buildClientRatesFlagsMutationRequests,
+  getRatesFlagsParityCategoryKeys,
+} from '@/lib/quotes/__tests__/ratesFlagsParityHelpers'
 import type {
   RatesFlagsEditableCategory,
   ScopeDefaultDraft,
@@ -28,6 +33,39 @@ const baseCategory: RatesFlagsEditableCategory<'scope_defaults'> = {
 }
 
 describe('ratesFlagsDraftAdapters', () => {
+  it('builds valid create, update, archive, and reactivate requests for every editable category', () => {
+    expect(getRatesFlagsParityCategoryKeys()).toEqual(ratesFlagsEditableCategoryKeys)
+
+    for (const categoryKey of ratesFlagsEditableCategoryKeys) {
+      const adapter = getRatesFlagsDraftAdapter(categoryKey)
+      const requests = buildClientRatesFlagsMutationRequests(categoryKey)
+
+      expect(adapter.validateDraft(requests.category, requests.draft), categoryKey).toEqual({
+        ok: true,
+      })
+      expect(requests.create, categoryKey).toMatchObject({
+        category: categoryKey,
+        action: 'create',
+      })
+      expect(requests.update, categoryKey).toMatchObject({
+        category: categoryKey,
+        action: 'update',
+        original_id: requests.create.values.id,
+      })
+      expect(requests.update.values.active, categoryKey).toBe('N')
+      expect(requests.archive, categoryKey).toEqual({
+        category: categoryKey,
+        action: 'archive',
+        rowId: requests.create.values.id,
+      })
+      expect(requests.reactivate, categoryKey).toEqual({
+        category: categoryKey,
+        action: 'reactivate',
+        rowId: requests.create.values.id,
+      })
+    }
+  })
+
   it('converts rows into typed drafts and formats values for the UI', () => {
     const adapter = getRatesFlagsDraftAdapter(baseCategory.key)
     const draft = adapter.rowToDraft(baseCategory, {

@@ -1,23 +1,36 @@
 'use client'
 
-import type { JobDetail } from '@/lib/jobs/client'
+import type {
+  QuoteCreateJobContextReadModel,
+  QuoteCreateJobReadModel,
+} from '@/lib/quotes/collectionData'
 import {
   isEligibleQuoteVersionJob,
   type EligibleQuoteVersionJob,
 } from '@/lib/quotes/versionCreation'
 
-export type QuoteCreatePageJob = EligibleQuoteVersionJob<JobDetail>
+export type QuoteCreatePageJob = EligibleQuoteVersionJob<QuoteCreateJobReadModel>
 
 export type QuoteCreatePageResource = {
-  job: QuoteCreatePageJob | null
+  job: QuoteCreateJobReadModel | null
+  selectedJob: QuoteCreatePageJob | null
 }
 
 export const EMPTY_QUOTE_CREATE_RESOURCE: QuoteCreatePageResource = {
   job: null,
+  selectedJob: null,
 }
 
-export function buildQuoteCreatePageResource(jobPayload: JobDetail): QuoteCreatePageResource {
+export function buildQuoteCreatePageResource(
+  context: QuoteCreateJobContextReadModel
+): QuoteCreatePageResource {
+  const jobPayload = context.job
+
   return {
-    job: isEligibleQuoteVersionJob(jobPayload) ? jobPayload : null,
+    job: jobPayload,
+    selectedJob:
+      jobPayload.eligibility.eligible && isEligibleQuoteVersionJob(jobPayload)
+        ? jobPayload
+        : null,
   }
 }

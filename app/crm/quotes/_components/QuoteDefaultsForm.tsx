@@ -7,6 +7,8 @@ type ProductRow = {
   id: string
   name: string
   family?: string | null
+  status?: string | null
+  missing?: boolean
 }
 
 type ProductDefaultField =
@@ -23,18 +25,21 @@ type ProductDefaultField =
 type ProductDefaultConfig = {
   label: string
   key: ProductDefaultField
+  expectedFamily: string
   options: ProductRow[]
 }
 
 type QuoteDefaultsFormProps = {
   value: QuoteDefaults
   productDefaultFields: readonly ProductDefaultConfig[]
+  productDefaultErrors?: Partial<Record<keyof QuoteDefaults, string>>
   onChange: (next: QuoteDefaults) => void
 }
 
 export function QuoteDefaultsForm({
   value,
   productDefaultFields,
+  productDefaultErrors = {},
   onChange,
 }: QuoteDefaultsFormProps) {
   function updateField<K extends keyof QuoteDefaults>(field: K, nextValue: QuoteDefaults[K]) {
@@ -51,8 +56,8 @@ export function QuoteDefaultsForm({
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          {productDefaultFields.map(({ label, key, options }) => (
-            <CrmField key={key} label={label}>
+          {productDefaultFields.map(({ label, key, expectedFamily, options }) => (
+            <CrmField key={key} label={label} error={productDefaultErrors[key]}>
               <select
                 className="ace-crm-input text-sm"
                 value={value[key] ?? ''}
@@ -61,7 +66,7 @@ export function QuoteDefaultsForm({
                 <option value="">-- none --</option>
                 {options.map((product) => (
                   <option key={product.id} value={product.id}>
-                    {product.name}
+                    {formatProductOptionLabel(product, expectedFamily)}
                   </option>
                 ))}
               </select>
@@ -78,7 +83,7 @@ export function QuoteDefaultsForm({
           </p>
         </div>
         <div className="max-w-[240px]">
-          <CrmField label="Labor rate / hr">
+          <CrmField label="Labor rate / hr" error={productDefaultErrors.override_labor_rate}>
             <input
               className="ace-crm-input text-sm"
               type="number"
@@ -92,4 +97,23 @@ export function QuoteDefaultsForm({
       </section>
     </div>
   )
+}
+
+function formatProductOptionLabel(product: ProductRow, expectedFamily: string) {
+  if (product.missing) return product.name
+
+  const tags = [
+    product.status && !isActiveStatus(product.status) ? product.status : null,
+    product.family && !matchesExpectedFamily(product.family, expectedFamily) ? product.family : null,
+  ].filter(Boolean)
+
+  return tags.length > 0 ? `${product.name} (${tags.join(', ')})` : product.name
+}
+
+function matchesExpectedFamily(value: string, expectedFamily: string) {
+  return value.trim().toLowerCase() === expectedFamily.toLowerCase()
+}
+
+function isActiveStatus(value: string) {
+  return value.trim().toLowerCase() === 'active'
 }

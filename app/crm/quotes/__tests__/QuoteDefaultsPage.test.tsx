@@ -46,8 +46,8 @@ describe('QuoteDefaultsPage', () => {
       .mockResolvedValueOnce(
         createResponse({
           data: [
-            { id: 'paint-1', name: 'Super Paint', family: 'paint' },
-            { id: 'primer-1', name: 'Prime Coat', family: 'primer' },
+            { id: 'paint-1', name: 'Super Paint', family: 'Paint', status: 'Active' },
+            { id: 'primer-1', name: 'Prime Coat', family: 'Primer', status: 'Active' },
           ],
         })
       )

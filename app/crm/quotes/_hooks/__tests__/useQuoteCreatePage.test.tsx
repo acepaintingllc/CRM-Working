@@ -8,13 +8,9 @@ const { push, getSearchParam } = vi.hoisted(() => ({
   getSearchParam: vi.fn(),
 }))
 
-const { fetchJobList, loadJobRecord } = vi.hoisted(() => ({
-  fetchJobList: vi.fn(),
-  loadJobRecord: vi.fn(),
-}))
-
-const { createQuoteVersion, loadQuoteJobVersions } = vi.hoisted(() => ({
+const { createQuoteVersion, loadQuoteCreateJobContext, loadQuoteJobVersions } = vi.hoisted(() => ({
   createQuoteVersion: vi.fn(),
+  loadQuoteCreateJobContext: vi.fn(),
   loadQuoteJobVersions: vi.fn(),
 }))
 
@@ -23,13 +19,9 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: getSearchParam }),
 }))
 
-vi.mock('@/lib/jobs/client', () => ({
-  fetchJobList,
-  loadJobRecord,
-}))
-
 vi.mock('@/lib/quotes/client', () => ({
   createQuoteVersion,
+  loadQuoteCreateJobContext,
   loadQuoteJobVersions,
 }))
 
@@ -37,9 +29,8 @@ describe('useQuoteCreatePage', () => {
   beforeEach(() => {
     push.mockReset()
     getSearchParam.mockReset()
-    fetchJobList.mockReset()
-    loadJobRecord.mockReset()
     createQuoteVersion.mockReset()
+    loadQuoteCreateJobContext.mockReset()
     loadQuoteJobVersions.mockReset()
   })
 
@@ -52,8 +43,7 @@ describe('useQuoteCreatePage', () => {
       expect(result.current.feedback.loading).toBe(false)
     })
 
-    expect(fetchJobList).not.toHaveBeenCalled()
-    expect(loadJobRecord).not.toHaveBeenCalled()
+    expect(loadQuoteCreateJobContext).not.toHaveBeenCalled()
     expect(loadQuoteJobVersions).not.toHaveBeenCalled()
     expect(result.current.feedback.shouldLoadJobData).toBe(false)
     expect(result.current.job.title).toBe('Unknown job')
@@ -62,7 +52,7 @@ describe('useQuoteCreatePage', () => {
 
   it('keeps the load error ahead of the required-job create error', async () => {
     getSearchParam.mockReturnValue('job-1')
-    loadJobRecord.mockRejectedValue(new Error('Load failed'))
+    loadQuoteCreateJobContext.mockRejectedValue(new Error('Load failed'))
     loadQuoteJobVersions.mockRejectedValue(new Error('Load failed'))
 
     const { result } = renderHook(() => useQuoteCreatePage())
@@ -82,24 +72,15 @@ describe('useQuoteCreatePage', () => {
 
   it('loads job data only for the requested job param and enables creation for eligible jobs', async () => {
     getSearchParam.mockReturnValue('job-1')
-    loadJobRecord.mockResolvedValue({
-      id: 'job-1',
-      customer_id: 'customer-1',
-      customer_name: 'Alice',
-      customer_address: '123 Main',
-      customer_email: null,
-      customer_phone: null,
-      title: 'Kitchen',
-      description: null,
-      status: 'estimate_pending',
-      estimate_date: null,
-      estimate_sent_at: null,
-      scheduled_date: null,
-      scheduled_end_date: null,
-      completed_at: null,
-      linked_estimate_id: null,
-      closeout_notes: null,
-      linked_estimates: [],
+    loadQuoteCreateJobContext.mockResolvedValue({
+      job: {
+        id: 'job-1',
+        customer_id: 'customer-1',
+        customer_name: 'Alice',
+        customer_address: '123 Main',
+        title: 'Kitchen',
+        eligibility: { eligible: true, reason: 'eligible' },
+      },
     })
     loadQuoteJobVersions.mockResolvedValue({
       job_id: 'job-1',
@@ -129,52 +110,61 @@ describe('useQuoteCreatePage', () => {
       expect(result.current.feedback.loading).toBe(false)
     })
 
-    expect(loadJobRecord).toHaveBeenCalledWith('job-1')
+    expect(loadQuoteCreateJobContext).toHaveBeenCalledWith('job-1')
     expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
     expect(result.current.job.hasJob).toBe(true)
     expect(result.current.versions.hasVersions).toBe(true)
     expect(result.current.create.canCreate).toBe(true)
   })
 
-  it('resets the draft fields when the selected job changes at the page level', async () => {
-    loadJobRecord
-      .mockResolvedValueOnce({
+  it('represents existing ineligible jobs without treating them as unknown jobs', async () => {
+    getSearchParam.mockReturnValue('job-1')
+    loadQuoteCreateJobContext.mockResolvedValue({
+      job: {
         id: 'job-1',
-        customer_id: 'customer-1',
-        customer_name: 'Alice',
-        customer_address: '123 Main',
-        customer_email: null,
-        customer_phone: null,
+        customer_id: null,
+        customer_name: null,
+        customer_address: null,
         title: 'Kitchen',
-        description: null,
-        status: 'estimate_pending',
-        estimate_date: null,
-        estimate_sent_at: null,
-        scheduled_date: null,
-        scheduled_end_date: null,
-        completed_at: null,
-        linked_estimate_id: null,
-        closeout_notes: null,
-        linked_estimates: [],
+        eligibility: { eligible: false, reason: 'missing_customer' },
+      },
+    })
+    loadQuoteJobVersions.mockResolvedValue({ job_id: 'job-1', total_versions: 0, items: [] })
+
+    const { result } = renderHook(() => useQuoteCreatePage())
+
+    await waitFor(() => {
+      expect(result.current.feedback.loading).toBe(false)
+    })
+
+    expect(result.current.job.hasJob).toBe(true)
+    expect(result.current.job.isEligible).toBe(false)
+    expect(result.current.job.title).toBe('Kitchen')
+    expect(result.current.job.customerLine).toBe('No customer assigned')
+    expect(result.current.create.canCreate).toBe(false)
+  })
+
+  it('resets the draft fields when the selected job changes at the page level', async () => {
+    loadQuoteCreateJobContext
+      .mockResolvedValueOnce({
+        job: {
+          id: 'job-1',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
       })
       .mockResolvedValueOnce({
-        id: 'job-2',
-        customer_id: 'customer-2',
-        customer_name: 'Bob',
-        customer_address: '456 Oak',
-        customer_email: null,
-        customer_phone: null,
-        title: 'Garage',
-        description: null,
-        status: 'estimate_sent',
-        estimate_date: null,
-        estimate_sent_at: null,
-        scheduled_date: null,
-        scheduled_end_date: null,
-        completed_at: null,
-        linked_estimate_id: null,
-        closeout_notes: null,
-        linked_estimates: [],
+        job: {
+          id: 'job-2',
+          customer_id: 'customer-2',
+          customer_name: 'Bob',
+          customer_address: '456 Oak',
+          title: 'Garage',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
       })
     loadQuoteJobVersions
       .mockResolvedValueOnce({ job_id: 'job-1', total_versions: 0, items: [] })
@@ -207,24 +197,15 @@ describe('useQuoteCreatePage', () => {
 
   it('keeps the draft when the same job reloads through the resource boundary', async () => {
     getSearchParam.mockReturnValue('job-1')
-    loadJobRecord.mockResolvedValue({
-      id: 'job-1',
-      customer_id: 'customer-1',
-      customer_name: 'Alice',
-      customer_address: '123 Main',
-      customer_email: null,
-      customer_phone: null,
-      title: 'Kitchen',
-      description: null,
-      status: 'estimate_pending',
-      estimate_date: null,
-      estimate_sent_at: null,
-      scheduled_date: null,
-      scheduled_end_date: null,
-      completed_at: null,
-      linked_estimate_id: null,
-      closeout_notes: null,
-      linked_estimates: [],
+    loadQuoteCreateJobContext.mockResolvedValue({
+      job: {
+        id: 'job-1',
+        customer_id: 'customer-1',
+        customer_name: 'Alice',
+        customer_address: '123 Main',
+        title: 'Kitchen',
+        eligibility: { eligible: true, reason: 'eligible' },
+      },
     })
     loadQuoteJobVersions
       .mockResolvedValueOnce({ job_id: 'job-1', total_versions: 0, items: [] })

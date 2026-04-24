@@ -11,6 +11,7 @@ import {
   loadEstimateCollectionJobsPayload,
   loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionPayload,
+  loadEstimateCollectionQuoteCreateContextPayload,
   loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload,
   loadEstimateCollectionSummaryPayload,
@@ -118,6 +119,28 @@ export async function handleEstimateHomeSearchRouteGet(request: Request) {
 
 export type EstimateJobVersionsRouteContext = {
   params: { jobId: string } | Promise<{ jobId: string }>
+}
+
+export type EstimateQuoteCreateContextRouteContext = {
+  params: { jobId: string } | Promise<{ jobId: string }>
+}
+
+export async function handleEstimateQuoteCreateContextRouteGet(
+  request: Request,
+  context: EstimateQuoteCreateContextRouteContext
+) {
+  void request
+
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  const params = await resolveParams(context)
+  const jobId = readUuidParam(params?.jobId, 'job id')
+  if (!jobId.ok) return jobId.response
+
+  return serviceResultDataResponse(
+    await loadEstimateCollectionQuoteCreateContextPayload(auth.session.orgId, jobId.value)
+  )
 }
 
 export async function handleEstimateJobVersionsRouteGet(

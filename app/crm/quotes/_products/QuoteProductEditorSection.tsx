@@ -58,7 +58,7 @@ export function QuoteProductEditorSection({ vm, actions }: Props) {
             disabled={!vm.canDelete}
             onClick={() => void actions.requestDelete()}
           >
-            Delete
+            Archive
           </CrmButton>
         </div>
       }

@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ProductionRateRow, RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 import { useQuoteRatesPage } from '../useQuoteRatesPage'
 
 const { loadRatesFlags, mutateRatesFlags } = vi.hoisted(() => ({
@@ -12,6 +13,67 @@ vi.mock('@/lib/quotes/client', () => ({
   loadRatesFlags,
   mutateRatesFlags,
 }))
+
+type RatesPayloadRow = RatesFlagsPayload['categories'][number]['rows'][number]
+
+function buildWallRateRow(overrides: Partial<ProductionRateRow>): ProductionRateRow {
+  return {
+    id: 'wall-rate-1',
+    production_scope: 'walls',
+    scope_id: 'scope-1',
+    display_name: 'Standard walls',
+    surface_type: 'paint',
+    condition: 'normal',
+    prep_sqft_per_hr: '100',
+    sqft_per_hr: '150',
+    primer_sqft_per_hr: '100',
+    notes: '',
+    active: true,
+    ...overrides,
+  }
+}
+
+function buildRatesPayload(params?: {
+  rows?: RatesPayloadRow[]
+  templateVersion?: number
+}): RatesFlagsPayload {
+  return {
+    source: 'db',
+    seeded: true,
+    template_version: params?.templateVersion ?? 2,
+    categories: [
+      {
+        key: 'production_rates_walls',
+        tab: 'rates',
+        group: 'production_rates',
+        label: 'Wall Production',
+        table_title: 'Wall Production',
+        description: 'Wall rates',
+        columns: [
+          { key: 'display_name', label: 'Name' },
+          { key: 'active', label: 'Status' },
+        ],
+        fields: [
+          { key: 'id', label: 'ID', type: 'text', required: true },
+          { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+          { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
+        ],
+        rows: params?.rows ?? [buildWallRateRow({})],
+      },
+    ],
+  }
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+
+  return { promise, resolve, reject }
+}
 
 describe('useQuoteRatesPage', () => {
   beforeEach(() => {
@@ -904,6 +966,235 @@ describe('useQuoteRatesPage', () => {
     })
     expect(result.current.uiState.notice).toBe('Reactivated row.')
     expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(true)
+  })
+
+  it('blocks save attempts while an archive mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    let archiveResult: boolean | Promise<boolean> = false
+    act(() => {
+      archiveResult = result.current.actions.archiveOrReactivate(false)
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('archiving')
+    })
+
+    expect(result.current.uiState.canSave).toBe(false)
+
+    await act(async () => {
+      await result.current.actions.saveCurrent()
+    })
+
+    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
+    expect(mutateRatesFlags).toHaveBeenCalledWith({
+      category: 'production_rates_walls',
+      action: 'archive',
+      rowId: 'wall-rate-1',
+    })
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await archiveResult
+    })
+  })
+
+  it('blocks archive attempts while a save mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+    })
+
+    let saveResult: void | Promise<void>
+    act(() => {
+      saveResult = result.current.actions.saveCurrent()
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('saving')
+    })
+
+    expect(result.current.tableVm.canArchiveToggle).toBe(false)
+
+    let archiveResult: boolean | Promise<boolean> = true
+    act(() => {
+      archiveResult = result.current.actions.archiveOrReactivate(false)
+    })
+
+    expect(archiveResult).toBe(false)
+    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
+    expect(mutateRatesFlags).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'production_rates_walls',
+        action: 'update',
+      })
+    )
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await saveResult
+    })
+  })
+
+  it('blocks reload attempts while a save mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+    })
+
+    let saveResult: void | Promise<void>
+    act(() => {
+      saveResult = result.current.actions.saveCurrent()
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('saving')
+    })
+
+    expect(result.current.uiState.canRetry).toBe(false)
+
+    let reloadResult: boolean | Promise<boolean> = true
+    act(() => {
+      reloadResult = result.current.actions.reload('wall-rate-1')
+    })
+
+    expect(reloadResult).toBe(false)
+    expect(loadRatesFlags).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await saveResult
+    })
+  })
+
+  it('blocks create and duplicate transitions while a mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+    })
+
+    let saveResult: void | Promise<void>
+    act(() => {
+      saveResult = result.current.actions.saveCurrent()
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('saving')
+    })
+
+    let createResult: boolean | Promise<boolean> = true
+    let duplicateResult: boolean | Promise<boolean> = true
+    act(() => {
+      createResult = result.current.actions.startCreate()
+      duplicateResult = result.current.actions.startDuplicate()
+    })
+
+    expect(createResult).toBe(false)
+    expect(duplicateResult).toBe(false)
+    expect(result.current.workflowVm.editorMode).toBe('selection')
+    expect(result.current.tableVm.isCreating).toBe(false)
+    expect(result.current.tableVm.canDuplicate).toBe(false)
+    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await saveResult
+    })
+  })
+
+  it('blocks selection, navigation, and draft active changes while a mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(
+      buildRatesPayload({
+        rows: [
+          buildWallRateRow({ id: 'wall-rate-1', sqft_per_hr: '150' }),
+          buildWallRateRow({
+            id: 'wall-rate-2',
+            display_name: 'Tall walls',
+            scope_id: 'scope-2',
+            sqft_per_hr: '175',
+          }),
+        ],
+      })
+    )
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+    })
+
+    let saveResult: void | Promise<void>
+    act(() => {
+      saveResult = result.current.actions.saveCurrent()
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('saving')
+    })
+
+    let selectionResult: boolean | Promise<boolean> = true
+    let searchResult: boolean | Promise<boolean> = true
+    act(() => {
+      selectionResult = result.current.actions.setSelectedId('wall-rate-2')
+      searchResult = result.current.actions.setSearch('Tall')
+      result.current.actions.setDraftActive(false)
+      result.current.actions.updateDraftValue('display_name', 'Mutated while saving')
+      result.current.actions.cancelEdit()
+    })
+
+    expect(selectionResult).toBe(false)
+    expect(searchResult).toBe(false)
+    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
+    expect(result.current.filtersVm.search).toBe('')
+    expect(result.current.editorVm.draftActive).toBe(true)
+    expect(result.current.actions.formatDraftValue('display_name')).toBe('Pre-save edit')
+    expect(result.current.discardVm.isOpen).toBe(false)
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await saveResult
+    })
   })
 
   it('exposes discard state and protects row selection changes until confirmed', async () => {

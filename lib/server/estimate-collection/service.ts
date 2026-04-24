@@ -3,6 +3,7 @@ import {
   buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSummaryFromRow,
+  buildQuoteCreateJobContextReadModel,
   buildQuoteHomeSearchReadModel,
   buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
@@ -16,6 +17,7 @@ import {
 } from '../../quotes/collectionData.ts'
 import {
   createEstimateCollectionVersionRecord,
+  loadEstimateCollectionJobContext,
   loadEstimateCollectionJobVersionsPage,
   loadEstimateCollectionJobsPage,
   loadEstimateCollectionRelatedRows,
@@ -40,6 +42,7 @@ type EstimateCollectionServiceDeps = {
   buildQuoteHomeJobsPageReadModel: typeof buildQuoteHomeJobsPageReadModel
   buildQuoteHomeRecentActivityReadModel: typeof buildQuoteHomeRecentActivityReadModel
   buildQuoteHomeSummaryFromRow: typeof buildQuoteHomeSummaryFromRow
+  buildQuoteCreateJobContextReadModel: typeof buildQuoteCreateJobContextReadModel
   buildQuoteHomeSearchReadModel: typeof buildQuoteHomeSearchReadModel
   buildQuoteJobVersionsReadModel: typeof buildQuoteJobVersionsReadModel
   buildQuoteListPayload: typeof buildQuoteListPayload
@@ -47,6 +50,7 @@ type EstimateCollectionServiceDeps = {
   decodeQuoteHomeCursor: typeof decodeQuoteHomeCursor
   decorateEstimateCollectionRows: typeof decorateEstimateCollectionRows
   encodeQuoteHomeCursor: typeof encodeQuoteHomeCursor
+  loadEstimateCollectionJobContext: typeof loadEstimateCollectionJobContext
   loadEstimateCollectionJobVersionsPage: typeof loadEstimateCollectionJobVersionsPage
   loadEstimateCollectionJobsPage: typeof loadEstimateCollectionJobsPage
   loadEstimateCollectionRelatedRows: typeof loadEstimateCollectionRelatedRows
@@ -64,6 +68,7 @@ const defaultDeps: EstimateCollectionServiceDeps = {
   buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSummaryFromRow,
+  buildQuoteCreateJobContextReadModel,
   buildQuoteHomeSearchReadModel,
   buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
@@ -71,6 +76,7 @@ const defaultDeps: EstimateCollectionServiceDeps = {
   decodeQuoteHomeCursor,
   decorateEstimateCollectionRows,
   encodeQuoteHomeCursor,
+  loadEstimateCollectionJobContext,
   loadEstimateCollectionJobVersionsPage,
   loadEstimateCollectionJobsPage,
   loadEstimateCollectionRelatedRows,
@@ -469,6 +475,36 @@ export async function loadEstimateCollectionJobsPayload(
     query: payload.query,
     items: payload.items.length,
     nextCursor: payload.next_cursor,
+    payloadBytes: bytesForLog(payload),
+  })
+
+  return {
+    ok: true as const,
+    data: payload,
+  }
+}
+
+export async function loadEstimateCollectionQuoteCreateContextPayload(
+  orgId: string,
+  jobId: string,
+  deps: Partial<EstimateCollectionServiceDeps> = {}
+) {
+  const resolvedDeps = withDeps(deps)
+  const { buildQuoteCreateJobContextReadModel, loadEstimateCollectionJobContext } = resolvedDeps
+
+  const startedAt = Date.now()
+  const jobResult = await loadEstimateCollectionJobContext(orgId, jobId)
+  if (!jobResult.ok) return jobResult
+  if (!jobResult.data) {
+    return errorResult('not_found', 'Job not found.')
+  }
+
+  const payload = buildQuoteCreateJobContextReadModel(jobResult.data)
+  logQuoteHomeRead('quote-create-context', {
+    orgId,
+    jobId,
+    durationMs: Date.now() - startedAt,
+    eligible: payload.job.eligibility.eligible,
     payloadBytes: bytesForLog(payload),
   })
 

@@ -7,13 +7,12 @@ import {
 } from '@/lib/quotes/ratesFlagsForm'
 import {
   getRatesFlagsDraftAdapter,
+  isRatesFlagsEditableCategory,
   isRatesFlagsEditableCategoryKey,
 } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
   RatesFlagsCategory,
   RatesFlagsCategoryKey,
-  RatesFlagsEditableCategory,
-  RatesFlagsEditableCategoryKey,
   RatesFlagsPayload,
   RatesFlagsRow,
 } from '@/types/estimator/ratesFlags'
@@ -71,15 +70,13 @@ export function buildQuoteRatesEditorSnapshotFromSelection(
   selectedId: string
 ): QuoteRatesEditorSnapshot {
   if (!category || !selectedId) return emptyQuoteRatesEditorSnapshot()
+  if (!isRatesFlagsEditableCategory(category)) return emptyQuoteRatesEditorSnapshot()
 
   const selectedRow = category.rows.find((row) => row.id === selectedId) ?? null
   if (!selectedRow) return emptyQuoteRatesEditorSnapshot()
 
-  const adapter = getRatesFlagsDraftAdapter(category.key as RatesFlagsEditableCategoryKey)
-  const draft = adapter.rowToDraft(
-    category as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
-    selectedRow
-  )
+  const adapter = getRatesFlagsDraftAdapter(category.key)
+  const draft = adapter.rowToDraft(category, selectedRow)
 
   return {
     selectedId: selectedRow.id,

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   buildQuoteHomeJobsPageReadModel: vi.fn(),
   buildQuoteHomeRecentActivityReadModel: vi.fn(),
   buildQuoteHomeSummaryFromRow: vi.fn(),
+  buildQuoteCreateJobContextReadModel: vi.fn(),
   buildQuoteHomeSearchReadModel: vi.fn(),
   buildQuoteJobVersionsReadModel: vi.fn(),
   buildQuoteListPayload: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   decodeQuoteHomeCursor: vi.fn(),
   decorateEstimateCollectionRows: vi.fn(),
   encodeQuoteHomeCursor: vi.fn(),
+  loadEstimateCollectionJobContext: vi.fn(),
   loadEstimateCollectionJobVersionsPage: vi.fn(),
   loadEstimateCollectionJobsPage: vi.fn(),
   loadEstimateCollectionRelatedRows: vi.fn(),
@@ -30,6 +32,7 @@ import {
   loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionJobsPayload,
   loadEstimateCollectionPayload,
+  loadEstimateCollectionQuoteCreateContextPayload,
   loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload,
   loadEstimateCollectionSummaryPayload,
@@ -40,6 +43,7 @@ const deps = {
   buildQuoteHomeJobsPageReadModel: mocks.buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeRecentActivityReadModel: mocks.buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSummaryFromRow: mocks.buildQuoteHomeSummaryFromRow,
+  buildQuoteCreateJobContextReadModel: mocks.buildQuoteCreateJobContextReadModel,
   buildQuoteHomeSearchReadModel: mocks.buildQuoteHomeSearchReadModel,
   buildQuoteJobVersionsReadModel: mocks.buildQuoteJobVersionsReadModel,
   buildQuoteListPayload: mocks.buildQuoteListPayload,
@@ -47,6 +51,7 @@ const deps = {
   decodeQuoteHomeCursor: mocks.decodeQuoteHomeCursor,
   decorateEstimateCollectionRows: mocks.decorateEstimateCollectionRows,
   encodeQuoteHomeCursor: mocks.encodeQuoteHomeCursor,
+  loadEstimateCollectionJobContext: mocks.loadEstimateCollectionJobContext,
   loadEstimateCollectionJobVersionsPage: mocks.loadEstimateCollectionJobVersionsPage,
   loadEstimateCollectionJobsPage: mocks.loadEstimateCollectionJobsPage,
   loadEstimateCollectionRelatedRows: mocks.loadEstimateCollectionRelatedRows,
@@ -372,6 +377,73 @@ describe('estimate collection service', () => {
       totalVersions: 1,
       limit: 10,
       nextCursor: null,
+    })
+  })
+
+  it('builds quote-create context from the direct job context read model', async () => {
+    const jobRow = {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      customer_name: 'Alice',
+      customer_address: '123 Main',
+      title: 'Kitchen',
+    }
+    const payload = {
+      job: {
+        ...jobRow,
+        eligibility: { eligible: true, reason: 'eligible' },
+      },
+    }
+
+    mocks.loadEstimateCollectionJobContext.mockResolvedValue({ ok: true, data: jobRow })
+    mocks.buildQuoteCreateJobContextReadModel.mockReturnValue(payload)
+
+    await expect(
+      loadEstimateCollectionQuoteCreateContextPayload('org-1', 'job-1', deps)
+    ).resolves.toEqual({
+      ok: true,
+      data: payload,
+    })
+    expect(mocks.loadEstimateCollectionJobContext).toHaveBeenCalledWith('org-1', 'job-1')
+    expect(mocks.buildQuoteCreateJobContextReadModel).toHaveBeenCalledWith(jobRow)
+  })
+
+  it('keeps missing quote-create jobs explicit as not found', async () => {
+    mocks.loadEstimateCollectionJobContext.mockResolvedValue({ ok: true, data: null })
+
+    await expect(
+      loadEstimateCollectionQuoteCreateContextPayload('org-1', 'missing-job', deps)
+    ).resolves.toEqual({
+      ok: false,
+      kind: 'not_found',
+      message: 'Job not found.',
+    })
+    expect(mocks.buildQuoteCreateJobContextReadModel).not.toHaveBeenCalled()
+  })
+
+  it('returns ineligible quote-create jobs instead of filtering them out', async () => {
+    const jobRow = {
+      id: 'job-1',
+      customer_id: null,
+      customer_name: null,
+      customer_address: null,
+      title: 'Kitchen',
+    }
+    const payload = {
+      job: {
+        ...jobRow,
+        eligibility: { eligible: false, reason: 'missing_customer' },
+      },
+    }
+
+    mocks.loadEstimateCollectionJobContext.mockResolvedValue({ ok: true, data: jobRow })
+    mocks.buildQuoteCreateJobContextReadModel.mockReturnValue(payload)
+
+    await expect(
+      loadEstimateCollectionQuoteCreateContextPayload('org-1', 'job-1', deps)
+    ).resolves.toEqual({
+      ok: true,
+      data: payload,
     })
   })
 

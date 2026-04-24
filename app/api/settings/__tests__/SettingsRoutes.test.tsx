@@ -277,6 +277,31 @@ describe('settings routes', () => {
     await expect(quoteDefaultsResponse.json()).resolves.toEqual({ error: 'Labor rate must be between 0 and 10000.' })
   })
 
+  it('returns 400 when quote defaults product references fail server validation', async () => {
+    const validationError = new Error(
+      'Walls default paint references a product that no longer exists (deleted-paint). Choose an active paint product or clear the selection.'
+    )
+    validationError.name = 'QuoteDefaultsValidationError'
+    mockSaveQuoteDefaults.mockRejectedValue(validationError)
+
+    const response = await putQuoteDefaultsRoute(
+      jsonRequest('PUT', {
+        data: {
+          walls_paint_id: 'deleted-paint',
+          walls_primer_id: null,
+          ceiling_paint_id: null,
+          ceiling_primer_id: null,
+          trim_paint_id: null,
+          trim_primer_id: null,
+          override_labor_rate: 65,
+        },
+      })
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: validationError.message })
+  })
+
   it('maps auth failures through the shared session guard', async () => {
     mockServerGetSessionUserOrg.mockResolvedValueOnce({ error: 'Not authenticated' })
     mockServerGetSessionUserOrg.mockResolvedValueOnce({ error: 'Org access denied' })

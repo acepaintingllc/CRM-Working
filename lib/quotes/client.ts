@@ -67,6 +67,15 @@ export async function loadQuoteJobVersions<T>(
   )
 }
 
+export async function loadQuoteCreateJobContext<T>(jobId: string) {
+  return loadData<T>(
+    `/api/quotes/home/jobs/${encodeURIComponent(jobId)}/create-context`,
+    {
+      cache: 'no-store',
+    }
+  )
+}
+
 export async function loadQuoteList<T>() {
   return loadData<T>('/api/quotes', { cache: 'no-store' })
 }
@@ -119,6 +128,14 @@ export async function updateQuoteProduct<T>(id: string, input: QuoteProductPaylo
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+  })
+}
+
+export async function archiveQuoteProduct<T>(id: string) {
+  return requestApi<ApiMutationEnvelope<T>>(`/api/quotes/products/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'Archived' }),
   })
 }
 

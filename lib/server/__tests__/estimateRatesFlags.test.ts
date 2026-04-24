@@ -5,6 +5,16 @@ import {
   buildRatesFlagsPayloadFromValues,
   parseConstantsTablesDetailed,
 } from '../rates-flags/index.ts'
+import { CATEGORY_CONFIGS } from '../rates-flags/categories.ts'
+import {
+  buildClientRatesFlagsMutationRequests,
+  getRatesFlagsParityCategory,
+  getRatesFlagsParityCategoryKeys,
+} from '../../quotes/__tests__/ratesFlagsParityHelpers.ts'
+import type {
+  RatesFlagsEditableCategoryKey,
+  RatesFlagsFieldDef,
+} from '../../../types/estimator/ratesFlags'
 
 function buildSampleConstantsValues() {
   return [
@@ -107,6 +117,33 @@ function findCategoryOrThrow(
   const category = payload.categories.find((entry) => entry.key === key)
   assert.ok(category, `missing category: ${key}`)
   return category
+}
+
+function isYnSelectField(field: RatesFlagsFieldDef) {
+  return field.options?.length === 2 && field.options[0] === 'Y' && field.options[1] === 'N'
+}
+
+function findParityFieldOrThrow(
+  description: string,
+  predicate: (field: RatesFlagsFieldDef) => boolean
+) {
+  for (const categoryKey of getRatesFlagsParityCategoryKeys()) {
+    const category = getRatesFlagsParityCategory(categoryKey)
+    const field = category.fields.find(predicate)
+    if (field) return { categoryKey, field }
+  }
+  throw new Error(`Missing parity field fixture for ${description}`)
+}
+
+function withCreateValueMutation(
+  categoryKey: RatesFlagsEditableCategoryKey,
+  mutate: (values: Record<string, unknown>) => Record<string, unknown>
+) {
+  const request = buildClientRatesFlagsMutationRequests(categoryKey).create
+  return {
+    ...request,
+    values: mutate(Object.fromEntries(Object.entries(request.values))),
+  }
 }
 
 test('buildRatesFlagsPayloadFromValues parses production split and supply subgroup rows', () => {
@@ -494,6 +531,102 @@ test('parseRatesFlagsMutationRequest rejects invalid category-field-action combi
         active: 'N',
       },
     })
+  }
+})
+
+test('rates flags client draft adapter requests parse successfully for every editable category', () => {
+  const categoryConfigKeys = CATEGORY_CONFIGS.map((config) => config.key).sort()
+  const adapterKeys = [...getRatesFlagsParityCategoryKeys()].sort()
+  assert.deepEqual(adapterKeys, categoryConfigKeys)
+
+  for (const categoryKey of getRatesFlagsParityCategoryKeys()) {
+    const requests = buildClientRatesFlagsMutationRequests(categoryKey)
+    const cases = [
+      requests.create,
+      requests.update,
+      requests.archive,
+      requests.reactivate,
+    ] as const
+
+    for (const request of cases) {
+      const parsed = _test.parseRatesFlagsMutationRequest(request)
+      assert.equal(parsed.ok, true, `${categoryKey} ${request.action}`)
+      if (parsed.ok) {
+        assert.deepEqual(parsed.value, request, `${categoryKey} ${request.action}`)
+      }
+    }
+  }
+})
+
+test('rates flags parser rejects required, select, Y/N, numeric, and unsupported extra fields from client-shaped requests', () => {
+  const required = findParityFieldOrThrow(
+    'required field',
+    (field) => field.required === true
+  )
+  const missingRequired = withCreateValueMutation(required.categoryKey, (values) => {
+    const { [required.field.key]: _removed, ...rest } = values
+    void _removed
+    return rest
+  })
+  const missingRequiredParsed = _test.parseRatesFlagsMutationRequest(missingRequired)
+  assert.equal(missingRequiredParsed.ok, false)
+  assert.match(missingRequiredParsed.error, /is required/i)
+
+  const select = findParityFieldOrThrow(
+    'select field',
+    (field) => field.type === 'select' && !field.readOnly && !isYnSelectField(field)
+  )
+  const invalidSelectParsed = _test.parseRatesFlagsMutationRequest(
+    withCreateValueMutation(select.categoryKey, (values) => ({
+      ...values,
+      [select.field.key]: '__INVALID_SELECT__',
+    }))
+  )
+  assert.equal(invalidSelectParsed.ok, false)
+  assert.match(invalidSelectParsed.error, /must be one of/i)
+
+  const yn = findParityFieldOrThrow(
+    'Y/N field',
+    (field) => field.type === 'select' && !field.readOnly && isYnSelectField(field)
+  )
+  const invalidYnParsed = _test.parseRatesFlagsMutationRequest(
+    withCreateValueMutation(yn.categoryKey, (values) => ({
+      ...values,
+      [yn.field.key]: 'maybe',
+    }))
+  )
+  assert.equal(invalidYnParsed.ok, false)
+  assert.match(invalidYnParsed.error, /must be Y or N/i)
+
+  const numeric = findParityFieldOrThrow(
+    'numeric field',
+    (field) => field.type === 'number'
+  )
+  const invalidNumberParsed = _test.parseRatesFlagsMutationRequest(
+    withCreateValueMutation(numeric.categoryKey, (values) => ({
+      ...values,
+      [numeric.field.key]: 'not-a-number',
+    }))
+  )
+  assert.equal(invalidNumberParsed.ok, false)
+  assert.match(invalidNumberParsed.error, /must be a valid number/i)
+
+  for (const categoryKey of getRatesFlagsParityCategoryKeys()) {
+    const requestWithExtraValue = withCreateValueMutation(categoryKey, (values) => ({
+      ...values,
+      unsupported_extra_field: 'nope',
+    }))
+    const extraValueParsed = _test.parseRatesFlagsMutationRequest(requestWithExtraValue)
+    assert.equal(extraValueParsed.ok, false, `${categoryKey} extra values field`)
+    assert.match(extraValueParsed.error, /does not support field 'unsupported_extra_field'/i)
+
+    const createRequest = buildClientRatesFlagsMutationRequests(categoryKey).create
+    const extraTopLevelParsed = _test.parseRatesFlagsMutationRequest({
+      ...createRequest,
+      unsupported_extra_field: 'nope',
+    })
+    assert.equal(extraTopLevelParsed.ok, false, `${categoryKey} extra top-level field`)
+    assert.match(extraTopLevelParsed.error, /Body does not support field 'unsupported_extra_field'/i)
   }
 })
 

@@ -92,6 +92,16 @@ describe('settings domain parsers', () => {
     ).toEqual({
       ok: false,
       error: 'Labor rate must be between 0 and 10000.',
+      fields: {
+        override_labor_rate: 'Labor rate must be between 0 and 10000.',
+      },
+      issues: [
+        {
+          code: 'invalid_labor_rate',
+          field: 'override_labor_rate',
+          message: 'Labor rate must be between 0 and 10000.',
+        },
+      ],
     })
 
     expect(

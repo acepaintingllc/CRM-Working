@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo } from 'react'
 import {
+  archiveQuoteProduct,
   createQuoteProduct,
-  deleteQuoteProduct,
   updateQuoteProduct,
 } from '@/lib/quotes/client'
 import {
@@ -14,7 +14,6 @@ import {
   type QuoteProductRow,
 } from '@/lib/quotes/productsForm'
 import {
-  chooseQuoteProductsFallbackId,
   mergeKnownQuoteProducts,
   removeProductFromVisibleSlice,
   upsertProductIntoVisibleSlice,
@@ -452,13 +451,18 @@ export function useQuoteProductsPageController() {
     applyAction({ type: 'beginAction', status: 'deleting' })
 
     try {
-      await deleteQuoteProduct(deleteTargetId)
+      const archived = await archiveQuoteProduct<QuoteProductRow>(deleteTargetId)
 
-      const nextVisibleRows = removeProductFromVisibleSlice(resource.data, deleteTargetId)
-      const nextKnownRows = removeProductFromVisibleSlice(resource.allKnownData, deleteTargetId)
+      const nextVisibleRows = upsertProductIntoVisibleSlice(
+        resource.data,
+        archived.data,
+        buildQuoteProductsQuery(currentState.navigation),
+        deleteTargetId
+      )
+      const nextKnownRows = mergeKnownQuoteProducts(resource.allKnownData, [archived.data])
       const nextSelectedId =
         currentState.selectedId === deleteTargetId
-          ? chooseQuoteProductsFallbackId(nextVisibleRows)
+          ? deleteTargetId
           : currentState.selectedId
 
       resource.setData(() => nextVisibleRows)
@@ -466,14 +470,14 @@ export function useQuoteProductsPageController() {
       applyAction({
         type: 'commitDelete',
         deletedId: deleteTargetId,
-        notice: 'Product deleted.',
+        notice: 'Product archived.',
         nextSelectedId,
       })
       return true
     } catch (error) {
       applyAction({
         type: 'setActionError',
-        error: error instanceof Error ? error.message : 'Failed to delete product.',
+        error: error instanceof Error ? error.message : 'Failed to archive product.',
       })
       applyAction({ type: 'finishAction' })
       return false

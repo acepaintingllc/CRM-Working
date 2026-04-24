@@ -41,7 +41,7 @@ describe('QuoteProductsPage', () => {
     cleanup()
   })
 
-  it('loads products, saves, and deletes through the standardized CRM admin shell', async () => {
+  it('loads products, saves, and archives through the standardized CRM admin shell', async () => {
     mockAuthedFetch
       .mockResolvedValueOnce(
         createResponse({
@@ -90,8 +90,24 @@ describe('QuoteProductsPage', () => {
       )
       .mockResolvedValueOnce(
         createResponse({
-          data: true,
-          notice: 'Product deleted.',
+          data: {
+            id: 'product-1',
+            name: 'Super Paint Pro',
+            family: 'Paint',
+            base: 'A',
+            subtype: 'Interior',
+            cost_per_unit: 30,
+            coverage_sqft_per_gal_per_coat: 350,
+            efficiency_pct: 90,
+            default_coats: 2,
+            default_sheen: 'Eggshell',
+            default_scopes: ['Walls'],
+            notes: '',
+            status: 'Archived',
+            created_at: '2026-01-01T00:00:00.000Z',
+            updated_at: '2026-01-01T00:00:00.000Z',
+          },
+          notice: 'Product archived.',
         })
       )
 
@@ -115,17 +131,17 @@ describe('QuoteProductsPage', () => {
       expect(screen.getByText('Product saved.')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete product' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Archive product' }))
 
     await waitFor(() => {
-      expect(screen.getByText('No products found')).toBeTruthy()
-      expect(screen.getByText('Select a product')).toBeTruthy()
+      expect(screen.getByText('Product archived.')).toBeTruthy()
+      expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('Archived')
     })
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(3)

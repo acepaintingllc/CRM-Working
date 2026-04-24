@@ -20,28 +20,6 @@ import type {
 type RatesFlagsArchiveAction = 'archive' | 'reactivate'
 type RatesFlagsCreateOrUpdateAction = 'create' | 'update'
 type DraftValue = string | number | boolean | null
-const editableCategoryKeys = new Set<RatesFlagsEditableCategoryKey>([
-  'production_rates_walls',
-  'production_rates_ceilings',
-  'production_rates_trim',
-  'unit_rates_doors',
-  'unit_rates_trim',
-  'unit_rates_drywall',
-  'access_fees_ladders',
-  'access_fees_scaffolding',
-  'access_fees_specialty',
-  'supply_rates_per_color',
-  'supply_rates_area_based',
-  'supply_rates_per_job',
-  'supply_rates_roller_covers',
-  'wall_complexity',
-  'height_factors',
-  'ceiling_types',
-  'condition_modifiers',
-  'room_types',
-  'room_templates',
-  'scope_defaults',
-])
 
 export type RatesFlagsDraftAdapter<
   TKey extends RatesFlagsEditableCategoryKey,
@@ -625,6 +603,14 @@ export const ratesFlagsDraftAdapters = {
 } satisfies {
   [TKey in RatesFlagsEditableCategoryKey]: RatesFlagsDraftAdapter<TKey>
 }
+
+export const ratesFlagsEditableCategoryKeys = Object.freeze(
+  Object.keys(ratesFlagsDraftAdapters)
+) as readonly RatesFlagsEditableCategoryKey[]
+
+const editableCategoryKeys = new Set<RatesFlagsEditableCategoryKey>(
+  ratesFlagsEditableCategoryKeys
+)
 
 export function getRatesFlagsDraftAdapter<TKey extends RatesFlagsEditableCategoryKey>(
   key: TKey

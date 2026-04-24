@@ -16,6 +16,7 @@ vi.mock('../../org.ts', () => ({
 
 import {
   createEstimateCollectionVersionRecord,
+  loadEstimateCollectionJobContext,
   loadEstimateCollectionRelatedRows,
   loadEstimateCollectionJobsPage,
   loadEstimateCollectionJobVersionsPage,
@@ -618,6 +619,68 @@ describe('estimate collection repository', () => {
           expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
         ],
       }),
+    })
+  })
+
+  it('loads quote-create job context with customer display data', async () => {
+    const jobQuery = makeQuery({
+      data: [{ id: 'job-1', customer_id: 'customer-1', title: 'Kitchen' }],
+      error: null,
+    })
+    const customerQuery = makeQuery({
+      data: [{ name: 'Alice', address: '123 Main' }],
+      error: null,
+    })
+    mocks.from.mockReturnValueOnce(jobQuery).mockReturnValueOnce(customerQuery)
+
+    const result = await loadEstimateCollectionJobContext('org-1', 'job-1')
+
+    expect(mocks.from).toHaveBeenNthCalledWith(1, 'jobs')
+    expect(jobQuery.select).toHaveBeenCalledWith('id, customer_id, title')
+    expect(jobQuery.eq).toHaveBeenCalledWith('org_id', 'org-1')
+    expect(jobQuery.eq).toHaveBeenCalledWith('id', 'job-1')
+    expect(mocks.from).toHaveBeenNthCalledWith(2, 'customers')
+    expect(customerQuery.select).toHaveBeenCalledWith('name, address')
+    expect(customerQuery.eq).toHaveBeenCalledWith('id', 'customer-1')
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        id: 'job-1',
+        customer_id: 'customer-1',
+        customer_name: 'Alice',
+        customer_address: '123 Main',
+        title: 'Kitchen',
+      },
+    })
+  })
+
+  it('returns quote-create job context for existing customer-less jobs', async () => {
+    const jobQuery = makeQuery({
+      data: [{ id: 'job-1', customer_id: null, title: 'Kitchen' }],
+      error: null,
+    })
+    mocks.from.mockReturnValueOnce(jobQuery)
+
+    await expect(loadEstimateCollectionJobContext('org-1', 'job-1')).resolves.toEqual({
+      ok: true,
+      data: {
+        id: 'job-1',
+        customer_id: null,
+        customer_name: null,
+        customer_address: null,
+        title: 'Kitchen',
+      },
+    })
+    expect(mocks.from).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns null quote-create job context for missing jobs', async () => {
+    const jobQuery = makeQuery({ data: [], error: null })
+    mocks.from.mockReturnValueOnce(jobQuery)
+
+    await expect(loadEstimateCollectionJobContext('org-1', 'missing-job')).resolves.toEqual({
+      ok: true,
+      data: null,
     })
   })
 

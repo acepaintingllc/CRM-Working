@@ -16,6 +16,7 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateHomeSearchRouteGet: vi.fn(),
   handleEstimateHomeSummaryRouteGet: vi.fn(),
   handleEstimateJobVersionsRouteGet: vi.fn(),
+  handleEstimateQuoteCreateContextRouteGet: vi.fn(),
   handleEstimateProductsRouteGet: vi.fn(),
   handleEstimateProductsRoutePost: vi.fn(),
   handleEstimateProductRoutePatch: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock('@/lib/server/estimateCollectionRoutes', () => ({
   handleEstimateHomeSearchRouteGet: routeHandlerMocks.handleEstimateHomeSearchRouteGet,
   handleEstimateHomeSummaryRouteGet: routeHandlerMocks.handleEstimateHomeSummaryRouteGet,
   handleEstimateJobVersionsRouteGet: routeHandlerMocks.handleEstimateJobVersionsRouteGet,
+  handleEstimateQuoteCreateContextRouteGet: routeHandlerMocks.handleEstimateQuoteCreateContextRouteGet,
   estimateCollectionCopy: {
     createdNotice: 'Estimate version created.',
     defaultVersionName: (value: number) => `Estimate Version ${value + 1}`,
@@ -91,6 +93,7 @@ import { GET as getQuoteHomeJobs } from '../quotes/home/jobs/route'
 import { GET as getQuoteHomeRecentActivity } from '../quotes/home/recent-activity/route'
 import { GET as getQuoteHomeSearch } from '../quotes/home/search/route'
 import { GET as getQuoteHomeSummary } from '../quotes/home/summary/route'
+import { GET as getQuoteCreateContext } from '../quotes/home/jobs/[jobId]/create-context/route'
 import { GET as getQuoteJobVersions } from '../quotes/home/jobs/[jobId]/versions/route'
 import { DELETE as deleteQuoteProduct, PATCH as patchQuoteProduct } from '../quotes/products/[id]/route'
 import { GET as getQuoteProducts, POST as postQuoteProducts } from '../quotes/products/route'
@@ -111,6 +114,7 @@ describe('estimate and quote route delegation', () => {
     routeHandlerMocks.handleEstimateHomeSearchRouteGet.mockReset()
     routeHandlerMocks.handleEstimateHomeSummaryRouteGet.mockReset()
     routeHandlerMocks.handleEstimateJobVersionsRouteGet.mockReset()
+    routeHandlerMocks.handleEstimateQuoteCreateContextRouteGet.mockReset()
     routeHandlerMocks.handleEstimateProductsRouteGet.mockReset()
     routeHandlerMocks.handleEstimateProductsRoutePost.mockReset()
     routeHandlerMocks.handleEstimateProductRoutePatch.mockReset()
@@ -211,6 +215,9 @@ describe('estimate and quote route delegation', () => {
     const jobVersionsRequest = new Request(
       'http://localhost/api/quotes/home/jobs/11111111-1111-4111-8111-111111111111/versions'
     )
+    const createContextRequest = new Request(
+      'http://localhost/api/quotes/home/jobs/11111111-1111-4111-8111-111111111111/create-context'
+    )
     const context = {
       params: { jobId: '11111111-1111-4111-8111-111111111111' },
     }
@@ -222,6 +229,7 @@ describe('estimate and quote route delegation', () => {
     await getQuoteHomeJobs(new Request('http://localhost/api/quotes/home/jobs?q=kitchen'))
     await getQuoteHomeSearch(searchRequest)
     await getQuoteJobVersions(jobVersionsRequest, context)
+    await getQuoteCreateContext(createContextRequest, context)
 
     expect(routeHandlerMocks.handleEstimateHomeSummaryRouteGet).toHaveBeenCalledWith()
     expect(routeHandlerMocks.handleEstimateHomeRecentActivityRouteGet).toHaveBeenCalledWith()
@@ -231,6 +239,10 @@ describe('estimate and quote route delegation', () => {
     expect(routeHandlerMocks.handleEstimateHomeSearchRouteGet).toHaveBeenCalledWith(searchRequest)
     expect(routeHandlerMocks.handleEstimateJobVersionsRouteGet).toHaveBeenCalledWith(
       jobVersionsRequest,
+      context
+    )
+    expect(routeHandlerMocks.handleEstimateQuoteCreateContextRouteGet).toHaveBeenCalledWith(
+      createContextRequest,
       context
     )
   })

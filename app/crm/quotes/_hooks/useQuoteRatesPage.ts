@@ -177,6 +177,8 @@ export function useQuoteRatesPage() {
   ])
 
   function applyNavigation(navigation: typeof state.navigation, preferredId?: string) {
+    if (stateRef.current.actionStatus !== 'idle') return false
+
     const selection = buildQuoteRatesSelectionSnapshot(resource.data, navigation, preferredId)
     applyAction({
       type: 'applyNavigation',
@@ -188,12 +190,15 @@ export function useQuoteRatesPage() {
   }
 
   function applySelection(selectedId: string) {
+    if (stateRef.current.actionStatus !== 'idle') return false
+
     const editor = buildQuoteRatesEditorSnapshotFromSelection(activeCategory, selectedId)
     applyAction({ type: 'selectRow', selectedId: editor.selectedId, editor })
     return true
   }
 
   function startCreate() {
+    if (stateRef.current.actionStatus !== 'idle') return false
     if (!editableActiveCategory || !adapter) return false
 
     const draft = adapter.createEmptyDraft(editableActiveCategory)
@@ -202,6 +207,7 @@ export function useQuoteRatesPage() {
   }
 
   function startDuplicate() {
+    if (stateRef.current.actionStatus !== 'idle') return false
     if (!editableActiveCategory || !adapter || !selectedRow) return false
 
     const draft = adapter.withDuplicateId(
@@ -226,6 +232,8 @@ export function useQuoteRatesPage() {
   }
 
   async function performReload(keepId?: string) {
+    if (stateRef.current.actionStatus !== 'idle') return false
+
     applyAction({
       type: 'scheduleRefreshRehydrate',
       selectedId: (keepId ?? stateRef.current.selectedId) || null,
@@ -248,6 +256,7 @@ export function useQuoteRatesPage() {
 
   async function saveCurrent() {
     const currentState = stateRef.current
+    if (currentState.actionStatus !== 'idle') return
     if (!editableActiveCategory || !currentState.draft || !validationResult?.ok) return
 
     applyAction({ type: 'beginAction', status: 'saving' })
@@ -282,6 +291,7 @@ export function useQuoteRatesPage() {
   }
 
   async function archiveOrReactivate(nextActive: boolean) {
+    if (stateRef.current.actionStatus !== 'idle') return false
     if (!editableActiveCategory || !selectedRow) return false
 
     applyAction({ type: 'beginAction', status: 'archiving' })
@@ -315,6 +325,8 @@ export function useQuoteRatesPage() {
   }
 
   function cancelEdit() {
+    if (stateRef.current.actionStatus !== 'idle') return
+
     const editor = buildQuoteRatesEditorSnapshotFromSelection(
       activeCategory,
       stateRef.current.selectedId
@@ -326,6 +338,7 @@ export function useQuoteRatesPage() {
 
   function updateDraftValue(fieldKey: string, rawInput: string) {
     const currentState = stateRef.current
+    if (currentState.actionStatus !== 'idle') return
     if (!editableActiveCategory || !adapter || !currentState.draft) return
 
     const nextDraft = adapter.updateDraftField(
@@ -338,6 +351,8 @@ export function useQuoteRatesPage() {
   }
 
   function setDraftActive(nextActive: boolean) {
+    if (stateRef.current.actionStatus !== 'idle') return
+
     applyAction({ type: 'setDraftActive', draftActive: nextActive })
   }
 
@@ -376,6 +391,18 @@ export function useQuoteRatesPage() {
     }
   }
 
+  function requestIdleTransition<TResult>(
+    intent: QuoteRatesPendingTransition,
+    options: {
+      changed: boolean
+      run: () => TResult | Promise<TResult>
+    }
+  ) {
+    if (stateRef.current.actionStatus !== 'idle') return false
+
+    return requestTransition(intent, options)
+  }
+
   const pageVm = buildQuoteRatesPageVm({
     resource,
     workflowState: state,
@@ -392,7 +419,7 @@ export function useQuoteRatesPage() {
 
   const actions: QuoteRatesActions = {
     setActiveTab: (activeTab) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'setActiveTab', activeTab },
         {
           changed: activeTab !== state.navigation.activeTab,
@@ -400,7 +427,7 @@ export function useQuoteRatesPage() {
         }
       ),
     setRateSection: (rateSection) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'setRateSection', rateSection },
         {
           changed: rateSection !== state.navigation.rateSection,
@@ -408,7 +435,7 @@ export function useQuoteRatesPage() {
         }
       ),
     setRateCategory: (rateCategory) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'setRateCategory', rateCategory },
         {
           changed: rateCategory !== state.navigation.rateCategory,
@@ -416,7 +443,7 @@ export function useQuoteRatesPage() {
         }
       ),
     setFlagsSection: (flagsSection) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'setFlagsSection', flagsSection },
         {
           changed: flagsSection !== state.navigation.flagsSection,
@@ -424,7 +451,7 @@ export function useQuoteRatesPage() {
         }
       ),
     setRoomDefaultsSection: (roomDefaultsSection) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'setRoomDefaultsSection', roomDefaultsSection },
         {
           changed: roomDefaultsSection !== state.navigation.roomDefaultsSection,
@@ -432,7 +459,7 @@ export function useQuoteRatesPage() {
         }
       ),
     setStatusFilter: (statusFilter) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'setStatusFilter', statusFilter },
         {
           changed: statusFilter !== state.navigation.statusFilter,
@@ -440,7 +467,7 @@ export function useQuoteRatesPage() {
         }
       ),
     setSearch: (search) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'setSearch', search },
         {
           changed: search !== state.navigation.search,
@@ -448,7 +475,7 @@ export function useQuoteRatesPage() {
         }
       ),
     setSelectedId: (selectedId) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'setSelectedId', selectedId },
         {
           changed: selectedId !== state.selectedId,
@@ -457,7 +484,7 @@ export function useQuoteRatesPage() {
       ),
     setDraftActive,
     reload: (keepId?: string) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'reload', keepId },
         {
           changed: true,
@@ -466,7 +493,7 @@ export function useQuoteRatesPage() {
       ),
     saveCurrent,
     archiveOrReactivate: (nextActive: boolean) =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'archiveOrReactivate', nextActive },
         {
           changed: true,
@@ -474,7 +501,7 @@ export function useQuoteRatesPage() {
         }
       ),
     startCreate: () =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'startCreate' },
         {
           changed: true,
@@ -482,7 +509,7 @@ export function useQuoteRatesPage() {
         }
       ),
     startDuplicate: () =>
-      requestTransition(
+      requestIdleTransition(
         { type: 'startDuplicate' },
         {
           changed: true,
@@ -490,13 +517,16 @@ export function useQuoteRatesPage() {
         }
       ),
     cancelEdit,
-    confirmDiscard: () =>
-      confirmDiscard((intent) => {
+    confirmDiscard: () => {
+      if (stateRef.current.actionStatus !== 'idle') return false
+
+      return confirmDiscard((intent) => {
         if (transitionNeedsDiscardReset(intent)) {
           discardCurrentChanges()
         }
         return runIntent(intent)
-      }),
+      })
+    },
     cancelDiscard,
     updateDraftValue,
     formatDraftValue,
