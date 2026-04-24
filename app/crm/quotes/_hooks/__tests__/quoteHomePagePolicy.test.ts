@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
 import {
-  normalizeQuoteHomeJobQuery,
   resolveQuoteHomeBootstrapJobsSync,
   resolveQuoteHomeJobsPageAfterRequest,
   resolveQuoteHomeJobsRefresh,
@@ -50,11 +49,6 @@ const exteriorJob: QuoteHomeJobListItemReadModel = {
 }
 
 describe('quoteHomePagePolicy', () => {
-  it('normalizes the server-backed job query before requests are made', () => {
-    expect(normalizeQuoteHomeJobQuery('  garage  ')).toBe('garage')
-    expect(normalizeQuoteHomeJobQuery('   ')).toBe('')
-  })
-
   it('keeps the current selected job id when it still exists', () => {
     expect(resolveQuoteHomeSelectedJobId([kitchenJob, exteriorJob], 'job-2')).toBe(
       'job-2'

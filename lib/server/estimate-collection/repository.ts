@@ -1,4 +1,5 @@
 import { normalizeQuoteVersionKind } from '../../quotes/versionCreation.ts'
+import { normalizeQuoteHomeSearchQuery } from '../../quotes/collectionData.ts'
 import { hasUniqueConstraintConflict } from '../dbErrors.ts'
 import { isMissingSchemaErrorMessage } from '../schema.ts'
 import { supabaseAdmin } from '../org.ts'
@@ -383,7 +384,7 @@ export async function searchEstimateCollectionRows(
 ): Promise<
   ServiceResult<EstimateCollectionSearchDbRows>
 > {
-  const query = rawQuery.trim()
+  const query = normalizeQuoteHomeSearchQuery(rawQuery)
   if (!query) {
     return okResult({
       query,

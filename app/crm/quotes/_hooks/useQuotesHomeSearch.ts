@@ -1,8 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type QuoteHomeSearchResponse } from '@/lib/quotes/collectionData'
+import {
+  normalizeQuoteHomeSearchQuery,
+  type QuoteHomeSearchResponse,
+} from '@/lib/quotes/collectionData'
 import { loadQuoteHomeSearch } from '@/lib/quotes/client'
+import {
+  beginQuoteHomeAsyncRequest,
+  cancelQuoteHomeAsyncRequests,
+  finishQuoteHomeAsyncRequest,
+  isQuoteHomeAsyncRequestCurrent,
+} from './quoteHomeAsyncLifecycle'
 
 const SEARCH_DEBOUNCE_MS = 150
 
@@ -18,10 +27,16 @@ export function useQuotesHomeSearch(query: string) {
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const requestIdRef = useRef(0)
+  const requestLifecycle = useMemo(
+    () => ({
+      currentRequestRef: requestIdRef,
+    }),
+    []
+  )
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      setDebouncedQuery(query.trim())
+      setDebouncedQuery(normalizeQuoteHomeSearchQuery(query))
     }, SEARCH_DEBOUNCE_MS)
 
     return () => clearTimeout(timeout)
@@ -31,7 +46,7 @@ export function useQuotesHomeSearch(query: string) {
     const nextQuery = debouncedQuery
 
     if (!nextQuery) {
-      requestIdRef.current += 1
+      cancelQuoteHomeAsyncRequests(requestLifecycle)
       setData(emptySearchResponse)
       setLoading(false)
       setError(null)
@@ -40,26 +55,24 @@ export function useQuotesHomeSearch(query: string) {
 
     setLoading(true)
     setError(null)
-    const requestId = ++requestIdRef.current
+    const request = beginQuoteHomeAsyncRequest(requestLifecycle, { query: nextQuery })
 
     void loadQuoteHomeSearch<QuoteHomeSearchResponse>(nextQuery)
       .then((response) => {
-        if (requestIdRef.current !== requestId) return
+        if (!isQuoteHomeAsyncRequestCurrent(requestLifecycle, request)) return
         setData(response)
       })
       .catch((loadError) => {
-        if (requestIdRef.current !== requestId) return
+        if (!isQuoteHomeAsyncRequestCurrent(requestLifecycle, request)) return
         setData({ query: nextQuery, items: [] })
         setError(
           loadError instanceof Error ? loadError.message : 'Failed to load quote search results.'
         )
       })
       .finally(() => {
-        if (requestIdRef.current === requestId) {
-          setLoading(false)
-        }
+        finishQuoteHomeAsyncRequest(requestLifecycle, request, () => setLoading(false))
       })
-  }, [attempt, debouncedQuery])
+  }, [attempt, debouncedQuery, requestLifecycle])
 
   const retry = useCallback(() => {
     if (!debouncedQuery) return

@@ -89,9 +89,12 @@ export type QuoteHomeCursorKey = {
   id: string
 }
 
-export function normalizeQuoteHomeSearchQuery(value: unknown): string {
+export function normalizeQuoteHomeQuery(value: unknown): string {
   return String(value ?? '').trim()
 }
+
+export const normalizeQuoteHomeSearchQuery = normalizeQuoteHomeQuery
+export const normalizeQuoteHomeJobQuery = normalizeQuoteHomeQuery
 
 export function normalizeQuoteHomePageLimit(
   value: number | null | undefined,

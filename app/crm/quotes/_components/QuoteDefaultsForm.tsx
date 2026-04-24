@@ -1,6 +1,7 @@
 'use client'
 
 import { CrmField } from '@/app/crm/_components/CrmField'
+import type { QuoteDefaultsProductDefaultField } from '@/app/crm/quotes/_hooks/quoteDefaultsPageVm'
 import type { QuoteDefaults } from '@/lib/settings/types'
 
 type ProductRow = {
@@ -11,27 +12,9 @@ type ProductRow = {
   missing?: boolean
 }
 
-type ProductDefaultField =
-  keyof Pick<
-    QuoteDefaults,
-    | 'walls_paint_id'
-    | 'walls_primer_id'
-    | 'ceiling_paint_id'
-    | 'ceiling_primer_id'
-    | 'trim_paint_id'
-    | 'trim_primer_id'
-  >
-
-type ProductDefaultConfig = {
-  label: string
-  key: ProductDefaultField
-  expectedFamily: string
-  options: ProductRow[]
-}
-
 type QuoteDefaultsFormProps = {
   value: QuoteDefaults
-  productDefaultFields: readonly ProductDefaultConfig[]
+  productDefaultFields: readonly QuoteDefaultsProductDefaultField[]
   productDefaultErrors?: Partial<Record<keyof QuoteDefaults, string>>
   onChange: (next: QuoteDefaults) => void
 }

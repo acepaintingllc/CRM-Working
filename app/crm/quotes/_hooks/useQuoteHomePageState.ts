@@ -2,8 +2,8 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { QuoteHomeJob } from '../_home/quoteHomeTypes'
+import { normalizeQuoteHomeJobQuery } from '@/lib/quotes/collectionData'
 import {
-  normalizeQuoteHomeJobQuery,
   resolveQuoteHomeLoadedJobsChangeKind,
   resolveQuoteHomeSelection,
 } from './quoteHomePagePolicy'

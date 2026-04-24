@@ -1,6 +1,10 @@
 'use client'
 
 import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
+import {
+  normalizeQuoteHomeJobQuery,
+  normalizeQuoteHomeSearchQuery,
+} from '@/lib/quotes/collectionData'
 import type {
   ProductFamily,
   QuoteProductPayload,
@@ -28,8 +32,9 @@ export async function loadQuoteHomeJobs<T>(options?: {
   cursor?: string | null
 }) {
   const params = new URLSearchParams()
-  if (options?.query?.trim()) {
-    params.set('q', options.query.trim())
+  const query = normalizeQuoteHomeJobQuery(options?.query)
+  if (query) {
+    params.set('q', query)
   }
   if (options?.limit) {
     params.set('limit', String(options.limit))
@@ -43,7 +48,10 @@ export async function loadQuoteHomeJobs<T>(options?: {
 }
 
 export async function loadQuoteHomeSearch<T>(query: string) {
-  return loadData<T>(`/api/quotes/home/search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
+  return loadData<T>(
+    `/api/quotes/home/search?q=${encodeURIComponent(normalizeQuoteHomeSearchQuery(query))}`,
+    { cache: 'no-store' }
+  )
 }
 
 export async function loadQuoteJobVersions<T>(

@@ -1,14 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useResource } from '@/app/crm/_hooks/useResource'
-import type {
-  QuoteHomeBootstrapReadModel,
-  QuoteHomeJobsPageReadModel,
+import {
+  normalizeQuoteHomeJobQuery,
+  type QuoteHomeBootstrapReadModel,
+  type QuoteHomeJobsPageReadModel,
 } from '@/lib/quotes/collectionData'
 import { loadQuoteHomeBootstrap, loadQuoteHomeJobs } from '@/lib/quotes/client'
 import {
-  normalizeQuoteHomeJobQuery,
+  beginQuoteHomeAsyncRequest,
+  cancelQuoteHomeAsyncRequests,
+  finishQuoteHomeAsyncRequest,
+  isQuoteHomeAsyncRequestCurrent,
+  type QuoteHomeAsyncLifecycle,
+  type QuoteHomeAsyncRequest,
+} from './quoteHomeAsyncLifecycle'
+import {
   resolveQuoteHomeBootstrapJobsSync,
   resolveQuoteHomeJobsPageAfterRequest,
   resolveQuoteHomeJobsRefresh,
@@ -44,11 +52,10 @@ function toLoadErrorMessage(scope: string, loadError: unknown) {
 
 type QuoteHomeJobsRequestPurpose = 'query_change' | 'refresh' | 'pagination'
 
-type QuoteHomeJobsOperation = {
-  requestId: number
+type QuoteHomeJobsOperation = QuoteHomeAsyncRequest<{
   query: string
   purpose: QuoteHomeJobsRequestPurpose
-}
+}>
 
 type QuoteHomeJobsLoadResult =
   | {
@@ -98,7 +105,16 @@ export function useQuotesHomeJobs(
   const jobsPageRef = useRef(bootstrapData.jobs)
   const jobsRequestIdRef = useRef(0)
   const jobsOperationRef = useRef<QuoteHomeJobsOperation | null>(null)
+  // Pagination keeps a local cursor gate; the shared lifecycle handles freshness,
+  // not duplicate load-more coalescing for the same page.
   const jobPaginationInFlightKeysRef = useRef(new Set<string>())
+  const jobsLifecycle = useMemo<QuoteHomeAsyncLifecycle<QuoteHomeJobsOperation>>(
+    () => ({
+      currentRequestRef: jobsRequestIdRef,
+      activeRequestRef: jobsOperationRef,
+    }),
+    []
+  )
 
   const commitJobsPage = useCallback((nextJobsPage: QuoteHomeJobsPageReadModel) => {
     jobsPageRef.current = nextJobsPage
@@ -115,10 +131,9 @@ export function useQuotesHomeJobs(
 
   const isActiveJobsRequest = useCallback(
     (operation: QuoteHomeJobsOperation) =>
-      jobsRequestIdRef.current === operation.requestId &&
-      jobsOperationRef.current?.requestId === operation.requestId &&
+      isQuoteHomeAsyncRequestCurrent(jobsLifecycle, operation) &&
       activeJobQueryRef.current === operation.query,
-    []
+    [jobsLifecycle]
   )
 
   const cancelJobsRequestsForQuery = useCallback(
@@ -129,23 +144,23 @@ export function useQuotesHomeJobs(
         return
       }
 
-      jobsRequestIdRef.current += 1
+      cancelQuoteHomeAsyncRequests(jobsLifecycle)
       jobPaginationInFlightKeysRef.current.clear()
       setActiveJobsOperation(null)
       setJobsError(null)
     },
-    [setActiveJobsOperation]
+    [jobsLifecycle, setActiveJobsOperation]
   )
 
   const adoptJobsPage = useCallback(
     (nextJobsPage: QuoteHomeJobsPageReadModel) => {
-      jobsRequestIdRef.current += 1
+      cancelQuoteHomeAsyncRequests(jobsLifecycle)
       jobPaginationInFlightKeysRef.current.clear()
       setActiveJobsOperation(null)
       setJobsError(null)
       commitJobsPage(nextJobsPage)
     },
-    [commitJobsPage, setActiveJobsOperation]
+    [commitJobsPage, jobsLifecycle, setActiveJobsOperation]
   )
 
   useEffect(() => {
@@ -175,11 +190,10 @@ export function useQuotesHomeJobs(
       purpose: QuoteHomeJobsRequestPurpose
     }): Promise<QuoteHomeJobsLoadResult> => {
       const normalizedQuery = normalizeQuoteHomeJobQuery(params.query)
-      const operation = {
-        requestId: ++jobsRequestIdRef.current,
+      const operation = beginQuoteHomeAsyncRequest(jobsLifecycle, {
         query: normalizedQuery,
         purpose: params.purpose,
-      }
+      })
       const reportError = params.reportError ?? true
 
       setActiveJobsOperation(operation)
@@ -222,12 +236,12 @@ export function useQuotesHomeJobs(
         }
         return { ok: false as const, error: nextError }
       } finally {
-        if (jobsOperationRef.current?.requestId === operation.requestId) {
+        finishQuoteHomeAsyncRequest(jobsLifecycle, operation, () => {
           setActiveJobsOperation(null)
-        }
+        })
       }
     },
-    [commitJobsPage, isActiveJobsRequest, setActiveJobsOperation]
+    [commitJobsPage, isActiveJobsRequest, jobsLifecycle, setActiveJobsOperation]
   )
 
   useEffect(() => {

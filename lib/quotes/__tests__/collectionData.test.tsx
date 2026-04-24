@@ -8,6 +8,9 @@ import {
   buildQuoteJobVersionsReadModel,
   buildQuoteListPayload,
   decorateEstimateCollectionRows,
+  normalizeQuoteHomeJobQuery,
+  normalizeQuoteHomeQuery,
+  normalizeQuoteHomeSearchQuery,
   QUOTE_HOME_FALLBACK_CUSTOMER_NAME,
   QUOTE_HOME_FALLBACK_JOB_TITLE,
   QUOTE_HOME_FALLBACK_VERSION_KIND,
@@ -117,6 +120,14 @@ function makeJob(id: string): QuoteHomeJobsPageReadModel['items'][number] {
 }
 
 describe('quote collection data', () => {
+  it('normalizes quote-home query text in the quote domain layer', () => {
+    expect(normalizeQuoteHomeQuery('  garage  ')).toBe('garage')
+    expect(normalizeQuoteHomeQuery('   ')).toBe('')
+    expect(normalizeQuoteHomeQuery(null)).toBe('')
+    expect(normalizeQuoteHomeSearchQuery('  kitchen  ')).toBe('kitchen')
+    expect(normalizeQuoteHomeJobQuery('  exterior  ')).toBe('exterior')
+  })
+
   it('decorates DB estimate rows with DB relation rows in the quote domain layer', () => {
     const decorated = decorateEstimateCollectionRows(
       [

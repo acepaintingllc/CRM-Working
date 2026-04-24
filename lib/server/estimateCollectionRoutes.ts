@@ -6,6 +6,10 @@ import {
   resolveParams,
 } from '@/lib/server/apiRoute'
 import {
+  normalizeQuoteHomeJobQuery,
+  normalizeQuoteHomeSearchQuery,
+} from '@/lib/quotes/collectionData'
+import {
   createEstimateCollectionVersion,
   loadEstimateCollectionBootstrapPayload,
   loadEstimateCollectionJobsPayload,
@@ -93,7 +97,7 @@ export async function handleEstimateHomeJobsRouteGet(request: Request) {
   if (!auth.ok) return auth.response
 
   const url = new URL(request.url)
-  const query = (url.searchParams.get('q') ?? '').trim()
+  const query = normalizeQuoteHomeJobQuery(url.searchParams.get('q'))
   const cursor = url.searchParams.get('cursor')
   const limit = readOptionalPositiveIntegerParam(url.searchParams, 'limit')
   if (!limit.ok) return limit.response
@@ -111,7 +115,7 @@ export async function handleEstimateHomeSearchRouteGet(request: Request) {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
-  const query = (new URL(request.url).searchParams.get('q') ?? '').trim()
+  const query = normalizeQuoteHomeSearchQuery(new URL(request.url).searchParams.get('q'))
   return serviceResultDataResponse(
     await loadEstimateCollectionSearchPayload(auth.session.orgId, query)
   )

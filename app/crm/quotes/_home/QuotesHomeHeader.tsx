@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { normalizeQuoteHomeSearchQuery } from '@/lib/quotes/collectionData'
 import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
 import type { QuotesHomeHeaderVm, QuotesHomeSearchStatusVm } from './quoteHomeTypes'
@@ -284,7 +285,7 @@ function buildLegacySearchStatus(params: {
   resultCount: number
   canRetry: boolean
 }): QuotesHomeSearchStatusVm {
-  const query = params.query.trim()
+  const query = normalizeQuoteHomeSearchQuery(params.query)
   if (!query) return { kind: 'idle' }
   if (params.loading) {
     return {

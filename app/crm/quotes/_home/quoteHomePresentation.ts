@@ -1,4 +1,7 @@
-import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
+import {
+  normalizeQuoteHomeSearchQuery,
+  type QuoteHomeSummaryReadModel,
+} from '@/lib/quotes/collectionData'
 import { QUOTE_VERSION_KIND_OPTIONS } from '@/lib/quotes/versionCreation'
 import type {
   QuoteHomeActionWarning,
@@ -222,7 +225,7 @@ export function buildQuotesHomeSearchStatus(params: {
   error: string | null
   resultCount: number
 }): QuotesHomeSearchStatusVm {
-  const query = params.query.trim()
+  const query = normalizeQuoteHomeSearchQuery(params.query)
   if (!query) return { kind: 'idle' }
 
   if (params.loading) {
