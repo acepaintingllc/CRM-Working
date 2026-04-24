@@ -11,13 +11,13 @@ import { useQuoteHomePageResources } from './useQuoteHomePageResources'
 export function useQuotesHomePage(
   initialData?: QuoteHomeBootstrapReadModel | null
 ): QuoteHomePageVm {
-  const { vmState, vmResources } = useQuoteHomePageResources(initialData)
+  const pageResources = useQuoteHomePageResources(initialData)
 
   return useMemo(
     () =>
-      buildQuoteHomePageVm(vmState, vmResources, {
+      buildQuoteHomePageVm(pageResources.vmState, pageResources.vmResources, {
         includeVersionFailureInFeedback: false,
       }),
-    [vmResources, vmState]
+    [pageResources.vmResources, pageResources.vmState]
   )
 }
