@@ -1,6 +1,7 @@
-import { renderHook } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { EligibleQuoteVersionJob, QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import { useQuoteVersionCreation } from '../useQuoteVersionCreation'
 
 const { push } = vi.hoisted(() => ({
@@ -80,7 +81,7 @@ describe('useQuoteVersionCreation', () => {
     expect(result.current.error).toBe('Select a job before creating a version.')
   })
 
-  it('keeps draft fields intact until the page controller resets them', async () => {
+  it('resets draft fields when the selected job changes', async () => {
     const firstJob = { id: 'job-1', customer_id: 'customer-1' }
     const nextJob = { id: 'job-2', customer_id: 'customer-2' }
 
@@ -95,11 +96,33 @@ describe('useQuoteVersionCreation', () => {
 
     rerender({ selectedJob: nextJob })
 
+    await waitFor(() => {
+      expect(result.current.versionName).toBe('')
+      expect(result.current.versionKind).toBe('standard')
+      expect(result.current.error).toBeNull()
+    })
+  })
+
+  it('preserves draft fields when selected job data changes without changing identity', async () => {
+    const firstJob = { id: 'job-1', customer_id: 'customer-1' }
+    const updatedJob = { id: 'job-1', customer_id: 'customer-1' }
+
+    const { result, rerender } = renderHook(({ selectedJob }) => useQuoteVersionCreation(selectedJob), {
+      initialProps: { selectedJob: firstJob },
+    })
+
+    act(() => {
+      result.current.setVersionName('Custom')
+      result.current.setVersionKind('revision')
+    })
+
+    rerender({ selectedJob: updatedJob })
+
     expect(result.current.versionName).toBe('Custom')
     expect(result.current.versionKind).toBe('revision')
   })
 
-  it('creates with the latest selected job when the visible selection changes', async () => {
+  it('creates with the latest selected job after the visible selection changes', async () => {
     createQuoteVersion.mockResolvedValue({ id: 'estimate-99' })
     const firstJob = { id: 'job-1', customer_id: 'customer-1' }
     const nextJob = { id: 'job-2', customer_id: 'customer-2' }
@@ -115,6 +138,15 @@ describe('useQuoteVersionCreation', () => {
 
     rerender({ selectedJob: nextJob })
 
+    await waitFor(() => {
+      expect(result.current.versionKind).toBe('standard')
+    })
+
+    act(() => {
+      result.current.setVersionName('Garage Updated')
+      result.current.setVersionKind('revision')
+    })
+
     await act(async () => {
       await result.current.createVersion()
     })
@@ -122,9 +154,47 @@ describe('useQuoteVersionCreation', () => {
     expect(createQuoteVersion).toHaveBeenCalledWith({
       job_id: 'job-2',
       customer_id: 'customer-2',
-      version_kind: 'alternate',
-      version_name: 'Garage',
+      version_kind: 'revision',
+      version_name: 'Garage Updated',
     })
+  })
+
+  it('surfaces the shared required-job error for an ineligible selected job', async () => {
+    const ineligibleJob = {
+      id: 'job-1',
+      customer_id: '   ',
+    } as EligibleQuoteVersionJob
+    const { result } = renderHook(() => useQuoteVersionCreation(ineligibleJob))
+
+    await act(async () => {
+      await result.current.createVersion()
+    })
+
+    expect(createQuoteVersion).not.toHaveBeenCalled()
+    expect(result.current.error).toBe('Select a job before creating a version.')
+  })
+
+  it('surfaces the shared invalid-kind error without creating', async () => {
+    const { result } = renderHook(() =>
+      useQuoteVersionCreation({
+        id: 'job-1',
+        customer_id: 'customer-1',
+      })
+    )
+
+    act(() => {
+      result.current.setVersionName('Custom')
+      result.current.setVersionKind('custom' as QuoteVersionKind)
+    })
+
+    await act(async () => {
+      await result.current.createVersion()
+    })
+
+    expect(createQuoteVersion).not.toHaveBeenCalled()
+    expect(result.current.error).toBe('Choose a valid version kind.')
+    expect(result.current.versionName).toBe('Custom')
+    expect(result.current.versionKind).toBe('custom')
   })
 
   it('coalesces rapid duplicate create calls into one request', async () => {
@@ -187,11 +257,18 @@ describe('useQuoteVersionCreation', () => {
       })
     )
 
+    act(() => {
+      result.current.setVersionName('Preserve me')
+      result.current.setVersionKind('alternate')
+    })
+
     await act(async () => {
       await result.current.createVersion()
     })
 
     expect(result.current.error).toBe('Creation failed')
+    expect(result.current.versionName).toBe('Preserve me')
+    expect(result.current.versionKind).toBe('alternate')
 
     await act(async () => {
       await result.current.createVersion()

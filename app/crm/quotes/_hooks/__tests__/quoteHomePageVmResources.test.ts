@@ -42,7 +42,7 @@ describe('buildQuoteHomePageVmResources', () => {
   it('maps hook resources into the quote home VM resource contract', () => {
     expect(
       buildQuoteHomePageVmResources({
-        homeResource: {
+        home: {
           summary: {
             total_versions: 1,
             draft_count: 1,
@@ -57,7 +57,7 @@ describe('buildQuoteHomePageVmResources', () => {
           bootstrapError: null,
           jobsError: null,
         },
-        searchState: {
+        search: {
           query: 'version',
           loading: false,
           error: null,
@@ -71,26 +71,22 @@ describe('buildQuoteHomePageVmResources', () => {
             },
           ],
         },
-        workflow: {
-          versions: {
-            items: [version],
-            error: null,
-            pageData: {
-              total_versions: 1,
-            },
-            hasMore: false,
-            loadingMore: false,
-            hasResolved: true,
-          },
-          create: {
-            creating: false,
-            error: null,
-            versionName: 'Version A',
-            versionKind: 'standard',
-            canCreate: true,
-          },
+        versions: {
+          items: [version],
+          error: null,
+          totalVersions: 1,
+          hasMore: false,
+          loadingMore: false,
+          hasResolved: true,
         },
-        deleteController: {
+        create: {
+          creating: false,
+          error: null,
+          versionName: 'Version A',
+          versionKind: 'standard',
+          canCreate: true,
+        },
+        delete: {
           confirmingDelete: version,
           deletingId: 'estimate-1',
           error: null,

@@ -52,6 +52,16 @@ export const QUOTES_HOME_LOADING_COPY = {
   jobsLoadingMore: 'Loading more jobs...',
 } as const
 
+export const QUOTES_HOME_DELETE_COPY = {
+  buttonLabel: 'Delete',
+  deletingButtonLabel: 'Deleting...',
+  closeLabel: 'Close delete confirmation',
+  warning: 'This permanently deletes the quote version. This cannot be undone.',
+  info:
+    'The home page will refresh job counts and the selected job version list after delete.',
+  cancelLabel: 'Cancel',
+} as const
+
 export function buildQuotesHomeCreateVm(params: {
   creating: boolean
   loading: boolean
@@ -482,9 +492,13 @@ export function buildQuoteHomeVersionItemVm(
   estimate: QuoteHomeJobVersion,
   deletingId: string | null,
 ): QuoteHomeVersionItemVm {
+  const title = estimate.version_name || 'Quote Version'
+  const isDeletingThisVersion = deletingId === estimate.estimate_id
+  const hasDeleteInFlight = Boolean(deletingId)
+
   return {
     id: estimate.estimate_id,
-    title: estimate.version_name || 'Quote Version',
+    title,
     total:
       estimate.final_total != null && estimate.final_total > 0
         ? formatCurrency(estimate.final_total)
@@ -493,8 +507,30 @@ export function buildQuoteHomeVersionItemVm(
       estimate.version_kind,
     )}${QUOTE_META_SEPARATOR}Updated ${formatDateTime(estimate.updated_at)}`,
     href: estimateWorkspaceHref(estimate.estimate_id),
-    deleting: deletingId === estimate.estimate_id,
+    deleting: isDeletingThisVersion,
+    deleteDisabled: hasDeleteInFlight,
+    deleteBusy: isDeletingThisVersion,
+    deleteButtonLabel: isDeletingThisVersion
+      ? QUOTES_HOME_DELETE_COPY.deletingButtonLabel
+      : QUOTES_HOME_DELETE_COPY.buttonLabel,
+    deleteButtonAriaLabel: buildQuoteHomeVersionDeleteAriaLabel({
+      title,
+      deleting: isDeletingThisVersion,
+      disabledByAnotherDelete: hasDeleteInFlight && !isDeletingThisVersion,
+    }),
   }
+}
+
+function buildQuoteHomeVersionDeleteAriaLabel(params: {
+  title: string
+  deleting: boolean
+  disabledByAnotherDelete: boolean
+}) {
+  if (params.deleting) return `Deleting quote version ${params.title}`
+  if (params.disabledByAnotherDelete) {
+    return `Delete quote version ${params.title} unavailable while another version is deleting`
+  }
+  return `Delete quote version ${params.title}`
 }
 
 export function buildQuotesHomeVersionHeading(
@@ -581,23 +617,32 @@ export function buildQuotesHomeDeleteDialogVm(
   estimate: QuoteHomeJobVersion | null,
   deletingId: string | null,
 ): QuotesHomeDeleteDialogVm {
-  const versionName = estimate?.version_name ?? 'this version'
-  const jobTitle = estimate?.job_title ?? 'the selected job'
+  const versionName = estimate?.version_name?.trim() || 'this quote version'
+  const jobTitle = estimate?.job_title?.trim() || 'the selected job'
+  const isDeletingThisVersion = Boolean(
+    estimate?.estimate_id && deletingId === estimate.estimate_id,
+  )
+  const hasDeleteInFlight = Boolean(deletingId)
 
   return {
     isOpen: Boolean(estimate?.estimate_id),
     estimateId: estimate?.estimate_id ?? null,
     versionName: estimate?.version_name ?? null,
     jobTitle: estimate?.job_title ?? null,
-    deleting: Boolean(deletingId),
-    title: 'Delete version?',
-    description: `Delete ${versionName} from ${jobTitle}.`,
-    closeLabel: 'Close delete confirmation',
-    warning: 'This permanently deletes the quote version. This cannot be undone.',
-    info:
-      'The home page will refresh job counts and the selected job version list after delete.',
+    deleting: isDeletingThisVersion,
+    title: `Delete ${versionName}?`,
+    description: `Permanently delete quote version ${versionName} from ${jobTitle}.`,
+    closeLabel: QUOTES_HOME_DELETE_COPY.closeLabel,
+    warning: QUOTES_HOME_DELETE_COPY.warning,
+    info: QUOTES_HOME_DELETE_COPY.info,
+    cancelLabel: QUOTES_HOME_DELETE_COPY.cancelLabel,
+    cancelAriaLabel: `Cancel deleting quote version ${versionName}`,
     confirmLabel: `Delete ${versionName}`,
-    confirmingLabel: 'Deleting...',
+    confirmAriaLabel: `Permanently delete quote version ${versionName} from ${jobTitle}`,
+    confirmingLabel: `Deleting ${versionName}...`,
+    confirmingAriaLabel: `Deleting quote version ${versionName} from ${jobTitle}`,
+    confirmDisabled: hasDeleteInFlight,
+    cancelDisabled: hasDeleteInFlight,
   }
 }
 

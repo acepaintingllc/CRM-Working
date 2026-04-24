@@ -393,12 +393,17 @@ describe('Quotes home panels', () => {
               meta: 'Draft / Standard',
               href: '/crm/quotes/estimate-1',
               deleting: false,
+              deleteDisabled: false,
+              deleteBusy: false,
+              deleteButtonLabel: 'Delete',
+              deleteButtonAriaLabel: 'Delete quote version Version A',
             },
           ],
           hasMore: true,
           loadingMore: false,
           errorMessage: null,
           canRetry: false,
+          status: { kind: 'ready' },
         }}
         onLoadMore={onLoadMore}
         onRetry={async () => true}
@@ -438,12 +443,17 @@ describe('Quotes home panels', () => {
               meta: 'Draft / Standard',
               href: '/crm/quotes/estimate-1',
               deleting: true,
+              deleteDisabled: true,
+              deleteBusy: true,
+              deleteButtonLabel: 'Deleting...',
+              deleteButtonAriaLabel: 'Deleting quote version Version A',
             },
           ],
           hasMore: false,
           loadingMore: false,
           errorMessage: null,
           canRetry: false,
+          status: { kind: 'ready' },
         }}
         onLoadMore={async () => {}}
         onRetry={async () => true}
@@ -452,12 +462,12 @@ describe('Quotes home panels', () => {
     )
 
     const deleteButton = screen.getByRole('button', {
-      name: 'Delete quote version Version A',
+      name: 'Deleting quote version Version A',
     })
     expect(deleteButton).toBeDisabled()
     expect(deleteButton).toHaveAttribute('aria-disabled', 'true')
     expect(deleteButton).toHaveAttribute('aria-busy', 'true')
-    expect(deleteButton).toHaveTextContent('Delete')
+    expect(deleteButton).toHaveTextContent('Deleting...')
   })
 
   it('uses the version name in delete confirmation labels', () => {
@@ -466,21 +476,100 @@ describe('Quotes home panels', () => {
     render(
       <QuotesHomeDeleteDialog
         vm={{
+          isOpen: true,
           estimateId: 'estimate-1',
           versionName: 'Version A',
           jobTitle: 'Kitchen Remodel',
           deleting: false,
+          title: 'Delete Version A?',
+          description:
+            'Permanently delete quote version Version A from Kitchen Remodel.',
+          closeLabel: 'Close delete confirmation',
+          warning: 'This permanently deletes the quote version. This cannot be undone.',
+          info:
+            'The home page will refresh job counts and the selected job version list after delete.',
+          cancelLabel: 'Cancel',
+          cancelAriaLabel: 'Cancel deleting quote version Version A',
+          confirmLabel: 'Delete Version A',
+          confirmAriaLabel:
+            'Permanently delete quote version Version A from Kitchen Remodel',
+          confirmingLabel: 'Deleting Version A...',
+          confirmingAriaLabel: 'Deleting quote version Version A from Kitchen Remodel',
+          confirmDisabled: false,
+          cancelDisabled: false,
         }}
         onCancel={() => {}}
         onConfirm={onConfirm}
       />,
     )
 
-    expect(screen.getByText('Delete Version A from Kitchen Remodel.')).toBeInTheDocument()
+    expect(screen.getByText('Delete Version A?')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Permanently delete quote version Version A from Kitchen Remodel.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'This permanently deletes the quote version. This cannot be undone.',
+      ),
+    ).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Version A' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Permanently delete quote version Version A from Kitchen Remodel',
+      }),
+    )
 
     expect(onConfirm).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables delete confirmation actions while deletion is in progress', () => {
+    render(
+      <QuotesHomeDeleteDialog
+        vm={{
+          isOpen: true,
+          estimateId: 'estimate-1',
+          versionName: 'Version A',
+          jobTitle: 'Kitchen Remodel',
+          deleting: true,
+          title: 'Delete Version A?',
+          description:
+            'Permanently delete quote version Version A from Kitchen Remodel.',
+          closeLabel: 'Close delete confirmation',
+          warning: 'This permanently deletes the quote version. This cannot be undone.',
+          info:
+            'The home page will refresh job counts and the selected job version list after delete.',
+          cancelLabel: 'Cancel',
+          cancelAriaLabel: 'Cancel deleting quote version Version A',
+          confirmLabel: 'Delete Version A',
+          confirmAriaLabel:
+            'Permanently delete quote version Version A from Kitchen Remodel',
+          confirmingLabel: 'Deleting Version A...',
+          confirmingAriaLabel: 'Deleting quote version Version A from Kitchen Remodel',
+          confirmDisabled: true,
+          cancelDisabled: true,
+        }}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+      />,
+    )
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Cancel deleting quote version Version A',
+      }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: 'Deleting quote version Version A from Kitchen Remodel',
+      }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: 'Deleting quote version Version A from Kitchen Remodel',
+      }),
+    ).toHaveAttribute('aria-busy', 'true')
   })
 
   it('renders a retryable error panel when versions fail to load', async () => {
@@ -503,6 +592,14 @@ describe('Quotes home panels', () => {
           loadingMore: false,
           errorMessage: 'versions failed',
           canRetry: true,
+          status: {
+            kind: 'error',
+            title: 'Versions failed to load',
+            message: 'versions failed',
+            canRetry: true,
+            retryLabel: 'Retry versions',
+            retryingLabel: 'Retrying versions...',
+          },
         }}
         onLoadMore={async () => {}}
         onRetry={onRetry}
@@ -553,6 +650,7 @@ describe('Quotes home panels', () => {
           loadingMore: false,
           errorMessage: null,
           canRetry: false,
+          status: { kind: 'ready' },
         }}
         onLoadMore={onLoadMore}
         onRetry={async () => true}

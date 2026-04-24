@@ -142,6 +142,10 @@ export type QuoteHomeVersionItemVm = {
   meta: string
   href: string
   deleting: boolean
+  deleteDisabled: boolean
+  deleteBusy: boolean
+  deleteButtonLabel: string
+  deleteButtonAriaLabel: string
 }
 
 export type QuotesHomeVersionListVm = {
@@ -153,7 +157,7 @@ export type QuotesHomeVersionListVm = {
   loadingMore: boolean
   errorMessage: string | null
   canRetry: boolean
-  status?:
+  status:
     | {
         kind: 'error'
         title: string
@@ -191,16 +195,22 @@ export type QuotesHomeCreateVm = {
 }
 
 export type QuotesHomeDeleteDialogVm = {
-  isOpen?: boolean
+  isOpen: boolean
   estimateId: string | null
   versionName: string | null
   jobTitle: string | null
   deleting: boolean
-  title?: string
-  description?: string
-  closeLabel?: string
-  warning?: string
-  info?: string
-  confirmLabel?: string
-  confirmingLabel?: string
+  title: string
+  description: string
+  closeLabel: string
+  warning: string
+  info: string
+  cancelLabel: string
+  cancelAriaLabel: string
+  confirmLabel: string
+  confirmAriaLabel: string
+  confirmingLabel: string
+  confirmingAriaLabel: string
+  confirmDisabled: boolean
+  cancelDisabled: boolean
 }

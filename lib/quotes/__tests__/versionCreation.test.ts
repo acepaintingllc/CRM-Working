@@ -7,6 +7,9 @@ import {
   filterEligibleQuoteVersionJobs,
   getQuoteWorkspaceHref,
   normalizeQuoteVersionKind,
+  prepareCreateQuoteVersionInput,
+  QUOTE_VERSION_INVALID_KIND_ERROR,
+  QUOTE_VERSION_REQUIRED_JOB_ERROR,
 } from '../versionCreation.ts'
 
 test('filters eligible jobs by customer id', () => {
@@ -68,4 +71,72 @@ test('normalizes fallback creation rules', () => {
   assert.equal(normalizeQuoteVersionKind('unknown'), 'standard')
   assert.equal(buildDefaultQuoteVersionName(2), 'Quote Version 3')
   assert.equal(getQuoteWorkspaceHref('estimate-9'), '/crm/quotes/estimate-9')
+})
+
+test('prepares a create payload for valid draft input', () => {
+  assert.deepEqual(
+    prepareCreateQuoteVersionInput(
+      { id: 'job-1', customer_id: 'customer-1' },
+      {
+        versionKind: 'REVISION',
+        versionName: '  Updated Scope  ',
+      }
+    ),
+    {
+      ok: true,
+      input: {
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_kind: 'revision',
+        version_name: 'Updated Scope',
+      },
+      error: null,
+    }
+  )
+})
+
+test('rejects missing or ineligible jobs before create', () => {
+  assert.deepEqual(
+    prepareCreateQuoteVersionInput(null, {
+      versionKind: 'standard',
+      versionName: 'Draft',
+    }),
+    {
+      ok: false,
+      input: null,
+      error: QUOTE_VERSION_REQUIRED_JOB_ERROR,
+    }
+  )
+
+  assert.deepEqual(
+    prepareCreateQuoteVersionInput(
+      { id: 'job-1', customer_id: '   ' },
+      {
+        versionKind: 'standard',
+        versionName: 'Draft',
+      }
+    ),
+    {
+      ok: false,
+      input: null,
+      error: QUOTE_VERSION_REQUIRED_JOB_ERROR,
+    }
+  )
+})
+
+test('rejects invalid version kinds before create', () => {
+  assert.deepEqual(
+    prepareCreateQuoteVersionInput(
+      { id: 'job-1', customer_id: 'customer-1' },
+      {
+        versionKind: 'custom',
+        versionName: 'Draft',
+      }
+    ),
+    {
+      ok: false,
+      input: null,
+      error: QUOTE_VERSION_INVALID_KIND_ERROR,
+    }
+  )
 })

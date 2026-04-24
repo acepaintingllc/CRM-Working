@@ -10,6 +10,12 @@ type CacheReadOptions = {
   force?: boolean
 }
 
+type InitialJobVersionsPageOptions = {
+  jobId: string
+  enabled: boolean
+  initialData: QuoteJobVersionsPageReadModel | null
+}
+
 export function emptyJobVersions(jobId: string): QuoteJobVersionsPageReadModel {
   return {
     job_id: jobId,
@@ -32,7 +38,16 @@ export function initialJobVersionsPage(
   initialData: QuoteJobVersionsPageReadModel | null
 ): QuoteJobVersionsPageReadModel {
   if (!enabled) return emptyJobVersions('')
-  return initialData ?? emptyJobVersions(jobId)
+  if (initialData?.job_id === jobId) return initialData
+  return emptyJobVersions(jobId)
+}
+
+export function resolveInitialJobVersionsPage({
+  jobId,
+  enabled,
+  initialData,
+}: InitialJobVersionsPageOptions): QuoteJobVersionsPageReadModel {
+  return initialJobVersionsPage(jobId, enabled, initialData)
 }
 
 export function mergeJobVersionsPages(
@@ -52,12 +67,16 @@ export function mergeJobVersionsPages(
   return { ...nextPage, items }
 }
 
+export function shouldReadJobVersionsCache(options?: CacheReadOptions): boolean {
+  return options?.force !== true
+}
+
 export function getCachedJobVersionsPage(
   cache: JobVersionsCache,
   jobId: string,
   options?: CacheReadOptions
 ): QuoteJobVersionsPageReadModel | null {
-  if (options?.force || !cache.has(jobId)) {
+  if (!shouldReadJobVersionsCache(options) || !cache.has(jobId)) {
     return null
   }
 

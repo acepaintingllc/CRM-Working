@@ -331,6 +331,96 @@ describe('useQuoteVersionWorkflow', () => {
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
   })
 
+  it('returns false and preserves version data when the version refresh fails', async () => {
+    const onRefresh = vi.fn().mockResolvedValue(true)
+    loadQuoteJobVersions
+      .mockResolvedValueOnce({
+        job_id: 'job-1',
+        total_versions: 1,
+        limit: 25,
+        next_cursor: null,
+        items: [
+          {
+            estimate_id: 'estimate-1',
+            job_id: 'job-1',
+            customer_id: 'customer-1',
+            version_name: 'Version A',
+            version_state: 'draft',
+            version_kind: 'standard',
+            version_sort_order: 1,
+            job_title: 'Kitchen',
+            customer_name: 'Alice',
+            final_total: 500,
+            updated_at: '2026-04-20T10:00:00.000Z',
+            created_at: '2026-04-19T10:00:00.000Z',
+            is_sent_estimate: false,
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error('Version refresh failed'))
+
+    const { result } = renderHook(() =>
+      useQuoteVersionWorkflow({
+        jobId: 'job-1',
+        selectedJob: { id: 'job-1', customer_id: 'customer-1' },
+        onRefresh,
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.versions.items).toHaveLength(1)
+    })
+
+    let refreshResult = true
+    await act(async () => {
+      refreshResult = await result.current.actions.refresh()
+    })
+
+    expect(refreshResult).toBe(false)
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+    expect(result.current.versions.items).toHaveLength(1)
+    expect(result.current.versions.error).toBe('Version refresh failed')
+  })
+
+  it('returns false when the page context refresh rejects while versions refresh succeeds', async () => {
+    const onRefresh = vi.fn().mockRejectedValue(new Error('Context refresh failed'))
+    loadQuoteJobVersions
+      .mockResolvedValueOnce({
+        job_id: 'job-1',
+        total_versions: 0,
+        limit: 25,
+        next_cursor: null,
+        items: [],
+      })
+      .mockResolvedValueOnce({
+        job_id: 'job-1',
+        total_versions: 0,
+        limit: 25,
+        next_cursor: null,
+        items: [],
+      })
+
+    const { result } = renderHook(() =>
+      useQuoteVersionWorkflow({
+        jobId: 'job-1',
+        selectedJob: { id: 'job-1', customer_id: 'customer-1' },
+        onRefresh,
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.versions.loading).toBe(false)
+    })
+
+    let refreshResult = true
+    await act(async () => {
+      refreshResult = await result.current.actions.refresh()
+    })
+
+    expect(refreshResult).toBe(false)
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
+  })
+
   it('loads additional version pages for the selected job', async () => {
     loadQuoteJobVersions
       .mockResolvedValueOnce({

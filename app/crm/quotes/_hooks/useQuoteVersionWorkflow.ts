@@ -39,8 +39,9 @@ export function useQuoteVersionWorkflow({
     enabled: Boolean(jobId),
     initialData: initialVersions,
   })
-  const createController = useQuoteVersionCreation(selectedJob)
-  const { setError, setVersionKind, setVersionName } = createController
+  const createController = useQuoteVersionCreation(selectedJob, {
+    resetKey: selectedJob?.id ?? jobId,
+  })
   const {
     data: versionsData,
     pageData: versionsPageData,
@@ -57,21 +58,20 @@ export function useQuoteVersionWorkflow({
   const hasJobContext = Boolean(jobId)
   const hasSelectedJob = Boolean(selectedJob)
 
-  useEffect(() => {
-    setVersionName('')
-    setVersionKind('standard')
-    setError(null)
-  }, [jobId, setError, setVersionKind, setVersionName])
-
   const createVersion = useLatestCallback(createController.createVersion)
 
-  const refresh = useCallback(async () => {
-    const [contextResult, versionsResult] = await Promise.all([
+  const refreshContextAndVersions = useCallback(async () => {
+    const [contextResult, versionsResult] = await Promise.allSettled([
       onRefresh ? onRefresh() : Promise.resolve(true),
       refreshVersions(),
     ])
 
-    return Boolean(contextResult && versionsResult)
+    const contextSucceeded =
+      contextResult.status === 'fulfilled' && contextResult.value !== false
+    const versionsSucceeded =
+      versionsResult.status === 'fulfilled' && versionsResult.value !== false
+
+    return contextSucceeded && versionsSucceeded
   }, [onRefresh, refreshVersions])
 
   const versionsState = useMemo(
@@ -140,7 +140,7 @@ export function useQuoteVersionWorkflow({
       setVersionName: createController.setVersionName,
       setVersionKind: createController.setVersionKind,
       create: createVersion,
-      refresh,
+      refresh: refreshContextAndVersions,
       refreshVersions,
       loadMoreVersions,
     }),
@@ -149,7 +149,7 @@ export function useQuoteVersionWorkflow({
       createController.setVersionName,
       createVersion,
       loadMoreVersions,
-      refresh,
+      refreshContextAndVersions,
       refreshVersions,
     ]
   )

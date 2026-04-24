@@ -43,15 +43,14 @@ export function QuotesHomeVersionList({
       setLoadingMore(false)
     }
   }
-  const status = vm.status ?? buildLegacyVersionStatus(vm)
 
   const renderStatus = () => {
-    if (status.kind === 'error') {
+    if (vm.status.kind === 'error') {
       return (
         <div style={S.emptyPanel} role="alert">
-          <div style={S.emptyPanelTitle}>{status.title}</div>
-          <div style={S.bodyText}>{status.message}</div>
-          {status.canRetry ? (
+          <div style={S.emptyPanelTitle}>{vm.status.title}</div>
+          <div style={S.bodyText}>{vm.status.message}</div>
+          {vm.status.canRetry ? (
             <div style={S.rowWrap}>
               <CrmButton
                 onClick={() => void handleRetry()}
@@ -59,7 +58,7 @@ export function QuotesHomeVersionList({
                 disabled={retrying}
                 aria-busy={retrying}
               >
-                {retrying ? status.retryingLabel : status.retryLabel}
+                {retrying ? vm.status.retryingLabel : vm.status.retryLabel}
               </CrmButton>
             </div>
           ) : null}
@@ -67,8 +66,8 @@ export function QuotesHomeVersionList({
       )
     }
 
-    if (status.kind === 'empty') {
-      return <div style={S.emptyState}>{status.message}</div>
+    if (vm.status.kind === 'empty') {
+      return <div style={S.emptyState}>{vm.status.message}</div>
     }
 
     return null
@@ -110,13 +109,13 @@ export function QuotesHomeVersionList({
                     type="button"
                     tone="danger"
                     onClick={() => onRequestDelete(estimate.id)}
-                    disabled={estimate.deleting}
-                    aria-disabled={estimate.deleting}
-                    aria-busy={estimate.deleting || undefined}
-                    aria-label={`Delete quote version ${estimate.title}`}
+                    disabled={estimate.deleteDisabled}
+                    aria-disabled={estimate.deleteDisabled}
+                    aria-busy={estimate.deleteBusy || undefined}
+                    aria-label={estimate.deleteButtonAriaLabel}
                   >
                     <Trash2 size={14} aria-hidden="true" />
-                    Delete
+                    {estimate.deleteButtonLabel}
                   </CrmButton>
                 </div>
               </li>
@@ -140,23 +139,4 @@ export function QuotesHomeVersionList({
       </div>
     </CrmSectionCard>
   )
-}
-
-function buildLegacyVersionStatus(
-  vm: QuotesHomeVersionListVm,
-): NonNullable<QuotesHomeVersionListVm['status']> {
-  if (vm.errorMessage) {
-    return {
-      kind: 'error',
-      title: 'Versions failed to load',
-      message: vm.errorMessage,
-      canRetry: vm.canRetry,
-      retryLabel: 'Retry versions',
-      retryingLabel: 'Retrying versions...',
-    }
-  }
-  if (vm.emptyMessage) {
-    return { kind: 'empty', message: vm.emptyMessage }
-  }
-  return { kind: 'ready' }
 }

@@ -1,32 +1,54 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createQuoteVersion } from '@/lib/quotes/client'
 import {
-  buildCreateQuoteVersionInput,
   getQuoteWorkspaceHref,
+  prepareCreateQuoteVersionInput,
   QUOTE_VERSION_CREATE_ERROR,
-  QUOTE_VERSION_REQUIRED_JOB_ERROR,
   type EligibleQuoteVersionJob,
   type QuoteVersionKind,
 } from '@/lib/quotes/versionCreation'
 
-export function useQuoteVersionCreation(selectedJob: EligibleQuoteVersionJob | null) {
+type UseQuoteVersionCreationOptions = {
+  resetKey?: string
+}
+
+export function useQuoteVersionCreation(
+  selectedJob: EligibleQuoteVersionJob | null,
+  options?: UseQuoteVersionCreationOptions
+) {
   const router = useRouter()
+  const resetKey = options?.resetKey ?? selectedJob?.id ?? ''
   const [versionName, setVersionName] = useState('')
   const [versionKind, setVersionKind] = useState<QuoteVersionKind>('standard')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const createInFlightRef = useRef(false)
+  const resetKeyRef = useRef(resetKey)
+
+  resetKeyRef.current = resetKey
+
+  useEffect(() => {
+    setVersionName('')
+    setVersionKind('standard')
+    setError(null)
+  }, [resetKey])
 
   async function createVersion() {
     if (createInFlightRef.current) {
       return null
     }
 
-    if (!selectedJob) {
-      setError(QUOTE_VERSION_REQUIRED_JOB_ERROR)
+    const createResetKey = resetKey
+    const inputResult = prepareCreateQuoteVersionInput(selectedJob, {
+      versionKind,
+      versionName,
+    })
+
+    if (!inputResult.ok) {
+      setError(inputResult.error)
       return null
     }
 
@@ -36,12 +58,14 @@ export function useQuoteVersionCreation(selectedJob: EligibleQuoteVersionJob | n
 
     try {
       const payload = await createQuoteVersion<{ id: string }>(
-        buildCreateQuoteVersionInput(selectedJob, { versionKind, versionName })
+        inputResult.input
       )
       router.push(getQuoteWorkspaceHref(payload.id))
       return payload
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : QUOTE_VERSION_CREATE_ERROR)
+      if (resetKeyRef.current === createResetKey) {
+        setError(createError instanceof Error ? createError.message : QUOTE_VERSION_CREATE_ERROR)
+      }
       return null
     } finally {
       createInFlightRef.current = false

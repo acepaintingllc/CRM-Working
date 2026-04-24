@@ -7,7 +7,19 @@ import type {
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import type { QuoteHomePageVmResources } from '../_home/quoteHomePageVm'
 
-export type QuoteHomeVmHomeResource = {
+export type QuoteHomeVmHomeResource = QuoteHomePageVmResources['home']
+
+export type QuoteHomeVmSearchResource = QuoteHomePageVmResources['search']
+
+export type QuoteHomeVmVersionsResource =
+  QuoteHomePageVmResources['workflow']['versions']
+
+export type QuoteHomeVmCreateResource =
+  QuoteHomePageVmResources['workflow']['create']
+
+export type QuoteHomeVmDeleteResource = QuoteHomePageVmResources['delete']
+
+export type QuoteHomeVmHomeResourceInput = {
   summary: QuoteHomeBootstrapReadModel['summary']
   jobs: QuoteHomeJobListItemReadModel[]
   hasMore: boolean
@@ -17,7 +29,7 @@ export type QuoteHomeVmHomeResource = {
   jobsError: string | null
 }
 
-export type QuoteHomeVmSearchResource = {
+export type QuoteHomeVmSearchResourceInput = {
   query: string
   loading: boolean
   error: string | null
@@ -27,75 +39,81 @@ export type QuoteHomeVmSearchResource = {
   >[]
 }
 
-export type QuoteHomeVmWorkflowResource = {
-  versions: {
-    items: QuoteHomeJobVersionItemReadModel[]
-    error: string | null
-    pageData: {
-      total_versions: number
-    }
-    hasMore: boolean
-    loadingMore: boolean
-    hasResolved: boolean
-  }
-  create: {
-    creating: boolean
-    error: string | null
-    versionName: string
-    versionKind: QuoteVersionKind
-    canCreate: boolean
-  }
+export type QuoteHomeVmVersionsResourceInput = {
+  items: QuoteHomeJobVersionItemReadModel[]
+  error: string | null
+  totalVersions: number
+  hasMore: boolean
+  loadingMore: boolean
+  hasResolved: boolean
 }
 
-export type QuoteHomeVmDeleteResource = {
+export type QuoteHomeVmCreateResourceInput = {
+  creating: boolean
+  error: string | null
+  versionName: string
+  versionKind: QuoteVersionKind
+  canCreate: boolean
+}
+
+export type QuoteHomeVmDeleteResourceInput = {
   confirmingDelete: QuoteHomeJobVersionItemReadModel | null
   deletingId: string | null
   error: string | null
 }
 
-export function buildQuoteHomePageVmResources(params: {
-  homeResource: QuoteHomeVmHomeResource
-  searchState: QuoteHomeVmSearchResource
-  workflow: QuoteHomeVmWorkflowResource
-  deleteController: QuoteHomeVmDeleteResource
-}): QuoteHomePageVmResources {
+export type QuoteHomeVmResourceInputs = {
+  home: QuoteHomeVmHomeResourceInput
+  search: QuoteHomeVmSearchResourceInput
+  versions: QuoteHomeVmVersionsResourceInput
+  create: QuoteHomeVmCreateResourceInput
+  delete: QuoteHomeVmDeleteResourceInput
+}
+
+export function buildQuoteHomePageVmResources({
+  home,
+  search,
+  versions,
+  create,
+  delete: deleteState,
+}: QuoteHomeVmResourceInputs): QuoteHomePageVmResources {
   return {
     home: {
-      summary: params.homeResource.summary,
-      jobs: params.homeResource.jobs,
-      hasMore: params.homeResource.hasMore,
-      jobsLoading: params.homeResource.jobsLoading,
-      loading: params.homeResource.loading,
-      bootstrapError: params.homeResource.bootstrapError,
-      jobsError: params.homeResource.jobsError,
+      summary: home.summary,
+      jobs: home.jobs,
+      hasMore: home.hasMore,
+      jobsLoading: home.jobsLoading,
+      loading: home.loading,
+      bootstrapError: home.bootstrapError,
+      jobsError: home.jobsError,
     },
     search: {
-      query: params.searchState.query,
-      loading: params.searchState.loading,
-      error: params.searchState.error,
-      results: params.searchState.results,
+      query: search.query,
+      loading: search.loading,
+      error: search.error,
+      results: search.results,
     },
     workflow: {
       versions: {
-        items: params.workflow.versions.items,
-        error: params.workflow.versions.error,
-        totalVersions: params.workflow.versions.pageData.total_versions,
-        hasMore: params.workflow.versions.hasMore,
-        loadingMore: params.workflow.versions.loadingMore,
-        hasResolved: params.workflow.versions.hasResolved,
+        items: versions.items,
+        error: versions.error,
+        totalVersions: versions.totalVersions,
+        hasMore: versions.hasMore,
+        loadingMore: versions.loadingMore,
+        hasResolved: versions.hasResolved,
       },
       create: {
-        creating: params.workflow.create.creating,
-        error: params.workflow.create.error,
-        versionName: params.workflow.create.versionName,
-        versionKind: params.workflow.create.versionKind,
-        canCreate: params.workflow.create.canCreate,
+        creating: create.creating,
+        error: create.error,
+        versionName: create.versionName,
+        versionKind: create.versionKind,
+        canCreate: create.canCreate,
       },
     },
     delete: {
-      confirmingDelete: params.deleteController.confirmingDelete,
-      deletingId: params.deleteController.deletingId,
-      error: params.deleteController.error,
+      confirmingDelete: deleteState.confirmingDelete,
+      deletingId: deleteState.deletingId,
+      error: deleteState.error,
     },
   }
 }

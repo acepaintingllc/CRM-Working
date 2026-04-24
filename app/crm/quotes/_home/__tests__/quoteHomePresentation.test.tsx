@@ -9,6 +9,7 @@ import {
   buildHeroSummaryText,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeFeedbackVm,
+  buildQuotesHomeDeleteDialogVm,
   buildQuotesHomeJobListEmptyState,
   buildQuotesHomeJobListStatus,
   buildQuotesHomeSearchCanRetry,
@@ -129,7 +130,51 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.total).toBe('$1,250')
     expect(versionVm.href).toBe('/crm/quotes/estimate-1')
     expect(versionVm.deleting).toBe(true)
+    expect(versionVm.deleteDisabled).toBe(true)
+    expect(versionVm.deleteBusy).toBe(true)
+    expect(versionVm.deleteButtonLabel).toBe('Deleting...')
+    expect(versionVm.deleteButtonAriaLabel).toBe(
+      'Deleting quote version Kitchen Revision',
+    )
     expect(versionVm.meta).toContain('Live / Revision \u00B7 Updated')
+  })
+
+  it('disables non-active delete buttons while another version is deleting', () => {
+    const versionVm = buildQuoteHomeVersionItemVm(estimate, 'estimate-2')
+
+    expect(versionVm.deleting).toBe(false)
+    expect(versionVm.deleteDisabled).toBe(true)
+    expect(versionVm.deleteBusy).toBe(false)
+    expect(versionVm.deleteButtonLabel).toBe('Delete')
+    expect(versionVm.deleteButtonAriaLabel).toBe(
+      'Delete quote version Kitchen Revision unavailable while another version is deleting',
+    )
+  })
+
+  it('builds destructive dialog copy and disabled state from delete resources', () => {
+    expect(buildQuotesHomeDeleteDialogVm(estimate, 'estimate-1')).toEqual({
+      isOpen: true,
+      estimateId: 'estimate-1',
+      versionName: 'Kitchen Revision',
+      jobTitle: 'Kitchen',
+      deleting: true,
+      title: 'Delete Kitchen Revision?',
+      description:
+        'Permanently delete quote version Kitchen Revision from Kitchen.',
+      closeLabel: 'Close delete confirmation',
+      warning: 'This permanently deletes the quote version. This cannot be undone.',
+      info:
+        'The home page will refresh job counts and the selected job version list after delete.',
+      cancelLabel: 'Cancel',
+      cancelAriaLabel: 'Cancel deleting quote version Kitchen Revision',
+      confirmLabel: 'Delete Kitchen Revision',
+      confirmAriaLabel:
+        'Permanently delete quote version Kitchen Revision from Kitchen',
+      confirmingLabel: 'Deleting Kitchen Revision...',
+      confirmingAriaLabel: 'Deleting quote version Kitchen Revision from Kitchen',
+      confirmDisabled: true,
+      cancelDisabled: true,
+    })
   })
 
   it('builds version-history heading from the full count, not the loaded page length', () => {

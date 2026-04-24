@@ -20,6 +20,7 @@ export const QUOTE_VERSION_KIND_OPTIONS: ReadonlyArray<{
 ]
 
 export const QUOTE_VERSION_REQUIRED_JOB_ERROR = 'Select a job before creating a version.'
+export const QUOTE_VERSION_INVALID_KIND_ERROR = 'Choose a valid version kind.'
 export const QUOTE_VERSION_CREATE_ERROR = 'Failed to create quote.'
 
 const QUOTE_VERSION_KIND_SET = new Set<string>(QUOTE_VERSION_KINDS)
@@ -42,7 +43,7 @@ export type QuoteVersionRecord = {
 }
 
 export type CreateQuoteVersionDraft = {
-  versionKind: QuoteVersionKind
+  versionKind: string | null | undefined
   versionName: string
 }
 
@@ -52,6 +53,18 @@ export type CreateQuoteVersionInput = {
   version_kind: QuoteVersionKind
   version_name?: string
 }
+
+export type CreateQuoteVersionInputResult =
+  | {
+      ok: true
+      input: CreateQuoteVersionInput
+      error: null
+    }
+  | {
+      ok: false
+      input: null
+      error: string
+    }
 
 function asTimestamp(value: string | null | undefined) {
   if (!value) return 0
@@ -105,6 +118,36 @@ export function buildCreateQuoteVersionInput(
     customer_id: job.customer_id,
     version_kind: normalizeQuoteVersionKind(draft.versionKind),
     ...(versionName ? { version_name: versionName } : {}),
+  }
+}
+
+export function prepareCreateQuoteVersionInput(
+  job: QuoteVersionCreationJob | null | undefined,
+  draft: CreateQuoteVersionDraft
+): CreateQuoteVersionInputResult {
+  if (!isEligibleQuoteVersionJob(job)) {
+    return {
+      ok: false,
+      input: null,
+      error: QUOTE_VERSION_REQUIRED_JOB_ERROR,
+    }
+  }
+
+  if (!isQuoteVersionKind(draft.versionKind)) {
+    return {
+      ok: false,
+      input: null,
+      error: QUOTE_VERSION_INVALID_KIND_ERROR,
+    }
+  }
+
+  return {
+    ok: true,
+    input: buildCreateQuoteVersionInput(job, {
+      versionKind: normalizeQuoteVersionKind(draft.versionKind),
+      versionName: draft.versionName,
+    }),
+    error: null,
   }
 }
 

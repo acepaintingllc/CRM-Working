@@ -555,6 +555,71 @@ describe('buildQuoteHomePageVm', () => {
     )
   })
 
+  it('threads delete busy state into version row actions', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        delete: {
+          deletingId: 'estimate-1',
+        },
+      })
+    )
+
+    expect(vm.versionList.items).toEqual([
+      expect.objectContaining({
+        id: 'estimate-2',
+        deleting: false,
+        deleteDisabled: true,
+        deleteBusy: false,
+        deleteButtonLabel: 'Delete',
+        deleteButtonAriaLabel:
+          'Delete quote version Version B unavailable while another version is deleting',
+      }),
+      expect.objectContaining({
+        id: 'estimate-1',
+        deleting: true,
+        deleteDisabled: true,
+        deleteBusy: true,
+        deleteButtonLabel: 'Deleting...',
+        deleteButtonAriaLabel: 'Deleting quote version Version A',
+      }),
+    ])
+  })
+
+  it('builds accessible destructive dialog state from the confirming version', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        delete: {
+          confirmingDelete: versionOne,
+          deletingId: 'estimate-1',
+        },
+      })
+    )
+
+    expect(vm.dialogs.delete).toEqual({
+      isOpen: true,
+      estimateId: 'estimate-1',
+      versionName: 'Version A',
+      jobTitle: 'Kitchen',
+      deleting: true,
+      title: 'Delete Version A?',
+      description: 'Permanently delete quote version Version A from Kitchen.',
+      closeLabel: 'Close delete confirmation',
+      warning: 'This permanently deletes the quote version. This cannot be undone.',
+      info:
+        'The home page will refresh job counts and the selected job version list after delete.',
+      cancelLabel: 'Cancel',
+      cancelAriaLabel: 'Cancel deleting quote version Version A',
+      confirmLabel: 'Delete Version A',
+      confirmAriaLabel: 'Permanently delete quote version Version A from Kitchen',
+      confirmingLabel: 'Deleting Version A...',
+      confirmingAriaLabel: 'Deleting quote version Version A from Kitchen',
+      confirmDisabled: true,
+      cancelDisabled: true,
+    })
+  })
+
   it('threads selected-job version load failures into the version list vm', () => {
     const vm = buildQuoteHomePageVm(
       buildState(),

@@ -1,7 +1,13 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act, StrictMode, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createJobVersionsCache, mergeJobVersionsPages } from '../jobVersionsCache'
+import {
+  createJobVersionsCache,
+  getCachedJobVersionsPage,
+  hydrateJobVersionsCache,
+  mergeJobVersionsPages,
+  resolveInitialJobVersionsPage,
+} from '../jobVersionsCache'
 import { useQuoteJobVersions } from '../useQuoteJobVersions'
 import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/collectionData'
 
@@ -81,6 +87,21 @@ describe('useQuoteJobVersions', () => {
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(1)
     expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
     expect(result.current.hasResolved).toBe(true)
+  })
+
+  it('reports a failed initial fresh load and leaves an empty page', async () => {
+    loadQuoteJobVersions.mockRejectedValue(new Error('versions unavailable'))
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('versions unavailable')
+    })
+
+    expect(result.current.data.job_id).toBe('job-1')
+    expect(result.current.items).toEqual([])
+    expect(result.current.loading).toBe(false)
+    expect(result.current.hasResolved).toBe(false)
   })
 
   it('appends the next versions page and keeps the authoritative total count', async () => {
@@ -241,6 +262,48 @@ describe('useQuoteJobVersions', () => {
     expect(result.current.hasMore).toBe(false)
   })
 
+  it('keeps the current page and releases loadMore after a failed cursor request', async () => {
+    loadQuoteJobVersions
+      .mockResolvedValueOnce({
+        ...versionPayload,
+        total_versions: 2,
+        next_cursor: 'cursor-2',
+        items: [versionPayload.items[0]],
+      })
+      .mockRejectedValueOnce(new Error('next page failed'))
+      .mockResolvedValueOnce({
+        ...versionPayload,
+        total_versions: 2,
+        next_cursor: null,
+        items: [versionPayload.items[1]],
+      })
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1'])
+    })
+
+    await act(async () => {
+      await expect(result.current.loadMore()).resolves.toBe(false)
+    })
+
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1'])
+    expect(result.current.error).toBe('next page failed')
+    expect(result.current.loadingMore).toBe(false)
+
+    await act(async () => {
+      await expect(result.current.loadMore()).resolves.toBe(true)
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(3)
+    expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(3, 'job-1', {
+      cursor: 'cursor-2',
+    })
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+    expect(result.current.error).toBeNull()
+  })
+
   it('uses cached data until a forced refresh is requested', async () => {
     loadQuoteJobVersions.mockResolvedValue(versionPayload)
 
@@ -331,6 +394,54 @@ describe('useQuoteJobVersions', () => {
 
     expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
+  })
+
+  it('prevents an older in-flight load from overwriting a cache hit', async () => {
+    const jobTwo = deferred<typeof versionPayload>()
+    const jobTwoPayload = {
+      ...versionPayload,
+      job_id: 'job-2',
+      items: [
+        {
+          ...versionPayload.items[0],
+          estimate_id: 'estimate-job-2',
+          job_id: 'job-2',
+          job_title: 'Garage',
+        },
+      ],
+    }
+
+    loadQuoteJobVersions.mockResolvedValueOnce(versionPayload).mockImplementationOnce(() => jobTwo.promise)
+
+    const { result, rerender } = renderHook(({ jobId }) => useQuoteJobVersions(jobId), {
+      initialProps: { jobId: 'job-1' },
+    })
+
+    await waitFor(() => {
+      expect(result.current.data.job_id).toBe('job-1')
+    })
+
+    rerender({ jobId: 'job-2' })
+
+    await waitFor(() => {
+      expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
+    })
+
+    rerender({ jobId: 'job-1' })
+
+    await waitFor(() => {
+      expect(result.current.data.job_id).toBe('job-1')
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+    })
+
+    jobTwo.resolve(jobTwoPayload)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.data.job_id).toBe('job-1')
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
   })
 
   it('initializes empty and does not fetch when disabled', async () => {
@@ -575,6 +686,65 @@ describe('createJobVersionsCache', () => {
     cache.set('job-1', replacementPayload)
 
     expect(cache.get('job-1')).toBe(replacementPayload)
+  })
+})
+
+describe('job versions cache policy', () => {
+  it('hydrates valid initial data into the cache and skips null pages', () => {
+    const cache = createJobVersionsCache()
+
+    expect(hydrateJobVersionsCache(cache, null)).toBe(false)
+    expect(cache.has('job-1')).toBe(false)
+
+    expect(hydrateJobVersionsCache(cache, versionPayload)).toBe(true)
+    expect(cache.get('job-1')).toBe(versionPayload)
+  })
+
+  it('resolves initial hook data only when enabled and matched to the selected job', () => {
+    const jobTwoPayload = {
+      ...versionPayload,
+      job_id: 'job-2',
+    }
+
+    expect(
+      resolveInitialJobVersionsPage({
+        jobId: 'job-1',
+        enabled: true,
+        initialData: versionPayload,
+      })
+    ).toBe(versionPayload)
+
+    expect(
+      resolveInitialJobVersionsPage({
+        jobId: 'job-1',
+        enabled: true,
+        initialData: jobTwoPayload,
+      })
+    ).toEqual({
+      job_id: 'job-1',
+      total_versions: 0,
+      limit: 25,
+      next_cursor: null,
+      items: [],
+    })
+
+    expect(
+      resolveInitialJobVersionsPage({
+        jobId: 'job-1',
+        enabled: false,
+        initialData: versionPayload,
+      }).job_id
+    ).toBe('')
+  })
+
+  it('returns cached pages unless a fresh load is forced', () => {
+    const cache = createJobVersionsCache()
+
+    cache.set('job-1', versionPayload)
+
+    expect(getCachedJobVersionsPage(cache, 'job-1')).toBe(versionPayload)
+    expect(getCachedJobVersionsPage(cache, 'job-1', { force: true })).toBeNull()
+    expect(getCachedJobVersionsPage(cache, 'job-2')).toBeNull()
   })
 })
 
