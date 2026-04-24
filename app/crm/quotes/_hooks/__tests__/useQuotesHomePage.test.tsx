@@ -1,6 +1,17 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  makePagedQuoteHomeVersions,
+  makeQuoteHomeSearchResult,
+  quoteHomeBootstrap,
+  quoteHomeEmptyBootstrap,
+  quoteHomeJob1Versions,
+  quoteHomeJob2Versions,
+  quoteHomeJobs,
+  quoteHomeJobThree,
+  quoteHomeSummary,
+} from '@/test-support/quoteHomeFixtures'
 import { useQuotesHomePage } from '../useQuotesHomePage'
 
 const { push } = vi.hoisted(() => ({
@@ -36,142 +47,7 @@ vi.mock('@/lib/quotes/client', () => ({
   loadQuoteJobVersions,
 }))
 
-const summaryPayload = {
-  total_versions: 3,
-  draft_count: 1,
-  sent_or_awaiting_count: 1,
-  live_count: 1,
-  pipeline_total: 1800,
-}
-
-const bootstrapJobs = [
-  {
-    id: 'job-1',
-    customer_id: 'customer-1',
-    customer_name: 'Alice',
-    customer_address: '123 Main',
-    title: 'Kitchen',
-    description: null,
-    status: 'estimate_pending',
-    created_at: '2026-04-21T10:00:00.000Z',
-    estimate_date: null,
-    estimate_sent_at: null,
-    scheduled_date: null,
-    scheduled_end_date: null,
-    scheduled_email_sent_at: null,
-    completed_at: null,
-    completed_email_sent_at: null,
-    closeout_notes: null,
-    linked_estimate_id: null,
-    version_count: 2,
-  },
-  {
-    id: 'job-2',
-    customer_id: 'customer-2',
-    customer_name: 'Bob',
-    customer_address: '456 Oak',
-    title: 'Garage',
-    description: null,
-    status: 'estimate_sent',
-    created_at: '2026-04-20T10:00:00.000Z',
-    estimate_date: null,
-    estimate_sent_at: null,
-    scheduled_date: null,
-    scheduled_end_date: null,
-    scheduled_email_sent_at: null,
-    completed_at: null,
-    completed_email_sent_at: null,
-    closeout_notes: null,
-    linked_estimate_id: null,
-    version_count: 1,
-  },
-]
-
-const jobThree = {
-  ...bootstrapJobs[1],
-  id: 'job-3',
-  customer_id: 'customer-3',
-  customer_name: 'Charlie',
-  customer_address: '789 Pine',
-  title: 'Bath',
-}
-
-const job1VersionsPayload = {
-  job_id: 'job-1',
-  total_versions: 2,
-  limit: 25,
-  next_cursor: null,
-  items: [
-    {
-      estimate_id: 'estimate-2',
-      job_id: 'job-1',
-      customer_id: 'customer-1',
-      version_name: 'Version B',
-      version_state: 'live',
-      version_kind: 'revision',
-      version_sort_order: 2,
-      job_title: 'Kitchen',
-      customer_name: 'Alice',
-      final_total: 1300,
-      updated_at: '2026-04-21T10:00:00.000Z',
-      created_at: '2026-04-20T10:00:00.000Z',
-      is_sent_estimate: true,
-    },
-    {
-      estimate_id: 'estimate-1',
-      job_id: 'job-1',
-      customer_id: 'customer-1',
-      version_name: 'Version A',
-      version_state: 'draft',
-      version_kind: 'standard',
-      version_sort_order: 1,
-      job_title: 'Kitchen',
-      customer_name: 'Alice',
-      final_total: 500,
-      updated_at: '2026-04-20T10:00:00.000Z',
-      created_at: '2026-04-19T10:00:00.000Z',
-      is_sent_estimate: false,
-    },
-  ],
-}
-
-const job2VersionsPayload = {
-  job_id: 'job-2',
-  total_versions: 1,
-  limit: 25,
-  next_cursor: null,
-  items: [
-    {
-      estimate_id: 'estimate-3',
-      job_id: 'job-2',
-      customer_id: 'customer-2',
-      version_name: 'Garage Alt',
-      version_state: 'archived',
-      version_kind: 'alternate',
-      version_sort_order: 1,
-      job_title: 'Garage',
-      customer_name: 'Bob',
-      final_total: 800,
-      updated_at: '2026-04-18T10:00:00.000Z',
-      created_at: '2026-04-17T10:00:00.000Z',
-      is_sent_estimate: true,
-    },
-  ],
-}
-
-const bootstrapPayload = {
-  summary: summaryPayload,
-  jobs: {
-    query: '',
-    limit: 25,
-    next_cursor: 'cursor-2',
-    items: bootstrapJobs,
-  },
-  selected_job_id: 'job-1',
-  selected_job_versions: job1VersionsPayload,
-}
-
-const refreshedBootstrapPayload = {
+const refreshedQuoteHomeBootstrap = {
   summary: {
     total_versions: 202,
     draft_count: 0,
@@ -185,10 +61,10 @@ const refreshedBootstrapPayload = {
     next_cursor: 'cursor-2',
     items: [
       {
-        ...bootstrapJobs[0],
+        ...quoteHomeJobs[0],
         version_count: 201,
       },
-      bootstrapJobs[1],
+      quoteHomeJobs[1],
     ],
   },
   selected_job_id: 'job-1',
@@ -197,30 +73,23 @@ const refreshedBootstrapPayload = {
     total_versions: 1,
     limit: 25,
     next_cursor: null,
-    items: [job1VersionsPayload.items[0]],
+    items: [quoteHomeJob1Versions.items[0]],
   },
 }
 
-const refreshedJob1VersionsPayload = {
+const refreshedQuoteHomeJob1Versions = {
   job_id: 'job-1',
   total_versions: 1,
   limit: 25,
   next_cursor: null,
-  items: [job1VersionsPayload.items[0]],
+  items: [quoteHomeJob1Versions.items[0]],
 }
 
-const pagedJob1VersionsPayload = {
-  job_id: 'job-1',
-  total_versions: 30,
-  limit: 25,
-  next_cursor: 'cursor-2',
-  items: Array.from({ length: 25 }, (_, index) => ({
-    ...job1VersionsPayload.items[0],
-    estimate_id: `estimate-${index + 1}`,
-    version_name: `Version ${index + 1}`,
-    version_sort_order: 30 - index,
-  })),
-}
+const pagedQuoteHomeJob1Versions = makePagedQuoteHomeVersions({
+  count: 25,
+  totalVersions: 30,
+  nextCursor: 'cursor-2',
+})
 
 describe('useQuotesHomePage', () => {
   beforeEach(() => {
@@ -238,31 +107,54 @@ describe('useQuotesHomePage', () => {
     })
   })
 
+  it('hydrates the first load from SSR bootstrap data without client bootstrap work', async () => {
+    const { result } = renderHook(() => useQuotesHomePage(quoteHomeBootstrap))
+
+    expect(result.current.loading).toBe(false)
+    expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    expect(result.current.jobList.selectedJobId).toBe('job-1')
+    expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
+      'estimate-2',
+      'estimate-1',
+    ])
+    expect(result.current.header.heroSummaryText).toBe(
+      '3 total versions \u00B7 1 drafts \u00B7 1 sent/awaiting \u00B7 1 live'
+    )
+    expect(loadQuoteHomeBootstrap).not.toHaveBeenCalled()
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
+  })
+
+  it('fetches bootstrap data on first load when SSR data is unavailable', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    expect(result.current.loading).toBe(true)
+
+    await waitFor(() => {
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
+        'estimate-2',
+        'estimate-1',
+      ])
+    })
+
+    expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(1)
+    expect(loadQuoteJobVersions).not.toHaveBeenCalled()
+    expect(result.current.jobList.selectedJobId).toBe('job-1')
+  })
+
   it('uses bootstrap-selected versions without an immediate duplicate fetch and keeps search separate', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
+    loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
+    createQuoteVersion.mockResolvedValue({ id: 'estimate-99' })
     loadQuoteHomeJobs.mockResolvedValue({
       query: 'garage',
       limit: 25,
       next_cursor: null,
-      items: [bootstrapJobs[1]],
+      items: [quoteHomeJobs[1]],
     })
     loadQuoteHomeSearch.mockResolvedValue({
       query: 'revision',
-      items: [
-        {
-          estimate_id: 'estimate-2',
-          job_id: 'job-1',
-          customer_id: 'customer-1',
-          version_name: 'Version B',
-          version_state: 'live',
-          version_kind: 'revision',
-          job_title: 'Kitchen',
-          customer_name: 'Alice',
-          updated_at: '2026-04-21T10:00:00.000Z',
-          final_total: 1300,
-          is_sent_estimate: true,
-        },
-      ],
+      items: [makeQuoteHomeSearchResult('estimate-2')],
     })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -281,6 +173,8 @@ describe('useQuotesHomePage', () => {
 
     act(() => {
       result.current.actions.setSearchQuery('revision')
+      result.current.actions.setVersionName('  Kitchen Revision  ')
+      result.current.actions.setVersionKind('revision')
       result.current.actions.setJobQuery('garage')
     })
 
@@ -300,20 +194,34 @@ describe('useQuotesHomePage', () => {
       cursor: undefined,
     })
     expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-2'])
-    expect(result.current.jobList.selectedJobId).toBe('job-2')
-    expect(result.current.selectedJob.title).toBe('Garage')
+    expect(result.current.jobList.items.some((job) => job.isSelected)).toBe(false)
+    expect(result.current.jobList.selectedJobId).toBe('job-1')
+    expect(result.current.selectedJob.title).toBe('Kitchen')
+    expect(result.current.create.versionName).toBe('  Kitchen Revision  ')
+    expect(result.current.create.versionKind).toBe('revision')
+
+    await act(async () => {
+      await result.current.actions.create()
+    })
+
+    expect(createQuoteVersion).toHaveBeenCalledWith({
+      job_id: 'job-1',
+      customer_id: 'customer-1',
+      version_kind: 'revision',
+      version_name: 'Kitchen Revision',
+    })
   })
 
   it('loads additional selected-job version pages beyond the first 25 records', async () => {
     loadQuoteHomeBootstrap.mockResolvedValue({
-      ...bootstrapPayload,
-      selected_job_versions: pagedJob1VersionsPayload,
+      ...quoteHomeBootstrap,
+      selected_job_versions: pagedQuoteHomeJob1Versions,
     })
     loadQuoteJobVersions.mockResolvedValue({
-      ...pagedJob1VersionsPayload,
+      ...pagedQuoteHomeJob1Versions,
       next_cursor: null,
       items: Array.from({ length: 5 }, (_, index) => ({
-        ...job1VersionsPayload.items[0],
+        ...quoteHomeJob1Versions.items[0],
         estimate_id: `estimate-${index + 26}`,
         version_name: `Version ${index + 26}`,
         version_sort_order: 5 - index,
@@ -345,26 +253,32 @@ describe('useQuotesHomePage', () => {
     expect(result.current.versionList.heading).toBe('30 versions under this job')
   })
 
-  it('keeps pagination inside the active server query and preserves selection when results expand', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
+  it('keeps pagination inside the active server query and preserves selected job when filters hide it', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
     loadQuoteHomeJobs
       .mockResolvedValueOnce({
         query: 'garage',
         limit: 25,
         next_cursor: 'cursor-3',
-        items: [bootstrapJobs[1]],
+        items: [quoteHomeJobs[1]],
       })
       .mockResolvedValueOnce({
         query: 'garage',
         limit: 25,
         next_cursor: null,
-        items: [jobThree],
+        items: [quoteHomeJobThree],
       })
       .mockResolvedValueOnce({
         query: 'ga',
         limit: 25,
         next_cursor: null,
-        items: [bootstrapJobs[1], jobThree],
+        items: [quoteHomeJobs[1], quoteHomeJobThree],
+      })
+      .mockResolvedValueOnce({
+        query: '',
+        limit: 25,
+        next_cursor: 'cursor-2',
+        items: quoteHomeJobs,
       })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -381,7 +295,9 @@ describe('useQuotesHomePage', () => {
       expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-2'])
     })
 
-    expect(result.current.jobList.selectedJobId).toBe('job-2')
+    expect(result.current.jobList.selectedJobId).toBe('job-1')
+    expect(result.current.selectedJob.title).toBe('Kitchen')
+    expect(result.current.jobList.items.some((job) => job.isSelected)).toBe(false)
     expect(result.current.jobList.hasMore).toBe(true)
 
     await act(async () => {
@@ -409,13 +325,33 @@ describe('useQuotesHomePage', () => {
       limit: 25,
       cursor: undefined,
     })
-    expect(result.current.jobList.selectedJobId).toBe('job-2')
-    expect(result.current.selectedJob.title).toBe('Garage')
+    expect(result.current.jobList.selectedJobId).toBe('job-1')
+    expect(result.current.selectedJob.title).toBe('Kitchen')
+    expect(result.current.jobList.items.some((job) => job.isSelected)).toBe(false)
+
+    act(() => {
+      result.current.actions.setJobQuery('')
+    })
+
+    expect(result.current.jobList.selectedJobId).toBe('job-1')
+    expect(result.current.selectedJob.title).toBe('Kitchen')
+
+    await waitFor(() => {
+      expect(result.current.jobList.items.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+    })
+
+    expect(loadQuoteHomeJobs).toHaveBeenNthCalledWith(4, {
+      query: '',
+      limit: 25,
+      cursor: undefined,
+    })
+    expect(result.current.jobList.selectedJobId).toBe('job-1')
+    expect(result.current.selectedJob.title).toBe('Kitchen')
   })
 
   it('loads versions for a newly selected job and creates a version', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
-    loadQuoteJobVersions.mockResolvedValue(job2VersionsPayload)
+    loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
+    loadQuoteJobVersions.mockResolvedValue(quoteHomeJob2Versions)
     createQuoteVersion.mockResolvedValue({ id: 'estimate-99' })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -463,15 +399,8 @@ describe('useQuotesHomePage', () => {
 
   it('surfaces an error when creating without a selected job', async () => {
     loadQuoteHomeBootstrap.mockResolvedValue({
-      summary: summaryPayload,
-      jobs: {
-        query: '',
-        limit: 25,
-        next_cursor: null,
-        items: [],
-      },
-      selected_job_id: null,
-      selected_job_versions: null,
+      ...quoteHomeEmptyBootstrap,
+      summary: quoteHomeSummary,
     })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -493,9 +422,9 @@ describe('useQuotesHomePage', () => {
 
   it('reuses bootstrap-selected versions after delete without a duplicate versions fetch', async () => {
     loadQuoteHomeBootstrap
-      .mockResolvedValueOnce(bootstrapPayload)
-      .mockResolvedValueOnce(refreshedBootstrapPayload)
-    loadQuoteJobVersions.mockResolvedValue(refreshedJob1VersionsPayload)
+      .mockResolvedValueOnce(quoteHomeBootstrap)
+      .mockResolvedValueOnce(refreshedQuoteHomeBootstrap)
+    loadQuoteJobVersions.mockResolvedValue(refreshedQuoteHomeJob1Versions)
     deleteQuoteVersion.mockResolvedValue({ data: { ok: true } })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -537,9 +466,39 @@ describe('useQuotesHomePage', () => {
     expect(result.current.versionList.heading).toBe('1 version under this job')
   })
 
+  it('surfaces delete failures without refreshing home data', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
+    deleteQuoteVersion.mockRejectedValueOnce(new Error('delete failed'))
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
+        'estimate-2',
+        'estimate-1',
+      ])
+    })
+
+    act(() => {
+      result.current.actions.requestDelete('estimate-1')
+    })
+
+    await act(async () => {
+      await result.current.actions.confirmDelete()
+    })
+
+    expect(deleteQuoteVersion).toHaveBeenCalledWith('estimate-1')
+    expect(loadQuoteHomeBootstrap).toHaveBeenCalledTimes(1)
+    expect(result.current.dialogs.delete.estimateId).toBe('estimate-1')
+    expect(result.current.feedback).toMatchObject({
+      title: 'Quote action failed',
+      details: ['delete failed'],
+    })
+  })
+
   it('keeps delete success explicit when follow-up refresh fails without local shadow mutation', async () => {
     loadQuoteHomeBootstrap
-      .mockResolvedValueOnce(bootstrapPayload)
+      .mockResolvedValueOnce(quoteHomeBootstrap)
       .mockRejectedValueOnce(new Error('bootstrap refresh failed'))
     loadQuoteJobVersions.mockRejectedValue(new Error('versions refresh failed'))
     deleteQuoteVersion.mockResolvedValue({ data: { ok: true } })
@@ -574,26 +533,12 @@ describe('useQuotesHomePage', () => {
   })
 
   it('surfaces search errors separately from bootstrap data and retries search independently', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue(bootstrapPayload)
+    loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
     loadQuoteHomeSearch
       .mockRejectedValueOnce(new Error('search failed'))
       .mockResolvedValueOnce({
         query: 'revision',
-        items: [
-          {
-            estimate_id: 'estimate-2',
-            job_id: 'job-1',
-            customer_id: 'customer-1',
-            version_name: 'Version B',
-            version_state: 'live',
-            version_kind: 'revision',
-            job_title: 'Kitchen',
-            customer_name: 'Alice',
-            updated_at: '2026-04-21T10:00:00.000Z',
-            final_total: 1300,
-            is_sent_estimate: true,
-          },
-        ],
+        items: [makeQuoteHomeSearchResult('estimate-2')],
       })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -634,9 +579,40 @@ describe('useQuotesHomePage', () => {
     expect(result.current.header.searchErrorMessage).toBeNull()
   })
 
+  it('surfaces empty quote search results without disturbing selected job state', async () => {
+    loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeBootstrap)
+    loadQuoteHomeSearch.mockResolvedValueOnce({
+      query: 'missing',
+      items: [],
+    })
+
+    const { result } = renderHook(() => useQuotesHomePage())
+
+    await waitFor(() => {
+      expect(result.current.selectedJob.title).toBe('Kitchen')
+    })
+
+    act(() => {
+      result.current.actions.setSearchQuery('missing')
+    })
+
+    await waitFor(
+      () => {
+        expect(result.current.header.searchEmptyMessage).toBe(
+          'No quote versions match "missing".'
+        )
+      },
+      { timeout: 1500 }
+    )
+
+    expect(result.current.header.searchResults).toEqual([])
+    expect(result.current.header.searchErrorMessage).toBeNull()
+    expect(result.current.selectedJob.title).toBe('Kitchen')
+  })
+
   it('keeps version-load failures separate from bootstrap failures', async () => {
     loadQuoteHomeBootstrap.mockResolvedValue({
-      ...bootstrapPayload,
+      ...quoteHomeBootstrap,
       selected_job_versions: null,
     })
     loadQuoteJobVersions.mockRejectedValue(new Error('versions failed'))
@@ -647,10 +623,9 @@ describe('useQuotesHomePage', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    expect(result.current.feedback).toMatchObject({
-      title: 'Quote home loaded with errors',
-    })
-    expect(result.current.feedback?.details).toContain('Job versions failed to load. versions failed')
+    expect(result.current.feedback).toBeNull()
+    expect(result.current.versionList.errorMessage).toBe('versions failed')
+    expect(result.current.versionList.canRetry).toBe(true)
     expect(result.current.header.searchErrorMessage).toBeNull()
   })
 
@@ -674,26 +649,12 @@ describe('useQuotesHomePage', () => {
 
   it('page refresh reuses bootstrap-selected versions without rerunning search or duplicate version fetches', async () => {
     loadQuoteHomeBootstrap
-      .mockResolvedValueOnce(bootstrapPayload)
-      .mockResolvedValueOnce(refreshedBootstrapPayload)
-    loadQuoteJobVersions.mockResolvedValue(refreshedJob1VersionsPayload)
+      .mockResolvedValueOnce(quoteHomeBootstrap)
+      .mockResolvedValueOnce(refreshedQuoteHomeBootstrap)
+    loadQuoteJobVersions.mockResolvedValue(refreshedQuoteHomeJob1Versions)
     loadQuoteHomeSearch.mockResolvedValue({
       query: 'revision',
-      items: [
-        {
-          estimate_id: 'estimate-2',
-          job_id: 'job-1',
-          customer_id: 'customer-1',
-          version_name: 'Version B',
-          version_state: 'live',
-          version_kind: 'revision',
-          job_title: 'Kitchen',
-          customer_name: 'Alice',
-          updated_at: '2026-04-21T10:00:00.000Z',
-          final_total: 1300,
-          is_sent_estimate: true,
-        },
-      ],
+      items: [makeQuoteHomeSearchResult('estimate-2')],
     })
 
     const { result } = renderHook(() => useQuotesHomePage())
@@ -726,23 +687,7 @@ describe('useQuotesHomePage', () => {
   })
 
   it('preserves empty states when there are no eligible jobs or quote versions', async () => {
-    loadQuoteHomeBootstrap.mockResolvedValue({
-      summary: {
-        total_versions: 0,
-        draft_count: 0,
-        sent_or_awaiting_count: 0,
-        live_count: 0,
-        pipeline_total: 0,
-      },
-      jobs: {
-        query: '',
-        limit: 25,
-        next_cursor: null,
-        items: [],
-      },
-      selected_job_id: null,
-      selected_job_versions: null,
-    })
+    loadQuoteHomeBootstrap.mockResolvedValue(quoteHomeEmptyBootstrap)
 
     const { result } = renderHook(() => useQuotesHomePage())
 
@@ -760,3 +705,4 @@ describe('useQuotesHomePage', () => {
     expect(result.current.create.canCreate).toBe(false)
   })
 })
+

@@ -57,6 +57,7 @@ function buildController() {
   >(async () => ({ ok: true, error: null }))
   const homeResource = {
     attemptRefresh: homeAttemptRefresh,
+    retryJobs: vi.fn(async () => true),
   }
   const versions = {
     pageData: bootstrapWithActiveVersions.selected_job_versions,
@@ -81,6 +82,7 @@ function buildController() {
     setVersionKind: vi.fn(),
     create: vi.fn(async () => ({ id: 'estimate-created' })),
     loadMoreVersions: vi.fn(async () => true),
+    retryVersions: vi.fn(async () => true),
   }
   const retrySearch = vi.fn()
 
@@ -120,6 +122,8 @@ describe('useQuoteHomePageController', () => {
     expect(result.current.actions.requestDelete).toBe(actions.requestDelete)
     expect(result.current.actions.cancelDelete).toBe(actions.cancelDelete)
     expect(result.current.actions.confirmDelete).toBe(actions.confirmDelete)
+    expect(result.current.actions.retryJobs).toBe(actions.retryJobs)
+    expect(result.current.actions.retryVersions).toBe(actions.retryVersions)
   })
 
   it('wires public page actions to their owning hook actions', async () => {
@@ -130,6 +134,7 @@ describe('useQuoteHomePageController', () => {
       workflowActions,
       retrySearch,
       deleteController,
+      homeResource,
     } = buildController()
 
     act(() => {
@@ -147,6 +152,8 @@ describe('useQuoteHomePageController', () => {
       await result.current.actions.loadMore()
       await result.current.actions.create()
       await result.current.actions.loadMoreVersions()
+      await result.current.actions.retryJobs()
+      await result.current.actions.retryVersions()
     })
 
     expect(stateActions.setSearchQuery).toHaveBeenCalledWith('revision')
@@ -158,6 +165,8 @@ describe('useQuoteHomePageController', () => {
     expect(workflowActions.setVersionKind).toHaveBeenCalledWith('revision')
     expect(workflowActions.create).toHaveBeenCalledTimes(1)
     expect(workflowActions.loadMoreVersions).toHaveBeenCalledTimes(1)
+    expect(homeResource.retryJobs).toHaveBeenCalledTimes(1)
+    expect(workflowActions.retryVersions).toHaveBeenCalledTimes(1)
     expect(retrySearch).toHaveBeenCalledTimes(1)
     expect(deleteController.cancelDelete).toHaveBeenCalledTimes(1)
   })
@@ -171,6 +180,22 @@ describe('useQuoteHomePageController', () => {
 
     expect(deleteController.requestDeleteVersion).toHaveBeenCalledWith(versionItem)
     expect(result.current.actionWarning).toBeNull()
+  })
+
+  it('keeps jobs and versions retry actions scoped to their failed resources', async () => {
+    const { result, homeResource, versions, workflowActions, retrySearch } = buildController()
+
+    await act(async () => {
+      await result.current.actions.retryJobs()
+      await result.current.actions.retryVersions()
+    })
+
+    expect(homeResource.retryJobs).toHaveBeenCalledTimes(1)
+    expect(workflowActions.retryVersions).toHaveBeenCalledTimes(1)
+    expect(homeResource.attemptRefresh).not.toHaveBeenCalled()
+    expect(versions.refresh).not.toHaveBeenCalled()
+    expect(versions.attemptRefresh).not.toHaveBeenCalled()
+    expect(retrySearch).not.toHaveBeenCalled()
   })
 
   it('does not refresh when delete confirmation fails', async () => {

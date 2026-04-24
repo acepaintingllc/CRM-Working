@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { SETTINGS_LINKS, formatToday } from './quoteHomePresentation'
 import { S } from './quoteHomeStyles'
 import type { QuotesHomeHeaderVm } from './quoteHomeTypes'
+import { useQuotesHomeHeaderInteractions } from './useQuotesHomeHeaderInteractions'
 
 type Props = {
   vm: QuotesHomeHeaderVm
@@ -19,42 +20,50 @@ export function QuotesHomeHeader({
   onSearchQueryChange,
   onSearchRetry,
 }: Props) {
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const searchContainerRef = useRef<HTMLDivElement | null>(null)
-  const settingsContainerRef = useRef<HTMLDivElement | null>(null)
-  const settingsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const {
+    searchContainerRef,
+    settingsContainerRef,
+    settingsButtonRef,
+    searchResultsId,
+    settingsPanelId,
+    settingsOpen,
+    openSearch,
+    toggleSettings,
+    handleSearchBlur,
+    handleSearchKeyDown,
+    handleSettingsKeyDown,
+  } = useQuotesHomeHeaderInteractions({
+    searchFocused: vm.searchFocused,
+    onSearchFocusedChange,
+  })
+  const firstSettingsItemRef = useRef<HTMLElement | null>(null)
 
+  const searchOpen = vm.searchFocused && Boolean(vm.searchQuery.trim())
   useEffect(() => {
-    if (!vm.searchFocused && !settingsOpen) return
+    if (!settingsOpen) return
+    firstSettingsItemRef.current?.focus()
+  }, [settingsOpen])
 
-    const handleDocumentMouseDown = (event: MouseEvent) => {
-      if (!(event.target instanceof Node)) return
-      if (searchContainerRef.current?.contains(event.target)) return
-      if (settingsContainerRef.current?.contains(event.target)) return
-      if (vm.searchFocused) onSearchFocusedChange(false)
-      if (settingsOpen) setSettingsOpen(false)
-    }
+  const handleSettingsMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
 
-    const handleDocumentFocusIn = (event: FocusEvent) => {
-      if (!vm.searchFocused) return
-      if (!(event.target instanceof Node)) return
-      if (searchContainerRef.current?.contains(event.target)) return
-      onSearchFocusedChange(false)
-    }
-
-    document.addEventListener('mousedown', handleDocumentMouseDown)
-    document.addEventListener('focusin', handleDocumentFocusIn)
-    return () => {
-      document.removeEventListener('mousedown', handleDocumentMouseDown)
-      document.removeEventListener('focusin', handleDocumentFocusIn)
-    }
-  }, [onSearchFocusedChange, settingsOpen, vm.searchFocused])
-
-  const handleSettingsButtonKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== 'Escape' || !settingsOpen) return
     event.preventDefault()
-    setSettingsOpen(false)
-    settingsButtonRef.current?.focus()
+    const menuItems = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).filter((item) => item.getAttribute('aria-disabled') !== 'true')
+    if (menuItems.length === 0) return
+
+    const currentIndex = menuItems.indexOf(document.activeElement as HTMLElement)
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? menuItems.length - 1
+          : event.key === 'ArrowDown'
+            ? Math.min(currentIndex + 1, menuItems.length - 1)
+            : Math.max(currentIndex - 1, 0)
+
+    menuItems[nextIndex]?.focus()
   }
 
   return (
@@ -68,19 +77,42 @@ export function QuotesHomeHeader({
 
         <div style={S.topControls}>
           <div style={S.searchWrap}>
-            <div ref={searchContainerRef}>
+            <div
+              ref={searchContainerRef}
+              onBlur={handleSearchBlur}
+              style={S.searchBox}
+            >
               <input
+                type="search"
                 value={vm.searchQuery}
                 onChange={(event) => onSearchQueryChange(event.target.value)}
-                onFocus={() => onSearchFocusedChange(true)}
+                onFocus={openSearch}
+                onKeyDown={handleSearchKeyDown}
                 placeholder="Search quote versions"
                 style={S.search}
                 aria-label="Search quote versions"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={searchOpen}
+                aria-haspopup="listbox"
+                aria-controls={searchOpen ? searchResultsId : undefined}
+                aria-busy={vm.searchLoading || undefined}
               />
-              {vm.searchFocused && vm.searchQuery.trim() ? (
-                <div style={S.searchResults}>
+              {searchOpen ? (
+                <div
+                  id={searchResultsId}
+                  style={S.searchResults}
+                  role="listbox"
+                  aria-label="Quote search results"
+                  aria-busy={vm.searchLoading || undefined}
+                >
                   {vm.searchLoading ? (
-                    <div style={S.searchStatusPanel}>
+                    <div
+                      style={S.searchStatusPanel}
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
                       <div style={S.searchStatusTitle}>Searching quote versions</div>
                       <div style={S.searchStatusText}>
                         Looking up versions that match &quot;{vm.searchQuery.trim()}&quot;.
@@ -89,7 +121,7 @@ export function QuotesHomeHeader({
                   ) : null}
 
                   {!vm.searchLoading && vm.searchErrorMessage ? (
-                    <div style={S.searchStatusPanel}>
+                    <div style={S.searchStatusPanel} role="alert">
                       <div style={S.searchStatusTitle}>Search results failed to load</div>
                       <div style={S.searchStatusText}>{vm.searchErrorMessage}</div>
                       {vm.searchCanRetry ? (
@@ -102,7 +134,13 @@ export function QuotesHomeHeader({
 
                   {!vm.searchLoading && !vm.searchErrorMessage && vm.searchResults.length > 0
                     ? vm.searchResults.map((estimate) => (
-                        <Link key={estimate.id} href={estimate.href} style={S.searchResultLink}>
+                        <Link
+                          key={estimate.id}
+                          href={estimate.href}
+                          style={S.searchResultLink}
+                          role="option"
+                          aria-selected="false"
+                        >
                           <div style={S.estimateTitle}>{estimate.title}</div>
                           <div style={S.estimateMeta}>{estimate.meta}</div>
                         </Link>
@@ -110,7 +148,12 @@ export function QuotesHomeHeader({
                     : null}
 
                   {!vm.searchLoading && !vm.searchErrorMessage && vm.searchEmptyMessage ? (
-                    <div style={S.searchStatusPanel}>
+                    <div
+                      style={S.searchStatusPanel}
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
                       <div style={S.searchStatusTitle}>No matching quote versions</div>
                       <div style={S.searchStatusText}>{vm.searchEmptyMessage}</div>
                     </div>
@@ -118,26 +161,55 @@ export function QuotesHomeHeader({
                 </div>
               ) : null}
             </div>
-            <div ref={settingsContainerRef} style={{ position: 'relative' }}>
+            <div
+              ref={settingsContainerRef}
+              style={{ position: 'relative', minWidth: 0 }}
+            >
               <button
                 ref={settingsButtonRef}
                 type="button"
                 style={S.settingsToggle}
-                onClick={() => setSettingsOpen((open) => !open)}
-                onKeyDown={handleSettingsButtonKeyDown}
+                onClick={toggleSettings}
+                onKeyDown={handleSettingsKeyDown}
                 aria-expanded={settingsOpen}
+                aria-controls={settingsOpen ? settingsPanelId : undefined}
+                aria-haspopup="menu"
               >
                 Settings & Constants
               </button>
               {settingsOpen ? (
-                <div style={S.settingsPanel} role="navigation" aria-label="Quote settings">
-                  {SETTINGS_LINKS.map((item) =>
+                <div
+                  id={settingsPanelId}
+                  style={S.settingsPanel}
+                  role="menu"
+                  aria-label="Quote settings"
+                  onKeyDown={handleSettingsMenuKeyDown}
+                >
+                  {SETTINGS_LINKS.map((item, index) =>
                     item.disabled ? (
-                      <span key={item.label} style={S.settingsDisabled}>
+                      <span
+                        key={item.label}
+                        ref={(element) => {
+                          if (index === 0) firstSettingsItemRef.current = element
+                        }}
+                        style={S.settingsDisabled}
+                        role="menuitem"
+                        aria-disabled="true"
+                        tabIndex={-1}
+                      >
                         {item.label}
                       </span>
                     ) : (
-                      <Link key={item.label} href={item.href ?? '#'} style={S.settingsLink}>
+                      <Link
+                        key={item.label}
+                        ref={(element) => {
+                          if (index === 0) firstSettingsItemRef.current = element
+                        }}
+                        href={item.href ?? '#'}
+                        style={S.settingsLink}
+                        role="menuitem"
+                        tabIndex={-1}
+                      >
                         {item.label}
                       </Link>
                     )

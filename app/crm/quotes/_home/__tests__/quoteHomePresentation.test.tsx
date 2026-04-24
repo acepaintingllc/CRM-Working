@@ -9,6 +9,8 @@ import {
   buildHeroSummaryText,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeFeedbackVm,
+  buildQuotesHomeSearchCanRetry,
+  buildQuotesHomeSearchEmptyMessage,
   buildQuotesHomeSelectedJobVm,
   buildQuotesHomeVersionDetail,
   buildQuotesHomeVersionHeading,
@@ -199,6 +201,63 @@ describe('quoteHomePresentation', () => {
     })
   })
 
+  it('builds search empty messaging only for completed empty searches', () => {
+    expect(
+      buildQuotesHomeSearchEmptyMessage({
+        query: 'missing',
+        loading: false,
+        error: null,
+        resultCount: 0,
+      })
+    ).toBe('No quote versions match "missing".')
+
+    expect(
+      buildQuotesHomeSearchEmptyMessage({
+        query: '',
+        loading: false,
+        error: null,
+        resultCount: 0,
+      })
+    ).toBeNull()
+
+    expect(
+      buildQuotesHomeSearchEmptyMessage({
+        query: 'missing',
+        loading: true,
+        error: null,
+        resultCount: 0,
+      })
+    ).toBeNull()
+
+    expect(
+      buildQuotesHomeSearchEmptyMessage({
+        query: 'missing',
+        loading: false,
+        error: 'search failed',
+        resultCount: 0,
+      })
+    ).toBeNull()
+
+    expect(
+      buildQuotesHomeSearchEmptyMessage({
+        query: 'missing',
+        loading: false,
+        error: null,
+        resultCount: 1,
+      })
+    ).toBeNull()
+  })
+
+  it('builds search retry eligibility from resource state', () => {
+    expect(buildQuotesHomeSearchCanRetry({ query: 'missing', loading: false })).toBe(
+      true
+    )
+    expect(buildQuotesHomeSearchCanRetry({ query: '', loading: false })).toBe(false)
+    expect(buildQuotesHomeSearchCanRetry({ query: 'missing', loading: true })).toBe(
+      false
+    )
+  })
+
   it('formats bootstrap load failure details without doubling the fallback prefix', () => {
     expect(
       buildHomeLoadFailureDetail('bootstrap', 'Quote home failed to load.')
@@ -362,15 +421,26 @@ describe('quoteHomePresentation', () => {
         pipeline_total: 0,
       })
     ).toEqual([
-      { label: 'Drafts', value: '0', subtext: '0 draft versions' },
+      {
+        label: 'Drafts',
+        value: '0',
+        displayValue: '0',
+        subtext: '0 draft versions',
+        valueColor: 'var(--v2-ink)',
+        subtextColor: 'var(--v2-ink-3)',
+      },
       {
         label: 'Sent / Awaiting',
         value: '0',
+        displayValue: '0',
         subtext: '0 versions attached to sent jobs',
+        valueColor: 'var(--v2-ink)',
+        subtextColor: 'var(--v2-ink-3)',
       },
       {
         label: 'Live Versions',
         value: '0',
+        displayValue: '0',
         subtext: '0 live versions',
         valueColor: 'var(--v2-green-2)',
         subtextColor: 'var(--v2-green-2)',
@@ -378,6 +448,7 @@ describe('quoteHomePresentation', () => {
       {
         label: 'Pipeline',
         value: '$0',
+        displayValue: '$0',
         subtext: 'Rollup-backed total',
         valueColor: 'var(--v2-amber)',
         subtextColor: 'var(--v2-ink-3)',
@@ -393,15 +464,26 @@ describe('quoteHomePresentation', () => {
         pipeline_total: 4200,
       })
     ).toEqual([
-      { label: 'Drafts', value: '1', subtext: '1 draft version' },
+      {
+        label: 'Drafts',
+        value: '1',
+        displayValue: '1',
+        subtext: '1 draft version',
+        valueColor: 'var(--v2-ink)',
+        subtextColor: 'var(--v2-ink-3)',
+      },
       {
         label: 'Sent / Awaiting',
         value: '2',
+        displayValue: '2',
         subtext: '2 versions attached to sent jobs',
+        valueColor: 'var(--v2-ink)',
+        subtextColor: 'var(--v2-ink-3)',
       },
       {
         label: 'Live Versions',
         value: '3',
+        displayValue: '3',
         subtext: '3 live versions',
         valueColor: 'var(--v2-green-2)',
         subtextColor: 'var(--v2-green-2)',
@@ -409,6 +491,7 @@ describe('quoteHomePresentation', () => {
       {
         label: 'Pipeline',
         value: '$4,200',
+        displayValue: '$4,200',
         subtext: 'Rollup-backed total',
         valueColor: 'var(--v2-amber)',
         subtextColor: 'var(--v2-ink-3)',
@@ -416,15 +499,26 @@ describe('quoteHomePresentation', () => {
     ])
 
     expect(buildSummaryCards(null)).toEqual([
-      { label: 'Drafts', value: '0', subtext: '0 draft versions' },
+      {
+        label: 'Drafts',
+        value: '0',
+        displayValue: '0',
+        subtext: '0 draft versions',
+        valueColor: 'var(--v2-ink)',
+        subtextColor: 'var(--v2-ink-3)',
+      },
       {
         label: 'Sent / Awaiting',
         value: '0',
+        displayValue: '0',
         subtext: '0 versions attached to sent jobs',
+        valueColor: 'var(--v2-ink)',
+        subtextColor: 'var(--v2-ink-3)',
       },
       {
         label: 'Live Versions',
         value: '0',
+        displayValue: '0',
         subtext: '0 live versions',
         valueColor: 'var(--v2-green-2)',
         subtextColor: 'var(--v2-green-2)',
@@ -432,6 +526,7 @@ describe('quoteHomePresentation', () => {
       {
         label: 'Pipeline',
         value: '$0',
+        displayValue: '$0',
         subtext: 'Rollup-backed total',
         valueColor: 'var(--v2-amber)',
         subtextColor: 'var(--v2-ink-3)',

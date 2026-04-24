@@ -221,8 +221,8 @@ export function useQuotesHomeData(
     options?.jobQuery ?? bootstrapResource.bootstrapData.jobs.query
   )
   const jobsResource = useQuotesHomeJobs(bootstrapResource.bootstrapData, activeJobQuery)
-  const { bootstrapLoading } = bootstrapResource
-  const { loadMoreJobs } = jobsResource
+  const { bootstrapLoading, refreshBootstrap } = bootstrapResource
+  const { jobsError, loadMoreJobs, refreshJobs } = jobsResource
 
   useEffect(() => {
     onJobsChangeRef.current = options?.onJobsChange ?? null
@@ -240,6 +240,21 @@ export function useQuotesHomeData(
     await loadMoreJobs()
   }, [bootstrapLoading, loadMoreJobs])
 
+  const retryJobs = useCallback(async () => {
+    if (jobsError) {
+      const result = await refreshJobs()
+      return result.ok
+    }
+
+    const bootstrapRefresh = await refreshBootstrap()
+    if (!bootstrapRefresh.ok || !bootstrapRefresh.data) {
+      return false
+    }
+
+    const jobsRefresh = await refreshJobs(undefined, bootstrapRefresh.data)
+    return jobsRefresh.ok
+  }, [jobsError, refreshBootstrap, refreshJobs])
+
   const bootstrap = {
     ...bootstrapResource.bootstrapData,
     jobs: jobsResource.jobsPage,
@@ -255,8 +270,10 @@ export function useQuotesHomeData(
     initialSelectedJobVersions: bootstrap.selected_job_versions,
     jobsLoading: jobsResource.jobsLoading,
     loading: bootstrapResource.bootstrapLoading,
-    bootstrapError: bootstrapResource.bootstrapError ?? jobsResource.jobsError,
+    bootstrapError: bootstrapResource.bootstrapError,
+    jobsError: jobsResource.jobsError,
     loadMore,
+    retryJobs,
     attemptRefresh: async (options?: { preserveDataOnError?: boolean; reportError?: boolean }) => {
       const result = await bootstrapResource.refreshBootstrap(options)
       if (!result.ok || !result.data) {

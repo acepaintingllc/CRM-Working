@@ -1,4 +1,5 @@
 import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
+import { QUOTE_VERSION_KIND_OPTIONS } from '@/lib/quotes/versionCreation'
 import type {
   QuoteHomeActionWarning,
   QuoteHomeFeedbackVm,
@@ -13,6 +14,7 @@ import type {
   SearchResultVm,
   SummaryCardVm,
   NavItem,
+  QuotesHomeCreateVm,
 } from './quoteHomeTypes'
 
 export const QUOTE_META_SEPARATOR = ' \u00B7 '
@@ -34,6 +36,35 @@ export const QUOTES_HOME_CREATE_PANEL_COPY = {
   versionKindLabel: 'Version Kind',
 } as const
 
+export function buildQuotesHomeCreateVm(params: {
+  creating: boolean
+  loading: boolean
+  selectedJobName: string | null
+  versionName: string
+  versionKind: QuotesHomeCreateVm['versionKind']
+  canCreate: boolean
+}): QuotesHomeCreateVm {
+  return {
+    eyebrow: QUOTES_HOME_CREATE_PANEL_COPY.eyebrow,
+    title: QUOTES_HOME_CREATE_PANEL_COPY.title,
+    description: QUOTES_HOME_CREATE_PANEL_COPY.description,
+    createButtonLabel: params.creating
+      ? QUOTES_HOME_CREATE_PANEL_COPY.creatingButton
+      : QUOTES_HOME_CREATE_PANEL_COPY.createButton,
+    versionNameLabel: QUOTES_HOME_CREATE_PANEL_COPY.versionNameLabel,
+    versionNameHelp: QUOTES_HOME_CREATE_PANEL_COPY.versionNameHelp,
+    versionNamePlaceholder: QUOTES_HOME_CREATE_PANEL_COPY.versionNamePlaceholder,
+    versionKindLabel: QUOTES_HOME_CREATE_PANEL_COPY.versionKindLabel,
+    versionKindOptions: QUOTE_VERSION_KIND_OPTIONS,
+    creating: params.creating,
+    loading: params.loading,
+    selectedJobName: params.selectedJobName,
+    versionName: params.versionName,
+    versionKind: params.versionKind,
+    canCreate: params.canCreate,
+  }
+}
+
 export const SETTINGS_LINKS: NavItem[] = [
   { label: 'Defaults', href: '/crm/quotes/defaults' },
   { label: 'Products', href: '/crm/quotes/products' },
@@ -47,6 +78,7 @@ const HOME_FAILURE_MESSAGES: Record<'bootstrap', string> = {
 
 const FAILURE_SOURCE_LABELS: Record<QuoteHomeFailureSource, string> = {
   bootstrap: 'bootstrap',
+  jobs: 'jobs',
   jobVersions: 'job versions',
   create: 'quote creation',
   delete: 'quote deletion',
@@ -110,6 +142,26 @@ export function buildSearchResultVm(
     title: estimate.version_name,
     meta: `${estimate.job_title}\n${estimate.customer_name} / ${formatVersionState(estimate.version_state)}`,
   }
+}
+
+export function buildQuotesHomeSearchEmptyMessage(params: {
+  query: string
+  loading: boolean
+  error: string | null
+  resultCount: number
+}) {
+  if (!params.query || params.loading || params.error || params.resultCount > 0) {
+    return null
+  }
+
+  return `No quote versions match "${params.query}".`
+}
+
+export function buildQuotesHomeSearchCanRetry(params: {
+  query: string
+  loading: boolean
+}) {
+  return Boolean(params.query) && !params.loading
 }
 
 export function buildHomeLoadFailureDetail(
@@ -333,22 +385,29 @@ export function buildSummaryCards(
     {
       label: 'Drafts',
       value: String(nextSummary.draft_count),
+      displayValue: String(nextSummary.draft_count),
       subtext:
         nextSummary.draft_count === 1
           ? '1 draft version'
           : `${nextSummary.draft_count} draft versions`,
+      valueColor: QUOTES_HOME_SUMMARY_DEFAULT_VALUE_COLOR,
+      subtextColor: QUOTES_HOME_SUMMARY_DEFAULT_SUBTEXT_COLOR,
     },
     {
       label: 'Sent / Awaiting',
       value: String(nextSummary.sent_or_awaiting_count),
+      displayValue: String(nextSummary.sent_or_awaiting_count),
       subtext:
         nextSummary.sent_or_awaiting_count === 1
           ? '1 version attached to sent jobs'
           : `${nextSummary.sent_or_awaiting_count} versions attached to sent jobs`,
+      valueColor: QUOTES_HOME_SUMMARY_DEFAULT_VALUE_COLOR,
+      subtextColor: QUOTES_HOME_SUMMARY_DEFAULT_SUBTEXT_COLOR,
     },
     {
       label: 'Live Versions',
       value: String(nextSummary.live_count),
+      displayValue: String(nextSummary.live_count),
       subtext:
         nextSummary.live_count === 1
           ? '1 live version'
@@ -359,6 +418,7 @@ export function buildSummaryCards(
     {
       label: 'Pipeline',
       value: formatCurrency(nextSummary.pipeline_total),
+      displayValue: formatCurrency(nextSummary.pipeline_total),
       subtext: 'Rollup-backed total',
       valueColor: 'var(--v2-amber)',
       subtextColor: 'var(--v2-ink-3)',

@@ -50,6 +50,10 @@ function asPositiveInteger(value: number | null | undefined, fallback: number, m
   return Math.max(1, Math.min(maximum, Math.trunc(next)))
 }
 
+function escapeLikePattern(value: string) {
+  return value.replace(/[\\%_]/g, '\\$&')
+}
+
 function encodeQuoteHomeCursor(value: { timestamp: string | null | undefined; id: string | null | undefined }) {
   if (!value.timestamp || !value.id) return null
   return `${value.timestamp}${quoteHomeCursorSeparator}${value.id}`
@@ -355,8 +359,8 @@ export async function searchEstimateCollectionRows(
   const query = rawQuery.trim()
   if (!query) return okResult([])
 
-  const pattern = `%${query.replace(/[%_]/g, ' ').trim()}%`
-  const estimateSearchPattern = `%${query.replace(/[,%_()]/g, ' ').trim()}%`
+  const pattern = `%${escapeLikePattern(query)}%`
+  const estimateSearchPattern = `%${escapeLikePattern(query.replace(/[(),]/g, ' ').trim())}%`
 
   const [versionMatchesRes, jobsRes, customersRes] = await Promise.all([
     supabaseAdmin
@@ -438,7 +442,11 @@ export async function searchEstimateCollectionRows(
 
   return okResult(
     Array.from(deduped.values())
-      .sort((a, b) => asTimestamp(b.updated_at) - asTimestamp(a.updated_at))
+      .sort((a, b) => {
+        const updatedDiff = asTimestamp(b.updated_at) - asTimestamp(a.updated_at)
+        if (updatedDiff !== 0) return updatedDiff
+        return b.id.localeCompare(a.id)
+      })
       .slice(0, limit)
   )
 }

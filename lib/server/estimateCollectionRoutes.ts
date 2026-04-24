@@ -52,6 +52,9 @@ export async function handleEstimateHomeRecentActivityRouteGet() {
 }
 
 export async function handleEstimateHomeJobCountsRouteGet() {
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
   return Response.json(
     { error: 'Quote home job-counts has been replaced by the paged jobs read model.' },
     { status: 410 }

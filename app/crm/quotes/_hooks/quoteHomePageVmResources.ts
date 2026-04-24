@@ -14,13 +14,13 @@ export type QuoteHomeVmHomeResource = {
   jobsLoading: boolean
   loading: boolean
   bootstrapError: string | null
+  jobsError: string | null
 }
 
 export type QuoteHomeVmSearchResource = {
+  query: string
   loading: boolean
-  emptyMessage: string | null
   error: string | null
-  canRetry: boolean
   results: Pick<
     QuoteHomeSearchResultReadModel,
     'estimate_id' | 'version_name' | 'version_state' | 'job_title' | 'customer_name'
@@ -67,12 +67,12 @@ export function buildQuoteHomePageVmResources(params: {
       jobsLoading: params.homeResource.jobsLoading,
       loading: params.homeResource.loading,
       bootstrapError: params.homeResource.bootstrapError,
+      jobsError: params.homeResource.jobsError,
     },
     search: {
+      query: params.searchState.query,
       loading: params.searchState.loading,
-      emptyMessage: params.searchState.emptyMessage,
       error: params.searchState.error,
-      canRetry: params.searchState.canRetry,
       results: params.searchState.results,
     },
     workflow: {

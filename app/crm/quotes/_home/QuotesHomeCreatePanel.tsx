@@ -3,18 +3,13 @@
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
-import {
-  QUOTE_VERSION_KIND_OPTIONS,
-  type QuoteVersionKind,
-} from '@/lib/quotes/versionCreation'
-import { QUOTES_HOME_CREATE_PANEL_COPY } from './quoteHomePresentation'
 import type { QuotesHomeCreateVm } from './quoteHomeTypes'
 import { S } from './quoteHomeStyles'
 
 type Props = {
   vm: QuotesHomeCreateVm
-  onCreate: () => void
-  onVersionKindChange: (value: QuoteVersionKind) => void
+  onCreate: () => void | Promise<unknown>
+  onVersionKindChange: (value: QuotesHomeCreateVm['versionKind']) => void
   onVersionNameChange: (value: string) => void
 }
 
@@ -27,44 +22,44 @@ export function QuotesHomeCreatePanel({
   return (
     <CrmSectionCard
       className="self-start"
-      eyebrow={QUOTES_HOME_CREATE_PANEL_COPY.eyebrow}
-      title={QUOTES_HOME_CREATE_PANEL_COPY.title}
-      description={QUOTES_HOME_CREATE_PANEL_COPY.description}
+      eyebrow={vm.eyebrow}
+      title={vm.title}
+      description={vm.description}
       actions={
         <CrmButton
           type="button"
           tone="primary"
-          onClick={onCreate}
+          onClick={() => void onCreate()}
           disabled={!vm.canCreate}
         >
-          {vm.creating
-            ? QUOTES_HOME_CREATE_PANEL_COPY.creatingButton
-            : QUOTES_HOME_CREATE_PANEL_COPY.createButton}
+          {vm.createButtonLabel}
         </CrmButton>
       }
     >
       <div style={S.createFields}>
         <CrmField
-          label={QUOTES_HOME_CREATE_PANEL_COPY.versionNameLabel}
-          help={QUOTES_HOME_CREATE_PANEL_COPY.versionNameHelp}
+          label={vm.versionNameLabel}
+          help={vm.versionNameHelp}
         >
           <input
             value={vm.versionName}
             onChange={(event) => onVersionNameChange(event.target.value)}
-            placeholder={QUOTES_HOME_CREATE_PANEL_COPY.versionNamePlaceholder}
+            placeholder={vm.versionNamePlaceholder}
             className="ace-crm-input text-sm"
           />
         </CrmField>
 
-        <CrmField label={QUOTES_HOME_CREATE_PANEL_COPY.versionKindLabel}>
+        <CrmField label={vm.versionKindLabel}>
           <select
             value={vm.versionKind}
             onChange={(event) =>
-              onVersionKindChange(event.target.value as QuoteVersionKind)
+              onVersionKindChange(
+                event.target.value as QuotesHomeCreateVm['versionKind']
+              )
             }
             className="ace-crm-input text-sm"
           >
-            {QUOTE_VERSION_KIND_OPTIONS.map((option) => (
+            {vm.versionKindOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

@@ -184,6 +184,7 @@ describe('useQuotesHomeData', () => {
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
     expect(result.current.initialSelectedJobId).toBe('job-2')
     expect(result.current.bootstrapError).toBeNull()
+    expect(result.current.jobsError).toBeNull()
 
     initial.resolve(firstPayload)
     stale.resolve(firstPayload)
@@ -197,6 +198,7 @@ describe('useQuotesHomeData', () => {
     expect(result.current.jobsPage.query).toBe('')
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
     expect(result.current.bootstrapError).toBeNull()
+    expect(result.current.jobsError).toBeNull()
   })
 
   it('keeps prior bootstrap data when refresh fails', async () => {
@@ -214,6 +216,7 @@ describe('useQuotesHomeData', () => {
     })
 
     expect(result.current.bootstrapError).toBe('bootstrap failed')
+    expect(result.current.jobsError).toBeNull()
     expect(result.current.summary.total_versions).toBe(1)
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1'])
     expect(refreshed).toEqual({
@@ -245,6 +248,8 @@ describe('useQuotesHomeData', () => {
     expect(result.current.summary.total_versions).toBe(2)
     expect(result.current.jobsPage.next_cursor).toBe('cursor-3')
     expect(result.current.initialSelectedJobId).toBe('job-2')
+    expect(result.current.bootstrapError).toBeNull()
+    expect(result.current.jobsError).toBeNull()
   })
 
   it('appends another jobs page when loadMore runs', async () => {
@@ -356,6 +361,43 @@ describe('useQuotesHomeData', () => {
     expect(result.current.jobsPage.items).toEqual([])
     expect(result.current.initialSelectedJobId).toBeNull()
     expect(result.current.bootstrapError).toBe('bootstrap failed')
+    expect(result.current.jobsError).toBeNull()
+  })
+
+  it('exposes jobs-page errors separately from bootstrap errors and retries only jobs', async () => {
+    loadQuoteHomeJobs
+      .mockRejectedValueOnce(new Error('jobs failed'))
+      .mockResolvedValueOnce({
+        query: 'garage',
+        limit: 25,
+        next_cursor: null,
+        items: [seededPayload.jobs.items[1]],
+      })
+
+    const { result, rerender } = renderHook(
+      ({ jobQuery }) => useQuotesHomeData(seededPayload, { jobQuery }),
+      {
+        initialProps: {
+          jobQuery: '',
+        },
+      }
+    )
+
+    rerender({ jobQuery: 'garage' })
+
+    await waitFor(() => expect(result.current.jobsError).toBe('jobs failed'))
+
+    expect(result.current.bootstrapError).toBeNull()
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
+
+    await act(async () => {
+      await expect(result.current.retryJobs()).resolves.toBe(true)
+    })
+
+    expect(loadQuoteHomeBootstrap).not.toHaveBeenCalled()
+    expect(loadQuoteHomeJobs).toHaveBeenCalledTimes(2)
+    expect(result.current.jobsError).toBeNull()
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
   })
 })
 

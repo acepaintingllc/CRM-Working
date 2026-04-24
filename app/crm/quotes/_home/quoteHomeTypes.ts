@@ -21,9 +21,10 @@ export type NavItem = {
 export type SummaryCardVm = {
   label: string
   value: string
+  displayValue: string
   subtext: string
-  valueColor?: string
-  subtextColor?: string
+  valueColor: string
+  subtextColor: string
 }
 
 export type SearchResultVm = {
@@ -37,6 +38,7 @@ export type QuoteHomeFeedbackTone = 'warning' | 'error'
 
 export type QuoteHomeFailureSource =
   | 'bootstrap'
+  | 'jobs'
   | 'jobVersions'
   | 'create'
   | 'delete'
@@ -121,6 +123,18 @@ export type QuotesHomeVersionListVm = {
 }
 
 export type QuotesHomeCreateVm = {
+  eyebrow: string
+  title: string
+  description: string
+  createButtonLabel: string
+  versionNameLabel: string
+  versionNameHelp: string
+  versionNamePlaceholder: string
+  versionKindLabel: string
+  versionKindOptions: ReadonlyArray<{
+    value: QuoteVersionKind
+    label: string
+  }>
   creating: boolean
   loading: boolean
   selectedJobName: string | null

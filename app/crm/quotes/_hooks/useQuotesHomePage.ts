@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
 import {
   buildQuoteHomePageVm,
@@ -24,19 +24,21 @@ export function useQuotesHomePage(
   const { jobQuery } = pageState
   const homeResource = useQuotesHomeData(initialData, {
     jobQuery,
-    onJobsChange: pageState.setJobsForSelection,
   })
   const {
     searchQuery,
     searchFocused,
     selectedJobId,
+    selectedJob,
     actions: stateActions,
+    setJobsForSelection,
   } = pageState
   const searchState = useQuotesHomeSearch(searchQuery)
-  const selectedJob = useMemo(
-    () => homeResource.jobs.find((job) => job.id === selectedJobId) ?? null,
-    [homeResource.jobs, selectedJobId]
-  )
+
+  useEffect(() => {
+    setJobsForSelection(homeResource.jobs, homeResource.jobsPage.query)
+  }, [homeResource.jobs, homeResource.jobsPage.query, setJobsForSelection])
+
   const workflow = useQuoteVersionWorkflow({
     jobId: selectedJobId,
     selectedJob,
@@ -53,12 +55,14 @@ export function useQuotesHomePage(
       setVersionKind: workflow.actions.setVersionKind,
       create: workflow.actions.create,
       loadMoreVersions: workflow.actions.loadMoreVersions,
+      retryVersions: workflow.actions.refreshVersions,
     }),
     [
       workflow.actions.setVersionName,
       workflow.actions.setVersionKind,
       workflow.actions.create,
       workflow.actions.loadMoreVersions,
+      workflow.actions.refreshVersions,
     ]
   )
   const controller = useQuoteHomePageController({

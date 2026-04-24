@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
 import {
   normalizeQuoteHomeJobQuery,
+  resolveQuoteHomeManualSelection,
+  resolveQuoteHomeSelectedJob,
   resolveQuoteHomeSelectedJobId,
+  resolveQuoteHomeSelectionAfterJobsLoaded,
 } from '../quoteHomePagePolicy'
 
 const kitchenJob: QuoteHomeJobListItemReadModel = {
@@ -67,5 +70,88 @@ describe('quoteHomePagePolicy', () => {
 
   it('returns an empty string when no current match and no fallback job exist', () => {
     expect(resolveQuoteHomeSelectedJobId([], 'missing-job')).toBe('')
+  })
+
+  it('resolves the selected job and id together', () => {
+    expect(resolveQuoteHomeSelectedJob([kitchenJob, exteriorJob], 'job-2')).toEqual({
+      selectedJobId: 'job-2',
+      selectedJob: exteriorJob,
+    })
+  })
+
+  it('preserves a selected job snapshot when a non-empty filter hides it', () => {
+    expect(
+      resolveQuoteHomeSelectionAfterJobsLoaded({
+        jobs: [exteriorJob],
+        currentSelection: {
+          selectedJobId: 'job-1',
+          selectedJob: kitchenJob,
+        },
+        jobQuery: 'exterior',
+      })
+    ).toEqual({
+      selectedJobId: 'job-1',
+      selectedJob: kitchenJob,
+    })
+  })
+
+  it('updates the selected job snapshot when the selected job is in loaded results', () => {
+    const updatedKitchenJob = {
+      ...kitchenJob,
+      title: 'Kitchen Updated',
+      version_count: 3,
+    }
+
+    expect(
+      resolveQuoteHomeSelectionAfterJobsLoaded({
+        jobs: [updatedKitchenJob, exteriorJob],
+        currentSelection: {
+          selectedJobId: 'job-1',
+          selectedJob: kitchenJob,
+        },
+        jobQuery: 'kitchen',
+      })
+    ).toEqual({
+      selectedJobId: 'job-1',
+      selectedJob: updatedKitchenJob,
+    })
+  })
+
+  it('falls back when an unfiltered loaded result no longer includes the selected job', () => {
+    expect(
+      resolveQuoteHomeSelectionAfterJobsLoaded({
+        jobs: [exteriorJob],
+        currentSelection: {
+          selectedJobId: 'job-1',
+          selectedJob: kitchenJob,
+        },
+        jobQuery: '',
+      })
+    ).toEqual({
+      selectedJobId: 'job-2',
+      selectedJob: exteriorJob,
+    })
+  })
+
+  it('keeps manual selection tied to a visible loaded job', () => {
+    expect(
+      resolveQuoteHomeManualSelection({
+        jobs: [kitchenJob, exteriorJob],
+        selectedJobId: 'job-2',
+      })
+    ).toEqual({
+      selectedJobId: 'job-2',
+      selectedJob: exteriorJob,
+    })
+
+    expect(
+      resolveQuoteHomeManualSelection({
+        jobs: [kitchenJob],
+        selectedJobId: 'job-2',
+      })
+    ).toEqual({
+      selectedJobId: '',
+      selectedJob: null,
+    })
   })
 })

@@ -97,17 +97,6 @@ export default function QuotesHomePage({ initialData }: Props) {
         <QuotesHomeErrorBoundary>
           <QuotesHomeContent initialData={initialData} />
         </QuotesHomeErrorBoundary>
-
-        <style jsx>{`
-          @media (max-width: 980px) {
-            .quotes-home-job-hub-grid {
-              grid-template-columns: 1fr !important;
-            }
-            .quotes-home-job-hub-detail-grid {
-              grid-template-columns: 1fr !important;
-            }
-          }
-        `}</style>
       </div>
     </CrmPageShell>
   )
@@ -141,14 +130,10 @@ function QuotesHomeContent({ initialData }: Props) {
         </div>
       ) : null}
 
-      <QuotesHomeSummaryCards
-        cards={controller.summaryCards}
-        loading={controller.loading}
-      />
+      <QuotesHomeSummaryCards cards={controller.summaryCards} />
 
       <div
         id="job-hub"
-        className="quotes-home-job-hub-grid"
         style={S.jobHubGrid}
       >
         <QuotesHomeJobList
@@ -156,28 +141,25 @@ function QuotesHomeContent({ initialData }: Props) {
           onJobQueryChange={actions.setJobQuery}
           onSelectJob={actions.setSelectedJobId}
           onLoadMore={actions.loadMore}
-          onRetry={actions.refresh}
+          onRetry={actions.retryJobs}
         />
 
         <section style={S.sectionStackLg}>
           <QuotesHomeSelectedJobPanel vm={controller.selectedJob} />
 
           <div
-            className="quotes-home-job-hub-detail-grid"
             style={S.jobHubDetailGrid}
           >
             <QuotesHomeVersionList
               vm={controller.versionList}
-              onLoadMore={async () => {
-                await actions.loadMoreVersions()
-              }}
-              onRetry={actions.refresh}
+              onLoadMore={actions.loadMoreVersions}
+              onRetry={actions.retryVersions}
               onRequestDelete={actions.requestDelete}
             />
 
             <QuotesHomeCreatePanel
               vm={controller.create}
-              onCreate={() => void actions.create()}
+              onCreate={actions.create}
               onVersionKindChange={actions.setVersionKind}
               onVersionNameChange={actions.setVersionName}
             />

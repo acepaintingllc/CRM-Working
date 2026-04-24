@@ -3,10 +3,13 @@ import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import {
   buildHeroSummaryText,
   buildQuoteHomeJobListItemVm,
+  buildQuotesHomeCreateVm,
   buildQuotesHomeJobListEmptyStateBody,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeDeleteDialogVm,
   buildQuotesHomeFeedbackVm,
+  buildQuotesHomeSearchCanRetry,
+  buildQuotesHomeSearchEmptyMessage,
   buildQuotesHomeSelectedJobVm,
   buildQuotesHomeVersionDetail,
   buildQuotesHomeVersionEmptyMessage,
@@ -39,6 +42,8 @@ export type QuoteHomePageActions = {
   setVersionKind: (value: QuoteVersionKind) => void
   create: () => Promise<unknown>
   loadMoreVersions: () => Promise<boolean>
+  retryJobs: () => Promise<boolean>
+  retryVersions: () => Promise<boolean>
   retrySearch: () => void
   requestDelete: (value: string | { estimate_id: string }) => void
   cancelDelete: () => void
@@ -65,12 +70,12 @@ export type QuoteHomePageVmResources = {
     jobsLoading: boolean
     loading: boolean
     bootstrapError: string | null
+    jobsError: string | null
   }
   search: {
+    query: string
     loading: boolean
-    emptyMessage: string | null
     error: string | null
-    canRetry: boolean
     results: QuoteHomeSearchResult[]
   }
   workflow: {
@@ -116,16 +121,25 @@ export function buildQuoteHomePageVm(
   state: QuoteHomePageVmState,
   resources: QuoteHomePageVmResources
 ): QuoteHomePageVm {
-  const summaryCards = buildSummaryCards(resources.home.summary)
-  const hasJobListLoadError =
+  const summaryCards = buildSummaryCards(resources.home.summary).map((card) => ({
+    ...card,
+    displayValue: resources.home.loading
+      ? '...'
+      : card.value,
+  }))
+  const bootstrapBlocksJobList =
     !resources.home.loading &&
     resources.home.jobs.length === 0 &&
     Boolean(resources.home.bootstrapError)
+  const jobListErrorMessage =
+    resources.home.jobsError ??
+    (bootstrapBlocksJobList ? resources.home.bootstrapError : null)
+  const hasJobListLoadError = Boolean(jobListErrorMessage)
   const feedbackVm = buildQuotesHomeFeedbackVm({
     homeFailures: resources.home.bootstrapError
       ? [{ source: 'bootstrap', message: resources.home.bootstrapError }]
       : [],
-    jobVersionsError: resources.workflow.versions.error,
+    jobVersionsError: null,
     createError: resources.workflow.create.error,
     deleteError: resources.delete.error,
     actionWarning: state.actionWarning,
@@ -135,6 +149,16 @@ export function buildQuoteHomePageVm(
       ? resources.workflow.versions.totalVersions
       : state.selectedJob.version_count
     : resources.workflow.versions.totalVersions
+  const searchEmptyMessage = buildQuotesHomeSearchEmptyMessage({
+    query: resources.search.query,
+    loading: resources.search.loading,
+    error: resources.search.error,
+    resultCount: resources.search.results.length,
+  })
+  const searchCanRetry = buildQuotesHomeSearchCanRetry({
+    query: resources.search.query,
+    loading: resources.search.loading,
+  })
 
   const jobListEmptyState = hasJobListLoadError
     ? 'none'
@@ -150,9 +174,9 @@ export function buildQuoteHomePageVm(
       searchQuery: state.searchQuery,
       searchFocused: state.searchFocused,
       searchLoading: resources.search.loading,
-      searchEmptyMessage: resources.search.emptyMessage,
+      searchEmptyMessage,
       searchErrorMessage: resources.search.error,
-      searchCanRetry: resources.search.canRetry,
+      searchCanRetry,
       searchResults: resources.search.results.map(buildSearchResultVm),
     },
     loading: resources.home.loading,
@@ -168,7 +192,7 @@ export function buildQuoteHomePageVm(
           selectedJobId: state.selectedJobId,
         })
       ),
-      errorMessage: hasJobListLoadError ? resources.home.bootstrapError : null,
+      errorMessage: jobListErrorMessage,
       canRetry: hasJobListLoadError,
       emptyState: jobListEmptyState,
       emptyStateBody: buildQuotesHomeJobListEmptyStateBody(jobListEmptyState),
@@ -197,14 +221,14 @@ export function buildQuoteHomePageVm(
       errorMessage: resources.workflow.versions.error,
       canRetry: Boolean(resources.workflow.versions.error),
     },
-    create: {
+    create: buildQuotesHomeCreateVm({
       creating: resources.workflow.create.creating,
       loading: resources.home.loading,
       selectedJobName: state.selectedJob?.title ?? null,
       versionName: resources.workflow.create.versionName,
       versionKind: resources.workflow.create.versionKind,
       canCreate: resources.workflow.create.canCreate,
-    },
+    }),
     dialogs: {
       delete: buildQuotesHomeDeleteDialogVm(
         resources.delete.confirmingDelete,

@@ -52,13 +52,6 @@ export function QuotesHomeSelectedJobPanel({ vm }: Props) {
           </div>
         ) : null}
       </div>
-      <style jsx>{`
-        @media (max-width: 720px) {
-          .quotes-home-selected-job-stats {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </CrmSectionCard>
   )
 }

@@ -24,6 +24,7 @@ type QuoteHomePageControllerHomeResource = {
   attemptRefresh: (
     options?: RefreshAttemptOptions
   ) => Promise<{ ok: boolean; error: string | null; data: QuoteHomeBootstrapReadModel | null }>
+  retryJobs: () => Promise<boolean>
 }
 
 type QuoteHomePageControllerVersionsResource = {
@@ -49,6 +50,7 @@ type QuoteHomeWorkflowActions = {
   setVersionKind: (value: QuoteVersionKind) => void
   create: () => Promise<unknown>
   loadMoreVersions: () => Promise<boolean>
+  retryVersions: () => Promise<boolean>
 }
 
 type UseQuoteHomePageControllerParams = {
@@ -92,7 +94,7 @@ export function useQuoteHomePageController({
   actions: QuoteHomePageActions
 } {
   const [actionWarning, setActionWarning] = useState<QuoteHomeActionWarning | null>(null)
-  const { attemptRefresh: refreshBootstrap } = homeResource
+  const { attemptRefresh: refreshBootstrap, retryJobs } = homeResource
   const {
     attemptRefresh: refreshVersions,
     items: versionItems,
@@ -181,6 +183,8 @@ export function useQuoteHomePageController({
       setVersionKind: workflowActions.setVersionKind,
       create: workflowActions.create,
       loadMoreVersions: workflowActions.loadMoreVersions,
+      retryJobs,
+      retryVersions: workflowActions.retryVersions,
       retrySearch,
       requestDelete,
       cancelDelete,
@@ -194,7 +198,9 @@ export function useQuoteHomePageController({
       workflowActions.setVersionKind,
       workflowActions.create,
       workflowActions.loadMoreVersions,
+      workflowActions.retryVersions,
       retrySearch,
+      retryJobs,
       requestDelete,
       cancelDelete,
       confirmDelete,

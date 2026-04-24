@@ -2,8 +2,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentPropsWithoutRef } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QuotesHomeCreatePanel } from '../QuotesHomeCreatePanel'
+import { QuotesHomeDeleteDialog } from '../QuotesHomeDeleteDialog'
 import { QuotesHomeJobList } from '../QuotesHomeJobList'
 import { QuotesHomeSelectedJobPanel } from '../QuotesHomeSelectedJobPanel'
+import { QuotesHomeSummaryCards } from '../QuotesHomeSummaryCards'
 import { QuotesHomeVersionList } from '../QuotesHomeVersionList'
 import { QUOTES_HOME_JOB_LIST_NO_JOBS_BODY } from '../quoteHomePresentation'
 
@@ -79,6 +81,7 @@ describe('Quotes home panels', () => {
       />,
     )
 
+    expect(screen.getByRole('alert')).toHaveTextContent('Jobs failed to load')
     expect(screen.getByText('Jobs failed to load')).toBeInTheDocument()
     expect(screen.getByText('bootstrap failed')).toBeInTheDocument()
     expect(screen.queryByText('No eligible jobs yet')).not.toBeInTheDocument()
@@ -86,6 +89,33 @@ describe('Quotes home panels', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry jobs' }))
 
     expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('announces job loading without making the whole list live', () => {
+    render(
+      <QuotesHomeJobList
+        vm={{
+          loading: true,
+          searchQuery: '',
+          selectedJobId: '',
+          hasMore: false,
+          items: [],
+          errorMessage: null,
+          canRetry: false,
+          emptyState: 'none',
+          emptyStateBody: null,
+        }}
+        onJobQueryChange={() => {}}
+        onSelectJob={() => {}}
+        onLoadMore={async () => {}}
+        onRetry={async () => true}
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading jobs...')
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByRole('status').parentElement).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('status').parentElement).not.toHaveAttribute('aria-live')
   })
 
   it('renders a load-more button when the vm reports more jobs', () => {
@@ -121,18 +151,99 @@ describe('Quotes home panels', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Load more jobs' }))
 
-    const jobList = screen.getByRole('list')
+    const jobList = screen.getByRole('listbox', { name: 'Jobs' })
     expect(jobList).toBeInTheDocument()
-    expect(jobList.parentElement).toHaveAttribute('aria-live', 'polite')
     expect(jobList.parentElement).toHaveAttribute('aria-busy', 'false')
-    expect(screen.getByRole('listitem')).toContainElement(
-      screen.getByRole('button', { name: /Kitchen Remodel/ }),
+    expect(screen.getByRole('option', { name: /Kitchen Remodel.*selected/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
     )
     expect(
-      screen.getByRole('button', { name: /Kitchen Remodel/ }),
-    ).toHaveAttribute('aria-pressed', 'true')
+      screen.getByRole('option', { name: /Kitchen Remodel.*selected/i }),
+    ).toHaveTextContent('Kitchen Remodel')
 
     expect(onLoadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders job-list loading directly from the vm', () => {
+    render(
+      <QuotesHomeJobList
+        vm={{
+          loading: true,
+          searchQuery: '',
+          selectedJobId: '',
+          hasMore: false,
+          items: [],
+          errorMessage: null,
+          canRetry: false,
+          emptyState: 'none',
+          emptyStateBody: null,
+        }}
+        onJobQueryChange={() => {}}
+        onSelectJob={() => {}}
+        onLoadMore={async () => {}}
+        onRetry={async () => true}
+      />,
+    )
+
+    expect(screen.getByText('Loading jobs...')).toBeInTheDocument()
+    expect(screen.getByText('Loading jobs...').parentElement).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+  })
+
+  it('supports keyboard job selection and listbox focus movement', () => {
+    const onSelectJob = vi.fn()
+
+    render(
+      <QuotesHomeJobList
+        vm={{
+          loading: false,
+          searchQuery: '',
+          selectedJobId: 'job-1',
+          hasMore: false,
+          items: [
+            {
+              id: 'job-1',
+              title: 'Kitchen Remodel',
+              customerName: 'Alice',
+              versionCountLabel: '2 versions',
+              isSelected: true,
+            },
+            {
+              id: 'job-2',
+              title: 'Exterior Paint',
+              customerName: 'Bob',
+              versionCountLabel: '1 version',
+              isSelected: false,
+            },
+          ],
+          errorMessage: null,
+          canRetry: false,
+          emptyState: 'none',
+          emptyStateBody: null,
+        }}
+        onJobQueryChange={() => {}}
+        onSelectJob={onSelectJob}
+        onLoadMore={async () => {}}
+        onRetry={async () => true}
+      />,
+    )
+
+    const kitchen = screen.getByRole('option', { name: /Kitchen Remodel.*selected/i })
+    const exterior = screen.getByRole('option', { name: /Exterior Paint/i })
+
+    kitchen.focus()
+    fireEvent.keyDown(kitchen, { key: 'ArrowDown' })
+
+    expect(exterior).toHaveFocus()
+
+    fireEvent.keyDown(exterior, { key: 'Enter' })
+    fireEvent.keyDown(exterior, { key: ' ' })
+
+    expect(onSelectJob).toHaveBeenCalledWith('job-2')
+    expect(onSelectJob).toHaveBeenCalledTimes(2)
   })
 
   it('uses CRM button actions for version open and delete', () => {
@@ -173,7 +284,7 @@ describe('Quotes home panels', () => {
       'ace-crm-btn-primary',
     )
 
-    const deleteButton = screen.getByRole('button', { name: /delete/i })
+    const deleteButton = screen.getByRole('button', { name: 'Delete quote version Version A' })
     expect(deleteButton).toHaveClass('ace-crm-btn', 'ace-crm-btn-danger')
 
     fireEvent.click(deleteButton)
@@ -181,6 +292,60 @@ describe('Quotes home panels', () => {
 
     expect(onRequestDelete).toHaveBeenCalledWith('estimate-1')
     expect(onLoadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables version deletion when the vm marks that row as deleting', () => {
+    render(
+      <QuotesHomeVersionList
+        vm={{
+          heading: '1 version under this job',
+          detail: null,
+          emptyMessage: null,
+          items: [
+            {
+              id: 'estimate-1',
+              title: 'Version A',
+              total: null,
+              meta: 'Draft / Standard',
+              href: '/crm/quotes/estimate-1',
+              deleting: true,
+            },
+          ],
+          hasMore: false,
+          loadingMore: false,
+          errorMessage: null,
+          canRetry: false,
+        }}
+        onLoadMore={async () => {}}
+        onRetry={async () => true}
+        onRequestDelete={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /delete/i })).toBeDisabled()
+  })
+
+  it('uses the version name in delete confirmation labels', () => {
+    const onConfirm = vi.fn()
+
+    render(
+      <QuotesHomeDeleteDialog
+        vm={{
+          estimateId: 'estimate-1',
+          versionName: 'Version A',
+          jobTitle: 'Kitchen Remodel',
+          deleting: false,
+        }}
+        onCancel={() => {}}
+        onConfirm={onConfirm}
+      />,
+    )
+
+    expect(screen.getByText('Delete Version A from Kitchen Remodel.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Version A' }))
+
+    expect(onConfirm).toHaveBeenCalledTimes(1)
   })
 
   it('renders a retryable error panel when versions fail to load', () => {
@@ -204,6 +369,7 @@ describe('Quotes home panels', () => {
       />,
     )
 
+    expect(screen.getByRole('alert')).toHaveTextContent('Versions failed to load')
     expect(screen.getByText('Versions failed to load')).toBeInTheDocument()
     expect(screen.getByText('versions failed')).toBeInTheDocument()
     expect(
@@ -216,19 +382,34 @@ describe('Quotes home panels', () => {
   })
 
   it('uses the CRM primary button for create version and keeps the local field controls', () => {
+    const onVersionKindChange = vi.fn()
+    const onVersionNameChange = vi.fn()
+
     render(
       <QuotesHomeCreatePanel
         vm={{
           creating: false,
           loading: false,
+          eyebrow: 'Create Version',
+          title: 'Start a quote version',
+          description: 'Create the first quote version for the selected job.',
+          createButtonLabel: 'Create version',
+          versionNameLabel: 'Version name',
+          versionNameHelp: 'Optional custom name.',
+          versionNamePlaceholder: 'Leave blank for the next default version name',
+          versionKindLabel: 'Version type',
+          versionKindOptions: [
+            { value: 'standard', label: 'Standard' },
+            { value: 'alternate', label: 'Alternate' },
+          ],
           selectedJobName: 'Kitchen',
           versionKind: 'standard',
           versionName: '',
           canCreate: false,
         }}
         onCreate={() => {}}
-        onVersionKindChange={() => {}}
-        onVersionNameChange={() => {}}
+        onVersionKindChange={onVersionKindChange}
+        onVersionNameChange={onVersionNameChange}
       />,
     )
 
@@ -245,6 +426,40 @@ describe('Quotes home panels', () => {
       ),
     ).toHaveClass('ace-crm-input')
     expect(screen.getByRole('combobox')).toHaveClass('ace-crm-input')
+
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        'Leave blank for the next default version name',
+      ),
+      { target: { value: 'Custom Revision' } },
+    )
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: 'alternate' },
+    })
+
+    expect(onVersionNameChange).toHaveBeenCalledWith('Custom Revision')
+    expect(onVersionKindChange).toHaveBeenCalledWith('alternate')
+  })
+
+  it('renders summary cards from display-ready vm fields', () => {
+    render(
+      <QuotesHomeSummaryCards
+        cards={[
+          {
+            label: 'Drafts',
+            value: '1',
+            displayValue: '...',
+            subtext: '1 draft version',
+            valueColor: 'rgb(255, 255, 255)',
+            subtextColor: 'rgb(120, 120, 120)',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('...')).toBeInTheDocument()
+    expect(screen.queryByText('1')).not.toBeInTheDocument()
+    expect(screen.getByText('1 draft version')).toBeInTheDocument()
   })
 
   it('owns the selected-job stats grid locally and no longer uses the page-injected class', () => {

@@ -109,6 +109,8 @@ function buildActions(): QuoteHomePageActions {
     setVersionKind: vi.fn(),
     create: vi.fn(async () => null),
     loadMoreVersions: vi.fn(async () => false),
+    retryJobs: vi.fn(async () => true),
+    retryVersions: vi.fn(async () => true),
     retrySearch: vi.fn(),
     requestDelete: vi.fn(),
     cancelDelete: vi.fn(),
@@ -134,13 +136,13 @@ function buildResources(
       jobsLoading: false,
       loading: false,
       bootstrapError: null,
+      jobsError: null,
       ...overrides?.home,
     },
     search: {
+      query: '',
       loading: false,
-      emptyMessage: null,
       error: null,
-      canRetry: false,
       results: [],
       ...overrides?.search,
     },
@@ -303,14 +305,21 @@ describe('buildQuoteHomePageVm', () => {
         detail: 'Showing 2 of 99 versions - reload to see all.',
       })
     )
-    expect(vm.create).toEqual({
-      creating: false,
-      loading: false,
-      selectedJobName: 'Kitchen',
-      versionName: 'Kitchen Revision',
-      versionKind: 'revision',
-      canCreate: true,
-    })
+    expect(vm.create).toEqual(
+      expect.objectContaining({
+        creating: false,
+        loading: false,
+        selectedJobName: 'Kitchen',
+        versionName: 'Kitchen Revision',
+        versionKind: 'revision',
+        canCreate: true,
+        createButtonLabel: 'Create version',
+        versionKindOptions: expect.arrayContaining([
+          { value: 'standard', label: 'Standard' },
+          { value: 'revision', label: 'Revision' },
+        ]),
+      })
+    )
   })
 
   it('builds header search result view models from search result resources', () => {
@@ -334,6 +343,86 @@ describe('buildQuoteHomePageVm', () => {
         meta: 'Kitchen\nAlice / Live',
       },
     ])
+  })
+
+  it('derives search loading state without empty or retry display affordances', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'kitchen',
+        searchFocused: true,
+      }),
+      buildResources({
+        search: {
+          query: 'kitchen',
+          loading: true,
+          results: [],
+        },
+      })
+    )
+
+    expect(vm.header.searchLoading).toBe(true)
+    expect(vm.header.searchEmptyMessage).toBeNull()
+    expect(vm.header.searchErrorMessage).toBeNull()
+    expect(vm.header.searchCanRetry).toBe(false)
+    expect(vm.header.searchResults).toEqual([])
+  })
+
+  it('derives search error state as retryable when a query is active', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'broken',
+      }),
+      buildResources({
+        search: {
+          query: 'broken',
+          error: 'search failed',
+          results: [],
+        },
+      })
+    )
+
+    expect(vm.header.searchEmptyMessage).toBeNull()
+    expect(vm.header.searchErrorMessage).toBe('search failed')
+    expect(vm.header.searchCanRetry).toBe(true)
+    expect(vm.header.searchResults).toEqual([])
+  })
+
+  it('derives search empty state from resource query and result count', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'missing',
+      }),
+      buildResources({
+        search: {
+          query: 'missing',
+          results: [],
+        },
+      })
+    )
+
+    expect(vm.header.searchEmptyMessage).toBe('No quote versions match "missing".')
+    expect(vm.header.searchErrorMessage).toBeNull()
+    expect(vm.header.searchCanRetry).toBe(true)
+    expect(vm.header.searchResults).toEqual([])
+  })
+
+  it('derives search result state without empty messaging', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        searchQuery: 'search',
+      }),
+      buildResources({
+        search: {
+          query: 'search',
+          results: [searchResult],
+        },
+      })
+    )
+
+    expect(vm.header.searchEmptyMessage).toBeNull()
+    expect(vm.header.searchErrorMessage).toBeNull()
+    expect(vm.header.searchCanRetry).toBe(true)
+    expect(vm.header.searchResults).toHaveLength(1)
   })
 
   it('builds the no-selected-job state without hiding the available job list', () => {
@@ -470,6 +559,23 @@ describe('buildQuoteHomePageVm', () => {
 
     expect(vm.versionList.errorMessage).toBe('versions failed')
     expect(vm.versionList.canRetry).toBe(true)
+    expect(vm.feedback).toBeNull()
+  })
+
+  it('keeps jobs-page failures inside the jobs pane when prior job data exists', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState(),
+      buildResources({
+        home: {
+          jobsError: 'jobs failed',
+        },
+      })
+    )
+
+    expect(vm.feedback).toBeNull()
+    expect(vm.jobList.errorMessage).toBe('jobs failed')
+    expect(vm.jobList.canRetry).toBe(true)
+    expect(vm.jobList.items).toHaveLength(2)
   })
 
   it('keeps job-list loading scoped to the jobs pane during server-backed queries', () => {
@@ -552,6 +658,44 @@ describe('buildQuoteHomePageVm', () => {
       emptyState: 'none',
       emptyStateBody: null,
     })
+  })
+
+  it('keeps combined bootstrap and jobs-page failures distinct without duplicate feedback', () => {
+    const vm = buildQuoteHomePageVm(
+      buildState({
+        selectedJobId: '',
+        selectedJob: null,
+        visibleJobs: [],
+      }),
+      buildResources({
+        home: {
+          jobs: [],
+          bootstrapError: 'Bootstrap timed out.',
+          jobsError: 'Jobs page timed out.',
+        },
+        workflow: {
+          versions: {
+            items: [],
+            totalVersions: 0,
+            hasMore: false,
+            loadingMore: false,
+            hasResolved: false,
+          },
+          create: {
+            canCreate: false,
+          },
+        },
+      })
+    )
+
+    expect(vm.feedback).toEqual({
+      tone: 'warning',
+      title: 'Quote home bootstrap failed to load',
+      details: ['Quote home failed to load. Bootstrap timed out.'],
+      sources: ['bootstrap'],
+    })
+    expect(vm.jobList.errorMessage).toBe('Jobs page timed out.')
+    expect(vm.jobList.canRetry).toBe(true)
   })
 
   it('propagates loading state without showing empty selected-job messaging', () => {

@@ -55,12 +55,12 @@ describe('buildQuoteHomePageVmResources', () => {
           jobsLoading: false,
           loading: false,
           bootstrapError: null,
+          jobsError: null,
         },
         searchState: {
+          query: 'version',
           loading: false,
-          emptyMessage: null,
           error: null,
-          canRetry: true,
           results: [
             {
               estimate_id: 'estimate-1',
@@ -110,12 +110,12 @@ describe('buildQuoteHomePageVmResources', () => {
         jobsLoading: false,
         loading: false,
         bootstrapError: null,
+        jobsError: null,
       },
       search: {
+        query: 'version',
         loading: false,
-        emptyMessage: null,
         error: null,
-        canRetry: true,
         results: [
           {
             estimate_id: 'estimate-1',

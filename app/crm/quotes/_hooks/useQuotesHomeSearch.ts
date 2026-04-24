@@ -68,17 +68,10 @@ export function useQuotesHomeSearch(query: string) {
 
   return useMemo(
     () => ({
-      query: data.query,
+      query: debouncedQuery,
       results: data.items,
       loading,
       error,
-      hasQuery: debouncedQuery.length > 0,
-      // TODO: Move display-only emptyMessage and canRetry derivation into quoteHomePageVm.ts.
-      emptyMessage:
-        debouncedQuery && !loading && !error && data.items.length === 0
-          ? `No quote versions match "${debouncedQuery}".`
-          : null,
-      canRetry: Boolean(debouncedQuery) && !loading,
       retry,
     }),
     [data, debouncedQuery, error, loading, retry]

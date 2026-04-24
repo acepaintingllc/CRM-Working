@@ -2,6 +2,7 @@
 
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import type { KeyboardEvent } from 'react'
 import type { QuotesHomeJobListVm } from './quoteHomeTypes'
 import { S } from './quoteHomeStyles'
 
@@ -20,6 +21,39 @@ export function QuotesHomeJobList({
   onLoadMore,
   onRetry,
 }: Props) {
+  const handleJobOptionKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    jobId: string
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onSelectJob(jobId)
+      return
+    }
+
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+
+    event.preventDefault()
+    const optionElements = Array.from(
+      event.currentTarget
+        .closest('[role="listbox"]')
+        ?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []
+    )
+    const currentIndex = optionElements.indexOf(event.currentTarget)
+    if (currentIndex === -1) return
+
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? optionElements.length - 1
+          : event.key === 'ArrowDown'
+            ? Math.min(currentIndex + 1, optionElements.length - 1)
+            : Math.max(currentIndex - 1, 0)
+
+    optionElements[nextIndex]?.focus()
+  }
+
   return (
     <CrmSectionCard className="self-start" eyebrow="Jobs">
       <div style={S.grid16}>
@@ -33,13 +67,16 @@ export function QuotesHomeJobList({
 
         <div
           style={S.jobListScroll}
-          aria-live="polite"
           aria-busy={vm.loading}
         >
-          {vm.loading ? <div style={S.mutedText}>Loading jobs...</div> : null}
+          {vm.loading ? (
+            <div style={S.mutedText} role="status" aria-live="polite" aria-atomic="true">
+              Loading jobs...
+            </div>
+          ) : null}
 
           {!vm.loading && vm.errorMessage ? (
-            <div style={S.emptyPanel}>
+            <div style={S.emptyPanel} role="alert">
               <div style={S.emptyPanelTitle}>Jobs failed to load</div>
               <div style={S.bodyText}>{vm.errorMessage}</div>
               {vm.canRetry ? (
@@ -71,13 +108,23 @@ export function QuotesHomeJobList({
             </div>
           ) : null}
 
-          <ul style={S.jobListItems}>
+          <ul
+            style={S.jobListItems}
+            role="listbox"
+            aria-label="Jobs"
+          >
             {vm.items.map((job) => (
-              <li key={job.id}>
+              <li key={job.id} role="presentation">
                 <button
+                  id={`quote-home-job-${job.id}`}
                   type="button"
+                  role="option"
                   onClick={() => onSelectJob(job.id)}
-                  aria-pressed={Boolean(job.isSelected)}
+                  onKeyDown={(event) => handleJobOptionKeyDown(event, job.id)}
+                  aria-selected={Boolean(job.isSelected)}
+                  aria-label={`${job.title}, ${job.customerName}, ${job.versionCountLabel}${
+                    job.isSelected ? ', selected' : ''
+                  }`}
                   style={
                     job.isSelected ? S.selectableItemSelected : S.selectableItem
                   }

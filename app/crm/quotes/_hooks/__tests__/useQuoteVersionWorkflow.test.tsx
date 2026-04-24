@@ -115,6 +115,46 @@ describe('useQuoteVersionWorkflow', () => {
     })
   })
 
+  it('preserves the draft when selected job data changes without changing job context', async () => {
+    loadQuoteJobVersions.mockResolvedValue({
+      job_id: 'job-1',
+      total_versions: 0,
+      limit: 25,
+      next_cursor: null,
+      items: [],
+    })
+
+    const { result, rerender } = renderHook(
+      ({ selectedJob }) =>
+        useQuoteVersionWorkflow({
+          jobId: 'job-1',
+          selectedJob,
+        }),
+      {
+        initialProps: {
+          selectedJob: { id: 'job-1', customer_id: 'customer-1' },
+        },
+      }
+    )
+
+    await waitFor(() => {
+      expect(result.current.versions.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.setVersionName('Keep me')
+      result.current.actions.setVersionKind('alternate')
+    })
+
+    rerender({
+      selectedJob: { id: 'job-1', customer_id: 'customer-1' },
+    })
+
+    expect(result.current.create.versionName).toBe('Keep me')
+    expect(result.current.create.versionKind).toBe('alternate')
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(1)
+  })
+
   it('uses the shared required-job guard for missing or invalid job context', async () => {
     const { result } = renderHook(() =>
       useQuoteVersionWorkflow({

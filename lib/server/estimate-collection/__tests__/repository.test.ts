@@ -16,7 +16,10 @@ vi.mock('../../org.ts', () => ({
 
 import {
   createEstimateCollectionVersionRecord,
+  decorateEstimateCollectionRows,
+  loadEstimateCollectionJobsPage,
   loadEstimateCollectionJobVersionsPage,
+  searchEstimateCollectionRows,
 } from '../repository.ts'
 import type { EstimateCollectionVersionRow } from '../types.ts'
 
@@ -60,6 +63,14 @@ function makeQuery(response: QueryResponse) {
     }),
     order: vi.fn((...args: unknown[]) => {
       calls.push({ method: 'order', args })
+      return query
+    }),
+    in: vi.fn((...args: unknown[]) => {
+      calls.push({ method: 'in', args })
+      return query
+    }),
+    ilike: vi.fn((...args: unknown[]) => {
+      calls.push({ method: 'ilike', args })
       return query
     }),
     limit: vi.fn((...args: unknown[]) => {
@@ -313,5 +324,157 @@ describe('estimate collection repository', () => {
       message: 'Invalid cursor.',
     })
     expect(mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid job cursors before calling the jobs-page rpc', async () => {
+    const result = await loadEstimateCollectionJobsPage('org-1', {
+      cursor: 'not-a-valid-cursor',
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Invalid cursor.',
+    })
+    expect(mocks.supabaseRpc).not.toHaveBeenCalled()
+  })
+
+  it('clamps job page limits and forwards cursor tie-break boundaries to the rpc', async () => {
+    const cursorTimestamp = '2026-04-24T12:00:00.000Z'
+    const cursorId = '33333333-3333-4333-8333-333333333333'
+    mocks.supabaseRpc.mockResolvedValue({
+      data: [
+        {
+          id: '22222222-2222-4222-8222-222222222222',
+          customer_id: 'customer-1',
+          customer_name: 'Taylor Smith',
+          customer_address: '12 Main',
+          title: 'Kitchen',
+          description: null,
+          status: 'estimate_scheduled',
+          created_at: cursorTimestamp,
+          estimate_date: null,
+          estimate_sent_at: null,
+          scheduled_date: null,
+          scheduled_end_date: null,
+          scheduled_email_sent_at: null,
+          completed_at: null,
+          completed_email_sent_at: null,
+          closeout_notes: null,
+          linked_estimate_id: null,
+          version_count: 2,
+        },
+      ],
+      error: null,
+    })
+
+    const result = await loadEstimateCollectionJobsPage('org-1', {
+      query: ' kitchen ',
+      limit: 999,
+      cursor: `${cursorTimestamp}::${cursorId}`,
+    })
+
+    expect(mocks.supabaseRpc).toHaveBeenCalledWith('quote_home_jobs_page', {
+      p_org_id: 'org-1',
+      p_search: 'kitchen',
+      p_limit: 101,
+      p_cursor_created_at: cursorTimestamp,
+      p_cursor_id: cursorId,
+    })
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        query: 'kitchen',
+        limit: 100,
+        nextCursor: null,
+        items: [expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' })],
+      }),
+    })
+  })
+
+  it('clamps job-version page limits', async () => {
+    const countQuery = makeQuery({ data: null, error: null, count: 1 })
+    const rowsQuery = makeQuery({
+      data: [makeEstimateRow('11111111-1111-4111-8111-111111111111', '2026-04-24T12:00:00.000Z')],
+      error: null,
+    })
+    mocks.from.mockReturnValueOnce(countQuery).mockReturnValueOnce(rowsQuery)
+
+    const result = await loadEstimateCollectionJobVersionsPage('org-1', 'job-1', {
+      limit: 999,
+    })
+
+    expect(rowsQuery.limit).toHaveBeenCalledWith(101)
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        limit: 100,
+        items: [expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' })],
+      }),
+    })
+  })
+
+  it('escapes wildcard search characters and returns deduped sorted rows', async () => {
+    const newest = makeEstimateRow('33333333-3333-4333-8333-333333333333', '2026-04-24T13:00:00.000Z')
+    const tieHigh = makeEstimateRow('22222222-2222-4222-8222-222222222222', '2026-04-24T12:00:00.000Z')
+    const tieLow = makeEstimateRow('11111111-1111-4111-8111-111111111111', '2026-04-24T12:00:00.000Z')
+    const versionMatchesQuery = makeQuery({ data: [tieLow, newest], error: null })
+    const jobsQuery = makeQuery({ data: [{ id: 'job-1' }], error: null })
+    const customersQuery = makeQuery({ data: [{ id: 'customer-1' }], error: null })
+    const jobLookupQuery = makeQuery({ data: [tieHigh, tieLow], error: null })
+    const customerLookupQuery = makeQuery({ data: [newest], error: null })
+    mocks.from
+      .mockReturnValueOnce(versionMatchesQuery)
+      .mockReturnValueOnce(jobsQuery)
+      .mockReturnValueOnce(customersQuery)
+      .mockReturnValueOnce(jobLookupQuery)
+      .mockReturnValueOnce(customerLookupQuery)
+
+    const result = await searchEstimateCollectionRows('org-1', '100%_ready\\now', 10)
+
+    expect(versionMatchesQuery.or).toHaveBeenCalledWith(
+      'version_name.ilike.%100\\%\\_ready\\\\now%,version_kind.ilike.%100\\%\\_ready\\\\now%,version_state.ilike.%100\\%\\_ready\\\\now%'
+    )
+    expect(jobsQuery.ilike).toHaveBeenCalledWith('title', '%100\\%\\_ready\\\\now%')
+    expect(customersQuery.ilike).toHaveBeenCalledWith('name', '%100\\%\\_ready\\\\now%')
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
+        expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
+        expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
+      ],
+    })
+  })
+
+  it('decorates empty data and missing rollup rows without failing', async () => {
+    await expect(
+      decorateEstimateCollectionRows('org-1', [], { includeRollups: true })
+    ).resolves.toEqual({ ok: true, data: [] })
+    expect(mocks.from).not.toHaveBeenCalled()
+
+    const jobQuery = makeQuery({
+      data: [{ id: 'job-1', title: 'Kitchen', status: 'estimate_sent', estimate_sent_at: null }],
+      error: null,
+    })
+    const customerQuery = makeQuery({ data: [{ id: 'customer-1', name: 'Taylor Smith' }], error: null })
+    const rollupQuery = makeQuery({ data: [], error: null })
+    mocks.from.mockReturnValueOnce(jobQuery).mockReturnValueOnce(customerQuery).mockReturnValueOnce(rollupQuery)
+
+    await expect(
+      decorateEstimateCollectionRows(
+        'org-1',
+        [makeEstimateRow('11111111-1111-4111-8111-111111111111', '2026-04-24T12:00:00.000Z')],
+        { includeRollups: true }
+      )
+    ).resolves.toEqual({
+      ok: true,
+      data: [
+        expect.objectContaining({
+          estimate_id: '11111111-1111-4111-8111-111111111111',
+          final_total: null,
+        }),
+      ],
+    })
   })
 })

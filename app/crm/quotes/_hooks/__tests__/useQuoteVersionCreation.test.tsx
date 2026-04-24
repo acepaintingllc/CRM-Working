@@ -82,4 +82,32 @@ describe('useQuoteVersionCreation', () => {
     expect(result.current.versionName).toBe('Custom')
     expect(result.current.versionKind).toBe('revision')
   })
+
+  it('creates with the latest selected job when the visible selection changes', async () => {
+    createQuoteVersion.mockResolvedValue({ id: 'estimate-99' })
+    const firstJob = { id: 'job-1', customer_id: 'customer-1' }
+    const nextJob = { id: 'job-2', customer_id: 'customer-2' }
+
+    const { result, rerender } = renderHook(({ selectedJob }) => useQuoteVersionCreation(selectedJob), {
+      initialProps: { selectedJob: firstJob },
+    })
+
+    act(() => {
+      result.current.setVersionName('Garage')
+      result.current.setVersionKind('alternate')
+    })
+
+    rerender({ selectedJob: nextJob })
+
+    await act(async () => {
+      await result.current.createVersion()
+    })
+
+    expect(createQuoteVersion).toHaveBeenCalledWith({
+      job_id: 'job-2',
+      customer_id: 'customer-2',
+      version_kind: 'alternate',
+      version_name: 'Garage',
+    })
+  })
 })

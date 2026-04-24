@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act, StrictMode, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createJobVersionsCache } from '../jobVersionsCache'
+import { createJobVersionsCache, mergeJobVersionsPages } from '../jobVersionsCache'
 import { useQuoteJobVersions } from '../useQuoteJobVersions'
 
 const { loadQuoteJobVersions } = vi.hoisted(() => ({
@@ -64,6 +64,22 @@ const versionPayload = {
 describe('useQuoteJobVersions', () => {
   beforeEach(() => {
     loadQuoteJobVersions.mockReset()
+  })
+
+  it('loads fresh versions when no cache entry exists', async () => {
+    loadQuoteJobVersions.mockResolvedValue(versionPayload)
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    expect(result.current.items).toEqual([])
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2)
+    })
+
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(1)
+    expect(loadQuoteJobVersions).toHaveBeenCalledWith('job-1')
+    expect(result.current.hasResolved).toBe(true)
   })
 
   it('appends the next versions page and keeps the authoritative total count', async () => {
@@ -133,6 +149,46 @@ describe('useQuoteJobVersions', () => {
     })
 
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(3)
+  })
+
+  it('uses cached data when switching back to a previously loaded job', async () => {
+    const jobTwoPayload = {
+      ...versionPayload,
+      job_id: 'job-2',
+      items: [
+        {
+          ...versionPayload.items[0],
+          estimate_id: 'estimate-job-2',
+          job_id: 'job-2',
+          job_title: 'Garage',
+        },
+      ],
+    }
+
+    loadQuoteJobVersions.mockResolvedValueOnce(versionPayload).mockResolvedValueOnce(jobTwoPayload)
+
+    const { result, rerender } = renderHook(({ jobId }) => useQuoteJobVersions(jobId), {
+      initialProps: { jobId: 'job-1' },
+    })
+
+    await waitFor(() => {
+      expect(result.current.data.job_id).toBe('job-1')
+    })
+
+    rerender({ jobId: 'job-2' })
+
+    await waitFor(() => {
+      expect(result.current.data.job_id).toBe('job-2')
+    })
+
+    rerender({ jobId: 'job-1' })
+
+    await waitFor(() => {
+      expect(result.current.data.job_id).toBe('job-1')
+    })
+
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+    expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
   })
 
   it('initializes empty and does not fetch when disabled', async () => {
@@ -234,6 +290,26 @@ describe('useQuoteJobVersions', () => {
     })
 
     expect(result.current.items).toHaveLength(2)
+    expect(result.current.error).toBe('refresh failed')
+  })
+
+  it('clears version data when a non-preserving refresh attempt fails', async () => {
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(versionPayload)
+      .mockRejectedValueOnce(new Error('refresh failed'))
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2)
+    })
+
+    await act(async () => {
+      await result.current.attemptRefresh({ preserveDataOnError: false })
+    })
+
+    expect(result.current.data.job_id).toBe('job-1')
+    expect(result.current.items).toEqual([])
     expect(result.current.error).toBe('refresh failed')
   })
 
@@ -357,5 +433,34 @@ describe('createJobVersionsCache', () => {
     cache.set('job-1', replacementPayload)
 
     expect(cache.get('job-1')).toBe(replacementPayload)
+  })
+})
+
+describe('mergeJobVersionsPages', () => {
+  it('merges pages without duplicating estimate ids', () => {
+    const currentPage = {
+      ...versionPayload,
+      total_versions: 3,
+      next_cursor: 'cursor-2',
+    }
+    const nextPage = {
+      ...versionPayload,
+      total_versions: 3,
+      next_cursor: null,
+      items: [
+        versionPayload.items[1],
+        {
+          ...versionPayload.items[0],
+          estimate_id: 'estimate-3',
+          version_name: 'Version C',
+        },
+      ],
+    }
+
+    expect(mergeJobVersionsPages(currentPage, nextPage).items.map((item) => item.estimate_id)).toEqual([
+      'estimate-1',
+      'estimate-2',
+      'estimate-3',
+    ])
   })
 })

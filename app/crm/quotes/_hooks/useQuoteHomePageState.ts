@@ -2,26 +2,34 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { QuoteHomeJob } from '../_home/quoteHomeTypes'
-import { resolveQuoteHomeSelectedJobId } from './quoteHomePagePolicy'
+import {
+  resolveQuoteHomeManualSelection,
+  resolveQuoteHomeSelectedJob,
+  resolveQuoteHomeSelectionAfterJobsLoaded,
+} from './quoteHomePagePolicy'
 
 export function useQuoteHomePageState(
   jobs: QuoteHomeJob[],
   initialSelectedJobId: string
 ) {
   const [jobsForSelection, setJobsForSelectionState] = useState(jobs)
+  const [jobsForSelectionQuery, setJobsForSelectionQuery] = useState('')
   const [searchQuery, setSearchQueryState] = useState('')
   const [searchFocused, setSearchFocusedState] = useState(false)
   const [jobQuery, setJobQueryState] = useState('')
-  const [selectedJobId, setSelectedJobIdState] = useState(() =>
-    resolveQuoteHomeSelectedJobId(jobs, initialSelectedJobId)
+  const [selection, setSelection] = useState(() =>
+    resolveQuoteHomeSelectedJob(jobs, initialSelectedJobId)
   )
 
   useEffect(() => {
-    const nextSelectedJobId = resolveQuoteHomeSelectedJobId(jobsForSelection, selectedJobId)
-    if (nextSelectedJobId !== selectedJobId) {
-      setSelectedJobIdState(nextSelectedJobId)
-    }
-  }, [jobsForSelection, selectedJobId])
+    setSelection((currentSelection) =>
+      resolveQuoteHomeSelectionAfterJobsLoaded({
+        jobs: jobsForSelection,
+        currentSelection,
+        jobQuery: jobsForSelectionQuery,
+      })
+    )
+  }, [jobsForSelection, jobsForSelectionQuery])
 
   const setSearchQuery = useCallback((value: string) => {
     setSearchQueryState(value)
@@ -35,12 +43,19 @@ export function useQuoteHomePageState(
     setJobQueryState(value)
   }, [])
 
-  const setSelectedJobId = useCallback((value: string) => {
-    setSelectedJobIdState(value)
-  }, [])
+  const setSelectedJobId = useCallback(
+    (value: string) => {
+      setSelection(resolveQuoteHomeManualSelection({
+        jobs: jobsForSelection,
+        selectedJobId: value,
+      }))
+    },
+    [jobsForSelection]
+  )
 
-  const setJobsForSelection = useCallback((value: QuoteHomeJob[]) => {
+  const setJobsForSelection = useCallback((value: QuoteHomeJob[], query = '') => {
     setJobsForSelectionState(value)
+    setJobsForSelectionQuery(query)
   }, [])
 
   const actions = useMemo(
@@ -64,7 +79,8 @@ export function useQuoteHomePageState(
     searchQuery,
     searchFocused,
     jobQuery,
-    selectedJobId,
+    selectedJobId: selection.selectedJobId,
+    selectedJob: selection.selectedJob,
     actions,
     setJobsForSelection,
   }

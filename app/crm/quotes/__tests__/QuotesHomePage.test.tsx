@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import { quoteHomeBootstrap } from '@/test-support/quoteHomeFixtures'
 import QuotesHomePage from '../QuotesHomePage'
 
 type MockHeaderProps = {
@@ -28,12 +28,12 @@ type MockJobListProps = {
 type MockSummaryCard = {
   label: string
   value: string
+  displayValue: string
   subtext?: string
 }
 
 type MockSummaryCardsProps = {
   cards: MockSummaryCard[]
-  loading: boolean
 }
 
 type MockSelectedJobPanelProps = {
@@ -42,7 +42,7 @@ type MockSelectedJobPanelProps = {
 
 type MockVersionListProps = {
   vm: { heading: string }
-  onLoadMore: () => Promise<void>
+  onLoadMore: () => Promise<unknown>
   onRetry: () => Promise<boolean>
   onRequestDelete: (id: string) => void
 }
@@ -108,14 +108,14 @@ vi.mock('../_home/QuotesHomeJobList', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeSummaryCards', () => ({
-  QuotesHomeSummaryCards: ({ cards, loading }: MockSummaryCardsProps) => {
+  QuotesHomeSummaryCards: ({ cards }: MockSummaryCardsProps) => {
     if (shouldThrowSummaryCards()) {
       throw new Error('summary cards crashed')
     }
 
     return (
       <div>
-        summary-cards:{cards.map((card) => `${card.label}:${card.value}`).join('|')}:{String(loading)}
+        summary-cards:{cards.map((card) => `${card.label}:${card.displayValue ?? card.value}`).join('|')}
       </div>
     )
   },
@@ -182,6 +182,8 @@ function createQuotesHomePageVm({
       setSelectedJobId: vi.fn(),
       loadMore: vi.fn(async () => undefined),
       refresh: vi.fn(async () => true),
+      retryJobs: vi.fn(async () => true),
+      retryVersions: vi.fn(async () => true),
       loadMoreVersions: vi.fn(async () => false),
       requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
@@ -271,6 +273,8 @@ describe('QuotesHomePage', () => {
       setSelectedJobId: vi.fn(),
       loadMore: vi.fn(async () => undefined),
       refresh: vi.fn(async () => true),
+      retryJobs: vi.fn(async () => true),
+      retryVersions: vi.fn(async () => true),
       loadMoreVersions: vi.fn(async () => false),
       requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
@@ -355,7 +359,7 @@ describe('QuotesHomePage', () => {
     expect(screen.getByText('Quote Home')).toBeInTheDocument()
     expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
     expect(screen.getByText('header:3 total versions')).toBeInTheDocument()
-    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:false')).toBeInTheDocument()
+    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800')).toBeInTheDocument()
     expect(screen.getByText('job-error:none')).toBeInTheDocument()
     expect(screen.getByText('job-can-retry:false')).toBeInTheDocument()
     expect(screen.getByText('job-has-more:true')).toBeInTheDocument()
@@ -374,6 +378,7 @@ describe('QuotesHomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'load more jobs' }))
     fireEvent.click(screen.getByRole('button', { name: 'retry jobs' }))
     fireEvent.click(screen.getByRole('button', { name: 'load more versions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'retry versions' }))
     fireEvent.click(screen.getByRole('button', { name: 'request delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'change kind' }))
     fireEvent.click(screen.getByRole('button', { name: 'change name' }))
@@ -387,7 +392,9 @@ describe('QuotesHomePage', () => {
     expect(actions.setJobQuery).toHaveBeenCalledWith('garage')
     expect(actions.setSelectedJobId).toHaveBeenCalledWith('job-2')
     expect(actions.loadMore).toHaveBeenCalledTimes(1)
-    expect(actions.refresh).toHaveBeenCalledTimes(1)
+    expect(actions.retryJobs).toHaveBeenCalledTimes(1)
+    expect(actions.retryVersions).toHaveBeenCalledTimes(1)
+    expect(actions.refresh).not.toHaveBeenCalled()
     expect(actions.loadMoreVersions).toHaveBeenCalledTimes(1)
     expect(actions.requestDelete).toHaveBeenCalledWith('estimate-2')
     expect(actions.setVersionKind).toHaveBeenCalledWith('revision')
@@ -407,6 +414,8 @@ describe('QuotesHomePage', () => {
         setSelectedJobId: vi.fn(),
         loadMore: vi.fn(async () => undefined),
         refresh: vi.fn(async () => true),
+        retryJobs: vi.fn(async () => true),
+        retryVersions: vi.fn(async () => true),
         loadMoreVersions: vi.fn(async () => false),
         requestDelete: vi.fn(),
         setVersionKind: vi.fn(),
@@ -484,24 +493,11 @@ describe('QuotesHomePage', () => {
   })
 
   it('passes initialData through to the controller hook', () => {
-    const seedPayload = {
-      summary: {
-        total_versions: 5,
-        draft_count: 2,
-        sent_or_awaiting_count: 1,
-        live_count: 2,
-        pipeline_total: 3000,
-      },
-      jobs: { query: '', limit: 25, next_cursor: null, items: [] },
-      selected_job_id: null,
-      selected_job_versions: null,
-    } satisfies QuoteHomeBootstrapReadModel
-
     useQuotesHomePage.mockReturnValue(createQuotesHomePageVm())
 
-    render(<QuotesHomePage initialData={seedPayload} />)
+    render(<QuotesHomePage initialData={quoteHomeBootstrap} />)
 
-    expect(useQuotesHomePage).toHaveBeenCalledWith(seedPayload)
+    expect(useQuotesHomePage).toHaveBeenCalledWith(quoteHomeBootstrap)
   })
 
   it('renders the loading state without feedback while keeping lists mounted', () => {
@@ -509,7 +505,7 @@ describe('QuotesHomePage', () => {
 
     render(<QuotesHomePage />)
 
-    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:true')).toBeInTheDocument()
+    expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800')).toBeInTheDocument()
     expect(screen.queryByText('Quote action failed')).not.toBeInTheDocument()
     expect(screen.getByText('job-list:desktop')).toBeInTheDocument()
     expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
