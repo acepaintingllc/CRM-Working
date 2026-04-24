@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import type { EligibleQuoteVersionJob } from '@/lib/quotes/versionCreation'
+import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/collectionData'
 import { useQuoteJobVersions } from './useQuoteJobVersions'
 import { useQuoteVersionCreation } from './useQuoteVersionCreation'
 
@@ -11,6 +12,7 @@ type UseQuoteVersionWorkflowOptions = {
   loading?: boolean
   blockCreateWhileVersionsLoading?: boolean
   onRefresh?: (() => Promise<unknown>) | null
+  initialVersions?: QuoteJobVersionsPageReadModel | null
 }
 
 export function useQuoteVersionWorkflow({
@@ -19,8 +21,12 @@ export function useQuoteVersionWorkflow({
   loading = false,
   blockCreateWhileVersionsLoading = false,
   onRefresh = null,
+  initialVersions = null,
 }: UseQuoteVersionWorkflowOptions) {
-  const versions = useQuoteJobVersions(jobId, { enabled: Boolean(jobId) })
+  const versions = useQuoteJobVersions(jobId, {
+    enabled: Boolean(jobId),
+    initialData: initialVersions,
+  })
   const createController = useQuoteVersionCreation(selectedJob)
   const { setError, setVersionKind, setVersionName } = createController
 
@@ -57,6 +63,7 @@ export function useQuoteVersionWorkflow({
       create: createController.createVersion,
       refresh,
       refreshVersions: versions.refresh,
+      loadMoreVersions: versions.loadMore,
     },
   }
 }

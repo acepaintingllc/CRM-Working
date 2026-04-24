@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import QuotesHomePage from '../QuotesHomePage'
 
 type MockHeaderProps = {
@@ -14,11 +14,11 @@ type MockHeaderProps = {
 type MockJobListProps = {
   vm: {
     emptyState: string
+    hasMore: boolean
   }
-  renderDesktop?: boolean
-  renderMobile?: boolean
   onJobQueryChange: (query: string) => void
   onSelectJob: (jobId: string) => void
+  onLoadMore: () => Promise<void>
 }
 
 type MockSummaryCard = {
@@ -38,6 +38,7 @@ type MockSelectedJobPanelProps = {
 
 type MockVersionListProps = {
   vm: { heading: string }
+  onLoadMore: () => void
   onRequestDelete: (id: string) => void
 }
 
@@ -79,12 +80,14 @@ vi.mock('../_home/QuotesHomeHeader', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeJobList', () => ({
-  QuotesHomeJobList: ({ vm, renderDesktop = true, renderMobile = true, onJobQueryChange, onSelectJob }: MockJobListProps) => (
+  QuotesHomeJobList: ({ vm, onJobQueryChange, onSelectJob, onLoadMore }: MockJobListProps) => (
     <div>
-      <div>job-list:{renderDesktop ? 'desktop' : 'mobile'}:{renderMobile ? 'mobile' : 'desktop'}</div>
+      <div>job-list:desktop</div>
       <div>job-empty:{vm.emptyState}</div>
+      <div>job-has-more:{String(vm.hasMore)}</div>
       <button onClick={() => onJobQueryChange('garage')}>change job query</button>
       <button onClick={() => onSelectJob('job-2')}>select job</button>
+      <button onClick={() => void onLoadMore()}>load more jobs</button>
     </div>
   ),
 }))
@@ -102,9 +105,10 @@ vi.mock('../_home/QuotesHomeSelectedJobPanel', () => ({
 }))
 
 vi.mock('../_home/QuotesHomeVersionList', () => ({
-  QuotesHomeVersionList: ({ vm, onRequestDelete }: MockVersionListProps) => (
+  QuotesHomeVersionList: ({ vm, onLoadMore, onRequestDelete }: MockVersionListProps) => (
     <div>
       <div>version-list:{vm.heading}</div>
+      <button onClick={onLoadMore}>load more versions</button>
       <button onClick={() => onRequestDelete('estimate-2')}>request delete</button>
     </div>
   ),
@@ -132,6 +136,11 @@ vi.mock('../_home/QuotesHomeDeleteDialog', () => ({
 }))
 
 describe('QuotesHomePage', () => {
+  beforeEach(() => {
+    cleanup()
+    useQuotesHomePage.mockReset()
+  })
+
   it('renders grouped sections and wires child callbacks through the page shell', () => {
     const actions = {
       setSearchFocused: vi.fn(),
@@ -139,6 +148,8 @@ describe('QuotesHomePage', () => {
       retrySearch: vi.fn(),
       setJobQuery: vi.fn(),
       setSelectedJobId: vi.fn(),
+      loadMore: vi.fn(async () => undefined),
+      loadMoreVersions: vi.fn(async () => false),
       requestDelete: vi.fn(),
       setVersionKind: vi.fn(),
       setVersionName: vi.fn(),
@@ -149,6 +160,7 @@ describe('QuotesHomePage', () => {
 
     useQuotesHomePage.mockReturnValue({
       actions,
+      loading: false,
       header: {
         heroSummaryText: '3 total versions',
         searchFocused: false,
@@ -160,7 +172,6 @@ describe('QuotesHomePage', () => {
         searchResults: [],
       },
       feedback: {
-        loading: false,
         tone: 'error',
         title: 'Quote action failed',
         details: ['Select a job before creating a version.'],
@@ -174,8 +185,8 @@ describe('QuotesHomePage', () => {
         loading: false,
         searchQuery: '',
         selectedJobId: 'job-1',
+        hasMore: true,
         items: [],
-        mobileItems: [],
         emptyState: 'none',
       },
       selectedJob: {
@@ -188,8 +199,11 @@ describe('QuotesHomePage', () => {
       },
       versionList: {
         heading: '2 versions under this job',
+        detail: null,
         emptyMessage: null,
         items: [],
+        hasMore: false,
+        loadingMore: false,
       },
       create: {
         creating: false,
@@ -199,10 +213,6 @@ describe('QuotesHomePage', () => {
         versionName: '',
         canCreate: true,
       },
-      mobileSummaryCards: [
-        { label: 'Drafts', value: '1', subtext: '1 draft version' },
-        { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
-      ],
       dialogs: {
         delete: {
           estimateId: 'estimate-2',
@@ -219,6 +229,7 @@ describe('QuotesHomePage', () => {
     expect(screen.getByText('Shared CRM shell')).toBeInTheDocument()
     expect(screen.getByText('header:3 total versions')).toBeInTheDocument()
     expect(screen.getByText('summary-cards:Drafts:1|Pipeline:$1,800:false')).toBeInTheDocument()
+    expect(screen.getByText('job-has-more:true')).toBeInTheDocument()
     expect(screen.getByText('selected-job:Kitchen')).toBeInTheDocument()
     expect(screen.getByText('version-list:2 versions under this job')).toBeInTheDocument()
     expect(screen.getByText('create-panel:standard:')).toBeInTheDocument()
@@ -231,6 +242,8 @@ describe('QuotesHomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'retry search' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'change job query' })[0])
     fireEvent.click(screen.getAllByRole('button', { name: 'select job' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'load more jobs' }))
+    fireEvent.click(screen.getByRole('button', { name: 'load more versions' }))
     fireEvent.click(screen.getByRole('button', { name: 'request delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'change kind' }))
     fireEvent.click(screen.getByRole('button', { name: 'change name' }))
@@ -243,11 +256,93 @@ describe('QuotesHomePage', () => {
     expect(actions.retrySearch).toHaveBeenCalledTimes(1)
     expect(actions.setJobQuery).toHaveBeenCalledWith('garage')
     expect(actions.setSelectedJobId).toHaveBeenCalledWith('job-2')
+    expect(actions.loadMore).toHaveBeenCalledTimes(1)
+    expect(actions.loadMoreVersions).toHaveBeenCalledTimes(1)
     expect(actions.requestDelete).toHaveBeenCalledWith('estimate-2')
     expect(actions.setVersionKind).toHaveBeenCalledWith('revision')
     expect(actions.setVersionName).toHaveBeenCalledWith('Custom Revision')
     expect(actions.create).toHaveBeenCalledTimes(1)
     expect(actions.cancelDelete).toHaveBeenCalledTimes(1)
     expect(actions.confirmDelete).toHaveBeenCalledTimes(1)
+  })
+
+  it('omits the feedback notice when the controller returns null feedback', () => {
+    useQuotesHomePage.mockReturnValue({
+      actions: {
+        setSearchFocused: vi.fn(),
+        setSearchQuery: vi.fn(),
+        retrySearch: vi.fn(),
+        setJobQuery: vi.fn(),
+        setSelectedJobId: vi.fn(),
+        loadMore: vi.fn(async () => undefined),
+        loadMoreVersions: vi.fn(async () => false),
+        requestDelete: vi.fn(),
+        setVersionKind: vi.fn(),
+        setVersionName: vi.fn(),
+        create: vi.fn(),
+        cancelDelete: vi.fn(),
+        confirmDelete: vi.fn(),
+      },
+      loading: false,
+      header: {
+        heroSummaryText: '3 total versions',
+        searchFocused: false,
+        searchQuery: '',
+        searchLoading: false,
+        searchEmptyMessage: null,
+        searchErrorMessage: null,
+        searchCanRetry: false,
+        searchResults: [],
+      },
+      feedback: null,
+      summaryCards: [
+        { label: 'Drafts', value: '1', subtext: '1 draft version' },
+        { label: 'Pipeline', value: '$1,800', subtext: 'Rollup-backed total' },
+      ],
+      jobList: {
+        loading: false,
+        searchQuery: '',
+        selectedJobId: 'job-1',
+        hasMore: false,
+        items: [],
+        emptyState: 'none',
+      },
+      selectedJob: {
+        loading: false,
+        emptyMessage: null,
+        title: 'Kitchen',
+        customerLine: 'Alice',
+        jobHref: '/crm/jobs/job-1',
+        stats: [],
+      },
+      versionList: {
+        heading: '2 versions under this job',
+        detail: null,
+        emptyMessage: null,
+        items: [],
+        hasMore: false,
+        loadingMore: false,
+      },
+      create: {
+        creating: false,
+        loading: false,
+        selectedJobName: 'Kitchen',
+        versionKind: 'standard',
+        versionName: '',
+        canCreate: true,
+      },
+      dialogs: {
+        delete: {
+          estimateId: null,
+          versionName: null,
+          jobTitle: null,
+          deleting: false,
+        },
+      },
+    })
+
+    render(<QuotesHomePage />)
+
+    expect(screen.queryByText('Quote action failed')).not.toBeInTheDocument()
   })
 })

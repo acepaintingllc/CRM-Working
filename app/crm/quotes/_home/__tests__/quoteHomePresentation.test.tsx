@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type {
-  QuoteHomeEligibleJobReadModel,
+  QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import {
   buildHeroSummaryText,
-  buildSearchResultVm,
   buildQuoteHomeVersionItemVm,
+  buildQuotesHomeFeedbackVm,
   buildQuotesHomeSelectedJobVm,
+  buildQuotesHomeVersionDetail,
+  buildQuotesHomeVersionHeading,
+  buildSearchResultVm,
+  buildSummaryCards,
+  QUOTE_META_SEPARATOR,
 } from '../quoteHomePresentation'
 
 const estimate: QuoteHomeJobVersionItemReadModel = {
@@ -26,7 +31,7 @@ const estimate: QuoteHomeJobVersionItemReadModel = {
   is_sent_estimate: true,
 }
 
-const job: QuoteHomeEligibleJobReadModel = {
+const job: QuoteHomeJobListItemReadModel = {
   id: 'job-1',
   customer_id: 'customer-1',
   customer_name: 'Alice',
@@ -34,13 +39,24 @@ const job: QuoteHomeEligibleJobReadModel = {
   title: 'Kitchen',
   description: null,
   status: 'estimate_sent',
+  created_at: null,
   estimate_date: null,
   estimate_sent_at: null,
   scheduled_date: null,
+  scheduled_end_date: null,
+  scheduled_email_sent_at: null,
   completed_at: null,
+  completed_email_sent_at: null,
+  closeout_notes: null,
+  linked_estimate_id: null,
+  version_count: 4,
 }
 
 describe('quoteHomePresentation', () => {
+  it('locks the quote meta separator to a middle dot', () => {
+    expect(QUOTE_META_SEPARATOR).toBe(' \u00B7 ')
+  })
+
   it('builds hero summary text from summary counts', () => {
     expect(
       buildHeroSummaryText({
@@ -50,13 +66,13 @@ describe('quoteHomePresentation', () => {
         live_count: 1,
         pipeline_total: 5000,
       })
-    ).toBe('24 total versions · 2 drafts · 3 sent/awaiting · 1 live')
+    ).toBe('24 total versions \u00B7 2 drafts \u00B7 3 sent/awaiting \u00B7 1 live')
   })
 
   it('builds selected-job and version item view models', () => {
     const selectedVm = buildQuotesHomeSelectedJobVm(job, 4, false)
     expect(selectedVm.title).toBe('Kitchen')
-    expect(selectedVm.customerLine).toBe('Alice · 123 Main')
+    expect(selectedVm.customerLine).toBe('Alice \u00B7 123 Main')
     expect(selectedVm.stats).toEqual([
       { label: 'Customer', value: 'Alice' },
       { label: 'Job Status', value: 'Estimate Sent' },
@@ -67,7 +83,27 @@ describe('quoteHomePresentation', () => {
     expect(versionVm.total).toBe('$1,250')
     expect(versionVm.href).toBe('/crm/quotes/estimate-1')
     expect(versionVm.deleting).toBe(true)
-    expect(versionVm.meta).toContain('Live / Revision · Updated')
+    expect(versionVm.meta).toContain('Live / Revision \u00B7 Updated')
+  })
+
+  it('builds version-history totals from the full count, not the loaded page length', () => {
+    expect(buildQuotesHomeVersionHeading(job, 30)).toBe(
+      '30 versions under this job'
+    )
+    expect(
+      buildQuotesHomeVersionDetail(job, {
+        loadedVersions: 25,
+        totalVersions: 30,
+        hasMore: true,
+      })
+    ).toBe('Showing 25 of 30 versions.')
+    expect(
+      buildQuotesHomeVersionDetail(job, {
+        loadedVersions: 30,
+        totalVersions: 30,
+        hasMore: false,
+      })
+    ).toBe('Showing all 30 versions.')
   })
 
   it('builds search result view models from shared home version items', () => {
@@ -77,5 +113,224 @@ describe('quoteHomePresentation', () => {
       title: 'Kitchen Revision',
       meta: 'Kitchen\nAlice / Live',
     })
+  })
+
+  it('builds feedback for each individual error source and the null case', () => {
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [
+          { source: 'bootstrap', message: 'Quote home failed to load.' },
+        ],
+        jobVersionsError: null,
+        createError: null,
+        deleteError: null,
+        actionWarning: null,
+      })
+    ).toEqual({
+      tone: 'warning',
+      title: 'Quote home bootstrap failed to load',
+      details: ['Quote home failed to load.'],
+      sources: ['bootstrap'],
+    })
+
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [],
+        jobVersionsError: 'Failed to load job quote versions.',
+        createError: null,
+        deleteError: null,
+        actionWarning: null,
+      })
+    ).toEqual({
+      tone: 'warning',
+      title: 'Quote home loaded with errors',
+      details: ['Job versions failed to load.'],
+      sources: ['jobVersions'],
+    })
+
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [],
+        jobVersionsError: null,
+        createError: 'Create failed.',
+        deleteError: null,
+        actionWarning: null,
+      })
+    ).toEqual({
+      tone: 'error',
+      title: 'Quote action failed',
+      details: ['Create failed.'],
+      sources: ['create'],
+    })
+
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [],
+        jobVersionsError: null,
+        createError: null,
+        deleteError: 'Delete failed.',
+        actionWarning: null,
+      })
+    ).toEqual({
+      tone: 'error',
+      title: 'Quote action failed',
+      details: ['Delete failed.'],
+      sources: ['delete'],
+    })
+
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [],
+        jobVersionsError: null,
+        createError: null,
+        deleteError: null,
+        actionWarning: {
+          source: 'delete',
+          message: 'Quote deleted, but refresh failed.',
+        },
+      })
+    ).toEqual({
+      tone: 'warning',
+      title: 'Quote action completed with refresh errors',
+      details: ['Quote deleted, but refresh failed.'],
+      sources: ['delete'],
+    })
+
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [],
+        jobVersionsError: null,
+        createError: null,
+        deleteError: null,
+        actionWarning: {
+          source: 'create',
+          message: 'Quote created, but refresh failed.',
+        },
+      })
+    ).toEqual({
+      tone: 'warning',
+      title: 'Quote action completed with refresh errors',
+      details: ['Quote created, but refresh failed.'],
+      sources: ['create'],
+    })
+
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [],
+        jobVersionsError: null,
+        createError: null,
+        deleteError: null,
+        actionWarning: null,
+      })
+    ).toBeNull()
+  })
+
+  it('builds combined feedback details in source order', () => {
+    expect(
+      buildQuotesHomeFeedbackVm({
+        homeFailures: [{ source: 'bootstrap', message: 'Timeout.' }],
+        jobVersionsError: 'Service unavailable.',
+        createError: 'Create failed.',
+        deleteError: 'Delete failed.',
+        actionWarning: null,
+      })
+    ).toEqual({
+      tone: 'error',
+      title: 'Quote action failed',
+      details: [
+        'Quote home failed to load. Timeout.',
+        'Job versions failed to load. Service unavailable.',
+        'Create failed.',
+        'Delete failed.',
+      ],
+      sources: ['bootstrap', 'jobVersions', 'create', 'delete'],
+    })
+  })
+
+  it('builds summary cards for zero, non-zero, and null summaries', () => {
+    expect(
+      buildSummaryCards({
+        total_versions: 0,
+        draft_count: 0,
+        sent_or_awaiting_count: 0,
+        live_count: 0,
+        pipeline_total: 0,
+      })
+    ).toEqual([
+      { label: 'Drafts', value: '0', subtext: '0 draft versions' },
+      {
+        label: 'Sent / Awaiting',
+        value: '0',
+        subtext: '0 versions attached to sent jobs',
+      },
+      {
+        label: 'Live Versions',
+        value: '0',
+        subtext: '0 live versions',
+        valueColor: 'var(--v2-green-2)',
+        subtextColor: 'var(--v2-green-2)',
+      },
+      {
+        label: 'Pipeline',
+        value: '$0',
+        subtext: 'Rollup-backed total',
+        valueColor: 'var(--v2-amber)',
+        subtextColor: 'var(--v2-ink-3)',
+      },
+    ])
+
+    expect(
+      buildSummaryCards({
+        total_versions: 7,
+        draft_count: 1,
+        sent_or_awaiting_count: 2,
+        live_count: 3,
+        pipeline_total: 4200,
+      })
+    ).toEqual([
+      { label: 'Drafts', value: '1', subtext: '1 draft version' },
+      {
+        label: 'Sent / Awaiting',
+        value: '2',
+        subtext: '2 versions attached to sent jobs',
+      },
+      {
+        label: 'Live Versions',
+        value: '3',
+        subtext: '3 live versions',
+        valueColor: 'var(--v2-green-2)',
+        subtextColor: 'var(--v2-green-2)',
+      },
+      {
+        label: 'Pipeline',
+        value: '$4,200',
+        subtext: 'Rollup-backed total',
+        valueColor: 'var(--v2-amber)',
+        subtextColor: 'var(--v2-ink-3)',
+      },
+    ])
+
+    expect(buildSummaryCards(null)).toEqual([
+      { label: 'Drafts', value: '0', subtext: '0 draft versions' },
+      {
+        label: 'Sent / Awaiting',
+        value: '0',
+        subtext: '0 versions attached to sent jobs',
+      },
+      {
+        label: 'Live Versions',
+        value: '0',
+        subtext: '0 live versions',
+        valueColor: 'var(--v2-green-2)',
+        subtextColor: 'var(--v2-green-2)',
+      },
+      {
+        label: 'Pipeline',
+        value: '$0',
+        subtext: 'Rollup-backed total',
+        valueColor: 'var(--v2-amber)',
+        subtextColor: 'var(--v2-ink-3)',
+      },
+    ])
   })
 })

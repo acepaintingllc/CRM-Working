@@ -1,17 +1,41 @@
 'use client'
 
-import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
+import { useEffect, useMemo } from 'react'
+import { valueFromRatesFlagsRow } from '@/lib/quotes/ratesFlagsForm'
+import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
-  RatesFlagsCategory,
-  RatesFlagsDraft,
+  RatesFlagsDraftValidationResult,
   RatesFlagsEditableCategory,
   RatesFlagsEditableCategoryKey,
-  RatesFlagsRow,
 } from '@/types/estimator/ratesFlags'
 import {
+  archiveOrReactivateQuoteRatesMutation,
+  saveQuoteRatesMutation,
+} from './quoteRatesPageMutations'
+import {
+  buildQuoteRatesEditorSnapshotFromSelection,
+  buildQuoteRatesSelectionSnapshot,
+  getQuoteRatesCategoryContext,
+  applyNavigationIntent,
+} from './quoteRatesPageNavigation'
+import {
+  createInitialQuoteRatesWorkflowState,
+  getQuoteRatesHasUnsavedChanges,
+  quoteRatesPageReducer,
+  transitionNeedsDiscardReset,
+  type QuoteRatesControllerAction,
   type QuoteRatesPendingTransition,
-  useQuoteRatesPageController,
-} from './quoteRatesPageController'
+  type QuoteRatesWorkflowState,
+} from './quoteRatesPageState'
+import {
+  buildQuoteRatesPageVm,
+  type QuoteRatesDiscardVm,
+  type QuoteRatesEditorVm,
+  type QuoteRatesFiltersVm,
+  type QuoteRatesTableVm,
+} from './quoteRatesPageVm'
+import { useDenseQuoteAdminOrchestrator } from './useDenseQuoteAdminOrchestrator'
+import { useQuoteRatesData } from './useQuoteRatesData'
 
 export {
   FLAGS_SECTIONS,
@@ -24,44 +48,7 @@ export {
   type StatusFilter,
 } from './quoteRatesPageConfig'
 
-export type QuoteRatesFiltersVm = {
-  search: string
-  statusFilter: import('./quoteRatesPageConfig').StatusFilter
-  activeTab: import('@/types/estimator/ratesFlags').RatesFlagsTab
-  rateSection: import('./quoteRatesPageConfig').RateSectionKey
-  rateCategory: import('@/types/estimator/ratesFlags').RatesFlagsCategoryKey
-  flagsSection: import('./quoteRatesPageConfig').FlagsSectionKey
-  roomDefaultsSection: import('./quoteRatesPageConfig').RoomDefaultsSectionKey
-}
-
-export type QuoteRatesTableVm = {
-  activeCategory: RatesFlagsCategory | null
-  filteredRows: RatesFlagsRow[]
-  selectedRow: RatesFlagsRow | null
-  selectedId: string
-  isCreating: boolean
-  canDuplicate: boolean
-  canArchiveToggle: boolean
-}
-
-export type QuoteRatesEditorVm = {
-  draft: RatesFlagsDraft | null
-  draftActive: boolean
-  isDirty: boolean
-  saving: boolean
-  activeCategory: RatesFlagsCategory | null
-  selectedRow: RatesFlagsRow | null
-  isCreating: boolean
-  inlineValidation: string | null
-  canSave: boolean
-  formatDraftValue: (fieldKey: string) => string
-}
-
-export type QuoteRatesDiscardVm = {
-  status: 'idle' | 'confirming' | 'applying'
-  isOpen: boolean
-  transitionType: QuoteRatesPendingTransition['type'] | null
-}
+export type { QuoteRatesDiscardVm, QuoteRatesEditorVm, QuoteRatesFiltersVm, QuoteRatesTableVm }
 
 export type QuoteRatesActions = {
   setActiveTab: (
@@ -89,157 +76,440 @@ export type QuoteRatesActions = {
   startCreate: () => boolean | Promise<boolean>
   startDuplicate: () => boolean | Promise<boolean>
   cancelEdit: () => void
-  confirmDiscard: () => Promise<boolean>
+  confirmDiscard: () => boolean | Promise<boolean>
   cancelDiscard: () => void
   updateDraftValue: (fieldKey: string, rawInput: string) => void
 }
 
 export function useQuoteRatesPage() {
-  const controller = useQuoteRatesPageController()
-  const { resource, workflowState, derived } = controller
+  const resource = useQuoteRatesData()
+  const orchestrator = useDenseQuoteAdminOrchestrator<
+    QuoteRatesWorkflowState,
+    QuoteRatesControllerAction,
+    QuoteRatesPendingTransition,
+    typeof resource.data
+  >({
+    reducer: quoteRatesPageReducer,
+    initialState: createInitialQuoteRatesWorkflowState(),
+    resourceData: resource.data,
+    getResourceSyncAction: (state, resourceData) => {
+      const selection = buildQuoteRatesSelectionSnapshot(
+        resourceData,
+        state.navigation,
+        (state.refreshSelectionId ?? state.selectedId) || undefined
+      )
 
-  const hasData = resource.data.categories.length > 0 || (!resource.loading && !resource.error)
-  const uiState = buildDenseQuotePageUiState({
-    loading: resource.loading,
-    hasData,
-    loadError: resource.error,
-    actionError: workflowState.actionError,
-    validationError: derived.validationError,
-    notice: workflowState.notice,
-    noticeTone: workflowState.noticeTone,
-    canRetry: !resource.loading,
-    canSave:
-      Boolean(derived.activeCategory) &&
-      workflowState.actionStatus !== 'saving' &&
-      !resource.error &&
-      Boolean(derived.validationResult?.ok),
-    canArchiveToggle:
-      Boolean(derived.selectedRow) &&
-      workflowState.editorMode !== 'create' &&
-      workflowState.actionStatus === 'idle' &&
-      !resource.loading &&
-      !resource.error,
-    canDuplicate:
-      Boolean(derived.selectedRow) &&
-      workflowState.actionStatus === 'idle' &&
-      !resource.loading &&
-      !resource.error,
+      const preserveCreateDraft = state.editorMode === 'create' && !state.forceRefreshRehydrate
+      const selectionChanged = selection.selectedId !== state.selectedId
+      const missingDraft = !state.draft
+
+      if (
+        preserveCreateDraft ||
+        (!state.forceRefreshRehydrate && !selectionChanged && !missingDraft)
+      ) {
+        if (state.refreshSelectionId !== null || state.forceRefreshRehydrate) {
+          return {
+            type: 'reconcileFromResource',
+            ...selection,
+            preserveCreateDraft,
+          }
+        }
+        return null
+      }
+
+      return {
+        type: 'reconcileFromResource',
+        ...selection,
+        preserveCreateDraft,
+      }
+    },
+    hasUnsavedChanges: getQuoteRatesHasUnsavedChanges,
+    discard: {
+      getPendingIntent: (state) => state.pendingTransition,
+      queue: (intent) => ({ type: 'openDiscard', intent }),
+      setStatus: (status) => ({ type: 'setDiscardStatus', status }),
+      clear: () => ({ type: 'clearDiscard' }),
+    },
+  })
+  const { state, stateRef, applyAction, requestTransition, confirmDiscard, cancelDiscard } =
+    orchestrator
+
+  const { activeCategory, filteredRows } = useMemo(
+    () => getQuoteRatesCategoryContext(resource.data, state.navigation),
+    [resource.data, state.navigation]
+  )
+
+  const selectedRow = useMemo(() => {
+    if (!activeCategory || !state.selectedId) return null
+    return activeCategory.rows.find((row) => row.id === state.selectedId) ?? null
+  }, [activeCategory, state.selectedId])
+
+  const adapter = useMemo(
+    () =>
+      activeCategory
+        ? getRatesFlagsDraftAdapter(activeCategory.key as RatesFlagsEditableCategoryKey)
+        : null,
+    [activeCategory]
+  )
+
+  const validationResult: RatesFlagsDraftValidationResult | null =
+    activeCategory && adapter && state.draft
+      ? adapter.validateDraft(
+          activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
+          state.draft as never
+        )
+      : null
+  const validationError = validationResult && !validationResult.ok ? validationResult.error : null
+  const isDirty = getQuoteRatesHasUnsavedChanges(state)
+
+  useEffect(() => {
+    if (state.actionStatus !== 'reloading' || resource.loading) return
+
+    if (state.refreshSelectionId !== null || state.forceRefreshRehydrate) {
+      applyAction({ type: 'clearRefreshRehydrate' })
+    }
+    applyAction({ type: 'finishAction' })
+  }, [
+    applyAction,
+    resource.loading,
+    state.actionStatus,
+    state.forceRefreshRehydrate,
+    state.refreshSelectionId,
+  ])
+
+  function applyNavigation(navigation: typeof state.navigation, preferredId?: string) {
+    const selection = buildQuoteRatesSelectionSnapshot(resource.data, navigation, preferredId)
+    applyAction({
+      type: 'applyNavigation',
+      navigation,
+      selectedId: selection.selectedId,
+      editor: selection.editor,
+    })
+    return true
+  }
+
+  function applySelection(selectedId: string) {
+    const editor = buildQuoteRatesEditorSnapshotFromSelection(activeCategory, selectedId)
+    applyAction({ type: 'selectRow', selectedId: editor.selectedId, editor })
+    return true
+  }
+
+  function startCreate() {
+    if (!activeCategory || !adapter) return false
+
+    const draft = adapter.createEmptyDraft(
+      activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>
+    )
+    applyAction({ type: 'startCreate', draft })
+    return true
+  }
+
+  function startDuplicate() {
+    if (!activeCategory || !adapter || !selectedRow) return false
+
+    const draft = adapter.withDuplicateId(
+      adapter.rowToDraft(
+        activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
+        selectedRow
+      ) as never,
+      selectedRow.id
+    )
+
+    applyAction({
+      type: 'startDuplicate',
+      draft,
+      draftActive: selectedRow.active,
+    })
+    return true
+  }
+
+  function discardCurrentChanges() {
+    const editor = buildQuoteRatesEditorSnapshotFromSelection(
+      activeCategory,
+      stateRef.current.selectedId
+    )
+    applyAction({ type: 'discardCurrentChanges', selectedId: editor.selectedId, editor })
+  }
+
+  async function performReload(keepId?: string) {
+    applyAction({
+      type: 'scheduleRefreshRehydrate',
+      selectedId: (keepId ?? stateRef.current.selectedId) || null,
+      force: true,
+    })
+    applyAction({ type: 'beginAction', status: 'reloading' })
+
+    const result = await resource.attemptRefresh({
+      preserveDataOnError: true,
+      reportError: true,
+    })
+
+    if (!result.ok) {
+      applyAction({ type: 'clearRefreshRehydrate' })
+      applyAction({ type: 'finishAction' })
+    }
+
+    return result.ok
+  }
+
+  async function saveCurrent() {
+    const currentState = stateRef.current
+    if (!activeCategory || !currentState.draft || !validationResult?.ok) return
+
+    applyAction({ type: 'beginAction', status: 'saving' })
+
+    const result = await saveQuoteRatesMutation({
+      resource,
+      navigation: currentState.navigation,
+      activeCategory: activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
+      draft: currentState.draft,
+      draftActive: currentState.draftActive,
+      editorMode: currentState.editorMode,
+      selectedRowId: selectedRow?.id,
+    })
+
+    if (!result.ok) {
+      applyAction({ type: 'setActionError', error: result.error })
+      applyAction({ type: 'finishAction' })
+      return
+    }
+
+    applyAction({
+      type: 'commitMutation',
+      selectedId: result.selectedId,
+      editor: result.editor,
+    })
+    applyAction({
+      type: 'setNotice',
+      notice: result.notice,
+      tone: result.tone,
+    })
+    applyAction({ type: 'finishAction' })
+  }
+
+  async function archiveOrReactivate(nextActive: boolean) {
+    if (!activeCategory || !selectedRow) return false
+
+    applyAction({ type: 'beginAction', status: 'archiving' })
+
+    const result = await archiveOrReactivateQuoteRatesMutation({
+      resource,
+      navigation: stateRef.current.navigation,
+      categoryKey: activeCategory.key as RatesFlagsEditableCategoryKey,
+      selectedRowId: selectedRow.id,
+      nextActive,
+    })
+
+    if (!result.ok) {
+      applyAction({ type: 'setActionError', error: result.error })
+      applyAction({ type: 'finishAction' })
+      return false
+    }
+
+    applyAction({
+      type: 'commitMutation',
+      selectedId: result.selectedId,
+      editor: result.editor,
+    })
+    applyAction({
+      type: 'setNotice',
+      notice: result.notice,
+      tone: result.tone,
+    })
+    applyAction({ type: 'finishAction' })
+    return true
+  }
+
+  function cancelEdit() {
+    const editor = buildQuoteRatesEditorSnapshotFromSelection(
+      activeCategory,
+      stateRef.current.selectedId
+    )
+    applyAction({ type: 'cancelEdit', selectedId: editor.selectedId, editor })
+    cancelDiscard()
+    applyAction({ type: 'clearFeedback' })
+  }
+
+  function updateDraftValue(fieldKey: string, rawInput: string) {
+    const currentState = stateRef.current
+    if (!activeCategory || !adapter || !currentState.draft) return
+
+    const nextDraft = adapter.updateDraftField(
+      activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
+      currentState.draft as never,
+      fieldKey,
+      rawInput
+    )
+    applyAction({ type: 'setDraft', draft: nextDraft })
+  }
+
+  function setDraftActive(nextActive: boolean) {
+    applyAction({ type: 'setDraftActive', draftActive: nextActive })
+  }
+
+  function runIntent(intent: QuoteRatesPendingTransition) {
+    switch (intent.type) {
+      case 'setActiveTab':
+      case 'setRateSection':
+      case 'setRateCategory':
+      case 'setFlagsSection':
+      case 'setRoomDefaultsSection':
+        return applyNavigation(applyNavigationIntent(stateRef.current.navigation, intent))
+      case 'setStatusFilter':
+      case 'setSearch':
+        return applyNavigation(
+          applyNavigationIntent(stateRef.current.navigation, intent),
+          stateRef.current.selectedId || undefined
+        )
+      case 'setSelectedId':
+        return applySelection(intent.selectedId)
+      case 'startCreate':
+        return startCreate()
+      case 'startDuplicate':
+        return startDuplicate()
+      case 'reload':
+        return performReload(intent.keepId)
+      case 'archiveOrReactivate':
+        return archiveOrReactivate(intent.nextActive)
+      default:
+        return false
+    }
+  }
+
+  const pageVm = buildQuoteRatesPageVm({
+    resource,
+    workflowState: state,
+    derived: {
+      activeCategory,
+      filteredRows,
+      selectedRow,
+      adapter,
+      validationResult,
+      validationError,
+      isDirty,
+    },
   })
 
-  const filtersVm = {
-    search: workflowState.navigation.search,
-    statusFilter: workflowState.navigation.statusFilter,
-    activeTab: workflowState.navigation.activeTab,
-    rateSection: workflowState.navigation.rateSection,
-    rateCategory: workflowState.navigation.rateCategory,
-    flagsSection: workflowState.navigation.flagsSection,
-    roomDefaultsSection: workflowState.navigation.roomDefaultsSection,
-  } satisfies QuoteRatesFiltersVm
+  const actions: QuoteRatesActions = {
+    setActiveTab: (activeTab) =>
+      requestTransition(
+        { type: 'setActiveTab', activeTab },
+        {
+          changed: activeTab !== state.navigation.activeTab,
+          run: () => runIntent({ type: 'setActiveTab', activeTab }),
+        }
+      ),
+    setRateSection: (rateSection) =>
+      requestTransition(
+        { type: 'setRateSection', rateSection },
+        {
+          changed: rateSection !== state.navigation.rateSection,
+          run: () => runIntent({ type: 'setRateSection', rateSection }),
+        }
+      ),
+    setRateCategory: (rateCategory) =>
+      requestTransition(
+        { type: 'setRateCategory', rateCategory },
+        {
+          changed: rateCategory !== state.navigation.rateCategory,
+          run: () => runIntent({ type: 'setRateCategory', rateCategory }),
+        }
+      ),
+    setFlagsSection: (flagsSection) =>
+      requestTransition(
+        { type: 'setFlagsSection', flagsSection },
+        {
+          changed: flagsSection !== state.navigation.flagsSection,
+          run: () => runIntent({ type: 'setFlagsSection', flagsSection }),
+        }
+      ),
+    setRoomDefaultsSection: (roomDefaultsSection) =>
+      requestTransition(
+        { type: 'setRoomDefaultsSection', roomDefaultsSection },
+        {
+          changed: roomDefaultsSection !== state.navigation.roomDefaultsSection,
+          run: () => runIntent({ type: 'setRoomDefaultsSection', roomDefaultsSection }),
+        }
+      ),
+    setStatusFilter: (statusFilter) =>
+      requestTransition(
+        { type: 'setStatusFilter', statusFilter },
+        {
+          changed: statusFilter !== state.navigation.statusFilter,
+          run: () => runIntent({ type: 'setStatusFilter', statusFilter }),
+        }
+      ),
+    setSearch: (search) =>
+      requestTransition(
+        { type: 'setSearch', search },
+        {
+          changed: search !== state.navigation.search,
+          run: () => runIntent({ type: 'setSearch', search }),
+        }
+      ),
+    setSelectedId: (selectedId) =>
+      requestTransition(
+        { type: 'setSelectedId', selectedId },
+        {
+          changed: selectedId !== state.selectedId,
+          run: () => runIntent({ type: 'setSelectedId', selectedId }),
+        }
+      ),
+    setDraftActive,
+    reload: (keepId?: string) =>
+      requestTransition(
+        { type: 'reload', keepId },
+        {
+          changed: true,
+          run: () => runIntent({ type: 'reload', keepId }),
+        }
+      ),
+    saveCurrent,
+    archiveOrReactivate: (nextActive: boolean) =>
+      requestTransition(
+        { type: 'archiveOrReactivate', nextActive },
+        {
+          changed: true,
+          run: () => runIntent({ type: 'archiveOrReactivate', nextActive }),
+        }
+      ),
+    startCreate: () =>
+      requestTransition(
+        { type: 'startCreate' },
+        {
+          changed: true,
+          run: () => runIntent({ type: 'startCreate' }),
+        }
+      ),
+    startDuplicate: () =>
+      requestTransition(
+        { type: 'startDuplicate' },
+        {
+          changed: true,
+          run: () => runIntent({ type: 'startDuplicate' }),
+        }
+      ),
+    cancelEdit,
+    confirmDiscard: () =>
+      confirmDiscard((intent) => {
+        if (transitionNeedsDiscardReset(intent)) {
+          discardCurrentChanges()
+        }
+        return runIntent(intent)
+      }),
+    cancelDiscard,
+    updateDraftValue,
+  }
 
   return {
     resource,
-    valueFromRow: controller.valueFromRow,
-    workflowVm: {
-      navigation: workflowState.navigation,
-      selectedId: workflowState.selectedId,
-      editorMode: workflowState.editorMode,
-      dirty: derived.isDirty,
-      pendingTransition: workflowState.pendingTransition,
-      actionStatus: workflowState.actionStatus,
-      refreshSelectionId: workflowState.refreshSelectionId,
-      forceRefreshRehydrate: workflowState.forceRefreshRehydrate,
-    },
-    uiState,
-    filtersVm,
-    tableVm: {
-      activeCategory: derived.activeCategory,
-      filteredRows: derived.filteredRows,
-      selectedRow: derived.selectedRow,
-      selectedId: workflowState.selectedId,
-      isCreating: workflowState.editorMode === 'create',
-      canDuplicate: uiState.canDuplicate,
-      canArchiveToggle: uiState.canArchiveToggle,
-    } satisfies QuoteRatesTableVm,
-    editorVm: {
-      draft: workflowState.draft,
-      draftActive: workflowState.draftActive,
-      isDirty: derived.isDirty,
-      saving: workflowState.actionStatus === 'saving',
-      activeCategory: derived.activeCategory,
-      selectedRow: derived.selectedRow,
-      isCreating: workflowState.editorMode === 'create',
-      inlineValidation: uiState.inlineValidation,
-      canSave: uiState.canSave,
-      formatDraftValue: derived.activeCategory
-        ? (fieldKey: string) =>
-            workflowState.draft && derived.adapter
-              ? derived.adapter.formatDraftValue(
-                  derived.activeCategory as RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey>,
-                  workflowState.draft as never,
-                  fieldKey
-                )
-              : ''
-        : () => '',
-    } satisfies QuoteRatesEditorVm,
-    actions: {
-      setActiveTab: (activeTab) =>
-        controller.actions.requestTransition(
-          { type: 'setActiveTab', activeTab },
-          activeTab !== workflowState.navigation.activeTab
-        ),
-      setRateSection: (rateSection) =>
-        controller.actions.requestTransition(
-          { type: 'setRateSection', rateSection },
-          rateSection !== workflowState.navigation.rateSection
-        ),
-      setRateCategory: (rateCategory) =>
-        controller.actions.requestTransition(
-          { type: 'setRateCategory', rateCategory },
-          rateCategory !== workflowState.navigation.rateCategory
-        ),
-      setFlagsSection: (flagsSection) =>
-        controller.actions.requestTransition(
-          { type: 'setFlagsSection', flagsSection },
-          flagsSection !== workflowState.navigation.flagsSection
-        ),
-      setRoomDefaultsSection: (roomDefaultsSection) =>
-        controller.actions.requestTransition(
-          { type: 'setRoomDefaultsSection', roomDefaultsSection },
-          roomDefaultsSection !== workflowState.navigation.roomDefaultsSection
-        ),
-      setStatusFilter: (statusFilter) =>
-        controller.actions.requestTransition(
-          { type: 'setStatusFilter', statusFilter },
-          statusFilter !== workflowState.navigation.statusFilter
-        ),
-      setSearch: (search) =>
-        controller.actions.requestTransition(
-          { type: 'setSearch', search },
-          search !== workflowState.navigation.search
-        ),
-      setSelectedId: (selectedId) =>
-        controller.actions.requestTransition(
-          { type: 'setSelectedId', selectedId },
-          selectedId !== workflowState.selectedId
-        ),
-      setDraftActive: controller.actions.setDraftActive,
-      reload: (keepId?: string) =>
-        controller.actions.requestTransition({ type: 'reload', keepId }, true),
-      saveCurrent: controller.actions.saveCurrent,
-      archiveOrReactivate: (nextActive: boolean) =>
-        controller.actions.requestTransition({ type: 'archiveOrReactivate', nextActive }, true),
-      startCreate: () => controller.actions.requestTransition({ type: 'startCreate' }, true),
-      startDuplicate: () => controller.actions.requestTransition({ type: 'startDuplicate' }, true),
-      cancelEdit: controller.actions.cancelEdit,
-      confirmDiscard: controller.actions.confirmDiscard,
-      cancelDiscard: controller.actions.cancelDiscard,
-      updateDraftValue: controller.actions.updateDraftValue,
-    } satisfies QuoteRatesActions,
-    discardVm: {
-      isOpen:
-        workflowState.discardStatus === 'confirming' && Boolean(workflowState.pendingTransition),
-      status: workflowState.discardStatus,
-      transitionType: workflowState.pendingTransition?.type ?? null,
-    } satisfies QuoteRatesDiscardVm,
+    valueFromRow: valueFromRatesFlagsRow,
+    uiState: pageVm.uiState,
+    filtersVm: pageVm.filtersVm,
+    workflowVm: pageVm.workflowVm,
+    tableVm: pageVm.tableVm,
+    editorVm: pageVm.editorVm,
+    discardVm: pageVm.discardVm,
+    actions,
   }
 }

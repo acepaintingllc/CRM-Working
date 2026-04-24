@@ -1,9 +1,11 @@
-'use client'
+import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
 
-import type { QuoteHomeEligibleJobReadModel } from '@/lib/quotes/collectionData'
+export function normalizeQuoteHomeJobQuery(query: string) {
+  return query.trim()
+}
 
 export function resolveQuoteHomeSelectedJobId(
-  jobs: QuoteHomeEligibleJobReadModel[],
+  jobs: QuoteHomeJobListItemReadModel[],
   currentJobId: string
 ) {
   if (currentJobId && jobs.some((job) => job.id === currentJobId)) {
@@ -11,17 +13,4 @@ export function resolveQuoteHomeSelectedJobId(
   }
 
   return jobs[0]?.id ?? ''
-}
-
-export function filterQuoteHomeJobs(
-  jobs: QuoteHomeEligibleJobReadModel[],
-  query: string
-) {
-  const normalizedQuery = query.trim().toLowerCase()
-  if (!normalizedQuery) return jobs
-
-  return jobs.filter((job) => {
-    const haystack = `${job.title} ${job.customer_name ?? ''} ${job.customer_address ?? ''}`.toLowerCase()
-    return haystack.includes(normalizedQuery)
-  })
 }

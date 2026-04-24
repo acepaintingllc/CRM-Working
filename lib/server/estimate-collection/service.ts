@@ -233,7 +233,7 @@ export async function loadEstimateCollectionSearchPayload(
   })
   if (!decoratedRowsResult.ok) return decoratedRowsResult
 
-  const payload = buildQuoteHomeSearchReadModel(decoratedRowsResult.data, query, HOME_SEARCH_LIMIT)
+  const payload = buildQuoteHomeSearchReadModel(decoratedRowsResult.data, query)
   logQuoteHomeRead('search', {
     orgId,
     durationMs: Date.now() - startedAt,

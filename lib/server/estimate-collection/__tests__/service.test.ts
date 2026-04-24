@@ -181,7 +181,7 @@ describe('estimate collection service', () => {
       data: searchPayload,
     })
     expect(mocks.searchEstimateCollectionRows).toHaveBeenCalledWith('org-1', 'kitchen', 8)
-    expect(mocks.buildQuoteHomeSearchReadModel).toHaveBeenCalledWith(decoratedRows, 'kitchen', 8)
+    expect(mocks.buildQuoteHomeSearchReadModel).toHaveBeenCalledWith(decoratedRows, 'kitchen')
   })
 
   it('builds jobs and job version payloads through the paging read-model builders', async () => {

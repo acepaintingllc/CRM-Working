@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildQuoteHomeBootstrapReadModel,
-  buildQuoteHomeJobVersionCountsReadModel,
+  buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSearchReadModel,
   buildQuoteHomeSummaryReadModel,
@@ -141,18 +141,12 @@ describe('quote collection data', () => {
     })
   })
 
-  it('builds dedicated per-job version counts for the job list boundary', () => {
-    expect(buildQuoteHomeJobVersionCountsReadModel(rows)).toEqual({
+  it('builds the canonical bootstrap payload from paged jobs plus selected job versions', () => {
+    const jobs = buildQuoteHomeJobsPageReadModel({
+      query: '',
+      limit: 25,
+      nextCursor: 'cursor-2',
       items: [
-        { job_id: 'job-2', version_count: 1 },
-        { job_id: 'job-1', version_count: 2 },
-      ],
-    })
-  })
-
-  it('builds bootstrap payloads from the shared row builders without duplicating counts or summary logic', () => {
-    expect(
-      buildQuoteHomeBootstrapReadModel(rows, [
         {
           id: 'job-1',
           customer_id: 'customer-1',
@@ -161,12 +155,33 @@ describe('quote collection data', () => {
           title: 'Kitchen',
           description: null,
           status: 'estimate_scheduled',
+          created_at: '2026-04-21T10:00:00.000Z',
           estimate_date: null,
           estimate_sent_at: '2026-04-21T00:00:00.000Z',
           scheduled_date: null,
+          scheduled_end_date: null,
+          scheduled_email_sent_at: null,
           completed_at: null,
+          completed_email_sent_at: null,
+          closeout_notes: null,
+          linked_estimate_id: null,
+          version_count: 2,
         },
-      ])
+      ],
+    })
+    const selectedJobVersions = buildQuoteJobVersionsReadModel(rows.slice(1), {
+      jobId: 'job-1',
+      totalVersions: 2,
+      limit: 25,
+      nextCursor: null,
+    })
+
+    expect(
+      buildQuoteHomeBootstrapReadModel({
+        summary: buildQuoteHomeSummaryReadModel(rows.map((row) => toQuoteHomeJobVersionItem(row))),
+        jobs,
+        selectedJobVersions,
+      })
     ).toEqual({
       summary: {
         total_versions: 3,
@@ -175,19 +190,18 @@ describe('quote collection data', () => {
         live_count: 1,
         pipeline_total: 1800,
       },
-      jobCounts: {
+      jobs,
+      selected_job_id: 'job-1',
+      selected_job_versions: {
+        job_id: 'job-1',
+        total_versions: 2,
+        limit: 25,
+        next_cursor: null,
         items: [
-          { job_id: 'job-2', version_count: 1 },
-          { job_id: 'job-1', version_count: 2 },
+          expect.objectContaining({ estimate_id: 'estimate-2' }),
+          expect.objectContaining({ estimate_id: 'estimate-1' }),
         ],
       },
-      jobs: [
-        expect.objectContaining({
-          id: 'job-1',
-          customer_id: 'customer-1',
-          title: 'Kitchen',
-        }),
-      ],
     })
   })
 
@@ -215,7 +229,7 @@ describe('quote collection data', () => {
     })
   })
 
-  it('returns full per-job versions even when search results are capped', () => {
+  it('returns paged per-job versions independently from capped search results', () => {
     const expandedRows = Array.from({ length: 205 }, (_, index) => {
       const jobId = index < 201 ? 'job-a' : 'job-b'
       const state = index < 100 ? 'draft' : index < 180 ? 'live' : 'archived'
@@ -247,11 +261,18 @@ describe('quote collection data', () => {
     })
 
     const searchPayload = buildQuoteHomeSearchReadModel(expandedRows.slice(0, 8), 'version')
-    const jobVersionsPayload = buildQuoteJobVersionsReadModel(expandedRows, 'job-a')
+    const jobVersionsPayload = buildQuoteJobVersionsReadModel(expandedRows, {
+      jobId: 'job-a',
+      totalVersions: 201,
+      limit: 25,
+      nextCursor: 'cursor-9',
+    })
 
     expect(searchPayload.items).toHaveLength(8)
     expect(jobVersionsPayload.job_id).toBe('job-a')
     expect(jobVersionsPayload.total_versions).toBe(201)
+    expect(jobVersionsPayload.limit).toBe(25)
+    expect(jobVersionsPayload.next_cursor).toBe('cursor-9')
     expect(jobVersionsPayload.items).toHaveLength(201)
   })
 })

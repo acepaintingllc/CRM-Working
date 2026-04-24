@@ -15,6 +15,7 @@ const emptyCustomerListPage: CustomerListPage = {
 type UseCustomerListOptions = {
   initialSearch?: string
   initialPage?: number
+  enabled?: boolean
 }
 
 function normalizePage(value: number | undefined) {
@@ -24,6 +25,7 @@ function normalizePage(value: number | undefined) {
 export function useCustomerList(options: UseCustomerListOptions = {}) {
   const [search, setSearchState] = useState(options.initialSearch ?? '')
   const [page, setPageState] = useState(() => normalizePage(options.initialPage))
+  const enabled = options.enabled ?? true
 
   useEffect(() => {
     setSearchState(options.initialSearch ?? '')
@@ -34,6 +36,8 @@ export function useCustomerList(options: UseCustomerListOptions = {}) {
   }, [options.initialPage])
 
   const customerListKey = useMemo(() => {
+    if (!enabled) return null
+
     const params = new URLSearchParams()
     const trimmedSearch = search.trim()
 
@@ -42,7 +46,7 @@ export function useCustomerList(options: UseCustomerListOptions = {}) {
 
     const serialized = params.toString()
     return serialized ? `/api/customers?${serialized}` : '/api/customers'
-  }, [page, search])
+  }, [enabled, page, search])
 
   const listResource = useSwrResource<CustomerListPage>(customerListKey, {
     fallbackData: emptyCustomerListPage,

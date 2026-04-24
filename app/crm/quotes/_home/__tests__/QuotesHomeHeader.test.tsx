@@ -59,4 +59,68 @@ describe('QuotesHomeHeader', () => {
     expect(screen.getByText('search failed')).toBeInTheDocument()
     expect(onSearchRetry).toHaveBeenCalledTimes(1)
   })
+
+  it('closes the search results when clicking outside the search container', () => {
+    const onSearchFocusedChange = vi.fn()
+
+    render(
+      <QuotesHomeHeader
+        vm={{ ...baseVm }}
+        onSearchFocusedChange={onSearchFocusedChange}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    fireEvent.mouseDown(document.body)
+
+    expect(onSearchFocusedChange).toHaveBeenCalledWith(false)
+  })
+
+  it('keeps the dropdown open long enough for a result link click to register', () => {
+    const onSearchFocusedChange = vi.fn()
+
+    render(
+      <QuotesHomeHeader
+        vm={{
+          ...baseVm,
+          searchResults: [
+            {
+              id: 'estimate-1',
+              href: '/crm/quotes/estimate-1',
+              title: 'Kitchen revision',
+              meta: 'Job 101',
+            },
+          ],
+        }}
+        onSearchFocusedChange={onSearchFocusedChange}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    const resultLink = screen.getByRole('link', { name: /Kitchen revision/i })
+
+    fireEvent.mouseDown(resultLink)
+
+    expect(onSearchFocusedChange).not.toHaveBeenCalledWith(false)
+  })
+
+  it('closes the settings menu on Escape', () => {
+    const { container } = render(
+      <QuotesHomeHeader
+        vm={{ ...baseVm }}
+        onSearchFocusedChange={() => {}}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    const settingsMenu = container.querySelector('details') as HTMLDetailsElement
+
+    settingsMenu.open = true
+    fireEvent.keyDown(settingsMenu, { key: 'Escape' })
+
+    expect(settingsMenu.open).toBe(false)
+  })
 })

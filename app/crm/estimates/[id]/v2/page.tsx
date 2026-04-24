@@ -1,5 +1,5 @@
-import { EstimateV2ErrorBoundary } from './_components/EstimateV2ErrorBoundary'
-import { EstimateV2EditorPageContent } from './_components/EstimateV2EditorPageContent'
+import { EstimateV2EditorPageContent } from '@/app/crm/estimates/[id]/v2/_components/EstimateV2EditorPageContent'
+import { EstimateV2ErrorBoundary } from '@/app/crm/estimates/[id]/v2/_components/EstimateV2ErrorBoundary'
 
 export default async function EstimateWorkspacePage({
   params,

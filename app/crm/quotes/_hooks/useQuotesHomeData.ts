@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useResource } from '@/app/crm/_hooks/useResource'
 import type {
-  QuoteHomeBootstrapPageReadModel,
   QuoteHomeBootstrapReadModel,
-  QuoteHomeJobVersionItemReadModel,
+  QuoteHomeJobsPageReadModel,
 } from '@/lib/quotes/collectionData'
-import { loadQuoteHomeBootstrap } from '@/lib/quotes/client'
+import { loadQuoteHomeBootstrap, loadQuoteHomeJobs } from '@/lib/quotes/client'
+import { normalizeQuoteHomeJobQuery } from './quoteHomePagePolicy'
 
 const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
   summary: {
@@ -17,127 +17,217 @@ const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
     live_count: 0,
     pipeline_total: 0,
   },
-  jobCounts: {
+  jobs: {
+    query: '',
+    limit: 25,
+    next_cursor: null,
     items: [],
   },
-  jobs: [],
-}
-
-function isLegacyBootstrap(
-  payload: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel
-): payload is QuoteHomeBootstrapReadModel {
-  return 'jobCounts' in payload && Array.isArray(payload.jobs)
-}
-
-function normalizeBootstrap(
-  payload: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel
-): QuoteHomeBootstrapReadModel {
-  if (isLegacyBootstrap(payload)) {
-    return payload
-  }
-
-  return {
-    summary: payload.summary,
-    jobCounts: {
-      items: payload.jobs.items.map((job) => ({
-        job_id: job.id,
-        version_count: job.version_count,
-      })),
-    },
-    jobs: payload.jobs.items.map(({ version_count: _versionCount, ...job }) => job),
-  }
+  selected_job_id: null,
+  selected_job_versions: null,
 }
 
 function toLoadErrorMessage(scope: string, loadError: unknown) {
   return loadError instanceof Error ? loadError.message : `Failed to load ${scope}.`
 }
 
+type UseQuotesHomeDataOptions = {
+  jobQuery?: string
+}
+
 export function useQuotesHomeData(
-  initialData?: QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel | null
+  initialData?: QuoteHomeBootstrapReadModel | null,
+  options?: UseQuotesHomeDataOptions
 ) {
-  const resolvedInitialData = initialData ? normalizeBootstrap(initialData) : EMPTY_BOOTSTRAP
+  const resolvedInitialData = initialData ?? EMPTY_BOOTSTRAP
+  const activeJobQuery = normalizeQuoteHomeJobQuery(options?.jobQuery ?? resolvedInitialData.jobs.query)
   const latestLoadedBootstrapRef = useRef(resolvedInitialData)
+  const activeJobQueryRef = useRef(activeJobQuery)
   const resource = useResource<QuoteHomeBootstrapReadModel>({
     initialData: resolvedInitialData,
     initialLoading: !initialData,
     skipInitialLoad: Boolean(initialData),
     resetOnError: false,
     load: async () => {
-      const nextBootstrap = normalizeBootstrap(
-        await loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel | QuoteHomeBootstrapPageReadModel>()
-      )
+      const nextBootstrap = await loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>()
       latestLoadedBootstrapRef.current = nextBootstrap
       return nextBootstrap
     },
     getErrorMessage: (loadError) => toLoadErrorMessage('quote home bootstrap', loadError),
   })
-  const bootstrapRef = useRef(resource.data)
+  const [jobsPage, setJobsPage] = useState<QuoteHomeJobsPageReadModel>(resolvedInitialData.jobs)
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const jobsPageRef = useRef(resolvedInitialData.jobs)
+  const jobsRequestIdRef = useRef(0)
+
+  const commitJobsPage = useCallback((nextJobsPage: QuoteHomeJobsPageReadModel) => {
+    jobsPageRef.current = nextJobsPage
+    setJobsPage(nextJobsPage)
+  }, [])
 
   useEffect(() => {
-    bootstrapRef.current = resource.data
-  }, [resource.data])
+    activeJobQueryRef.current = activeJobQuery
+  }, [activeJobQuery])
 
-  const resolvedBootstrap = resource.data
-  const versionCountByJob = useMemo(() => {
-    return resolvedBootstrap.jobCounts.items.reduce<Record<string, number>>((counts, item) => {
-      counts[item.job_id] = item.version_count
-      return counts
-    }, {})
-  }, [resolvedBootstrap.jobCounts.items])
+  useEffect(() => {
+    latestLoadedBootstrapRef.current = resource.data
+    if (normalizeQuoteHomeJobQuery(resource.data.jobs.query) !== activeJobQueryRef.current) {
+      return
+    }
 
-  return {
-    summary: resolvedBootstrap.summary,
-    jobCounts: resolvedBootstrap.jobCounts,
-    jobs: resolvedBootstrap.jobs,
-    loading: resource.loading,
-    bootstrapError: resource.error,
-    versionCountByJob,
-    applyDeletedVersion: (estimate: QuoteHomeJobVersionItemReadModel) => {
-      resource.setData((current) => {
-        const nextBootstrap = {
-          ...current,
-          summary: {
-            ...current.summary,
-            total_versions: Math.max(0, current.summary.total_versions - 1),
-            draft_count:
-              estimate.version_state === 'draft'
-                ? Math.max(0, current.summary.draft_count - 1)
-                : current.summary.draft_count,
-            sent_or_awaiting_count: estimate.is_sent_estimate
-              ? Math.max(0, current.summary.sent_or_awaiting_count - 1)
-              : current.summary.sent_or_awaiting_count,
-            live_count:
-              estimate.version_state === 'live'
-                ? Math.max(0, current.summary.live_count - 1)
-                : current.summary.live_count,
-            pipeline_total: Math.max(0, current.summary.pipeline_total - (estimate.final_total ?? 0)),
-          },
-          jobCounts: {
-            ...current.jobCounts,
-            items: current.jobCounts.items.map((item) =>
-              item.job_id === estimate.job_id
-                ? {
-                    ...item,
-                    version_count: Math.max(0, item.version_count - 1),
-                  }
-                : item
-            ),
-          },
+    jobsRequestIdRef.current += 1
+    setJobsLoading(false)
+    commitJobsPage(resource.data.jobs)
+  }, [commitJobsPage, resource.data])
+
+  const loadJobsPage = useCallback(
+    async (params: {
+      query: string
+      cursor?: string | null
+      append?: boolean
+      reportError?: boolean
+    }) => {
+      const requestId = ++jobsRequestIdRef.current
+      const reportError = params.reportError ?? true
+
+      setJobsLoading(true)
+      if (reportError) {
+        resource.setError(null)
+      }
+
+      try {
+        const nextPage = await loadQuoteHomeJobs<QuoteHomeJobsPageReadModel>({
+          query: params.query,
+          limit: jobsPageRef.current.limit,
+          cursor: params.cursor,
+        })
+
+        if (jobsRequestIdRef.current !== requestId) {
+          return { ok: false as const, error: null }
         }
-        latestLoadedBootstrapRef.current = nextBootstrap
-        return nextBootstrap
+
+        if (reportError) {
+          resource.setError(null)
+        }
+
+        if (params.append) {
+          const existingIds = new Set(jobsPageRef.current.items.map((job) => job.id))
+          commitJobsPage({
+            ...nextPage,
+            items: [
+              ...jobsPageRef.current.items,
+              ...nextPage.items.filter((job) => !existingIds.has(job.id)),
+            ],
+          })
+        } else {
+          commitJobsPage(nextPage)
+        }
+
+        return { ok: true as const, error: null }
+      } catch (loadError) {
+        if (jobsRequestIdRef.current !== requestId) {
+          return { ok: false as const, error: null }
+        }
+
+        const nextError = toLoadErrorMessage('quote home jobs', loadError)
+        if (reportError) {
+          resource.setError(nextError)
+        }
+        return { ok: false as const, error: nextError }
+      } finally {
+        if (jobsRequestIdRef.current === requestId) {
+          setJobsLoading(false)
+        }
+      }
+    },
+    [commitJobsPage, resource.setError]
+  )
+
+  useEffect(() => {
+    if (activeJobQuery === normalizeQuoteHomeJobQuery(jobsPageRef.current.query)) {
+      return
+    }
+
+    void loadJobsPage({ query: activeJobQuery })
+  }, [activeJobQuery, loadJobsPage])
+
+  const refreshActiveJobsPage = useCallback(
+    async (options?: { reportError?: boolean }) => {
+      const currentQuery = activeJobQueryRef.current
+      const bootstrapQuery = normalizeQuoteHomeJobQuery(latestLoadedBootstrapRef.current.jobs.query)
+
+      if (currentQuery === bootstrapQuery) {
+        jobsRequestIdRef.current += 1
+        setJobsLoading(false)
+        commitJobsPage(latestLoadedBootstrapRef.current.jobs)
+        return { ok: true as const, error: null }
+      }
+
+      return loadJobsPage({
+        query: currentQuery,
+        reportError: options?.reportError,
       })
     },
+    [commitJobsPage, loadJobsPage]
+  )
+
+  const loadMore = useCallback(async () => {
+    const currentJobsPage = jobsPageRef.current
+    const cursor = currentJobsPage.next_cursor
+    if (!cursor || resource.loading || jobsLoading) {
+      return
+    }
+
+    await loadJobsPage({
+      query: currentJobsPage.query,
+      cursor,
+      append: true,
+    })
+  }, [jobsLoading, loadJobsPage, resource.loading])
+
+  const bootstrap = {
+    ...resource.data,
+    jobs: jobsPage,
+  }
+
+  return {
+    bootstrap,
+    summary: resource.data.summary,
+    jobsPage,
+    jobs: jobsPage.items,
+    hasMore: Boolean(jobsPage.next_cursor),
+    initialSelectedJobId: bootstrap.selected_job_id,
+    initialSelectedJobVersions: bootstrap.selected_job_versions,
+    jobsLoading,
+    loading: resource.loading,
+    bootstrapError: resource.error,
+    loadMore,
     refresh: async () => {
       const ok = await resource.refresh()
-      return ok ? latestLoadedBootstrapRef.current : null
+      if (!ok) {
+        return null
+      }
+
+      const jobsRefresh = await refreshActiveJobsPage()
+      return jobsRefresh.ok ? latestLoadedBootstrapRef.current : null
     },
     attemptRefresh: async (options?: { preserveDataOnError?: boolean; reportError?: boolean }) => {
       const result = await resource.attemptRefresh(options)
+      if (!result.ok) {
+        return {
+          ok: false,
+          error: result.error,
+          data: null,
+        }
+      }
+
+      const jobsRefresh = await refreshActiveJobsPage({
+        reportError: options?.reportError,
+      })
       return {
-        ok: result.ok,
-        error: result.error,
-        data: result.ok ? latestLoadedBootstrapRef.current : null,
+        ok: jobsRefresh.ok,
+        error: jobsRefresh.error,
+        data: jobsRefresh.ok ? latestLoadedBootstrapRef.current : null,
       }
     },
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type QuoteHomeSearchResponse,
   type QuoteHomeJobVersionItemReadModel,
@@ -18,20 +18,21 @@ export function useQuotesHomeSearch(query: string) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
+    const timeout = setTimeout(() => {
       setDebouncedQuery(query.trim())
     }, 150)
 
-    return () => window.clearTimeout(timeout)
+    return () => clearTimeout(timeout)
   }, [query])
 
   useEffect(() => {
-    let cancelled = false
     const nextQuery = debouncedQuery
 
     if (!nextQuery) {
+      requestIdRef.current += 1
       setData(emptySearchResponse)
       setLoading(false)
       setError(null)
@@ -40,28 +41,25 @@ export function useQuotesHomeSearch(query: string) {
 
     setLoading(true)
     setError(null)
+    const requestId = ++requestIdRef.current
 
     void loadQuoteHomeSearch<QuoteHomeSearchResponse>(nextQuery)
       .then((response) => {
-        if (cancelled) return
+        if (requestIdRef.current !== requestId) return
         setData(response)
       })
       .catch((loadError) => {
-        if (cancelled) return
+        if (requestIdRef.current !== requestId) return
         setData({ query: nextQuery, items: [] })
         setError(
           loadError instanceof Error ? loadError.message : 'Failed to load quote search results.'
         )
       })
       .finally(() => {
-        if (!cancelled) {
+        if (requestIdRef.current === requestId) {
           setLoading(false)
         }
       })
-
-    return () => {
-      cancelled = true
-    }
   }, [attempt, debouncedQuery])
 
   const retry = useCallback(() => {

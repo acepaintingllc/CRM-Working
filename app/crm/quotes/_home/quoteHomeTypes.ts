@@ -1,10 +1,10 @@
 import type {
-  QuoteHomeEligibleJobReadModel,
+  QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
 } from '@/lib/quotes/collectionData'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 
-export type QuoteHomeJob = QuoteHomeEligibleJobReadModel
+export type QuoteHomeJob = QuoteHomeJobListItemReadModel
 export type QuoteHomeJobVersion = QuoteHomeJobVersionItemReadModel
 
 export type NavItem = {
@@ -36,6 +36,11 @@ export type QuoteHomeFailureSource =
   | 'create'
   | 'delete'
 
+export type QuoteHomeActionWarning = {
+  source: QuoteHomeFailureSource
+  message: string
+}
+
 export type QuoteHomeFeedbackVm = {
   tone: QuoteHomeFeedbackTone
   title: string
@@ -43,9 +48,7 @@ export type QuoteHomeFeedbackVm = {
   sources: QuoteHomeFailureSource[]
 }
 
-export type QuotesHomeFeedbackBannerVm = QuoteHomeFeedbackVm & {
-  loading: boolean
-}
+export type QuotesHomeFeedbackBannerVm = QuoteHomeFeedbackVm | null
 
 export type QuotesHomeHeaderVm = {
   heroSummaryText: string
@@ -71,8 +74,8 @@ export type QuotesHomeJobListVm = {
   loading: boolean
   searchQuery: string
   selectedJobId: string
+  hasMore: boolean
   items: QuoteHomeJobListItemVm[]
-  mobileItems: QuoteHomeJobListItemVm[]
   emptyState: 'none' | 'no_jobs' | 'no_matches'
 }
 
@@ -101,8 +104,11 @@ export type QuoteHomeVersionItemVm = {
 
 export type QuotesHomeVersionListVm = {
   heading: string
+  detail: string | null
   emptyMessage: string | null
   items: QuoteHomeVersionItemVm[]
+  hasMore: boolean
+  loadingMore: boolean
 }
 
 export type QuotesHomeCreateVm = {
@@ -119,16 +125,4 @@ export type QuotesHomeDeleteDialogVm = {
   versionName: string | null
   jobTitle: string | null
   deleting: boolean
-}
-
-export type QuotesHomePageSections = {
-  headerVm: QuotesHomeHeaderVm
-  feedbackVm: QuotesHomeFeedbackBannerVm
-  summaryCards: SummaryCardVm[]
-  jobListVm: QuotesHomeJobListVm
-  selectedJobVm: QuotesHomeSelectedJobVm
-  versionListVm: QuotesHomeVersionListVm
-  createVm: QuotesHomeCreateVm
-  mobileSummaryCards: SummaryCardVm[]
-  deleteDialogVm: QuotesHomeDeleteDialogVm
 }
