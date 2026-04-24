@@ -65,7 +65,6 @@ export type QuoteHomePageVmState = {
   jobQuery: string
   selectedJobId: string
   selectedJob: QuoteHomeJob | null
-  visibleJobs: QuoteHomeJob[]
   actions: QuoteHomePageActions
 }
 
@@ -188,12 +187,13 @@ function buildJobListVm(
   state: QuoteHomePageVmState,
   resources: QuoteHomePageVmResources
 ): QuotesHomeJobListVm {
+  const jobs = resources.home.jobs
   const errorMessage = buildQuotesHomeJobListErrorMessage(resources)
   const hasLoadError = Boolean(errorMessage)
   const emptyState = buildQuotesHomeJobListEmptyState({
     hasLoadError,
-    totalJobCount: resources.home.jobs.length,
-    visibleJobCount: state.visibleJobs.length,
+    totalJobCount: jobs.length,
+    visibleJobCount: jobs.length,
   })
   const emptyStateBody = buildQuotesHomeJobListEmptyStateBody(emptyState)
   const loading = resources.home.loading || resources.home.jobsLoading
@@ -203,7 +203,7 @@ function buildJobListVm(
     searchQuery: state.jobQuery,
     selectedJobId: state.selectedJobId,
     hasMore: resources.home.hasMore,
-    items: state.visibleJobs.map((job) =>
+    items: jobs.map((job) =>
       buildQuoteHomeJobListItemVm(job, job.version_count, {
         selectedJobId: state.selectedJobId,
       })
