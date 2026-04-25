@@ -172,12 +172,13 @@ export function useEstimateV2RoomActions(params: {
       const next = updateRoomDimensionsMutation({
         rooms: collections.rooms,
         scopes: collections.scopes,
+        ceilingScopes: collections.ceilingScopes,
         roomId,
         field,
         value,
       })
       setRooms(next.rooms)
-      applySynchronizedDrafts(next.rooms, next.scopes)
+      applySynchronizedDrafts(next.rooms, next.scopes, next.ceilingScopes)
       markDirty('room')
     },
     [applySynchronizedDrafts, markDirty, store]

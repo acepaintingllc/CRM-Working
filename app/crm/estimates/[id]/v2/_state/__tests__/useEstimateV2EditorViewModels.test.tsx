@@ -198,6 +198,19 @@ function createViewModelParams() {
 }
 
 describe('useEstimateV2EditorViewModels', () => {
+  it('uses scope-neutral empty selection copy for the room inputs workspace', () => {
+    const params = createViewModelParams()
+
+    const { result } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: params } }
+    )
+
+    expect(result.current.pageVm.emptySelectionMessage).toBe(
+      'Add a room or select one from the roster to start editing room inputs.'
+    )
+  })
+
   it('keeps unrelated section view models stable when trim-only derived inputs change', () => {
     const params = createViewModelParams()
 

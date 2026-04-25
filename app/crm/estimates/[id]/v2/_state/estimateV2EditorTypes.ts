@@ -169,7 +169,6 @@ export type EstimateV2EditorRoomVm = {
   selectedRoomIssueCount: number
   roomFlagsEnabled: boolean
   roomFlagsCatalog: EstimateV2RoomFlagOption[]
-  getFlagMultiplierHint: (label: string) => string | null
   addRoom: () => void
   deleteRoom: (roomId: string) => void
   updateRoom: (roomId: string, patch: Partial<EstimateV2RoomDraft>) => void

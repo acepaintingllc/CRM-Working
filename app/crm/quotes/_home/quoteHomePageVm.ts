@@ -10,6 +10,7 @@ import {
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeDeleteDialogVm,
   buildQuotesHomeFeedbackVm,
+  buildQuotesHomeSearchCanRetry,
   buildQuotesHomeSearchEmptyMessage,
   buildQuotesHomeSearchStatus,
   buildQuotesHomeSelectedJobVersionCount,
@@ -20,6 +21,7 @@ import {
   buildQuotesHomeVersionHeading,
   buildSearchResultVm,
   QUOTES_HOME_LOADING_COPY,
+  QUOTES_HOME_SUMMARY_LOADING_VALUE,
   buildSummaryCards,
 } from './quoteHomePresentation'
 import type {
@@ -132,124 +134,21 @@ export function buildQuoteHomePageVm(
   resources: QuoteHomePageVmResources,
   options: { includeVersionFailureInFeedback?: boolean } = {}
 ): QuoteHomePageVm {
-  const jobListErrorMessage = buildQuotesHomeJobListErrorMessage(resources)
-  const hasJobListLoadError = Boolean(jobListErrorMessage)
-  const selectedJobVersionCount = buildQuotesHomeSelectedJobVersionCount({
-    selectedJob: state.selectedJob,
-    totalVersions: resources.workflow.versions.totalVersions,
-    hasResolved: resources.workflow.versions.hasResolved,
-  })
-  const jobListEmptyState = buildQuotesHomeJobListEmptyState({
-    hasLoadError: hasJobListLoadError,
-    totalJobCount: resources.home.jobs.length,
-    visibleJobCount: state.visibleJobs.length,
-  })
-  const jobListEmptyStateBody =
-    buildQuotesHomeJobListEmptyStateBody(jobListEmptyState)
-  const jobListLoading = resources.home.loading || resources.home.jobsLoading
-  const jobListStatus = buildQuotesHomeJobListStatus({
-    loading: jobListLoading,
-    errorMessage: jobListErrorMessage,
-    canRetry: hasJobListLoadError,
-    emptyState: jobListEmptyState,
-    emptyStateBody: jobListEmptyStateBody,
-  })
-  const searchState = buildQuoteHomeSearchState(resources)
-  const versionEmptyMessage = buildQuotesHomeVersionEmptyMessage(
-    state.selectedJob,
-    resources.workflow.versions.items
-  )
-  const versionErrorMessage = resources.workflow.versions.error
-  const versionCanRetry = Boolean(versionErrorMessage)
-  const versionStatus = buildQuotesHomeVersionListStatus({
-    errorMessage: versionErrorMessage,
-    canRetry: versionCanRetry,
-    emptyMessage: versionEmptyMessage,
-  })
-  const feedbackVm = buildQuotesHomeFeedbackVm({
-    homeFailures: buildQuoteHomeLoadFailures(resources),
-    jobVersionsError: options.includeVersionFailureInFeedback === false
-      ? null
-      : resources.workflow.versions.error,
-    createError: resources.workflow.create.error,
-    deleteError: resources.delete.error,
-    actionWarning: state.actionWarning,
-  })
-  const summaryCards = buildSummaryCards(resources.home.summary).map((card) => ({
-    ...card,
-    displayValue: resources.home.loading
-      ? '...'
-      : card.value,
-  }))
+  const selectedJobVersionCount = buildSelectedJobVersionCount(state, resources)
 
   return {
-    header: {
-      heroSummaryText: buildHeroSummaryText(resources.home.summary),
-      searchQuery: state.searchQuery,
-      searchFocused: state.searchFocused,
-      searchLoading: resources.search.loading,
-      searchEmptyMessage: searchState.emptyMessage,
-      searchErrorMessage: resources.search.error,
-      searchCanRetry: searchState.canRetry,
-      searchResults: resources.search.results.map(buildSearchResultVm),
-      searchStatus: searchState.status,
-    },
+    header: buildHeaderVm(state, resources),
     loading: resources.home.loading,
-    feedback: feedbackVm,
-    summaryCards,
-    jobList: {
-      loading: jobListLoading,
-      searchQuery: state.jobQuery,
-      selectedJobId: state.selectedJobId,
-      hasMore: resources.home.hasMore,
-      items: state.visibleJobs.map((job) =>
-        buildQuoteHomeJobListItemVm(job, job.version_count, {
-          selectedJobId: state.selectedJobId,
-        })
-      ),
-      errorMessage: jobListErrorMessage,
-      canRetry: hasJobListLoadError,
-      emptyState: jobListEmptyState,
-      emptyStateBody: jobListEmptyStateBody,
-      status: jobListStatus,
-      loadMoreLabel: QUOTES_HOME_LOADING_COPY.jobsLoadMore,
-      loadingMoreLabel: QUOTES_HOME_LOADING_COPY.jobsLoadingMore,
-    },
+    feedback: buildFeedbackVm(state, resources, options),
+    summaryCards: buildSummaryCardVms(resources.home),
+    jobList: buildJobListVm(state, resources),
     selectedJob: buildQuotesHomeSelectedJobVm(
       state.selectedJob,
       selectedJobVersionCount,
       resources.home.loading
     ),
-    versionList: {
-      heading: buildQuotesHomeVersionHeading(
-        state.selectedJob,
-        selectedJobVersionCount
-      ),
-      detail: buildQuotesHomeVersionDetail(state.selectedJob, {
-        loadedVersions: resources.workflow.versions.items.length,
-        totalVersions: selectedJobVersionCount,
-        hasMore: resources.workflow.versions.hasMore,
-      }),
-      emptyMessage: versionEmptyMessage,
-      items: resources.workflow.versions.items.map((estimate) =>
-        buildQuoteHomeVersionItemVm(estimate, resources.delete.deletingId)
-      ),
-      hasMore: resources.workflow.versions.hasMore,
-      loadingMore: resources.workflow.versions.loadingMore,
-      errorMessage: versionErrorMessage,
-      canRetry: versionCanRetry,
-      status: versionStatus,
-      loadMoreLabel: QUOTES_HOME_LOADING_COPY.versionsLoadMore,
-      loadingMoreLabel: QUOTES_HOME_LOADING_COPY.versionsLoadingMore,
-    },
-    create: buildQuotesHomeCreateVm({
-      creating: resources.workflow.create.creating,
-      loading: resources.home.loading,
-      selectedJobName: state.selectedJob?.title ?? null,
-      versionName: resources.workflow.create.versionName,
-      versionKind: resources.workflow.create.versionKind,
-      canCreate: resources.workflow.create.canCreate,
-    }),
+    versionList: buildVersionListVm(state, resources, selectedJobVersionCount),
+    create: buildCreateVm(state, resources),
     dialogs: {
       delete: buildQuotesHomeDeleteDialogVm(
         resources.delete.confirmingDelete,
@@ -258,6 +157,158 @@ export function buildQuoteHomePageVm(
     },
     actions: state.actions,
   }
+}
+
+function buildHeaderVm(
+  state: QuoteHomePageVmState,
+  resources: QuoteHomePageVmResources
+): QuotesHomeHeaderVm {
+  const searchState = buildQuoteHomeSearchState(resources)
+
+  return {
+    heroSummaryText: buildHeroSummaryText(resources.home.summary),
+    searchQuery: state.searchQuery,
+    searchFocused: state.searchFocused,
+    searchLoading: resources.search.loading,
+    searchEmptyMessage: searchState.emptyMessage,
+    searchErrorMessage: resources.search.error,
+    searchCanRetry: searchState.canRetry,
+    searchResults: resources.search.results.map(buildSearchResultVm),
+    searchStatus: searchState.status,
+  }
+}
+
+function buildSummaryCardVms(
+  home: QuoteHomePageVmResources['home']
+): SummaryCardVm[] {
+  return buildSummaryCards(home.summary).map((card) => ({
+    ...card,
+    displayValue: home.loading
+      ? QUOTES_HOME_SUMMARY_LOADING_VALUE
+      : card.value,
+  }))
+}
+
+function buildJobListVm(
+  state: QuoteHomePageVmState,
+  resources: QuoteHomePageVmResources
+): QuotesHomeJobListVm {
+  const errorMessage = buildQuotesHomeJobListErrorMessage(resources)
+  const hasLoadError = Boolean(errorMessage)
+  const emptyState = buildQuotesHomeJobListEmptyState({
+    hasLoadError,
+    totalJobCount: resources.home.jobs.length,
+    visibleJobCount: state.visibleJobs.length,
+  })
+  const emptyStateBody = buildQuotesHomeJobListEmptyStateBody(emptyState)
+  const loading = resources.home.loading || resources.home.jobsLoading
+
+  return {
+    loading,
+    searchQuery: state.jobQuery,
+    selectedJobId: state.selectedJobId,
+    hasMore: resources.home.hasMore,
+    items: state.visibleJobs.map((job) =>
+      buildQuoteHomeJobListItemVm(job, job.version_count, {
+        selectedJobId: state.selectedJobId,
+      })
+    ),
+    errorMessage,
+    canRetry: hasLoadError,
+    emptyState,
+    emptyStateBody,
+    status: buildQuotesHomeJobListStatus({
+      loading,
+      errorMessage,
+      canRetry: hasLoadError,
+      emptyState,
+      emptyStateBody,
+    }),
+    loadMoreLabel: QUOTES_HOME_LOADING_COPY.jobsLoadMore,
+    loadingMoreLabel: QUOTES_HOME_LOADING_COPY.jobsLoadingMore,
+  }
+}
+
+function buildVersionListVm(
+  state: QuoteHomePageVmState,
+  resources: QuoteHomePageVmResources,
+  selectedJobVersionCount: number
+): QuotesHomeVersionListVm {
+  const versions = resources.workflow.versions
+  const emptyMessage = buildQuotesHomeVersionEmptyMessage(
+    state.selectedJob,
+    versions.items
+  )
+  const errorMessage = versions.error
+  const canRetry = Boolean(errorMessage)
+
+  return {
+    heading: buildQuotesHomeVersionHeading(
+      state.selectedJob,
+      selectedJobVersionCount
+    ),
+    detail: buildQuotesHomeVersionDetail(state.selectedJob, {
+      loadedVersions: versions.items.length,
+      totalVersions: selectedJobVersionCount,
+      hasMore: versions.hasMore,
+    }),
+    emptyMessage,
+    items: versions.items.map((estimate) =>
+      buildQuoteHomeVersionItemVm(estimate, resources.delete.deletingId)
+    ),
+    hasMore: versions.hasMore,
+    loadingMore: versions.loadingMore,
+    errorMessage,
+    canRetry,
+    status: buildQuotesHomeVersionListStatus({
+      errorMessage,
+      canRetry,
+      emptyMessage,
+    }),
+    loadMoreLabel: QUOTES_HOME_LOADING_COPY.versionsLoadMore,
+    loadingMoreLabel: QUOTES_HOME_LOADING_COPY.versionsLoadingMore,
+  }
+}
+
+function buildCreateVm(
+  state: QuoteHomePageVmState,
+  resources: QuoteHomePageVmResources
+): QuotesHomeCreateVm {
+  return buildQuotesHomeCreateVm({
+    creating: resources.workflow.create.creating,
+    loading: resources.home.loading,
+    selectedJobName: state.selectedJob?.title ?? null,
+    versionName: resources.workflow.create.versionName,
+    versionKind: resources.workflow.create.versionKind,
+    canCreate: resources.workflow.create.canCreate,
+  })
+}
+
+function buildSelectedJobVersionCount(
+  state: QuoteHomePageVmState,
+  resources: QuoteHomePageVmResources
+) {
+  return buildQuotesHomeSelectedJobVersionCount({
+    selectedJob: state.selectedJob,
+    totalVersions: resources.workflow.versions.totalVersions,
+    hasResolved: resources.workflow.versions.hasResolved,
+  })
+}
+
+function buildFeedbackVm(
+  state: QuoteHomePageVmState,
+  resources: QuoteHomePageVmResources,
+  options: { includeVersionFailureInFeedback?: boolean }
+) {
+  return buildQuotesHomeFeedbackVm({
+    homeFailures: buildQuoteHomeLoadFailures(resources),
+    jobVersionsError: options.includeVersionFailureInFeedback === false
+      ? null
+      : resources.workflow.versions.error,
+    createError: resources.workflow.create.error,
+    deleteError: resources.delete.error,
+    actionWarning: state.actionWarning,
+  })
 }
 
 function buildQuoteHomeLoadFailures(
@@ -295,7 +346,7 @@ function buildQuoteHomeSearchState(resources: QuoteHomePageVmResources) {
     canRetry:
       status.kind === 'error'
         ? status.canRetry
-        : Boolean(resources.search.query) && !resources.search.loading,
+        : buildQuotesHomeSearchCanRetry(params),
     status,
   }
 }

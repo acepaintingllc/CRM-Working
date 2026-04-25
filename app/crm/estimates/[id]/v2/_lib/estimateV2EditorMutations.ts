@@ -57,13 +57,14 @@ export function updateRoomMutation(
 export function updateRoomDimensionsMutation(params: {
   rooms: EstimateV2RoomDraft[]
   scopes: EstimateV2WallScopeDraft[]
+  ceilingScopes?: EstimateV2CeilingScopeDraft[]
   roomId: string
   field: 'lengthIn' | 'widthIn' | 'heightIn'
   value: string
 }) {
   const rooms = updateRoomMutation(params.rooms, params.roomId, { [params.field]: params.value })
   const room = rooms.find((entry) => entry.roomId === params.roomId)
-  if (!room) return { rooms, scopes: params.scopes }
+  if (!room) return { rooms, scopes: params.scopes, ceilingScopes: params.ceilingScopes }
 
   const lengthIn = numberOrNull(room.lengthIn)
   const widthIn = numberOrNull(room.widthIn)
@@ -71,18 +72,30 @@ export function updateRoomDimensionsMutation(params: {
     (scope) => scope.mode === 'RECT'
   )
 
-  if (!firstRectScope) return { rooms, scopes: params.scopes }
-
   const scopePatch: Partial<EstimateV2WallScopeDraft> = {}
   if (lengthIn != null && widthIn != null) scopePatch.perimeterIn = String(2 * (lengthIn + widthIn))
   if (params.field === 'heightIn') scopePatch.heightIn = params.value
-  if (Object.keys(scopePatch).length === 0) return { rooms, scopes: params.scopes }
+  const scopes =
+    firstRectScope && Object.keys(scopePatch).length > 0
+      ? params.scopes.map((scope) =>
+          scope.id === firstRectScope.id ? { ...scope, ...scopePatch } : scope
+        )
+      : params.scopes
+
+  const shouldSyncCeilingGeometry = params.field === 'lengthIn' || params.field === 'widthIn'
+  const ceilingScopes =
+    params.ceilingScopes && shouldSyncCeilingGeometry
+      ? params.ceilingScopes.map((scope) =>
+          scope.roomId === params.roomId && scope.mode === 'RECT'
+            ? { ...scope, lengthIn: room.lengthIn, widthIn: room.widthIn }
+            : scope
+        )
+      : params.ceilingScopes
 
   return {
     rooms,
-    scopes: params.scopes.map((scope) =>
-      scope.id === firstRectScope.id ? { ...scope, ...scopePatch } : scope
-    ),
+    scopes,
+    ceilingScopes,
   }
 }
 

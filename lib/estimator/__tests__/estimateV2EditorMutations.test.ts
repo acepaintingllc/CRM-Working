@@ -7,7 +7,101 @@ import {
   moveTrimScopeMutation,
   stripInvalidTrimHelperModeMutation,
   toggleRoomFlagMutation,
+  updateRoomDimensionsMutation,
 } from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorMutations.ts'
+import type {
+  EstimateV2CeilingScopeDraft,
+  EstimateV2RoomDraft,
+  EstimateV2WallScopeDraft,
+} from '../../../types/estimator/v2.ts'
+
+function makeRoom(overrides: Partial<EstimateV2RoomDraft> = {}): EstimateV2RoomDraft {
+  return {
+    id: 'room-1',
+    roomId: 'R001',
+    roomName: 'Living Room',
+    roomTypeId: '',
+    lengthIn: '120',
+    widthIn: '144',
+    heightIn: '108',
+    wallComplexityId: '',
+    notes: '',
+    position: 0,
+    ...overrides,
+  }
+}
+
+function makeWallScope(overrides: Partial<EstimateV2WallScopeDraft> = {}): EstimateV2WallScopeDraft {
+  return {
+    id: 'wall-r001-main',
+    roomId: 'R001',
+    position: 0,
+    mode: 'RECT',
+    include: 'Y',
+    scopeName: '',
+    colorId: 'COLOR1',
+    paintProductId: '',
+    primerProductId: '',
+    primeMode: 'NONE',
+    heightIn: '108',
+    perimeterIn: '528',
+    standardDoorCount: '',
+    standardWindowCount: '',
+    heightFactor: '1',
+    complexityFactor: '1',
+    wallFlagFactor: '1',
+    cutInTopFactor: '1',
+    cutInBottomFactor: '1',
+    paintCoats: '2',
+    primerCoats: '1',
+    spotPrimePercent: '',
+    overrideAreaSqFt: '',
+    overridePaintHours: '',
+    overridePrimerHours: '',
+    overridePaintGallons: '',
+    overridePrimerGallons: '',
+    overrideSupplyCost: '',
+    overrideTotal: '',
+    notes: '',
+    ...overrides,
+  }
+}
+
+function makeCeilingScope(
+  overrides: Partial<EstimateV2CeilingScopeDraft> = {}
+): EstimateV2CeilingScopeDraft {
+  return {
+    id: 'ceiling-r001-main',
+    roomId: 'R001',
+    position: 0,
+    mode: 'RECT',
+    include: 'Y',
+    scopeName: '',
+    colorId: 'COLOR1',
+    paintProductId: '',
+    primerProductId: '',
+    primeMode: 'NONE',
+    spotPrimePercent: '',
+    ceilingTypeId: '',
+    lengthIn: '120',
+    widthIn: '144',
+    areaSf: '',
+    heightFactor: '1',
+    complexityFactor: '1',
+    ceilingFlagFactor: '1',
+    paintCoats: '2',
+    primerCoats: '1',
+    overrideAreaSqFt: '',
+    overridePaintHours: '',
+    overridePrimerHours: '',
+    overridePaintGallons: '',
+    overridePrimerGallons: '',
+    overrideSupplyCost: '',
+    overrideTotal: '',
+    notes: '',
+    ...overrides,
+  }
+}
 
 test('addRoomMutation appends a room and seeds one RECT wall scope', () => {
   const result = addRoomMutation({
@@ -21,6 +115,86 @@ test('addRoomMutation appends a room and seeds one RECT wall scope', () => {
   assert.equal(result.scopes[0].roomId, result.room.roomId)
   assert.equal(result.scopes[0].mode, 'RECT')
   assert.equal(result.scopes[0].heightFactor, '1.15')
+})
+
+test('updateRoomDimensionsMutation keeps RECT wall perimeter sync working without ceiling scopes', () => {
+  const result = updateRoomDimensionsMutation({
+    rooms: [makeRoom()],
+    scopes: [makeWallScope()],
+    roomId: 'R001',
+    field: 'lengthIn',
+    value: '132',
+  })
+
+  const room = result.rooms.find((entry) => entry.roomId === 'R001')
+  const wallScope = result.scopes.find((scope) => scope.id === 'wall-r001-main')
+
+  assert.equal(room?.lengthIn, '132')
+  assert.equal(wallScope?.perimeterIn, '552')
+  assert.equal(result.ceilingScopes, undefined)
+})
+
+test('updateRoomDimensionsMutation syncs RECT ceiling geometry even when no RECT wall scope exists', () => {
+  const result = updateRoomDimensionsMutation({
+    rooms: [makeRoom()],
+    scopes: [],
+    ceilingScopes: [makeCeilingScope()],
+    roomId: 'R001',
+    field: 'widthIn',
+    value: '156',
+  })
+
+  const ceilingScope = result.ceilingScopes?.find((scope) => scope.id === 'ceiling-r001-main')
+
+  assert.equal(result.scopes.length, 0)
+  assert.equal(ceilingScope?.lengthIn, '120')
+  assert.equal(ceilingScope?.widthIn, '156')
+})
+
+test('updateRoomDimensionsMutation syncs both RECT wall and RECT ceiling geometry for the changed room', () => {
+  const result = updateRoomDimensionsMutation({
+    rooms: [makeRoom()],
+    scopes: [makeWallScope()],
+    ceilingScopes: [makeCeilingScope({ areaSf: '88' })],
+    roomId: 'R001',
+    field: 'lengthIn',
+    value: '130',
+  })
+
+  const wallScope = result.scopes.find((scope) => scope.id === 'wall-r001-main')
+  const ceilingScope = result.ceilingScopes?.find((scope) => scope.id === 'ceiling-r001-main')
+
+  assert.equal(wallScope?.perimeterIn, '548')
+  assert.equal(ceilingScope?.lengthIn, '130')
+  assert.equal(ceilingScope?.widthIn, '144')
+  assert.equal(ceilingScope?.areaSf, '88')
+})
+
+test('updateRoomDimensionsMutation does not overwrite SEG ceiling scopes', () => {
+  const result = updateRoomDimensionsMutation({
+    rooms: [makeRoom({ id: 'room-2', roomId: 'R002', lengthIn: '96', widthIn: '120' })],
+    scopes: [makeWallScope({ id: 'wall-r002-main', roomId: 'R002', mode: 'SEG', perimeterIn: '' })],
+    ceilingScopes: [
+      makeCeilingScope({
+        id: 'ceiling-r002-main',
+        roomId: 'R002',
+        mode: 'SEG',
+        lengthIn: '222',
+        widthIn: '333',
+        areaSf: '44',
+      }),
+    ],
+    roomId: 'R002',
+    field: 'lengthIn',
+    value: '101',
+  })
+
+  const ceilingScope = result.ceilingScopes?.find((scope) => scope.id === 'ceiling-r002-main')
+
+  assert.equal(ceilingScope?.mode, 'SEG')
+  assert.equal(ceilingScope?.lengthIn, '222')
+  assert.equal(ceilingScope?.widthIn, '333')
+  assert.equal(ceilingScope?.areaSf, '44')
 })
 
 test('deleteRoomCascadeMutation removes room-owned rows and reindexes survivors', () => {

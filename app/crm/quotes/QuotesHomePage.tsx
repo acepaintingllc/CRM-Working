@@ -14,6 +14,7 @@ import { QuotesHomeRecoveryBoundary } from './_home/QuotesHomeRecoveryBoundary'
 import { QuotesHomeSelectedJobPanel } from './_home/QuotesHomeSelectedJobPanel'
 import { QuotesHomeSummaryCards } from './_home/QuotesHomeSummaryCards'
 import { QuotesHomeVersionList } from './_home/QuotesHomeVersionList'
+import { QUOTES_HOME_PAGE_COPY } from './_home/quoteHomePresentation'
 import { S } from './_home/quoteHomeStyles'
 import { useQuotesHomePage } from './_hooks/useQuotesHomePage'
 
@@ -26,17 +27,21 @@ export default function QuotesHomePage({ initialData }: Props) {
     <CrmPageShell className="max-w-7xl">
       <div style={S.tokens}>
         <CrmPageHeader
-          eyebrow="Quotes"
-          title="Quote Home"
-          description="Search jobs, review quote versions, and start a new quote from one place."
-          badge={<CrmChip tone="accent">Shared CRM shell</CrmChip>}
+          eyebrow={QUOTES_HOME_PAGE_COPY.header.eyebrow}
+          title={QUOTES_HOME_PAGE_COPY.header.title}
+          description={QUOTES_HOME_PAGE_COPY.header.description}
+          badge={
+            <CrmChip tone="accent">
+              {QUOTES_HOME_PAGE_COPY.header.badge}
+            </CrmChip>
+          }
           actions={
             <>
               <CrmButton href="/crm/jobs/new" tone="secondary">
-                Create job
+                {QUOTES_HOME_PAGE_COPY.header.createJobAction}
               </CrmButton>
               <a href="#job-hub" className={crmButtonClassName('primary')}>
-                New quote
+                {QUOTES_HOME_PAGE_COPY.header.newQuoteAction}
               </a>
             </>
           }
@@ -51,26 +56,26 @@ export default function QuotesHomePage({ initialData }: Props) {
 }
 
 function QuotesHomeContent({ initialData }: Props) {
-  const controller = useQuotesHomePage(initialData)
-  const { actions } = controller
+  const pageVm = useQuotesHomePage(initialData)
+  const { actions } = pageVm
 
   return (
     <>
       <QuotesHomeHeader
-        vm={controller.header}
+        vm={pageVm.header}
         onSearchFocusedChange={actions.setSearchFocused}
         onSearchQueryChange={actions.setSearchQuery}
         onSearchRetry={actions.retrySearch}
       />
 
-      {controller.feedback ? (
+      {pageVm.feedback ? (
         <div style={S.feedbackWrap}>
           <CrmNotice
-            tone={controller.feedback.tone}
-            title={controller.feedback.title}
+            tone={pageVm.feedback.tone}
+            title={pageVm.feedback.title}
           >
             <div style={S.feedbackDetails}>
-              {controller.feedback.details.map((detail) => (
+              {pageVm.feedback.details.map((detail) => (
                 <div key={detail}>{detail}</div>
               ))}
             </div>
@@ -78,14 +83,14 @@ function QuotesHomeContent({ initialData }: Props) {
         </div>
       ) : null}
 
-      <QuotesHomeSummaryCards cards={controller.summaryCards} />
+      <QuotesHomeSummaryCards cards={pageVm.summaryCards} />
 
       <div
         id="job-hub"
         style={S.jobHubGrid}
       >
         <QuotesHomeJobList
-          vm={controller.jobList}
+          vm={pageVm.jobList}
           onJobQueryChange={actions.setJobQuery}
           onSelectJob={actions.setSelectedJobId}
           onLoadMore={actions.loadMore}
@@ -93,20 +98,20 @@ function QuotesHomeContent({ initialData }: Props) {
         />
 
         <section style={S.sectionStackLg}>
-          <QuotesHomeSelectedJobPanel vm={controller.selectedJob} />
+          <QuotesHomeSelectedJobPanel vm={pageVm.selectedJob} />
 
           <div
             style={S.jobHubDetailGrid}
           >
             <QuotesHomeVersionList
-              vm={controller.versionList}
+              vm={pageVm.versionList}
               onLoadMore={actions.loadMoreVersions}
               onRetry={actions.retryVersions}
               onRequestDelete={actions.requestDelete}
             />
 
             <QuotesHomeCreatePanel
-              vm={controller.create}
+              vm={pageVm.create}
               onCreate={actions.create}
               onVersionKindChange={actions.setVersionKind}
               onVersionNameChange={actions.setVersionName}
@@ -116,7 +121,7 @@ function QuotesHomeContent({ initialData }: Props) {
       </div>
 
       <QuotesHomeDeleteDialog
-        vm={controller.dialogs.delete}
+        vm={pageVm.dialogs.delete}
         onCancel={actions.cancelDelete}
         onConfirm={() => void actions.confirmDelete()}
       />

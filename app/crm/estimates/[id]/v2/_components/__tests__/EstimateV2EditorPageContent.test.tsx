@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EstimateV2EditorPageContent } from '../EstimateV2EditorPageContent'
 
 const push = vi.fn()
@@ -256,6 +256,10 @@ describe('EstimateV2EditorPageContent', () => {
     mockUseEstimateV2Editor.mockReturnValue(baseEditorState)
   })
 
+  afterEach(() => {
+    cleanup()
+  })
+
   it('renders from grouped VMs and routes header save/navigation actions', async () => {
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
 
@@ -292,5 +296,50 @@ describe('EstimateV2EditorPageContent', () => {
       screen.getByRole('status', { name: 'Loading quote workspace' })
     ).toHaveTextContent('Loading workspace...')
     expect(screen.getByRole('alert')).toHaveTextContent('Failed to fetch estimate workspace')
+  })
+
+  it('renders a single validation issue', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        validationIssues: ['Room name is required'],
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('Room name is required')).toBeInTheDocument()
+  })
+
+  it('renders multiple validation issues', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        validationIssues: ['Room name is required', 'Wall height is required'],
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('Room name is required')).toBeInTheDocument()
+    expect(screen.getByText('Wall height is required')).toBeInTheDocument()
+  })
+
+  it('renders the empty-selection state when no room is selected', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      roomVm: {
+        ...baseEditorState.roomVm,
+        selectedRoomId: null,
+        selectedRoom: null,
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('Empty')).toBeInTheDocument()
+    expect(screen.queryByText('Walls Body')).not.toBeInTheDocument()
   })
 })

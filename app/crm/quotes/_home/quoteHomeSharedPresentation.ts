@@ -13,6 +13,18 @@ export const QUOTES_HOME_LOADING_COPY = {
   jobsLoadingMore: 'Loading more jobs...',
 } as const
 
+export const QUOTES_HOME_PAGE_COPY = {
+  header: {
+    eyebrow: 'Quotes',
+    title: 'Quote Home',
+    description:
+      'Search jobs, review quote versions, and start a new quote from one place.',
+    badge: 'Shared CRM shell',
+    createJobAction: 'Create job',
+    newQuoteAction: 'New quote',
+  },
+} as const
+
 export function formatVersionCount(value: number) {
   return `${value} version${value === 1 ? '' : 's'}`
 }

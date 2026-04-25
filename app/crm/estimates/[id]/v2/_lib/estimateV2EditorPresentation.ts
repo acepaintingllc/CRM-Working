@@ -1,10 +1,73 @@
+import type { EstimateV2RoomFlagDraft, EstimateV2RoomFlagOption } from '@/types/estimator/v2'
 import type {
   EstimateV2EditorSectionChipVm,
   EstimateV2EditorSectionSummaryVm,
 } from '../_state/estimateV2EditorTypes'
 
+const FACTOR_IDENTITY_EPSILON = 0.000001
+
 function formatCountLabel(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`
+}
+
+function formatFactorValue(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(value)
+}
+
+function isMeaningfulFactor(value: number | null | undefined) {
+  return (
+    value != null &&
+    Number.isFinite(value) &&
+    value > 0 &&
+    Math.abs(value - 1) > FACTOR_IDENTITY_EPSILON
+  )
+}
+
+function parseFlagMultiplierHintFromLabel(label: string) {
+  const normalized = label.replace(/\u00D7/g, 'x')
+  const scoped = normalized.match(/\b(?:walls?|ceil(?:ing)?s?|trim|doors?)\s*x\s*\d+(?:\.\d+)?\b/i)
+  if (scoped) return scoped[0].replace(/\s+/g, ' ')
+  const simple = normalized.match(/\bx\s*\d+(?:\.\d+)?\b/i)
+  if (simple) return simple[0].replace(/\s+/g, '')
+  return null
+}
+
+export function buildRoomFlagModifierHint(flag: EstimateV2RoomFlagOption) {
+  const factorHints = [
+    { label: 'Walls', value: flag.wall_factor },
+    { label: 'Ceilings', value: flag.ceil_factor },
+    { label: 'Trim', value: flag.trim_factor },
+  ]
+    .filter((factor): factor is { label: string; value: number } =>
+      isMeaningfulFactor(factor.value)
+    )
+    .map((factor) => `${factor.label} x${formatFactorValue(factor.value)}`)
+
+  return factorHints.length > 0
+    ? factorHints.join(', ')
+    : parseFlagMultiplierHintFromLabel(flag.label)
+}
+
+export function buildRoomFlagChipVms(params: {
+  roomId: string
+  flags: EstimateV2RoomFlagOption[]
+  selectedFlags: EstimateV2RoomFlagDraft[]
+}) {
+  const selectedFlagIds = new Set(
+    params.selectedFlags
+      .filter((flag) => flag.roomId === params.roomId)
+      .map((flag) => flag.flagId)
+  )
+
+  return params.flags.map((flag) => ({
+    id: flag.id,
+    label: flag.label,
+    active: selectedFlagIds.has(flag.id),
+    modifierHint: buildRoomFlagModifierHint(flag),
+  }))
 }
 
 export function buildHeaderSubtitle(job: {
