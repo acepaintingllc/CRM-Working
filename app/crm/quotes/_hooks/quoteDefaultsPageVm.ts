@@ -117,8 +117,11 @@ export function buildQuoteDefaultsPageVm(resource: QuoteDefaultsPageVmResource):
 function buildQuoteDefaultsFormSections(
   data: QuoteDefaultsResource
 ): QuoteDefaultsFormSectionVm[] {
-  return data.form.sections.map(({ fieldKeys: _fieldKeys, fields, ...section }) => ({
-    ...section,
+  return data.form.sections.map(({ fields, key, kind, title, description }) => ({
+    key,
+    kind,
+    title,
+    description,
     fields: fields.map((field) => buildQuoteDefaultsFormField(field, data.form.fieldErrors)),
   }))
 }

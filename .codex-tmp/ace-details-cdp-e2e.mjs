@@ -247,10 +247,6 @@ async function clickButton(cdp, sessionId, text, requireEnabled = false) {
   })()`)
 }
 
-async function firstContinueEnabled(cdp, sessionId) {
-  return evaluate(cdp, sessionId, `Array.from(document.querySelectorAll('button')).some((button) => button.textContent?.includes('Continue to Summary') && !button.disabled)`)
-}
-
 async function firstContinueDisabled(cdp, sessionId) {
   return evaluate(cdp, sessionId, `Array.from(document.querySelectorAll('button')).some((button) => button.textContent?.includes('Continue to Summary') && button.disabled)`)
 }
@@ -349,7 +345,7 @@ async function main() {
 
     const fatalErrors = runtimeErrors.filter((message) => !message.includes('Download the React DevTools'))
     check('no console/runtime/request errors', fatalErrors.length === 0)
-    console.log(results.join('\n'))
+    process.stdout.write(`${results.join('\n')}\n`)
   } finally {
     await saveInputs(apiToken, primaryEstimateId, originalPrimaryInputs)
     await saveInputs(apiToken, unassignedEstimateId, originalUnassignedInputs)
