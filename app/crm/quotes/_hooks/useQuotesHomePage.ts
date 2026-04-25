@@ -1,23 +1,23 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/quoteHomeTypes'
 import {
   buildQuoteHomePageVm,
   type QuoteHomePageVm,
 } from '../_home/quoteHomePageVm'
-import { useQuoteHomePageResources } from './useQuoteHomePageResources'
+import { useQuoteHomePageResource } from './quoteHomePageResource'
 
 export function useQuotesHomePage(
   initialData?: QuoteHomeBootstrapReadModel | null
 ): QuoteHomePageVm {
-  const pageResources = useQuoteHomePageResources(initialData)
+  const quoteHome = useQuoteHomePageResource(initialData)
 
   return useMemo(
     () =>
-      buildQuoteHomePageVm(pageResources.vmState, pageResources.vmResources, {
+      buildQuoteHomePageVm(quoteHome.vmInput.state, quoteHome.vmInput.resources, {
         includeVersionFailureInFeedback: false,
       }),
-    [pageResources.vmResources, pageResources.vmState]
+    [quoteHome.vmInput]
   )
 }

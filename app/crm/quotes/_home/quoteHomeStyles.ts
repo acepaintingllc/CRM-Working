@@ -340,6 +340,21 @@ export const S: Record<string, CSSProperties> = {
     display: 'grid',
     gap: 6,
   },
+  recoveryPanel: {
+    border: '1px solid var(--crm-ui-danger-border)',
+    borderRadius: 8,
+    background: 'var(--crm-ui-danger-bg)',
+    color: 'var(--crm-ui-danger-text)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+    padding: 16,
+  },
+  recoveryTitle: {
+    margin: 0,
+    fontWeight: 800,
+  },
   mobileLinkCard: {
     display: 'block',
     borderRadius: 12,

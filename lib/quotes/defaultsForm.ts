@@ -1,17 +1,217 @@
-import type { QuoteDefaults } from '@/lib/settings/types'
-import { DEFAULT_LABOR_RATE } from '@/lib/estimator/defaults'
+import { DEFAULT_LABOR_RATE } from '../estimator/defaults.ts'
+import type { ProductFamily } from './productsForm.ts'
+import type { QuoteDefaults } from '../settings/types.ts'
+
+type Unsafe = Record<string, unknown>
+
+type ParseResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string; fields?: QuoteDefaultsValidationFields; issues?: QuoteDefaultsValidationIssue[] }
+
+export type QuoteDefaultsProductFieldKey = keyof Pick<
+  QuoteDefaults,
+  | 'walls_paint_id'
+  | 'walls_primer_id'
+  | 'ceiling_paint_id'
+  | 'ceiling_primer_id'
+  | 'trim_paint_id'
+  | 'trim_primer_id'
+>
+
+export type QuoteDefaultsLaborRateFieldKey = keyof Pick<QuoteDefaults, 'override_labor_rate'>
+export type QuoteDefaultsFormFieldKey = QuoteDefaultsProductFieldKey | QuoteDefaultsLaborRateFieldKey
+
+export type QuoteDefaultsProductReference = {
+  id: string
+  name?: string | null
+  family?: string | null
+  status?: string | null
+}
+
+export type QuoteDefaultsMissingProductOption = {
+  id: string
+  name: string
+  family: null
+  status: 'Missing'
+  missing: true
+}
+
+export type QuoteDefaultsProductOption<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> = TProduct | QuoteDefaultsMissingProductOption
+
+export type QuoteDefaultsProductFieldConfig<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> = {
+  label: string
+  key: QuoteDefaultsProductFieldKey
+  expectedFamily: ProductFamily
+  options: QuoteDefaultsProductOption<TProduct>[]
+}
+
+export type QuoteDefaultsFormSectionKey = 'product_defaults' | 'labor_rate'
+export type QuoteDefaultsFormSectionKind = 'product_defaults' | 'labor_rate'
+
+export type QuoteDefaultsFormSectionMetadata = {
+  key: QuoteDefaultsFormSectionKey
+  kind: QuoteDefaultsFormSectionKind
+  title: string
+  description: string
+  fieldKeys: readonly QuoteDefaultsFormFieldKey[]
+}
+
+export type QuoteDefaultsLaborRateFieldConfig = {
+  label: string
+  key: QuoteDefaultsLaborRateFieldKey
+  min: number
+  max: number
+  step: number
+}
+
+export type QuoteDefaultsFormFieldConfig<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> =
+  | ({
+      kind: 'product_select'
+    } & QuoteDefaultsProductFieldConfig<TProduct>)
+  | ({
+      kind: 'number_input'
+    } & QuoteDefaultsLaborRateFieldConfig)
+
+export type QuoteDefaultsFormSectionConfig<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> = QuoteDefaultsFormSectionMetadata & {
+  fields: QuoteDefaultsFormFieldConfig<TProduct>[]
+}
+
+export type QuoteDefaultsValidationIssueCode =
+  | 'invalid_labor_rate'
+  | 'missing_product'
+  | 'wrong_product_family'
+  | 'inactive_product'
+
+export type QuoteDefaultsValidationIssue = {
+  code: QuoteDefaultsValidationIssueCode
+  field: keyof QuoteDefaults
+  message: string
+  productId?: string
+  productName?: string
+  expectedFamily?: ProductFamily
+  actualFamily?: string | null
+  status?: string | null
+}
+
+export type QuoteDefaultsValidationFields = Partial<Record<keyof QuoteDefaults, string>>
+
+export type QuoteDefaultsValidationContext = {
+  products?: readonly QuoteDefaultsProductReference[]
+}
+
+export type QuoteDefaultsValidationResult =
+  | {
+      ok: true
+      value: QuoteDefaults
+      fields: QuoteDefaultsValidationFields
+      issues: QuoteDefaultsValidationIssue[]
+    }
+  | {
+      ok: false
+      error: string
+      fields: QuoteDefaultsValidationFields
+      issues: QuoteDefaultsValidationIssue[]
+    }
+
+export type QuoteDefaultsFormState<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> = {
+  settings: QuoteDefaults
+  validation: QuoteDefaultsValidationResult
+  fieldErrors: QuoteDefaultsValidationFields
+  validationError: string | null
+  sections: QuoteDefaultsFormSectionConfig<TProduct>[]
+  productDefaultFields: QuoteDefaultsProductFieldConfig<TProduct>[]
+  laborRateField: QuoteDefaultsLaborRateFieldConfig
+  canSave: boolean
+}
+
+export const QUOTE_DEFAULTS_LABOR_RATE_MIN = 0
+export const QUOTE_DEFAULTS_LABOR_RATE_MAX = 10000
+
+export const quoteDefaultsProductFields = [
+  { label: 'Walls default paint', key: 'walls_paint_id', expectedFamily: 'Paint' },
+  { label: 'Walls default primer', key: 'walls_primer_id', expectedFamily: 'Primer' },
+  { label: 'Ceilings default paint', key: 'ceiling_paint_id', expectedFamily: 'Paint' },
+  { label: 'Ceilings default primer', key: 'ceiling_primer_id', expectedFamily: 'Primer' },
+  { label: 'Trim default paint', key: 'trim_paint_id', expectedFamily: 'Paint' },
+  { label: 'Trim default primer', key: 'trim_primer_id', expectedFamily: 'Primer' },
+] as const satisfies readonly {
+  label: string
+  key: QuoteDefaultsProductFieldKey
+  expectedFamily: ProductFamily
+}[]
+
+export const quoteDefaultsLaborRateField = {
+  label: 'Labor rate / hr',
+  key: 'override_labor_rate',
+  min: QUOTE_DEFAULTS_LABOR_RATE_MIN,
+  max: QUOTE_DEFAULTS_LABOR_RATE_MAX,
+  step: 1,
+} as const satisfies QuoteDefaultsLaborRateFieldConfig
+
+// Future Quote Defaults sections should be added by extending:
+// 1. QuoteDefaults in lib/settings/types.ts and emptyQuoteDefaults below.
+// 2. normalization, equality, and validation in this module.
+// 3. field metadata here and quoteDefaultsFormSections fieldKeys.
+// 4. quoteDefaultsPageVm.ts only to map a new field control kind, if needed.
+// 5. domain, VM, hook, and page tests for invalid values, save normalization, and section output.
+export const quoteDefaultsFormSections = [
+  {
+    key: 'product_defaults',
+    kind: 'product_defaults',
+    title: 'Paint and primer',
+    description: 'Shared starter selections for new quote job settings.',
+    fieldKeys: quoteDefaultsProductFields.map((field) => field.key),
+  },
+  {
+    key: 'labor_rate',
+    kind: 'labor_rate',
+    title: 'Labor rate',
+    description: 'Org-level labor rate used when a specific quote has not saved its own override.',
+    fieldKeys: [quoteDefaultsLaborRateField.key],
+  },
+] as const satisfies readonly QuoteDefaultsFormSectionMetadata[]
+
+export const emptyQuoteDefaults: QuoteDefaults = {
+  walls_paint_id: null,
+  walls_primer_id: null,
+  ceiling_paint_id: null,
+  ceiling_primer_id: null,
+  trim_paint_id: null,
+  trim_primer_id: null,
+  override_labor_rate: DEFAULT_LABOR_RATE,
+}
+
+function asNullableText(value: unknown) {
+  const text = value == null ? '' : String(value).trim()
+  return text || null
+}
+
+function asNumber(value: unknown) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
 
 export function normalizeQuoteDefaults(
-  value: Partial<QuoteDefaults> | null | undefined = {}
+  value: Partial<QuoteDefaults> | Unsafe | null | undefined = {}
 ): QuoteDefaults {
   return {
-    walls_paint_id: value?.walls_paint_id ?? null,
-    walls_primer_id: value?.walls_primer_id ?? null,
-    ceiling_paint_id: value?.ceiling_paint_id ?? null,
-    ceiling_primer_id: value?.ceiling_primer_id ?? null,
-    trim_paint_id: value?.trim_paint_id ?? null,
-    trim_primer_id: value?.trim_primer_id ?? null,
-    override_labor_rate: Number(value?.override_labor_rate ?? DEFAULT_LABOR_RATE),
+    walls_paint_id: asNullableText(value?.walls_paint_id),
+    walls_primer_id: asNullableText(value?.walls_primer_id),
+    ceiling_paint_id: asNullableText(value?.ceiling_paint_id),
+    ceiling_primer_id: asNullableText(value?.ceiling_primer_id),
+    trim_paint_id: asNullableText(value?.trim_paint_id),
+    trim_primer_id: asNullableText(value?.trim_primer_id),
+    override_labor_rate: asNumber(value?.override_labor_rate) ?? emptyQuoteDefaults.override_labor_rate,
   }
 }
 
@@ -33,16 +233,272 @@ export function areQuoteDefaultsEqual(
   )
 }
 
-export function validateQuoteDefaults(value: QuoteDefaults) {
-  if (!Number.isFinite(value.override_labor_rate) || value.override_labor_rate < 0) {
+export function parseQuoteDefaults(
+  input: unknown,
+  context: QuoteDefaultsValidationContext = {}
+): ParseResult<QuoteDefaults> {
+  const row = (input ?? null) as Unsafe | null
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    return { ok: false, error: 'Missing quote defaults payload.' }
+  }
+
+  const data = normalizeQuoteDefaults(row)
+  const validation = validateQuoteDefaults(data, context)
+  if (!validation.ok) {
     return {
-      ok: false as const,
-      error: 'Labor rate must be zero or greater.',
+      ok: false,
+      error: validation.error,
+      fields: validation.fields,
+      issues: validation.issues,
     }
   }
 
   return {
     ok: true as const,
-    value,
+    data,
   }
+}
+
+export function getQuoteDefaultsValidationError(
+  data: QuoteDefaults,
+  context: QuoteDefaultsValidationContext = {}
+) {
+  const validation = validateQuoteDefaults(data, context)
+  return validation.ok ? null : validation.error
+}
+
+export function validateQuoteDefaults(
+  value: Partial<QuoteDefaults> | null | undefined,
+  context: QuoteDefaultsValidationContext = {}
+): QuoteDefaultsValidationResult {
+  const data = normalizeQuoteDefaults(value)
+  const fields: QuoteDefaultsValidationFields = {}
+  const issues: QuoteDefaultsValidationIssue[] = []
+
+  if (
+    !Number.isFinite(data.override_labor_rate) ||
+    data.override_labor_rate < QUOTE_DEFAULTS_LABOR_RATE_MIN ||
+    data.override_labor_rate > QUOTE_DEFAULTS_LABOR_RATE_MAX
+  ) {
+    const message = `Labor rate must be between ${QUOTE_DEFAULTS_LABOR_RATE_MIN} and ${QUOTE_DEFAULTS_LABOR_RATE_MAX}.`
+    fields.override_labor_rate = message
+    issues.push({
+      code: 'invalid_labor_rate',
+      field: 'override_labor_rate',
+      message,
+    })
+  }
+
+  if (context.products) {
+    validateQuoteDefaultProductReferences(data, context.products, fields, issues)
+  }
+
+  const firstIssue = issues[0]
+  if (firstIssue) {
+    return {
+      ok: false,
+      error: firstIssue.message,
+      fields,
+      issues,
+    }
+  }
+
+  return {
+    ok: true,
+    value: data,
+    fields,
+    issues,
+  }
+}
+
+export function buildQuoteDefaultsFormState<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+>(
+  value: Partial<QuoteDefaults> | null | undefined,
+  context: { products?: readonly TProduct[] } = {}
+): QuoteDefaultsFormState<TProduct> {
+  const settings = normalizeQuoteDefaults(value)
+  const validation = validateQuoteDefaults(settings, context)
+  const productDefaultFields = buildQuoteDefaultsProductFieldConfigs(
+    settings,
+    context.products ?? []
+  )
+
+  return {
+    settings,
+    validation,
+    fieldErrors: validation.fields,
+    validationError: validation.ok ? null : validation.error,
+    sections: buildQuoteDefaultsFormSectionConfigs(productDefaultFields),
+    productDefaultFields,
+    laborRateField: quoteDefaultsLaborRateField,
+    canSave: validation.ok,
+  }
+}
+
+export function formatQuoteDefaultsProductOptionLabel(
+  product: QuoteDefaultsProductOption,
+  expectedFamily: ProductFamily
+) {
+  if ('missing' in product && product.missing) return product.name
+
+  const name = product.name ?? product.id
+  const tags = [
+    product.status && !isActiveProductStatus(product.status) ? product.status : null,
+    product.family && !matchesExpectedFamily(product.family, expectedFamily) ? product.family : null,
+  ].filter(Boolean)
+
+  return tags.length > 0 ? `${name} (${tags.join(', ')})` : name
+}
+
+function buildQuoteDefaultsProductFieldConfigs<
+  TProduct extends QuoteDefaultsProductReference,
+>(
+  settings: QuoteDefaults,
+  products: readonly TProduct[]
+): QuoteDefaultsProductFieldConfig<TProduct>[] {
+  return quoteDefaultsProductFields.map((field) => ({
+    ...field,
+    options: buildProductOptionsForDefaultField(
+      products,
+      settings[field.key],
+      field.expectedFamily
+    ),
+  }))
+}
+
+function buildQuoteDefaultsFormSectionConfigs<
+  TProduct extends QuoteDefaultsProductReference,
+>(
+  productDefaultFields: readonly QuoteDefaultsProductFieldConfig<TProduct>[]
+): QuoteDefaultsFormSectionConfig<TProduct>[] {
+  const fieldsByKey = new Map<QuoteDefaultsFormFieldKey, QuoteDefaultsFormFieldConfig<TProduct>>()
+
+  for (const field of productDefaultFields) {
+    fieldsByKey.set(field.key, {
+      ...field,
+      kind: 'product_select',
+    })
+  }
+  fieldsByKey.set(quoteDefaultsLaborRateField.key, {
+    ...quoteDefaultsLaborRateField,
+    kind: 'number_input',
+  })
+
+  return quoteDefaultsFormSections.map((section) => ({
+    ...section,
+    fields: section.fieldKeys.map((fieldKey) => {
+      const field = fieldsByKey.get(fieldKey)
+      if (!field) {
+        throw new Error(
+          `Quote defaults section ${section.key} references unknown field ${fieldKey}.`
+        )
+      }
+      return field
+    }),
+  }))
+}
+
+function buildProductOptionsForDefaultField<TProduct extends QuoteDefaultsProductReference>(
+  products: readonly TProduct[],
+  selectedProductId: string | null,
+  expectedFamily: ProductFamily
+): QuoteDefaultsProductOption<TProduct>[] {
+  const activeOptions = products.filter(
+    (product) =>
+      matchesExpectedFamily(product.family, expectedFamily) &&
+      isActiveProductStatus(product.status)
+  )
+
+  if (!selectedProductId) return activeOptions
+
+  const selectedProduct = products.find((product) => product.id === selectedProductId)
+  const selectedAlreadyVisible = activeOptions.some((product) => product.id === selectedProductId)
+
+  if (selectedAlreadyVisible) return activeOptions
+
+  if (selectedProduct) {
+    return [selectedProduct, ...activeOptions]
+  }
+
+  return [
+    {
+      id: selectedProductId,
+      name: `Missing product (${selectedProductId})`,
+      family: null,
+      status: 'Missing',
+      missing: true,
+    },
+    ...activeOptions,
+  ]
+}
+
+function validateQuoteDefaultProductReferences(
+  data: QuoteDefaults,
+  products: readonly QuoteDefaultsProductReference[],
+  fields: QuoteDefaultsValidationFields,
+  issues: QuoteDefaultsValidationIssue[]
+) {
+  const productsById = new Map(products.map((product) => [product.id, product]))
+
+  for (const field of quoteDefaultsProductFields) {
+    const productId = data[field.key]
+    if (!productId) continue
+
+    const product = productsById.get(productId)
+    if (!product) {
+      const message = `${field.label} references a product that no longer exists (${productId}). Choose an active ${field.expectedFamily.toLowerCase()} product or clear the selection.`
+      fields[field.key] = message
+      issues.push({
+        code: 'missing_product',
+        field: field.key,
+        message,
+        productId,
+        expectedFamily: field.expectedFamily,
+      })
+      continue
+    }
+
+    if (!matchesExpectedFamily(product.family, field.expectedFamily)) {
+      const familyLabel = product.family ? `${product.family}` : 'unknown family'
+      const message = `${field.label} must use a ${field.expectedFamily.toLowerCase()} product, but ${product.name ?? product.id} is ${familyLabel}.`
+      fields[field.key] = message
+      issues.push({
+        code: 'wrong_product_family',
+        field: field.key,
+        message,
+        productId,
+        productName: product.name ?? product.id,
+        expectedFamily: field.expectedFamily,
+        actualFamily: product.family ?? null,
+        status: product.status ?? null,
+      })
+      continue
+    }
+
+    if (!isActiveProductStatus(product.status)) {
+      const statusLabel = product.status ? product.status.toLowerCase() : 'not active'
+      const message = `${field.label} uses ${product.name ?? product.id}, which is ${statusLabel}. Choose an active ${field.expectedFamily.toLowerCase()} product or clear the selection.`
+      fields[field.key] = message
+      issues.push({
+        code: 'inactive_product',
+        field: field.key,
+        message,
+        productId,
+        productName: product.name ?? product.id,
+        expectedFamily: field.expectedFamily,
+        actualFamily: product.family ?? null,
+        status: product.status ?? null,
+      })
+    }
+  }
+}
+
+function matchesExpectedFamily(value: string | null | undefined, expectedFamily: ProductFamily) {
+  return String(value ?? '').trim().toLowerCase() === expectedFamily.toLowerCase()
+}
+
+function isActiveProductStatus(value: string | null | undefined) {
+  if (value == null) return true
+  return String(value).trim().toLowerCase() === 'active'
 }

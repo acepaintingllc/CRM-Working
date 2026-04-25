@@ -34,7 +34,7 @@ export function QuoteDefaultsPageContent() {
       >
         <QuoteDefaultsForm
           value={controller.form.settings}
-          productDefaultFields={controller.form.productDefaultFields}
+          sections={controller.form.sections}
           onChange={controller.actions.setSettings}
         />
       </CrmEntityFormPage>

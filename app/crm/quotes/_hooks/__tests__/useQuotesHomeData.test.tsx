@@ -1,7 +1,10 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { QuoteHomeJobsPageReadModel } from '@/lib/quotes/collectionData'
+import type {
+  QuoteHomeBootstrapReadModel,
+  QuoteHomeJobsPageReadModel,
+} from '@/lib/quotes/quoteHomeTypes'
 import {
   useQuotesHomeBootstrap,
   useQuotesHomeData,
@@ -838,5 +841,57 @@ describe('useQuotesHomeJobs', () => {
     })
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
     expect(result.current.jobsError).toBeNull()
+  })
+
+  it('keeps active query jobs when a refreshed bootstrap page has the default query', async () => {
+    loadQuoteHomeJobs.mockResolvedValueOnce({
+      query: 'garage',
+      limit: 25,
+      next_cursor: null,
+      items: [seededPayload.jobs.items[1]],
+    })
+
+    const refreshedBootstrap: QuoteHomeBootstrapReadModel = {
+      ...seededPayload,
+      jobs: {
+        query: '',
+        limit: 25,
+        next_cursor: null,
+        items: [seededPayload.jobs.items[0]],
+      },
+    }
+
+    const { result, rerender } = renderHook(
+      ({
+        bootstrap,
+        jobQuery,
+      }: {
+        bootstrap: QuoteHomeBootstrapReadModel
+        jobQuery: string
+      }) => useQuotesHomeJobs(bootstrap, jobQuery),
+      {
+        initialProps: {
+          bootstrap: seededPayload as QuoteHomeBootstrapReadModel,
+          jobQuery: '',
+        },
+      }
+    )
+
+    rerender({
+      bootstrap: seededPayload as QuoteHomeBootstrapReadModel,
+      jobQuery: 'garage',
+    })
+
+    await waitFor(() => expect(result.current.jobsPage.query).toBe('garage'))
+
+    rerender({ bootstrap: refreshedBootstrap, jobQuery: 'garage' })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.jobsPage.query).toBe('garage')
+    expect(result.current.jobs.map((job) => job.id)).toEqual(['job-2'])
+    expect(loadQuoteHomeJobs).toHaveBeenCalledTimes(1)
   })
 })

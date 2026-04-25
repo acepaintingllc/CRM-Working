@@ -1,16 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  archiveEstimateProductRecord: vi.fn(),
   createEstimateProductRecord: vi.fn(),
   deleteEstimateProductRecord: vi.fn(),
+  findEstimateProductReferences: vi.fn(),
   listEstimateProductRecords: vi.fn(),
   loadEstimateProductRecord: vi.fn(),
   updateEstimateProductRecord: vi.fn(),
 }))
 
 vi.mock('../repository.ts', () => ({
+  archiveEstimateProductRecord: mocks.archiveEstimateProductRecord,
   createEstimateProductRecord: mocks.createEstimateProductRecord,
   deleteEstimateProductRecord: mocks.deleteEstimateProductRecord,
+  findEstimateProductReferences: mocks.findEstimateProductReferences,
   listEstimateProductRecords: mocks.listEstimateProductRecords,
   loadEstimateProductRecord: mocks.loadEstimateProductRecord,
   updateEstimateProductRecord: mocks.updateEstimateProductRecord,
@@ -176,27 +180,79 @@ describe('estimate product service', () => {
     expect(mocks.updateEstimateProductRecord).not.toHaveBeenCalled()
   })
 
-  it('propagates not-found reads and delete boundaries without duplicating rules', async () => {
-    mocks.loadEstimateProductRecord
-      .mockResolvedValueOnce({
-        ok: false,
-        kind: 'not_found',
-        message: 'Product not found',
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: existingRow,
-      })
+  it('archives status-only update patches through the status-only repository path', async () => {
+    mocks.loadEstimateProductRecord.mockResolvedValue({
+      ok: true,
+      data: existingRow,
+    })
+    mocks.archiveEstimateProductRecord.mockResolvedValue({
+      ok: true,
+      data: { ...existingRow, status: 'Archived' },
+    })
+
+    await expect(updateEstimateProduct('org-1', existingRow.id, { status: 'Archived' })).resolves.toEqual({
+      ok: true,
+      data: { ...existingRow, status: 'Archived' },
+    })
+
+    expect(mocks.archiveEstimateProductRecord).toHaveBeenCalledWith(
+      'org-1',
+      existingRow.id,
+      {}
+    )
+  })
+
+  it('returns an already archived row from status-only update patches without writing again', async () => {
+    mocks.loadEstimateProductRecord.mockResolvedValue({
+      ok: true,
+      data: { ...existingRow, status: 'Archived' },
+    })
+
+    await expect(updateEstimateProduct('org-1', existingRow.id, { status: 'Archived' })).resolves.toEqual({
+      ok: true,
+      data: { ...existingRow, status: 'Archived' },
+    })
+
+    expect(mocks.archiveEstimateProductRecord).not.toHaveBeenCalled()
+  })
+
+  it('prevents hard delete when quote defaults or estimate references still point at the product', async () => {
+    mocks.loadEstimateProductRecord.mockResolvedValue({
+      ok: true,
+      data: existingRow,
+    })
+    mocks.findEstimateProductReferences.mockResolvedValue({
+      ok: true,
+      data: [
+        { source: 'quote_defaults', label: 'quote defaults' },
+        { source: 'wall_scopes', label: 'wall scope product selections' },
+      ],
+    })
+
+    await expect(deleteEstimateProduct('org-1', existingRow.id)).resolves.toEqual({
+      ok: false,
+      kind: 'conflict',
+      message:
+        'Product is still referenced by quote defaults, wall scope product selections. Archive the product instead to keep quote defaults and historical estimates intact.',
+    })
+
+    expect(mocks.deleteEstimateProductRecord).not.toHaveBeenCalled()
+  })
+
+  it('allows hard delete when reference checks prove the product is unused', async () => {
+    mocks.loadEstimateProductRecord.mockResolvedValue({
+      ok: true,
+      data: existingRow,
+    })
+    mocks.findEstimateProductReferences.mockResolvedValue({
+      ok: true,
+      data: [],
+    })
     mocks.deleteEstimateProductRecord.mockResolvedValue({
       ok: true,
       data: true,
     })
 
-    await expect(updateEstimateProduct('org-1', existingRow.id, { name: 'Missing' })).resolves.toEqual({
-      ok: false,
-      kind: 'not_found',
-      message: 'Product not found',
-    })
     await expect(deleteEstimateProduct('org-1', existingRow.id)).resolves.toEqual({
       ok: true,
       data: true,
@@ -207,5 +263,33 @@ describe('estimate product service', () => {
       existingRow.id,
       {}
     )
+  })
+
+  it('propagates not-found reads without duplicating rules', async () => {
+    mocks.loadEstimateProductRecord
+      .mockResolvedValueOnce({
+        ok: false,
+        kind: 'not_found',
+        message: 'Product not found',
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        kind: 'not_found',
+        message: 'Product not found',
+      })
+
+    await expect(updateEstimateProduct('org-1', existingRow.id, { name: 'Missing' })).resolves.toEqual({
+      ok: false,
+      kind: 'not_found',
+      message: 'Product not found',
+    })
+    await expect(deleteEstimateProduct('org-1', existingRow.id)).resolves.toEqual({
+      ok: false,
+      kind: 'not_found',
+      message: 'Product not found',
+    })
+
+    expect(mocks.findEstimateProductReferences).not.toHaveBeenCalled()
+    expect(mocks.deleteEstimateProductRecord).not.toHaveBeenCalled()
   })
 })

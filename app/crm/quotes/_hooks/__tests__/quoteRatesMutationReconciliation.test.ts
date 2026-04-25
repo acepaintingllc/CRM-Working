@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  decideRatesFlagsMutationReconciliation,
   findReconciledRatesRow,
   reconcileRatesFlagsPayload,
 } from '../quoteRatesMutationReconciliation'
+import { buildQuoteRatesMutationSnapshot, getFilteredRows } from '../quoteRatesPageNavigation'
+import { DEFAULT_QUOTE_RATES_NAVIGATION } from '../quoteRatesPageState'
 import type {
   RatesFlagsArchiveRequest,
   RatesFlagsCategory,
@@ -276,6 +279,39 @@ describe('reconcileRatesFlagsPayload', () => {
       expect(rowsFor(result)[1]).toEqual({ ...target, active: false })
       expect(rowsFor(result)[2]).toBe(last)
     })
+
+    it('keeps an archived row in the payload even when active filters hide it', () => {
+      const first = scopeRow('FIRST')
+      const target = scopeRow('TARGET')
+      const payload = payloadWith([
+        ratesCategory('scope_defaults', [first, target]),
+        ratesCategory('production_rates_walls', []),
+      ])
+
+      const result = reconcileRatesFlagsPayload(payload, archiveRequest('TARGET'))
+      const snapshot = buildQuoteRatesMutationSnapshot(
+        result,
+        {
+          ...DEFAULT_QUOTE_RATES_NAVIGATION,
+          activeTab: 'room_defaults',
+          roomDefaultsSection: 'scope_defaults',
+          statusFilter: 'active',
+        },
+        'TARGET'
+      )
+
+      expect(findReconciledRatesRow(result, 'scope_defaults', 'TARGET')).toMatchObject({
+        id: 'TARGET',
+        active: false,
+      })
+      expect(
+        getFilteredRows(result.categories[0], { search: '', statusFilter: 'active' }).map(
+          (row) => row.id
+        )
+      ).toEqual(['FIRST'])
+      expect(snapshot.selectedId).toBe('TARGET')
+      expect(snapshot.editor.selectedId).toBe('TARGET')
+    })
   })
 
   describe('reactivate', () => {
@@ -310,5 +346,46 @@ describe('findReconciledRatesRow', () => {
     const payload = payloadWith([ratesCategory('condition_modifiers', [scopeRow('FIRST')])])
 
     expect(findReconciledRatesRow(payload, 'scope_defaults', 'FIRST')).toBeNull()
+  })
+})
+
+describe('decideRatesFlagsMutationReconciliation', () => {
+  it('uses the verified server payload when refresh succeeds', () => {
+    const currentPayload = payloadWith([ratesCategory('scope_defaults', [scopeRow('OLD')])])
+    const serverPayload = payloadWith([ratesCategory('scope_defaults', [scopeRow('SERVER')])])
+
+    const result = decideRatesFlagsMutationReconciliation({
+      currentPayload,
+      request: createRequest(scopeValues('LOCAL')),
+      verification: {
+        ok: true,
+        data: serverPayload,
+        error: null,
+      },
+    })
+
+    expect(result).toEqual({
+      kind: 'server_verified',
+      payload: serverPayload,
+      verificationError: null,
+    })
+  })
+
+  it('falls back to a locally reconciled payload when refresh verification fails', () => {
+    const currentPayload = payloadWith([ratesCategory('scope_defaults', [scopeRow('OLD')])])
+
+    const result = decideRatesFlagsMutationReconciliation({
+      currentPayload,
+      request: createRequest(scopeValues('LOCAL')),
+      verification: {
+        ok: false,
+        data: null,
+        error: 'verification failed',
+      },
+    })
+
+    expect(result.kind).toBe('local_fallback')
+    expect(result.verificationError).toBe('verification failed')
+    expect(rowsFor(result.payload).map((row) => row.id)).toEqual(['LOCAL', 'OLD'])
   })
 })

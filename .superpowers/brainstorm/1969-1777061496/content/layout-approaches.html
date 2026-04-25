@@ -1,0 +1,99 @@
+<h2>Details & Overrides — Layout Approaches</h2>
+<p class="subtitle">Same content, three different ways to organize it. Which feels right for this workflow step?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:11px;padding:10px;background:#1a1a2e;border-radius:6px;color:#ccc;line-height:1.8">
+        <div style="background:#2d5a9e;color:#fff;padding:4px 8px;border-radius:4px;margin-bottom:6px;font-size:10px;font-weight:600">🎨 PAINT SELECTIONS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">Walls <span style="color:#7ca">▼ Sherwin SW-7015</span></div>
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">Ceiling <span style="color:#7ca">▼ SW Ultra White</span></div>
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">Trim <span style="color:#7ca">▼ BM OC-17</span></div>
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">Doors <span style="color:#7ca">▼ (same as trim)</span></div>
+        </div>
+        <div style="background:#2d5a9e;color:#fff;padding:4px 8px;border-radius:4px;margin-bottom:6px;font-size:10px;font-weight:600">🖌 ROLLER COVERS <span style="color:#adf;font-weight:400">(auto: 3 wall + 1 ceiling)</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">3× Wall <span style="color:#7ca">▼ 3/8" nap</span></div>
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">1× Ceiling <span style="color:#7ca">▼ 1/2" nap</span></div>
+        </div>
+        <div style="background:#444;color:#fff;padding:4px 8px;border-radius:4px;margin-bottom:6px;font-size:10px;font-weight:600">⚙️ SCOPE OVERRIDES</div>
+        <div style="background:#252540;padding:6px;border-radius:3px;font-size:10px">
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:3px;color:#888;margin-bottom:3px">
+            <span>Scope</span><span>SqFt</span><span>Hours</span><span>Price</span>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:3px">
+            <span>Walls</span><span style="background:#333;padding:1px 3px;border-radius:2px">1,240</span><span style="background:#333;padding:1px 3px;border-radius:2px">8.2</span><span style="background:#333;padding:1px 3px;border-radius:2px">$640</span>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:3px;margin-top:2px">
+            <span>Ceilings</span><span style="background:#333;padding:1px 3px;border-radius:2px">420</span><span style="background:#333;padding:1px 3px;border-radius:2px">2.5</span><span style="background:#333;padding:1px 3px;border-radius:2px">$180</span>
+          </div>
+        </div>
+        <div style="margin-top:6px;color:#666;font-size:10px;padding:4px 6px;border:1px dashed #444;border-radius:3px">▶ Advanced room overrides (collapsed)</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Single Scroll</h3>
+      <p>Everything on one page, top to bottom by frequency of use. Paint + rollers at top (always), scope overrides in middle (sometimes), advanced collapsed at bottom (rarely). No tabs, no navigation — just scroll.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:11px;padding:10px;background:#1a1a2e;border-radius:6px;color:#ccc;line-height:1.8">
+        <div style="display:flex;gap:3px;margin-bottom:8px">
+          <div style="background:#2d5a9e;color:#fff;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:600">Materials</div>
+          <div style="background:#252540;color:#888;padding:4px 10px;border-radius:4px;font-size:10px">Overrides</div>
+        </div>
+        <div style="background:#2d5a9e;color:#fff;padding:4px 8px;border-radius:4px;margin-bottom:6px;font-size:10px;font-weight:600">🎨 PAINT SELECTIONS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">Walls <span style="color:#7ca">▼ SW-7015</span></div>
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">Ceiling <span style="color:#7ca">▼ Ultra White</span></div>
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">Trim <span style="color:#7ca">▼ OC-17</span></div>
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">Doors <span style="color:#7ca">▼ (same as trim)</span></div>
+        </div>
+        <div style="background:#2d5a9e;color:#fff;padding:4px 8px;border-radius:4px;margin-bottom:6px;font-size:10px;font-weight:600">🖌 ROLLER COVERS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">3× Wall <span style="color:#7ca">▼ 3/8" nap</span></div>
+          <div style="background:#252540;padding:4px 6px;border-radius:3px">1× Ceiling <span style="color:#7ca">▼ 1/2" nap</span></div>
+        </div>
+        <div style="margin-top:8px;color:#666;font-size:9px;text-align:center">Switch to "Overrides" tab for scope & room adjustments</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Two Tabs</h3>
+      <p>Tab 1 "Materials" has paint + rollers. Tab 2 "Overrides" has scope overrides + advanced room overrides. Clean separation — the "always" stuff is the default tab, the "sometimes" stuff is one click away.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:11px;padding:10px;background:#1a1a2e;border-radius:6px;color:#ccc;line-height:1.6">
+        <div style="display:flex;gap:8px">
+          <div style="width:70px;flex-shrink:0">
+            <div style="background:#2d5a9e;color:#fff;padding:4px 6px;border-radius:3px;font-size:10px;margin-bottom:3px">🎨 Paint</div>
+            <div style="background:#2d5a9e;color:#fff;padding:4px 6px;border-radius:3px;font-size:10px;margin-bottom:3px">🖌 Rollers</div>
+            <div style="background:#252540;color:#888;padding:4px 6px;border-radius:3px;font-size:10px;margin-bottom:3px">Walls</div>
+            <div style="background:#252540;color:#888;padding:4px 6px;border-radius:3px;font-size:10px;margin-bottom:3px">Ceilings</div>
+            <div style="background:#252540;color:#888;padding:4px 6px;border-radius:3px;font-size:10px;margin-bottom:3px">Trim</div>
+            <div style="background:#252540;color:#888;padding:4px 6px;border-radius:3px;font-size:10px">Doors</div>
+          </div>
+          <div style="flex:1">
+            <div style="background:#252540;padding:8px;border-radius:4px">
+              <div style="color:#7ca;font-size:10px;margin-bottom:5px;font-weight:600">🖌 ROLLER COVERS</div>
+              <div style="margin-bottom:3px">3× Wall <span style="background:#333;padding:1px 5px;border-radius:2px;color:#aaa">▼ 3/8" nap</span></div>
+              <div>1× Ceiling <span style="background:#333;padding:1px 5px;border-radius:2px;color:#aaa">▼ 1/2" nap</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:6px;color:#666;font-size:9px;text-align:center">Left nav selects section; right panel shows content</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Left Nav Sections</h3>
+      <p>Persistent left nav: Paint, Rollers, then one entry per scope (Walls, Ceilings, Trim, Doors). Clicking a scope shows its override fields. Compact but requires more clicks to get to scope overrides.</p>
+    </div>
+  </div>
+
+</div>

@@ -16,13 +16,14 @@ vi.mock('../../org.ts', () => ({
 
 import {
   createEstimateCollectionVersionRecord,
+  loadEstimateCollectionJobContext,
   loadEstimateCollectionRelatedRows,
   loadEstimateCollectionJobsPage,
   loadEstimateCollectionJobVersionsPage,
   searchEstimateCollectionRows,
 } from '../repository.ts'
-import { decodeQuoteHomeCursor } from '@/lib/quotes/collectionData'
-import type { EstimateCollectionVersionRow } from '../types.ts'
+import { decodeQuoteHomeCursor } from '@/lib/quotes/quoteHomeCursors'
+import type { EstimateCollectionJobPageDbRow, EstimateCollectionVersionRow } from '../types.ts'
 
 type QueryResponse = {
   data?: unknown[] | null
@@ -47,6 +48,33 @@ function makeEstimateRow(
     created_at: '2026-04-20T10:00:00.000Z',
     updated_at: updatedAt,
     ...overrides,
+  }
+}
+
+function makeJobPageRow(
+  id: string,
+  createdAt: string,
+  customerId: string | null = 'customer-1'
+): EstimateCollectionJobPageDbRow {
+  return {
+    id,
+    customer_id: customerId,
+    customer_name: customerId ? 'Taylor Smith' : null,
+    customer_address: customerId ? '12 Main' : null,
+    title: `Job ${id}`,
+    description: null,
+    status: 'estimate_scheduled',
+    created_at: createdAt,
+    estimate_date: null,
+    estimate_sent_at: null,
+    scheduled_date: null,
+    scheduled_end_date: null,
+    scheduled_email_sent_at: null,
+    completed_at: null,
+    completed_email_sent_at: null,
+    closeout_notes: null,
+    linked_estimate_id: null,
+    version_count: customerId ? 2 : 0,
   }
 }
 
@@ -422,6 +450,84 @@ describe('estimate collection repository', () => {
     expect(mocks.supabaseRpc).not.toHaveBeenCalled()
   })
 
+  it('returns only eligible job rows when ineligible rows appear before eligible rows', async () => {
+    mocks.supabaseRpc.mockResolvedValue({
+      data: [
+        makeJobPageRow('44444444-4444-4444-8444-444444444444', '2026-04-24T14:00:00.000Z', null),
+        makeJobPageRow(
+          '33333333-3333-4333-8333-333333333333',
+          '2026-04-24T13:00:00.000Z',
+          'customer-3'
+        ),
+        makeJobPageRow(
+          '22222222-2222-4222-8222-222222222222',
+          '2026-04-24T12:00:00.000Z',
+          'customer-2'
+        ),
+      ],
+      error: null,
+    })
+
+    const result = await loadEstimateCollectionJobsPage('org-1', { limit: 2 })
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        limit: 2,
+        rows: [
+          expect.objectContaining({ id: '33333333-3333-4333-8333-333333333333' }),
+          expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' }),
+        ],
+      }),
+    })
+    expect(mocks.supabaseRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns an empty eligible job page when no returned rows are eligible', async () => {
+    mocks.supabaseRpc.mockResolvedValue({
+      data: [
+        makeJobPageRow('33333333-3333-4333-8333-333333333333', '2026-04-24T13:00:00.000Z', null),
+        makeJobPageRow('22222222-2222-4222-8222-222222222222', '2026-04-24T12:00:00.000Z', null),
+      ],
+      error: null,
+    })
+
+    await expect(loadEstimateCollectionJobsPage('org-1', { limit: 2 })).resolves.toEqual({
+      ok: true,
+      data: {
+        query: '',
+        limit: 2,
+        rows: [],
+      },
+    })
+  })
+
+  it('filters many ineligible job rows without issuing extra RPC calls', async () => {
+    mocks.supabaseRpc.mockResolvedValue({
+      data: [
+        makeJobPageRow('99999999-9999-4999-8999-999999999999', '2026-04-24T19:00:00.000Z', null),
+        makeJobPageRow('88888888-8888-4888-8888-888888888888', '2026-04-24T18:00:00.000Z', null),
+        makeJobPageRow('77777777-7777-4777-8777-777777777777', '2026-04-24T17:00:00.000Z', null),
+        makeJobPageRow(
+          '66666666-6666-4666-8666-666666666666',
+          '2026-04-24T16:00:00.000Z',
+          'customer-6'
+        ),
+      ],
+      error: null,
+    })
+
+    const result = await loadEstimateCollectionJobsPage('org-1', { limit: 2 })
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        rows: [expect.objectContaining({ id: '66666666-6666-4666-8666-666666666666' })],
+      }),
+    })
+    expect(mocks.supabaseRpc).toHaveBeenCalledTimes(1)
+  })
+
   it('returns sorted DB-shaped job page rows with duplicate timestamps', async () => {
     const duplicateTimestamp = '2026-04-24T12:00:00.000Z'
     mocks.supabaseRpc.mockResolvedValue({
@@ -509,6 +615,7 @@ describe('estimate collection repository', () => {
     const cursorId = '33333333-3333-4333-8333-333333333333'
     mocks.supabaseRpc.mockResolvedValue({
       data: [
+        makeJobPageRow('44444444-4444-4444-8444-444444444444', cursorTimestamp, null),
         {
           id: '22222222-2222-4222-8222-222222222222',
           customer_id: 'customer-1',
@@ -553,6 +660,28 @@ describe('estimate collection repository', () => {
         limit: 100,
         rows: [expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222' })],
       }),
+    })
+  })
+
+  it('forwards a bounded max job page over-fetch value that the rpc can honor', async () => {
+    mocks.supabaseRpc.mockResolvedValue({
+      data: [],
+      error: null,
+    })
+
+    const result = await loadEstimateCollectionJobsPage('org-1', { limit: 100 })
+
+    expect(mocks.supabaseRpc).toHaveBeenCalledWith(
+      'quote_home_jobs_page',
+      expect.objectContaining({ p_limit: 101 })
+    )
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        query: '',
+        limit: 100,
+        rows: [],
+      },
     })
   })
 
@@ -618,6 +747,68 @@ describe('estimate collection repository', () => {
           expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
         ],
       }),
+    })
+  })
+
+  it('loads quote-create job context with customer display data', async () => {
+    const jobQuery = makeQuery({
+      data: [{ id: 'job-1', customer_id: 'customer-1', title: 'Kitchen' }],
+      error: null,
+    })
+    const customerQuery = makeQuery({
+      data: [{ name: 'Alice', address: '123 Main' }],
+      error: null,
+    })
+    mocks.from.mockReturnValueOnce(jobQuery).mockReturnValueOnce(customerQuery)
+
+    const result = await loadEstimateCollectionJobContext('org-1', 'job-1')
+
+    expect(mocks.from).toHaveBeenNthCalledWith(1, 'jobs')
+    expect(jobQuery.select).toHaveBeenCalledWith('id, customer_id, title')
+    expect(jobQuery.eq).toHaveBeenCalledWith('org_id', 'org-1')
+    expect(jobQuery.eq).toHaveBeenCalledWith('id', 'job-1')
+    expect(mocks.from).toHaveBeenNthCalledWith(2, 'customers')
+    expect(customerQuery.select).toHaveBeenCalledWith('name, address')
+    expect(customerQuery.eq).toHaveBeenCalledWith('id', 'customer-1')
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        id: 'job-1',
+        customer_id: 'customer-1',
+        customer_name: 'Alice',
+        customer_address: '123 Main',
+        title: 'Kitchen',
+      },
+    })
+  })
+
+  it('returns quote-create job context for existing customer-less jobs', async () => {
+    const jobQuery = makeQuery({
+      data: [{ id: 'job-1', customer_id: null, title: 'Kitchen' }],
+      error: null,
+    })
+    mocks.from.mockReturnValueOnce(jobQuery)
+
+    await expect(loadEstimateCollectionJobContext('org-1', 'job-1')).resolves.toEqual({
+      ok: true,
+      data: {
+        id: 'job-1',
+        customer_id: null,
+        customer_name: null,
+        customer_address: null,
+        title: 'Kitchen',
+      },
+    })
+    expect(mocks.from).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns null quote-create job context for missing jobs', async () => {
+    const jobQuery = makeQuery({ data: [], error: null })
+    mocks.from.mockReturnValueOnce(jobQuery)
+
+    await expect(loadEstimateCollectionJobContext('org-1', 'missing-job')).resolves.toEqual({
+      ok: true,
+      data: null,
     })
   })
 

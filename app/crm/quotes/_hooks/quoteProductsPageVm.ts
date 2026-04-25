@@ -116,7 +116,8 @@ export function buildQuoteProductsPageVm(params: {
     canDelete:
       workflowState.actionStatus === 'idle' &&
       !resource.error &&
-      workflowState.editorMode === 'edit',
+      workflowState.editorMode === 'edit' &&
+      derived.selectedRow?.status !== 'Archived',
   })
 
   return {

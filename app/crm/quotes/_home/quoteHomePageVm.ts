@@ -1,4 +1,4 @@
-import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import {
   buildHeroSummaryText,
@@ -122,6 +122,11 @@ export type QuoteHomePageVm = {
     delete: QuotesHomeDeleteDialogVm
   }
   actions: QuoteHomePageActions
+}
+
+export type QuoteHomePageVmInput = {
+  state: QuoteHomePageVmState
+  resources: QuoteHomePageVmResources
 }
 
 export function buildQuoteHomePageVm(

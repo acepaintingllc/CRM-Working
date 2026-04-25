@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react'
 import { act } from 'react'
 import { describe, expect, it } from 'vitest'
-import { type QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
+import { type QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/quoteHomeTypes'
 import { useQuotesHomeDelete } from '../useQuotesHomeDelete'
 
 function makeEstimate(

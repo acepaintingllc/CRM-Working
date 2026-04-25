@@ -68,6 +68,14 @@ export type EstimateCollectionJobPageDbRow = {
   version_count: number | null
 }
 
+export type EstimateCollectionJobContextDbRow = {
+  id: string
+  customer_id: string | null
+  customer_name: string | null
+  customer_address: string | null
+  title: string | null
+}
+
 export type EstimateCollectionJobVersionsDbPage = {
   jobId: string
   totalVersions: number

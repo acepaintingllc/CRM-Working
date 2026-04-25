@@ -5,10 +5,8 @@ import {
   quoteHomeBootstrap,
   quoteHomeJobs,
 } from '@/test-support/quoteHomeFixtures'
-import {
-  QUOTE_HOME_SEARCH_SOURCE_RANK,
-  selectQuoteHomeSearchRows,
-} from '@/lib/quotes/collectionData'
+import { QUOTE_HOME_SEARCH_SOURCE_RANK } from '@/lib/quotes/quoteHomeTypes'
+import { selectQuoteHomeSearchRows } from '@/lib/quotes/quoteHomeSearch'
 import type { EstimateCollectionVersionRow } from '@/lib/server/estimate-collection/types'
 
 const mocks = vi.hoisted(() => ({
@@ -16,9 +14,8 @@ const mocks = vi.hoisted(() => ({
   loadEstimateCollectionBootstrapPayload: vi.fn(),
   loadEstimateCollectionJobVersionsPayload: vi.fn(),
   loadEstimateCollectionJobsPayload: vi.fn(),
-  loadEstimateCollectionRecentActivityPayload: vi.fn(),
+  loadEstimateCollectionQuoteCreateContextPayload: vi.fn(),
   loadEstimateCollectionSearchPayload: vi.fn(),
-  loadEstimateCollectionSummaryPayload: vi.fn(),
 }))
 
 vi.mock('@/lib/server/apiRoute', () => ({
@@ -44,19 +41,16 @@ vi.mock('@/lib/server/estimate-collection/service', () => ({
   loadEstimateCollectionBootstrapPayload: mocks.loadEstimateCollectionBootstrapPayload,
   loadEstimateCollectionJobVersionsPayload: mocks.loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionJobsPayload: mocks.loadEstimateCollectionJobsPayload,
-  loadEstimateCollectionRecentActivityPayload: mocks.loadEstimateCollectionRecentActivityPayload,
+  loadEstimateCollectionQuoteCreateContextPayload: mocks.loadEstimateCollectionQuoteCreateContextPayload,
   loadEstimateCollectionSearchPayload: mocks.loadEstimateCollectionSearchPayload,
-  loadEstimateCollectionSummaryPayload: mocks.loadEstimateCollectionSummaryPayload,
   loadEstimateCollectionPayload: vi.fn(),
   createEstimateCollectionVersion: vi.fn(),
 }))
 
 import { GET as getQuoteHomeBootstrap } from '../quotes/home/bootstrap/route'
-import { GET as getQuoteHomeJobCounts } from '../quotes/home/job-counts/route'
 import { GET as getQuoteHomeJobs } from '../quotes/home/jobs/route'
-import { GET as getQuoteHomeRecentActivity } from '../quotes/home/recent-activity/route'
 import { GET as getQuoteHomeSearch } from '../quotes/home/search/route'
-import { GET as getQuoteHomeSummary } from '../quotes/home/summary/route'
+import { GET as getQuoteCreateContext } from '../quotes/home/jobs/[jobId]/create-context/route'
 import { GET as getQuoteJobVersions } from '../quotes/home/jobs/[jobId]/versions/route'
 
 const authedSession = {
@@ -92,14 +86,6 @@ describe('quote home API routes', () => {
       ok: true,
       data: quoteHomeBootstrap,
     })
-    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValue({
-      ok: true,
-      data: { total_versions: 0 },
-    })
-    mocks.loadEstimateCollectionRecentActivityPayload.mockResolvedValue({
-      ok: true,
-      data: { items: [] },
-    })
     mocks.loadEstimateCollectionJobsPayload.mockResolvedValue({
       ok: true,
       data: { query: '', limit: 25, next_cursor: null, items: quoteHomeJobs },
@@ -112,6 +98,19 @@ describe('quote home API routes', () => {
       ok: true,
       data: makePagedQuoteHomeVersions({ jobId: '33333333-3333-4333-8333-333333333333', count: 2 }),
     })
+    mocks.loadEstimateCollectionQuoteCreateContextPayload.mockResolvedValue({
+      ok: true,
+      data: {
+        job: {
+          id: '33333333-3333-4333-8333-333333333333',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
+      },
+    })
   })
 
   it('requires auth before quote home service work', async () => {
@@ -120,12 +119,10 @@ describe('quote home API routes', () => {
       response: Response.json({ error: 'Not authenticated' }, { status: 401 }),
     }))
     const versionContext = { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    const createContext = { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
 
     const responses = await Promise.all([
       getQuoteHomeBootstrap(),
-      getQuoteHomeSummary(),
-      getQuoteHomeRecentActivity(),
-      getQuoteHomeJobCounts(),
       getQuoteHomeJobs(new Request('http://localhost/api/quotes/home/jobs?q=kit')),
       getQuoteHomeSearch(new Request('http://localhost/api/quotes/home/search?q=kit')),
       getQuoteJobVersions(
@@ -134,34 +131,32 @@ describe('quote home API routes', () => {
         ),
         versionContext
       ),
+      getQuoteCreateContext(
+        new Request(
+          'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+        ),
+        createContext
+      ),
     ])
 
-    expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401, 401, 401, 401])
+    expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401, 401])
     for (const response of responses) {
       await expect(response.json()).resolves.toEqual({ error: 'Not authenticated' })
     }
     expect(mocks.loadEstimateCollectionBootstrapPayload).not.toHaveBeenCalled()
-    expect(mocks.loadEstimateCollectionSummaryPayload).not.toHaveBeenCalled()
-    expect(mocks.loadEstimateCollectionRecentActivityPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionJobsPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionSearchPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
+    expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).not.toHaveBeenCalled()
   })
 
-  it('keeps bootstrap, summary, jobs, search, and job-version reads in data envelopes', async () => {
+  it('keeps approved quote home reads in data envelopes', async () => {
     const bootstrapResponse = await getQuoteHomeBootstrap()
     expect(bootstrapResponse.status).toBe(200)
     await expect(bootstrapResponse.json()).resolves.toEqual({
       data: quoteHomeBootstrap,
     })
     expect(mocks.loadEstimateCollectionBootstrapPayload).toHaveBeenCalledWith('org-1')
-
-    const summaryResponse = await getQuoteHomeSummary()
-    expect(summaryResponse.status).toBe(200)
-    await expect(summaryResponse.json()).resolves.toEqual({
-      data: { total_versions: 0 },
-    })
-    expect(mocks.loadEstimateCollectionSummaryPayload).toHaveBeenCalledWith('org-1')
 
     const jobsResponse = await getQuoteHomeJobs(
       new Request('http://localhost/api/quotes/home/jobs?q=kit&cursor=next&limit=10')
@@ -206,6 +201,30 @@ describe('quote home API routes', () => {
         limit: 5,
       }
     )
+
+    const createContextResponse = await getQuoteCreateContext(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+    expect(createContextResponse.status).toBe(200)
+    await expect(createContextResponse.json()).resolves.toEqual({
+      data: {
+        job: {
+          id: '33333333-3333-4333-8333-333333333333',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
+      },
+    })
+    expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).toHaveBeenCalledWith(
+      'org-1',
+      '33333333-3333-4333-8333-333333333333'
+    )
   })
 
   it('keeps quote home service and validation errors in error envelopes', async () => {
@@ -217,15 +236,6 @@ describe('quote home API routes', () => {
     const bootstrapResponse = await getQuoteHomeBootstrap()
     expect(bootstrapResponse.status).toBe(500)
     await expect(bootstrapResponse.json()).resolves.toEqual({ error: 'bootstrap failed' })
-
-    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValueOnce({
-      ok: false,
-      kind: 'server_error',
-      message: 'summary failed',
-    })
-    const summaryResponse = await getQuoteHomeSummary()
-    expect(summaryResponse.status).toBe(500)
-    await expect(summaryResponse.json()).resolves.toEqual({ error: 'summary failed' })
 
     mocks.loadEstimateCollectionJobsPayload.mockResolvedValueOnce({
       ok: false,
@@ -263,6 +273,21 @@ describe('quote home API routes', () => {
 
     expect(errorResponse.status).toBe(400)
     await expect(errorResponse.json()).resolves.toEqual({ error: 'Invalid cursor.' })
+
+    mocks.loadEstimateCollectionQuoteCreateContextPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'not_found',
+      message: 'Job not found.',
+    })
+    const createContextResponse = await getQuoteCreateContext(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+
+    expect(createContextResponse.status).toBe(404)
+    await expect(createContextResponse.json()).resolves.toEqual({ error: 'Job not found.' })
   })
 
   it('returns under-filled jobs pages in the standard data envelope', async () => {
@@ -301,6 +326,15 @@ describe('quote home API routes', () => {
     await expect(response.json()).resolves.toEqual({ error: 'Invalid job id' })
     expect(mocks.requireSessionUserOrg).toHaveBeenCalledTimes(1)
     expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
+
+    const createContextResponse = await getQuoteCreateContext(
+      new Request('http://localhost/api/quotes/home/jobs/not-a-uuid/create-context'),
+      { params: { jobId: 'not-a-uuid' } }
+    )
+
+    expect(createContextResponse.status).toBe(400)
+    await expect(createContextResponse.json()).resolves.toEqual({ error: 'Invalid job id' })
+    expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).not.toHaveBeenCalled()
   })
 
   it('rejects invalid limits after auth and before service work', async () => {

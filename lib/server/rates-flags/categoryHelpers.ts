@@ -6,7 +6,6 @@ import type {
   PersistedValuesRecord,
   RatesFlagsCategory,
   RatesFlagsEditableCategoryKey,
-  RatesFlagsMutationRequest,
   TemplateConstantRowRecord,
 } from './categoryTypes.ts'
 import { asBooleanYN, asText, normalizeId, rowByHeader } from './shared.ts'
@@ -66,6 +65,7 @@ export function buildCategory<TKey extends RatesFlagsEditableCategoryKey>(
       readOnly: field.readOnly,
       helperText: field.helperText,
       options: field.options,
+      writeDefault: typeof field.writeDefault === 'string' ? field.writeDefault : undefined,
     })),
     rows,
   }
@@ -114,9 +114,9 @@ export function buildMutationPlan<TKey extends RatesFlagsEditableCategoryKey>(
     }
   }
 
-  const mutation = request as unknown as Extract<
-    RatesFlagsMutationRequest,
-    { category: TKey; action: 'create' | 'update' }
+  const mutation = request as Extract<
+    typeof request,
+    { action: 'create' | 'update' }
   >
   const originalId = normalizeId(
     mutation.action === 'update' ? mutation.original_id : mutation.values.id
@@ -234,6 +234,7 @@ export function buildCategoryFromStoredRows<TKey extends RatesFlagsEditableCateg
       readOnly: field.readOnly,
       helperText: field.helperText,
       options: field.options,
+      writeDefault: typeof field.writeDefault === 'string' ? field.writeDefault : undefined,
     })),
     rows: normalizedRows,
   }

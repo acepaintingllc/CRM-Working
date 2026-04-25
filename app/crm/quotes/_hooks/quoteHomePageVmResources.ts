@@ -3,9 +3,12 @@ import type {
   QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
   QuoteHomeSearchResultReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import type { QuoteHomePageVmResources } from '../_home/quoteHomePageVm'
+import type { QuoteHomeDeleteState } from './useQuotesHomeDelete'
+import type { QuoteHomeDataResourceContract } from './useQuotesHomeData'
+import type { QuoteVersionWorkflowController } from './useQuoteVersionWorkflow'
 
 export type QuoteHomeVmHomeResource = QuoteHomePageVmResources['home']
 
@@ -62,12 +65,84 @@ export type QuoteHomeVmDeleteResourceInput = {
   error: string | null
 }
 
+export type QuoteHomeSearchResourceContract = {
+  query: string
+  loading: boolean
+  error: string | null
+  results: QuoteHomeVmSearchResourceInput['results']
+  retry: () => void
+}
+
+export type QuoteHomeCreateResourceContract = Pick<
+  QuoteVersionWorkflowController['create'],
+  'creating' | 'error' | 'versionName' | 'versionKind' | 'canCreate'
+>
+
+export type QuoteHomeDeleteResourceContract = Pick<
+  QuoteHomeDeleteState,
+  'confirmingDelete' | 'deletingId' | 'error'
+>
+
+export type QuoteHomeVmResourceSourceContracts = {
+  homeResource: QuoteHomeDataResourceContract
+  searchResource: QuoteHomeSearchResourceContract
+  versionsResource: QuoteVersionWorkflowController['versions']
+  createResource: QuoteHomeCreateResourceContract
+  deleteResource: QuoteHomeDeleteResourceContract
+}
+
 export type QuoteHomeVmResourceInputs = {
   home: QuoteHomeVmHomeResourceInput
   search: QuoteHomeVmSearchResourceInput
   versions: QuoteHomeVmVersionsResourceInput
   create: QuoteHomeVmCreateResourceInput
   delete: QuoteHomeVmDeleteResourceInput
+}
+
+export function buildQuoteHomePageVmResourceInputs({
+  homeResource,
+  searchResource,
+  versionsResource,
+  createResource,
+  deleteResource,
+}: QuoteHomeVmResourceSourceContracts): QuoteHomeVmResourceInputs {
+  return {
+    home: {
+      summary: homeResource.summary,
+      jobs: homeResource.jobs,
+      hasMore: homeResource.hasMore,
+      jobsLoading: homeResource.jobsLoading,
+      loading: homeResource.loading,
+      bootstrapError: homeResource.bootstrapError,
+      jobsError: homeResource.jobsError,
+    },
+    search: {
+      query: searchResource.query,
+      loading: searchResource.loading,
+      error: searchResource.error,
+      results: searchResource.results,
+    },
+    versions: {
+      items: versionsResource.items,
+      error: versionsResource.error,
+      totalVersions: versionsResource.pageData.total_versions,
+      hasMore: versionsResource.hasMore,
+      loadingMore: versionsResource.loadingMore,
+      hasResolved: versionsResource.hasResolved,
+    },
+    create: {
+      creating: createResource.creating,
+      error: createResource.error,
+      versionName: createResource.versionName,
+      versionKind: createResource.versionKind,
+      canCreate: createResource.canCreate,
+    },
+    delete: {
+      confirmingDelete: deleteResource.confirmingDelete,
+      deletingId: deleteResource.deletingId,
+      error: deleteResource.error,
+    },
+  }
 }
 
 export function buildQuoteHomePageVmResources({

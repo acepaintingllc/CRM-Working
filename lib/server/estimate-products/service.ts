@@ -8,13 +8,16 @@ import {
   validateQuoteProductDraft,
   type QuoteProductRow,
 } from '../../quotes/productsForm.ts'
-import type { ServiceResult } from '../serviceResult.ts'
+import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import {
+  archiveEstimateProductRecord,
   createEstimateProductRecord,
   deleteEstimateProductRecord,
+  findEstimateProductReferences,
   listEstimateProductRecords,
   loadEstimateProductRecord,
   updateEstimateProductRecord,
+  type EstimateProductReference,
   type EstimateProductListFilters,
   type EstimateProductRepositoryDeps,
 } from './repository.ts'
@@ -50,6 +53,20 @@ function validationFailure(summary: string | null | undefined, fields: Record<st
     message: summary ?? 'Invalid product payload.',
     fields,
   }
+}
+
+function buildHardDeleteConflictMessage(references: EstimateProductReference[]) {
+  const labels = references.map((reference) => reference.label)
+  const uniqueLabels = [...new Set(labels)].join(', ')
+  return `Product is still referenced by ${uniqueLabels}. Archive the product instead to keep quote defaults and historical estimates intact.`
+}
+
+function isArchiveOnlyPatch(
+  body: Record<string, unknown>,
+  patch: Partial<ReturnType<typeof quoteProductPatchToDraft>>
+) {
+  const keys = Object.keys(body)
+  return keys.length === 1 && keys[0] === 'status' && patch.status === 'Archived'
 }
 
 export function isEstimateProductValidationFailure(
@@ -91,9 +108,18 @@ export async function updateEstimateProduct(
   const existingResult = await loadEstimateProductRecord(orgId, productId, deps)
   if (!existingResult.ok) return existingResult
 
+  const draftPatch = quoteProductPatchToDraft(body)
+  if (isArchiveOnlyPatch(body, draftPatch)) {
+    if (existingResult.data.status === 'Archived') {
+      return okResult(existingResult.data)
+    }
+
+    return archiveEstimateProductRecord(orgId, productId, deps)
+  }
+
   const validated = validateQuoteProductDraft({
     ...quoteProductRowToDraft(existingResult.data),
-    ...quoteProductPatchToDraft(body),
+    ...draftPatch,
   })
   if (!validated.ok) {
     return validationFailure(validated.validation.summary, validated.validation.fields)
@@ -109,6 +135,12 @@ export async function deleteEstimateProduct(
 ): Promise<ServiceResult<true>> {
   const existingResult = await loadEstimateProductRecord(orgId, productId, deps)
   if (!existingResult.ok) return existingResult
+
+  const referenceResult = await findEstimateProductReferences(orgId, productId, deps)
+  if (!referenceResult.ok) return referenceResult
+  if (referenceResult.data.length > 0) {
+    return errorResult('conflict', buildHardDeleteConflictMessage(referenceResult.data))
+  }
 
   return deleteEstimateProductRecord(orgId, productId, deps)
 }

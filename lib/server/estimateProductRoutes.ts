@@ -20,15 +20,9 @@ type EstimateProductRouteContext = {
   params: { id: string } | Promise<{ id: string }>
 }
 
-function validationErrorResponse(validation: {
-  summary?: string | null
-  fields: Record<string, string>
-}) {
+function validationErrorResponse(validation: { summary?: string | null }) {
   return Response.json(
-    {
-      error: validation.summary ?? 'Invalid product payload.',
-      fields: validation.fields,
-    },
+    { error: validation.summary ?? 'Invalid product payload.' },
     { status: 400 }
   )
 }
@@ -53,7 +47,6 @@ export async function handleEstimateProductsRoutePost(request: Request) {
   if (isEstimateProductValidationFailure(result)) {
     return validationErrorResponse({
       summary: result.message,
-      fields: result.fields,
     })
   }
 
@@ -78,7 +71,6 @@ export async function handleEstimateProductRoutePatch(
   if (isEstimateProductValidationFailure(result)) {
     return validationErrorResponse({
       summary: result.message,
-      fields: result.fields,
     })
   }
 
@@ -98,6 +90,6 @@ export async function handleEstimateProductRouteDelete(
 
   return serviceResultMutationResponse(
     await deleteEstimateProduct(auth.session.orgId, idResult.value),
-    'Product deleted.'
+    'Product permanently deleted.'
   )
 }

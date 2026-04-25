@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ProductionRateRow, RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 import { useQuoteRatesPage } from '../useQuoteRatesPage'
 
 const { loadRatesFlags, mutateRatesFlags } = vi.hoisted(() => ({
@@ -12,6 +13,81 @@ vi.mock('@/lib/quotes/client', () => ({
   loadRatesFlags,
   mutateRatesFlags,
 }))
+
+type RatesPayloadRow = RatesFlagsPayload['categories'][number]['rows'][number]
+
+function getObjectValue(value: object | null, key: string) {
+  if (!value) return undefined
+  const propertyValue: unknown = Reflect.get(value, key)
+  return propertyValue
+}
+
+function buildWallRateRow(overrides: Partial<ProductionRateRow>): ProductionRateRow {
+  return {
+    id: 'wall-rate-1',
+    production_scope: 'walls',
+    scope_id: 'scope-1',
+    display_name: 'Standard walls',
+    surface_type: 'paint',
+    condition: 'normal',
+    prep_sqft_per_hr: '100',
+    sqft_per_hr: '150',
+    primer_sqft_per_hr: '100',
+    notes: '',
+    active: true,
+    ...overrides,
+  }
+}
+
+function buildRatesPayload(params?: {
+  rows?: RatesPayloadRow[]
+  templateVersion?: number
+}): RatesFlagsPayload {
+  return {
+    source: 'db',
+    seeded: true,
+    template_version: params?.templateVersion ?? 2,
+    categories: [
+      {
+        key: 'production_rates_walls',
+        tab: 'rates',
+        group: 'production_rates',
+        label: 'Wall Production',
+        table_title: 'Wall Production',
+        description: 'Wall rates',
+        columns: [
+          { key: 'display_name', label: 'Name' },
+          { key: 'active', label: 'Status' },
+        ],
+        fields: [
+          { key: 'id', label: 'ID', type: 'text', required: true },
+          {
+            key: 'production_scope',
+            label: 'Production Scope',
+            type: 'select',
+            readOnly: true,
+            options: ['walls'],
+            writeDefault: 'walls',
+          },
+          { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+          { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
+        ],
+        rows: params?.rows ?? [buildWallRateRow({})],
+      },
+    ],
+  }
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+
+  return { promise, resolve, reject }
+}
 
 describe('useQuoteRatesPage', () => {
   beforeEach(() => {
@@ -108,6 +184,14 @@ describe('useQuoteRatesPage', () => {
             ],
             fields: [
               { key: 'id', label: 'ID', type: 'text', required: true },
+              {
+                key: 'production_scope',
+                label: 'Production Scope',
+                type: 'select',
+                readOnly: true,
+                options: ['walls'],
+                writeDefault: 'walls',
+              },
               { key: 'display_name', label: 'Display Name', type: 'text', required: true },
               { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
               { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
@@ -143,6 +227,14 @@ describe('useQuoteRatesPage', () => {
             ],
             fields: [
               { key: 'id', label: 'ID', type: 'text', required: true },
+              {
+                key: 'production_scope',
+                label: 'Production Scope',
+                type: 'select',
+                readOnly: true,
+                options: ['walls'],
+                writeDefault: 'walls',
+              },
               { key: 'display_name', label: 'Display Name', type: 'text', required: true },
               { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
               { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
@@ -189,14 +281,10 @@ describe('useQuoteRatesPage', () => {
     })
 
     expect(result.current.tableVm.isCreating).toBe(true)
-    const duplicateDraft = result.current.editorVm.draft as unknown as {
-      id: string
-      sqft_per_hr: number | null
-      helper_allowed: boolean
-    }
-    expect(duplicateDraft.id).toBe('wall-rate-1_COPY')
-    expect(duplicateDraft.sqft_per_hr).toBe(150)
-    expect(duplicateDraft.helper_allowed).toBe(true)
+    const duplicateDraft = result.current.editorVm.draft
+    expect(getObjectValue(duplicateDraft, 'id')).toBe('wall-rate-1_COPY')
+    expect(getObjectValue(duplicateDraft, 'sqft_per_hr')).toBe(150)
+    expect(getObjectValue(duplicateDraft, 'helper_allowed')).toBe(true)
 
     act(() => {
       result.current.actions.updateDraftValue('display_name', 'Duplicated walls')
@@ -302,6 +390,14 @@ describe('useQuoteRatesPage', () => {
             columns: [],
             fields: [
               { key: 'id', label: 'ID', type: 'text', required: true },
+              {
+                key: 'production_scope',
+                label: 'Production Scope',
+                type: 'select',
+                readOnly: true,
+                options: ['walls'],
+                writeDefault: 'walls',
+              },
               { key: 'display_name', label: 'Display Name', type: 'text', required: true },
               { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
             ],
@@ -332,6 +428,14 @@ describe('useQuoteRatesPage', () => {
             columns: [],
             fields: [
               { key: 'id', label: 'ID', type: 'text', required: true },
+              {
+                key: 'production_scope',
+                label: 'Production Scope',
+                type: 'select',
+                readOnly: true,
+                options: ['walls'],
+                writeDefault: 'walls',
+              },
               { key: 'display_name', label: 'Display Name', type: 'text', required: true },
               { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
             ],
@@ -379,6 +483,72 @@ describe('useQuoteRatesPage', () => {
     )
     expect(result.current.uiState.notice).toBe('Saved Wall Production.')
     expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
+  })
+
+  it('commits a clean draft snapshot after a successful save', async () => {
+    loadRatesFlags
+      .mockResolvedValueOnce(buildRatesPayload())
+      .mockResolvedValueOnce(
+        buildRatesPayload({
+          rows: [buildWallRateRow({ display_name: 'Clean saved walls', sqft_per_hr: '180' })],
+          templateVersion: 3,
+        })
+      )
+    mutateRatesFlags.mockResolvedValue({ data: true })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Clean saved walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '180')
+    })
+
+    expect(result.current.editorVm.isDirty).toBe(true)
+
+    await act(async () => {
+      await result.current.actions.saveCurrent()
+    })
+
+    expect(result.current.uiState.notice).toBe('Saved Wall Production.')
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Clean saved walls',
+      sqft_per_hr: 180,
+    })
+    expect(result.current.workflowVm.actionStatus).toBe('idle')
+  })
+
+  it('leaves the current draft editable when save fails', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    mutateRatesFlags.mockRejectedValue(new Error('Save failed.'))
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Still editable')
+      result.current.actions.updateDraftValue('sqft_per_hr', '190')
+    })
+
+    await act(async () => {
+      await result.current.actions.saveCurrent()
+    })
+
+    expect(result.current.uiState.actionError).toBe('Save failed.')
+    expect(result.current.workflowVm.actionStatus).toBe('idle')
+    expect(result.current.editorVm.isDirty).toBe(true)
+    expect(result.current.editorVm.canSave).toBe(true)
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Still editable',
+      sqft_per_hr: 190,
+    })
   })
 
   it('keeps a successful save explicit when refresh verification fails', async () => {
@@ -904,6 +1074,284 @@ describe('useQuoteRatesPage', () => {
     })
     expect(result.current.uiState.notice).toBe('Reactivated row.')
     expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(true)
+  })
+
+  it('queues discard before archiving a row with unsaved draft changes', async () => {
+    loadRatesFlags
+      .mockResolvedValueOnce(buildRatesPayload())
+      .mockResolvedValueOnce(
+        buildRatesPayload({
+          rows: [buildWallRateRow({ active: false })],
+          templateVersion: 3,
+        })
+      )
+    mutateRatesFlags.mockResolvedValue({ data: true })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Unsaved before archive')
+    })
+
+    let archiveResult: boolean | Promise<boolean> = true
+    act(() => {
+      archiveResult = result.current.actions.archiveOrReactivate(false)
+    })
+
+    expect(archiveResult).toBe(false)
+    expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.transitionType).toBe('archiveOrReactivate')
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Unsaved before archive',
+    })
+    expect(mutateRatesFlags).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.actions.confirmDiscard()
+    })
+
+    expect(mutateRatesFlags).toHaveBeenCalledWith({
+      category: 'production_rates_walls',
+      action: 'archive',
+      rowId: 'wall-rate-1',
+    })
+    expect(result.current.discardVm.isOpen).toBe(false)
+    expect(result.current.uiState.notice).toBe('Archived row.')
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(false)
+  })
+
+  it('blocks save attempts while an archive mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    let archiveResult: boolean | Promise<boolean> = false
+    act(() => {
+      archiveResult = result.current.actions.archiveOrReactivate(false)
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('archiving')
+    })
+
+    expect(result.current.uiState.canSave).toBe(false)
+
+    await act(async () => {
+      await result.current.actions.saveCurrent()
+    })
+
+    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
+    expect(mutateRatesFlags).toHaveBeenCalledWith({
+      category: 'production_rates_walls',
+      action: 'archive',
+      rowId: 'wall-rate-1',
+    })
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await archiveResult
+    })
+  })
+
+  it('blocks archive attempts while a save mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+    })
+
+    let saveResult: void | Promise<void>
+    act(() => {
+      saveResult = result.current.actions.saveCurrent()
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('saving')
+    })
+
+    expect(result.current.tableVm.canArchiveToggle).toBe(false)
+
+    let archiveResult: boolean | Promise<boolean> = true
+    act(() => {
+      archiveResult = result.current.actions.archiveOrReactivate(false)
+    })
+
+    expect(archiveResult).toBe(false)
+    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
+    expect(mutateRatesFlags).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'production_rates_walls',
+        action: 'update',
+      })
+    )
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await saveResult
+    })
+  })
+
+  it('blocks reload attempts while a save mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+    })
+
+    let saveResult: void | Promise<void>
+    act(() => {
+      saveResult = result.current.actions.saveCurrent()
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('saving')
+    })
+
+    expect(result.current.uiState.canRetry).toBe(false)
+
+    let reloadResult: boolean | Promise<boolean> = true
+    act(() => {
+      reloadResult = result.current.actions.reload('wall-rate-1')
+    })
+
+    expect(reloadResult).toBe(false)
+    expect(loadRatesFlags).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await saveResult
+    })
+  })
+
+  it('blocks create and duplicate transitions while a mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+    })
+
+    let saveResult: void | Promise<void>
+    act(() => {
+      saveResult = result.current.actions.saveCurrent()
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('saving')
+    })
+
+    let createResult: boolean | Promise<boolean> = true
+    let duplicateResult: boolean | Promise<boolean> = true
+    act(() => {
+      createResult = result.current.actions.startCreate()
+      duplicateResult = result.current.actions.startDuplicate()
+    })
+
+    expect(createResult).toBe(false)
+    expect(duplicateResult).toBe(false)
+    expect(result.current.workflowVm.editorMode).toBe('selection')
+    expect(result.current.tableVm.isCreating).toBe(false)
+    expect(result.current.tableVm.canDuplicate).toBe(false)
+    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await saveResult
+    })
+  })
+
+  it('blocks selection, navigation, and draft active changes while a mutation is active', async () => {
+    loadRatesFlags.mockResolvedValue(
+      buildRatesPayload({
+        rows: [
+          buildWallRateRow({ id: 'wall-rate-1', sqft_per_hr: '150' }),
+          buildWallRateRow({
+            id: 'wall-rate-2',
+            display_name: 'Tall walls',
+            scope_id: 'scope-2',
+            sqft_per_hr: '175',
+          }),
+        ],
+      })
+    )
+    const mutation = createDeferred<{ data: boolean }>()
+    mutateRatesFlags.mockReturnValue(mutation.promise)
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+    })
+
+    let saveResult: void | Promise<void>
+    act(() => {
+      saveResult = result.current.actions.saveCurrent()
+    })
+
+    await waitFor(() => {
+      expect(result.current.workflowVm.actionStatus).toBe('saving')
+    })
+
+    let selectionResult: boolean | Promise<boolean> = true
+    let searchResult: boolean | Promise<boolean> = true
+    act(() => {
+      selectionResult = result.current.actions.setSelectedId('wall-rate-2')
+      searchResult = result.current.actions.setSearch('Tall')
+      result.current.actions.setDraftActive(false)
+      result.current.actions.updateDraftValue('display_name', 'Mutated while saving')
+      result.current.actions.cancelEdit()
+    })
+
+    expect(selectionResult).toBe(false)
+    expect(searchResult).toBe(false)
+    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
+    expect(result.current.filtersVm.search).toBe('')
+    expect(result.current.editorVm.draftActive).toBe(true)
+    expect(result.current.actions.formatDraftValue('display_name')).toBe('Pre-save edit')
+    expect(result.current.discardVm.isOpen).toBe(false)
+
+    await act(async () => {
+      mutation.resolve({ data: true })
+      await saveResult
+    })
   })
 
   it('exposes discard state and protects row selection changes until confirmed', async () => {

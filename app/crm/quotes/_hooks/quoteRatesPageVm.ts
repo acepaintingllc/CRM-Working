@@ -41,7 +41,10 @@ export type QuoteRatesEditorVm = {
   draftActive: boolean
   isDirty: boolean
   saving: boolean
+  busy: boolean
   activeCategory: RatesFlagsCategory | null
+  canEditCategory: boolean
+  showLegacyCategoryNotice: boolean
   selectedRow: RatesFlagsRow | null
   isCreating: boolean
   inlineValidation: string | null
@@ -73,6 +76,14 @@ export function buildQuoteRatesPageVm(params: {
   const { resource, workflowState, derived } = params
 
   const hasData = resource.data.categories.length > 0
+  const actionIsIdle = workflowState.actionStatus === 'idle'
+  const isCreating = workflowState.editorMode === 'create'
+  const canEditCategory = Boolean(derived.editableActiveCategory)
+  const showLegacyCategoryNotice =
+    derived.activeCategory !== null &&
+    !canEditCategory &&
+    !isCreating &&
+    workflowState.draft === null
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
     hasData,
@@ -81,21 +92,21 @@ export function buildQuoteRatesPageVm(params: {
     validationError: derived.validationError,
     notice: workflowState.notice,
     noticeTone: workflowState.noticeTone,
-    canRetry: !resource.loading,
+    canRetry: !resource.loading && actionIsIdle,
     canSave:
       Boolean(derived.activeCategory) &&
-      workflowState.actionStatus !== 'saving' &&
+      actionIsIdle &&
       !resource.error &&
       Boolean(derived.validationResult?.ok),
     canArchiveToggle:
       Boolean(derived.selectedRow) &&
       workflowState.editorMode !== 'create' &&
-      workflowState.actionStatus === 'idle' &&
+      actionIsIdle &&
       !resource.loading &&
       !resource.error,
     canDuplicate:
       Boolean(derived.selectedRow) &&
-      workflowState.actionStatus === 'idle' &&
+      actionIsIdle &&
       !resource.loading &&
       !resource.error,
   })
@@ -128,7 +139,7 @@ export function buildQuoteRatesPageVm(params: {
       filteredRows: derived.filteredRows,
       selectedRow: derived.selectedRow,
       selectedId: workflowState.selectedId,
-      isCreating: workflowState.editorMode === 'create',
+      isCreating,
       canDuplicate: uiState.canDuplicate,
       canArchiveToggle: uiState.canArchiveToggle,
     } satisfies QuoteRatesTableVm,
@@ -137,9 +148,12 @@ export function buildQuoteRatesPageVm(params: {
       draftActive: workflowState.draftActive,
       isDirty: derived.isDirty,
       saving: workflowState.actionStatus === 'saving',
+      busy: !actionIsIdle,
       activeCategory: derived.activeCategory,
+      canEditCategory,
+      showLegacyCategoryNotice,
       selectedRow: derived.selectedRow,
-      isCreating: workflowState.editorMode === 'create',
+      isCreating,
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
     } satisfies QuoteRatesEditorVm,

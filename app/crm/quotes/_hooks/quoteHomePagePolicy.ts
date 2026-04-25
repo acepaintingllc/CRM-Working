@@ -1,11 +1,8 @@
+import { normalizeQuoteHomeJobQuery } from '@/lib/quotes/quoteHomeCursors'
 import type {
   QuoteHomeJobsPageReadModel,
   QuoteHomeJobListItemReadModel,
-} from '@/lib/quotes/collectionData'
-
-export function normalizeQuoteHomeJobQuery(query: string) {
-  return query.trim()
-}
+} from '@/lib/quotes/quoteHomeTypes'
 
 export type QuoteHomeSelectedJobState = {
   selectedJobId: string
@@ -76,6 +73,15 @@ export type QuoteHomeJobsRefreshDecision =
 
 export type QuoteHomeJobsPageMergeMode = 'replace' | 'append'
 
+export type QuoteHomeJobsRequestPurpose = 'query_change' | 'refresh' | 'pagination'
+
+export type QuoteHomeJobsPageRequest = {
+  requestId: number
+  query: string
+  purpose: QuoteHomeJobsRequestPurpose
+  reportError: boolean
+}
+
 export type QuoteHomeJobsLoadMoreDecision =
   | {
       action: 'load_next_jobs_page'
@@ -85,6 +91,40 @@ export type QuoteHomeJobsLoadMoreDecision =
   | {
       action: 'skip_load_more'
       reason: 'jobs_request_in_flight' | 'no_next_cursor'
+    }
+
+export type QuoteHomeJobsPageState = {
+  jobsPage: QuoteHomeJobsPageReadModel
+  activeRequest: QuoteHomeJobsPageRequest | null
+  error: string | null
+}
+
+export type QuoteHomeJobsPageAction =
+  | {
+      type: 'adopt_bootstrap_jobs'
+      jobsPage: QuoteHomeJobsPageReadModel
+    }
+  | {
+      type: 'request_started'
+      request: QuoteHomeJobsPageRequest
+    }
+  | {
+      type: 'request_succeeded'
+      request: QuoteHomeJobsPageRequest
+      loadedJobsPage: QuoteHomeJobsPageReadModel
+      mergeMode: QuoteHomeJobsPageMergeMode
+    }
+  | {
+      type: 'request_failed'
+      request: QuoteHomeJobsPageRequest
+      error: string
+    }
+  | {
+      type: 'request_finished'
+      request: QuoteHomeJobsPageRequest
+    }
+  | {
+      type: 'request_cancelled'
     }
 
 export function resolveQuoteHomeSelectedJobId(
@@ -352,6 +392,87 @@ export function resolveQuoteHomeJobsPageAfterRequest(params: {
       ...params.currentJobsPage.items,
       ...params.loadedJobsPage.items.filter((job) => !existingIds.has(job.id)),
     ],
+  }
+}
+
+export function createQuoteHomeJobsPageState(
+  jobsPage: QuoteHomeJobsPageReadModel
+): QuoteHomeJobsPageState {
+  return {
+    jobsPage,
+    activeRequest: null,
+    error: null,
+  }
+}
+
+function isQuoteHomeJobsPageRequestActive(
+  state: QuoteHomeJobsPageState,
+  request: QuoteHomeJobsPageRequest
+) {
+  return (
+    state.activeRequest?.requestId === request.requestId &&
+    normalizeQuoteHomeJobQuery(state.activeRequest.query) ===
+      normalizeQuoteHomeJobQuery(request.query)
+  )
+}
+
+export function reduceQuoteHomeJobsPageState(
+  state: QuoteHomeJobsPageState,
+  action: QuoteHomeJobsPageAction
+): QuoteHomeJobsPageState {
+  if (action.type === 'adopt_bootstrap_jobs') {
+    return {
+      jobsPage: action.jobsPage,
+      activeRequest: null,
+      error: null,
+    }
+  }
+
+  if (action.type === 'request_cancelled') {
+    return {
+      ...state,
+      activeRequest: null,
+      error: null,
+    }
+  }
+
+  if (action.type === 'request_started') {
+    return {
+      ...state,
+      activeRequest: {
+        ...action.request,
+        query: normalizeQuoteHomeJobQuery(action.request.query),
+      },
+      error: action.request.reportError ? null : state.error,
+    }
+  }
+
+  if (!isQuoteHomeJobsPageRequestActive(state, action.request)) {
+    return state
+  }
+
+  if (action.type === 'request_succeeded') {
+    return {
+      ...state,
+      jobsPage: resolveQuoteHomeJobsPageAfterRequest({
+        currentJobsPage: state.jobsPage,
+        loadedJobsPage: action.loadedJobsPage,
+        mergeMode: action.mergeMode,
+      }),
+      error: action.request.reportError ? null : state.error,
+    }
+  }
+
+  if (action.type === 'request_failed') {
+    return {
+      ...state,
+      error: action.request.reportError ? action.error : state.error,
+    }
+  }
+
+  return {
+    ...state,
+    activeRequest: null,
   }
 }
 

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/quoteHomeTypes'
 import {
-  normalizeQuoteHomeJobQuery,
+  createQuoteHomeJobsPageState,
+  reduceQuoteHomeJobsPageState,
   resolveQuoteHomeBootstrapJobsSync,
   resolveQuoteHomeJobsPageAfterRequest,
   resolveQuoteHomeJobsRefresh,
@@ -50,11 +51,6 @@ const exteriorJob: QuoteHomeJobListItemReadModel = {
 }
 
 describe('quoteHomePagePolicy', () => {
-  it('normalizes the server-backed job query before requests are made', () => {
-    expect(normalizeQuoteHomeJobQuery('  garage  ')).toBe('garage')
-    expect(normalizeQuoteHomeJobQuery('   ')).toBe('')
-  })
-
   it('keeps the current selected job id when it still exists', () => {
     expect(resolveQuoteHomeSelectedJobId([kitchenJob, exteriorJob], 'job-2')).toBe(
       'job-2'
@@ -501,5 +497,113 @@ describe('quoteHomePagePolicy', () => {
       action: 'skip_load_more',
       reason: 'no_next_cursor',
     })
+  })
+
+  it('reduces active jobs-page requests and ignores stale responses', () => {
+    const currentJobsPage = {
+      query: '',
+      limit: 25,
+      next_cursor: 'cursor-2',
+      items: [kitchenJob],
+    }
+    const staleRequest = {
+      requestId: 1,
+      query: '',
+      purpose: 'pagination' as const,
+      reportError: true,
+    }
+    const latestRequest = {
+      requestId: 2,
+      query: 'garage',
+      purpose: 'query_change' as const,
+      reportError: true,
+    }
+
+    let state = createQuoteHomeJobsPageState(currentJobsPage)
+    state = reduceQuoteHomeJobsPageState(state, {
+      type: 'request_started',
+      request: staleRequest,
+    })
+    state = reduceQuoteHomeJobsPageState(state, {
+      type: 'request_started',
+      request: latestRequest,
+    })
+    state = reduceQuoteHomeJobsPageState(state, {
+      type: 'request_succeeded',
+      request: staleRequest,
+      loadedJobsPage: {
+        query: '',
+        limit: 25,
+        next_cursor: null,
+        items: [exteriorJob],
+      },
+      mergeMode: 'append',
+    })
+
+    expect(state.jobsPage).toEqual(currentJobsPage)
+    expect(state.activeRequest).toEqual(latestRequest)
+
+    state = reduceQuoteHomeJobsPageState(state, {
+      type: 'request_succeeded',
+      request: latestRequest,
+      loadedJobsPage: {
+        query: 'garage',
+        limit: 25,
+        next_cursor: null,
+        items: [exteriorJob],
+      },
+      mergeMode: 'replace',
+    })
+
+    expect(state.jobsPage.query).toBe('garage')
+    expect(state.jobsPage.items.map((job) => job.id)).toEqual(['job-2'])
+    expect(state.error).toBeNull()
+  })
+
+  it('reduces jobs-page error reporting without dropping preserved data', () => {
+    const currentJobsPage = {
+      query: '',
+      limit: 25,
+      next_cursor: 'cursor-2',
+      items: [kitchenJob],
+    }
+    const visibleRequest = {
+      requestId: 1,
+      query: '',
+      purpose: 'refresh' as const,
+      reportError: true,
+    }
+    const silentRequest = {
+      ...visibleRequest,
+      requestId: 2,
+      reportError: false,
+    }
+
+    let state = createQuoteHomeJobsPageState(currentJobsPage)
+    state = reduceQuoteHomeJobsPageState(state, {
+      type: 'request_started',
+      request: visibleRequest,
+    })
+    state = reduceQuoteHomeJobsPageState(state, {
+      type: 'request_failed',
+      request: visibleRequest,
+      error: 'jobs failed',
+    })
+
+    expect(state.error).toBe('jobs failed')
+    expect(state.jobsPage).toEqual(currentJobsPage)
+
+    state = reduceQuoteHomeJobsPageState(state, {
+      type: 'request_started',
+      request: silentRequest,
+    })
+    state = reduceQuoteHomeJobsPageState(state, {
+      type: 'request_failed',
+      request: silentRequest,
+      error: 'silent failure',
+    })
+
+    expect(state.error).toBe('jobs failed')
+    expect(state.jobsPage).toEqual(currentJobsPage)
   })
 })

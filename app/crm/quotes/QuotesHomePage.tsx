@@ -1,7 +1,5 @@
 'use client'
-import type { ReactNode } from 'react'
-import { Component } from 'react'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/quoteHomeTypes'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
@@ -12,6 +10,7 @@ import { QuotesHomeCreatePanel } from './_home/QuotesHomeCreatePanel'
 import { QuotesHomeDeleteDialog } from './_home/QuotesHomeDeleteDialog'
 import { QuotesHomeHeader } from './_home/QuotesHomeHeader'
 import { QuotesHomeJobList } from './_home/QuotesHomeJobList'
+import { QuotesHomeRecoveryBoundary } from './_home/QuotesHomeRecoveryBoundary'
 import { QuotesHomeSelectedJobPanel } from './_home/QuotesHomeSelectedJobPanel'
 import { QuotesHomeSummaryCards } from './_home/QuotesHomeSummaryCards'
 import { QuotesHomeVersionList } from './_home/QuotesHomeVersionList'
@@ -21,57 +20,6 @@ import { useQuotesHomePage } from './_hooks/useQuotesHomePage'
 
 type Props = {
   initialData?: QuoteHomeBootstrapReadModel | null
-}
-
-type ErrorBoundaryProps = {
-  children: ReactNode
-}
-
-type ErrorBoundaryState = {
-  hasError: boolean
-}
-
-class QuotesHomeErrorBoundary extends Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
-  state: ErrorBoundaryState = {
-    hasError: false,
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true }
-  }
-
-  render() {
-    if (!this.state.hasError) {
-      return this.props.children
-    }
-
-    return (
-      <div
-        role="alert"
-        style={{
-          border: '1px solid var(--crm-ui-danger-border)',
-          borderRadius: 8,
-          background: 'var(--crm-ui-danger-bg)',
-          color: 'var(--crm-ui-danger-text)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          padding: 16,
-        }}
-      >
-        <p style={{ margin: 0, fontWeight: 800 }}>
-          {QUOTES_HOME_PAGE_COPY.errorBoundary.title}
-        </p>
-        <CrmButton tone="secondary" onClick={() => window.location.reload()}>
-          {QUOTES_HOME_PAGE_COPY.errorBoundary.reloadAction}
-        </CrmButton>
-      </div>
-    )
-  }
 }
 
 export default function QuotesHomePage({ initialData }: Props) {
@@ -99,9 +47,9 @@ export default function QuotesHomePage({ initialData }: Props) {
           }
         />
 
-        <QuotesHomeErrorBoundary>
+        <QuotesHomeRecoveryBoundary>
           <QuotesHomeContent initialData={initialData} />
-        </QuotesHomeErrorBoundary>
+        </QuotesHomeRecoveryBoundary>
       </div>
     </CrmPageShell>
   )

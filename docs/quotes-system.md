@@ -9,6 +9,8 @@ This is the entrypoint for all quotes system work. It covers the Products editor
 
 For build and refactor tasks, also read `docs/feature-page-prompt-template.md`. The architecture file supplements it with quotes-specific rules.
 
+**Adding a new page or feature?** Go directly to the **"Adding a New Quotes Page: Canonical Recipe"** section in `docs/quotes-architecture.md`. It contains the exact folder/file structure, naming formula, per-file responsibility rules, which abstractions to reuse, the orchestration decision tree, required test files, and a list of things that will fail review. Do not invent structure — follow the recipe.
+
 ---
 
 ## How to use
@@ -27,6 +29,6 @@ Out of scope:
 - [non-goal]
 ```
 
-**For a review:** Read the scoped files, score them using the review prompt, and produce a ranked list of rewrite targets with ready-to-paste prompts.
+**For a review:** Read the scoped files, score them using the review prompt, and produce a ranked list of rewrite targets.
 
 **For a build / refactor / rewrite:** Read the architecture constraints first, identify what already exists and can be reused, then implement with minimal scope. Follow the definition of done in the architecture file before declaring anything complete.

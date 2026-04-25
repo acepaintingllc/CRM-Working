@@ -6,14 +6,17 @@ import {
   resolveParams,
 } from '@/lib/server/apiRoute'
 import {
+  normalizeQuoteHomeJobQuery,
+  normalizeQuoteHomeSearchQuery,
+} from '@/lib/quotes/quoteHomeCursors'
+import {
   createEstimateCollectionVersion,
   loadEstimateCollectionBootstrapPayload,
   loadEstimateCollectionJobsPayload,
   loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionPayload,
-  loadEstimateCollectionRecentActivityPayload,
+  loadEstimateCollectionQuoteCreateContextPayload,
   loadEstimateCollectionSearchPayload,
-  loadEstimateCollectionSummaryPayload,
   type EstimateCollectionVersionCopy,
 } from '@/lib/server/estimate-collection/service'
 import {
@@ -54,13 +57,6 @@ export async function handleEstimateCollectionRouteGet() {
   return serviceResultDataResponse(await loadEstimateCollectionPayload(auth.session.orgId))
 }
 
-export async function handleEstimateHomeSummaryRouteGet() {
-  const auth = await requireSessionUserOrg()
-  if (!auth.ok) return auth.response
-
-  return serviceResultDataResponse(await loadEstimateCollectionSummaryPayload(auth.session.orgId))
-}
-
 export async function handleEstimateHomeBootstrapRouteGet() {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
@@ -68,31 +64,12 @@ export async function handleEstimateHomeBootstrapRouteGet() {
   return serviceResultDataResponse(await loadEstimateCollectionBootstrapPayload(auth.session.orgId))
 }
 
-export async function handleEstimateHomeRecentActivityRouteGet() {
-  const auth = await requireSessionUserOrg()
-  if (!auth.ok) return auth.response
-
-  return serviceResultDataResponse(
-    await loadEstimateCollectionRecentActivityPayload(auth.session.orgId)
-  )
-}
-
-export async function handleEstimateHomeJobCountsRouteGet() {
-  const auth = await requireSessionUserOrg()
-  if (!auth.ok) return auth.response
-
-  return Response.json(
-    { error: 'Quote home job-counts has been replaced by the paged jobs read model.' },
-    { status: 410 }
-  )
-}
-
 export async function handleEstimateHomeJobsRouteGet(request: Request) {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
   const url = new URL(request.url)
-  const query = (url.searchParams.get('q') ?? '').trim()
+  const query = normalizeQuoteHomeJobQuery(url.searchParams.get('q'))
   const cursor = url.searchParams.get('cursor')
   const limit = readOptionalPositiveIntegerParam(url.searchParams, 'limit')
   if (!limit.ok) return limit.response
@@ -110,7 +87,7 @@ export async function handleEstimateHomeSearchRouteGet(request: Request) {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
-  const query = (new URL(request.url).searchParams.get('q') ?? '').trim()
+  const query = normalizeQuoteHomeSearchQuery(new URL(request.url).searchParams.get('q'))
   return serviceResultDataResponse(
     await loadEstimateCollectionSearchPayload(auth.session.orgId, query)
   )
@@ -118,6 +95,28 @@ export async function handleEstimateHomeSearchRouteGet(request: Request) {
 
 export type EstimateJobVersionsRouteContext = {
   params: { jobId: string } | Promise<{ jobId: string }>
+}
+
+export type EstimateQuoteCreateContextRouteContext = {
+  params: { jobId: string } | Promise<{ jobId: string }>
+}
+
+export async function handleEstimateQuoteCreateContextRouteGet(
+  request: Request,
+  context: EstimateQuoteCreateContextRouteContext
+) {
+  void request
+
+  const auth = await requireSessionUserOrg()
+  if (!auth.ok) return auth.response
+
+  const params = await resolveParams(context)
+  const jobId = readUuidParam(params?.jobId, 'job id')
+  if (!jobId.ok) return jobId.response
+
+  return serviceResultDataResponse(
+    await loadEstimateCollectionQuoteCreateContextPayload(auth.session.orgId, jobId.value)
+  )
 }
 
 export async function handleEstimateJobVersionsRouteGet(

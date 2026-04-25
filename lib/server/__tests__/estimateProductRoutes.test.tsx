@@ -137,7 +137,7 @@ describe('estimate product routes', () => {
     })
   })
 
-  it('returns stable validation errors for invalid create payloads', async () => {
+  it('returns validation failures in the canonical error envelope', async () => {
     mocks.readJsonBody.mockResolvedValue({
       ok: true,
       value: { efficiency_pct: 120 },
@@ -159,10 +159,6 @@ describe('estimate product routes', () => {
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toEqual({
       error: 'Product name is required.',
-      fields: {
-        name: 'Product name is required.',
-        efficiency_pct: 'Efficiency must be 100 or less.',
-      },
     })
   })
 
@@ -266,7 +262,29 @@ describe('estimate product routes', () => {
     await expect(deleteResponse.json()).resolves.toEqual({ error: 'Product not found' })
   })
 
-  it('deletes products with the canonical mutation envelope', async () => {
+  it('returns a conflict when hard delete is blocked by product references', async () => {
+    mocks.deleteEstimateProduct.mockResolvedValue({
+      ok: false,
+      kind: 'conflict',
+      message:
+        'Product is still referenced by quote defaults. Archive the product instead to keep quote defaults and historical estimates intact.',
+    })
+
+    const response = await handleEstimateProductRouteDelete(
+      new Request('http://localhost/api/estimates/v2/products/id', { method: 'DELETE' }),
+      {
+        params: { id: existingRow.id },
+      }
+    )
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      error:
+        'Product is still referenced by quote defaults. Archive the product instead to keep quote defaults and historical estimates intact.',
+    })
+  })
+
+  it('hard deletes products with the canonical mutation envelope once reference checks pass', async () => {
     mocks.deleteEstimateProduct.mockResolvedValue({
       ok: true,
       data: true,
@@ -281,7 +299,7 @@ describe('estimate product routes', () => {
 
     await expect(response.json()).resolves.toEqual({
       data: true,
-      notice: 'Product deleted.',
+      notice: 'Product permanently deleted.',
     })
   })
 })

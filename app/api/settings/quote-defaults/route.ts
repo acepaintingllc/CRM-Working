@@ -44,6 +44,10 @@ export async function PUT(request: Request) {
     const data = await saveQuoteDefaults(sessionResult.session.orgId, normalized.data)
     return settingsSaved(data, 'Quote defaults saved.')
   } catch (error) {
+    if (error instanceof Error && error.name === 'QuoteDefaultsValidationError') {
+      return settingsError(error.message, 400)
+    }
+
     logSettingsRouteFailure({
       resource: 'quote-defaults',
       action: 'save',

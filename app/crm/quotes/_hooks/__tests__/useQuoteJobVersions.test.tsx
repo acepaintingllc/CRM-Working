@@ -2,14 +2,16 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { act, StrictMode, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  createInitialJobVersionsState,
   createJobVersionsCache,
   getCachedJobVersionsPage,
   hydrateJobVersionsCache,
   mergeJobVersionsPages,
+  reduceJobVersionsResourceState,
   resolveInitialJobVersionsPage,
 } from '../jobVersionsCache'
 import { useQuoteJobVersions } from '../useQuoteJobVersions'
-import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/quoteHomeTypes'
 
 const { loadQuoteJobVersions } = vi.hoisted(() => ({
   loadQuoteJobVersions: vi.fn(),
@@ -195,7 +197,10 @@ describe('useQuoteJobVersions', () => {
       await firstLoadMore
     })
 
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-1',
+      'estimate-2',
+    ])
   })
 
   it('allows loadMore again after the previous cursor request settles', async () => {
@@ -258,7 +263,11 @@ describe('useQuoteJobVersions', () => {
     expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(3, 'job-1', {
       cursor: 'cursor-3',
     })
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2', 'estimate-3'])
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-1',
+      'estimate-2',
+      'estimate-3',
+    ])
     expect(result.current.hasMore).toBe(false)
   })
 
@@ -281,14 +290,18 @@ describe('useQuoteJobVersions', () => {
     const { result } = renderHook(() => useQuoteJobVersions('job-1'))
 
     await waitFor(() => {
-      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1'])
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+        'estimate-1',
+      ])
     })
 
     await act(async () => {
       await expect(result.current.loadMore()).resolves.toBe(false)
     })
 
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1'])
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-1',
+    ])
     expect(result.current.error).toBe('next page failed')
     expect(result.current.loadingMore).toBe(false)
 
@@ -300,7 +313,10 @@ describe('useQuoteJobVersions', () => {
     expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(3, 'job-1', {
       cursor: 'cursor-2',
     })
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-1',
+      'estimate-2',
+    ])
     expect(result.current.error).toBeNull()
   })
 
@@ -339,12 +355,17 @@ describe('useQuoteJobVersions', () => {
       ],
     }
 
-    loadQuoteJobVersions.mockResolvedValueOnce(versionPayload).mockResolvedValueOnce(refreshedPayload)
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(versionPayload)
+      .mockResolvedValueOnce(refreshedPayload)
 
     const { result } = renderHook(() => useQuoteJobVersions('job-1'))
 
     await waitFor(() => {
-      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+        'estimate-1',
+        'estimate-2',
+      ])
     })
 
     await act(async () => {
@@ -353,7 +374,9 @@ describe('useQuoteJobVersions', () => {
 
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
     expect(loadQuoteJobVersions).toHaveBeenNthCalledWith(2, 'job-1')
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-refreshed'])
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-refreshed',
+    ])
   })
 
   it('uses cached data when switching back to a previously loaded job', async () => {
@@ -370,11 +393,16 @@ describe('useQuoteJobVersions', () => {
       ],
     }
 
-    loadQuoteJobVersions.mockResolvedValueOnce(versionPayload).mockResolvedValueOnce(jobTwoPayload)
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(versionPayload)
+      .mockResolvedValueOnce(jobTwoPayload)
 
-    const { result, rerender } = renderHook(({ jobId }) => useQuoteJobVersions(jobId), {
-      initialProps: { jobId: 'job-1' },
-    })
+    const { result, rerender } = renderHook(
+      ({ jobId }) => useQuoteJobVersions(jobId),
+      {
+        initialProps: { jobId: 'job-1' },
+      },
+    )
 
     await waitFor(() => {
       expect(result.current.data.job_id).toBe('job-1')
@@ -392,7 +420,10 @@ describe('useQuoteJobVersions', () => {
       expect(result.current.data.job_id).toBe('job-1')
     })
 
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-1',
+      'estimate-2',
+    ])
     expect(loadQuoteJobVersions).toHaveBeenCalledTimes(2)
   })
 
@@ -411,11 +442,16 @@ describe('useQuoteJobVersions', () => {
       ],
     }
 
-    loadQuoteJobVersions.mockResolvedValueOnce(versionPayload).mockImplementationOnce(() => jobTwo.promise)
+    loadQuoteJobVersions
+      .mockResolvedValueOnce(versionPayload)
+      .mockImplementationOnce(() => jobTwo.promise)
 
-    const { result, rerender } = renderHook(({ jobId }) => useQuoteJobVersions(jobId), {
-      initialProps: { jobId: 'job-1' },
-    })
+    const { result, rerender } = renderHook(
+      ({ jobId }) => useQuoteJobVersions(jobId),
+      {
+        initialProps: { jobId: 'job-1' },
+      },
+    )
 
     await waitFor(() => {
       expect(result.current.data.job_id).toBe('job-1')
@@ -431,7 +467,10 @@ describe('useQuoteJobVersions', () => {
 
     await waitFor(() => {
       expect(result.current.data.job_id).toBe('job-1')
-      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+        'estimate-1',
+        'estimate-2',
+      ])
     })
 
     jobTwo.resolve(jobTwoPayload)
@@ -441,11 +480,16 @@ describe('useQuoteJobVersions', () => {
     })
 
     expect(result.current.data.job_id).toBe('job-1')
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1', 'estimate-2'])
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-1',
+      'estimate-2',
+    ])
   })
 
   it('initializes empty and does not fetch when disabled', async () => {
-    const { result } = renderHook(() => useQuoteJobVersions('job-1', { enabled: false }))
+    const { result } = renderHook(() =>
+      useQuoteJobVersions('job-1', { enabled: false }),
+    )
 
     expect(result.current.data.job_id).toBe('')
     expect(result.current.items).toEqual([])
@@ -477,12 +521,15 @@ describe('useQuoteJobVersions', () => {
             job_id: 'job-2',
             job_title: 'Garage',
           })),
-        }))
+        })),
       )
 
-    const { result, rerender } = renderHook(({ jobId }) => useQuoteJobVersions(jobId), {
-      initialProps: { jobId: 'job-1' },
-    })
+    const { result, rerender } = renderHook(
+      ({ jobId }) => useQuoteJobVersions(jobId),
+      {
+        initialProps: { jobId: 'job-1' },
+      },
+    )
 
     rerender({ jobId: 'job-2' })
 
@@ -499,7 +546,9 @@ describe('useQuoteJobVersions', () => {
     })
 
     expect(result.current.data.job_id).toBe('job-2')
-    expect(result.current.items.every((item) => item.job_id === 'job-2')).toBe(true)
+    expect(result.current.items.every((item) => item.job_id === 'job-2')).toBe(
+      true,
+    )
   })
 
   it('clears stale version items immediately when switching to a different uncached job', async () => {
@@ -513,9 +562,12 @@ describe('useQuoteJobVersions', () => {
         items: [],
       })
 
-    const { result, rerender } = renderHook(({ jobId }) => useQuoteJobVersions(jobId), {
-      initialProps: { jobId: 'job-1' },
-    })
+    const { result, rerender } = renderHook(
+      ({ jobId }) => useQuoteJobVersions(jobId),
+      {
+        initialProps: { jobId: 'job-1' },
+      },
+    )
 
     await waitFor(() => {
       expect(result.current.items).toHaveLength(2)
@@ -576,7 +628,7 @@ describe('useQuoteJobVersions', () => {
     const { result } = renderHook(() =>
       useQuoteJobVersions('job-1', {
         initialData: seededPayload,
-      })
+      }),
     )
 
     await waitFor(() => {
@@ -597,7 +649,9 @@ describe('useQuoteJobVersions', () => {
       total_versions: 1,
       items: [versionPayload.items[1]],
     }
-    const wrapper = ({ children }: { children: ReactNode }) => <StrictMode>{children}</StrictMode>
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StrictMode>{children}</StrictMode>
+    )
 
     const { result, rerender } = renderHook(
       ({ initialData }) =>
@@ -609,19 +663,23 @@ describe('useQuoteJobVersions', () => {
           initialData: firstSeed,
         },
         wrapper,
-      }
+      },
     )
 
     await waitFor(() => {
       expect(result.current.hasResolved).toBe(true)
-      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-1'])
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+        'estimate-1',
+      ])
     })
 
     rerender({ initialData: refreshedSeed })
 
     await waitFor(() => {
       expect(result.current.hasResolved).toBe(true)
-      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+        'estimate-2',
+      ])
     })
 
     expect(loadQuoteJobVersions).not.toHaveBeenCalled()
@@ -646,13 +704,15 @@ describe('useQuoteJobVersions', () => {
         initialProps: {
           initialData: null as typeof seededPayload | null,
         },
-      }
+      },
     )
 
     rerender({ initialData: seededPayload })
 
     await waitFor(() => {
-      expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
+      expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+        'estimate-2',
+      ])
     })
 
     stale.resolve(versionPayload)
@@ -661,7 +721,9 @@ describe('useQuoteJobVersions', () => {
       await Promise.resolve()
     })
 
-    expect(result.current.items.map((item) => item.estimate_id)).toEqual(['estimate-2'])
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-2',
+    ])
     expect(result.current.pageData.total_versions).toBe(1)
   })
 })
@@ -711,7 +773,7 @@ describe('job versions cache policy', () => {
         jobId: 'job-1',
         enabled: true,
         initialData: versionPayload,
-      })
+      }),
     ).toBe(versionPayload)
 
     expect(
@@ -719,7 +781,7 @@ describe('job versions cache policy', () => {
         jobId: 'job-1',
         enabled: true,
         initialData: jobTwoPayload,
-      })
+      }),
     ).toEqual({
       job_id: 'job-1',
       total_versions: 0,
@@ -733,7 +795,7 @@ describe('job versions cache policy', () => {
         jobId: 'job-1',
         enabled: false,
         initialData: versionPayload,
-      }).job_id
+      }).job_id,
     ).toBe('')
   })
 
@@ -745,6 +807,45 @@ describe('job versions cache policy', () => {
     expect(getCachedJobVersionsPage(cache, 'job-1')).toBe(versionPayload)
     expect(getCachedJobVersionsPage(cache, 'job-1', { force: true })).toBeNull()
     expect(getCachedJobVersionsPage(cache, 'job-2')).toBeNull()
+  })
+
+  it('reduces preserving and non-preserving refresh failures consistently', () => {
+    const initialState = createInitialJobVersionsState({
+      jobId: 'job-1',
+      enabled: true,
+      initialData: versionPayload,
+    })
+
+    const preservingFailure = reduceJobVersionsResourceState(initialState, {
+      type: 'fail',
+      jobId: 'job-1',
+      purpose: 'fresh',
+      error: 'refresh failed',
+      preserveDataOnError: true,
+      reportError: true,
+    })
+
+    expect(preservingFailure.pageData).toBe(versionPayload)
+    expect(preservingFailure.error).toBe('refresh failed')
+    expect(preservingFailure.loading).toBe(false)
+
+    const clearingFailure = reduceJobVersionsResourceState(initialState, {
+      type: 'fail',
+      jobId: 'job-1',
+      purpose: 'fresh',
+      error: 'refresh failed',
+      preserveDataOnError: false,
+      reportError: true,
+    })
+
+    expect(clearingFailure.pageData).toEqual({
+      job_id: 'job-1',
+      total_versions: 0,
+      limit: 25,
+      next_cursor: null,
+      items: [],
+    })
+    expect(clearingFailure.error).toBe('refresh failed')
   })
 })
 
@@ -769,10 +870,10 @@ describe('mergeJobVersionsPages', () => {
       ],
     }
 
-    expect(mergeJobVersionsPages(currentPage, nextPage).items.map((item) => item.estimate_id)).toEqual([
-      'estimate-1',
-      'estimate-2',
-      'estimate-3',
-    ])
+    expect(
+      mergeJobVersionsPages(currentPage, nextPage).items.map(
+        (item) => item.estimate_id,
+      ),
+    ).toEqual(['estimate-1', 'estimate-2', 'estimate-3'])
   })
 })

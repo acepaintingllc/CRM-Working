@@ -1,6 +1,10 @@
 'use client'
 
 import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
+import {
+  normalizeQuoteHomeJobQuery,
+  normalizeQuoteHomeSearchQuery,
+} from '@/lib/quotes/quoteHomeCursors'
 import type {
   ProductFamily,
   QuoteProductPayload,
@@ -14,10 +18,6 @@ import type {
   RatesFlagsEditableCategoryKey,
 } from '@/types/estimator/ratesFlags'
 
-export async function loadQuoteHomeSummary<T>() {
-  return loadData<T>('/api/quotes/home/summary', { cache: 'no-store' })
-}
-
 export async function loadQuoteHomeBootstrap<T>() {
   return loadData<T>('/api/quotes/home/bootstrap', { cache: 'no-store' })
 }
@@ -28,8 +28,9 @@ export async function loadQuoteHomeJobs<T>(options?: {
   cursor?: string | null
 }) {
   const params = new URLSearchParams()
-  if (options?.query?.trim()) {
-    params.set('q', options.query.trim())
+  const query = normalizeQuoteHomeJobQuery(options?.query)
+  if (query) {
+    params.set('q', query)
   }
   if (options?.limit) {
     params.set('limit', String(options.limit))
@@ -43,7 +44,10 @@ export async function loadQuoteHomeJobs<T>(options?: {
 }
 
 export async function loadQuoteHomeSearch<T>(query: string) {
-  return loadData<T>(`/api/quotes/home/search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
+  return loadData<T>(
+    `/api/quotes/home/search?q=${encodeURIComponent(normalizeQuoteHomeSearchQuery(query))}`,
+    { cache: 'no-store' }
+  )
 }
 
 export async function loadQuoteJobVersions<T>(
@@ -67,8 +71,13 @@ export async function loadQuoteJobVersions<T>(
   )
 }
 
-export async function loadQuoteList<T>() {
-  return loadData<T>('/api/quotes', { cache: 'no-store' })
+export async function loadQuoteCreateJobContext<T>(jobId: string) {
+  return loadData<T>(
+    `/api/quotes/home/jobs/${encodeURIComponent(jobId)}/create-context`,
+    {
+      cache: 'no-store',
+    }
+  )
 }
 
 export async function createQuoteVersion<T extends { id: string }>(input: CreateQuoteVersionInput) {
@@ -122,9 +131,11 @@ export async function updateQuoteProduct<T>(id: string, input: QuoteProductPaylo
   })
 }
 
-export async function deleteQuoteProduct(id: string) {
-  return requestApi<ApiMutationEnvelope<boolean>>(`/api/quotes/products/${id}`, {
-    method: 'DELETE',
+export async function archiveQuoteProduct<T>(id: string) {
+  return requestApi<ApiMutationEnvelope<T>>(`/api/quotes/products/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'Archived' }),
   })
 }
 

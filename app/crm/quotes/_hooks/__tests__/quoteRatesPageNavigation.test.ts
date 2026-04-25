@@ -1,18 +1,31 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyNavigationIntent,
+  buildQuoteRatesResourceSyncAction,
   buildQuoteRatesSelectionSnapshot,
+  buildQuoteRatesTransitionPlan,
+  getQuoteRatesIntentChanged,
   getFilteredRows,
   getNextSelectedId,
 } from '../quoteRatesPageNavigation'
 import {
   DEFAULT_QUOTE_RATES_NAVIGATION,
+  createInitialQuoteRatesWorkflowState,
   getDefaultRateCategory,
+  quoteRatesPageReducer,
   transitionNeedsDiscardReset,
   type QuoteRatesNavigationState,
 } from '../quoteRatesPageState'
-import { RATE_SUBGROUPS } from '../quoteRatesPageConfig'
+import {
+  FLAGS_SECTIONS,
+  RATE_SUBGROUPS,
+  ROOM_DEFAULTS_SECTIONS,
+} from '../quoteRatesPageConfig'
 import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
+import {
+  ratesFlagsEditableCategoryKeys,
+  ratesFlagsEditableCategoryRegistry,
+} from '@/types/estimator/ratesFlags'
 
 const payload: RatesFlagsPayload = {
   source: 'db',
@@ -88,6 +101,40 @@ const payload: RatesFlagsPayload = {
 }
 
 describe('quoteRatesPageNavigation invariants', () => {
+  it('places every editable category exactly once in the matching UI navigation group', () => {
+    const uiEntries = [
+      ...Object.entries(RATE_SUBGROUPS).flatMap(([group, items]) =>
+        items.map((item) => ({ ...item, group }))
+      ),
+      ...FLAGS_SECTIONS.map((item) => ({ ...item, group: item.key })),
+      ...ROOM_DEFAULTS_SECTIONS.map((item) => ({ ...item, group: item.key })),
+    ]
+    const uiKeys = uiEntries.map((entry) => entry.key)
+
+    expect([...uiKeys].sort()).toEqual([...ratesFlagsEditableCategoryKeys].sort())
+
+    for (const categoryKey of ratesFlagsEditableCategoryKeys) {
+      const entries = uiEntries.filter((entry) => entry.key === categoryKey)
+      const registration = ratesFlagsEditableCategoryRegistry.find(
+        (category) => category.key === categoryKey
+      )
+
+      expect(entries, categoryKey).toHaveLength(1)
+      expect(registration, categoryKey).toBeDefined()
+      if (!registration) throw new Error(`Missing registry entry for ${categoryKey}`)
+
+      expect(entries[0].group, categoryKey).toBe(registration.navigationGroup)
+      expect(entries[0].label, categoryKey).toBe(registration.navigationLabel)
+      if (registration.navigationGroup in RATE_SUBGROUPS) {
+        expect(registration.tab, categoryKey).toBe('rates')
+      } else if (FLAGS_SECTIONS.some((section) => section.key === registration.key)) {
+        expect(registration.tab, categoryKey).toBe('flags')
+      } else {
+        expect(registration.tab, categoryKey).toBe('room_defaults')
+      }
+    }
+  })
+
   it('keeps preferred selection only when it remains visible in the filtered slice', () => {
     const rows = getFilteredRows(payload.categories[0], {
       search: '',
@@ -157,4 +204,152 @@ describe('quoteRatesPageNavigation invariants', () => {
     )
   })
 
+  it('detects whether a navigation intent would change the current workflow state', () => {
+    const state = {
+      ...createInitialQuoteRatesWorkflowState(),
+      selectedId: 'wall-rate-1',
+    }
+
+    expect(getQuoteRatesIntentChanged(state, { type: 'setSearch', search: '' })).toBe(false)
+    expect(getQuoteRatesIntentChanged(state, { type: 'setSearch', search: 'tall' })).toBe(true)
+    expect(getQuoteRatesIntentChanged(state, { type: 'setSelectedId', selectedId: 'wall-rate-1' }))
+      .toBe(false)
+    expect(getQuoteRatesIntentChanged(state, { type: 'setSelectedId', selectedId: 'wall-rate-2' }))
+      .toBe(true)
+    expect(getQuoteRatesIntentChanged(state, { type: 'reload' })).toBe(true)
+  })
+
+  it('plans tab, filter, selection, reload, and activation intents without controller state', () => {
+    expect(
+      buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, {
+        type: 'setActiveTab',
+        activeTab: 'flags',
+      })
+    ).toMatchObject({
+      kind: 'navigation',
+      navigation: { activeTab: 'flags' },
+      preserveSelectedId: false,
+    })
+
+    expect(
+      buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, {
+        type: 'setSearch',
+        search: 'tall',
+      })
+    ).toMatchObject({
+      kind: 'navigation',
+      navigation: { search: 'tall' },
+      preserveSelectedId: true,
+    })
+
+    expect(
+      buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, {
+        type: 'setSelectedId',
+        selectedId: 'wall-rate-2',
+      })
+    ).toEqual({ kind: 'selection', selectedId: 'wall-rate-2' })
+    expect(buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, { type: 'reload' }))
+      .toEqual({ kind: 'reload', keepId: undefined })
+    expect(
+      buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, {
+        type: 'archiveOrReactivate',
+        nextActive: false,
+      })
+    ).toEqual({ kind: 'archiveOrReactivate', nextActive: false })
+  })
+
+  it('preserves a create draft during ordinary resource sync', () => {
+    const initialState = createInitialQuoteRatesWorkflowState()
+    const initialSync = buildQuoteRatesResourceSyncAction(initialState, payload)
+    expect(initialSync?.type).toBe('resourceReconciled')
+
+    const selectedState = quoteRatesPageReducer(initialState, initialSync!)
+    const createDraft = {
+      ...selectedState.draft!,
+      id: 'wall-rate-new',
+      display_name: 'Unsaved create',
+    } as NonNullable<typeof selectedState.draft>
+    const createState = quoteRatesPageReducer(selectedState, {
+      type: 'createStarted',
+      draft: createDraft,
+    })
+
+    const refreshedPayload: RatesFlagsPayload = {
+      ...payload,
+      template_version: 3,
+      categories: [
+        {
+          ...payload.categories[0],
+          rows: [
+            {
+              ...payload.categories[0].rows[0],
+              display_name: 'Server changed row',
+            },
+          ],
+        },
+        ...payload.categories.slice(1),
+      ],
+    }
+
+    const syncAction = buildQuoteRatesResourceSyncAction(createState, refreshedPayload)
+
+    expect(syncAction).toBeNull()
+    expect(createState.editorMode).toBe('create')
+    expect(createState.draft).toMatchObject({
+      id: 'wall-rate-new',
+      display_name: 'Unsaved create',
+    })
+  })
+
+  it('force rehydrates a create draft from refreshed resource data', () => {
+    const initialSync = buildQuoteRatesResourceSyncAction(
+      createInitialQuoteRatesWorkflowState(),
+      payload
+    )
+    const selectedState = quoteRatesPageReducer(createInitialQuoteRatesWorkflowState(), initialSync!)
+    const createDraft = {
+      ...selectedState.draft!,
+      id: 'wall-rate-new',
+      display_name: 'Unsaved create',
+    } as NonNullable<typeof selectedState.draft>
+    const createState = quoteRatesPageReducer(selectedState, {
+      type: 'createStarted',
+      draft: createDraft,
+    })
+    const refreshState = quoteRatesPageReducer(createState, {
+      type: 'refreshRehydrateChanged',
+      selectedId: 'wall-rate-1',
+      force: true,
+    })
+    const refreshedPayload: RatesFlagsPayload = {
+      ...payload,
+      template_version: 4,
+      categories: [
+        {
+          ...payload.categories[0],
+          rows: [
+            {
+              ...payload.categories[0].rows[0],
+              display_name: 'Force refreshed row',
+            },
+          ],
+        },
+        ...payload.categories.slice(1),
+      ],
+    }
+
+    const syncAction = buildQuoteRatesResourceSyncAction(refreshState, refreshedPayload)
+
+    expect(syncAction).toMatchObject({
+      type: 'resourceReconciled',
+      preserveCreateDraft: false,
+    })
+
+    const syncedState = quoteRatesPageReducer(refreshState, syncAction!)
+    expect(syncedState.editorMode).toBe('selection')
+    expect(syncedState.selectedId).toBe('wall-rate-1')
+    expect(syncedState.draft).toMatchObject({
+      display_name: 'Force refreshed row',
+    })
+  })
 })

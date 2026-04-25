@@ -1,11 +1,17 @@
-import type {
-  RatesFlagsActivationMutationRequest,
-  RatesFlagsCategoryValueMap,
-  RatesFlagsCreateOrUpdateMutationRequest,
-  RatesFlagsEditableCategoryKey,
-  RatesFlagsMutationRequest,
-  RatesFlagsMutationValues,
-} from '../../../types/estimator/ratesFlags'
+import {
+  ratesFlagsEditableCategoryKeys,
+  type RatesFlagsActivationMutationRequest,
+  type RatesFlagsCreateOrUpdateMutationRequest,
+  type RatesFlagsEditableCategoryKey,
+  type RatesFlagsMutationRequest,
+  type RatesFlagsMutationValues,
+} from '../../../types/estimator/ratesFlags.ts'
+import { CATEGORY_CONFIGS_BY_KEY } from './categories.ts'
+import {
+  getRatesFlagsMutationFieldSpecs,
+  validateRatesFlagsCategoryValues,
+  type RatesFlagsMutationFieldSpec,
+} from './mutationSchema.ts'
 import { asText, normalizeId } from './shared.ts'
 
 type ParseResult<T> =
@@ -20,43 +26,8 @@ type ParseResult<T> =
 
 type RawObject = Record<string, unknown>
 
-type MutationFieldSpec =
-  | {
-      key: string
-      label: string
-      kind: 'text'
-      required?: boolean
-      defaultValue?: string
-    }
-  | {
-      key: string
-      label: string
-      kind: 'number'
-      required?: boolean
-      defaultValue?: string
-    }
-  | {
-      key: string
-      label: string
-      kind: 'select'
-      options: readonly string[]
-      required?: boolean
-      defaultValue?: string
-    }
-  | {
-      key: string
-      label: string
-      kind: 'yn'
-      defaultValue?: 'Y' | 'N'
-    }
-  | {
-      key: string
-      label: string
-      kind: 'literal'
-      value: string
-    }
-
 type MutationParserEntry<TKey extends RatesFlagsEditableCategoryKey> = {
+  specs: readonly RatesFlagsMutationFieldSpec[]
   parseValues: (input: unknown) => ParseResult<RatesFlagsMutationValues<TKey>>
 }
 
@@ -82,7 +53,10 @@ function parseNumberString(value: string) {
   return Number.isFinite(parsed)
 }
 
-function parseFieldValue(spec: MutationFieldSpec, raw: unknown): ParseResult<string> {
+function parseFieldValue(
+  spec: RatesFlagsMutationFieldSpec,
+  raw: unknown
+): ParseResult<string> {
   if (spec.kind === 'literal') {
     const value = raw === undefined ? spec.value : asText(raw)
     if (value !== spec.value) {
@@ -134,10 +108,10 @@ function parseFieldValue(spec: MutationFieldSpec, raw: unknown): ParseResult<str
 function parseValueObject(
   input: unknown,
   categoryLabel: string,
-  specs: readonly MutationFieldSpec[]
+  specs: readonly RatesFlagsMutationFieldSpec[]
 ): ParseResult<Record<string, string>> {
-  // The route parser mirrors each category contract exactly so invalid fields
-  // are rejected at the boundary instead of leaking as loose value bags.
+  // The route parser is generated from CATEGORY_CONFIGS.fields so unsupported
+  // value fields cannot drift away from the UI/editor category contract.
   if (!isPlainObject(input)) {
     return { ok: false, error: 'Mutation values must be an object.' }
   }
@@ -163,445 +137,46 @@ function parseValueObject(
 }
 
 function createParser<TKey extends RatesFlagsEditableCategoryKey>(
-  categoryLabel: string,
-  specs: readonly MutationFieldSpec[],
-  build: (values: Record<string, string>) => RatesFlagsCategoryValueMap[TKey]
+  categoryKey: TKey
 ): MutationParserEntry<TKey> {
+  const specs = getRatesFlagsMutationFieldSpecs(categoryKey)
+  const categoryLabel = CATEGORY_CONFIGS_BY_KEY[categoryKey].label
+
   return {
+    specs,
     parseValues(input) {
       const parsed = parseValueObject(input, categoryLabel, specs)
       if (!parsed.ok) return parsed
-      return { ok: true, value: build(parsed.value) }
+      const categoryIssue = validateRatesFlagsCategoryValues({
+        categoryKey,
+        specs,
+        values: parsed.value,
+      })
+      if (categoryIssue) {
+        return { ok: false, error: categoryIssue.error }
+      }
+      return {
+        ok: true,
+        value: parsed.value as RatesFlagsMutationValues<TKey>,
+      }
     },
   }
 }
 
-function createProductionRateParser<TKey extends 'production_rates_walls' | 'production_rates_ceilings' | 'production_rates_trim'>(
-  category: TKey,
-  productionScope: RatesFlagsCategoryValueMap[TKey]['production_scope'],
-  scopeIdDefault: string
-) {
-  return createParser<TKey>(
-    category,
-    [
-      { key: 'production_scope', label: 'Production Scope', kind: 'literal', value: productionScope },
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'scope_id', label: 'Scope', kind: 'text', required: true, defaultValue: scopeIdDefault },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'surface_type', label: 'Surface Type', kind: 'text' },
-      { key: 'condition', label: 'Condition', kind: 'text' },
-      { key: 'prep_sqft_per_hr', label: 'Prep Rate', kind: 'number' },
-      { key: 'sqft_per_hr', label: 'Paint Rate', kind: 'number', required: true },
-      { key: 'primer_sqft_per_hr', label: 'Primer Rate', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      production_scope: productionScope,
-      id: values.id,
-      scope_id: values.scope_id,
-      display_name: values.display_name,
-      surface_type: values.surface_type,
-      condition: values.condition,
-      prep_sqft_per_hr: values.prep_sqft_per_hr,
-      sqft_per_hr: values.sqft_per_hr,
-      primer_sqft_per_hr: values.primer_sqft_per_hr,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    } as RatesFlagsCategoryValueMap[TKey])
-  )
-}
-
-function createAccessFeeParser<TKey extends 'access_fees_ladders' | 'access_fees_scaffolding' | 'access_fees_specialty'>(
-  category: TKey,
-  accessGroup: RatesFlagsCategoryValueMap[TKey]['access_group']
-) {
-  return createParser<TKey>(
-    category,
-    [
-      { key: 'access_group', label: 'Access Group', kind: 'literal', value: accessGroup },
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      {
-        key: 'fee_type',
-        label: 'Fee Type',
-        kind: 'select',
-        options: ['Labor', 'PassThrough', 'Specialty', 'Other'],
-      },
-      { key: 'amount', label: 'Amount', kind: 'number', required: true },
-      { key: 'unit', label: 'Unit', kind: 'text' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      access_group: accessGroup,
-      id: values.id,
-      display_name: values.display_name,
-      fee_type: values.fee_type,
-      amount: values.amount,
-      unit: values.unit,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    } as RatesFlagsCategoryValueMap[TKey])
-  )
-}
-
-function createSupplyRateParser<TKey extends 'supply_rates_per_color' | 'supply_rates_area_based' | 'supply_rates_per_job'>(
-  category: TKey,
-  supplyGroup: RatesFlagsCategoryValueMap[TKey]['supply_group'],
-  unitSpec: MutationFieldSpec
-) {
-  return createParser<TKey>(
-    category,
-    [
-      { key: 'supply_group', label: 'Supply Group', kind: 'literal', value: supplyGroup },
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'scope', label: 'Scope', kind: 'text' },
-      unitSpec,
-      { key: 'cost_per', label: 'Cost', kind: 'number', required: true },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      supply_group: supplyGroup,
-      id: values.id,
-      display_name: values.display_name,
-      scope: values.scope,
-      unit: values.unit,
-      cost_per: values.cost_per,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    } as RatesFlagsCategoryValueMap[TKey])
-  )
-}
-
-const MUTATION_PARSERS: {
+const MUTATION_PARSERS = Object.fromEntries(
+  ratesFlagsEditableCategoryKeys.map((key) => [key, createParser(key)] as const)
+) as {
   [TCategory in RatesFlagsEditableCategoryKey]: MutationParserEntry<TCategory>
-} = {
-  production_rates_walls: createProductionRateParser('production_rates_walls', 'walls', 'WALLS'),
-  production_rates_ceilings: createProductionRateParser(
-    'production_rates_ceilings',
-    'ceilings',
-    'CEILINGS'
-  ),
-  production_rates_trim: createProductionRateParser('production_rates_trim', 'trim', 'TRIM'),
-  unit_rates_doors: createParser(
-    'unit_rates_doors',
-    [
-      { key: 'unit_rate_group', label: 'Unit Group', kind: 'literal', value: 'doors' },
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'unit_rate_type', label: 'Type', kind: 'text' },
-      { key: 'unit', label: 'Unit', kind: 'text' },
-      { key: 'default_qty', label: 'Default Qty', kind: 'number' },
-      { key: 'labor_rate', label: 'Labor', kind: 'number' },
-      { key: 'material_rate', label: 'Material', kind: 'number' },
-      { key: 'amount', label: 'Amount', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      unit_rate_group: 'doors',
-      id: values.id,
-      display_name: values.display_name,
-      unit_rate_type: values.unit_rate_type,
-      unit: values.unit,
-      default_qty: values.default_qty,
-      labor_rate: values.labor_rate,
-      material_rate: values.material_rate,
-      amount: values.amount,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  unit_rates_trim: createParser(
-    'unit_rates_trim',
-    [
-      { key: 'unit_rate_group', label: 'Unit Group', kind: 'literal', value: 'trim' },
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'unit_rate_type', label: 'Type', kind: 'text' },
-      { key: 'unit', label: 'Unit', kind: 'text' },
-      { key: 'helper_allowed', label: 'Helper Allowed', kind: 'yn', defaultValue: 'N' },
-      { key: 'default_production_rate_id', label: 'Default Production Rate ID', kind: 'text' },
-      { key: 'default_qty', label: 'Default Qty', kind: 'number' },
-      { key: 'labor_rate', label: 'Labor', kind: 'number' },
-      { key: 'material_rate', label: 'Material', kind: 'number' },
-      { key: 'amount', label: 'Amount', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      unit_rate_group: 'trim',
-      id: values.id,
-      display_name: values.display_name,
-      unit_rate_type: values.unit_rate_type,
-      unit: values.unit,
-      helper_allowed: values.helper_allowed as 'Y' | 'N',
-      default_production_rate_id: values.default_production_rate_id,
-      default_qty: values.default_qty,
-      labor_rate: values.labor_rate,
-      material_rate: values.material_rate,
-      amount: values.amount,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  unit_rates_drywall: createParser(
-    'unit_rates_drywall',
-    [
-      { key: 'unit_rate_group', label: 'Unit Group', kind: 'literal', value: 'drywall' },
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'unit_rate_type', label: 'Type', kind: 'text' },
-      { key: 'unit', label: 'Unit', kind: 'text' },
-      { key: 'default_qty', label: 'Default Qty', kind: 'number' },
-      { key: 'labor_rate', label: 'Labor', kind: 'number' },
-      { key: 'material_rate', label: 'Material', kind: 'number' },
-      { key: 'amount', label: 'Amount', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      unit_rate_group: 'drywall',
-      id: values.id,
-      display_name: values.display_name,
-      unit_rate_type: values.unit_rate_type,
-      unit: values.unit,
-      default_qty: values.default_qty,
-      labor_rate: values.labor_rate,
-      material_rate: values.material_rate,
-      amount: values.amount,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  access_fees_ladders: createAccessFeeParser('access_fees_ladders', 'ladders'),
-  access_fees_scaffolding: createAccessFeeParser('access_fees_scaffolding', 'scaffolding'),
-  access_fees_specialty: createAccessFeeParser('access_fees_specialty', 'specialty'),
-  supply_rates_per_color: createSupplyRateParser('supply_rates_per_color', 'per_color', {
-    key: 'unit',
-    label: 'Unit',
-    kind: 'text',
-  }),
-  supply_rates_area_based: createSupplyRateParser('supply_rates_area_based', 'area_based', {
-    key: 'unit',
-    label: 'Unit',
-    kind: 'literal',
-    value: '$/sqft',
-  }),
-  supply_rates_per_job: createSupplyRateParser('supply_rates_per_job', 'per_job', {
-    key: 'unit',
-    label: 'Unit',
-    kind: 'text',
-  }),
-  supply_rates_roller_covers: createParser(
-    'supply_rates_roller_covers',
-    [
-      { key: 'supply_group', label: 'Supply Group', kind: 'literal', value: 'roller_covers' },
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'scope', label: 'Scope', kind: 'select', options: ['Wall', 'Ceiling', 'Other'] },
-      { key: 'size_in', label: 'Size (in)', kind: 'number' },
-      { key: 'price_each', label: 'Price Each', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      supply_group: 'roller_covers',
-      id: values.id,
-      display_name: values.display_name,
-      scope: values.scope,
-      size_in: values.size_in,
-      price_each: values.price_each,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  wall_complexity: createParser(
-    'wall_complexity',
-    [
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'primary_value', label: 'Labor Multiplier', kind: 'number', required: true },
-      { key: 'secondary_value', label: 'Access Fee', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      id: values.id,
-      display_name: values.display_name,
-      primary_value: values.primary_value,
-      secondary_value: values.secondary_value,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  height_factors: createParser(
-    'height_factors',
-    [
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'min_height_ft', label: 'Min Height', kind: 'number' },
-      { key: 'max_height_ft', label: 'Max Height', kind: 'number' },
-      { key: 'primary_value', label: 'Labor Multiplier', kind: 'number', required: true },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      id: values.id,
-      display_name: values.display_name,
-      min_height_ft: values.min_height_ft,
-      max_height_ft: values.max_height_ft,
-      primary_value: values.primary_value,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  ceiling_types: createParser(
-    'ceiling_types',
-    [
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'primary_value', label: 'Labor Multiplier', kind: 'number', required: true },
-      { key: 'secondary_value', label: 'Surcharge / sqft', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      id: values.id,
-      display_name: values.display_name,
-      primary_value: values.primary_value,
-      secondary_value: values.secondary_value,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  condition_modifiers: createParser(
-    'condition_modifiers',
-    [
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'wall_factor', label: 'Wall Factor', kind: 'number' },
-      { key: 'ceil_factor', label: 'Ceiling Factor', kind: 'number' },
-      { key: 'trim_factor', label: 'Trim Factor', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      id: values.id,
-      display_name: values.display_name,
-      wall_factor: values.wall_factor,
-      ceil_factor: values.ceil_factor,
-      trim_factor: values.trim_factor,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  room_types: createParser(
-    'room_types',
-    [
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'default_wall_rate_id', label: 'Default Wall Rate ID', kind: 'text' },
-      { key: 'default_ceil_rate_id', label: 'Default Ceiling Rate ID', kind: 'text' },
-      { key: 'default_complexity_id', label: 'Default Complexity ID', kind: 'text' },
-      { key: 'default_wall_mode', label: 'Default Wall Mode', kind: 'select', options: ['RECT', 'SEG'] },
-      { key: 'top_cut_in_factor', label: 'Top Cut-In Factor', kind: 'number' },
-      { key: 'bot_cut_in_factor', label: 'Bottom Cut-In Factor', kind: 'number' },
-      { key: 'typical_height_ft', label: 'Typical Height', kind: 'number' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      id: values.id,
-      display_name: values.display_name,
-      default_wall_rate_id: values.default_wall_rate_id,
-      default_ceil_rate_id: values.default_ceil_rate_id,
-      default_complexity_id: values.default_complexity_id,
-      default_wall_mode: values.default_wall_mode,
-      top_cut_in_factor: values.top_cut_in_factor,
-      bot_cut_in_factor: values.bot_cut_in_factor,
-      typical_height_ft: values.typical_height_ft,
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  room_templates: createParser(
-    'room_templates',
-    [
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'room_type_id', label: 'Room Type ID', kind: 'text' },
-      { key: 'default_wall_rate_id', label: 'Default Wall Rate ID', kind: 'text' },
-      { key: 'default_ceil_rate_id', label: 'Default Ceiling Rate ID', kind: 'text' },
-      { key: 'default_complexity_id', label: 'Default Complexity ID', kind: 'text' },
-      { key: 'default_wall_mode', label: 'Default Wall Mode', kind: 'select', options: ['RECT', 'SEG'] },
-      { key: 'include_walls', label: 'Include Walls', kind: 'yn', defaultValue: 'Y' },
-      { key: 'include_ceilings', label: 'Include Ceilings', kind: 'yn', defaultValue: 'N' },
-      { key: 'include_trim', label: 'Include Trim', kind: 'yn', defaultValue: 'N' },
-      { key: 'include_doors', label: 'Include Doors', kind: 'yn', defaultValue: 'N' },
-      { key: 'include_drywall', label: 'Include Drywall', kind: 'yn', defaultValue: 'N' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      id: values.id,
-      display_name: values.display_name,
-      room_type_id: values.room_type_id,
-      default_wall_rate_id: values.default_wall_rate_id,
-      default_ceil_rate_id: values.default_ceil_rate_id,
-      default_complexity_id: values.default_complexity_id,
-      default_wall_mode: values.default_wall_mode,
-      include_walls: values.include_walls as 'Y' | 'N',
-      include_ceilings: values.include_ceilings as 'Y' | 'N',
-      include_trim: values.include_trim as 'Y' | 'N',
-      include_doors: values.include_doors as 'Y' | 'N',
-      include_drywall: values.include_drywall as 'Y' | 'N',
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
-  scope_defaults: createParser(
-    'scope_defaults',
-    [
-      { key: 'id', label: 'ID', kind: 'text', required: true },
-      { key: 'display_name', label: 'Display Name', kind: 'text', required: true },
-      { key: 'default_wall_mode', label: 'Default Wall Mode', kind: 'select', options: ['RECT', 'SEG'] },
-      { key: 'top_cut_in_factor', label: 'Top Cut-In Factor', kind: 'number' },
-      { key: 'bot_cut_in_factor', label: 'Bottom Cut-In Factor', kind: 'number' },
-      { key: 'typical_height_ft', label: 'Typical Height', kind: 'number' },
-      { key: 'include_walls', label: 'Include Walls', kind: 'yn', defaultValue: 'Y' },
-      { key: 'include_ceilings', label: 'Include Ceilings', kind: 'yn', defaultValue: 'N' },
-      { key: 'include_trim', label: 'Include Trim', kind: 'yn', defaultValue: 'N' },
-      { key: 'include_doors', label: 'Include Doors', kind: 'yn', defaultValue: 'N' },
-      { key: 'include_drywall', label: 'Include Drywall', kind: 'yn', defaultValue: 'N' },
-      { key: 'notes', label: 'Notes', kind: 'text' },
-      { key: 'active', label: 'Active', kind: 'yn', defaultValue: 'Y' },
-    ],
-    (values) => ({
-      id: values.id,
-      display_name: values.display_name,
-      default_wall_mode: values.default_wall_mode,
-      top_cut_in_factor: values.top_cut_in_factor,
-      bot_cut_in_factor: values.bot_cut_in_factor,
-      typical_height_ft: values.typical_height_ft,
-      include_walls: values.include_walls as 'Y' | 'N',
-      include_ceilings: values.include_ceilings as 'Y' | 'N',
-      include_trim: values.include_trim as 'Y' | 'N',
-      include_doors: values.include_doors as 'Y' | 'N',
-      include_drywall: values.include_drywall as 'Y' | 'N',
-      notes: values.notes,
-      active: values.active as 'Y' | 'N',
-    })
-  ),
 }
+
+const mutationParserCategoryKeys = new Set<RatesFlagsEditableCategoryKey>(
+  ratesFlagsEditableCategoryKeys
+)
 
 function parseCategory(input: RawObject): ParseResult<RatesFlagsEditableCategoryKey> {
   const category = asText(input.category) as RatesFlagsEditableCategoryKey
   if (!category) return { ok: false, error: 'Body must include category and action.' }
-  if (!(category in MUTATION_PARSERS)) {
+  if (!mutationParserCategoryKeys.has(category)) {
     return { ok: false, error: 'Unknown category.' }
   }
   return { ok: true, value: category }
@@ -713,4 +288,22 @@ export function parseRatesFlagsMutationRequest(input: unknown): ParseResult<Rate
   }
 
   return parseCreateOrUpdateRequest(category.value, action.value, input)
+}
+
+export function getRatesFlagsMutationParserCategoryKeys() {
+  return ratesFlagsEditableCategoryKeys
+}
+
+export function getRatesFlagsMutationParserFieldKeys(
+  categoryKey: RatesFlagsEditableCategoryKey
+) {
+  return MUTATION_PARSERS[categoryKey].specs.map((spec) => spec.key)
+}
+
+export function getRatesFlagsMutationParserRequiredFieldKeys(
+  categoryKey: RatesFlagsEditableCategoryKey
+) {
+  return MUTATION_PARSERS[categoryKey].specs
+    .filter((spec) => spec.kind !== 'yn' && spec.kind !== 'literal' && spec.required)
+    .map((spec) => spec.key)
 }

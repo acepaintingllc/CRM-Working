@@ -5,20 +5,20 @@ import type { QuoteProductQuery, QuoteProductRow } from '@/lib/quotes/productsFo
 import { useQuoteProductsPage } from '../useQuoteProductsPage'
 
 const {
+  archiveQuoteProduct,
   createQuoteProduct,
-  deleteQuoteProduct,
   loadQuoteProducts,
   updateQuoteProduct,
 } = vi.hoisted(() => ({
+  archiveQuoteProduct: vi.fn(),
   createQuoteProduct: vi.fn(),
-  deleteQuoteProduct: vi.fn(),
   loadQuoteProducts: vi.fn(),
   updateQuoteProduct: vi.fn(),
 }))
 
 vi.mock('@/lib/quotes/client', () => ({
+  archiveQuoteProduct,
   createQuoteProduct,
-  deleteQuoteProduct,
   loadQuoteProducts,
   updateQuoteProduct,
 }))
@@ -56,8 +56,8 @@ function matchesQuery(product: QuoteProductRow, query: QuoteProductQuery) {
 
 describe('useQuoteProductsPage', () => {
   beforeEach(() => {
+    archiveQuoteProduct.mockReset()
     createQuoteProduct.mockReset()
-    deleteQuoteProduct.mockReset()
     loadQuoteProducts.mockReset()
     updateQuoteProduct.mockReset()
   })
@@ -79,7 +79,7 @@ describe('useQuoteProductsPage', () => {
     expect(result.current.uiState.loadError).toBeNull()
   })
 
-  it('loads query-driven product slices, creates, saves, and deletes product rows', async () => {
+  it('loads query-driven product slices, creates, saves, and archives product rows', async () => {
     const products = [
       buildProduct({ id: 'paint-1', name: 'Super Paint' }),
       buildProduct({
@@ -132,7 +132,9 @@ describe('useQuoteProductsPage', () => {
       }),
       notice: 'Product created.',
     })
-    deleteQuoteProduct.mockResolvedValue({ data: true })
+    archiveQuoteProduct.mockResolvedValue({
+      data: buildProduct({ id: 'paint-1', name: 'Super Paint Pro', status: 'Archived' }),
+    })
 
     const { result } = renderHook(() => useQuoteProductsPage())
 
@@ -233,9 +235,14 @@ describe('useQuoteProductsPage', () => {
       await result.current.actions.confirmDelete()
     })
 
-    expect(deleteQuoteProduct).toHaveBeenCalledWith('paint-1')
-    expect(result.current.resource.data.map((product) => product.id)).toEqual(['paint-3', 'paint-2'])
-    expect(result.current.uiState.notice).toBe('Product deleted.')
+    expect(archiveQuoteProduct).toHaveBeenCalledWith('paint-1')
+    expect(result.current.resource.data.map((product) => product.id)).toEqual([
+      'paint-3',
+      'paint-1',
+      'paint-2',
+    ])
+    expect(result.current.editorVm.draft.status).toBe('Archived')
+    expect(result.current.uiState.notice).toBe('Product archived.')
     expect(result.current.deleteVm.isOpen).toBe(false)
   })
 
@@ -405,11 +412,13 @@ describe('useQuoteProductsPage', () => {
     expect(result.current.catalogVm.selected?.id).toBe('paint-1')
   })
 
-  it('keeps selection coherent when query-driven rows disappear after delete', async () => {
+  it('keeps selection coherent when query-driven rows disappear after archive', async () => {
     loadQuoteProducts.mockResolvedValue([
       buildProduct({ id: 'paint-2', name: 'Dormant Paint', status: 'Inactive' }),
     ])
-    deleteQuoteProduct.mockResolvedValue({ data: true })
+    archiveQuoteProduct.mockResolvedValue({
+      data: buildProduct({ id: 'paint-2', name: 'Dormant Paint', status: 'Archived' }),
+    })
 
     const { result } = renderHook(() => useQuoteProductsPage())
 
@@ -435,15 +444,21 @@ describe('useQuoteProductsPage', () => {
 
     expect(result.current.catalogVm.products).toEqual([])
     expect(result.current.catalogVm.selected).toBeNull()
-    expect(result.current.catalogVm.selectedId).toBeNull()
+    expect(result.current.catalogVm.selectedId).toBe('paint-2')
+    expect(result.current.editorVm.selectionVisibility).toBe('hidden')
   })
 
-  it('falls back to the next visible row after deleting the explicit selection', async () => {
-    loadQuoteProducts.mockResolvedValue([
+  it('keeps the archived row selected when the current filter hides it', async () => {
+    const products = [
       buildProduct({ id: 'paint-1', name: 'Super Paint' }),
       buildProduct({ id: 'paint-2', name: 'Dormant Paint', status: 'Inactive' }),
-    ])
-    deleteQuoteProduct.mockResolvedValue({ data: true })
+    ]
+    loadQuoteProducts.mockImplementation(async (query: QuoteProductQuery) =>
+      products.filter((product) => matchesQuery(product, query))
+    )
+    archiveQuoteProduct.mockResolvedValue({
+      data: buildProduct({ id: 'paint-2', name: 'Dormant Paint', status: 'Archived' }),
+    })
 
     const { result } = renderHook(() => useQuoteProductsPage())
 
@@ -452,11 +467,12 @@ describe('useQuoteProductsPage', () => {
     })
 
     act(() => {
+      result.current.actions.setStatusFilter('inactive')
       result.current.actions.setSelectedId('paint-2')
     })
 
     await waitFor(() => {
-      expect(result.current.editorVm.selected?.id).toBe('paint-2')
+      expect(result.current.catalogVm.products.map((product) => product.id)).toEqual(['paint-2'])
     })
 
     act(() => {
@@ -467,14 +483,69 @@ describe('useQuoteProductsPage', () => {
       await result.current.actions.confirmDelete()
     })
 
-    await waitFor(() => {
-      expect(result.current.catalogVm.selectedId).toBe('paint-1')
+    expect(result.current.catalogVm.products).toEqual([])
+    expect(result.current.catalogVm.selectedId).toBe('paint-2')
+    expect(result.current.catalogVm.selected).toBeNull()
+    expect(result.current.editorVm.selected?.id).toBe('paint-2')
+    expect(result.current.editorVm.draft.status).toBe('Archived')
+    expect(result.current.editorVm.selectionVisibility).toBe('hidden')
+  })
+
+  it('keeps edited and archived rows coherent after explicit refreshes', async () => {
+    let serverProducts = [buildProduct({ id: 'paint-1', name: 'Super Paint' })]
+    loadQuoteProducts.mockImplementation(async (query: QuoteProductQuery) =>
+      serverProducts.filter((product) => matchesQuery(product, query))
+    )
+    updateQuoteProduct.mockImplementation(async () => {
+      const updated = buildProduct({ id: 'paint-1', name: 'Super Paint Pro' })
+      serverProducts = [updated]
+      return {
+        data: updated,
+        notice: 'Product saved.',
+      }
+    })
+    archiveQuoteProduct.mockImplementation(async () => {
+      const archived = buildProduct({
+        id: 'paint-1',
+        name: 'Super Paint Pro',
+        status: 'Archived',
+      })
+      serverProducts = [archived]
+      return { data: archived }
     })
 
-    expect(result.current.catalogVm.products.map((product) => product.id)).toEqual(['paint-1'])
-    expect(result.current.catalogVm.selected?.id).toBe('paint-1')
-    expect(result.current.editorVm.selected?.id).toBe('paint-1')
-    expect(result.current.editorVm.draft.name).toBe('Super Paint')
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftField('name', 'Super Paint Pro')
+    })
+
+    await act(async () => {
+      await result.current.actions.save()
+      await result.current.resource.refresh()
+    })
+
+    expect(result.current.catalogVm.selectedId).toBe('paint-1')
+    expect(result.current.editorVm.selected?.name).toBe('Super Paint Pro')
+    expect(result.current.editorVm.draft.name).toBe('Super Paint Pro')
+
+    act(() => {
+      result.current.actions.requestDelete()
+    })
+
+    await act(async () => {
+      await result.current.actions.confirmDelete()
+      await result.current.resource.refresh()
+    })
+
+    expect(result.current.catalogVm.selectedId).toBe('paint-1')
+    expect(result.current.editorVm.selected?.status).toBe('Archived')
+    expect(result.current.editorVm.draft.status).toBe('Archived')
+    expect(result.current.uiState.notice).toBe('Product archived.')
   })
 
   it('keeps the explicit selection stable when a save moves the row out of the filtered slice', async () => {
@@ -513,7 +584,7 @@ describe('useQuoteProductsPage', () => {
     expect(result.current.catalogVm.selectedId).toBe('paint-2')
     expect(result.current.editorVm.selected?.id).toBe('paint-2')
     expect(result.current.editorVm.draft.status).toBe('Archived')
-    expect(result.current.editorVm.canDelete).toBe(true)
+    expect(result.current.editorVm.canDelete).toBe(false)
     expect(result.current.resource.data.find((product) => product.id === 'paint-2')).toBeUndefined()
   })
 
@@ -664,9 +735,11 @@ describe('useQuoteProductsPage', () => {
     expect(result.current.editorVm.draft.family).toBe('Paint')
   })
 
-  it('opens, cancels, and confirms delete with modal state instead of window.confirm', async () => {
+  it('opens, cancels, and confirms archive with modal state instead of window.confirm', async () => {
     loadQuoteProducts.mockResolvedValue([buildProduct({ id: 'paint-1' })])
-    deleteQuoteProduct.mockResolvedValue({ data: true })
+    archiveQuoteProduct.mockResolvedValue({
+      data: buildProduct({ id: 'paint-1', status: 'Archived' }),
+    })
 
     const { result } = renderHook(() => useQuoteProductsPage())
 
@@ -689,7 +762,7 @@ describe('useQuoteProductsPage', () => {
     })
 
     expect(result.current.deleteVm.isOpen).toBe(false)
-    expect(deleteQuoteProduct).not.toHaveBeenCalled()
+    expect(archiveQuoteProduct).not.toHaveBeenCalled()
 
     act(() => {
       result.current.actions.requestDelete()
@@ -699,9 +772,10 @@ describe('useQuoteProductsPage', () => {
       await result.current.actions.confirmDelete()
     })
 
-    expect(deleteQuoteProduct).toHaveBeenCalledWith('paint-1')
+    expect(archiveQuoteProduct).toHaveBeenCalledWith('paint-1')
     expect(result.current.deleteVm.isOpen).toBe(false)
-    expect(result.current.catalogVm.selectedId).toBeNull()
+    expect(result.current.catalogVm.selectedId).toBe('paint-1')
+    expect(result.current.editorVm.draft.status).toBe('Archived')
   })
 
   it('applies a queued product transition only once', async () => {

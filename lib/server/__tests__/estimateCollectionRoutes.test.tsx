@@ -7,9 +7,8 @@ const mocks = vi.hoisted(() => ({
   loadEstimateCollectionJobVersionsPayload: vi.fn(),
   loadEstimateCollectionJobsPayload: vi.fn(),
   loadEstimateCollectionPayload: vi.fn(),
-  loadEstimateCollectionRecentActivityPayload: vi.fn(),
+  loadEstimateCollectionQuoteCreateContextPayload: vi.fn(),
   loadEstimateCollectionSearchPayload: vi.fn(),
-  loadEstimateCollectionSummaryPayload: vi.fn(),
   createEstimateCollectionVersion: vi.fn(),
 }))
 
@@ -37,9 +36,8 @@ vi.mock('@/lib/server/estimate-collection/service', () => ({
   loadEstimateCollectionJobVersionsPayload: mocks.loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionJobsPayload: mocks.loadEstimateCollectionJobsPayload,
   loadEstimateCollectionPayload: mocks.loadEstimateCollectionPayload,
-  loadEstimateCollectionRecentActivityPayload: mocks.loadEstimateCollectionRecentActivityPayload,
+  loadEstimateCollectionQuoteCreateContextPayload: mocks.loadEstimateCollectionQuoteCreateContextPayload,
   loadEstimateCollectionSearchPayload: mocks.loadEstimateCollectionSearchPayload,
-  loadEstimateCollectionSummaryPayload: mocks.loadEstimateCollectionSummaryPayload,
   createEstimateCollectionVersion: mocks.createEstimateCollectionVersion,
 }))
 
@@ -47,12 +45,10 @@ import {
   estimateCollectionCopy,
   handleEstimateCollectionRoutePost,
   handleEstimateHomeBootstrapRouteGet,
-  handleEstimateHomeJobCountsRouteGet,
   handleEstimateHomeJobsRouteGet,
-  handleEstimateHomeRecentActivityRouteGet,
   handleEstimateHomeSearchRouteGet,
-  handleEstimateHomeSummaryRouteGet,
   handleEstimateJobVersionsRouteGet,
+  handleEstimateQuoteCreateContextRouteGet,
 } from '../estimateCollectionRoutes'
 
 describe('estimate collection routes', () => {
@@ -67,13 +63,24 @@ describe('estimate collection routes', () => {
       value: { job_id: '11111111-1111-4111-8111-111111111111' },
     })
     mocks.loadEstimateCollectionBootstrapPayload.mockResolvedValue({ ok: true, data: { jobs: { items: [] } } })
-    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValue({ ok: true, data: { total_versions: 2 } })
-    mocks.loadEstimateCollectionRecentActivityPayload.mockResolvedValue({ ok: true, data: { items: [] } })
     mocks.loadEstimateCollectionJobsPayload.mockResolvedValue({ ok: true, data: { query: '', items: [] } })
     mocks.loadEstimateCollectionSearchPayload.mockResolvedValue({ ok: true, data: { query: 'garage', limit: 8, items: [] } })
     mocks.loadEstimateCollectionJobVersionsPayload.mockResolvedValue({
       ok: true,
       data: { job_id: 'job-1', total_versions: 1, limit: 25, next_cursor: null, items: [] },
+    })
+    mocks.loadEstimateCollectionQuoteCreateContextPayload.mockResolvedValue({
+      ok: true,
+      data: {
+        job: {
+          id: '33333333-3333-4333-8333-333333333333',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
+      },
     })
     mocks.createEstimateCollectionVersion.mockResolvedValue({
       ok: true,
@@ -81,19 +88,15 @@ describe('estimate collection routes', () => {
     })
   })
 
-  it('keeps bootstrap, summary, recent-activity, jobs, and search routes thin', async () => {
+  it('keeps approved quote home routes thin', async () => {
     const jobsRequest = new Request('http://localhost/api/quotes/home/jobs?q=%20kit%20&cursor=abc&limit=10')
     const searchRequest = new Request('http://localhost/api/quotes/home/search?q=%20garage%20')
 
     await handleEstimateHomeBootstrapRouteGet()
-    await handleEstimateHomeSummaryRouteGet()
-    await handleEstimateHomeRecentActivityRouteGet()
     await handleEstimateHomeJobsRouteGet(jobsRequest)
     await handleEstimateHomeSearchRouteGet(searchRequest)
 
     expect(mocks.loadEstimateCollectionBootstrapPayload).toHaveBeenCalledWith('org-1')
-    expect(mocks.loadEstimateCollectionSummaryPayload).toHaveBeenCalledWith('org-1')
-    expect(mocks.loadEstimateCollectionRecentActivityPayload).toHaveBeenCalledWith('org-1')
     expect(mocks.loadEstimateCollectionJobsPayload).toHaveBeenCalledWith('org-1', {
       query: 'kit',
       cursor: 'abc',
@@ -202,11 +205,6 @@ describe('estimate collection routes', () => {
     })
   })
 
-  it('marks the old job-counts route as gone', async () => {
-    const response = await handleEstimateHomeJobCountsRouteGet()
-    expect(response.status).toBe(410)
-  })
-
   it('validates job ids and forwards pagination params for job versions', async () => {
     const invalidResponse = await handleEstimateJobVersionsRouteGet(
       new Request('http://localhost/api/quotes/home/jobs/not-a-uuid/versions'),
@@ -224,6 +222,57 @@ describe('estimate collection routes', () => {
       '33333333-3333-4333-8333-333333333333',
       { cursor: 'next', limit: 50 }
     )
+  })
+
+  it('validates job ids and forwards quote-create context reads', async () => {
+    const invalidResponse = await handleEstimateQuoteCreateContextRouteGet(
+      new Request('http://localhost/api/quotes/home/jobs/not-a-uuid/create-context'),
+      { params: { jobId: 'not-a-uuid' } }
+    )
+    expect(invalidResponse.status).toBe(400)
+
+    const response = await handleEstimateQuoteCreateContextRouteGet(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        job: {
+          id: '33333333-3333-4333-8333-333333333333',
+          customer_id: 'customer-1',
+          customer_name: 'Alice',
+          customer_address: '123 Main',
+          title: 'Kitchen',
+          eligibility: { eligible: true, reason: 'eligible' },
+        },
+      },
+    })
+    expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).toHaveBeenCalledWith(
+      'org-1',
+      '33333333-3333-4333-8333-333333333333'
+    )
+  })
+
+  it('keeps missing quote-create context jobs in error envelopes', async () => {
+    mocks.loadEstimateCollectionQuoteCreateContextPayload.mockResolvedValueOnce({
+      ok: false,
+      kind: 'not_found',
+      message: 'Job not found.',
+    })
+
+    const response = await handleEstimateQuoteCreateContextRouteGet(
+      new Request(
+        'http://localhost/api/quotes/home/jobs/33333333-3333-4333-8333-333333333333/create-context'
+      ),
+      { params: { jobId: '33333333-3333-4333-8333-333333333333' } }
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({ error: 'Job not found.' })
   })
 
   it('delegates version creation to the shared write service', async () => {

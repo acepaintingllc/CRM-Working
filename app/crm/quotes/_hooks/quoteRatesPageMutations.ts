@@ -7,7 +7,11 @@ import type {
   RatesFlagsEditableCategoryKey,
   RatesFlagsMutationRequestByCategory,
 } from '@/types/estimator/ratesFlags'
-import { findReconciledRatesRow, reconcileRatesFlagsPayload } from './quoteRatesMutationReconciliation'
+import {
+  decideRatesFlagsMutationReconciliation,
+  findReconciledRatesRow,
+  type RatesFlagsMutationReconciliation,
+} from './quoteRatesMutationReconciliation'
 import { buildQuoteRatesMutationSnapshot } from './quoteRatesPageNavigation'
 import type {
   QuoteRatesActionStatus,
@@ -27,6 +31,7 @@ type MutationSuccessResult = {
   tone: 'success' | 'warning'
   selectedId: string
   editor: ReturnType<typeof buildQuoteRatesMutationSnapshot>['editor']
+  reconciliation: RatesFlagsMutationReconciliation
 }
 
 type MutationResult = MutationErrorResult | MutationSuccessResult
@@ -49,16 +54,22 @@ async function persistRatesFlagsMutation(params: PersistParams) {
     preserveDataOnError: true,
     reportError: false,
   })
-  const nextPayload =
-    (verification.ok && verification.data) ||
-    reconcileRatesFlagsPayload(resource.data, request)
-  if (!verification.ok) {
-    resource.setData(nextPayload)
+  const reconciliation = decideRatesFlagsMutationReconciliation({
+    currentPayload: resource.data,
+    request,
+    verification: verification.ok && verification.data
+      ? { ok: true, data: verification.data, error: null }
+      : { ok: false, data: verification.data, error: verification.error },
+  })
+
+  if (reconciliation.kind === 'local_fallback') {
+    resource.setData(reconciliation.payload)
   }
 
   return {
-    nextPayload,
+    nextPayload: reconciliation.payload,
     verification,
+    reconciliation,
   }
 }
 
@@ -77,12 +88,13 @@ export async function saveQuoteRatesMutation(params: {
     const adapter = getRatesFlagsDraftAdapter(activeCategory.key)
     const request = adapter.toMutationRequest({
       action: editorMode === 'create' ? 'create' : 'update',
+      category: activeCategory,
       draft,
       draftActive,
       originalId: editorMode === 'create' ? undefined : selectedRowId,
     })
     const keepId = typeof draft.id === 'string' && draft.id ? draft.id : selectedRowId ?? ''
-    const { nextPayload, verification } = await persistRatesFlagsMutation({ request, resource })
+    const { nextPayload, reconciliation } = await persistRatesFlagsMutation({ request, resource })
     const mutationSnapshot = buildQuoteRatesMutationSnapshot(nextPayload, navigation, keepId)
     const verb = editorMode === 'create' ? 'Created' : 'Saved'
 
@@ -90,10 +102,11 @@ export async function saveQuoteRatesMutation(params: {
       ok: true,
       selectedId: mutationSnapshot.selectedId,
       editor: mutationSnapshot.editor,
-      notice: verification.ok
+      reconciliation,
+      notice: reconciliation.kind === 'server_verified'
         ? `${verb} ${activeCategory.label}.`
-        : `${verb} ${activeCategory.label}, but refresh failed. Showing locally updated data.${verification.error ? ` ${verification.error}` : ''}`,
-      tone: verification.ok ? 'success' : 'warning',
+        : `${verb} ${activeCategory.label}, but refresh failed. Showing locally updated data.${reconciliation.verificationError ? ` ${reconciliation.verificationError}` : ''}`,
+      tone: reconciliation.kind === 'server_verified' ? 'success' : 'warning',
     }
   } catch (error) {
     return {
@@ -113,12 +126,13 @@ export async function archiveOrReactivateQuoteRatesMutation(params: {
   const { resource, navigation, categoryKey, selectedRowId, nextActive } = params
 
   try {
-    const request: RatesFlagsMutationRequestByCategory<RatesFlagsEditableCategoryKey> = {
-      category: categoryKey,
-      action: nextActive ? 'reactivate' : 'archive',
-      rowId: selectedRowId,
-    }
-    const { nextPayload, verification } = await persistRatesFlagsMutation({ request, resource })
+    const adapter = getRatesFlagsDraftAdapter(categoryKey)
+    const request: RatesFlagsMutationRequestByCategory<RatesFlagsEditableCategoryKey> =
+      adapter.toArchiveRequest({
+        action: nextActive ? 'reactivate' : 'archive',
+        rowId: selectedRowId,
+      })
+    const { nextPayload, reconciliation } = await persistRatesFlagsMutation({ request, resource })
     const preferredRow =
       findReconciledRatesRow(nextPayload, request.category, selectedRowId)?.id ?? selectedRowId
     const mutationSnapshot = buildQuoteRatesMutationSnapshot(nextPayload, navigation, preferredRow)
@@ -127,12 +141,13 @@ export async function archiveOrReactivateQuoteRatesMutation(params: {
       ok: true,
       selectedId: mutationSnapshot.selectedId,
       editor: mutationSnapshot.editor,
-      notice: verification.ok
+      reconciliation,
+      notice: reconciliation.kind === 'server_verified'
         ? nextActive
           ? 'Reactivated row.'
           : 'Archived row.'
-        : `${nextActive ? 'Reactivated' : 'Archived'} row, but refresh failed. Showing locally updated data.${verification.error ? ` ${verification.error}` : ''}`,
-      tone: verification.ok ? 'success' : 'warning',
+        : `${nextActive ? 'Reactivated' : 'Archived'} row, but refresh failed. Showing locally updated data.${reconciliation.verificationError ? ` ${reconciliation.verificationError}` : ''}`,
+      tone: reconciliation.kind === 'server_verified' ? 'success' : 'warning',
     }
   } catch (error) {
     return {

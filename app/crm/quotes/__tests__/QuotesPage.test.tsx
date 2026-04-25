@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import QuotesPage from '../page'
+import { QuoteHomeServerBootstrap } from '../QuoteHomeServerBootstrap'
 
 const { redirect, getSessionUserOrg, loadQuoteHomeBootstrap } = vi.hoisted(() => ({
   redirect: vi.fn(),
@@ -36,10 +37,21 @@ describe('QuotesPage', () => {
     })
   })
 
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('keeps the route entrypoint delegated to the named server bootstrap wrapper', () => {
+    expect(QuotesPage()).toMatchObject({
+      type: QuoteHomeServerBootstrap,
+      props: {},
+    })
+  })
+
   it('redirects to login when the session lookup fails', async () => {
     getSessionUserOrg.mockResolvedValue({ error: 'Not authenticated' })
 
-    await expect(QuotesPage()).rejects.toThrow('NEXT_REDIRECT')
+    await expect(QuoteHomeServerBootstrap()).rejects.toThrow('NEXT_REDIRECT')
 
     expect(redirect).toHaveBeenCalledWith('/login?next=%2Fcrm%2Fquotes')
     expect(loadQuoteHomeBootstrap).not.toHaveBeenCalled()
@@ -57,9 +69,23 @@ describe('QuotesPage', () => {
       data: bootstrapData,
     })
 
-    render(await QuotesPage())
+    render(await QuoteHomeServerBootstrap())
 
     expect(loadQuoteHomeBootstrap).toHaveBeenCalledWith('org-1')
     expect(screen.getByTestId('quotes-home-page')).toHaveTextContent(JSON.stringify(bootstrapData))
+  })
+
+  it('falls back to client-side loading when the server bootstrap read model fails', async () => {
+    getSessionUserOrg.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' })
+    loadQuoteHomeBootstrap.mockResolvedValue({
+      ok: false,
+      error: 'database_unavailable',
+      message: 'Could not load quote home bootstrap.',
+    })
+
+    render(await QuoteHomeServerBootstrap())
+
+    expect(loadQuoteHomeBootstrap).toHaveBeenCalledWith('org-1')
+    expect(screen.getByTestId('quotes-home-page')).toHaveTextContent('null')
   })
 })

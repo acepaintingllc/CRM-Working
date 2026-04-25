@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import path from 'path'
 import { describe, expect, it } from 'vitest'
 
@@ -10,6 +10,18 @@ const quoteInternalPaths = [
   'app/crm/quotes/[id]/send/SendQuoteReviewClient.tsx',
   'app/crm/quotes/[id]/summary/_components/EstimateV2SummaryPageContent.tsx',
   'app/crm/quotes/[id]/summary/_lib/estimateV2SummaryDerived.ts',
+]
+
+const forbiddenQuoteImplementationDirectories = [
+  'app/crm/quotes/[id]/_components',
+  'app/crm/quotes/[id]/_state',
+  'app/crm/quotes/[id]/_lib',
+  'app/crm/quotes/[id]/summary/_components',
+  'app/crm/quotes/[id]/summary/_lib',
+]
+
+const forbiddenQuoteImplementationDirectoryPrefixes = [
+  'app/crm/quotes/[id]/summary/_',
 ]
 
 const canonicalEstimateRuntimePaths = [
@@ -71,6 +83,24 @@ function isForbiddenCanonicalRuntimeImport(specifier: string) {
 }
 
 describe('quote canonical ownership guardrails', () => {
+  it('does not keep quote-side V2 implementation directories after canonicalization', () => {
+    for (const relativePath of forbiddenQuoteImplementationDirectories) {
+      expect(existsSync(path.resolve(process.cwd(), relativePath))).toBe(false)
+    }
+
+    for (const relativePath of forbiddenQuoteImplementationDirectoryPrefixes) {
+      const parentDir = path.resolve(process.cwd(), path.dirname(relativePath))
+      if (!existsSync(parentDir)) continue
+
+      const prefix = path.basename(relativePath)
+      const forbiddenEntries = readdirSync(parentDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix))
+        .map((entry) => path.join(path.dirname(relativePath), entry.name))
+
+      expect(forbiddenEntries).toEqual([])
+    }
+  })
+
   it('does not keep quote-side V2 implementation files after canonicalization', () => {
     for (const relativePath of quoteInternalPaths) {
       expect(existsSync(path.resolve(process.cwd(), relativePath))).toBe(false)

@@ -26,6 +26,7 @@
       "Bash(node --experimental-specifier-resolution=node --test \"lib/estimator/__tests__/ceilings.test.ts\")",
       "Bash(git add *)",
       "Bash(git commit *)",
+      "Bash(grep -E \"\\\\.ts$|\\\\.tsx$\")",
       "Bash(gh pr *)"
     ]
   }

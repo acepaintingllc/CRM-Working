@@ -119,6 +119,32 @@ describe('useQuotesHomeSearch', () => {
     expect(result.current.results).toEqual([{ estimate_id: 'estimate-2' }])
   })
 
+  it('ignores stale search errors after the query is cleared', async () => {
+    const stale = deferred<{ query: string; items: Array<{ estimate_id: string }> }>()
+
+    loadQuoteHomeSearch.mockImplementationOnce(() => stale.promise)
+
+    const { result, rerender } = renderHook(({ query }) => useQuotesHomeSearch(query), {
+      initialProps: { query: 'first' },
+    })
+
+    await sleep(170)
+
+    rerender({ query: '   ' })
+    await sleep(170)
+
+    stale.reject(new Error('stale search failed'))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.query).toBe('')
+    expect(result.current.results).toEqual([])
+    expect(result.current.error).toBeNull()
+    expect(result.current.loading).toBe(false)
+  })
+
   it('surfaces load errors without leaving stale results behind', async () => {
     loadQuoteHomeSearch.mockRejectedValue(new Error('search failed'))
 

@@ -1,40 +1,21 @@
 'use client'
 
 import { CrmField } from '@/app/crm/_components/CrmField'
+import type {
+  QuoteDefaultsFormFieldVm,
+  QuoteDefaultsFormSectionVm,
+} from '@/app/crm/quotes/_hooks/quoteDefaultsPageVm'
 import type { QuoteDefaults } from '@/lib/settings/types'
-
-type ProductRow = {
-  id: string
-  name: string
-  family?: string | null
-}
-
-type ProductDefaultField =
-  keyof Pick<
-    QuoteDefaults,
-    | 'walls_paint_id'
-    | 'walls_primer_id'
-    | 'ceiling_paint_id'
-    | 'ceiling_primer_id'
-    | 'trim_paint_id'
-    | 'trim_primer_id'
-  >
-
-type ProductDefaultConfig = {
-  label: string
-  key: ProductDefaultField
-  options: ProductRow[]
-}
 
 type QuoteDefaultsFormProps = {
   value: QuoteDefaults
-  productDefaultFields: readonly ProductDefaultConfig[]
+  sections: readonly QuoteDefaultsFormSectionVm[]
   onChange: (next: QuoteDefaults) => void
 }
 
 export function QuoteDefaultsForm({
   value,
-  productDefaultFields,
+  sections,
   onChange,
 }: QuoteDefaultsFormProps) {
   function updateField<K extends keyof QuoteDefaults>(field: K, nextValue: QuoteDefaults[K]) {
@@ -43,53 +24,83 @@ export function QuoteDefaultsForm({
 
   return (
     <div className="grid gap-6">
-      <section className="grid gap-4">
-        <div>
-          <h3 className="text-base font-black text-[color:var(--crm-ui-text)]">Paint and primer</h3>
-          <p className="mt-1 text-sm text-[color:var(--crm-ui-muted)]">
-            Shared starter selections for new quote job settings.
-          </p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          {productDefaultFields.map(({ label, key, options }) => (
-            <CrmField key={key} label={label}>
-              <select
-                className="ace-crm-input text-sm"
-                value={value[key] ?? ''}
-                onChange={(event) => updateField(key, event.target.value || null)}
-              >
-                <option value="">-- none --</option>
-                {options.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
-                  </option>
-                ))}
-              </select>
-            </CrmField>
-          ))}
-        </div>
-      </section>
+      {sections.map((section) => {
+        return (
+          <section key={section.key} className="grid gap-4">
+            <QuoteDefaultsSectionHeader title={section.title} description={section.description} />
+            <div
+              className={section.fields.length > 1 ? 'grid gap-4 md:grid-cols-2' : 'max-w-[240px]'}
+            >
+              {section.fields.map((field) => (
+                <QuoteDefaultsField
+                  key={field.key}
+                  field={field}
+                  value={value}
+                  onChange={updateField}
+                />
+              ))}
+            </div>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
 
-      <section className="grid gap-4">
-        <div>
-          <h3 className="text-base font-black text-[color:var(--crm-ui-text)]">Labor rate</h3>
-          <p className="mt-1 text-sm text-[color:var(--crm-ui-muted)]">
-            Org-level labor rate used when a specific quote has not saved its own override.
-          </p>
-        </div>
-        <div className="max-w-[240px]">
-          <CrmField label="Labor rate / hr">
-            <input
-              className="ace-crm-input text-sm"
-              type="number"
-              min={0}
-              step={1}
-              value={value.override_labor_rate}
-              onChange={(event) => updateField('override_labor_rate', Number(event.target.value))}
-            />
-          </CrmField>
-        </div>
-      </section>
+function QuoteDefaultsField({
+  field,
+  value,
+  onChange,
+}: {
+  field: QuoteDefaultsFormFieldVm
+  value: QuoteDefaults
+  onChange: <K extends keyof QuoteDefaults>(field: K, nextValue: QuoteDefaults[K]) => void
+}) {
+  if (field.kind === 'product_select') {
+    return (
+      <CrmField label={field.label} error={field.error}>
+        <select
+          className="ace-crm-input text-sm"
+          value={value[field.key] ?? ''}
+          onChange={(event) => onChange(field.key, event.target.value || null)}
+        >
+          <option value="">-- none --</option>
+          {field.options.map((product) => (
+            <option key={product.id} value={product.id}>
+              {product.label}
+            </option>
+          ))}
+        </select>
+      </CrmField>
+    )
+  }
+
+  return (
+    <CrmField label={field.label} error={field.error}>
+      <input
+        className="ace-crm-input text-sm"
+        type="number"
+        min={field.min}
+        max={field.max}
+        step={field.step}
+        value={value[field.key]}
+        onChange={(event) => onChange(field.key, Number(event.target.value))}
+      />
+    </CrmField>
+  )
+}
+
+function QuoteDefaultsSectionHeader({
+  title,
+  description,
+}: {
+  title: string
+  description: string
+}) {
+  return (
+    <div>
+      <h3 className="text-base font-black text-[color:var(--crm-ui-text)]">{title}</h3>
+      <p className="mt-1 text-sm text-[color:var(--crm-ui-muted)]">{description}</p>
     </div>
   )
 }

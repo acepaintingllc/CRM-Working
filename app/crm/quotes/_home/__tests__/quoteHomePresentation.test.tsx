@@ -3,15 +3,17 @@ import type {
   QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
   QuoteHomeSearchResultReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import {
   buildHomeLoadFailureDetail,
   buildHeroSummaryText,
   buildQuoteHomeVersionItemVm,
   buildQuotesHomeFeedbackVm,
   buildQuotesHomeDeleteDialogVm,
+  buildQuotesHomeHeaderSearchStatus,
   buildQuotesHomeJobListEmptyState,
   buildQuotesHomeJobListStatus,
+  buildQuotesHomeJobListStatusFromVm,
   buildQuotesHomeSearchCanRetry,
   buildQuotesHomeSearchEmptyMessage,
   buildQuotesHomeSearchStatus,
@@ -25,6 +27,7 @@ import {
   formatVersionCount,
   formatToday,
   QUOTE_META_SEPARATOR,
+  QUOTES_HOME_RECOVERY_COPY,
   SETTINGS_LINKS,
 } from '../quoteHomePresentation'
 
@@ -95,6 +98,13 @@ describe('quoteHomePresentation', () => {
       { label: 'Rates & Flags', href: '/crm/quotes/rates' },
       { label: 'Settings', href: '/crm/settings' },
     ])
+  })
+
+  it('exports shared recovery copy for the quote-home boundary', () => {
+    expect(QUOTES_HOME_RECOVERY_COPY).toEqual({
+      title: 'Something went wrong loading quotes',
+      reloadLabel: 'Reload',
+    })
   })
 
   it('formats today for the header eyebrow', () => {
@@ -379,6 +389,34 @@ describe('quoteHomePresentation', () => {
     })
   })
 
+  it('keeps header legacy search status resolution in presentation helpers', () => {
+    expect(
+      buildQuotesHomeHeaderSearchStatus({
+        query: 'missing',
+        loading: false,
+        errorMessage: null,
+        emptyMessage: null,
+        resultCount: 0,
+        canRetry: true,
+      })
+    ).toEqual({ kind: 'idle' })
+
+    expect(
+      buildQuotesHomeHeaderSearchStatus({
+        query: 'missing',
+        loading: false,
+        errorMessage: null,
+        emptyMessage: 'No quote versions match "missing".',
+        resultCount: 0,
+        canRetry: true,
+      })
+    ).toEqual({
+      kind: 'empty',
+      title: 'No matching quote versions',
+      message: 'No quote versions match "missing".',
+    })
+  })
+
   it('formats bootstrap load failure details without doubling the fallback prefix', () => {
     expect(
       buildHomeLoadFailureDetail('bootstrap', 'Quote home failed to load.')
@@ -640,6 +678,27 @@ describe('quoteHomePresentation', () => {
       canRetry: true,
       retryLabel: 'Retry versions',
       retryingLabel: 'Retrying versions...',
+    })
+  })
+
+  it('builds legacy-compatible job-list status from the list vm', () => {
+    expect(
+      buildQuotesHomeJobListStatusFromVm({
+        loading: false,
+        searchQuery: '',
+        selectedJobId: '',
+        hasMore: false,
+        items: [],
+        errorMessage: null,
+        canRetry: false,
+        emptyState: 'no_matches',
+        emptyStateBody: null,
+      })
+    ).toEqual({
+      kind: 'empty',
+      emptyState: 'no_matches',
+      title: 'No jobs match this search.',
+      body: null,
     })
   })
 

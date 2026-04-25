@@ -16,13 +16,13 @@ export function QuoteProductDeleteDialog({ vm, onConfirm, onCancel }: Props) {
     <QuoteAdminConfirmDialog
       isOpen={vm.isOpen}
       labelledBy="quote-product-delete-title"
-      title="Delete product?"
-      description={`Delete ${vm.productName} from the quote products catalog.`}
-      closeLabel="Close delete confirmation"
-      warning="This permanently removes the product row and its admin defaults. This cannot be undone."
-      info="After delete, the editor will move to the next visible product if one exists."
-      confirmLabel="Delete product"
-      confirmingLabel="Deleting..."
+      title="Archive product?"
+      description={`Archive ${vm.productName} in the quote products catalog.`}
+      closeLabel="Close archive confirmation"
+      warning="Archived products remain available for historical quotes and references, but are excluded from active defaults."
+      info="If the archived product is hidden by the current filter, the editor will move to the next visible product."
+      confirmLabel="Archive product"
+      confirmingLabel="Archiving..."
       confirming={vm.status === 'deleting'}
       onConfirm={onConfirm}
       onCancel={onCancel}

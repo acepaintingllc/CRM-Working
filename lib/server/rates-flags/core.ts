@@ -5,7 +5,12 @@ import type {
 } from '../../../types/estimator/ratesFlags'
 import { CATEGORY_CONFIGS, getCategoryConfig } from './categories.ts'
 import { buildCategory, buildCategoryFromStoredRows, buildMutationPlan } from './categoryHelpers.ts'
-import { parseRatesFlagsMutationRequest } from './mutationParser.ts'
+import {
+  getRatesFlagsMutationParserCategoryKeys,
+  getRatesFlagsMutationParserFieldKeys,
+  getRatesFlagsMutationParserRequiredFieldKeys,
+  parseRatesFlagsMutationRequest,
+} from './mutationParser.ts'
 import { type RatesFlagsCatalogOverlay, isAreaBasedUnit } from './shared.ts'
 import { buildOverlayFromRows } from './overlay.ts'
 import { findCategoryTablesDetailed, findTableDetailed, getHeaderIndex, parseConstantsTablesDetailed, parseSchemaVersion } from './tableParsing.ts'
@@ -226,6 +231,9 @@ export const _test = {
   ensureTemplateState,
   findTableDetailed,
   getHeaderIndex,
+  getRatesFlagsMutationParserCategoryKeys,
+  getRatesFlagsMutationParserFieldKeys,
+  getRatesFlagsMutationParserRequiredFieldKeys,
   isAreaBasedUnit,
   parseRatesFlagsMutationRequest,
   setSupabaseAdminProvider,

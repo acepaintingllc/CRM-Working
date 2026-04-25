@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
-import { type QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
+import { type QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/quoteHomeTypes'
 
 export type QuoteHomeDeleteStatus = 'idle' | 'confirming' | 'deleting' | 'failed'
 
