@@ -8,9 +8,7 @@ const mocks = vi.hoisted(() => ({
   loadEstimateCollectionJobsPayload: vi.fn(),
   loadEstimateCollectionPayload: vi.fn(),
   loadEstimateCollectionQuoteCreateContextPayload: vi.fn(),
-  loadEstimateCollectionRecentActivityPayload: vi.fn(),
   loadEstimateCollectionSearchPayload: vi.fn(),
-  loadEstimateCollectionSummaryPayload: vi.fn(),
   createEstimateCollectionVersion: vi.fn(),
 }))
 
@@ -39,9 +37,7 @@ vi.mock('@/lib/server/estimate-collection/service', () => ({
   loadEstimateCollectionJobsPayload: mocks.loadEstimateCollectionJobsPayload,
   loadEstimateCollectionPayload: mocks.loadEstimateCollectionPayload,
   loadEstimateCollectionQuoteCreateContextPayload: mocks.loadEstimateCollectionQuoteCreateContextPayload,
-  loadEstimateCollectionRecentActivityPayload: mocks.loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload: mocks.loadEstimateCollectionSearchPayload,
-  loadEstimateCollectionSummaryPayload: mocks.loadEstimateCollectionSummaryPayload,
   createEstimateCollectionVersion: mocks.createEstimateCollectionVersion,
 }))
 
@@ -49,11 +45,8 @@ import {
   estimateCollectionCopy,
   handleEstimateCollectionRoutePost,
   handleEstimateHomeBootstrapRouteGet,
-  handleEstimateHomeJobCountsRouteGet,
   handleEstimateHomeJobsRouteGet,
-  handleEstimateHomeRecentActivityRouteGet,
   handleEstimateHomeSearchRouteGet,
-  handleEstimateHomeSummaryRouteGet,
   handleEstimateJobVersionsRouteGet,
   handleEstimateQuoteCreateContextRouteGet,
 } from '../estimateCollectionRoutes'
@@ -70,8 +63,6 @@ describe('estimate collection routes', () => {
       value: { job_id: '11111111-1111-4111-8111-111111111111' },
     })
     mocks.loadEstimateCollectionBootstrapPayload.mockResolvedValue({ ok: true, data: { jobs: { items: [] } } })
-    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValue({ ok: true, data: { total_versions: 2 } })
-    mocks.loadEstimateCollectionRecentActivityPayload.mockResolvedValue({ ok: true, data: { items: [] } })
     mocks.loadEstimateCollectionJobsPayload.mockResolvedValue({ ok: true, data: { query: '', items: [] } })
     mocks.loadEstimateCollectionSearchPayload.mockResolvedValue({ ok: true, data: { query: 'garage', limit: 8, items: [] } })
     mocks.loadEstimateCollectionJobVersionsPayload.mockResolvedValue({
@@ -97,19 +88,15 @@ describe('estimate collection routes', () => {
     })
   })
 
-  it('keeps bootstrap, summary, recent-activity, jobs, and search routes thin', async () => {
+  it('keeps approved quote home routes thin', async () => {
     const jobsRequest = new Request('http://localhost/api/quotes/home/jobs?q=%20kit%20&cursor=abc&limit=10')
     const searchRequest = new Request('http://localhost/api/quotes/home/search?q=%20garage%20')
 
     await handleEstimateHomeBootstrapRouteGet()
-    await handleEstimateHomeSummaryRouteGet()
-    await handleEstimateHomeRecentActivityRouteGet()
     await handleEstimateHomeJobsRouteGet(jobsRequest)
     await handleEstimateHomeSearchRouteGet(searchRequest)
 
     expect(mocks.loadEstimateCollectionBootstrapPayload).toHaveBeenCalledWith('org-1')
-    expect(mocks.loadEstimateCollectionSummaryPayload).toHaveBeenCalledWith('org-1')
-    expect(mocks.loadEstimateCollectionRecentActivityPayload).toHaveBeenCalledWith('org-1')
     expect(mocks.loadEstimateCollectionJobsPayload).toHaveBeenCalledWith('org-1', {
       query: 'kit',
       cursor: 'abc',
@@ -216,11 +203,6 @@ describe('estimate collection routes', () => {
         items: [{ id: 'job-1' }],
       },
     })
-  })
-
-  it('marks the old job-counts route as gone', async () => {
-    const response = await handleEstimateHomeJobCountsRouteGet()
-    expect(response.status).toBe(410)
   })
 
   it('validates job ids and forwards pagination params for job versions', async () => {

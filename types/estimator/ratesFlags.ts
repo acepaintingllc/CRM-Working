@@ -1,30 +1,220 @@
 export type RatesFlagsTab = 'rates' | 'flags' | 'room_defaults'
 
-export const ratesFlagsEditableCategoryKeys = [
-  'production_rates_walls',
-  'production_rates_ceilings',
-  'production_rates_trim',
-  'unit_rates_doors',
-  'unit_rates_trim',
-  'unit_rates_drywall',
-  'access_fees_ladders',
-  'access_fees_scaffolding',
-  'access_fees_specialty',
-  'supply_rates_per_color',
-  'supply_rates_area_based',
-  'supply_rates_per_job',
-  'supply_rates_roller_covers',
-  'wall_complexity',
-  'height_factors',
-  'ceiling_types',
-  'condition_modifiers',
-  'room_types',
-  'room_templates',
-  'scope_defaults',
-] as const
+export type RatesFlagsGroup =
+  | 'production_rates'
+  | 'unit_rates'
+  | 'access_fees'
+  | 'supply_rates'
+  | 'condition_modifiers'
+  | 'height_factors'
+  | 'wall_complexity'
+  | 'ceiling_types'
+  | 'room_types'
+  | 'room_templates'
+  | 'scope_defaults'
+  | 'legacy'
+
+export type RatesFlagsNavigationGroup =
+  | 'production'
+  | 'unit_rates'
+  | 'access_fees'
+  | 'supplies'
+  | 'condition_modifiers'
+  | 'height_factors'
+  | 'wall_complexity'
+  | 'ceiling_types'
+  | 'room_types'
+  | 'room_templates'
+  | 'scope_defaults'
+
+type RatesFlagsEditableCategoryRegistration = {
+  key: string
+  tab: RatesFlagsTab
+  group: RatesFlagsGroup
+  navigationGroup: RatesFlagsNavigationGroup
+  navigationLabel: string
+  navigationOrder: number
+}
+
+function defineRatesFlagsEditableCategoryRegistry<
+  const TRegistry extends readonly RatesFlagsEditableCategoryRegistration[],
+>(registry: TRegistry) {
+  return registry
+}
+
+// Canonical editable Rates/Flags category registry.
+// To add a category, register it here, then add the category-specific value/row/draft
+// types plus its server CategoryConfig. Adapters and page navigation derive coverage
+// from this registry and tests fail when a category is missing downstream.
+export const ratesFlagsEditableCategoryRegistry = defineRatesFlagsEditableCategoryRegistry([
+  {
+    key: 'production_rates_walls',
+    tab: 'rates',
+    group: 'production_rates',
+    navigationGroup: 'production',
+    navigationLabel: 'Walls',
+    navigationOrder: 10,
+  },
+  {
+    key: 'production_rates_ceilings',
+    tab: 'rates',
+    group: 'production_rates',
+    navigationGroup: 'production',
+    navigationLabel: 'Ceilings',
+    navigationOrder: 20,
+  },
+  {
+    key: 'production_rates_trim',
+    tab: 'rates',
+    group: 'production_rates',
+    navigationGroup: 'production',
+    navigationLabel: 'Trim',
+    navigationOrder: 30,
+  },
+  {
+    key: 'unit_rates_doors',
+    tab: 'rates',
+    group: 'unit_rates',
+    navigationGroup: 'unit_rates',
+    navigationLabel: 'Doors',
+    navigationOrder: 10,
+  },
+  {
+    key: 'unit_rates_trim',
+    tab: 'rates',
+    group: 'unit_rates',
+    navigationGroup: 'unit_rates',
+    navigationLabel: 'Trim Types',
+    navigationOrder: 20,
+  },
+  {
+    key: 'unit_rates_drywall',
+    tab: 'rates',
+    group: 'unit_rates',
+    navigationGroup: 'unit_rates',
+    navigationLabel: 'Drywall',
+    navigationOrder: 30,
+  },
+  {
+    key: 'access_fees_ladders',
+    tab: 'rates',
+    group: 'access_fees',
+    navigationGroup: 'access_fees',
+    navigationLabel: 'Ladders',
+    navigationOrder: 10,
+  },
+  {
+    key: 'access_fees_scaffolding',
+    tab: 'rates',
+    group: 'access_fees',
+    navigationGroup: 'access_fees',
+    navigationLabel: 'Scaffolding',
+    navigationOrder: 20,
+  },
+  {
+    key: 'access_fees_specialty',
+    tab: 'rates',
+    group: 'access_fees',
+    navigationGroup: 'access_fees',
+    navigationLabel: 'Specialty',
+    navigationOrder: 30,
+  },
+  {
+    key: 'supply_rates_per_color',
+    tab: 'rates',
+    group: 'supply_rates',
+    navigationGroup: 'supplies',
+    navigationLabel: 'Per-Color',
+    navigationOrder: 10,
+  },
+  {
+    key: 'supply_rates_area_based',
+    tab: 'rates',
+    group: 'supply_rates',
+    navigationGroup: 'supplies',
+    navigationLabel: 'Area-Based',
+    navigationOrder: 20,
+  },
+  {
+    key: 'supply_rates_per_job',
+    tab: 'rates',
+    group: 'supply_rates',
+    navigationGroup: 'supplies',
+    navigationLabel: 'Per-Job',
+    navigationOrder: 30,
+  },
+  {
+    key: 'supply_rates_roller_covers',
+    tab: 'rates',
+    group: 'supply_rates',
+    navigationGroup: 'supplies',
+    navigationLabel: 'Roller Covers',
+    navigationOrder: 40,
+  },
+  {
+    key: 'wall_complexity',
+    tab: 'flags',
+    group: 'wall_complexity',
+    navigationGroup: 'wall_complexity',
+    navigationLabel: 'Wall Complexity',
+    navigationOrder: 30,
+  },
+  {
+    key: 'height_factors',
+    tab: 'flags',
+    group: 'height_factors',
+    navigationGroup: 'height_factors',
+    navigationLabel: 'Height Factors',
+    navigationOrder: 20,
+  },
+  {
+    key: 'ceiling_types',
+    tab: 'flags',
+    group: 'ceiling_types',
+    navigationGroup: 'ceiling_types',
+    navigationLabel: 'Ceiling Types',
+    navigationOrder: 40,
+  },
+  {
+    key: 'condition_modifiers',
+    tab: 'flags',
+    group: 'condition_modifiers',
+    navigationGroup: 'condition_modifiers',
+    navigationLabel: 'Condition Modifiers',
+    navigationOrder: 10,
+  },
+  {
+    key: 'room_types',
+    tab: 'room_defaults',
+    group: 'room_types',
+    navigationGroup: 'room_types',
+    navigationLabel: 'Room Types',
+    navigationOrder: 10,
+  },
+  {
+    key: 'room_templates',
+    tab: 'room_defaults',
+    group: 'room_templates',
+    navigationGroup: 'room_templates',
+    navigationLabel: 'Room Templates',
+    navigationOrder: 20,
+  },
+  {
+    key: 'scope_defaults',
+    tab: 'room_defaults',
+    group: 'scope_defaults',
+    navigationGroup: 'scope_defaults',
+    navigationLabel: 'Scope Defaults',
+    navigationOrder: 30,
+  },
+] as const)
 
 export type RatesFlagsEditableCategoryKey =
-  (typeof ratesFlagsEditableCategoryKeys)[number]
+  (typeof ratesFlagsEditableCategoryRegistry)[number]['key']
+
+export const ratesFlagsEditableCategoryKeys = ratesFlagsEditableCategoryRegistry.map(
+  (category) => category.key
+) as RatesFlagsEditableCategoryKey[]
 
 export const ratesFlagsLegacyCategoryKeys = [
   'unit_rates',
@@ -41,20 +231,6 @@ export type RatesFlagsLegacyCategoryKey =
 export type RatesFlagsCategoryKey =
   | RatesFlagsEditableCategoryKey
   | RatesFlagsLegacyCategoryKey
-
-export type RatesFlagsGroup =
-  | 'production_rates'
-  | 'unit_rates'
-  | 'access_fees'
-  | 'supply_rates'
-  | 'condition_modifiers'
-  | 'height_factors'
-  | 'wall_complexity'
-  | 'ceiling_types'
-  | 'room_types'
-  | 'room_templates'
-  | 'scope_defaults'
-  | 'legacy'
 
 export type RatesFlagsFieldType = 'text' | 'number' | 'select'
 

@@ -184,12 +184,6 @@ type QuoteHomeVersionIdentity = {
   customer_name: string
 }
 
-export type QuoteHomeRecentActivityItemReadModel = QuoteHomeVersionIdentity & {
-  final_total: number | null
-  updated_at: string | null
-  is_sent_estimate: boolean
-}
-
 export type QuoteHomeJobVersionItemReadModel = QuoteHomeVersionIdentity & {
   customer_id: string
   version_sort_order: number
@@ -205,10 +199,6 @@ export type QuoteHomeSummaryReadModel = {
   sent_or_awaiting_count: number
   live_count: number
   pipeline_total: number
-}
-
-export type QuoteHomeRecentActivityReadModel = {
-  items: QuoteHomeRecentActivityItemReadModel[]
 }
 
 export type QuoteHomeSearchResultReadModel = {
@@ -428,23 +418,6 @@ export function toQuoteListEstimate(row: EstimateCollectionDecoratedRowInput): Q
   }
 }
 
-export function toQuoteHomeRecentActivityItem(
-  row: EstimateCollectionDecoratedRowInput
-): QuoteHomeRecentActivityItemReadModel {
-  return {
-    estimate_id: getEstimateId(row),
-    job_id: asRequiredText(row.job_id, ''),
-    version_name: getVersionName(row),
-    version_state: getVersionState(row),
-    version_kind: getVersionKind(row),
-    job_title: getJobTitle(row),
-    customer_name: getCustomerName(row),
-    final_total: asNullableNumber(row.final_total),
-    updated_at: asNullableText(row.updated_at),
-    is_sent_estimate: asBoolean(row.is_sent_estimate),
-  }
-}
-
 export function toQuoteHomeJobVersionItem(
   row: EstimateCollectionDecoratedRowInput
 ): QuoteHomeJobVersionItemReadModel {
@@ -642,14 +615,6 @@ export function buildQuoteHomeBootstrapReadModel(params: {
     selected_job_id:
       asRequiredText(params.selectedJobVersions?.job_id, firstJobId) || null,
     selected_job_versions: params.selectedJobVersions,
-  }
-}
-
-export function buildQuoteHomeRecentActivityReadModel(
-  rows: EstimateCollectionDecoratedRowInput[]
-): QuoteHomeRecentActivityReadModel {
-  return {
-    items: rows.map(toQuoteHomeRecentActivityItem).slice(0, 12),
   }
 }
 

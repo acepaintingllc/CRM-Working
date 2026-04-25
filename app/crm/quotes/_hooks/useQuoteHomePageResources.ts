@@ -1,154 +1,30 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
 import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
-import type {
-  QuoteHomePageActions,
-  QuoteHomePageVmResources,
-  QuoteHomePageVmState,
-} from '../_home/quoteHomePageVm'
+import type { QuoteHomePageVmInput } from '../_home/quoteHomePageVm'
 import {
-  buildQuoteHomePageVmResourceInputs,
-  buildQuoteHomePageVmResources,
-} from './quoteHomePageVmResources'
-import { useQuoteHomePageState } from './useQuoteHomePageState'
-import { useQuoteVersionWorkflow } from './useQuoteVersionWorkflow'
-import { useQuotesHomeData, type QuoteHomeDataResourceContract } from './useQuotesHomeData'
-import { useQuotesHomeSearch } from './useQuotesHomeSearch'
-import { useQuoteHomePageController } from './quoteHomePageController'
+  useQuoteHomePageResource,
+  type QuoteHomePageResourceFacade,
+} from './quoteHomePageResource'
 
-type QuoteHomePageResources = {
-  vmState: QuoteHomePageVmState
-  vmResources: QuoteHomePageVmResources
-}
-
-type QuoteHomePageStateResource = ReturnType<typeof useQuoteHomePageState>
-type QuoteHomeVersionWorkflowResource = ReturnType<typeof useQuoteVersionWorkflow>
-type QuoteHomeSearchResource = ReturnType<typeof useQuotesHomeSearch>
-
-function useSyncQuoteHomeLoadedJobsToPageSelection(
-  pageState: QuoteHomePageStateResource,
-  homeResource: QuoteHomeDataResourceContract
-) {
-  const { reconcileLoadedJobs } = pageState
-
-  useEffect(() => {
-    reconcileLoadedJobs(homeResource.jobs, homeResource.jobsPage.query, {
-      preferredSelectedJobId: homeResource.initialSelectedJobId,
-    })
-  }, [
-    homeResource.initialSelectedJobId,
-    homeResource.jobs,
-    homeResource.jobsPage.query,
-    reconcileLoadedJobs,
-  ])
-}
-
-function useQuoteHomeVmState(params: {
-  pageState: QuoteHomePageStateResource
-  homeResource: QuoteHomeDataResourceContract
-  actions: QuoteHomePageActions
-  actionWarning: QuoteHomePageVmState['actionWarning']
-}) {
-  const { pageState, homeResource, actions, actionWarning } = params
-
-  return useMemo<QuoteHomePageVmState>(
-    () => ({
-      actionWarning,
-      searchQuery: pageState.searchQuery,
-      searchFocused: pageState.searchFocused,
-      jobQuery: pageState.jobQuery,
-      selectedJobId: pageState.selectedJobId,
-      selectedJob: pageState.selectedJob,
-      visibleJobs: homeResource.jobs,
-      actions,
-    }),
-    [
-      actionWarning,
-      actions,
-      homeResource.jobs,
-      pageState.jobQuery,
-      pageState.searchFocused,
-      pageState.searchQuery,
-      pageState.selectedJob,
-      pageState.selectedJobId,
-    ]
-  )
-}
-
-function useQuoteHomeVmResources(params: {
-  homeResource: QuoteHomeDataResourceContract
-  searchResource: QuoteHomeSearchResource
-  workflow: QuoteHomeVersionWorkflowResource
-  deleteResource: ReturnType<typeof useQuoteHomePageController>['deleteState']
-}) {
-  const { homeResource, searchResource, workflow, deleteResource } = params
-
-  return useMemo(
-    () =>
-      buildQuoteHomePageVmResources(
-        buildQuoteHomePageVmResourceInputs({
-          homeResource,
-          searchResource,
-          versionsResource: workflow.versions,
-          createResource: workflow.create,
-          deleteResource,
-        })
-      ),
-    [deleteResource, homeResource, searchResource, workflow.create, workflow.versions]
-  )
+type QuoteHomePageResources = QuoteHomePageVmInput & {
+  vmState: QuoteHomePageVmInput['state']
+  vmResources: QuoteHomePageVmInput['resources']
+  facade: QuoteHomePageResourceFacade
 }
 
 export function useQuoteHomePageResources(
   initialData?: QuoteHomeBootstrapReadModel | null
 ): QuoteHomePageResources {
-  const pageState = useQuoteHomePageState(
-    initialData?.jobs.items ?? [],
-    initialData?.selected_job_id ?? ''
-  )
-
-  const homeResource = useQuotesHomeData(initialData, {
-    jobQuery: pageState.jobQuery,
-  })
-
-  const searchState = useQuotesHomeSearch(pageState.searchQuery)
-  const initialVersionsForSelectedJob =
-    homeResource.initialSelectedJobVersions?.job_id === pageState.selectedJobId
-      ? homeResource.initialSelectedJobVersions
-      : null
-
-  const workflow = useQuoteVersionWorkflow({
-    jobId: pageState.selectedJobId,
-    selectedJob: pageState.selectedJob,
-    loading: homeResource.loading,
-    initialVersions: initialVersionsForSelectedJob,
-  })
-
-  useSyncQuoteHomeLoadedJobsToPageSelection(pageState, homeResource)
-
-  const controller = useQuoteHomePageController({
-    homeResource,
-    versions: workflow.versions,
-    create: workflow.create,
-    search: searchState,
-    stateActions: pageState.actions,
-  })
-
-  const vmState = useQuoteHomeVmState({
-    pageState,
-    homeResource,
-    actions: controller.actions,
-    actionWarning: controller.actionWarning,
-  })
-  const vmResources = useQuoteHomeVmResources({
-    homeResource,
-    searchResource: searchState,
-    workflow,
-    deleteResource: controller.deleteState,
-  })
+  const facade = useQuoteHomePageResource(initialData)
 
   return {
-    vmState,
-    vmResources,
+    ...facade.vmInput,
+    vmState: facade.vmInput.state,
+    vmResources: facade.vmInput.resources,
+    facade,
   }
 }
+
+export { useQuoteHomePageResource }
+export type { QuoteHomePageResourceFacade }

@@ -67,7 +67,6 @@ All quote/estimate-collection server work follows three layers:
 
 ```
 GET  /api/quotes/home/bootstrap                       — initial home page data
-GET  /api/quotes/home/summary                         — summary stats only
 GET  /api/quotes/home/jobs                            — paginated jobs list
 GET  /api/quotes/home/jobs/[jobId]/versions           — versions for a job
 GET  /api/quotes/home/jobs/[jobId]/create-context     — job context for quote creation
@@ -110,8 +109,9 @@ Hooks inside `app/crm/quotes/_hooks/` are organized into four roles:
 **Data loading hooks** — resource fetching only, no UI state:
 - `useQuoteRatesData` — loads `RatesFlagsPayload`
 - `useQuoteProductsData` — loads product list
-- `useQuotesHomeData` — loads home bootstrap, jobs, summary
-- `useQuoteHomePageResources` — combines home data sources
+- `useQuotesHomeData` — loads home bootstrap and paginated jobs
+- `useQuoteHomePageResource` — combines the approved Quote Home resources into one facade
+- `useQuoteHomePageResources` — thin compatibility wrapper around `useQuoteHomePageResource`
 - `useQuoteJobVersions` — paginated versions for a job
 
 **Orchestration hooks** — primary per-page controllers:
@@ -177,7 +177,7 @@ QuoteJobVersionsPageReadModel {
 
 // Combined bootstrap for home page
 QuoteHomeBootstrapReadModel {
-  summary, jobsPage, selectedJobVersions
+  summary, jobs, selected_job_id, selected_job_versions
 }
 ```
 

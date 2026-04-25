@@ -3,7 +3,9 @@ import test from 'node:test'
 import {
   buildQuoteDefaultsFormState,
   emptyQuoteDefaults,
+  formatQuoteDefaultsProductOptionLabel,
   parseQuoteDefaults,
+  quoteDefaultsFormSections,
   validateQuoteDefaults,
   type QuoteDefaultsProductReference,
 } from '../defaultsForm.ts'
@@ -137,6 +139,46 @@ test('buildQuoteDefaultsFormState creates a missing option for deleted selected 
     missing: true,
   })
   assert.match(state.fieldErrors.walls_paint_id ?? '', /no longer exists/)
+})
+
+test('quote defaults form metadata defines product and labor extension sections', () => {
+  assert.deepEqual(
+    quoteDefaultsFormSections.map((section) => [section.key, section.kind]),
+    [
+      ['product_defaults', 'product_defaults'],
+      ['labor_rate', 'labor_rate'],
+    ]
+  )
+})
+
+test('formatQuoteDefaultsProductOptionLabel decorates inactive, wrong-family, and missing options', () => {
+  assert.equal(
+    formatQuoteDefaultsProductOptionLabel(
+      { id: 'paint-inactive', name: 'Inactive Paint', family: 'Paint', status: 'Inactive' },
+      'Paint'
+    ),
+    'Inactive Paint (Inactive)'
+  )
+  assert.equal(
+    formatQuoteDefaultsProductOptionLabel(
+      { id: 'primer-1', name: 'Primer', family: 'Primer', status: 'Active' },
+      'Paint'
+    ),
+    'Primer (Primer)'
+  )
+  assert.equal(
+    formatQuoteDefaultsProductOptionLabel(
+      {
+        id: 'deleted-paint',
+        name: 'Missing product (deleted-paint)',
+        family: null,
+        status: 'Missing',
+        missing: true,
+      },
+      'Paint'
+    ),
+    'Missing product (deleted-paint)'
+  )
 })
 
 test('parseQuoteDefaults enforces the shared labor-rate range', () => {

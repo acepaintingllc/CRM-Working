@@ -491,6 +491,63 @@ describe('useQuoteProductsPage', () => {
     expect(result.current.editorVm.selectionVisibility).toBe('hidden')
   })
 
+  it('keeps edited and archived rows coherent after explicit refreshes', async () => {
+    let serverProducts = [buildProduct({ id: 'paint-1', name: 'Super Paint' })]
+    loadQuoteProducts.mockImplementation(async (query: QuoteProductQuery) =>
+      serverProducts.filter((product) => matchesQuery(product, query))
+    )
+    updateQuoteProduct.mockImplementation(async () => {
+      const updated = buildProduct({ id: 'paint-1', name: 'Super Paint Pro' })
+      serverProducts = [updated]
+      return {
+        data: updated,
+        notice: 'Product saved.',
+      }
+    })
+    archiveQuoteProduct.mockImplementation(async () => {
+      const archived = buildProduct({
+        id: 'paint-1',
+        name: 'Super Paint Pro',
+        status: 'Archived',
+      })
+      serverProducts = [archived]
+      return { data: archived }
+    })
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftField('name', 'Super Paint Pro')
+    })
+
+    await act(async () => {
+      await result.current.actions.save()
+      await result.current.resource.refresh()
+    })
+
+    expect(result.current.catalogVm.selectedId).toBe('paint-1')
+    expect(result.current.editorVm.selected?.name).toBe('Super Paint Pro')
+    expect(result.current.editorVm.draft.name).toBe('Super Paint Pro')
+
+    act(() => {
+      result.current.actions.requestDelete()
+    })
+
+    await act(async () => {
+      await result.current.actions.confirmDelete()
+      await result.current.resource.refresh()
+    })
+
+    expect(result.current.catalogVm.selectedId).toBe('paint-1')
+    expect(result.current.editorVm.selected?.status).toBe('Archived')
+    expect(result.current.editorVm.draft.status).toBe('Archived')
+    expect(result.current.uiState.notice).toBe('Product archived.')
+  })
+
   it('keeps the explicit selection stable when a save moves the row out of the filtered slice', async () => {
     loadQuoteProducts.mockResolvedValue([
       buildProduct({ id: 'paint-2', name: 'Dormant Paint', status: 'Inactive' }),

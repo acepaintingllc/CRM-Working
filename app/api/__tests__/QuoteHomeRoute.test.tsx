@@ -17,9 +17,7 @@ const mocks = vi.hoisted(() => ({
   loadEstimateCollectionJobVersionsPayload: vi.fn(),
   loadEstimateCollectionJobsPayload: vi.fn(),
   loadEstimateCollectionQuoteCreateContextPayload: vi.fn(),
-  loadEstimateCollectionRecentActivityPayload: vi.fn(),
   loadEstimateCollectionSearchPayload: vi.fn(),
-  loadEstimateCollectionSummaryPayload: vi.fn(),
 }))
 
 vi.mock('@/lib/server/apiRoute', () => ({
@@ -46,19 +44,14 @@ vi.mock('@/lib/server/estimate-collection/service', () => ({
   loadEstimateCollectionJobVersionsPayload: mocks.loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionJobsPayload: mocks.loadEstimateCollectionJobsPayload,
   loadEstimateCollectionQuoteCreateContextPayload: mocks.loadEstimateCollectionQuoteCreateContextPayload,
-  loadEstimateCollectionRecentActivityPayload: mocks.loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload: mocks.loadEstimateCollectionSearchPayload,
-  loadEstimateCollectionSummaryPayload: mocks.loadEstimateCollectionSummaryPayload,
   loadEstimateCollectionPayload: vi.fn(),
   createEstimateCollectionVersion: vi.fn(),
 }))
 
 import { GET as getQuoteHomeBootstrap } from '../quotes/home/bootstrap/route'
-import { GET as getQuoteHomeJobCounts } from '../quotes/home/job-counts/route'
 import { GET as getQuoteHomeJobs } from '../quotes/home/jobs/route'
-import { GET as getQuoteHomeRecentActivity } from '../quotes/home/recent-activity/route'
 import { GET as getQuoteHomeSearch } from '../quotes/home/search/route'
-import { GET as getQuoteHomeSummary } from '../quotes/home/summary/route'
 import { GET as getQuoteCreateContext } from '../quotes/home/jobs/[jobId]/create-context/route'
 import { GET as getQuoteJobVersions } from '../quotes/home/jobs/[jobId]/versions/route'
 
@@ -94,14 +87,6 @@ describe('quote home API routes', () => {
     mocks.loadEstimateCollectionBootstrapPayload.mockResolvedValue({
       ok: true,
       data: quoteHomeBootstrap,
-    })
-    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValue({
-      ok: true,
-      data: { total_versions: 0 },
-    })
-    mocks.loadEstimateCollectionRecentActivityPayload.mockResolvedValue({
-      ok: true,
-      data: { items: [] },
     })
     mocks.loadEstimateCollectionJobsPayload.mockResolvedValue({
       ok: true,
@@ -140,9 +125,6 @@ describe('quote home API routes', () => {
 
     const responses = await Promise.all([
       getQuoteHomeBootstrap(),
-      getQuoteHomeSummary(),
-      getQuoteHomeRecentActivity(),
-      getQuoteHomeJobCounts(),
       getQuoteHomeJobs(new Request('http://localhost/api/quotes/home/jobs?q=kit')),
       getQuoteHomeSearch(new Request('http://localhost/api/quotes/home/search?q=kit')),
       getQuoteJobVersions(
@@ -159,33 +141,24 @@ describe('quote home API routes', () => {
       ),
     ])
 
-    expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401, 401, 401, 401, 401])
+    expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401, 401])
     for (const response of responses) {
       await expect(response.json()).resolves.toEqual({ error: 'Not authenticated' })
     }
     expect(mocks.loadEstimateCollectionBootstrapPayload).not.toHaveBeenCalled()
-    expect(mocks.loadEstimateCollectionSummaryPayload).not.toHaveBeenCalled()
-    expect(mocks.loadEstimateCollectionRecentActivityPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionJobsPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionSearchPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionJobVersionsPayload).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCollectionQuoteCreateContextPayload).not.toHaveBeenCalled()
   })
 
-  it('keeps bootstrap, summary, jobs, search, and job-version reads in data envelopes', async () => {
+  it('keeps approved quote home reads in data envelopes', async () => {
     const bootstrapResponse = await getQuoteHomeBootstrap()
     expect(bootstrapResponse.status).toBe(200)
     await expect(bootstrapResponse.json()).resolves.toEqual({
       data: quoteHomeBootstrap,
     })
     expect(mocks.loadEstimateCollectionBootstrapPayload).toHaveBeenCalledWith('org-1')
-
-    const summaryResponse = await getQuoteHomeSummary()
-    expect(summaryResponse.status).toBe(200)
-    await expect(summaryResponse.json()).resolves.toEqual({
-      data: { total_versions: 0 },
-    })
-    expect(mocks.loadEstimateCollectionSummaryPayload).toHaveBeenCalledWith('org-1')
 
     const jobsResponse = await getQuoteHomeJobs(
       new Request('http://localhost/api/quotes/home/jobs?q=kit&cursor=next&limit=10')
@@ -265,15 +238,6 @@ describe('quote home API routes', () => {
     const bootstrapResponse = await getQuoteHomeBootstrap()
     expect(bootstrapResponse.status).toBe(500)
     await expect(bootstrapResponse.json()).resolves.toEqual({ error: 'bootstrap failed' })
-
-    mocks.loadEstimateCollectionSummaryPayload.mockResolvedValueOnce({
-      ok: false,
-      kind: 'server_error',
-      message: 'summary failed',
-    })
-    const summaryResponse = await getQuoteHomeSummary()
-    expect(summaryResponse.status).toBe(500)
-    await expect(summaryResponse.json()).resolves.toEqual({ error: 'summary failed' })
 
     mocks.loadEstimateCollectionJobsPayload.mockResolvedValueOnce({
       ok: false,

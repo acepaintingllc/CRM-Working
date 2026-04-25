@@ -147,6 +147,43 @@ describe('useQuoteDefaultsPage', () => {
     expect(result.current.form.canSave).toBe(false)
   })
 
+  it('keeps dirty edits and surfaces an action error when save fails', async () => {
+    loadQuoteProducts.mockResolvedValue([
+      { id: 'paint-1', name: 'Paint', family: 'Paint', status: 'Active' },
+    ])
+    loadQuoteDefaults.mockResolvedValue({
+      walls_paint_id: 'paint-1',
+      walls_primer_id: null,
+      ceiling_paint_id: null,
+      ceiling_primer_id: null,
+      trim_paint_id: null,
+      trim_primer_id: null,
+      override_labor_rate: 65,
+    })
+    saveQuoteDefaults.mockRejectedValue(new Error('Server unavailable.'))
+
+    const { result } = renderHook(() => useQuoteDefaultsPage())
+
+    await waitFor(() => {
+      expect(result.current.feedback.hasLoaded).toBe(true)
+    })
+
+    act(() => {
+      result.current.actions.setSettings({
+        ...result.current.form.settings,
+        override_labor_rate: 75,
+      })
+    })
+
+    await act(async () => {
+      await result.current.actions.save()
+    })
+
+    expect(result.current.feedback.actionError).toBe('Server unavailable.')
+    expect(result.current.form.settings.override_labor_rate).toBe(75)
+    expect(result.current.form.canSave).toBe(true)
+  })
+
   it('keeps inactive saved selections visible while blocking save', async () => {
     loadQuoteProducts.mockResolvedValue([
       { id: 'paint-1', name: 'Paint', family: 'Paint', status: 'Active' },

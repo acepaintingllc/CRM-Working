@@ -15,8 +15,16 @@ import {
   transitionNeedsDiscardReset,
   type QuoteRatesNavigationState,
 } from '../quoteRatesPageState'
-import { RATE_SUBGROUPS } from '../quoteRatesPageConfig'
+import {
+  FLAGS_SECTIONS,
+  RATE_SUBGROUPS,
+  ROOM_DEFAULTS_SECTIONS,
+} from '../quoteRatesPageConfig'
 import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
+import {
+  ratesFlagsEditableCategoryKeys,
+  ratesFlagsEditableCategoryRegistry,
+} from '@/types/estimator/ratesFlags'
 
 const payload: RatesFlagsPayload = {
   source: 'db',
@@ -92,6 +100,40 @@ const payload: RatesFlagsPayload = {
 }
 
 describe('quoteRatesPageNavigation invariants', () => {
+  it('places every editable category exactly once in the matching UI navigation group', () => {
+    const uiEntries = [
+      ...Object.entries(RATE_SUBGROUPS).flatMap(([group, items]) =>
+        items.map((item) => ({ ...item, group }))
+      ),
+      ...FLAGS_SECTIONS.map((item) => ({ ...item, group: item.key })),
+      ...ROOM_DEFAULTS_SECTIONS.map((item) => ({ ...item, group: item.key })),
+    ]
+    const uiKeys = uiEntries.map((entry) => entry.key)
+
+    expect([...uiKeys].sort()).toEqual([...ratesFlagsEditableCategoryKeys].sort())
+
+    for (const categoryKey of ratesFlagsEditableCategoryKeys) {
+      const entries = uiEntries.filter((entry) => entry.key === categoryKey)
+      const registration = ratesFlagsEditableCategoryRegistry.find(
+        (category) => category.key === categoryKey
+      )
+
+      expect(entries, categoryKey).toHaveLength(1)
+      expect(registration, categoryKey).toBeDefined()
+      if (!registration) throw new Error(`Missing registry entry for ${categoryKey}`)
+
+      expect(entries[0].group, categoryKey).toBe(registration.navigationGroup)
+      expect(entries[0].label, categoryKey).toBe(registration.navigationLabel)
+      if (registration.navigationGroup in RATE_SUBGROUPS) {
+        expect(registration.tab, categoryKey).toBe('rates')
+      } else if (FLAGS_SECTIONS.some((section) => section.key === registration.key)) {
+        expect(registration.tab, categoryKey).toBe('flags')
+      } else {
+        expect(registration.tab, categoryKey).toBe('room_defaults')
+      }
+    }
+  })
+
   it('keeps preferred selection only when it remains visible in the filtered slice', () => {
     const rows = getFilteredRows(payload.categories[0], {
       search: '',

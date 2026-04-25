@@ -1,13 +1,27 @@
-import type { RatesFlagsCategoryKey } from '@/types/estimator/ratesFlags'
+import {
+  ratesFlagsEditableCategoryRegistry,
+  type RatesFlagsEditableCategoryKey,
+  type RatesFlagsNavigationGroup,
+} from '@/types/estimator/ratesFlags'
 
 export type StatusFilter = 'active' | 'archived' | 'all'
-export type RateSectionKey = 'production' | 'unit_rates' | 'access_fees' | 'supplies'
-export type FlagsSectionKey =
-  | 'condition_modifiers'
-  | 'height_factors'
-  | 'wall_complexity'
-  | 'ceiling_types'
-export type RoomDefaultsSectionKey = 'room_types' | 'room_templates' | 'scope_defaults'
+export type RateSectionKey = Extract<
+  RatesFlagsNavigationGroup,
+  'production' | 'unit_rates' | 'access_fees' | 'supplies'
+>
+export type FlagsSectionKey = Extract<
+  RatesFlagsNavigationGroup,
+  'condition_modifiers' | 'height_factors' | 'wall_complexity' | 'ceiling_types'
+>
+export type RoomDefaultsSectionKey = Extract<
+  RatesFlagsNavigationGroup,
+  'room_types' | 'room_templates' | 'scope_defaults'
+>
+
+type CategoryNavigationItem = {
+  key: RatesFlagsEditableCategoryKey
+  label: string
+}
 
 export const RATE_SECTIONS = [
   { key: 'production', label: 'Production' },
@@ -16,45 +30,39 @@ export const RATE_SECTIONS = [
   { key: 'supplies', label: 'Supplies' },
 ] as const
 
-export const RATE_SUBGROUPS: Record<
-  RateSectionKey,
-  Array<{
-    key: RatesFlagsCategoryKey
-    label: string
-  }>
-> = {
-  production: [
-    { key: 'production_rates_walls', label: 'Walls' },
-    { key: 'production_rates_ceilings', label: 'Ceilings' },
-    { key: 'production_rates_trim', label: 'Trim' },
-  ],
-  unit_rates: [
-    { key: 'unit_rates_doors', label: 'Doors' },
-    { key: 'unit_rates_trim', label: 'Trim Types' },
-    { key: 'unit_rates_drywall', label: 'Drywall' },
-  ],
-  access_fees: [
-    { key: 'access_fees_ladders', label: 'Ladders' },
-    { key: 'access_fees_scaffolding', label: 'Scaffolding' },
-    { key: 'access_fees_specialty', label: 'Specialty' },
-  ],
-  supplies: [
-    { key: 'supply_rates_per_color', label: 'Per-Color' },
-    { key: 'supply_rates_area_based', label: 'Area-Based' },
-    { key: 'supply_rates_per_job', label: 'Per-Job' },
-    { key: 'supply_rates_roller_covers', label: 'Roller Covers' },
-  ],
+function buildNavigationItems(groups: readonly RatesFlagsNavigationGroup[]) {
+  return ratesFlagsEditableCategoryRegistry
+    .filter((category) => groups.includes(category.navigationGroup))
+    .sort((left, right) => left.navigationOrder - right.navigationOrder)
+    .map((category) => ({
+      key: category.key,
+      label: category.navigationLabel,
+    }))
 }
 
-export const FLAGS_SECTIONS = [
-  { key: 'condition_modifiers', label: 'Condition Modifiers' },
-  { key: 'height_factors', label: 'Height Factors' },
-  { key: 'wall_complexity', label: 'Wall Complexity' },
-  { key: 'ceiling_types', label: 'Ceiling Types' },
-] as const
+function buildRateSubgroups() {
+  return Object.fromEntries(
+    RATE_SECTIONS.map((section) => [
+      section.key,
+      buildNavigationItems([section.key]),
+    ])
+  ) as Record<RateSectionKey, CategoryNavigationItem[]>
+}
 
-export const ROOM_DEFAULTS_SECTIONS = [
-  { key: 'room_types', label: 'Room Types' },
-  { key: 'room_templates', label: 'Room Templates' },
-  { key: 'scope_defaults', label: 'Scope Defaults' },
-] as const
+export const RATE_SUBGROUPS: Record<
+  RateSectionKey,
+  CategoryNavigationItem[]
+> = buildRateSubgroups()
+
+export const FLAGS_SECTIONS = buildNavigationItems([
+  'condition_modifiers',
+  'height_factors',
+  'wall_complexity',
+  'ceiling_types',
+]) as Array<CategoryNavigationItem & { key: FlagsSectionKey }>
+
+export const ROOM_DEFAULTS_SECTIONS = buildNavigationItems([
+  'room_types',
+  'room_templates',
+  'scope_defaults',
+]) as Array<CategoryNavigationItem & { key: RoomDefaultsSectionKey }>

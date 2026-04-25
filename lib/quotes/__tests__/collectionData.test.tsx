@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   buildQuoteHomeBootstrapReadModel,
   buildQuoteHomeJobsPageReadModel,
-  buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSearchReadModel,
   buildQuoteHomeSummaryReadModel,
   buildQuoteJobVersionsReadModel,
@@ -295,7 +294,6 @@ describe('quote collection data', () => {
 
   it('returns empty collections without leaking undefined fields', () => {
     expect(buildQuoteListPayload([])).toEqual({ estimates: [] })
-    expect(buildQuoteHomeRecentActivityReadModel([])).toEqual({ items: [] })
     expect(buildQuoteHomeSearchReadModel([], 'kitchen')).toEqual({ query: 'kitchen', items: [] })
     expect(
       buildQuoteJobVersionsReadModel([], {
@@ -314,7 +312,6 @@ describe('quote collection data', () => {
   })
 
   it('normalizes empty decorated rows to required display fallbacks', () => {
-    const recent = buildQuoteHomeRecentActivityReadModel([{}]).items[0]
     const search = buildQuoteHomeSearchReadModel([{}], 'missing').items[0]
     const versions = buildQuoteJobVersionsReadModel([{}], {
       jobId: '',
@@ -336,7 +333,6 @@ describe('quote collection data', () => {
       is_sent_estimate: false,
     }
 
-    expect(recent).toEqual(expectedRequiredFields)
     expect(search).toEqual({
       ...expectedRequiredFields,
       customer_id: '',
@@ -394,31 +390,6 @@ describe('quote collection data', () => {
       final_total: null,
       updated_at: null,
       created_at: null,
-      is_sent_estimate: true,
-    })
-  })
-
-  it('builds recent activity separately and caps it at 12 items', () => {
-    const expandedRows = Array.from({ length: 15 }, (_, index) => ({
-      ...rows[0],
-      id: `estimate-${index + 1}`,
-      estimate_id: `estimate-${index + 1}`,
-      updated_at: `2026-04-22T${String(index).padStart(2, '0')}:00:00.000Z`,
-    }))
-
-    const payload = buildQuoteHomeRecentActivityReadModel(expandedRows)
-
-    expect(payload.items).toHaveLength(12)
-    expect(payload.items[0]).toEqual({
-      estimate_id: 'estimate-1',
-      job_id: 'job-2',
-      version_name: 'Quote Version',
-      version_state: 'draft',
-      version_kind: 'alternate',
-      job_title: 'Garage',
-      customer_name: 'Bob',
-      final_total: 500,
-      updated_at: '2026-04-22T00:00:00.000Z',
       is_sent_estimate: true,
     })
   })

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   buildQuoteHomeBootstrapReadModel: vi.fn(),
   buildQuoteHomeJobsPageReadModel: vi.fn(),
-  buildQuoteHomeRecentActivityReadModel: vi.fn(),
   buildQuoteHomeSummaryFromRow: vi.fn(),
   buildQuoteCreateJobContextReadModel: vi.fn(),
   buildQuoteHomeSearchReadModel: vi.fn(),
@@ -33,15 +32,12 @@ import {
   loadEstimateCollectionJobsPayload,
   loadEstimateCollectionPayload,
   loadEstimateCollectionQuoteCreateContextPayload,
-  loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload,
-  loadEstimateCollectionSummaryPayload,
 } from '../service.ts'
 
 const deps = {
   buildQuoteHomeBootstrapReadModel: mocks.buildQuoteHomeBootstrapReadModel,
   buildQuoteHomeJobsPageReadModel: mocks.buildQuoteHomeJobsPageReadModel,
-  buildQuoteHomeRecentActivityReadModel: mocks.buildQuoteHomeRecentActivityReadModel,
   buildQuoteHomeSummaryFromRow: mocks.buildQuoteHomeSummaryFromRow,
   buildQuoteCreateJobContextReadModel: mocks.buildQuoteCreateJobContextReadModel,
   buildQuoteHomeSearchReadModel: mocks.buildQuoteHomeSearchReadModel,
@@ -124,20 +120,6 @@ describe('estimate collection service', () => {
     })
     expect(mocks.decorateEstimateCollectionRows).toHaveBeenCalledWith(rows, { jobs: [], customers: [], rollups: [] })
     expect(mocks.buildQuoteListPayload).toHaveBeenCalledWith(decoratedRows)
-  })
-
-  it('returns the summary payload from the repository summary loader', async () => {
-    const row = { total_versions: 2, pipeline_total: 1500 }
-    const payload = { total_versions: 2, pipeline_total: 1500 }
-    mocks.loadEstimateCollectionSummary.mockResolvedValue({ ok: true, data: row })
-    mocks.buildQuoteHomeSummaryFromRow.mockReturnValue(payload)
-
-    await expect(loadEstimateCollectionSummaryPayload('org-1', deps)).resolves.toEqual({
-      ok: true,
-      data: payload,
-    })
-    expect(mocks.loadEstimateCollectionSummary).toHaveBeenCalledWith('org-1')
-    expect(mocks.buildQuoteHomeSummaryFromRow).toHaveBeenCalledWith(row)
   })
 
   it('builds the bootstrap payload from summary, paged jobs, and selected job versions', async () => {
@@ -227,27 +209,18 @@ describe('estimate collection service', () => {
     })
   })
 
-  it('builds recent activity and search payloads from decorated rows', async () => {
+  it('builds search payloads from decorated rows', async () => {
     const rows = [{ id: 'estimate-1', job_id: 'job-1' }]
     const decoratedRows = [{ estimate_id: 'estimate-1', job_id: 'job-1' }]
-    const recentActivityPayload = { items: decoratedRows }
     const searchPayload = { query: 'kitchen', items: decoratedRows }
 
-    mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: rows })
     mocks.searchEstimateCollectionRows.mockResolvedValue({
       ok: true,
       data: { query: 'kitchen', candidateLimit: 32, versionRows: rows, jobRows: [], customerRows: [] },
     })
     mocks.selectQuoteHomeSearchRows.mockReturnValue(rows)
     mocks.decorateEstimateCollectionRows.mockReturnValue(decoratedRows)
-    mocks.buildQuoteHomeRecentActivityReadModel.mockReturnValue(recentActivityPayload)
     mocks.buildQuoteHomeSearchReadModel.mockReturnValue(searchPayload)
-
-    await expect(loadEstimateCollectionRecentActivityPayload('org-1', deps)).resolves.toEqual({
-      ok: true,
-      data: recentActivityPayload,
-    })
-    expect(mocks.loadEstimateCollectionRowsForOrg).toHaveBeenCalledWith('org-1', { limit: 12 })
 
     await expect(loadEstimateCollectionSearchPayload('org-1', 'kitchen', deps)).resolves.toEqual({
       ok: true,

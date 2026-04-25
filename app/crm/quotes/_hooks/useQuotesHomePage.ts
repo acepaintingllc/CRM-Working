@@ -6,18 +6,18 @@ import {
   buildQuoteHomePageVm,
   type QuoteHomePageVm,
 } from '../_home/quoteHomePageVm'
-import { useQuoteHomePageResources } from './useQuoteHomePageResources'
+import { useQuoteHomePageResource } from './quoteHomePageResource'
 
 export function useQuotesHomePage(
   initialData?: QuoteHomeBootstrapReadModel | null
 ): QuoteHomePageVm {
-  const { vmState, vmResources } = useQuoteHomePageResources(initialData)
+  const quoteHome = useQuoteHomePageResource(initialData)
 
   return useMemo(
     () =>
-      buildQuoteHomePageVm(vmState, vmResources, {
+      buildQuoteHomePageVm(quoteHome.vmInput.state, quoteHome.vmInput.resources, {
         includeVersionFailureInFeedback: false,
       }),
-    [vmResources, vmState]
+    [quoteHome.vmInput]
   )
 }

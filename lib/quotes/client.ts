@@ -18,10 +18,6 @@ import type {
   RatesFlagsEditableCategoryKey,
 } from '@/types/estimator/ratesFlags'
 
-export async function loadQuoteHomeSummary<T>() {
-  return loadData<T>('/api/quotes/home/summary', { cache: 'no-store' })
-}
-
 export async function loadQuoteHomeBootstrap<T>() {
   return loadData<T>('/api/quotes/home/bootstrap', { cache: 'no-store' })
 }
@@ -82,10 +78,6 @@ export async function loadQuoteCreateJobContext<T>(jobId: string) {
       cache: 'no-store',
     }
   )
-}
-
-export async function loadQuoteList<T>() {
-  return loadData<T>('/api/quotes', { cache: 'no-store' })
 }
 
 export async function createQuoteVersion<T extends { id: string }>(input: CreateQuoteVersionInput) {

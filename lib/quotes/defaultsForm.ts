@@ -46,6 +46,16 @@ export type QuoteDefaultsProductFieldConfig<
   options: QuoteDefaultsProductOption<TProduct>[]
 }
 
+export type QuoteDefaultsFormSectionKey = 'product_defaults' | 'labor_rate'
+export type QuoteDefaultsFormSectionKind = 'product_defaults' | 'labor_rate'
+
+export type QuoteDefaultsFormSectionMetadata = {
+  key: QuoteDefaultsFormSectionKey
+  kind: QuoteDefaultsFormSectionKind
+  title: string
+  description: string
+}
+
 export type QuoteDefaultsValidationIssueCode =
   | 'invalid_labor_rate'
   | 'missing_product'
@@ -109,6 +119,21 @@ export const quoteDefaultsProductFields = [
   key: QuoteDefaultsProductFieldKey
   expectedFamily: ProductFamily
 }[]
+
+export const quoteDefaultsFormSections = [
+  {
+    key: 'product_defaults',
+    kind: 'product_defaults',
+    title: 'Paint and primer',
+    description: 'Shared starter selections for new quote job settings.',
+  },
+  {
+    key: 'labor_rate',
+    kind: 'labor_rate',
+    title: 'Labor rate',
+    description: 'Org-level labor rate used when a specific quote has not saved its own override.',
+  },
+] as const satisfies readonly QuoteDefaultsFormSectionMetadata[]
 
 export const emptyQuoteDefaults: QuoteDefaults = {
   walls_paint_id: null,
@@ -260,6 +285,21 @@ export function buildQuoteDefaultsFormState<
     ),
     canSave: validation.ok,
   }
+}
+
+export function formatQuoteDefaultsProductOptionLabel(
+  product: QuoteDefaultsProductOption,
+  expectedFamily: ProductFamily
+) {
+  if ('missing' in product && product.missing) return product.name
+
+  const name = product.name ?? product.id
+  const tags = [
+    product.status && !isActiveProductStatus(product.status) ? product.status : null,
+    product.family && !matchesExpectedFamily(product.family, expectedFamily) ? product.family : null,
+  ].filter(Boolean)
+
+  return tags.length > 0 ? `${name} (${tags.join(', ')})` : name
 }
 
 function buildQuoteDefaultsProductFieldConfigs<

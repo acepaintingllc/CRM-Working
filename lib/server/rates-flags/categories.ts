@@ -26,28 +26,9 @@ function findRequiredCategoryConfig<TKey extends RatesFlagsEditableCategoryKey>(
   return config as CategoryConfig<TKey>
 }
 
-export const CATEGORY_CONFIGS_BY_KEY = {
-  production_rates_walls: findRequiredCategoryConfig('production_rates_walls'),
-  production_rates_ceilings: findRequiredCategoryConfig('production_rates_ceilings'),
-  production_rates_trim: findRequiredCategoryConfig('production_rates_trim'),
-  unit_rates_doors: findRequiredCategoryConfig('unit_rates_doors'),
-  unit_rates_trim: findRequiredCategoryConfig('unit_rates_trim'),
-  unit_rates_drywall: findRequiredCategoryConfig('unit_rates_drywall'),
-  access_fees_ladders: findRequiredCategoryConfig('access_fees_ladders'),
-  access_fees_scaffolding: findRequiredCategoryConfig('access_fees_scaffolding'),
-  access_fees_specialty: findRequiredCategoryConfig('access_fees_specialty'),
-  supply_rates_per_color: findRequiredCategoryConfig('supply_rates_per_color'),
-  supply_rates_area_based: findRequiredCategoryConfig('supply_rates_area_based'),
-  supply_rates_per_job: findRequiredCategoryConfig('supply_rates_per_job'),
-  supply_rates_roller_covers: findRequiredCategoryConfig('supply_rates_roller_covers'),
-  wall_complexity: findRequiredCategoryConfig('wall_complexity'),
-  height_factors: findRequiredCategoryConfig('height_factors'),
-  ceiling_types: findRequiredCategoryConfig('ceiling_types'),
-  condition_modifiers: findRequiredCategoryConfig('condition_modifiers'),
-  room_types: findRequiredCategoryConfig('room_types'),
-  room_templates: findRequiredCategoryConfig('room_templates'),
-  scope_defaults: findRequiredCategoryConfig('scope_defaults'),
-} satisfies {
+export const CATEGORY_CONFIGS_BY_KEY = Object.fromEntries(
+  ratesFlagsEditableCategoryKeys.map((key) => [key, findRequiredCategoryConfig(key)] as const)
+) as {
   [TKey in RatesFlagsEditableCategoryKey]: CategoryConfig<TKey>
 }
 

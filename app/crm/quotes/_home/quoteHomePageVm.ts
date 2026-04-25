@@ -122,6 +122,11 @@ export type QuoteHomePageVm = {
   actions: QuoteHomePageActions
 }
 
+export type QuoteHomePageVmInput = {
+  state: QuoteHomePageVmState
+  resources: QuoteHomePageVmResources
+}
+
 export function buildQuoteHomePageVm(
   state: QuoteHomePageVmState,
   resources: QuoteHomePageVmResources,

@@ -16,9 +16,7 @@ import {
   loadEstimateCollectionJobVersionsPayload,
   loadEstimateCollectionPayload,
   loadEstimateCollectionQuoteCreateContextPayload,
-  loadEstimateCollectionRecentActivityPayload,
   loadEstimateCollectionSearchPayload,
-  loadEstimateCollectionSummaryPayload,
   type EstimateCollectionVersionCopy,
 } from '@/lib/server/estimate-collection/service'
 import {
@@ -59,37 +57,11 @@ export async function handleEstimateCollectionRouteGet() {
   return serviceResultDataResponse(await loadEstimateCollectionPayload(auth.session.orgId))
 }
 
-export async function handleEstimateHomeSummaryRouteGet() {
-  const auth = await requireSessionUserOrg()
-  if (!auth.ok) return auth.response
-
-  return serviceResultDataResponse(await loadEstimateCollectionSummaryPayload(auth.session.orgId))
-}
-
 export async function handleEstimateHomeBootstrapRouteGet() {
   const auth = await requireSessionUserOrg()
   if (!auth.ok) return auth.response
 
   return serviceResultDataResponse(await loadEstimateCollectionBootstrapPayload(auth.session.orgId))
-}
-
-export async function handleEstimateHomeRecentActivityRouteGet() {
-  const auth = await requireSessionUserOrg()
-  if (!auth.ok) return auth.response
-
-  return serviceResultDataResponse(
-    await loadEstimateCollectionRecentActivityPayload(auth.session.orgId)
-  )
-}
-
-export async function handleEstimateHomeJobCountsRouteGet() {
-  const auth = await requireSessionUserOrg()
-  if (!auth.ok) return auth.response
-
-  return Response.json(
-    { error: 'Quote home job-counts has been replaced by the paged jobs read model.' },
-    { status: 410 }
-  )
 }
 
 export async function handleEstimateHomeJobsRouteGet(request: Request) {

@@ -61,11 +61,13 @@ type QuoteHomeSearchResource = {
 }
 
 type UseQuoteHomePageControllerParams = {
-  homeResource: QuoteHomePageControllerHomeResource
-  versions: QuoteHomePageControllerVersionsResource
-  create: QuoteHomeCreateActions
-  search: QuoteHomeSearchResource
-  stateActions: QuoteHomeStateActions
+  resources: {
+    home: QuoteHomePageControllerHomeResource
+    versions: QuoteHomePageControllerVersionsResource
+    create: QuoteHomeCreateActions
+    search: QuoteHomeSearchResource
+    pageActions: QuoteHomeStateActions
+  }
 }
 
 function buildDeleteRefreshWarning(refreshFailures: string[]) {
@@ -124,11 +126,7 @@ async function refreshQuoteHomeAfterDelete(
 }
 
 export function useQuoteHomePageController({
-  homeResource,
-  versions,
-  create,
-  search,
-  stateActions,
+  resources,
 }: UseQuoteHomePageControllerParams): {
   actionWarning: QuoteHomeActionWarning | null
   deleteState: QuoteHomeDeleteState
@@ -140,26 +138,26 @@ export function useQuoteHomePageController({
     attemptRefresh: refreshBootstrap,
     loadMore: loadMoreJobs,
     retryJobs,
-  } = homeResource
+  } = resources.home
   const {
     attemptRefresh: refreshVersions,
     items: versionItems,
     loadMore: loadMoreVersions,
     pageData,
     refresh: refreshVersionsList,
-  } = versions
+  } = resources.versions
   const {
     createVersion,
     setVersionKind,
     setVersionName,
-  } = create
-  const { retry: retrySearch } = search
+  } = resources.create
+  const { retry: retrySearch } = resources.search
   const {
     setJobQuery,
     setSearchFocused,
     setSearchQuery,
     setSelectedJobId,
-  } = stateActions
+  } = resources.pageActions
   const {
     beginDelete,
     cancelDelete: cancelDeleteVersion,

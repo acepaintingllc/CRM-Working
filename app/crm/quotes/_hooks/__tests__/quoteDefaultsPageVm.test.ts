@@ -46,11 +46,20 @@ describe('buildQuoteDefaultsPageVm', () => {
       })
     )
 
-    expect(vm.form.productDefaultFields[0]?.options).toEqual([
-      { id: 'paint-1', name: 'Paint', family: 'Paint', status: 'Active' },
-    ])
+    expect(vm.form.sections[0]).toMatchObject({
+      key: 'product_defaults',
+      kind: 'product_defaults',
+    })
+    expect(vm.form.sections[0]).toMatchObject({
+      productDefaultFields: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'walls_paint_id',
+          options: [expect.objectContaining({ id: 'paint-1', label: 'Paint' })],
+        }),
+      ]),
+    })
     expect(vm.form.productDefaultFields[1]?.options).toEqual([
-      { id: 'primer-1', name: 'Primer', family: 'Primer', status: 'Active' },
+      expect.objectContaining({ id: 'primer-1', label: 'Primer' }),
     ])
   })
 
@@ -73,10 +82,14 @@ describe('buildQuoteDefaultsPageVm', () => {
     )
 
     expect(vm.form.productDefaultFields[0]?.options[0]).toEqual(
-      expect.objectContaining({ id: 'inactive-paint', status: 'Inactive' })
+      expect.objectContaining({
+        id: 'inactive-paint',
+        status: 'Inactive',
+        label: 'Old Paint (Inactive)',
+      })
     )
     expect(vm.form.productDefaultFields[1]?.options[0]).toEqual(
-      expect.objectContaining({ id: 'paint-1', family: 'Paint' })
+      expect.objectContaining({ id: 'paint-1', family: 'Paint', label: 'Paint (Paint)' })
     )
     expect(vm.form.productDefaultErrors.walls_paint_id).toMatch(/inactive/i)
     expect(vm.form.productDefaultErrors.walls_primer_id).toMatch(/must use a primer product/)
@@ -103,6 +116,7 @@ describe('buildQuoteDefaultsPageVm', () => {
       family: null,
       status: 'Missing',
       missing: true,
+      label: 'Missing product (deleted-paint)',
     })
     expect(vm.form.productDefaultErrors.walls_paint_id).toMatch(/no longer exists/)
     expect(vm.form.canSave).toBe(false)
@@ -117,5 +131,32 @@ describe('buildQuoteDefaultsPageVm', () => {
     expect(dirty.form.canSave).toBe(true)
     expect(saving.form.canSave).toBe(false)
     expect(saving.feedback.saving).toBe(true)
+  })
+
+  it('keeps labor defaults in their own section with field errors', () => {
+    const vm = buildQuoteDefaultsPageVm(
+      buildResource({
+        data: {
+          settings: {
+            ...emptyQuoteDefaults,
+            override_labor_rate: 10001,
+          },
+        },
+        dirty: true,
+      })
+    )
+
+    expect(vm.form.sections[1]).toEqual({
+      key: 'labor_rate',
+      kind: 'labor_rate',
+      title: 'Labor rate',
+      description: 'Org-level labor rate used when a specific quote has not saved its own override.',
+      laborRateField: {
+        label: 'Labor rate / hr',
+        key: 'override_labor_rate',
+        error: 'Labor rate must be between 0 and 10000.',
+      },
+    })
+    expect(vm.form.canSave).toBe(false)
   })
 })

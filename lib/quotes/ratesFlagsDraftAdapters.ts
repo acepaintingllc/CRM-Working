@@ -348,30 +348,11 @@ type RatesFlagsDraftAdapterMap = {
   [TKey in RatesFlagsEditableCategoryKey]: RatesFlagsDraftAdapter<TKey>
 }
 
-export const ratesFlagsDraftAdapters: RatesFlagsDraftAdapterMap = {
-  production_rates_walls: buildAdapter('production_rates_walls'),
-  production_rates_ceilings: buildAdapter('production_rates_ceilings'),
-  production_rates_trim: buildAdapter('production_rates_trim'),
-  unit_rates_doors: buildAdapter('unit_rates_doors'),
-  unit_rates_trim: buildAdapter('unit_rates_trim'),
-  unit_rates_drywall: buildAdapter('unit_rates_drywall'),
-  access_fees_ladders: buildAdapter('access_fees_ladders'),
-  access_fees_scaffolding: buildAdapter('access_fees_scaffolding'),
-  access_fees_specialty: buildAdapter('access_fees_specialty'),
-  supply_rates_per_color: buildAdapter('supply_rates_per_color'),
-  supply_rates_area_based: buildAdapter('supply_rates_area_based'),
-  supply_rates_per_job: buildAdapter('supply_rates_per_job'),
-  supply_rates_roller_covers: buildAdapter('supply_rates_roller_covers'),
-  wall_complexity: buildAdapter('wall_complexity'),
-  height_factors: buildAdapter('height_factors'),
-  ceiling_types: buildAdapter('ceiling_types'),
-  condition_modifiers: buildAdapter('condition_modifiers'),
-  room_types: buildAdapter('room_types'),
-  room_templates: buildAdapter('room_templates'),
-  scope_defaults: buildAdapter('scope_defaults'),
-}
-
 export const ratesFlagsEditableCategoryKeys = sharedRatesFlagsEditableCategoryKeys
+
+export const ratesFlagsDraftAdapters = Object.fromEntries(
+  ratesFlagsEditableCategoryKeys.map((key) => [key, buildAdapter(key)] as const)
+) as RatesFlagsDraftAdapterMap
 
 const editableCategoryKeys = new Set<RatesFlagsEditableCategoryKey>(
   ratesFlagsEditableCategoryKeys

@@ -141,11 +141,13 @@ function buildController(
 
   const hook = renderHook(() =>
     useQuoteHomePageController({
-      homeResource,
-      versions,
-      create,
-      search,
-      stateActions,
+      resources: {
+        home: homeResource,
+        versions,
+        create,
+        search,
+        pageActions: stateActions,
+      },
     })
   )
 
