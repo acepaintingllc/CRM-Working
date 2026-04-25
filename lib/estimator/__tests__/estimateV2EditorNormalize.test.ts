@@ -6,6 +6,7 @@ import {
   inferTrimUnitTypeFromText,
   isCrownTrimType,
   normalizeRoom,
+  normalizeRoller,
   normalizeScope,
   resolveRoomModeById,
 } from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorNormalize.ts'
@@ -80,6 +81,34 @@ test('normalizeRoom and normalizeScope coerce values into editor drafts', () => 
   assert.equal(scope.primeMode, 'SPOT')
   assert.equal(scope.paintCoats, '3')
   assert.equal(scope.heightFactor, '1.25')
+})
+
+test('normalizeRoller preserves unassigned wall scope identity and normalizes color ids', () => {
+  const scopeRoller = normalizeRoller(
+    {
+      id: 'roller-unassigned',
+      scope: 'Wall',
+      wall_color_id: 'scope:wall-unassigned',
+      selected_option_id: 'WALL_9',
+      roller_size_in: 9,
+      covers_qty: 1,
+    },
+    0
+  )
+  const colorRoller = normalizeRoller(
+    {
+      id: 'roller-color',
+      scope: 'Wall',
+      wall_color_id: 'color1',
+      selected_option_id: 'WALL_9',
+      roller_size_in: 9,
+      covers_qty: 1,
+    },
+    1
+  )
+
+  assert.equal(scopeRoller?.wallColorId, 'scope:wall-unassigned')
+  assert.equal(colorRoller?.wallColorId, 'COLOR1')
 })
 
 test('resolveRoomModeById prefers scope modes and defaults missing rooms to RECT', () => {

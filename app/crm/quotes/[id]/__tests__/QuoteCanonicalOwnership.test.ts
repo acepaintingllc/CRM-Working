@@ -8,6 +8,9 @@ const quoteInternalPaths = [
   'app/crm/quotes/[id]/_lib/estimateV2EditorNormalize.ts',
   'app/crm/quotes/[id]/send/SendQuoteClient.tsx',
   'app/crm/quotes/[id]/send/SendQuoteReviewClient.tsx',
+  'app/crm/quotes/[id]/details/_components/EstimateV2DetailsPageContent.tsx',
+  'app/crm/quotes/[id]/details/_state/useEstimateV2DetailsPage.ts',
+  'app/crm/quotes/[id]/details/_lib/estimateV2DetailsVm.ts',
   'app/crm/quotes/[id]/summary/_components/EstimateV2SummaryPageContent.tsx',
   'app/crm/quotes/[id]/summary/_lib/estimateV2SummaryDerived.ts',
 ]
@@ -16,11 +19,15 @@ const forbiddenQuoteImplementationDirectories = [
   'app/crm/quotes/[id]/_components',
   'app/crm/quotes/[id]/_state',
   'app/crm/quotes/[id]/_lib',
+  'app/crm/quotes/[id]/details/_components',
+  'app/crm/quotes/[id]/details/_state',
+  'app/crm/quotes/[id]/details/_lib',
   'app/crm/quotes/[id]/summary/_components',
   'app/crm/quotes/[id]/summary/_lib',
 ]
 
 const forbiddenQuoteImplementationDirectoryPrefixes = [
+  'app/crm/quotes/[id]/details/_',
   'app/crm/quotes/[id]/summary/_',
 ]
 
@@ -36,6 +43,9 @@ const canonicalEstimateRuntimePaths = [
   'app/crm/estimates/[id]/v2/_state/useEstimateV2SummaryLoader.ts',
   'app/crm/estimates/[id]/v2/_state/useEstimateV2SummaryPolicyController.ts',
   'app/crm/estimates/[id]/v2/_state/useEstimateV2TrimPaintController.ts',
+  'app/crm/estimates/[id]/v2/details/_components/EstimateV2DetailsPageContent.tsx',
+  'app/crm/estimates/[id]/v2/details/_lib/estimateV2DetailsVm.ts',
+  'app/crm/estimates/[id]/v2/details/_state/useEstimateV2DetailsPage.ts',
   'app/crm/estimates/[id]/v2/summary/page.tsx',
   'app/crm/estimates/[id]/v2/summary/_components/EstimateV2SummaryPageContent.tsx',
   'app/crm/estimates/[id]/send/_shared/customerSendWorkflow.ts',

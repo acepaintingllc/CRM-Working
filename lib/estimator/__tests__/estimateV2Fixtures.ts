@@ -9,6 +9,7 @@ import type {
   EstimateV2PricingSummary,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
   EstimateV2SummaryPageData,
   EstimateV2TrimPaint,
   EstimateV2TrimScopeDraft,
@@ -27,6 +28,7 @@ type MixedEstimateFixture = {
   orgJobProductDefaults: EstimateV2JobDefaultProducts
   rooms: EstimateV2RoomDraft[]
   roomFlags: EstimateV2RoomFlagDraft[]
+  rollers: EstimateV2RollerDraft[]
   scopes: EstimateV2WallScopeDraft[]
   segments: EstimateV2WallSegmentDraft[]
   ceilingScopes: EstimateV2CeilingScopeDraft[]
@@ -189,6 +191,19 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
 
   const roomFlags: EstimateV2RoomFlagDraft[] = [
     { id: 'room-flag-1', roomId: 'R002', flagId: 'FLAG-HIGH', position: 0 },
+  ]
+
+  const rollers: EstimateV2RollerDraft[] = [
+    {
+      id: 'roller-wall-color-1',
+      scope: 'Wall',
+      wallColorId: 'COLOR1',
+      selectedOptionId: '',
+      rollerSizeIn: '9',
+      coversQty: '2',
+      notes: 'Main wall roller',
+      position: 0,
+    },
   ]
 
   const scopes: EstimateV2WallScopeDraft[] = [
@@ -513,6 +528,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     scopes,
     segments,
     roomFlags,
+    rollers,
     ceilingScopes,
     ceilingSegments,
     trimScopes
@@ -696,6 +712,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     orgJobProductDefaults: clone(orgJobProductDefaults),
     rooms: clone(rooms),
     roomFlags: clone(roomFlags),
+    rollers: clone(rollers),
     scopes: clone(scopes),
     segments: clone(segments),
     ceilingScopes: clone(ceilingScopes),

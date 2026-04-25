@@ -160,11 +160,11 @@ begin
       select
         j.id,
         j.customer_id,
-        c.name as customer_name,
-        c.address as customer_address,
-        j.title,
-        j.description,
-        j.status,
+        c.name::text as customer_name,
+        c.address::text as customer_address,
+        j.title::text as title,
+        j.description::text as description,
+        j.status::text as status,
         j.created_at,
         j.estimate_date,
         j.estimate_sent_at,
@@ -173,7 +173,7 @@ begin
         j.scheduled_email_sent_at,
         j.completed_at,
         j.completed_email_sent_at,
-        j.closeout_notes,
+        j.closeout_notes::text as closeout_notes,
         j.linked_estimate_id
       from public.jobs j
       join public.customers c

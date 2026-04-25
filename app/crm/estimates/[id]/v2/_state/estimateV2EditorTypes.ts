@@ -11,9 +11,11 @@ import type {
   EstimateV2JobMeta,
   EstimateV2JobSettingsDraft,
   EstimateV2PaintProductOption,
+  EstimateV2PricingSummary,
   EstimateV2ProductionRateOption,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
   EstimateV2RoomFlagOption,
   EstimateV2TrimScopeDraft,
   EstimateV2TrimTypeOption,
@@ -37,6 +39,7 @@ export type DirtySource =
   | 'walls'
   | 'ceilings'
   | 'trim'
+  | 'details-overrides'
   | 'job-settings'
   | 'customer'
   | 'save:auto'
@@ -59,6 +62,8 @@ export type EstimateV2EditorCollections = {
   setSegments: EstimateV2StateSetter<EstimateV2WallSegmentDraft[]>
   roomFlags: EstimateV2RoomFlagDraft[]
   setRoomFlags: EstimateV2StateSetter<EstimateV2RoomFlagDraft[]>
+  rollers: EstimateV2RollerDraft[]
+  setRollers: EstimateV2StateSetter<EstimateV2RollerDraft[]>
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   setCeilingScopes: EstimateV2StateSetter<EstimateV2CeilingScopeDraft[]>
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
@@ -84,6 +89,8 @@ export type EstimateV2EditorMetaState = {
   setCeilingCalculations: EstimateV2StateSetter<Unsafe | null>
   trimCalculations: Unsafe | null
   setTrimCalculations: EstimateV2StateSetter<Unsafe | null>
+  pricingSummary?: EstimateV2PricingSummary | null
+  setPricingSummary: EstimateV2StateSetter<EstimateV2PricingSummary | null>
   selectedRoomId: string
   setSelectedRoomId: EstimateV2StateSetter<string>
   error: EstimateV2Error | null

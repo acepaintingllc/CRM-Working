@@ -30,6 +30,7 @@ export function applyEstimateV2SuccessfulSaveState(
   state.setWallCalculations(responseState.calculations.wallCalculations)
   state.setCeilingCalculations(responseState.calculations.ceilingCalculations)
   state.setTrimCalculations(responseState.calculations.trimCalculations)
+  state.setPricingSummary(responseState.calculations.pricingSummary)
   state.setEstimate((prev) => (prev ? { ...prev, updated_at: new Date().toISOString() } : prev))
   state.setLastSavedSnapshot(responseState.lastSavedSnapshot)
 }

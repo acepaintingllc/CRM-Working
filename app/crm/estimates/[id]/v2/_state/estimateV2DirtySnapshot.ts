@@ -6,6 +6,7 @@ import type {
   EstimateV2CeilingSegmentDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
   EstimateV2SavePayload,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
@@ -31,6 +32,7 @@ export function buildEstimateV2DirtySnapshot(params: {
   scopes: EstimateV2WallScopeDraft[]
   segments: EstimateV2WallSegmentDraft[]
   roomFlags: EstimateV2RoomFlagDraft[]
+  rollers: EstimateV2RollerDraft[]
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
@@ -40,6 +42,7 @@ export function buildEstimateV2DirtySnapshot(params: {
     params.scopes,
     params.segments,
     params.roomFlags,
+    params.rollers,
     params.ceilingScopes,
     params.ceilingSegments,
     params.trimScopes

@@ -30,6 +30,7 @@ type EstimateV2CollectionsState = Omit<
   | 'setScopes'
   | 'setSegments'
   | 'setRoomFlags'
+  | 'setRollers'
   | 'setCeilingScopes'
   | 'setCeilingSegments'
   | 'setTrimScopes'
@@ -45,6 +46,7 @@ type EstimateV2MetaFields = Omit<
   | 'setWallCalculations'
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
+  | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
   | 'setValidationIssues'
@@ -92,6 +94,7 @@ type EstimateV2CollectionSetters = Pick<
   | 'setScopes'
   | 'setSegments'
   | 'setRoomFlags'
+  | 'setRollers'
   | 'setCeilingScopes'
   | 'setCeilingSegments'
   | 'setTrimScopes'
@@ -107,6 +110,7 @@ type EstimateV2MetaSetters = Pick<
   | 'setWallCalculations'
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
+  | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
   | 'setValidationIssues'
@@ -197,6 +201,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       scopes: [],
       segments: [],
       roomFlags: [],
+      rollers: [],
       ceilingScopes: [],
       ceilingSegments: [],
       trimScopes: [],
@@ -210,6 +215,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       wallCalculations: null,
       ceilingCalculations: null,
       trimCalculations: null,
+      pricingSummary: null,
       selectedRoomId: '',
       error: null,
       validationIssues: [],
@@ -280,6 +286,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
           roomFlags: resolveUpdater(state.collections.roomFlags, value),
         },
       })),
+    setRollers: (value) =>
+      set((state) => ({
+        collections: {
+          ...state.collections,
+          rollers: resolveUpdater(state.collections.rollers, value),
+        },
+      })),
     setCeilingScopes: (value) =>
       set((state) => ({
         collections: {
@@ -340,6 +353,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
         meta: {
           ...state.meta,
           trimCalculations: resolveUpdater(state.meta.trimCalculations, value),
+        },
+      })),
+    setPricingSummary: (value) =>
+      set((state) => ({
+        meta: {
+          ...state.meta,
+          pricingSummary: resolveUpdater(state.meta.pricingSummary ?? null, value),
         },
       })),
     setSelectedRoomId: (value) =>
@@ -461,6 +481,8 @@ function selectCollectionsWithSetters(state: EstimateV2EditorStore): EstimateV2E
     setSegments: state.setSegments,
     roomFlags: state.collections.roomFlags,
     setRoomFlags: state.setRoomFlags,
+    rollers: state.collections.rollers,
+    setRollers: state.setRollers,
     ceilingScopes: state.collections.ceilingScopes,
     setCeilingScopes: state.setCeilingScopes,
     ceilingSegments: state.collections.ceilingSegments,
@@ -488,6 +510,8 @@ function selectMetaWithSetters(state: EstimateV2EditorStore): EstimateV2EditorMe
     setCeilingCalculations: state.setCeilingCalculations,
     trimCalculations: state.meta.trimCalculations,
     setTrimCalculations: state.setTrimCalculations,
+    pricingSummary: state.meta.pricingSummary,
+    setPricingSummary: state.setPricingSummary,
     selectedRoomId: state.meta.selectedRoomId,
     setSelectedRoomId: state.setSelectedRoomId,
     error: state.meta.error,

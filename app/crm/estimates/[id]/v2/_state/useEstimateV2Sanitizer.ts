@@ -20,6 +20,7 @@ import type {
   EstimateV2JobMeta,
   EstimateV2JobSettingsDraft as JobSettingsDraft,
   EstimateV2RoomFlagDraft as RoomFlagDraft,
+  EstimateV2RollerDraft,
   EstimateV2TrimTypeOption,
 } from '@/types/estimator/v2'
 import { inferTrimUnitTypeFromText } from '../_lib/estimateV2EditorNormalize'
@@ -29,6 +30,7 @@ import {
   normalizeCeilingSegment,
   normalizeRoom,
   normalizeRoomFlag,
+  normalizeRoller,
   normalizeScope,
   normalizeSegment,
   normalizeTrimScope,
@@ -53,6 +55,7 @@ export type EstimateV2SanitizedLoadResult = {
     scopes: ReturnType<typeof normalizeScope>[]
     segments: ReturnType<typeof normalizeSegment>[]
     roomFlags: RoomFlagDraft[]
+    rollers: EstimateV2RollerDraft[]
     ceilingScopes: ReturnType<typeof normalizeCeilingScope>[]
     ceilingSegments: ReturnType<typeof normalizeCeilingSegment>[]
     trimScopes: ReturnType<typeof normalizeTrimScope>[]
@@ -205,6 +208,11 @@ export function sanitizeEstimateV2EditorLoad(params: {
       .map(normalizeRoomFlag)
       .filter((flag): flag is RoomFlagDraft => flag != null)
   )
+  const normalizedRollers = sortByPosition(
+    (estimatePayload.inputs.rollers ?? [])
+      .map(normalizeRoller)
+      .filter((roller): roller is NonNullable<ReturnType<typeof normalizeRoller>> => roller != null)
+  )
 
   const normalizedCeilingScopes = sortByPosition(
     (estimatePayload.inputs.room_ceiling_scopes ?? []).map(normalizeCeilingScope)
@@ -268,6 +276,7 @@ export function sanitizeEstimateV2EditorLoad(params: {
     scopes: recalculated.wallScopes,
     segments: sanitizedWalls.segments,
     roomFlags: normalizedRoomFlags,
+    rollers: normalizedRollers,
     ceilingScopes: recalculated.ceilingScopes,
     ceilingSegments: sanitizedCeilings.ceilingSegments,
     trimScopes: recalculated.trimScopes,
@@ -281,6 +290,7 @@ export function sanitizeEstimateV2EditorLoad(params: {
       scopes: recalculated.wallScopes,
       segments: sanitizedWalls.segments,
       roomFlags: normalizedRoomFlags,
+      rollers: normalizedRollers,
       ceilingScopes: recalculated.ceilingScopes,
       ceilingSegments: sanitizedCeilings.ceilingSegments,
       trimScopes: recalculated.trimScopes,

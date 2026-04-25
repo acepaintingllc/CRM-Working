@@ -3,6 +3,7 @@ export type EstimateRouteCatalogSource = 'estimate' | 'v2'
 export type EstimateRouteFamily = {
   listHref: string
   editorHref: (estimateId: string) => string
+  detailsHref: (estimateId: string) => string
   summaryHref: (estimateId: string) => string
   sendHref: (estimateId: string) => string
   estimateApiHref: (estimateId: string) => string
@@ -23,6 +24,7 @@ function withCatalogSourceQuery(path: string, catalogSource?: EstimateRouteCatal
 export const estimateRouteFamily: EstimateRouteFamily = {
   listHref: '/crm/quotes',
   editorHref: (estimateId) => `/crm/estimates/${estimateId}/v2`,
+  detailsHref: (estimateId) => `/crm/estimates/${estimateId}/v2/details`,
   summaryHref: (estimateId) => `/crm/estimates/${estimateId}/v2/summary`,
   sendHref: (estimateId) => `/crm/estimates/${estimateId}/send`,
   estimateApiHref: (estimateId) => `/api/estimates/${estimateId}`,
@@ -35,6 +37,7 @@ export const estimateRouteFamily: EstimateRouteFamily = {
 export const quoteRouteFamily: EstimateRouteFamily = {
   listHref: '/crm/quotes',
   editorHref: (estimateId) => `/crm/quotes/${estimateId}`,
+  detailsHref: (estimateId) => `/crm/quotes/${estimateId}/details`,
   summaryHref: (estimateId) => `/crm/quotes/${estimateId}/summary`,
   sendHref: (estimateId) => `/crm/quotes/${estimateId}/send`,
   estimateApiHref: (estimateId) => `/api/quotes/${estimateId}`,

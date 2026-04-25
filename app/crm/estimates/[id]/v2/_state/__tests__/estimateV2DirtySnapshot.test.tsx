@@ -14,6 +14,7 @@ describe('estimateV2DirtySnapshot', () => {
       scopes: [...fixture.scopes].reverse(),
       segments: [...fixture.segments].reverse(),
       roomFlags: [...fixture.roomFlags].reverse(),
+      rollers: [...fixture.rollers].reverse(),
       ceilingScopes: [...fixture.ceilingScopes].reverse(),
       ceilingSegments: [...fixture.ceilingSegments].reverse(),
       trimScopes: [...fixture.trimScopes].reverse(),
