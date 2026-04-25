@@ -4,8 +4,8 @@ import { useEditableResource } from '@/app/crm/_hooks/useEditableResource'
 import { loadQuoteDefaults, loadQuoteProducts, saveQuoteDefaults } from '@/lib/quotes/client'
 import {
   areQuoteDefaultsEqual,
-  normalizeQuoteDefaults,
-  validateQuoteDefaults,
+  buildQuoteDefaultsFormState,
+  type QuoteDefaultsFormState,
 } from '@/lib/quotes/defaultsForm'
 import type { QuoteDefaults } from '@/lib/settings/types'
 
@@ -20,12 +20,23 @@ export type QuoteDefaultsProductRow = {
 export type QuoteDefaultsResource = {
   settings: QuoteDefaults
   products: QuoteDefaultsProductRow[]
+  form: QuoteDefaultsFormState<QuoteDefaultsProductRow>
 }
 
-const emptyQuoteDefaultsResource: QuoteDefaultsResource = {
-  settings: normalizeQuoteDefaults(),
-  products: [],
+function buildQuoteDefaultsResource(
+  settings: Partial<QuoteDefaults> | null | undefined,
+  products: QuoteDefaultsProductRow[]
+): QuoteDefaultsResource {
+  const form = buildQuoteDefaultsFormState(settings, { products })
+
+  return {
+    settings: form.settings,
+    products,
+    form,
+  }
 }
+
+const emptyQuoteDefaultsResource = buildQuoteDefaultsResource(null, [])
 
 async function loadQuoteDefaultsResource(): Promise<QuoteDefaultsResource> {
   const [products, settings] = await Promise.all([
@@ -33,27 +44,21 @@ async function loadQuoteDefaultsResource(): Promise<QuoteDefaultsResource> {
     loadQuoteDefaults(),
   ])
 
-  return {
-    settings: normalizeQuoteDefaults(settings),
-    products,
-  }
+  return buildQuoteDefaultsResource(settings, products)
 }
 
 async function saveQuoteDefaultsResource(
   current: QuoteDefaultsResource
 ): Promise<{ data: QuoteDefaultsResource; notice: string }> {
-  const validated = validateQuoteDefaults(current.settings, { products: current.products })
-  if (!validated.ok) {
-    throw new Error(validated.error)
+  const form = buildQuoteDefaultsFormState(current.settings, { products: current.products })
+  if (!form.validation.ok) {
+    throw new Error(form.validation.error)
   }
 
-  const result = await saveQuoteDefaults(validated.value)
+  const result = await saveQuoteDefaults(form.validation.value)
 
   return {
-    data: {
-      settings: normalizeQuoteDefaults(result.data ?? validated.value),
-      products: current.products,
-    },
+    data: buildQuoteDefaultsResource(result.data ?? form.settings, current.products),
     notice: result.notice ?? 'Quote defaults saved.',
   }
 }
@@ -84,7 +89,7 @@ export function useQuoteDefaultsPageController() {
       reload: resource.reload,
       save: resource.saveChanges,
       setSettings: (next: QuoteDefaults) =>
-        resource.setData((current) => ({ ...current, settings: next })),
+        resource.setData((current) => buildQuoteDefaultsResource(next, current.products)),
     },
   }
 }

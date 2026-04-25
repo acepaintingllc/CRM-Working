@@ -16,8 +16,19 @@ import type {
   RatesFlagsPayload,
   RatesFlagsRow,
 } from '@/types/estimator/ratesFlags'
-import type { QuoteRatesNavigationState, QuoteRatesEditorSnapshot } from './quoteRatesPageState'
-import { emptyQuoteRatesEditorSnapshot, getDefaultRateCategory } from './quoteRatesPageState'
+import type {
+  QuoteRatesControllerAction,
+  QuoteRatesDerivedState,
+  QuoteRatesEditorSnapshot,
+  QuoteRatesNavigationState,
+  QuoteRatesPendingTransition,
+  QuoteRatesWorkflowState,
+} from './quoteRatesPageState'
+import {
+  emptyQuoteRatesEditorSnapshot,
+  getDefaultRateCategory,
+  getQuoteRatesHasUnsavedChanges,
+} from './quoteRatesPageState'
 
 export function resolveActiveCategoryKey(navigation: QuoteRatesNavigationState) {
   if (navigation.activeTab === 'rates') return navigation.rateCategory
@@ -63,6 +74,43 @@ export function getQuoteRatesCategoryContext(
   const activeCategory = resolveActiveCategory(data, navigation)
   const filteredRows = getFilteredRows(activeCategory, navigation)
   return { activeCategory, filteredRows }
+}
+
+export function getQuoteRatesSelectedRow(
+  activeCategory: RatesFlagsCategory | null,
+  selectedId: string
+) {
+  if (!activeCategory || !selectedId) return null
+  return activeCategory.rows.find((row) => row.id === selectedId) ?? null
+}
+
+export function buildQuoteRatesDerivedState(
+  data: RatesFlagsPayload,
+  state: QuoteRatesWorkflowState
+): QuoteRatesDerivedState {
+  const { activeCategory, filteredRows } = getQuoteRatesCategoryContext(data, state.navigation)
+  const selectedRow = getQuoteRatesSelectedRow(activeCategory, state.selectedId)
+  const editableActiveCategory =
+    activeCategory && isRatesFlagsEditableCategory(activeCategory) ? activeCategory : null
+  const adapter = editableActiveCategory
+    ? getRatesFlagsDraftAdapter(editableActiveCategory.key)
+    : null
+  const validationResult =
+    editableActiveCategory && adapter && state.draft
+      ? adapter.validateDraft(editableActiveCategory, state.draft)
+      : null
+  const validationError = validationResult && !validationResult.ok ? validationResult.error : null
+
+  return {
+    activeCategory,
+    editableActiveCategory,
+    filteredRows,
+    selectedRow,
+    adapter,
+    validationResult,
+    validationError,
+    isDirty: getQuoteRatesHasUnsavedChanges(state),
+  }
 }
 
 export function buildQuoteRatesEditorSnapshotFromSelection(
@@ -116,9 +164,75 @@ export function buildQuoteRatesMutationSnapshot(
   }
 }
 
+export function buildQuoteRatesResourceSyncAction(
+  state: QuoteRatesWorkflowState,
+  resourceData: RatesFlagsPayload
+): QuoteRatesControllerAction | null {
+  const selection = buildQuoteRatesSelectionSnapshot(
+    resourceData,
+    state.navigation,
+    (state.refreshSelectionId ?? state.selectedId) || undefined
+  )
+
+  const preserveCreateDraft = state.editorMode === 'create' && !state.forceRefreshRehydrate
+  const selectionChanged = selection.selectedId !== state.selectedId
+  const missingDraft = !state.draft
+
+  if (
+    preserveCreateDraft ||
+    (!state.forceRefreshRehydrate && !selectionChanged && !missingDraft)
+  ) {
+    if (state.refreshSelectionId !== null || state.forceRefreshRehydrate) {
+      return {
+        type: 'reconcileFromResource',
+        ...selection,
+        preserveCreateDraft,
+      }
+    }
+    return null
+  }
+
+  return {
+    type: 'reconcileFromResource',
+    ...selection,
+    preserveCreateDraft,
+  }
+}
+
+export function getQuoteRatesIntentChanged(
+  state: QuoteRatesWorkflowState,
+  intent: QuoteRatesPendingTransition
+) {
+  switch (intent.type) {
+    case 'setActiveTab':
+      return intent.activeTab !== state.navigation.activeTab
+    case 'setRateSection':
+      return intent.rateSection !== state.navigation.rateSection
+    case 'setRateCategory':
+      return intent.rateCategory !== state.navigation.rateCategory
+    case 'setFlagsSection':
+      return intent.flagsSection !== state.navigation.flagsSection
+    case 'setRoomDefaultsSection':
+      return intent.roomDefaultsSection !== state.navigation.roomDefaultsSection
+    case 'setStatusFilter':
+      return intent.statusFilter !== state.navigation.statusFilter
+    case 'setSearch':
+      return intent.search !== state.navigation.search
+    case 'setSelectedId':
+      return intent.selectedId !== state.selectedId
+    case 'startCreate':
+    case 'startDuplicate':
+    case 'reload':
+    case 'archiveOrReactivate':
+      return true
+    default:
+      return false
+  }
+}
+
 export function applyNavigationIntent(
   navigation: QuoteRatesNavigationState,
-  intent: import('./quoteRatesPageState').QuoteRatesPendingTransition
+  intent: QuoteRatesPendingTransition
 ): QuoteRatesNavigationState {
   switch (intent.type) {
     case 'setActiveTab':

@@ -1,33 +1,46 @@
 export type RatesFlagsTab = 'rates' | 'flags' | 'room_defaults'
 
+export const ratesFlagsEditableCategoryKeys = [
+  'production_rates_walls',
+  'production_rates_ceilings',
+  'production_rates_trim',
+  'unit_rates_doors',
+  'unit_rates_trim',
+  'unit_rates_drywall',
+  'access_fees_ladders',
+  'access_fees_scaffolding',
+  'access_fees_specialty',
+  'supply_rates_per_color',
+  'supply_rates_area_based',
+  'supply_rates_per_job',
+  'supply_rates_roller_covers',
+  'wall_complexity',
+  'height_factors',
+  'ceiling_types',
+  'condition_modifiers',
+  'room_types',
+  'room_templates',
+  'scope_defaults',
+] as const
+
+export type RatesFlagsEditableCategoryKey =
+  (typeof ratesFlagsEditableCategoryKeys)[number]
+
+export const ratesFlagsLegacyCategoryKeys = [
+  'unit_rates',
+  'access_fees',
+  'supply_rates',
+  'production_rates',
+  'area_costs',
+  'fixed_fees',
+] as const
+
+export type RatesFlagsLegacyCategoryKey =
+  (typeof ratesFlagsLegacyCategoryKeys)[number]
+
 export type RatesFlagsCategoryKey =
-  | 'production_rates_walls'
-  | 'production_rates_ceilings'
-  | 'production_rates_trim'
-  | 'unit_rates_doors'
-  | 'unit_rates_trim'
-  | 'unit_rates_drywall'
-  | 'access_fees_ladders'
-  | 'access_fees_scaffolding'
-  | 'access_fees_specialty'
-  | 'supply_rates_per_color'
-  | 'supply_rates_area_based'
-  | 'supply_rates_per_job'
-  | 'supply_rates_roller_covers'
-  | 'wall_complexity'
-  | 'height_factors'
-  | 'ceiling_types'
-  | 'condition_modifiers'
-  | 'room_types'
-  | 'room_templates'
-  | 'scope_defaults'
-  // legacy compatibility keys (seeded data before taxonomy migration)
-  | 'unit_rates'
-  | 'access_fees'
-  | 'supply_rates'
-  | 'production_rates'
-  | 'area_costs'
-  | 'fixed_fees'
+  | RatesFlagsEditableCategoryKey
+  | RatesFlagsLegacyCategoryKey
 
 export type RatesFlagsGroup =
   | 'production_rates'
@@ -53,6 +66,7 @@ export type RatesFlagsFieldDef = {
   readOnly?: boolean
   helperText?: string
   options?: string[]
+  writeDefault?: string
 }
 
 export type RatesFlagsColumnDef = {
@@ -187,16 +201,6 @@ export type RatesFlagsPayload = {
 }
 
 export type RatesFlagsMutationAction = 'create' | 'update' | 'archive' | 'reactivate'
-
-export type RatesFlagsEditableCategoryKey = Exclude<
-  RatesFlagsCategoryKey,
-  | 'unit_rates'
-  | 'access_fees'
-  | 'supply_rates'
-  | 'production_rates'
-  | 'area_costs'
-  | 'fixed_fees'
->
 
 export type RatesFlagsEditableCategory<
   TCategory extends RatesFlagsEditableCategoryKey = RatesFlagsEditableCategoryKey,
@@ -500,6 +504,8 @@ export type RatesFlagsActivationMutationRequest = Extract<
 >
 
 export type RatesFlagsDraftValue = string | number | boolean | null
+export type RatesFlagsNumberDraftValue = number | null | string
+export type RatesFlagsYnDraftValue = boolean | string | null
 
 export type ProductionRateDraft = {
   id: string
@@ -507,9 +513,9 @@ export type ProductionRateDraft = {
   scope_id: string
   surface_type: string
   condition: string
-  prep_sqft_per_hr: number | null
-  sqft_per_hr: number | null
-  primer_sqft_per_hr: number | null
+  prep_sqft_per_hr: RatesFlagsNumberDraftValue
+  sqft_per_hr: RatesFlagsNumberDraftValue
+  primer_sqft_per_hr: RatesFlagsNumberDraftValue
   notes: string
 }
 
@@ -518,15 +524,15 @@ export type DoorUnitRateDraft = {
   display_name: string
   unit_rate_type: string
   unit: string
-  default_qty: number | null
-  labor_rate: number | null
-  material_rate: number | null
-  amount: number | null
+  default_qty: RatesFlagsNumberDraftValue
+  labor_rate: RatesFlagsNumberDraftValue
+  material_rate: RatesFlagsNumberDraftValue
+  amount: RatesFlagsNumberDraftValue
   notes: string
 }
 
 export type TrimUnitRateDraft = DoorUnitRateDraft & {
-  helper_allowed: boolean
+  helper_allowed: RatesFlagsYnDraftValue
   default_production_rate_id: string
 }
 
@@ -536,7 +542,7 @@ export type AccessFeeDraft = {
   id: string
   display_name: string
   fee_type: string
-  amount: number | null
+  amount: RatesFlagsNumberDraftValue
   unit: string
   notes: string
 }
@@ -546,7 +552,7 @@ export type SupplyRateDraft = {
   display_name: string
   scope: string
   unit: string
-  cost_per: number | null
+  cost_per: RatesFlagsNumberDraftValue
   notes: string
 }
 
@@ -554,42 +560,42 @@ export type RollerCoverSupplyRateDraft = {
   id: string
   display_name: string
   scope: string
-  size_in: number | null
-  price_each: number | null
+  size_in: RatesFlagsNumberDraftValue
+  price_each: RatesFlagsNumberDraftValue
   notes: string
 }
 
 export type WallComplexityDraft = {
   id: string
   display_name: string
-  primary_value: number | null
-  secondary_value: number | null
+  primary_value: RatesFlagsNumberDraftValue
+  secondary_value: RatesFlagsNumberDraftValue
   notes: string
 }
 
 export type HeightFactorDraft = {
   id: string
   display_name: string
-  min_height_ft: number | null
-  max_height_ft: number | null
-  primary_value: number | null
+  min_height_ft: RatesFlagsNumberDraftValue
+  max_height_ft: RatesFlagsNumberDraftValue
+  primary_value: RatesFlagsNumberDraftValue
   notes: string
 }
 
 export type CeilingTypeDraft = {
   id: string
   display_name: string
-  primary_value: number | null
-  secondary_value: number | null
+  primary_value: RatesFlagsNumberDraftValue
+  secondary_value: RatesFlagsNumberDraftValue
   notes: string
 }
 
 export type ConditionModifierDraft = {
   id: string
   display_name: string
-  wall_factor: number | null
-  ceil_factor: number | null
-  trim_factor: number | null
+  wall_factor: RatesFlagsNumberDraftValue
+  ceil_factor: RatesFlagsNumberDraftValue
+  trim_factor: RatesFlagsNumberDraftValue
   notes: string
 }
 
@@ -600,9 +606,9 @@ export type RoomTypeDraft = {
   default_ceil_rate_id: string
   default_complexity_id: string
   default_wall_mode: string
-  top_cut_in_factor: number | null
-  bot_cut_in_factor: number | null
-  typical_height_ft: number | null
+  top_cut_in_factor: RatesFlagsNumberDraftValue
+  bot_cut_in_factor: RatesFlagsNumberDraftValue
+  typical_height_ft: RatesFlagsNumberDraftValue
   notes: string
 }
 
@@ -614,11 +620,11 @@ export type RoomTemplateDraft = {
   default_ceil_rate_id: string
   default_complexity_id: string
   default_wall_mode: string
-  include_walls: boolean
-  include_ceilings: boolean
-  include_trim: boolean
-  include_doors: boolean
-  include_drywall: boolean
+  include_walls: RatesFlagsYnDraftValue
+  include_ceilings: RatesFlagsYnDraftValue
+  include_trim: RatesFlagsYnDraftValue
+  include_doors: RatesFlagsYnDraftValue
+  include_drywall: RatesFlagsYnDraftValue
   notes: string
 }
 
@@ -626,14 +632,14 @@ export type ScopeDefaultDraft = {
   id: string
   display_name: string
   default_wall_mode: string
-  top_cut_in_factor: number | null
-  bot_cut_in_factor: number | null
-  typical_height_ft: number | null
-  include_walls: boolean
-  include_ceilings: boolean
-  include_trim: boolean
-  include_doors: boolean
-  include_drywall: boolean
+  top_cut_in_factor: RatesFlagsNumberDraftValue
+  bot_cut_in_factor: RatesFlagsNumberDraftValue
+  typical_height_ft: RatesFlagsNumberDraftValue
+  include_walls: RatesFlagsYnDraftValue
+  include_ceilings: RatesFlagsYnDraftValue
+  include_trim: RatesFlagsYnDraftValue
+  include_doors: RatesFlagsYnDraftValue
+  include_drywall: RatesFlagsYnDraftValue
   notes: string
 }
 

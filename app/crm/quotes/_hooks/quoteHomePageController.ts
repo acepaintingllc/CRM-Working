@@ -34,11 +34,13 @@ type QuoteHomePageControllerHomeResource = {
     options?: RefreshAttemptOptions
   ) => Promise<BootstrapRefreshAttemptResult>
   retryJobs: () => Promise<boolean>
+  loadMore: () => Promise<void>
 }
 
 type QuoteHomePageControllerVersionsResource = {
   pageData: QuoteJobVersionsPageReadModel
   items: QuoteHomeJobVersionItemReadModel[]
+  loadMore: () => Promise<boolean>
   refresh: () => Promise<boolean>
   attemptRefresh: (options?: RefreshAttemptOptions) => Promise<RefreshAttemptResult>
 }
@@ -48,21 +50,22 @@ type QuoteHomeStateActions = Pick<
   'setSearchQuery' | 'setSearchFocused' | 'setJobQuery' | 'setSelectedJobId'
 >
 
-type QuoteHomeWorkflowActions = {
+type QuoteHomeCreateActions = {
   setVersionName: (value: string) => void
   setVersionKind: (value: QuoteVersionKind) => void
-  create: () => Promise<unknown>
-  loadMoreVersions: () => Promise<boolean>
-  retryVersions: () => Promise<boolean>
+  createVersion: () => Promise<unknown>
+}
+
+type QuoteHomeSearchResource = {
+  retry: () => void
 }
 
 type UseQuoteHomePageControllerParams = {
   homeResource: QuoteHomePageControllerHomeResource
   versions: QuoteHomePageControllerVersionsResource
+  create: QuoteHomeCreateActions
+  search: QuoteHomeSearchResource
   stateActions: QuoteHomeStateActions
-  loadMoreJobs: () => Promise<void>
-  workflowActions: QuoteHomeWorkflowActions
-  retrySearch: () => void
 }
 
 function buildDeleteRefreshWarning(refreshFailures: string[]) {
@@ -100,7 +103,7 @@ function bootstrapVersionsCoverActiveJob(
   )
 }
 
-async function refreshAfterDelete(
+async function refreshQuoteHomeAfterDelete(
   refreshBootstrap: QuoteHomePageControllerHomeResource['attemptRefresh'],
   refreshVersions: QuoteHomePageControllerVersionsResource['attemptRefresh']
 ): Promise<{
@@ -123,10 +126,9 @@ async function refreshAfterDelete(
 export function useQuoteHomePageController({
   homeResource,
   versions,
+  create,
+  search,
   stateActions,
-  loadMoreJobs,
-  workflowActions,
-  retrySearch,
 }: UseQuoteHomePageControllerParams): {
   actionWarning: QuoteHomeActionWarning | null
   deleteState: QuoteHomeDeleteState
@@ -134,13 +136,30 @@ export function useQuoteHomePageController({
 } {
   const [actionWarning, setActionWarning] = useState<QuoteHomeActionWarning | null>(null)
   const deleteController = useQuotesHomeDelete()
-  const { attemptRefresh: refreshBootstrap, retryJobs } = homeResource
+  const {
+    attemptRefresh: refreshBootstrap,
+    loadMore: loadMoreJobs,
+    retryJobs,
+  } = homeResource
   const {
     attemptRefresh: refreshVersions,
     items: versionItems,
+    loadMore: loadMoreVersions,
     pageData,
     refresh: refreshVersionsList,
   } = versions
+  const {
+    createVersion,
+    setVersionKind,
+    setVersionName,
+  } = create
+  const { retry: retrySearch } = search
+  const {
+    setJobQuery,
+    setSearchFocused,
+    setSearchQuery,
+    setSelectedJobId,
+  } = stateActions
   const {
     beginDelete,
     cancelDelete: cancelDeleteVersion,
@@ -161,6 +180,15 @@ export function useQuoteHomePageController({
     }
     return refreshVersionsList()
   }, [activeVersionsJobId, refreshBootstrap, refreshVersionsList])
+
+  const createQuoteVersionForSelectedJob = useCallback(async () => {
+    setActionWarning(null)
+    return createVersion()
+  }, [createVersion])
+
+  const retryVersions = useCallback(() => {
+    return refreshVersionsList()
+  }, [refreshVersionsList])
 
   const requestDelete = useCallback(
     (value: string | { estimate_id: string }) => {
@@ -189,7 +217,7 @@ export function useQuoteHomePageController({
       await deleteQuoteVersion(estimate.estimate_id)
       completeDelete()
 
-      const { bootstrapRefresh, versionsRefresh } = await refreshAfterDelete(
+      const { bootstrapRefresh, versionsRefresh } = await refreshQuoteHomeAfterDelete(
         refreshBootstrap,
         refreshVersions
       )
@@ -247,14 +275,17 @@ export function useQuoteHomePageController({
 
   const actions = useMemo(
     () => ({
-      ...stateActions,
+      setSearchQuery,
+      setSearchFocused,
+      setJobQuery,
+      setSelectedJobId,
       loadMore: loadMoreJobs,
-      setVersionName: workflowActions.setVersionName,
-      setVersionKind: workflowActions.setVersionKind,
-      create: workflowActions.create,
-      loadMoreVersions: workflowActions.loadMoreVersions,
+      setVersionName,
+      setVersionKind,
+      create: createQuoteVersionForSelectedJob,
+      loadMoreVersions,
       retryJobs,
-      retryVersions: workflowActions.retryVersions,
+      retryVersions,
       retrySearch,
       requestDelete,
       cancelDelete,
@@ -262,13 +293,16 @@ export function useQuoteHomePageController({
       refresh,
     }),
     [
-      stateActions,
+      setSearchQuery,
+      setSearchFocused,
+      setJobQuery,
+      setSelectedJobId,
       loadMoreJobs,
-      workflowActions.setVersionName,
-      workflowActions.setVersionKind,
-      workflowActions.create,
-      workflowActions.loadMoreVersions,
-      workflowActions.retryVersions,
+      setVersionName,
+      setVersionKind,
+      createQuoteVersionForSelectedJob,
+      loadMoreVersions,
+      retryVersions,
       retrySearch,
       retryJobs,
       requestDelete,

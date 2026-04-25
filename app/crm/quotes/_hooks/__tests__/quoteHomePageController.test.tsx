@@ -115,10 +115,12 @@ function buildController(
   const homeResource = {
     attemptRefresh: homeAttemptRefresh,
     retryJobs: vi.fn(async () => true),
+    loadMore: vi.fn(async () => undefined),
   }
   const versions = {
     pageData: versionsPageData,
     items: versionItems,
+    loadMore: vi.fn(async () => true),
     refresh: vi.fn(async () => true),
     attemptRefresh: versionsAttemptRefresh,
   }
@@ -128,24 +130,22 @@ function buildController(
     setJobQuery: vi.fn(),
     setSelectedJobId: vi.fn(),
   }
-  const loadMoreJobs = vi.fn(async () => undefined)
-  const workflowActions = {
+  const create = {
     setVersionName: vi.fn(),
     setVersionKind: vi.fn(),
-    create: vi.fn(async () => ({ id: 'estimate-created' })),
-    loadMoreVersions: vi.fn(async () => true),
-    retryVersions: vi.fn(async () => true),
+    createVersion: vi.fn(async () => ({ id: 'estimate-created' })),
   }
-  const retrySearch = vi.fn()
+  const search = {
+    retry: vi.fn(),
+  }
 
   const hook = renderHook(() =>
     useQuoteHomePageController({
       homeResource,
       versions,
+      create,
+      search,
       stateActions,
-      loadMoreJobs,
-      workflowActions,
-      retrySearch,
     })
   )
 
@@ -153,10 +153,9 @@ function buildController(
     ...hook,
     homeResource,
     versions,
+    create,
     stateActions,
-    loadMoreJobs,
-    workflowActions,
-    retrySearch,
+    search,
   }
 }
 
@@ -185,10 +184,10 @@ describe('useQuoteHomePageController', () => {
     const {
       result,
       stateActions,
-      loadMoreJobs,
-      workflowActions,
-      retrySearch,
       homeResource,
+      versions,
+      create,
+      search,
     } = buildController()
 
     act(() => {
@@ -215,14 +214,14 @@ describe('useQuoteHomePageController', () => {
     expect(stateActions.setSearchFocused).toHaveBeenCalledWith(true)
     expect(stateActions.setJobQuery).toHaveBeenCalledWith('garage')
     expect(stateActions.setSelectedJobId).toHaveBeenCalledWith('job-2')
-    expect(loadMoreJobs).toHaveBeenCalledTimes(1)
-    expect(workflowActions.setVersionName).toHaveBeenCalledWith('Custom')
-    expect(workflowActions.setVersionKind).toHaveBeenCalledWith('revision')
-    expect(workflowActions.create).toHaveBeenCalledTimes(1)
-    expect(workflowActions.loadMoreVersions).toHaveBeenCalledTimes(1)
+    expect(homeResource.loadMore).toHaveBeenCalledTimes(1)
+    expect(create.setVersionName).toHaveBeenCalledWith('Custom')
+    expect(create.setVersionKind).toHaveBeenCalledWith('revision')
+    expect(create.createVersion).toHaveBeenCalledTimes(1)
+    expect(versions.loadMore).toHaveBeenCalledTimes(1)
     expect(homeResource.retryJobs).toHaveBeenCalledTimes(1)
-    expect(workflowActions.retryVersions).toHaveBeenCalledTimes(1)
-    expect(retrySearch).toHaveBeenCalledTimes(1)
+    expect(versions.refresh).toHaveBeenCalledTimes(1)
+    expect(search.retry).toHaveBeenCalledTimes(1)
     expect(result.current.deleteState.status).toBe('idle')
   })
 
@@ -245,7 +244,7 @@ describe('useQuoteHomePageController', () => {
   })
 
   it('keeps jobs and versions retry actions scoped to their failed resources', async () => {
-    const { result, homeResource, versions, workflowActions, retrySearch } = buildController()
+    const { result, homeResource, versions, search } = buildController()
 
     await act(async () => {
       await result.current.actions.retryJobs()
@@ -253,11 +252,10 @@ describe('useQuoteHomePageController', () => {
     })
 
     expect(homeResource.retryJobs).toHaveBeenCalledTimes(1)
-    expect(workflowActions.retryVersions).toHaveBeenCalledTimes(1)
+    expect(versions.refresh).toHaveBeenCalledTimes(1)
     expect(homeResource.attemptRefresh).not.toHaveBeenCalled()
-    expect(versions.refresh).not.toHaveBeenCalled()
     expect(versions.attemptRefresh).not.toHaveBeenCalled()
-    expect(retrySearch).not.toHaveBeenCalled()
+    expect(search.retry).not.toHaveBeenCalled()
   })
 
   it('does not refresh when there is no confirmed delete target', async () => {

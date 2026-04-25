@@ -11,10 +11,11 @@ import {
   getRatesFlagsParityCategory,
   getRatesFlagsParityCategoryKeys,
 } from '../../quotes/__tests__/ratesFlagsParityHelpers.ts'
-import type {
-  RatesFlagsEditableCategoryKey,
-  RatesFlagsFieldDef,
-} from '../../../types/estimator/ratesFlags'
+import {
+  ratesFlagsEditableCategoryKeys as sharedRatesFlagsEditableCategoryKeys,
+  type RatesFlagsEditableCategoryKey,
+  type RatesFlagsFieldDef,
+} from '../../../types/estimator/ratesFlags.ts'
 
 function buildSampleConstantsValues() {
   return [
@@ -135,6 +136,11 @@ function findParityFieldOrThrow(
   throw new Error(`Missing parity field fixture for ${description}`)
 }
 
+function getRowString(row: object, key: string) {
+  const value: unknown = Reflect.get(row, key)
+  return typeof value === 'string' ? value : ''
+}
+
 function withCreateValueMutation(
   categoryKey: RatesFlagsEditableCategoryKey,
   mutate: (values: Record<string, unknown>) => Record<string, unknown>
@@ -220,8 +226,9 @@ test('payload category grouping returns rates, flags, and room defaults tabs', (
     payload.categories.some((category) => category.key === 'condition_modifiers')
   )
   const condition = findCategoryOrThrow(payload, 'condition_modifiers')
-  const first = condition.rows[0] as unknown as Record<string, string>
-  assert.equal(first.trim_factor, '1.3')
+  const first = condition.rows[0]
+  assert.ok(first)
+  assert.equal(getRowString(first, 'trim_factor'), '1.3')
 })
 
 test('mutation plan create/update/archive/reactivate and validation', () => {
@@ -558,6 +565,37 @@ test('rates flags client draft adapter requests parse successfully for every edi
   }
 })
 
+test('rates flags parser, category config, and client mutation fields stay in parity', () => {
+  const sharedKeys = [...sharedRatesFlagsEditableCategoryKeys].sort()
+  const configKeys = CATEGORY_CONFIGS.map((config) => config.key).sort()
+  const adapterKeys = [...getRatesFlagsParityCategoryKeys()].sort()
+  const parserKeys = [..._test.getRatesFlagsMutationParserCategoryKeys()].sort()
+
+  assert.deepEqual(configKeys, sharedKeys)
+  assert.deepEqual(adapterKeys, sharedKeys)
+  assert.deepEqual(parserKeys, sharedKeys)
+
+  for (const categoryKey of sharedRatesFlagsEditableCategoryKeys) {
+    const category = getRatesFlagsParityCategory(categoryKey)
+    const requests = buildClientRatesFlagsMutationRequests(categoryKey)
+    const categoryFieldKeys = category.fields.map((field) => field.key).sort()
+    const requiredFieldKeys = category.fields
+      .filter((field) => field.required)
+      .map((field) => field.key)
+      .sort()
+    const draftFieldKeys = Object.keys(requests.draft).sort()
+    const mutationFieldKeys = Object.keys(requests.create.values).sort()
+    const parserFieldKeys = _test.getRatesFlagsMutationParserFieldKeys(categoryKey).sort()
+    const parserRequiredFieldKeys = _test
+      .getRatesFlagsMutationParserRequiredFieldKeys(categoryKey)
+      .sort()
+
+    assert.deepEqual(draftFieldKeys, categoryFieldKeys, `${categoryKey} draft fields`)
+    assert.deepEqual(parserFieldKeys, mutationFieldKeys, `${categoryKey} mutation parser fields`)
+    assert.deepEqual(parserRequiredFieldKeys, requiredFieldKeys, `${categoryKey} required fields`)
+  }
+})
+
 test('rates flags parser rejects required, select, Y/N, numeric, and unsupported extra fields from client-shaped requests', () => {
   const required = findParityFieldOrThrow(
     'required field',
@@ -628,6 +666,39 @@ test('rates flags parser rejects required, select, Y/N, numeric, and unsupported
     assert.equal(extraTopLevelParsed.ok, false, `${categoryKey} extra top-level field`)
     assert.match(extraTopLevelParsed.error, /Body does not support field 'unsupported_extra_field'/i)
   }
+})
+
+test('rates flags parser rejects category-specific mutation validation failures', () => {
+  const negativeAmount = _test.parseRatesFlagsMutationRequest(
+    withCreateValueMutation('access_fees_ladders', (values) => ({
+      ...values,
+      amount: '-1',
+    }))
+  )
+  assert.equal(negativeAmount.ok, false)
+  assert.match(negativeAmount.error, /amount must not be negative/i)
+
+  const invertedHeightRange = _test.parseRatesFlagsMutationRequest(
+    withCreateValueMutation('height_factors', (values) => ({
+      ...values,
+      min_height_ft: '12',
+      max_height_ft: '10',
+    }))
+  )
+  assert.equal(invertedHeightRange.ok, false)
+  assert.match(
+    invertedHeightRange.error,
+    /min height \(ft\) must be less than or equal to max height \(ft\)/i
+  )
+
+  const blankDisplayName = _test.parseRatesFlagsMutationRequest(
+    withCreateValueMutation('production_rates_walls', (values) => ({
+      ...values,
+      display_name: '   ',
+    }))
+  )
+  assert.equal(blankDisplayName.ok, false)
+  assert.match(blankDisplayName.error, /display name is required/i)
 })
 
 test('access fee ID-first classification routes canonical ladder/scaffolding IDs and leaves specialty empty', () => {
@@ -721,10 +792,10 @@ test('height factors parse min/max and render multiplier/range fields', () => {
   assert.ok(h0)
   assert.ok(h16)
 
-  assert.equal((h0 as unknown as Record<string, string>).primary_value, '1.00')
-  assert.equal((h0 as unknown as Record<string, string>).secondary_value, '0 - 10')
-  assert.equal((h16 as unknown as Record<string, string>).primary_value, '1.50')
-  assert.equal((h16 as unknown as Record<string, string>).secondary_value, '16')
+  assert.equal(getRowString(h0, 'primary_value'), '1.00')
+  assert.equal(getRowString(h0, 'secondary_value'), '0 - 10')
+  assert.equal(getRowString(h16, 'primary_value'), '1.50')
+  assert.equal(getRowString(h16, 'secondary_value'), '16')
 })
 
 test('buildOverlayFromRows maps trim items and room types from DB rows', () => {

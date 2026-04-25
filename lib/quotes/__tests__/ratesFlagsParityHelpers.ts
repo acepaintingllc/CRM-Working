@@ -99,11 +99,13 @@ export function buildClientRatesFlagsMutationRequests<TKey extends RatesFlagsEdi
     draft,
     create: adapter.toMutationRequest({
       action: 'create',
+      category,
       draft,
       draftActive: true,
     }) as RatesFlagsCreateRequest<TKey>,
     update: adapter.toMutationRequest({
       action: 'update',
+      category,
       draft,
       draftActive: false,
       originalId: rowId,

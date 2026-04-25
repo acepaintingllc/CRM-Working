@@ -7,6 +7,22 @@ import type {
   RatesFlagsRow,
 } from '@/types/estimator/ratesFlags'
 
+export type RatesFlagsMutationVerification =
+  | { ok: true; data: RatesFlagsPayload; error: null }
+  | { ok: false; data: RatesFlagsPayload | null; error: string | null }
+
+export type RatesFlagsMutationReconciliation =
+  | {
+      kind: 'server_verified'
+      payload: RatesFlagsPayload
+      verificationError: null
+    }
+  | {
+      kind: 'local_fallback'
+      payload: RatesFlagsPayload
+      verificationError: string | null
+    }
+
 function buildRowFromMutation(
   request: RatesFlagsCreateOrUpdateRequest<RatesFlagsEditableCategoryKey>
 ): RatesFlagsRow {
@@ -76,4 +92,26 @@ export function findReconciledRatesRow(
   rowId: string
 ) {
   return categoryByKey(payload.categories, categoryKey)?.rows.find((row) => row.id === rowId) ?? null
+}
+
+export function decideRatesFlagsMutationReconciliation(params: {
+  currentPayload: RatesFlagsPayload
+  request: RatesFlagsMutationRequestByCategory<RatesFlagsEditableCategoryKey>
+  verification: RatesFlagsMutationVerification
+}): RatesFlagsMutationReconciliation {
+  const { currentPayload, request, verification } = params
+
+  if (verification.ok) {
+    return {
+      kind: 'server_verified',
+      payload: verification.data,
+      verificationError: null,
+    }
+  }
+
+  return {
+    kind: 'local_fallback',
+    payload: reconcileRatesFlagsPayload(currentPayload, request),
+    verificationError: verification.error,
+  }
 }

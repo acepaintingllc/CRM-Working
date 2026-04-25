@@ -16,6 +16,12 @@ vi.mock('@/lib/quotes/client', () => ({
 
 type RatesPayloadRow = RatesFlagsPayload['categories'][number]['rows'][number]
 
+function getObjectValue(value: object | null, key: string) {
+  if (!value) return undefined
+  const propertyValue: unknown = Reflect.get(value, key)
+  return propertyValue
+}
+
 function buildWallRateRow(overrides: Partial<ProductionRateRow>): ProductionRateRow {
   return {
     id: 'wall-rate-1',
@@ -55,6 +61,14 @@ function buildRatesPayload(params?: {
         ],
         fields: [
           { key: 'id', label: 'ID', type: 'text', required: true },
+          {
+            key: 'production_scope',
+            label: 'Production Scope',
+            type: 'select',
+            readOnly: true,
+            options: ['walls'],
+            writeDefault: 'walls',
+          },
           { key: 'display_name', label: 'Display Name', type: 'text', required: true },
           { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
         ],
@@ -170,6 +184,14 @@ describe('useQuoteRatesPage', () => {
             ],
             fields: [
               { key: 'id', label: 'ID', type: 'text', required: true },
+              {
+                key: 'production_scope',
+                label: 'Production Scope',
+                type: 'select',
+                readOnly: true,
+                options: ['walls'],
+                writeDefault: 'walls',
+              },
               { key: 'display_name', label: 'Display Name', type: 'text', required: true },
               { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
               { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
@@ -205,6 +227,14 @@ describe('useQuoteRatesPage', () => {
             ],
             fields: [
               { key: 'id', label: 'ID', type: 'text', required: true },
+              {
+                key: 'production_scope',
+                label: 'Production Scope',
+                type: 'select',
+                readOnly: true,
+                options: ['walls'],
+                writeDefault: 'walls',
+              },
               { key: 'display_name', label: 'Display Name', type: 'text', required: true },
               { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
               { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
@@ -251,14 +281,10 @@ describe('useQuoteRatesPage', () => {
     })
 
     expect(result.current.tableVm.isCreating).toBe(true)
-    const duplicateDraft = result.current.editorVm.draft as unknown as {
-      id: string
-      sqft_per_hr: number | null
-      helper_allowed: boolean
-    }
-    expect(duplicateDraft.id).toBe('wall-rate-1_COPY')
-    expect(duplicateDraft.sqft_per_hr).toBe(150)
-    expect(duplicateDraft.helper_allowed).toBe(true)
+    const duplicateDraft = result.current.editorVm.draft
+    expect(getObjectValue(duplicateDraft, 'id')).toBe('wall-rate-1_COPY')
+    expect(getObjectValue(duplicateDraft, 'sqft_per_hr')).toBe(150)
+    expect(getObjectValue(duplicateDraft, 'helper_allowed')).toBe(true)
 
     act(() => {
       result.current.actions.updateDraftValue('display_name', 'Duplicated walls')
@@ -364,6 +390,14 @@ describe('useQuoteRatesPage', () => {
             columns: [],
             fields: [
               { key: 'id', label: 'ID', type: 'text', required: true },
+              {
+                key: 'production_scope',
+                label: 'Production Scope',
+                type: 'select',
+                readOnly: true,
+                options: ['walls'],
+                writeDefault: 'walls',
+              },
               { key: 'display_name', label: 'Display Name', type: 'text', required: true },
               { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
             ],
@@ -394,6 +428,14 @@ describe('useQuoteRatesPage', () => {
             columns: [],
             fields: [
               { key: 'id', label: 'ID', type: 'text', required: true },
+              {
+                key: 'production_scope',
+                label: 'Production Scope',
+                type: 'select',
+                readOnly: true,
+                options: ['walls'],
+                writeDefault: 'walls',
+              },
               { key: 'display_name', label: 'Display Name', type: 'text', required: true },
               { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
             ],
@@ -441,6 +483,72 @@ describe('useQuoteRatesPage', () => {
     )
     expect(result.current.uiState.notice).toBe('Saved Wall Production.')
     expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
+  })
+
+  it('commits a clean draft snapshot after a successful save', async () => {
+    loadRatesFlags
+      .mockResolvedValueOnce(buildRatesPayload())
+      .mockResolvedValueOnce(
+        buildRatesPayload({
+          rows: [buildWallRateRow({ display_name: 'Clean saved walls', sqft_per_hr: '180' })],
+          templateVersion: 3,
+        })
+      )
+    mutateRatesFlags.mockResolvedValue({ data: true })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Clean saved walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '180')
+    })
+
+    expect(result.current.editorVm.isDirty).toBe(true)
+
+    await act(async () => {
+      await result.current.actions.saveCurrent()
+    })
+
+    expect(result.current.uiState.notice).toBe('Saved Wall Production.')
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Clean saved walls',
+      sqft_per_hr: 180,
+    })
+    expect(result.current.workflowVm.actionStatus).toBe('idle')
+  })
+
+  it('leaves the current draft editable when save fails', async () => {
+    loadRatesFlags.mockResolvedValue(buildRatesPayload())
+    mutateRatesFlags.mockRejectedValue(new Error('Save failed.'))
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Still editable')
+      result.current.actions.updateDraftValue('sqft_per_hr', '190')
+    })
+
+    await act(async () => {
+      await result.current.actions.saveCurrent()
+    })
+
+    expect(result.current.uiState.actionError).toBe('Save failed.')
+    expect(result.current.workflowVm.actionStatus).toBe('idle')
+    expect(result.current.editorVm.isDirty).toBe(true)
+    expect(result.current.editorVm.canSave).toBe(true)
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Still editable',
+      sqft_per_hr: 190,
+    })
   })
 
   it('keeps a successful save explicit when refresh verification fails', async () => {
@@ -966,6 +1074,55 @@ describe('useQuoteRatesPage', () => {
     })
     expect(result.current.uiState.notice).toBe('Reactivated row.')
     expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(true)
+  })
+
+  it('queues discard before archiving a row with unsaved draft changes', async () => {
+    loadRatesFlags
+      .mockResolvedValueOnce(buildRatesPayload())
+      .mockResolvedValueOnce(
+        buildRatesPayload({
+          rows: [buildWallRateRow({ active: false })],
+          templateVersion: 3,
+        })
+      )
+    mutateRatesFlags.mockResolvedValue({ data: true })
+
+    const { result } = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Unsaved before archive')
+    })
+
+    let archiveResult: boolean | Promise<boolean> = true
+    act(() => {
+      archiveResult = result.current.actions.archiveOrReactivate(false)
+    })
+
+    expect(archiveResult).toBe(false)
+    expect(result.current.discardVm.isOpen).toBe(true)
+    expect(result.current.discardVm.transitionType).toBe('archiveOrReactivate')
+    expect(result.current.editorVm.draft).toMatchObject({
+      display_name: 'Unsaved before archive',
+    })
+    expect(mutateRatesFlags).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.actions.confirmDiscard()
+    })
+
+    expect(mutateRatesFlags).toHaveBeenCalledWith({
+      category: 'production_rates_walls',
+      action: 'archive',
+      rowId: 'wall-rate-1',
+    })
+    expect(result.current.discardVm.isOpen).toBe(false)
+    expect(result.current.uiState.notice).toBe('Archived row.')
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(false)
   })
 
   it('blocks save attempts while an archive mutation is active', async () => {

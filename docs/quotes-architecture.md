@@ -33,7 +33,7 @@ Repository              lib/server/estimate-collection/repository.ts
 ```
 
 **Layer jobs:**
-- **Page** — resolves params, mounts content component, nothing else
+- **Page** — resolves params, mounts the content component or a documented server wrapper, nothing else
 - **Hook facade** — single public API for the page; coordinates controller + VM + data
 - **Controller** — orchestrates mutations, resource sync, transitions; no UI concerns
 - **State machine** — pure reducer + action types; no side effects
@@ -43,6 +43,17 @@ Repository              lib/server/estimate-collection/repository.ts
 - **API client** (`lib/quotes/client.ts`) — thin fetch wrapper; all API calls go through here
 - **Server service** — builds read models, orchestrates DB queries; no raw SQL
 - **Repository** — all DB queries; no business logic
+
+### Quote Home SSR bootstrap exception
+
+Quote Home (`/crm/quotes`) is allowed to server-render an initial bootstrap payload so authenticated users can land on populated summary/job/version data without waiting for the client resource hook's first fetch. This is a narrow exception to the default "page only mounts content" rule:
+
+- `app/crm/quotes/page.tsx` stays route-entrypoint-only and mounts a clearly named server wrapper.
+- The server wrapper may perform the auth/session check at the page boundary and redirect unauthenticated users to `/login?next=%2Fcrm%2Fquotes`.
+- The server wrapper may load only initial Quote Home read-model data, and only through server service aliases exported by `lib/server/estimateCollectionData.ts`. It must not import repositories or bypass `lib/server/estimate-collection/service.ts`.
+- Bootstrap load failures are non-blocking for the page render; pass `null` initial data so the client data hook can use its normal refresh/error path.
+- All client refreshes, pagination, searches, and mutations still go through `lib/quotes/client.ts` plus the Quote Home data hook/controller layers.
+- No other quote page should copy this server bootstrap pattern unless this section is extended with an explicit page-specific reason.
 
 ---
 

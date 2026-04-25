@@ -11,6 +11,7 @@ import type {
   RatesFlagsDraft,
   RatesFlagsDraftValidationResult,
   RatesFlagsEditableCategoryKey,
+  RatesFlagsEditableCategory,
   RatesFlagsRow,
   RatesFlagsTab,
 } from '@/types/estimator/ratesFlags'
@@ -317,6 +318,7 @@ export function transitionNeedsDiscardReset(intent: QuoteRatesPendingTransition)
 
 export type QuoteRatesDerivedState = {
   activeCategory: RatesFlagsCategory | null
+  editableActiveCategory: RatesFlagsEditableCategory<RatesFlagsEditableCategoryKey> | null
   filteredRows: RatesFlagsRow[]
   selectedRow: RatesFlagsRow | null
   adapter: RatesFlagsDraftAdapter<RatesFlagsEditableCategoryKey> | null

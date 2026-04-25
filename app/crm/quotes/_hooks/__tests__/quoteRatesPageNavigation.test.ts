@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyNavigationIntent,
+  buildQuoteRatesResourceSyncAction,
   buildQuoteRatesSelectionSnapshot,
+  getQuoteRatesIntentChanged,
   getFilteredRows,
   getNextSelectedId,
 } from '../quoteRatesPageNavigation'
 import {
   DEFAULT_QUOTE_RATES_NAVIGATION,
+  createInitialQuoteRatesWorkflowState,
   getDefaultRateCategory,
+  quoteRatesPageReducer,
   transitionNeedsDiscardReset,
   type QuoteRatesNavigationState,
 } from '../quoteRatesPageState'
@@ -157,4 +161,113 @@ describe('quoteRatesPageNavigation invariants', () => {
     )
   })
 
+  it('detects whether a navigation intent would change the current workflow state', () => {
+    const state = {
+      ...createInitialQuoteRatesWorkflowState(),
+      selectedId: 'wall-rate-1',
+    }
+
+    expect(getQuoteRatesIntentChanged(state, { type: 'setSearch', search: '' })).toBe(false)
+    expect(getQuoteRatesIntentChanged(state, { type: 'setSearch', search: 'tall' })).toBe(true)
+    expect(getQuoteRatesIntentChanged(state, { type: 'setSelectedId', selectedId: 'wall-rate-1' }))
+      .toBe(false)
+    expect(getQuoteRatesIntentChanged(state, { type: 'setSelectedId', selectedId: 'wall-rate-2' }))
+      .toBe(true)
+    expect(getQuoteRatesIntentChanged(state, { type: 'reload' })).toBe(true)
+  })
+
+  it('preserves a create draft during ordinary resource sync', () => {
+    const initialState = createInitialQuoteRatesWorkflowState()
+    const initialSync = buildQuoteRatesResourceSyncAction(initialState, payload)
+    expect(initialSync?.type).toBe('reconcileFromResource')
+
+    const selectedState = quoteRatesPageReducer(initialState, initialSync!)
+    const createDraft = {
+      ...selectedState.draft!,
+      id: 'wall-rate-new',
+      display_name: 'Unsaved create',
+    } as NonNullable<typeof selectedState.draft>
+    const createState = quoteRatesPageReducer(selectedState, {
+      type: 'startCreate',
+      draft: createDraft,
+    })
+
+    const refreshedPayload: RatesFlagsPayload = {
+      ...payload,
+      template_version: 3,
+      categories: [
+        {
+          ...payload.categories[0],
+          rows: [
+            {
+              ...payload.categories[0].rows[0],
+              display_name: 'Server changed row',
+            },
+          ],
+        },
+        ...payload.categories.slice(1),
+      ],
+    }
+
+    const syncAction = buildQuoteRatesResourceSyncAction(createState, refreshedPayload)
+
+    expect(syncAction).toBeNull()
+    expect(createState.editorMode).toBe('create')
+    expect(createState.draft).toMatchObject({
+      id: 'wall-rate-new',
+      display_name: 'Unsaved create',
+    })
+  })
+
+  it('force rehydrates a create draft from refreshed resource data', () => {
+    const initialSync = buildQuoteRatesResourceSyncAction(
+      createInitialQuoteRatesWorkflowState(),
+      payload
+    )
+    const selectedState = quoteRatesPageReducer(createInitialQuoteRatesWorkflowState(), initialSync!)
+    const createDraft = {
+      ...selectedState.draft!,
+      id: 'wall-rate-new',
+      display_name: 'Unsaved create',
+    } as NonNullable<typeof selectedState.draft>
+    const createState = quoteRatesPageReducer(selectedState, {
+      type: 'startCreate',
+      draft: createDraft,
+    })
+    const refreshState = quoteRatesPageReducer(createState, {
+      type: 'scheduleRefreshRehydrate',
+      selectedId: 'wall-rate-1',
+      force: true,
+    })
+    const refreshedPayload: RatesFlagsPayload = {
+      ...payload,
+      template_version: 4,
+      categories: [
+        {
+          ...payload.categories[0],
+          rows: [
+            {
+              ...payload.categories[0].rows[0],
+              display_name: 'Force refreshed row',
+            },
+          ],
+        },
+        ...payload.categories.slice(1),
+      ],
+    }
+
+    const syncAction = buildQuoteRatesResourceSyncAction(refreshState, refreshedPayload)
+
+    expect(syncAction).toMatchObject({
+      type: 'reconcileFromResource',
+      preserveCreateDraft: false,
+    })
+
+    const syncedState = quoteRatesPageReducer(refreshState, syncAction!)
+    expect(syncedState.editorMode).toBe('selection')
+    expect(syncedState.selectedId).toBe('wall-rate-1')
+    expect(syncedState.draft).toMatchObject({
+      display_name: 'Force refreshed row',
+    })
+  })
 })

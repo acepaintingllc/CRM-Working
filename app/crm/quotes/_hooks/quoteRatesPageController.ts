@@ -1,23 +1,18 @@
 'use client'
 
 import { useCallback, useEffect, useMemo } from 'react'
-import {
-  getRatesFlagsDraftAdapter,
-  isRatesFlagsEditableCategory,
-} from '@/lib/quotes/ratesFlagsDraftAdapters'
-import type {
-  RatesFlagsDraftValidationResult,
-  RatesFlagsTab,
-} from '@/types/estimator/ratesFlags'
+import type { RatesFlagsTab } from '@/types/estimator/ratesFlags'
 import {
   archiveOrReactivateQuoteRatesMutation,
   saveQuoteRatesMutation,
 } from './quoteRatesPageMutations'
 import {
   applyNavigationIntent,
+  buildQuoteRatesDerivedState,
   buildQuoteRatesEditorSnapshotFromSelection,
+  buildQuoteRatesResourceSyncAction,
   buildQuoteRatesSelectionSnapshot,
-  getQuoteRatesCategoryContext,
+  getQuoteRatesIntentChanged,
 } from './quoteRatesPageNavigation'
 import {
   createInitialQuoteRatesWorkflowState,
@@ -25,7 +20,6 @@ import {
   quoteRatesPageReducer,
   transitionNeedsDiscardReset,
   type QuoteRatesControllerAction,
-  type QuoteRatesDerivedState,
   type QuoteRatesPendingTransition,
   type QuoteRatesWorkflowState,
 } from './quoteRatesPageState'
@@ -65,37 +59,6 @@ export type QuoteRatesActions = {
 
 type QuoteRatesTransitionResult = boolean | Promise<boolean>
 
-function getQuoteRatesIntentChanged(
-  state: QuoteRatesWorkflowState,
-  intent: QuoteRatesPendingTransition
-) {
-  switch (intent.type) {
-    case 'setActiveTab':
-      return intent.activeTab !== state.navigation.activeTab
-    case 'setRateSection':
-      return intent.rateSection !== state.navigation.rateSection
-    case 'setRateCategory':
-      return intent.rateCategory !== state.navigation.rateCategory
-    case 'setFlagsSection':
-      return intent.flagsSection !== state.navigation.flagsSection
-    case 'setRoomDefaultsSection':
-      return intent.roomDefaultsSection !== state.navigation.roomDefaultsSection
-    case 'setStatusFilter':
-      return intent.statusFilter !== state.navigation.statusFilter
-    case 'setSearch':
-      return intent.search !== state.navigation.search
-    case 'setSelectedId':
-      return intent.selectedId !== state.selectedId
-    case 'startCreate':
-    case 'startDuplicate':
-    case 'reload':
-    case 'archiveOrReactivate':
-      return true
-    default:
-      return false
-  }
-}
-
 export function useQuoteRatesPageController() {
   const resource = useQuoteRatesData()
   const orchestrator = useDenseQuoteAdminOrchestrator<
@@ -107,37 +70,7 @@ export function useQuoteRatesPageController() {
     reducer: quoteRatesPageReducer,
     initialState: createInitialQuoteRatesWorkflowState(),
     resourceData: resource.data,
-    getResourceSyncAction: (state, resourceData) => {
-      const selection = buildQuoteRatesSelectionSnapshot(
-        resourceData,
-        state.navigation,
-        (state.refreshSelectionId ?? state.selectedId) || undefined
-      )
-
-      const preserveCreateDraft = state.editorMode === 'create' && !state.forceRefreshRehydrate
-      const selectionChanged = selection.selectedId !== state.selectedId
-      const missingDraft = !state.draft
-
-      if (
-        preserveCreateDraft ||
-        (!state.forceRefreshRehydrate && !selectionChanged && !missingDraft)
-      ) {
-        if (state.refreshSelectionId !== null || state.forceRefreshRehydrate) {
-          return {
-            type: 'reconcileFromResource',
-            ...selection,
-            preserveCreateDraft,
-          }
-        }
-        return null
-      }
-
-      return {
-        type: 'reconcileFromResource',
-        ...selection,
-        preserveCreateDraft,
-      }
-    },
+    getResourceSyncAction: buildQuoteRatesResourceSyncAction,
     hasUnsavedChanges: getQuoteRatesHasUnsavedChanges,
     discard: {
       getPendingIntent: (state) => state.pendingTransition,
@@ -149,31 +82,10 @@ export function useQuoteRatesPageController() {
   const { state, stateRef, applyAction, requestTransition, confirmDiscard, cancelDiscard } =
     orchestrator
 
-  const { activeCategory, filteredRows } = useMemo(
-    () => getQuoteRatesCategoryContext(resource.data, state.navigation),
-    [resource.data, state.navigation]
+  const derived = useMemo(
+    () => buildQuoteRatesDerivedState(resource.data, state),
+    [resource.data, state]
   )
-
-  const selectedRow = useMemo(() => {
-    if (!activeCategory || !state.selectedId) return null
-    return activeCategory.rows.find((row) => row.id === state.selectedId) ?? null
-  }, [activeCategory, state.selectedId])
-
-  const editableActiveCategory = useMemo(
-    () => (activeCategory && isRatesFlagsEditableCategory(activeCategory) ? activeCategory : null),
-    [activeCategory]
-  )
-  const adapter = useMemo(
-    () => (editableActiveCategory ? getRatesFlagsDraftAdapter(editableActiveCategory.key) : null),
-    [editableActiveCategory]
-  )
-
-  const validationResult: RatesFlagsDraftValidationResult | null =
-    editableActiveCategory && adapter && state.draft
-      ? adapter.validateDraft(editableActiveCategory, state.draft)
-      : null
-  const validationError = validationResult && !validationResult.ok ? validationResult.error : null
-  const isDirty = getQuoteRatesHasUnsavedChanges(state)
 
   useEffect(() => {
     if (state.actionStatus !== 'reloading' || resource.loading) return
@@ -206,40 +118,40 @@ export function useQuoteRatesPageController() {
   function applySelection(selectedId: string) {
     if (stateRef.current.actionStatus !== 'idle') return false
 
-    const editor = buildQuoteRatesEditorSnapshotFromSelection(activeCategory, selectedId)
+    const editor = buildQuoteRatesEditorSnapshotFromSelection(derived.activeCategory, selectedId)
     applyAction({ type: 'selectRow', selectedId: editor.selectedId, editor })
     return true
   }
 
   function startCreate() {
     if (stateRef.current.actionStatus !== 'idle') return false
-    if (!editableActiveCategory || !adapter) return false
+    if (!derived.editableActiveCategory || !derived.adapter) return false
 
-    const draft = adapter.createEmptyDraft(editableActiveCategory)
+    const draft = derived.adapter.createEmptyDraft(derived.editableActiveCategory)
     applyAction({ type: 'startCreate', draft })
     return true
   }
 
   function startDuplicate() {
     if (stateRef.current.actionStatus !== 'idle') return false
-    if (!editableActiveCategory || !adapter || !selectedRow) return false
+    if (!derived.editableActiveCategory || !derived.adapter || !derived.selectedRow) return false
 
-    const draft = adapter.withDuplicateId(
-      adapter.rowToDraft(editableActiveCategory, selectedRow),
-      selectedRow.id
+    const draft = derived.adapter.withDuplicateId(
+      derived.adapter.rowToDraft(derived.editableActiveCategory, derived.selectedRow),
+      derived.selectedRow.id
     )
 
     applyAction({
       type: 'startDuplicate',
       draft,
-      draftActive: selectedRow.active,
+      draftActive: derived.selectedRow.active,
     })
     return true
   }
 
   function discardCurrentChanges() {
     const editor = buildQuoteRatesEditorSnapshotFromSelection(
-      activeCategory,
+      derived.activeCategory,
       stateRef.current.selectedId
     )
     applyAction({ type: 'discardCurrentChanges', selectedId: editor.selectedId, editor })
@@ -271,18 +183,20 @@ export function useQuoteRatesPageController() {
   async function saveCurrent() {
     const currentState = stateRef.current
     if (currentState.actionStatus !== 'idle') return
-    if (!editableActiveCategory || !currentState.draft || !validationResult?.ok) return
+    if (!derived.editableActiveCategory || !currentState.draft || !derived.validationResult?.ok) {
+      return
+    }
 
     applyAction({ type: 'beginAction', status: 'saving' })
 
     const result = await saveQuoteRatesMutation({
       resource,
       navigation: currentState.navigation,
-      activeCategory: editableActiveCategory,
+      activeCategory: derived.editableActiveCategory,
       draft: currentState.draft,
       draftActive: currentState.draftActive,
       editorMode: currentState.editorMode,
-      selectedRowId: selectedRow?.id,
+      selectedRowId: derived.selectedRow?.id,
     })
 
     if (!result.ok) {
@@ -306,15 +220,15 @@ export function useQuoteRatesPageController() {
 
   async function archiveOrReactivate(nextActive: boolean) {
     if (stateRef.current.actionStatus !== 'idle') return false
-    if (!editableActiveCategory || !selectedRow) return false
+    if (!derived.editableActiveCategory || !derived.selectedRow) return false
 
     applyAction({ type: 'beginAction', status: 'archiving' })
 
     const result = await archiveOrReactivateQuoteRatesMutation({
       resource,
       navigation: stateRef.current.navigation,
-      categoryKey: editableActiveCategory.key,
-      selectedRowId: selectedRow.id,
+      categoryKey: derived.editableActiveCategory.key,
+      selectedRowId: derived.selectedRow.id,
       nextActive,
     })
 
@@ -342,7 +256,7 @@ export function useQuoteRatesPageController() {
     if (stateRef.current.actionStatus !== 'idle') return
 
     const editor = buildQuoteRatesEditorSnapshotFromSelection(
-      activeCategory,
+      derived.activeCategory,
       stateRef.current.selectedId
     )
     applyAction({ type: 'cancelEdit', selectedId: editor.selectedId, editor })
@@ -353,10 +267,10 @@ export function useQuoteRatesPageController() {
   function updateDraftValue(fieldKey: string, rawInput: string) {
     const currentState = stateRef.current
     if (currentState.actionStatus !== 'idle') return
-    if (!editableActiveCategory || !adapter || !currentState.draft) return
+    if (!derived.editableActiveCategory || !derived.adapter || !currentState.draft) return
 
-    const nextDraft = adapter.updateDraftField(
-      editableActiveCategory,
+    const nextDraft = derived.adapter.updateDraftField(
+      derived.editableActiveCategory,
       currentState.draft,
       fieldKey,
       rawInput
@@ -372,8 +286,13 @@ export function useQuoteRatesPageController() {
 
   const formatDraftValue = useCallback(
     (fieldKey: string) =>
-      formatRatesDraftValue(adapter, editableActiveCategory, state.draft, fieldKey),
-    [adapter, editableActiveCategory, state.draft]
+      formatRatesDraftValue(
+        derived.adapter,
+        derived.editableActiveCategory,
+        state.draft,
+        fieldKey
+      ),
+    [derived.adapter, derived.editableActiveCategory, state.draft]
   )
 
   function executeIntent(intent: QuoteRatesPendingTransition): QuoteRatesTransitionResult {
@@ -412,16 +331,6 @@ export function useQuoteRatesPageController() {
       changed: getQuoteRatesIntentChanged(stateRef.current, intent),
       run: () => executeIntent(intent),
     })
-  }
-
-  const derived: QuoteRatesDerivedState = {
-    activeCategory,
-    filteredRows,
-    selectedRow,
-    adapter,
-    validationResult,
-    validationError,
-    isDirty,
   }
 
   const actions: QuoteRatesActions = {

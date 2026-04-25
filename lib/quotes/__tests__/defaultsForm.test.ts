@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  buildQuoteDefaultsFormState,
   emptyQuoteDefaults,
   parseQuoteDefaults,
   validateQuoteDefaults,
@@ -86,6 +87,56 @@ test('validateQuoteDefaults rejects missing and wrong-family product defaults', 
     assert.match(wrongFamily.error, /must use a paint product/)
     assert.equal(wrongFamily.issues[0]?.code, 'wrong_product_family')
   }
+})
+
+test('buildQuoteDefaultsFormState derives product options from active matching products', () => {
+  const state = buildQuoteDefaultsFormState(emptyQuoteDefaults, { products })
+
+  assert.deepEqual(state.productDefaultFields[0]?.options, [
+    { id: 'paint-1', name: 'Active Paint', family: 'Paint', status: 'Active' },
+  ])
+  assert.deepEqual(state.productDefaultFields[1]?.options, [
+    { id: 'primer-1', name: 'Active Primer', family: 'Primer', status: 'Active' },
+  ])
+  assert.equal(state.canSave, true)
+  assert.deepEqual(state.fieldErrors, {})
+})
+
+test('buildQuoteDefaultsFormState keeps inactive and wrong-family selected products visible', () => {
+  const state = buildQuoteDefaultsFormState(
+    {
+      ...emptyQuoteDefaults,
+      walls_paint_id: 'paint-inactive',
+      walls_primer_id: 'paint-1',
+    },
+    { products }
+  )
+
+  assert.equal(state.canSave, false)
+  assert.equal(state.productDefaultFields[0]?.options[0]?.id, 'paint-inactive')
+  assert.equal(state.productDefaultFields[1]?.options[0]?.id, 'paint-1')
+  assert.match(state.fieldErrors.walls_paint_id ?? '', /inactive/i)
+  assert.match(state.fieldErrors.walls_primer_id ?? '', /must use a primer product/)
+})
+
+test('buildQuoteDefaultsFormState creates a missing option for deleted selected products', () => {
+  const state = buildQuoteDefaultsFormState(
+    {
+      ...emptyQuoteDefaults,
+      walls_paint_id: 'deleted-paint',
+    },
+    { products }
+  )
+
+  assert.equal(state.canSave, false)
+  assert.deepEqual(state.productDefaultFields[0]?.options[0], {
+    id: 'deleted-paint',
+    name: 'Missing product (deleted-paint)',
+    family: null,
+    status: 'Missing',
+    missing: true,
+  })
+  assert.match(state.fieldErrors.walls_paint_id ?? '', /no longer exists/)
 })
 
 test('parseQuoteDefaults enforces the shared labor-rate range', () => {

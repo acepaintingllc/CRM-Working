@@ -1,19 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { emptyQuoteDefaults } from '@/lib/quotes/defaultsForm'
+import { buildQuoteDefaultsFormState, emptyQuoteDefaults } from '@/lib/quotes/defaultsForm'
 import { buildQuoteDefaultsPageVm } from '../quoteDefaultsPageVm'
 import type { QuoteDefaultsResource } from '../quoteDefaultsPageController'
 
-function buildResource(
-  overrides: Partial<Parameters<typeof buildQuoteDefaultsPageVm>[0]> = {}
-): Parameters<typeof buildQuoteDefaultsPageVm>[0] {
+type QuoteDefaultsVmResource = Parameters<typeof buildQuoteDefaultsPageVm>[0]
+type QuoteDefaultsVmResourceOverride = Partial<Omit<QuoteDefaultsVmResource, 'data'>> & {
+  data?: Partial<QuoteDefaultsResource>
+}
+
+function buildResource(overrides: QuoteDefaultsVmResourceOverride = {}): QuoteDefaultsVmResource {
+  const dataOverrides = overrides.data ?? {}
+  const settings = dataOverrides.settings ?? emptyQuoteDefaults
+  const products = dataOverrides.products ?? []
   const data: QuoteDefaultsResource = {
-    settings: emptyQuoteDefaults,
-    products: [],
-    ...overrides.data,
+    ...dataOverrides,
+    settings,
+    products,
+    form: buildQuoteDefaultsFormState(settings, { products }),
   }
 
   return {
-    data,
     loading: false,
     saving: false,
     error: null,
@@ -21,6 +27,7 @@ function buildResource(
     dirty: false,
     hasLoaded: true,
     ...overrides,
+    data,
   }
 }
 

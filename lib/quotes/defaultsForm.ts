@@ -25,6 +25,27 @@ export type QuoteDefaultsProductReference = {
   status?: string | null
 }
 
+export type QuoteDefaultsMissingProductOption = {
+  id: string
+  name: string
+  family: null
+  status: 'Missing'
+  missing: true
+}
+
+export type QuoteDefaultsProductOption<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> = TProduct | QuoteDefaultsMissingProductOption
+
+export type QuoteDefaultsProductFieldConfig<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> = {
+  label: string
+  key: QuoteDefaultsProductFieldKey
+  expectedFamily: ProductFamily
+  options: QuoteDefaultsProductOption<TProduct>[]
+}
+
 export type QuoteDefaultsValidationIssueCode =
   | 'invalid_labor_rate'
   | 'missing_product'
@@ -48,7 +69,7 @@ export type QuoteDefaultsValidationContext = {
   products?: readonly QuoteDefaultsProductReference[]
 }
 
-type QuoteDefaultsValidationResult =
+export type QuoteDefaultsValidationResult =
   | {
       ok: true
       value: QuoteDefaults
@@ -61,6 +82,17 @@ type QuoteDefaultsValidationResult =
       fields: QuoteDefaultsValidationFields
       issues: QuoteDefaultsValidationIssue[]
     }
+
+export type QuoteDefaultsFormState<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> = {
+  settings: QuoteDefaults
+  validation: QuoteDefaultsValidationResult
+  fieldErrors: QuoteDefaultsValidationFields
+  validationError: string | null
+  productDefaultFields: QuoteDefaultsProductFieldConfig<TProduct>[]
+  canSave: boolean
+}
 
 export const QUOTE_DEFAULTS_LABOR_RATE_MIN = 0
 export const QUOTE_DEFAULTS_LABOR_RATE_MAX = 10000
@@ -206,6 +238,78 @@ export function validateQuoteDefaults(
     fields,
     issues,
   }
+}
+
+export function buildQuoteDefaultsFormState<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+>(
+  value: Partial<QuoteDefaults> | null | undefined,
+  context: { products?: readonly TProduct[] } = {}
+): QuoteDefaultsFormState<TProduct> {
+  const settings = normalizeQuoteDefaults(value)
+  const validation = validateQuoteDefaults(settings, context)
+
+  return {
+    settings,
+    validation,
+    fieldErrors: validation.fields,
+    validationError: validation.ok ? null : validation.error,
+    productDefaultFields: buildQuoteDefaultsProductFieldConfigs(
+      settings,
+      context.products ?? []
+    ),
+    canSave: validation.ok,
+  }
+}
+
+function buildQuoteDefaultsProductFieldConfigs<
+  TProduct extends QuoteDefaultsProductReference,
+>(
+  settings: QuoteDefaults,
+  products: readonly TProduct[]
+): QuoteDefaultsProductFieldConfig<TProduct>[] {
+  return quoteDefaultsProductFields.map((field) => ({
+    ...field,
+    options: buildProductOptionsForDefaultField(
+      products,
+      settings[field.key],
+      field.expectedFamily
+    ),
+  }))
+}
+
+function buildProductOptionsForDefaultField<TProduct extends QuoteDefaultsProductReference>(
+  products: readonly TProduct[],
+  selectedProductId: string | null,
+  expectedFamily: ProductFamily
+): QuoteDefaultsProductOption<TProduct>[] {
+  const activeOptions = products.filter(
+    (product) =>
+      matchesExpectedFamily(product.family, expectedFamily) &&
+      isActiveProductStatus(product.status)
+  )
+
+  if (!selectedProductId) return activeOptions
+
+  const selectedProduct = products.find((product) => product.id === selectedProductId)
+  const selectedAlreadyVisible = activeOptions.some((product) => product.id === selectedProductId)
+
+  if (selectedAlreadyVisible) return activeOptions
+
+  if (selectedProduct) {
+    return [selectedProduct, ...activeOptions]
+  }
+
+  return [
+    {
+      id: selectedProductId,
+      name: `Missing product (${selectedProductId})`,
+      family: null,
+      status: 'Missing',
+      missing: true,
+    },
+    ...activeOptions,
+  ]
 }
 
 function validateQuoteDefaultProductReferences(

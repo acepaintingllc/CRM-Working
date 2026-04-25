@@ -17,20 +17,6 @@ import { useQuotesHomeData, type QuoteHomeDataResourceContract } from './useQuot
 import { useQuotesHomeSearch } from './useQuotesHomeSearch'
 import { useQuoteHomePageController } from './quoteHomePageController'
 
-type QuoteHomeStateActions = Pick<
-  QuoteHomePageActions,
-  'setSearchQuery' | 'setSearchFocused' | 'setJobQuery' | 'setSelectedJobId'
->
-
-type QuoteHomeWorkflowActions = Pick<
-  QuoteHomePageActions,
-  | 'setVersionName'
-  | 'setVersionKind'
-  | 'create'
-  | 'loadMoreVersions'
-  | 'retryVersions'
->
-
 type QuoteHomePageResources = {
   vmState: QuoteHomePageVmState
   vmResources: QuoteHomePageVmResources
@@ -40,7 +26,7 @@ type QuoteHomePageStateResource = ReturnType<typeof useQuoteHomePageState>
 type QuoteHomeVersionWorkflowResource = ReturnType<typeof useQuoteVersionWorkflow>
 type QuoteHomeSearchResource = ReturnType<typeof useQuotesHomeSearch>
 
-function useReconcileQuoteHomeJobs(
+function useSyncQuoteHomeLoadedJobsToPageSelection(
   pageState: QuoteHomePageStateResource,
   homeResource: QuoteHomeDataResourceContract
 ) {
@@ -56,42 +42,6 @@ function useReconcileQuoteHomeJobs(
     homeResource.jobsPage.query,
     reconcileLoadedJobs,
   ])
-}
-
-function useQuoteHomeStateActions(pageState: QuoteHomePageStateResource) {
-  return useMemo<QuoteHomeStateActions>(
-    () => ({
-      setSearchQuery: pageState.actions.setSearchQuery,
-      setSearchFocused: pageState.actions.setSearchFocused,
-      setJobQuery: pageState.actions.setJobQuery,
-      setSelectedJobId: pageState.actions.setSelectedJobId,
-    }),
-    [
-      pageState.actions.setSearchQuery,
-      pageState.actions.setSearchFocused,
-      pageState.actions.setJobQuery,
-      pageState.actions.setSelectedJobId,
-    ]
-  )
-}
-
-function useQuoteHomeWorkflowActions(workflow: QuoteHomeVersionWorkflowResource) {
-  return useMemo<QuoteHomeWorkflowActions>(
-    () => ({
-      setVersionName: workflow.actions.setVersionName,
-      setVersionKind: workflow.actions.setVersionKind,
-      create: workflow.actions.create,
-      loadMoreVersions: workflow.actions.loadMoreVersions,
-      retryVersions: workflow.actions.refreshVersions,
-    }),
-    [
-      workflow.actions.setVersionName,
-      workflow.actions.setVersionKind,
-      workflow.actions.create,
-      workflow.actions.loadMoreVersions,
-      workflow.actions.refreshVersions,
-    ]
-  )
 }
 
 function useQuoteHomeVmState(params: {
@@ -174,18 +124,14 @@ export function useQuoteHomePageResources(
     initialVersions: initialVersionsForSelectedJob,
   })
 
-  useReconcileQuoteHomeJobs(pageState, homeResource)
-
-  const stateActions = useQuoteHomeStateActions(pageState)
-  const workflowActions = useQuoteHomeWorkflowActions(workflow)
+  useSyncQuoteHomeLoadedJobsToPageSelection(pageState, homeResource)
 
   const controller = useQuoteHomePageController({
     homeResource,
     versions: workflow.versions,
-    stateActions,
-    loadMoreJobs: homeResource.loadMore,
-    workflowActions,
-    retrySearch: searchState.retry,
+    create: workflow.create,
+    search: searchState,
+    stateActions: pageState.actions,
   })
 
   const vmState = useQuoteHomeVmState({
