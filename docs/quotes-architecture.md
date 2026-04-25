@@ -212,6 +212,156 @@ Flag and fix these:
 
 ---
 
+## Adding a New Quotes Page: Canonical Recipe
+
+Follow this exactly when building a new standalone page in the quotes section. Every existing page (Products, Rates, Defaults, Home) was built this way. New pages must match.
+
+### Naming Formula
+
+Replace `Xxx` with your PascalCase feature name (e.g. `Templates`, `Approvals`).
+
+| What | Formula |
+|---|---|
+| Route folder | `app/crm/quotes/xxx/` (lowercase) |
+| Next.js route | `app/crm/quotes/xxx/page.tsx` |
+| Content component | `app/crm/quotes/xxx/XxxPageContent.tsx` |
+| Presentation folder | `app/crm/quotes/xxx/_xxx/` |
+| Hooks folder | `app/crm/quotes/xxx/_hooks/` |
+| Public hook facade | `_hooks/useQuoteXxxPage.ts` → export `useQuoteXxxPage` |
+| Controller | `_hooks/quoteXxxPageController.ts` |
+| State machine (if needed) | `_hooks/quoteXxxPageState.ts` |
+| VM builder | `_hooks/quoteXxxPageVm.ts` → export `buildQuoteXxxPageVm` |
+| Data hook (if needed) | `_hooks/useQuoteXxxData.ts` |
+| Lib domain | `lib/quotes/xxxForm.ts` |
+| API route | `app/api/quotes/xxx/route.ts` |
+
+### File-by-File Responsibilities
+
+**`page.tsx`**
+- Resolves Next.js params/searchParams only.
+- Mounts the content component. Nothing else.
+- No business logic, no data fetching, no conditional renders beyond `<Suspense>` or server wrappers.
+
+**`XxxPageContent.tsx`**
+- Calls the public hook facade (`useQuoteXxxPage`), passes the VM down to presentation components.
+- No logic. No direct hook calls beyond the facade.
+
+**`_xxx/` presentation components**
+- Receive VM props. Render only.
+- No state, no hooks except `useState` for purely local UI (tooltip open, accordion), no fetches.
+- Never call `useQuoteXxxPage` or any controller directly.
+
+**`useQuoteXxxPage.ts`** — public hook facade
+- Single export consumed by the content component.
+- Coordinates controller, VM builder, and data hook. Returns the VM.
+- No mutation logic inline — delegate to controller.
+- Stable name; do not rename once a page ships.
+
+**`quoteXxxPageController.ts`**
+- Orchestrates mutations, resource syncs, and transitions.
+- Calls `lib/quotes/client.ts` for API calls. Never calls `fetch` directly.
+- If the page is a dense editor (rows, inline edits, discard flow): use `useDenseQuoteAdminOrchestrator` — do not write a second orchestrator.
+- If the page is a simple editable resource (one form, save/cancel): use a lightweight controller with `useResource` and local mutation state.
+
+**`quoteXxxPageState.ts`** — only create if needed
+- Pure reducer and action types. No side effects, no imports from hooks or components.
+- Required when the page has multi-step transitions, tab/panel selection state, or dual dirty tracking.
+- Skip this file entirely for simple pages — use `useState` in the controller instead.
+
+**`quoteXxxPageVm.ts`**
+- One exported pure function: `buildQuoteXxxPageVm(state, resource): QuoteXxxPageVm`.
+- No hooks, no mutations, no navigation, no side effects.
+- All conditional UI logic (disabled states, visible sections, validation messages) lives here — not in components.
+
+**`useQuoteXxxData.ts`** — only create if needed
+- Wraps `useResource` for data fetching. No state machine awareness.
+- Skip this file if the page uses a server-rendered bootstrap or a simple `useResource` inline in the controller is sufficient.
+
+**`lib/quotes/xxxForm.ts`**
+- Validation, normalization, draft↔payload conversion, and enum/type definitions for this feature.
+- Pure functions only. No React imports.
+- Even if the page is simple, domain types and validation belong here — not inline in the hook.
+
+**`app/api/quotes/xxx/route.ts`**
+- Must call `requireSessionUserOrg` before any logic.
+- Must return `{ data }`, `{ data, notice? }`, or `{ error }` envelopes with correct HTTP status codes.
+- Validation and business logic delegate to `lib/quotes/xxxForm.ts` and service modules — no inline logic.
+
+### Decision Tree: Which Orchestration Abstraction?
+
+```
+Does the page have inline-editable rows with a discard confirmation flow?
+  YES → useDenseQuoteAdminOrchestrator
+  NO  → Does the page have a single form with save/cancel?
+          YES → Lightweight controller: useResource + local mutation state
+          NO  → Does the page only display read data with no mutations?
+                  YES → No controller needed; data hook + VM builder is enough
+                  NO  → Talk to the codebase before inventing a new pattern
+```
+
+### Reuse Checklist Before Writing New Code
+
+Before creating any new file or abstraction, check these first:
+
+- `useDenseQuoteAdminOrchestrator` — dense editor orchestration
+- `useResource` — standard resource loading with loading/error states
+- `lib/quotes/client.ts` — all API calls go through here; add a new function, not a new client
+- `CrmPageShell`, `CrmPageHeader`, `CrmSectionCard`, `CrmButton`, `CrmNotice`, `CrmChip` — default UI shell
+- `lib/quotes/collectionData.ts` — read model helpers for collection/job data
+- `quoteAdminPageFeedback.ts` — feedback/notice logic already wired for admin pages
+
+### Test Files to Create
+
+| File | What to test |
+|---|---|
+| `_hooks/__tests__/quoteXxxPageVm.test.ts` | Pure VM builder: known state input → expected VM output |
+| `_hooks/__tests__/quoteXxxPageController.test.ts` | Mutation flows, resource sync, state transitions |
+| `_hooks/__tests__/quoteXxxPageState.test.ts` | Reducer: action input → expected state output (only if state machine exists) |
+| `lib/quotes/__tests__/xxxForm.test.ts` | Validation and normalization with input/output pairs |
+| `app/api/quotes/xxx/__tests__/route.test.ts` | Auth enforcement, envelope shape, error cases |
+
+### What a Minimal New Page Looks Like
+
+```
+app/crm/quotes/xxx/
+  page.tsx                          ← params → mounts XxxPageContent
+  XxxPageContent.tsx                ← useQuoteXxxPage() → passes vm to components
+  _xxx/
+    XxxHeader.tsx
+    XxxBody.tsx
+  _hooks/
+    useQuoteXxxPage.ts              ← public facade
+    quoteXxxPageController.ts       ← mutations + resource sync
+    quoteXxxPageVm.ts               ← pure (state, resource) → vm
+    __tests__/
+      quoteXxxPageVm.test.ts
+      quoteXxxPageController.test.ts
+
+lib/quotes/
+  xxxForm.ts                        ← types, validation, normalization
+  __tests__/
+    xxxForm.test.ts
+
+app/api/quotes/xxx/
+  route.ts                          ← auth + envelope
+```
+
+Add `quoteXxxPageState.ts` and `useQuoteXxxData.ts` only when the decision tree above says you need them.
+
+### Things That Will Fail Review
+
+- Business logic inside `XxxPageContent.tsx` or any `_xxx/` component.
+- `fetch()` called directly — use `lib/quotes/client.ts`.
+- Validation inline in a hook or component — belongs in `lib/quotes/xxxForm.ts`.
+- A new orchestrator hook when `useDenseQuoteAdminOrchestrator` covers the pattern.
+- `any` types anywhere.
+- Missing auth on the route handler.
+- Wrong response envelope shape.
+- No tests on a new layer.
+- Naming a concept `Quote` when it belongs to shared estimate domain logic.
+
+---
+
 ## Known Complexity Hotspots
 
 These are intentional. Do not simplify them away without understanding why they exist.

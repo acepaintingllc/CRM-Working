@@ -4,6 +4,8 @@ import {
   findReconciledRatesRow,
   reconcileRatesFlagsPayload,
 } from '../quoteRatesMutationReconciliation'
+import { buildQuoteRatesMutationSnapshot, getFilteredRows } from '../quoteRatesPageNavigation'
+import { DEFAULT_QUOTE_RATES_NAVIGATION } from '../quoteRatesPageState'
 import type {
   RatesFlagsArchiveRequest,
   RatesFlagsCategory,
@@ -276,6 +278,39 @@ describe('reconcileRatesFlagsPayload', () => {
       expect(rowsFor(result)[0]).toBe(first)
       expect(rowsFor(result)[1]).toEqual({ ...target, active: false })
       expect(rowsFor(result)[2]).toBe(last)
+    })
+
+    it('keeps an archived row in the payload even when active filters hide it', () => {
+      const first = scopeRow('FIRST')
+      const target = scopeRow('TARGET')
+      const payload = payloadWith([
+        ratesCategory('scope_defaults', [first, target]),
+        ratesCategory('production_rates_walls', []),
+      ])
+
+      const result = reconcileRatesFlagsPayload(payload, archiveRequest('TARGET'))
+      const snapshot = buildQuoteRatesMutationSnapshot(
+        result,
+        {
+          ...DEFAULT_QUOTE_RATES_NAVIGATION,
+          activeTab: 'room_defaults',
+          roomDefaultsSection: 'scope_defaults',
+          statusFilter: 'active',
+        },
+        'TARGET'
+      )
+
+      expect(findReconciledRatesRow(result, 'scope_defaults', 'TARGET')).toMatchObject({
+        id: 'TARGET',
+        active: false,
+      })
+      expect(
+        getFilteredRows(result.categories[0], { search: '', statusFilter: 'active' }).map(
+          (row) => row.id
+        )
+      ).toEqual(['FIRST'])
+      expect(snapshot.selectedId).toBe('TARGET')
+      expect(snapshot.editor.selectedId).toBe('TARGET')
     })
   })
 

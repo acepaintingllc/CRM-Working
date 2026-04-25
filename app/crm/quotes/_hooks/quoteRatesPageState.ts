@@ -81,31 +81,23 @@ export type QuoteRatesWorkflowState = {
 
 export type QuoteRatesControllerAction =
   | {
-      type: 'applyNavigation'
-      navigation: QuoteRatesNavigationState
+      type: 'editorApplied'
       selectedId: string
       editor: QuoteRatesEditorSnapshot
+      navigation?: QuoteRatesNavigationState
     }
-  | { type: 'selectRow'; selectedId: string; editor: QuoteRatesEditorSnapshot }
-  | { type: 'startCreate'; draft: RatesFlagsDraft }
-  | { type: 'startDuplicate'; draft: RatesFlagsDraft; draftActive: boolean }
-  | { type: 'cancelEdit'; selectedId: string; editor: QuoteRatesEditorSnapshot }
-  | { type: 'discardCurrentChanges'; selectedId: string; editor: QuoteRatesEditorSnapshot }
-  | { type: 'setDraft'; draft: RatesFlagsDraft }
-  | { type: 'setDraftActive'; draftActive: boolean }
-  | { type: 'openDiscard'; intent: QuoteRatesPendingTransition }
-  | { type: 'setDiscardStatus'; status: QuoteRatesDiscardStatus }
-  | { type: 'clearDiscard' }
-  | { type: 'beginAction'; status: QuoteRatesActionStatus }
-  | { type: 'finishAction' }
-  | { type: 'setNotice'; notice: string | null; tone?: 'success' | 'warning' | null }
-  | { type: 'setActionError'; error: string | null }
-  | { type: 'clearFeedback' }
-  | { type: 'scheduleRefreshRehydrate'; selectedId: string | null; force: boolean }
-  | { type: 'clearRefreshRehydrate' }
-  | { type: 'commitMutation'; selectedId: string; editor: QuoteRatesEditorSnapshot }
+  | { type: 'createStarted'; draft: RatesFlagsDraft; draftActive?: boolean }
+  | { type: 'draftChanged'; draft?: RatesFlagsDraft; draftActive?: boolean }
   | {
-      type: 'reconcileFromResource'
+      type: 'discardChanged'
+      status: QuoteRatesDiscardStatus
+      intent?: QuoteRatesPendingTransition | null
+    }
+  | { type: 'mutationChanged'; status: QuoteRatesActionStatus; error?: string | null }
+  | { type: 'feedbackChanged'; notice: string | null; tone?: 'success' | 'warning' | null }
+  | { type: 'refreshRehydrateChanged'; selectedId: string | null; force: boolean }
+  | {
+      type: 'resourceReconciled'
       editor: QuoteRatesEditorSnapshot
       selectedId: string
       preserveCreateDraft: boolean
@@ -185,116 +177,67 @@ export function quoteRatesPageReducer(
   action: QuoteRatesControllerAction
 ): QuoteRatesWorkflowState {
   switch (action.type) {
-    case 'applyNavigation':
+    case 'editorApplied':
       return {
         ...applyEditorSnapshot(state, action),
-        navigation: action.navigation,
+        navigation: action.navigation ?? state.navigation,
       }
-    case 'selectRow':
-    case 'cancelEdit':
-    case 'discardCurrentChanges':
-    case 'commitMutation':
-      return applyEditorSnapshot(state, action)
-    case 'startCreate':
+    case 'createStarted':
       return {
         ...state,
         selectedId: '',
         editorMode: 'create',
         draft: action.draft,
-        draftActive: true,
+        draftActive: action.draftActive ?? true,
         cleanSnapshot: createRatesFlagsDraftSnapshot(action.draft),
-        cleanDraftActive: true,
+        cleanDraftActive: action.draftActive ?? true,
         notice: null,
         actionError: null,
       }
-    case 'startDuplicate':
+    case 'draftChanged':
       return {
         ...state,
-        selectedId: '',
-        editorMode: 'create',
-        draft: action.draft,
-        draftActive: action.draftActive,
-        cleanSnapshot: createRatesFlagsDraftSnapshot(action.draft),
-        cleanDraftActive: action.draftActive,
-        notice: null,
-        actionError: null,
+        draft: action.draft ?? state.draft,
+        draftActive: action.draftActive ?? state.draftActive,
       }
-    case 'setDraft':
-      return {
-        ...state,
-        draft: action.draft,
+    case 'discardChanged':
+      if (action.status === 'confirming') {
+        return state.pendingTransition
+          ? state
+          : {
+              ...state,
+              pendingTransition: action.intent ?? null,
+              discardStatus: action.status,
+            }
       }
-    case 'setDraftActive':
-      return {
-        ...state,
-        draftActive: action.draftActive,
-      }
-    case 'openDiscard':
-      return state.pendingTransition
-        ? state
-        : {
-            ...state,
-            pendingTransition: action.intent,
-            discardStatus: 'confirming',
-          }
-    case 'setDiscardStatus':
       return {
         ...state,
         discardStatus: action.status,
+        pendingTransition:
+          action.status === 'idle' ? null : (action.intent ?? state.pendingTransition),
       }
-    case 'clearDiscard':
-      return {
-        ...state,
-        pendingTransition: null,
-        discardStatus: 'idle',
-      }
-    case 'beginAction':
+    case 'mutationChanged':
       return {
         ...state,
         actionStatus: action.status,
-        notice: null,
-        noticeTone: null,
-        actionError: null,
+        notice: action.status === 'idle' ? (action.error ? null : state.notice) : null,
+        noticeTone: action.status === 'idle' ? (action.error ? null : state.noticeTone) : null,
+        actionError: action.status === 'idle' ? (action.error ?? null) : null,
       }
-    case 'finishAction':
-      return {
-        ...state,
-        actionStatus: 'idle',
-      }
-    case 'setNotice':
+    case 'feedbackChanged':
       return {
         ...state,
         notice: action.notice,
         noticeTone: action.tone ?? null,
         actionError: null,
       }
-    case 'setActionError':
-      return {
-        ...state,
-        actionError: action.error,
-        notice: null,
-        noticeTone: null,
-      }
-    case 'clearFeedback':
-      return {
-        ...state,
-        notice: null,
-        noticeTone: null,
-        actionError: null,
-      }
-    case 'scheduleRefreshRehydrate':
+    case 'refreshRehydrateChanged':
       return {
         ...state,
         refreshSelectionId: action.selectedId,
         forceRefreshRehydrate: action.force,
       }
-    case 'clearRefreshRehydrate':
-      return {
-        ...state,
-        refreshSelectionId: null,
-        forceRefreshRehydrate: false,
-      }
-    case 'reconcileFromResource':
+    case 'resourceReconciled':
       if (action.preserveCreateDraft) {
         return {
           ...state,

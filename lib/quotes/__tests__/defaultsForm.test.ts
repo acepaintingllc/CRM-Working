@@ -100,6 +100,17 @@ test('buildQuoteDefaultsFormState derives product options from active matching p
   assert.deepEqual(state.productDefaultFields[1]?.options, [
     { id: 'primer-1', name: 'Active Primer', family: 'Primer', status: 'Active' },
   ])
+  assert.equal(state.sections[0]?.key, 'product_defaults')
+  assert.equal(state.sections[0]?.fields[0]?.kind, 'product_select')
+  assert.equal(state.sections[1]?.key, 'labor_rate')
+  assert.deepEqual(state.sections[1]?.fields[0], {
+    kind: 'number_input',
+    label: 'Labor rate / hr',
+    key: 'override_labor_rate',
+    min: 0,
+    max: 10000,
+    step: 1,
+  })
   assert.equal(state.canSave, true)
   assert.deepEqual(state.fieldErrors, {})
 })
@@ -143,12 +154,44 @@ test('buildQuoteDefaultsFormState creates a missing option for deleted selected 
 
 test('quote defaults form metadata defines product and labor extension sections', () => {
   assert.deepEqual(
-    quoteDefaultsFormSections.map((section) => [section.key, section.kind]),
+    quoteDefaultsFormSections.map((section) => [section.key, section.kind, section.fieldKeys]),
     [
-      ['product_defaults', 'product_defaults'],
-      ['labor_rate', 'labor_rate'],
+      [
+        'product_defaults',
+        'product_defaults',
+        [
+          'walls_paint_id',
+          'walls_primer_id',
+          'ceiling_paint_id',
+          'ceiling_primer_id',
+          'trim_paint_id',
+          'trim_primer_id',
+        ],
+      ],
+      ['labor_rate', 'labor_rate', ['override_labor_rate']],
     ]
   )
+})
+
+test('buildQuoteDefaultsFormState normalizes values before validation and save', () => {
+  const state = buildQuoteDefaultsFormState(
+    {
+      ...emptyQuoteDefaults,
+      walls_paint_id: ' paint-1 ',
+      override_labor_rate: '70' as unknown as number,
+    },
+    { products }
+  )
+
+  assert.equal(state.validation.ok, true)
+  assert.equal(state.settings.walls_paint_id, 'paint-1')
+  if (state.validation.ok) {
+    assert.deepEqual(state.validation.value, {
+      ...emptyQuoteDefaults,
+      walls_paint_id: 'paint-1',
+      override_labor_rate: 70,
+    })
+  }
 })
 
 test('formatQuoteDefaultsProductOptionLabel decorates inactive, wrong-family, and missing options', () => {

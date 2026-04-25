@@ -18,6 +18,9 @@ export type QuoteDefaultsProductFieldKey = keyof Pick<
   | 'trim_primer_id'
 >
 
+export type QuoteDefaultsLaborRateFieldKey = keyof Pick<QuoteDefaults, 'override_labor_rate'>
+export type QuoteDefaultsFormFieldKey = QuoteDefaultsProductFieldKey | QuoteDefaultsLaborRateFieldKey
+
 export type QuoteDefaultsProductReference = {
   id: string
   name?: string | null
@@ -54,6 +57,31 @@ export type QuoteDefaultsFormSectionMetadata = {
   kind: QuoteDefaultsFormSectionKind
   title: string
   description: string
+  fieldKeys: readonly QuoteDefaultsFormFieldKey[]
+}
+
+export type QuoteDefaultsLaborRateFieldConfig = {
+  label: string
+  key: QuoteDefaultsLaborRateFieldKey
+  min: number
+  max: number
+  step: number
+}
+
+export type QuoteDefaultsFormFieldConfig<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> =
+  | ({
+      kind: 'product_select'
+    } & QuoteDefaultsProductFieldConfig<TProduct>)
+  | ({
+      kind: 'number_input'
+    } & QuoteDefaultsLaborRateFieldConfig)
+
+export type QuoteDefaultsFormSectionConfig<
+  TProduct extends QuoteDefaultsProductReference = QuoteDefaultsProductReference,
+> = QuoteDefaultsFormSectionMetadata & {
+  fields: QuoteDefaultsFormFieldConfig<TProduct>[]
 }
 
 export type QuoteDefaultsValidationIssueCode =
@@ -100,7 +128,9 @@ export type QuoteDefaultsFormState<
   validation: QuoteDefaultsValidationResult
   fieldErrors: QuoteDefaultsValidationFields
   validationError: string | null
+  sections: QuoteDefaultsFormSectionConfig<TProduct>[]
   productDefaultFields: QuoteDefaultsProductFieldConfig<TProduct>[]
+  laborRateField: QuoteDefaultsLaborRateFieldConfig
   canSave: boolean
 }
 
@@ -120,18 +150,34 @@ export const quoteDefaultsProductFields = [
   expectedFamily: ProductFamily
 }[]
 
+export const quoteDefaultsLaborRateField = {
+  label: 'Labor rate / hr',
+  key: 'override_labor_rate',
+  min: QUOTE_DEFAULTS_LABOR_RATE_MIN,
+  max: QUOTE_DEFAULTS_LABOR_RATE_MAX,
+  step: 1,
+} as const satisfies QuoteDefaultsLaborRateFieldConfig
+
+// Future Quote Defaults sections should be added by extending:
+// 1. QuoteDefaults in lib/settings/types.ts and emptyQuoteDefaults below.
+// 2. normalization, equality, and validation in this module.
+// 3. field metadata here and quoteDefaultsFormSections fieldKeys.
+// 4. quoteDefaultsPageVm.ts only to map a new field control kind, if needed.
+// 5. domain, VM, hook, and page tests for invalid values, save normalization, and section output.
 export const quoteDefaultsFormSections = [
   {
     key: 'product_defaults',
     kind: 'product_defaults',
     title: 'Paint and primer',
     description: 'Shared starter selections for new quote job settings.',
+    fieldKeys: quoteDefaultsProductFields.map((field) => field.key),
   },
   {
     key: 'labor_rate',
     kind: 'labor_rate',
     title: 'Labor rate',
     description: 'Org-level labor rate used when a specific quote has not saved its own override.',
+    fieldKeys: [quoteDefaultsLaborRateField.key],
   },
 ] as const satisfies readonly QuoteDefaultsFormSectionMetadata[]
 
@@ -273,16 +319,19 @@ export function buildQuoteDefaultsFormState<
 ): QuoteDefaultsFormState<TProduct> {
   const settings = normalizeQuoteDefaults(value)
   const validation = validateQuoteDefaults(settings, context)
+  const productDefaultFields = buildQuoteDefaultsProductFieldConfigs(
+    settings,
+    context.products ?? []
+  )
 
   return {
     settings,
     validation,
     fieldErrors: validation.fields,
     validationError: validation.ok ? null : validation.error,
-    productDefaultFields: buildQuoteDefaultsProductFieldConfigs(
-      settings,
-      context.products ?? []
-    ),
+    sections: buildQuoteDefaultsFormSectionConfigs(productDefaultFields),
+    productDefaultFields,
+    laborRateField: quoteDefaultsLaborRateField,
     canSave: validation.ok,
   }
 }
@@ -315,6 +364,38 @@ function buildQuoteDefaultsProductFieldConfigs<
       settings[field.key],
       field.expectedFamily
     ),
+  }))
+}
+
+function buildQuoteDefaultsFormSectionConfigs<
+  TProduct extends QuoteDefaultsProductReference,
+>(
+  productDefaultFields: readonly QuoteDefaultsProductFieldConfig<TProduct>[]
+): QuoteDefaultsFormSectionConfig<TProduct>[] {
+  const fieldsByKey = new Map<QuoteDefaultsFormFieldKey, QuoteDefaultsFormFieldConfig<TProduct>>()
+
+  for (const field of productDefaultFields) {
+    fieldsByKey.set(field.key, {
+      ...field,
+      kind: 'product_select',
+    })
+  }
+  fieldsByKey.set(quoteDefaultsLaborRateField.key, {
+    ...quoteDefaultsLaborRateField,
+    kind: 'number_input',
+  })
+
+  return quoteDefaultsFormSections.map((section) => ({
+    ...section,
+    fields: section.fieldKeys.map((fieldKey) => {
+      const field = fieldsByKey.get(fieldKey)
+      if (!field) {
+        throw new Error(
+          `Quote defaults section ${section.key} references unknown field ${fieldKey}.`
+        )
+      }
+      return field
+    }),
   }))
 }
 

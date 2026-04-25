@@ -30,6 +30,15 @@ import {
   getQuoteRatesHasUnsavedChanges,
 } from './quoteRatesPageState'
 
+export type QuoteRatesTransitionPlan =
+  | { kind: 'navigation'; navigation: QuoteRatesNavigationState; preserveSelectedId: boolean }
+  | { kind: 'selection'; selectedId: string }
+  | { kind: 'startCreate' }
+  | { kind: 'startDuplicate' }
+  | { kind: 'reload'; keepId?: string }
+  | { kind: 'archiveOrReactivate'; nextActive: boolean }
+  | { kind: 'noop' }
+
 export function resolveActiveCategoryKey(navigation: QuoteRatesNavigationState) {
   if (navigation.activeTab === 'rates') return navigation.rateCategory
   if (navigation.activeTab === 'flags') return navigation.flagsSection
@@ -184,7 +193,7 @@ export function buildQuoteRatesResourceSyncAction(
   ) {
     if (state.refreshSelectionId !== null || state.forceRefreshRehydrate) {
       return {
-        type: 'reconcileFromResource',
+        type: 'resourceReconciled',
         ...selection,
         preserveCreateDraft,
       }
@@ -193,7 +202,7 @@ export function buildQuoteRatesResourceSyncAction(
   }
 
   return {
-    type: 'reconcileFromResource',
+    type: 'resourceReconciled',
     ...selection,
     preserveCreateDraft,
   }
@@ -227,6 +236,43 @@ export function getQuoteRatesIntentChanged(
       return true
     default:
       return false
+  }
+}
+
+export function buildQuoteRatesTransitionPlan(
+  navigation: QuoteRatesNavigationState,
+  intent: QuoteRatesPendingTransition
+): QuoteRatesTransitionPlan {
+  switch (intent.type) {
+    case 'setActiveTab':
+    case 'setRateSection':
+    case 'setRateCategory':
+    case 'setFlagsSection':
+    case 'setRoomDefaultsSection':
+      return {
+        kind: 'navigation',
+        navigation: applyNavigationIntent(navigation, intent),
+        preserveSelectedId: false,
+      }
+    case 'setStatusFilter':
+    case 'setSearch':
+      return {
+        kind: 'navigation',
+        navigation: applyNavigationIntent(navigation, intent),
+        preserveSelectedId: true,
+      }
+    case 'setSelectedId':
+      return { kind: 'selection', selectedId: intent.selectedId }
+    case 'startCreate':
+      return { kind: 'startCreate' }
+    case 'startDuplicate':
+      return { kind: 'startDuplicate' }
+    case 'reload':
+      return { kind: 'reload', keepId: intent.keepId }
+    case 'archiveOrReactivate':
+      return { kind: 'archiveOrReactivate', nextActive: intent.nextActive }
+    default:
+      return { kind: 'noop' }
   }
 }
 

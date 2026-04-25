@@ -57,6 +57,7 @@ describe('useQuoteDefaultsPage', () => {
     act(() => {
       result.current.actions.setSettings({
         ...result.current.form.settings,
+        walls_paint_id: ' paint-1 ',
         override_labor_rate: 70,
       })
     })
@@ -67,7 +68,12 @@ describe('useQuoteDefaultsPage', () => {
       await result.current.actions.save()
     })
 
-    expect(saveQuoteDefaults).toHaveBeenCalled()
+    expect(saveQuoteDefaults).toHaveBeenCalledWith(
+      expect.objectContaining({
+        walls_paint_id: 'paint-1',
+        override_labor_rate: 70,
+      })
+    )
     expect(result.current.feedback.notice).toBe('Quote defaults saved.')
     expect(result.current.form.settings.override_labor_rate).toBe(70)
     expect(result.current.form.canSave).toBe(false)

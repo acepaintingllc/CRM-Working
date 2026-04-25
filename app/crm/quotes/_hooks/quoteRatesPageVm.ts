@@ -43,6 +43,8 @@ export type QuoteRatesEditorVm = {
   saving: boolean
   busy: boolean
   activeCategory: RatesFlagsCategory | null
+  canEditCategory: boolean
+  showLegacyCategoryNotice: boolean
   selectedRow: RatesFlagsRow | null
   isCreating: boolean
   inlineValidation: string | null
@@ -75,6 +77,13 @@ export function buildQuoteRatesPageVm(params: {
 
   const hasData = resource.data.categories.length > 0
   const actionIsIdle = workflowState.actionStatus === 'idle'
+  const isCreating = workflowState.editorMode === 'create'
+  const canEditCategory = Boolean(derived.editableActiveCategory)
+  const showLegacyCategoryNotice =
+    derived.activeCategory !== null &&
+    !canEditCategory &&
+    !isCreating &&
+    workflowState.draft === null
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
     hasData,
@@ -130,7 +139,7 @@ export function buildQuoteRatesPageVm(params: {
       filteredRows: derived.filteredRows,
       selectedRow: derived.selectedRow,
       selectedId: workflowState.selectedId,
-      isCreating: workflowState.editorMode === 'create',
+      isCreating,
       canDuplicate: uiState.canDuplicate,
       canArchiveToggle: uiState.canArchiveToggle,
     } satisfies QuoteRatesTableVm,
@@ -141,8 +150,10 @@ export function buildQuoteRatesPageVm(params: {
       saving: workflowState.actionStatus === 'saving',
       busy: !actionIsIdle,
       activeCategory: derived.activeCategory,
+      canEditCategory,
+      showLegacyCategoryNotice,
       selectedRow: derived.selectedRow,
-      isCreating: workflowState.editorMode === 'create',
+      isCreating,
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
     } satisfies QuoteRatesEditorVm,

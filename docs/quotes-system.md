@@ -9,6 +9,8 @@ This is the entrypoint for all quotes system work. It covers the Products editor
 
 For build and refactor tasks, also read `docs/feature-page-prompt-template.md`. The architecture file supplements it with quotes-specific rules.
 
+**Adding a new page or feature?** Go directly to the **"Adding a New Quotes Page: Canonical Recipe"** section in `docs/quotes-architecture.md`. It contains the exact folder/file structure, naming formula, per-file responsibility rules, which abstractions to reuse, the orchestration decision tree, required test files, and a list of things that will fail review. Do not invent structure — follow the recipe.
+
 ---
 
 ## How to use

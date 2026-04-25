@@ -3,6 +3,7 @@ import {
   applyNavigationIntent,
   buildQuoteRatesResourceSyncAction,
   buildQuoteRatesSelectionSnapshot,
+  buildQuoteRatesTransitionPlan,
   getQuoteRatesIntentChanged,
   getFilteredRows,
   getNextSelectedId,
@@ -218,10 +219,49 @@ describe('quoteRatesPageNavigation invariants', () => {
     expect(getQuoteRatesIntentChanged(state, { type: 'reload' })).toBe(true)
   })
 
+  it('plans tab, filter, selection, reload, and activation intents without controller state', () => {
+    expect(
+      buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, {
+        type: 'setActiveTab',
+        activeTab: 'flags',
+      })
+    ).toMatchObject({
+      kind: 'navigation',
+      navigation: { activeTab: 'flags' },
+      preserveSelectedId: false,
+    })
+
+    expect(
+      buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, {
+        type: 'setSearch',
+        search: 'tall',
+      })
+    ).toMatchObject({
+      kind: 'navigation',
+      navigation: { search: 'tall' },
+      preserveSelectedId: true,
+    })
+
+    expect(
+      buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, {
+        type: 'setSelectedId',
+        selectedId: 'wall-rate-2',
+      })
+    ).toEqual({ kind: 'selection', selectedId: 'wall-rate-2' })
+    expect(buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, { type: 'reload' }))
+      .toEqual({ kind: 'reload', keepId: undefined })
+    expect(
+      buildQuoteRatesTransitionPlan(DEFAULT_QUOTE_RATES_NAVIGATION, {
+        type: 'archiveOrReactivate',
+        nextActive: false,
+      })
+    ).toEqual({ kind: 'archiveOrReactivate', nextActive: false })
+  })
+
   it('preserves a create draft during ordinary resource sync', () => {
     const initialState = createInitialQuoteRatesWorkflowState()
     const initialSync = buildQuoteRatesResourceSyncAction(initialState, payload)
-    expect(initialSync?.type).toBe('reconcileFromResource')
+    expect(initialSync?.type).toBe('resourceReconciled')
 
     const selectedState = quoteRatesPageReducer(initialState, initialSync!)
     const createDraft = {
@@ -230,7 +270,7 @@ describe('quoteRatesPageNavigation invariants', () => {
       display_name: 'Unsaved create',
     } as NonNullable<typeof selectedState.draft>
     const createState = quoteRatesPageReducer(selectedState, {
-      type: 'startCreate',
+      type: 'createStarted',
       draft: createDraft,
     })
 
@@ -273,11 +313,11 @@ describe('quoteRatesPageNavigation invariants', () => {
       display_name: 'Unsaved create',
     } as NonNullable<typeof selectedState.draft>
     const createState = quoteRatesPageReducer(selectedState, {
-      type: 'startCreate',
+      type: 'createStarted',
       draft: createDraft,
     })
     const refreshState = quoteRatesPageReducer(createState, {
-      type: 'scheduleRefreshRehydrate',
+      type: 'refreshRehydrateChanged',
       selectedId: 'wall-rate-1',
       force: true,
     })
@@ -301,7 +341,7 @@ describe('quoteRatesPageNavigation invariants', () => {
     const syncAction = buildQuoteRatesResourceSyncAction(refreshState, refreshedPayload)
 
     expect(syncAction).toMatchObject({
-      type: 'reconcileFromResource',
+      type: 'resourceReconciled',
       preserveCreateDraft: false,
     })
 

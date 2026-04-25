@@ -2,15 +2,13 @@
 
 import { buildQuoteAdminPageStatus } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
 import type {
-  QuoteDefaultsFormSectionKey,
   QuoteDefaultsFormSectionKind,
+  QuoteDefaultsFormSectionKey,
+  QuoteDefaultsFormFieldConfig,
   QuoteDefaultsProductFieldKey,
   QuoteDefaultsValidationFields,
 } from '@/lib/quotes/defaultsForm'
-import {
-  formatQuoteDefaultsProductOptionLabel,
-  quoteDefaultsFormSections,
-} from '@/lib/quotes/defaultsForm'
+import { formatQuoteDefaultsProductOptionLabel } from '@/lib/quotes/defaultsForm'
 import type { QuoteDefaults } from '@/lib/settings/types'
 import type { QuoteDefaultsProductRow, QuoteDefaultsResource } from './quoteDefaultsPageController'
 
@@ -19,6 +17,7 @@ export type QuoteDefaultsProductDefaultOption = QuoteDefaultsProductRow & {
 }
 
 export type QuoteDefaultsProductDefaultField = {
+  kind: 'product_select'
   label: string
   key: QuoteDefaultsProductFieldKey
   expectedFamily: string
@@ -27,26 +26,26 @@ export type QuoteDefaultsProductDefaultField = {
 }
 
 export type QuoteDefaultsLaborRateField = {
+  kind: 'number_input'
   label: string
   key: 'override_labor_rate'
+  min: number
+  max: number
+  step: number
   error?: string
 }
 
-export type QuoteDefaultsFormSectionVm =
-  | {
-      key: QuoteDefaultsFormSectionKey
-      kind: Extract<QuoteDefaultsFormSectionKind, 'product_defaults'>
-      title: string
-      description: string
-      productDefaultFields: QuoteDefaultsProductDefaultField[]
-    }
-  | {
-      key: QuoteDefaultsFormSectionKey
-      kind: Extract<QuoteDefaultsFormSectionKind, 'labor_rate'>
-      title: string
-      description: string
-      laborRateField: QuoteDefaultsLaborRateField
-    }
+export type QuoteDefaultsFormFieldVm =
+  | QuoteDefaultsProductDefaultField
+  | QuoteDefaultsLaborRateField
+
+export type QuoteDefaultsFormSectionVm = {
+  key: QuoteDefaultsFormSectionKey
+  kind: QuoteDefaultsFormSectionKind
+  title: string
+  description: string
+  fields: QuoteDefaultsFormFieldVm[]
+}
 
 export type QuoteDefaultsPageVm = {
   feedback: {
@@ -84,11 +83,10 @@ type QuoteDefaultsPageVmResource = {
 export function buildQuoteDefaultsPageVm(resource: QuoteDefaultsPageVmResource): QuoteDefaultsPageVm {
   const validationError = resource.data.form.validationError
   const canSave = resource.hasLoaded && resource.dirty && !resource.saving && resource.data.form.canSave
-  const productDefaultFields = buildProductDefaultFields(resource.data)
-  const sections = buildQuoteDefaultsFormSections(
-    productDefaultFields,
-    resource.data.form.fieldErrors
-  )
+  const sections = buildQuoteDefaultsFormSections(resource.data)
+  const productDefaultFields = sections
+    .flatMap((section) => section.fields)
+    .filter((field): field is QuoteDefaultsProductDefaultField => field.kind === 'product_select')
   const status = buildQuoteAdminPageStatus({
     loading: resource.loading,
     hasData: resource.hasLoaded,
@@ -116,38 +114,32 @@ export function buildQuoteDefaultsPageVm(resource: QuoteDefaultsPageVmResource):
   }
 }
 
-function buildProductDefaultFields(
+function buildQuoteDefaultsFormSections(
   data: QuoteDefaultsResource
-): QuoteDefaultsProductDefaultField[] {
-  return data.form.productDefaultFields.map((field) => ({
-    ...field,
-    error: data.form.fieldErrors[field.key],
-    options: field.options.map((product) => ({
-      ...product,
-      label: formatQuoteDefaultsProductOptionLabel(product, field.expectedFamily),
-    })),
+): QuoteDefaultsFormSectionVm[] {
+  return data.form.sections.map(({ fieldKeys: _fieldKeys, fields, ...section }) => ({
+    ...section,
+    fields: fields.map((field) => buildQuoteDefaultsFormField(field, data.form.fieldErrors)),
   }))
 }
 
-function buildQuoteDefaultsFormSections(
-  productDefaultFields: QuoteDefaultsProductDefaultField[],
+function buildQuoteDefaultsFormField(
+  field: QuoteDefaultsFormFieldConfig<QuoteDefaultsProductRow>,
   fieldErrors: QuoteDefaultsValidationFields
-): QuoteDefaultsFormSectionVm[] {
-  return quoteDefaultsFormSections.map((section) => {
-    if (section.kind === 'product_defaults') {
-      return {
-        ...section,
-        productDefaultFields,
-      }
-    }
-
+): QuoteDefaultsFormFieldVm {
+  if (field.kind === 'product_select') {
     return {
-      ...section,
-      laborRateField: {
-        label: 'Labor rate / hr',
-        key: 'override_labor_rate',
-        error: fieldErrors.override_labor_rate,
-      },
+      ...field,
+      error: fieldErrors[field.key],
+      options: field.options.map((product) => ({
+        ...product,
+        label: formatQuoteDefaultsProductOptionLabel(product, field.expectedFamily),
+      })),
     }
-  })
+  }
+
+  return {
+    ...field,
+    error: fieldErrors[field.key],
+  }
 }

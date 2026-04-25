@@ -51,8 +51,9 @@ describe('buildQuoteDefaultsPageVm', () => {
       kind: 'product_defaults',
     })
     expect(vm.form.sections[0]).toMatchObject({
-      productDefaultFields: expect.arrayContaining([
+      fields: expect.arrayContaining([
         expect.objectContaining({
+          kind: 'product_select',
           key: 'walls_paint_id',
           options: [expect.objectContaining({ id: 'paint-1', label: 'Paint' })],
         }),
@@ -151,11 +152,17 @@ describe('buildQuoteDefaultsPageVm', () => {
       kind: 'labor_rate',
       title: 'Labor rate',
       description: 'Org-level labor rate used when a specific quote has not saved its own override.',
-      laborRateField: {
-        label: 'Labor rate / hr',
-        key: 'override_labor_rate',
-        error: 'Labor rate must be between 0 and 10000.',
-      },
+      fields: [
+        {
+          kind: 'number_input',
+          label: 'Labor rate / hr',
+          key: 'override_labor_rate',
+          min: 0,
+          max: 10000,
+          step: 1,
+          error: 'Labor rate must be between 0 and 10000.',
+        },
+      ],
     })
     expect(vm.form.canSave).toBe(false)
   })

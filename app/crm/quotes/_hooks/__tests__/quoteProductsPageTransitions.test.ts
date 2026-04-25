@@ -13,10 +13,13 @@ import {
 import {
   buildQuoteProductsIntentState,
   buildQuoteProductsQuery,
+  buildQuoteProductsRestoreEditorActions,
   buildQuoteProductsSavedState,
   createInitialQuoteProductsWorkflowState,
   createQuoteProductsCreateDraft,
   createQuoteProductsDraftFromRow,
+  getQuoteProductsDiscardRestorePolicy,
+  getQuoteProductsIntentChanged,
   quoteProductsPageReducer,
   reconcileQuoteProductsStateFromResource,
 } from '../quoteProductsPageState'
@@ -60,7 +63,7 @@ describe('quoteProductsPageTransitions invariants', () => {
 
   it('reduces raw and committed search state independently', () => {
     const searchedState = quoteProductsPageReducer(createInitialQuoteProductsWorkflowState(), {
-      type: 'setSearchInput',
+      type: 'searchChanged',
       search: '  trim later  ',
     })
 
@@ -68,8 +71,9 @@ describe('quoteProductsPageTransitions invariants', () => {
     expect(searchedState.navigation.debouncedSearch).toBe('')
 
     const committedState = quoteProductsPageReducer(searchedState, {
-      type: 'commitSearch',
+      type: 'searchChanged',
       search: searchedState.navigation.search,
+      committed: true,
     })
 
     expect(committedState.navigation.search).toBe('  trim later  ')
@@ -78,12 +82,14 @@ describe('quoteProductsPageTransitions invariants', () => {
 
   it('keeps the first pending discard transition in the products reducer', () => {
     const firstQueuedState = quoteProductsPageReducer(createInitialQuoteProductsWorkflowState(), {
-      type: 'openDiscard',
+      type: 'discardChanged',
+      status: 'confirming',
       transition: { type: 'setStatusFilter', status: 'inactive' },
     })
 
     const secondQueuedState = quoteProductsPageReducer(firstQueuedState, {
-      type: 'openDiscard',
+      type: 'discardChanged',
+      status: 'confirming',
       transition: { type: 'setSearch', search: 'primer' },
     })
 
@@ -148,6 +154,114 @@ describe('quoteProductsPageTransitions invariants', () => {
 
     expect(nextState).toBeNull()
     expect(dirtyState.draft.name).toBe('Local draft')
+  })
+
+  it('computes product intent changed status without controller state branches', () => {
+    const state = createInitialQuoteProductsWorkflowState()
+
+    expect(
+      getQuoteProductsIntentChanged(state, {
+        type: 'setActiveFamily',
+        nextFamily: 'Paint',
+      })
+    ).toBe(false)
+    expect(
+      getQuoteProductsIntentChanged(state, {
+        type: 'setStatusFilter',
+        status: 'inactive',
+      })
+    ).toBe(true)
+    expect(
+      getQuoteProductsIntentChanged(
+        {
+          ...state,
+          selectedId: 'product-1',
+        },
+        {
+          type: 'setSelectedId',
+          selectedId: 'product-1',
+        }
+      )
+    ).toBe(false)
+  })
+
+  it('computes discard restore policy for product transitions', () => {
+    const editState = {
+      ...createInitialQuoteProductsWorkflowState(),
+      selectedId: 'product-1',
+      editorMode: 'edit' as const,
+    }
+    const createState = {
+      ...createInitialQuoteProductsWorkflowState(),
+      editorMode: 'create' as const,
+      returnSelectionId: 'product-1',
+    }
+
+    expect(
+      getQuoteProductsDiscardRestorePolicy(editState, {
+        type: 'setSelectedId',
+        selectedId: 'product-2',
+      })
+    ).toEqual({
+      shouldRestoreDraft: true,
+      shouldApplySearchInput: false,
+    })
+    expect(
+      getQuoteProductsDiscardRestorePolicy(createState, {
+        type: 'setSearch',
+        search: 'primer',
+      })
+    ).toEqual({
+      shouldRestoreDraft: true,
+      shouldApplySearchInput: true,
+    })
+    expect(
+      getQuoteProductsDiscardRestorePolicy(createState, {
+        type: 'setActiveFamily',
+        nextFamily: 'Primer',
+      })
+    ).toEqual({
+      shouldRestoreDraft: false,
+      shouldApplySearchInput: false,
+    })
+  })
+
+  it('builds restore editor actions from known hidden selected rows', () => {
+    const hiddenSelected = buildProduct({
+      id: 'paint-2',
+      name: 'Dormant Paint',
+      status: 'Inactive',
+    })
+    const actions = buildQuoteProductsRestoreEditorActions({
+      state: {
+        ...createInitialQuoteProductsWorkflowState(),
+        selectedId: 'paint-2',
+        editorMode: 'edit',
+        draft: {
+          ...createQuoteProductsDraftFromRow(hiddenSelected).draft,
+          name: 'Unsaved local edit',
+        },
+      },
+      resource: {
+        visibleRows: [buildProduct({ id: 'paint-1', name: 'Visible Paint' })],
+        knownRows: [hiddenSelected],
+      },
+    })
+
+    expect(actions).toEqual([
+      {
+        type: 'editCanceled',
+        selectedId: 'paint-2',
+      },
+      expect.objectContaining({
+        type: 'resourceReconciled',
+        selectedId: 'paint-2',
+        editorMode: 'edit',
+        draft: expect.objectContaining({
+          name: 'Dormant Paint',
+        }),
+      }),
+    ])
   })
 
   it('preserves the explicit hidden selection after a save moves the row out of the filtered slice', () => {

@@ -14,7 +14,10 @@ import {
   type QuoteProductRow,
   type QuoteProductStatusFilter,
 } from '@/lib/quotes/productsForm'
-import { chooseQuoteProductsFallbackId, findQuoteProductById } from './quoteProductsControllerUtils'
+import {
+  chooseQuoteProductsFallbackId,
+  findQuoteProductById,
+} from './quoteProductsControllerUtils'
 
 export type QuoteProductsPendingTransition =
   | { type: 'setSelectedId'; selectedId: string | null }
@@ -48,36 +51,41 @@ export type QuoteProductsResourceSnapshot = {
   knownRows: QuoteProductRow[]
 }
 
+export type QuoteProductsActionStatus = 'idle' | 'saving' | 'deleting'
+export type QuoteProductsDiscardStatus = 'idle' | 'confirming' | 'applying'
+
 export type QuoteProductsWorkflowAction =
-  | { type: 'setSearchInput'; search: string }
-  | { type: 'commitSearch'; search: string }
-  | { type: 'setDraft'; draft: QuoteProductDraft }
-  | { type: 'beginAction'; status: 'saving' | 'deleting' }
-  | { type: 'finishAction' }
-  | { type: 'setNotice'; notice: string | null }
-  | { type: 'setActionError'; error: string | null }
-  | { type: 'clearFeedback' }
-  | { type: 'openDiscard'; transition: QuoteProductsPendingTransition }
-  | { type: 'setDiscardStatus'; status: 'idle' | 'confirming' | 'applying' }
-  | { type: 'clearDiscard' }
-  | { type: 'setDeleteTargetId'; id: string | null }
-  | { type: 'applyIntent'; intent: QuoteProductsPendingTransition }
-  | { type: 'cancelEdit'; selectedId: string | null }
+  | { type: 'searchChanged'; search: string; committed?: boolean }
+  | { type: 'draftChanged'; draft: QuoteProductDraft }
   | {
-      type: 'reconcileFromResource'
+      type: 'mutationChanged'
+      status: QuoteProductsActionStatus
+      error?: string | null
+    }
+  | { type: 'feedbackChanged'; notice: string | null; error?: string | null }
+  | {
+      type: 'discardChanged'
+      status: QuoteProductsDiscardStatus
+      transition?: QuoteProductsPendingTransition | null
+    }
+  | { type: 'deleteTargetChanged'; id: string | null }
+  | { type: 'intentApplied'; intent: QuoteProductsPendingTransition }
+  | { type: 'editCanceled'; selectedId: string | null }
+  | {
+      type: 'resourceReconciled'
       selectedId: string | null
       draft: QuoteProductDraft
       cleanSnapshot: QuoteProductDraftSnapshot
       editorMode: 'none' | 'edit'
     }
   | {
-      type: 'commitSave'
+      type: 'saveCommitted'
       row: QuoteProductRow
       notice: string | null
       navigation: QuoteProductsWorkflowState['navigation']
     }
   | {
-      type: 'commitDelete'
+      type: 'deleteCommitted'
       deletedId: string
       notice: string | null
       nextSelectedId: string | null
@@ -118,6 +126,13 @@ export function buildQuoteProductsQuery(
   }
 }
 
+export function buildQuoteProductsResourceSyncAction(
+  state: QuoteProductsWorkflowState,
+  resource: QuoteProductsResourceSnapshot
+) {
+  return reconcileQuoteProductsStateFromResource(state, resource)
+}
+
 export function getQuoteProductsSelectedRow(
   rows: QuoteProductRow[],
   selectedId: string | null
@@ -145,7 +160,9 @@ export function createQuoteProductsCreateDraft(family: ProductFamily) {
   }
 }
 
-export function getQuoteProductsHasUnsavedChanges(state: QuoteProductsWorkflowState) {
+export function getQuoteProductsHasUnsavedChanges(
+  state: QuoteProductsWorkflowState
+) {
   return (
     state.editorMode !== 'none' &&
     !areQuoteProductDraftSnapshotsEqual(
@@ -153,6 +170,24 @@ export function getQuoteProductsHasUnsavedChanges(state: QuoteProductsWorkflowSt
       state.cleanSnapshot
     )
   )
+}
+
+export function buildQuoteProductsDraftFieldAction<
+  K extends keyof QuoteProductDraft,
+>(
+  state: QuoteProductsWorkflowState,
+  field: K,
+  value: QuoteProductDraft[K]
+): QuoteProductsWorkflowAction | null {
+  if (state.editorMode === 'none') return null
+
+  return {
+    type: 'draftChanged',
+    draft: {
+      ...state.draft,
+      [field]: value,
+    },
+  }
 }
 
 export function buildQuoteProductsSelection(params: {
@@ -163,7 +198,8 @@ export function buildQuoteProductsSelection(params: {
   const selected =
     findQuoteProductById(params.knownRows, params.selectedId) ??
     findQuoteProductById(params.visibleRows, params.selectedId)
-  const nextSelectedId = selected?.id ?? chooseQuoteProductsFallbackId(params.visibleRows)
+  const nextSelectedId =
+    selected?.id ?? chooseQuoteProductsFallbackId(params.visibleRows)
   const nextSelected =
     selected ??
     findQuoteProductById(params.knownRows, nextSelectedId) ??
@@ -173,6 +209,43 @@ export function buildQuoteProductsSelection(params: {
     selectedId: nextSelectedId,
     selected: nextSelected,
   }
+}
+
+export function buildQuoteProductsRestoreEditorActions(params: {
+  state: QuoteProductsWorkflowState
+  resource: QuoteProductsResourceSnapshot
+}): QuoteProductsWorkflowAction[] {
+  const selectedId =
+    params.state.editorMode === 'create'
+      ? params.state.returnSelectionId
+      : params.state.selectedId
+  const actions: QuoteProductsWorkflowAction[] = [
+    {
+      type: 'editCanceled',
+      selectedId,
+    },
+  ]
+
+  const selection = buildQuoteProductsSelection({
+    visibleRows: params.resource.visibleRows,
+    knownRows: params.resource.knownRows,
+    selectedId,
+  })
+
+  if (!selection.selected) {
+    return actions
+  }
+
+  const restored = createQuoteProductsDraftFromRow(selection.selected)
+  actions.push({
+    type: 'resourceReconciled',
+    selectedId: selection.selected.id,
+    editorMode: 'edit',
+    draft: restored.draft,
+    cleanSnapshot: restored.cleanSnapshot,
+  })
+
+  return actions
 }
 
 export function reconcileQuoteProductsStateFromResource(
@@ -191,7 +264,7 @@ export function reconcileQuoteProductsStateFromResource(
   if (!selection.selected) {
     if (state.selectedId === null && state.editorMode === 'none') return null
     return {
-      type: 'reconcileFromResource' as const,
+      type: 'resourceReconciled' as const,
       selectedId: null,
       editorMode: 'none' as const,
       draft: createEmptyQuoteProductDraft(),
@@ -210,11 +283,44 @@ export function reconcileQuoteProductsStateFromResource(
   if (!selectionChanged && !modeChanged && !draftChanged) return null
 
   return {
-    type: 'reconcileFromResource' as const,
+    type: 'resourceReconciled' as const,
     selectedId: selection.selectedId,
     editorMode: 'edit' as const,
     draft: nextDraftState.draft,
     cleanSnapshot: nextDraftState.cleanSnapshot,
+  }
+}
+
+export function getQuoteProductsIntentChanged(
+  state: QuoteProductsWorkflowState,
+  intent: QuoteProductsPendingTransition
+) {
+  switch (intent.type) {
+    case 'setActiveFamily':
+      return intent.nextFamily !== state.navigation.activeFamily
+    case 'setStatusFilter':
+      return intent.status !== state.navigation.statusFilter
+    case 'setSearch':
+      return intent.search !== state.navigation.search
+    case 'setSelectedId':
+      return intent.selectedId !== state.selectedId
+    case 'startCreate':
+      return state.editorMode !== 'create'
+    default:
+      return false
+  }
+}
+
+export function getQuoteProductsDiscardRestorePolicy(
+  state: QuoteProductsWorkflowState,
+  intent: QuoteProductsPendingTransition
+) {
+  return {
+    shouldRestoreDraft:
+      intent.type === 'setSelectedId' ||
+      intent.type === 'startCreate' ||
+      (state.editorMode === 'create' && intent.type !== 'setActiveFamily'),
+    shouldApplySearchInput: intent.type === 'setSearch',
   }
 }
 
@@ -281,7 +387,9 @@ export function buildQuoteProductsIntentState(
         deleteTargetId: null,
       }
     case 'startCreate': {
-      const createDraft = createQuoteProductsCreateDraft(state.navigation.activeFamily)
+      const createDraft = createQuoteProductsCreateDraft(
+        state.navigation.activeFamily
+      )
       return {
         ...state,
         editorMode: 'create',
@@ -303,83 +411,65 @@ export function quoteProductsPageReducer(
   action: QuoteProductsWorkflowAction
 ): QuoteProductsWorkflowState {
   switch (action.type) {
-    case 'setSearchInput':
+    case 'searchChanged':
       return {
         ...state,
         navigation: {
           ...state.navigation,
-          search: action.search,
+          search: action.committed ? state.navigation.search : action.search,
+          debouncedSearch: action.committed
+            ? action.search.trim()
+            : state.navigation.debouncedSearch,
         },
       }
-    case 'commitSearch':
-      return {
-        ...state,
-        navigation: {
-          ...state.navigation,
-          debouncedSearch: action.search.trim(),
-        },
-      }
-    case 'setDraft':
+    case 'draftChanged':
       return {
         ...state,
         draft: action.draft,
       }
-    case 'beginAction':
+    case 'mutationChanged':
       return {
         ...state,
         actionStatus: action.status,
-        notice: null,
-        actionError: null,
+        notice:
+          action.status === 'idle'
+            ? action.error
+              ? null
+              : state.notice
+            : null,
+        actionError: action.status === 'idle' ? (action.error ?? null) : null,
       }
-    case 'finishAction':
-      return {
-        ...state,
-        actionStatus: 'idle',
-      }
-    case 'setNotice':
+    case 'feedbackChanged':
       return {
         ...state,
         notice: action.notice,
-        actionError: null,
+        actionError: action.error ?? null,
       }
-    case 'setActionError':
-      return {
-        ...state,
-        notice: null,
-        actionError: action.error,
+    case 'discardChanged':
+      if (action.status === 'confirming') {
+        if (state.pendingTransition) return state
+        return {
+          ...state,
+          discardStatus: action.status,
+          pendingTransition: action.transition ?? null,
+        }
       }
-    case 'clearFeedback':
-      return {
-        ...state,
-        notice: null,
-        actionError: null,
-      }
-    case 'openDiscard':
-      if (state.pendingTransition) return state
-      return {
-        ...state,
-        discardStatus: 'confirming',
-        pendingTransition: action.transition,
-      }
-    case 'setDiscardStatus':
       return {
         ...state,
         discardStatus: action.status,
+        pendingTransition:
+          action.status === 'idle'
+            ? null
+            : (action.transition ?? state.pendingTransition),
       }
-    case 'clearDiscard':
-      return {
-        ...state,
-        discardStatus: 'idle',
-        pendingTransition: null,
-      }
-    case 'setDeleteTargetId':
+    case 'deleteTargetChanged':
       return {
         ...state,
         deleteTargetId: action.id,
       }
-    case 'applyIntent':
+    case 'intentApplied':
       return buildQuoteProductsIntentState(state, action.intent)
-    case 'cancelEdit':
+    case 'editCanceled':
       return {
         ...state,
         selectedId: action.selectedId,
@@ -390,16 +480,19 @@ export function quoteProductsPageReducer(
         notice: null,
         actionError: null,
       }
-    case 'reconcileFromResource':
+    case 'resourceReconciled':
       return {
         ...state,
         selectedId: action.selectedId,
         editorMode: action.editorMode,
         draft: action.draft,
         cleanSnapshot: action.cleanSnapshot,
-        deleteTargetId: state.deleteTargetId === action.selectedId ? state.deleteTargetId : null,
+        deleteTargetId:
+          state.deleteTargetId === action.selectedId
+            ? state.deleteTargetId
+            : null,
       }
-    case 'commitSave':
+    case 'saveCommitted':
       return buildQuoteProductsSavedState({
         state: {
           ...state,
@@ -408,7 +501,7 @@ export function quoteProductsPageReducer(
         row: action.row,
         notice: action.notice,
       })
-    case 'commitDelete':
+    case 'deleteCommitted':
       return buildQuoteProductsDeletedState({
         state,
         deletedId: action.deletedId,
@@ -467,7 +560,9 @@ export function buildQuoteProductsDeletedState(params: {
   const shouldResetEditor = params.state.selectedId === params.deletedId
   return {
     ...params.state,
-    selectedId: shouldResetEditor ? params.nextSelectedId : params.state.selectedId,
+    selectedId: shouldResetEditor
+      ? params.nextSelectedId
+      : params.state.selectedId,
     editorMode:
       shouldResetEditor && !params.nextSelectedId
         ? ('none' as const)

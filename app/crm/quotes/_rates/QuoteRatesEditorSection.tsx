@@ -6,7 +6,6 @@ import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import type { QuoteRatesActions, QuoteRatesEditorVm } from '@/app/crm/quotes/_hooks/useQuoteRatesPage'
-import { isRatesFlagsEditableCategory } from '@/lib/quotes/ratesFlagsDraftAdapters'
 
 type Props = {
   vm: QuoteRatesEditorVm
@@ -18,12 +17,6 @@ type Props = {
 }
 
 export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props) {
-  const showLegacyCategoryNotice =
-    vm.activeCategory !== null &&
-    !isRatesFlagsEditableCategory(vm.activeCategory) &&
-    !vm.isCreating &&
-    vm.draft === null
-
   return (
     <CrmSectionCard
       title={vm.isCreating ? 'New row' : vm.selectedRow ? vm.selectedRow.display_name || vm.selectedRow.id : 'No selection'}
@@ -31,7 +24,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
         vm.activeCategory ? `${vm.activeCategory.label} | template v${templateVersion ?? 'n/a'}` : 'No active category.'
       }
       actions={
-        showLegacyCategoryNotice ? null : (
+        vm.showLegacyCategoryNotice ? null : (
           <div className="flex flex-wrap gap-2">
             <CrmButton
               type="button"
@@ -50,7 +43,7 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
     >
       {!vm.activeCategory ? (
         <CrmEmptyState title="No active category" description="Select a tab and category." />
-      ) : showLegacyCategoryNotice ? (
+      ) : vm.showLegacyCategoryNotice ? (
         <CrmNotice tone="info">
           This category is a legacy data type and cannot be edited here.
         </CrmNotice>

@@ -7,7 +7,7 @@ import {
   saveQuoteRatesMutation,
 } from './quoteRatesPageMutations'
 import {
-  applyNavigationIntent,
+  buildQuoteRatesTransitionPlan,
   buildQuoteRatesDerivedState,
   buildQuoteRatesEditorSnapshotFromSelection,
   buildQuoteRatesResourceSyncAction,
@@ -74,9 +74,9 @@ export function useQuoteRatesPageController() {
     hasUnsavedChanges: getQuoteRatesHasUnsavedChanges,
     discard: {
       getPendingIntent: (state) => state.pendingTransition,
-      queue: (intent) => ({ type: 'openDiscard', intent }),
-      setStatus: (status) => ({ type: 'setDiscardStatus', status }),
-      clear: () => ({ type: 'clearDiscard' }),
+      queue: (intent) => ({ type: 'discardChanged', status: 'confirming', intent }),
+      setStatus: (status) => ({ type: 'discardChanged', status }),
+      clear: () => ({ type: 'discardChanged', status: 'idle' }),
     },
   })
   const { state, stateRef, applyAction, requestTransition, confirmDiscard, cancelDiscard } =
@@ -91,9 +91,9 @@ export function useQuoteRatesPageController() {
     if (state.actionStatus !== 'reloading' || resource.loading) return
 
     if (state.refreshSelectionId !== null || state.forceRefreshRehydrate) {
-      applyAction({ type: 'clearRefreshRehydrate' })
+      applyAction({ type: 'refreshRehydrateChanged', selectedId: null, force: false })
     }
-    applyAction({ type: 'finishAction' })
+    applyAction({ type: 'mutationChanged', status: 'idle' })
   }, [
     applyAction,
     resource.loading,
@@ -107,7 +107,7 @@ export function useQuoteRatesPageController() {
 
     const selection = buildQuoteRatesSelectionSnapshot(resource.data, navigation, preferredId)
     applyAction({
-      type: 'applyNavigation',
+      type: 'editorApplied',
       navigation,
       selectedId: selection.selectedId,
       editor: selection.editor,
@@ -119,7 +119,7 @@ export function useQuoteRatesPageController() {
     if (stateRef.current.actionStatus !== 'idle') return false
 
     const editor = buildQuoteRatesEditorSnapshotFromSelection(derived.activeCategory, selectedId)
-    applyAction({ type: 'selectRow', selectedId: editor.selectedId, editor })
+    applyAction({ type: 'editorApplied', selectedId: editor.selectedId, editor })
     return true
   }
 
@@ -128,7 +128,7 @@ export function useQuoteRatesPageController() {
     if (!derived.editableActiveCategory || !derived.adapter) return false
 
     const draft = derived.adapter.createEmptyDraft(derived.editableActiveCategory)
-    applyAction({ type: 'startCreate', draft })
+    applyAction({ type: 'createStarted', draft })
     return true
   }
 
@@ -142,7 +142,7 @@ export function useQuoteRatesPageController() {
     )
 
     applyAction({
-      type: 'startDuplicate',
+      type: 'createStarted',
       draft,
       draftActive: derived.selectedRow.active,
     })
@@ -154,18 +154,18 @@ export function useQuoteRatesPageController() {
       derived.activeCategory,
       stateRef.current.selectedId
     )
-    applyAction({ type: 'discardCurrentChanges', selectedId: editor.selectedId, editor })
+    applyAction({ type: 'editorApplied', selectedId: editor.selectedId, editor })
   }
 
   async function performReload(keepId?: string) {
     if (stateRef.current.actionStatus !== 'idle') return false
 
     applyAction({
-      type: 'scheduleRefreshRehydrate',
+      type: 'refreshRehydrateChanged',
       selectedId: (keepId ?? stateRef.current.selectedId) || null,
       force: true,
     })
-    applyAction({ type: 'beginAction', status: 'reloading' })
+    applyAction({ type: 'mutationChanged', status: 'reloading' })
 
     const result = await resource.attemptRefresh({
       preserveDataOnError: true,
@@ -173,8 +173,8 @@ export function useQuoteRatesPageController() {
     })
 
     if (!result.ok) {
-      applyAction({ type: 'clearRefreshRehydrate' })
-      applyAction({ type: 'finishAction' })
+      applyAction({ type: 'refreshRehydrateChanged', selectedId: null, force: false })
+      applyAction({ type: 'mutationChanged', status: 'idle' })
     }
 
     return result.ok
@@ -187,7 +187,7 @@ export function useQuoteRatesPageController() {
       return
     }
 
-    applyAction({ type: 'beginAction', status: 'saving' })
+    applyAction({ type: 'mutationChanged', status: 'saving' })
 
     const result = await saveQuoteRatesMutation({
       resource,
@@ -200,29 +200,28 @@ export function useQuoteRatesPageController() {
     })
 
     if (!result.ok) {
-      applyAction({ type: 'setActionError', error: result.error })
-      applyAction({ type: 'finishAction' })
+      applyAction({ type: 'mutationChanged', status: 'idle', error: result.error })
       return
     }
 
     applyAction({
-      type: 'commitMutation',
+      type: 'editorApplied',
       selectedId: result.selectedId,
       editor: result.editor,
     })
     applyAction({
-      type: 'setNotice',
+      type: 'feedbackChanged',
       notice: result.notice,
       tone: result.tone,
     })
-    applyAction({ type: 'finishAction' })
+    applyAction({ type: 'mutationChanged', status: 'idle' })
   }
 
   async function archiveOrReactivate(nextActive: boolean) {
     if (stateRef.current.actionStatus !== 'idle') return false
     if (!derived.editableActiveCategory || !derived.selectedRow) return false
 
-    applyAction({ type: 'beginAction', status: 'archiving' })
+    applyAction({ type: 'mutationChanged', status: 'archiving' })
 
     const result = await archiveOrReactivateQuoteRatesMutation({
       resource,
@@ -233,22 +232,21 @@ export function useQuoteRatesPageController() {
     })
 
     if (!result.ok) {
-      applyAction({ type: 'setActionError', error: result.error })
-      applyAction({ type: 'finishAction' })
+      applyAction({ type: 'mutationChanged', status: 'idle', error: result.error })
       return false
     }
 
     applyAction({
-      type: 'commitMutation',
+      type: 'editorApplied',
       selectedId: result.selectedId,
       editor: result.editor,
     })
     applyAction({
-      type: 'setNotice',
+      type: 'feedbackChanged',
       notice: result.notice,
       tone: result.tone,
     })
-    applyAction({ type: 'finishAction' })
+    applyAction({ type: 'mutationChanged', status: 'idle' })
     return true
   }
 
@@ -259,9 +257,9 @@ export function useQuoteRatesPageController() {
       derived.activeCategory,
       stateRef.current.selectedId
     )
-    applyAction({ type: 'cancelEdit', selectedId: editor.selectedId, editor })
+    applyAction({ type: 'editorApplied', selectedId: editor.selectedId, editor })
     cancelDiscard()
-    applyAction({ type: 'clearFeedback' })
+    applyAction({ type: 'feedbackChanged', notice: null })
   }
 
   function updateDraftValue(fieldKey: string, rawInput: string) {
@@ -275,13 +273,13 @@ export function useQuoteRatesPageController() {
       fieldKey,
       rawInput
     )
-    applyAction({ type: 'setDraft', draft: nextDraft })
+    applyAction({ type: 'draftChanged', draft: nextDraft })
   }
 
   function setDraftActive(nextActive: boolean) {
     if (stateRef.current.actionStatus !== 'idle') return
 
-    applyAction({ type: 'setDraftActive', draftActive: nextActive })
+    applyAction({ type: 'draftChanged', draftActive: nextActive })
   }
 
   const formatDraftValue = useCallback(
@@ -296,29 +294,24 @@ export function useQuoteRatesPageController() {
   )
 
   function executeIntent(intent: QuoteRatesPendingTransition): QuoteRatesTransitionResult {
-    switch (intent.type) {
-      case 'setActiveTab':
-      case 'setRateSection':
-      case 'setRateCategory':
-      case 'setFlagsSection':
-      case 'setRoomDefaultsSection':
-        return applyNavigation(applyNavigationIntent(stateRef.current.navigation, intent))
-      case 'setStatusFilter':
-      case 'setSearch':
+    const plan = buildQuoteRatesTransitionPlan(stateRef.current.navigation, intent)
+
+    switch (plan.kind) {
+      case 'navigation':
         return applyNavigation(
-          applyNavigationIntent(stateRef.current.navigation, intent),
-          stateRef.current.selectedId || undefined
+          plan.navigation,
+          plan.preserveSelectedId ? stateRef.current.selectedId || undefined : undefined
         )
-      case 'setSelectedId':
-        return applySelection(intent.selectedId)
+      case 'selection':
+        return applySelection(plan.selectedId)
       case 'startCreate':
         return startCreate()
       case 'startDuplicate':
         return startDuplicate()
       case 'reload':
-        return performReload(intent.keepId)
+        return performReload(plan.keepId)
       case 'archiveOrReactivate':
-        return archiveOrReactivate(intent.nextActive)
+        return archiveOrReactivate(plan.nextActive)
       default:
         return false
     }

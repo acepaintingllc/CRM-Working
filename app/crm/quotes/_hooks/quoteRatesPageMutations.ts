@@ -126,11 +126,12 @@ export async function archiveOrReactivateQuoteRatesMutation(params: {
   const { resource, navigation, categoryKey, selectedRowId, nextActive } = params
 
   try {
-    const request: RatesFlagsMutationRequestByCategory<RatesFlagsEditableCategoryKey> = {
-      category: categoryKey,
-      action: nextActive ? 'reactivate' : 'archive',
-      rowId: selectedRowId,
-    }
+    const adapter = getRatesFlagsDraftAdapter(categoryKey)
+    const request: RatesFlagsMutationRequestByCategory<RatesFlagsEditableCategoryKey> =
+      adapter.toArchiveRequest({
+        action: nextActive ? 'reactivate' : 'archive',
+        rowId: selectedRowId,
+      })
     const { nextPayload, reconciliation } = await persistRatesFlagsMutation({ request, resource })
     const preferredRow =
       findReconciledRatesRow(nextPayload, request.category, selectedRowId)?.id ?? selectedRowId
