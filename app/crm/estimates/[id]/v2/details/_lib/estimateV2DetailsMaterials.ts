@@ -3,44 +3,57 @@ import type {
   EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
-  UnsafeRecord,
 } from '@/types/estimator/v2'
 import type {
   BuildDetailsVmParams,
   DetailsScopeLineVm,
-  DetailsValidationIssue,
 } from './estimateV2DetailsVm'
-import { cleanInputNumber, isActive, round1, sumNumbers } from './estimateV2DetailsShared'
 import {
-  createDetailsBlockingIssue,
-  createDetailsWarningIssue,
+  cleanInputNumber,
+  isActive,
+  resolveOptionalGallonOverride,
+  round1,
+  sumNumbers,
+} from './estimateV2DetailsShared'
+import {
+  createMaterialMissingCalculationIssues,
+  createMaterialMissingProductIssues,
+  createMaterialOverrideInputIssues,
 } from './estimateV2DetailsValidation'
+import {
+  calculationRowsById,
+  type EstimateV2DetailsAggregateCalculationRow,
+} from './estimateV2DetailsMaterialCalculations'
+import {
+  resolveGroupedOverride,
+  wallScopeGroupKey,
+} from './estimateV2DetailsMaterialOverrides'
+
+export {
+  extractEstimateV2DetailsCalculationRows,
+  type EstimateV2DetailsCeilingCalculationRow,
+  type EstimateV2DetailsCalculationRows,
+  type EstimateV2DetailsTrimCalculationRow,
+  type EstimateV2DetailsWallCalculationRow,
+} from './estimateV2DetailsMaterialCalculations'
+
+export {
+  applyCeilingGallonOverride,
+  applyGroupedMaterialOverridePersistencePolicy,
+  applyTrimGallonOverride,
+  applyWallGroupGallonOverride,
+  resolveGroupedOverride,
+} from './estimateV2DetailsMaterialOverrides'
 
 function roomNameById(rooms: EstimateV2RoomDraft[]) {
   return new Map(rooms.map((room) => [room.roomId, room.roomName || room.roomId] as const))
 }
 
-function calcById(rows: UnsafeRecord[] | null | undefined) {
-  return new Map((rows ?? []).map((row) => [String(row.id ?? ''), row] as const))
-}
-
 function validateOverrideInput(params: { label: string; targetId: string; value: string }) {
-  if (!params.value.trim()) return []
-  return cleanInputNumber(params.value) == null
-    ? [
-        createDetailsBlockingIssue({
-          id: `material:${params.targetId}:overrideGallons:invalid-number`,
-          section: 'material',
-          targetId: params.targetId,
-          field: 'overrideGallons',
-          message: `${params.label} override gallons must be a zero or positive number`,
-        }),
-      ]
-    : []
-}
-
-function wallScopeGroupKey(scope: Pick<EstimateV2WallScopeDraft, 'id' | 'colorId'>) {
-  return scope.colorId || `scope:${scope.id}`
+  return createMaterialOverrideInputIssues({
+    ...params,
+    isValid: cleanInputNumber(params.value) != null,
+  })
 }
 
 function resolveWallGroupIdentity(params: {
@@ -86,82 +99,45 @@ function resolveProduct(
     : { label: id, warning: `${id} is not in the loaded catalog` }
 }
 
-function createMissingCalculationIssue(params: {
-  label: string
-  targetId: string
-  missingScopeIds: string[]
+function summarizeWallCalculations(params: {
+  scopes: EstimateV2WallScopeDraft[]
+  calcById: Map<string, { effectiveAreaSf: number | null; rawPaintGallons: number | null }>
 }) {
-  if (params.missingScopeIds.length === 0) return []
-  return [
-    createDetailsBlockingIssue({
-      id: `material:${params.targetId}:calculation:missing`,
-      section: 'material',
-      targetId: params.targetId,
-      field: 'calculation',
-      message: `${params.label} calculation data is unavailable; reopen the estimate calculator before continuing.`,
-    }),
-  ]
-}
-
-function createMissingProductIssue(params: {
-  label: string
-  targetId: string
-  productWarning?: string
-}) {
-  if (!params.productWarning) return []
-  return [
-    createDetailsWarningIssue({
-      id: `material:${params.targetId}:paintProductId:missing-catalog-label`,
-      section: 'material',
-      targetId: params.targetId,
-      field: 'paintProductId',
-      message: `${params.label} product ${params.productWarning}.`,
-    }),
-  ]
-}
-
-export function resolveGroupedOverride(params: {
-  label: string
-  targetId: string
-  scopes: Array<{ id: string }>
-  valuesByScopeId: Map<string, string>
-}) {
-  const ownerScopeId = params.scopes[0]?.id ?? null
-  const persistedOverrides = params.scopes
-    .map((scope) => ({
-      scopeId: scope.id,
-      value: params.valuesByScopeId.get(scope.id) ?? '',
-    }))
-    .filter((entry) => entry.value.trim())
-  const overrideGallons = persistedOverrides[0]?.value ?? ''
-  const uniqueValues = Array.from(new Set(persistedOverrides.map((entry) => entry.value.trim())))
-  const conflictKind = uniqueValues.length === 1 ? 'duplicate' : 'conflicting'
-  const errors: DetailsValidationIssue[] =
-    persistedOverrides.length <= 1
-      ? []
-      : [
-          createDetailsBlockingIssue({
-            id: `material:${params.targetId}:overrideGallons:${conflictKind}-saved-values`,
-            section: 'material',
-            targetId: params.targetId,
-            field: 'overrideGallons',
-            message:
-              conflictKind === 'duplicate'
-                ? `${params.label} has duplicate saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.`
-                : `${params.label} has conflicting saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.`,
-          }),
-        ]
-
   return {
-    overrideGallons,
-    ownerScopeId,
-    errors,
+    calculatedGallons: sumNumbers(
+      params.scopes,
+      (scope) => params.calcById.get(scope.id)?.rawPaintGallons
+    ),
+    missingCalcScopeIds: params.scopes
+      .filter((scope) => !params.calcById.has(scope.id))
+      .map((scope) => scope.id),
+    sqFt: sumNumbers(params.scopes, (scope) => params.calcById.get(scope.id)?.effectiveAreaSf),
+  }
+}
+
+function summarizeAggregateCalculations(params: {
+  scopes: Array<EstimateV2CeilingScopeDraft | EstimateV2TrimScopeDraft>
+  calcById: Map<string, EstimateV2DetailsAggregateCalculationRow>
+}) {
+  return {
+    calculatedGallons: sumNumbers(
+      params.scopes,
+      (scope) => params.calcById.get(scope.id)?.rawPaintGallons
+    ),
+    missingCalcScopeIds: params.scopes
+      .filter((scope) => !params.calcById.has(scope.id))
+      .map((scope) => scope.id),
+    sqFt: sumNumbers(params.scopes, (scope) => {
+      const row = params.calcById.get(scope.id)
+      if (!row) return null
+      return 'effectiveAreaSf' in row ? row.effectiveAreaSf : row.effectiveMeasurement
+    }),
   }
 }
 
 export function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm[] {
   const rooms = roomNameById(params.rooms)
-  const wallCalcById = calcById(params.wallCalculations)
+  const wallCalcById = calculationRowsById(params.wallCalculations)
   const groups = new Map<string, EstimateV2WallScopeDraft[]>()
 
   for (const scope of params.wallScopes) {
@@ -176,11 +152,7 @@ export function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm
       scopes,
       colorLabelById: params.colorLabelById,
     })
-    const calculatedGallons = sumNumbers(scopes, (scope) => wallCalcById.get(scope.id)?.raw_paint_gallons)
-    const missingCalcScopeIds = scopes
-      .filter((scope) => !wallCalcById.has(scope.id))
-      .map((scope) => scope.id)
-    const sqFt = sumNumbers(scopes, (scope) => wallCalcById.get(scope.id)?.effective_area_sf)
+    const calculationSummary = summarizeWallCalculations({ scopes, calcById: wallCalcById })
     const groupedOverride = resolveGroupedOverride({
       label: identity.label,
       targetId: identity.id,
@@ -188,8 +160,8 @@ export function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm
       valuesByScopeId: new Map(scopes.map((scope) => [scope.id, scope.overridePaintGallons] as const)),
     })
     const overrideGallons = groupedOverride.overrideGallons
-    const override = cleanInputNumber(overrideGallons)
-    const roundedGallons = Math.ceil(calculatedGallons)
+    const roundedGallons = Math.ceil(calculationSummary.calculatedGallons)
+    const overrideState = resolveOptionalGallonOverride({ overrideGallons, roundedGallons })
     const product = resolveProduct(scopes, params.paintProductLabelById)
 
     return {
@@ -198,29 +170,30 @@ export function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm
       colorId: identity.colorId,
       colorName: identity.colorName,
       rooms: Array.from(new Set(scopes.map((scope) => rooms.get(scope.roomId) ?? scope.roomId))),
-      sqFt: round1(sqFt),
+      sqFt: round1(calculationSummary.sqFt),
       coats: Array.from(new Set(scopes.map((scope) => scope.paintCoats || '2'))).join(', '),
       product: product.label,
       productWarning: product.warning,
-      calculationStatus: missingCalcScopeIds.length > 0 ? 'unavailable' : 'available',
+      calculationStatus:
+        calculationSummary.missingCalcScopeIds.length > 0 ? 'unavailable' : 'available',
       calculationMessage:
-        missingCalcScopeIds.length > 0
+        calculationSummary.missingCalcScopeIds.length > 0
           ? 'Calculation data unavailable'
           : undefined,
-      calculatedGallons: round1(calculatedGallons),
+      calculatedGallons: round1(calculationSummary.calculatedGallons),
       roundedGallons,
       overrideGallons,
-      finalGallons: override ?? roundedGallons,
+      finalGallons: overrideState.finalGallons,
       overrideKey: identity.overrideKey,
       overrideOwnerScopeId: groupedOverride.ownerScopeId,
-      hasOverride: override != null,
+      hasOverride: overrideState.hasOverride,
       errors: [
-        ...createMissingCalculationIssue({
+        ...createMaterialMissingCalculationIssues({
           label: identity.label,
           targetId: identity.id,
-          missingScopeIds: missingCalcScopeIds,
+          missingScopeIds: calculationSummary.missingCalcScopeIds,
         }),
-        ...createMissingProductIssue({
+        ...createMaterialMissingProductIssues({
           label: identity.label,
           targetId: identity.id,
           productWarning: product.warning,
@@ -240,7 +213,7 @@ export function createAggregateRow(params: {
   id: string
   label: string
   scopes: Array<EstimateV2CeilingScopeDraft | EstimateV2TrimScopeDraft>
-  calcRows: UnsafeRecord[] | null | undefined
+  calcRows: EstimateV2DetailsAggregateCalculationRow[] | null | undefined
   rooms: EstimateV2RoomDraft[]
   productLabelById: Map<string, string>
   overrideField: 'overridePaintGallons' | 'overrideGallons'
@@ -248,14 +221,9 @@ export function createAggregateRow(params: {
   const scopes = params.scopes.filter((scope) => isActive(scope.include))
   if (scopes.length === 0) return null
 
-  const byId = calcById(params.calcRows)
+  const calcById = calculationRowsById(params.calcRows)
   const rooms = roomNameById(params.rooms)
-  const calculatedGallons = sumNumbers(scopes, (scope) => byId.get(scope.id)?.raw_paint_gallons)
-  const missingCalcScopeIds = scopes.filter((scope) => !byId.has(scope.id)).map((scope) => scope.id)
-  const sqFt = sumNumbers(
-    scopes,
-    (scope) => byId.get(scope.id)?.effective_area_sf ?? byId.get(scope.id)?.effective_measurement
-  )
+  const calculationSummary = summarizeAggregateCalculations({ scopes, calcById })
   const getOverrideValue = (scope: EstimateV2CeilingScopeDraft | EstimateV2TrimScopeDraft) =>
     params.overrideField === 'overridePaintGallons'
       ? (scope as EstimateV2CeilingScopeDraft).overridePaintGallons
@@ -267,8 +235,8 @@ export function createAggregateRow(params: {
     valuesByScopeId: new Map(scopes.map((scope) => [scope.id, getOverrideValue(scope)] as const)),
   })
   const overrideGallons = groupedOverride.overrideGallons
-  const override = cleanInputNumber(overrideGallons)
-  const roundedGallons = Math.ceil(calculatedGallons)
+  const roundedGallons = Math.ceil(calculationSummary.calculatedGallons)
+  const overrideState = resolveOptionalGallonOverride({ overrideGallons, roundedGallons })
   const product = resolveProduct(scopes, params.productLabelById)
 
   return {
@@ -276,29 +244,30 @@ export function createAggregateRow(params: {
     label: params.label,
     colorName: params.label,
     rooms: Array.from(new Set(scopes.map((scope) => rooms.get(scope.roomId) ?? scope.roomId))),
-    sqFt: round1(sqFt),
+    sqFt: round1(calculationSummary.sqFt),
     coats: Array.from(new Set(scopes.map((scope) => scope.paintCoats || '2'))).join(', '),
     product: product.label,
     productWarning: product.warning,
-    calculationStatus: missingCalcScopeIds.length > 0 ? 'unavailable' : 'available',
+    calculationStatus:
+      calculationSummary.missingCalcScopeIds.length > 0 ? 'unavailable' : 'available',
     calculationMessage:
-      missingCalcScopeIds.length > 0
+      calculationSummary.missingCalcScopeIds.length > 0
         ? 'Calculation data unavailable'
         : undefined,
-    calculatedGallons: round1(calculatedGallons),
+    calculatedGallons: round1(calculationSummary.calculatedGallons),
     roundedGallons,
     overrideGallons,
-    finalGallons: override ?? roundedGallons,
+    finalGallons: overrideState.finalGallons,
     overrideKey: params.id,
     overrideOwnerScopeId: groupedOverride.ownerScopeId,
-    hasOverride: override != null,
+    hasOverride: overrideState.hasOverride,
     errors: [
-      ...createMissingCalculationIssue({
+      ...createMaterialMissingCalculationIssues({
         label: params.label,
         targetId: params.id,
-        missingScopeIds: missingCalcScopeIds,
+        missingScopeIds: calculationSummary.missingCalcScopeIds,
       }),
-      ...createMissingProductIssue({
+      ...createMaterialMissingProductIssues({
         label: params.label,
         targetId: params.id,
         productWarning: product.warning,
@@ -307,47 +276,4 @@ export function createAggregateRow(params: {
       ...validateOverrideInput({ label: params.label, targetId: params.id, value: overrideGallons }),
     ],
   }
-}
-
-export function applyWallGroupGallonOverride(
-  scopes: EstimateV2WallScopeDraft[],
-  groupKey: string,
-  value: string
-) {
-  let used = false
-  return scopes.map((scope) => {
-    if (wallScopeGroupKey(scope) !== groupKey || scope.include === 'N') return scope
-    if (!used) {
-      used = true
-      return { ...scope, overridePaintGallons: value }
-    }
-    return { ...scope, overridePaintGallons: '' }
-  })
-}
-
-export function applyCeilingGallonOverride(
-  scopes: EstimateV2CeilingScopeDraft[],
-  value: string
-) {
-  let used = false
-  return scopes.map((scope) => {
-    if (scope.include === 'N') return scope
-    if (!used) {
-      used = true
-      return { ...scope, overridePaintGallons: value }
-    }
-    return { ...scope, overridePaintGallons: '' }
-  })
-}
-
-export function applyTrimGallonOverride(scopes: EstimateV2TrimScopeDraft[], value: string) {
-  let used = false
-  return scopes.map((scope) => {
-    if (scope.include === 'N') return scope
-    if (!used) {
-      used = true
-      return { ...scope, overrideGallons: value }
-    }
-    return { ...scope, overrideGallons: '' }
-  })
 }

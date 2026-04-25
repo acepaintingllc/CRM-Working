@@ -2,7 +2,7 @@ import type { EstimateV2RollerDraft } from '@/types/estimator/v2'
 import { normalizeRollerApplicatorQuantity } from '@/lib/estimator/rollerQuantities'
 import type { DetailsRollerCoverOption, DetailsRollerState } from './estimateV2DetailsVm'
 import {
-  findDetailsRollerDraftIndex,
+  findDetailsRollerDraftIndexForRowId,
   parseDetailsRollerRowId,
   type DetailsRollerRowTarget,
 } from './estimateV2DetailsRollerIdentity'
@@ -14,6 +14,28 @@ export function createDetailsDraftId() {
     return crypto.randomUUID()
   }
   return `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function areRollerDraftsEqual(left: EstimateV2RollerDraft, right: EstimateV2RollerDraft) {
+  return (
+    left.id === right.id &&
+    left.scope === right.scope &&
+    left.wallColorId === right.wallColorId &&
+    (left.selectedOptionId ?? '') === (right.selectedOptionId ?? '') &&
+    left.rollerSizeIn === right.rollerSizeIn &&
+    left.coversQty === right.coversQty &&
+    left.notes === right.notes &&
+    left.position === right.position
+  )
+}
+
+function isEmptyRollerDraft(row: EstimateV2RollerDraft) {
+  return (
+    (row.selectedOptionId ?? '') === '' &&
+    row.rollerSizeIn === '' &&
+    row.coversQty === '' &&
+    row.notes === ''
+  )
 }
 
 export function applyDetailsRollerRowPatch(params: {
@@ -28,9 +50,9 @@ export function applyDetailsRollerRowPatch(params: {
     params.patch.coverId != null
       ? params.rollerOptions.find((option) => option.id === params.patch.coverId)
       : null
-  const existingIndex = findDetailsRollerDraftIndex({
+  const existingIndex = findDetailsRollerDraftIndexForRowId({
     rollers: params.rollers,
-    target: rowTarget,
+    rowId: params.rowId,
   })
   const existing = existingIndex >= 0 ? params.rollers[existingIndex] : null
   const nextCoversQty =
@@ -54,6 +76,10 @@ export function applyDetailsRollerRowPatch(params: {
     position: existing?.position ?? params.rollers.length,
   }
 
-  if (existingIndex < 0) return [...params.rollers, nextRow]
+  if (existingIndex < 0) {
+    if (isEmptyRollerDraft(nextRow)) return params.rollers
+    return [...params.rollers, nextRow]
+  }
+  if (existing && areRollerDraftsEqual(existing, nextRow)) return params.rollers
   return params.rollers.map((roller, index) => (index === existingIndex ? nextRow : roller))
 }

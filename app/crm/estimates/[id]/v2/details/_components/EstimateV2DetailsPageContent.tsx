@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowRight, Save } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Save } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
@@ -75,7 +75,11 @@ export function EstimateV2DetailsPageContent({
         title="Details & Overrides"
         description="Material planning, gallon overrides, persisted roller and trim applicator planning, and final validation before summary."
         eyebrow="Estimate V2"
-        backHref={resolvedRouteFamily.editorHref(estimateId)}
+        backAction={
+          <CrmButton type="button" tone="secondary" onClick={() => void actions.returnToEditor()}>
+            <IconLabel icon={<ArrowLeft size={16} aria-hidden="true" />}>Back</IconLabel>
+          </CrmButton>
+        }
         actions={
           <>
             <CrmChip tone={page.dirty ? 'warning' : 'success'}>{page.saveStatusText}</CrmChip>

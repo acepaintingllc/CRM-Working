@@ -12,6 +12,7 @@ import {
 } from '../../../estimateRouteFamily'
 import { useEstimateV2EditorDerivedSections } from '../../_state/useEstimateV2EditorDerivedSections'
 import { useEstimateV2EditorLoader } from '../../_state/useEstimateV2EditorLoader'
+import { useEstimateV2BeforeUnload } from '../../_state/useEstimateV2BeforeUnload'
 import { useEstimateV2SaveController } from '../../_state/useEstimateV2SaveController'
 import { useEstimateV2DetailsController } from './useEstimateV2DetailsController'
 import { useEstimateV2DetailsMutations } from './useEstimateV2DetailsMutations'
@@ -35,26 +36,31 @@ export function useEstimateV2DetailsPage({
     estimateV2StoreSelectors.effectiveJobProductDefaults
   )
   const { state, vm } = useEstimateV2DetailsVm({ store, rollerOptionsState })
+  const dirty = derived.calculation.dirty
 
-  const saveController = useEstimateV2SaveController({
+  useEstimateV2BeforeUnload({ loading: state.loading, dirty })
+
+  const { save: saveEstimateV2 } = useEstimateV2SaveController({
     estimateId,
     routeFamily,
     store,
     currentSnapshot: derived.calculation.currentSnapshot,
-    dirty: derived.calculation.dirty,
+    dirty,
     effectiveJobProductDefaults,
   })
 
   const detailMutations = useEstimateV2DetailsMutations({
     store,
     rollerOptions: rollerOptionsState.options,
+    vm,
   })
 
   const controller = useEstimateV2DetailsController({
     estimateId,
     routeFamily,
     vm,
-    saveEstimate: saveController.save,
+    dirty,
+    saveEstimate: saveEstimateV2,
     mutations: detailMutations,
   })
 
@@ -63,12 +69,11 @@ export function useEstimateV2DetailsPage({
     loading: state.loading,
     saving: state.saving,
     error: state.error,
-    dirty: derived.calculation.dirty,
+    dirty,
     saveStatus: state.saveStatus,
     estimate: state.estimate,
     job: state.job,
     saveStatusText: derived.save.saveStatusText,
-    showValidation: controller.showValidation,
     routeFamily,
     actions: controller.actions,
   }

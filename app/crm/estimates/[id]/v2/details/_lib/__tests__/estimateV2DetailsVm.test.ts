@@ -1,13 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildEstimateV2DetailsVm,
+  buildEstimateV2MaterialPlanningVm,
+  buildEstimateV2RollerPlanningVm,
+  buildEstimateV2TotalsVm,
+  buildEstimateV2ValidationVm,
   applyCeilingGallonOverride,
   applyTrimGallonOverride,
   applyWallGroupGallonOverride,
+  extractEstimateV2DetailsCalculationRows,
   parseRollerCoverOptionsFromRatesFlags,
   parseRollerCoverOptionsStateFromRatesFlags,
+  type BuildDetailsVmParams,
 } from '../estimateV2DetailsVm'
-import { createWallRows, resolveGroupedOverride } from '../estimateV2DetailsMaterials'
+import {
+  createWallRows,
+} from '../estimateV2DetailsMaterials'
+import {
+  applyGroupedMaterialOverridePersistencePolicy,
+  resolveGroupedOverride,
+} from '../estimateV2DetailsMaterialOverrides'
+import { calculationRowsById } from '../estimateV2DetailsMaterialCalculations'
 import { resolveRollerRowState, validateRollerRow } from '../estimateV2DetailsRollers'
 import { formatDetailsNumber } from '../estimateV2DetailsShared'
 import {
@@ -178,18 +191,46 @@ function trimScope(patch: Partial<EstimateV2TrimScopeDraft>): EstimateV2TrimScop
   }
 }
 
-function buildVm(overrides = {}) {
-  return buildEstimateV2DetailsVm({
+function wallCalculationRow(params: {
+  id: string
+  effectiveAreaSf: number | null
+  rawPaintGallons: number | null
+}) {
+  return params
+}
+
+function ceilingCalculationRow(params: {
+  id: string
+  effectiveAreaSf: number | null
+  rawPaintGallons: number | null
+}) {
+  return params
+}
+
+function trimCalculationRow(params: {
+  id: string
+  effectiveMeasurement: number | null
+  rawPaintGallons: number | null
+}) {
+  return params
+}
+
+function buildVmParams(overrides: Partial<BuildDetailsVmParams> = {}): BuildDetailsVmParams {
+  return {
     rooms,
     wallScopes: [wallScope({}), wallScope({ id: 'wall-2', colorId: 'COLOR2' })],
     ceilingScopes: [ceilingScope({})],
     trimScopes: [trimScope({})],
     wallCalculations: [
-      { id: 'wall-1', effective_area_sf: 100, raw_paint_gallons: 1.2 },
-      { id: 'wall-2', effective_area_sf: 50, raw_paint_gallons: 0.6 },
+      wallCalculationRow({ id: 'wall-1', effectiveAreaSf: 100, rawPaintGallons: 1.2 }),
+      wallCalculationRow({ id: 'wall-2', effectiveAreaSf: 50, rawPaintGallons: 0.6 }),
     ],
-    ceilingCalculations: [{ id: 'ceil-1', effective_area_sf: 75, raw_paint_gallons: 0.7 }],
-    trimCalculations: [{ id: 'trim-1', effective_measurement: 40, raw_paint_gallons: 0.2 }],
+    ceilingCalculations: [
+      ceilingCalculationRow({ id: 'ceil-1', effectiveAreaSf: 75, rawPaintGallons: 0.7 }),
+    ],
+    trimCalculations: [
+      trimCalculationRow({ id: 'trim-1', effectiveMeasurement: 40, rawPaintGallons: 0.2 }),
+    ],
     pricingSummary: null,
     paintProductLabelById: new Map([
       ['P-WALL', 'Wall Paint'],
@@ -207,7 +248,11 @@ function buildVm(overrides = {}) {
     ],
     rollers: [],
     ...overrides,
-  })
+  }
+}
+
+function buildVm(overrides: Partial<BuildDetailsVmParams> = {}) {
+  return buildEstimateV2DetailsVm(buildVmParams(overrides))
 }
 
 describe('estimate details VM', () => {
@@ -223,8 +268,8 @@ describe('estimate details VM', () => {
       ceilingScopes: [],
       trimScopes: [],
       wallCalculations: [
-        { id: 'wall-1', effective_area_sf: 100, raw_paint_gallons: 1.2 },
-        { id: 'wall-2', effective_area_sf: 50, raw_paint_gallons: 0.6 },
+        wallCalculationRow({ id: 'wall-1', effectiveAreaSf: 100, rawPaintGallons: 1.2 }),
+        wallCalculationRow({ id: 'wall-2', effectiveAreaSf: 50, rawPaintGallons: 0.6 }),
       ],
       ceilingCalculations: [],
       trimCalculations: [],
@@ -242,8 +287,114 @@ describe('estimate details VM', () => {
       sqFt: 150,
       calculatedGallons: 1.8,
       roundedGallons: 2,
-      finalGallons: 0,
+      finalGallons: 2,
       calculationStatus: 'available' as const,
+    })
+  })
+
+  it('builds the material planning VM as an isolated pure planning step', () => {
+    const materialPlanning = buildEstimateV2MaterialPlanningVm(buildVmParams({
+      wallScopes: [wallScope({ overridePaintGallons: '4' })],
+      ceilingScopes: [ceilingScope({ overridePaintGallons: '3' })],
+      trimScopes: [],
+    }))
+
+    expect(materialPlanning.wallRows).toHaveLength(1)
+    expect(materialPlanning.ceilingRow).toMatchObject({ id: 'ceilings', finalGallons: 3 })
+    expect(materialPlanning.trimRow).toBeNull()
+    expect(materialPlanning.hasCeilings).toBe(true)
+    expect(materialPlanning.hasTrim).toBe(false)
+    expect(materialPlanning.activeOverrides.map((override) => override.key)).toEqual([
+      'walls:color:COLOR1',
+      'ceilings',
+    ])
+    expect(materialPlanning.materialPlanningSections.walls.description).toBe(
+      '1 active wall color group.'
+    )
+    expect(materialPlanning.materialPlanningSections.trim.description).toBe(
+      'No active trim scopes.'
+    )
+  })
+
+  it('builds the roller planning VM from material rows and scoped option pools', () => {
+    const params = buildVmParams({
+      rollers: [
+        {
+          id: 'roller-wall-1',
+          scope: 'Wall',
+          wallColorId: 'COLOR1',
+          selectedOptionId: 'WALL_9',
+          rollerSizeIn: '9',
+          coversQty: '2',
+          notes: '',
+          position: 0,
+        },
+      ],
+    })
+    const materialPlanning = buildEstimateV2MaterialPlanningVm(params)
+    const rollerPlanning = buildEstimateV2RollerPlanningVm({
+      materialPlanning,
+      rollerOptions: params.rollerOptions,
+      rollers: params.rollers,
+    })
+
+    expect(rollerPlanning.wallRollerOptions.map((option) => option.id)).toEqual(['WALL_9'])
+    expect(rollerPlanning.ceilingRollerOptions.map((option) => option.id)).toEqual(['CEIL_14'])
+    expect(rollerPlanning.trimApplicatorOptions.map((option) => option.id)).toEqual(['TRIM_4'])
+    expect(rollerPlanning.wallRollerRows.find((row) => row.id === 'wall:COLOR1')).toMatchObject({
+      coverId: 'WALL_9',
+      quantity: '2',
+    })
+    expect(rollerPlanning.ceilingRollerRow).toMatchObject({ id: 'ceiling' })
+    expect(rollerPlanning.trimApplicatorRow).toMatchObject({ id: 'trim' })
+  })
+
+  it('builds validation and totals VMs from focused orchestration helpers', () => {
+    const params = buildVmParams({
+      pricingSummary: {
+        rawLaborHours: 0,
+        rawLaborDays: 0,
+        effectiveLaborDays: 0,
+        effectiveLaborHours: 0,
+        laborCost: 0,
+        wallPaintMaterialCost: 60,
+        ceilingPaintMaterialCost: 10,
+        trimPaintMaterialCost: 5,
+        paintMaterialCost: 75,
+        primerMaterialCost: 0,
+        supplyCost: 12,
+        prePolicyTotal: 0,
+        postLaborPolicyTotal: 0,
+        minimumAdjustmentAmount: 0,
+        finalTotal: 0,
+        rooms: [],
+        trimPaint: null,
+      },
+    })
+    const materialPlanning = buildEstimateV2MaterialPlanningVm(params)
+    const rollerPlanning = buildEstimateV2RollerPlanningVm({
+      materialPlanning,
+      rollerOptions: params.rollerOptions,
+      rollers: params.rollers,
+    })
+    const validation = buildEstimateV2ValidationVm({ materialPlanning, rollerPlanning })
+    const totals = buildEstimateV2TotalsVm({
+      materialPlanning,
+      pricingSummary: params.pricingSummary,
+    })
+
+    expect(validation.canContinueToSummary).toBe(false)
+    expect(validation.continueBlockedReason).toBe('Primary roller cover is required')
+    expect(validation.validationSummary).toMatchObject({
+      status: 'blocked',
+      title: 'Summary is blocked',
+    })
+    expect(totals.gallonsByScope).toEqual({ walls: 3, ceilings: 1, trim: 1, total: 5 })
+    expect(totals.materialCards).toContainEqual({
+      label: 'Current Calculated Material Cost',
+      finalValue: '$87',
+      calculatedValue: 'Pricing summary paint + supplies',
+      overridden: false,
     })
   })
 
@@ -274,7 +425,9 @@ describe('estimate details VM', () => {
 
   it('blocks missing wall calculation rows instead of silently treating them as usable zeroes', () => {
     const vm = buildVm({
-      wallCalculations: [{ id: 'wall-1', effective_area_sf: 100, raw_paint_gallons: 1.2 }],
+      wallCalculations: [
+        wallCalculationRow({ id: 'wall-1', effectiveAreaSf: 100, rawPaintGallons: 1.2 }),
+      ],
     })
     const accent = vm.wallRows.find((row) => row.id === 'COLOR2')
 
@@ -319,6 +472,96 @@ describe('estimate details VM', () => {
       ])
     )
     expect(vm.canContinueToSummary).toBe(false)
+  })
+
+  it('extracts valid calculation scope rows for details materials', () => {
+    const rows = extractEstimateV2DetailsCalculationRows({
+      wallCalculations: {
+        scopes: [
+          { id: 'wall-1', effective_area_sf: 100, raw_paint_gallons: 1.2 },
+          { id: 'wall-2', effective_area_sf: 50, raw_paint_gallons: 0.6 },
+        ],
+      },
+      ceilingCalculations: {
+        scopes: [{ id: 'ceil-1', effective_area_sf: 75, raw_paint_gallons: 0.7 }],
+      },
+      trimCalculations: {
+        scopes: [{ id: 'trim-1', effective_measurement: 40, raw_paint_gallons: 0.2 }],
+      },
+    })
+    const vm = buildVm({
+      wallCalculations: rows.wallCalculationRows,
+      ceilingCalculations: rows.ceilingCalculationRows,
+      trimCalculations: rows.trimCalculationRows,
+    })
+
+    expect(rows).toEqual({
+      wallCalculationRows: [
+        { id: 'wall-1', effectiveAreaSf: 100, rawPaintGallons: 1.2 },
+        { id: 'wall-2', effectiveAreaSf: 50, rawPaintGallons: 0.6 },
+      ],
+      ceilingCalculationRows: [
+        { id: 'ceil-1', effectiveAreaSf: 75, rawPaintGallons: 0.7 },
+      ],
+      trimCalculationRows: [
+        { id: 'trim-1', effectiveMeasurement: 40, rawPaintGallons: 0.2 },
+      ],
+    })
+    expect(vm.wallRows.map((row) => row.calculationStatus)).toEqual(['available', 'available'])
+    expect(vm.ceilingRow?.calculationStatus).toBe('available')
+    expect(vm.trimRow?.calculationStatus).toBe('available')
+    expect(validationIds(vm)).not.toEqual(
+      expect.arrayContaining([
+        'material:COLOR1:calculation:missing',
+        'material:COLOR2:calculation:missing',
+        'material:ceilings:calculation:missing',
+        'material:trim:calculation:missing',
+      ])
+    )
+  })
+
+  it('indexes material calculation rows by stable scope id', () => {
+    const byId = calculationRowsById([
+      wallCalculationRow({ id: 'wall-b', effectiveAreaSf: 50, rawPaintGallons: 0.6 }),
+      wallCalculationRow({ id: 'wall-a', effectiveAreaSf: 100, rawPaintGallons: 1.2 }),
+    ])
+
+    expect(byId.get('wall-a')).toEqual({
+      id: 'wall-a',
+      effectiveAreaSf: 100,
+      rawPaintGallons: 1.2,
+    })
+    expect(byId.get('missing')).toBeUndefined()
+  })
+
+  it('degrades malformed calculation payloads to missing calculation rows consistently', () => {
+    const rows = extractEstimateV2DetailsCalculationRows({
+      wallCalculations: { scopes: 'not-an-array' },
+      ceilingCalculations: 'not-an-object',
+      trimCalculations: { scopes: [null, 'bad-row'] },
+    })
+    const vm = buildVm({
+      wallCalculations: rows.wallCalculationRows,
+      ceilingCalculations: rows.ceilingCalculationRows,
+      trimCalculations: rows.trimCalculationRows,
+    })
+
+    expect(rows).toEqual({
+      wallCalculationRows: null,
+      ceilingCalculationRows: null,
+      trimCalculationRows: [],
+    })
+    expect(vm.wallRows.map((row) => row.calculationStatus)).toEqual(['unavailable', 'unavailable'])
+    expect(vm.ceilingRow?.calculationStatus).toBe('unavailable')
+    expect(vm.trimRow?.calculationStatus).toBe('unavailable')
+    expect(validationIds(vm)).toEqual(
+      expect.arrayContaining([
+        'material:COLOR1:calculation:missing',
+        'material:COLOR2:calculation:missing',
+        'material:ceilings:calculation:missing',
+        'material:trim:calculation:missing',
+      ])
+    )
   })
 
   it('surfaces missing product catalog labels consistently without blocking summary', () => {
@@ -415,6 +658,34 @@ describe('estimate details VM', () => {
             'Primary has conflicting saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.',
         },
       ],
+    })
+  })
+
+  it('resolves grouped override owners deterministically when scope order changes', () => {
+    const scopes = [{ id: 'wall-b' }, { id: 'wall-a' }]
+
+    expect(
+      resolveGroupedOverride({
+        label: 'Primary',
+        targetId: 'COLOR1',
+        scopes,
+        valuesByScopeId: new Map([['wall-a', '4']]),
+      })
+    ).toMatchObject({
+      overrideGallons: '4',
+      ownerScopeId: 'wall-a',
+    })
+
+    expect(
+      resolveGroupedOverride({
+        label: 'Primary',
+        targetId: 'COLOR1',
+        scopes,
+        valuesByScopeId: new Map(),
+      })
+    ).toMatchObject({
+      overrideGallons: '',
+      ownerScopeId: 'wall-a',
     })
   })
 
@@ -637,7 +908,9 @@ describe('estimate details VM', () => {
       wallScopes: [wallScope({ overridePaintGallons: '4' })],
       ceilingScopes: [],
       trimScopes: [],
-      wallCalculations: [{ id: 'wall-1', effective_area_sf: 100, raw_paint_gallons: 1.2 }],
+      wallCalculations: [
+        wallCalculationRow({ id: 'wall-1', effectiveAreaSf: 100, rawPaintGallons: 1.2 }),
+      ],
       ceilingCalculations: [],
       trimCalculations: [],
       pricingSummary: null,
@@ -983,7 +1256,11 @@ describe('estimate details VM', () => {
       ceilingScopes: [],
       trimScopes: [],
       wallCalculations: [
-        { id: 'wall-unassigned', effective_area_sf: 80, raw_paint_gallons: 0.9 },
+        wallCalculationRow({
+          id: 'wall-unassigned',
+          effectiveAreaSf: 80,
+          rawPaintGallons: 0.9,
+        }),
       ],
       rollers: [
         {
@@ -1027,7 +1304,11 @@ describe('estimate details VM', () => {
       ceilingScopes: [],
       trimScopes: [],
       wallCalculations: [
-        { id: 'wall-unassigned', effective_area_sf: 80, raw_paint_gallons: 0.9 },
+        wallCalculationRow({
+          id: 'wall-unassigned',
+          effectiveAreaSf: 80,
+          rawPaintGallons: 0.9,
+        }),
       ],
       rollers: [
         {
@@ -1227,6 +1508,85 @@ describe('estimate details VM', () => {
     expect(vm.continueBlockedReason).toBe('Primary override gallons must be a zero or positive number')
   })
 
+  it('uses consistent optional gallon override semantics across material row types', () => {
+    const cases = [
+      {
+        value: '',
+        finalGallons: { wall: 2, ceiling: 1, trim: 1 },
+        hasOverride: false,
+        invalid: false,
+      },
+      {
+        value: '   ',
+        finalGallons: { wall: 2, ceiling: 1, trim: 1 },
+        hasOverride: false,
+        invalid: false,
+      },
+      {
+        value: '0',
+        finalGallons: { wall: 0, ceiling: 0, trim: 0 },
+        hasOverride: true,
+        invalid: false,
+      },
+      {
+        value: '2.5',
+        finalGallons: { wall: 2.5, ceiling: 2.5, trim: 2.5 },
+        hasOverride: true,
+        invalid: false,
+      },
+      {
+        value: '-1',
+        finalGallons: { wall: 2, ceiling: 1, trim: 1 },
+        hasOverride: false,
+        invalid: true,
+      },
+      {
+        value: 'abc',
+        finalGallons: { wall: 2, ceiling: 1, trim: 1 },
+        hasOverride: false,
+        invalid: true,
+      },
+    ] as const
+
+    for (const testCase of cases) {
+      const displayOverrideGallons = testCase.value.trim() ? testCase.value : ''
+      const vm = buildVm({
+        wallScopes: [wallScope({ overridePaintGallons: testCase.value })],
+        ceilingScopes: [ceilingScope({ overridePaintGallons: testCase.value })],
+        trimScopes: [trimScope({ overrideGallons: testCase.value })],
+      })
+
+      expect(vm.wallRows[0], `wall override ${JSON.stringify(testCase.value)}`).toMatchObject({
+        overrideGallons: displayOverrideGallons,
+        roundedGallons: 2,
+        finalGallons: testCase.finalGallons.wall,
+        hasOverride: testCase.hasOverride,
+      })
+      expect(vm.ceilingRow, `ceiling override ${JSON.stringify(testCase.value)}`).toMatchObject({
+        overrideGallons: displayOverrideGallons,
+        roundedGallons: 1,
+        finalGallons: testCase.finalGallons.ceiling,
+        hasOverride: testCase.hasOverride,
+      })
+      expect(vm.trimRow, `trim override ${JSON.stringify(testCase.value)}`).toMatchObject({
+        overrideGallons: displayOverrideGallons,
+        roundedGallons: 1,
+        finalGallons: testCase.finalGallons.trim,
+        hasOverride: testCase.hasOverride,
+      })
+
+      const issueIds = validationIds(vm)
+      for (const targetId of ['COLOR1', 'ceilings', 'trim']) {
+        const invalidIssueId = `material:${targetId}:overrideGallons:invalid-number`
+        if (testCase.invalid) {
+          expect(issueIds).toContain(invalidIssueId)
+        } else {
+          expect(issueIds).not.toContain(invalidIssueId)
+        }
+      }
+    }
+  })
+
   it('reports active overrides without requiring saved override reasons', () => {
     const vm = buildVm({
       wallScopes: [wallScope({ overridePaintGallons: '4' })],
@@ -1249,6 +1609,63 @@ describe('estimate details VM', () => {
     expect(vm.wallRows[0].overrideOwnerScopeId).toBe('wall-1')
     expect(validationMessages(vm)).not.toContain('Primary override requires a reason')
     expect(vm.canContinueToSummary).toBe(true)
+  })
+
+  it('ignores inactive grouped material overrides in details planning rows', () => {
+    const vm = buildVm({
+      wallScopes: [
+        wallScope({ id: 'wall-active', colorId: 'COLOR1', overridePaintGallons: '' }),
+        wallScope({
+          id: 'wall-inactive',
+          colorId: 'COLOR1',
+          include: 'N',
+          overridePaintGallons: '9',
+        }),
+      ],
+      ceilingScopes: [
+        ceilingScope({ id: 'ceil-active', overridePaintGallons: '' }),
+        ceilingScope({ id: 'ceil-inactive', include: 'N', overridePaintGallons: '8' }),
+      ],
+      trimScopes: [
+        trimScope({ id: 'trim-active', overrideGallons: '' }),
+        trimScope({ id: 'trim-inactive', include: 'N', overrideGallons: '7' }),
+      ],
+      wallCalculations: [
+        wallCalculationRow({ id: 'wall-active', effectiveAreaSf: 100, rawPaintGallons: 1.2 }),
+      ],
+      ceilingCalculations: [
+        ceilingCalculationRow({ id: 'ceil-active', effectiveAreaSf: 75, rawPaintGallons: 0.7 }),
+      ],
+      trimCalculations: [
+        trimCalculationRow({ id: 'trim-active', effectiveMeasurement: 40, rawPaintGallons: 0.2 }),
+      ],
+    })
+
+    expect(vm.wallRows[0]).toMatchObject({
+      overrideGallons: '',
+      finalGallons: 2,
+      hasOverride: false,
+      overrideOwnerScopeId: 'wall-active',
+    })
+    expect(vm.ceilingRow).toMatchObject({
+      overrideGallons: '',
+      finalGallons: 1,
+      hasOverride: false,
+      overrideOwnerScopeId: 'ceil-active',
+    })
+    expect(vm.trimRow).toMatchObject({
+      overrideGallons: '',
+      finalGallons: 1,
+      hasOverride: false,
+      overrideOwnerScopeId: 'trim-active',
+    })
+    expect(vm.validationIssues.map((issue) => issue.id)).not.toEqual(
+      expect.arrayContaining([
+        'material:COLOR1:overrideGallons:duplicate-saved-values',
+        'material:ceilings:overrideGallons:duplicate-saved-values',
+        'material:trim:overrideGallons:duplicate-saved-values',
+      ])
+    )
   })
 
   it('blocks a wall group with two different saved gallon override values', () => {
@@ -1445,6 +1862,64 @@ describe('estimate details VM', () => {
     expect(validationMessages(vm)).not.toContain(
       'Primary saved wall roller cover size 9" matches multiple active options; make sizes unique before continuing.'
     )
+  })
+
+  it('hydrates persisted roller drafts through normalized row identities', () => {
+    const vm = buildVm({
+      rollers: [
+        {
+          id: 'roller-wall-case',
+          scope: 'Wall',
+          wallColorId: 'color1',
+          selectedOptionId: 'WALL_9',
+          rollerSizeIn: '9',
+          coversQty: '2',
+          notes: 'Case-insensitive color',
+          position: 0,
+        },
+        {
+          id: 'roller-ceiling-colored',
+          scope: 'Ceiling',
+          wallColorId: 'COLOR1',
+          selectedOptionId: 'CEIL_14',
+          rollerSizeIn: '14',
+          coversQty: '1',
+          notes: 'Aggregate ignores color',
+          position: 1,
+        },
+        {
+          id: 'applicator-trim-colored',
+          scope: 'Trim',
+          wallColorId: 'COLOR2',
+          selectedOptionId: 'TRIM_4',
+          rollerSizeIn: '4',
+          coversQty: '3',
+          notes: 'Trim ignores color',
+          position: 2,
+        },
+      ],
+    })
+
+    expect(vm.wallRollerRows.find((row) => row.id === 'wall:COLOR1')).toMatchObject({
+      coverId: 'WALL_9',
+      quantity: '2',
+      notes: 'Case-insensitive color',
+      errors: [],
+    })
+    expect(vm.ceilingRollerRow).toMatchObject({
+      id: 'ceiling',
+      coverId: 'CEIL_14',
+      quantity: '1',
+      notes: 'Aggregate ignores color',
+      errors: [],
+    })
+    expect(vm.trimApplicatorRow).toMatchObject({
+      id: 'trim',
+      coverId: 'TRIM_4',
+      quantity: '3',
+      notes: 'Trim ignores color',
+      errors: [],
+    })
   })
 
   it('hydrates legacy size-only roller selections from persisted roller rows', () => {
@@ -1665,6 +2140,7 @@ describe('estimate details VM', () => {
           key: 'supply_rates_roller_covers',
           rows: [
             { id: 'WALL_9', display_name: 'Wall', scope: 'Wall', size_in: '9', price_each: '6', active: 'Y' },
+            { id: 'WALL_ARCHIVED', display_name: 'Archived wall', scope: 'Wall', size_in: '9', price_each: '1', active: 'N' },
             { id: 'CEIL_14', display_name: 'Ceiling', scope: 'Ceiling', size_in: '14', price_each: '10', active: 'Y' },
             { id: 'TRIM_4', display_name: 'Trim applicator', scope: 'Trim', size_in: '4', price_each: '4', active: 'Y' },
           ],
@@ -1685,6 +2161,11 @@ describe('estimate details VM', () => {
       options: [],
     })
 
+    expect(parseRollerCoverOptionsStateFromRatesFlags({ categories: [{}] })).toMatchObject({
+      status: 'unavailable',
+      options: [],
+    })
+
     expect(
       parseRollerCoverOptionsStateFromRatesFlags({
         categories: [{ key: 'supply_rates_roller_covers', rows: [] }],
@@ -1695,7 +2176,7 @@ describe('estimate details VM', () => {
     })
   })
 
-  it('applies and clears wall grouped gallon overrides on the first active backing scope', () => {
+  it('applies and clears wall grouped gallon overrides on the explicit owner scope', () => {
     const scopes = [
       wallScope({ id: 'wall-inactive', colorId: 'COLOR1', include: 'N', overridePaintGallons: '9' }),
       wallScope({ id: 'wall-1', colorId: 'COLOR1', overridePaintGallons: '1' }),
@@ -1704,14 +2185,14 @@ describe('estimate details VM', () => {
     ]
 
     expect(
-      applyWallGroupGallonOverride(scopes, 'COLOR1', '5').map((scope) => ({
+      applyWallGroupGallonOverride(scopes, 'COLOR1', '5', 'wall-2').map((scope) => ({
         id: scope.id,
         overridePaintGallons: scope.overridePaintGallons,
       }))
     ).toEqual([
-      { id: 'wall-inactive', overridePaintGallons: '9' },
-      { id: 'wall-1', overridePaintGallons: '5' },
-      { id: 'wall-2', overridePaintGallons: '' },
+      { id: 'wall-inactive', overridePaintGallons: '' },
+      { id: 'wall-1', overridePaintGallons: '' },
+      { id: 'wall-2', overridePaintGallons: '5' },
       { id: 'wall-3', overridePaintGallons: '7' },
     ])
 
@@ -1721,48 +2202,182 @@ describe('estimate details VM', () => {
         overridePaintGallons: scope.overridePaintGallons,
       }))
     ).toEqual([
-      { id: 'wall-inactive', overridePaintGallons: '9' },
+      { id: 'wall-inactive', overridePaintGallons: '' },
       { id: 'wall-1', overridePaintGallons: '' },
       { id: 'wall-2', overridePaintGallons: '' },
       { id: 'wall-3', overridePaintGallons: '7' },
     ])
   })
 
-  it('applies and clears ceiling grouped gallon overrides on the first active backing scope', () => {
+  it('applies unassigned wall overrides by stable scope group key', () => {
+    const scopes = [
+      wallScope({
+        id: 'wall-unassigned-a',
+        colorId: '',
+        scopeName: 'Unassigned A',
+        overridePaintGallons: '1',
+      }),
+      wallScope({
+        id: 'wall-unassigned-b',
+        colorId: '',
+        scopeName: 'Unassigned B',
+        overridePaintGallons: '2',
+      }),
+      wallScope({
+        id: 'wall-unassigned-inactive',
+        colorId: '',
+        scopeName: 'Unassigned inactive',
+        include: 'N',
+        overridePaintGallons: '8',
+      }),
+    ]
+
+    expect(
+      applyWallGroupGallonOverride(scopes, 'scope:wall-unassigned-b', '6').map((scope) => ({
+        id: scope.id,
+        overridePaintGallons: scope.overridePaintGallons,
+      }))
+    ).toEqual([
+      { id: 'wall-unassigned-a', overridePaintGallons: '1' },
+      { id: 'wall-unassigned-b', overridePaintGallons: '6' },
+      { id: 'wall-unassigned-inactive', overridePaintGallons: '8' },
+    ])
+  })
+
+  it('keeps wall grouped override ownership stable when active scope order changes', () => {
+    const firstOrder = [
+      wallScope({ id: 'wall-a', colorId: 'COLOR1', position: 0, overridePaintGallons: '1' }),
+      wallScope({ id: 'wall-b', colorId: 'COLOR1', position: 1, overridePaintGallons: '' }),
+    ]
+    const secondOrder = [...firstOrder].reverse()
+    const summarize = (scopes: EstimateV2WallScopeDraft[]) =>
+      scopes.map((scope) => ({
+        id: scope.id,
+        overridePaintGallons: scope.overridePaintGallons,
+      }))
+
+    expect(summarize(applyWallGroupGallonOverride(firstOrder, 'COLOR1', '5'))).toEqual([
+      { id: 'wall-a', overridePaintGallons: '5' },
+      { id: 'wall-b', overridePaintGallons: '' },
+    ])
+    expect(summarize(applyWallGroupGallonOverride(secondOrder, 'COLOR1', '5'))).toEqual([
+      { id: 'wall-b', overridePaintGallons: '' },
+      { id: 'wall-a', overridePaintGallons: '5' },
+    ])
+  })
+
+  it('centralizes grouped material override persistence policy', () => {
+    const scopes = [
+      { id: 'inactive-match', include: 'N', group: 'target', overrideGallons: '9' },
+      { id: 'owner', include: 'Y', group: 'target', overrideGallons: '1' },
+      { id: 'z-duplicate', include: 'Y', group: 'target', overrideGallons: '2' },
+      { id: 'other', include: 'Y', group: 'other', overrideGallons: '7' },
+    ]
+
+    expect(
+      applyGroupedMaterialOverridePersistencePolicy({
+        scopes,
+        value: '4',
+        belongsToGroup: (scope) => scope.group === 'target',
+        getPersistedValue: (scope) => scope.overrideGallons,
+        applyValue: (scope, value) => ({ ...scope, overrideGallons: value }),
+      })
+    ).toEqual([
+      { id: 'inactive-match', include: 'N', group: 'target', overrideGallons: '' },
+      { id: 'owner', include: 'Y', group: 'target', overrideGallons: '4' },
+      { id: 'z-duplicate', include: 'Y', group: 'target', overrideGallons: '' },
+      { id: 'other', include: 'Y', group: 'other', overrideGallons: '7' },
+    ])
+  })
+
+  it('applies and clears ceiling grouped gallon overrides on the explicit owner scope', () => {
     const scopes = [
       ceilingScope({ id: 'ceil-inactive', include: 'N', overridePaintGallons: '9' }),
       ceilingScope({ id: 'ceil-1', overridePaintGallons: '1' }),
       ceilingScope({ id: 'ceil-2', overridePaintGallons: '2' }),
     ]
 
-    expect(applyCeilingGallonOverride(scopes, '3').map((scope) => scope.overridePaintGallons)).toEqual([
-      '9',
-      '3',
+    expect(applyCeilingGallonOverride(scopes, '3', 'ceil-2').map((scope) => scope.overridePaintGallons)).toEqual([
       '',
+      '',
+      '3',
     ])
     expect(applyCeilingGallonOverride(scopes, '').map((scope) => scope.overridePaintGallons)).toEqual([
-      '9',
+      '',
       '',
       '',
     ])
   })
 
-  it('applies and clears trim grouped gallon overrides on the first active backing scope', () => {
+  it('applies and clears trim grouped gallon overrides on the explicit owner scope', () => {
     const scopes = [
       trimScope({ id: 'trim-inactive', include: 'N', overrideGallons: '9' }),
       trimScope({ id: 'trim-1', overrideGallons: '1' }),
       trimScope({ id: 'trim-2', overrideGallons: '2' }),
     ]
 
-    expect(applyTrimGallonOverride(scopes, '2').map((scope) => scope.overrideGallons)).toEqual([
-      '9',
-      '2',
+    expect(applyTrimGallonOverride(scopes, '2', 'trim-2').map((scope) => scope.overrideGallons)).toEqual([
       '',
+      '',
+      '2',
     ])
     expect(applyTrimGallonOverride(scopes, '').map((scope) => scope.overrideGallons)).toEqual([
-      '9',
+      '',
       '',
       '',
     ])
+  })
+
+  it('keeps ceiling and trim grouped override ownership stable when scope order changes', () => {
+    const ceilingScopes = [
+      ceilingScope({ id: 'ceil-a', overridePaintGallons: '1' }),
+      ceilingScope({ id: 'ceil-b', overridePaintGallons: '' }),
+    ]
+    const trimScopes = [
+      trimScope({ id: 'trim-a', overrideGallons: '1' }),
+      trimScope({ id: 'trim-b', overrideGallons: '' }),
+    ]
+
+    expect(
+      applyCeilingGallonOverride([...ceilingScopes].reverse(), '4').map((scope) => ({
+        id: scope.id,
+        overridePaintGallons: scope.overridePaintGallons,
+      }))
+    ).toEqual([
+      { id: 'ceil-b', overridePaintGallons: '' },
+      { id: 'ceil-a', overridePaintGallons: '4' },
+    ])
+    expect(
+      applyTrimGallonOverride([...trimScopes].reverse(), '3').map((scope) => ({
+        id: scope.id,
+        overrideGallons: scope.overrideGallons,
+      }))
+    ).toEqual([
+      { id: 'trim-b', overrideGallons: '' },
+      { id: 'trim-a', overrideGallons: '3' },
+    ])
+  })
+
+  it('returns previous wall, ceiling, and trim collections for no-op grouped override persistence', () => {
+    const wallScopes = [
+      wallScope({ id: 'wall-a', colorId: 'COLOR1', overridePaintGallons: '5' }),
+      wallScope({ id: 'wall-b', colorId: 'COLOR1', overridePaintGallons: '' }),
+      wallScope({ id: 'wall-inactive', colorId: 'COLOR1', include: 'N', overridePaintGallons: '' }),
+      wallScope({ id: 'wall-other', colorId: 'COLOR2', overridePaintGallons: '8' }),
+    ]
+    const ceilingScopes = [
+      ceilingScope({ id: 'ceil-a', overridePaintGallons: '3' }),
+      ceilingScope({ id: 'ceil-b', overridePaintGallons: '' }),
+      ceilingScope({ id: 'ceil-inactive', include: 'N', overridePaintGallons: '' }),
+    ]
+    const trimScopes = [
+      trimScope({ id: 'trim-a', overrideGallons: '2' }),
+      trimScope({ id: 'trim-b', overrideGallons: '' }),
+      trimScope({ id: 'trim-inactive', include: 'N', overrideGallons: '' }),
+    ]
+
+    expect(applyWallGroupGallonOverride(wallScopes, 'COLOR1', '5', 'wall-a')).toBe(wallScopes)
+    expect(applyCeilingGallonOverride(ceilingScopes, '3', 'ceil-a')).toBe(ceilingScopes)
+    expect(applyTrimGallonOverride(trimScopes, '2', 'trim-a')).toBe(trimScopes)
   })
 })

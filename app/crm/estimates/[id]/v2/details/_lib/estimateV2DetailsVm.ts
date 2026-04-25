@@ -5,7 +5,6 @@ import type {
   EstimateV2RollerDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
-  UnsafeRecord,
 } from '@/types/estimator/v2'
 import {
   createAggregateRow,
@@ -13,6 +12,10 @@ import {
   applyCeilingGallonOverride,
   applyTrimGallonOverride,
   applyWallGroupGallonOverride,
+  extractEstimateV2DetailsCalculationRows,
+  type EstimateV2DetailsCeilingCalculationRow,
+  type EstimateV2DetailsTrimCalculationRow,
+  type EstimateV2DetailsWallCalculationRow,
 } from './estimateV2DetailsMaterials'
 import {
   createCeilingRollerRow,
@@ -177,9 +180,9 @@ export type BuildDetailsVmParams = {
   wallScopes: EstimateV2WallScopeDraft[]
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
-  wallCalculations: UnsafeRecord[] | null | undefined
-  ceilingCalculations: UnsafeRecord[] | null | undefined
-  trimCalculations: UnsafeRecord[] | null | undefined
+  wallCalculations: EstimateV2DetailsWallCalculationRow[] | null | undefined
+  ceilingCalculations: EstimateV2DetailsCeilingCalculationRow[] | null | undefined
+  trimCalculations: EstimateV2DetailsTrimCalculationRow[] | null | undefined
   pricingSummary: EstimateV2PricingSummary | null | undefined
   paintProductLabelById: Map<string, string>
   colorLabelById: Map<string, string>
@@ -188,24 +191,81 @@ export type BuildDetailsVmParams = {
   rollers: EstimateV2RollerDraft[]
 }
 
+export type EstimateV2DetailsMaterialPlanningVm = Pick<
+  EstimateV2DetailsVm,
+  | 'wallRows'
+  | 'ceilingRow'
+  | 'trimRow'
+  | 'materialPlanningSections'
+  | 'activeOverrides'
+  | 'hasCeilings'
+  | 'hasTrim'
+>
+
+export type EstimateV2DetailsRollerPlanningVm = Pick<
+  EstimateV2DetailsVm,
+  | 'wallRollerRows'
+  | 'ceilingRollerRow'
+  | 'trimApplicatorRow'
+  | 'wallRollerOptions'
+  | 'ceilingRollerOptions'
+  | 'trimApplicatorOptions'
+  | 'rollerOptionsState'
+>
+
+export type EstimateV2DetailsValidationVm = Pick<
+  EstimateV2DetailsVm,
+  | 'validationIssues'
+  | 'validationSummary'
+  | 'canContinueToSummary'
+  | 'continueBlockedReason'
+>
+
+export type EstimateV2DetailsTotalsVm = Pick<
+  EstimateV2DetailsVm,
+  'materialCards' | 'gallonsByScope' | 'estimatedMaterialCost'
+>
+
 export {
   applyCeilingGallonOverride,
   applyTrimGallonOverride,
   applyWallGroupGallonOverride,
+  extractEstimateV2DetailsCalculationRows,
   parseRollerCoverOptionsFromRatesFlags,
   parseRollerCoverOptionsStateFromRatesFlags,
 }
 
-export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): EstimateV2DetailsVm {
-  const rollerOptionsState = params.rollerOptionsState ?? {
-    status: 'loaded' as const,
-    options: params.rollerOptions,
-    message: null,
+function createMaterialPlanningSections(params: {
+  wallRows: DetailsScopeLineVm[]
+  ceilingRow: DetailsScopeLineVm | null
+  trimRow: DetailsScopeLineVm | null
+}): EstimateV2DetailsMaterialPlanningVm['materialPlanningSections'] {
+  return {
+    walls: {
+      description: `${params.wallRows.length} active wall color group${params.wallRows.length === 1 ? '' : 's'}.`,
+      emptyTitle: 'No Active Wall Scopes',
+      emptyMessage: 'There are no active wall scopes to plan paint or roller covers for.',
+    },
+    ceilings: {
+      description: params.ceilingRow
+        ? `${formatDetailsNumber(round1(params.ceilingRow.sqFt))} sqft across active ceiling scopes.`
+        : 'No active ceiling scopes.',
+      emptyTitle: 'No Active Ceiling Scopes',
+      emptyMessage: 'There are no active ceiling scopes to plan ceiling paint or roller covers for.',
+    },
+    trim: {
+      description: params.trimRow
+        ? 'Paint gallons for trim and baseboards.'
+        : 'No active trim scopes.',
+      emptyTitle: 'No Active Trim Scopes',
+      emptyMessage: 'There are no active trim scopes to plan trim paint or applicators for.',
+    },
   }
-  const rollerOptions = rollerOptionsState.options
-  const wallRollerOptions = rollerOptions.filter((option) => option.scope === 'Wall')
-  const ceilingRollerOptions = rollerOptions.filter((option) => option.scope === 'Ceiling')
-  const trimApplicatorOptions = rollerOptions.filter((option) => option.scope === 'Trim')
+}
+
+export function buildEstimateV2MaterialPlanningVm(
+  params: BuildDetailsVmParams
+): EstimateV2DetailsMaterialPlanningVm {
   const wallRows = createWallRows(params)
   const ceilingRow = createAggregateRow({
     id: 'ceilings',
@@ -226,52 +286,56 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     overrideField: 'overrideGallons',
   })
 
-  const wallRollerRows = createWallRollerRows({
+  return {
     wallRows,
+    ceilingRow,
+    trimRow,
+    materialPlanningSections: createMaterialPlanningSections({ wallRows, ceilingRow, trimRow }),
+    activeOverrides: createActiveOverrides({ wallRows, ceilingRow, trimRow }),
+    hasCeilings: !!ceilingRow,
+    hasTrim: !!trimRow,
+  }
+}
+
+export function buildEstimateV2RollerPlanningVm(params: {
+  materialPlanning: Pick<EstimateV2DetailsMaterialPlanningVm, 'wallRows' | 'ceilingRow' | 'trimRow'>
+  rollerOptions: DetailsRollerCoverOption[]
+  rollerOptionsState?: DetailsRollerOptionsState
+  rollers: EstimateV2RollerDraft[]
+}): EstimateV2DetailsRollerPlanningVm {
+  const rollerOptionsState = params.rollerOptionsState ?? {
+    status: 'loaded' as const,
+    options: params.rollerOptions,
+    message: null,
+  }
+  const rollerOptions = rollerOptionsState.options
+  const wallRollerOptions = rollerOptions.filter((option) => option.scope === 'Wall')
+  const ceilingRollerOptions = rollerOptions.filter((option) => option.scope === 'Ceiling')
+  const trimApplicatorOptions = rollerOptions.filter((option) => option.scope === 'Trim')
+
+  const wallRollerRows = createWallRollerRows({
+    wallRows: params.materialPlanning.wallRows,
     rollers: params.rollers,
     rollerOptions,
     rollerOptionsState,
     wallRollerOptions,
   })
   const ceilingRollerRow = createCeilingRollerRow({
-    ceilingRow,
+    ceilingRow: params.materialPlanning.ceilingRow,
     rollers: params.rollers,
     rollerOptions,
     rollerOptionsState,
     ceilingRollerOptions,
   })
   const trimApplicatorRow = createTrimApplicatorRow({
-    trimRow,
+    trimRow: params.materialPlanning.trimRow,
     rollers: params.rollers,
     rollerOptions,
     rollerOptionsState,
     trimApplicatorOptions,
   })
 
-  const activeOverrides = createActiveOverrides({ wallRows, ceilingRow, trimRow })
-  const validationIssues = createValidationIssues({
-    wallRows,
-    ceilingRow,
-    trimRow,
-    wallRollerRows,
-    ceilingRollerRow,
-    trimApplicatorRow,
-    activeMaterialScopeCount:
-      wallRows.length + (ceilingRow ? 1 : 0) + (trimRow ? 1 : 0),
-  })
-  const blockingValidationIssues = getBlockingValidationIssues(validationIssues)
-  const canContinueToSummary = blockingValidationIssues.length === 0
-  const continueBlockedReason = blockingValidationIssues[0]?.message ?? null
-  const walls = wallRows.reduce((sum, row) => sum + row.finalGallons, 0)
-  const ceilings = ceilingRow?.finalGallons ?? 0
-  const trim = trimRow?.finalGallons ?? 0
-  const estimatedMaterialCost =
-    (params.pricingSummary?.paintMaterialCost ?? 0) + (params.pricingSummary?.supplyCost ?? 0)
-
   return {
-    wallRows,
-    ceilingRow,
-    trimRow,
     wallRollerRows,
     ceilingRollerRow,
     trimApplicatorRow,
@@ -279,39 +343,61 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     ceilingRollerOptions,
     trimApplicatorOptions,
     rollerOptionsState,
-    materialCards: createMaterialCards({
-      wallRows,
-      ceilingRow,
-      trimRow,
-      activeOverrides,
-      estimatedMaterialCost,
-    }),
-    materialPlanningSections: {
-      walls: {
-        description: `${wallRows.length} active wall color group${wallRows.length === 1 ? '' : 's'}.`,
-        emptyTitle: 'No Active Wall Scopes',
-        emptyMessage: 'There are no active wall scopes to plan paint or roller covers for.',
-      },
-      ceilings: {
-        description: ceilingRow
-          ? `${formatDetailsNumber(round1(ceilingRow.sqFt))} sqft across active ceiling scopes.`
-          : 'No active ceiling scopes.',
-        emptyTitle: 'No Active Ceiling Scopes',
-        emptyMessage: 'There are no active ceiling scopes to plan ceiling paint or roller covers for.',
-      },
-      trim: {
-        description: trimRow
-          ? 'Paint gallons for trim and baseboards.'
-          : 'No active trim scopes.',
-        emptyTitle: 'No Active Trim Scopes',
-        emptyMessage: 'There are no active trim scopes to plan trim paint or applicators for.',
-      },
-    },
-    activeOverrides,
+  }
+}
+
+export function buildEstimateV2ValidationVm(params: {
+  materialPlanning: Pick<EstimateV2DetailsMaterialPlanningVm, 'wallRows' | 'ceilingRow' | 'trimRow'>
+  rollerPlanning: Pick<
+    EstimateV2DetailsRollerPlanningVm,
+    'wallRollerRows' | 'ceilingRollerRow' | 'trimApplicatorRow'
+  >
+}): EstimateV2DetailsValidationVm {
+  const validationIssues = createValidationIssues({
+    wallRows: params.materialPlanning.wallRows,
+    ceilingRow: params.materialPlanning.ceilingRow,
+    trimRow: params.materialPlanning.trimRow,
+    wallRollerRows: params.rollerPlanning.wallRollerRows,
+    ceilingRollerRow: params.rollerPlanning.ceilingRollerRow,
+    trimApplicatorRow: params.rollerPlanning.trimApplicatorRow,
+    activeMaterialScopeCount:
+      params.materialPlanning.wallRows.length +
+      (params.materialPlanning.ceilingRow ? 1 : 0) +
+      (params.materialPlanning.trimRow ? 1 : 0),
+  })
+  const blockingValidationIssues = getBlockingValidationIssues(validationIssues)
+  const canContinueToSummary = blockingValidationIssues.length === 0
+  const continueBlockedReason = blockingValidationIssues[0]?.message ?? null
+
+  return {
     validationIssues,
     validationSummary: createValidationSummary(blockingValidationIssues),
     canContinueToSummary,
     continueBlockedReason,
+  }
+}
+
+export function buildEstimateV2TotalsVm(params: {
+  materialPlanning: Pick<
+    EstimateV2DetailsMaterialPlanningVm,
+    'wallRows' | 'ceilingRow' | 'trimRow' | 'activeOverrides'
+  >
+  pricingSummary: EstimateV2PricingSummary | null | undefined
+}): EstimateV2DetailsTotalsVm {
+  const walls = params.materialPlanning.wallRows.reduce((sum, row) => sum + row.finalGallons, 0)
+  const ceilings = params.materialPlanning.ceilingRow?.finalGallons ?? 0
+  const trim = params.materialPlanning.trimRow?.finalGallons ?? 0
+  const estimatedMaterialCost =
+    (params.pricingSummary?.paintMaterialCost ?? 0) + (params.pricingSummary?.supplyCost ?? 0)
+
+  return {
+    materialCards: createMaterialCards({
+      wallRows: params.materialPlanning.wallRows,
+      ceilingRow: params.materialPlanning.ceilingRow,
+      trimRow: params.materialPlanning.trimRow,
+      activeOverrides: params.materialPlanning.activeOverrides,
+      estimatedMaterialCost,
+    }),
     gallonsByScope: {
       walls: round1(walls),
       ceilings: round1(ceilings),
@@ -319,7 +405,27 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
       total: round1(walls + ceilings + trim),
     },
     estimatedMaterialCost,
-    hasCeilings: !!ceilingRow,
-    hasTrim: !!trimRow,
+  }
+}
+
+export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): EstimateV2DetailsVm {
+  const materialPlanning = buildEstimateV2MaterialPlanningVm(params)
+  const rollerPlanning = buildEstimateV2RollerPlanningVm({
+    materialPlanning,
+    rollerOptions: params.rollerOptions,
+    rollerOptionsState: params.rollerOptionsState,
+    rollers: params.rollers,
+  })
+  const validation = buildEstimateV2ValidationVm({ materialPlanning, rollerPlanning })
+  const totals = buildEstimateV2TotalsVm({
+    materialPlanning,
+    pricingSummary: params.pricingSummary,
+  })
+
+  return {
+    ...materialPlanning,
+    ...rollerPlanning,
+    ...validation,
+    ...totals,
   }
 }

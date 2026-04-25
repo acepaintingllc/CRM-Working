@@ -26,6 +26,75 @@ export function createDetailsWarningIssue(params: Omit<DetailsValidationIssue, '
   })
 }
 
+export function createMaterialOverrideInputIssues(params: {
+  label: string
+  targetId: string
+  value: string
+  isValid: boolean
+}) {
+  if (!params.value.trim() || params.isValid) return []
+  return [
+    createDetailsBlockingIssue({
+      id: `material:${params.targetId}:overrideGallons:invalid-number`,
+      section: 'material',
+      targetId: params.targetId,
+      field: 'overrideGallons',
+      message: `${params.label} override gallons must be a zero or positive number`,
+    }),
+  ]
+}
+
+export function createMaterialMissingCalculationIssues(params: {
+  label: string
+  targetId: string
+  missingScopeIds: string[]
+}) {
+  if (params.missingScopeIds.length === 0) return []
+  return [
+    createDetailsBlockingIssue({
+      id: `material:${params.targetId}:calculation:missing`,
+      section: 'material',
+      targetId: params.targetId,
+      field: 'calculation',
+      message: `${params.label} calculation data is unavailable; reopen the estimate calculator before continuing.`,
+    }),
+  ]
+}
+
+export function createMaterialMissingProductIssues(params: {
+  label: string
+  targetId: string
+  productWarning?: string
+}) {
+  if (!params.productWarning) return []
+  return [
+    createDetailsWarningIssue({
+      id: `material:${params.targetId}:paintProductId:missing-catalog-label`,
+      section: 'material',
+      targetId: params.targetId,
+      field: 'paintProductId',
+      message: `${params.label} product ${params.productWarning}.`,
+    }),
+  ]
+}
+
+export function createMaterialGroupedOverrideConflictIssue(params: {
+  label: string
+  targetId: string
+  conflictKind: 'duplicate' | 'conflicting'
+}) {
+  return createDetailsBlockingIssue({
+    id: `material:${params.targetId}:overrideGallons:${params.conflictKind}-saved-values`,
+    section: 'material',
+    targetId: params.targetId,
+    field: 'overrideGallons',
+    message:
+      params.conflictKind === 'duplicate'
+        ? `${params.label} has duplicate saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.`
+        : `${params.label} has conflicting saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.`,
+  })
+}
+
 export function createActiveOverrides(params: {
   wallRows: DetailsScopeLineVm[]
   ceilingRow: DetailsScopeLineVm | null

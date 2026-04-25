@@ -4,6 +4,7 @@ import { EstimateV2DetailsPageContent } from '../EstimateV2DetailsPageContent'
 
 const mockUseEstimateV2DetailsPage = vi.fn()
 const continueToSummary = vi.fn()
+const returnToEditor = vi.fn()
 const saveDraft = vi.fn()
 
 vi.mock('../../_state/useEstimateV2DetailsPage', () => ({
@@ -42,7 +43,6 @@ const basePage = {
   dirty: true,
   saveStatus: 'dirty',
   saveStatusText: 'Unsaved changes',
-  showValidation: true,
   estimate: { id: 'estimate-1', version_name: 'Version A' },
   job: null,
   routeFamily: null,
@@ -129,6 +129,7 @@ const basePage = {
     hasTrim: false,
   },
   actions: {
+    returnToEditor,
     saveDraft,
     continueToSummary,
     setRollerRow: vi.fn(),
@@ -141,6 +142,7 @@ const basePage = {
 describe('EstimateV2DetailsPageContent', () => {
   beforeEach(() => {
     continueToSummary.mockReset()
+    returnToEditor.mockReset()
     saveDraft.mockReset()
     mockUseEstimateV2DetailsPage.mockReturnValue(basePage)
   })
@@ -166,6 +168,14 @@ describe('EstimateV2DetailsPageContent', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save Draft/i }))
     expect(saveDraft).toHaveBeenCalled()
     expect(continueToSummary).not.toHaveBeenCalled()
+  })
+
+  it('routes header back through the guarded page action', () => {
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }))
+
+    expect(returnToEditor).toHaveBeenCalled()
   })
 
   it('renders unavailable roller option state and keeps summary actions disabled', () => {

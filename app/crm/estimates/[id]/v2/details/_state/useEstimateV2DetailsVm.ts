@@ -8,6 +8,7 @@ import {
 import {
   buildEstimateV2DetailsVm,
   type DetailsRollerOptionsState,
+  extractEstimateV2DetailsCalculationRows,
 } from '../_lib/estimateV2DetailsVm'
 
 export function useEstimateV2DetailsVm(params: {
@@ -26,22 +27,22 @@ export function useEstimateV2DetailsVm(params: {
     estimate: current.meta.estimate,
     job: current.meta.job,
     catalogs: current.meta.catalogs,
-    wallCalculationRows: current.meta.wallCalculations?.scopes ?? null,
-    ceilingCalculationRows:
-      current.meta.ceilingCalculations &&
-      typeof current.meta.ceilingCalculations === 'object' &&
-      Array.isArray((current.meta.ceilingCalculations as { scopes?: unknown }).scopes)
-        ? ((current.meta.ceilingCalculations as { scopes: Record<string, unknown>[] }).scopes)
-        : null,
-    trimCalculationRows:
-      current.meta.trimCalculations &&
-      typeof current.meta.trimCalculations === 'object' &&
-      Array.isArray((current.meta.trimCalculations as { scopes?: unknown }).scopes)
-        ? ((current.meta.trimCalculations as { scopes: Record<string, unknown>[] }).scopes)
-        : null,
+    wallCalculations: current.meta.wallCalculations,
+    ceilingCalculations: current.meta.ceilingCalculations,
+    trimCalculations: current.meta.trimCalculations,
     pricingSummary: current.meta.pricingSummary,
     saveStatus: current.meta.saveStatus,
   }))
+
+  const calculationRows = useMemo(
+    () =>
+      extractEstimateV2DetailsCalculationRows({
+        wallCalculations: state.wallCalculations,
+        ceilingCalculations: state.ceilingCalculations,
+        trimCalculations: state.trimCalculations,
+      }),
+    [state.ceilingCalculations, state.trimCalculations, state.wallCalculations]
+  )
 
   const paintProductLabelById = useMemo(
     () =>
@@ -66,9 +67,9 @@ export function useEstimateV2DetailsVm(params: {
         wallScopes: state.wallScopes,
         ceilingScopes: state.ceilingScopes,
         trimScopes: state.trimScopes,
-        wallCalculations: state.wallCalculationRows,
-        ceilingCalculations: state.ceilingCalculationRows,
-        trimCalculations: state.trimCalculationRows,
+        wallCalculations: calculationRows.wallCalculationRows,
+        ceilingCalculations: calculationRows.ceilingCalculationRows,
+        trimCalculations: calculationRows.trimCalculationRows,
         pricingSummary: state.pricingSummary,
         paintProductLabelById,
         colorLabelById,
@@ -77,17 +78,17 @@ export function useEstimateV2DetailsVm(params: {
         rollers: state.rollers,
       }),
     [
+      calculationRows.ceilingCalculationRows,
+      calculationRows.trimCalculationRows,
+      calculationRows.wallCalculationRows,
       colorLabelById,
       paintProductLabelById,
       params.rollerOptionsState,
       state.rollers,
-      state.ceilingCalculationRows,
       state.ceilingScopes,
       state.rooms,
       state.pricingSummary,
-      state.trimCalculationRows,
       state.trimScopes,
-      state.wallCalculationRows,
       state.wallScopes,
     ]
   )

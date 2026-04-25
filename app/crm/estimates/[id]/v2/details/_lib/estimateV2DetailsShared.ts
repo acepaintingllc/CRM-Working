@@ -21,6 +21,21 @@ export function formatDetailsNumber(value: number) {
 }
 
 export function cleanInputNumber(value: string) {
-  const parsed = Number(value)
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+export function resolveOptionalGallonOverride(params: {
+  overrideGallons: string
+  roundedGallons: number
+}) {
+  const override = cleanInputNumber(params.overrideGallons)
+  const hasOverride = params.overrideGallons.trim() !== '' && override != null
+
+  return {
+    finalGallons: hasOverride ? override : params.roundedGallons,
+    hasOverride,
+  }
 }

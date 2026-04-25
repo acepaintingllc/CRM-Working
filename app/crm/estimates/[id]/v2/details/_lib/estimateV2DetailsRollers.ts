@@ -14,6 +14,8 @@ import type {
 } from './estimateV2DetailsVm'
 import { cleanInputNumber } from './estimateV2DetailsShared'
 import {
+  createAggregateDetailsRollerRowTarget,
+  createWallDetailsRollerRowTarget,
   detailsRollerRowId,
   findDetailsRollerDraft,
 } from './estimateV2DetailsRollerIdentity'
@@ -110,10 +112,10 @@ export function rollerDraftByScope(params: {
 }) {
   return findDetailsRollerDraft({
     rollers: params.rollers,
-    target: {
-      scope: params.scope,
-      wallColorId: params.wallColorId ?? '',
-    },
+    target:
+      params.scope === 'Ceiling' || params.scope === 'Trim'
+        ? createAggregateDetailsRollerRowTarget(params.scope)
+        : createWallDetailsRollerRowTarget(params.wallColorId ?? ''),
   })
 }
 
@@ -122,6 +124,30 @@ function rollerOptionScopeLabel(scope: DetailsRollerCoverOption['scope']) {
   if (scope === 'Ceiling') return 'ceiling roller cover'
   if (scope === 'Wall') return 'wall roller cover'
   return 'roller cover'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getRatesFlagsCategories(payload: unknown) {
+  if (!isRecord(payload)) return null
+  return Array.isArray(payload.categories) ? payload.categories : null
+}
+
+function findRollerCoverCategory(categories: unknown[]) {
+  return categories.find(
+    (entry): entry is Record<string, unknown> =>
+      isRecord(entry) && entry.key === 'supply_rates_roller_covers'
+  )
+}
+
+function normalizeRollerOptionScope(scope: unknown): DetailsRollerCoverOption['scope'] {
+  const value = String(scope ?? 'Other').toLowerCase()
+  if (value.startsWith('wall')) return 'Wall'
+  if (value.startsWith('ceil')) return 'Ceiling'
+  if (value.startsWith('trim')) return 'Trim'
+  return 'Other'
 }
 
 function createStaleSelectedOptionIssue(params: {
@@ -204,7 +230,7 @@ export function createWallRollerRows(params: {
   wallRollerOptions: DetailsRollerCoverOption[]
 }) {
   return params.wallRows.map((row) => {
-    const target = { scope: 'Wall' as const, wallColorId: row.id }
+    const target = createWallDetailsRollerRowTarget(row.id)
     const targetId = detailsRollerRowId(target)
     const state = resolveRollerRowState({
       label: row.label,
@@ -241,16 +267,18 @@ export function createCeilingRollerRow(params: {
   rollerOptionsState: DetailsRollerOptionsState
   ceilingRollerOptions: DetailsRollerCoverOption[]
 }) {
+  const target = createAggregateDetailsRollerRowTarget('Ceiling')
+  const targetId = detailsRollerRowId(target)
   const state = resolveRollerRowState({
     label: 'Ceilings',
-    targetId: 'ceiling',
-    draft: rollerDraftByScope({ rollers: params.rollers, scope: 'Ceiling' }),
+    targetId,
+    draft: findDetailsRollerDraft({ rollers: params.rollers, target }),
     options: params.rollerOptions,
     scope: 'Ceiling',
   })
   const ceilingRollerRow = params.ceilingRow
     ? {
-        id: 'ceiling',
+        id: targetId,
         label: 'Ceilings',
         sublabel: 'All active ceiling scopes',
         sqFt: params.ceilingRow.sqFt,
@@ -280,16 +308,18 @@ export function createTrimApplicatorRow(params: {
   rollerOptionsState: DetailsRollerOptionsState
   trimApplicatorOptions: DetailsRollerCoverOption[]
 }) {
+  const target = createAggregateDetailsRollerRowTarget('Trim')
+  const targetId = detailsRollerRowId(target)
   const state = resolveRollerRowState({
     label: 'Trim & Baseboards',
-    targetId: 'trim',
-    draft: rollerDraftByScope({ rollers: params.rollers, scope: 'Trim' }),
+    targetId,
+    draft: findDetailsRollerDraft({ rollers: params.rollers, target }),
     options: params.rollerOptions,
     scope: 'Trim',
   })
   const trimApplicatorRow = params.trimRow
     ? {
-        id: 'trim',
+        id: targetId,
         label: 'Trim & Baseboards',
         sublabel: 'All active trim scopes',
         sqFt: params.trimRow.sqFt,
@@ -319,23 +349,15 @@ export function parseRollerCoverOptionsFromRatesFlags(payload: unknown): Details
 export function parseRollerCoverOptionsStateFromRatesFlags(
   payload: unknown
 ): DetailsRollerOptionsState {
-  const categories =
-    payload && typeof payload === 'object' && 'categories' in payload
-      ? (payload as { categories?: unknown }).categories
-      : null
-  if (!Array.isArray(categories)) {
+  const categories = getRatesFlagsCategories(payload)
+  if (!categories) {
     return {
       status: 'unavailable',
       options: [],
       message: 'Roller and applicator options could not be read from rates and flags.',
     }
   }
-  const category = categories.find(
-    (entry) =>
-      entry &&
-      typeof entry === 'object' &&
-      (entry as { key?: unknown }).key === 'supply_rates_roller_covers'
-  ) as { rows?: unknown } | undefined
+  const category = findRollerCoverCategory(categories)
   if (!category || !Array.isArray(category.rows)) {
     return {
       status: 'unavailable',
@@ -345,23 +367,13 @@ export function parseRollerCoverOptionsStateFromRatesFlags(
   }
 
   const options = category.rows
-    .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+    .filter(isRecord)
     .filter((row) => String(row.active ?? 'Y').toUpperCase() !== 'N')
     .map((row): DetailsRollerCoverOption => {
-      const scope = String(row.scope ?? 'Other')
-      const normalizedScope: DetailsRollerCoverOption['scope'] = scope
-        .toLowerCase()
-        .startsWith('wall')
-        ? 'Wall'
-        : scope.toLowerCase().startsWith('ceil')
-          ? 'Ceiling'
-          : scope.toLowerCase().startsWith('trim')
-            ? 'Trim'
-            : 'Other'
       return {
         id: String(row.id ?? ''),
         label: `${row.display_name ?? row.id ?? 'Roller cover'}${row.size_in ? ` ${row.size_in}"` : ''}`,
-        scope: normalizedScope,
+        scope: normalizeRollerOptionScope(row.scope),
         sizeIn: asMaybeNumber(row.size_in),
         priceEach: asMaybeNumber(row.price_each),
       }

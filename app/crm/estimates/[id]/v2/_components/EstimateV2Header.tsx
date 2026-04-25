@@ -75,6 +75,9 @@ export function EstimateV2Header({
         {detailsHref ? (
           <Link
             href={detailsHref}
+            onClick={(event) => {
+              if (!confirmNavigation()) event.preventDefault()
+            }}
             style={{
               ...styles.button,
               display: 'inline-flex',
