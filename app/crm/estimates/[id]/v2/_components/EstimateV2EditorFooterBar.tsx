@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type {
   EstimateV2EditorPageVm,
   EstimateV2EditorSaveVm,
@@ -12,12 +14,21 @@ export function EstimateV2EditorFooterBar({
   pageVm,
   saveVm,
   summaryVm,
+  estimateId,
+  routeFamily,
 }: {
   styles: EstimateV2EditorPageStyles
   pageVm: EstimateV2EditorPageVm
   saveVm: EstimateV2EditorSaveVm
   summaryVm: EstimateV2EditorSummaryVm
+  estimateId?: string
+  routeFamily: EstimateRouteFamily
 }) {
+  const router = useRouter()
+  const detailsHref = estimateId
+    ? routeFamily.detailsHref?.(estimateId) ?? routeFamily.summaryHref(estimateId)
+    : null
+
   return (
     <div style={styles.footer}>
       <div>
@@ -53,12 +64,16 @@ export function EstimateV2EditorFooterBar({
         <button
           type="button"
           className="v2-btn-primary"
-          onClick={() => void saveVm.save()}
-          disabled={pageVm.saving || !saveVm.dirty}
+          onClick={() =>
+            void saveVm.save().then((ok) => {
+              if (ok && detailsHref) router.push(detailsHref)
+            })
+          }
+          disabled={pageVm.saving}
           style={{
             ...styles.buttonPrimary,
-            opacity: pageVm.saving || !saveVm.dirty ? 0.65 : 1,
-            cursor: pageVm.saving || !saveVm.dirty ? 'not-allowed' : 'pointer',
+            opacity: pageVm.saving ? 0.65 : 1,
+            cursor: pageVm.saving ? 'not-allowed' : 'pointer',
           }}
         >
           {pageVm.saving ? 'Saving...' : 'Save & continue ->'}

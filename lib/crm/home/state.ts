@@ -124,6 +124,8 @@ export function readCustomersPayload(payload: unknown): ParserResult<DashboardCu
       ? payload.customers
       : isRecord(payload) && Array.isArray(payload.data)
         ? payload.data
+        : isRecord(payload) && isRecord(payload.data) && Array.isArray(payload.data.data)
+          ? payload.data.data
         : null
 
   if (!rows) {

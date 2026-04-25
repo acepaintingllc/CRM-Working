@@ -25,7 +25,7 @@ export default function NewJobPage() {
       <CrmResourceState
         loading={controller.customerResource.loading}
         error={controller.customerResource.error}
-        hasData={controller.customerResource.data.length > 0}
+        hasData={controller.hasCustomerChoices}
         loadingTitle="Loading customers"
         loadingDescription="Loading customers..."
         errorTitle="Customers unavailable"

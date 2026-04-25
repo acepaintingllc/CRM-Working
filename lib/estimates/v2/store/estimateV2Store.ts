@@ -45,6 +45,7 @@ type EstimateV2MetaFields = Omit<
   | 'setWallCalculations'
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
+  | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
   | 'setValidationIssues'
@@ -107,6 +108,7 @@ type EstimateV2MetaSetters = Pick<
   | 'setWallCalculations'
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
+  | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
   | 'setValidationIssues'
@@ -210,6 +212,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       wallCalculations: null,
       ceilingCalculations: null,
       trimCalculations: null,
+      pricingSummary: null,
       selectedRoomId: '',
       error: null,
       validationIssues: [],
@@ -340,6 +343,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
         meta: {
           ...state.meta,
           trimCalculations: resolveUpdater(state.meta.trimCalculations, value),
+        },
+      })),
+    setPricingSummary: (value) =>
+      set((state) => ({
+        meta: {
+          ...state.meta,
+          pricingSummary: resolveUpdater(state.meta.pricingSummary ?? null, value),
         },
       })),
     setSelectedRoomId: (value) =>
@@ -488,6 +498,8 @@ function selectMetaWithSetters(state: EstimateV2EditorStore): EstimateV2EditorMe
     setCeilingCalculations: state.setCeilingCalculations,
     trimCalculations: state.meta.trimCalculations,
     setTrimCalculations: state.setTrimCalculations,
+    pricingSummary: state.meta.pricingSummary,
+    setPricingSummary: state.setPricingSummary,
     selectedRoomId: state.meta.selectedRoomId,
     setSelectedRoomId: state.setSelectedRoomId,
     error: state.meta.error,

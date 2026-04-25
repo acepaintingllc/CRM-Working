@@ -5,6 +5,7 @@ import { useEstimateV2EditorPageUiState } from '../_state/useEstimateV2EditorPag
 import { useCallback } from 'react'
 import {
   estimateRouteFamily,
+  quoteRouteFamily,
   type EstimateRouteFamily,
 } from '../../estimateRouteFamily'
 import pageStyles from './EstimateV2EditorPageContent.module.css'
@@ -19,11 +20,15 @@ import { estimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 
 export function EstimateV2EditorPageContent({
   estimateId,
-  routeFamily = estimateRouteFamily,
+  routeFamilyKey = 'estimate',
+  routeFamily,
 }: {
   estimateId?: string
+  routeFamilyKey?: 'estimate' | 'quote'
   routeFamily?: EstimateRouteFamily
 }) {
+  const resolvedRouteFamily =
+    routeFamily ?? (routeFamilyKey === 'quote' ? quoteRouteFamily : estimateRouteFamily)
   const {
     pageVm,
     headerVm,
@@ -35,7 +40,7 @@ export function EstimateV2EditorPageContent({
     jobSettingsVm,
     saveVm,
     toDisplayNumber,
-  } = useEstimateV2Editor({ estimateId, routeFamily })
+  } = useEstimateV2Editor({ estimateId, routeFamily: resolvedRouteFamily })
 
   const confirmNavigation = useCallback(() => {
     if (!saveVm.dirty) return true
@@ -56,7 +61,7 @@ export function EstimateV2EditorPageContent({
       <EstimateV2EditorHeaderArea
         styles={estimateV2EditorPageStyles}
         estimateId={estimateId}
-        routeFamily={routeFamily}
+        routeFamily={resolvedRouteFamily}
         headerVm={headerVm}
         saveVm={saveVm}
         confirmNavigation={confirmNavigation}
@@ -158,6 +163,8 @@ export function EstimateV2EditorPageContent({
         pageVm={pageVm}
         saveVm={saveVm}
         summaryVm={summaryVm}
+        estimateId={estimateId}
+        routeFamily={resolvedRouteFamily}
       />
 
       <EstimateV2SettingsDrawer styles={estimateV2EditorPageStyles} jobSettingsVm={jobSettingsVm} />

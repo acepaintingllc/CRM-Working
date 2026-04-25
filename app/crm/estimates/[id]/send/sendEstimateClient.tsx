@@ -7,6 +7,7 @@ import { templatePresets } from '@/lib/customer-estimates/presets'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import {
   estimateRouteFamily,
+  quoteRouteFamily,
   type EstimateRouteFamily,
 } from '../estimateRouteFamily'
 import {
@@ -148,12 +149,16 @@ function draftPayload(form: CustomerSendComposerDraft) {
 export default function SendEstimateClient({
   estimateId,
   catalogSource,
-  routeFamily = estimateRouteFamily,
+  routeFamilyKey = 'estimate',
+  routeFamily,
 }: {
   estimateId: string
   catalogSource?: 'estimate' | 'v2'
+  routeFamilyKey?: 'estimate' | 'quote'
   routeFamily?: EstimateRouteFamily
 }) {
+  const resolvedRouteFamily =
+    routeFamily ?? (routeFamilyKey === 'quote' ? quoteRouteFamily : estimateRouteFamily)
   const {
     loading,
     busy,
@@ -176,7 +181,7 @@ export default function SendEstimateClient({
   } = useCustomerSendWorkflow<CustomerSendComposerDraft>({
     estimateId,
     catalogSource,
-    routeFamily,
+    routeFamily: resolvedRouteFamily,
     buildForm: buildCustomerSendComposerDraft,
     buildDocument: buildCustomerSendComposerPreview,
     draftPayload,
@@ -270,7 +275,7 @@ export default function SendEstimateClient({
               <div style={{ marginTop: 10, color: C.ink2 }}>{error}</div>
               <div style={{ marginTop: 16 }}>
                 <Link
-                  href={routeFamily.summaryHref(estimateId)}
+                  href={resolvedRouteFamily.summaryHref(estimateId)}
                   style={{ color: '#d7f3df', fontWeight: 800 }}
                 >
                   Return to internal review
@@ -331,7 +336,7 @@ export default function SendEstimateClient({
             >
               <StatusChip status={version?.status ?? 'draft'} />
               <Link
-                href={routeFamily.summaryHref(estimateId)}
+                href={resolvedRouteFamily.summaryHref(estimateId)}
                 style={{
                   ...secondaryButton,
                   textDecoration: 'none',

@@ -271,12 +271,12 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.getAllByText('364 sf').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getAllByText('+ Add room')[0])
-    fireEvent.click(screen.getByText('Next: Summary ->'))
+    fireEvent.click(screen.getByText('Next: Details ->'))
 
     expect(addRoom).toHaveBeenCalled()
     await waitFor(() => {
       expect(save).toHaveBeenCalled()
-      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/summary')
+      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/details')
     })
   })
 

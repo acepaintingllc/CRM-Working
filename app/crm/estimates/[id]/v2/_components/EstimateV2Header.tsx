@@ -25,6 +25,10 @@ export function EstimateV2Header({
   confirmNavigation: () => boolean
   onNext: () => void
 }) {
+  const detailsHref = vm.estimateId
+    ? routeFamily.detailsHref?.(vm.estimateId) ?? routeFamily.summaryHref(vm.estimateId)
+    : null
+
   return (
     <div style={styles.header}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -68,9 +72,9 @@ export function EstimateV2Header({
         >
           Settings
         </button>
-        {vm.estimateId ? (
+        {detailsHref ? (
           <Link
-            href={routeFamily.summaryHref(vm.estimateId)}
+            href={detailsHref}
             style={{
               ...styles.button,
               display: 'inline-flex',
@@ -80,7 +84,7 @@ export function EstimateV2Header({
               fontSize: 'calc(11px + 4pt)',
             }}
           >
-            {'Summary ->'}
+            {'Details ->'}
           </Link>
         ) : null}
         <button
@@ -101,7 +105,7 @@ export function EstimateV2Header({
           disabled={vm.saving}
           style={{ ...styles.buttonPrimary, opacity: vm.saving ? 0.65 : 1, cursor: vm.saving ? 'not-allowed' : 'pointer' }}
         >
-          {vm.saving ? 'Saving...' : 'Next: Summary ->'}
+          {vm.saving ? 'Saving...' : 'Next: Details ->'}
         </button>
       </div>
     </div>

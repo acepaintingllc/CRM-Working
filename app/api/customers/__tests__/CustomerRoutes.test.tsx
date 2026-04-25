@@ -73,10 +73,12 @@ describe('customer route adapters', () => {
     const response = await listCustomersRoute(new Request('http://localhost/api/customers'))
 
     await expect(response.json()).resolves.toEqual({
-      data: [{ id: 'customer-1', name: 'Taylor Jones', email: null, phone: null, address: null }],
-      total: 73,
-      page: 1,
-      pageSize: 50,
+      data: {
+        data: [{ id: 'customer-1', name: 'Taylor Jones', email: null, phone: null, address: null }],
+        total: 73,
+        page: 1,
+        pageSize: 50,
+      },
     })
     expect(mockListCustomers).toHaveBeenCalledWith('org-1', {
       search: '',
@@ -101,10 +103,12 @@ describe('customer route adapters', () => {
     )
 
     await expect(response.json()).resolves.toEqual({
-      data: [{ id: 'customer-2', name: 'Bob Owner', email: null, phone: null, address: null }],
-      total: 3,
-      page: 2,
-      pageSize: 25,
+      data: {
+        data: [{ id: 'customer-2', name: 'Bob Owner', email: null, phone: null, address: null }],
+        total: 3,
+        page: 2,
+        pageSize: 25,
+      },
     })
     expect(mockListCustomers).toHaveBeenCalledWith('org-1', {
       search: 'bob',

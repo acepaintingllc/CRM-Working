@@ -79,7 +79,7 @@ export function CustomerDetailCard(props: CustomerDetailCardProps) {
                 <span>Map</span>
               </CrmButton>
             )}
-            <CrmButton href={`/crm/jobs/new?customerId=${customer.id}`}>
+            <CrmButton href={`/crm/jobs/new?customerId=${customer.id}`} prefetch={false}>
               <BriefcaseBusiness size={16} aria-hidden="true" />
               <span>Create job</span>
             </CrmButton>
