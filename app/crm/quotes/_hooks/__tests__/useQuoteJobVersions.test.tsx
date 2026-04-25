@@ -11,7 +11,7 @@ import {
   resolveInitialJobVersionsPage,
 } from '../jobVersionsCache'
 import { useQuoteJobVersions } from '../useQuoteJobVersions'
-import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/quoteHomeTypes'
 
 const { loadQuoteJobVersions } = vi.hoisted(() => ({
   loadQuoteJobVersions: vi.fn(),

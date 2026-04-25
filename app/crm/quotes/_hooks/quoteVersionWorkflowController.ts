@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type { EligibleQuoteVersionJob } from '@/lib/quotes/versionCreation'
 import { useQuoteJobVersions } from './useQuoteJobVersions'
 import { useQuoteVersionCreation } from './useQuoteVersionCreation'

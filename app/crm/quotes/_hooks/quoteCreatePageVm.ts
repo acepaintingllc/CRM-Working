@@ -1,7 +1,7 @@
 'use client'
 
 import { buildQuoteAdminPageStatus } from '@/app/crm/quotes/_hooks/quoteAdminPageFeedback'
-import type { QuoteCreateJobReadModel, QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteCreateJobReadModel, QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import { QUOTE_META_SEPARATOR } from '../_home/quoteHomePresentation'
 import type { QuoteCreatePageResource } from './quoteCreatePagePolicy'

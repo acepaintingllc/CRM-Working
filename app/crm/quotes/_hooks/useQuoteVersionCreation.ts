@@ -1,10 +1,8 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { createQuoteVersion } from '@/lib/quotes/client'
 import {
-  getQuoteWorkspaceHref,
   prepareCreateQuoteVersionInput,
   QUOTE_VERSION_CREATE_ERROR,
   type EligibleQuoteVersionJob,
@@ -19,7 +17,6 @@ export function useQuoteVersionCreation(
   selectedJob: EligibleQuoteVersionJob | null,
   options?: UseQuoteVersionCreationOptions
 ) {
-  const router = useRouter()
   const resetKey = options?.resetKey ?? selectedJob?.id ?? ''
   const [versionName, setVersionName] = useState('')
   const [versionKind, setVersionKind] = useState<QuoteVersionKind>('standard')
@@ -60,7 +57,6 @@ export function useQuoteVersionCreation(
       const payload = await createQuoteVersion<{ id: string }>(
         inputResult.input
       )
-      router.push(getQuoteWorkspaceHref(payload.id))
       return payload
     } catch (createError) {
       if (resetKeyRef.current === createResetKey) {

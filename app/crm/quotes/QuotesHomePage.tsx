@@ -1,5 +1,5 @@
 'use client'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/quoteHomeTypes'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'

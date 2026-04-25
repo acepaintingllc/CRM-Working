@@ -1,13 +1,18 @@
 'use client'
 
-import { useCallback } from 'react'
-import { useResource } from '@/app/crm/_hooks/useResource'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { normalizeQuoteHomeJobQuery } from '@/lib/quotes/quoteHomeCursors'
 import {
-  normalizeQuoteHomeJobQuery,
   type QuoteHomeBootstrapReadModel,
   type QuoteHomeJobsPageReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import { loadQuoteHomeBootstrap } from '@/lib/quotes/client'
+import {
+  cancelQuotePagedAsyncRequests,
+  runQuotePagedAsyncRequest,
+  startQuotePagedAsyncRequest,
+  type QuotePagedAsyncRequest,
+} from './quotePagedAsyncLifecycle'
 import { useQuoteHomeJobsPageResource } from './quoteHomeJobsResource'
 
 const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
@@ -77,27 +82,106 @@ type UseQuotesHomeDataOptions = {
   jobQuery?: string
 }
 
+type QuoteHomeBootstrapRequest = QuotePagedAsyncRequest<{
+  scope: 'bootstrap'
+  preserveDataOnError: boolean
+  reportError: boolean
+}>
+
 export function useQuoteHomeBootstrapResource(
   initialData?: QuoteHomeBootstrapReadModel | null,
 ): QuoteHomeBootstrapResourceContract {
   const resolvedInitialData = initialData ?? EMPTY_BOOTSTRAP
-  const resource = useResource<QuoteHomeBootstrapReadModel>({
-    initialData: resolvedInitialData,
-    initialLoading: !initialData,
-    skipInitialLoad: Boolean(initialData),
-    resetOnError: false,
-    load: async () => {
-      return loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>()
+  const [bootstrapData, setBootstrapData] =
+    useState<QuoteHomeBootstrapReadModel>(resolvedInitialData)
+  const [bootstrapLoading, setBootstrapLoading] = useState(!initialData)
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+  const lifecycle = useMemo(
+    () => ({
+      currentRequestRef: { current: 0 },
+      activeRequestRef: { current: null as QuoteHomeBootstrapRequest | null },
+    }),
+    [],
+  )
+
+  const refreshBootstrap = useCallback(
+    async (
+      options?: QuoteHomeRefreshAttemptOptions,
+    ): Promise<QuoteHomeRefreshAttemptResult<QuoteHomeBootstrapReadModel>> => {
+      const preserveDataOnError = options?.preserveDataOnError ?? true
+      const reportError = options?.reportError ?? true
+      const request = startQuotePagedAsyncRequest(
+        lifecycle,
+        {
+          scope: 'bootstrap',
+          preserveDataOnError,
+          reportError,
+        },
+        () => {
+          setBootstrapLoading(true)
+          if (reportError) {
+            setBootstrapError(null)
+          }
+        },
+        { cancelLoadMore: true },
+      )
+
+      const result = await runQuotePagedAsyncRequest(lifecycle, request, {
+        load: () => loadQuoteHomeBootstrap<QuoteHomeBootstrapReadModel>(),
+        getErrorMessage: (loadError) =>
+          toLoadErrorMessage('quote home bootstrap', loadError),
+        onSuccess: (_, nextBootstrapData) => {
+          setBootstrapData(nextBootstrapData)
+          if (reportError) {
+            setBootstrapError(null)
+          }
+        },
+        onFailure: (_, error) => {
+          if (!preserveDataOnError) {
+            setBootstrapData(EMPTY_BOOTSTRAP)
+          }
+          if (reportError) {
+            setBootstrapError(error)
+          }
+        },
+        onFinish: () => setBootstrapLoading(false),
+      })
+
+      if (result.ok) {
+        return {
+          ok: true,
+          error: null,
+          data: result.data,
+        }
+      }
+
+      return {
+        ok: false,
+        error: result.error,
+        data: null,
+      }
     },
-    getErrorMessage: (loadError) =>
-      toLoadErrorMessage('quote home bootstrap', loadError),
-  })
+    [lifecycle],
+  )
+
+  const didSkipInitialLoadRef = useRef(Boolean(initialData))
+
+  useEffect(() => {
+    if (didSkipInitialLoadRef.current) {
+      didSkipInitialLoadRef.current = false
+      return () => cancelQuotePagedAsyncRequests(lifecycle)
+    }
+
+    void refreshBootstrap({ preserveDataOnError: true })
+
+    return () => cancelQuotePagedAsyncRequests(lifecycle)
+  }, [lifecycle, refreshBootstrap])
 
   return {
-    bootstrapData: resource.data,
-    bootstrapLoading: resource.loading,
-    bootstrapError: resource.error,
-    refreshBootstrap: resource.attemptRefresh,
+    bootstrapData,
+    bootstrapLoading,
+    bootstrapError,
+    refreshBootstrap,
   } satisfies QuoteHomeBootstrapResourceContract
 }
 

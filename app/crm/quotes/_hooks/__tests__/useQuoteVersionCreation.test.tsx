@@ -4,16 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EligibleQuoteVersionJob, QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import { useQuoteVersionCreation } from '../useQuoteVersionCreation'
 
-const { push } = vi.hoisted(() => ({
-  push: vi.fn(),
-}))
-
 const { createQuoteVersion } = vi.hoisted(() => ({
   createQuoteVersion: vi.fn(),
-}))
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push }),
 }))
 
 vi.mock('@/lib/quotes/client', () => ({
@@ -38,11 +30,10 @@ function createControlledPromise<T>() {
 
 describe('useQuoteVersionCreation', () => {
   beforeEach(() => {
-    push.mockReset()
     createQuoteVersion.mockReset()
   })
 
-  it('creates a quote version and routes to the workspace', async () => {
+  it('creates a quote version and returns the created payload without navigating', async () => {
     createQuoteVersion.mockResolvedValue({ id: 'estimate-99' })
 
     const { result } = renderHook(() =>
@@ -57,8 +48,9 @@ describe('useQuoteVersionCreation', () => {
       result.current.setVersionKind('split')
     })
 
+    let created: { id: string } | null = null
     await act(async () => {
-      await result.current.createVersion()
+      created = await result.current.createVersion()
     })
 
     expect(createQuoteVersion).toHaveBeenCalledWith({
@@ -67,17 +59,19 @@ describe('useQuoteVersionCreation', () => {
       version_kind: 'split',
       version_name: 'Garage Custom',
     })
-    expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-99')
+    expect(created).toEqual({ id: 'estimate-99' })
   })
 
   it('surfaces the shared required-job error when no job is selected', async () => {
     const { result } = renderHook(() => useQuoteVersionCreation(null))
 
+    let created: { id: string } | null = { id: 'unexpected' }
     await act(async () => {
-      await result.current.createVersion()
+      created = await result.current.createVersion()
     })
 
     expect(createQuoteVersion).not.toHaveBeenCalled()
+    expect(created).toBeNull()
     expect(result.current.error).toBe('Select a job before creating a version.')
   })
 
@@ -147,8 +141,9 @@ describe('useQuoteVersionCreation', () => {
       result.current.setVersionKind('revision')
     })
 
+    let created: { id: string } | null = null
     await act(async () => {
-      await result.current.createVersion()
+      created = await result.current.createVersion()
     })
 
     expect(createQuoteVersion).toHaveBeenCalledWith({
@@ -157,6 +152,7 @@ describe('useQuoteVersionCreation', () => {
       version_kind: 'revision',
       version_name: 'Garage Updated',
     })
+    expect(created).toEqual({ id: 'estimate-99' })
   })
 
   it('surfaces the shared required-job error for an ineligible selected job', async () => {
@@ -166,11 +162,13 @@ describe('useQuoteVersionCreation', () => {
     } as EligibleQuoteVersionJob
     const { result } = renderHook(() => useQuoteVersionCreation(ineligibleJob))
 
+    let created: { id: string } | null = { id: 'unexpected' }
     await act(async () => {
-      await result.current.createVersion()
+      created = await result.current.createVersion()
     })
 
     expect(createQuoteVersion).not.toHaveBeenCalled()
+    expect(created).toBeNull()
     expect(result.current.error).toBe('Select a job before creating a version.')
   })
 
@@ -187,11 +185,13 @@ describe('useQuoteVersionCreation', () => {
       result.current.setVersionKind('custom' as QuoteVersionKind)
     })
 
+    let created: { id: string } | null = { id: 'unexpected' }
     await act(async () => {
-      await result.current.createVersion()
+      created = await result.current.createVersion()
     })
 
     expect(createQuoteVersion).not.toHaveBeenCalled()
+    expect(created).toBeNull()
     expect(result.current.error).toBe('Choose a valid version kind.')
     expect(result.current.versionName).toBe('Custom')
     expect(result.current.versionKind).toBe('custom')
@@ -221,7 +221,8 @@ describe('useQuoteVersionCreation', () => {
       await Promise.all(createCalls)
     })
 
-    expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-99')
+    await expect(createCalls[0]).resolves.toEqual({ id: 'estimate-99' })
+    await expect(createCalls[1]).resolves.toBeNull()
   })
 
   it('allows a new create call after a successful create settles', async () => {
@@ -243,8 +244,6 @@ describe('useQuoteVersionCreation', () => {
     })
 
     expect(createQuoteVersion).toHaveBeenCalledTimes(2)
-    expect(push).toHaveBeenNthCalledWith(1, '/crm/quotes/estimate-1')
-    expect(push).toHaveBeenNthCalledWith(2, '/crm/quotes/estimate-2')
   })
 
   it('allows a new create call after a failed create settles', async () => {
@@ -276,6 +275,5 @@ describe('useQuoteVersionCreation', () => {
 
     expect(createQuoteVersion).toHaveBeenCalledTimes(2)
     expect(result.current.error).toBeNull()
-    expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-2')
   })
 })

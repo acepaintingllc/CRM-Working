@@ -5,10 +5,8 @@ import {
   quoteHomeBootstrap,
   quoteHomeJobs,
 } from '@/test-support/quoteHomeFixtures'
-import {
-  QUOTE_HOME_SEARCH_SOURCE_RANK,
-  selectQuoteHomeSearchRows,
-} from '@/lib/quotes/collectionData'
+import { QUOTE_HOME_SEARCH_SOURCE_RANK } from '@/lib/quotes/quoteHomeTypes'
+import { selectQuoteHomeSearchRows } from '@/lib/quotes/quoteHomeSearch'
 import type { EstimateCollectionVersionRow } from '@/lib/server/estimate-collection/types'
 
 const mocks = vi.hoisted(() => ({

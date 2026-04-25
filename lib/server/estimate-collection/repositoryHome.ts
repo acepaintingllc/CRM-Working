@@ -15,6 +15,13 @@ import {
   isAfterNullableTimestampDescIdCursor,
 } from './repositoryShared.ts'
 
+const QUOTE_HOME_JOBS_RPC_MAX_LIMIT = 101
+
+function getQuoteHomeJobsRpcLimit(limit: number) {
+  const normalizedLimit = Number.isFinite(limit) ? Math.trunc(limit) : 25
+  return Math.min(Math.max(normalizedLimit + 1, 1), QUOTE_HOME_JOBS_RPC_MAX_LIMIT)
+}
+
 export async function loadEstimateCollectionSummary(
   orgId: string
 ): Promise<ServiceResult<EstimateCollectionSummaryDbRow | null>> {
@@ -61,7 +68,7 @@ export async function loadEstimateCollectionJobsPage(
   const { data, error } = await supabaseAdmin.rpc('quote_home_jobs_page', {
     p_org_id: orgId,
     p_search: query || null,
-    p_limit: limit + 1,
+    p_limit: getQuoteHomeJobsRpcLimit(limit),
     p_cursor_created_at: cursor?.timestamp ?? null,
     p_cursor_id: cursor?.id ?? null,
   })
@@ -76,12 +83,14 @@ export async function loadEstimateCollectionJobsPage(
     return errorResult('server_error', error.message)
   }
 
-  const sortedRows = ((data ?? []) as EstimateCollectionJobPageDbRow[]).sort((left, right) =>
-    compareNullableTimestampDescIdDesc(
-      { timestamp: left.created_at, id: left.id },
-      { timestamp: right.created_at, id: right.id }
+  const sortedRows = ((data ?? []) as EstimateCollectionJobPageDbRow[])
+    .filter((row) => Boolean(row.customer_id))
+    .sort((left, right) =>
+      compareNullableTimestampDescIdDesc(
+        { timestamp: left.created_at, id: left.id },
+        { timestamp: right.created_at, id: right.id }
+      )
     )
-  )
   return okResult({
     query,
     limit,

@@ -3,7 +3,7 @@ import { errorResult, okResult, type ServiceResult } from '../serviceResult'
 import type {
   QuoteHomeCursorKey,
   QuoteHomeJobListItemReadModel,
-} from '../../quotes/collectionData.ts'
+} from '../../quotes/quoteHomeTypes.ts'
 import type {
   EstimateCollectionJobVersionsDbPage,
   EstimateCollectionVersionRow,
@@ -52,51 +52,24 @@ export async function loadEligibleJobsPage(
   const pageOptions = parseQuoteHomePageOptions(options, false, deps)
   if (!pageOptions.ok) return pageOptions
 
-  const firstPageResult = await deps.loadEstimateCollectionJobsPage(orgId, pageOptions.data)
-  if (!firstPageResult.ok) return firstPageResult
+  const jobsPageResult = await deps.loadEstimateCollectionJobsPage(orgId, pageOptions.data)
+  if (!jobsPageResult.ok) return jobsPageResult
 
-  const limit = firstPageResult.data.limit
-  const query = firstPageResult.data.query
-  const eligibleItems: QuoteHomeJobListItemReadModel[] = []
-  let scannedRows = firstPageResult.data.rows
-  let lastRawRow = scannedRows[scannedRows.length - 1] ?? null
-  let hasMoreRawRows = scannedRows.length > limit
-
-  while (true) {
-    for (const row of scannedRows) {
-      const item = deps.toQuoteHomeEligibleJobReadModel(row)
-      if (item) {
-        eligibleItems.push(item)
-      }
-      if (eligibleItems.length > limit) break
-    }
-
-    if (eligibleItems.length > limit || !hasMoreRawRows || !lastRawRow?.created_at) break
-
-    const nextPageResult = await deps.loadEstimateCollectionJobsPage(orgId, {
-      query,
-      limit,
-      cursor: {
-        timestamp: lastRawRow.created_at,
-        id: lastRawRow.id,
-      },
-    })
-    if (!nextPageResult.ok) return nextPageResult
-
-    scannedRows = nextPageResult.data.rows
-    lastRawRow = scannedRows[scannedRows.length - 1] ?? null
-    hasMoreRawRows = scannedRows.length > limit
-  }
-
+  const limit = jobsPageResult.data.limit
+  const query = jobsPageResult.data.query
+  const eligibleItems = jobsPageResult.data.rows
+    .map((row) => deps.toQuoteHomeEligibleJobReadModel(row))
+    .filter((item): item is QuoteHomeJobListItemReadModel => Boolean(item))
   const pageItems = eligibleItems.slice(0, limit)
   const lastReturnedItem = pageItems[pageItems.length - 1] ?? null
+
   return {
     ok: true as const,
     data: {
       query,
       limit,
       nextCursor:
-        eligibleItems.length > limit && lastReturnedItem?.created_at
+        jobsPageResult.data.rows.length > limit && lastReturnedItem?.created_at
           ? deps.encodeQuoteHomeCursor({
               timestamp: lastReturnedItem.created_at,
               id: lastReturnedItem.id,

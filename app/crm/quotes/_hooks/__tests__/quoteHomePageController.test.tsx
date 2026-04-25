@@ -4,11 +4,19 @@ import type {
   QuoteHomeBootstrapReadModel,
   QuoteHomeJobVersionItemReadModel,
   QuoteJobVersionsPageReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import { useQuoteHomePageController } from '../quoteHomePageController'
 
 const { deleteQuoteVersion } = vi.hoisted(() => ({
   deleteQuoteVersion: vi.fn(),
+}))
+
+const { push } = vi.hoisted(() => ({
+  push: vi.fn(),
+}))
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push }),
 }))
 
 vi.mock('@/lib/quotes/client', () => ({
@@ -163,6 +171,7 @@ function buildController(
 
 describe('useQuoteHomePageController', () => {
   beforeEach(() => {
+    push.mockReset()
     deleteQuoteVersion.mockReset()
     deleteQuoteVersion.mockResolvedValue({ data: { ok: true } })
   })
@@ -220,6 +229,7 @@ describe('useQuoteHomePageController', () => {
     expect(create.setVersionName).toHaveBeenCalledWith('Custom')
     expect(create.setVersionKind).toHaveBeenCalledWith('revision')
     expect(create.createVersion).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith('/crm/quotes/estimate-created')
     expect(versions.loadMore).toHaveBeenCalledTimes(1)
     expect(homeResource.retryJobs).toHaveBeenCalledTimes(1)
     expect(versions.refresh).toHaveBeenCalledTimes(1)

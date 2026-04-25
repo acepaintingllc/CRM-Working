@@ -3,7 +3,7 @@
 import type {
   QuoteCreateJobContextReadModel,
   QuoteCreateJobReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import {
   isEligibleQuoteVersionJob,
   type EligibleQuoteVersionJob,

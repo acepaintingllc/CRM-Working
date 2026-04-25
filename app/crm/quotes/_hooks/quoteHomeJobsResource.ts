@@ -1,20 +1,20 @@
 'use client'
 
 import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { normalizeQuoteHomeJobQuery } from '@/lib/quotes/quoteHomeCursors'
 import {
-  normalizeQuoteHomeJobQuery,
   type QuoteHomeBootstrapReadModel,
   type QuoteHomeJobsPageReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import { loadQuoteHomeJobs } from '@/lib/quotes/client'
 import {
   cancelQuotePagedAsyncRequests,
-  clearQuotePagedAsyncLoadMoreKeys,
   isQuotePagedAsyncRequestCurrent,
-  runQuotePagedAsyncLoadMoreKey,
+  runQuotePagedAsyncLoadMoreRequest,
   runQuotePagedAsyncRequest,
   startQuotePagedAsyncRequest,
   useQuotePagedAsyncLifecycle,
+  type QuotePagedAsyncRunHandlers,
 } from './quotePagedAsyncLifecycle'
 import {
   createQuoteHomeJobsPageState,
@@ -28,10 +28,6 @@ import {
   type QuoteHomeJobsPageState,
   type QuoteHomeJobsRequestPurpose,
 } from './quoteHomePagePolicy'
-
-function getJobsPaginationRequestKey(query: string, cursor: string) {
-  return JSON.stringify([query, cursor])
-}
 
 function toJobsLoadErrorMessage(loadError: unknown) {
   return loadError instanceof Error
@@ -79,10 +75,9 @@ export function useQuoteHomeJobsPageResource(
     bootstrapData.jobs,
     createQuoteHomeJobsPageState,
   )
-  // The reducer tracks the active request; this cursor gate coalesces duplicate
-  // load-more calls for the same page before React has committed a render.
-  const jobPaginationInFlightKeysRef = useRef(new Set<string>())
-  const jobsLifecycle = useQuotePagedAsyncLifecycle<QuoteHomeJobsPageRequest>()
+  const jobsLifecycle = useQuotePagedAsyncLifecycle<QuoteHomeJobsPageRequest>({
+    trackLoadMore: true,
+  })
 
   const dispatchJobsAction = useCallback((action: QuoteHomeJobsPageAction) => {
     jobsStateRef.current = reduceQuoteHomeJobsPageState(
@@ -94,7 +89,6 @@ export function useQuoteHomeJobsPageResource(
 
   const cancelActiveJobsRequest = useCallback(() => {
     cancelQuotePagedAsyncRequests(jobsLifecycle)
-    clearQuotePagedAsyncLoadMoreKeys(jobPaginationInFlightKeysRef)
     dispatchJobsAction({ type: 'request_cancelled' })
   }, [dispatchJobsAction, jobsLifecycle])
 
@@ -112,6 +106,7 @@ export function useQuoteHomeJobsPageResource(
           reportError: params.reportError,
         },
         (request) => dispatchJobsAction({ type: 'request_started', request }),
+        { cancelLoadMore: params.purpose !== 'pagination' },
       )
     },
     [dispatchJobsAction, jobsLifecycle],
@@ -143,7 +138,6 @@ export function useQuoteHomeJobsPageResource(
   const adoptJobsPage = useCallback(
     (nextJobsPage: QuoteHomeJobsPageReadModel) => {
       cancelQuotePagedAsyncRequests(jobsLifecycle)
-      clearQuotePagedAsyncLoadMoreKeys(jobPaginationInFlightKeysRef)
       dispatchJobsAction({
         type: 'adopt_bootstrap_jobs',
         jobsPage: nextJobsPage,
@@ -180,13 +174,15 @@ export function useQuoteHomeJobsPageResource(
     }): Promise<QuoteHomeJobsLoadResult> => {
       const normalizedQuery = normalizeQuoteHomeJobQuery(params.query)
       const reportError = params.reportError ?? true
-      const request = startJobsRequest({
+      const requestDetails = {
         query: normalizedQuery,
         purpose: params.purpose,
         reportError,
-      })
-
-      const result = await runQuotePagedAsyncRequest(jobsLifecycle, request, {
+      }
+      const handlers: QuotePagedAsyncRunHandlers<
+        QuoteHomeJobsPageRequest,
+        QuoteHomeJobsPageReadModel
+      > = {
         isCurrent: isActiveJobsRequest,
         getErrorMessage: toJobsLoadErrorMessage,
         load: () =>
@@ -213,7 +209,27 @@ export function useQuoteHomeJobsPageResource(
             type: 'request_finished',
             request: finishedRequest,
           }),
-      })
+      }
+      const result = params.append
+        ? await runQuotePagedAsyncLoadMoreRequest(
+            jobsLifecycle,
+            requestDetails,
+            params.cursor,
+            {
+              ...handlers,
+              onStart: (request) =>
+                dispatchJobsAction({ type: 'request_started', request }),
+            },
+          )
+        : await runQuotePagedAsyncRequest(
+            jobsLifecycle,
+            startJobsRequest(requestDetails),
+            handlers,
+          )
+
+      if (result === null) {
+        return { ok: false as const, error: null }
+      }
 
       return result.ok
         ? { ok: true as const, error: null }
@@ -272,22 +288,12 @@ export function useQuoteHomeJobsPageResource(
       return
     }
 
-    const paginationRequestKey = getJobsPaginationRequestKey(
-      loadMoreDecision.query,
-      loadMoreDecision.cursor,
-    )
-
-    await runQuotePagedAsyncLoadMoreKey(
-      jobPaginationInFlightKeysRef,
-      paginationRequestKey,
-      () =>
-        loadJobsPage({
-          query: loadMoreDecision.query,
-          cursor: loadMoreDecision.cursor,
-          append: true,
-          purpose: 'pagination',
-        }),
-    )
+    await loadJobsPage({
+      query: loadMoreDecision.query,
+      cursor: loadMoreDecision.cursor,
+      append: true,
+      purpose: 'pagination',
+    })
   }, [loadJobsPage])
 
   return {

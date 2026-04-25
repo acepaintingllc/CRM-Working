@@ -1,7 +1,5 @@
-import {
-  normalizeQuoteHomeSearchQuery,
-  type QuoteHomeSummaryReadModel,
-} from '@/lib/quotes/collectionData'
+import { normalizeQuoteHomeSearchQuery } from '@/lib/quotes/quoteHomeCursors'
+import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type {
   NavItem,
   QuoteHomeSearchResult,

@@ -2,7 +2,7 @@
 
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
-import type { QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/quoteHomeTypes'
 import {
   estimateWorkspaceHref,
   formatDateTime,

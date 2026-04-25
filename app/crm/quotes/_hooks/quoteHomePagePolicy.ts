@@ -1,8 +1,8 @@
-import {
-  normalizeQuoteHomeJobQuery,
-  type QuoteHomeJobsPageReadModel,
-  type QuoteHomeJobListItemReadModel,
-} from '@/lib/quotes/collectionData'
+import { normalizeQuoteHomeJobQuery } from '@/lib/quotes/quoteHomeCursors'
+import type {
+  QuoteHomeJobsPageReadModel,
+  QuoteHomeJobListItemReadModel,
+} from '@/lib/quotes/quoteHomeTypes'
 
 export type QuoteHomeSelectedJobState = {
   selectedJobId: string

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeJobVersionItemReadModel } from '@/lib/quotes/quoteHomeTypes'
 import { EMPTY_QUOTE_CREATE_RESOURCE } from '../quoteCreatePagePolicy'
 import { buildQuoteCreatePageVm } from '../quoteCreatePageVm'
 

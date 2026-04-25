@@ -4,7 +4,7 @@ import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } 
 import {
   normalizeQuoteHomeJobQuery,
   normalizeQuoteHomeSearchQuery,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeCursors'
 import type {
   ProductFamily,
   QuoteProductPayload,

@@ -1,4 +1,4 @@
-import { normalizeQuoteHomeSearchQuery } from '../../quotes/collectionData.ts'
+import { normalizeQuoteHomeSearchQuery } from '../../quotes/quoteHomeCursors.ts'
 import { supabaseAdmin } from '../org.ts'
 import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import type {

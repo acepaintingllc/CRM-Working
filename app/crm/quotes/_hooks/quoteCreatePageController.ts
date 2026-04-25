@@ -1,9 +1,11 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
-import type { QuoteCreateJobContextReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteCreateJobContextReadModel } from '@/lib/quotes/quoteHomeTypes'
 import { loadQuoteCreateJobContext } from '@/lib/quotes/client'
+import { getQuoteWorkspaceHref } from '@/lib/quotes/versionCreation'
 import {
   buildQuoteCreatePageResource,
   EMPTY_QUOTE_CREATE_RESOURCE,
@@ -22,6 +24,7 @@ function quoteCreatePageLoadErrorMessage(loadError: unknown) {
 }
 
 export function useQuoteCreatePageController({ jobId }: UseQuoteCreatePageControllerOptions) {
+  const { push } = useRouter()
   const shouldLoadJobData = Boolean(jobId)
   const resource = useLoadableResource<QuoteCreatePageResource>({
     initialData: EMPTY_QUOTE_CREATE_RESOURCE,
@@ -44,20 +47,23 @@ export function useQuoteCreatePageController({ jobId }: UseQuoteCreatePageContro
     blockCreateWhileVersionsLoading: true,
     onRefresh: resource.refresh,
   })
+  const workflowActions = workflow.actions
+  const createAndNavigate = useCallback(async () => {
+    const created = await workflowActions.create()
+    if (created) {
+      push(getQuoteWorkspaceHref(created.id))
+    }
+    return created
+  }, [push, workflowActions])
 
   const actions = useMemo(
     () => ({
-      setVersionName: workflow.actions.setVersionName,
-      setVersionKind: workflow.actions.setVersionKind,
-      create: workflow.actions.create,
-      retry: workflow.actions.refresh,
+      setVersionName: workflowActions.setVersionName,
+      setVersionKind: workflowActions.setVersionKind,
+      create: createAndNavigate,
+      retry: workflowActions.refresh,
     }),
-    [
-      workflow.actions.create,
-      workflow.actions.refresh,
-      workflow.actions.setVersionKind,
-      workflow.actions.setVersionName,
-    ]
+    [createAndNavigate, workflowActions]
   )
 
   return {

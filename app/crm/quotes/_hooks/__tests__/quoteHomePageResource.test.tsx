@@ -6,7 +6,6 @@ import {
   quoteHomeJobs,
 } from '@/test-support/quoteHomeFixtures'
 import { useQuoteHomePageResource } from '../quoteHomePageResource'
-import { useQuoteHomePageResources } from '../useQuoteHomePageResources'
 
 const { push } = vi.hoisted(() => ({
   push: vi.fn(),
@@ -66,19 +65,5 @@ describe('useQuoteHomePageResource', () => {
     expect(result.current.vmInput.resources.workflow.versions.items).toEqual(
       quoteHomeJob1Versions.items
     )
-  })
-})
-
-describe('useQuoteHomePageResources', () => {
-  it('keeps the previous VM resource contract as a thin compatibility wrapper', () => {
-    loadQuoteHomeSearch.mockResolvedValue({ query: '', items: [] })
-    loadQuoteJobVersions.mockResolvedValue(quoteHomeJob1Versions)
-
-    const { result } = renderHook(() => useQuoteHomePageResources(quoteHomeBootstrap))
-
-    expect(result.current.vmState).toBe(result.current.state)
-    expect(result.current.vmResources).toBe(result.current.resources)
-    expect(result.current.facade.vmInput.state).toBe(result.current.vmState)
-    expect(result.current.facade.vmInput.resources).toBe(result.current.vmResources)
   })
 })

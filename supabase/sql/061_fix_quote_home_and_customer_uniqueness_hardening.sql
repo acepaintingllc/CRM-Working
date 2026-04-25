@@ -2,7 +2,7 @@
 -- Ensures:
 -- 1) duplicate preflight checks exist before customer uniqueness enforcement
 -- 2) customer unique indexes are present
--- 3) quote_home_jobs_page enforces cursor integrity and p_limit clamp
+-- 3) quote_home_jobs_page enforces cursor integrity and a bounded p_limit over-fetch clamp
 
 do $$
 declare
@@ -191,7 +191,7 @@ begin
           or (j.created_at, j.id) < (p_cursor_created_at, p_cursor_id)
         )
       order by j.created_at desc, j.id desc
-      limit least(greatest(coalesce(p_limit, 25), 1), 100)
+      limit least(greatest(coalesce(p_limit, 25), 1), 101)
     ),
     version_counts as (
       select e.job_id, count(*)::bigint as version_count

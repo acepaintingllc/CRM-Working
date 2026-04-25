@@ -8,7 +8,7 @@ import {
 import {
   normalizeQuoteHomeJobQuery,
   normalizeQuoteHomeSearchQuery,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeCursors'
 import {
   createEstimateCollectionVersion,
   loadEstimateCollectionBootstrapPayload,

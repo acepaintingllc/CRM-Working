@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeJobListItemReadModel } from '@/lib/quotes/quoteHomeTypes'
 import {
   createQuoteHomeJobsPageState,
   reduceQuoteHomeJobsPageState,

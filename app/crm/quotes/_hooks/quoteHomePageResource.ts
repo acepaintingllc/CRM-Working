@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo } from 'react'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type {
   QuoteHomePageActions,
   QuoteHomePageVmInput,

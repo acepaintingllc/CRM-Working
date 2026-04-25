@@ -3,7 +3,7 @@ import type {
   QuoteHomeJobListItemReadModel,
   QuoteHomeJobVersionItemReadModel,
   QuoteHomeSearchResultReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import {
   buildQuoteHomePageVm,
   type QuoteHomePageActions,

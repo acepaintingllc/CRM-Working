@@ -1,4 +1,4 @@
-import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteJobVersionsPageReadModel } from '@/lib/quotes/quoteHomeTypes'
 
 export type JobVersionsCache = {
   get(jobId: string): QuoteJobVersionsPageReadModel | null

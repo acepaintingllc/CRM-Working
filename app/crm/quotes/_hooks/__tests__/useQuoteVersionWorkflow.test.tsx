@@ -173,6 +173,36 @@ describe('useQuoteVersionWorkflow', () => {
     expect(result.current.create.canCreate).toBe(false)
   })
 
+  it('returns the created payload without owning workspace navigation', async () => {
+    loadQuoteJobVersions.mockResolvedValue({
+      job_id: 'job-1',
+      total_versions: 0,
+      limit: 25,
+      next_cursor: null,
+      items: [],
+    })
+    createQuoteVersion.mockResolvedValue({ id: 'estimate-99' })
+
+    const { result } = renderHook(() =>
+      useQuoteVersionWorkflow({
+        jobId: 'job-1',
+        selectedJob: { id: 'job-1', customer_id: 'customer-1' },
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.versions.loading).toBe(false)
+    })
+
+    let created: { id: string } | null = null
+    await act(async () => {
+      created = await result.current.actions.create()
+    })
+
+    expect(created).toEqual({ id: 'estimate-99' })
+    expect(push).not.toHaveBeenCalled()
+  })
+
   it('refreshes both the page context and the selected job versions', async () => {
     const onRefresh = vi.fn().mockResolvedValue(true)
     loadQuoteJobVersions

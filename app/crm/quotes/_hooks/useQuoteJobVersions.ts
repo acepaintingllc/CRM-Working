@@ -11,7 +11,7 @@ import type {
   QuoteJobVersionsPageReadModel,
   QuoteJobVersionsReadModel,
   QuoteHomeJobVersionItemReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import { loadQuoteJobVersions } from '@/lib/quotes/client'
 import {
   createInitialJobVersionsState,

@@ -1,4 +1,4 @@
-import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type { SummaryCardVm } from './quoteHomeTypes'
 import { formatCurrency } from './quoteHomeSharedPresentation'
 

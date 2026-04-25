@@ -1,28 +1,24 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  cancelQuoteHomeAsyncRequests,
-  runQuoteHomeAsyncRequest,
-  startQuoteHomeAsyncRequest,
-  type QuoteHomeAsyncLifecycle,
-  type QuoteHomeAsyncRequest,
-} from '../quoteHomeAsyncLifecycle'
-import {
   beginQuotePagedAsyncLoadMoreKey,
   beginQuotePagedAsyncLoadMoreRequest,
   cancelQuotePagedAsyncRequests,
   canStartQuotePagedAsyncLoadMoreRequest,
   finishQuotePagedAsyncLoadMoreKey,
   finishQuotePagedAsyncLoadMoreRequest,
+  runQuotePagedAsyncRequest,
   runQuotePagedAsyncLoadMoreKey,
   runQuotePagedAsyncLoadMoreRequest,
+  startQuotePagedAsyncRequest,
   type QuotePagedAsyncLifecycle,
+  type QuotePagedAsyncRequest,
 } from '../quotePagedAsyncLifecycle'
 
-type TestRequest = QuoteHomeAsyncRequest<{
+type TestRequest = QuotePagedAsyncRequest<{
   scope: 'jobs' | 'versions'
 }>
 
-function createLifecycle(): QuoteHomeAsyncLifecycle<TestRequest> {
+function createLifecycle(): QuotePagedAsyncLifecycle<TestRequest> {
   return {
     currentRequestRef: { current: 0 },
     activeRequestRef: { current: null },
@@ -37,19 +33,20 @@ function createPagedLifecycle(): QuotePagedAsyncLifecycle<TestRequest> {
   }
 }
 
-describe('quoteHomeAsyncLifecycle', () => {
+describe('quotePagedAsyncLifecycle', () => {
   it('runs start, success, and finish for the active request', async () => {
     const lifecycle = createLifecycle()
     const onStart = vi.fn()
     const onSuccess = vi.fn()
     const onFinish = vi.fn()
 
-    const request = startQuoteHomeAsyncRequest(
+    const request = startQuotePagedAsyncRequest(
       lifecycle,
       { scope: 'jobs' },
       onStart,
     )
-    const result = await runQuoteHomeAsyncRequest(lifecycle, request, {
+
+    const result = await runQuotePagedAsyncRequest(lifecycle, request, {
       load: async () => 'loaded',
       getErrorMessage: () => 'failed',
       onSuccess,
@@ -73,11 +70,11 @@ describe('quoteHomeAsyncLifecycle', () => {
     const onFailure = vi.fn()
     const onFinish = vi.fn()
     const loadError = new Error('network down')
-    const request = startQuoteHomeAsyncRequest(lifecycle, {
+    const request = startQuotePagedAsyncRequest(lifecycle, {
       scope: 'versions',
     })
 
-    const result = await runQuoteHomeAsyncRequest(lifecycle, request, {
+    const result = await runQuotePagedAsyncRequest(lifecycle, request, {
       load: async () => {
         throw loadError
       },
@@ -102,11 +99,11 @@ describe('quoteHomeAsyncLifecycle', () => {
     const lifecycle = createLifecycle()
     const onSuccess = vi.fn()
     const onFinish = vi.fn()
-    const request = startQuoteHomeAsyncRequest(lifecycle, { scope: 'jobs' })
+    const request = startQuotePagedAsyncRequest(lifecycle, { scope: 'jobs' })
 
-    cancelQuoteHomeAsyncRequests(lifecycle)
+    cancelQuotePagedAsyncRequests(lifecycle)
 
-    const result = await runQuoteHomeAsyncRequest(lifecycle, request, {
+    const result = await runQuotePagedAsyncRequest(lifecycle, request, {
       load: async () => 'stale data',
       getErrorMessage: () => 'failed',
       onSuccess,

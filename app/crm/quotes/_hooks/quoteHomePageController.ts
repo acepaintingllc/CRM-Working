@@ -1,13 +1,17 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import type {
   QuoteHomeBootstrapReadModel,
   QuoteHomeJobVersionItemReadModel,
   QuoteJobVersionsPageReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import { deleteQuoteVersion } from '@/lib/quotes/client'
-import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
+import {
+  getQuoteWorkspaceHref,
+  type QuoteVersionKind,
+} from '@/lib/quotes/versionCreation'
 import type { QuoteHomePageActions } from '../_home/quoteHomePageVm'
 import type { QuoteHomeActionWarning } from '../_home/quoteHomeTypes'
 import {
@@ -53,7 +57,7 @@ type QuoteHomeStateActions = Pick<
 type QuoteHomeCreateActions = {
   setVersionName: (value: string) => void
   setVersionKind: (value: QuoteVersionKind) => void
-  createVersion: () => Promise<unknown>
+  createVersion: () => Promise<{ id: string } | null>
 }
 
 type QuoteHomeSearchResource = {
@@ -132,6 +136,7 @@ export function useQuoteHomePageController({
   deleteState: QuoteHomeDeleteState
   actions: QuoteHomePageActions
 } {
+  const { push } = useRouter()
   const [actionWarning, setActionWarning] = useState<QuoteHomeActionWarning | null>(null)
   const deleteController = useQuotesHomeDelete()
   const {
@@ -181,8 +186,12 @@ export function useQuoteHomePageController({
 
   const createQuoteVersionForSelectedJob = useCallback(async () => {
     setActionWarning(null)
-    return createVersion()
-  }, [createVersion])
+    const created = await createVersion()
+    if (created) {
+      push(getQuoteWorkspaceHref(created.id))
+    }
+    return created
+  }, [createVersion, push])
 
   const retryVersions = useCallback(() => {
     return refreshVersionsList()

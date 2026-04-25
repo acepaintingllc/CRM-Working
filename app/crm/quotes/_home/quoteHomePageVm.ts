@@ -1,4 +1,4 @@
-import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import {
   buildHeroSummaryText,

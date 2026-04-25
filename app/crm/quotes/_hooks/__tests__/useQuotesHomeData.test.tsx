@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   QuoteHomeBootstrapReadModel,
   QuoteHomeJobsPageReadModel,
-} from '@/lib/quotes/collectionData'
+} from '@/lib/quotes/quoteHomeTypes'
 import {
   useQuotesHomeBootstrap,
   useQuotesHomeData,

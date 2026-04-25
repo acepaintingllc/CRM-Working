@@ -420,20 +420,16 @@ describe('estimate collection service', () => {
     })
   })
 
-  it('fills job pages after eligibility filtering and cursors from the last returned eligible row', async () => {
-    const firstRows = [
+  it('builds the first jobs page from one bounded repository page with ineligible rows before eligible rows', async () => {
+    const rows = [
       { id: 'job-4', customer_id: null, created_at: '2026-04-24T14:00:00.000Z', title: 'No customer' },
       { id: 'job-3', customer_id: 'customer-3', created_at: '2026-04-24T13:00:00.000Z', title: 'Kitchen' },
-      { id: 'job-2', customer_id: null, created_at: '2026-04-24T12:00:00.000Z', title: 'No customer' },
-    ]
-    const secondRows = [
-      { id: 'job-1', customer_id: 'customer-1', created_at: '2026-04-24T11:00:00.000Z', title: 'Garage' },
-      { id: 'job-0', customer_id: 'customer-0', created_at: '2026-04-24T10:00:00.000Z', title: 'Bath' },
+      { id: 'job-2', customer_id: 'customer-2', created_at: '2026-04-24T12:00:00.000Z', title: 'Garage' },
     ]
     const pagePayload = {
       query: '',
       limit: 2,
-      next_cursor: '2026-04-24T11:00:00.000Z::job-1',
+      next_cursor: '2026-04-24T12:00:00.000Z::job-2',
       items: [
         {
           id: 'job-3',
@@ -442,17 +438,18 @@ describe('estimate collection service', () => {
           created_at: '2026-04-24T13:00:00.000Z',
         },
         {
-          id: 'job-1',
-          customer_id: 'customer-1',
+          id: 'job-2',
+          customer_id: 'customer-2',
           title: 'Garage',
-          created_at: '2026-04-24T11:00:00.000Z',
+          created_at: '2026-04-24T12:00:00.000Z',
         },
       ],
     }
 
-    mocks.loadEstimateCollectionJobsPage
-      .mockResolvedValueOnce({ ok: true, data: { query: '', limit: 2, rows: firstRows } })
-      .mockResolvedValueOnce({ ok: true, data: { query: '', limit: 2, rows: secondRows } })
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValueOnce({
+      ok: true,
+      data: { query: '', limit: 2, rows },
+    })
     mocks.toQuoteHomeEligibleJobReadModel.mockImplementation((row) =>
       row.customer_id
         ? { id: row.id, customer_id: row.customer_id, title: row.title, created_at: row.created_at }
@@ -470,18 +467,11 @@ describe('estimate collection service', () => {
       limit: 2,
       cursor: null,
     })
-    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenNthCalledWith(2, 'org-1', {
-      query: '',
-      limit: 2,
-      cursor: {
-        timestamp: '2026-04-24T12:00:00.000Z',
-        id: 'job-2',
-      },
-    })
+    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenCalledTimes(1)
     expect(mocks.buildQuoteHomeJobsPageReadModel).toHaveBeenCalledWith({
       query: '',
       limit: 2,
-      nextCursor: '2026-04-24T11:00:00.000Z::job-1',
+      nextCursor: '2026-04-24T12:00:00.000Z::job-2',
       items: pagePayload.items,
     })
   })
@@ -585,19 +575,56 @@ describe('estimate collection service', () => {
     })
   })
 
-  it('returns an exact-limit final page when only ineligible raw rows remain', async () => {
-    const firstRows = [
+  it('returns 100 jobs and a next cursor when a max-size jobs page has more rows', async () => {
+    const rows = Array.from({ length: 101 }, (_, index) => {
+      const createdAt = new Date(Date.UTC(2026, 3, 24, 12, 0, 0) - index * 1000).toISOString()
+      return makeJobRow(`job-${String(index + 1).padStart(3, '0')}`, createdAt, `customer-${index + 1}`)
+    })
+    const lastReturnedRow = rows[99]
+
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValueOnce({
+      ok: true,
+      data: { query: '', limit: 100, rows },
+    })
+
+    const result = await loadEstimateCollectionJobsPayload('org-1', { limit: 100 }, deps)
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        query: '',
+        limit: 100,
+        next_cursor: `${lastReturnedRow.created_at}::${lastReturnedRow.id}`,
+        items: expect.arrayContaining([
+          expect.objectContaining({ id: rows[0].id }),
+          expect.objectContaining({ id: lastReturnedRow.id }),
+        ]),
+      },
+    })
+    expect(result.ok ? result.data.items : []).toHaveLength(100)
+    expect(result.ok ? result.data.items : []).not.toContainEqual(
+      expect.objectContaining({ id: rows[100].id })
+    )
+    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenCalledWith('org-1', {
+      query: '',
+      limit: 100,
+      cursor: null,
+    })
+    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not scan extra pages when many ineligible rows appear in a bounded repository page', async () => {
+    const rows = [
       makeJobRow('job-4', '2026-04-24T14:00:00.000Z', 'customer-4'),
-      makeJobRow('job-3', '2026-04-24T13:00:00.000Z', 'customer-3'),
+      makeJobRow('job-3', '2026-04-24T13:00:00.000Z', null),
       makeJobRow('job-2', '2026-04-24T12:00:00.000Z', null),
-    ]
-    const secondRows = [
       makeJobRow('job-1', '2026-04-24T11:00:00.000Z', null),
     ]
 
-    mocks.loadEstimateCollectionJobsPage
-      .mockResolvedValueOnce({ ok: true, data: { query: '', limit: 2, rows: firstRows } })
-      .mockResolvedValueOnce({ ok: true, data: { query: '', limit: 2, rows: secondRows } })
+    mocks.loadEstimateCollectionJobsPage.mockResolvedValueOnce({
+      ok: true,
+      data: { query: '', limit: 2, rows },
+    })
 
     const result = await loadEstimateCollectionJobsPayload('org-1', { limit: 2 }, deps)
 
@@ -606,21 +633,13 @@ describe('estimate collection service', () => {
       data: {
         query: '',
         limit: 2,
-        next_cursor: null,
+        next_cursor: '2026-04-24T14:00:00.000Z::job-4',
         items: [
           expect.objectContaining({ id: 'job-4' }),
-          expect.objectContaining({ id: 'job-3' }),
         ],
       },
     })
-    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenNthCalledWith(2, 'org-1', {
-      query: '',
-      limit: 2,
-      cursor: {
-        timestamp: '2026-04-24T12:00:00.000Z',
-        id: 'job-2',
-      },
-    })
+    expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenCalledTimes(1)
   })
 
   it('rejects invalid page cursors before repository work', async () => {

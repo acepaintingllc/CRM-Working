@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import QuotesHomePage from './QuotesHomePage'
 import { getSessionUserOrg } from '@/lib/server/org'
 import { loadQuoteHomeBootstrap } from '@/lib/server/estimateCollectionData'
-import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/collectionData'
+import type { QuoteHomeBootstrapReadModel } from '@/lib/quotes/quoteHomeTypes'
 
 const QUOTES_HOME_PATH = '/crm/quotes'
 
