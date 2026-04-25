@@ -29,6 +29,7 @@ export function useEstimateV2CalculationDerived(params: {
     | 'scopes'
     | 'segments'
     | 'roomFlags'
+    | 'rollers'
     | 'ceilingScopes'
     | 'ceilingSegments'
     | 'trimScopes'
@@ -97,6 +98,7 @@ export function useEstimateV2CalculationDerived(params: {
         scopes: collections.scopes,
         segments: collections.segments,
         roomFlags: collections.roomFlags,
+        rollers: collections.rollers,
         ceilingScopes: collections.ceilingScopes,
         ceilingSegments: collections.ceilingSegments,
         trimScopes: collections.trimScopes,
@@ -105,6 +107,7 @@ export function useEstimateV2CalculationDerived(params: {
       collections.ceilingScopes,
       collections.ceilingSegments,
       collections.roomFlags,
+      collections.rollers,
       collections.rooms,
       collections.scopes,
       collections.segments,

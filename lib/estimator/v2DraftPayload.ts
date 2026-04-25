@@ -3,6 +3,7 @@ import type {
   EstimateV2CeilingSegmentDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
   EstimateV2SavePayload,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDerived,
@@ -87,6 +88,7 @@ export function buildEstimateV2SavePayload(
   scopes: EstimateV2WallScopeDraft[],
   segments: EstimateV2WallSegmentDraft[],
   roomFlags: EstimateV2RoomFlagDraft[],
+  rollers: EstimateV2RollerDraft[],
   ceilingScopes: EstimateV2CeilingScopeDraft[],
   ceilingSegments: EstimateV2CeilingSegmentDraft[],
   trimScopes: EstimateV2TrimScopeDraft[]
@@ -194,6 +196,20 @@ export function buildEstimateV2SavePayload(
       active: 'Y' as const,
     }))
 
+  const orderedRollers = [...rollers]
+    .sort((a, b) => a.position - b.position)
+    .map((roller, index) => ({
+      id: roller.id,
+      scope: roller.scope,
+      wall_color_id:
+        roller.scope === 'Wall' ? roller.wallColorId.trim().toUpperCase() || null : null,
+      roller_size_in: toNullableDraftNumber(roller.rollerSizeIn),
+      covers_qty: toNullableDraftNumber(roller.coversQty),
+      notes: roller.notes.trim() || null,
+      position: index,
+    }))
+    .filter((roller) => roller.scope === 'Ceiling' || roller.scope === 'Trim' || roller.wall_color_id)
+
   const orderedCeilingScopes = orderedRooms.flatMap((room) =>
     sortByPosition(ceilingScopes.filter((scope) => scope.roomId === room.room_id)).map((scope, index) => ({
       id: scope.id,
@@ -295,6 +311,7 @@ export function buildEstimateV2SavePayload(
     room_wall_scopes: orderedScopes,
     wall_segments: orderedSegments,
     room_flags: orderedRoomFlags,
+    rollers: orderedRollers,
     room_ceiling_scopes: orderedCeilingScopes,
     ceiling_scope_segments: orderedCeilingSegments,
     room_trim_scopes: orderedTrimScopes,

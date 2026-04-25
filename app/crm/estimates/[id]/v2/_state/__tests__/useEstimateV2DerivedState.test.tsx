@@ -12,6 +12,7 @@ function createDerivedStore() {
       scopes: fixture.scopes,
       segments: fixture.segments,
       roomFlags: fixture.roomFlags,
+      rollers: fixture.rollers,
       ceilingScopes: fixture.ceilingScopes,
       ceilingSegments: fixture.ceilingSegments,
       trimScopes: fixture.trimScopes,

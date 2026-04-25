@@ -289,4 +289,83 @@ describe('saveEstimateV2Inputs', () => {
       ],
     })
   })
+
+  it('maps roller payload rows to estimate_rollers persistence', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: {
+        id: 'estimate-1',
+        job_id: 'job-1',
+      },
+    })
+    mocks.softReplaceRows.mockResolvedValue(undefined)
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          rollers: [
+            {
+              id: 'roller-1',
+              scope: 'Wall',
+              wall_color_id: 'COLOR1',
+              roller_size_in: '9',
+              covers_qty: '2',
+              notes: 'Saved roller',
+            },
+            {
+              id: 'roller-2',
+              scope: 'Ceiling',
+              roller_size_in: 14,
+              covers_qty: 1,
+            },
+            {
+              id: 'applicator-1',
+              scope: 'Trim',
+              roller_size_in: '4',
+              covers_qty: '2',
+              notes: 'Saved applicator',
+            },
+          ],
+        },
+      })
+    ).resolves.toEqual({ ok: true })
+
+    expect(mocks.softReplaceRows).toHaveBeenCalledWith({
+      table: 'estimate_rollers',
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      rows: [
+        expect.objectContaining({
+          id: 'roller-1',
+          org_id: 'org-1',
+          estimate_id: 'estimate-1',
+          job_id: 'job-1',
+          scope: 'Wall',
+          wall_color_id: 'COLOR1',
+          roller_size_in: 9,
+          covers_qty: 2,
+          notes: 'Saved roller',
+        }),
+        expect.objectContaining({
+          id: 'roller-2',
+          scope: 'Ceiling',
+          wall_color_id: null,
+          roller_size_in: 14,
+          covers_qty: 1,
+        }),
+        expect.objectContaining({
+          id: 'applicator-1',
+          scope: 'Trim',
+          wall_color_id: null,
+          roller_size_in: 4,
+          covers_qty: 2,
+          notes: 'Saved applicator',
+        }),
+      ],
+    })
+  })
 })

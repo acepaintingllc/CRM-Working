@@ -30,6 +30,7 @@ type EstimateV2CollectionsState = Omit<
   | 'setScopes'
   | 'setSegments'
   | 'setRoomFlags'
+  | 'setRollers'
   | 'setCeilingScopes'
   | 'setCeilingSegments'
   | 'setTrimScopes'
@@ -93,6 +94,7 @@ type EstimateV2CollectionSetters = Pick<
   | 'setScopes'
   | 'setSegments'
   | 'setRoomFlags'
+  | 'setRollers'
   | 'setCeilingScopes'
   | 'setCeilingSegments'
   | 'setTrimScopes'
@@ -199,6 +201,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       scopes: [],
       segments: [],
       roomFlags: [],
+      rollers: [],
       ceilingScopes: [],
       ceilingSegments: [],
       trimScopes: [],
@@ -281,6 +284,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
         collections: {
           ...state.collections,
           roomFlags: resolveUpdater(state.collections.roomFlags, value),
+        },
+      })),
+    setRollers: (value) =>
+      set((state) => ({
+        collections: {
+          ...state.collections,
+          rollers: resolveUpdater(state.collections.rollers, value),
         },
       })),
     setCeilingScopes: (value) =>
@@ -471,6 +481,8 @@ function selectCollectionsWithSetters(state: EstimateV2EditorStore): EstimateV2E
     setSegments: state.setSegments,
     roomFlags: state.collections.roomFlags,
     setRoomFlags: state.setRoomFlags,
+    rollers: state.collections.rollers,
+    setRollers: state.setRollers,
     ceilingScopes: state.collections.ceilingScopes,
     setCeilingScopes: state.setCeilingScopes,
     ceilingSegments: state.collections.ceilingSegments,

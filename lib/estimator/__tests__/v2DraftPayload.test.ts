@@ -176,6 +176,26 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
     ],
     [
       {
+        id: 'roller-1',
+        scope: 'Wall',
+        wallColorId: 'A',
+        rollerSizeIn: '9',
+        coversQty: '2',
+        notes: 'Use shed-resistant cover',
+        position: 0,
+      },
+      {
+        id: 'trim-applicator-1',
+        scope: 'Trim',
+        wallColorId: '',
+        rollerSizeIn: '4',
+        coversQty: '2',
+        notes: 'Foam trim applicator',
+        position: 1,
+      },
+    ],
+    [
+      {
         id: 'ceil-1',
         roomId: 'R001',
         position: 0,
@@ -252,9 +272,14 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.rooms.length, 1)
   assert.equal(payload.room_wall_scopes.length, 1)
   assert.equal(payload.room_flags.length, 1)
+  assert.equal(payload.rollers.length, 2)
   assert.equal(payload.room_ceiling_scopes.length, 1)
   assert.equal(payload.room_trim_scopes.length, 1)
   assert.equal(payload.rooms[0].room_id, 'R001')
   assert.equal(payload.room_wall_scopes[0].room_id, 'R001')
+  assert.equal(payload.rollers[0].roller_size_in, 9)
+  assert.equal(payload.rollers[1].scope, 'Trim')
+  assert.equal(payload.rollers[1].wall_color_id, null)
+  assert.equal(payload.rollers[1].covers_qty, 2)
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
 })

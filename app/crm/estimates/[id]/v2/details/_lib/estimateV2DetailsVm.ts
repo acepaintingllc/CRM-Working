@@ -3,6 +3,8 @@ import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2PricingSummary,
   EstimateV2RoomDraft,
+  EstimateV2RollerDraft,
+  EstimateV2RollerScope,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
   UnsafeRecord,
@@ -11,10 +13,32 @@ import type {
 export type DetailsRollerCoverOption = {
   id: string
   label: string
-  scope: 'Wall' | 'Ceiling' | 'Other'
+  scope: 'Wall' | 'Ceiling' | 'Trim' | 'Other'
   sizeIn: number | null
   priceEach: number | null
 }
+
+export type DetailsRollerOptionsState =
+  | {
+      status: 'loading'
+      options: DetailsRollerCoverOption[]
+      message: string
+    }
+  | {
+      status: 'loaded'
+      options: DetailsRollerCoverOption[]
+      message: string | null
+    }
+  | {
+      status: 'empty'
+      options: DetailsRollerCoverOption[]
+      message: string
+    }
+  | {
+      status: 'unavailable'
+      options: DetailsRollerCoverOption[]
+      message: string
+    }
 
 export type DetailsRollerRowState = {
   coverId: string
@@ -23,7 +47,6 @@ export type DetailsRollerRowState = {
 }
 
 export type DetailsRollerState = Record<string, DetailsRollerRowState>
-export type DetailsOverrideReasons = Record<string, string>
 
 export type DetailsScopeLineVm = {
   id: string
@@ -40,7 +63,9 @@ export type DetailsScopeLineVm = {
   overrideGallons: string
   finalGallons: number
   overrideKey: string
+  overrideOwnerScopeId: string | null
   hasOverride: boolean
+  errors: string[]
 }
 
 export type DetailsRollerVm = {
@@ -60,7 +85,6 @@ export type DetailsOverrideVm = {
   itemName: string
   originalValue: number
   newValue: number
-  reason: string
 }
 
 export type EstimateV2DetailsVm = {
@@ -72,6 +96,8 @@ export type EstimateV2DetailsVm = {
   trimApplicatorRow: DetailsRollerVm | null
   wallRollerOptions: DetailsRollerCoverOption[]
   ceilingRollerOptions: DetailsRollerCoverOption[]
+  trimApplicatorOptions: DetailsRollerCoverOption[]
+  rollerOptionsState: DetailsRollerOptionsState
   materialCards: Array<{
     label: string
     finalValue: string
@@ -80,6 +106,13 @@ export type EstimateV2DetailsVm = {
   }>
   activeOverrides: DetailsOverrideVm[]
   validationIssues: string[]
+  validationSummary: {
+    status: 'ready' | 'blocked'
+    title: string
+    message: string
+  }
+  canContinueToSummary: boolean
+  continueBlockedReason: string | null
   gallonsByScope: {
     walls: number
     ceilings: number
@@ -103,8 +136,8 @@ type BuildDetailsVmParams = {
   paintProductLabelById: Map<string, string>
   colorLabelById: Map<string, string>
   rollerOptions: DetailsRollerCoverOption[]
-  rollerState: DetailsRollerState
-  overrideReasons: DetailsOverrideReasons
+  rollerOptionsState?: DetailsRollerOptionsState
+  rollers: EstimateV2RollerDraft[]
 }
 
 function isActive(include: string | null | undefined) {
@@ -132,6 +165,13 @@ function cleanInputNumber(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
 
+function validateOverrideInput(params: { label: string; value: string }) {
+  if (!params.value.trim()) return []
+  return cleanInputNumber(params.value) == null
+    ? [`${params.label} override gallons must be a zero or positive number`]
+    : []
+}
+
 function resolveProduct(
   scopes: Array<{ paintProductId: string }>,
   productLabelById: Map<string, string>
@@ -140,6 +180,36 @@ function resolveProduct(
   if (ids.length > 1) return { label: 'Mixed', warning: 'Mixed product selection' }
   const id = ids[0] ?? ''
   return { label: id ? productLabelById.get(id) ?? id : 'Default product' }
+}
+
+function resolveGroupedOverride(params: {
+  label: string
+  scopes: Array<{ id: string }>
+  valuesByScopeId: Map<string, string>
+}) {
+  const ownerScopeId = params.scopes[0]?.id ?? null
+  const persistedOverrides = params.scopes
+    .map((scope) => ({
+      scopeId: scope.id,
+      value: params.valuesByScopeId.get(scope.id) ?? '',
+    }))
+    .filter((entry) => entry.value.trim())
+  const overrideGallons = persistedOverrides[0]?.value ?? ''
+  const uniqueValues = Array.from(new Set(persistedOverrides.map((entry) => entry.value.trim())))
+  const errors =
+    persistedOverrides.length <= 1
+      ? []
+      : [
+          uniqueValues.length === 1
+            ? `${params.label} has duplicate saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.`
+            : `${params.label} has conflicting saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.`,
+        ]
+
+  return {
+    overrideGallons,
+    ownerScopeId,
+    errors,
+  }
 }
 
 function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm[] {
@@ -162,7 +232,12 @@ function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm[] {
       (sum, scope) => sum + n(wallCalcById.get(scope.id)?.effective_area_sf),
       0
     )
-    const overrideGallons = scopes.find((scope) => scope.overridePaintGallons)?.overridePaintGallons ?? ''
+    const groupedOverride = resolveGroupedOverride({
+      label: `Color ${index + 1}`,
+      scopes,
+      valuesByScopeId: new Map(scopes.map((scope) => [scope.id, scope.overridePaintGallons] as const)),
+    })
+    const overrideGallons = groupedOverride.overrideGallons
     const override = cleanInputNumber(overrideGallons)
     const roundedGallons = Math.ceil(calculatedGallons)
     const product = resolveProduct(scopes, params.paintProductLabelById)
@@ -182,7 +257,12 @@ function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm[] {
       overrideGallons,
       finalGallons: override ?? roundedGallons,
       overrideKey: `walls:${colorId}`,
+      overrideOwnerScopeId: groupedOverride.ownerScopeId,
       hasOverride: override != null,
+      errors: [
+        ...groupedOverride.errors,
+        ...validateOverrideInput({ label: `Color ${index + 1}`, value: overrideGallons }),
+      ],
     }
   })
 }
@@ -216,7 +296,12 @@ function createAggregateRow(params: {
     params.overrideField === 'overridePaintGallons'
       ? (scope as EstimateV2CeilingScopeDraft).overridePaintGallons
       : (scope as EstimateV2TrimScopeDraft).overrideGallons
-  const overrideGallons = getOverrideValue(scopes.find((scope) => getOverrideValue(scope)) ?? scopes[0]) ?? ''
+  const groupedOverride = resolveGroupedOverride({
+    label: params.label,
+    scopes,
+    valuesByScopeId: new Map(scopes.map((scope) => [scope.id, getOverrideValue(scope)] as const)),
+  })
+  const overrideGallons = groupedOverride.overrideGallons
   const override = cleanInputNumber(overrideGallons)
   const roundedGallons = Math.ceil(calculatedGallons)
   const product = resolveProduct(scopes, params.productLabelById)
@@ -235,32 +320,111 @@ function createAggregateRow(params: {
     overrideGallons,
     finalGallons: override ?? roundedGallons,
     overrideKey: params.id,
+    overrideOwnerScopeId: groupedOverride.ownerScopeId,
     hasOverride: override != null,
+    errors: [
+      ...groupedOverride.errors,
+      ...validateOverrideInput({ label: params.label, value: overrideGallons }),
+    ],
   }
 }
 
-function validateRollerRow(row: DetailsRollerVm) {
+function validateRollerRow(
+  row: DetailsRollerVm,
+  optionsState: DetailsRollerOptionsState,
+  scopedOptions: DetailsRollerCoverOption[]
+) {
   const issues: string[] = []
-  if (!row.coverId) issues.push(`${row.label} roller cover is required`)
+  if (optionsState.status === 'loading') {
+    issues.push('Roller and applicator options are still loading')
+  } else if (optionsState.status === 'unavailable') {
+    issues.push(optionsState.message)
+  } else if (scopedOptions.length === 0) {
+    issues.push(
+      `${row.id === 'trim' ? 'Trim applicator' : row.id === 'ceiling' ? 'Ceiling roller cover' : 'Wall roller cover'} options are not configured`
+    )
+  } else if (!row.coverId) {
+    issues.push(`${row.label} ${row.id === 'trim' ? 'applicator' : 'roller cover'} is required`)
+  }
   if ((cleanInputNumber(row.quantity) ?? 0) <= 0) issues.push(`${row.label} quantity is required`)
   return issues
 }
 
+function rollerDraftByScope(params: {
+  rollers: EstimateV2RollerDraft[]
+  scope: EstimateV2RollerScope
+  wallColorId?: string
+}) {
+  return params.rollers.find((roller) => {
+    if (roller.scope !== params.scope) return false
+    if (params.scope === 'Ceiling' || params.scope === 'Trim') return true
+    return roller.wallColorId === params.wallColorId
+  })
+}
+
+function rollerOptionScopeLabel(scope: DetailsRollerCoverOption['scope']) {
+  if (scope === 'Trim') return 'trim applicator'
+  if (scope === 'Ceiling') return 'ceiling roller cover'
+  if (scope === 'Wall') return 'wall roller cover'
+  return 'roller cover'
+}
+
+function resolveRollerRowState(params: {
+  label: string
+  draft: EstimateV2RollerDraft | null | undefined
+  options: DetailsRollerCoverOption[]
+  scope: DetailsRollerCoverOption['scope']
+}): DetailsRollerRowState & { hydrationErrors: string[] } {
+  const size = cleanInputNumber(params.draft?.rollerSizeIn ?? '')
+  const matchingOptions = params.options.filter(
+    (option) => option.scope === params.scope && option.sizeIn != null && option.sizeIn === size
+  )
+  const isAmbiguous = size != null && matchingOptions.length > 1
+  return {
+    coverId: matchingOptions.length === 1 ? matchingOptions[0].id : '',
+    quantity: params.draft?.coversQty ?? '',
+    notes: params.draft?.notes ?? '',
+    hydrationErrors: isAmbiguous
+      ? [
+          `${params.label} saved ${rollerOptionScopeLabel(params.scope)} size ${size}" matches multiple active options; make sizes unique before continuing.`,
+        ]
+      : [],
+  }
+}
+
 export function parseRollerCoverOptionsFromRatesFlags(payload: unknown): DetailsRollerCoverOption[] {
+  return parseRollerCoverOptionsStateFromRatesFlags(payload).options
+}
+
+export function parseRollerCoverOptionsStateFromRatesFlags(
+  payload: unknown
+): DetailsRollerOptionsState {
   const categories =
     payload && typeof payload === 'object' && 'categories' in payload
       ? (payload as { categories?: unknown }).categories
       : null
-  if (!Array.isArray(categories)) return []
+  if (!Array.isArray(categories)) {
+    return {
+      status: 'unavailable',
+      options: [],
+      message: 'Roller and applicator options could not be read from rates and flags.',
+    }
+  }
   const category = categories.find(
     (entry) =>
       entry &&
       typeof entry === 'object' &&
       (entry as { key?: unknown }).key === 'supply_rates_roller_covers'
   ) as { rows?: unknown } | undefined
-  if (!Array.isArray(category?.rows)) return []
+  if (!category || !Array.isArray(category.rows)) {
+    return {
+      status: 'unavailable',
+      options: [],
+      message: 'Roller and applicator options could not be read from rates and flags.',
+    }
+  }
 
-  return category.rows
+  const options = category.rows
     .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
     .filter((row) => String(row.active ?? 'Y').toUpperCase() !== 'N')
     .map((row): DetailsRollerCoverOption => {
@@ -271,6 +435,8 @@ export function parseRollerCoverOptionsFromRatesFlags(payload: unknown): Details
         ? 'Wall'
         : scope.toLowerCase().startsWith('ceil')
           ? 'Ceiling'
+          : scope.toLowerCase().startsWith('trim')
+            ? 'Trim'
           : 'Other'
       return {
         id: String(row.id ?? ''),
@@ -281,9 +447,32 @@ export function parseRollerCoverOptionsFromRatesFlags(payload: unknown): Details
       }
     })
     .filter((row) => row.id)
+
+  if (options.length === 0) {
+    return {
+      status: 'empty',
+      options,
+      message: 'No roller or applicator options are configured in rates and flags.',
+    }
+  }
+
+  return {
+    status: 'loaded',
+    options,
+    message: null,
+  }
 }
 
 export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): EstimateV2DetailsVm {
+  const rollerOptionsState = params.rollerOptionsState ?? {
+    status: 'loaded',
+    options: params.rollerOptions,
+    message: null,
+  }
+  const rollerOptions = rollerOptionsState.options
+  const wallRollerOptions = rollerOptions.filter((option) => option.scope === 'Wall')
+  const ceilingRollerOptions = rollerOptions.filter((option) => option.scope === 'Ceiling')
+  const trimApplicatorOptions = rollerOptions.filter((option) => option.scope === 'Trim')
   const wallRows = createWallRows(params)
   const ceilingRow = createAggregateRow({
     id: 'ceilings',
@@ -305,19 +494,37 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
   })
 
   const wallRollerRows = wallRows.map((row) => {
-    const state = params.rollerState[`wall:${row.id}`] ?? { coverId: '', quantity: '', notes: '' }
+    const state = resolveRollerRowState({
+      label: row.label,
+      draft: rollerDraftByScope({ rollers: params.rollers, scope: 'Wall', wallColorId: row.id }),
+      options: rollerOptions,
+      scope: 'Wall',
+    })
     const rollerRow = {
       id: `wall:${row.id}`,
       label: row.label,
       sublabel: row.colorName,
       sqFt: row.sqFt,
       product: row.product,
-      ...state,
+      coverId: state.coverId,
+      quantity: state.quantity,
+      notes: state.notes,
       errors: [],
     }
-    return { ...rollerRow, errors: validateRollerRow(rollerRow) }
+    return {
+      ...rollerRow,
+      errors: [
+        ...state.hydrationErrors,
+        ...validateRollerRow(rollerRow, rollerOptionsState, wallRollerOptions),
+      ],
+    }
   })
-  const ceilingState = params.rollerState.ceiling ?? { coverId: '', quantity: '', notes: '' }
+  const ceilingState = resolveRollerRowState({
+    label: 'Ceilings',
+    draft: rollerDraftByScope({ rollers: params.rollers, scope: 'Ceiling' }),
+    options: rollerOptions,
+    scope: 'Ceiling',
+  })
   const ceilingRollerRow = ceilingRow
     ? {
         id: 'ceiling',
@@ -325,23 +532,44 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
         sublabel: 'All active ceiling scopes',
         sqFt: ceilingRow.sqFt,
         product: ceilingRow.product,
-        ...ceilingState,
+        coverId: ceilingState.coverId,
+        quantity: ceilingState.quantity,
+        notes: ceilingState.notes,
         errors: [] as string[],
       }
     : null
-  if (ceilingRollerRow) ceilingRollerRow.errors = validateRollerRow(ceilingRollerRow)
+  if (ceilingRollerRow) {
+    ceilingRollerRow.errors = [
+      ...ceilingState.hydrationErrors,
+      ...validateRollerRow(ceilingRollerRow, rollerOptionsState, ceilingRollerOptions),
+    ]
+  }
 
+  const trimState = resolveRollerRowState({
+    label: 'Trim & Baseboards',
+    draft: rollerDraftByScope({ rollers: params.rollers, scope: 'Trim' }),
+    options: rollerOptions,
+    scope: 'Trim',
+  })
   const trimApplicatorRow = trimRow
     ? {
         id: 'trim',
         label: 'Trim & Baseboards',
-        sublabel: 'Page-local applicator quantity',
+        sublabel: 'All active trim scopes',
         sqFt: trimRow.sqFt,
         product: trimRow.product,
-        ...(params.rollerState.trim ?? { coverId: '', quantity: '', notes: '' }),
-        errors: [],
+        coverId: trimState.coverId,
+        quantity: trimState.quantity,
+        notes: trimState.notes,
+        errors: [] as string[],
       }
     : null
+  if (trimApplicatorRow) {
+    trimApplicatorRow.errors = [
+      ...trimState.hydrationErrors,
+      ...validateRollerRow(trimApplicatorRow, rollerOptionsState, trimApplicatorOptions),
+    ]
+  }
 
   const activeOverrides = [wallRows, ceilingRow ? [ceilingRow] : [], trimRow ? [trimRow] : []]
     .flat()
@@ -351,16 +579,22 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
       itemName: row.label,
       originalValue: row.roundedGallons,
       newValue: row.finalGallons,
-      reason: params.overrideReasons[row.overrideKey] ?? '',
     }))
 
-  const validationIssues = [
+  const materialValidationIssues = [
+    ...wallRows.flatMap((row) => row.errors),
+    ...(ceilingRow?.errors ?? []),
+    ...(trimRow?.errors ?? []),
+  ]
+  const validationIssues = Array.from(new Set([
+    ...materialValidationIssues,
     ...wallRollerRows.flatMap((row) => row.errors),
     ...(ceilingRollerRow?.errors ?? []),
-    ...activeOverrides
-      .filter((override) => !override.reason.trim())
-      .map((override) => `${override.itemName} override requires a reason`),
-  ]
+    ...(trimApplicatorRow?.errors ?? []),
+  ]))
+  const canContinueToSummary = validationIssues.length === 0
+  const continueBlockedReason =
+    validationIssues[0] ?? null
 
   const walls = wallRows.reduce((sum, row) => sum + row.finalGallons, 0)
   const ceilings = ceilingRow?.finalGallons ?? 0
@@ -373,8 +607,10 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     wallRollerRows,
     ceilingRollerRow,
     trimApplicatorRow,
-    wallRollerOptions: params.rollerOptions.filter((option) => option.scope === 'Wall'),
-    ceilingRollerOptions: params.rollerOptions.filter((option) => option.scope === 'Ceiling'),
+    wallRollerOptions,
+    ceilingRollerOptions,
+    trimApplicatorOptions,
+    rollerOptionsState,
     materialCards: [
       { label: 'Wall Paint', finalValue: `${round1(walls)} gal`, calculatedValue: `${round1(wallRows.reduce((sum, row) => sum + row.roundedGallons, 0))} rounded`, overridden: wallRows.some((row) => row.hasOverride) },
       { label: 'Ceiling Paint', finalValue: `${round1(ceilings)} gal`, calculatedValue: `${ceilingRow?.roundedGallons ?? 0} rounded`, overridden: !!ceilingRow?.hasOverride },
@@ -384,6 +620,19 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     ],
     activeOverrides,
     validationIssues,
+    validationSummary: canContinueToSummary
+      ? {
+          status: 'ready',
+          title: 'Ready to continue',
+          message: 'Required material planning fields are complete.',
+        }
+      : {
+          status: 'blocked',
+          title: 'Summary is blocked',
+          message: `${validationIssues.length} required item${validationIssues.length === 1 ? '' : 's'} need attention before continuing.`,
+        },
+    canContinueToSummary,
+    continueBlockedReason,
     gallonsByScope: {
       walls: round1(walls),
       ceilings: round1(ceilings),

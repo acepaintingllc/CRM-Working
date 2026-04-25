@@ -15,6 +15,7 @@ import type {
   EstimateV2ProductionRateOption,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
   EstimateV2RoomFlagOption,
   EstimateV2TrimScopeDraft,
   EstimateV2TrimTypeOption,
@@ -61,6 +62,8 @@ export type EstimateV2EditorCollections = {
   setSegments: EstimateV2StateSetter<EstimateV2WallSegmentDraft[]>
   roomFlags: EstimateV2RoomFlagDraft[]
   setRoomFlags: EstimateV2StateSetter<EstimateV2RoomFlagDraft[]>
+  rollers: EstimateV2RollerDraft[]
+  setRollers: EstimateV2StateSetter<EstimateV2RollerDraft[]>
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   setCeilingScopes: EstimateV2StateSetter<EstimateV2CeilingScopeDraft[]>
   ceilingSegments: EstimateV2CeilingSegmentDraft[]

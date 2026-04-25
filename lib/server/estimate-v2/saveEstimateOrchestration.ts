@@ -420,15 +420,21 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.rollers)) {
+      const normalizeRollerScope = (value: unknown) => {
+        const raw = asText(value)
+        if (raw === 'Ceiling') return 'Ceiling'
+        if (raw === 'Trim') return 'Trim'
+        return 'Wall'
+      }
       await softReplaceRows({
         table: 'estimate_rollers',
         orgId: params.orgId,
         estimateId: params.estimateId,
         rows: body.rollers
           .map((row: Unsafe, idx: number) => ({
-            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, scope: asText(row.scope) === 'Ceiling' ? 'Ceiling' : 'Wall', wall_color_id: toColorId(row.wall_color_id) || null, roller_size_in: asNullableNumber(row.roller_size_in), covers_qty: asNullableNumber(row.covers_qty), notes: asText(row.notes) || null, active: toYN(row.active, 'Y'),
+            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, scope: normalizeRollerScope(row.scope), wall_color_id: asText(row.wall_color_id).toUpperCase() || null, roller_size_in: asNullableNumber(row.roller_size_in), covers_qty: asNullableNumber(row.covers_qty), notes: asText(row.notes) || null, active: toYN(row.active, 'Y'),
           }))
-          .filter((row) => row.scope === 'Ceiling' || !!row.wall_color_id),
+          .filter((row) => row.scope === 'Ceiling' || row.scope === 'Trim' || !!row.wall_color_id),
       })
     }
 

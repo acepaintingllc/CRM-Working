@@ -103,11 +103,27 @@ export function useEstimateV2SummaryLoader(
   routeFamily: EstimateRouteFamily,
   state: SummaryLoaderState
 ) {
+  const {
+    setLoading,
+    setError,
+    setData,
+    setJob,
+    setLaborDayEnabled,
+    setDayhours,
+    setRoundIncrement,
+    setLaborRate,
+    setJobMinEnabled,
+    setJobMinAmount,
+    setTrimPaintProductId,
+    setTrimPaintGallons,
+    setTrimPaintQuarts,
+  } = state
+
   const loadSummary = useCallback(
     async (activeRef: { current: boolean }) => {
       try {
-        state.setLoading(true)
-        state.setError(null)
+        setLoading(true)
+        setError(null)
 
         const res = await authedFetch(routeFamily.estimateApiHref(estimateId), {
           cache: 'no-store',
@@ -124,26 +140,26 @@ export function useEstimateV2SummaryLoader(
             status: res.status,
             message,
           })
-          state.setError(createEstimateV2Error(message, { retryable: true }))
-          state.setLoading(false)
+          setError(createEstimateV2Error(message, { retryable: true }))
+          setLoading(false)
           return
         }
 
-        state.setData(payload)
+        setData(payload)
 
         const defaults = applyJobSettingsDefaults(
           payload.inputs?.jobsettings,
           payload.inputs?.org_defaults
         )
-        state.setLaborDayEnabled(defaults.laborDayEnabled)
-        state.setDayhours(defaults.dayhours)
-        state.setRoundIncrement(defaults.roundIncrement)
-        state.setLaborRate(defaults.laborRate)
-        state.setJobMinEnabled(defaults.jobMinEnabled)
-        state.setJobMinAmount(defaults.jobMinAmount)
-        state.setTrimPaintProductId(payload.trim_paint?.paint_product_id ?? '')
-        state.setTrimPaintGallons(payload.trim_paint?.gallons ?? 0)
-        state.setTrimPaintQuarts(payload.trim_paint?.quarts ?? 0)
+        setLaborDayEnabled(defaults.laborDayEnabled)
+        setDayhours(defaults.dayhours)
+        setRoundIncrement(defaults.roundIncrement)
+        setLaborRate(defaults.laborRate)
+        setJobMinEnabled(defaults.jobMinEnabled)
+        setJobMinAmount(defaults.jobMinAmount)
+        setTrimPaintProductId(payload.trim_paint?.paint_product_id ?? '')
+        setTrimPaintGallons(payload.trim_paint?.gallons ?? 0)
+        setTrimPaintQuarts(payload.trim_paint?.quarts ?? 0)
 
         const jobRes = await authedFetch(`/api/jobs/${payload.estimate.job_id}`, {
           cache: 'no-store',
@@ -151,9 +167,9 @@ export function useEstimateV2SummaryLoader(
         const jobParsed = await parseApiResponse(jobRes)
         const jobPayload = jobParsed.json as ApiDataEnvelope<EstimateV2JobMeta> | null
         if (!activeRef.current) return
-        if (jobRes.ok && jobPayload?.data) state.setJob(jobPayload.data)
+        if (jobRes.ok && jobPayload?.data) setJob(jobPayload.data)
 
-        state.setLoading(false)
+        setLoading(false)
       } catch (error) {
         if (!activeRef.current) return
         console.error('Estimate V2 summary load crashed', {
@@ -161,13 +177,27 @@ export function useEstimateV2SummaryLoader(
           operation: 'loadEstimate',
           error,
         })
-        state.setError(
-          createEstimateV2Error('Failed to fetch estimate summary', { retryable: true })
-        )
-        state.setLoading(false)
+        setError(createEstimateV2Error('Failed to fetch estimate summary', { retryable: true }))
+        setLoading(false)
       }
     },
-    [estimateId, routeFamily, state]
+    [
+      estimateId,
+      routeFamily,
+      setData,
+      setDayhours,
+      setError,
+      setJob,
+      setJobMinAmount,
+      setJobMinEnabled,
+      setLaborDayEnabled,
+      setLaborRate,
+      setLoading,
+      setRoundIncrement,
+      setTrimPaintGallons,
+      setTrimPaintProductId,
+      setTrimPaintQuarts,
+    ]
   )
 
   useEffect(() => {

@@ -1,7 +1,14 @@
 'use client'
 
-import Link from 'next/link'
-import type { CSSProperties, ReactNode } from 'react'
+import { ArrowRight, Save } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import {
   estimateRouteFamily,
   quoteRouteFamily,
@@ -14,80 +21,21 @@ import {
 } from '../_lib/estimateV2DetailsVm'
 import { useEstimateV2DetailsPage } from '../_state/useEstimateV2DetailsPage'
 
-const C = {
-  bg: '#080d0a',
-  card: '#0f1712',
-  panel: '#111d16',
-  border: '#213328',
-  borderStrong: '#35634b',
-  ink: '#eef7f0',
-  ink2: '#b9c8be',
-  ink3: '#74857b',
-  green: '#7ee0ad',
-  red: '#fb917f',
-  amber: '#f7c66b',
-  mono: "'JetBrains Mono', ui-monospace, monospace",
-  sans: "'Inter', system-ui, sans-serif",
-}
-
-const card: CSSProperties = {
-  background: C.card,
-  border: `1px solid ${C.border}`,
-  borderRadius: 8,
-  overflow: 'hidden',
-}
-
-const sectionHeader: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: 12,
-  alignItems: 'center',
-  padding: '14px 16px',
-  borderBottom: `1px solid ${C.border}`,
-}
-
-const input: CSSProperties = {
-  width: '100%',
-  minWidth: 0,
-  border: `1px solid ${C.border}`,
-  background: '#0b120e',
-  color: C.ink,
-  borderRadius: 6,
-  padding: '8px 9px',
-  fontSize: 12,
-  fontWeight: 700,
-  outline: 'none',
-}
-
-const th: CSSProperties = {
-  color: C.ink3,
-  fontSize: 10,
-  fontWeight: 900,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-}
+const metricClassName =
+  'ace-crm-surface-muted min-w-0 rounded-xl px-4 py-3'
+const labelClassName =
+  'ace-crm-mono text-[11px] font-black uppercase text-[color:var(--crm-ui-muted-2)]'
 
 function fmt(value: number) {
   return value.toLocaleString('en-US', { maximumFractionDigits: 1 })
 }
 
-function Section({
-  title,
-  meta,
-  children,
-}: {
-  title: string
-  meta?: string
-  children: ReactNode
-}) {
+function IconLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <section style={card}>
-      <div style={sectionHeader}>
-        <h2 style={{ margin: 0, fontSize: 15, color: C.ink }}>{title}</h2>
-        {meta && <div style={{ color: C.ink3, fontSize: 12 }}>{meta}</div>}
-      </div>
-      {children}
-    </section>
+    <span className="inline-flex items-center gap-2">
+      {icon}
+      <span>{children}</span>
+    </span>
   )
 }
 
@@ -95,14 +43,20 @@ function RollerSelect({
   value,
   options,
   onChange,
+  placeholder = 'Select cover',
 }: {
   value: string
   options: DetailsRollerCoverOption[]
   onChange: (value: string) => void
+  placeholder?: string
 }) {
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)} style={input}>
-      <option value="">Select cover</option>
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={crmInputClassName('w-full min-w-0 text-sm')}
+    >
+      <option value="">{placeholder}</option>
       {options.map((option) => (
         <option key={option.id} value={option.id}>
           {option.label}
@@ -116,48 +70,46 @@ function RollerRows({
   rows,
   options,
   onChange,
+  selectPlaceholder,
 }: {
   rows: DetailsRollerVm[]
   options: DetailsRollerCoverOption[]
   onChange: (id: string, patch: Partial<{ coverId: string; quantity: string; notes: string }>) => void
+  selectPlaceholder?: string
 }) {
   return (
-    <div style={{ display: 'grid', gap: 10, padding: 16 }}>
+    <div className="grid gap-3">
       {rows.map((row) => (
-        <div
-          key={row.id}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(150px, 1.2fr) minmax(160px, 1fr) 82px minmax(120px, 1fr)',
-            gap: 10,
-            alignItems: 'start',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>{row.label}</div>
-            <div style={{ color: C.ink3, fontSize: 11 }}>
-              {row.sublabel} · {fmt(row.sqFt)} sqft · {row.product}
+        <div key={row.id} className="ace-crm-surface-muted grid gap-3 rounded-xl p-3">
+          <div className="grid gap-3 lg:grid-cols-[minmax(160px,1.1fr)_minmax(160px,1fr)_90px_minmax(140px,1fr)] lg:items-start">
+            <div className="min-w-0">
+              <div className="font-black text-[color:var(--crm-ui-text)]">{row.label}</div>
+              <div className="mt-1 text-xs text-[color:var(--crm-ui-muted)]">
+                {row.sublabel} - {fmt(row.sqFt)} sqft - {row.product}
+              </div>
             </div>
+            <RollerSelect value={row.coverId} options={options} onChange={(coverId) => onChange(row.id, { coverId })} placeholder={selectPlaceholder} />
+            <input
+              aria-label={`${row.label} quantity`}
+              value={row.quantity}
+              onChange={(event) => onChange(row.id, { quantity: event.target.value })}
+              className={crmInputClassName('w-full min-w-0 text-sm')}
+              placeholder="Qty"
+              inputMode="decimal"
+            />
+            <input
+              aria-label={`${row.label} notes`}
+              value={row.notes}
+              onChange={(event) => onChange(row.id, { notes: event.target.value })}
+              className={crmInputClassName('w-full min-w-0 text-sm')}
+              placeholder="Notes"
+            />
           </div>
-          <RollerSelect value={row.coverId} options={options} onChange={(coverId) => onChange(row.id, { coverId })} />
-          <input
-            aria-label={`${row.label} quantity`}
-            value={row.quantity}
-            onChange={(event) => onChange(row.id, { quantity: event.target.value })}
-            style={input}
-            placeholder="Qty"
-            inputMode="decimal"
-          />
-          <input
-            aria-label={`${row.label} notes`}
-            value={row.notes}
-            onChange={(event) => onChange(row.id, { notes: event.target.value })}
-            style={input}
-            placeholder="Notes"
-          />
-          {row.errors.length > 0 && (
-            <div style={{ gridColumn: '2 / -1', color: C.red, fontSize: 11 }}>{row.errors.join(' · ')}</div>
-          )}
+          {row.errors.length > 0 ? (
+            <div className="text-xs font-semibold text-[color:var(--crm-ui-danger-text)]">
+              {row.errors.join(' - ')}
+            </div>
+          ) : null}
         </div>
       ))}
     </div>
@@ -172,58 +124,133 @@ function MaterialTable({
   onOverride: (row: DetailsScopeLineVm, value: string) => void
 }) {
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <div style={{ minWidth: 980 }}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '110px 150px 190px 80px 70px 150px 90px 90px 110px 90px',
-            gap: 12,
-            padding: '11px 14px',
-            background: '#0b120e',
-          }}
-        >
-          {['Color', 'Name', 'Rooms', 'Sq Ft', 'Coats', 'Product', 'Calc Gal', 'Rnd Gal', 'Override', 'Final'].map((label) => (
-            <div key={label} style={th}>{label}</div>
+    <div className="overflow-x-auto">
+      <table className="min-w-[980px] w-full border-separate border-spacing-0 text-left text-sm">
+        <thead>
+          <tr className="bg-[color:var(--crm-ui-surface-muted)]">
+            {['Color', 'Name', 'Rooms', 'Sq Ft', 'Coats', 'Product', 'Calc Gal', 'Rounded', 'Override', 'Final'].map((label) => (
+              <th key={label} className={`${labelClassName} px-3 py-3`}>
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className={row.hasOverride ? 'bg-[color:var(--crm-ui-accent-soft)]' : undefined}>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3 font-black">{row.label}</td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3 text-[color:var(--crm-ui-muted)]">{row.colorName || '-'}</td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3 text-[color:var(--crm-ui-muted)]">{row.rooms.join(', ') || '-'}</td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3">{fmt(row.sqFt)}</td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3">{row.coats}</td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3">
+                <div>{row.product}</div>
+                {row.productWarning ? (
+                  <div className="mt-1 text-xs text-[color:var(--crm-ui-warning-text)]">{row.productWarning}</div>
+                ) : null}
+              </td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3">{fmt(row.calculatedGallons)}</td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3 font-black">{fmt(row.roundedGallons)}</td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3">
+                <input
+                  aria-label={`${row.label} override gallons`}
+                  value={row.overrideGallons}
+                  onChange={(event) => onOverride(row, event.target.value)}
+                  className={crmInputClassName(
+                    `w-24 min-w-0 text-sm ${row.hasOverride ? 'border-[color:var(--crm-ui-accent-border)] text-[color:var(--crm-ui-accent)]' : ''}`
+                  )}
+                  inputMode="decimal"
+                />
+                {row.errors.length > 0 ? (
+                  <div className="mt-1 text-xs text-[color:var(--crm-ui-danger-text)]">{row.errors.join(' - ')}</div>
+                ) : null}
+              </td>
+              <td className="border-t border-[color:var(--crm-ui-border)] px-3 py-3 font-black text-[color:var(--crm-ui-text)]">{fmt(row.finalGallons)}</td>
+            </tr>
           ))}
-        </div>
-        {rows.map((row) => (
-          <div
-            key={row.id}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '110px 150px 190px 80px 70px 150px 90px 90px 110px 90px',
-              gap: 12,
-              alignItems: 'center',
-              padding: '12px 14px',
-              borderTop: `1px solid ${C.border}`,
-              background: row.hasOverride ? 'rgba(126,224,173,0.08)' : 'transparent',
-              fontSize: 12,
-            }}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function SummaryRail({
+  page,
+  onContinue,
+}: {
+  page: ReturnType<typeof useEstimateV2DetailsPage>
+  onContinue: () => void
+}) {
+  const { vm } = page
+
+  return (
+    <aside className="grid gap-4 lg:sticky lg:top-4">
+      <CrmSectionCard
+        title="Validation"
+        description={vm.validationSummary.message}
+        badge={<CrmChip tone={vm.canContinueToSummary ? 'success' : 'danger'}>{vm.validationSummary.title}</CrmChip>}
+        variant="rail"
+      >
+        <div className="grid gap-3">
+          {vm.validationIssues.length === 0 ? (
+            <CrmNotice tone="success" compact>{vm.validationSummary.message}</CrmNotice>
+          ) : (
+            <CrmNotice tone="warning" title="Required before summary" compact>
+              <ul className="list-disc space-y-1 pl-4">
+                {vm.validationIssues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </CrmNotice>
+          )}
+          <CrmButton
+            type="button"
+            tone="primary"
+            onClick={onContinue}
+            disabled={page.saving || !vm.canContinueToSummary}
+            aria-disabled={page.saving || !vm.canContinueToSummary}
+            title={vm.continueBlockedReason ?? undefined}
+            className="justify-center"
           >
-            <strong>{row.label}</strong>
-            <div style={{ color: C.ink2 }}>{row.colorName || '-'}</div>
-            <div style={{ color: C.ink2 }}>{row.rooms.join(' · ') || '-'}</div>
-            <div>{fmt(row.sqFt)}</div>
-            <div>{row.coats}</div>
-            <div>
-              {row.product}
-              {row.productWarning && <div style={{ color: C.amber, fontSize: 10 }}>{row.productWarning}</div>}
-            </div>
-            <div>{fmt(row.calculatedGallons)}</div>
-            <strong>{fmt(row.roundedGallons)}</strong>
-            <input
-              aria-label={`${row.label} override gallons`}
-              value={row.overrideGallons}
-              onChange={(event) => onOverride(row, event.target.value)}
-              style={{ ...input, borderColor: row.hasOverride ? C.borderStrong : C.border, color: row.hasOverride ? C.green : C.ink }}
-              inputMode="decimal"
-            />
-            <strong style={{ color: row.hasOverride ? C.green : C.ink }}>{fmt(row.finalGallons)}</strong>
+            <IconLabel icon={<ArrowRight size={16} aria-hidden="true" />}>
+              Continue to Summary
+            </IconLabel>
+          </CrmButton>
+          {vm.continueBlockedReason ? (
+            <div className="text-xs font-semibold text-[color:var(--crm-ui-muted)]">{vm.continueBlockedReason}</div>
+          ) : null}
+        </div>
+      </CrmSectionCard>
+
+      <CrmSectionCard title="Active Overrides" variant="rail">
+        {vm.activeOverrides.length === 0 ? (
+          <div className="text-sm text-[color:var(--crm-ui-muted)]">None</div>
+        ) : (
+          <div className="grid gap-2 text-sm">
+            {vm.activeOverrides.map((override) => (
+              <div key={override.key} className="flex justify-between gap-3">
+                <span>{override.itemName}</span>
+                <strong className="text-[color:var(--crm-ui-accent)]">{fmt(override.newValue)} gal</strong>
+              </div>
+            ))}
+          </div>
+        )}
+      </CrmSectionCard>
+
+      <CrmSectionCard title="Gallons By Scope" variant="rail">
+        {[
+          ['Walls', vm.gallonsByScope.walls],
+          ['Ceilings', vm.gallonsByScope.ceilings],
+          ['Trim', vm.gallonsByScope.trim],
+          ['Total', vm.gallonsByScope.total],
+        ].map(([label, value]) => (
+          <div key={label} className="flex justify-between border-b border-[color:var(--crm-ui-border)] py-2 text-sm last:border-b-0">
+            <span>{label}</span>
+            <strong>{fmt(Number(value))}</strong>
           </div>
         ))}
-      </div>
-    </div>
+      </CrmSectionCard>
+    </aside>
   )
 }
 
@@ -240,166 +267,157 @@ export function EstimateV2DetailsPageContent({
     routeFamily ?? (routeFamilyKey === 'quote' ? quoteRouteFamily : estimateRouteFamily)
   const page = useEstimateV2DetailsPage({ estimateId, routeFamily: resolvedRouteFamily })
   const { vm, actions } = page
+  const saveError = page.error && page.estimate ? page.error.message : null
 
   if (page.loading) {
-    return <div style={{ minHeight: '100vh', background: C.bg, color: C.ink3, display: 'grid', placeItems: 'center' }}>Loading details...</div>
+    return (
+      <CrmPageShell>
+        <CrmSectionCard title="Loading details">
+          <div role="status" aria-label="Loading estimate details" className="text-sm text-[color:var(--crm-ui-muted)]">
+            Loading details...
+          </div>
+        </CrmSectionCard>
+      </CrmPageShell>
+    )
   }
 
-  if (page.error) {
-    return <div role="alert" style={{ minHeight: '100vh', background: C.bg, color: C.red, display: 'grid', placeItems: 'center' }}>{page.error.message}</div>
+  if (page.error && !page.estimate) {
+    return (
+      <CrmPageShell>
+        <CrmSectionCard title="Details unavailable">
+          <CrmNotice tone="error">{page.error.message}</CrmNotice>
+        </CrmSectionCard>
+      </CrmPageShell>
+    )
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: C.sans }}>
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) auto',
-          gap: 16,
-          alignItems: 'center',
-          padding: '14px 22px',
-          background: 'rgba(8,13,10,0.95)',
-          borderBottom: `1px solid ${C.border}`,
-        }}
-      >
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center', minWidth: 0 }}>
-          <Link href={resolvedRouteFamily.editorHref(estimateId)} style={{ color: C.ink2, textDecoration: 'none', border: `1px solid ${C.border}`, borderRadius: 6, padding: '7px 10px' }}>
-            Back
-          </Link>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 22 }}>Details & Overrides</h1>
-            <div style={{ color: C.ink3, fontSize: 13 }}>Material planning and final adjustments</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" onClick={() => void actions.saveDraft()} disabled={page.saving} style={{ ...input, width: 112, cursor: 'pointer' }}>
-            Save Draft
-          </button>
-          <button
-            type="button"
-            onClick={() => void actions.continueToSummary()}
-            disabled={page.saving}
-            style={{ ...input, width: 190, cursor: 'pointer', background: C.green, color: '#062014', borderColor: C.green }}
-          >
-            Continue to Summary
-          </button>
-        </div>
-      </header>
+    <CrmPageShell className="max-w-[1480px]">
+      <CrmPageHeader
+        title="Details & Overrides"
+        description="Material planning, gallon overrides, persisted roller and trim applicator planning, and final validation before summary."
+        eyebrow="Estimate V2"
+        backHref={resolvedRouteFamily.editorHref(estimateId)}
+        actions={
+          <>
+            <CrmChip tone={page.dirty ? 'warning' : 'success'}>{page.saveStatusText}</CrmChip>
+            <CrmButton type="button" onClick={() => void actions.saveDraft()} disabled={page.saving}>
+              <IconLabel icon={<Save size={16} aria-hidden="true" />}>
+                {page.saving ? 'Saving...' : 'Save Draft'}
+              </IconLabel>
+            </CrmButton>
+            <CrmButton
+              type="button"
+              tone="primary"
+              onClick={() => void actions.continueToSummary()}
+              disabled={page.saving || !vm.canContinueToSummary}
+              title={vm.continueBlockedReason ?? undefined}
+            >
+              <IconLabel icon={<ArrowRight size={16} aria-hidden="true" />}>
+                Continue to Summary
+              </IconLabel>
+            </CrmButton>
+          </>
+        }
+        meta={
+          <>
+            <CrmChip tone="accent">{page.estimate?.version_name ?? 'Estimate'}</CrmChip>
+            <CrmChip tone={vm.canContinueToSummary ? 'success' : 'danger'}>
+              {vm.validationSummary.title}
+            </CrmChip>
+          </>
+        }
+      />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 18, padding: 22, alignItems: 'start' }}>
-        <main style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-          <Section title="Rollers & Applicators" meta={`${vm.wallRollerRows.length + (vm.ceilingRollerRow ? 1 : 0)} required rows`}>
-            <div style={{ padding: '14px 16px 0', ...th }}>Wall Rollers</div>
-            <RollerRows rows={vm.wallRollerRows} options={vm.wallRollerOptions} onChange={actions.setRollerRow} />
-            {vm.ceilingRollerRow && (
-              <>
-                <div style={{ padding: '0 16px', ...th }}>Ceiling Rollers</div>
-                <RollerRows rows={[vm.ceilingRollerRow]} options={vm.ceilingRollerOptions} onChange={actions.setRollerRow} />
-              </>
-            )}
-            {vm.trimApplicatorRow && (
-              <div style={{ padding: '0 16px 16px', color: C.ink3, fontSize: 12 }}>
-                Trim applicator catalog is not available in Rates/Flags, so trim applicator choice is page-local for this pass.
-              </div>
-            )}
-          </Section>
+      {saveError ? <CrmNotice tone="error" title="Save failed">{saveError}</CrmNotice> : null}
+      {!vm.canContinueToSummary ? (
+        <CrmNotice tone="warning" title="Summary blocked">
+          {vm.validationSummary.message}
+        </CrmNotice>
+      ) : null}
 
-          <Section title="Material Overview" meta="Live totals">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, padding: 16 }}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <main className="grid min-w-0 gap-4">
+          <CrmSectionCard title="Material Overview" description="Final gallons use saved overrides when present.">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {vm.materialCards.map((item) => (
-                <div key={item.label} style={{ border: `1px solid ${item.overridden ? C.borderStrong : C.border}`, borderRadius: 6, padding: 14, background: item.overridden ? 'rgba(126,224,173,0.08)' : C.panel }}>
-                  <div style={th}>{item.label}</div>
-                  <div style={{ marginTop: 8, fontSize: 24, fontWeight: 900 }}>{item.finalValue}</div>
-                  <div style={{ marginTop: 6, color: C.ink3, fontSize: 11 }}>{item.calculatedValue}</div>
+                <div
+                  key={item.label}
+                  className={`${metricClassName} ${item.overridden ? 'border-[color:var(--crm-ui-accent-border)] bg-[color:var(--crm-ui-accent-soft)]' : ''}`}
+                >
+                  <div className={labelClassName}>{item.label}</div>
+                  <div className="mt-2 text-2xl font-black text-[color:var(--crm-ui-text)]">{item.finalValue}</div>
+                  <div className="mt-1 text-xs text-[color:var(--crm-ui-muted)]">{item.calculatedValue}</div>
                 </div>
               ))}
             </div>
-          </Section>
+          </CrmSectionCard>
 
-          <Section title="Wall Paint Planning" meta={`${vm.wallRows.length} active colors`}>
+          <CrmSectionCard title="Paint Planning" description={`${vm.wallRows.length} active wall color group${vm.wallRows.length === 1 ? '' : 's'}.`}>
             <MaterialTable rows={vm.wallRows} onOverride={(row, value) => actions.setWallOverride(row.colorId ?? row.id, value)} />
-          </Section>
+          </CrmSectionCard>
 
-          {vm.ceilingRow && (
-            <Section title="Ceiling Breakdown" meta={`${fmt(vm.ceilingRow.sqFt)} sqft`}>
+          {vm.ceilingRow ? (
+            <CrmSectionCard title="Ceiling Paint Planning" description={`${fmt(vm.ceilingRow.sqFt)} sqft across active ceiling scopes.`}>
               <MaterialTable rows={[vm.ceilingRow]} onOverride={(_, value) => actions.setCeilingOverride(value)} />
-            </Section>
-          )}
+            </CrmSectionCard>
+          ) : null}
 
-          {vm.trimRow && (
-            <Section title="Trim Setup" meta="Paint gallons">
+          {vm.trimRow ? (
+            <CrmSectionCard title="Trim Paint Planning" description="Paint gallons for trim and baseboards.">
               <MaterialTable rows={[vm.trimRow]} onOverride={(_, value) => actions.setTrimOverride(value)} />
-            </Section>
-          )}
+            </CrmSectionCard>
+          ) : null}
 
-          <Section title="Advanced Overrides" meta="Reasons required before summary">
+          <CrmSectionCard title="Rollers & Applicators" description={`${vm.wallRollerRows.length + (vm.ceilingRollerRow ? 1 : 0) + (vm.trimApplicatorRow ? 1 : 0)} required persisted planning row${vm.wallRollerRows.length + (vm.ceilingRollerRow ? 1 : 0) + (vm.trimApplicatorRow ? 1 : 0) === 1 ? '' : 's'}.`}>
+            <div className="grid gap-5">
+              {vm.rollerOptionsState.status !== 'loaded' ? (
+                <CrmNotice
+                  tone={vm.rollerOptionsState.status === 'unavailable' ? 'error' : 'warning'}
+                  compact
+                >
+                  {vm.rollerOptionsState.message}
+                </CrmNotice>
+              ) : null}
+              <div className="grid gap-2">
+                <div className={labelClassName}>Wall Rollers</div>
+                <RollerRows rows={vm.wallRollerRows} options={vm.wallRollerOptions} onChange={actions.setRollerRow} />
+              </div>
+              {vm.ceilingRollerRow ? (
+                <div className="grid gap-2">
+                  <div className={labelClassName}>Ceiling Rollers</div>
+                  <RollerRows rows={[vm.ceilingRollerRow]} options={vm.ceilingRollerOptions} onChange={actions.setRollerRow} />
+                </div>
+              ) : null}
+              {vm.trimApplicatorRow ? (
+                <div className="grid gap-2">
+                  <div className={labelClassName}>Trim Applicators</div>
+                  <RollerRows rows={[vm.trimApplicatorRow]} options={vm.trimApplicatorOptions} onChange={actions.setRollerRow} selectPlaceholder="Select applicator" />
+                </div>
+              ) : null}
+            </div>
+          </CrmSectionCard>
+
+          <CrmSectionCard title="Active Overrides" description="Saved gallon overrides that will affect material totals.">
             {vm.activeOverrides.length === 0 ? (
-              <div style={{ padding: 16, color: C.ink3, fontSize: 13 }}>No advanced overrides applied</div>
+              <div className="text-sm text-[color:var(--crm-ui-muted)]">No active gallon overrides.</div>
             ) : (
-              <div style={{ display: 'grid', gap: 10, padding: 16 }}>
+              <div className="grid gap-2 md:grid-cols-2">
                 {vm.activeOverrides.map((override) => (
-                  <div key={override.key} style={{ display: 'grid', gridTemplateColumns: '180px 130px minmax(200px, 1fr)', gap: 10, alignItems: 'center' }}>
-                    <strong>{override.itemName}</strong>
-                    <div style={{ color: C.green }}>{fmt(override.originalValue)} → {fmt(override.newValue)} gal</div>
-                    <input value={override.reason} onChange={(event) => actions.setOverrideReason(override.key, event.target.value)} style={input} placeholder="Reason / justification" />
+                  <div key={override.key} className="ace-crm-surface-muted rounded-xl px-4 py-3">
+                    <div className="font-black">{override.itemName}</div>
+                    <div className="mt-1 text-sm text-[color:var(--crm-ui-accent)]">
+                      {fmt(override.originalValue)} to {fmt(override.newValue)} gal
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-          </Section>
+          </CrmSectionCard>
         </main>
 
-        <aside style={{ ...card, position: 'sticky', top: 84 }}>
-          <div style={sectionHeader}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 16 }}>Summary Rail</h2>
-              <div style={{ color: C.ink3, fontSize: 12 }}>{page.estimate?.version_name ?? 'Estimate'}</div>
-            </div>
-          </div>
-          <div style={{ padding: 16, display: 'grid', gap: 16 }}>
-            <div>
-              <div style={th}>Validation</div>
-              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-                {vm.validationIssues.length === 0 ? (
-                  <div style={{ color: C.green }}>Ready to continue</div>
-                ) : (
-                  vm.validationIssues.map((issue) => <div key={issue} style={{ color: C.red, fontSize: 12 }}>{issue}</div>)
-                )}
-              </div>
-            </div>
-            <div>
-              <div style={th}>Active Overrides</div>
-              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-                {vm.activeOverrides.length === 0 ? <div style={{ color: C.ink3 }}>None</div> : vm.activeOverrides.map((override) => <div key={override.key}>{override.itemName}: <strong style={{ color: C.green }}>{fmt(override.newValue)} gal</strong></div>)}
-              </div>
-            </div>
-            <div>
-              <div style={th}>Gallons By Scope</div>
-              {[
-                ['Walls', vm.gallonsByScope.walls],
-                ['Ceilings', vm.gallonsByScope.ceilings],
-                ['Trim', vm.gallonsByScope.trim],
-                ['Total', vm.gallonsByScope.total],
-              ].map(([label, value]) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <span>{label}</span>
-                  <strong>{fmt(Number(value))}</strong>
-                </div>
-              ))}
-            </div>
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, background: C.panel }}>
-              <div style={th}>Estimated Material Cost</div>
-              <div style={{ fontSize: 24, fontWeight: 900, marginTop: 6 }}>${Math.round(vm.estimatedMaterialCost).toLocaleString('en-US')}</div>
-            </div>
-            <button type="button" onClick={() => void actions.continueToSummary()} disabled={page.saving} style={{ ...input, cursor: 'pointer', background: vm.validationIssues.length ? '#26352b' : C.green, color: vm.validationIssues.length ? C.ink3 : '#062014', borderColor: vm.validationIssues.length ? C.border : C.green }}>
-              Continue to Summary
-            </button>
-          </div>
-        </aside>
+        <SummaryRail page={page} onContinue={() => void actions.continueToSummary()} />
       </div>
-    </div>
+    </CrmPageShell>
   )
 }

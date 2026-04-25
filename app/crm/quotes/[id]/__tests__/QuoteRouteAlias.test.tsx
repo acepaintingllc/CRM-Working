@@ -67,6 +67,10 @@ function getImportSpecifiers(source: string) {
   return Array.from(source.matchAll(/from\s+['"]([^'"]+)['"]/g), (match) => match[1]).sort()
 }
 
+function getRelativeImportSpecifiers(source: string) {
+  return getImportSpecifiers(source).filter((specifier) => specifier.startsWith('.'))
+}
+
 describe('quote route aliases', () => {
   it('keeps quote route files as thin composition layers over canonical estimate modules', () => {
     expect(
@@ -93,6 +97,17 @@ describe('quote route aliases', () => {
     ).toEqual([
       '@/app/crm/estimates/[id]/send/sendEstimateClient',
     ])
+  })
+
+  it('keeps the quote details route free of route-local implementation imports', () => {
+    const source = readSource('app/crm/quotes/[id]/details/page.tsx')
+
+    expect(getRelativeImportSpecifiers(source)).toEqual([])
+    expect(source.includes('@/app/crm/quotes/[id]/details/_')).toBe(false)
+    expect(source.includes('./_')).toBe(false)
+    expect(source).toContain(
+      '@/app/crm/estimates/[id]/v2/details/_components/EstimateV2DetailsPageContent'
+    )
   })
 
   it('mounts the canonical estimate v2 workspace content', async () => {
