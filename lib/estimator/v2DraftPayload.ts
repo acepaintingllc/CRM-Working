@@ -12,6 +12,8 @@ import type {
   EstimateV2WallSegmentDraft,
 } from '../../types/estimator/v2.ts'
 import { asNullableNumber } from './parsing.ts'
+import { normalizeRollerApplicatorQuantity } from './rollerQuantities.ts'
+import { normalizeWallRollerTargetId } from './rollerIdentity.ts'
 
 const STANDARD_DOOR_DEDUCTION_SF = 21
 const STANDARD_WINDOW_DEDUCTION_SF = 15
@@ -202,9 +204,10 @@ export function buildEstimateV2SavePayload(
       id: roller.id,
       scope: roller.scope,
       wall_color_id:
-        roller.scope === 'Wall' ? roller.wallColorId.trim().toUpperCase() || null : null,
+        roller.scope === 'Wall' ? normalizeWallRollerTargetId(roller.wallColorId) || null : null,
+      selected_option_id: roller.selectedOptionId?.trim() || null,
       roller_size_in: toNullableDraftNumber(roller.rollerSizeIn),
-      covers_qty: toNullableDraftNumber(roller.coversQty),
+      covers_qty: normalizeRollerApplicatorQuantity(roller.coversQty).numberValue,
       notes: roller.notes.trim() || null,
       position: index,
     }))

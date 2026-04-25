@@ -42,6 +42,50 @@ function createErrorResponse(message: string, status = 500) {
   }
 }
 
+function createRollerRatesPayload() {
+  return {
+    categories: [
+      {
+        key: 'supply_rates_roller_covers',
+        rows: [
+          {
+            id: 'WALL_9',
+            display_name: 'Wall',
+            scope: 'Wall',
+            size_in: 9,
+            price_each: 6,
+            active: 'Y',
+          },
+          {
+            id: 'WALL_12',
+            display_name: 'Wall',
+            scope: 'Wall',
+            size_in: 12,
+            price_each: 8,
+            active: 'Y',
+          },
+          {
+            id: 'CEIL_14',
+            display_name: 'Ceiling',
+            scope: 'Ceiling',
+            size_in: 14,
+            price_each: 10,
+            active: 'Y',
+          },
+          {
+            id: 'TRIM_4',
+            display_name: 'Trim applicator',
+            scope: 'Trim',
+            size_in: 4,
+            price_each: 4,
+            active: 'Y',
+          },
+        ],
+      },
+    ],
+  }
+}
+
 function hasSaveRequest(estimateId: string) {
   return mocks.authedFetch.mock.calls.some(
     ([url, init]) =>
@@ -50,6 +94,10 @@ function hasSaveRequest(estimateId: string) {
       init != null &&
       (init as { method?: string }).method === 'PUT'
   )
+}
+
+function validationMessages(vm: ReturnType<typeof useEstimateV2DetailsPage>['vm']) {
+  return vm.validationIssues.map((issue) => issue.message)
 }
 
 function mockLoadedEstimate(fixture: ReturnType<typeof createMixedEstimateV2Fixture>) {
@@ -182,13 +230,21 @@ describe('useEstimateV2DetailsPage', () => {
     )
     expect(saveRequest).toBeTruthy()
     const body = JSON.parse((saveRequest?.[1] as { body: string }).body) as {
-      rollers: Array<{ scope: string; wall_color_id: string | null; roller_size_in: number | null; covers_qty: number | null; notes: string | null }>
+      rollers: Array<{
+        scope: string
+        wall_color_id: string | null
+        selected_option_id: string | null
+        roller_size_in: number | null
+        covers_qty: number | null
+        notes: string | null
+      }>
     }
     expect(body.rollers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           scope: 'Wall',
           wall_color_id: 'COLOR1',
+          selected_option_id: 'WALL_12',
           roller_size_in: 12,
           covers_qty: 3,
           notes: 'Changed from details page',
@@ -196,15 +252,130 @@ describe('useEstimateV2DetailsPage', () => {
         expect.objectContaining({
           scope: 'Ceiling',
           wall_color_id: null,
+          selected_option_id: 'CEIL_14',
           roller_size_in: 14,
           covers_qty: 1,
         }),
         expect.objectContaining({
           scope: 'Trim',
           wall_color_id: null,
+          selected_option_id: 'TRIM_4',
           roller_size_in: 4,
           covers_qty: 2,
           notes: 'Trim applicator',
+        }),
+      ])
+    )
+  })
+
+  it('round-trips unassigned wall scope roller identity through details draft save payloads', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    fixture.scopes[0] = {
+      ...fixture.scopes[0],
+      id: 'wall-unassigned',
+      scopeName: 'Unassigned walls',
+      colorId: '',
+    }
+    const wallCalculationScopes = fixture.wallCalculations.scopes ?? []
+    const wallCalculationTraces = fixture.wallCalculations.scope_traces ?? []
+    fixture.wallCalculations.scopes = wallCalculationScopes
+    fixture.wallCalculations.scope_traces = wallCalculationTraces
+    wallCalculationScopes[0] = {
+      ...wallCalculationScopes[0],
+      id: 'wall-unassigned',
+      color_id: null,
+      scope_name: 'Unassigned walls',
+    }
+    wallCalculationTraces[0] = {
+      ...wallCalculationTraces[0],
+      scope_id: 'wall-unassigned',
+    }
+    fixture.rollers = [
+      {
+        id: 'roller-unassigned',
+        scope: 'Wall',
+        wallColorId: 'SCOPE:wall-unassigned',
+        selectedOptionId: 'WALL_9',
+        rollerSizeIn: '9',
+        coversQty: '2',
+        notes: 'Saved unassigned scope',
+        position: 0,
+      },
+      {
+        id: 'roller-wall-color-2',
+        scope: 'Wall',
+        wallColorId: 'COLOR2',
+        selectedOptionId: 'WALL_12',
+        rollerSizeIn: '12',
+        coversQty: '1',
+        notes: '',
+        position: 1,
+      },
+    ]
+    mocks.authedFetch.mockResolvedValue(createResponse(createRollerRatesPayload()))
+    mockLoadedEstimate(fixture)
+
+    const { result } = renderHook(() =>
+      useEstimateV2DetailsPage({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.vm.rollerOptionsState.status).toBe('loaded')
+    })
+
+    const unassignedRow = result.current.vm.wallRollerRows.find(
+      (row) => row.id === 'wall:scope:wall-unassigned'
+    )
+    expect(unassignedRow).toMatchObject({
+      coverId: 'WALL_9',
+      quantity: '2',
+      notes: 'Saved unassigned scope',
+    })
+
+    act(() => {
+      result.current.actions.setRollerRow('wall:scope:wall-unassigned', {
+        coverId: 'WALL_12',
+        quantity: '3',
+        notes: 'Updated unassigned scope',
+      })
+    })
+
+    await act(async () => {
+      await expect(result.current.actions.saveDraft()).resolves.toBe(true)
+    })
+
+    const saveRequest = mocks.authedFetch.mock.calls.find(
+      ([url, init]) =>
+        url === estimateRouteFamily.estimateApiHref(fixture.estimate.id) &&
+        typeof init === 'object' &&
+        init != null &&
+        (init as { method?: string }).method === 'PUT'
+    )
+    expect(saveRequest).toBeTruthy()
+    const body = JSON.parse((saveRequest?.[1] as { body: string }).body) as {
+      rollers: Array<{
+        id: string
+        scope: string
+        wall_color_id: string | null
+        selected_option_id: string | null
+        roller_size_in: number | null
+        covers_qty: number | null
+        notes: string | null
+      }>
+    }
+    expect(body.rollers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'roller-unassigned',
+          scope: 'Wall',
+          wall_color_id: 'scope:wall-unassigned',
+          selected_option_id: 'WALL_12',
+          roller_size_in: 12,
+          covers_qty: 3,
+          notes: 'Updated unassigned scope',
         }),
       ])
     )
@@ -273,8 +444,76 @@ describe('useEstimateV2DetailsPage', () => {
       quantity: '2',
       notes: 'Main wall roller',
     })
-    expect(result.current.vm.validationIssues).toContain(
-      'Color 1 saved wall roller cover size 9" matches multiple active options; make sizes unique before continuing.'
+    expect(validationMessages(result.current.vm)).toContain(
+      'Warm White saved wall roller cover size 9" matches multiple active options; make sizes unique before continuing.'
+    )
+
+    await act(async () => {
+      await expect(result.current.actions.continueToSummary()).resolves.toBe(false)
+    })
+
+    expect(mocks.push).not.toHaveBeenCalled()
+    expect(hasSaveRequest(fixture.estimate.id)).toBe(false)
+  })
+
+  it('blocks continue to summary when a stale saved roller option has no safe fallback', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    fixture.rollers[0] = {
+      ...fixture.rollers[0],
+      selectedOptionId: 'WALL_9_ARCHIVED',
+      rollerSizeIn: '9',
+      coversQty: '2',
+    }
+    mocks.authedFetch.mockResolvedValue(
+      createResponse({
+        categories: [
+          {
+            key: 'supply_rates_roller_covers',
+            rows: [
+              {
+                id: 'WALL_12',
+                display_name: 'Wall',
+                scope: 'Wall',
+                size_in: 12,
+                price_each: 8,
+                active: 'Y',
+              },
+              {
+                id: 'CEIL_14',
+                display_name: 'Ceiling',
+                scope: 'Ceiling',
+                size_in: 14,
+                price_each: 10,
+                active: 'Y',
+              },
+              {
+                id: 'TRIM_4',
+                display_name: 'Trim applicator',
+                scope: 'Trim',
+                size_in: 4,
+                price_each: 4,
+                active: 'Y',
+              },
+            ],
+          },
+        ],
+      })
+    )
+    mockLoadedEstimate(fixture)
+
+    const { result } = renderHook(() =>
+      useEstimateV2DetailsPage({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.vm.rollerOptionsState.status).toBe('loaded')
+    })
+
+    expect(result.current.vm.validationIssues.map((issue) => issue.id)).toContain(
+      'rollers:wall:COLOR1:coverId:stale-option'
     )
 
     await act(async () => {
@@ -309,6 +548,120 @@ describe('useEstimateV2DetailsPage', () => {
 
     expect(mocks.push).not.toHaveBeenCalled()
     expect(hasSaveRequest(fixture.estimate.id)).toBe(false)
+  })
+
+  it('saves and routes to summary when continue validation passes', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    mocks.authedFetch.mockImplementation(async (url, init) => {
+      const method =
+        typeof init === 'object' && init != null ? (init as { method?: string }).method : undefined
+      if (url === estimateRouteFamily.estimateApiHref(fixture.estimate.id) && method === 'PUT') {
+        return createResponse({})
+      }
+      return createResponse(createRollerRatesPayload())
+    })
+    mockLoadedEstimate(fixture)
+
+    const { result } = renderHook(() =>
+      useEstimateV2DetailsPage({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.vm.rollerOptionsState.status).toBe('loaded')
+    })
+
+    act(() => {
+      result.current.actions.setRollerRow('wall:COLOR1', {
+        coverId: 'WALL_9',
+        quantity: '2',
+        notes: 'Main wall roller',
+      })
+      result.current.actions.setRollerRow('wall:COLOR2', {
+        coverId: 'WALL_12',
+        quantity: '1',
+        notes: '',
+      })
+      result.current.actions.setRollerRow('ceiling', {
+        coverId: 'CEIL_14',
+        quantity: '1',
+        notes: '',
+      })
+      result.current.actions.setRollerRow('trim', {
+        coverId: 'TRIM_4',
+        quantity: '2',
+        notes: '',
+      })
+    })
+
+    expect(result.current.vm.canContinueToSummary).toBe(true)
+
+    await act(async () => {
+      await expect(result.current.actions.continueToSummary()).resolves.toBe(true)
+    })
+
+    expect(hasSaveRequest(fixture.estimate.id)).toBe(true)
+    expect(mocks.push).toHaveBeenCalledWith(estimateRouteFamily.summaryHref(fixture.estimate.id))
+  })
+
+  it('does not route to summary when continue save fails', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    mocks.authedFetch.mockImplementation(async (url, init) => {
+      const method =
+        typeof init === 'object' && init != null ? (init as { method?: string }).method : undefined
+      if (url === estimateRouteFamily.estimateApiHref(fixture.estimate.id) && method === 'PUT') {
+        return createErrorResponse('Save failed during continue', 500)
+      }
+      return createResponse(createRollerRatesPayload())
+    })
+    mockLoadedEstimate(fixture)
+
+    const { result } = renderHook(() =>
+      useEstimateV2DetailsPage({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.vm.rollerOptionsState.status).toBe('loaded')
+    })
+
+    act(() => {
+      result.current.actions.setRollerRow('wall:COLOR1', {
+        coverId: 'WALL_9',
+        quantity: '2',
+        notes: '',
+      })
+      result.current.actions.setRollerRow('wall:COLOR2', {
+        coverId: 'WALL_12',
+        quantity: '1',
+        notes: '',
+      })
+      result.current.actions.setRollerRow('ceiling', {
+        coverId: 'CEIL_14',
+        quantity: '1',
+        notes: '',
+      })
+      result.current.actions.setRollerRow('trim', {
+        coverId: 'TRIM_4',
+        quantity: '2',
+        notes: '',
+      })
+    })
+
+    expect(result.current.vm.canContinueToSummary).toBe(true)
+
+    await act(async () => {
+      await expect(result.current.actions.continueToSummary()).resolves.toBe(false)
+    })
+
+    expect(hasSaveRequest(fixture.estimate.id)).toBe(true)
+    expect(mocks.push).not.toHaveBeenCalled()
+    expect(result.current.error?.message).toBe('Save failed during continue')
+    expect(result.current.saveStatus).toBe('error')
   })
 
   it('blocks continue to summary when grouped wall overrides conflict', async () => {
@@ -365,8 +718,8 @@ describe('useEstimateV2DetailsPage', () => {
       finalGallons: 4,
       overrideOwnerScopeId: 'wall-conflict-a',
     })
-    expect(result.current.vm.validationIssues).toContain(
-      'Color 1 has conflicting saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.'
+    expect(validationMessages(result.current.vm)).toContain(
+      'Warm White has conflicting saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.'
     )
 
     await act(async () => {
@@ -394,8 +747,8 @@ describe('useEstimateV2DetailsPage', () => {
     })
 
     expect(result.current.vm.rollerOptionsState.message).toBe('Rates unavailable')
-    expect(result.current.vm.validationIssues).toContain('Rates unavailable')
-    expect(result.current.vm.validationIssues).not.toContain('Color 1 roller cover is required')
+    expect(validationMessages(result.current.vm)).toContain('Rates unavailable')
+    expect(validationMessages(result.current.vm)).not.toContain('Warm White roller cover is required')
   })
 
   it('marks roller options unavailable when the fetch throws', async () => {
@@ -417,7 +770,7 @@ describe('useEstimateV2DetailsPage', () => {
     expect(result.current.vm.rollerOptionsState.message).toBe(
       'Roller and applicator options failed to load.'
     )
-    expect(result.current.vm.validationIssues).not.toContain('Color 1 roller cover is required')
+    expect(validationMessages(result.current.vm)).not.toContain('Warm White roller cover is required')
   })
 
   it('marks malformed rates payloads unavailable', async () => {
@@ -439,7 +792,7 @@ describe('useEstimateV2DetailsPage', () => {
     expect(result.current.vm.rollerOptionsState.message).toBe(
       'Roller and applicator options could not be read from rates and flags.'
     )
-    expect(result.current.vm.validationIssues).not.toContain('Color 1 roller cover is required')
+    expect(validationMessages(result.current.vm)).not.toContain('Warm White roller cover is required')
   })
 
   it('marks an empty configured roller category explicitly', async () => {
@@ -465,9 +818,9 @@ describe('useEstimateV2DetailsPage', () => {
     expect(result.current.vm.rollerOptionsState.message).toBe(
       'No roller or applicator options are configured in rates and flags.'
     )
-    expect(result.current.vm.validationIssues).toContain(
+    expect(validationMessages(result.current.vm)).toContain(
       'Wall roller cover options are not configured'
     )
-    expect(result.current.vm.validationIssues).not.toContain('Color 1 roller cover is required')
+    expect(validationMessages(result.current.vm)).not.toContain('Warm White roller cover is required')
   })
 })

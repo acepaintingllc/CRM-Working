@@ -198,6 +198,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       id: 'roller-wall-color-1',
       scope: 'Wall',
       wallColorId: 'COLOR1',
+      selectedOptionId: '',
       rollerSizeIn: '9',
       coversQty: '2',
       notes: 'Main wall roller',

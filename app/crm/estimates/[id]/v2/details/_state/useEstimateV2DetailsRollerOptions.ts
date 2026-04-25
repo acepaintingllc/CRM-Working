@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { authedFetch } from '@/lib/auth/authedFetch'
-import { getApiErrorMessage, getApiPayloadData, parseApiResponse } from '@/lib/client/api'
+import { loadEstimateV2RatesFlagsPayload } from '@/lib/estimates/v2/client'
 import {
   parseRollerCoverOptionsStateFromRatesFlags,
   type DetailsRollerOptionsState,
@@ -21,45 +20,19 @@ export function useEstimateV2DetailsRollerOptions() {
   useEffect(() => {
     let active = true
     async function loadRollerOptions() {
-      try {
-        const response = await authedFetch('/api/estimates/v2/rates-flags', { cache: 'no-store' })
-        if (!active) return
+      const result = await loadEstimateV2RatesFlagsPayload()
+      if (!active) return
 
-        const parsed = await parseApiResponse(response)
-        if (!active) return
-
-        if (!response.ok) {
-          setRollerOptionsState({
-            status: 'unavailable',
-            options: [],
-            message: getApiErrorMessage(
-              response,
-              parsed,
-              'Roller and applicator options failed to load.'
-            ),
-          })
-          return
-        }
-
-        const payload = getApiPayloadData<unknown>(parsed.json)
-        if (!payload) {
-          setRollerOptionsState({
-            status: 'unavailable',
-            options: [],
-            message: 'Roller and applicator options response was malformed.',
-          })
-          return
-        }
-
-        setRollerOptionsState(parseRollerCoverOptionsStateFromRatesFlags(payload))
-      } catch {
-        if (!active) return
+      if (!result.ok) {
         setRollerOptionsState({
           status: 'unavailable',
           options: [],
-          message: 'Roller and applicator options failed to load.',
+          message: result.message,
         })
+        return
       }
+
+      setRollerOptionsState(parseRollerCoverOptionsStateFromRatesFlags(result.payload))
     }
     void loadRollerOptions()
     return () => {

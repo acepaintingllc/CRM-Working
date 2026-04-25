@@ -1,4 +1,5 @@
 import { asNullableNumber, asText } from '../../../../../../lib/estimator/parsing.ts'
+import { normalizeWallRollerTargetId } from '../../../../../../lib/estimator/rollerIdentity.ts'
 import type {
   EstimateV2CeilingPrimeMode,
   EstimateV2CeilingScopeDraft,
@@ -230,12 +231,13 @@ function parseRollerScope(value: unknown): EstimateV2RollerScope {
 
 export function normalizeRoller(row: UnsafeRecord, index: number): EstimateV2RollerDraft | null {
   const scope = parseRollerScope(row.scope)
-  const wallColorId = asText(row.wall_color_id).toUpperCase()
+  const wallColorId = normalizeWallRollerTargetId(asText(row.wall_color_id))
   if (scope === 'Wall' && !wallColorId) return null
   return {
     id: asText(row.id) || createUuid(),
     scope,
     wallColorId,
+    selectedOptionId: asText(row.selected_option_id),
     rollerSizeIn: toInputNumber(row.roller_size_in),
     coversQty: toInputNumber(row.covers_qty),
     notes: asText(row.notes),

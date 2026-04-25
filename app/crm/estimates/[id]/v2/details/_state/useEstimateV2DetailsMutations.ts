@@ -73,3 +73,5 @@ export function useEstimateV2DetailsMutations(params: {
     setTrimOverride,
   }
 }
+
+export type EstimateV2DetailsMutations = ReturnType<typeof useEstimateV2DetailsMutations>

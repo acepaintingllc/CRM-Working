@@ -10,6 +10,31 @@ vi.mock('../../_state/useEstimateV2DetailsPage', () => ({
   useEstimateV2DetailsPage: (...args: unknown[]) => mockUseEstimateV2DetailsPage(...args),
 }))
 
+function issue(patch: {
+  id: string
+  message: string
+  section?: 'material' | 'rollers' | 'rates' | 'save' | 'unknown'
+  targetId?: string
+  field?: string
+}) {
+  return {
+    id: patch.id,
+    section: patch.section ?? 'unknown',
+    targetId: patch.targetId ?? 'test',
+    field: patch.field,
+    severity: 'blocking',
+    message: patch.message,
+  }
+}
+
+const primaryRollerRequired = issue({
+  id: 'rollers:wall:COLOR1:coverId:required',
+  section: 'rollers',
+  targetId: 'wall:COLOR1',
+  field: 'coverId',
+  message: 'Primary roller cover is required',
+})
+
 const basePage = {
   loading: false,
   saving: false,
@@ -25,18 +50,19 @@ const basePage = {
     wallRows: [
       {
         id: 'COLOR1',
-        label: 'Color 1',
+        label: 'Primary',
         colorId: 'COLOR1',
         colorName: 'Primary',
         rooms: ['Living'],
         sqFt: 100,
         coats: '2',
         product: 'Wall Paint',
+        calculationStatus: 'available',
         calculatedGallons: 1.2,
         roundedGallons: 2,
         overrideGallons: '',
         finalGallons: 2,
-        overrideKey: 'walls:COLOR1',
+        overrideKey: 'walls:color:COLOR1',
         overrideOwnerScopeId: 'wall-1',
         hasOverride: false,
         errors: [],
@@ -47,14 +73,14 @@ const basePage = {
     wallRollerRows: [
       {
         id: 'wall:COLOR1',
-        label: 'Color 1',
+        label: 'Primary',
         sublabel: 'Primary',
         sqFt: 100,
         product: 'Wall Paint',
         coverId: '',
         quantity: '',
         notes: '',
-        errors: ['Color 1 roller cover is required'],
+        errors: [primaryRollerRequired],
       },
     ],
     ceilingRollerRow: null,
@@ -71,15 +97,32 @@ const basePage = {
       { label: 'Wall Paint', finalValue: '2 gal', calculatedValue: '2 rounded', overridden: false },
       { label: 'Total Paint', finalValue: '2 gal', calculatedValue: '1.2 calc', overridden: false },
     ],
+    materialPlanningSections: {
+      walls: {
+        description: '1 active wall color group.',
+        emptyTitle: 'No Active Wall Scopes',
+        emptyMessage: 'There are no active wall scopes to plan paint or roller covers for.',
+      },
+      ceilings: {
+        description: 'No active ceiling scopes.',
+        emptyTitle: 'No Active Ceiling Scopes',
+        emptyMessage: 'There are no active ceiling scopes to plan ceiling paint or roller covers for.',
+      },
+      trim: {
+        description: 'No active trim scopes.',
+        emptyTitle: 'No Active Trim Scopes',
+        emptyMessage: 'There are no active trim scopes to plan trim paint or applicators for.',
+      },
+    },
     activeOverrides: [],
-    validationIssues: ['Color 1 roller cover is required'],
+    validationIssues: [primaryRollerRequired],
     validationSummary: {
       status: 'blocked',
       title: 'Summary is blocked',
       message: '1 required item needs attention before continuing.',
     },
     canContinueToSummary: false,
-    continueBlockedReason: 'Color 1 roller cover is required',
+    continueBlockedReason: 'Primary roller cover is required',
     gallonsByScope: { walls: 2, ceilings: 0, trim: 0, total: 2 },
     estimatedMaterialCost: 100,
     hasCeilings: false,
@@ -112,7 +155,7 @@ describe('EstimateV2DetailsPageContent', () => {
     expect(screen.getByText('Details & Overrides')).toBeInTheDocument()
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
     expect(screen.getAllByText('Summary is blocked').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Color 1 roller cover is required').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Primary roller cover is required').length).toBeGreaterThan(0)
     expect(screen.getByText('Material Overview')).toBeInTheDocument()
     expect(screen.getByText('Paint Planning')).toBeInTheDocument()
     expect(screen.getByText('Rollers & Applicators')).toBeInTheDocument()
@@ -136,7 +179,14 @@ describe('EstimateV2DetailsPageContent', () => {
           message: 'Rates unavailable',
         },
         wallRollerOptions: [],
-        validationIssues: ['Rates unavailable'],
+        validationIssues: [
+          issue({
+            id: 'rates:roller-options:unavailable',
+            section: 'rates',
+            targetId: 'roller-options',
+            message: 'Rates unavailable',
+          }),
+        ],
         validationSummary: {
           status: 'blocked',
           title: 'Summary is blocked',
@@ -153,9 +203,44 @@ describe('EstimateV2DetailsPageContent', () => {
     expect(continueButtons.every((button) => button.hasAttribute('disabled'))).toBe(true)
   })
 
+  it('renders VM-provided material empty states for inactive scope sections', () => {
+    const emptyIssue = issue({
+      id: 'material:active-scopes:empty',
+      section: 'material',
+      targetId: 'active-scopes',
+      message: 'Add at least one active wall, ceiling, or trim scope before continuing.',
+    })
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...basePage,
+      vm: {
+        ...basePage.vm,
+        wallRows: [],
+        ceilingRow: null,
+        trimRow: null,
+        wallRollerRows: [],
+        validationIssues: [emptyIssue],
+        continueBlockedReason: emptyIssue.message,
+      },
+    })
+
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('No Active Wall Scopes')).toBeInTheDocument()
+    expect(screen.getByText('No Active Ceiling Scopes')).toBeInTheDocument()
+    expect(screen.getByText('No Active Trim Scopes')).toBeInTheDocument()
+    expect(screen.getAllByText(emptyIssue.message).length).toBeGreaterThan(0)
+  })
+
   it('renders grouped override conflicts in planning and validation surfaces', () => {
     const conflictMessage =
-      'Color 1 has conflicting saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.'
+      'Primary has conflicting saved gallon overrides across grouped scopes; apply or clear the grouped override to normalize it to the first active scope.'
+    const conflictIssue = issue({
+      id: 'material:COLOR1:overrideGallons:conflicting-saved-values',
+      section: 'material',
+      targetId: 'COLOR1',
+      field: 'overrideGallons',
+      message: conflictMessage,
+    })
 
     mockUseEstimateV2DetailsPage.mockReturnValue({
       ...basePage,
@@ -167,18 +252,18 @@ describe('EstimateV2DetailsPageContent', () => {
             overrideGallons: '4',
             finalGallons: 4,
             hasOverride: true,
-            errors: [conflictMessage],
+            errors: [conflictIssue],
           },
         ],
         activeOverrides: [
           {
-            key: 'walls:COLOR1',
-            itemName: 'Color 1',
+            key: 'walls:color:COLOR1',
+            itemName: 'Primary',
             originalValue: 2,
             newValue: 4,
           },
         ],
-        validationIssues: [conflictMessage],
+        validationIssues: [conflictIssue],
         continueBlockedReason: conflictMessage,
       },
     })
@@ -186,7 +271,7 @@ describe('EstimateV2DetailsPageContent', () => {
     render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
 
     expect(screen.getAllByText(conflictMessage).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Color 1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Primary').length).toBeGreaterThan(0)
     expect(screen.getByText(/2 to 4 gal/i)).toBeInTheDocument()
   })
 })

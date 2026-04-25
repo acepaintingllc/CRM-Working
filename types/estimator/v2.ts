@@ -192,6 +192,7 @@ export type EstimateV2RollerInputRow = UnsafeRecord & {
   id: string
   scope: EstimateV2RollerScope
   wall_color_id?: string | null
+  selected_option_id?: string | null
   roller_size_in?: number | string | null
   covers_qty?: number | string | null
   notes?: string | null
@@ -307,6 +308,7 @@ export type EstimateV2RollerDraft = {
   id: string
   scope: EstimateV2RollerScope
   wallColorId: string
+  selectedOptionId?: string
   rollerSizeIn: string
   coversQty: string
   notes: string
@@ -493,6 +495,7 @@ export type EstimateV2SavePayload = {
     id: string
     scope: EstimateV2RollerScope
     wall_color_id: string | null
+    selected_option_id: string | null
     roller_size_in: number | null
     covers_qty: number | null
     notes: string | null

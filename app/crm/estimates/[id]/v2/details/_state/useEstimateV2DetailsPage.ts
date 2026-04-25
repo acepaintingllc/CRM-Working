@@ -1,7 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import {
   createEstimateV2Store,
   estimateV2StoreSelectors,
@@ -14,6 +13,7 @@ import {
 import { useEstimateV2EditorDerivedSections } from '../../_state/useEstimateV2EditorDerivedSections'
 import { useEstimateV2EditorLoader } from '../../_state/useEstimateV2EditorLoader'
 import { useEstimateV2SaveController } from '../../_state/useEstimateV2SaveController'
+import { useEstimateV2DetailsController } from './useEstimateV2DetailsController'
 import { useEstimateV2DetailsMutations } from './useEstimateV2DetailsMutations'
 import { useEstimateV2DetailsRollerOptions } from './useEstimateV2DetailsRollerOptions'
 import { useEstimateV2DetailsVm } from './useEstimateV2DetailsVm'
@@ -25,9 +25,7 @@ export function useEstimateV2DetailsPage({
   estimateId: string
   routeFamily?: EstimateRouteFamily
 }) {
-  const router = useRouter()
   const [store] = useState(() => createEstimateV2Store())
-  const [submitted, setSubmitted] = useState(false)
   const rollerOptionsState = useEstimateV2DetailsRollerOptions()
 
   useEstimateV2EditorLoader({ estimateId, routeFamily, store })
@@ -52,15 +50,13 @@ export function useEstimateV2DetailsPage({
     rollerOptions: rollerOptionsState.options,
   })
 
-  const saveDraft = useCallback(() => saveController.save('manual'), [saveController])
-
-  const continueToSummary = useCallback(async () => {
-    setSubmitted(true)
-    if (vm.validationIssues.length > 0) return false
-    const ok = await saveController.save('manual')
-    if (ok) router.push(routeFamily.summaryHref(estimateId))
-    return ok
-  }, [estimateId, routeFamily, router, saveController, vm.validationIssues.length])
+  const controller = useEstimateV2DetailsController({
+    estimateId,
+    routeFamily,
+    vm,
+    saveEstimate: saveController.save,
+    mutations: detailMutations,
+  })
 
   return {
     vm,
@@ -72,12 +68,8 @@ export function useEstimateV2DetailsPage({
     estimate: state.estimate,
     job: state.job,
     saveStatusText: derived.save.saveStatusText,
-    showValidation: submitted || vm.validationIssues.length > 0,
+    showValidation: controller.showValidation,
     routeFamily,
-    actions: {
-      saveDraft,
-      continueToSummary,
-      ...detailMutations,
-    },
+    actions: controller.actions,
   }
 }

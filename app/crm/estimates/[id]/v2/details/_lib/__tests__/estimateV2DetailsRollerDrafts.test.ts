@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { EstimateV2RollerDraft } from '@/types/estimator/v2'
-import {
-  applyDetailsRollerRowPatch,
-  parseDetailsRollerRowId,
-} from '../estimateV2DetailsRollerDrafts'
+import { applyDetailsRollerRowPatch } from '../estimateV2DetailsRollerDrafts'
+import { parseDetailsRollerRowId } from '../estimateV2DetailsRollerIdentity'
 import type { DetailsRollerCoverOption } from '../estimateV2DetailsVm'
 
 const rollerOptions: DetailsRollerCoverOption[] = [
@@ -17,6 +15,14 @@ describe('estimate details roller draft helpers', () => {
     expect(parseDetailsRollerRowId('wall:color1')).toEqual({
       scope: 'Wall',
       wallColorId: 'COLOR1',
+    })
+    expect(parseDetailsRollerRowId('wall:scope:wall-unassigned')).toEqual({
+      scope: 'Wall',
+      wallColorId: 'scope:wall-unassigned',
+    })
+    expect(parseDetailsRollerRowId('wall:SCOPE:wall-unassigned')).toEqual({
+      scope: 'Wall',
+      wallColorId: 'scope:wall-unassigned',
     })
     expect(parseDetailsRollerRowId('ceiling')).toEqual({
       scope: 'Ceiling',
@@ -46,12 +52,67 @@ describe('estimate details roller draft helpers', () => {
         id: 'roller-new',
         scope: 'Wall',
         wallColorId: 'COLOR1',
+        selectedOptionId: 'WALL_9',
         rollerSizeIn: '9',
         coversQty: '3',
         notes: 'Changed from details page',
         position: 0,
       },
     ])
+  })
+
+  it('creates a persisted unassigned wall roller draft from the stable scope key', () => {
+    const result = applyDetailsRollerRowPatch({
+      rollers: [],
+      rowId: 'wall:scope:wall-unassigned',
+      patch: {
+        coverId: 'WALL_9',
+        quantity: '1',
+      },
+      rollerOptions,
+      createId: () => 'roller-unassigned',
+    })
+
+    expect(result[0]).toMatchObject({
+      id: 'roller-unassigned',
+      scope: 'Wall',
+      wallColorId: 'scope:wall-unassigned',
+      selectedOptionId: 'WALL_9',
+      rollerSizeIn: '9',
+      coversQty: '1',
+    })
+  })
+
+  it('matches existing unassigned wall roller drafts with shared scope identity rules', () => {
+    const result = applyDetailsRollerRowPatch({
+      rollers: [
+        {
+          id: 'roller-unassigned',
+          scope: 'Wall',
+          wallColorId: 'scope:WALL-UNASSIGNED',
+          selectedOptionId: 'WALL_9',
+          rollerSizeIn: '9',
+          coversQty: '1',
+          notes: '',
+          position: 0,
+        },
+      ],
+      rowId: 'wall:SCOPE:wall-unassigned',
+      patch: {
+        quantity: '2',
+        notes: 'Still the same row',
+      },
+      rollerOptions,
+      createId: () => 'roller-duplicate',
+    })
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      id: 'roller-unassigned',
+      wallColorId: 'scope:wall-unassigned',
+      coversQty: '2',
+      notes: 'Still the same row',
+    })
   })
 
   it('updates existing ceiling and trim aggregate drafts without wall color ids', () => {
@@ -94,6 +155,7 @@ describe('estimate details roller draft helpers', () => {
         id: 'roller-ceiling',
         scope: 'Ceiling',
         wallColorId: '',
+        selectedOptionId: 'CEIL_14',
         rollerSizeIn: '14',
         coversQty: '2',
         notes: '',
@@ -103,6 +165,7 @@ describe('estimate details roller draft helpers', () => {
         id: 'applicator-trim',
         scope: 'Trim',
         wallColorId: '',
+        selectedOptionId: 'TRIM_4',
         rollerSizeIn: '4',
         coversQty: '1',
         notes: 'Trim applicator',
@@ -131,9 +194,33 @@ describe('estimate details roller draft helpers', () => {
 
     expect(result[0]).toMatchObject({
       id: 'roller-wall',
+      selectedOptionId: '',
       rollerSizeIn: '9',
       coversQty: '4',
       notes: 'More covers',
+    })
+  })
+
+  it('normalizes patched quantity with the canonical roller quantity rules', () => {
+    const trimmed = applyDetailsRollerRowPatch({
+      rollers: [],
+      rowId: 'wall:COLOR1',
+      patch: { coverId: 'WALL_9', quantity: ' 3 ' },
+      rollerOptions,
+      createId: () => 'roller-trimmed',
+    })
+    const malformed = applyDetailsRollerRowPatch({
+      rollers: trimmed,
+      rowId: 'wall:COLOR1',
+      patch: { quantity: ' 1.5 ' },
+      rollerOptions,
+    })
+
+    expect(trimmed[0]).toMatchObject({
+      coversQty: '3',
+    })
+    expect(malformed[0]).toMatchObject({
+      coversQty: '1.5',
     })
   })
 })
