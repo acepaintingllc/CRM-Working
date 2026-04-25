@@ -14,6 +14,14 @@ export type V2TrimSanitizeScope = {
   measurementMode: V2TrimMeasurementMode
   helperSource: 'ROOM_PERIMETER' | '' | null
   helperValue: string
+  paintProductId?: string
+  primerProductId?: string
+  overrideMeasurement?: string
+  overrideHours?: string
+  overrideGallons?: string
+  overrideSupplyCost?: string
+  overrideTotal?: string
+  overrideDescription?: string
 }
 
 function sortByPosition<T extends { position: number }>(rows: T[]) {
@@ -66,6 +74,30 @@ export function sanitizeV2TrimDrafts<TScope extends V2TrimSanitizeScope>(params:
         nextScope = {
           ...nextScope,
           helperSource: 'ROOM_PERIMETER',
+        }
+        changed = true
+      }
+
+      if (
+        nextScope.paintProductId ||
+        nextScope.primerProductId ||
+        nextScope.overrideMeasurement ||
+        nextScope.overrideHours ||
+        nextScope.overrideGallons ||
+        nextScope.overrideSupplyCost ||
+        nextScope.overrideTotal ||
+        nextScope.overrideDescription
+      ) {
+        nextScope = {
+          ...nextScope,
+          paintProductId: '',
+          primerProductId: '',
+          overrideMeasurement: '',
+          overrideHours: '',
+          overrideGallons: '',
+          overrideSupplyCost: '',
+          overrideTotal: '',
+          overrideDescription: '',
         }
         changed = true
       }

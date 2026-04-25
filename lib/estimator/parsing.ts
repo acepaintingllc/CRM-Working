@@ -27,7 +27,7 @@ export function toYN(value: unknown, fallback: 'Y' | 'N' = 'N') {
 export function toColorId(value: unknown) {
   return asText(value)
     .toUpperCase()
-    .replace(/[^A-Z]/g, '')
+    .replace(/[^A-Z0-9]/g, '')
 }
 
 export function normalizeKey(value: unknown) {

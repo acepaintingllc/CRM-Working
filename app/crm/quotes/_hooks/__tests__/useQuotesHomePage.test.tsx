@@ -909,7 +909,7 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.loading).toBe(false)
+      expect(result.current.versionList.errorMessage).toBe('versions failed')
     })
 
     expect(result.current.feedback).toBeNull()

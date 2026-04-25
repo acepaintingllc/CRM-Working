@@ -12,8 +12,9 @@ import { EstimateV2SummaryRoomBlock } from './EstimateV2SummaryRoomBlock'
 import { fmtUSD } from '../_lib/estimateV2SummaryFormat'
 import { useEstimateV2SummaryDerived } from '../_lib/useEstimateV2SummaryDerived'
 import {
-  estimateRouteFamily,
+  resolveEstimateRouteFamily,
   type EstimateRouteFamily,
+  type EstimateRouteFamilyKey,
 } from '../../../estimateRouteFamily'
 
 const C = {
@@ -213,11 +214,14 @@ function SummaryActionLinks({
 
 export function EstimateV2SummaryPageContent({
   estimateId,
-  routeFamily = estimateRouteFamily,
+  routeFamily,
+  routeFamilyKey = 'estimate',
 }: {
   estimateId: string
   routeFamily?: EstimateRouteFamily
+  routeFamilyKey?: EstimateRouteFamilyKey
 }) {
+  const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
   const {
     data,
     job,
@@ -226,7 +230,7 @@ export function EstimateV2SummaryPageContent({
     policySaving,
     jobSettingsVm,
     trimPaintVm,
-  } = useEstimateV2SummaryData(estimateId, routeFamily)
+  } = useEstimateV2SummaryData(estimateId, resolvedRouteFamily)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [openRooms, setOpenRooms] = useState<Record<string, boolean>>({})
   const derived = useEstimateV2SummaryDerived({
@@ -493,7 +497,7 @@ export function EstimateV2SummaryPageContent({
           }}
         >
           <Link
-            href={routeFamily.listHref}
+            href={resolvedRouteFamily.listHref}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -610,7 +614,7 @@ export function EstimateV2SummaryPageContent({
                         Saving...
                       </div>
                     )}
-                    <SummaryActionLinks estimateId={estimateId} routeFamily={routeFamily} compact />
+                    <SummaryActionLinks estimateId={estimateId} routeFamily={resolvedRouteFamily} compact />
                   </div>
                 </div>
               </div>
@@ -639,7 +643,7 @@ export function EstimateV2SummaryPageContent({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <Link
-              href={routeFamily.listHref}
+              href={resolvedRouteFamily.listHref}
               style={{ fontSize: 12, color: C.ink3, textDecoration: 'none', flexShrink: 0 }}
             >
               Back to Quotes
@@ -657,7 +661,7 @@ export function EstimateV2SummaryPageContent({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <SummaryStatusBadge statusLabel={derived.statusLabel} />
-            <SummaryActionLinks estimateId={estimateId} routeFamily={routeFamily} />
+            <SummaryActionLinks estimateId={estimateId} routeFamily={resolvedRouteFamily} />
           </div>
         </header>
 

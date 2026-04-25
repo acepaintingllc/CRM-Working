@@ -11,6 +11,7 @@ import type {
   EstimateV2WallSegmentDraft,
 } from '../../types/estimator/v2.ts'
 import { asNullableNumber } from './parsing.ts'
+import { HIDDEN_CEILING_COLOR_ID } from './scopeRules.ts'
 
 const STANDARD_DOOR_DEDUCTION_SF = 21
 const STANDARD_WINDOW_DEDUCTION_SF = 15
@@ -202,7 +203,7 @@ export function buildEstimateV2SavePayload(
       mode: scope.mode,
       include: scope.include,
       scope_name: scope.scopeName.trim() || null,
-      color_id: scope.colorId.trim() || null,
+      color_id: HIDDEN_CEILING_COLOR_ID,
       paint_product_id: scope.paintProductId.trim() || null,
       primer_product_id: scope.primerProductId.trim() || null,
       prime_mode: scope.primeMode,
@@ -263,6 +264,7 @@ export function buildEstimateV2SavePayload(
       helper_source: scope.measurementMode === 'ROOM_HELPER' ? 'ROOM_PERIMETER' : null,
       measurement_value: scope.measurementMode === 'MANUAL' ? toNullableDraftNumber(scope.measurementValue) : null,
       helper_value: scope.measurementMode === 'ROOM_HELPER' ? toNullableDraftNumber(scope.helperValue) : null,
+      baseboard_opening_count: toNullableDraftNumber(scope.baseboardOpeningCount),
       color_id: scope.colorId.trim() || null,
       paint_product_id: scope.paintProductId.trim() || null,
       primer_product_id: scope.primerProductId.trim() || null,
@@ -280,12 +282,12 @@ export function buildEstimateV2SavePayload(
       caulk_fill_factor: toNullableDraftNumber(scope.caulkFillFactor),
       paint_coats: toNullableDraftNumber(scope.paintCoats),
       primer_coats: toNullableDraftNumber(scope.primerCoats),
-      override_measurement: toNullableDraftNumber(scope.overrideMeasurement),
-      override_hours: toNullableDraftNumber(scope.overrideHours),
-      override_gallons: toNullableDraftNumber(scope.overrideGallons),
-      override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
-      override_total: toNullableDraftNumber(scope.overrideTotal),
-      override_description: scope.overrideDescription.trim() || null,
+      override_measurement: null,
+      override_hours: null,
+      override_gallons: null,
+      override_supply_cost: null,
+      override_total: null,
+      override_description: null,
       notes: scope.notes.trim() || null,
     }))
   )

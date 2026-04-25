@@ -20,6 +20,11 @@ import {
 import type { EstimateV2WallSegmentShape as WallSegmentShape } from '@/types/estimator/v2'
 
 type EditorStyles = Record<string, CSSProperties>
+const OPENING_STEP = 0.5
+
+function nextOpeningCount(value: string, delta: number) {
+  return String(Math.max(0, (numberOrNull(value) ?? 0) + delta))
+}
 
 export function EstimateV2WallsSectionBody({
   styles,
@@ -146,8 +151,8 @@ export function EstimateV2WallsSectionBody({
                           <Field label="Height (in)" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={segment.heightIn} onChange={(e) => updateSegment(segment.id, { heightIn: e.target.value })} style={{ ...styles.input, opacity: segment.shapeType !== 'MANUAL' ? 1 : 0.5 }} disabled={segment.shapeType === 'MANUAL'} /></Field>
                           <Field label="Base (in)" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={segment.baseIn} onChange={(e) => updateSegment(segment.id, { baseIn: e.target.value })} style={{ ...styles.input, opacity: segment.shapeType === 'TRIANGLE' ? 1 : 0.5 }} disabled={segment.shapeType !== 'TRIANGLE'} /></Field>
                           <Field label="Manual Area (sf)" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={segment.manualAreaSqFt} onChange={(e) => updateSegment(segment.id, { manualAreaSqFt: e.target.value })} style={{ ...styles.input, opacity: segment.shapeType === 'MANUAL' ? 1 : 0.5 }} disabled={segment.shapeType !== 'MANUAL'} /></Field>
-                          <Field label="Doors" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={segment.standardDoorCount} onChange={(e) => updateSegment(segment.id, { standardDoorCount: e.target.value })} style={styles.input} /></Field>
-                          <Field label="Windows" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={segment.standardWindowCount} onChange={(e) => updateSegment(segment.id, { standardWindowCount: e.target.value })} style={styles.input} /></Field>
+                          <Field label="Doors" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={segment.standardDoorCount} onChange={(e) => updateSegment(segment.id, { standardDoorCount: e.target.value })} style={styles.input} type="number" min="0" step="0.5" /></Field>
+                          <Field label="Windows" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={segment.standardWindowCount} onChange={(e) => updateSegment(segment.id, { standardWindowCount: e.target.value })} style={styles.input} type="number" min="0" step="0.5" /></Field>
                           <Field label="Area Override (sf)" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={segment.overrideAreaSqFt} onChange={(e) => updateSegment(segment.id, { overrideAreaSqFt: e.target.value })} style={styles.input} /></Field>
                         </SharedSegmentGrid>
                         <Field label="Notes" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><textarea value={segment.notes} onChange={(e) => updateSegment(segment.id, { notes: e.target.value })} style={styles.textarea} /></Field>
@@ -164,16 +169,16 @@ export function EstimateV2WallsSectionBody({
               <div className="geometry-secondary-grid">
                 <Field label="Doors" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}>
                   <div style={styles.stepper}>
-                    <button type="button" className="stepper-btn" style={styles.stepperBtn} onClick={() => updateScope(firstScope.id, { standardDoorCount: String(Math.max(0, (numberOrNull(firstScope.standardDoorCount) ?? 0) - 1)) })}>-</button>
+                    <button type="button" className="stepper-btn" style={styles.stepperBtn} onClick={() => updateScope(firstScope.id, { standardDoorCount: nextOpeningCount(firstScope.standardDoorCount, -OPENING_STEP) })}>-</button>
                     <span style={styles.stepperVal}>{firstScope.standardDoorCount || '0'}</span>
-                    <button type="button" className="stepper-btn" style={styles.stepperBtn} onClick={() => updateScope(firstScope.id, { standardDoorCount: String((numberOrNull(firstScope.standardDoorCount) ?? 0) + 1) })}>+</button>
+                    <button type="button" className="stepper-btn" style={styles.stepperBtn} onClick={() => updateScope(firstScope.id, { standardDoorCount: nextOpeningCount(firstScope.standardDoorCount, OPENING_STEP) })}>+</button>
                   </div>
                 </Field>
                 <Field label="Windows" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}>
                   <div style={styles.stepper}>
-                    <button type="button" className="stepper-btn" style={styles.stepperBtn} onClick={() => updateScope(firstScope.id, { standardWindowCount: String(Math.max(0, (numberOrNull(firstScope.standardWindowCount) ?? 0) - 1)) })}>-</button>
+                    <button type="button" className="stepper-btn" style={styles.stepperBtn} onClick={() => updateScope(firstScope.id, { standardWindowCount: nextOpeningCount(firstScope.standardWindowCount, -OPENING_STEP) })}>-</button>
                     <span style={styles.stepperVal}>{firstScope.standardWindowCount || '0'}</span>
-                    <button type="button" className="stepper-btn" style={styles.stepperBtn} onClick={() => updateScope(firstScope.id, { standardWindowCount: String((numberOrNull(firstScope.standardWindowCount) ?? 0) + 1) })}>+</button>
+                    <button type="button" className="stepper-btn" style={styles.stepperBtn} onClick={() => updateScope(firstScope.id, { standardWindowCount: nextOpeningCount(firstScope.standardWindowCount, OPENING_STEP) })}>+</button>
                   </div>
                 </Field>
                 <Field label="Coats" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}>
@@ -246,7 +251,7 @@ export function EstimateV2WallsSectionBody({
           <Field label="Primer Mode" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}>
             <PrimerModeButtons
               currentMode={firstScope.primeMode}
-              onChange={(mode) => updateScope(firstScope.id, { primeMode: mode })}
+              onChange={(mode) => updateScope(firstScope.id, { primeMode: mode, primerProductId: mode === 'NONE' ? '' : firstScope.primerProductId })}
               styles={{ button: styles.button }}
             />
           </Field>
@@ -278,11 +283,11 @@ export function EstimateV2WallsSectionBody({
               <Field label="Height (in)" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.heightIn} onChange={(e) => updateScope(firstScope.id, { heightIn: e.target.value })} style={styles.input} /></Field>
               <Field label="Perimeter (in)" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.perimeterIn} onChange={(e) => updateScope(firstScope.id, { perimeterIn: e.target.value })} style={styles.input} /></Field>
               <Field label="Height Factor" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.heightFactor} onChange={(e) => updateScope(firstScope.id, { heightFactor: e.target.value })} style={styles.input} /></Field>
-              <Field label="Complexity Factor" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.complexityFactor} readOnly style={{ ...styles.input, opacity: 0.7, cursor: 'not-allowed' }} /></Field>
-              <Field label="Wall Flag Factor" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.wallFlagFactor} readOnly style={{ ...styles.input, opacity: 0.7, cursor: 'not-allowed' }} /></Field>
-              <Field label="Cut-In Top" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.cutInTopFactor} onChange={(e) => updateScope(firstScope.id, { cutInTopFactor: e.target.value })} style={styles.input} /></Field>
-              <Field label="Cut-In Bottom" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.cutInBottomFactor} onChange={(e) => updateScope(firstScope.id, { cutInBottomFactor: e.target.value })} style={styles.input} /></Field>
-            </div>
+                <Field label="Complexity Factor" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.complexityFactor} readOnly style={{ ...styles.input, opacity: 0.7, cursor: 'not-allowed' }} /></Field>
+                <Field label="Wall Flag Factor" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.wallFlagFactor} readOnly style={{ ...styles.input, opacity: 0.7, cursor: 'not-allowed' }} /></Field>
+                <Field label="Cut-In Top" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.cutInTopFactor} onChange={(e) => updateScope(firstScope.id, { cutInTopFactor: e.target.value })} style={styles.input} /></Field>
+                <Field label="Cut-In Bottom" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.cutInBottomFactor} onChange={(e) => updateScope(firstScope.id, { cutInBottomFactor: e.target.value })} style={styles.input} /></Field>
+              </div>
             <div>
               <div style={{ ...styles.mono, marginBottom: 6 }}>Overrides</div>
               <div className="advanced-grid">

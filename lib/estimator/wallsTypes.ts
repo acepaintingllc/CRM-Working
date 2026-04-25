@@ -80,6 +80,7 @@ export type WallCalculationScopeRow = {
   primer_prod_rate_sqft_per_hour?: number | null
   area_supply_cost_per_sf?: number | null
   per_color_supply_cost?: number | null
+  primer_supply_cost?: number | null
   labor_rate_per_hour?: number | null
   paint_price_per_gal?: number | null
   primer_price_per_gal?: number | null
@@ -117,6 +118,7 @@ export type WallCalculationSettings = {
   spot_prime_percent?: number | null
   area_supply_cost_per_sf?: number | null
   per_color_supply_cost?: number | null
+  primer_supply_cost?: number | null
   paint_price_per_gal?: number | null
   primer_price_per_gal?: number | null
   standard_door_deduction_sf?: number | null
@@ -203,6 +205,7 @@ export type WallScopeTrace = {
   }
   supplies: {
     area_based_cost: number | null
+    primer_supply_cost: number | null
     color_group_key: string | null
     color_group_total_cost: number | null
     allocated_color_cost: number

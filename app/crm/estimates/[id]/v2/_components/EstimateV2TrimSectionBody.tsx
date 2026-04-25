@@ -35,11 +35,6 @@ export function EstimateV2TrimSectionBody({
     trimTypeOptions,
     trimScopeEffectiveMeasurementById,
     trimScopeEffectiveTotalById,
-    colorCodeOptions,
-    effectiveTrimPaintLabel,
-    effectiveTrimPrimerLabel,
-    trimPaintOptions,
-    trimPrimerOptions,
     addScope,
     moveScope,
     deleteScope,
@@ -79,6 +74,16 @@ export function EstimateV2TrimSectionBody({
       {selectedRoomTrimScopes.map((trimScope, trimIndex) => {
         const typeMeta = trimTypeOptions.find((item) => item.id === trimScope.trimTypeId)
         const helperEligible = selectedRoomResolvedMode === 'RECT' && !!typeMeta?.helper_allowed
+        const isBaseboardLf =
+          trimScope.unitType === 'LF' &&
+          [
+            typeMeta?.family,
+            typeMeta?.category,
+            typeMeta?.label,
+            trimScope.trimFamily,
+            trimScope.scopeName,
+            trimScope.trimTypeId,
+          ].some((value) => String(value ?? '').toLowerCase().includes('baseboard'))
         const rowMeasurement = trimScopeEffectiveMeasurementById.get(trimScope.id)
         const rowSubtotal = trimScopeEffectiveTotalById.get(trimScope.id)
         const rowModifierCount = [
@@ -198,52 +203,23 @@ export function EstimateV2TrimSectionBody({
                   />
                 )}
               </Field>
+              {isBaseboardLf && (
+                <Field label="Openings" styles={sharedStyles(styles)}>
+                  <input
+                    value={trimScope.baseboardOpeningCount}
+                    onChange={(e) =>
+                      updateScope(trimScope.id, { baseboardOpeningCount: e.target.value })
+                    }
+                    style={styles.input}
+                    type="number"
+                    min="0"
+                    step="0.5"
+                  />
+                </Field>
+              )}
             </div>
 
             <div className="paint-setup-grid">
-              <Field label="Paint Override" styles={sharedStyles(styles)}>
-                <select
-                  value={trimScope.paintProductId}
-                  onChange={(e) => updateScope(trimScope.id, { paintProductId: e.target.value })}
-                  style={styles.input}
-                >
-                  <option value="">{effectiveTrimPaintLabel}</option>
-                  {trimPaintOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Primer Override" styles={sharedStyles(styles)}>
-                <select
-                  value={trimScope.primerProductId}
-                  onChange={(e) =>
-                    updateScope(trimScope.id, { primerProductId: e.target.value })
-                  }
-                  style={styles.input}
-                >
-                  <option value="">{effectiveTrimPrimerLabel}</option>
-                  {trimPrimerOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Color Slot" styles={sharedStyles(styles)}>
-                <select
-                  value={trimScope.colorId}
-                  onChange={(e) => updateScope(trimScope.id, { colorId: e.target.value })}
-                  style={styles.input}
-                >
-                  {colorCodeOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
               <Field label="Primer Mode" styles={sharedStyles(styles)}>
                 <select
                   value={trimScope.primeMode}
@@ -322,56 +298,6 @@ export function EstimateV2TrimSectionBody({
               </Field>
             </div>
 
-            <div className="advanced-grid">
-              <Field label="Measure Override" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.overrideMeasurement}
-                  onChange={(e) =>
-                    updateScope(trimScope.id, { overrideMeasurement: e.target.value })
-                  }
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Hours Override" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.overrideHours}
-                  onChange={(e) => updateScope(trimScope.id, { overrideHours: e.target.value })}
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Gallons Override" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.overrideGallons}
-                  onChange={(e) => updateScope(trimScope.id, { overrideGallons: e.target.value })}
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Supply Override" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.overrideSupplyCost}
-                  onChange={(e) =>
-                    updateScope(trimScope.id, { overrideSupplyCost: e.target.value })
-                  }
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Line Total Override" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.overrideTotal}
-                  onChange={(e) => updateScope(trimScope.id, { overrideTotal: e.target.value })}
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Description Override" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.overrideDescription}
-                  onChange={(e) =>
-                    updateScope(trimScope.id, { overrideDescription: e.target.value })
-                  }
-                  style={styles.input}
-                />
-              </Field>
-            </div>
           </div>
         )
       })}

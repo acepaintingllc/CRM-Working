@@ -71,6 +71,7 @@ export type CeilingCalculationScopeRow = {
   primer_coverage_sqft_per_gal_per_coat?: number | null
   area_supply_cost_per_sf?: number | null
   per_color_supply_cost?: number | null
+  primer_supply_cost?: number | null
   labor_rate_per_hour?: number | null
   paint_price_per_gal?: number | null
   primer_price_per_gal?: number | null

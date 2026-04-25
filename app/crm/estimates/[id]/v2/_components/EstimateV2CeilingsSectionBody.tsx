@@ -144,12 +144,14 @@ export function EstimateV2CeilingsSectionBody({
                     colorValue={firstCeilingScope.colorId}
                     onColorChange={(value) => updateScope(firstCeilingScope.id, { colorId: value })}
                     colorOptions={colorCodeOptions}
+                    hideColor
+                    hidePrimer={firstCeilingScope.primeMode === 'NONE'}
                   />
                 </div>
                 <Field label="Primer Mode" styles={sharedStyles(styles)}>
                   <PrimerModeButtons
                     currentMode={firstCeilingScope.primeMode}
-                    onChange={(mode) => updateScope(firstCeilingScope.id, { primeMode: mode })}
+                    onChange={(mode) => updateScope(firstCeilingScope.id, { primeMode: mode, primerProductId: mode === 'NONE' ? '' : firstCeilingScope.primerProductId })}
                     styles={{ button: styles.button }}
                   />
                 </Field>
@@ -237,6 +239,8 @@ export function EstimateV2CeilingsSectionBody({
                         colorValue={scope.colorId}
                         onColorChange={(value) => updateScope(scope.id, { colorId: value })}
                         colorOptions={colorCodeOptions}
+                        hideColor
+                        hidePrimer={scope.primeMode === 'NONE'}
                       />
                     </div>
                     <button type="button" style={styles.button} onClick={() => addSegment(selectedRoom.roomId, scope.id)}>
@@ -310,7 +314,9 @@ export function EstimateV2CeilingsSectionBody({
                     <Field label="Ceiling Flag Factor" styles={sharedStyles(styles)}><input value={firstCeilingScope.ceilingFlagFactor} readOnly style={{ ...styles.input, opacity: 0.7, cursor: 'not-allowed' }} /></Field>
                     <Field label="Paint Coats" styles={sharedStyles(styles)}><input value={firstCeilingScope.paintCoats} onChange={(e) => updateScope(firstCeilingScope.id, { paintCoats: e.target.value })} style={styles.input} /></Field>
                   </div>
-                  <Field label="Primer Override" styles={sharedStyles(styles)}><select value={firstCeilingScope.primerProductId} onChange={(e) => updateScope(firstCeilingScope.id, { primerProductId: e.target.value })} style={styles.input}><option value="">{effectiveCeilingPrimerLabel}</option>{ceilingPrimerOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
+                  {firstCeilingScope.primeMode !== 'NONE' && (
+                    <Field label="Primer Override" styles={sharedStyles(styles)}><select value={firstCeilingScope.primerProductId} onChange={(e) => updateScope(firstCeilingScope.id, { primerProductId: e.target.value })} style={styles.input}><option value="">{effectiveCeilingPrimerLabel}</option>{ceilingPrimerOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
+                  )}
                   <div>
                     <div style={{ ...styles.mono, marginBottom: 6 }}>Overrides</div>
                     <div className="advanced-grid">

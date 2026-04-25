@@ -98,6 +98,7 @@ test('recalculateEditorDraftFactors syncs wall, ceiling, and trim factors and st
         helperSource: 'ROOM_PERIMETER',
         measurementValue: '',
         helperValue: '',
+        baseboardOpeningCount: '',
         colorId: '',
         paintProductId: '',
         primerProductId: '',

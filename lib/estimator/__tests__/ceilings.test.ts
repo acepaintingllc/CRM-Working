@@ -100,6 +100,29 @@ test('RECT scope: area from L×W, prime_mode NONE, no modifier', () => {
   approx(result.room_totals[0].effective_total, 178.4)
 })
 
+test('ceiling primer supply cost applies only for SPOT and FULL prime modes', () => {
+  const catalogs = {
+    supplies_rates: [{ key: 'PRIMER_CEIL', scope: 'Ceilings', unit: 'primer per scope', value: 6 }],
+  }
+  const none = calculateCeilings({ catalogs, settings: BASE_SETTINGS, scopes: [makeScope()], segments: [] })
+  const spot = calculateCeilings({
+    catalogs,
+    settings: BASE_SETTINGS,
+    scopes: [makeScope({ prime_mode: 'SPOT' })],
+    segments: [],
+  })
+  const full = calculateCeilings({
+    catalogs,
+    settings: BASE_SETTINGS,
+    scopes: [makeScope({ prime_mode: 'FULL' })],
+    segments: [],
+  })
+
+  approx(none.scopes[0].raw_supply_cost, 14.4)
+  approx(spot.scopes[0].raw_supply_cost, 20.4)
+  approx(full.scopes[0].raw_supply_cost, 20.4)
+})
+
 test('ceiling scope preserves the raw paint label when catalog lookup misses', () => {
   const input: CeilingCalculationInput = {
     settings: BASE_SETTINGS,

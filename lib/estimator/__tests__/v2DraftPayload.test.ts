@@ -221,6 +221,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         helperSource: '',
         measurementValue: '42',
         helperValue: '',
+        baseboardOpeningCount: '1.5',
         colorId: 'A',
         paintProductId: 'PAINT-3',
         primerProductId: 'PRIMER-3',
@@ -238,12 +239,12 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         caulkFillFactor: '1',
         paintCoats: '1',
         primerCoats: '1',
-        overrideMeasurement: '',
-        overrideHours: '',
-        overrideGallons: '',
-        overrideSupplyCost: '',
-        overrideTotal: '',
-        overrideDescription: '',
+        overrideMeasurement: '10',
+        overrideHours: '2',
+        overrideGallons: '3',
+        overrideSupplyCost: '4',
+        overrideTotal: '5',
+        overrideDescription: 'hidden override',
         notes: '',
       },
     ]
@@ -256,5 +257,10 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.room_trim_scopes.length, 1)
   assert.equal(payload.rooms[0].room_id, 'R001')
   assert.equal(payload.room_wall_scopes[0].room_id, 'R001')
+  assert.equal(payload.room_ceiling_scopes[0].color_id, 'COLOR0')
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
+  assert.equal(payload.room_trim_scopes[0].baseboard_opening_count, 1.5)
+  assert.equal(payload.room_trim_scopes[0].override_measurement, null)
+  assert.equal(payload.room_trim_scopes[0].override_total, null)
+  assert.equal(payload.room_trim_scopes[0].override_description, null)
 })

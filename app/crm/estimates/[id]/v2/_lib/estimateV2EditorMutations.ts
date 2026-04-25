@@ -554,14 +554,21 @@ export function applyTrimTypeMutation(params: {
     const helperAllowed = !!trimType?.helper_allowed && roomMode === 'RECT'
     const keepHelperMode = helperAllowed && scope.measurementMode === 'ROOM_HELPER'
     const isCrown = isCrownTrimType(trimType, scope)
+    const nextUnitType = (trimType?.unit_type ?? scope.unitType ?? 'LF') as EstimateV2TrimUnitType
+    const isBaseboard =
+      nextUnitType === 'LF' &&
+      [trimType?.family, trimType?.category, trimType?.label, scope.trimFamily, scope.scopeName, params.trimTypeId].some(
+        (value) => String(value ?? '').toLowerCase().includes('baseboard')
+      )
     return {
       ...scope,
       trimTypeId: params.trimTypeId,
       trimFamily: (trimType?.family ?? trimType?.category ?? scope.trimFamily ?? '').toUpperCase(),
-      unitType: (trimType?.unit_type ?? scope.unitType ?? 'LF') as EstimateV2TrimUnitType,
+      unitType: nextUnitType,
       productionRateId: trimType?.default_production_rate_id ?? params.trimTypeId ?? scope.productionRateId,
       measurementMode: keepHelperMode ? 'ROOM_HELPER' : 'MANUAL',
       helperSource: keepHelperMode ? 'ROOM_PERIMETER' : '',
+      baseboardOpeningCount: isBaseboard ? scope.baseboardOpeningCount : '',
       heightFactor: isCrown ? params.roomHeightFactorByRoomId.get(scope.roomId) ?? '1' : '1',
     }
   })

@@ -13,36 +13,36 @@ vi.mock('@/app/crm/estimates/[id]/v2/_components/EstimateV2ErrorBoundary', () =>
 vi.mock('@/app/crm/estimates/[id]/v2/_components/EstimateV2EditorPageContent', () => ({
   EstimateV2EditorPageContent: ({
     estimateId,
-    routeFamily,
+    routeFamilyKey,
   }: {
     estimateId?: string
-    routeFamily: { summaryHref: (estimateId: string) => string }
+    routeFamilyKey?: string
   }) => (
-    <div>editor:{estimateId}:{routeFamily.summaryHref(estimateId ?? '')}</div>
+    <div>editor:{estimateId}:{routeFamilyKey}</div>
   ),
 }))
 
 vi.mock('@/app/crm/estimates/[id]/v2/summary/_components/EstimateV2SummaryPageContent', () => ({
   EstimateV2SummaryPageContent: ({
     estimateId,
-    routeFamily,
+    routeFamilyKey,
   }: {
     estimateId: string
-    routeFamily: { editorHref: (estimateId: string) => string }
+    routeFamilyKey?: string
   }) => (
-    <div>summary:{estimateId}:{routeFamily.editorHref(estimateId)}</div>
+    <div>summary:{estimateId}:{routeFamilyKey}</div>
   ),
 }))
 
 vi.mock('@/app/crm/estimates/[id]/send/sendEstimateClient', () => ({
   default: ({
     estimateId,
-    routeFamily,
+    routeFamilyKey,
   }: {
     estimateId: string
-    routeFamily: { sendHref: (estimateId: string) => string }
+    routeFamilyKey?: string
   }) => (
-    <div>send:{estimateId}:{routeFamily.sendHref(estimateId)}</div>
+    <div>send:{estimateId}:{routeFamilyKey}</div>
   ),
 }))
 
@@ -59,7 +59,6 @@ describe('quote route aliases', () => {
     expect(
       getImportSpecifiers(readSource('app/crm/quotes/[id]/page.tsx'))
     ).toEqual([
-      '@/app/crm/estimates/[id]/estimateRouteFamily',
       '@/app/crm/estimates/[id]/v2/_components/EstimateV2EditorPageContent',
       '@/app/crm/estimates/[id]/v2/_components/EstimateV2ErrorBoundary',
     ])
@@ -67,30 +66,28 @@ describe('quote route aliases', () => {
     expect(
       getImportSpecifiers(readSource('app/crm/quotes/[id]/summary/page.tsx'))
     ).toEqual([
-      '@/app/crm/estimates/[id]/estimateRouteFamily',
       '@/app/crm/estimates/[id]/v2/summary/_components/EstimateV2SummaryPageContent',
     ])
 
     expect(
       getImportSpecifiers(readSource('app/crm/quotes/[id]/send/page.tsx'))
     ).toEqual([
-      '@/app/crm/estimates/[id]/estimateRouteFamily',
       '@/app/crm/estimates/[id]/send/sendEstimateClient',
     ])
   })
 
   it('mounts the canonical estimate v2 workspace content', async () => {
     render(await QuoteWorkspacePage({ params: { id: 'estimate-1' } }))
-    expect(screen.getByText('editor:estimate-1:/crm/quotes/estimate-1/summary')).toBeTruthy()
+    expect(screen.getByText('editor:estimate-1:quote')).toBeTruthy()
   })
 
   it('mounts the canonical estimate v2 summary content', async () => {
     render(await QuoteSummaryPage({ params: { id: 'estimate-1' } }))
-    expect(screen.getByText('summary:estimate-1:/crm/quotes/estimate-1')).toBeTruthy()
+    expect(screen.getByText('summary:estimate-1:quote')).toBeTruthy()
   })
 
   it('mounts the canonical estimate send content with quote aliases', async () => {
     render(await SendQuotePage({ params: { id: 'estimate-1' } }))
-    expect(screen.getByText('send:estimate-1:/crm/quotes/estimate-1/send')).toBeTruthy()
+    expect(screen.getByText('send:estimate-1:quote')).toBeTruthy()
   })
 })

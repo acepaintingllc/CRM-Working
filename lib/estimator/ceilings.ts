@@ -9,6 +9,7 @@ import {
   sumNumbers,
 } from './wallsHelpers.ts'
 import { allocatePaintMaterialRollups } from './paintMaterial.ts'
+import { resolvePrimerSupplyCost } from './scopeRules.ts'
 import type {
   MissingInput,
   ResolvedSettings,
@@ -48,6 +49,7 @@ type ScopeCalc = {
   effective_primer_gallons: number | null
   primer_material_cost: number | null
   area_supply_cost: number | null
+  primer_supply_cost: number | null
   color_group_key: string | null
   color_allocated_cost: number
   raw_supply_cost: number | null
@@ -380,6 +382,17 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
     // Area-based supply cost (ceiling-scoped rate)
     const areaRate = pos(n(scope.area_supply_cost_per_sf)) ?? ceilingAreaSupplyRate
     const areaSupplyCost = include === 'Y' ? round4(effectiveArea * areaRate) : 0
+    const primerSupplyCost =
+      include === 'Y'
+        ? round4(
+            pos(n(scope.primer_supply_cost)) ??
+              resolvePrimerSupplyCost({
+                primeMode: scope.prime_mode,
+                scope: 'ceilings',
+                suppliesRates: input.catalogs?.supplies_rates,
+              })
+          )
+        : 0
 
     // Per-color supply group key
     const colorGroupKey =
@@ -410,10 +423,11 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
       effective_primer_gallons: effectivePrimerGallons,
       primer_material_cost: null,
       area_supply_cost: areaSupplyCost,
+      primer_supply_cost: primerSupplyCost,
       color_group_key: colorGroupKey,
       color_allocated_cost: 0,
-      raw_supply_cost: areaSupplyCost,
-      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost),
+      raw_supply_cost: round4(areaSupplyCost + primerSupplyCost),
+      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost + primerSupplyCost),
       raw_total: 0,
       effective_total_before_override: 0,
       effective_total: 0,
@@ -466,7 +480,9 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
     for (const scope of scopes) {
       const weight = totalArea > 0 ? (scope.effective_area ?? 0) / totalArea : 1 / scopes.length
       scope.color_allocated_cost = round4(totalCost * weight)
-      scope.raw_supply_cost = round4((scope.area_supply_cost ?? 0) + scope.color_allocated_cost)
+      scope.raw_supply_cost = round4(
+        (scope.area_supply_cost ?? 0) + (scope.primer_supply_cost ?? 0) + scope.color_allocated_cost
+      )
       scope.effective_supply_cost = round4(nonNeg(n(scope.row.override_supply_cost)) ?? scope.raw_supply_cost)
       applyScopeCosts(scope, settings, products)
     }
