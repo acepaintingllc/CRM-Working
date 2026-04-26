@@ -67,6 +67,53 @@ function rateFromCatalog(
   return null
 }
 
+function normalizedCrewSize(value: unknown) {
+  const parsed = n(value)
+  return parsed == null ? 1 : Math.max(1, Math.floor(parsed))
+}
+
+function supplyScopeMatches(row: SupplyRateRow, scopeName: 'walls' | 'ceilings' | 'trim') {
+  const scope = normalizeKey(row.scope)
+  if (scope === 'all') return true
+  if (scopeName === 'walls') return scope === 'wall' || scope === 'walls'
+  if (scopeName === 'ceilings') return scope === 'ceiling' || scope === 'ceilings'
+  return scope === 'trim'
+}
+
+function supplyGroupMatches(row: SupplyRateRow, group: 'per_color' | 'area_based' | 'per_job') {
+  const explicit = normalizeKey(row.supply_group)
+  if (group === 'per_color') {
+    const unit = normalizeKey(row.unit)
+    return explicit === 'percolor' || (!explicit && (unit === 'color' || unit === 'percolor'))
+  }
+  if (group === 'area_based') {
+    const unit = normalizeKey(row.unit)
+    return explicit === 'areabased' || (!explicit && (unit === 'sf' || unit === 'sqft'))
+  }
+  return explicit === 'perjob'
+}
+
+function supplyMultiplier(row: SupplyRateRow, crewSize: number) {
+  return String(row.crew_multiplier ?? '').toUpperCase() === 'Y' ? crewSize : 1
+}
+
+export function supplyCostFromCatalog(params: {
+  catalogs: WallCalculationCatalogs | null | undefined
+  scopeName: 'walls' | 'ceilings' | 'trim'
+  group: 'per_color' | 'per_job'
+  crewSize: number
+}) {
+  let total = 0
+  let matched = false
+  for (const row of params.catalogs?.supplies_rates ?? []) {
+    if (!supplyGroupMatches(row, params.group)) continue
+    if (!supplyScopeMatches(row, params.scopeName)) continue
+    matched = true
+    total = round4(total + (pos(n(row.value)) ?? 0) * supplyMultiplier(row, params.crewSize))
+  }
+  return matched ? total : null
+}
+
 export function resolveSettings(
   settings: WallCalculationSettings | undefined,
   catalogs: WallCalculationCatalogs | null | undefined
@@ -78,16 +125,18 @@ export function resolveSettings(
       return (scope === 'wall' || scope === 'walls') && (unit === 'sf' || unit === 'sqft')
     }) ?? null
   const perColorFromCatalog =
-    rateFromCatalog(catalogs, (row) => {
-      const scope = normalizeKey(row.scope)
-      const unit = normalizeKey(row.unit)
-      return (scope === 'wall' || scope === 'walls') && (unit === 'color' || unit === 'percolor')
+    supplyCostFromCatalog({
+      catalogs,
+      scopeName: 'walls',
+      group: 'per_color',
+      crewSize: normalizedCrewSize(settings?.crew_size),
     }) ?? null
 
   return {
     standard_door_deduction_sf: pos(n(settings?.standard_door_deduction_sf)) ?? DEFAULTS.standard_door_deduction_sf,
     standard_window_deduction_sf:
       pos(n(settings?.standard_window_deduction_sf)) ?? DEFAULTS.standard_window_deduction_sf,
+    crew_size: normalizedCrewSize(settings?.crew_size),
     paint_prod_rate_sqft_per_hour:
       pos(n(settings?.paint_prod_rate_sqft_per_hour)) ?? DEFAULTS.paint_prod_rate_sqft_per_hour,
     primer_prod_rate_sqft_per_hour:

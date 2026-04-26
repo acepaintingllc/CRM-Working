@@ -176,12 +176,19 @@ export function buildOverlayFromRows(params: {
     const values = toStringRecord(row.values_json)
     const supplyGroup = asText(values.supply_group).toLowerCase()
     const unit = asText(values.unit) || '$/sqft'
-    if (supplyGroup && supplyGroup !== 'area_based' && !isAreaBasedUnit(unit)) continue
+    const normalizedSupplyGroup =
+      supplyGroup === 'per_color' || supplyGroup === 'per_job' || supplyGroup === 'area_based'
+        ? supplyGroup
+        : isAreaBasedUnit(unit)
+          ? 'area_based'
+          : 'per_job'
     area_supplies_rates.push({
       key: normalizeId(values.id || row.row_id),
+      supply_group: normalizedSupplyGroup,
       scope: asText(values.scope) || null,
       unit,
       value: parseNumber(values.cost_per) ?? 0,
+      crew_multiplier: asText(values.crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
       notes: asText(values.notes) || null,
       active: row.active,
     })

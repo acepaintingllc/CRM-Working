@@ -93,6 +93,7 @@ export function prepareEstimateV2SaveState(
     roomModeById,
     collections,
     payloadSnapshot: buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
       rooms: currentState.collections.rooms,
       scopes: collections.scopes,
       segments: collections.segments,
@@ -284,6 +285,7 @@ export function resolveEstimateV2SaveResponseState(params: {
       pricingSummary: nextPricingSummary,
     },
     lastSavedSnapshot: buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
       rooms: currentState.collections.rooms,
       scopes: nextScopes,
       segments: nextSegments,

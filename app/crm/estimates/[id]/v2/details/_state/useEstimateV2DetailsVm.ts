@@ -31,6 +31,7 @@ export function useEstimateV2DetailsVm(params: {
     ceilingCalculations: current.meta.ceilingCalculations,
     trimCalculations: current.meta.trimCalculations,
     pricingSummary: current.meta.pricingSummary,
+    crewSize: current.meta.jobSettingsDraft.crewSize,
     saveStatus: current.meta.saveStatus,
   }))
 
@@ -71,6 +72,7 @@ export function useEstimateV2DetailsVm(params: {
         ceilingCalculations: calculationRows.ceilingCalculationRows,
         trimCalculations: calculationRows.trimCalculationRows,
         pricingSummary: state.pricingSummary,
+        crewSize: state.crewSize,
         paintProductLabelById,
         colorLabelById,
         rollerOptions: params.rollerOptionsState.options,
@@ -88,6 +90,7 @@ export function useEstimateV2DetailsVm(params: {
       state.ceilingScopes,
       state.rooms,
       state.pricingSummary,
+      state.crewSize,
       state.trimScopes,
       state.wallScopes,
     ]

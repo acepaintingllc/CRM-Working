@@ -292,6 +292,7 @@ export type SupplyRateRow = RatesFlagsBaseRow & {
   scope: string
   unit: string
   cost_per: string
+  crew_multiplier?: 'Y' | 'N' | string
   size_in: string
   price_each: string
 }
@@ -461,6 +462,7 @@ export type SupplyRateMutationValues<TGroup extends 'per_color' | 'area_based' |
   scope: string
   unit: string
   cost_per: string
+  crew_multiplier?: 'Y' | 'N'
   notes: string
   active: 'Y' | 'N'
 }
@@ -729,6 +731,7 @@ export type SupplyRateDraft = {
   scope: string
   unit: string
   cost_per: RatesFlagsNumberDraftValue
+  crew_multiplier?: RatesFlagsYnDraftValue
   notes: string
 }
 

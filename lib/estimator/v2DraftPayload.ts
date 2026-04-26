@@ -1,6 +1,7 @@
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
+  EstimateV2JobSettingsDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2RollerDraft,
@@ -25,6 +26,16 @@ export function sortByPosition<T extends { position: number }>(rows: T[]) {
 
 function toNullableDraftNumber(value: string) {
   return asNullableNumber(value)
+}
+
+function normalizeCrewSize(value: number | null | undefined) {
+  if (!Number.isFinite(value)) return 1
+  return Math.max(1, Math.floor(value as number))
+}
+
+function toNullableText(value: string) {
+  const trimmed = value.trim()
+  return trimmed || null
 }
 
 export function deriveEstimateV2Segment(segment: EstimateV2WallSegmentDraft): EstimateV2WallSegmentDerived {
@@ -87,6 +98,7 @@ export function deriveEstimateV2Scope(
 }
 
 export function buildEstimateV2SavePayload(
+  jobSettingsDraft: EstimateV2JobSettingsDraft,
   rooms: EstimateV2RoomDraft[],
   scopes: EstimateV2WallScopeDraft[],
   segments: EstimateV2WallSegmentDraft[],
@@ -96,6 +108,22 @@ export function buildEstimateV2SavePayload(
   trimScopes: EstimateV2TrimScopeDraft[],
   rollers: EstimateV2RollerDraft[] = []
 ): EstimateV2SavePayload {
+  const jobsettings = {
+    labor_day_policy_enabled: jobSettingsDraft.laborDayEnabled,
+    dayhours: jobSettingsDraft.dayhours,
+    rounding_increment_hours: jobSettingsDraft.roundingIncrementHours,
+    override_labor_rate: jobSettingsDraft.laborRate,
+    job_minimum_enabled: jobSettingsDraft.jobMinEnabled,
+    job_minimum_amount: jobSettingsDraft.jobMinAmount,
+    crew_size: normalizeCrewSize(jobSettingsDraft.crewSize),
+    walls_paint_id: toNullableText(jobSettingsDraft.wallPaintProductId),
+    walls_primer_id: toNullableText(jobSettingsDraft.wallPrimerProductId),
+    ceiling_paint_id: toNullableText(jobSettingsDraft.ceilingPaintProductId),
+    ceiling_primer_id: toNullableText(jobSettingsDraft.ceilingPrimerProductId),
+    trim_paint_id: toNullableText(jobSettingsDraft.trimPaintProductId),
+    trim_primer_id: toNullableText(jobSettingsDraft.trimPrimerProductId),
+  }
+
   const orderedRooms = sortByPosition(rooms).map((room, index) => ({
     id: room.id,
     room_id: room.roomId,
@@ -308,9 +336,10 @@ export function buildEstimateV2SavePayload(
       covers_qty: normalizeRollerApplicatorQuantity(roller.coversQty).numberValue,
       notes: roller.notes.trim() || null,
     }))
-    .filter((roller) => roller.scope === 'Ceiling' || roller.scope === 'Trim' || roller.wall_color_id)
+    .filter((roller) => roller.scope === 'Ceiling' || roller.wall_color_id)
 
   return {
+    jobsettings,
     rooms: orderedRooms,
     room_wall_scopes: orderedScopes,
     wall_segments: orderedSegments,

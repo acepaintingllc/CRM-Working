@@ -281,7 +281,8 @@ export function buildEstimatePricingSummary(
   engines: EngineOutput[],
   laborPolicy: LaborDayPolicySettings,
   minimumPolicy: JobMinimumSettings,
-  trimPaint: EstimateTrimPaintInput | null = null
+  trimPaint: EstimateTrimPaintInput | null = null,
+  extraSupplyCost = 0
 ): EstimatePricingSummary {
   const laborRate = engines[0]?.assumptions.labor_rate_per_hour ?? DEFAULT_LABOR_RATE
   const wallEngine = engines[0]
@@ -329,7 +330,7 @@ export function buildEstimatePricingSummary(
       }
     }
   }
-  const supplyCost = round2(areaSupplyCost + perColorSupplyCost)
+  const supplyCost = round2(areaSupplyCost + perColorSupplyCost + extraSupplyCost)
 
   const laborResult = applyLaborDayPolicy(rawLaborHours, laborPolicy)
   const laborCost = round2(laborResult.effectiveHours * laborRate)
@@ -376,10 +377,36 @@ export function buildEstimatePricingSummary(
     trimPaint,
   }
 }
+
+export function buildPerJobSupplyCost(params: {
+  catalogs: WallCalculationCatalogs | null | undefined
+  crewSize: number
+  activeScopes: Array<'walls' | 'ceilings' | 'trim'>
+}) {
+  const activeScopes = new Set(params.activeScopes)
+  let total = 0
+  for (const row of params.catalogs?.supplies_rates ?? []) {
+    if (String(row.supply_group ?? '').replace(/[^a-z0-9]/gi, '').toLowerCase() !== 'perjob') {
+      continue
+    }
+    const scope = String(row.scope ?? '').replace(/[^a-z0-9]/gi, '').toLowerCase()
+    const applies =
+      scope === '' ||
+      scope === 'all' ||
+      (activeScopes.has('walls') && (scope === 'wall' || scope === 'walls')) ||
+      (activeScopes.has('ceilings') && (scope === 'ceiling' || scope === 'ceilings')) ||
+      (activeScopes.has('trim') && scope === 'trim')
+    if (!applies) continue
+    const multiplier = String(row.crew_multiplier ?? '').toUpperCase() === 'Y' ? params.crewSize : 1
+    total = round4(total + Math.max(0, row.value) * multiplier)
+  }
+  return total
+}
 import {
   DEFAULT_DAY_HOURS,
   DEFAULT_JOB_MINIMUM_AMOUNT,
   DEFAULT_LABOR_RATE,
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from './defaults.ts'
+import type { WallCalculationCatalogs } from './wallsTypes.ts'
 

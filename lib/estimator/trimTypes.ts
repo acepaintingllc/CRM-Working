@@ -104,6 +104,7 @@ export type TrimCalculationInput = {
   rooms: TrimCalculationRoomInput[]
   settings?: {
     labor_rate_per_hour?: number | null
+    crew_size?: number | null
   }
   catalogs?:
     | (WallCalculationCatalogs & {

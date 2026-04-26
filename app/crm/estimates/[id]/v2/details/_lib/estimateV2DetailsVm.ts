@@ -121,15 +121,15 @@ export type DetailsOverrideVm = {
 }
 
 export type EstimateV2DetailsVm = {
+  crewSize: number
   wallRows: DetailsScopeLineVm[]
   ceilingRow: DetailsScopeLineVm | null
   trimRow: DetailsScopeLineVm | null
   wallRollerRows: DetailsRollerVm[]
   ceilingRollerRow: DetailsRollerVm | null
-  trimApplicatorRow: DetailsRollerVm | null
+  trimApplicatorSummary: { active: boolean; label: string } | null
   wallRollerOptions: DetailsRollerCoverOption[]
   ceilingRollerOptions: DetailsRollerCoverOption[]
-  trimApplicatorOptions: DetailsRollerCoverOption[]
   rollerOptionsState: DetailsRollerOptionsState
   materialCards: Array<{
     label: string
@@ -183,6 +183,7 @@ export type BuildDetailsVmParams = {
   ceilingCalculations: EstimateV2DetailsCeilingCalculationRow[] | null | undefined
   trimCalculations: EstimateV2DetailsTrimCalculationRow[] | null | undefined
   pricingSummary: EstimateV2PricingSummary | null | undefined
+  crewSize?: number
   paintProductLabelById: Map<string, string>
   colorLabelById: Map<string, string>
   rollerOptions: DetailsRollerCoverOption[]
@@ -205,10 +206,9 @@ export type EstimateV2DetailsRollerPlanningVm = Pick<
   EstimateV2DetailsVm,
   | 'wallRollerRows'
   | 'ceilingRollerRow'
-  | 'trimApplicatorRow'
+  | 'trimApplicatorSummary'
   | 'wallRollerOptions'
   | 'ceilingRollerOptions'
-  | 'trimApplicatorOptions'
   | 'rollerOptionsState'
 >
 
@@ -310,7 +310,6 @@ export function buildEstimateV2RollerPlanningVm(params: {
   const rollerOptions = rollerOptionsState.options
   const wallRollerOptions = rollerOptions.filter((option) => option.scope === 'Wall')
   const ceilingRollerOptions = rollerOptions.filter((option) => option.scope === 'Ceiling')
-  const trimApplicatorOptions = rollerOptions.filter((option) => option.scope === 'Trim')
 
   const wallRollerRows = createWallRollerRows({
     wallRows: params.materialPlanning.wallRows,
@@ -329,10 +328,14 @@ export function buildEstimateV2RollerPlanningVm(params: {
   return {
     wallRollerRows,
     ceilingRollerRow,
-    trimApplicatorRow: null,
+    trimApplicatorSummary: params.materialPlanning.trimRow
+      ? {
+          active: true,
+          label: '1 brush + 1 roller included automatically per color',
+        }
+      : null,
     wallRollerOptions,
     ceilingRollerOptions,
-    trimApplicatorOptions,
     rollerOptionsState,
   }
 }
@@ -341,7 +344,7 @@ export function buildEstimateV2ValidationVm(params: {
   materialPlanning: Pick<EstimateV2DetailsMaterialPlanningVm, 'wallRows' | 'ceilingRow' | 'trimRow'>
   rollerPlanning: Pick<
     EstimateV2DetailsRollerPlanningVm,
-    'wallRollerRows' | 'ceilingRollerRow' | 'trimApplicatorRow'
+    'wallRollerRows' | 'ceilingRollerRow'
   >
 }): EstimateV2DetailsValidationVm {
   const validationIssues = createValidationIssues({
@@ -350,7 +353,6 @@ export function buildEstimateV2ValidationVm(params: {
     trimRow: params.materialPlanning.trimRow,
     wallRollerRows: params.rollerPlanning.wallRollerRows,
     ceilingRollerRow: params.rollerPlanning.ceilingRollerRow,
-    trimApplicatorRow: params.rollerPlanning.trimApplicatorRow,
     activeMaterialScopeCount:
       params.materialPlanning.wallRows.length +
       (params.materialPlanning.ceilingRow ? 1 : 0) +
@@ -414,6 +416,7 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
   })
 
   return {
+    crewSize: params.crewSize ?? 1,
     ...materialPlanning,
     ...rollerPlanning,
     ...validation,

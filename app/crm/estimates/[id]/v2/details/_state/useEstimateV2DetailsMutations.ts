@@ -34,7 +34,8 @@ export function useEstimateV2DetailsMutations(params: {
   rollerOptions: DetailsRollerCoverOption[]
   vm: EstimateV2DetailsVm
 }) {
-  const markDirty = useCallback(() => {
+  const recordDebugDirtySource = useCallback(() => {
+    // Debug-only instrumentation; snapshot comparison controls actual dirty state.
     params.store
       .getState()
       .setDebugMeta((prev) => ({ ...prev, dirtySource: 'details-overrides' }))
@@ -52,9 +53,9 @@ export function useEstimateV2DetailsMutations(params: {
             rollerOptions: params.rollerOptions,
           })
       )
-      if (changed) markDirty()
+      if (changed) recordDebugDirtySource()
     },
-    [markDirty, params.rollerOptions, params.store]
+    [recordDebugDirtySource, params.rollerOptions, params.store]
   )
 
   const setWallOverride = useCallback(
@@ -66,9 +67,9 @@ export function useEstimateV2DetailsMutations(params: {
         params.store.getState().setScopes,
         (prev) => applyWallGroupGallonOverride(prev, colorId, value, ownerScopeId)
       )
-      if (changed) markDirty()
+      if (changed) recordDebugDirtySource()
     },
-    [markDirty, params.store, params.vm.wallRows]
+    [recordDebugDirtySource, params.store, params.vm.wallRows]
   )
 
   const setCeilingOverride = useCallback(
@@ -78,9 +79,9 @@ export function useEstimateV2DetailsMutations(params: {
         params.store.getState().setCeilingScopes,
         (prev) => applyCeilingGallonOverride(prev, value, ownerScopeId)
       )
-      if (changed) markDirty()
+      if (changed) recordDebugDirtySource()
     },
-    [markDirty, params.store, params.vm.ceilingRow]
+    [recordDebugDirtySource, params.store, params.vm.ceilingRow]
   )
 
   const setTrimOverride = useCallback(
@@ -90,12 +91,26 @@ export function useEstimateV2DetailsMutations(params: {
         params.store.getState().setTrimScopes,
         (prev) => applyTrimGallonOverride(prev, value, ownerScopeId)
       )
-      if (changed) markDirty()
+      if (changed) recordDebugDirtySource()
     },
-    [markDirty, params.store, params.vm.trimRow]
+    [recordDebugDirtySource, params.store, params.vm.trimRow]
+  )
+
+  const setCrewSize = useCallback(
+    (value: number) => {
+      const normalized = Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1
+      const previous = params.store.getState().meta.jobSettingsDraft.crewSize
+      if (previous === normalized) return
+      params.store
+        .getState()
+        .setJobSettingsDraft((prev) => ({ ...prev, crewSize: normalized }))
+      recordDebugDirtySource()
+    },
+    [params.store, recordDebugDirtySource]
   )
 
   return {
+    setCrewSize,
     setRollerRow,
     setWallOverride,
     setCeilingOverride,

@@ -122,6 +122,21 @@ test('deriveEstimateV2Scope sums SEG segment areas and honors override', () => {
 
 test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and trim rows', () => {
   const payload = buildEstimateV2SavePayload(
+    {
+      laborDayEnabled: true,
+      dayhours: 8,
+      roundingIncrementHours: 4,
+      laborRate: 65,
+      jobMinEnabled: false,
+      jobMinAmount: 0,
+      crewSize: 2,
+      wallPaintProductId: '',
+      wallPrimerProductId: '',
+      ceilingPaintProductId: '',
+      ceilingPrimerProductId: '',
+      trimPaintProductId: '',
+      trimPrimerProductId: '',
+    },
     [
       {
         id: 'room-1',
@@ -249,6 +264,8 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
       },
     ]
   )
+
+  assert.equal(payload.jobsettings.crew_size, 2)
 
   assert.equal(payload.rooms.length, 1)
   assert.equal(payload.room_wall_scopes.length, 1)

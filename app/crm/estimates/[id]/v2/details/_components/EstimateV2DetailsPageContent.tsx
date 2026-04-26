@@ -8,6 +8,7 @@ import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
 import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { CrmConfirmDialog } from '@/app/crm/_components/CrmConfirmDialog'
 import {
   estimateRouteFamily,
   quoteRouteFamily,
@@ -19,6 +20,7 @@ import { EstimateV2DetailsMaterialTable } from './EstimateV2DetailsMaterialTable
 import { EstimateV2DetailsRollerRows } from './EstimateV2DetailsRollerRows'
 import { EstimateV2DetailsSummaryRail } from './EstimateV2DetailsSummaryRail'
 import { useEstimateV2DetailsPage } from '../_state/useEstimateV2DetailsPage'
+import { DETAILS_UNSAVED_CHANGES_MESSAGE } from '../_state/useEstimateV2DetailsController'
 
 const labelClassName =
   'ace-crm-mono text-[11px] font-black uppercase text-[color:var(--crm-ui-muted-2)]'
@@ -109,6 +111,7 @@ export function EstimateV2DetailsPageContent({
         meta={
           <>
             <CrmChip tone="accent">{page.estimate?.version_name ?? 'Estimate'}</CrmChip>
+            <CrmChip>Crew: {vm.crewSize}</CrmChip>
             <CrmChip tone={vm.canContinueToSummary ? 'success' : 'danger'}>
               {vm.validationSummary.title}
             </CrmChip>
@@ -125,6 +128,23 @@ export function EstimateV2DetailsPageContent({
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
         <main className="grid min-w-0 gap-4">
+          <CrmSectionCard
+            title="Crew Size"
+            description="Multiplies per-person supply items (brushes, trays) automatically"
+          >
+            <label className="grid max-w-[220px] gap-2">
+              <span className={labelClassName}>Crew Size</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={vm.crewSize}
+                onChange={(event) => actions.setCrewSize(event.currentTarget.valueAsNumber)}
+                className="h-10 rounded-[6px] border border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface)] px-3 text-sm font-semibold text-[color:var(--crm-ui-ink)] outline-none focus:border-[color:var(--crm-ui-accent)]"
+              />
+            </label>
+          </CrmSectionCard>
+
           <CrmSectionCard
             title="Rollers"
             description={`${rollerRowCount} required persisted planning row${rollerRowCount === 1 ? '' : 's'}.`}
@@ -155,6 +175,11 @@ export function EstimateV2DetailsPageContent({
                     onChange={actions.setRollerRow}
                   />
                 </div>
+              ) : null}
+              {vm.trimApplicatorSummary?.active ? (
+                <CrmChip>
+                  Trim: 1 brush + 1 roller per color included automatically via supply rates
+                </CrmChip>
               ) : null}
             </div>
           </CrmSectionCard>
@@ -201,6 +226,18 @@ export function EstimateV2DetailsPageContent({
           onContinue={() => void actions.continueToSummary()}
         />
       </div>
+      <CrmConfirmDialog
+        isOpen={page.discardVm.isOpen}
+        labelledBy="estimate-details-discard-title"
+        title="Discard unsaved changes?"
+        description="You have unsaved details edits that are not yet saved."
+        closeLabel="Close discard confirmation"
+        warning={DETAILS_UNSAVED_CHANGES_MESSAGE}
+        info="Choose Discard to return to the editor, or Cancel to keep editing details."
+        confirmLabel="Discard and return"
+        onConfirm={() => void actions.confirmReturnToEditor()}
+        onCancel={actions.cancelDiscard}
+      />
     </CrmPageShell>
   )
 }

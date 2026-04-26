@@ -145,6 +145,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     laborRate: 62.5,
     jobMinEnabled: true,
     jobMinAmount: 400,
+    crewSize: 1,
     wallPaintProductId: 'P-WALL',
     wallPrimerProductId: 'P-PRIMER',
     ceilingPaintProductId: 'P-CEIL',
@@ -526,6 +527,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
   ]
 
   const payload = buildEstimateV2SavePayload(
+    jobSettingsDraft,
     rooms,
     scopes,
     segments,

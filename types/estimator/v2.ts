@@ -147,6 +147,7 @@ export type EstimateV2JobSettingsInput = {
   override_labor_rate?: number | null
   job_minimum_enabled?: boolean | null
   job_minimum_amount?: number | null
+  crew_size?: number | null
   wall_paint_id?: string | null
   wall_primer_id?: string | null
   walls_paint_id?: string | null
@@ -257,6 +258,7 @@ export type EstimateV2JobSettingsDraft = {
   laborRate: number
   jobMinEnabled: boolean
   jobMinAmount: number
+  crewSize: number
   wallPaintProductId: string
   wallPrimerProductId: string
   ceilingPaintProductId: string
@@ -479,6 +481,21 @@ export type EstimateV2WallScopeDerived = {
 }
 
 export type EstimateV2SavePayload = {
+  jobsettings: {
+    labor_day_policy_enabled: boolean
+    dayhours: number
+    rounding_increment_hours: number
+    override_labor_rate: number
+    job_minimum_enabled: boolean
+    job_minimum_amount: number
+    crew_size: number
+    walls_paint_id: string | null
+    walls_primer_id: string | null
+    ceiling_paint_id: string | null
+    ceiling_primer_id: string | null
+    trim_paint_id: string | null
+    trim_primer_id: string | null
+  }
   rooms: Array<{
     id: string
     room_id: string

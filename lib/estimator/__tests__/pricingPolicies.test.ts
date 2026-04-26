@@ -5,6 +5,7 @@ import {
   applyJobMinimum,
   allocateMinimumAdjustment,
   buildEstimatePricingSummary,
+  buildPerJobSupplyCost,
   reconcileWholeDollarRows,
   type LaborDayPolicySettings,
   type JobMinimumSettings,
@@ -259,6 +260,7 @@ const mockAssumptions: WallCalculationOutput['assumptions'] = {
   primer_price_per_gal: 30,
   standard_door_deduction_sf: 21,
   standard_window_deduction_sf: 15,
+  crew_size: 1,
 }
 
 const mockOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
@@ -339,6 +341,33 @@ test('buildEstimatePricingSummary: material costs from gallons × price', () => 
   assert.equal(result.paintMaterialCost, 150)   // (2 + 1) gal × $50
   assert.equal(result.primerMaterialCost, 22.5) // (0.5 + 0.25) gal × $30
   assert.equal(result.supplyCost, 30)           // $20 + $10
+})
+
+test('buildPerJobSupplyCost multiplies only crew-flagged supply rows', () => {
+  const catalogs = {
+    supplies_rates: [
+      {
+        key: 'BRUSH_TRIM',
+        supply_group: 'per_job',
+        scope: 'Trim',
+        unit: 'each',
+        value: 5,
+        crew_multiplier: 'Y',
+      },
+      {
+        key: 'TAPE_MASK',
+        supply_group: 'per_job',
+        scope: 'All',
+        unit: 'each',
+        value: 2,
+        crew_multiplier: 'N',
+      },
+    ],
+  }
+
+  assert.equal(buildPerJobSupplyCost({ catalogs, crewSize: 3, activeScopes: ['trim'] }), 17)
+  assert.equal(buildPerJobSupplyCost({ catalogs, crewSize: 3, activeScopes: ['walls', 'trim'] }), 17)
+  assert.equal(buildPerJobSupplyCost({ catalogs, crewSize: 1, activeScopes: ['trim'] }), 7)
 })
 
 test('buildEstimatePricingSummary: trim paint adds estimate-level paint cost and room allocation', () => {

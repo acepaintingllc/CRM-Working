@@ -103,6 +103,59 @@ test('wall primer supply cost applies only for SPOT and FULL prime modes', () =>
   approx(spot.scope_traces[0].supplies.primer_supply_cost, 7)
 })
 
+test('per-color catalog supply costs multiply only crew-flagged rows', () => {
+  const result = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, crew_size: 3 },
+    catalogs: {
+      supplies_rates: [
+        {
+          key: 'BRUSH_WALL',
+          supply_group: 'per_color',
+          scope: 'Walls',
+          unit: 'each',
+          value: 5,
+          crew_multiplier: 'Y',
+        },
+        {
+          key: 'TRAY_WALL',
+          supply_group: 'per_color',
+          scope: 'Walls',
+          unit: 'each',
+          value: 2,
+          crew_multiplier: 'N',
+        },
+      ],
+    },
+    scopes: [makeWallScope()],
+    segments: [],
+  })
+
+  assert.equal(result.per_color_supply_groups[0].total_shared_supply_cost, 17)
+  assert.equal(result.per_color_supply_groups[0].allocations[0].allocated_supply_cost, 17)
+})
+
+test('per-color crew multiplier defaults to one crew member', () => {
+  const result = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0 },
+    catalogs: {
+      supplies_rates: [
+        {
+          key: 'BRUSH_WALL',
+          supply_group: 'per_color',
+          scope: 'Walls',
+          unit: 'each',
+          value: 5,
+          crew_multiplier: 'Y',
+        },
+      ],
+    },
+    scopes: [makeWallScope()],
+    segments: [],
+  })
+
+  assert.equal(result.per_color_supply_groups[0].total_shared_supply_cost, 5)
+})
+
 test('RECT scope calculates area, labor, gallons, supplies, and totals', () => {
   const input: WallCalculationInput = {
     settings: {

@@ -198,7 +198,7 @@ const baseEditorState = {
     updateTrimType: vi.fn(),
   },
   jobSettingsVm: {
-    jobSettingsDraft: { wallPaintProductId: '', wallPrimerProductId: '', ceilingPaintProductId: '', ceilingPrimerProductId: '', trimPaintProductId: '', trimPrimerProductId: '', laborDayEnabled: false, dayhours: 8, roundingIncrementHours: 4, laborRate: 65, jobMinEnabled: false, jobMinAmount: 0 },
+    jobSettingsDraft: { wallPaintProductId: '', wallPrimerProductId: '', ceilingPaintProductId: '', ceilingPrimerProductId: '', trimPaintProductId: '', trimPrimerProductId: '', laborDayEnabled: false, dayhours: 8, roundingIncrementHours: 4, laborRate: 65, jobMinEnabled: false, jobMinAmount: 0, crewSize: 1 },
     orgJobProductDefaults: { wallPaintProductId: '', wallPrimerProductId: '', ceilingPaintProductId: '', ceilingPrimerProductId: '', trimPaintProductId: '', trimPrimerProductId: '' },
     customerDraft: { customerId: '', name: '', email: '', phone: '', address: '' },
     settingsOpen: false,

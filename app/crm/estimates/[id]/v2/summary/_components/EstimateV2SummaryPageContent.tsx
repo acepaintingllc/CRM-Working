@@ -517,6 +517,22 @@ export function EstimateV2SummaryPageContent({
               <span>Back to Quotes</span>
           </Link>
           <SummaryStatusBadge statusLabel={derived.statusLabel} />
+          <span
+            style={{
+              padding: '6px 10px',
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background: 'rgba(255,255,255,0.04)',
+              color: C.ink2,
+              fontSize: 10,
+              fontWeight: 900,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Crew: {derived.crewSize}
+          </span>
         </header>
 
         <main style={{ display: 'grid', gap: 12, minWidth: 0 }}>
@@ -663,6 +679,22 @@ export function EstimateV2SummaryPageContent({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <SummaryStatusBadge statusLabel={derived.statusLabel} />
+            <span
+              style={{
+                padding: '6px 10px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'rgba(255,255,255,0.04)',
+                color: C.ink2,
+                fontSize: 10,
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Crew: {derived.crewSize}
+            </span>
             <SummaryActionLinks estimateId={estimateId} routeFamily={resolvedRouteFamily} />
           </div>
         </header>

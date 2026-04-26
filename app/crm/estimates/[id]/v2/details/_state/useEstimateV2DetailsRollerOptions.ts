@@ -4,7 +4,7 @@ import { useEffect, useReducer } from 'react'
 import {
   loadEstimateV2RatesFlagsPayload,
   type EstimateV2RatesFlagsLoadResult,
-} from '@/lib/estimates/v2/client'
+} from '@/lib/quotes/client'
 import {
   parseRollerCoverOptionsStateFromRatesFlags,
   type DetailsRollerOptionsState,

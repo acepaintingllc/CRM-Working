@@ -202,7 +202,7 @@ describe('estimate details roller draft helpers', () => {
     )
   })
 
-  it('updates existing ceiling and trim aggregate drafts without wall color ids', () => {
+  it('updates existing ceiling drafts and ignores trim applicator edits', () => {
     const rollers: EstimateV2RollerDraft[] = [
       {
         id: 'roller-ceiling',
@@ -251,11 +251,10 @@ describe('estimate details roller draft helpers', () => {
       {
         id: 'applicator-trim',
         scope: 'Trim',
-        wallColorId: '',
-        selectedOptionId: 'TRIM_4',
-        rollerSizeIn: '4',
+        wallColorId: 'COLOR2',
+        rollerSizeIn: '2',
         coversQty: '1',
-        notes: 'Trim applicator',
+        notes: '',
         position: 1,
       },
     ])
@@ -338,6 +337,47 @@ describe('estimate details roller draft helpers', () => {
     })
 
     expect(result).toBe(rollers)
+  })
+
+  it('treats an empty selected option patch as unchanged when the existing draft has no selected option id', () => {
+    const rollers: EstimateV2RollerDraft[] = [
+      {
+        id: 'roller-wall',
+        scope: 'Wall',
+        wallColorId: 'COLOR1',
+        rollerSizeIn: '',
+        coversQty: '',
+        notes: '',
+        position: 0,
+      },
+    ]
+    const options = [
+      ...rollerOptions,
+      { id: 'OPT-1', label: 'Wall option 1"', scope: 'Wall' as const, sizeIn: 1, priceEach: 2 },
+    ]
+
+    const emptySelection = applyDetailsRollerRowPatch({
+      rollers,
+      rowId: 'wall:COLOR1',
+      patch: { coverId: '' },
+      rollerOptions: options,
+      createId: () => 'unused',
+    })
+    const selectedOption = applyDetailsRollerRowPatch({
+      rollers,
+      rowId: 'wall:COLOR1',
+      patch: { coverId: 'OPT-1' },
+      rollerOptions: options,
+      createId: () => 'unused',
+    })
+
+    expect(emptySelection).toBe(rollers)
+    expect(selectedOption).not.toBe(rollers)
+    expect(selectedOption[0]).toMatchObject({
+      id: 'roller-wall',
+      selectedOptionId: 'OPT-1',
+      rollerSizeIn: '1',
+    })
   })
 
   it('does not create a persisted row for an empty aggregate roller patch', () => {

@@ -6,6 +6,7 @@ import {
   productMap,
   resolveSettings,
   round4,
+  supplyCostFromCatalog,
   sumNumbers,
 } from './wallsHelpers.ts'
 import { allocatePaintMaterialRollups } from './paintMaterial.ts'
@@ -473,8 +474,15 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
 
   const perColorGroups: WallPerColorSupplyGroup[] = Array.from(grouped.entries()).map(([groupKey, scopes]) => {
     const totalArea = sumNumbers(scopes.map((scope) => scope.effective_area))
+    const catalogPerColorCost =
+      supplyCostFromCatalog({
+        catalogs: input.catalogs,
+        scopeName: 'ceilings',
+        group: 'per_color',
+        crewSize: settings.crew_size,
+      }) ?? settings.per_color_supply_cost
     const totalCost = round4(
-      Math.max(...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? settings.per_color_supply_cost))
+      Math.max(...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? catalogPerColorCost))
     )
 
     for (const scope of scopes) {

@@ -2,7 +2,7 @@ import { supabaseAdmin } from '../org.ts'
 import { calculateWalls } from '../../estimator/walls.ts'
 import { calculateCeilings } from '../../estimator/ceilings.ts'
 import { calculateTrim } from '../../estimator/trim.ts'
-import { buildEstimatePricingSummary } from '../../estimator/pricingPolicies.ts'
+import { buildEstimatePricingSummary, buildPerJobSupplyCost } from '../../estimator/pricingPolicies.ts'
 import {
   DEFAULT_DAY_HOURS,
   DEFAULT_JOB_MINIMUM_AMOUNT,
@@ -67,6 +67,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
       : orgDefaults?.job_minimum_enabled
   const effectiveJobMinimumAmount =
     asNullableNumber(js?.job_minimum_amount) ?? orgDefaults?.job_minimum_amount ?? null
+  const effectiveCrewSize = Math.max(1, Math.floor(asNullableNumber(js?.crew_size) ?? 1))
 
   const calculationCatalogs = await loadEstimateV2CalculationCatalogs({
     requestOrigin: params.requestOrigin,
@@ -96,7 +97,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   const wallCalculations = calculateWalls({
     scopes: wallScopeRowsForCalc,
     segments: params.wallSegments as unknown as V2WallSegmentSaveRow[],
-    settings: { labor_rate_per_hour: effectiveLaborRate },
+    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize },
     catalogs: calculationCatalogs.wall,
   })
   const quoteWallScopes = ((wallCalculations.scopes ?? []) as Unsafe[]).map((row) => {
@@ -128,7 +129,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   const ceilingCalculations = calculateCeilings({
     scopes: ceilingScopeRowsForCalc,
     segments: params.ceilingScopeSegments as unknown as V2CeilingSegmentSaveRow[],
-    settings: { labor_rate_per_hour: effectiveLaborRate },
+    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize },
     catalogs: calculationCatalogs.ceiling ?? undefined,
   })
   const quoteCeilingScopes = ((ceilingCalculations.scopes ?? []) as Unsafe[]).map((row) => {
@@ -173,7 +174,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
         mode: roomModeById.get(roomId) ?? 'RECT',
       }
     }),
-    settings: { labor_rate_per_hour: effectiveLaborRate },
+    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize },
     catalogs: calculationCatalogs.trim ?? undefined,
   })
   const quoteTrimScopes = ((trimCalculations.scopes ?? []) as Unsafe[]).map((row) => {
@@ -202,7 +203,16 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
       enabled: effectiveJobMinimumEnabled === true,
       amount: effectiveJobMinimumAmount ?? DEFAULT_JOB_MINIMUM_AMOUNT,
     },
-    trimPaintInput
+    trimPaintInput,
+    buildPerJobSupplyCost({
+      catalogs: calculationCatalogs.wall,
+      crewSize: effectiveCrewSize,
+      activeScopes: [
+        wallCalculations.scopes.some((scope) => scope.include === 'Y') ? 'walls' as const : null,
+        ceilingCalculations.scopes.some((scope) => scope.include === 'Y') ? 'ceilings' as const : null,
+        trimCalculations.scopes.some((scope) => scope.include === 'Y') ? 'trim' as const : null,
+      ].filter((scope): scope is 'walls' | 'ceilings' | 'trim' => scope != null),
+    })
   )
 
   return {
@@ -257,11 +267,12 @@ export async function calculateWallsForSave(params: {
   ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
 }) {
   const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
+  const crewSize = Math.max(1, Math.floor(asNullableNumber(params.jobsettings?.crew_size) ?? 1))
   const catalogs = await params.ensureCatalogs()
   const wallCalculations = calculateWalls({
     scopes: params.scopes,
     segments: params.segments,
-    settings: { labor_rate_per_hour: laborRate },
+    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
     catalogs: catalogs.wall,
   })
   return {
@@ -279,11 +290,12 @@ export async function calculateCeilingsForSave(params: {
   ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
 }) {
   const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
+  const crewSize = Math.max(1, Math.floor(asNullableNumber(params.jobsettings?.crew_size) ?? 1))
   const catalogs = await params.ensureCatalogs()
   const ceilingCalculations = calculateCeilings({
     scopes: params.scopes,
     segments: params.segments,
-    settings: { labor_rate_per_hour: laborRate },
+    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
     catalogs: catalogs.ceiling ?? undefined,
   })
   return {
@@ -303,6 +315,7 @@ export async function calculateTrimForSave(params: {
   ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
 }) {
   const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
+  const crewSize = Math.max(1, Math.floor(asNullableNumber(params.jobsettings?.crew_size) ?? 1))
   const trimRoomModeById =
     params.wallScopeRows || params.ceilingScopeRows
       ? resolveEstimateV2RoomModeById({
@@ -323,7 +336,7 @@ export async function calculateTrimForSave(params: {
       width_in: room.width_in,
       mode: trimRoomModeById.get(room.room_id) ?? 'RECT',
     })),
-    settings: { labor_rate_per_hour: laborRate },
+    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
     catalogs: catalogs.trim ?? undefined,
   })
 }

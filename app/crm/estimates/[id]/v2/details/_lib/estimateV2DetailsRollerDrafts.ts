@@ -46,6 +46,8 @@ export function applyDetailsRollerRowPatch(params: {
   createId?: () => string
 }) {
   const rowTarget = parseDetailsRollerRowId(params.rowId)
+  if (rowTarget.scope === 'Trim') return params.rollers
+
   const selectedCover =
     params.patch.coverId != null
       ? params.rollerOptions.find((option) => option.id === params.patch.coverId)

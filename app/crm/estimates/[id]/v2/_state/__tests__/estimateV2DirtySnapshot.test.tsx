@@ -10,6 +10,7 @@ describe('estimateV2DirtySnapshot', () => {
     const fixture = createMixedEstimateV2Fixture()
 
     const reorderedSnapshot = buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: fixture.jobSettingsDraft,
       rooms: [...fixture.rooms].reverse(),
       scopes: [...fixture.scopes].reverse(),
       segments: [...fixture.segments].reverse(),
@@ -22,5 +23,24 @@ describe('estimateV2DirtySnapshot', () => {
 
     expect(areEstimateV2DirtySnapshotsEqual(reorderedSnapshot, fixture.currentSnapshot)).toBe(true)
     expect(reorderedSnapshot.payload).toEqual(fixture.currentSnapshot.payload)
+  })
+
+  it('changes the comparison key when crew size changes', () => {
+    const fixture = createMixedEstimateV2Fixture()
+
+    const crewSnapshot = buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: { ...fixture.jobSettingsDraft, crewSize: 3 },
+      rooms: fixture.rooms,
+      scopes: fixture.scopes,
+      segments: fixture.segments,
+      roomFlags: fixture.roomFlags,
+      rollers: fixture.rollers,
+      ceilingScopes: fixture.ceilingScopes,
+      ceilingSegments: fixture.ceilingSegments,
+      trimScopes: fixture.trimScopes,
+    })
+
+    expect(crewSnapshot.comparisonKey).not.toBe(fixture.currentSnapshot.comparisonKey)
+    expect(crewSnapshot.payload.jobsettings.crew_size).toBe(3)
   })
 })

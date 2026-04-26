@@ -121,7 +121,6 @@ export function createValidationIssues(params: {
   trimRow: DetailsScopeLineVm | null
   wallRollerRows: DetailsRollerVm[]
   ceilingRollerRow: DetailsRollerVm | null
-  trimApplicatorRow: DetailsRollerVm | null
   activeMaterialScopeCount?: number
 }) {
   const emptyMaterialIssues: DetailsValidationIssue[] =

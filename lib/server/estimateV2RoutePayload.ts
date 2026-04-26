@@ -570,9 +570,11 @@ export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallC
     supplies_rates: Array.isArray(catalogs.supplies_rates)
       ? catalogs.supplies_rates.map((row) => ({
           key: asText((row as Unsafe).key),
+          supply_group: asText((row as Unsafe).supply_group) || null,
           scope: asText((row as Unsafe).scope) || null,
           unit: asText((row as Unsafe).unit) || null,
           value: asNullableNumber((row as Unsafe).value) ?? 0,
+          crew_multiplier: asText((row as Unsafe).crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
         }))
       : [],
   }

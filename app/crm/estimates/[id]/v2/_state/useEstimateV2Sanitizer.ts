@@ -79,6 +79,7 @@ function buildJobSettingsDraft(
   orgDefaults: Unsafe | null,
   overrides: ProductOverrideInputs
 ) {
+  const crewSize = Number(jobsettings?.crew_size ?? 1)
   return {
     laborDayEnabled:
       typeof jobsettings?.labor_day_policy_enabled === 'boolean'
@@ -106,6 +107,7 @@ function buildJobSettingsDraft(
         orgDefaults?.job_minimum_amount ??
         DEFAULT_JOB_MINIMUM_AMOUNT
     ),
+    crewSize: Number.isFinite(crewSize) ? Math.max(1, Math.floor(crewSize)) : 1,
     wallPaintProductId: overrides.wallPaintOverride,
     wallPrimerProductId: overrides.wallPrimerOverride,
     ceilingPaintProductId: overrides.ceilingPaintOverride,
@@ -285,6 +287,14 @@ export function sanitizeEstimateV2EditorLoad(params: {
       : normalizedRooms[0]?.roomId ?? ''
 
   const lastSavedSnapshot = buildEstimateV2DirtySnapshot({
+    jobSettingsDraft: buildJobSettingsDraft(js, orgDefaults, {
+      wallPaintOverride,
+      wallPrimerOverride,
+      ceilingPaintOverride,
+      ceilingPrimerOverride,
+      trimPaintOverride,
+      trimPrimerOverride,
+    }),
     rooms: normalizedRooms,
     scopes: recalculated.wallScopes,
     segments: sanitizedWalls.segments,

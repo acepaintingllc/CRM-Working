@@ -93,9 +93,11 @@ export type TrimItemCatalogRow = {
 
 export type AreaSupplyCatalogRow = {
   key: string
+  supply_group: 'per_color' | 'area_based' | 'per_job'
   scope: string | null
   unit: string | null
   value: number
+  crew_multiplier: 'Y' | 'N'
   notes: string | null
   active: 'Y' | 'N'
 }
