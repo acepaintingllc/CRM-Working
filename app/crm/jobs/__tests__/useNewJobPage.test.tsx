@@ -58,6 +58,17 @@ describe('useNewJobPage', () => {
       .mockResolvedValueOnce(
         createResponse({
           data: {
+            id: 'customer-1',
+            name: 'Taylor Jones',
+            email: 'taylor@example.com',
+            phone: '812-555-0100',
+            address: '123 Main St, Newburgh, IN 47630',
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        createResponse({
+          data: {
             id: 'job-1',
             customer_id: 'customer-1',
             title: 'Exterior repaint',
@@ -70,6 +81,8 @@ describe('useNewJobPage', () => {
     const { result } = renderHook(() => useNewJobPage())
 
     await waitFor(() => expect(result.current.selectedCustomer?.id).toBe('customer-1'))
+    expect(authedFetch).toHaveBeenCalledWith('/api/customers?pageSize=3', { cache: 'no-store' })
+    expect(authedFetch).toHaveBeenCalledWith('/api/customers/customer-1', { cache: 'no-store' })
 
     await act(async () => {
       result.current.setValue({

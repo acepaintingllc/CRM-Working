@@ -8,7 +8,10 @@ import { validateV2CeilingsBeforeSave } from '@/lib/estimator/v2CeilingsValidati
 import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
 import { validateV2TrimBeforeSave } from '@/lib/estimator/v2TrimValidation'
 import type { EstimateV2EditorStoreState } from '@/lib/estimates/v2/store/estimateV2Store'
-import type { EstimateV2WallCalculationsPayload } from '@/types/estimator/v2'
+import type {
+  EstimateV2PricingSummary,
+  EstimateV2WallCalculationsPayload,
+} from '@/types/estimator/v2'
 import {
   normalizeCeilingScope,
   normalizeCeilingSegment,
@@ -259,6 +262,12 @@ export function resolveEstimateV2SaveResponseState(params: {
     )
   }
 
+  const nextPricingSummary =
+    payload != null && typeof payload === 'object' && 'pricing_summary' in payload
+      ? (((payload as { pricing_summary?: unknown }).pricing_summary ??
+          null) as EstimateV2PricingSummary | null)
+      : null
+
   return {
     collections: {
       scopes: nextScopes,
@@ -272,6 +281,7 @@ export function resolveEstimateV2SaveResponseState(params: {
       wallCalculations: nextWallCalculations,
       ceilingCalculations: nextCeilingCalculations,
       trimCalculations: nextTrimCalculations,
+      pricingSummary: nextPricingSummary,
     },
     lastSavedSnapshot: buildEstimateV2DirtySnapshot({
       rooms: currentState.collections.rooms,

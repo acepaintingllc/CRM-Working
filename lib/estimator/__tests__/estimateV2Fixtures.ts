@@ -28,12 +28,12 @@ type MixedEstimateFixture = {
   orgJobProductDefaults: EstimateV2JobDefaultProducts
   rooms: EstimateV2RoomDraft[]
   roomFlags: EstimateV2RoomFlagDraft[]
+  rollers: EstimateV2RollerDraft[]
   scopes: EstimateV2WallScopeDraft[]
   segments: EstimateV2WallSegmentDraft[]
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
-  rollers: EstimateV2RollerDraft[]
   wallCalculations: EstimateV2WallCalculationsPayload
   ceilingCalculations: Record<string, unknown>
   trimCalculations: Record<string, unknown>
@@ -191,6 +191,19 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
 
   const roomFlags: EstimateV2RoomFlagDraft[] = [
     { id: 'room-flag-1', roomId: 'R002', flagId: 'FLAG-HIGH', position: 0 },
+  ]
+
+  const rollers: EstimateV2RollerDraft[] = [
+    {
+      id: 'roller-wall-color-1',
+      scope: 'Wall',
+      wallColorId: 'COLOR1',
+      selectedOptionId: '',
+      rollerSizeIn: '9',
+      coversQty: '2',
+      notes: 'Main wall roller',
+      position: 0,
+    },
   ]
 
   const scopes: EstimateV2WallScopeDraft[] = [
@@ -512,19 +525,6 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     },
   ]
 
-  const rollers: EstimateV2RollerDraft[] = [
-    {
-      id: 'roller-wall-color-1',
-      scope: 'Wall',
-      wallColorId: 'COLOR1',
-      selectedOptionId: '',
-      rollerSizeIn: '',
-      coversQty: '',
-      notes: '',
-      position: 0,
-    },
-  ]
-
   const payload = buildEstimateV2SavePayload(
     rooms,
     scopes,
@@ -714,12 +714,12 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     orgJobProductDefaults: clone(orgJobProductDefaults),
     rooms: clone(rooms),
     roomFlags: clone(roomFlags),
+    rollers: clone(rollers),
     scopes: clone(scopes),
     segments: clone(segments),
     ceilingScopes: clone(ceilingScopes),
     ceilingSegments: clone(ceilingSegments),
     trimScopes: clone(trimScopes),
-    rollers: clone(rollers),
     wallCalculations: clone(wallCalculations),
     ceilingCalculations: clone(ceilingCalculations),
     trimCalculations: clone(trimCalculations),

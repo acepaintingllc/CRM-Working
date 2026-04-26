@@ -29,6 +29,7 @@ export function useEstimateV2CalculationDerived(params: {
     | 'scopes'
     | 'segments'
     | 'roomFlags'
+    | 'rollers'
     | 'ceilingScopes'
     | 'ceilingSegments'
     | 'trimScopes'

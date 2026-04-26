@@ -188,6 +188,18 @@ export type EstimateV2RoomFlagRow = {
   active?: YN | null
 }
 
+export type EstimateV2RollerInputRow = UnsafeRecord & {
+  id: string
+  scope: EstimateV2RollerScope
+  wall_color_id?: string | null
+  selected_option_id?: string | null
+  roller_size_in?: number | string | null
+  covers_qty?: number | string | null
+  notes?: string | null
+  position?: number | null
+  active?: YN | null
+}
+
 export type EstimateV2ResponseInputs = {
   jobsettings: EstimateV2JobSettingsInput | null
   org_defaults: EstimateV2JobSettingsInput | null
@@ -200,7 +212,7 @@ export type EstimateV2ResponseInputs = {
   room_ceiling_scopes: UnsafeRecord[]
   ceiling_scope_segments: UnsafeRecord[]
   room_trim_scopes: UnsafeRecord[]
-  rollers: UnsafeRecord[]
+  rollers: EstimateV2RollerInputRow[]
   prejob: UnsafeRecord[]
   trim_items: UnsafeRecord[]
   job_colors: UnsafeRecord[]
@@ -480,8 +492,17 @@ export type EstimateV2SavePayload = {
   room_wall_scopes: UnsafeRecord[]
   wall_segments: UnsafeRecord[]
   room_flags: EstimateV2RoomFlagRow[]
+  rollers: Array<{
+    id: string
+    scope: EstimateV2RollerScope
+    wall_color_id: string | null
+    selected_option_id: string | null
+    roller_size_in: number | null
+    covers_qty: number | null
+    notes: string | null
+    position: number
+  }>
   room_ceiling_scopes: UnsafeRecord[]
   ceiling_scope_segments: UnsafeRecord[]
   room_trim_scopes: UnsafeRecord[]
-  rollers: UnsafeRecord[]
 }

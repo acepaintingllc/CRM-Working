@@ -54,10 +54,10 @@ export type EstimateV2SanitizedLoadResult = {
     scopes: ReturnType<typeof normalizeScope>[]
     segments: ReturnType<typeof normalizeSegment>[]
     roomFlags: RoomFlagDraft[]
+    rollers: EstimateV2RollerDraft[]
     ceilingScopes: ReturnType<typeof normalizeCeilingScope>[]
     ceilingSegments: ReturnType<typeof normalizeCeilingSegment>[]
     trimScopes: ReturnType<typeof normalizeTrimScope>[]
-    rollers: EstimateV2RollerDraft[]
   }
   meta: {
     wallCalculations: EstimateResponse['wall_calculations']
@@ -222,6 +222,11 @@ export function sanitizeEstimateV2EditorLoad(params: {
       .map(normalizeRoomFlag)
       .filter((flag): flag is RoomFlagDraft => flag != null)
   )
+  const normalizedRollers = sortByPosition(
+    (estimatePayload.inputs.rollers ?? [])
+      .map(normalizeRoller)
+      .filter((roller): roller is NonNullable<ReturnType<typeof normalizeRoller>> => roller != null)
+  )
 
   const normalizedCeilingScopes = sortByPosition(
     (estimatePayload.inputs.room_ceiling_scopes ?? []).map(normalizeCeilingScope)
@@ -264,10 +269,6 @@ export function sanitizeEstimateV2EditorLoad(params: {
     primerProductId:
       scope.primerProductId === normalizedTrimPrimerDefault ? '' : scope.primerProductId,
   }))
-  const normalizedRollers = sortByPosition(
-    (estimatePayload.inputs.rollers ?? []).map(normalizeRoller)
-  )
-
   const recalculated = recalculateEditorDraftFactors({
     rooms: normalizedRooms,
     wallScopes: wallScopesWithoutDefaults,

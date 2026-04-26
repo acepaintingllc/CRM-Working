@@ -88,7 +88,7 @@ describe('loadEstimateV2Response', () => {
       ['estimate_room_ceiling_scopes', createOrderedQuery({ data: [{ id: 'ceiling-scope-raw' }], error: null }, 2)],
       ['estimate_room_ceiling_scope_segments', createOrderedQuery({ data: [{ id: 'ceiling-scope-segment-1' }], error: null }, 2)],
       ['estimate_room_trim_scopes', createOrderedQuery({ data: [{ id: 'trim-scope-raw' }], error: null }, 2)],
-      ['estimate_rollers', createOrderedQuery({ data: [{ id: 'roller-1' }], error: null }, 1)],
+      ['estimate_rollers', createOrderedQuery({ data: [{ id: 'roller-1' }, { id: 'applicator-1', scope: 'Trim' }], error: null }, 1)],
       ['estimate_prejob', createOrderedQuery({ data: [{ id: 'prejob-1' }], error: null }, 1)],
       ['estimate_trim_items', createOrderedQuery({ data: [{ id: 'trim-item-1' }], error: null }, 1)],
       ['estimate_job_colors', createOrderedQuery({ data: [{ id: 'color-1' }], error: null }, 1)],
@@ -144,6 +144,7 @@ describe('loadEstimateV2Response', () => {
           room_wall_scopes: [{ id: 'wall-scope-1' }],
           room_ceiling_scopes: [{ id: 'ceiling-scope-1' }],
           room_trim_scopes: [{ id: 'trim-scope-1' }],
+          rollers: [{ id: 'roller-1' }, { id: 'applicator-1', scope: 'Trim' }],
         }),
         pricing_summary: { final_total: 1200 },
       })

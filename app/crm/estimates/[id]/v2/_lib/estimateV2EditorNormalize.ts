@@ -1,4 +1,5 @@
 import { asNullableNumber, asText } from '../../../../../../lib/estimator/parsing.ts'
+import { normalizeWallRollerTargetId } from '../../../../../../lib/estimator/rollerIdentity.ts'
 import { HIDDEN_CEILING_COLOR_ID } from '../../../../../../lib/estimator/scopeRules.ts'
 import type {
   EstimateV2CeilingPrimeMode,
@@ -8,6 +9,8 @@ import type {
   EstimateV2CeilingSegmentShape,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
+  EstimateV2RollerScope,
   EstimateV2TrimMeasurementMode,
   EstimateV2TrimScopeDraft,
   EstimateV2TrimTypeOption,
@@ -216,6 +219,26 @@ export function normalizeRoomFlag(row: UnsafeRecord, index: number): EstimateV2R
     id: asText(row.id) || createUuid(),
     roomId,
     flagId,
+    position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
+  }
+}
+
+function normalizeRollerScope(value: unknown): EstimateV2RollerScope {
+  const raw = asText(value).toLowerCase()
+  if (raw === 'ceiling') return 'Ceiling'
+  if (raw === 'trim') return 'Trim'
+  return 'Wall'
+}
+
+export function normalizeRoller(row: UnsafeRecord, index: number): EstimateV2RollerDraft {
+  return {
+    id: asText(row.id) || createUuid(),
+    scope: normalizeRollerScope(row.scope),
+    wallColorId: normalizeWallRollerTargetId(row.wallColorId ?? row.wall_color_id),
+    selectedOptionId: asText(row.selectedOptionId ?? row.selected_option_id),
+    rollerSizeIn: toInputNumber(row.rollerSizeIn ?? row.roller_size_in),
+    coversQty: toInputNumber(row.coversQty ?? row.covers_qty),
+    notes: asText(row.notes),
     position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
   }
 }

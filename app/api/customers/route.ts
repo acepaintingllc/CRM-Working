@@ -1,5 +1,5 @@
 import { requireSessionUserOrg, readJsonBody } from '@/lib/server/apiRoute'
-import { serviceResultResponse } from '@/lib/server/routeResult'
+import { serviceResultDataResponse, serviceResultResponse } from '@/lib/server/routeResult'
 import { serverLog } from '@/lib/server/log'
 import { normalizeCreateCustomerInput } from '@/lib/customers/normalizers'
 import { createCustomer, listCustomers } from '@/lib/customers/service'
@@ -20,9 +20,8 @@ export async function GET(request: Request) {
   const pageSize = Math.min(50, readPositiveInt(searchParams.get('pageSize'), 50))
   const search = (searchParams.get('search') ?? '').trim()
 
-  return serviceResultResponse(
-    await listCustomers(session.session.orgId, { search, page, pageSize }),
-    (customers) => customers
+  return serviceResultDataResponse(
+    await listCustomers(session.session.orgId, { search, page, pageSize })
   )
 }
 

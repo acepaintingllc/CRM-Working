@@ -1,69 +1,7 @@
--- Quote home read-model support.
--- Adds bounded server-side functions for:
--- 1) org-scoped quote-home KPI aggregation
--- 2) paged quote-home job browsing with version counts
-
-alter table public.jobs
-  add column if not exists scheduled_email_sent_at timestamptz;
-
-alter table public.jobs
-  add column if not exists completed_email_sent_at timestamptz;
-
-alter table public.jobs
-  add column if not exists closeout_notes text;
-
-alter table public.jobs
-  add column if not exists linked_estimate_id uuid;
-
-create or replace function public.quote_home_summary(
-  p_org_id uuid
-) returns table (
-  total_versions bigint,
-  draft_count bigint,
-  sent_or_awaiting_count bigint,
-  live_count bigint,
-  pipeline_total numeric
-)
-language sql
-stable
-set search_path = public
-as $$
-  with estimate_base as (
-    select
-      e.id,
-      e.job_id,
-      coalesce(nullif(btrim(e.version_state), ''), 'draft') as version_state
-    from public.estimates e
-    where e.org_id = p_org_id
-  ),
-  sent_jobs as (
-    select j.id
-    from public.jobs j
-    where j.org_id = p_org_id
-      and j.status in ('estimate_sent', 'follow_up')
-  ),
-  rollups as (
-    select r.estimate_id, coalesce(r.final_total, 0) as final_total
-    from public.estimate_version_rollups r
-    where r.org_id = p_org_id
-  )
-  select
-    count(*)::bigint as total_versions,
-    count(*) filter (where estimate_base.version_state = 'draft')::bigint as draft_count,
-    count(*) filter (where estimate_base.job_id in (select id from sent_jobs))::bigint as sent_or_awaiting_count,
-    count(*) filter (where estimate_base.version_state = 'live')::bigint as live_count,
-    coalesce(
-      sum(
-        case
-          when estimate_base.version_state = 'archived' then 0
-          else coalesce(rollups.final_total, 0)
-        end
-      ),
-      0
-    ) as pipeline_total
-  from estimate_base
-  left join rollups on rollups.estimate_id = estimate_base.id;
-$$;
+-- Forward-fix quote_home_jobs_page for databases that already applied 061.
+-- RETURN QUERY requires exact column types. Older databases may have text-like
+-- columns as varchar, and jobs.status is public.job_status, while the RPC
+-- contract returns text for the application read model.
 
 create or replace function public.quote_home_jobs_page(
   p_org_id uuid,
@@ -121,7 +59,7 @@ begin
         j.scheduled_email_sent_at,
         j.completed_at,
         j.completed_email_sent_at,
-        j.closeout_notes,
+        j.closeout_notes::text as closeout_notes,
         j.linked_estimate_id
       from public.jobs j
       join public.customers c
@@ -139,7 +77,7 @@ begin
           or (j.created_at, j.id) < (p_cursor_created_at, p_cursor_id)
         )
       order by j.created_at desc, j.id desc
-      limit least(greatest(coalesce(p_limit, 25), 1), 100)
+      limit least(greatest(coalesce(p_limit, 25), 1), 101)
     ),
     version_counts as (
       select e.job_id, count(*)::bigint as version_count
@@ -172,11 +110,6 @@ begin
     order by filtered_jobs.created_at desc, filtered_jobs.id desc;
 end;
 $$;
-
-revoke all on function public.quote_home_summary(uuid) from public;
-revoke all on function public.quote_home_summary(uuid) from anon;
-revoke all on function public.quote_home_summary(uuid) from authenticated;
-grant execute on function public.quote_home_summary(uuid) to service_role;
 
 revoke all on function public.quote_home_jobs_page(uuid, text, integer, timestamptz, uuid) from public;
 revoke all on function public.quote_home_jobs_page(uuid, text, integer, timestamptz, uuid) from anon;

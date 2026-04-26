@@ -101,12 +101,14 @@ export function useEstimateV2SummaryData(
     estimateId,
     routeFamily,
     refreshPricing,
+    setError,
     setPolicySaving,
   })
   const { saveTrimPaintDebounced } = useEstimateV2TrimPaintController({
     estimateId,
     routeFamily,
     refreshPricing,
+    setError,
     setPolicySaving,
   })
 

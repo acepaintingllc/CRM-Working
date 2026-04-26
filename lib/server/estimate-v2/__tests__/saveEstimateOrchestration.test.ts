@@ -289,4 +289,107 @@ describe('saveEstimateV2Inputs', () => {
       ],
     })
   })
+
+  it('maps roller payload rows to estimate_rollers persistence', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: {
+        id: 'estimate-1',
+        job_id: 'job-1',
+      },
+    })
+    mocks.softReplaceRows.mockResolvedValue(undefined)
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          rollers: [
+            {
+              id: 'roller-1',
+              scope: 'Wall',
+              wall_color_id: 'color1',
+              selected_option_id: 'WALL_9',
+              roller_size_in: '9',
+              covers_qty: '2',
+              notes: 'Saved roller',
+            },
+            {
+              id: 'roller-unassigned',
+              scope: 'Wall',
+              wall_color_id: 'scope:wall-unassigned',
+              selected_option_id: 'WALL_12',
+              roller_size_in: '12',
+              covers_qty: '1',
+              notes: 'Unassigned wall scope',
+            },
+            {
+              id: 'roller-2',
+              scope: 'Ceiling',
+              selected_option_id: 'CEIL_14',
+              roller_size_in: 14,
+              covers_qty: 1,
+            },
+            {
+              id: 'applicator-1',
+              scope: 'Trim',
+              selected_option_id: 'TRIM_4',
+              roller_size_in: '4',
+              covers_qty: '2',
+              notes: 'Saved applicator',
+            },
+          ],
+        },
+      })
+    ).resolves.toEqual({ ok: true })
+
+    expect(mocks.softReplaceRows).toHaveBeenCalledWith({
+      table: 'estimate_rollers',
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      rows: [
+        expect.objectContaining({
+          id: 'roller-1',
+          org_id: 'org-1',
+          estimate_id: 'estimate-1',
+          job_id: 'job-1',
+          scope: 'Wall',
+          wall_color_id: 'COLOR1',
+          selected_option_id: 'WALL_9',
+          roller_size_in: 9,
+          covers_qty: 2,
+          notes: 'Saved roller',
+        }),
+        expect.objectContaining({
+          id: 'roller-unassigned',
+          scope: 'Wall',
+          wall_color_id: 'scope:wall-unassigned',
+          selected_option_id: 'WALL_12',
+          roller_size_in: 12,
+          covers_qty: 1,
+          notes: 'Unassigned wall scope',
+        }),
+        expect.objectContaining({
+          id: 'roller-2',
+          scope: 'Ceiling',
+          wall_color_id: null,
+          selected_option_id: 'CEIL_14',
+          roller_size_in: 14,
+          covers_qty: 1,
+        }),
+        expect.objectContaining({
+          id: 'applicator-1',
+          scope: 'Trim',
+          wall_color_id: null,
+          selected_option_id: 'TRIM_4',
+          roller_size_in: 4,
+          covers_qty: 2,
+          notes: 'Saved applicator',
+        }),
+      ],
+    })
+  })
 })

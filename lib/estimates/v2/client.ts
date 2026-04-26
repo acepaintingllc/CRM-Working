@@ -1,27 +1,75 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-import { getApiErrorMessage, getApiPayloadData, parseApiResponse } from '@/lib/client/api'
-import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
+import { getApiErrorMessage, getApiPayloadData, parseApiResponse } from '../../client/apiCore.ts'
 
-export type EstimateV2RatesFlagsLoadResult =
+type EstimateV2Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
+type EstimateV2ClientResult<TPayload> =
   | {
       ok: true
-      payload: unknown
+      payload: TPayload
     }
   | {
       ok: false
       message: string
     }
 
-export async function loadEstimateV2RatesFlagsPayload(): Promise<EstimateV2RatesFlagsLoadResult> {
-  const response = await authedFetch('/api/estimates/v2/rates-flags', {
-    cache: 'no-store',
-  })
-  const parsed = await parseApiResponse(response)
-  if (!response.ok) {
-    return { ok: false, message: getApiErrorMessage(response, parsed) }
-  }
+export type EstimateV2RatesFlagsLoadResult = EstimateV2ClientResult<unknown>
 
-  return { ok: true, payload: getApiPayloadData<RatesFlagsPayload>(parsed.json) }
+const estimateV2RatesFlagsEndpoint = '/api/estimates/v2/rates-flags'
+const rollerOptionsLoadFailureMessage = 'Roller and applicator options failed to load.'
+const rollerOptionsMalformedMessage = 'Roller and applicator options response was malformed.'
+
+async function getDefaultFetch(): Promise<EstimateV2Fetch> {
+  const authModule = await import('../../auth/authedFetch.ts')
+  return authModule.authedFetch
+}
+
+async function loadEstimateV2DataEnvelope<TPayload>(params: {
+  endpoint: string
+  fetchImpl?: EstimateV2Fetch
+  failureMessage: string
+  malformedMessage: string
+}): Promise<EstimateV2ClientResult<TPayload>> {
+  try {
+    const fetcher = params.fetchImpl ?? (await getDefaultFetch())
+    const response = await fetcher(params.endpoint, { cache: 'no-store' })
+    const parsed = await parseApiResponse(response)
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        message: getApiErrorMessage(response, parsed, params.failureMessage),
+      }
+    }
+
+    const payload = getApiPayloadData<TPayload>(parsed.json)
+    if (!payload) {
+      return {
+        ok: false,
+        message: params.malformedMessage,
+      }
+    }
+
+    return {
+      ok: true,
+      payload,
+    }
+  } catch {
+    return {
+      ok: false,
+      message: params.failureMessage,
+    }
+  }
+}
+
+export async function loadEstimateV2RatesFlagsPayload(
+  fetchImpl?: EstimateV2Fetch
+): Promise<EstimateV2RatesFlagsLoadResult> {
+  return loadEstimateV2DataEnvelope<unknown>({
+    endpoint: estimateV2RatesFlagsEndpoint,
+    fetchImpl,
+    failureMessage: rollerOptionsLoadFailureMessage,
+    malformedMessage: rollerOptionsMalformedMessage,
+  })
 }

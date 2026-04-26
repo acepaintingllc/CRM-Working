@@ -12,6 +12,8 @@ import type {
   EstimateV2WallSegmentDraft,
 } from '../../types/estimator/v2.ts'
 import { asNullableNumber } from './parsing.ts'
+import { normalizeRollerApplicatorQuantity } from './rollerQuantities.ts'
+import { normalizeWallRollerTargetId } from './rollerIdentity.ts'
 import { HIDDEN_CEILING_COLOR_ID } from './scopeRules.ts'
 
 const STANDARD_DOOR_DEDUCTION_SF = 21
@@ -295,25 +297,18 @@ export function buildEstimateV2SavePayload(
   )
 
   const orderedRollers = sortByPosition(rollers)
-    .filter(
-      (roller) =>
-        !!(
-          roller.selectedOptionId?.trim() ||
-          roller.rollerSizeIn.trim() ||
-          roller.coversQty.trim() ||
-          roller.notes.trim()
-        )
-    )
     .map((roller, index) => ({
       id: roller.id,
       position: index,
       scope: roller.scope,
-      wall_color_id: roller.scope === 'Wall' ? roller.wallColorId.trim() || null : null,
+      wall_color_id:
+        roller.scope === 'Wall' ? normalizeWallRollerTargetId(roller.wallColorId) || null : null,
       selected_option_id: roller.selectedOptionId?.trim() || null,
       roller_size_in: toNullableDraftNumber(roller.rollerSizeIn),
-      covers_qty: toNullableDraftNumber(roller.coversQty),
+      covers_qty: normalizeRollerApplicatorQuantity(roller.coversQty).numberValue,
       notes: roller.notes.trim() || null,
     }))
+    .filter((roller) => roller.scope === 'Ceiling' || roller.scope === 'Trim' || roller.wall_color_id)
 
   return {
     rooms: orderedRooms,

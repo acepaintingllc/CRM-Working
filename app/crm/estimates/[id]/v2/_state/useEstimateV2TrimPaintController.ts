@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import { getApiErrorMessage, parseApiResponse } from '@/lib/client/api'
+import { createEstimateV2Error, type EstimateV2Error } from '@/lib/estimator/errors'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 
 export type SummaryTrimPaintDraft = {
@@ -14,9 +16,10 @@ export function useEstimateV2TrimPaintController(params: {
   estimateId: string
   routeFamily: EstimateRouteFamily
   refreshPricing: () => Promise<void>
+  setError: (value: EstimateV2Error | null) => void
   setPolicySaving: (value: boolean) => void
 }) {
-  const { estimateId, routeFamily, refreshPricing, setPolicySaving } = params
+  const { estimateId, routeFamily, refreshPricing, setError, setPolicySaving } = params
   const trimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const saveTrimPaintDebounced = useCallback(
@@ -26,7 +29,7 @@ export function useEstimateV2TrimPaintController(params: {
         if (!estimateId) return
         setPolicySaving(true)
         try {
-          await authedFetch(routeFamily.estimateApiHref(estimateId), {
+          const response = await authedFetch(routeFamily.estimateApiHref(estimateId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -37,13 +40,33 @@ export function useEstimateV2TrimPaintController(params: {
               },
             }),
           })
+          const parsed = await parseApiResponse(response)
+          if (!response.ok) {
+            const message = getApiErrorMessage(response, parsed, 'Failed to save trim paint')
+            console.error('Estimate V2 trim paint save failed', {
+              estimateId,
+              operation: 'saveTrimPaintDebounced',
+              status: response.status,
+              message,
+            })
+            setError(createEstimateV2Error(message, { retryable: true }))
+            return
+          }
+          setError(null)
           await refreshPricing()
+        } catch (error) {
+          console.error('Estimate V2 trim paint save crashed', {
+            estimateId,
+            operation: 'saveTrimPaintDebounced',
+            error,
+          })
+          setError(createEstimateV2Error('Failed to save trim paint', { retryable: true }))
         } finally {
           setPolicySaving(false)
         }
       }, 600)
     },
-    [estimateId, refreshPricing, routeFamily, setPolicySaving]
+    [estimateId, refreshPricing, routeFamily, setError, setPolicySaving]
   )
 
   useEffect(
