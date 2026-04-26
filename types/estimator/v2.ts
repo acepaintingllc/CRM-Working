@@ -1,8 +1,35 @@
 import type { YN } from '@/types/estimator/core'
 import type {
-  EstimateV2ConditionModifier,
-  EstimateV2ConditionSelections,
+  EstimateV2ConditionModifier as EstimateV2LegacyConditionModifier,
+  EstimateV2ConditionSelections as EstimateV2LegacyConditionSelections,
 } from '@/lib/estimator/conditionModifiers'
+
+// Condition modifier types — room & scope conditions on the details page
+
+export type ConditionLevel = 'active' | 'minor' | 'moderate' | 'major'
+
+export type ConditionScopeFactors = {
+  room: number
+  wall: number
+  ceiling: number
+  trim: number
+}
+
+export type EstimateV2ConditionModifier = {
+  id: string
+  displayName: string
+  scope: 'room' | 'wall' | 'ceiling' | 'trim'
+  modifierType: 'binary' | 'severity'
+  factorField: string
+  levels: Partial<Record<ConditionLevel, number>>
+}
+
+export type EstimateV2ConditionSelections = {
+  room: Record<string, ConditionLevel>
+  wall: Record<string, ConditionLevel>
+  ceiling: Record<string, ConditionLevel>
+  trim: Record<string, ConditionLevel>
+}
 
 export type UnsafeRecord = Record<string, unknown>
 
@@ -82,7 +109,7 @@ export type EstimateV2Catalogs = {
   room_flags: EstimateV2RoomFlagOption[]
   ceiling_types: EstimateV2CeilingTypeOption[]
   trim_items: EstimateV2TrimTypeOption[]
-  condition_modifiers?: EstimateV2ConditionModifier[]
+  condition_modifiers?: EstimateV2LegacyConditionModifier[]
 }
 
 export type EstimateV2CatalogsPayload = {
@@ -184,7 +211,7 @@ export type EstimateV2RoomInputRow = {
   width_in?: number | null
   wallheight_in?: number | null
   mode?: 'RECT' | 'SEG' | null
-  condition_selections?: EstimateV2ConditionSelections | null
+  condition_selections?: EstimateV2LegacyConditionSelections | null
 }
 
 export type EstimateV2RoomFlagRow = {
@@ -271,6 +298,8 @@ export type EstimateV2JobSettingsDraft = {
   ceilingPrimerProductId: string
   trimPaintProductId: string
   trimPrimerProductId: string
+  conditionSelections?: EstimateV2ConditionSelections
+  resolvedConditionFactors?: ConditionScopeFactors
 }
 
 export type EstimateV2JobDefaultProducts = {
@@ -301,7 +330,7 @@ export type EstimateV2RoomDraft = {
   wallComplexityId: string
   notes: string
   position: number
-  conditionSelections?: EstimateV2ConditionSelections
+  conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
 export type EstimateV2RoomFlagDraft = {
@@ -359,7 +388,7 @@ export type EstimateV2WallScopeDraft = {
   overrideSupplyCost: string
   overrideTotal: string
   notes: string
-  conditionSelections?: EstimateV2ConditionSelections
+  conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
 export type EstimateV2WallSegmentDraft = {
@@ -414,7 +443,7 @@ export type EstimateV2CeilingScopeDraft = {
   overrideSupplyCost: string
   overrideTotal: string
   notes: string
-  conditionSelections?: EstimateV2ConditionSelections
+  conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
 export type EstimateV2CeilingSegmentDraft = {
@@ -475,7 +504,7 @@ export type EstimateV2TrimScopeDraft = {
   overrideTotal: string
   overrideDescription: string
   notes: string
-  conditionSelections?: EstimateV2ConditionSelections
+  conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
 export type EstimateV2WallSegmentDerived = {
@@ -515,7 +544,7 @@ export type EstimateV2SavePayload = {
     length_in: number | null
     width_in: number | null
     wallheight_in: number | null
-    condition_selections: EstimateV2ConditionSelections | null
+    condition_selections: EstimateV2LegacyConditionSelections | null
   }>
   room_wall_scopes: UnsafeRecord[]
   wall_segments: UnsafeRecord[]
