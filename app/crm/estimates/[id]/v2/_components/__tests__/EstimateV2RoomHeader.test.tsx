@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EstimateV2EditorRoomVm } from '../../_state/estimateV2EditorTypes'
 import { estimateV2EditorPageStyles } from '../estimateV2EditorPageStyles'
@@ -88,7 +88,7 @@ describe('EstimateV2RoomHeader', () => {
     cleanup()
   })
 
-  it('renders room flag chip hints from scoped wall, ceiling, and trim factors', () => {
+  it('keeps room flag multiplier details in hover titles only', () => {
     render(
       <EstimateV2RoomHeader
         styles={estimateV2EditorPageStyles}
@@ -97,20 +97,23 @@ describe('EstimateV2RoomHeader', () => {
       />
     )
 
-    expect(
-      within(screen.getByRole('button', { name: /Walls only legacy/i })).getByText('Walls x1.2')
-    ).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('button', { name: /Ceiling repair/i })).getByText('Ceilings x1.15')
-    ).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('button', { name: /Trim detail/i })).getByText('Trim x1.1')
-    ).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('button', { name: /Heavy prep/i })).getByText(
-        'Walls x1.2, Ceilings x1.15, Trim x1.1'
-      )
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Walls only legacy/i })).toHaveAttribute(
+      'title',
+      'Walls x1.2'
+    )
+    expect(screen.getByRole('button', { name: /Ceiling repair/i })).toHaveAttribute(
+      'title',
+      'Ceilings x1.15'
+    )
+    expect(screen.getByRole('button', { name: /Trim detail/i })).toHaveAttribute(
+      'title',
+      'Trim x1.1'
+    )
+    expect(screen.getByRole('button', { name: /Heavy prep/i })).toHaveAttribute(
+      'title',
+      'Walls x1.2, Ceilings x1.15, Trim x1.1'
+    )
+    expect(screen.queryByText('Walls x1.2')).not.toBeInTheDocument()
   })
 
   it('disables the active geometry mode so no-op clicks do not dispatch mode changes', () => {

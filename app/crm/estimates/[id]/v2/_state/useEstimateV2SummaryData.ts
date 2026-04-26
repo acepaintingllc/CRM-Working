@@ -44,6 +44,25 @@ export function useEstimateV2SummaryData(
   const [trimPaintQuarts, setTrimPaintQuarts] = useState(0)
   const [policySaving, setPolicySaving] = useState(false)
 
+  const summaryLoaderState = useMemo(
+    () => ({
+      setLoading,
+      setError,
+      setData,
+      setJob,
+      setLaborDayEnabled,
+      setDayhours,
+      setRoundIncrement,
+      setLaborRate,
+      setJobMinEnabled,
+      setJobMinAmount,
+      setTrimPaintProductId,
+      setTrimPaintGallons,
+      setTrimPaintQuarts,
+    }),
+    []
+  )
+
   const refreshPricing = useCallback(async () => {
     if (!estimateId) return
     try {
@@ -76,21 +95,7 @@ export function useEstimateV2SummaryData(
     }
   }, [estimateId, routeFamily])
 
-  useEstimateV2SummaryLoader(estimateId, routeFamily, {
-    setLoading,
-    setError,
-    setData,
-    setJob,
-    setLaborDayEnabled,
-    setDayhours,
-    setRoundIncrement,
-    setLaborRate,
-    setJobMinEnabled,
-    setJobMinAmount,
-    setTrimPaintProductId,
-    setTrimPaintGallons,
-    setTrimPaintQuarts,
-  })
+  useEstimateV2SummaryLoader(estimateId, routeFamily, summaryLoaderState)
 
   const { savePolicyDebounced } = useEstimateV2SummaryPolicyController({
     estimateId,

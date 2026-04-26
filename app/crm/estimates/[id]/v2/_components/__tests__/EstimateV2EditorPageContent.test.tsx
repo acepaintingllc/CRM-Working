@@ -253,6 +253,7 @@ vi.mock('../EstimateV2TrimSectionBody', () => ({
 
 describe('EstimateV2EditorPageContent', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     mockUseEstimateV2Editor.mockReturnValue(baseEditorState)
   })
 
@@ -271,12 +272,31 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.getAllByText('364 sf').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getAllByText('+ Add room')[0])
-    fireEvent.click(screen.getByText('Next: Summary ->'))
+    fireEvent.click(screen.getByText('Next: Details & Overrides ->'))
 
     expect(addRoom).toHaveBeenCalled()
     await waitFor(() => {
       expect(save).toHaveBeenCalled()
-      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/summary')
+      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/details')
+    })
+  })
+
+  it('lets footer continue navigate even when there are no dirty changes', async () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByText('Save & continue ->'))
+
+    expect(save).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/details')
     })
   })
 

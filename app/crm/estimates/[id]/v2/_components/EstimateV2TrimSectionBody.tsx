@@ -1,11 +1,14 @@
 'use client'
 
 import { numberOrNull } from '../_lib/estimateV2EditorNormalize'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, Dispatch, SetStateAction } from 'react'
 import type { EstimateV2EditorTrimVm } from '../_state/estimateV2EditorTypes'
 import {
+  Advanced,
+  AdvancedPanelToggle,
   Field,
   ItemActionRow,
+  PrimerModeButtons,
   ReorderDeleteActions,
   TrimScopePanel,
 } from './EstimateV2EditorPrimitives'
@@ -22,19 +25,28 @@ const sharedStyles = (styles: EditorStyles) => ({
 export function EstimateV2TrimSectionBody({
   styles,
   trimVm,
+  openTrimAdvanced,
+  setOpenTrimAdvanced,
   toDisplayNumber,
 }: {
   styles: EditorStyles
   trimVm: EstimateV2EditorTrimVm
+  openTrimAdvanced: Record<string, boolean>
+  setOpenTrimAdvanced: Dispatch<SetStateAction<Record<string, boolean>>>
   toDisplayNumber: (value: number | null | undefined) => string
 }) {
   const {
     selectedRoom,
     selectedRoomResolvedMode,
     selectedRoomTrimScopes,
+    effectiveTrimPaintLabel,
+    effectiveTrimPrimerLabel,
+    trimPaintOptions,
+    trimPrimerOptions,
     trimTypeOptions,
     trimScopeEffectiveMeasurementById,
     trimScopeEffectiveTotalById,
+    colorCodeOptions,
     addScope,
     moveScope,
     deleteScope,
@@ -58,19 +70,17 @@ export function EstimateV2TrimSectionBody({
         <div style={{ ...styles.mono, color: 'var(--v2-ink-3)' }}>
           Dynamic trim items for this room
         </div>
-        <button
-          type="button"
-          style={styles.button}
-          onClick={() => addScope(selectedRoom.roomId)}
-        >
+        <button type="button" style={styles.button} onClick={() => addScope(selectedRoom.roomId)}>
           + Add Trim Item
         </button>
       </div>
+
       {selectedRoomTrimScopes.length === 0 && (
         <div style={{ ...styles.panel, color: 'var(--v2-ink-3)' }}>
           Add a trim item to start trim scope inputs for this room.
         </div>
       )}
+
       {selectedRoomTrimScopes.map((trimScope, trimIndex) => {
         const typeMeta = trimTypeOptions.find((item) => item.id === trimScope.trimTypeId)
         const helperEligible = selectedRoomResolvedMode === 'RECT' && !!typeMeta?.helper_allowed
@@ -96,6 +106,7 @@ export function EstimateV2TrimSectionBody({
           trimScope.difficultFinishFactor,
           trimScope.caulkFillFactor,
         ].filter((value) => (numberOrNull(value) ?? 1) !== 1).length
+        const advancedOpen = !!openTrimAdvanced[trimScope.id]
 
         return (
           <div
@@ -106,6 +117,7 @@ export function EstimateV2TrimSectionBody({
               padding: 12,
               display: 'grid',
               gap: 10,
+              background: '#111111',
             }}
           >
             <ItemActionRow
@@ -134,8 +146,10 @@ export function EstimateV2TrimSectionBody({
             />
 
             <div style={{ ...styles.mono, color: 'var(--v2-ink-3)' }}>
-              {trimScope.measurementMode === 'ROOM_HELPER' ? 'Helper' : 'Manual'} ·{' '}
-              {trimScope.unitType} · modifiers {rowModifierCount}
+              {trimScope.measurementMode === 'ROOM_HELPER' ? 'Helper' : 'Manual'} | {trimScope.unitType}
+              {rowModifierCount > 0
+                ? ` | ${rowModifierCount} saved factor${rowModifierCount === 1 ? '' : 's'}`
+                : ''}
             </div>
 
             <div className="paint-setup-grid">
@@ -177,9 +191,9 @@ export function EstimateV2TrimSectionBody({
                   }}
                   style={styles.input}
                 >
-                  <option value="MANUAL">MANUAL</option>
+                  <option value="MANUAL">Manual</option>
                   <option value="ROOM_HELPER" disabled={!helperEligible}>
-                    ROOM_HELPER
+                    Room helper
                   </option>
                 </select>
               </Field>
@@ -217,87 +231,153 @@ export function EstimateV2TrimSectionBody({
                   />
                 </Field>
               )}
-            </div>
-
-            <div className="paint-setup-grid">
               <Field label="Primer Mode" styles={sharedStyles(styles)}>
-                <select
-                  value={trimScope.primeMode}
-                  onChange={(e) =>
+                <PrimerModeButtons
+                  currentMode={trimScope.primeMode}
+                  onChange={(mode) =>
                     updateScope(trimScope.id, {
-                      primeMode: e.target.value as 'NONE' | 'SPOT' | 'FULL',
+                      primeMode: mode,
+                      primerProductId: mode === 'NONE' ? '' : trimScope.primerProductId,
                     })
                   }
-                  style={styles.input}
-                >
-                  <option value="NONE">NONE</option>
-                  <option value="SPOT">SPOT</option>
-                  <option value="FULL">FULL</option>
-                </select>
-              </Field>
-            </div>
-
-            <div className="advanced-grid">
-              <Field label="Prep" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.prepFactor}
-                  onChange={(e) => updateScope(trimScope.id, { prepFactor: e.target.value })}
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Height" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.heightFactor}
-                  onChange={(e) => updateScope(trimScope.id, { heightFactor: e.target.value })}
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Profile" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.profileFactor}
-                  onChange={(e) => updateScope(trimScope.id, { profileFactor: e.target.value })}
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Room Flag" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.roomFlagFactor}
-                  readOnly
-                  style={{ ...styles.input, opacity: 0.7, cursor: 'not-allowed' }}
-                />
-              </Field>
-              <Field label="Masking" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.maskingFactor}
-                  onChange={(e) => updateScope(trimScope.id, { maskingFactor: e.target.value })}
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Stair" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.stairFactor}
-                  onChange={(e) => updateScope(trimScope.id, { stairFactor: e.target.value })}
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Finish" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.difficultFinishFactor}
-                  onChange={(e) =>
-                    updateScope(trimScope.id, { difficultFinishFactor: e.target.value })
-                  }
-                  style={styles.input}
-                />
-              </Field>
-              <Field label="Caulk/Fill" styles={sharedStyles(styles)}>
-                <input
-                  value={trimScope.caulkFillFactor}
-                  onChange={(e) => updateScope(trimScope.id, { caulkFillFactor: e.target.value })}
-                  style={styles.input}
+                  styles={{ button: styles.button }}
                 />
               </Field>
             </div>
 
+            <Advanced styles={sharedStyles(styles)}>
+              <AdvancedPanelToggle
+                label="Advanced / Overrides"
+                open={advancedOpen}
+                onToggle={() =>
+                  setOpenTrimAdvanced((prev) => ({
+                    ...prev,
+                    [trimScope.id]: !advancedOpen,
+                  }))
+                }
+                styles={{ mono: styles.mono }}
+              />
+              {advancedOpen && (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div className="advanced-grid">
+                    <Field label="Scope Name" styles={sharedStyles(styles)}>
+                      <input
+                        value={trimScope.scopeName}
+                        onChange={(e) => updateScope(trimScope.id, { scopeName: e.target.value })}
+                        style={styles.input}
+                      />
+                    </Field>
+                    <Field label="Paint Override" styles={sharedStyles(styles)}>
+                      <select
+                        value={trimScope.paintProductId}
+                        onChange={(e) => updateScope(trimScope.id, { paintProductId: e.target.value })}
+                        style={styles.input}
+                      >
+                        <option value="">{effectiveTrimPaintLabel}</option>
+                        {trimPaintOptions.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    {trimScope.primeMode !== 'NONE' && (
+                      <Field label="Primer Override" styles={sharedStyles(styles)}>
+                        <select
+                          value={trimScope.primerProductId}
+                          onChange={(e) =>
+                            updateScope(trimScope.id, { primerProductId: e.target.value })
+                          }
+                          style={styles.input}
+                        >
+                          <option value="">{effectiveTrimPrimerLabel}</option>
+                          {trimPrimerOptions.map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
+                    <Field label="Color Slot" styles={sharedStyles(styles)}>
+                      <select
+                        value={trimScope.colorId}
+                        onChange={(e) => updateScope(trimScope.id, { colorId: e.target.value })}
+                        style={styles.input}
+                      >
+                        {colorCodeOptions.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Paint Coats" styles={sharedStyles(styles)}>
+                      <input
+                        value={trimScope.paintCoats}
+                        onChange={(e) => updateScope(trimScope.id, { paintCoats: e.target.value })}
+                        style={styles.input}
+                      />
+                    </Field>
+                    {trimScope.primeMode !== 'NONE' && (
+                      <Field label="Primer Coats" styles={sharedStyles(styles)}>
+                        <input
+                          value={trimScope.primerCoats}
+                          onChange={(e) => updateScope(trimScope.id, { primerCoats: e.target.value })}
+                          style={styles.input}
+                        />
+                      </Field>
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ ...styles.mono, marginBottom: 6 }}>Overrides</div>
+                    <div className="advanced-grid">
+                      <Field label="Measurement Override" styles={sharedStyles(styles)}>
+                        <input
+                          value={trimScope.overrideMeasurement}
+                          onChange={(e) =>
+                            updateScope(trimScope.id, { overrideMeasurement: e.target.value })
+                          }
+                          style={styles.input}
+                        />
+                      </Field>
+                      <Field label="Hours Override" styles={sharedStyles(styles)}>
+                        <input
+                          value={trimScope.overrideHours}
+                          onChange={(e) => updateScope(trimScope.id, { overrideHours: e.target.value })}
+                          style={styles.input}
+                        />
+                      </Field>
+                      <Field label="Supply Cost Override" styles={sharedStyles(styles)}>
+                        <input
+                          value={trimScope.overrideSupplyCost}
+                          onChange={(e) =>
+                            updateScope(trimScope.id, { overrideSupplyCost: e.target.value })
+                          }
+                          style={styles.input}
+                        />
+                      </Field>
+                      <Field label="Total Override" styles={sharedStyles(styles)}>
+                        <input
+                          value={trimScope.overrideTotal}
+                          onChange={(e) => updateScope(trimScope.id, { overrideTotal: e.target.value })}
+                          style={styles.input}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+
+                  <Field label="Notes" styles={sharedStyles(styles)}>
+                    <textarea
+                      value={trimScope.notes}
+                      onChange={(e) => updateScope(trimScope.id, { notes: e.target.value })}
+                      style={styles.textarea}
+                    />
+                  </Field>
+                </div>
+              )}
+            </Advanced>
           </div>
         )
       })}

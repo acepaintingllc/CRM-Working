@@ -141,26 +141,16 @@ export function EstimateV2RoomHeader({
                   type="button"
                   className={`flag-chip${flag.active ? ' flag-chip-active' : ''}`}
                   onClick={() => roomVm.toggleSelectedRoomFlag(flag.id)}
+                  title={flag.modifierHint || undefined}
+                  aria-pressed={flag.active}
                   style={{
                     ...styles.flagChip,
-                    borderColor: flag.active ? 'rgba(134,239,172,0.4)' : 'var(--v2-line)',
-                    background: flag.active ? 'rgba(74,222,128,0.1)' : '#0d0d0d',
-                    color: flag.active ? 'var(--v2-ink)' : 'var(--v2-ink-2)',
+                    borderColor: flag.active ? 'rgba(134,239,172,0.46)' : 'var(--v2-line)',
+                    background: flag.active ? 'rgba(74,222,128,0.12)' : '#0d0d0d',
+                    color: flag.active ? 'var(--v2-green-2)' : 'var(--v2-ink-2)',
                   }}
                 >
-                  <span style={{ fontWeight: flag.active ? 600 : 500 }}>{flag.label}</span>
-                  {flag.modifierHint || flag.active ? (
-                    <span
-                      style={{
-                        ...styles.mono,
-                        color: flag.active ? 'var(--v2-green-2)' : 'var(--v2-ink-3)',
-                        fontSize: 'calc(10px + 4pt)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {flag.modifierHint ?? 'on'}
-                    </span>
-                  ) : null}
+                  <span className="flag-chip-label" style={{ fontWeight: flag.active ? 700 : 500 }}>{flag.label}</span>
                 </button>
               )
             })}

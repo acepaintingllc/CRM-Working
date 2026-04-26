@@ -216,10 +216,12 @@ export function EstimateV2SummaryPageContent({
   estimateId,
   routeFamily,
   routeFamilyKey = 'estimate',
+  pageEyebrow = 'Internal quote summary',
 }: {
   estimateId: string
   routeFamily?: EstimateRouteFamily
   routeFamilyKey?: EstimateRouteFamilyKey
+  pageEyebrow?: string
 }) {
   const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
   const {
@@ -520,7 +522,7 @@ export function EstimateV2SummaryPageContent({
         <main style={{ display: 'grid', gap: 12, minWidth: 0 }}>
           <section style={{ ...card, padding: '16px', borderRadius: 16, display: 'grid', gap: 8 }}>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.ink3 }}>
-              Internal quote summary
+              {pageEyebrow}
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.02, letterSpacing: '-0.04em', fontWeight: 900, color: C.ink }}>
@@ -669,7 +671,7 @@ export function EstimateV2SummaryPageContent({
           <main style={mainColStyle}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 4 }}>
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.ink3 }}>
-                Internal quote summary
+                {pageEyebrow}
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                 <h2 style={{ margin: 0, fontSize: 28, fontWeight: 900, letterSpacing: '-0.03em', color: C.ink }}>{derived.versionName}</h2>

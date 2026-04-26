@@ -26,6 +26,7 @@ export function useEstimateV2EditorPageUiState({
   const [openCeilingSection, setOpenCeilingSection] = useState<ScopeRecord>({})
   const [openCeilingAdvanced, setOpenCeilingAdvanced] = useState<ScopeRecord>({})
   const [openTrimSection, setOpenTrimSection] = useState<ScopeRecord>({})
+  const [openTrimAdvanced, setOpenTrimAdvanced] = useState<ScopeRecord>({})
 
   const toggleRoomWallInclude = useCallback(
     (roomId: string) => {
@@ -89,6 +90,8 @@ export function useEstimateV2EditorPageUiState({
     setOpenCeilingAdvanced,
     openTrimSection,
     setOpenTrimSection,
+    openTrimAdvanced,
+    setOpenTrimAdvanced,
     toggleRoomWallInclude,
     toggleRoomCeilingInclude,
     focusRoomSection,

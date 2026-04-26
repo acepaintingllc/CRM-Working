@@ -11,7 +11,6 @@ import {
   GeometryBlock,
   ItemActionRow,
   PaintSetup,
-  PaintOverrideFields,
   PrimerModeButtons,
   ReorderDeleteActions,
   SharedSegmentGrid,
@@ -233,20 +232,6 @@ export function EstimateV2WallsSectionBody({
                 {wallProductionRates.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
               </select>
             </Field>
-            <PaintOverrideFields
-              styles={{ label: styles.label, mono: styles.mono, panel: styles.panel, input: styles.input }}
-              paintLabel={effectiveWallPaintLabel}
-              paintValue={firstScope.paintProductId}
-              onPaintChange={(value) => updateScope(firstScope.id, { paintProductId: value })}
-              paintOptions={wallPaintOptions}
-              primerLabel={effectiveWallPrimerLabel}
-              primerValue={firstScope.primerProductId}
-              onPrimerChange={(value) => updateScope(firstScope.id, { primerProductId: value })}
-              primerOptions={wallPrimerOptions}
-              colorValue={firstScope.colorId}
-              onColorChange={(value) => updateScope(firstScope.id, { colorId: value })}
-              colorOptions={colorCodeOptions}
-            />
           </div>
           <Field label="Primer Mode" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}>
             <PrimerModeButtons
@@ -292,11 +277,13 @@ export function EstimateV2WallsSectionBody({
               <div style={{ ...styles.mono, marginBottom: 6 }}>Overrides</div>
               <div className="advanced-grid">
                 <Field label="Paint Override" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><select value={firstScope.paintProductId} onChange={(e) => updateScope(firstScope.id, { paintProductId: e.target.value })} style={styles.input}><option value="">{effectiveWallPaintLabel}</option>{wallPaintOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
+                {firstScope.primeMode !== 'NONE' && (
+                  <Field label="Primer Override" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><select value={firstScope.primerProductId} onChange={(e) => updateScope(firstScope.id, { primerProductId: e.target.value })} style={styles.input}><option value="">{effectiveWallPrimerLabel}</option>{wallPrimerOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
+                )}
+                <Field label="Color Slot" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><select value={firstScope.colorId} onChange={(e) => updateScope(firstScope.id, { colorId: e.target.value })} style={styles.input}>{colorCodeOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
                 <Field label="Area Override (sf)" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.overrideAreaSqFt} onChange={(e) => updateScope(firstScope.id, { overrideAreaSqFt: e.target.value })} style={styles.input} /></Field>
                 <Field label="Paint Hours Override" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.overridePaintHours} onChange={(e) => updateScope(firstScope.id, { overridePaintHours: e.target.value })} style={styles.input} /></Field>
                 <Field label="Primer Hours Override" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.overridePrimerHours} onChange={(e) => updateScope(firstScope.id, { overridePrimerHours: e.target.value })} style={styles.input} /></Field>
-                <Field label="Paint Gallons Override" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.overridePaintGallons} onChange={(e) => updateScope(firstScope.id, { overridePaintGallons: e.target.value })} style={styles.input} /></Field>
-                <Field label="Primer Gallons Override" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.overridePrimerGallons} onChange={(e) => updateScope(firstScope.id, { overridePrimerGallons: e.target.value })} style={styles.input} /></Field>
                 <Field label="Supply Cost Override" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.overrideSupplyCost} onChange={(e) => updateScope(firstScope.id, { overrideSupplyCost: e.target.value })} style={styles.input} /></Field>
                 <Field label="Total Override" styles={{ label: styles.label, mono: styles.mono, panel: styles.panel }}><input value={firstScope.overrideTotal} onChange={(e) => updateScope(firstScope.id, { overrideTotal: e.target.value })} style={styles.input} /></Field>
               </div>

@@ -17,6 +17,7 @@ import { EstimateV2SettingsDrawer } from './EstimateV2SettingsDrawer'
 import { EstimateV2Sidebar } from './EstimateV2Sidebar'
 import { EstimateV2SummaryRail } from './EstimateV2SummaryRail'
 import { estimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
+import { useEstimateV2SidebarCollapse } from './useEstimateV2SidebarCollapse'
 
 export function EstimateV2EditorPageContent({
   estimateId,
@@ -54,6 +55,7 @@ export function EstimateV2EditorPageContent({
     toggleWallsInclude: wallsVm.toggleRoomInclude,
     toggleCeilingsInclude: ceilingsVm.toggleRoomInclude,
   })
+  const sidebarCollapse = useEstimateV2SidebarCollapse()
 
   return (
     <div className={`${pageStyles.root} ace-v2-shell`} style={estimateV2EditorPageStyles.page}>
@@ -66,12 +68,21 @@ export function EstimateV2EditorPageContent({
         confirmNavigation={confirmNavigation}
       />
 
-      <div style={estimateV2EditorPageStyles.shell} className="ace-v2-rooms-layout walls-v2-shell">
+      <div
+        style={{
+          ...estimateV2EditorPageStyles.shell,
+          gridTemplateColumns: sidebarCollapse.collapsed ? '48px minmax(0, 1fr)' : 'minmax(240px, 320px) minmax(0, 1fr)',
+        }}
+        className="ace-v2-rooms-layout walls-v2-shell"
+      >
         <EstimateV2Sidebar
           styles={estimateV2EditorPageStyles}
           roomVm={roomVm}
           jobSettingsVm={jobSettingsVm}
           toDisplayNumber={toDisplayNumber}
+          collapsed={sidebarCollapse.collapsed}
+          onCollapse={sidebarCollapse.collapseSidebar}
+          onExpand={sidebarCollapse.expandSidebar}
         />
 
         <main style={{ display: 'grid', gap: 14, paddingBottom: 88 }}>
@@ -143,6 +154,8 @@ export function EstimateV2EditorPageContent({
                   setOpenCeilingAdvanced={uiState.setOpenCeilingAdvanced}
                   openTrimSection={uiState.openTrimSection}
                   setOpenTrimSection={uiState.setOpenTrimSection}
+                  openTrimAdvanced={uiState.openTrimAdvanced}
+                  setOpenTrimAdvanced={uiState.setOpenTrimAdvanced}
                   toDisplayNumber={toDisplayNumber}
                 />
               </div>
@@ -159,6 +172,8 @@ export function EstimateV2EditorPageContent({
 
       <EstimateV2EditorFooterBar
         styles={estimateV2EditorPageStyles}
+        estimateId={estimateId}
+        routeFamily={resolvedRouteFamily}
         pageVm={pageVm}
         saveVm={saveVm}
         summaryVm={summaryVm}

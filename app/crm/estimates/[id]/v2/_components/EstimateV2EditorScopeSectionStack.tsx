@@ -40,6 +40,8 @@ export function EstimateV2EditorScopeSectionStack({
   setOpenCeilingAdvanced,
   openTrimSection,
   setOpenTrimSection,
+  openTrimAdvanced,
+  setOpenTrimAdvanced,
   toDisplayNumber,
 }: {
   styles: EstimateV2EditorPageStyles
@@ -61,6 +63,8 @@ export function EstimateV2EditorScopeSectionStack({
   setOpenCeilingAdvanced: Dispatch<SetStateAction<Record<string, boolean>>>
   openTrimSection: Record<string, boolean>
   setOpenTrimSection: Dispatch<SetStateAction<Record<string, boolean>>>
+  openTrimAdvanced: Record<string, boolean>
+  setOpenTrimAdvanced: Dispatch<SetStateAction<Record<string, boolean>>>
   toDisplayNumber: (value: number | null | undefined) => string
 }) {
   const selectedRoom = roomVm.selectedRoom
@@ -135,7 +139,13 @@ export function EstimateV2EditorScopeSectionStack({
           }
           summary={<ScopeSummaryChips chips={summaryVm.trim.chips} chipStyle={styles.scopePill} />}
         >
-          <EstimateV2TrimSectionBody styles={styles} trimVm={trimVm} toDisplayNumber={toDisplayNumber} />
+          <EstimateV2TrimSectionBody
+            styles={styles}
+            trimVm={trimVm}
+            openTrimAdvanced={openTrimAdvanced}
+            setOpenTrimAdvanced={setOpenTrimAdvanced}
+            toDisplayNumber={toDisplayNumber}
+          />
         </EstimateV2TrimSection>
       )}
 
