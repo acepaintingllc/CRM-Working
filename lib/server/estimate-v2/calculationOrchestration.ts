@@ -10,6 +10,11 @@ import {
 } from '../../estimator/defaults.ts'
 import { productMap } from '../../estimator/wallsHelpers.ts'
 import { asNullableNumber, asNullableNumberFromKeys, asText, type UnsafeRecord as Unsafe } from '../../estimator/parsing.ts'
+import {
+  normalizeConditionSelections,
+  resolveConditionFactor,
+  type EstimateV2ConditionScope,
+} from '../../estimator/conditionModifiers.ts'
 import { buildTrimPaintInput } from '../trimPaint.ts'
 import {
   loadEstimateV2CalculationCatalogs,
@@ -25,6 +30,37 @@ import type {
   V2WallSegmentSaveRow,
 } from '../estimateV2RoutePayload.ts'
 import type { EstimateTemplateSettingsRow } from '../estimateTemplateSettings.ts'
+
+function roomConditionSelectionsById(rooms: Unsafe[]) {
+  const result = new Map<string, ReturnType<typeof normalizeConditionSelections>>()
+  for (const room of rooms) {
+    const roomId = asText(room.room_id).toUpperCase()
+    if (roomId) result.set(roomId, normalizeConditionSelections(room.condition_selections))
+  }
+  return result
+}
+
+function resolveCombinedConditionFactor(params: {
+  catalogs: Awaited<ReturnType<typeof loadEstimateV2CalculationCatalogs>>
+  roomSelectionsById: Map<string, ReturnType<typeof normalizeConditionSelections>>
+  roomId: string
+  scope: EstimateV2ConditionScope
+  selections: unknown
+}) {
+  const catalog = params.catalogs.wall?.condition_modifiers ?? []
+  const factor =
+    resolveConditionFactor({
+      catalog,
+      scope: 'room',
+      selections: params.roomSelectionsById.get(params.roomId),
+    }) *
+    resolveConditionFactor({
+      catalog,
+      scope: params.scope,
+      selections: normalizeConditionSelections(params.selections),
+    })
+  return factor === 1 ? null : factor
+}
 
 export async function loadCalculatedEstimateV2Artifacts(params: {
   requestOrigin: string
@@ -76,6 +112,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
     estimateId: params.estimateId,
   })
 
+  const conditionSelectionsByRoomId = roomConditionSelectionsById(params.rooms)
   const wallScopeRowsForSave = params.roomWallScopes as unknown as V2WallScopeSaveRow[]
   const wallScopePaintById = new Map<string, string | null>()
   const wallScopePrimerById = new Map<string, string | null>()
@@ -87,6 +124,13 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
     if (rowId) wallScopePrimerById.set(rowId, primerProductId)
     return {
       ...row,
+      condition_factor: resolveCombinedConditionFactor({
+        catalogs: calculationCatalogs,
+        roomSelectionsById: conditionSelectionsByRoomId,
+        roomId: asText((row as unknown as Unsafe).room_id).toUpperCase(),
+        scope: 'wall',
+        selections: (row as unknown as Unsafe).condition_selections,
+      }),
       paint_product_id: paintProductId || wallDefaultPaintId,
       primer_product_id: primerProductId || wallDefaultPrimerId,
       paint_coats: asNullableNumberFromKeys(row as unknown as Unsafe, ['paint_coats', 'wall_coats', 'walls_topcoats']),
@@ -122,6 +166,13 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
     if (rowId) ceilingScopePrimerById.set(rowId, primerProductId)
     return {
       ...row,
+      condition_factor: resolveCombinedConditionFactor({
+        catalogs: calculationCatalogs,
+        roomSelectionsById: conditionSelectionsByRoomId,
+        roomId: asText((row as unknown as Unsafe).room_id).toUpperCase(),
+        scope: 'ceiling',
+        selections: (row as unknown as Unsafe).condition_selections,
+      }),
       paint_product_id: paintProductId || ceilingDefaultPaintId,
       primer_product_id: primerProductId || ceilingDefaultPrimerId,
     }
@@ -159,6 +210,13 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
     if (rowId) trimScopePrimerById.set(rowId, primerProductId)
     return {
       ...row,
+      condition_factor: resolveCombinedConditionFactor({
+        catalogs: calculationCatalogs,
+        roomSelectionsById: conditionSelectionsByRoomId,
+        roomId: asText((row as unknown as Unsafe).room_id).toUpperCase(),
+        scope: 'trim',
+        selections: (row as unknown as Unsafe).condition_selections,
+      }),
       paint_product_id: paintProductId || trimDefaultPaintId,
       primer_product_id: primerProductId || trimDefaultPrimerId,
     }
@@ -262,6 +320,7 @@ export async function calculateWallsForSave(params: {
   userId: string
   estimateId: string
   scopes: V2WallScopeSaveRow[]
+  roomRows: V2RoomRosterRow[]
   segments: V2WallSegmentSaveRow[]
   jobsettings: Unsafe | undefined
   ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
@@ -269,8 +328,18 @@ export async function calculateWallsForSave(params: {
   const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
   const crewSize = Math.max(1, Math.floor(asNullableNumber(params.jobsettings?.crew_size) ?? 1))
   const catalogs = await params.ensureCatalogs()
+  const conditionSelectionsByRoomId = roomConditionSelectionsById(params.roomRows as unknown as Unsafe[])
   const wallCalculations = calculateWalls({
-    scopes: params.scopes,
+    scopes: params.scopes.map((scope) => ({
+      ...scope,
+      condition_factor: resolveCombinedConditionFactor({
+        catalogs,
+        roomSelectionsById: conditionSelectionsByRoomId,
+        roomId: scope.room_id,
+        scope: 'wall',
+        selections: (scope as unknown as Unsafe).condition_selections,
+      }),
+    })),
     segments: params.segments,
     settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
     catalogs: catalogs.wall,
@@ -285,6 +354,7 @@ export async function calculateCeilingsForSave(params: {
   orgId: string
   estimateId: string
   scopes: V2CeilingScopeSaveRow[]
+  roomRows: V2RoomRosterRow[]
   segments: V2CeilingSegmentSaveRow[]
   jobsettings: Unsafe | undefined
   ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
@@ -292,8 +362,18 @@ export async function calculateCeilingsForSave(params: {
   const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
   const crewSize = Math.max(1, Math.floor(asNullableNumber(params.jobsettings?.crew_size) ?? 1))
   const catalogs = await params.ensureCatalogs()
+  const conditionSelectionsByRoomId = roomConditionSelectionsById(params.roomRows as unknown as Unsafe[])
   const ceilingCalculations = calculateCeilings({
-    scopes: params.scopes,
+    scopes: params.scopes.map((scope) => ({
+      ...scope,
+      condition_factor: resolveCombinedConditionFactor({
+        catalogs,
+        roomSelectionsById: conditionSelectionsByRoomId,
+        roomId: scope.room_id,
+        scope: 'ceiling',
+        selections: (scope as unknown as Unsafe).condition_selections,
+      }),
+    })),
     segments: params.segments,
     settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
     catalogs: catalogs.ceiling ?? undefined,
@@ -328,8 +408,18 @@ export async function calculateTrimForSave(params: {
           estimateId: params.estimateId,
         })
   const catalogs = await params.ensureCatalogs()
+  const conditionSelectionsByRoomId = roomConditionSelectionsById(params.roomRows as unknown as Unsafe[])
   return calculateTrim({
-    scopes: params.scopes,
+    scopes: params.scopes.map((scope) => ({
+      ...scope,
+      condition_factor: resolveCombinedConditionFactor({
+        catalogs,
+        roomSelectionsById: conditionSelectionsByRoomId,
+        roomId: scope.room_id,
+        scope: 'trim',
+        selections: (scope as unknown as Unsafe).condition_selections,
+      }),
+    })),
     rooms: params.roomRows.map((room) => ({
       room_id: room.room_id,
       length_in: room.length_in,

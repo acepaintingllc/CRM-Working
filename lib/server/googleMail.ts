@@ -55,6 +55,8 @@ export async function sendGmailMessage(params: {
   orgId: string
   userId: string
   to: string
+  cc?: string | null
+  bcc?: string | null
   subject: string
   bodyText: string
   attachment?: { filename: string; contentType: string; data: Buffer } | null
@@ -69,6 +71,12 @@ export async function sendGmailMessage(params: {
 
   const sender = await getOrgSenderProfile(params.orgId)
   const fromHeader = formatMailboxHeader(sender.fromName, sender.fromEmail)
+  const toHeader = sanitizeHeaderValue(params.to)
+  const ccHeader = sanitizeHeaderValue(params.cc ?? '')
+  const bccHeader = sanitizeHeaderValue(params.bcc ?? '')
+  const subjectHeader = sanitizeHeaderValue(params.subject)
+  if (!toHeader) return { error: 'Recipient email is required' } as const
+  if (!subjectHeader) return { error: 'Subject is required' } as const
   const boundary = `acecrm_${Date.now()}`
   const normalizedAttachments = (
     Array.isArray(params.attachments) ? params.attachments : params.attachment ? [params.attachment] : []
@@ -76,8 +84,10 @@ export async function sendGmailMessage(params: {
 
   let raw = ''
   if (fromHeader) raw += `From: ${fromHeader}\r\n`
-  raw += `To: ${params.to}\r\n`
-  raw += `Subject: ${params.subject}\r\n`
+  raw += `To: ${toHeader}\r\n`
+  if (ccHeader) raw += `Cc: ${ccHeader}\r\n`
+  if (bccHeader) raw += `Bcc: ${bccHeader}\r\n`
+  raw += `Subject: ${subjectHeader}\r\n`
   raw += 'MIME-Version: 1.0\r\n'
 
   if (normalizedAttachments.length > 0) {

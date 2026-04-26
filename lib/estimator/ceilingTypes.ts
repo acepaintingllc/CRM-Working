@@ -62,6 +62,8 @@ export type CeilingCalculationScopeRow = {
   raw_total: number | null
   effective_total: number | null
   notes: string | null
+  condition_factor?: number | null
+  condition_selections?: Partial<Record<string, string>> | null
   // Per-scope setting overrides (same pattern as walls)
   paint_coats?: number | null
   primer_coats?: number | null

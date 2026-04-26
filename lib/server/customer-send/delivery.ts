@@ -130,6 +130,8 @@ export async function submitCustomerSendMessage(params: {
     orgId: params.orgId,
     userId: params.userId,
     to: params.draft.to_email,
+    cc: params.draft.cc_email,
+    bcc: params.draft.bcc_email,
     subject,
     bodyText,
   })

@@ -152,6 +152,7 @@ function createEmptyCatalogs(): EstimateV2CatalogsPayload['catalogs'] {
     room_flags: [],
     ceiling_types: [],
     trim_items: [],
+    condition_modifiers: [],
   }
 }
 

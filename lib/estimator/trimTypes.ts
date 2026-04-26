@@ -62,6 +62,8 @@ export type TrimCalculationScopeRow = {
   raw_total: number | null
   effective_total: number | null
   notes: string | null
+  condition_factor?: number | null
+  condition_selections?: Partial<Record<string, string>> | null
   paint_coats?: number | null
   primer_coats?: number | null
   paint_prod_rate_units_per_hour?: number | null

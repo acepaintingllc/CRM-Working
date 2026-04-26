@@ -54,6 +54,14 @@ type RoomFlag = CatalogOption & {
   notes: string | null
 }
 
+type ConditionModifier = CatalogOption & {
+  scope: 'room' | 'wall' | 'ceiling' | 'trim'
+  modifier_type: 'binary' | 'severity'
+  factor_field: string | null
+  levels: Partial<Record<'active' | 'minor' | 'moderate' | 'major', number>>
+  notes: string | null
+}
+
 type AccessFee = CatalogOption & {
   fee_type: string | null
   amount: number | null
@@ -99,6 +107,7 @@ export type EstimateCatalogs = {
   color_codes: CatalogOption[]
   roller_covers: CatalogOption[]
   room_flags: RoomFlag[]
+  condition_modifiers: ConditionModifier[]
   access_fees: AccessFee[]
   trim_items: TrimItem[]
   trim_menu_items: TrimItem[]
@@ -264,6 +273,18 @@ function buildV2CatalogResultFromSources(params: {
           wall_factor: row.wall_factor,
           ceil_factor: row.ceil_factor,
           trim_factor: row.trim_factor,
+          notes: row.notes,
+        })),
+      condition_modifiers: params.overlay.condition_modifiers
+        .filter((row) => row.active === 'Y')
+        .map((row) => ({
+          id: row.id,
+          label: row.label || row.id,
+          active: row.active,
+          scope: row.scope,
+          modifier_type: row.modifier_type,
+          factor_field: row.factor_field,
+          levels: row.levels,
           notes: row.notes,
         })),
       access_fees: [],

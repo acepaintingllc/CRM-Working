@@ -241,15 +241,15 @@ test('all modifiers combine multiplicatively', () => {
         height_factor: 1.1,
         complexity_factor: 1.2,
         ceiling_flag_factor: 1.0,
+        condition_factor: 1.25,
         prime_mode: 'NONE',
       }),
     ],
     segments: [],
   }
   const result = calculateCeilings(input)
-  // modifier = 1.3 * 1.1 * 1.2 * 1.0 = 1.716
-  // paint hours: (144 * 2 / 100) * 1.716 = 4.942...
-  const modifier = 1.3 * 1.1 * 1.2
+  // modifier = 1.3 * 1.1 * 1.2 * 1.0 * 1.25 = 2.145
+  const modifier = 1.3 * 1.1 * 1.2 * 1.25
   approx(result.scopes[0].raw_paint_hours, (144 * 2 / 100) * modifier)
 })
 

@@ -1,4 +1,8 @@
 import type { YN } from '@/types/estimator/core'
+import type {
+  EstimateV2ConditionModifier,
+  EstimateV2ConditionSelections,
+} from '@/lib/estimator/conditionModifiers'
 
 export type UnsafeRecord = Record<string, unknown>
 
@@ -78,6 +82,7 @@ export type EstimateV2Catalogs = {
   room_flags: EstimateV2RoomFlagOption[]
   ceiling_types: EstimateV2CeilingTypeOption[]
   trim_items: EstimateV2TrimTypeOption[]
+  condition_modifiers?: EstimateV2ConditionModifier[]
 }
 
 export type EstimateV2CatalogsPayload = {
@@ -179,6 +184,7 @@ export type EstimateV2RoomInputRow = {
   width_in?: number | null
   wallheight_in?: number | null
   mode?: 'RECT' | 'SEG' | null
+  condition_selections?: EstimateV2ConditionSelections | null
 }
 
 export type EstimateV2RoomFlagRow = {
@@ -295,6 +301,7 @@ export type EstimateV2RoomDraft = {
   wallComplexityId: string
   notes: string
   position: number
+  conditionSelections?: EstimateV2ConditionSelections
 }
 
 export type EstimateV2RoomFlagDraft = {
@@ -352,6 +359,7 @@ export type EstimateV2WallScopeDraft = {
   overrideSupplyCost: string
   overrideTotal: string
   notes: string
+  conditionSelections?: EstimateV2ConditionSelections
 }
 
 export type EstimateV2WallSegmentDraft = {
@@ -406,6 +414,7 @@ export type EstimateV2CeilingScopeDraft = {
   overrideSupplyCost: string
   overrideTotal: string
   notes: string
+  conditionSelections?: EstimateV2ConditionSelections
 }
 
 export type EstimateV2CeilingSegmentDraft = {
@@ -466,6 +475,7 @@ export type EstimateV2TrimScopeDraft = {
   overrideTotal: string
   overrideDescription: string
   notes: string
+  conditionSelections?: EstimateV2ConditionSelections
 }
 
 export type EstimateV2WallSegmentDerived = {
@@ -505,6 +515,7 @@ export type EstimateV2SavePayload = {
     length_in: number | null
     width_in: number | null
     wallheight_in: number | null
+    condition_selections: EstimateV2ConditionSelections | null
   }>
   room_wall_scopes: UnsafeRecord[]
   wall_segments: UnsafeRecord[]

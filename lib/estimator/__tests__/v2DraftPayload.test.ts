@@ -147,6 +147,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         widthIn: '120',
         heightIn: '96',
         wallComplexityId: '',
+        conditionSelections: { ROOM_FURNISHED: 'active' },
         notes: '',
         position: 0,
       },
@@ -172,6 +173,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         wallFlagFactor: '1',
         cutInTopFactor: '1',
         cutInBottomFactor: '1',
+        conditionSelections: { WALL_CUT_IN: 'moderate' },
         paintCoats: '2',
         primerCoats: '1',
         spotPrimePercent: '35',
@@ -209,6 +211,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         heightFactor: '1',
         complexityFactor: '1',
         ceilingFlagFactor: '1',
+        conditionSelections: { CEIL_TEXTURE: 'major' },
         paintCoats: '1',
         primerCoats: '1',
         overrideAreaSqFt: '',
@@ -252,6 +255,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         stairFactor: '1',
         difficultFinishFactor: '1',
         caulkFillFactor: '1',
+        conditionSelections: { TRIM_CAULKING: 'minor' },
         paintCoats: '1',
         primerCoats: '1',
         overrideMeasurement: '10',
@@ -273,9 +277,13 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.room_ceiling_scopes.length, 1)
   assert.equal(payload.room_trim_scopes.length, 1)
   assert.equal(payload.rooms[0].room_id, 'R001')
+  assert.deepEqual(payload.rooms[0].condition_selections, { ROOM_FURNISHED: 'active' })
   assert.equal(payload.room_wall_scopes[0].room_id, 'R001')
+  assert.deepEqual(payload.room_wall_scopes[0].condition_selections, { WALL_CUT_IN: 'moderate' })
   assert.equal(payload.room_ceiling_scopes[0].color_id, 'COLOR0')
+  assert.deepEqual(payload.room_ceiling_scopes[0].condition_selections, { CEIL_TEXTURE: 'major' })
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
+  assert.deepEqual(payload.room_trim_scopes[0].condition_selections, { TRIM_CAULKING: 'minor' })
   assert.equal(payload.room_trim_scopes[0].baseboard_opening_count, 1.5)
   assert.equal(payload.room_trim_scopes[0].override_measurement, null)
   assert.equal(payload.room_trim_scopes[0].override_total, null)

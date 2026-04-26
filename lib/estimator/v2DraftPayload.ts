@@ -16,6 +16,7 @@ import { asNullableNumber } from './parsing.ts'
 import { normalizeRollerApplicatorQuantity } from './rollerQuantities.ts'
 import { normalizeWallRollerTargetId } from './rollerIdentity.ts'
 import { HIDDEN_CEILING_COLOR_ID } from './scopeRules.ts'
+import type { EstimateV2ConditionSelections } from './conditionModifiers.ts'
 
 const STANDARD_DOOR_DEDUCTION_SF = 21
 const STANDARD_WINDOW_DEDUCTION_SF = 15
@@ -36,6 +37,13 @@ function normalizeCrewSize(value: number | null | undefined) {
 function toNullableText(value: string) {
   const trimmed = value.trim()
   return trimmed || null
+}
+
+function toPersistedConditionSelections(
+  selections: EstimateV2ConditionSelections | null | undefined
+) {
+  const entries = Object.entries(selections ?? {}).filter(([, value]) => !!value)
+  return entries.length > 0 ? Object.fromEntries(entries) : null
 }
 
 export function deriveEstimateV2Segment(segment: EstimateV2WallSegmentDraft): EstimateV2WallSegmentDerived {
@@ -133,6 +141,7 @@ export function buildEstimateV2SavePayload(
     length_in: toNullableDraftNumber(room.lengthIn),
     width_in: toNullableDraftNumber(room.widthIn),
     wallheight_in: toNullableDraftNumber(room.heightIn),
+    condition_selections: toPersistedConditionSelections(room.conditionSelections),
   }))
 
   const orderedScopes = orderedRooms.flatMap((room) =>
@@ -184,6 +193,7 @@ export function buildEstimateV2SavePayload(
         override_total: toNullableDraftNumber(scope.overrideTotal),
         effective_total: null,
         notes: scope.notes.trim() || null,
+        condition_selections: toPersistedConditionSelections(scope.conditionSelections),
       }
     })
   )
@@ -257,6 +267,7 @@ export function buildEstimateV2SavePayload(
       override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
       override_total: toNullableDraftNumber(scope.overrideTotal),
       notes: scope.notes.trim() || null,
+      condition_selections: toPersistedConditionSelections(scope.conditionSelections),
     }))
   )
 
@@ -321,6 +332,7 @@ export function buildEstimateV2SavePayload(
       override_total: null,
       override_description: null,
       notes: scope.notes.trim() || null,
+      condition_selections: toPersistedConditionSelections(scope.conditionSelections),
     }))
   )
 

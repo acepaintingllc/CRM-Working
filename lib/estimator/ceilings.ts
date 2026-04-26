@@ -336,7 +336,8 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
       ceilingTypeMult *
         (nonNeg(n(scope.height_factor)) ?? 1) *
         (nonNeg(n(scope.complexity_factor)) ?? 1) *
-        (nonNeg(n(scope.ceiling_flag_factor)) ?? 1)
+        (nonNeg(n(scope.ceiling_flag_factor)) ?? 1) *
+        (nonNeg(n(scope.condition_factor)) ?? 1)
     )
 
     // Paint / primer rates

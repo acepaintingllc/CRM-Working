@@ -20,9 +20,20 @@ export type SupplyRateRow = {
   crew_multiplier?: 'Y' | 'N' | string | null
 }
 
+export type ConditionModifierCatalogRow = {
+  id: string
+  label: string
+  scope: 'room' | 'wall' | 'ceiling' | 'trim'
+  modifier_type: 'binary' | 'severity'
+  factor_field: string | null
+  levels: Partial<Record<'active' | 'minor' | 'moderate' | 'major', number>>
+  active?: 'Y' | 'N'
+}
+
 export type WallCalculationCatalogs = {
   paint_products?: ProductRow[] | null
   supplies_rates?: SupplyRateRow[] | null
+  condition_modifiers?: ConditionModifierCatalogRow[] | null
 }
 
 export type WallCalculationScopeRow = {
@@ -73,6 +84,8 @@ export type WallCalculationScopeRow = {
   override_total: number | null
   effective_total: number | null
   notes: string | null
+  condition_factor?: number | null
+  condition_selections?: Partial<Record<string, string>> | null
   paint_coats?: number | null
   primer_coats?: number | null
   spot_prime_percent?: number | null

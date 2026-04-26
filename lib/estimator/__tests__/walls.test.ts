@@ -156,6 +156,21 @@ test('per-color crew multiplier defaults to one crew member', () => {
   assert.equal(result.per_color_supply_groups[0].total_shared_supply_cost, 5)
 })
 
+test('condition_factor stacks with existing wall labor modifiers', () => {
+  const result = calculateWalls({
+    settings: {
+      paint_prod_rate_sqft_per_hour: 100,
+      paint_coats: 2,
+      area_supply_cost_per_sf: 0,
+      per_color_supply_cost: 0,
+    },
+    scopes: [makeWallScope({ height_factor: 1.2, condition_factor: 1.25 })],
+    segments: [],
+  })
+
+  approx(result.scopes[0].raw_paint_hours, 12)
+})
+
 test('RECT scope calculates area, labor, gallons, supplies, and totals', () => {
   const input: WallCalculationInput = {
     settings: {

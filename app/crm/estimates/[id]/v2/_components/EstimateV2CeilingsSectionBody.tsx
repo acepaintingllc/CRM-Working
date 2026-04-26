@@ -14,6 +14,7 @@ import {
   ReorderDeleteActions,
   SharedSegmentGrid,
 } from './EstimateV2EditorPrimitives'
+import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import type { EstimateV2CeilingSegmentShape as CeilingSegmentShape } from '@/types/estimator/v2'
 
 type EditorStyles = Record<string, CSSProperties>
@@ -297,6 +298,14 @@ export function EstimateV2CeilingsSectionBody({
           )}
         </div>
       </Advanced>
+      <EstimateV2ConditionsPanel
+        title="Ceiling Conditions"
+        scope="ceiling"
+        catalog={ceilingsVm.conditionModifiers ?? []}
+        selections={ceilingsVm.conditionSelections}
+        onChange={ceilingsVm.setSelectedRoomCeilingCondition ?? (() => undefined)}
+        styles={styles}
+      />
     </CeilingsScopePanel>
   )
 }

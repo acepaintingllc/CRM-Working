@@ -1,6 +1,11 @@
 import type { EstimateV2Error } from '@/lib/estimator/errors'
 import type { ScopeKind } from '@/lib/estimator/scopeKinds'
 import type {
+  EstimateV2ConditionLevel,
+  EstimateV2ConditionModifier,
+  EstimateV2ConditionSelections,
+} from '@/lib/estimator/conditionModifiers'
+import type {
   EstimateV2CatalogOption,
   EstimateV2CatalogsPayload,
   EstimateV2CeilingScopeDraft,
@@ -176,6 +181,7 @@ export type EstimateV2EditorRoomVm = {
   selectedRoomIssueCount: number
   roomFlagsEnabled: boolean
   roomFlagsCatalog: EstimateV2RoomFlagOption[]
+  conditionModifiers?: EstimateV2ConditionModifier[]
   addRoom: () => void
   deleteRoom: (roomId: string) => void
   updateRoom: (roomId: string, patch: Partial<EstimateV2RoomDraft>) => void
@@ -188,6 +194,7 @@ export type EstimateV2EditorRoomVm = {
   toggleSelectedRoomFlag: (flagId: string) => void
   updateSelectedRoomDimensions: (field: 'lengthIn' | 'widthIn' | 'heightIn', value: string) => void
   switchSelectedRoomGeometryMode: (nextMode: 'RECT' | 'SEG') => void
+  setSelectedRoomCondition?: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => void
 }
 
 export type EstimateV2EditorWallsVm = {
@@ -217,6 +224,9 @@ export type EstimateV2EditorWallsVm = {
   updateSegment: (segmentId: string, patch: Partial<EstimateV2WallSegmentDraft>) => void
   toggleRoomInclude: (roomId: string) => void
   updateRoomComplexity: (roomId: string, wallComplexityId: string) => void
+  conditionModifiers?: EstimateV2ConditionModifier[]
+  conditionSelections: EstimateV2ConditionSelections
+  setSelectedRoomWallCondition?: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => void
 }
 
 export type EstimateV2EditorCeilingsVm = {
@@ -244,6 +254,9 @@ export type EstimateV2EditorCeilingsVm = {
   moveSegment: (ceilingScopeId: string, segmentId: string, direction: -1 | 1) => void
   updateSegment: (segmentId: string, patch: Partial<EstimateV2CeilingSegmentDraft>) => void
   toggleRoomInclude: (roomId: string) => void
+  conditionModifiers?: EstimateV2ConditionModifier[]
+  conditionSelections: EstimateV2ConditionSelections
+  setSelectedRoomCeilingCondition?: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => void
 }
 
 export type EstimateV2EditorTrimVm = {
@@ -271,6 +284,9 @@ export type EstimateV2EditorTrimVm = {
   deleteScope: (roomId: string, scopeId: string) => void
   toggleRoomInclude: (roomId: string) => void
   updateTrimType: (scopeId: string, trimTypeId: string) => void
+  conditionModifiers?: EstimateV2ConditionModifier[]
+  conditionSelections: EstimateV2ConditionSelections
+  setSelectedRoomTrimCondition?: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => void
 }
 
 export type EstimateV2EditorPageVm = {

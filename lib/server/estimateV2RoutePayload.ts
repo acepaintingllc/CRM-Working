@@ -22,6 +22,11 @@ import {
   toYN,
   type UnsafeRecord as Unsafe,
 } from '../estimator/parsing.ts'
+import {
+  normalizeConditionSelections,
+  parseConditionModifierRow,
+  type EstimateV2ConditionSelections,
+} from '../estimator/conditionModifiers.ts'
 
 function nextRoomId(used: Set<string>, startAt: number) {
   let n = Math.max(1, startAt)
@@ -56,6 +61,7 @@ export type V2RoomRosterRow = {
   length_in: number | null
   width_in: number | null
   wallheight_in: number | null
+  condition_selections: EstimateV2ConditionSelections | null
 }
 
 export type V2WallScopeSaveRow = WallCalculationScopeRow
@@ -83,6 +89,7 @@ export function buildV2RoomRosterRows(rows: Unsafe[]) {
       length_in: asNullableNumber(row.length_in),
       width_in: asNullableNumber(row.width_in),
       wallheight_in: asNullableNumber(row.wallheight_in),
+      condition_selections: normalizeConditionSelections(row.condition_selections),
     } satisfies V2RoomRosterRow
   })
 }
@@ -180,6 +187,7 @@ export function buildV2WallScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       paint_price_per_gal: asNullableNumberFromKeys(row, ['paint_price_per_gal']),
       primer_price_per_gal: asNullableNumberFromKeys(row, ['primer_price_per_gal']),
       notes: asText(row.notes) || null,
+      condition_selections: normalizeConditionSelections(row.condition_selections),
     } satisfies V2WallScopeSaveRow
   })
 
@@ -382,6 +390,7 @@ export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       paint_price_per_gal: asNullableNumber(row.paint_price_per_gal),
       primer_price_per_gal: asNullableNumber(row.primer_price_per_gal),
       notes: asText(row.notes) || null,
+      condition_selections: normalizeConditionSelections(row.condition_selections),
     } satisfies V2CeilingScopeSaveRow
   })
 
@@ -534,6 +543,7 @@ export function buildV2TrimScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       paint_price_per_gal: asNullableNumber(row.paint_price_per_gal),
       primer_price_per_gal: asNullableNumber(row.primer_price_per_gal),
       notes: asText(row.notes) || null,
+      condition_selections: normalizeConditionSelections(row.condition_selections),
     } satisfies V2TrimScopeSaveRow
   })
 
@@ -554,6 +564,7 @@ export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallC
   const catalogs = raw as {
     paint_products?: Unsafe[]
     supplies_rates?: Unsafe[]
+    condition_modifiers?: Unsafe[]
   }
   return {
     paint_products: Array.isArray(catalogs.paint_products)
@@ -576,6 +587,11 @@ export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallC
           value: asNullableNumber((row as Unsafe).value) ?? 0,
           crew_multiplier: asText((row as Unsafe).crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
         }))
+      : [],
+    condition_modifiers: Array.isArray(catalogs.condition_modifiers)
+      ? catalogs.condition_modifiers
+          .map((row) => parseConditionModifierRow(row))
+          .filter((row): row is NonNullable<ReturnType<typeof parseConditionModifierRow>> => row != null)
       : [],
   }
 }

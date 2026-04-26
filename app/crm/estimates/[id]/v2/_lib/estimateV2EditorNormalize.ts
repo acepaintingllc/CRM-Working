@@ -1,6 +1,7 @@
 import { asNullableNumber, asText } from '../../../../../../lib/estimator/parsing.ts'
 import { normalizeWallRollerTargetId } from '../../../../../../lib/estimator/rollerIdentity.ts'
 import { HIDDEN_CEILING_COLOR_ID } from '../../../../../../lib/estimator/scopeRules.ts'
+import { normalizeConditionSelections } from '../../../../../../lib/estimator/conditionModifiers.ts'
 import type {
   EstimateV2CeilingPrimeMode,
   EstimateV2CeilingScopeDraft,
@@ -137,6 +138,7 @@ export function createDefaultRoom(existingRooms: EstimateV2RoomDraft[]): Estimat
     wallComplexityId: '',
     notes: '',
     position: existingRooms.length,
+    conditionSelections: {},
   }
 }
 
@@ -172,6 +174,7 @@ export function createDefaultScope(roomId: string, mode: EstimateV2WallScopeMode
     overrideSupplyCost: '',
     overrideTotal: '',
     notes: '',
+    conditionSelections: {},
   }
 }
 
@@ -289,6 +292,7 @@ export function normalizeScope(row: UnsafeRecord, index: number): EstimateV2Wall
     overrideSupplyCost: toInputNumber(row.override_supply_cost),
     overrideTotal: toInputNumber(row.override_total),
     notes: asText(row.notes),
+    conditionSelections: normalizeConditionSelections(row.condition_selections),
   }
 }
 
@@ -346,6 +350,7 @@ export function createDefaultCeilingScope(
     overrideSupplyCost: '',
     overrideTotal: '',
     notes: '',
+    conditionSelections: {},
   }
 }
 
@@ -415,6 +420,7 @@ export function normalizeCeilingScope(row: UnsafeRecord, index: number): Estimat
     overrideSupplyCost: toInputNumber(row.override_supply_cost),
     overrideTotal: toInputNumber(row.override_total),
     notes: asText(row.notes),
+    conditionSelections: normalizeConditionSelections(row.condition_selections),
   }
 }
 
@@ -476,6 +482,7 @@ export function createDefaultTrimScope(roomId: string): EstimateV2TrimScopeDraft
     overrideTotal: '',
     overrideDescription: '',
     notes: '',
+    conditionSelections: {},
   }
 }
 
@@ -524,6 +531,7 @@ export function normalizeTrimScope(row: UnsafeRecord, index: number): EstimateV2
     overrideTotal: toInputNumber(row.override_total),
     overrideDescription: asText(row.override_description),
     notes: asText(row.notes),
+    conditionSelections: normalizeConditionSelections(row.condition_selections),
   }
 }
 

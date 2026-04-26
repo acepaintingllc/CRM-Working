@@ -283,7 +283,8 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
         (nonNeg(n(scope.masking_factor)) ?? 1) *
         (nonNeg(n(scope.stair_factor)) ?? 1) *
         (nonNeg(n(scope.difficult_finish_factor)) ?? 1) *
-        (nonNeg(n(scope.caulk_fill_factor)) ?? 1)
+        (nonNeg(n(scope.caulk_fill_factor)) ?? 1) *
+        (nonNeg(n(scope.condition_factor)) ?? 1)
     )
 
     const paintEnabled = scope.paint_enabled === 'N' ? 'N' : 'Y'

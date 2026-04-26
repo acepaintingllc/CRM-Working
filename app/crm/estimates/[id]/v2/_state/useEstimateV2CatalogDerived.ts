@@ -122,6 +122,10 @@ export function useEstimateV2CatalogDerived(params: {
           : [],
     [meta.catalogs.room_types, selectedRoom]
   )
+  const conditionModifiers = useMemo(
+    () => meta.catalogs.condition_modifiers ?? [],
+    [meta.catalogs.condition_modifiers]
+  )
 
   return {
     rooms: collections.rooms,
@@ -143,5 +147,6 @@ export function useEstimateV2CatalogDerived(params: {
     ceilingPrimerOptions,
     trimPrimerOptions,
     roomTypeOptions,
+    conditionModifiers,
   }
 }

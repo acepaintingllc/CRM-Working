@@ -12,6 +12,7 @@ import {
   ReorderDeleteActions,
   TrimScopePanel,
 } from './EstimateV2EditorPrimitives'
+import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import type { EstimateV2TrimMeasurementMode as TrimMeasurementMode } from '@/types/estimator/v2'
 
 type EditorStyles = Record<string, CSSProperties>
@@ -381,6 +382,15 @@ export function EstimateV2TrimSectionBody({
           </div>
         )
       })}
+
+      <EstimateV2ConditionsPanel
+        title="Trim Conditions"
+        scope="trim"
+        catalog={trimVm.conditionModifiers ?? []}
+        selections={trimVm.conditionSelections}
+        onChange={trimVm.setSelectedRoomTrimCondition ?? (() => undefined)}
+        styles={styles}
+      />
     </TrimScopePanel>
   )
 }

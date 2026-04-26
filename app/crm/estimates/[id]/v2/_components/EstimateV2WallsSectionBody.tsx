@@ -16,6 +16,7 @@ import {
   SharedSegmentGrid,
   WallsScopePanel,
 } from './EstimateV2EditorPrimitives'
+import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import type { EstimateV2WallSegmentShape as WallSegmentShape } from '@/types/estimator/v2'
 
 type EditorStyles = Record<string, CSSProperties>
@@ -292,6 +293,15 @@ export function EstimateV2WallsSectionBody({
           </div>
         )}
       </Advanced>
+
+      <EstimateV2ConditionsPanel
+        title="Wall Conditions"
+        scope="wall"
+        catalog={wallsVm.conditionModifiers ?? []}
+        selections={wallsVm.conditionSelections}
+        onChange={wallsVm.setSelectedRoomWallCondition ?? (() => undefined)}
+        styles={styles}
+      />
     </WallsScopePanel>
   )
 }

@@ -98,6 +98,8 @@ describe('customer send delivery', () => {
     expect(mockSendGmailMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
+        cc: '',
+        bcc: '',
       })
     )
     expect(result.ok).toBe(true)
@@ -166,5 +168,29 @@ describe('customer send delivery', () => {
       kind: 'invalid_input',
       message: 'Gmail not configured',
     })
+  })
+
+  it('passes cc and bcc recipients through to Gmail send', async () => {
+    await submitCustomerSendMessage({
+      ...baseParams,
+      mode: 'test',
+      draft: {
+        ...baseParams.draft,
+        cc_email: 'team@example.com',
+        bcc_email: 'owner@example.com',
+      },
+      version: {
+        id: 'draft-1',
+        snapshot_json: { document: true },
+      },
+    } as never)
+
+    expect(mockSendGmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'customer@example.com',
+        cc: 'team@example.com',
+        bcc: 'owner@example.com',
+      })
+    )
   })
 })

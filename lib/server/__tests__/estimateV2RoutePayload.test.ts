@@ -14,7 +14,7 @@ import {
 
 test('buildV2RoomRosterRows assigns generated IDs and enforces uniqueness', () => {
   const rows = buildV2RoomRosterRows([
-    { room_name: 'Living', room_id: 'R001' },
+    { room_name: 'Living', room_id: 'R001', condition_selections: { room_furnished: 'active', bad: 'invalid' } },
     { room_name: 'Kitchen', room_id: '' },
     { room_name: 'Hall', room_id: 'R010' },
   ])
@@ -22,6 +22,7 @@ test('buildV2RoomRosterRows assigns generated IDs and enforces uniqueness', () =
   assert.equal(rows[0].room_id, 'R001')
   assert.equal(rows[1].room_id, 'R002')
   assert.equal(rows[2].room_id, 'R010')
+  assert.deepEqual(rows[0].condition_selections, { ROOM_FURNISHED: 'active' })
 })
 
 test('buildV2WallScopeRows enforces one RECT scope per room and no mixed room mode', () => {
@@ -68,6 +69,7 @@ test('buildV2WallScopeRows maps v2 wall fields including coats and spot prime al
         standard_door_count: '1',
         standard_window_count: '2',
         complexity_factor: '1.2',
+        condition_selections: { wall_cut_in: 'major', noop: 'none' },
         paint_coats: '3',
         wall_spot_prime_pct: '40',
       },
@@ -85,6 +87,7 @@ test('buildV2WallScopeRows maps v2 wall fields including coats and spot prime al
   assert.equal(scope.paint_coats, 3)
   assert.equal(scope.spot_prime_percent, 40)
   assert.equal(scope.complexity_factor, 1.2)
+  assert.deepEqual(scope.condition_selections, { WALL_CUT_IN: 'major' })
   assert.equal(parsed.modeByRoom.get('R001'), 'RECT')
 })
 
@@ -154,11 +157,22 @@ test('toWallCalculationCatalogs normalizes product and supply rows', () => {
   const catalogs = toWallCalculationCatalogs({
     paint_products: [{ id: 'P1', type: 'Paint', price_per_gal: '42.5', coverage_sqft_per_gal_per_coat: '350' }],
     supplies_rates: [{ key: 'WALL_PER_COLOR', scope: 'Walls', unit: 'per color', value: '12' }],
+    condition_modifiers: [
+      {
+        id: 'WALL_TEXTURE',
+        display_name: 'Heavy wall texture',
+        scope: 'wall',
+        modifier_type: 'severity',
+        factor_field: 'complexity_factor',
+        levels: { minor: '1.10', moderate: '1.20' },
+      },
+    ],
   })
   assert.ok(catalogs)
   const cast = catalogs as {
     paint_products: Array<{ id: string; type: string; price_per_gal: number | null }>
     supplies_rates: Array<{ key: string; value: number }>
+    condition_modifiers: Array<{ id: string; scope: string; levels: { minor?: number; moderate?: number } }>
   }
   assert.equal(cast.paint_products.length, 1)
   assert.equal(cast.paint_products[0].id, 'P1')
@@ -166,6 +180,9 @@ test('toWallCalculationCatalogs normalizes product and supply rows', () => {
   assert.equal(cast.supplies_rates.length, 1)
   assert.equal(cast.supplies_rates[0].key, 'WALL_PER_COLOR')
   assert.equal(cast.supplies_rates[0].value, 12)
+  assert.equal(cast.condition_modifiers[0].id, 'WALL_TEXTURE')
+  assert.equal(cast.condition_modifiers[0].scope, 'wall')
+  assert.equal(cast.condition_modifiers[0].levels.moderate, 1.2)
 })
 
 // ─── Ceiling scope / segment builders ─────────────────────────────────────────
@@ -214,6 +231,7 @@ test('buildV2CeilingScopeRows maps ceiling-specific fields and auto-assigns posi
         width_in: '120',
         height_factor: '1.1',
         complexity_factor: '1.2',
+        condition_selections: { ceil_texture: 'moderate' },
       },
     ],
     new Set(['R001'])
@@ -232,6 +250,7 @@ test('buildV2CeilingScopeRows maps ceiling-specific fields and auto-assigns posi
   assert.equal(scope.width_in, 120)
   assert.equal(scope.height_factor, 1.1)
   assert.equal(scope.complexity_factor, 1.2)
+  assert.deepEqual(scope.condition_selections, { CEIL_TEXTURE: 'moderate' })
   assert.equal(scope.color_id, 'B')
   assert.equal(parsed.modeByRoom.get('R001'), 'RECT')
 })
@@ -326,6 +345,7 @@ test('buildV2TrimScopeRows maps trim row fields and validates room IDs', () => {
         prime_mode: 'SPOT',
         paint_enabled: 'Y',
         spot_prime_percent: '35',
+        condition_selections: { trim_oil_based: 'active' },
       },
     ],
     new Set(['R001'])
@@ -342,6 +362,7 @@ test('buildV2TrimScopeRows maps trim row fields and validates room IDs', () => {
   assert.equal(row.baseboard_opening_count, 1.5)
   assert.equal(row.prime_mode, 'SPOT')
   assert.equal(row.spot_prime_percent, 35)
+  assert.deepEqual(row.condition_selections, { TRIM_OIL_BASED: 'active' })
 
   assert.throws(
     () => buildV2TrimScopeRows([{ room_id: 'R404' }], new Set(['R001'])),
