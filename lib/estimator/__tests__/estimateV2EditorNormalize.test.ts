@@ -24,6 +24,7 @@ test('createDefaultRoom assigns the next sequential room code', () => {
       wallComplexityId: '',
       notes: '',
       position: 0,
+      conditionSelections: {},
     },
     {
       id: '2',
@@ -36,6 +37,7 @@ test('createDefaultRoom assigns the next sequential room code', () => {
       wallComplexityId: '',
       notes: '',
       position: 1,
+      conditionSelections: {},
     },
   ])
 
@@ -72,15 +74,60 @@ test('normalizeRoom and normalizeScope coerce values into editor drafts', () => 
     0
   )
 
-  assert.equal(room.roomId, 'R010')
-  assert.equal(room.wallComplexityId, 'STD')
-  assert.equal(room.lengthIn, '144')
-  assert.equal(scope.mode, 'SEG')
-  assert.equal(scope.include, 'N')
-  assert.equal(scope.colorId, 'C1')
-  assert.equal(scope.primeMode, 'SPOT')
-  assert.equal(scope.paintCoats, '3')
-  assert.equal(scope.heightFactor, '1.25')
+    assert.equal(room.roomId, 'R010')
+    assert.equal(room.wallComplexityId, 'STD')
+    assert.equal(room.lengthIn, '144')
+    // conditionSelections defaults to empty object when no condition_selections in row
+    assert.deepEqual(room.conditionSelections, {})
+    assert.equal(scope.mode, 'SEG')
+    assert.equal(scope.include, 'N')
+    assert.equal(scope.colorId, 'C1')
+    assert.equal(scope.primeMode, 'SPOT')
+    assert.equal(scope.paintCoats, '3')
+    assert.equal(scope.heightFactor, '1.25')
+})
+
+test('normalizeRoom reads condition_selections from saved data', () => {
+    const room = normalizeRoom(
+      {
+        id: 'room-cond',
+        room_id: 'R100',
+        room_name: 'Condition Test',
+        length_in: 120,
+        width_in: 120,
+        wallheight_in: 96,
+        condition_selections: { ROOM_FURNISHED: 'active', ROOM_WATER_DAMAGE: 'moderate' },
+      },
+      0
+    )
+
+    assert.equal(room.roomId, 'R100')
+    assert.deepEqual(room.conditionSelections, {
+      ROOM_FURNISHED: 'active',
+      ROOM_WATER_DAMAGE: 'moderate',
+    })
+})
+
+test('normalizeRoom normalizes condition_selections casing and drops invalid values', () => {
+    const room = normalizeRoom(
+      {
+        id: 'room-cond-2',
+        room_id: 'R101',
+        room_name: 'Casing Test',
+        condition_selections: { room_furnished: 'Active', invalid_key: 'extreme', trim_caulking: 'major' },
+      },
+      0
+    )
+
+    assert.deepEqual(room.conditionSelections, {
+      ROOM_FURNISHED: 'active',
+      TRIM_CAULKING: 'major',
+    })
+})
+
+test('createDefaultRoom initializes conditionSelections as empty object', () => {
+    const room = createDefaultRoom([])
+    assert.deepEqual(room.conditionSelections, {})
 })
 
 test('normalizeRoller preserves unassigned wall scope identity and normalizes color ids', () => {
@@ -125,6 +172,7 @@ test('resolveRoomModeById prefers scope modes and defaults missing rooms to RECT
         wallComplexityId: '',
         notes: '',
         position: 0,
+        conditionSelections: {},
       },
       {
         id: 'room-2',
@@ -137,6 +185,7 @@ test('resolveRoomModeById prefers scope modes and defaults missing rooms to RECT
         wallComplexityId: '',
         notes: '',
         position: 1,
+        conditionSelections: {},
       },
     ],
     wallScopes: [createDefaultScope('R001', 'SEG')],

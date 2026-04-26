@@ -202,7 +202,7 @@ describe('estimate details roller draft helpers', () => {
     )
   })
 
-  it('updates existing ceiling drafts and ignores trim applicator edits', () => {
+  it('updates existing ceiling and trim aggregate drafts', () => {
     const rollers: EstimateV2RollerDraft[] = [
       {
         id: 'roller-ceiling',
@@ -251,11 +251,38 @@ describe('estimate details roller draft helpers', () => {
       {
         id: 'applicator-trim',
         scope: 'Trim',
-        wallColorId: 'COLOR2',
-        rollerSizeIn: '2',
+        wallColorId: '',
+        selectedOptionId: 'TRIM_4',
+        rollerSizeIn: '4',
         coversQty: '1',
-        notes: '',
+        notes: 'Trim applicator',
         position: 1,
+      },
+    ])
+  })
+
+  it('rejects cover option ids from the wrong scope', () => {
+    const result = applyDetailsRollerRowPatch({
+      rollers: [],
+      rowId: 'wall:COLOR1',
+      patch: {
+        coverId: 'CEIL_14',
+        quantity: '2',
+      },
+      rollerOptions,
+      createId: () => 'roller-wall',
+    })
+
+    expect(result).toEqual([
+      {
+        id: 'roller-wall',
+        scope: 'Wall',
+        wallColorId: 'COLOR1',
+        selectedOptionId: '',
+        rollerSizeIn: '',
+        coversQty: '2',
+        notes: '',
+        position: 0,
       },
     ])
   })
@@ -339,7 +366,7 @@ describe('estimate details roller draft helpers', () => {
     expect(result).toBe(rollers)
   })
 
-  it('treats an empty selected option patch as unchanged when the existing draft has no selected option id', () => {
+  it('removes an empty existing row when the selected option is cleared', () => {
     const rollers: EstimateV2RollerDraft[] = [
       {
         id: 'roller-wall',
@@ -371,7 +398,7 @@ describe('estimate details roller draft helpers', () => {
       createId: () => 'unused',
     })
 
-    expect(emptySelection).toBe(rollers)
+    expect(emptySelection).toEqual([])
     expect(selectedOption).not.toBe(rollers)
     expect(selectedOption[0]).toMatchObject({
       id: 'roller-wall',
@@ -396,5 +423,33 @@ describe('estimate details roller draft helpers', () => {
     })
 
     expect(result).toBe(rollers)
+  })
+
+  it('removes an existing row when all persisted fields are cleared', () => {
+    const rollers: EstimateV2RollerDraft[] = [
+      {
+        id: 'roller-wall',
+        scope: 'Wall',
+        wallColorId: 'COLOR1',
+        selectedOptionId: 'WALL_9',
+        rollerSizeIn: '9',
+        coversQty: '3',
+        notes: 'Existing',
+        position: 0,
+      },
+    ]
+
+    const result = applyDetailsRollerRowPatch({
+      rollers,
+      rowId: 'wall:COLOR1',
+      patch: {
+        coverId: '',
+        quantity: '',
+        notes: '',
+      },
+      rollerOptions,
+    })
+
+    expect(result).toEqual([])
   })
 })

@@ -338,6 +338,12 @@ export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
     const nextPosition = positionByRoom.get(roomId) ?? 0
     positionByRoom.set(roomId, nextPosition + 1)
 
+        const geometryMode = asText(row.ceiling_geometry_mode).toUpperCase()
+    const ceilingGeometryMode: 'FLAT' | 'VAULTED' | 'TRAY' | 'COFFERED' | 'MANUAL' =
+      geometryMode === 'VAULTED' || geometryMode === 'TRAY' || geometryMode === 'COFFERED' || geometryMode === 'MANUAL'
+        ? geometryMode
+        : 'FLAT'
+
     return {
       id: isUuid(row.id) ? asText(row.id) : undefined,
       room_id: roomId,
@@ -351,6 +357,18 @@ export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       prime_mode: toCeilingPrimeMode(row.prime_mode),
       spot_prime_percent: asNullableNumber(row.spot_prime_percent),
       ceiling_type_id: asText(row.ceiling_type_id) || null,
+      // Geometry helper fields
+      ceiling_geometry_mode: ceilingGeometryMode,
+      vaulted_area_factor: asNullableNumber(row.vaulted_area_factor),
+      tray_perimeter_in: asNullableNumber(row.tray_perimeter_in),
+      tray_step_height_in: asNullableNumber(row.tray_step_height_in),
+      tray_band_width_in: asNullableNumber(row.tray_band_width_in),
+      coffer_section_length_in: asNullableNumber(row.coffer_section_length_in),
+      coffer_section_width_in: asNullableNumber(row.coffer_section_width_in),
+      coffer_section_count: asNullableNumber(row.coffer_section_count),
+      coffer_face_height_in: asNullableNumber(row.coffer_face_height_in),
+      coffer_bottom_width_in: asNullableNumber(row.coffer_bottom_width_in),
+      helper_extra_area_sf: asNullableNumber(row.helper_extra_area_sf),
       length_in: asNullableNumber(row.length_in),
       width_in: asNullableNumber(row.width_in),
       area_sf: asNullableNumber(row.area_sf),
@@ -602,10 +620,11 @@ export function toCeilingCalculationCatalogs(raw: Unsafe | null | undefined) {
   const catalogs = raw as { ceiling_types?: Unsafe[] }
   return {
     ...base,
-    ceiling_types: Array.isArray(catalogs.ceiling_types)
+        ceiling_types: Array.isArray(catalogs.ceiling_types)
       ? catalogs.ceiling_types.map((row) => ({
           id: asText((row as Unsafe).id),
           labor_mult: asNullableNumber((row as Unsafe).labor_mult),
+          area_factor: asNullableNumber((row as Unsafe).area_factor),
         }))
       : [],
   }
@@ -627,6 +646,9 @@ export function toTrimCalculationCatalogs(raw: Unsafe | null | undefined) {
             (row as Unsafe).helper_allowed === true,
           default_production_rate_id:
             asText((row as Unsafe).default_production_rate_id || (row as Unsafe).production_rate_id) || null,
+          trim_category: asText((row as Unsafe).trim_category) || null,
+          measurement_class: asText((row as Unsafe).measurement_class) || null,
+          picker_group: asText((row as Unsafe).picker_group) || null,
         }))
       : [],
     production_rates: Array.isArray(catalogs.production_rates)

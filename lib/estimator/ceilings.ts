@@ -154,6 +154,38 @@ function resolveCeilingAreaSupplyRate(
   return base.area_supply_cost_per_sf
 }
 
+function resolveCeilingHelperArea(scope: CeilingCalculationScopeRow, baseArea: number | null) {
+  const mode = scope.ceiling_geometry_mode ?? 'FLAT'
+  const base = nonNeg(n(baseArea)) ?? 0
+  if (base <= 0) return 0
+
+  if (mode === 'VAULTED') {
+    const factor = pos(n(scope.vaulted_area_factor)) ?? 1.2
+    return round4(Math.max(base * factor - base, 0))
+  }
+
+  if (mode === 'TRAY') {
+    const perimeter = nonNeg(n(scope.tray_perimeter_in)) ?? 0
+    const stepHeight = nonNeg(n(scope.tray_step_height_in)) ?? 0
+    const bandWidth = nonNeg(n(scope.tray_band_width_in)) ?? 0
+    return round4((perimeter * stepHeight) / 144 + (perimeter * bandWidth) / 144)
+  }
+
+  if (mode === 'COFFERED') {
+    const sectionLength = nonNeg(n(scope.coffer_section_length_in)) ?? 0
+    const sectionWidth = nonNeg(n(scope.coffer_section_width_in)) ?? 0
+    const sectionCount = Math.max(0, Math.floor(nonNeg(n(scope.coffer_section_count)) ?? 0))
+    const faceHeight = nonNeg(n(scope.coffer_face_height_in)) ?? 0
+    const bottomWidth = nonNeg(n(scope.coffer_bottom_width_in)) ?? 0
+    const sectionPerimeter = 2 * (sectionLength + sectionWidth)
+    return round4(
+      sectionCount * ((sectionPerimeter * faceHeight) / 144 + (sectionPerimeter * bottomWidth) / 144)
+    )
+  }
+
+  return 0
+}
+
 function applyScopeCosts(
   scope: ScopeCalc,
   settings: ResolvedSettings,
@@ -243,10 +275,15 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
   const products = productMap(input.catalogs)
   const missingInputs: MissingInput[] = []
 
-  // Build ceiling_type_mult lookup: ceiling_type_id → labor_mult (default 1)
-  const ceilingTypeMultMap = new Map<string, number>()
+  // Build ceiling_type lookup: ceiling_type_id → { labor_mult, area_factor }
+  const ceilingTypeInfoMap = new Map<string, { labor_mult: number; area_factor: number }>()
   for (const ct of input.catalogs?.ceiling_types ?? []) {
-    if (ct.id) ceilingTypeMultMap.set(ct.id, pos(n(ct.labor_mult)) ?? 1)
+    if (ct.id) {
+      ceilingTypeInfoMap.set(ct.id, {
+        labor_mult: pos(n(ct.labor_mult)) ?? 1,
+        area_factor: pos(n(ct.area_factor)) ?? 1,
+      })
+    }
   }
 
   // Ceiling-scoped area supply rate
@@ -327,11 +364,15 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
       rawArea = sumNumbers(includedSegments.map((seg) => seg.effective_area_sf))
     }
 
+    const typeInfo = scope.ceiling_type_id ? ceilingTypeInfoMap.get(scope.ceiling_type_id) : undefined
+    const helperExtraArea = resolveCeilingHelperArea(scope, rawArea)
+    const areaFactor = typeInfo?.area_factor ?? 1
+    const factoredRawArea = rawArea == null ? null : round4((rawArea + helperExtraArea) * areaFactor)
     const overrideArea = nonNeg(n(scope.override_area_sf))
-    const effectiveArea = include === 'Y' ? round4(overrideArea ?? rawArea ?? 0) : 0
+    const effectiveArea = include === 'Y' ? round4(overrideArea ?? factoredRawArea ?? 0) : 0
 
     // Modifier: ceiling_type_mult × height_factor × complexity_factor × ceiling_flag_factor
-    const ceilingTypeMult = scope.ceiling_type_id ? (ceilingTypeMultMap.get(scope.ceiling_type_id) ?? 1) : 1
+    const ceilingTypeMult = typeInfo?.labor_mult ?? 1
     const modifier = round4(
       ceilingTypeMult *
         (nonNeg(n(scope.height_factor)) ?? 1) *
@@ -409,7 +450,7 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
       paint_product_id: scope.paint_product_id ?? null,
       paint_product_label: paintProduct?.label ?? scope.paint_product_label ?? null,
       geometry,
-      raw_area: include === 'Y' ? rawArea : 0,
+      raw_area: include === 'Y' ? factoredRawArea : 0,
       effective_area: effectiveArea,
       raw_paint_hours: rawPaintHours,
       effective_paint_hours: effectivePaintHours,
@@ -441,6 +482,7 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
     return {
       ...scope,
       include,
+      helper_extra_area_sf: helperExtraArea,
       raw_area_sf: calc.raw_area,
       effective_area_sf: calc.effective_area,
       raw_paint_hours: calc.raw_paint_hours,

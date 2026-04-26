@@ -6,6 +6,8 @@ import {
   buildCustomerSendComposerDraft,
   customerSendUrl,
   deriveCustomerSendLabels,
+  isPositiveInteger,
+  isValidRecipientList,
   normalizeCustomerSendVersion,
   useCustomerSendWorkflow,
 } from '../customerSendWorkflow'
@@ -206,7 +208,7 @@ describe('customerSendWorkflow', () => {
     })
 
     await act(async () => {
-      await result.current.submit('test')
+      await result.current.submit('test', { testRecipient: 'qa@example.com' })
     })
 
     expect(result.current.message).toBe('Test message sent.')
@@ -287,5 +289,71 @@ describe('customerSendWorkflow', () => {
       declined_at: null,
       public_token: null,
     })
+  })
+
+  it('validates email lists and validity days helpers', () => {
+    expect(isValidRecipientList('person@example.com')).toBe(true)
+    expect(isValidRecipientList('first@example.com, second@example.com')).toBe(true)
+    expect(isValidRecipientList('bad-address')).toBe(false)
+    expect(isPositiveInteger('90')).toBe(true)
+    expect(isPositiveInteger('0')).toBe(false)
+    expect(isPositiveInteger('12.5')).toBe(false)
+  })
+
+  it('requires a separate internal test recipient and routes test sends there', async () => {
+    loadCustomerSendPage.mockResolvedValue({
+      ...basePayload,
+      draft: {
+        ...basePayload.draft,
+        cc_email: 'team@example.com',
+        bcc_email: 'owner@example.com',
+      },
+    })
+    submitCustomerSend.mockResolvedValue({
+      version: { status: 'draft' },
+    })
+
+    const { result } = renderHook(() =>
+      useCustomerSendWorkflow({
+        estimateId: 'estimate-1',
+        catalogSource: 'v2' as const,
+        buildForm: buildCustomerSendComposerDraft,
+        buildDocument: (data) => data.document,
+        draftPayload: (form) => form,
+        loadErrorMessage: 'Unable to load quote send page',
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.form?.title).toBe('Kitchen Quote')
+    })
+
+    await act(async () => {
+      await result.current.submit('test')
+    })
+    expect(result.current.error).toBe('Test recipient email is required.')
+    expect(submitCustomerSend).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.submit('test', { testRecipient: 'customer@example.com' })
+    })
+    expect(result.current.error).toBe('Use an internal test recipient, not the customer To address.')
+    expect(submitCustomerSend).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.submit('test', { testRecipient: 'qa@example.com' })
+    })
+
+    expect(submitCustomerSend).toHaveBeenCalledWith(
+      '/api/estimates/estimate-1/customer-send?v2=1',
+      expect.objectContaining({
+        mode: 'test',
+        draft: expect.objectContaining({
+          to_email: 'qa@example.com',
+          cc_email: '',
+          bcc_email: '',
+        }),
+      })
+    )
   })
 })

@@ -134,16 +134,35 @@
 
 :global(.room-setup-grid) {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(170px, 0.9fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   align-items: end;
 }
 
-:global(.room-setup-actions) {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  min-height: 34px;
+:global(.dim-helper-text) {
+  display: block;
+  font-family: var(--v2-mono);
+  font-size: calc(8px + 4pt);
+  color: var(--v2-ink-3);
+  margin-top: 2px;
+  letter-spacing: 0.06em;
+}
+
+:global(.wall-formula-text) {
+  display: block;
+  font-family: var(--v2-mono);
+  font-size: calc(8px + 4pt);
+  color: var(--v2-ink-3);
+  margin-top: 2px;
+  letter-spacing: 0.06em;
+}
+
+:global(.room-header-delete-btn) {
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+:global(.room-header-delete-btn:hover) {
+  background: rgba(248,113,113,0.08) !important;
+  border-color: rgba(248,113,113,0.4) !important;
 }
 
 :global(.geometry-primary-grid) {

@@ -26,6 +26,25 @@ function sanitizeHeaderValue(value: string) {
   return value.replace(/[\r\n]+/g, ' ').trim()
 }
 
+const EMAIL_PATTERN = /^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/
+
+function normalizeRecipientList(value: string) {
+  const cleaned = sanitizeHeaderValue(value)
+  if (!cleaned) return [] as string[]
+  return cleaned
+    .split(/[;,]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+function parseRecipientList(value: string) {
+  const recipients = normalizeRecipientList(value)
+  if (recipients.length === 0) return { ok: true as const, recipients }
+  const invalid = recipients.some((recipient) => !EMAIL_PATTERN.test(recipient))
+  if (invalid) return { ok: false as const, recipients: [] as string[] }
+  return { ok: true as const, recipients }
+}
+
 function formatMailboxHeader(name: string | null, email: string | null) {
   if (!email) return null
   const safeEmail = sanitizeHeaderValue(email)
@@ -71,9 +90,16 @@ export async function sendGmailMessage(params: {
 
   const sender = await getOrgSenderProfile(params.orgId)
   const fromHeader = formatMailboxHeader(sender.fromName, sender.fromEmail)
-  const toHeader = sanitizeHeaderValue(params.to)
-  const ccHeader = sanitizeHeaderValue(params.cc ?? '')
-  const bccHeader = sanitizeHeaderValue(params.bcc ?? '')
+  const toRecipients = parseRecipientList(params.to)
+  const ccRecipients = parseRecipientList(params.cc ?? '')
+  const bccRecipients = parseRecipientList(params.bcc ?? '')
+  if (!toRecipients.ok) return { error: 'Invalid To recipient list' } as const
+  if (!ccRecipients.ok) return { error: 'Invalid Cc recipient list' } as const
+  if (!bccRecipients.ok) return { error: 'Invalid Bcc recipient list' } as const
+
+  const toHeader = toRecipients.recipients.join(', ')
+  const ccHeader = ccRecipients.recipients.join(', ')
+  const bccHeader = bccRecipients.recipients.join(', ')
   const subjectHeader = sanitizeHeaderValue(params.subject)
   if (!toHeader) return { error: 'Recipient email is required' } as const
   if (!subjectHeader) return { error: 'Subject is required' } as const

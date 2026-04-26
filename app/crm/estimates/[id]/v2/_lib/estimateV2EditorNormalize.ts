@@ -211,6 +211,7 @@ export function normalizeRoom(row: UnsafeRecord, index: number): EstimateV2RoomD
     wallComplexityId: asText(row.wall_complexity_id || row.wall_complexity_type_id).toUpperCase(),
     notes: asText(row.notes),
     position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
+    conditionSelections: normalizeConditionSelections(row.condition_selections),
   }
 }
 
@@ -334,6 +335,16 @@ export function createDefaultCeilingScope(
     primeMode: 'NONE',
     spotPrimePercent: '',
     ceilingTypeId: '',
+    ceilingGeometryMode: 'FLAT',
+    vaultedAreaFactor: '',
+    trayPerimeterIn: '',
+    trayStepHeightIn: '',
+    trayBandWidthIn: '',
+    cofferSectionLengthIn: '',
+    cofferSectionWidthIn: '',
+    cofferSectionCount: '',
+    cofferFaceHeightIn: '',
+    cofferBottomWidthIn: '',
     lengthIn: '',
     widthIn: '',
     areaSf: '',
@@ -390,6 +401,12 @@ function parseCeilingSegmentShape(value: unknown): EstimateV2CeilingSegmentShape
   return 'RECTANGLE'
 }
 
+function parseCeilingGeometryMode(value: unknown): string {
+  const raw = asText(value).toUpperCase()
+  if (raw === 'VAULTED' || raw === 'TRAY' || raw === 'COFFERED' || raw === 'MANUAL') return raw
+  return 'FLAT'
+}
+
 export function normalizeCeilingScope(row: UnsafeRecord, index: number): EstimateV2CeilingScopeDraft {
   return {
     id: asText(row.id) || createUuid(),
@@ -404,6 +421,16 @@ export function normalizeCeilingScope(row: UnsafeRecord, index: number): Estimat
     primeMode: parseCeilingPrimeMode(row.prime_mode),
     spotPrimePercent: toInputNumber(row.spot_prime_percent),
     ceilingTypeId: asText(row.ceiling_type_id).toUpperCase(),
+    ceilingGeometryMode: parseCeilingGeometryMode(row.ceiling_geometry_mode),
+    vaultedAreaFactor: toInputNumber(row.vaulted_area_factor),
+    trayPerimeterIn: toInputNumber(row.tray_perimeter_in),
+    trayStepHeightIn: toInputNumber(row.tray_step_height_in),
+    trayBandWidthIn: toInputNumber(row.tray_band_width_in),
+    cofferSectionLengthIn: toInputNumber(row.coffer_section_length_in),
+    cofferSectionWidthIn: toInputNumber(row.coffer_section_width_in),
+    cofferSectionCount: toInputNumber(row.coffer_section_count),
+    cofferFaceHeightIn: toInputNumber(row.coffer_face_height_in),
+    cofferBottomWidthIn: toInputNumber(row.coffer_bottom_width_in),
     lengthIn: toInputNumber(row.length_in),
     widthIn: toInputNumber(row.width_in),
     areaSf: toInputNumber(row.area_sf),

@@ -124,6 +124,24 @@ export function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
 }
 
+const EMAIL_PATTERN = /^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/
+
+export function isValidRecipientList(value: string) {
+  const trimmed = asText(value)
+  if (!trimmed) return true
+  return trimmed
+    .split(/[;,]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .every((recipient) => EMAIL_PATTERN.test(recipient))
+}
+
+export function isPositiveInteger(value: string) {
+  const normalized = asText(value)
+  if (!normalized) return false
+  return /^[1-9]\d*$/.test(normalized)
+}
+
 export function customerSendUrl(
   estimateId: string,
   catalogSource?: CustomerSendRouteCatalogSource,
@@ -410,16 +428,57 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
   }, [catalogSource, draftPayload, estimateId, form, publicUrl, routeFamily])
 
   const submit = useCallback(
-    async (mode: 'test' | 'send') => {
+    async (mode: 'test' | 'send', options?: { testRecipient?: string }) => {
       if (!form) return false
-      if (mode === 'test' && !form.to_email.trim()) {
-        setError('To email is required for a test send.')
+      if (!isValidRecipientList(form.to_email)) {
+        setError('Enter a valid To email address list.')
+        return false
+      }
+      if (!isValidRecipientList(form.cc_email)) {
+        setError('Enter a valid CC email address list.')
+        return false
+      }
+      if (!isValidRecipientList(form.bcc_email)) {
+        setError('Enter a valid BCC email address list.')
+        return false
+      }
+      if (!asText(form.subject)) {
+        setError('Subject is required.')
+        return false
+      }
+      if ('quote_validity_days' in form) {
+        const days = (form as unknown as { quote_validity_days?: string }).quote_validity_days
+        if (typeof days === 'string' && !isPositiveInteger(days)) {
+          setError('Validity days must be a whole number greater than 0.')
+          return false
+        }
+      }
+      const testRecipient = asText(options?.testRecipient)
+      if (mode === 'test' && !testRecipient) {
+        setError('Test recipient email is required.')
+        return false
+      }
+      if (mode === 'test' && !isValidRecipientList(testRecipient)) {
+        setError('Enter a valid test recipient email.')
+        return false
+      }
+      if (mode === 'test' && testRecipient.toLowerCase() === form.to_email.trim().toLowerCase()) {
+        setError('Use an internal test recipient, not the customer To address.')
         return false
       }
 
       setBusy(true)
       setError(null)
       setMessage(null)
+      const submitForm =
+        mode === 'test'
+          ? ({
+              ...form,
+              to_email: testRecipient,
+              cc_email: '',
+              bcc_email: '',
+            } as TForm)
+          : form
 
       let payload: CustomerSendMutationResponse
       try {
@@ -427,7 +486,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
           customerSendUrl(estimateId, catalogSource, routeFamily),
           {
             mode,
-            draft: draftPayload(form),
+            draft: draftPayload(submitForm),
           }
         )
       } catch (submitError) {

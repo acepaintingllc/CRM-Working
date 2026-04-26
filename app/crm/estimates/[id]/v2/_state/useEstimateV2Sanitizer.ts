@@ -9,6 +9,7 @@ import {
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from '@/lib/estimator/defaults'
 import { asText } from '@/lib/estimator/parsing'
+import { normalizeWallRollerTargetId } from '@/lib/estimator/rollerIdentity'
 import { sortByPosition } from '@/lib/estimator/v2DraftPayload'
 import { sanitizeV2CeilingsDrafts } from '@/lib/estimator/v2CeilingsSanitize'
 import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
@@ -161,10 +162,11 @@ function normalizeRollerScope(value: unknown): EstimateV2RollerScope {
 }
 
 function normalizeRoller(row: Unsafe, index: number): EstimateV2RollerDraft {
+  const scope = normalizeRollerScope(row.scope)
   return {
     id: asText(row.id),
-    scope: normalizeRollerScope(row.scope),
-    wallColorId: asText(row.wallColorId ?? row.wall_color_id),
+    scope,
+    wallColorId: scope === 'Wall' ? normalizeWallRollerTargetId(row.wallColorId ?? row.wall_color_id) : '',
     selectedOptionId: asText(row.selectedOptionId ?? row.selected_option_id),
     rollerSizeIn: asText(row.rollerSizeIn ?? row.roller_size_in),
     coversQty: asText(row.coversQty ?? row.covers_qty),

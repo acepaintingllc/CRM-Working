@@ -44,6 +44,7 @@ export type CeilingTypeCatalogRow = {
   id: string
   label: string
   labor_mult: number | null
+  area_factor: number | null
   surcharge_per_sqft: number | null
   notes: string | null
   active: 'Y' | 'N'
@@ -100,6 +101,9 @@ export type TrimItemCatalogRow = {
   category: string | null
   size: string | null
   active: 'Y' | 'N'
+  trim_category?: string | null
+  measurement_class?: string | null
+  picker_group?: string | null
 }
 
 export type AreaSupplyCatalogRow = {

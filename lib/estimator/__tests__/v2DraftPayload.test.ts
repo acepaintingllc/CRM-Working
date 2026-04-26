@@ -190,6 +190,9 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
     [],
     [
       { id: 'flag-1', roomId: 'R001', flagId: 'FLAG-1', position: 0 },
+      { id: 'flag-stale-room', roomId: 'R404', flagId: 'FLAG-2', position: 0 },
+      { id: 'flag-duplicate', roomId: 'R001', flagId: 'FLAG-1', position: 1 },
+      { id: 'flag-2', roomId: 'R001', flagId: 'FLAG-2', position: 5 },
     ],
     [
       {
@@ -205,6 +208,16 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         primeMode: 'NONE',
         spotPrimePercent: '',
         ceilingTypeId: 'flat',
+        ceilingGeometryMode: 'TRAY',
+        vaultedAreaFactor: '',
+        trayPerimeterIn: '480',
+        trayStepHeightIn: '12',
+        trayBandWidthIn: '18',
+        cofferSectionLengthIn: '',
+        cofferSectionWidthIn: '',
+        cofferSectionCount: '',
+        cofferFaceHeightIn: '',
+        cofferBottomWidthIn: '',
         lengthIn: '',
         widthIn: '',
         areaSf: '120',
@@ -266,6 +279,48 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         overrideDescription: 'hidden override',
         notes: '',
       },
+    ],
+    [
+      {
+        id: 'wall-roller-missing-target',
+        scope: 'Wall',
+        wallColorId: '',
+        selectedOptionId: 'WALL_9',
+        rollerSizeIn: '9',
+        coversQty: '2',
+        notes: 'Missing target',
+        position: 0,
+      },
+      {
+        id: 'wall-roller-1',
+        scope: 'Wall',
+        wallColorId: 'COLOR1',
+        selectedOptionId: 'WALL_12',
+        rollerSizeIn: '12',
+        coversQty: '3',
+        notes: 'Wall cover',
+        position: 1,
+      },
+      {
+        id: 'ceiling-roller-1',
+        scope: 'Ceiling',
+        wallColorId: '',
+        selectedOptionId: 'CEIL_14',
+        rollerSizeIn: '14',
+        coversQty: '1',
+        notes: 'Ceiling cover',
+        position: 2,
+      },
+      {
+        id: 'trim-applicator-1',
+        scope: 'Trim',
+        wallColorId: '',
+        selectedOptionId: 'TRIM_4',
+        rollerSizeIn: '4',
+        coversQty: '1',
+        notes: 'Trim applicator',
+        position: 3,
+      },
     ]
   )
 
@@ -273,14 +328,23 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
 
   assert.equal(payload.rooms.length, 1)
   assert.equal(payload.room_wall_scopes.length, 1)
-  assert.equal(payload.room_flags.length, 1)
+  assert.equal(payload.room_flags.length, 2)
   assert.equal(payload.room_ceiling_scopes.length, 1)
   assert.equal(payload.room_trim_scopes.length, 1)
   assert.equal(payload.rooms[0].room_id, 'R001')
   assert.deepEqual(payload.rooms[0].condition_selections, { ROOM_FURNISHED: 'active' })
   assert.equal(payload.room_wall_scopes[0].room_id, 'R001')
+  assert.deepEqual(payload.room_flags, [
+    { id: 'flag-1', room_id: 'R001', flag_id: 'FLAG-1', position: 0, active: 'Y' },
+    { id: 'flag-2', room_id: 'R001', flag_id: 'FLAG-2', position: 1, active: 'Y' },
+  ])
   assert.deepEqual(payload.room_wall_scopes[0].condition_selections, { WALL_CUT_IN: 'moderate' })
   assert.equal(payload.room_ceiling_scopes[0].color_id, 'COLOR0')
+  assert.equal(payload.room_ceiling_scopes[0].ceiling_geometry_mode, 'TRAY')
+  assert.equal(payload.room_ceiling_scopes[0].tray_perimeter_in, 480)
+  assert.equal(payload.room_ceiling_scopes[0].tray_step_height_in, 12)
+  assert.equal(payload.room_ceiling_scopes[0].tray_band_width_in, 18)
+  assert.equal(payload.room_ceiling_scopes[0].helper_extra_area_sf, null)
   assert.deepEqual(payload.room_ceiling_scopes[0].condition_selections, { CEIL_TEXTURE: 'major' })
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
   assert.deepEqual(payload.room_trim_scopes[0].condition_selections, { TRIM_CAULKING: 'minor' })
@@ -288,4 +352,32 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.room_trim_scopes[0].override_measurement, null)
   assert.equal(payload.room_trim_scopes[0].override_total, null)
   assert.equal(payload.room_trim_scopes[0].override_description, null)
+  assert.deepEqual(
+    payload.rollers.map((roller) => ({
+      id: roller.id,
+      scope: roller.scope,
+      wall_color_id: roller.wall_color_id,
+      selected_option_id: roller.selected_option_id,
+    })),
+    [
+      {
+        id: 'wall-roller-1',
+        scope: 'Wall',
+        wall_color_id: 'COLOR1',
+        selected_option_id: 'WALL_12',
+      },
+      {
+        id: 'ceiling-roller-1',
+        scope: 'Ceiling',
+        wall_color_id: null,
+        selected_option_id: 'CEIL_14',
+      },
+      {
+        id: 'trim-applicator-1',
+        scope: 'Trim',
+        wall_color_id: null,
+        selected_option_id: 'TRIM_4',
+      },
+    ]
+  )
 })

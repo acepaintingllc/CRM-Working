@@ -14,6 +14,10 @@ import type {
   EstimateV2RoomInputRow,
   EstimateV2TrimPaint,
 } from '@/types/estimator/v2'
+import {
+  normalizeConditionSelections,
+  type EstimateV2ConditionSelections,
+} from '@/lib/estimator/conditionModifiers'
 
 type SummaryScopeSourceRow = {
   id: string
@@ -41,6 +45,7 @@ type SummaryScopeSourceRow = {
   override_hours?: number | null
   override_gallons?: number | null
   override_description?: string | null
+  condition_selections?: EstimateV2ConditionSelections | null
 }
 
 export type EstimateV2SummaryAlert = {
@@ -61,6 +66,7 @@ export type EstimateV2SummaryScopeRowVm = {
   subtotal: number | null
   hasOverride: boolean
   missingProduct: boolean
+  conditionSelections: EstimateV2ConditionSelections
 }
 
 export type EstimateV2SummaryRoomBlockVm = {
@@ -82,12 +88,15 @@ export type EstimateV2SummaryRoomBlockVm = {
     overrides: number
     flags: number
   }
+  conditionBadges: string[]
 }
 
 export type EstimateV2SummaryPricingKpis = {
   finalTotal: number | null
   laborHours: number | null
   laborDays: number | null
+  rawLaborHours: number | null
+  rawLaborDays: number | null
   laborCost: number | null
   suppliesCost: number | null
   rooms: number
@@ -195,6 +204,7 @@ function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
     override_hours: asMaybeNumber(value.override_hours),
     override_gallons: asMaybeNumber(value.override_gallons),
     override_description: asNullableString(value.override_description),
+    condition_selections: normalizeConditionSelections(value.condition_selections),
   }
 }
 
@@ -261,7 +271,24 @@ function buildScopeRow(kind: ScopeKind, scope: SummaryScopeSourceRow): EstimateV
     subtotal: scope.effective_total ?? null,
     hasOverride: config.hasOverride(scope),
     missingProduct: config.missingProduct(scope),
+    conditionSelections: scope.condition_selections ?? {},
   }
+}
+
+function buildConditionBadges(room: EstimateV2RoomInputRow, scopeRows: EstimateV2SummaryScopeRowVm[]) {
+  const badges: string[] = []
+  const pushSelections = (prefix: string, selections: EstimateV2ConditionSelections | null | undefined) => {
+    for (const [conditionId, level] of Object.entries(selections ?? {})) {
+      badges.push(`${prefix}: ${conditionId.toLowerCase()} ${level}`)
+    }
+  }
+
+  pushSelections('room', room.condition_selections)
+  for (const scope of scopeRows) {
+    pushSelections(roomScopeTypeLabel(scope.kind).toLowerCase(), scope.conditionSelections)
+  }
+
+  return Array.from(new Set(badges))
 }
 
 export function buildRoomScopeRows(params: {
@@ -431,6 +458,7 @@ export function buildRoomBlocks(params: {
       totals,
       flagsLabel,
       alerts,
+      conditionBadges: buildConditionBadges(room, scopeRows),
     }
   })
 }
@@ -447,6 +475,11 @@ export function buildPricingKpis(params: {
     laborDays:
       params.pricingSummary?.effectiveLaborHours != null
         ? params.pricingSummary.effectiveLaborHours / params.dayhours
+        : null,
+    rawLaborHours: params.pricingSummary?.rawLaborHours ?? null,
+    rawLaborDays:
+      params.pricingSummary?.rawLaborHours != null
+        ? params.pricingSummary.rawLaborHours / params.dayhours
         : null,
     laborCost: params.pricingSummary?.laborCost ?? null,
     suppliesCost: params.pricingSummary?.supplyCost ?? null,
@@ -546,6 +579,10 @@ export function buildPaintSupplyRows(pricingSummary: EstimateV2PricingSummary | 
     {
       label: 'Ceiling paint',
       value: formatWholeDollar(pricingSummary?.ceilingPaintMaterialCost),
+    },
+    {
+      label: 'Trim paint',
+      value: formatWholeDollar(pricingSummary?.trimPaintMaterialCost),
     },
     {
       label: 'Primer',

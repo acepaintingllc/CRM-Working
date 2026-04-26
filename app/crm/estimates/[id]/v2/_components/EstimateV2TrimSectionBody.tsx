@@ -13,6 +13,7 @@ import {
   TrimScopePanel,
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
+import { EstimateV2TrimTypePicker } from './EstimateV2TrimTypePicker'
 import type { EstimateV2TrimMeasurementMode as TrimMeasurementMode } from '@/types/estimator/v2'
 
 type EditorStyles = Record<string, CSSProperties>
@@ -155,18 +156,12 @@ export function EstimateV2TrimSectionBody({
 
             <div className="paint-setup-grid">
               <Field label="Trim Type" styles={sharedStyles(styles)}>
-                <select
+                <EstimateV2TrimTypePicker
                   value={trimScope.trimTypeId}
-                  onChange={(e) => updateTrimType(trimScope.id, e.target.value)}
-                  style={styles.input}
-                >
-                  <option value="">-- select trim type --</option>
-                  {trimTypeOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label || opt.id}
-                    </option>
-                  ))}
-                </select>
+                  options={trimTypeOptions}
+                  onChange={(trimTypeId) => updateTrimType(trimScope.id, trimTypeId)}
+                  styles={{ input: styles.input, mono: styles.mono }}
+                />
               </Field>
               <Field label="Include" styles={sharedStyles(styles)}>
                 <select

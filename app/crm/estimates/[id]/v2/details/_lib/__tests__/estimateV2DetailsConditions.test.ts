@@ -151,7 +151,7 @@ describe('resolveConditionFactor', () => {
   })
 
   it('ignores unknown condition ids in selections', () => {
-    expect(resolveConditionFactor([TRIM_OIL], 'trim', { UNKNOWN: 'active' as any })).toBe(1)
+    expect(resolveConditionFactor([TRIM_OIL], 'trim', { UNKNOWN: 'active' })).toBe(1)
   })
 })
 

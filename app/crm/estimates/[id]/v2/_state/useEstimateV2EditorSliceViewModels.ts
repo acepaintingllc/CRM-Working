@@ -288,15 +288,7 @@ function useWallsVm(
       derived.room.wallsIncluded,
       segments,
       updateRoomComplexity,
-      wallActions.addScope,
-      wallActions.addSegment,
-      wallActions.deleteScope,
-      wallActions.deleteSegment,
-      wallActions.moveScope,
-      wallActions.moveSegment,
-      wallActions.toggleRoomInclude,
-      wallActions.updateScope,
-      wallActions.updateSegment,
+      wallActions,
     ]
   )
 }
@@ -348,15 +340,7 @@ function useCeilingsVm(
       },
     }),
     [
-      ceilingActions.addScope,
-      ceilingActions.addSegment,
-      ceilingActions.deleteScope,
-      ceilingActions.deleteSegment,
-      ceilingActions.moveScope,
-      ceilingActions.moveSegment,
-      ceilingActions.toggleRoomInclude,
-      ceilingActions.updateScope,
-      ceilingActions.updateSegment,
+      ceilingActions,
       ceilingState.catalogs,
       ceilingState.ceilingSegments,
       derived.calculation.selectedCeilingEffectiveSqFt,
@@ -423,6 +407,7 @@ function useTrimVm(
       derived.calculation.trimScopeEffectiveMeasurementById,
       derived.calculation.trimScopeEffectiveTotalById,
       derived.catalog.colorCodeOptions,
+      derived.catalog.conditionModifiers,
       derived.catalog.trimPaintOptions,
       derived.catalog.trimPrimerOptions,
       derived.catalog.trimTypeOptions,
@@ -436,12 +421,7 @@ function useTrimVm(
       derived.room.selectedRoomResolvedMode,
       derived.room.selectedRoomTrimScopes,
       derived.room.trimsIncluded,
-      trimActions.addScope,
-      trimActions.deleteScope,
-      trimActions.moveScope,
-      trimActions.toggleRoomInclude,
-      trimActions.updateScope,
-      trimActions.updateTrimType,
+      trimActions,
     ]
   )
 }

@@ -188,6 +188,7 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(paintRows).toEqual([
       { label: 'Wall paint', value: '$120' },
       { label: 'Ceiling paint', value: '$80' },
+      { label: 'Trim paint', value: '$40' },
       { label: 'Primer', value: '$30' },
       { label: 'Supplies', value: '$50' },
     ])

@@ -112,6 +112,7 @@ export function buildOverlayFromRows(params: {
       id: normalizeId(values.id || row.row_id),
       label: asText(values.display_name) || row.display_name,
       labor_mult: parseNumber(values.primary_value),
+      area_factor: parseNumber(values.area_factor),
       surcharge_per_sqft: parseNumber(values.secondary_value),
       notes: asText(values.notes) || null,
       active: row.active,
@@ -195,6 +196,9 @@ export function buildOverlayFromRows(params: {
       category: asText(values.unit_rate_type) || null,
       size: asText(values.unit_rate_type) || null,
       active: row.active,
+      trim_category: asText(values.trim_category) || null,
+      measurement_class: asText(values.measurement_class) || null,
+      picker_group: asText(values.picker_group) || null,
     })
   }
 

@@ -84,6 +84,7 @@ export type EstimateV2RoomFlagOption = EstimateV2CatalogOption & {
 
 export type EstimateV2CeilingTypeOption = EstimateV2CatalogOption & {
   labor_mult: number | null
+  area_factor?: number | null
 }
 
 export type EstimateV2HeightFactorOption = EstimateV2CatalogOption & {
@@ -92,12 +93,19 @@ export type EstimateV2HeightFactorOption = EstimateV2CatalogOption & {
   labor_multiplier: number | null
 }
 
+export type EstimateV2TrimCategory = 'base' | 'crown' | 'casing' | 'rail' | 'door_window' | 'panel' | 'feature' | 'other'
+
+export type EstimateV2TrimMeasurementClass = 'linear' | 'opening' | 'surface' | 'assembly'
+
 export type EstimateV2TrimTypeOption = EstimateV2CatalogOption & {
   family: string | null
   category: string | null
   unit_type: 'LF' | 'EA' | 'SF' | null
   helper_allowed: boolean
   default_production_rate_id: string | null
+  trim_category?: EstimateV2TrimCategory | null
+  measurement_class?: EstimateV2TrimMeasurementClass | null
+  picker_group?: string | null
 }
 
 export type EstimateV2Catalogs = {
@@ -414,6 +422,8 @@ export type EstimateV2CeilingScopeMode = 'RECT' | 'SEG'
 export type EstimateV2CeilingPrimeMode = 'NONE' | 'SPOT' | 'FULL'
 export type EstimateV2CeilingSegmentShape = 'RECTANGLE' | 'TRIANGLE' | 'MANUAL'
 
+export type EstimateV2CeilingGeometryMode = 'FLAT' | 'VAULTED' | 'TRAY' | 'COFFERED' | 'MANUAL'
+
 export type EstimateV2CeilingScopeDraft = {
   id: string
   roomId: string
@@ -427,6 +437,16 @@ export type EstimateV2CeilingScopeDraft = {
   primeMode: EstimateV2CeilingPrimeMode
   spotPrimePercent: string
   ceilingTypeId: string
+  ceilingGeometryMode?: string
+  vaultedAreaFactor?: string
+  trayPerimeterIn?: string
+  trayStepHeightIn?: string
+  trayBandWidthIn?: string
+  cofferSectionLengthIn?: string
+  cofferSectionWidthIn?: string
+  cofferSectionCount?: string
+  cofferFaceHeightIn?: string
+  cofferBottomWidthIn?: string
   lengthIn: string
   widthIn: string
   areaSf: string

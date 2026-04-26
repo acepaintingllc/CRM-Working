@@ -278,6 +278,9 @@ export type UnitRateRow = RatesFlagsBaseRow & {
   labor_rate: string
   material_rate: string
   amount: string
+  trim_category?: string
+  measurement_class?: string
+  picker_group?: string
 }
 
 export type AccessFeeRow = RatesFlagsBaseRow & {
@@ -301,6 +304,7 @@ export type MultiplierRow = RatesFlagsBaseRow & {
   multiplier_type: 'wall_complexity' | 'height_factors' | 'ceiling_types'
   primary_label: string
   primary_value: string
+  area_factor?: string
   secondary_label: string
   secondary_value: string
 }
@@ -440,6 +444,9 @@ export type TrimUnitRateMutationValues = {
   amount: string
   notes: string
   active: 'Y' | 'N'
+  trim_category?: string
+  measurement_class?: string
+  picker_group?: string
 }
 
 export type DrywallUnitRateMutationValues = {
@@ -512,6 +519,7 @@ export type HeightFactorMutationValues = {
 export type CeilingTypeMutationValues = {
   id: string
   display_name: string
+  area_factor: string
   primary_value: string
   secondary_value: string
   notes: string
@@ -724,6 +732,9 @@ export type DoorUnitRateDraft = {
 export type TrimUnitRateDraft = DoorUnitRateDraft & {
   helper_allowed: RatesFlagsYnDraftValue
   default_production_rate_id: string
+  trim_category?: string
+  measurement_class?: string
+  picker_group?: string
 }
 
 export type DrywallUnitRateDraft = DoorUnitRateDraft
@@ -776,6 +787,7 @@ export type HeightFactorDraft = {
 export type CeilingTypeDraft = {
   id: string
   display_name: string
+  area_factor: RatesFlagsNumberDraftValue
   primary_value: RatesFlagsNumberDraftValue
   secondary_value: RatesFlagsNumberDraftValue
   notes: string

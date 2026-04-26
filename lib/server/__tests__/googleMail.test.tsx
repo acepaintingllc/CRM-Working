@@ -81,9 +81,9 @@ describe('sendGmailMessage', () => {
       origin: 'https://example.test',
       orgId: 'org-1',
       userId: 'user-1',
-      to: 'customer@example.com\r\nBCC:bad@example.com',
-      cc: 'team@example.com\r\nInjected: nope',
-      bcc: 'owner@example.com\r\nOops: nope',
+      to: ' customer@example.com ',
+      cc: 'team@example.com, crew@example.com',
+      bcc: 'owner@example.com',
       subject: 'Quote ready\r\nExtra',
       bodyText: 'Body copy',
     })
@@ -94,9 +94,43 @@ describe('sendGmailMessage', () => {
     const payload = JSON.parse(String(init?.body)) as { raw: string }
     const rawMessage = decodeRawMessage(payload.raw)
 
-    expect(rawMessage).toContain('To: customer@example.com BCC:bad@example.com')
-    expect(rawMessage).toContain('Cc: team@example.com Injected: nope')
-    expect(rawMessage).toContain('Bcc: owner@example.com Oops: nope')
+    expect(rawMessage).toContain('To: customer@example.com')
+    expect(rawMessage).toContain('Cc: team@example.com, crew@example.com')
+    expect(rawMessage).toContain('Bcc: owner@example.com')
     expect(rawMessage).toContain('Subject: Quote ready Extra')
+  })
+
+  it('rejects malformed to, cc, and bcc recipient lists', async () => {
+    const badTo = await sendGmailMessage({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      to: 'not-an-email',
+      subject: 'Quote ready',
+      bodyText: 'Body',
+    })
+    expect(badTo).toEqual({ error: 'Invalid To recipient list' })
+
+    const badCc = await sendGmailMessage({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      to: 'customer@example.com',
+      cc: 'also-bad',
+      subject: 'Quote ready',
+      bodyText: 'Body',
+    })
+    expect(badCc).toEqual({ error: 'Invalid Cc recipient list' })
+
+    const badBcc = await sendGmailMessage({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      to: 'customer@example.com',
+      bcc: 'bad-bcc',
+      subject: 'Quote ready',
+      bodyText: 'Body',
+    })
+    expect(badBcc).toEqual({ error: 'Invalid Bcc recipient list' })
   })
 })

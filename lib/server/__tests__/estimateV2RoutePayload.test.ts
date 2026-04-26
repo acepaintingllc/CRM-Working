@@ -226,6 +226,10 @@ test('buildV2CeilingScopeRows maps ceiling-specific fields and auto-assigns posi
         ceiling_type_id: 'vaulted',
         prime_mode: 'SPOT',
         spot_prime_percent: '40',
+        ceiling_geometry_mode: 'TRAY',
+        tray_perimeter_in: '480',
+        tray_step_height_in: '12',
+        tray_band_width_in: '18',
         area_sf: '200',
         length_in: '144',
         width_in: '120',
@@ -245,6 +249,10 @@ test('buildV2CeilingScopeRows maps ceiling-specific fields and auto-assigns posi
   assert.equal(scope.ceiling_type_id, 'vaulted')
   assert.equal(scope.prime_mode, 'SPOT')
   assert.equal(scope.spot_prime_percent, 40)
+  assert.equal(scope.ceiling_geometry_mode, 'TRAY')
+  assert.equal(scope.tray_perimeter_in, 480)
+  assert.equal(scope.tray_step_height_in, 12)
+  assert.equal(scope.tray_band_width_in, 18)
   assert.equal(scope.area_sf, 200)
   assert.equal(scope.length_in, 144)
   assert.equal(scope.width_in, 120)
@@ -310,20 +318,21 @@ test('buildV2CeilingSegmentRows enforces SEG-only ownership and shape-required d
   assert.equal(segments[1].manual_area_sf, 30)
 })
 
-test('toCeilingCalculationCatalogs includes ceiling_types with normalized labor_mult', () => {
+test('toCeilingCalculationCatalogs includes ceiling_types with normalized labor_mult and area_factor', () => {
   const catalogs = toCeilingCalculationCatalogs({
-    ceiling_types: [{ id: 'vaulted', labor_mult: '1.5' }],
+    ceiling_types: [{ id: 'vaulted', labor_mult: '1.5', area_factor: '1.2' }],
     paint_products: [{ id: 'P1', type: 'Paint', price_per_gal: '42.5', coverage_sqft_per_gal_per_coat: '350' }],
     supplies_rates: [],
   })
   assert.ok(catalogs)
   const cast = catalogs as {
-    ceiling_types: Array<{ id: string; labor_mult: number | null }>
+    ceiling_types: Array<{ id: string; labor_mult: number | null; area_factor: number | null }>
     paint_products: Array<{ id: string }>
   }
   assert.equal(cast.ceiling_types.length, 1)
   assert.equal(cast.ceiling_types[0].id, 'vaulted')
   assert.equal(cast.ceiling_types[0].labor_mult, 1.5)
+  assert.equal(cast.ceiling_types[0].area_factor, 1.2)
   assert.equal(cast.paint_products.length, 1)
 })
 
@@ -398,4 +407,62 @@ test('toTrimCalculationCatalogs maps trim_items and production_rates rows', () =
   assert.equal(cast.production_rates.length, 1)
   assert.equal(cast.production_rates[0].id, 'TRIM_BASE')
   assert.equal(cast.production_rates[0].units_per_hour, 90)
+})
+
+test('toTrimCalculationCatalogs passes through trim_category, measurement_class, picker_group metadata', () => {
+  const catalogs = toTrimCalculationCatalogs({
+    trim_items: [
+      {
+        id: 'BASE_STD',
+        family: 'BASEBOARD',
+        unit_type: 'LF',
+        helper_allowed: 'Y',
+        default_production_rate_id: 'TRIM_BASE',
+        trim_category: 'base',
+        measurement_class: 'linear',
+        picker_group: 'base_molding',
+      },
+      {
+        id: 'DOOR_PREHUNG',
+        family: 'DOOR',
+        unit_type: 'EA',
+        helper_allowed: 'N',
+        default_production_rate_id: 'TRIM_DOOR',
+        trim_category: 'door_window',
+        measurement_class: 'opening',
+        picker_group: 'doors_windows',
+      },
+      {
+        id: 'LEGACY_ITEM',
+        family: 'OTHER',
+        unit_type: 'LF',
+        helper_allowed: 'N',
+        default_production_rate_id: null,
+        // no metadata fields — should get null
+      },
+    ],
+    production_rates: [],
+    paint_products: [],
+  })
+  assert.ok(catalogs)
+  const items = (catalogs as { trim_items: Array<Record<string, unknown>> }).trim_items
+  assert.equal(items.length, 3)
+
+  // Item with all metadata
+  assert.equal(items[0].id, 'BASE_STD')
+  assert.equal(items[0].trim_category, 'base')
+  assert.equal(items[0].measurement_class, 'linear')
+  assert.equal(items[0].picker_group, 'base_molding')
+
+  // Item with door_window metadata
+  assert.equal(items[1].id, 'DOOR_PREHUNG')
+  assert.equal(items[1].trim_category, 'door_window')
+  assert.equal(items[1].measurement_class, 'opening')
+  assert.equal(items[1].picker_group, 'doors_windows')
+
+  // Legacy item without metadata — fields should be null
+  assert.equal(items[2].id, 'LEGACY_ITEM')
+  assert.equal(items[2].trim_category, null)
+  assert.equal(items[2].measurement_class, null)
+  assert.equal(items[2].picker_group, null)
 })

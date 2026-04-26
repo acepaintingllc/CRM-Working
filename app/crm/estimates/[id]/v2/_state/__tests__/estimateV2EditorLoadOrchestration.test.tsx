@@ -17,7 +17,11 @@ describe('buildEstimateV2EditorLoadState', () => {
         room_ceiling_scopes: fixture.summaryData.inputs.room_ceiling_scopes ?? [],
         segments: fixture.summaryData.inputs.segments ?? [],
         room_trim_scopes: fixture.summaryData.inputs.room_trim_scopes ?? [],
-        rollers: fixture.currentSnapshot.payload.rollers,
+        rollers: fixture.currentSnapshot.payload.rollers.map((roller) =>
+          roller.scope === 'Wall'
+            ? { ...roller, wall_color_id: String(roller.wall_color_id ?? '').toLowerCase() }
+            : { ...roller, wall_color_id: 'STALE-NON-WALL-TARGET' }
+        ),
         prejob: fixture.summaryData.inputs.prejob ?? [],
         trim_items: fixture.summaryData.inputs.trim_items ?? [],
         job_colors: fixture.summaryData.inputs.job_colors ?? [],
@@ -48,7 +52,11 @@ describe('buildEstimateV2EditorLoadState', () => {
 
     expect(result.collections.rooms).toHaveLength(fixture.rooms.length)
     expect(result.collections.scopes).toHaveLength(fixture.scopes.length)
-    expect(result.collections.rollers).toEqual(fixture.rollers)
+    expect(result.collections.rollers).toEqual(
+      fixture.rollers.map((roller) =>
+        roller.scope === 'Wall' ? roller : { ...roller, wallColorId: '' }
+      )
+    )
     expect(result.meta.lastSavedSnapshot.payload.rollers).toEqual(
       fixture.currentSnapshot.payload.rollers
     )

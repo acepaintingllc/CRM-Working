@@ -418,8 +418,17 @@ describe('useEstimateV2DetailsPage', () => {
         }),
       ])
     )
-    // TODO: expect this to be true after the v2DraftPayload roller scope filter keeps Trim rows.
-    expect(body.rollers.some((roller) => roller.scope === 'Trim')).toBe(false)
+    expect(body.rollers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'Trim',
+          wall_color_id: null,
+          selected_option_id: 'TRIM_4',
+          roller_size_in: 4,
+          covers_qty: 1,
+        }),
+      ])
+    )
   })
 
   it('saves a trim-only draft without active wall or ceiling scopes', async () => {
@@ -882,8 +891,17 @@ describe('useEstimateV2DetailsPage', () => {
         }),
       ])
     )
-    // TODO: expect this to be true after the v2DraftPayload roller scope filter keeps Trim rows.
-    expect(saved.rollers.some((roller) => roller.scope === 'Trim')).toBe(false)
+    expect(saved.rollers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'Trim',
+          wall_color_id: null,
+          selected_option_id: 'TRIM_4',
+          roller_size_in: 4,
+          covers_qty: 1,
+        }),
+      ])
+    )
 
     const wallScopes = normalizeSummaryScopeRows(
       saved.room_wall_scopes.map((scope) => ({

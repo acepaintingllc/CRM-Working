@@ -79,42 +79,23 @@ export async function submitCustomerSendMessage(params: {
   }>
 > {
   let publicVersion = params.version
-  let publicUrl = buildCustomerSendPublicUrl({
+  let publicUrl: string | null = null
+  let pendingPublicToken = asText(publicVersion.public_token)
+  if (params.mode === 'send' && !pendingPublicToken) {
+    pendingPublicToken = randomUUID().replace(/-/g, '')
+  }
+  const previewVersion =
+    params.mode === 'send'
+      ? ({
+          ...publicVersion,
+          public_token: pendingPublicToken || null,
+        } as EstimatePublicVersionRow)
+      : publicVersion
+  publicUrl = buildCustomerSendPublicUrl({
     origin: params.origin,
-    version: publicVersion,
+    version: previewVersion,
     fallback: params.context.public_url,
   })
-
-  if (params.mode === 'send') {
-    let token = asText(publicVersion.public_token)
-    if (!token) token = randomUUID().replace(/-/g, '')
-    const sentAt = new Date().toISOString()
-    const sentVersion = await markEstimatePublicVersionSent({
-      orgId: params.orgId,
-      versionId: asText(publicVersion.id),
-      publicToken: token,
-      sentAt,
-      lockFailureMessage: params.copy.lockFailureMessage,
-    })
-    if (!sentVersion.ok) return sentVersion
-
-    publicVersion = sentVersion.data
-    publicUrl = buildCustomerSendPublicUrl({
-      origin: params.origin,
-      version: publicVersion,
-      fallback: params.context.public_url,
-    })
-
-    const eventResult = await writeEstimatePublicEvent({
-      orgId: params.orgId,
-      versionId: asText(publicVersion.id),
-      eventType: 'sent',
-      actorType: 'staff',
-      createdBy: params.userId,
-      metadata: { publicUrl },
-    })
-    if (!eventResult.ok) return eventResult
-  }
 
   const subject =
     params.draft.subject || `${asText(params.context.estimate.version_name) || 'Quote'} ready`
@@ -137,6 +118,39 @@ export async function submitCustomerSendMessage(params: {
   })
   if ('error' in send) {
     return errorResult('invalid_input', send.error ?? params.copy.sendFailureMessage)
+  }
+
+  if (params.mode === 'send') {
+    if (!pendingPublicToken) {
+      return errorResult('server_error', params.copy.lockFailureMessage)
+    }
+
+    const sentAt = new Date().toISOString()
+    const sentVersion = await markEstimatePublicVersionSent({
+      orgId: params.orgId,
+      versionId: asText(publicVersion.id),
+      publicToken: pendingPublicToken,
+      sentAt,
+      lockFailureMessage: params.copy.lockFailureMessage,
+    })
+    if (!sentVersion.ok) return sentVersion
+
+    publicVersion = sentVersion.data
+    publicUrl = buildCustomerSendPublicUrl({
+      origin: params.origin,
+      version: publicVersion,
+      fallback: params.context.public_url,
+    })
+
+    const eventResult = await writeEstimatePublicEvent({
+      orgId: params.orgId,
+      versionId: asText(publicVersion.id),
+      eventType: 'sent',
+      actorType: 'staff',
+      createdBy: params.userId,
+      metadata: { publicUrl },
+    })
+    if (!eventResult.ok) return eventResult
   }
 
   return okResult({

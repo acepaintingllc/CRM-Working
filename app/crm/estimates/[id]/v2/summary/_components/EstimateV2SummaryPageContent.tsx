@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useId, useState, type CSSProperties } from 'react'
+import { useId, useState, useEffect, type CSSProperties } from 'react'
 import { EstimateV2SummaryPolicyControls } from '../../_components/EstimateV2SummaryPolicyControls'
 import { EstimateV2SummaryTrimPaintPanel } from '../../_components/EstimateV2SummaryTrimPaintPanel'
 import { useEstimateV2SummaryData } from '../../_state/useEstimateV2SummaryData'
@@ -9,13 +9,15 @@ import { EstimateV2SummaryAlerts } from './EstimateV2SummaryAlerts'
 import { EstimateV2SummaryKPIRail } from './EstimateV2SummaryKPIRail'
 import { EstimateV2SummaryPricingTable } from './EstimateV2SummaryPricingTable'
 import { EstimateV2SummaryRoomBlock } from './EstimateV2SummaryRoomBlock'
-import { fmtUSD } from '../_lib/estimateV2SummaryFormat'
+import { fmtUSD, fmtH, fmtNumber } from '../_lib/estimateV2SummaryFormat'
 import { useEstimateV2SummaryDerived } from '../_lib/useEstimateV2SummaryDerived'
 import {
   resolveEstimateRouteFamily,
   type EstimateRouteFamily,
   type EstimateRouteFamilyKey,
 } from '../../../estimateRouteFamily'
+import { loadData } from '@/lib/client/api'
+import type { UnsafeRecord } from '@/types/estimator/v2'
 
 const C = {
   bg: '#0a0a0a',
@@ -101,7 +103,7 @@ type StatusTone = {
   color: string
 }
 
-type SharedSectionKey = 'alerts' | 'pricing' | 'paint' | 'rooms'
+type SharedSectionKey = 'alerts' | 'pricing' | 'paint' | 'charges' | 'rooms'
 
 function getStatusTone(statusLabel: string): StatusTone {
   const normalized = statusLabel.trim().toLowerCase()
@@ -212,6 +214,104 @@ function SummaryActionLinks({
   )
 }
 
+function textValue(row: UnsafeRecord, key: string) {
+  const value = row[key]
+  return typeof value === 'string' ? value : ''
+}
+
+function numberValue(row: UnsafeRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : null
+    if (parsed != null && Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function buildChargeRows(accessFees: UnsafeRecord[], otherCharges: UnsafeRecord[]) {
+  const rows: { label: string; value: string; total: number }[] = []
+
+  for (const fee of accessFees) {
+    const label = textValue(fee, 'access_fee_id') || 'Access fee'
+    const qty = numberValue(fee, ['qty']) ?? 1
+    const total =
+      numberValue(fee, ['effective_total', 'final_total', 'raw_total', 'override_total']) ??
+      (numberValue(fee, ['actual_cost_override']) ?? 0) * qty
+    rows.push({ label: `${label} x ${qty}`, value: fmtUSD(total), total })
+  }
+
+  for (const item of otherCharges) {
+    const label = textValue(item, 'client_description') || 'Other'
+    const qty = numberValue(item, ['qty']) ?? 1
+    const total =
+      numberValue(item, ['effective_total', 'final_total', 'raw_total', 'override_total']) ??
+      (numberValue(item, ['materials_each']) ?? 0) * qty
+    rows.push({ label: `${label} x ${qty}`, value: fmtUSD(total), total })
+  }
+
+  return rows
+}
+
+function SendStatusBadge({ sendStatus }: {
+  sendStatus: {
+    status: string
+    sent_at?: string | null
+    viewed_at?: string | null
+    accepted_at?: string | null
+    declined_at?: string | null
+    public_url?: string | null
+  }
+}) {
+  const { status, sent_at, viewed_at, accepted_at, declined_at } = sendStatus
+
+  const tone: StatusTone = (() => {
+    if (accepted_at) return { border: 'rgba(132,204,147,0.3)', background: 'rgba(132,204,147,0.1)', color: C.green }
+    if (declined_at) return { border: 'rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.1)', color: '#f87171' }
+    if (viewed_at) return { border: 'rgba(96,165,250,0.3)', background: 'rgba(96,165,250,0.1)', color: '#60a5fa' }
+    if (sent_at) return { border: 'rgba(251,191,36,0.3)', background: 'rgba(251,191,36,0.1)', color: '#fbbf24' }
+    if (status.toLowerCase() === 'draft') return { border: 'rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: C.ink3 }
+    return { border: 'rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: C.ink3 }
+  })()
+
+  const label = (() => {
+    if (accepted_at) return 'Accepted'
+    if (declined_at) return 'Declined'
+    if (viewed_at) return 'Viewed'
+    if (sent_at) return 'Sent'
+    return 'Draft'
+  })()
+
+  const title = (() => {
+    const parts: string[] = []
+    if (sent_at) parts.push(`Sent: ${new Date(sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`)
+    if (viewed_at) parts.push(`Viewed: ${new Date(viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`)
+    if (accepted_at) parts.push(`Accepted: ${new Date(accepted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`)
+    if (declined_at) parts.push(`Declined: ${new Date(declined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`)
+    return parts.join(' | ') || undefined
+  })()
+
+  return (
+    <span
+      title={title}
+      style={{
+        padding: '4px 10px',
+        borderRadius: 999,
+        border: `1px solid ${tone.border}`,
+        background: tone.background,
+        color: tone.color,
+        fontSize: 10,
+        fontWeight: 900,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+        cursor: title ? 'help' : undefined,
+      }}
+    >
+      {label}
+    </span>
+  )
+}
+
 export function EstimateV2SummaryPageContent({
   estimateId,
   routeFamily,
@@ -245,7 +345,42 @@ export function EstimateV2SummaryPageContent({
   })
 
   const policySectionId = useId()
-  const sharedSections: SharedSectionKey[] = ['alerts', 'pricing', 'paint', 'rooms']
+  const sharedSections: SharedSectionKey[] = ['alerts', 'pricing', 'paint', 'charges', 'rooms']
+
+  // Customer send / portal status
+  const [sendStatus, setSendStatus] = useState<{
+    status: string
+    sent_at?: string | null
+    viewed_at?: string | null
+    accepted_at?: string | null
+    declined_at?: string | null
+    public_url?: string | null
+  } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const url = resolvedRouteFamily.customerSendApiHref(estimateId)
+    loadData<{
+      version?: { status?: string; sent_at?: string | null; viewed_at?: string | null; accepted_at?: string | null; declined_at?: string | null; public_token?: string | null } | null
+      public_url?: string | null
+    }>(url).then((res) => {
+      if (cancelled) return
+      const v = res?.version
+      if (v?.status) {
+        setSendStatus({
+          status: v.status,
+          sent_at: v.sent_at,
+          viewed_at: v.viewed_at,
+          accepted_at: v.accepted_at,
+          declined_at: v.declined_at,
+          public_url: res?.public_url ?? null,
+        })
+      }
+    }).catch(() => {
+      // Silently ignore; send status is non-critical.
+    })
+    return () => { cancelled = true }
+  }, [estimateId, resolvedRouteFamily])
 
   if (loading) {
     return (
@@ -372,6 +507,51 @@ export function EstimateV2SummaryPageContent({
             />
           ))
         )}
+        {!mobile && derived.roomBlocks.length > 0 && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'minmax(230px, 1.35fr) minmax(170px, 1.05fr) 92px 92px 100px 100px 100px 76px 110px',
+              gap: 0,
+              padding: '12px 16px',
+              borderTop: `1px solid ${C.border}`,
+              background: 'rgba(255,255,255,0.03)',
+              color: C.ink,
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            <div style={{ color: C.ink2 }}>Totals</div>
+            <div>{derived.roomBlocks.length} rooms</div>
+            <div style={{ textAlign: 'right' }}>
+              {fmtNumber(
+                derived.roomBlocks.reduce((sum, b) => sum + (b.roomArea ?? 0), 0),
+                0
+              )}
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              {fmtH(
+                derived.roomBlocks.reduce((sum, b) => sum + b.totals.labor, 0) || null
+              )}
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              {fmtUSD(
+                derived.roomBlocks.reduce((sum, b) => sum + b.totals.paint, 0) || null
+              )}
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              {fmtUSD(
+                derived.roomBlocks.reduce((sum, b) => sum + b.totals.supplies, 0) || null
+              )}
+            </div>
+            <div style={{ textAlign: 'right', color: C.green }}>
+              {fmtUSD(derived.finalTotal)}
+            </div>
+            <div style={{ textAlign: 'right' }}>100%</div>
+            <div />
+          </div>
+        )}
       </div>
     </section>
   )
@@ -420,6 +600,31 @@ export function EstimateV2SummaryPageContent({
           rows={derived.paintSupplyRows}
           totalLabel="Total"
           totalValue={fmtUSD(derived.paintSuppliesTotal)}
+          totalPrefix="Total"
+          colors={{ ink: C.ink, ink2: C.inkSub, ink3: C.ink3, green: C.green, border: C.border, cardDark: C.cardDark, mono: C.mono }}
+          cardStyle={card}
+          mobile={mobile}
+        />
+      )
+    }
+
+    if (key === 'charges') {
+      const accessFees = data?.inputs?.access_fees ?? []
+      const otherCharges = data?.inputs?.other ?? []
+      const hasCharges = accessFees.length > 0 || otherCharges.length > 0
+
+      if (!hasCharges) return null
+
+      const chargeRows = buildChargeRows(accessFees, otherCharges)
+      const total = chargeRows.reduce((sum, row) => sum + row.total, 0)
+
+      return (
+        <EstimateV2SummaryPricingTable
+          key={key}
+          title="Access Fees & Other Charges"
+          rows={chargeRows}
+          totalLabel="Total Charges"
+          totalValue={fmtUSD(total || null)}
           totalPrefix="Total"
           colors={{ ink: C.ink, ink2: C.inkSub, ink3: C.ink3, green: C.green, border: C.border, cardDark: C.cardDark, mono: C.mono }}
           cardStyle={card}
@@ -517,6 +722,9 @@ export function EstimateV2SummaryPageContent({
               <span>Back to Quotes</span>
           </Link>
           <SummaryStatusBadge statusLabel={derived.statusLabel} />
+          {sendStatus && (
+            <SendStatusBadge sendStatus={sendStatus} />
+          )}
           <span
             style={{
               padding: '6px 10px',
@@ -541,12 +749,34 @@ export function EstimateV2SummaryPageContent({
               {pageEyebrow}
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
+              {job?.title && (
+                <div style={{ color: C.ink2, fontSize: 16, fontWeight: 600, lineHeight: 1.3 }}>
+                  {job.title}
+                </div>
+              )}
               <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.02, letterSpacing: '-0.04em', fontWeight: 900, color: C.ink }}>
                 {derived.versionName}
               </h1>
-              {(job?.customer_name || job?.customer_address) && (
+              {(job?.customer_name || job?.customer_address || job?.customer_email || job?.customer_phone) && (
                 <div style={{ color: C.inkSub, fontSize: 14, lineHeight: 1.35 }}>
                   {[job?.customer_name, job?.customer_address].filter(Boolean).join(' | ')}
+                  {(job?.customer_email || job?.customer_phone) && (
+                    <>
+                      <br />
+                      {[job?.customer_email, job?.customer_phone].filter(Boolean).join(' | ')}
+                    </>
+                  )}
+                </div>
+              )}
+              {data?.estimate?.updated_at && (
+                <div style={{ color: C.ink3, fontSize: 11, lineHeight: 1.4, marginTop: 2 }}>
+                  Last updated: {new Date(data.estimate.updated_at).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </div>
               )}
             </div>
@@ -679,6 +909,9 @@ export function EstimateV2SummaryPageContent({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <SummaryStatusBadge statusLabel={derived.statusLabel} />
+            {sendStatus && (
+              <SendStatusBadge sendStatus={sendStatus} />
+            )}
             <span
               style={{
                 padding: '6px 10px',
@@ -705,14 +938,36 @@ export function EstimateV2SummaryPageContent({
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.ink3 }}>
                 {pageEyebrow}
               </div>
+              {job?.title && (
+                <div style={{ color: C.ink2, fontSize: 15, fontWeight: 600, lineHeight: 1.3 }}>
+                  {job.title}
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                 <h2 style={{ margin: 0, fontSize: 28, fontWeight: 900, letterSpacing: '-0.03em', color: C.ink }}>{derived.versionName}</h2>
-                {(job?.customer_name || job?.customer_address) && (
+                {(job?.customer_name || job?.customer_address || job?.customer_email || job?.customer_phone) && (
                   <div style={{ color: C.inkSub, fontSize: 13 }}>
                     {[job?.customer_name, job?.customer_address].filter(Boolean).join(' | ')}
+                    {(job?.customer_email || job?.customer_phone) && (
+                      <>
+                        <br />
+                        {[job?.customer_email, job?.customer_phone].filter(Boolean).join(' | ')}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
+              {data?.estimate?.updated_at && (
+                <div style={{ color: C.ink3, fontSize: 11, lineHeight: 1.4 }}>
+                  Last updated: {new Date(data.estimate.updated_at).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </div>
+              )}
             </div>
 
             <EstimateV2SummaryKPIRail
@@ -725,6 +980,8 @@ export function EstimateV2SummaryPageContent({
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
               {sharedSections.slice(0, 3).map((section) => renderSharedSection(section))}
             </section>
+
+            {renderSharedSection('charges')}
 
             {renderSharedSection('rooms')}
           </main>

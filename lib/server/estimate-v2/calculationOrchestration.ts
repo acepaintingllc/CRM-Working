@@ -380,6 +380,7 @@ export async function calculateCeilingsForSave(params: {
   })
   return {
     ceilingCalculations,
+    ceilingScopeRows: ceilingCalculations.scopes as V2CeilingScopeSaveRow[],
     ceilingSegmentRows: ceilingCalculations.segments as V2CeilingSegmentSaveRow[],
   }
 }
