@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useReducer } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import {
   loadEstimateV2RatesFlagsPayload,
   type EstimateV2RatesFlagsLoadResult,
@@ -9,6 +9,7 @@ import {
   parseRollerCoverOptionsStateFromRatesFlags,
   type DetailsRollerOptionsState,
 } from '../_lib/estimateV2DetailsVm'
+import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 
 export const initialRollerOptionsState: DetailsRollerOptionsState = {
   status: 'loading',
@@ -59,6 +60,7 @@ export function useEstimateV2DetailsRollerOptions() {
     reduceRollerOptionsLoadState,
     initialRollerOptionsState
   )
+  const [ratesFlagsPayload, setRatesFlagsPayload] = useState<RatesFlagsPayload | null>(null)
 
   useEffect(() => {
     let active = true
@@ -68,6 +70,9 @@ export function useEstimateV2DetailsRollerOptions() {
         const result = await loadEstimateV2RatesFlagsPayload()
         if (!active) return
         dispatch({ type: 'loaded', result })
+        if (result.ok) {
+          setRatesFlagsPayload(result.payload as RatesFlagsPayload)
+        }
       } catch {
         if (!active) return
         dispatch({ type: 'failed' })
@@ -79,5 +84,5 @@ export function useEstimateV2DetailsRollerOptions() {
     }
   }, [])
 
-  return rollerOptionsState
+  return { rollerOptionsState, ratesFlagsPayload }
 }
