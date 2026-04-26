@@ -123,6 +123,12 @@ function inferTrimUnitType(value: unknown): string | null {
   return null
 }
 
+function normalizeTrimCatalogUnit(value: unknown): 'LF' | 'EA' | 'SF' | null {
+  const raw = asText(value).toUpperCase()
+  if (raw === 'LF' || raw === 'EA' || raw === 'SF') return raw
+  return inferTrimUnitType(raw) as 'LF' | 'EA' | 'SF' | null
+}
+
 async function readV2Products(orgId: string): Promise<PaintProduct[]> {
   const { data, error } = await supabaseAdmin
     .from('v2_products')
@@ -151,6 +157,41 @@ function buildV2CatalogResultFromSources(params: {
 }): EstimateCatalogsResult {
   const activeProductionRates = params.overlay.production_rates.filter((row) => row.active === 'Y')
   const activeTrimProductionRates = activeProductionRates.filter((row) => asText(row.scope_id).toUpperCase() === 'TRIM')
+  const activeTrimItems = params.overlay.trim_items.filter((row) => row.active === 'Y')
+  const trimItems =
+    activeTrimItems.length > 0
+      ? activeTrimItems.map((row) => ({
+          id: row.id,
+          label: row.label || row.id,
+          active: row.active,
+          unit: normalizeTrimCatalogUnit(row.unit),
+          family: row.family,
+          unit_type: normalizeTrimCatalogUnit(row.unit_type || row.unit),
+          helper_allowed: row.helper_allowed,
+          default_production_rate_id: row.default_production_rate_id,
+          production_rate_id: row.production_rate_id,
+          notes: row.notes,
+          default_qty: row.default_qty,
+          is_active: row.active === 'Y',
+          category: row.category,
+          size: row.size,
+        }))
+      : activeTrimProductionRates.map((row) => ({
+          id: row.id,
+          label: row.label || row.id,
+          active: row.active,
+          unit: inferTrimUnitType(`${row.id} ${row.label} ${row.surface_type} ${row.condition}`),
+          family: row.surface_type,
+          unit_type: inferTrimUnitType(`${row.id} ${row.label} ${row.surface_type} ${row.condition}`),
+          helper_allowed: false,
+          default_production_rate_id: row.id,
+          production_rate_id: row.id,
+          notes: row.notes,
+          default_qty: null,
+          is_active: row.active === 'Y',
+          category: row.surface_type,
+          size: row.condition,
+        }))
 
   return {
     catalogs: {
@@ -218,23 +259,8 @@ function buildV2CatalogResultFromSources(params: {
           notes: row.notes,
         })),
       access_fees: [],
-      trim_items: activeTrimProductionRates.map((row) => ({
-        id: row.id,
-        label: row.label || row.id,
-        active: row.active,
-        unit: inferTrimUnitType(`${row.id} ${row.label} ${row.surface_type} ${row.condition}`),
-        family: row.surface_type,
-        unit_type: inferTrimUnitType(`${row.id} ${row.label} ${row.surface_type} ${row.condition}`),
-        helper_allowed: false,
-        default_production_rate_id: row.id,
-        production_rate_id: row.id,
-        notes: row.notes,
-        default_qty: null,
-        is_active: row.active === 'Y',
-        category: row.surface_type,
-        size: row.condition,
-      })),
-      trim_menu_items: [],
+      trim_items: trimItems,
+      trim_menu_items: trimItems,
       prejob_trips: [],
       supplies_rates: [],
     },

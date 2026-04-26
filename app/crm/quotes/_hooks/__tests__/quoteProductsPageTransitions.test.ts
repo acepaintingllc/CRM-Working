@@ -51,12 +51,14 @@ describe('quoteProductsPageTransitions invariants', () => {
       buildQuoteProductsQuery({
         activeFamily: 'Primer',
         statusFilter: 'inactive',
+        scopeFilter: 'Ceilings',
         search: 'raw input',
         debouncedSearch: 'committed',
       })
     ).toEqual({
       family: 'Primer',
       status: 'inactive',
+      scope: 'Ceilings',
       search: 'committed',
     })
   })
@@ -291,6 +293,7 @@ describe('quoteProductsPageTransitions invariants', () => {
         navigation: {
           activeFamily: 'Paint',
           statusFilter: 'inactive',
+          scopeFilter: 'all',
           search: '',
           debouncedSearch: '',
         },
@@ -329,6 +332,7 @@ describe('quoteProductsPageTransitions invariants', () => {
       navigation: {
         activeFamily: 'Paint',
         statusFilter: 'inactive',
+        scopeFilter: 'all',
         search: 'dormant',
         debouncedSearch: 'dormant',
       },
@@ -337,6 +341,7 @@ describe('quoteProductsPageTransitions invariants', () => {
     expect(patch.navigation).toEqual({
       activeFamily: 'Paint',
       statusFilter: 'all',
+      scopeFilter: 'all',
       search: '',
       debouncedSearch: '',
     })
@@ -370,6 +375,7 @@ describe('quoteProductsPageTransitions invariants', () => {
       navigation: {
         activeFamily: 'Paint',
         statusFilter: 'inactive',
+        scopeFilter: 'all',
         search: '',
         debouncedSearch: '',
       },
@@ -403,6 +409,7 @@ describe('quoteProductsPageTransitions invariants', () => {
       navigation: {
         activeFamily: 'Paint',
         statusFilter: 'inactive',
+        scopeFilter: 'all',
         search: '',
         debouncedSearch: '',
       },

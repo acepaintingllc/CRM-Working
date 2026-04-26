@@ -7,6 +7,7 @@ import type {
   EstimateV2JobMeta,
   EstimateV2JobSettingsDraft,
   EstimateV2PricingSummary,
+  EstimateV2RollerDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2SummaryPageData,
@@ -32,6 +33,7 @@ type MixedEstimateFixture = {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
+  rollers: EstimateV2RollerDraft[]
   wallCalculations: EstimateV2WallCalculationsPayload
   ceilingCalculations: Record<string, unknown>
   trimCalculations: Record<string, unknown>
@@ -510,6 +512,19 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     },
   ]
 
+  const rollers: EstimateV2RollerDraft[] = [
+    {
+      id: 'roller-wall-color-1',
+      scope: 'Wall',
+      wallColorId: 'COLOR1',
+      selectedOptionId: '',
+      rollerSizeIn: '',
+      coversQty: '',
+      notes: '',
+      position: 0,
+    },
+  ]
+
   const payload = buildEstimateV2SavePayload(
     rooms,
     scopes,
@@ -517,7 +532,8 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     roomFlags,
     ceilingScopes,
     ceilingSegments,
-    trimScopes
+    trimScopes,
+    rollers
   )
 
   const wallCalculations: EstimateV2WallCalculationsPayload = {
@@ -703,6 +719,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     ceilingScopes: clone(ceilingScopes),
     ceilingSegments: clone(ceilingSegments),
     trimScopes: clone(trimScopes),
+    rollers: clone(rollers),
     wallCalculations: clone(wallCalculations),
     ceilingCalculations: clone(ceilingCalculations),
     trimCalculations: clone(trimCalculations),

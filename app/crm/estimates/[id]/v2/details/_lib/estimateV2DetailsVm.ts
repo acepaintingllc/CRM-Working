@@ -19,7 +19,6 @@ import {
 } from './estimateV2DetailsMaterials'
 import {
   createCeilingRollerRow,
-  createTrimApplicatorRow,
   createWallRollerRows,
   parseRollerCoverOptionsFromRatesFlags,
   parseRollerCoverOptionsStateFromRatesFlags,
@@ -258,7 +257,7 @@ function createMaterialPlanningSections(params: {
         ? 'Paint gallons for trim and baseboards.'
         : 'No active trim scopes.',
       emptyTitle: 'No Active Trim Scopes',
-      emptyMessage: 'There are no active trim scopes to plan trim paint or applicators for.',
+      emptyMessage: 'There are no active trim scopes to plan trim paint for.',
     },
   }
 }
@@ -327,18 +326,10 @@ export function buildEstimateV2RollerPlanningVm(params: {
     rollerOptionsState,
     ceilingRollerOptions,
   })
-  const trimApplicatorRow = createTrimApplicatorRow({
-    trimRow: params.materialPlanning.trimRow,
-    rollers: params.rollers,
-    rollerOptions,
-    rollerOptionsState,
-    trimApplicatorOptions,
-  })
-
   return {
     wallRollerRows,
     ceilingRollerRow,
-    trimApplicatorRow,
+    trimApplicatorRow: null,
     wallRollerOptions,
     ceilingRollerOptions,
     trimApplicatorOptions,

@@ -15,7 +15,12 @@ type Props = {
   vm: QuoteProductsCatalogVm
   actions: Pick<
     QuoteProductsActions,
-    'setSearch' | 'setStatusFilter' | 'setActiveFamily' | 'setSelectedId' | 'startCreate'
+    | 'setSearch'
+    | 'setStatusFilter'
+    | 'setScopeFilter'
+    | 'setActiveFamily'
+    | 'setSelectedId'
+    | 'startCreate'
   >
 }
 
@@ -30,6 +35,7 @@ export function QuoteProductsCatalogSection({ vm, actions }: Props) {
           <>
             <select
               className="ace-crm-input min-w-[120px] text-sm"
+              aria-label="Product status"
               value={vm.statusFilter}
               onChange={(event) => actions.setStatusFilter(event.target.value)}
             >
@@ -37,6 +43,18 @@ export function QuoteProductsCatalogSection({ vm, actions }: Props) {
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="archived">Archived</option>
+            </select>
+            <select
+              className="ace-crm-input min-w-[130px] text-sm"
+              aria-label="Product scope"
+              value={vm.scopeFilter}
+              onChange={(event) => actions.setScopeFilter(event.target.value)}
+            >
+              {vm.scopeFilters.map((scope) => (
+                <option key={scope} value={scope}>
+                  {scope === 'all' ? 'All scopes' : scope}
+                </option>
+              ))}
             </select>
             {vm.families.map((family) => (
               <CrmButton
@@ -54,7 +72,7 @@ export function QuoteProductsCatalogSection({ vm, actions }: Props) {
 
       <CrmSectionCard
         title={`${vm.activeFamily} catalog`}
-        description="Select a product row from the current family to edit its defaults and pricing."
+        description="Select a product row from the current family and scope to edit its defaults and pricing."
       >
         <div className="grid gap-3">
           <CrmButton type="button" tone="secondary" onClick={actions.startCreate}>
@@ -63,7 +81,7 @@ export function QuoteProductsCatalogSection({ vm, actions }: Props) {
           {vm.products.length === 0 ? (
             <CrmEmptyState
               title="No products found"
-              description="Try a different search, family, or status filter."
+              description="Try a different search, family, scope, or status filter."
             />
           ) : (
             vm.products.map((product) => (

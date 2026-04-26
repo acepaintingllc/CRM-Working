@@ -13,10 +13,12 @@ import {
 function createListChain(result: unknown) {
   const chain = {
     eq: vi.fn(),
+    contains: vi.fn(),
     or: vi.fn(),
     order: vi.fn().mockResolvedValue(result),
   }
   chain.eq.mockReturnValue(chain)
+  chain.contains.mockReturnValue(chain)
   chain.or.mockReturnValue(chain)
   return chain
 }
@@ -110,7 +112,7 @@ describe('estimate product repository', () => {
     client = createDepsFromMock(fromMock as (relation: string) => unknown)
   })
 
-  it('applies org, status, family, and search filters to the list query', async () => {
+  it('applies org, status, family, scope, and search filters to the list query', async () => {
     const listChain = createListChain({
       data: [existingRow],
       error: null,
@@ -120,7 +122,7 @@ describe('estimate product repository', () => {
     await expect(
       listEstimateProductRecords(
         'org-1',
-        { status: 'active', family: 'Paint', search: '%super_' },
+        { status: 'active', family: 'Paint', scope: 'Walls', search: '%super_' },
         { client }
       )
     ).resolves.toEqual({
@@ -131,6 +133,7 @@ describe('estimate product repository', () => {
     expect(listChain.eq).toHaveBeenNthCalledWith(1, 'org_id', 'org-1')
     expect(listChain.eq).toHaveBeenNthCalledWith(2, 'status', 'Active')
     expect(listChain.eq).toHaveBeenNthCalledWith(3, 'family', 'Paint')
+    expect(listChain.contains).toHaveBeenCalledWith('default_scopes', ['Walls'])
     expect(listChain.or).toHaveBeenCalledWith(
       'name.ilike."%\\\\%super\\\\_%",base.ilike."%\\\\%super\\\\_%",subtype.ilike."%\\\\%super\\\\_%",notes.ilike."%\\\\%super\\\\_%",status.ilike."%\\\\%super\\\\_%"'
     )

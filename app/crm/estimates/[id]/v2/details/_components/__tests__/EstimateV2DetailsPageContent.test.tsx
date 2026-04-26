@@ -111,7 +111,7 @@ const basePage = {
       trim: {
         description: 'No active trim scopes.',
         emptyTitle: 'No Active Trim Scopes',
-        emptyMessage: 'There are no active trim scopes to plan trim paint or applicators for.',
+        emptyMessage: 'There are no active trim scopes to plan trim paint for.',
       },
     },
     activeOverrides: [],
@@ -160,7 +160,7 @@ describe('EstimateV2DetailsPageContent', () => {
     expect(screen.getAllByText('Primary roller cover is required').length).toBeGreaterThan(0)
     expect(screen.getByText('Material Overview')).toBeInTheDocument()
     expect(screen.getByText('Paint Planning')).toBeInTheDocument()
-    expect(screen.getByText('Rollers & Applicators')).toBeInTheDocument()
+    expect(screen.getByText('Rollers')).toBeInTheDocument()
 
     const continueButtons = screen.getAllByRole('button', { name: /Continue to Summary/i })
     expect(continueButtons.every((button) => button.hasAttribute('disabled'))).toBe(true)
@@ -283,5 +283,49 @@ describe('EstimateV2DetailsPageContent', () => {
     expect(screen.getAllByText(conflictMessage).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Primary').length).toBeGreaterThan(0)
     expect(screen.getByText(/2 to 4 gal/i)).toBeInTheDocument()
+  })
+
+  it('keeps focused override edits visible when the VM briefly rerenders stale values', () => {
+    const setWallOverride = vi.fn()
+    const page = {
+      ...basePage,
+      actions: {
+        ...basePage.actions,
+        setWallOverride,
+      },
+    }
+    mockUseEstimateV2DetailsPage.mockReturnValue(page)
+
+    const { rerender } = render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+    const input = screen.getByLabelText('Primary override gallons') as HTMLInputElement
+
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: '6' } })
+
+    expect(input.value).toBe('6')
+    expect(setWallOverride).toHaveBeenCalledWith('COLOR1', '6')
+
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...page,
+      vm: {
+        ...page.vm,
+        wallRows: [{ ...page.vm.wallRows[0], overrideGallons: '' }],
+      },
+    })
+    rerender(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByLabelText('Primary override gallons')).toHaveValue('6')
+
+    fireEvent.change(screen.getByLabelText('Primary override gallons'), { target: { value: '' } })
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...page,
+      vm: {
+        ...page.vm,
+        wallRows: [{ ...page.vm.wallRows[0], overrideGallons: '4' }],
+      },
+    })
+    rerender(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByLabelText('Primary override gallons')).toHaveValue('')
   })
 })

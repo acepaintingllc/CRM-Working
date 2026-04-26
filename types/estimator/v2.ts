@@ -290,6 +290,19 @@ export type EstimateV2RoomFlagDraft = {
   position: number
 }
 
+export type EstimateV2RollerScope = 'Wall' | 'Ceiling' | 'Trim'
+
+export type EstimateV2RollerDraft = {
+  id: string
+  scope: EstimateV2RollerScope
+  wallColorId: string
+  selectedOptionId?: string
+  rollerSizeIn: string
+  coversQty: string
+  notes: string
+  position: number
+}
+
 export type EstimateV2WallScopeMode = 'RECT' | 'SEG'
 export type EstimateV2WallPrimeMode = 'NONE' | 'SPOT' | 'FULL'
 export type EstimateV2WallSegmentShape = 'RECTANGLE' | 'TRIANGLE' | 'MANUAL'
@@ -470,4 +483,5 @@ export type EstimateV2SavePayload = {
   room_ceiling_scopes: UnsafeRecord[]
   ceiling_scope_segments: UnsafeRecord[]
   room_trim_scopes: UnsafeRecord[]
+  rollers: UnsafeRecord[]
 }

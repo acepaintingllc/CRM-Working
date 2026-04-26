@@ -26,7 +26,7 @@ export function EstimateV2DetailsSummaryRail({
   onContinue: () => void
 }) {
   return (
-    <aside className="grid gap-4 lg:sticky lg:top-4">
+    <aside className="order-first grid gap-4 md:grid-cols-2 xl:order-none xl:sticky xl:top-4 xl:grid-cols-1">
       <CrmSectionCard
         title="Validation"
         description={vm.validationSummary.message}
@@ -36,6 +36,7 @@ export function EstimateV2DetailsSummaryRail({
           </CrmChip>
         }
         variant="rail"
+        className="md:col-span-2 xl:col-span-1"
       >
         <div className="grid gap-3">
           {vm.validationIssues.length === 0 ? (

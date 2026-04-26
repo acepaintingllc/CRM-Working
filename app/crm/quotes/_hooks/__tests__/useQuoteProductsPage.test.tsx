@@ -46,6 +46,7 @@ function buildProduct(overrides: Partial<QuoteProductRow>): QuoteProductRow {
 
 function matchesQuery(product: QuoteProductRow, query: QuoteProductQuery) {
   if (query.family && product.family !== query.family) return false
+  if (query.scope && !(product.default_scopes ?? []).includes(query.scope)) return false
   if (query.status !== 'all' && product.status.toLowerCase() !== query.status) return false
   const search = String(query.search ?? '').trim().toLowerCase()
   if (!search) return true
@@ -77,6 +78,39 @@ describe('useQuoteProductsPage', () => {
 
     expect(result.current.uiState.hasData).toBe(false)
     expect(result.current.uiState.loadError).toBeNull()
+  })
+
+  it('filters product slices by default scope', async () => {
+    const products = [
+      buildProduct({ id: 'paint-wall', name: 'Wall Paint', default_scopes: ['Walls'] }),
+      buildProduct({ id: 'paint-ceiling', name: 'Ceiling Paint', default_scopes: ['Ceilings'] }),
+    ]
+    loadQuoteProducts.mockImplementation(async (query: QuoteProductQuery) =>
+      products.filter((product) => matchesQuery(product, query))
+    )
+
+    const { result } = renderHook(() => useQuoteProductsPage())
+
+    await waitFor(() => {
+      expect(result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      result.current.actions.setScopeFilter('Ceilings')
+    })
+
+    await waitFor(() => {
+      expect(result.current.catalogVm.products.map((product) => product.id)).toEqual([
+        'paint-ceiling',
+      ])
+    })
+    expect(result.current.catalogVm.scopeFilter).toBe('Ceilings')
+    expect(loadQuoteProducts).toHaveBeenLastCalledWith({
+      status: 'all',
+      family: 'Paint',
+      scope: 'Ceilings',
+      search: null,
+    })
   })
 
   it('loads query-driven product slices, creates, saves, and archives product rows', async () => {

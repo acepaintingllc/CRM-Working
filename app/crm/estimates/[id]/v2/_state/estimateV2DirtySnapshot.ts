@@ -6,6 +6,7 @@ import type {
   EstimateV2CeilingSegmentDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
   EstimateV2SavePayload,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
@@ -34,6 +35,7 @@ export function buildEstimateV2DirtySnapshot(params: {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
+  rollers?: EstimateV2RollerDraft[]
 }): EstimateV2DirtySnapshot {
   const payload = buildEstimateV2SavePayload(
     params.rooms,
@@ -42,7 +44,8 @@ export function buildEstimateV2DirtySnapshot(params: {
     params.roomFlags,
     params.ceilingScopes,
     params.ceilingSegments,
-    params.trimScopes
+    params.trimScopes,
+    params.rollers ?? []
   )
 
   return createEstimateV2DirtySnapshot(payload)

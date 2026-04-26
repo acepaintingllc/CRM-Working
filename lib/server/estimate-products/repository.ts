@@ -3,6 +3,7 @@ import {
   type ProductFamily,
   type QuoteProductPayload,
   type QuoteProductRow,
+  type QuoteProductScope,
   type QuoteProductStatusFilter,
 } from '../../quotes/productsForm.ts'
 import { supabaseAdmin } from '../org.ts'
@@ -39,6 +40,7 @@ type SingleEstimateProductResult = {
 
 type EstimateProductQuery = {
   eq(column: string, value: string): EstimateProductQuery
+  contains(column: string, value: string[]): EstimateProductQuery
   or(condition: string): EstimateProductQuery
   order(column: string, options: { ascending: boolean }): Promise<EstimateProductRowResult>
   select(columns?: string): EstimateProductQuery
@@ -58,6 +60,7 @@ export type EstimateProductRepositoryDeps = {
 export type EstimateProductListFilters = {
   status: QuoteProductStatusFilter
   family?: ProductFamily | null
+  scope?: QuoteProductScope | null
   search?: string | null
 }
 
@@ -211,6 +214,10 @@ export async function listEstimateProductRecords(
 
     if (filters.family && isQuoteProductFamily(filters.family)) {
       query = query.eq('family', filters.family)
+    }
+
+    if (filters.scope) {
+      query = query.contains('default_scopes', [filters.scope])
     }
 
     const requestedSearch = String(filters.search ?? '').trim()

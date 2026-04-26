@@ -112,7 +112,7 @@ begin
         c.address as customer_address,
         j.title,
         j.description,
-        j.status,
+        j.status::text as status,
         j.created_at,
         j.estimate_date,
         j.estimate_sent_at,

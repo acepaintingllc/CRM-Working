@@ -990,6 +990,12 @@ describe('useEstimateV2DetailsPage', () => {
 
   it('blocks ambiguous same-size roller options instead of silently rehydrating the first match', async () => {
     const fixture = createMixedEstimateV2Fixture()
+    fixture.rollers[0] = {
+      ...fixture.rollers[0],
+      rollerSizeIn: '9',
+      coversQty: '2',
+      notes: 'Main wall roller',
+    }
     mocks.authedFetch.mockResolvedValue(
       createResponse({
         categories: [

@@ -83,7 +83,6 @@ export function sanitizeV2TrimDrafts<TScope extends V2TrimSanitizeScope>(params:
         nextScope.primerProductId ||
         nextScope.overrideMeasurement ||
         nextScope.overrideHours ||
-        nextScope.overrideGallons ||
         nextScope.overrideSupplyCost ||
         nextScope.overrideTotal ||
         nextScope.overrideDescription
@@ -94,7 +93,6 @@ export function sanitizeV2TrimDrafts<TScope extends V2TrimSanitizeScope>(params:
           primerProductId: '',
           overrideMeasurement: '',
           overrideHours: '',
-          overrideGallons: '',
           overrideSupplyCost: '',
           overrideTotal: '',
           overrideDescription: '',

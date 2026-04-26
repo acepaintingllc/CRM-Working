@@ -26,6 +26,7 @@ import type {
 
 type EstimateV2CollectionsState = Omit<
   EstimateV2EditorCollections,
+  | 'rollers'
   | 'setRooms'
   | 'setScopes'
   | 'setSegments'
@@ -33,10 +34,14 @@ type EstimateV2CollectionsState = Omit<
   | 'setCeilingScopes'
   | 'setCeilingSegments'
   | 'setTrimScopes'
->
+  | 'setRollers'
+> & {
+  rollers?: EstimateV2EditorCollections['rollers']
+}
 
 type EstimateV2MetaFields = Omit<
   EstimateV2EditorMetaState,
+  | 'pricingSummary'
   | 'setLoading'
   | 'setSaving'
   | 'setEstimate'
@@ -45,6 +50,7 @@ type EstimateV2MetaFields = Omit<
   | 'setWallCalculations'
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
+  | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
   | 'setValidationIssues'
@@ -57,7 +63,9 @@ type EstimateV2MetaFields = Omit<
   | 'setOrgJobProductDefaults'
   | 'setCustomerDraft'
   | 'setDebugMeta'
->
+> & {
+  pricingSummary?: EstimateV2EditorMetaState['pricingSummary']
+}
 
 export type EstimateV2EditorStoreState = {
   collections: EstimateV2CollectionsState
@@ -73,6 +81,7 @@ export type EstimateV2EditorViewState = EstimateV2CollectionsState &
     | 'job'
     | 'catalogs'
     | 'selectedRoomId'
+    | 'pricingSummary'
     | 'error'
     | 'validationIssues'
     | 'saveStatus'
@@ -95,6 +104,7 @@ type EstimateV2CollectionSetters = Pick<
   | 'setCeilingScopes'
   | 'setCeilingSegments'
   | 'setTrimScopes'
+  | 'setRollers'
 >
 
 type EstimateV2MetaSetters = Pick<
@@ -107,6 +117,7 @@ type EstimateV2MetaSetters = Pick<
   | 'setWallCalculations'
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
+  | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
   | 'setValidationIssues'
@@ -200,6 +211,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       ceilingScopes: [],
       ceilingSegments: [],
       trimScopes: [],
+      rollers: [],
     },
     meta: {
       loading: true,
@@ -210,6 +222,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       wallCalculations: null,
       ceilingCalculations: null,
       trimCalculations: null,
+      pricingSummary: null,
       selectedRoomId: '',
       error: null,
       validationIssues: [],
@@ -301,6 +314,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
           trimScopes: resolveUpdater(state.collections.trimScopes, value),
         },
       })),
+    setRollers: (value) =>
+      set((state) => ({
+        collections: {
+          ...state.collections,
+          rollers: resolveUpdater(state.collections.rollers ?? [], value),
+        },
+      })),
     setLoading: (value) =>
       set((state) => ({
         meta: { ...state.meta, loading: resolveUpdater(state.meta.loading, value) },
@@ -340,6 +360,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
         meta: {
           ...state.meta,
           trimCalculations: resolveUpdater(state.meta.trimCalculations, value),
+        },
+      })),
+    setPricingSummary: (value) =>
+      set((state) => ({
+        meta: {
+          ...state.meta,
+          pricingSummary: resolveUpdater(state.meta.pricingSummary ?? null, value),
         },
       })),
     setSelectedRoomId: (value) =>
@@ -441,6 +468,7 @@ function selectViewState(state: EstimateV2EditorStore): EstimateV2EditorViewStat
     selectedRoomId: state.meta.selectedRoomId,
     error: state.meta.error,
     validationIssues: state.meta.validationIssues,
+    pricingSummary: state.meta.pricingSummary ?? null,
     saveStatus: state.meta.saveStatus,
     settingsOpen: state.meta.settingsOpen,
     jobDefaultsOpen: state.meta.jobDefaultsOpen,
@@ -467,6 +495,8 @@ function selectCollectionsWithSetters(state: EstimateV2EditorStore): EstimateV2E
     setCeilingSegments: state.setCeilingSegments,
     trimScopes: state.collections.trimScopes,
     setTrimScopes: state.setTrimScopes,
+    rollers: state.collections.rollers ?? [],
+    setRollers: state.setRollers,
   }
 }
 
@@ -488,6 +518,8 @@ function selectMetaWithSetters(state: EstimateV2EditorStore): EstimateV2EditorMe
     setCeilingCalculations: state.setCeilingCalculations,
     trimCalculations: state.meta.trimCalculations,
     setTrimCalculations: state.setTrimCalculations,
+    pricingSummary: state.meta.pricingSummary ?? null,
+    setPricingSummary: state.setPricingSummary,
     selectedRoomId: state.meta.selectedRoomId,
     setSelectedRoomId: state.setSelectedRoomId,
     error: state.meta.error,

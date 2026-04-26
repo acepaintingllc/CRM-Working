@@ -146,7 +146,6 @@ export function createValidationIssues(params: {
     ...materialValidationIssues,
     ...params.wallRollerRows.flatMap((row) => row.errors),
     ...(params.ceilingRollerRow?.errors ?? []),
-    ...(params.trimApplicatorRow?.errors ?? []),
   ]) {
     if (!issuesById.has(issue.id)) issuesById.set(issue.id, issue)
   }

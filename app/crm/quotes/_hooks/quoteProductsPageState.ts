@@ -6,12 +6,14 @@ import {
   createEmptyQuoteProductDraft,
   createQuoteProductDraftSnapshot,
   normalizeQuoteProductFamily,
+  normalizeQuoteProductScopeFilter,
   quoteProductRowToDraft,
   type ProductFamily,
   type QuoteProductDraft,
   type QuoteProductDraftSnapshot,
   type QuoteProductQuery,
   type QuoteProductRow,
+  type QuoteProductScopeFilter,
   type QuoteProductStatusFilter,
 } from '@/lib/quotes/productsForm'
 import {
@@ -23,6 +25,7 @@ export type QuoteProductsPendingTransition =
   | { type: 'setSelectedId'; selectedId: string | null }
   | { type: 'setActiveFamily'; nextFamily: ProductFamily }
   | { type: 'setStatusFilter'; status: QuoteProductStatusFilter }
+  | { type: 'setScopeFilter'; scope: QuoteProductScopeFilter }
   | { type: 'setSearch'; search: string }
   | { type: 'startCreate' }
 
@@ -30,6 +33,7 @@ export type QuoteProductsWorkflowState = {
   navigation: {
     activeFamily: ProductFamily
     statusFilter: QuoteProductStatusFilter
+    scopeFilter: QuoteProductScopeFilter
     search: string
     debouncedSearch: string
   }
@@ -99,6 +103,7 @@ export function createInitialQuoteProductsWorkflowState(): QuoteProductsWorkflow
     navigation: {
       activeFamily: QUOTE_PRODUCT_FAMILIES[0],
       statusFilter: 'all',
+      scopeFilter: 'all',
       search: '',
       debouncedSearch: '',
     },
@@ -122,6 +127,7 @@ export function buildQuoteProductsQuery(
   return {
     family: navigation.activeFamily,
     status: navigation.statusFilter,
+    ...(navigation.scopeFilter === 'all' ? {} : { scope: navigation.scopeFilter }),
     search: navigation.debouncedSearch || null,
   }
 }
@@ -300,6 +306,8 @@ export function getQuoteProductsIntentChanged(
       return intent.nextFamily !== state.navigation.activeFamily
     case 'setStatusFilter':
       return intent.status !== state.navigation.statusFilter
+    case 'setScopeFilter':
+      return intent.scope !== state.navigation.scopeFilter
     case 'setSearch':
       return intent.search !== state.navigation.search
     case 'setSelectedId':
@@ -364,6 +372,16 @@ export function buildQuoteProductsIntentState(
         navigation: {
           ...state.navigation,
           statusFilter: intent.status,
+        },
+        editorMode: state.editorMode === 'create' ? 'none' : state.editorMode,
+        deleteTargetId: null,
+      }
+    case 'setScopeFilter':
+      return {
+        ...state,
+        navigation: {
+          ...state.navigation,
+          scopeFilter: normalizeQuoteProductScopeFilter(intent.scope, 'all'),
         },
         editorMode: state.editorMode === 'create' ? 'none' : state.editorMode,
         deleteTargetId: null,
@@ -528,6 +546,7 @@ export function buildQuoteProductsSavedState(params: {
       ? {
           activeFamily: nextFamily,
           statusFilter: 'all' as const,
+          scopeFilter: 'all' as const,
           search: '',
           debouncedSearch: '',
         }

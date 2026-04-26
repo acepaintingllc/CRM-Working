@@ -32,6 +32,7 @@ export function useEstimateV2CalculationDerived(params: {
     | 'ceilingScopes'
     | 'ceilingSegments'
     | 'trimScopes'
+    | 'rollers'
   >
   meta: Pick<
     EstimateV2EditorMetaState,
@@ -100,12 +101,14 @@ export function useEstimateV2CalculationDerived(params: {
         ceilingScopes: collections.ceilingScopes,
         ceilingSegments: collections.ceilingSegments,
         trimScopes: collections.trimScopes,
+        rollers: collections.rollers,
       }),
     [
       collections.ceilingScopes,
       collections.ceilingSegments,
       collections.roomFlags,
       collections.rooms,
+      collections.rollers,
       collections.scopes,
       collections.segments,
       collections.trimScopes,
