@@ -7,6 +7,7 @@ import {
   type EstimateV2EditorStoreApi,
 } from '@/lib/estimates/v2/store/estimateV2Store'
 import { toDisplayNumber } from '../_lib/estimateV2EditorNormalize'
+import { setConditionSelection, type EstimateV2ConditionLevel } from '@/lib/estimator/conditionModifiers'
 import {
   buildCalculationState,
   buildHeaderSubtitle,
@@ -154,6 +155,7 @@ function useRoomVm(
       selectedRoomIssueCount: derived.room.selectedRoomIssueCount,
       roomFlagsEnabled: roomState.roomFlagsCatalog.length > 0,
       roomFlagsCatalog: roomState.roomFlagsCatalog,
+      conditionModifiers: derived.catalog.conditionModifiers,
       addRoom,
       deleteRoom,
       updateRoom,
@@ -181,6 +183,16 @@ function useRoomVm(
         if (!derived.room.selectedRoom) return
         switchRoomGeometryMode(derived.room.selectedRoom.roomId, nextMode)
       },
+      setSelectedRoomCondition: (conditionId, level) => {
+        if (!derived.room.selectedRoom) return
+        updateRoom(derived.room.selectedRoom.roomId, {
+          conditionSelections: setConditionSelection(
+            derived.room.selectedRoom.conditionSelections,
+            conditionId,
+            level
+          ),
+        })
+      },
     }),
     [
       addRoom,
@@ -188,6 +200,7 @@ function useRoomVm(
       derived.calculation.displayedRoomEffectiveAreaByRoomId,
       derived.calculation.selectedRoomEffectiveSqFt,
       derived.catalog.roomTypeOptions,
+      derived.catalog.conditionModifiers,
       derived.room.activeRoomFlagCount,
       derived.room.roomCeilingScopeByRoomId,
       derived.room.roomScopeByRoomId,
@@ -246,11 +259,21 @@ function useWallsVm(
       updateSegment: wallActions.updateSegment,
       toggleRoomInclude: wallActions.toggleRoomInclude,
       updateRoomComplexity,
+      conditionModifiers: derived.catalog.conditionModifiers,
+      conditionSelections: derived.room.firstScope?.conditionSelections ?? {},
+      setSelectedRoomWallCondition: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => {
+        const baseSelections = derived.room.firstScope?.conditionSelections ?? {}
+        const nextSelections = setConditionSelection(baseSelections, conditionId, level)
+        for (const scope of derived.room.selectedRoomScopes) {
+          wallActions.updateScope(scope.id, { conditionSelections: nextSelections })
+        }
+      },
     }),
     [
       derived.calculation.displayedScopeEffectiveAreaById,
       derived.calculation.displayedSegmentEffectiveAreaById,
       derived.catalog.colorCodeOptions,
+      derived.catalog.conditionModifiers,
       derived.catalog.wallPaintOptions,
       derived.catalog.wallPrimerOptions,
       derived.catalog.wallProductionRates,
@@ -265,15 +288,7 @@ function useWallsVm(
       derived.room.wallsIncluded,
       segments,
       updateRoomComplexity,
-      wallActions.addScope,
-      wallActions.addSegment,
-      wallActions.deleteScope,
-      wallActions.deleteSegment,
-      wallActions.moveScope,
-      wallActions.moveSegment,
-      wallActions.toggleRoomInclude,
-      wallActions.updateScope,
-      wallActions.updateSegment,
+      wallActions,
     ]
   )
 }
@@ -314,23 +329,25 @@ function useCeilingsVm(
       moveSegment: ceilingActions.moveSegment,
       updateSegment: ceilingActions.updateSegment,
       toggleRoomInclude: ceilingActions.toggleRoomInclude,
+      conditionModifiers: derived.catalog.conditionModifiers,
+      conditionSelections: derived.room.firstCeilingScope?.conditionSelections ?? {},
+      setSelectedRoomCeilingCondition: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => {
+        const baseSelections = derived.room.firstCeilingScope?.conditionSelections ?? {}
+        const nextSelections = setConditionSelection(baseSelections, conditionId, level)
+        for (const scope of derived.room.selectedRoomCeilingScopes) {
+          ceilingActions.updateScope(scope.id, { conditionSelections: nextSelections })
+        }
+      },
     }),
     [
-      ceilingActions.addScope,
-      ceilingActions.addSegment,
-      ceilingActions.deleteScope,
-      ceilingActions.deleteSegment,
-      ceilingActions.moveScope,
-      ceilingActions.moveSegment,
-      ceilingActions.toggleRoomInclude,
-      ceilingActions.updateScope,
-      ceilingActions.updateSegment,
+      ceilingActions,
       ceilingState.catalogs,
       ceilingState.ceilingSegments,
       derived.calculation.selectedCeilingEffectiveSqFt,
       derived.catalog.ceilingPaintOptions,
       derived.catalog.ceilingPrimerOptions,
       derived.catalog.colorCodeOptions,
+      derived.catalog.conditionModifiers,
       derived.productLabels.ceilingPaintLabel,
       derived.productLabels.ceilingPrimerLabel,
       derived.productLabels.effectiveCeilingPaintLabel,
@@ -374,6 +391,15 @@ function useTrimVm(
       deleteScope: trimActions.deleteScope,
       toggleRoomInclude: trimActions.toggleRoomInclude,
       updateTrimType: trimActions.updateTrimType,
+      conditionModifiers: derived.catalog.conditionModifiers,
+      conditionSelections: derived.room.firstTrimScope?.conditionSelections ?? {},
+      setSelectedRoomTrimCondition: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => {
+        const baseSelections = derived.room.firstTrimScope?.conditionSelections ?? {}
+        const nextSelections = setConditionSelection(baseSelections, conditionId, level)
+        for (const scope of derived.room.selectedRoomTrimScopes) {
+          trimActions.updateScope(scope.id, { conditionSelections: nextSelections })
+        }
+      },
     }),
     [
       derived.calculation.selectedTrimMeasurement,
@@ -381,6 +407,7 @@ function useTrimVm(
       derived.calculation.trimScopeEffectiveMeasurementById,
       derived.calculation.trimScopeEffectiveTotalById,
       derived.catalog.colorCodeOptions,
+      derived.catalog.conditionModifiers,
       derived.catalog.trimPaintOptions,
       derived.catalog.trimPrimerOptions,
       derived.catalog.trimTypeOptions,
@@ -394,12 +421,7 @@ function useTrimVm(
       derived.room.selectedRoomResolvedMode,
       derived.room.selectedRoomTrimScopes,
       derived.room.trimsIncluded,
-      trimActions.addScope,
-      trimActions.deleteScope,
-      trimActions.moveScope,
-      trimActions.toggleRoomInclude,
-      trimActions.updateScope,
-      trimActions.updateTrimType,
+      trimActions,
     ]
   )
 }

@@ -42,6 +42,7 @@ export function useEstimateV2CalculationDerived(params: {
     | 'wallCalculations'
     | 'ceilingCalculations'
     | 'trimCalculations'
+    | 'jobSettingsDraft'
   >
   selectedRoom: EstimateV2RoomDraft | null
   firstScope: { id: string } | null
@@ -96,6 +97,7 @@ export function useEstimateV2CalculationDerived(params: {
     () =>
       buildEstimateV2DirtySnapshot({
         rooms: collections.rooms,
+        jobSettingsDraft: meta.jobSettingsDraft,
         scopes: collections.scopes,
         segments: collections.segments,
         roomFlags: collections.roomFlags,
@@ -113,6 +115,7 @@ export function useEstimateV2CalculationDerived(params: {
       collections.scopes,
       collections.segments,
       collections.trimScopes,
+      meta.jobSettingsDraft,
     ]
   )
   const dirty = !meta.loading && !areEstimateV2DirtySnapshotsEqual(currentSnapshot, meta.lastSavedSnapshot)

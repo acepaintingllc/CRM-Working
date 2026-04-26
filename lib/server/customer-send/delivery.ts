@@ -79,20 +79,57 @@ export async function submitCustomerSendMessage(params: {
   }>
 > {
   let publicVersion = params.version
-  let publicUrl = buildCustomerSendPublicUrl({
+  let publicUrl: string | null = null
+  let pendingPublicToken = asText(publicVersion.public_token)
+  if (params.mode === 'send' && !pendingPublicToken) {
+    pendingPublicToken = randomUUID().replace(/-/g, '')
+  }
+  const previewVersion =
+    params.mode === 'send'
+      ? ({
+          ...publicVersion,
+          public_token: pendingPublicToken || null,
+        } as EstimatePublicVersionRow)
+      : publicVersion
+  publicUrl = buildCustomerSendPublicUrl({
     origin: params.origin,
-    version: publicVersion,
+    version: previewVersion,
     fallback: params.context.public_url,
   })
 
+  const subject =
+    params.draft.subject || `${asText(params.context.estimate.version_name) || 'Quote'} ready`
+  const bodyText = buildDefaultEmailBody({
+    draft: params.draft,
+    context: params.context,
+    publicUrl,
+    mode: params.mode,
+  })
+
+  const send = await sendGmailMessage({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+    to: params.draft.to_email,
+    cc: params.draft.cc_email,
+    bcc: params.draft.bcc_email,
+    subject,
+    bodyText,
+  })
+  if ('error' in send) {
+    return errorResult('invalid_input', send.error ?? params.copy.sendFailureMessage)
+  }
+
   if (params.mode === 'send') {
-    let token = asText(publicVersion.public_token)
-    if (!token) token = randomUUID().replace(/-/g, '')
+    if (!pendingPublicToken) {
+      return errorResult('server_error', params.copy.lockFailureMessage)
+    }
+
     const sentAt = new Date().toISOString()
     const sentVersion = await markEstimatePublicVersionSent({
       orgId: params.orgId,
       versionId: asText(publicVersion.id),
-      publicToken: token,
+      publicToken: pendingPublicToken,
       sentAt,
       lockFailureMessage: params.copy.lockFailureMessage,
     })
@@ -114,27 +151,6 @@ export async function submitCustomerSendMessage(params: {
       metadata: { publicUrl },
     })
     if (!eventResult.ok) return eventResult
-  }
-
-  const subject =
-    params.draft.subject || `${asText(params.context.estimate.version_name) || 'Quote'} ready`
-  const bodyText = buildDefaultEmailBody({
-    draft: params.draft,
-    context: params.context,
-    publicUrl,
-    mode: params.mode,
-  })
-
-  const send = await sendGmailMessage({
-    origin: params.origin,
-    orgId: params.orgId,
-    userId: params.userId,
-    to: params.draft.to_email,
-    subject,
-    bodyText,
-  })
-  if ('error' in send) {
-    return errorResult('invalid_input', send.error ?? params.copy.sendFailureMessage)
   }
 
   return okResult({

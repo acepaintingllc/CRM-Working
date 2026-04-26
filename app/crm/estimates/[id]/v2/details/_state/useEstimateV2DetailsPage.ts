@@ -10,11 +10,15 @@ import {
   estimateRouteFamily,
   type EstimateRouteFamily,
 } from '../../../estimateRouteFamily'
+import { useCrmIntentGuard } from '@/app/crm/_hooks/useCrmIntentGuard'
 import { useEstimateV2EditorDerivedSections } from '../../_state/useEstimateV2EditorDerivedSections'
 import { useEstimateV2EditorLoader } from '../../_state/useEstimateV2EditorLoader'
 import { useEstimateV2BeforeUnload } from '../../_state/useEstimateV2BeforeUnload'
 import { useEstimateV2SaveController } from '../../_state/useEstimateV2SaveController'
-import { useEstimateV2DetailsController } from './useEstimateV2DetailsController'
+import {
+  useEstimateV2DetailsController,
+  type EstimateV2DetailsPendingIntent,
+} from './useEstimateV2DetailsController'
 import { useEstimateV2DetailsMutations } from './useEstimateV2DetailsMutations'
 import { useEstimateV2DetailsRollerOptions } from './useEstimateV2DetailsRollerOptions'
 import { useEstimateV2DetailsVm } from './useEstimateV2DetailsVm'
@@ -27,7 +31,7 @@ export function useEstimateV2DetailsPage({
   routeFamily?: EstimateRouteFamily
 }) {
   const [store] = useState(() => createEstimateV2Store())
-  const rollerOptionsState = useEstimateV2DetailsRollerOptions()
+  const { rollerOptionsState, ratesFlagsPayload } = useEstimateV2DetailsRollerOptions()
 
   useEstimateV2EditorLoader({ estimateId, routeFamily, store })
   const derived = useEstimateV2EditorDerivedSections({ store })
@@ -35,8 +39,12 @@ export function useEstimateV2DetailsPage({
     store,
     estimateV2StoreSelectors.effectiveJobProductDefaults
   )
-  const { state, vm } = useEstimateV2DetailsVm({ store, rollerOptionsState })
+  const { state, vm } = useEstimateV2DetailsVm({ store, rollerOptionsState, ratesFlagsPayload })
   const dirty = derived.calculation.dirty
+  const intentGuard = useCrmIntentGuard<EstimateV2DetailsPendingIntent>({
+    hasUnsavedChanges: dirty,
+    getIntentType: (intent) => intent,
+  })
 
   useEstimateV2BeforeUnload({ loading: state.loading, dirty })
 
@@ -62,6 +70,7 @@ export function useEstimateV2DetailsPage({
     dirty,
     saveEstimate: saveEstimateV2,
     mutations: detailMutations,
+    intentGuard,
   })
 
   return {
@@ -75,6 +84,7 @@ export function useEstimateV2DetailsPage({
     job: state.job,
     saveStatusText: derived.save.saveStatusText,
     routeFamily,
+    discardVm: intentGuard.discardVm,
     actions: controller.actions,
   }
 }

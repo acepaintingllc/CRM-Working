@@ -271,6 +271,7 @@ describe('useEstimateV2SaveController', () => {
     await expect(result.current.save('manual')).resolves.toBe(true)
 
     const expectedSavedSnapshot = buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: harness.store.getState().meta.jobSettingsDraft,
       rooms: harness.store.getState().collections.rooms,
       scopes: harness.store.getState().collections.scopes,
       segments: harness.store.getState().collections.segments,

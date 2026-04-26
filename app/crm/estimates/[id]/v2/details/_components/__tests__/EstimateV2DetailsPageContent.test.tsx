@@ -6,6 +6,8 @@ const mockUseEstimateV2DetailsPage = vi.fn()
 const continueToSummary = vi.fn()
 const returnToEditor = vi.fn()
 const saveDraft = vi.fn()
+const confirmReturnToEditor = vi.fn()
+const cancelDiscard = vi.fn()
 
 vi.mock('../../_state/useEstimateV2DetailsPage', () => ({
   useEstimateV2DetailsPage: (...args: unknown[]) => mockUseEstimateV2DetailsPage(...args),
@@ -46,6 +48,12 @@ const basePage = {
   estimate: { id: 'estimate-1', version_name: 'Version A' },
   job: null,
   routeFamily: null,
+  discardVm: {
+    status: 'idle',
+    isOpen: false,
+    intent: null,
+    intentType: null,
+  },
   vm: {
     wallRows: [
       {
@@ -84,10 +92,9 @@ const basePage = {
       },
     ],
     ceilingRollerRow: null,
-    trimApplicatorRow: null,
+    trimApplicatorSummary: null,
     wallRollerOptions: [{ id: 'WALL_9', label: 'Wall 9"', scope: 'Wall', sizeIn: 9, priceEach: 6 }],
     ceilingRollerOptions: [],
-    trimApplicatorOptions: [],
     rollerOptionsState: {
       status: 'loaded',
       options: [{ id: 'WALL_9', label: 'Wall 9"', scope: 'Wall', sizeIn: 9, priceEach: 6 }],
@@ -130,6 +137,8 @@ const basePage = {
   },
   actions: {
     returnToEditor,
+    confirmReturnToEditor,
+    cancelDiscard,
     saveDraft,
     continueToSummary,
     setRollerRow: vi.fn(),
@@ -144,6 +153,8 @@ describe('EstimateV2DetailsPageContent', () => {
     continueToSummary.mockReset()
     returnToEditor.mockReset()
     saveDraft.mockReset()
+    confirmReturnToEditor.mockReset()
+    cancelDiscard.mockReset()
     mockUseEstimateV2DetailsPage.mockReturnValue(basePage)
   })
 
@@ -176,6 +187,31 @@ describe('EstimateV2DetailsPageContent', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Back$/i }))
 
     expect(returnToEditor).toHaveBeenCalled()
+  })
+
+  it('renders the discard dialog and wires cancel and confirm actions', () => {
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...basePage,
+      discardVm: {
+        status: 'confirming',
+        isOpen: true,
+        intent: 'returnToEditor',
+        intentType: 'returnToEditor',
+      },
+    })
+
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByRole('dialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument()
+    expect(
+      screen.getByText('You have unsaved changes. Discard and return to editor?')
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(cancelDiscard).toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard and return' }))
+    expect(confirmReturnToEditor).toHaveBeenCalled()
   })
 
   it('renders unavailable roller option state and keeps summary actions disabled', () => {
@@ -211,6 +247,35 @@ describe('EstimateV2DetailsPageContent', () => {
     expect(screen.getAllByText('Rates unavailable').length).toBeGreaterThan(0)
     const continueButtons = screen.getAllByRole('button', { name: /Continue to Summary/i })
     expect(continueButtons.every((button) => button.hasAttribute('disabled'))).toBe(true)
+  })
+
+  it('renders the static trim applicator summary when trim is active', () => {
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...basePage,
+      vm: {
+        ...basePage.vm,
+        trimRow: {
+          ...basePage.vm.wallRows[0],
+          id: 'trim',
+          label: 'Trim & Baseboards',
+          colorId: undefined,
+          colorName: 'Trim',
+          overrideKey: 'trim',
+          overrideOwnerScopeId: 'trim-1',
+        },
+        trimApplicatorSummary: {
+          active: true,
+          label: '1 brush + 1 roller included automatically per color',
+        },
+        hasTrim: true,
+      },
+    })
+
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    expect(
+      screen.getByText('Trim: 1 brush + 1 roller per color included automatically via supply rates')
+    ).toBeInTheDocument()
   })
 
   it('renders VM-provided material empty states for inactive scope sections', () => {

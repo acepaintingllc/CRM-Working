@@ -53,6 +53,7 @@ export async function saveV2RoomRoster(params: {
       length_in: row.length_in,
       width_in: row.width_in,
       wallheight_in: row.wallheight_in,
+      condition_selections: row.condition_selections ?? null,
     }
     if (id) {
       withId.push(baseRow)

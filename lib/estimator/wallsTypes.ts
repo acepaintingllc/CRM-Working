@@ -13,14 +13,27 @@ export type ProductRow = {
 
 export type SupplyRateRow = {
   key: string
+  supply_group?: string | null
   scope: string | null
   unit: string | null
   value: number
+  crew_multiplier?: 'Y' | 'N' | string | null
+}
+
+export type ConditionModifierCatalogRow = {
+  id: string
+  label: string
+  scope: 'room' | 'wall' | 'ceiling' | 'trim'
+  modifier_type: 'binary' | 'severity'
+  factor_field: string | null
+  levels: Partial<Record<'active' | 'minor' | 'moderate' | 'major', number>>
+  active?: 'Y' | 'N'
 }
 
 export type WallCalculationCatalogs = {
   paint_products?: ProductRow[] | null
   supplies_rates?: SupplyRateRow[] | null
+  condition_modifiers?: ConditionModifierCatalogRow[] | null
 }
 
 export type WallCalculationScopeRow = {
@@ -71,6 +84,8 @@ export type WallCalculationScopeRow = {
   override_total: number | null
   effective_total: number | null
   notes: string | null
+  condition_factor?: number | null
+  condition_selections?: Partial<Record<string, string>> | null
   paint_coats?: number | null
   primer_coats?: number | null
   spot_prime_percent?: number | null
@@ -81,6 +96,7 @@ export type WallCalculationScopeRow = {
   area_supply_cost_per_sf?: number | null
   per_color_supply_cost?: number | null
   primer_supply_cost?: number | null
+  crew_size?: number | null
   labor_rate_per_hour?: number | null
   paint_price_per_gal?: number | null
   primer_price_per_gal?: number | null
@@ -119,6 +135,7 @@ export type WallCalculationSettings = {
   area_supply_cost_per_sf?: number | null
   per_color_supply_cost?: number | null
   primer_supply_cost?: number | null
+  crew_size?: number | null
   paint_price_per_gal?: number | null
   primer_price_per_gal?: number | null
   standard_door_deduction_sf?: number | null
@@ -244,6 +261,7 @@ export type ResolvedSettings = {
   primer_price_per_gal: number
   standard_door_deduction_sf: number
   standard_window_deduction_sf: number
+  crew_size: number
 }
 
 export type WallCalculationOutput = {

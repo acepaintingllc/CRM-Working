@@ -341,13 +341,15 @@ describe('estimate details VM', () => {
 
     expect(rollerPlanning.wallRollerOptions.map((option) => option.id)).toEqual(['WALL_9'])
     expect(rollerPlanning.ceilingRollerOptions.map((option) => option.id)).toEqual(['CEIL_14'])
-    expect(rollerPlanning.trimApplicatorOptions.map((option) => option.id)).toEqual(['TRIM_4'])
     expect(rollerPlanning.wallRollerRows.find((row) => row.id === 'wall:COLOR1')).toMatchObject({
       coverId: 'WALL_9',
       quantity: '2',
     })
     expect(rollerPlanning.ceilingRollerRow).toMatchObject({ id: 'ceiling' })
-    expect(rollerPlanning.trimApplicatorRow).toBeNull()
+    expect(rollerPlanning.trimApplicatorSummary).toEqual({
+      active: true,
+      label: '1 brush + 1 roller included automatically per color',
+    })
   })
 
   it('builds validation and totals VMs from focused orchestration helpers', () => {
@@ -1156,7 +1158,6 @@ describe('estimate details VM', () => {
       trimRow: null,
       wallRollerRows: [rollerRow],
       ceilingRollerRow: null,
-      trimApplicatorRow: null,
     })
 
     expect(issues.map((issue) => issue.id)).toEqual([
@@ -1204,6 +1205,31 @@ describe('estimate details VM', () => {
       calculatedGallons: 1.2,
       roundedGallons: 2,
     })
+  })
+
+  it('omits a wall color group when all scopes in that color are inactive', () => {
+    const materialPlanning = buildEstimateV2MaterialPlanningVm(buildVmParams({
+      wallScopes: [
+        wallScope({ id: 'wall-color1-a', colorId: 'COLOR1', include: 'N' }),
+        wallScope({ id: 'wall-color1-b', colorId: 'COLOR1', include: 'N' }),
+        wallScope({ id: 'wall-color2-active', colorId: 'COLOR2', include: 'Y' }),
+      ],
+      ceilingScopes: [],
+      trimScopes: [],
+      wallCalculations: [
+        wallCalculationRow({ id: 'wall-color1-a', effectiveAreaSf: 100, rawPaintGallons: 1.2 }),
+        wallCalculationRow({ id: 'wall-color1-b', effectiveAreaSf: 80, rawPaintGallons: 0.8 }),
+        wallCalculationRow({ id: 'wall-color2-active', effectiveAreaSf: 50, rawPaintGallons: 0.6 }),
+      ],
+    }))
+
+    expect(materialPlanning.wallRows).toHaveLength(1)
+    expect(materialPlanning.wallRows[0]).toMatchObject({
+      id: 'COLOR2',
+      label: 'Accent',
+      colorName: 'Accent',
+    })
+    expect(materialPlanning.wallRows.some((row) => row.id === 'COLOR1')).toBe(false)
   })
 
   it('keeps wall group labels and override keys stable when scopes are reordered', () => {
@@ -1390,7 +1416,6 @@ describe('estimate details VM', () => {
     const vm = buildVm()
     expect(validationMessages(vm)).toContain('Primary roller cover is required')
     expect(validationMessages(vm)).toContain('Ceilings quantity is required')
-    expect(validationMessages(vm)).not.toContain('Trim & Baseboards applicator is required')
     expect(vm.canContinueToSummary).toBe(false)
     expect(vm.validationSummary).toMatchObject({
       status: 'blocked',
@@ -1466,7 +1491,6 @@ describe('estimate details VM', () => {
     expect(vm.rollerOptionsState.status).toBe('unavailable')
     expect(validationMessages(vm)).toContain('Roller and applicator options failed to load.')
     expect(validationMessages(vm)).not.toContain('Primary roller cover is required')
-    expect(validationMessages(vm)).not.toContain('Trim & Baseboards applicator is required')
   })
 
   it('represents configured-but-empty roller options explicitly', () => {
@@ -1586,6 +1610,40 @@ describe('estimate details VM', () => {
         }
       }
     }
+  })
+
+  it('keeps zero calculated wall gallons distinct from missing calculations and override zero', () => {
+    const noOverride = buildVm({
+      wallScopes: [wallScope({ id: 'wall-zero', colorId: 'COLOR1', overridePaintGallons: '' })],
+      ceilingScopes: [],
+      trimScopes: [],
+      wallCalculations: [
+        wallCalculationRow({ id: 'wall-zero', effectiveAreaSf: 0, rawPaintGallons: 0 }),
+      ],
+    })
+
+    expect(noOverride.wallRows[0]).toMatchObject({
+      calculatedGallons: 0,
+      roundedGallons: 0,
+      finalGallons: 0,
+      hasOverride: false,
+    })
+
+    const overrideZero = buildVm({
+      wallScopes: [wallScope({ id: 'wall-zero', colorId: 'COLOR1', overridePaintGallons: '0' })],
+      ceilingScopes: [],
+      trimScopes: [],
+      wallCalculations: [
+        wallCalculationRow({ id: 'wall-zero', effectiveAreaSf: 0, rawPaintGallons: 0 }),
+      ],
+    })
+
+    expect(overrideZero.wallRows[0]).toMatchObject({
+      calculatedGallons: 0,
+      roundedGallons: 0,
+      finalGallons: 0,
+      hasOverride: true,
+    })
   })
 
   it('reports active overrides without requiring saved override reasons', () => {
@@ -1853,7 +1911,7 @@ describe('estimate details VM', () => {
       quantity: '1',
       errors: [],
     })
-    expect(vm.trimApplicatorRow).toBeNull()
+    expect(vm.trimApplicatorSummary).toMatchObject({ active: true })
     expect(vm.canContinueToSummary).toBe(false)
     expect(validationMessages(vm)).not.toContain(
       'Primary saved wall roller cover size 9" matches multiple active options; make sizes unique before continuing.'
@@ -1909,7 +1967,7 @@ describe('estimate details VM', () => {
       notes: 'Aggregate ignores color',
       errors: [],
     })
-    expect(vm.trimApplicatorRow).toBeNull()
+    expect(vm.trimApplicatorSummary).toMatchObject({ active: true })
   })
 
   it('hydrates legacy size-only roller selections from persisted roller rows', () => {
@@ -1956,7 +2014,7 @@ describe('estimate details VM', () => {
       quantity: '1',
       errors: [],
     })
-    expect(vm.trimApplicatorRow).toBeNull()
+    expect(vm.trimApplicatorSummary).toMatchObject({ active: true })
   })
 
   it('surfaces a stale saved selected option id through details VM validation', () => {
@@ -2108,12 +2166,9 @@ describe('estimate details VM', () => {
     })
 
     expect(vm.ceilingRollerRow).toMatchObject({ coverId: '', quantity: '1' })
-    expect(vm.trimApplicatorRow).toBeNull()
+    expect(vm.trimApplicatorSummary).toMatchObject({ active: true })
     expect(validationMessages(vm)).toContain(
       'Ceilings saved ceiling roller cover size 14" matches multiple active options; make sizes unique before continuing.'
-    )
-    expect(validationMessages(vm)).not.toContain(
-      'Trim & Baseboards saved trim applicator size 4" matches multiple active options; make sizes unique before continuing.'
     )
     expect(vm.canContinueToSummary).toBe(false)
   })

@@ -3,6 +3,7 @@ import type { AnchorHTMLAttributes } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EstimateV2SummaryPageContent } from '../EstimateV2SummaryPageContent'
 
+const mockLoadData = vi.hoisted(() => vi.fn())
 const mockUseEstimateV2SummaryData = vi.fn()
 const mockUseEstimateV2SummaryDerived = vi.fn()
 
@@ -16,6 +17,10 @@ vi.mock('next/link', () => ({
 
 vi.mock('../../../_state/useEstimateV2SummaryData', () => ({
   useEstimateV2SummaryData: (...args: unknown[]) => mockUseEstimateV2SummaryData(...args),
+}))
+
+vi.mock('@/lib/client/api', () => ({
+  loadData: mockLoadData,
 }))
 
 vi.mock('../../_lib/useEstimateV2SummaryDerived', () => ({
@@ -94,6 +99,7 @@ const baseDerivedState = {
 
 describe('EstimateV2SummaryPageContent', () => {
   beforeEach(() => {
+    mockLoadData.mockResolvedValue({ version: null, public_url: null })
     mockUseEstimateV2SummaryData.mockReturnValue(baseDataState)
     mockUseEstimateV2SummaryDerived.mockReturnValue(baseDerivedState)
   })

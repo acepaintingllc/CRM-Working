@@ -9,6 +9,7 @@ import {
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from '@/lib/estimator/defaults'
 import { asText } from '@/lib/estimator/parsing'
+import { normalizeWallRollerTargetId } from '@/lib/estimator/rollerIdentity'
 import { sortByPosition } from '@/lib/estimator/v2DraftPayload'
 import { sanitizeV2CeilingsDrafts } from '@/lib/estimator/v2CeilingsSanitize'
 import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
@@ -79,6 +80,7 @@ function buildJobSettingsDraft(
   orgDefaults: Unsafe | null,
   overrides: ProductOverrideInputs
 ) {
+  const crewSize = Number(jobsettings?.crew_size ?? 1)
   return {
     laborDayEnabled:
       typeof jobsettings?.labor_day_policy_enabled === 'boolean'
@@ -106,6 +108,7 @@ function buildJobSettingsDraft(
         orgDefaults?.job_minimum_amount ??
         DEFAULT_JOB_MINIMUM_AMOUNT
     ),
+    crewSize: Number.isFinite(crewSize) ? Math.max(1, Math.floor(crewSize)) : 1,
     wallPaintProductId: overrides.wallPaintOverride,
     wallPrimerProductId: overrides.wallPrimerOverride,
     ceilingPaintProductId: overrides.ceilingPaintOverride,
@@ -159,10 +162,11 @@ function normalizeRollerScope(value: unknown): EstimateV2RollerScope {
 }
 
 function normalizeRoller(row: Unsafe, index: number): EstimateV2RollerDraft {
+  const scope = normalizeRollerScope(row.scope)
   return {
     id: asText(row.id),
-    scope: normalizeRollerScope(row.scope),
-    wallColorId: asText(row.wallColorId ?? row.wall_color_id),
+    scope,
+    wallColorId: scope === 'Wall' ? normalizeWallRollerTargetId(row.wallColorId ?? row.wall_color_id) : '',
     selectedOptionId: asText(row.selectedOptionId ?? row.selected_option_id),
     rollerSizeIn: asText(row.rollerSizeIn ?? row.roller_size_in),
     coversQty: asText(row.coversQty ?? row.covers_qty),
@@ -285,6 +289,14 @@ export function sanitizeEstimateV2EditorLoad(params: {
       : normalizedRooms[0]?.roomId ?? ''
 
   const lastSavedSnapshot = buildEstimateV2DirtySnapshot({
+    jobSettingsDraft: buildJobSettingsDraft(js, orgDefaults, {
+      wallPaintOverride,
+      wallPrimerOverride,
+      ceilingPaintOverride,
+      ceilingPrimerOverride,
+      trimPaintOverride,
+      trimPrimerOverride,
+    }),
     rooms: normalizedRooms,
     scopes: recalculated.wallScopes,
     segments: sanitizedWalls.segments,

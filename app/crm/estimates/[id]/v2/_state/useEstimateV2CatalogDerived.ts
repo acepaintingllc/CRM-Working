@@ -59,6 +59,9 @@ export function useEstimateV2CatalogDerived(params: {
         unit_type: item.unit_type,
         helper_allowed: !!item.helper_allowed,
         default_production_rate_id: item.default_production_rate_id,
+        trim_category: (item as Record<string, unknown>).trim_category as TrimTypeOption['trim_category'],
+        measurement_class: (item as Record<string, unknown>).measurement_class as TrimTypeOption['measurement_class'],
+        picker_group: (item as Record<string, unknown>).picker_group as TrimTypeOption['picker_group'],
       })),
     [meta.catalogs.trim_items]
   )
@@ -122,6 +125,10 @@ export function useEstimateV2CatalogDerived(params: {
           : [],
     [meta.catalogs.room_types, selectedRoom]
   )
+  const conditionModifiers = useMemo(
+    () => meta.catalogs.condition_modifiers ?? [],
+    [meta.catalogs.condition_modifiers]
+  )
 
   return {
     rooms: collections.rooms,
@@ -143,5 +150,6 @@ export function useEstimateV2CatalogDerived(params: {
     ceilingPrimerOptions,
     trimPrimerOptions,
     roomTypeOptions,
+    conditionModifiers,
   }
 }

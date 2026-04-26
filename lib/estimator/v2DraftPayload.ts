@@ -1,6 +1,7 @@
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
+  EstimateV2JobSettingsDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2RollerDraft,
@@ -15,6 +16,7 @@ import { asNullableNumber } from './parsing.ts'
 import { normalizeRollerApplicatorQuantity } from './rollerQuantities.ts'
 import { normalizeWallRollerTargetId } from './rollerIdentity.ts'
 import { HIDDEN_CEILING_COLOR_ID } from './scopeRules.ts'
+import type { EstimateV2ConditionSelections } from './conditionModifiers.ts'
 
 const STANDARD_DOOR_DEDUCTION_SF = 21
 const STANDARD_WINDOW_DEDUCTION_SF = 15
@@ -25,6 +27,52 @@ export function sortByPosition<T extends { position: number }>(rows: T[]) {
 
 function toNullableDraftNumber(value: string) {
   return asNullableNumber(value)
+}
+
+function normalizeCrewSize(value: number | null | undefined) {
+  if (!Number.isFinite(value)) return 1
+  return Math.max(1, Math.floor(value as number))
+}
+
+function toNullableText(value: string) {
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+function toPersistedConditionSelections(
+  selections: EstimateV2ConditionSelections | null | undefined
+) {
+  const entries = Object.entries(selections ?? {}).filter(([, value]) => !!value)
+  return entries.length > 0 ? Object.fromEntries(entries) : null
+}
+
+function buildOrderedRoomFlags(
+  roomFlags: EstimateV2RoomFlagDraft[],
+  roomIds: Set<string>
+) {
+  const seen = new Set<string>()
+  const byRoomId = new Map<string, EstimateV2RoomFlagDraft[]>()
+
+  for (const flag of [...roomFlags].sort((a, b) => a.roomId.localeCompare(b.roomId) || a.position - b.position)) {
+    if (!roomIds.has(flag.roomId)) continue
+    const key = `${flag.roomId}\u0000${flag.flagId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const roomFlagsForRoom = byRoomId.get(flag.roomId) ?? []
+    roomFlagsForRoom.push(flag)
+    byRoomId.set(flag.roomId, roomFlagsForRoom)
+  }
+
+  return [...byRoomId.entries()].flatMap(([roomId, flags]) =>
+    flags.map((flag, position) => ({
+      id: flag.id,
+      room_id: roomId,
+      flag_id: flag.flagId,
+      position,
+      active: 'Y' as const,
+    }))
+  )
 }
 
 export function deriveEstimateV2Segment(segment: EstimateV2WallSegmentDraft): EstimateV2WallSegmentDerived {
@@ -87,6 +135,7 @@ export function deriveEstimateV2Scope(
 }
 
 export function buildEstimateV2SavePayload(
+  jobSettingsDraft: EstimateV2JobSettingsDraft,
   rooms: EstimateV2RoomDraft[],
   scopes: EstimateV2WallScopeDraft[],
   segments: EstimateV2WallSegmentDraft[],
@@ -96,6 +145,22 @@ export function buildEstimateV2SavePayload(
   trimScopes: EstimateV2TrimScopeDraft[],
   rollers: EstimateV2RollerDraft[] = []
 ): EstimateV2SavePayload {
+  const jobsettings = {
+    labor_day_policy_enabled: jobSettingsDraft.laborDayEnabled,
+    dayhours: jobSettingsDraft.dayhours,
+    rounding_increment_hours: jobSettingsDraft.roundingIncrementHours,
+    override_labor_rate: jobSettingsDraft.laborRate,
+    job_minimum_enabled: jobSettingsDraft.jobMinEnabled,
+    job_minimum_amount: jobSettingsDraft.jobMinAmount,
+    crew_size: normalizeCrewSize(jobSettingsDraft.crewSize),
+    walls_paint_id: toNullableText(jobSettingsDraft.wallPaintProductId),
+    walls_primer_id: toNullableText(jobSettingsDraft.wallPrimerProductId),
+    ceiling_paint_id: toNullableText(jobSettingsDraft.ceilingPaintProductId),
+    ceiling_primer_id: toNullableText(jobSettingsDraft.ceilingPrimerProductId),
+    trim_paint_id: toNullableText(jobSettingsDraft.trimPaintProductId),
+    trim_primer_id: toNullableText(jobSettingsDraft.trimPrimerProductId),
+  }
+
   const orderedRooms = sortByPosition(rooms).map((room, index) => ({
     id: room.id,
     room_id: room.roomId,
@@ -105,6 +170,7 @@ export function buildEstimateV2SavePayload(
     length_in: toNullableDraftNumber(room.lengthIn),
     width_in: toNullableDraftNumber(room.widthIn),
     wallheight_in: toNullableDraftNumber(room.heightIn),
+    condition_selections: toPersistedConditionSelections(room.conditionSelections),
   }))
 
   const orderedScopes = orderedRooms.flatMap((room) =>
@@ -156,6 +222,7 @@ export function buildEstimateV2SavePayload(
         override_total: toNullableDraftNumber(scope.overrideTotal),
         effective_total: null,
         notes: scope.notes.trim() || null,
+        condition_selections: toPersistedConditionSelections(scope.conditionSelections),
       }
     })
   )
@@ -189,15 +256,8 @@ export function buildEstimateV2SavePayload(
     )
   )
 
-  const orderedRoomFlags = [...roomFlags]
-    .sort((a, b) => a.roomId.localeCompare(b.roomId) || a.position - b.position)
-    .map((flag) => ({
-      id: flag.id,
-      room_id: flag.roomId,
-      flag_id: flag.flagId,
-      position: flag.position,
-      active: 'Y' as const,
-    }))
+  const roomIdSet = new Set(orderedRooms.map((room) => room.room_id))
+  const orderedRoomFlags = buildOrderedRoomFlags(roomFlags, roomIdSet)
 
   const orderedCeilingScopes = orderedRooms.flatMap((room) =>
     sortByPosition(ceilingScopes.filter((scope) => scope.roomId === room.room_id)).map((scope, index) => ({
@@ -213,6 +273,17 @@ export function buildEstimateV2SavePayload(
       prime_mode: scope.primeMode,
       spot_prime_percent: toNullableDraftNumber(scope.spotPrimePercent),
       ceiling_type_id: scope.ceilingTypeId.trim() || null,
+      ceiling_geometry_mode: scope.ceilingGeometryMode?.trim() || 'FLAT',
+      vaulted_area_factor: toNullableDraftNumber(scope.vaultedAreaFactor ?? ''),
+      tray_perimeter_in: toNullableDraftNumber(scope.trayPerimeterIn ?? ''),
+      tray_step_height_in: toNullableDraftNumber(scope.trayStepHeightIn ?? ''),
+      tray_band_width_in: toNullableDraftNumber(scope.trayBandWidthIn ?? ''),
+      coffer_section_length_in: toNullableDraftNumber(scope.cofferSectionLengthIn ?? ''),
+      coffer_section_width_in: toNullableDraftNumber(scope.cofferSectionWidthIn ?? ''),
+      coffer_section_count: toNullableDraftNumber(scope.cofferSectionCount ?? ''),
+      coffer_face_height_in: toNullableDraftNumber(scope.cofferFaceHeightIn ?? ''),
+      coffer_bottom_width_in: toNullableDraftNumber(scope.cofferBottomWidthIn ?? ''),
+      helper_extra_area_sf: null,
       length_in: scope.mode === 'RECT' ? room.length_in : null,
       width_in: scope.mode === 'RECT' ? room.width_in : null,
       area_sf: toNullableDraftNumber(scope.areaSf),
@@ -229,6 +300,7 @@ export function buildEstimateV2SavePayload(
       override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
       override_total: toNullableDraftNumber(scope.overrideTotal),
       notes: scope.notes.trim() || null,
+      condition_selections: toPersistedConditionSelections(scope.conditionSelections),
     }))
   )
 
@@ -293,6 +365,7 @@ export function buildEstimateV2SavePayload(
       override_total: null,
       override_description: null,
       notes: scope.notes.trim() || null,
+      condition_selections: toPersistedConditionSelections(scope.conditionSelections),
     }))
   )
 
@@ -308,9 +381,10 @@ export function buildEstimateV2SavePayload(
       covers_qty: normalizeRollerApplicatorQuantity(roller.coversQty).numberValue,
       notes: roller.notes.trim() || null,
     }))
-    .filter((roller) => roller.scope === 'Ceiling' || roller.scope === 'Trim' || roller.wall_color_id)
+    .filter((roller) => roller.scope !== 'Wall' || roller.wall_color_id)
 
   return {
+    jobsettings,
     rooms: orderedRooms,
     room_wall_scopes: orderedScopes,
     wall_segments: orderedSegments,

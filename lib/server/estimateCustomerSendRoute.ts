@@ -4,6 +4,7 @@ import {
   requireSessionUserOrg,
   resolveParams,
 } from '@/lib/server/apiRoute'
+import { checkLocalRateLimit } from '@/lib/server/rateLimit'
 import { loadEstimateCustomerSendContext } from '@/lib/server/estimateCustomerPortal'
 import {
   serviceResultDataResponse,
@@ -119,6 +120,18 @@ export async function handleEstimateCustomerSendRoutePost(
 
   const body = await readJsonBody<Record<string, unknown>>(request, { allowEmpty: true })
   if (!body.ok) return body.response
+
+  const rate = checkLocalRateLimit({
+    key: `customer-send:${auth.session.orgId}:${auth.session.userId}:${estimateId.value}`,
+    max: 5,
+    windowMs: 10 * 60 * 1000,
+  })
+  if (!rate.ok) {
+    return Response.json(
+      { error: 'Too many send attempts. Please wait and retry.' },
+      { status: 429 }
+    )
+  }
 
   const origin = new URL(request.url).origin
   const contextResult = await loadCustomerSendContextResult({

@@ -30,6 +30,8 @@ describe('Estimate V2 summary extracted components', () => {
             suppliesCost: 360,
             rooms: 3,
             laborRate: 80,
+            rawLaborHours: null,
+            rawLaborDays: null,
           }}
           finalTotal={4200}
           laborShare={233}
@@ -83,6 +85,7 @@ describe('Estimate V2 summary extracted components', () => {
                 subtotal: 900,
                 hasOverride: false,
                 missingProduct: false,
+                conditionSelections: {},
               },
             ],
             displayScopeSubtotalMap: new Map([['scope-1', 900]]),
@@ -93,6 +96,7 @@ describe('Estimate V2 summary extracted components', () => {
             totals: { labor: 8, paint: 120, supplies: 40 },
             flagsLabel: 'None',
             alerts: { missingProduct: 0, overrides: 0, flags: 0 },
+            conditionBadges: [],
           }}
           open
           onToggle={onToggle}

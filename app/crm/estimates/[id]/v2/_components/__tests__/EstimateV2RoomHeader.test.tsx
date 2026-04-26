@@ -127,8 +127,8 @@ describe('EstimateV2RoomHeader', () => {
       />
     )
 
-    const rectButton = screen.getByText('RECT').closest('button') as HTMLButtonElement
-    const segButton = screen.getByRole('button', { name: 'SEG' })
+    const rectButton = screen.getByText('Rectangle').closest('button') as HTMLButtonElement
+    const segButton = screen.getByRole('button', { name: 'Segments' })
 
     expect(rectButton).toBeDisabled()
     fireEvent.click(rectButton)
@@ -136,5 +136,205 @@ describe('EstimateV2RoomHeader', () => {
 
     fireEvent.click(segButton)
     expect(switchSelectedRoomGeometryMode).toHaveBeenCalledWith('SEG')
+  })
+
+  it('renders helper text converting total inches to feet and inches', () => {
+    const selectedRoom = {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living Room',
+      roomTypeId: '',
+      lengthIn: '120',
+      widthIn: '144',
+      heightIn: '108',
+      wallComplexityId: '',
+      notes: '',
+      position: 0,
+    }
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ selectedRoom })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    expect(screen.getByText('10 ft')).toBeInTheDocument()
+    expect(screen.getByText('12 ft')).toBeInTheDocument()
+    expect(screen.getByText('9 ft')).toBeInTheDocument()
+  })
+
+  it('renders helper text with inches remainder when inches exceed 12', () => {
+    const selectedRoom = {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living Room',
+      roomTypeId: '',
+      lengthIn: '150',
+      widthIn: '155',
+      heightIn: '96',
+      wallComplexityId: '',
+      notes: '',
+      position: 0,
+    }
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ selectedRoom })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    expect(screen.getByText('12 ft 6 in')).toBeInTheDocument()
+    expect(screen.getByText('12 ft 11 in')).toBeInTheDocument()
+    expect(screen.getByText('8 ft')).toBeInTheDocument()
+  })
+
+  it('renders decimal inch helper text without truncating values', () => {
+    const selectedRoom = {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living Room',
+      roomTypeId: '',
+      lengthIn: '150.5',
+      widthIn: '11.25',
+      heightIn: '96',
+      wallComplexityId: '',
+      notes: '',
+      position: 0,
+    }
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ selectedRoom })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    expect(screen.getByText('12 ft 6.5 in')).toBeInTheDocument()
+    expect(screen.getByText('11.25 in')).toBeInTheDocument()
+    expect(screen.getByText('8 ft')).toBeInTheDocument()
+  })
+
+  it('disables the room type select and shows Catalog unavailable when options are empty', () => {
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ roomTypeOptions: [] })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    const select = screen.getByRole('combobox')
+    expect(select).toBeDisabled()
+    expect(screen.getByText('Catalog unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Room type templates could not be loaded')).toBeInTheDocument()
+  })
+
+  it('keeps a saved room type value selected when the room type catalog is unavailable', () => {
+    const selectedRoom = {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living Room',
+      roomTypeId: 'LIVING',
+      lengthIn: '120',
+      widthIn: '144',
+      heightIn: '108',
+      wallComplexityId: '',
+      notes: '',
+      position: 0,
+    }
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ selectedRoom, roomTypeOptions: [] })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    expect(select).toBeDisabled()
+    expect(select.value).toBe('LIVING')
+    expect(screen.getByText('Catalog unavailable')).toBeInTheDocument()
+  })
+
+  it('renders formula context in rectangle mode from total inches', () => {
+    const selectedRoom = {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living Room',
+      roomTypeId: '',
+      lengthIn: '120',
+      widthIn: '144',
+      heightIn: '108',
+      wallComplexityId: '',
+      notes: '',
+      position: 0,
+    }
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ selectedRoom, selectedRoomGeometryMode: 'RECT' })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    // Perimeter = 2 * (120 + 144) = 528 in
+    expect(screen.getByText('Perimeter 528 in x Height 108 in')).toBeInTheDocument()
+  })
+
+  it('renders formula context from decimal dimensions without truncating values', () => {
+    const selectedRoom = {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living Room',
+      roomTypeId: '',
+      lengthIn: '120.5',
+      widthIn: '144',
+      heightIn: '108',
+      wallComplexityId: '',
+      notes: '',
+      position: 0,
+    }
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ selectedRoom, selectedRoomGeometryMode: 'RECT' })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    expect(screen.getByText('Perimeter 529 in x Height 108 in')).toBeInTheDocument()
+  })
+
+  it('shows "From wall segments" formula text in segment mode', () => {
+    const selectedRoom = {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living Room',
+      roomTypeId: '',
+      lengthIn: '120',
+      widthIn: '144',
+      heightIn: '108',
+      wallComplexityId: '',
+      notes: '',
+      position: 0,
+    }
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ selectedRoom, selectedRoomGeometryMode: 'SEG' })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    expect(screen.getByText('From wall segments')).toBeInTheDocument()
   })
 })

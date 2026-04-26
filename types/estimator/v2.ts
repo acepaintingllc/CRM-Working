@@ -1,4 +1,35 @@
 import type { YN } from '@/types/estimator/core'
+import type {
+  EstimateV2ConditionModifier as EstimateV2LegacyConditionModifier,
+  EstimateV2ConditionSelections as EstimateV2LegacyConditionSelections,
+} from '@/lib/estimator/conditionModifiers'
+
+// Condition modifier types — room & scope conditions on the details page
+
+export type ConditionLevel = 'active' | 'minor' | 'moderate' | 'major'
+
+export type ConditionScopeFactors = {
+  room: number
+  wall: number
+  ceiling: number
+  trim: number
+}
+
+export type EstimateV2ConditionModifier = {
+  id: string
+  displayName: string
+  scope: 'room' | 'wall' | 'ceiling' | 'trim'
+  modifierType: 'binary' | 'severity'
+  factorField: string
+  levels: Partial<Record<ConditionLevel, number>>
+}
+
+export type EstimateV2ConditionSelections = {
+  room: Record<string, ConditionLevel>
+  wall: Record<string, ConditionLevel>
+  ceiling: Record<string, ConditionLevel>
+  trim: Record<string, ConditionLevel>
+}
 
 export type UnsafeRecord = Record<string, unknown>
 
@@ -53,6 +84,7 @@ export type EstimateV2RoomFlagOption = EstimateV2CatalogOption & {
 
 export type EstimateV2CeilingTypeOption = EstimateV2CatalogOption & {
   labor_mult: number | null
+  area_factor?: number | null
 }
 
 export type EstimateV2HeightFactorOption = EstimateV2CatalogOption & {
@@ -61,12 +93,19 @@ export type EstimateV2HeightFactorOption = EstimateV2CatalogOption & {
   labor_multiplier: number | null
 }
 
+export type EstimateV2TrimCategory = 'base' | 'crown' | 'casing' | 'rail' | 'door_window' | 'panel' | 'feature' | 'other'
+
+export type EstimateV2TrimMeasurementClass = 'linear' | 'opening' | 'surface' | 'assembly'
+
 export type EstimateV2TrimTypeOption = EstimateV2CatalogOption & {
   family: string | null
   category: string | null
   unit_type: 'LF' | 'EA' | 'SF' | null
   helper_allowed: boolean
   default_production_rate_id: string | null
+  trim_category?: EstimateV2TrimCategory | null
+  measurement_class?: EstimateV2TrimMeasurementClass | null
+  picker_group?: string | null
 }
 
 export type EstimateV2Catalogs = {
@@ -78,6 +117,7 @@ export type EstimateV2Catalogs = {
   room_flags: EstimateV2RoomFlagOption[]
   ceiling_types: EstimateV2CeilingTypeOption[]
   trim_items: EstimateV2TrimTypeOption[]
+  condition_modifiers?: EstimateV2LegacyConditionModifier[]
 }
 
 export type EstimateV2CatalogsPayload = {
@@ -147,6 +187,7 @@ export type EstimateV2JobSettingsInput = {
   override_labor_rate?: number | null
   job_minimum_enabled?: boolean | null
   job_minimum_amount?: number | null
+  crew_size?: number | null
   wall_paint_id?: string | null
   wall_primer_id?: string | null
   walls_paint_id?: string | null
@@ -178,6 +219,7 @@ export type EstimateV2RoomInputRow = {
   width_in?: number | null
   wallheight_in?: number | null
   mode?: 'RECT' | 'SEG' | null
+  condition_selections?: EstimateV2LegacyConditionSelections | null
 }
 
 export type EstimateV2RoomFlagRow = {
@@ -257,12 +299,15 @@ export type EstimateV2JobSettingsDraft = {
   laborRate: number
   jobMinEnabled: boolean
   jobMinAmount: number
+  crewSize: number
   wallPaintProductId: string
   wallPrimerProductId: string
   ceilingPaintProductId: string
   ceilingPrimerProductId: string
   trimPaintProductId: string
   trimPrimerProductId: string
+  conditionSelections?: EstimateV2ConditionSelections
+  resolvedConditionFactors?: ConditionScopeFactors
 }
 
 export type EstimateV2JobDefaultProducts = {
@@ -293,6 +338,7 @@ export type EstimateV2RoomDraft = {
   wallComplexityId: string
   notes: string
   position: number
+  conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
 export type EstimateV2RoomFlagDraft = {
@@ -350,6 +396,7 @@ export type EstimateV2WallScopeDraft = {
   overrideSupplyCost: string
   overrideTotal: string
   notes: string
+  conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
 export type EstimateV2WallSegmentDraft = {
@@ -375,6 +422,8 @@ export type EstimateV2CeilingScopeMode = 'RECT' | 'SEG'
 export type EstimateV2CeilingPrimeMode = 'NONE' | 'SPOT' | 'FULL'
 export type EstimateV2CeilingSegmentShape = 'RECTANGLE' | 'TRIANGLE' | 'MANUAL'
 
+export type EstimateV2CeilingGeometryMode = 'FLAT' | 'VAULTED' | 'TRAY' | 'COFFERED' | 'MANUAL'
+
 export type EstimateV2CeilingScopeDraft = {
   id: string
   roomId: string
@@ -388,6 +437,16 @@ export type EstimateV2CeilingScopeDraft = {
   primeMode: EstimateV2CeilingPrimeMode
   spotPrimePercent: string
   ceilingTypeId: string
+  ceilingGeometryMode?: string
+  vaultedAreaFactor?: string
+  trayPerimeterIn?: string
+  trayStepHeightIn?: string
+  trayBandWidthIn?: string
+  cofferSectionLengthIn?: string
+  cofferSectionWidthIn?: string
+  cofferSectionCount?: string
+  cofferFaceHeightIn?: string
+  cofferBottomWidthIn?: string
   lengthIn: string
   widthIn: string
   areaSf: string
@@ -404,6 +463,7 @@ export type EstimateV2CeilingScopeDraft = {
   overrideSupplyCost: string
   overrideTotal: string
   notes: string
+  conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
 export type EstimateV2CeilingSegmentDraft = {
@@ -464,6 +524,7 @@ export type EstimateV2TrimScopeDraft = {
   overrideTotal: string
   overrideDescription: string
   notes: string
+  conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
 export type EstimateV2WallSegmentDerived = {
@@ -479,6 +540,21 @@ export type EstimateV2WallScopeDerived = {
 }
 
 export type EstimateV2SavePayload = {
+  jobsettings: {
+    labor_day_policy_enabled: boolean
+    dayhours: number
+    rounding_increment_hours: number
+    override_labor_rate: number
+    job_minimum_enabled: boolean
+    job_minimum_amount: number
+    crew_size: number
+    walls_paint_id: string | null
+    walls_primer_id: string | null
+    ceiling_paint_id: string | null
+    ceiling_primer_id: string | null
+    trim_paint_id: string | null
+    trim_primer_id: string | null
+  }
   rooms: Array<{
     id: string
     room_id: string
@@ -488,6 +564,7 @@ export type EstimateV2SavePayload = {
     length_in: number | null
     width_in: number | null
     wallheight_in: number | null
+    condition_selections: EstimateV2LegacyConditionSelections | null
   }>
   room_wall_scopes: UnsafeRecord[]
   wall_segments: UnsafeRecord[]

@@ -318,7 +318,8 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
         (nonNeg(n(scope.complexity_factor)) ?? 1) *
         (nonNeg(n(scope.wall_flag_factor)) ?? 1) *
         (nonNeg(n(scope.cut_in_top_factor)) ?? 1) *
-        (nonNeg(n(scope.cut_in_bottom_factor)) ?? 1)
+        (nonNeg(n(scope.cut_in_bottom_factor)) ?? 1) *
+        (nonNeg(n(scope.condition_factor)) ?? 1)
     )
 
     const paintCoats = pos(n(scope.paint_coats)) ?? settings.paint_coats

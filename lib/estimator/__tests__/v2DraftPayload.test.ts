@@ -122,6 +122,21 @@ test('deriveEstimateV2Scope sums SEG segment areas and honors override', () => {
 
 test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and trim rows', () => {
   const payload = buildEstimateV2SavePayload(
+    {
+      laborDayEnabled: true,
+      dayhours: 8,
+      roundingIncrementHours: 4,
+      laborRate: 65,
+      jobMinEnabled: false,
+      jobMinAmount: 0,
+      crewSize: 2,
+      wallPaintProductId: '',
+      wallPrimerProductId: '',
+      ceilingPaintProductId: '',
+      ceilingPrimerProductId: '',
+      trimPaintProductId: '',
+      trimPrimerProductId: '',
+    },
     [
       {
         id: 'room-1',
@@ -132,6 +147,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         widthIn: '120',
         heightIn: '96',
         wallComplexityId: '',
+        conditionSelections: { ROOM_FURNISHED: 'active' },
         notes: '',
         position: 0,
       },
@@ -157,6 +173,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         wallFlagFactor: '1',
         cutInTopFactor: '1',
         cutInBottomFactor: '1',
+        conditionSelections: { WALL_CUT_IN: 'moderate' },
         paintCoats: '2',
         primerCoats: '1',
         spotPrimePercent: '35',
@@ -173,6 +190,9 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
     [],
     [
       { id: 'flag-1', roomId: 'R001', flagId: 'FLAG-1', position: 0 },
+      { id: 'flag-stale-room', roomId: 'R404', flagId: 'FLAG-2', position: 0 },
+      { id: 'flag-duplicate', roomId: 'R001', flagId: 'FLAG-1', position: 1 },
+      { id: 'flag-2', roomId: 'R001', flagId: 'FLAG-2', position: 5 },
     ],
     [
       {
@@ -188,12 +208,23 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         primeMode: 'NONE',
         spotPrimePercent: '',
         ceilingTypeId: 'flat',
+        ceilingGeometryMode: 'TRAY',
+        vaultedAreaFactor: '',
+        trayPerimeterIn: '480',
+        trayStepHeightIn: '12',
+        trayBandWidthIn: '18',
+        cofferSectionLengthIn: '',
+        cofferSectionWidthIn: '',
+        cofferSectionCount: '',
+        cofferFaceHeightIn: '',
+        cofferBottomWidthIn: '',
         lengthIn: '',
         widthIn: '',
         areaSf: '120',
         heightFactor: '1',
         complexityFactor: '1',
         ceilingFlagFactor: '1',
+        conditionSelections: { CEIL_TEXTURE: 'major' },
         paintCoats: '1',
         primerCoats: '1',
         overrideAreaSqFt: '',
@@ -237,6 +268,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         stairFactor: '1',
         difficultFinishFactor: '1',
         caulkFillFactor: '1',
+        conditionSelections: { TRIM_CAULKING: 'minor' },
         paintCoats: '1',
         primerCoats: '1',
         overrideMeasurement: '10',
@@ -247,20 +279,105 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         overrideDescription: 'hidden override',
         notes: '',
       },
+    ],
+    [
+      {
+        id: 'wall-roller-missing-target',
+        scope: 'Wall',
+        wallColorId: '',
+        selectedOptionId: 'WALL_9',
+        rollerSizeIn: '9',
+        coversQty: '2',
+        notes: 'Missing target',
+        position: 0,
+      },
+      {
+        id: 'wall-roller-1',
+        scope: 'Wall',
+        wallColorId: 'COLOR1',
+        selectedOptionId: 'WALL_12',
+        rollerSizeIn: '12',
+        coversQty: '3',
+        notes: 'Wall cover',
+        position: 1,
+      },
+      {
+        id: 'ceiling-roller-1',
+        scope: 'Ceiling',
+        wallColorId: '',
+        selectedOptionId: 'CEIL_14',
+        rollerSizeIn: '14',
+        coversQty: '1',
+        notes: 'Ceiling cover',
+        position: 2,
+      },
+      {
+        id: 'trim-applicator-1',
+        scope: 'Trim',
+        wallColorId: '',
+        selectedOptionId: 'TRIM_4',
+        rollerSizeIn: '4',
+        coversQty: '1',
+        notes: 'Trim applicator',
+        position: 3,
+      },
     ]
   )
 
+  assert.equal(payload.jobsettings.crew_size, 2)
+
   assert.equal(payload.rooms.length, 1)
   assert.equal(payload.room_wall_scopes.length, 1)
-  assert.equal(payload.room_flags.length, 1)
+  assert.equal(payload.room_flags.length, 2)
   assert.equal(payload.room_ceiling_scopes.length, 1)
   assert.equal(payload.room_trim_scopes.length, 1)
   assert.equal(payload.rooms[0].room_id, 'R001')
+  assert.deepEqual(payload.rooms[0].condition_selections, { ROOM_FURNISHED: 'active' })
   assert.equal(payload.room_wall_scopes[0].room_id, 'R001')
+  assert.deepEqual(payload.room_flags, [
+    { id: 'flag-1', room_id: 'R001', flag_id: 'FLAG-1', position: 0, active: 'Y' },
+    { id: 'flag-2', room_id: 'R001', flag_id: 'FLAG-2', position: 1, active: 'Y' },
+  ])
+  assert.deepEqual(payload.room_wall_scopes[0].condition_selections, { WALL_CUT_IN: 'moderate' })
   assert.equal(payload.room_ceiling_scopes[0].color_id, 'COLOR0')
+  assert.equal(payload.room_ceiling_scopes[0].ceiling_geometry_mode, 'TRAY')
+  assert.equal(payload.room_ceiling_scopes[0].tray_perimeter_in, 480)
+  assert.equal(payload.room_ceiling_scopes[0].tray_step_height_in, 12)
+  assert.equal(payload.room_ceiling_scopes[0].tray_band_width_in, 18)
+  assert.equal(payload.room_ceiling_scopes[0].helper_extra_area_sf, null)
+  assert.deepEqual(payload.room_ceiling_scopes[0].condition_selections, { CEIL_TEXTURE: 'major' })
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
+  assert.deepEqual(payload.room_trim_scopes[0].condition_selections, { TRIM_CAULKING: 'minor' })
   assert.equal(payload.room_trim_scopes[0].baseboard_opening_count, 1.5)
   assert.equal(payload.room_trim_scopes[0].override_measurement, null)
   assert.equal(payload.room_trim_scopes[0].override_total, null)
   assert.equal(payload.room_trim_scopes[0].override_description, null)
+  assert.deepEqual(
+    payload.rollers.map((roller) => ({
+      id: roller.id,
+      scope: roller.scope,
+      wall_color_id: roller.wall_color_id,
+      selected_option_id: roller.selected_option_id,
+    })),
+    [
+      {
+        id: 'wall-roller-1',
+        scope: 'Wall',
+        wall_color_id: 'COLOR1',
+        selected_option_id: 'WALL_12',
+      },
+      {
+        id: 'ceiling-roller-1',
+        scope: 'Ceiling',
+        wall_color_id: null,
+        selected_option_id: 'CEIL_14',
+      },
+      {
+        id: 'trim-applicator-1',
+        scope: 'Trim',
+        wall_color_id: null,
+        selected_option_id: 'TRIM_4',
+      },
+    ]
+  )
 })

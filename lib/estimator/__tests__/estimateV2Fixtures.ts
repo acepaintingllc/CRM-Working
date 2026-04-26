@@ -145,6 +145,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     laborRate: 62.5,
     jobMinEnabled: true,
     jobMinAmount: 400,
+    crewSize: 1,
     wallPaintProductId: 'P-WALL',
     wallPrimerProductId: 'P-PRIMER',
     ceilingPaintProductId: 'P-CEIL',
@@ -162,7 +163,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     trimPrimerProductId: 'P-TRIM-PRIMER',
   }
 
-  const rooms: EstimateV2RoomDraft[] = [
+    const rooms: EstimateV2RoomDraft[] = [
     {
       id: 'room-1',
       roomId: 'R001',
@@ -174,6 +175,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       wallComplexityId: 'RATE-STD',
       notes: '',
       position: 0,
+      conditionSelections: {},
     },
     {
       id: 'room-2',
@@ -186,6 +188,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       wallComplexityId: 'RATE-STD',
       notes: '',
       position: 1,
+      conditionSelections: {},
     },
   ]
 
@@ -526,6 +529,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
   ]
 
   const payload = buildEstimateV2SavePayload(
+    jobSettingsDraft,
     rooms,
     scopes,
     segments,

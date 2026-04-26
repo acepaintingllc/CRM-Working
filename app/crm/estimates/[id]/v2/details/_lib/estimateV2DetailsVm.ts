@@ -5,7 +5,15 @@ import type {
   EstimateV2RollerDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
+  EstimateV2ConditionModifier,
+  EstimateV2ConditionSelections,
+  ConditionScopeFactors,
 } from '@/types/estimator/v2'
+import {
+  resolveAllConditionFactors,
+  countActiveConditions,
+  emptyConditionSelections,
+} from './estimateV2DetailsConditions'
 import {
   createAggregateRow,
   createWallRows,
@@ -120,16 +128,27 @@ export type DetailsOverrideVm = {
   newValue: number
 }
 
+export type DetailsConditionsVm = {
+  available: boolean
+  conditions: EstimateV2ConditionModifier[]
+  selections: EstimateV2ConditionSelections
+  roomActiveCount: number
+  wallActiveCount: number
+  ceilingActiveCount: number
+  trimActiveCount: number
+  scopeFactors: ConditionScopeFactors
+}
+
 export type EstimateV2DetailsVm = {
+  crewSize: number
   wallRows: DetailsScopeLineVm[]
   ceilingRow: DetailsScopeLineVm | null
   trimRow: DetailsScopeLineVm | null
   wallRollerRows: DetailsRollerVm[]
   ceilingRollerRow: DetailsRollerVm | null
-  trimApplicatorRow: DetailsRollerVm | null
+  trimApplicatorSummary: { active: boolean; label: string } | null
   wallRollerOptions: DetailsRollerCoverOption[]
   ceilingRollerOptions: DetailsRollerCoverOption[]
-  trimApplicatorOptions: DetailsRollerCoverOption[]
   rollerOptionsState: DetailsRollerOptionsState
   materialCards: Array<{
     label: string
@@ -172,6 +191,7 @@ export type EstimateV2DetailsVm = {
   estimatedMaterialCost: number
   hasCeilings: boolean
   hasTrim: boolean
+  conditions: DetailsConditionsVm
 }
 
 export type BuildDetailsVmParams = {
@@ -183,11 +203,14 @@ export type BuildDetailsVmParams = {
   ceilingCalculations: EstimateV2DetailsCeilingCalculationRow[] | null | undefined
   trimCalculations: EstimateV2DetailsTrimCalculationRow[] | null | undefined
   pricingSummary: EstimateV2PricingSummary | null | undefined
+  crewSize?: number
   paintProductLabelById: Map<string, string>
   colorLabelById: Map<string, string>
   rollerOptions: DetailsRollerCoverOption[]
   rollerOptionsState?: DetailsRollerOptionsState
   rollers: EstimateV2RollerDraft[]
+  conditionModifiers?: EstimateV2ConditionModifier[]
+  conditionSelections?: EstimateV2ConditionSelections
 }
 
 export type EstimateV2DetailsMaterialPlanningVm = Pick<
@@ -205,10 +228,9 @@ export type EstimateV2DetailsRollerPlanningVm = Pick<
   EstimateV2DetailsVm,
   | 'wallRollerRows'
   | 'ceilingRollerRow'
-  | 'trimApplicatorRow'
+  | 'trimApplicatorSummary'
   | 'wallRollerOptions'
   | 'ceilingRollerOptions'
-  | 'trimApplicatorOptions'
   | 'rollerOptionsState'
 >
 
@@ -310,7 +332,6 @@ export function buildEstimateV2RollerPlanningVm(params: {
   const rollerOptions = rollerOptionsState.options
   const wallRollerOptions = rollerOptions.filter((option) => option.scope === 'Wall')
   const ceilingRollerOptions = rollerOptions.filter((option) => option.scope === 'Ceiling')
-  const trimApplicatorOptions = rollerOptions.filter((option) => option.scope === 'Trim')
 
   const wallRollerRows = createWallRollerRows({
     wallRows: params.materialPlanning.wallRows,
@@ -329,10 +350,14 @@ export function buildEstimateV2RollerPlanningVm(params: {
   return {
     wallRollerRows,
     ceilingRollerRow,
-    trimApplicatorRow: null,
+    trimApplicatorSummary: params.materialPlanning.trimRow
+      ? {
+          active: true,
+          label: '1 brush + 1 roller included automatically per color',
+        }
+      : null,
     wallRollerOptions,
     ceilingRollerOptions,
-    trimApplicatorOptions,
     rollerOptionsState,
   }
 }
@@ -341,7 +366,7 @@ export function buildEstimateV2ValidationVm(params: {
   materialPlanning: Pick<EstimateV2DetailsMaterialPlanningVm, 'wallRows' | 'ceilingRow' | 'trimRow'>
   rollerPlanning: Pick<
     EstimateV2DetailsRollerPlanningVm,
-    'wallRollerRows' | 'ceilingRollerRow' | 'trimApplicatorRow'
+    'wallRollerRows' | 'ceilingRollerRow'
   >
 }): EstimateV2DetailsValidationVm {
   const validationIssues = createValidationIssues({
@@ -350,7 +375,6 @@ export function buildEstimateV2ValidationVm(params: {
     trimRow: params.materialPlanning.trimRow,
     wallRollerRows: params.rollerPlanning.wallRollerRows,
     ceilingRollerRow: params.rollerPlanning.ceilingRollerRow,
-    trimApplicatorRow: params.rollerPlanning.trimApplicatorRow,
     activeMaterialScopeCount:
       params.materialPlanning.wallRows.length +
       (params.materialPlanning.ceilingRow ? 1 : 0) +
@@ -399,6 +423,23 @@ export function buildEstimateV2TotalsVm(params: {
   }
 }
 
+function buildEstimateV2ConditionsVm(params: BuildDetailsVmParams): DetailsConditionsVm {
+  const conditions = params.conditionModifiers ?? []
+  const selections = params.conditionSelections ?? emptyConditionSelections()
+  const available = conditions.length > 0
+  const scopeFactors = resolveAllConditionFactors(conditions, selections)
+  return {
+    available,
+    conditions,
+    selections,
+    roomActiveCount: countActiveConditions(selections.room),
+    wallActiveCount: countActiveConditions(selections.wall),
+    ceilingActiveCount: countActiveConditions(selections.ceiling),
+    trimActiveCount: countActiveConditions(selections.trim),
+    scopeFactors,
+  }
+}
+
 export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): EstimateV2DetailsVm {
   const materialPlanning = buildEstimateV2MaterialPlanningVm(params)
   const rollerPlanning = buildEstimateV2RollerPlanningVm({
@@ -414,9 +455,11 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
   })
 
   return {
+    crewSize: params.crewSize ?? 1,
     ...materialPlanning,
     ...rollerPlanning,
     ...validation,
     ...totals,
+    conditions: buildEstimateV2ConditionsVm(params),
   }
 }

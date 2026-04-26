@@ -98,6 +98,8 @@ describe('customer send delivery', () => {
     expect(mockSendGmailMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
+        cc: '',
+        bcc: '',
       })
     )
     expect(result.ok).toBe(true)
@@ -106,13 +108,57 @@ describe('customer send delivery', () => {
   })
 
   it('locks, tokenizes, logs, and sends for a live send', async () => {
-    mockMarkEstimatePublicVersionSent.mockResolvedValue({
+    mockMarkEstimatePublicVersionSent.mockImplementation(async (params: { publicToken: string }) => ({
       ok: true,
       data: {
         id: 'draft-1',
-        public_token: 'testtoken1234',
+        public_token: params.publicToken,
         snapshot_json: { document: true },
       },
+    }))
+
+    const result = await submitCustomerSendMessage({
+      ...baseParams,
+      mode: 'send',
+      version: {
+        id: 'draft-1',
+        public_token: null,
+        snapshot_json: { document: true },
+      },
+    } as never)
+
+    const sendOrder = mockSendGmailMessage.mock.invocationCallOrder[0]
+    const markOrder = mockMarkEstimatePublicVersionSent.mock.invocationCallOrder[0]
+    expect(sendOrder).toBeLessThan(markOrder)
+    expect(mockMarkEstimatePublicVersionSent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        versionId: 'draft-1',
+        publicToken: expect.stringMatching(/^[a-z0-9]+$/i),
+      })
+    )
+    const [[markParams]] = mockMarkEstimatePublicVersionSent.mock.calls as Array<[
+      { publicToken: string },
+    ]>
+    const publicUrl = `https://example.test/quote/${markParams.publicToken}`
+    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'sent',
+        metadata: {
+          publicUrl,
+        },
+      })
+    )
+    expect(mockSendGmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bodyText: expect.stringContaining(publicUrl),
+      })
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('does not lock or write sent events when live send fails', async () => {
+    mockSendGmailMessage.mockResolvedValue({
+      error: 'Gmail not configured',
     })
 
     const result = await submitCustomerSendMessage({
@@ -125,26 +171,13 @@ describe('customer send delivery', () => {
       },
     } as never)
 
-    expect(mockMarkEstimatePublicVersionSent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        versionId: 'draft-1',
-        publicToken: expect.stringMatching(/^[a-z0-9]+$/i),
-      })
-    )
-    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventType: 'sent',
-        metadata: {
-          publicUrl: 'https://example.test/quote/testtoken1234',
-        },
-      })
-    )
-    expect(mockSendGmailMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        bodyText: expect.stringContaining('https://example.test/quote/testtoken1234'),
-      })
-    )
-    expect(result.ok).toBe(true)
+    expect(mockMarkEstimatePublicVersionSent).not.toHaveBeenCalled()
+    expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      ok: false,
+      kind: 'invalid_input',
+      message: 'Gmail not configured',
+    })
   })
 
   it('maps Gmail failures to invalid input errors', async () => {
@@ -166,5 +199,29 @@ describe('customer send delivery', () => {
       kind: 'invalid_input',
       message: 'Gmail not configured',
     })
+  })
+
+  it('passes cc and bcc recipients through to Gmail send', async () => {
+    await submitCustomerSendMessage({
+      ...baseParams,
+      mode: 'test',
+      draft: {
+        ...baseParams.draft,
+        cc_email: 'team@example.com',
+        bcc_email: 'owner@example.com',
+      },
+      version: {
+        id: 'draft-1',
+        snapshot_json: { document: true },
+      },
+    } as never)
+
+    expect(mockSendGmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'customer@example.com',
+        cc: 'team@example.com',
+        bcc: 'owner@example.com',
+      })
+    )
   })
 })

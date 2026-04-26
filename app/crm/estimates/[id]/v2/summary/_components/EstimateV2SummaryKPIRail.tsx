@@ -53,6 +53,11 @@ export function EstimateV2SummaryKPIRail({
           <div style={{ textAlign: 'right' }}>
             <div style={kpiTitleStyle(colors.ink3)}>Labor Hours</div>
             <div style={mobileSecondaryValueStyle(colors)}>{fmtH(pricingKpis.laborHours)}</div>
+            {pricingKpis.rawLaborHours != null && pricingKpis.rawLaborHours !== pricingKpis.laborHours && (
+              <div style={{ fontSize: 10, color: colors.ink3, marginTop: 2 }}>
+                Raw: {fmtH(pricingKpis.rawLaborHours)}
+              </div>
+            )}
           </div>
           <div>
             <div style={kpiTitleStyle(colors.ink3)}>Labor Cost</div>
@@ -105,15 +110,30 @@ export function EstimateV2SummaryKPIRail({
         <div style={{ ...desktopPrimaryValueStyle(colors), color: colors.green }}>{fmtUSD(finalTotal)}</div>
       </div>
       {[
-        { label: 'Labor Hours', value: fmtH(pricingKpis.laborHours) },
-        { label: 'Days', value: fmtD(pricingKpis.laborDays) },
-        { label: 'Labor Cost', value: fmtUSD(pricingKpis.laborCost) },
-        { label: 'Supplies Cost', value: fmtUSD(pricingKpis.suppliesCost) },
-        { label: 'Rooms', value: String(pricingKpis.rooms) },
+        {
+          label: 'Labor Hours',
+          value: fmtH(pricingKpis.laborHours),
+          secondary: pricingKpis.rawLaborHours != null && pricingKpis.rawLaborHours !== pricingKpis.laborHours
+            ? `Raw: ${fmtH(pricingKpis.rawLaborHours)}`
+            : null,
+        },
+        {
+          label: 'Days',
+          value: fmtD(pricingKpis.laborDays),
+          secondary: pricingKpis.rawLaborDays != null && pricingKpis.rawLaborDays !== pricingKpis.laborDays
+            ? `Raw: ${fmtD(pricingKpis.rawLaborDays)}`
+            : null,
+        },
+        { label: 'Labor Cost', value: fmtUSD(pricingKpis.laborCost), secondary: null },
+        { label: 'Supplies Cost', value: fmtUSD(pricingKpis.suppliesCost), secondary: null },
+        { label: 'Rooms', value: String(pricingKpis.rooms), secondary: null },
       ].map((item) => (
         <div key={item.label} style={colors.cardStyle}>
           <div style={{ ...kpiTitleStyle(colors.ink3), marginBottom: 8 }}>{item.label}</div>
           <div style={desktopMetricValueStyle(colors)}>{item.value}</div>
+          {item.secondary && (
+            <div style={{ fontSize: 10, color: colors.ink3, marginTop: 4 }}>{item.secondary}</div>
+          )}
         </div>
       ))}
     </section>

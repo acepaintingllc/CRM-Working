@@ -3,6 +3,7 @@ import {
   getOrCreateLiveRatesFlagsCatalogOverlay,
   readLiveRatesFlagsCatalogOverlay,
 } from '@/lib/server/rates-flags'
+import { inferTrimTypeMetadata } from '@/lib/estimator/trimTypeMetadata'
 
 type CatalogOption = {
   id: string
@@ -20,6 +21,7 @@ type PaintProduct = CatalogOption & {
 
 type CeilingType = CatalogOption & {
   labor_mult: number | null
+  area_factor: number | null
   surcharge_per_sqft: number | null
   notes: string | null
 }
@@ -54,6 +56,14 @@ type RoomFlag = CatalogOption & {
   notes: string | null
 }
 
+type ConditionModifier = CatalogOption & {
+  scope: 'room' | 'wall' | 'ceiling' | 'trim'
+  modifier_type: 'binary' | 'severity'
+  factor_field: string | null
+  levels: Partial<Record<'active' | 'minor' | 'moderate' | 'major', number>>
+  notes: string | null
+}
+
 type AccessFee = CatalogOption & {
   fee_type: string | null
   amount: number | null
@@ -73,6 +83,9 @@ type TrimItem = CatalogOption & {
   is_active: boolean
   category: string | null
   size: string | null
+  trim_category?: string | null
+  measurement_class?: string | null
+  picker_group?: string | null
 }
 
 type ProductionRate = CatalogOption & {
@@ -99,11 +112,20 @@ export type EstimateCatalogs = {
   color_codes: CatalogOption[]
   roller_covers: CatalogOption[]
   room_flags: RoomFlag[]
+  condition_modifiers: ConditionModifier[]
   access_fees: AccessFee[]
   trim_items: TrimItem[]
   trim_menu_items: TrimItem[]
   prejob_trips: CatalogOption[]
-  supplies_rates: Array<{ key: string; scope: string | null; unit: string | null; value: number; notes: string | null }>
+  supplies_rates: Array<{
+    key: string
+    supply_group?: 'per_color' | 'area_based' | 'per_job'
+    scope: string | null
+    unit: string | null
+    value: number
+    crew_multiplier?: 'Y' | 'N'
+    notes: string | null
+  }>
 }
 
 export type EstimateCatalogsResult = {
@@ -160,38 +182,68 @@ function buildV2CatalogResultFromSources(params: {
   const activeTrimItems = params.overlay.trim_items.filter((row) => row.active === 'Y')
   const trimItems =
     activeTrimItems.length > 0
-      ? activeTrimItems.map((row) => ({
-          id: row.id,
-          label: row.label || row.id,
-          active: row.active,
-          unit: normalizeTrimCatalogUnit(row.unit),
-          family: row.family,
-          unit_type: normalizeTrimCatalogUnit(row.unit_type || row.unit),
-          helper_allowed: row.helper_allowed,
-          default_production_rate_id: row.default_production_rate_id,
-          production_rate_id: row.production_rate_id,
-          notes: row.notes,
-          default_qty: row.default_qty,
-          is_active: row.active === 'Y',
-          category: row.category,
-          size: row.size,
-        }))
-      : activeTrimProductionRates.map((row) => ({
-          id: row.id,
-          label: row.label || row.id,
-          active: row.active,
-          unit: inferTrimUnitType(`${row.id} ${row.label} ${row.surface_type} ${row.condition}`),
-          family: row.surface_type,
-          unit_type: inferTrimUnitType(`${row.id} ${row.label} ${row.surface_type} ${row.condition}`),
-          helper_allowed: false,
-          default_production_rate_id: row.id,
-          production_rate_id: row.id,
-          notes: row.notes,
-          default_qty: null,
-          is_active: row.active === 'Y',
-          category: row.surface_type,
-          size: row.condition,
-        }))
+      ? activeTrimItems.map((row) => {
+          const unitType = normalizeTrimCatalogUnit(row.unit_type || row.unit)
+          const metadata = inferTrimTypeMetadata({
+            id: row.id,
+            label: row.label,
+            family: row.family,
+            category: row.category,
+            unitType,
+            trimCategory: row.trim_category,
+            measurementClass: row.measurement_class,
+            pickerGroup: row.picker_group,
+          })
+          return {
+            id: row.id,
+            label: row.label || row.id,
+            active: row.active,
+            unit: normalizeTrimCatalogUnit(row.unit),
+            family: row.family,
+            unit_type: unitType,
+            helper_allowed: row.helper_allowed,
+            default_production_rate_id: row.default_production_rate_id,
+            production_rate_id: row.production_rate_id,
+            notes: row.notes,
+            default_qty: row.default_qty,
+            is_active: row.active === 'Y',
+            category: row.category,
+            size: row.size,
+            trim_category: metadata.trim_category,
+            measurement_class: metadata.measurement_class,
+            picker_group: metadata.picker_group,
+          }
+        })
+      : activeTrimProductionRates.map((row) => {
+          const source = `${row.id} ${row.label} ${row.surface_type} ${row.condition}`
+          const unitType = inferTrimUnitType(source)
+          const metadata = inferTrimTypeMetadata({
+            id: row.id,
+            label: row.label,
+            family: row.surface_type,
+            category: row.surface_type,
+            unitType,
+          })
+          return {
+            id: row.id,
+            label: row.label || row.id,
+            active: row.active,
+            unit: unitType,
+            family: row.surface_type,
+            unit_type: unitType,
+            helper_allowed: false,
+            default_production_rate_id: row.id,
+            production_rate_id: row.id,
+            notes: row.notes,
+            default_qty: null,
+            is_active: row.active === 'Y',
+            category: row.surface_type,
+            size: row.condition,
+            trim_category: metadata.trim_category,
+            measurement_class: metadata.measurement_class,
+            picker_group: metadata.picker_group,
+          }
+        })
 
   return {
     catalogs: {
@@ -203,6 +255,7 @@ function buildV2CatalogResultFromSources(params: {
           label: row.label || row.id,
           active: row.active,
           labor_mult: row.labor_mult,
+          area_factor: row.area_factor,
           surcharge_per_sqft: row.surcharge_per_sqft,
           notes: row.notes,
         })),
@@ -258,11 +311,33 @@ function buildV2CatalogResultFromSources(params: {
           trim_factor: row.trim_factor,
           notes: row.notes,
         })),
+      condition_modifiers: params.overlay.condition_modifiers
+        .filter((row) => row.active === 'Y')
+        .map((row) => ({
+          id: row.id,
+          label: row.label || row.id,
+          active: row.active,
+          scope: row.scope,
+          modifier_type: row.modifier_type,
+          factor_field: row.factor_field,
+          levels: row.levels,
+          notes: row.notes,
+        })),
       access_fees: [],
       trim_items: trimItems,
       trim_menu_items: trimItems,
       prejob_trips: [],
-      supplies_rates: [],
+      supplies_rates: params.overlay.area_supplies_rates
+        .filter((row) => row.active === 'Y')
+        .map((row) => ({
+          key: row.key,
+          supply_group: row.supply_group,
+          scope: row.scope,
+          unit: row.unit,
+          value: row.value,
+          crew_multiplier: row.crew_multiplier,
+          notes: row.notes,
+        })),
     },
   }
 }

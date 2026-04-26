@@ -10,10 +10,16 @@ import {
   type DetailsRollerOptionsState,
   extractEstimateV2DetailsCalculationRows,
 } from '../_lib/estimateV2DetailsVm'
+import {
+  parseConditionModifiers,
+  emptyConditionSelections,
+} from '../_lib/estimateV2DetailsConditions'
+import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 
 export function useEstimateV2DetailsVm(params: {
   store: EstimateV2EditorStoreApi
   rollerOptionsState: DetailsRollerOptionsState
+  ratesFlagsPayload: RatesFlagsPayload | null
 }) {
   const state = useEstimateV2Store(params.store, (current) => ({
     rooms: current.collections.rooms,
@@ -31,6 +37,8 @@ export function useEstimateV2DetailsVm(params: {
     ceilingCalculations: current.meta.ceilingCalculations,
     trimCalculations: current.meta.trimCalculations,
     pricingSummary: current.meta.pricingSummary,
+    crewSize: current.meta.jobSettingsDraft.crewSize,
+    conditionSelections: current.meta.jobSettingsDraft.conditionSelections,
     saveStatus: current.meta.saveStatus,
   }))
 
@@ -60,6 +68,11 @@ export function useEstimateV2DetailsVm(params: {
     [state.catalogs.color_codes]
   )
 
+  const conditionModifiers = useMemo(
+    () => (params.ratesFlagsPayload ? parseConditionModifiers(params.ratesFlagsPayload) : []),
+    [params.ratesFlagsPayload]
+  )
+
   const vm = useMemo(
     () =>
       buildEstimateV2DetailsVm({
@@ -71,23 +84,29 @@ export function useEstimateV2DetailsVm(params: {
         ceilingCalculations: calculationRows.ceilingCalculationRows,
         trimCalculations: calculationRows.trimCalculationRows,
         pricingSummary: state.pricingSummary,
+        crewSize: state.crewSize,
         paintProductLabelById,
         colorLabelById,
         rollerOptions: params.rollerOptionsState.options,
         rollerOptionsState: params.rollerOptionsState,
         rollers: state.rollers,
+        conditionModifiers,
+        conditionSelections: state.conditionSelections ?? emptyConditionSelections(),
       }),
     [
       calculationRows.ceilingCalculationRows,
       calculationRows.trimCalculationRows,
       calculationRows.wallCalculationRows,
       colorLabelById,
+      conditionModifiers,
       paintProductLabelById,
       params.rollerOptionsState,
       state.rollers,
       state.ceilingScopes,
+      state.conditionSelections,
       state.rooms,
       state.pricingSummary,
+      state.crewSize,
       state.trimScopes,
       state.wallScopes,
     ]

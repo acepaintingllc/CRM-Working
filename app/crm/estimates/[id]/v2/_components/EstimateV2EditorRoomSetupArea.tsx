@@ -8,6 +8,7 @@ import type {
   EstimateV2EditorCeilingsVm,
 } from '../_state/estimateV2EditorTypes'
 import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
+import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import { EstimateV2RoomHeader } from './EstimateV2RoomHeader'
 
 export function EstimateV2EditorRoomSetupArea({
@@ -38,6 +39,16 @@ export function EstimateV2EditorRoomSetupArea({
   return (
     <>
       <EstimateV2RoomHeader styles={styles} roomVm={roomVm} toDisplayNumber={toDisplayNumber} />
+
+      <EstimateV2ConditionsPanel
+        title="Room Conditions"
+        scope="room"
+        catalog={roomVm.conditionModifiers ?? []}
+        selections={selectedRoom.conditionSelections ?? {}}
+        onChange={roomVm.setSelectedRoomCondition ?? (() => undefined)}
+        styles={styles}
+        collapsible={false}
+      />
 
       <div className="scope-chip-row">
         <button

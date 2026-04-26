@@ -9,6 +9,8 @@ import type {
 
 export type CeilingMode = 'RECT' | 'SEG'
 export type CeilingSegmentShape = 'RECTANGLE' | 'TRIANGLE' | 'MANUAL'
+/** Ceiling geometry helper mode for area computation */
+export type CeilingGeometryMode = 'FLAT' | 'VAULTED' | 'TRAY' | 'COFFERED' | 'MANUAL'
 
 export type CeilingCalculationScopeRow = {
   id?: string
@@ -21,6 +23,18 @@ export type CeilingCalculationScopeRow = {
   area_sf: number | null          // direct area input (alternative to L×W)
   length_in: number | null
   width_in: number | null
+  // Ceiling geometry helper mode and fields
+  ceiling_geometry_mode?: CeilingGeometryMode | null
+  vaulted_area_factor?: number | null        // VAULTED: slope/area multiplier (default 1.20)
+  tray_perimeter_in?: number | null          // TRAY: perimeter of the step
+  tray_step_height_in?: number | null        // TRAY: vertical rise of the step
+  tray_band_width_in?: number | null         // TRAY: width of the horizontal band
+  coffer_section_length_in?: number | null   // COFFERED: length of each section (in)
+  coffer_section_width_in?: number | null    // COFFERED: width of each section (in)
+  coffer_section_count?: number | null       // COFFERED: number of sections
+  coffer_face_height_in?: number | null      // COFFERED: vertical face height (in)
+  coffer_bottom_width_in?: number | null     // COFFERED: bottom reveal width (in)
+  helper_extra_area_sf?: number | null       // computed extra area from geometry helper
   // Paint setup
   color_id: string | null
   paint_product_id: string | null
@@ -28,7 +42,7 @@ export type CeilingCalculationScopeRow = {
   prime_mode: 'NONE' | 'SPOT' | 'FULL'
   spot_prime_percent: number | null
   // Rate modifiers
-  ceiling_type_id: string | null  // maps to labor_mult from catalog
+  ceiling_type_id: string | null  // maps to labor_mult and area_factor from catalog
   height_factor: number | null
   complexity_factor: number | null
   ceiling_flag_factor: number | null  // aggregated ceil_factor from room flags
@@ -62,6 +76,8 @@ export type CeilingCalculationScopeRow = {
   raw_total: number | null
   effective_total: number | null
   notes: string | null
+  condition_factor?: number | null
+  condition_selections?: Partial<Record<string, string>> | null
   // Per-scope setting overrides (same pattern as walls)
   paint_coats?: number | null
   primer_coats?: number | null
@@ -102,7 +118,7 @@ export type CeilingCalculationInput = {
   segments: CeilingCalculationSegmentRow[]
   settings?: WallCalculationSettings
   catalogs?: WallCalculationCatalogs & {
-    ceiling_types?: Array<{ id: string; labor_mult: number | null }> | null
+    ceiling_types?: Array<{ id: string; labor_mult: number | null; area_factor?: number | null }> | null
   }
 }
 

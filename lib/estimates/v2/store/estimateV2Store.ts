@@ -152,6 +152,7 @@ function createEmptyCatalogs(): EstimateV2CatalogsPayload['catalogs'] {
     room_flags: [],
     ceiling_types: [],
     trim_items: [],
+    condition_modifiers: [],
   }
 }
 
@@ -163,6 +164,7 @@ function createDefaultJobSettingsDraft(): EstimateV2JobSettingsDraft {
     laborRate: DEFAULT_LABOR_RATE,
     jobMinEnabled: DEFAULT_JOB_MINIMUM_ENABLED,
     jobMinAmount: DEFAULT_JOB_MINIMUM_AMOUNT,
+    crewSize: 1,
     wallPaintProductId: '',
     wallPrimerProductId: '',
     ceilingPaintProductId: '',

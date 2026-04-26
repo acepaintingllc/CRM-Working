@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   buildCustomerSendPageData: vi.fn(),
   saveCustomerSendDraftMutation: vi.fn(),
   submitCustomerSendMutation: vi.fn(),
+  checkLocalRateLimit: vi.fn(),
 }))
 
 vi.mock('@/lib/server/apiRoute', async (importOriginal) => {
@@ -29,6 +30,10 @@ vi.mock('@/lib/server/customer-send/service', () => ({
   buildCustomerSendPageData: mocks.buildCustomerSendPageData,
   saveCustomerSendDraftMutation: mocks.saveCustomerSendDraftMutation,
   submitCustomerSendMutation: mocks.submitCustomerSendMutation,
+}))
+
+vi.mock('@/lib/server/rateLimit', () => ({
+  checkLocalRateLimit: mocks.checkLocalRateLimit,
 }))
 
 import {
@@ -60,6 +65,7 @@ describe('estimateCustomerSendRoute', () => {
     mocks.buildCustomerSendPageData.mockReset()
     mocks.saveCustomerSendDraftMutation.mockReset()
     mocks.submitCustomerSendMutation.mockReset()
+    mocks.checkLocalRateLimit.mockReset()
 
     mocks.requireSessionUserOrg.mockResolvedValue({
       ok: true,
@@ -86,6 +92,7 @@ describe('estimateCustomerSendRoute', () => {
       ok: true,
       data: { public_url: 'https://example.test/quote/token', version: { status: 'sent' } },
     })
+    mocks.checkLocalRateLimit.mockReturnValue({ ok: true })
   })
 
   it('returns { data } for GET success', async () => {
@@ -156,6 +163,11 @@ describe('estimateCustomerSendRoute', () => {
   it('returns copy send notice for live POST success', async () => {
     const response = await handleEstimateCustomerSendRoutePost(request, context, estimateCustomerSendCopy)
 
+    expect(mocks.checkLocalRateLimit).toHaveBeenCalledWith({
+      key: 'customer-send:org-1:user-1:estimate-1',
+      max: 5,
+      windowMs: 10 * 60 * 1000,
+    })
     expect(mocks.submitCustomerSendMutation).toHaveBeenCalledWith({
       origin: 'http://localhost',
       orgId: 'org-1',
@@ -170,6 +182,18 @@ describe('estimateCustomerSendRoute', () => {
       data: { public_url: 'https://example.test/quote/token', version: { status: 'sent' } },
       notice: 'Estimate sent.',
     })
+  })
+
+  it('returns 429 when customer-send rate limit is exceeded', async () => {
+    mocks.checkLocalRateLimit.mockReturnValueOnce({ ok: false })
+
+    const response = await handleEstimateCustomerSendRoutePost(request, context, estimateCustomerSendCopy)
+
+    expect(response.status).toBe(429)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Too many send attempts. Please wait and retry.',
+    })
+    expect(mocks.submitCustomerSendMutation).not.toHaveBeenCalled()
   })
 
   it('short-circuits on auth failure', async () => {

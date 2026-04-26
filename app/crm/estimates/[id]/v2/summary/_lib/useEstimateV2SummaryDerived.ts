@@ -37,6 +37,7 @@ export function useEstimateV2SummaryDerived(params: {
   jobSettingsDraft: {
     dayhours: number
     laborRate: number
+    crewSize?: number
   }
 }) {
   const { data, job, jobSettingsDraft } = params
@@ -166,6 +167,12 @@ export function useEstimateV2SummaryDerived(params: {
 
   const versionName = data?.estimate.version_name ?? 'Estimate'
   const statusLabel = data?.estimate.version_state ?? 'Draft'
+  const crewSize = Math.max(
+    1,
+    Math.floor(
+      Number(data?.inputs?.jobsettings?.crew_size ?? jobSettingsDraft.crewSize ?? 1)
+    )
+  )
   const finalTotal = pricingSummary?.finalTotal ?? null
   const laborShare =
     pricingSummary?.effectiveLaborHours && finalTotal != null
@@ -200,6 +207,7 @@ export function useEstimateV2SummaryDerived(params: {
     summaryAlerts,
     versionName,
     statusLabel,
+    crewSize,
     finalTotal,
     laborShare,
     priceAdjustment,

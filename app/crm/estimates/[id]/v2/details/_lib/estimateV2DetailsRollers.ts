@@ -301,47 +301,6 @@ export function createCeilingRollerRow(params: {
     : null
 }
 
-export function createTrimApplicatorRow(params: {
-  trimRow: DetailsScopeLineVm | null
-  rollers: EstimateV2RollerDraft[]
-  rollerOptions: DetailsRollerCoverOption[]
-  rollerOptionsState: DetailsRollerOptionsState
-  trimApplicatorOptions: DetailsRollerCoverOption[]
-}) {
-  const target = createAggregateDetailsRollerRowTarget('Trim')
-  const targetId = detailsRollerRowId(target)
-  const state = resolveRollerRowState({
-    label: 'Trim & Baseboards',
-    targetId,
-    draft: findDetailsRollerDraft({ rollers: params.rollers, target }),
-    options: params.rollerOptions,
-    scope: 'Trim',
-  })
-  const trimApplicatorRow = params.trimRow
-    ? {
-        id: targetId,
-        label: 'Trim & Baseboards',
-        sublabel: 'All active trim scopes',
-        sqFt: params.trimRow.sqFt,
-        product: params.trimRow.product,
-        coverId: state.coverId,
-        quantity: state.quantity,
-        notes: state.notes,
-        errors: [] as DetailsValidationIssue[],
-      }
-    : null
-
-  return trimApplicatorRow
-    ? {
-        ...trimApplicatorRow,
-        errors: [
-          ...state.hydrationErrors,
-          ...validateRollerRow(trimApplicatorRow, params.rollerOptionsState, params.trimApplicatorOptions),
-        ],
-      }
-    : null
-}
-
 export function parseRollerCoverOptionsFromRatesFlags(payload: unknown): DetailsRollerCoverOption[] {
   return parseRollerCoverOptionsStateFromRatesFlags(payload).options
 }

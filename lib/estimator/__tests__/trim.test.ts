@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { calculateTrim, type TrimCalculationInput } from '../trim.ts'
 
+function approx(actual: number | null | undefined, expected: number, epsilon = 0.0001) {
+  assert.notEqual(actual, null)
+  assert.ok(Math.abs((actual as number) - expected) <= epsilon, `expected ${expected}, got ${actual}`)
+}
+
 function makeTrimScope(overrides: Partial<TrimCalculationInput['scopes'][0]> = {}): TrimCalculationInput['scopes'][0] {
   return {
     id: 'S1',
@@ -151,6 +156,15 @@ test('trim primer supply cost applies only for SPOT and FULL prime modes', () =>
   assert.equal(none.scopes[0].raw_supply_cost, 4.8)
   assert.equal(spot.scopes[0].raw_supply_cost, 9.8)
   assert.equal(full.scopes[0].raw_supply_cost, 9.8)
+})
+
+test('condition_factor stacks with existing trim labor modifiers', () => {
+  const result = calculateTrim({
+    rooms: [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' }],
+    scopes: [makeTrimScope({ prep_factor: 1.1, condition_factor: 1.25 })],
+  })
+
+  approx(result.scopes[0].raw_paint_hours, 1.1)
 })
 
 test('calculateTrim blocks helper mode for SEG rooms', () => {

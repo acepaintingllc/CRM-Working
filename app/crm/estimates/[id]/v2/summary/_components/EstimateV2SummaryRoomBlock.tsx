@@ -43,6 +43,7 @@ export function EstimateV2SummaryRoomBlock({
   }
   const panelId = `estimate-v2-summary-room-panel-${block.room.room_id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
   const buttonLabel = `${block.room.room_name ?? block.room.room_id} room details`
+  const conditionBadges = block.conditionBadges ?? []
 
   if (mobile) {
     return (
@@ -94,6 +95,26 @@ export function EstimateV2SummaryRoomBlock({
             id={panelId}
             style={{ borderTop: `1px solid ${colors.border}`, background: 'rgba(255,255,255,0.015)', padding: '12px 14px 14px', display: 'grid', gap: 10 }}
           >
+            {conditionBadges.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {conditionBadges.map((label) => (
+                  <span
+                    key={label}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: 'rgba(251,191,36,0.12)',
+                      color: '#fbbf24',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            )}
             {block.scopeRows.length === 0 ? (
               <div style={{ color: colors.ink3, fontSize: 13 }}>No scoped items</div>
             ) : (
@@ -180,8 +201,28 @@ export function EstimateV2SummaryRoomBlock({
         </div>
       </button>
 
-      {open && block.scopeRows.length > 0 && (
+      {open && (
         <div id={panelId} style={{ background: 'rgba(255,255,255,0.015)', borderTop: `1px solid ${colors.border}` }}>
+          {conditionBadges.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '10px 16px', borderBottom: `1px solid ${colors.border}` }}>
+              {conditionBadges.map((label) => (
+                <span
+                  key={label}
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: 'rgba(251,191,36,0.12)',
+                    color: '#fbbf24',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
           <div
             style={{
               display: 'grid',

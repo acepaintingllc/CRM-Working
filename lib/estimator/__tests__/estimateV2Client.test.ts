@@ -14,7 +14,7 @@ function createResponse(
   } as Response
 }
 
-test('loadEstimateV2RatesFlagsPayload loads the estimate-side endpoint and unwraps the data envelope', async () => {
+test('loadEstimateV2RatesFlagsPayload loads the canonical quote rates-flags endpoint and unwraps the data envelope', async () => {
   const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
   const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ input, init })
@@ -33,7 +33,7 @@ test('loadEstimateV2RatesFlagsPayload loads the estimate-side endpoint and unwra
   })
   assert.deepEqual(calls, [
     {
-      input: '/api/estimates/v2/rates-flags',
+      input: '/api/quotes/rates-flags',
       init: { cache: 'no-store' },
     },
   ])

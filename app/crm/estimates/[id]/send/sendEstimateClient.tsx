@@ -14,6 +14,8 @@ import {
   asText,
   buildCustomerSendComposerDraft,
   buildCustomerSendComposerPreview,
+  isPositiveInteger,
+  isValidRecipientList,
   type CustomerSendComposerDraft,
   useCustomerSendWorkflow,
 } from './_shared/customerSendWorkflow'
@@ -188,6 +190,7 @@ export default function SendEstimateClient({
   })
 
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [testRecipient, setTestRecipient] = useState('')
 
   const setDraftField = <K extends keyof CustomerSendComposerDraft>(
     key: K,
@@ -200,12 +203,23 @@ export default function SendEstimateClient({
     const next = templatePresets.find((preset) => preset.key === templateKey) ?? templatePresets[0]
     setForm((prev) =>
       prev
-        ? {
-            ...prev,
-            template_key: next.key,
-            subject: next.subject,
-            body: next.body,
-          }
+        ? (() => {
+            const hasCustomMessage =
+              prev.subject.trim() !== currentTemplate.subject.trim() ||
+              prev.body.trim() !== currentTemplate.body.trim()
+            if (hasCustomMessage) {
+              const shouldReplace = window.confirm(
+                'Switching templates will replace your current subject and message edits. Continue?'
+              )
+              if (!shouldReplace) return prev
+            }
+            return {
+              ...prev,
+              template_key: next.key,
+              subject: next.subject,
+              body: next.body,
+            }
+          })()
         : prev
     )
   }
@@ -288,6 +302,27 @@ export default function SendEstimateClient({
   }
 
   if (!data || !form || !liveDocument) return null
+
+  const toError =
+    form.to_email && !isValidRecipientList(form.to_email)
+      ? 'Use valid email addresses separated by commas.'
+      : null
+  const ccError =
+    form.cc_email && !isValidRecipientList(form.cc_email)
+      ? 'Use valid email addresses separated by commas.'
+      : null
+  const bccError =
+    form.bcc_email && !isValidRecipientList(form.bcc_email)
+      ? 'Use valid email addresses separated by commas.'
+      : null
+  const validityError =
+    form.quote_validity_days && !isPositiveInteger(form.quote_validity_days)
+      ? 'Enter a whole number greater than 0.'
+      : null
+  const testRecipientError =
+    testRecipient && !isValidRecipientList(testRecipient)
+      ? 'Enter one valid internal test email.'
+      : null
 
   return (
     <div className="send-shell" style={{ minHeight: '100vh', background: C.bg, color: C.ink }}>
@@ -428,7 +463,9 @@ export default function SendEstimateClient({
                     value={form.to_email}
                     onChange={(event) => setDraftField('to_email', event.target.value)}
                     style={inputBase}
+                    placeholder="customer@example.com"
                   />
+                  {toError ? <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{toError}</div> : null}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -438,7 +475,11 @@ export default function SendEstimateClient({
                       value={form.cc_email}
                       onChange={(event) => setDraftField('cc_email', event.target.value)}
                       style={inputBase}
+                      placeholder="team@example.com, owner@example.com"
                     />
+                    {ccError ? (
+                      <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{ccError}</div>
+                    ) : null}
                   </div>
                   <div>
                     <FieldLabel>BCC</FieldLabel>
@@ -446,7 +487,11 @@ export default function SendEstimateClient({
                       value={form.bcc_email}
                       onChange={(event) => setDraftField('bcc_email', event.target.value)}
                       style={inputBase}
+                      placeholder="internal@example.com"
                     />
+                    {bccError ? (
+                      <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{bccError}</div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -473,8 +518,14 @@ export default function SendEstimateClient({
                   <input
                     value={form.quote_validity_days}
                     onChange={(event) => setDraftField('quote_validity_days', event.target.value)}
+                    type="number"
+                    min={1}
+                    step={1}
                     style={inputBase}
                   />
+                  {validityError ? (
+                    <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{validityError}</div>
+                  ) : null}
                 </div>
 
                 <div>
@@ -518,10 +569,27 @@ export default function SendEstimateClient({
               ) : null}
 
               <div style={{ display: 'grid', gap: 10, marginTop: 'auto', paddingTop: 6 }}>
+                <div>
+                  <FieldLabel>Test recipient (internal only)</FieldLabel>
+                  <input
+                    value={testRecipient}
+                    onChange={(event) => setTestRecipient(event.target.value)}
+                    style={inputBase}
+                    placeholder="you@yourcompany.com"
+                  />
+                  {testRecipientError ? (
+                    <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{testRecipientError}</div>
+                  ) : null}
+                </div>
                 <button type="button" disabled={busy} onClick={() => void persistDraft()} style={actionButton}>
                   Save Draft
                 </button>
-                <button type="button" disabled={busy} onClick={() => void submit('test')} style={secondaryButton}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void submit('test', { testRecipient })}
+                  style={secondaryButton}
+                >
                   Send Test
                 </button>
                 <button type="button" disabled={busy} onClick={() => void submit('send')} style={actionButton}>

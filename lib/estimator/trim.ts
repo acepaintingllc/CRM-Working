@@ -6,6 +6,7 @@ import {
   productMap,
   resolveSettings,
   round4,
+  supplyCostFromCatalog,
   sumNumbers,
 } from './wallsHelpers.ts'
 import type {
@@ -282,7 +283,8 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
         (nonNeg(n(scope.masking_factor)) ?? 1) *
         (nonNeg(n(scope.stair_factor)) ?? 1) *
         (nonNeg(n(scope.difficult_finish_factor)) ?? 1) *
-        (nonNeg(n(scope.caulk_fill_factor)) ?? 1)
+        (nonNeg(n(scope.caulk_fill_factor)) ?? 1) *
+        (nonNeg(n(scope.condition_factor)) ?? 1)
     )
 
     const paintEnabled = scope.paint_enabled === 'N' ? 'N' : 'Y'
@@ -426,8 +428,15 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
 
   const perColorGroups: WallPerColorSupplyGroup[] = Array.from(grouped.entries()).map(([groupKey, scopes]) => {
     const totalMeasurement = sumNumbers(scopes.map((scope) => scope.effective_measurement))
+    const catalogPerColorCost =
+      supplyCostFromCatalog({
+        catalogs: input.catalogs,
+        scopeName: 'trim',
+        group: 'per_color',
+        crewSize: settings.crew_size,
+      }) ?? settings.per_color_supply_cost
     const totalCost = round4(
-      Math.max(...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? settings.per_color_supply_cost))
+      Math.max(...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? catalogPerColorCost))
     )
 
     for (const scope of scopes) {

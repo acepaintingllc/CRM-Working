@@ -32,6 +32,7 @@ export function buildOverlayFromRows(params: {
   const wall_complexity_types: RatesFlagsCatalogOverlay['wall_complexity_types'] = []
   const ceiling_types: RatesFlagsCatalogOverlay['ceiling_types'] = []
   const room_flags: RatesFlagsCatalogOverlay['room_flags'] = []
+  const condition_modifiers: RatesFlagsCatalogOverlay['condition_modifiers'] = []
   const access_fees: RatesFlagsCatalogOverlay['access_fees'] = []
   const trim_items: RatesFlagsCatalogOverlay['trim_items'] = []
   const area_supplies_rates: RatesFlagsCatalogOverlay['area_supplies_rates'] = []
@@ -111,6 +112,7 @@ export function buildOverlayFromRows(params: {
       id: normalizeId(values.id || row.row_id),
       label: asText(values.display_name) || row.display_name,
       labor_mult: parseNumber(values.primary_value),
+      area_factor: parseNumber(values.area_factor),
       surcharge_per_sqft: parseNumber(values.secondary_value),
       notes: asText(values.notes) || null,
       active: row.active,
@@ -118,7 +120,37 @@ export function buildOverlayFromRows(params: {
   }
 
   for (const row of grouped.get('condition_modifiers') ?? []) {
+    const valuesJson = (row.values_json ?? {}) as Record<string, unknown>
     const values = toStringRecord(row.values_json)
+    const levels =
+      valuesJson.levels && typeof valuesJson.levels === 'object' && !Array.isArray(valuesJson.levels)
+        ? Object.fromEntries(
+            Object.entries(valuesJson.levels as Record<string, unknown>)
+              .map(([key, value]) => [key.toLowerCase(), parseNumber(value)] as const)
+              .filter((entry): entry is [string, number] => entry[1] != null)
+          )
+        : null
+    const scope = asText(values.scope).toLowerCase()
+    const normalizedScope =
+      scope === 'room' || scope === 'wall' || scope === 'ceiling' || scope === 'trim'
+        ? scope
+        : scope === 'ceil' || scope === 'ceilings'
+          ? 'ceiling'
+          : scope === 'walls'
+            ? 'wall'
+            : ''
+    if (normalizedScope && levels) {
+      condition_modifiers.push({
+        id: normalizeId(values.id || row.row_id),
+        label: asText(values.display_name) || row.display_name,
+        scope: normalizedScope,
+        modifier_type: asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity',
+        factor_field: asText(values.factor_field) || null,
+        levels,
+        notes: asText(values.notes) || null,
+        active: row.active,
+      })
+    }
     room_flags.push({
       id: normalizeId(values.id || row.row_id),
       label: asText(values.display_name) || row.display_name,
@@ -164,6 +196,9 @@ export function buildOverlayFromRows(params: {
       category: asText(values.unit_rate_type) || null,
       size: asText(values.unit_rate_type) || null,
       active: row.active,
+      trim_category: asText(values.trim_category) || null,
+      measurement_class: asText(values.measurement_class) || null,
+      picker_group: asText(values.picker_group) || null,
     })
   }
 
@@ -176,12 +211,19 @@ export function buildOverlayFromRows(params: {
     const values = toStringRecord(row.values_json)
     const supplyGroup = asText(values.supply_group).toLowerCase()
     const unit = asText(values.unit) || '$/sqft'
-    if (supplyGroup && supplyGroup !== 'area_based' && !isAreaBasedUnit(unit)) continue
+    const normalizedSupplyGroup =
+      supplyGroup === 'per_color' || supplyGroup === 'per_job' || supplyGroup === 'area_based'
+        ? supplyGroup
+        : isAreaBasedUnit(unit)
+          ? 'area_based'
+          : 'per_job'
     area_supplies_rates.push({
       key: normalizeId(values.id || row.row_id),
+      supply_group: normalizedSupplyGroup,
       scope: asText(values.scope) || null,
       unit,
       value: parseNumber(values.cost_per) ?? 0,
+      crew_multiplier: asText(values.crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
       notes: asText(values.notes) || null,
       active: row.active,
     })
@@ -195,6 +237,7 @@ export function buildOverlayFromRows(params: {
     wall_complexity_types,
     ceiling_types,
     room_flags,
+    condition_modifiers,
     access_fees,
     trim_items,
     area_supplies_rates,

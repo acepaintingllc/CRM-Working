@@ -21,6 +21,17 @@ export type RoomFlagCatalogRow = {
   active: 'Y' | 'N'
 }
 
+export type ConditionModifierCatalogRow = {
+  id: string
+  label: string
+  scope: 'room' | 'wall' | 'ceiling' | 'trim'
+  modifier_type: 'binary' | 'severity'
+  factor_field: string | null
+  levels: Partial<Record<'active' | 'minor' | 'moderate' | 'major', number>>
+  notes: string | null
+  active: 'Y' | 'N'
+}
+
 export type WallComplexityCatalogRow = {
   id: string
   label: string
@@ -33,6 +44,7 @@ export type CeilingTypeCatalogRow = {
   id: string
   label: string
   labor_mult: number | null
+  area_factor: number | null
   surcharge_per_sqft: number | null
   notes: string | null
   active: 'Y' | 'N'
@@ -89,13 +101,18 @@ export type TrimItemCatalogRow = {
   category: string | null
   size: string | null
   active: 'Y' | 'N'
+  trim_category?: string | null
+  measurement_class?: string | null
+  picker_group?: string | null
 }
 
 export type AreaSupplyCatalogRow = {
   key: string
+  supply_group: 'per_color' | 'area_based' | 'per_job'
   scope: string | null
   unit: string | null
   value: number
+  crew_multiplier: 'Y' | 'N'
   notes: string | null
   active: 'Y' | 'N'
 }
@@ -108,6 +125,7 @@ export type RatesFlagsCatalogOverlay = {
   wall_complexity_types: WallComplexityCatalogRow[]
   ceiling_types: CeilingTypeCatalogRow[]
   room_flags: RoomFlagCatalogRow[]
+  condition_modifiers: ConditionModifierCatalogRow[]
   access_fees: AccessFeeCatalogRow[]
   trim_items: TrimItemCatalogRow[]
   area_supplies_rates: AreaSupplyCatalogRow[]

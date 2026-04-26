@@ -46,9 +46,12 @@ export function applyDetailsRollerRowPatch(params: {
   createId?: () => string
 }) {
   const rowTarget = parseDetailsRollerRowId(params.rowId)
+
   const selectedCover =
     params.patch.coverId != null
-      ? params.rollerOptions.find((option) => option.id === params.patch.coverId)
+      ? params.rollerOptions.find(
+          (option) => option.scope === rowTarget.scope && option.id === params.patch.coverId
+        )
       : null
   const existingIndex = findDetailsRollerDraftIndexForRowId({
     rollers: params.rollers,
@@ -79,6 +82,9 @@ export function applyDetailsRollerRowPatch(params: {
   if (existingIndex < 0) {
     if (isEmptyRollerDraft(nextRow)) return params.rollers
     return [...params.rollers, nextRow]
+  }
+  if (isEmptyRollerDraft(nextRow)) {
+    return params.rollers.filter((_, index) => index !== existingIndex)
   }
   if (existing && areRollerDraftsEqual(existing, nextRow)) return params.rollers
   return params.rollers.map((roller, index) => (index === existingIndex ? nextRow : roller))

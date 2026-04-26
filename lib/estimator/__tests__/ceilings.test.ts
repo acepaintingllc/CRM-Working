@@ -35,6 +35,17 @@ function makeScope(overrides: Partial<CeilingCalculationInput['scopes'][0]> = {}
     prime_mode: 'NONE',
     spot_prime_percent: null,
     ceiling_type_id: null,
+    ceiling_geometry_mode: 'FLAT',
+    vaulted_area_factor: null,
+    tray_perimeter_in: null,
+    tray_step_height_in: null,
+    tray_band_width_in: null,
+    coffer_section_length_in: null,
+    coffer_section_width_in: null,
+    coffer_section_count: null,
+    coffer_face_height_in: null,
+    coffer_bottom_width_in: null,
+    helper_extra_area_sf: null,
     height_factor: null,
     complexity_factor: null,
     ceiling_flag_factor: null,
@@ -208,6 +219,107 @@ test('ceiling_type_id applies labor_mult from catalogs', () => {
   approx(result.scopes[0].raw_paint_hours, 4.32)
 })
 
+test('ceiling type area_factor increases area, gallons, materials, and area-based labor', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'vaulted', labor_mult: 1, area_factor: 1.25 }],
+    },
+    scopes: [makeScope({ ceiling_type_id: 'vaulted', prime_mode: 'NONE' })],
+    segments: [],
+  })
+
+  approx(result.scopes[0].raw_area_sf, 180)
+  approx(result.scopes[0].raw_paint_gallons, 1.8)
+  approx(result.scopes[0].raw_paint_hours, 3.6)
+})
+
+test('vaulted helper area uses slope factor and labor multiplier remains labor-only', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'vaulted', labor_mult: 1.5, area_factor: 1 }],
+    },
+    scopes: [
+      makeScope({
+        ceiling_type_id: 'vaulted',
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_area_factor: 1.2,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 28.8)
+  approx(result.scopes[0].raw_area_sf, 172.8)
+  approx(result.scopes[0].raw_paint_gallons, 1.728)
+  approx(result.scopes[0].raw_paint_hours, 5.184)
+})
+
+test('tray helper adds vertical and band drywall sqft', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'TRAY',
+        tray_perimeter_in: 480,
+        tray_step_height_in: 12,
+        tray_band_width_in: 18,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 100)
+  approx(result.scopes[0].raw_area_sf, 244)
+})
+
+test('coffered helper calculates extra drywall sqft from section size and count', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'COFFERED',
+        coffer_section_length_in: 48,
+        coffer_section_width_in: 36,
+        coffer_section_count: 6,
+        coffer_face_height_in: 6,
+        coffer_bottom_width_in: 4,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 70)
+  approx(result.scopes[0].raw_area_sf, 214)
+})
+
+test('override_area_sf wins over helper and area factor for effective area', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'vaulted', labor_mult: 1, area_factor: 1.25 }],
+    },
+    scopes: [
+      makeScope({
+        ceiling_type_id: 'vaulted',
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_area_factor: 1.2,
+        override_area_sf: 100,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].raw_area_sf, 216)
+  approx(result.scopes[0].effective_area_sf, 100)
+  approx(result.scopes[0].raw_paint_gallons, 1)
+})
+
 test('height_factor multiplies labor', () => {
   const input: CeilingCalculationInput = {
     settings: BASE_SETTINGS,
@@ -241,15 +353,15 @@ test('all modifiers combine multiplicatively', () => {
         height_factor: 1.1,
         complexity_factor: 1.2,
         ceiling_flag_factor: 1.0,
+        condition_factor: 1.25,
         prime_mode: 'NONE',
       }),
     ],
     segments: [],
   }
   const result = calculateCeilings(input)
-  // modifier = 1.3 * 1.1 * 1.2 * 1.0 = 1.716
-  // paint hours: (144 * 2 / 100) * 1.716 = 4.942...
-  const modifier = 1.3 * 1.1 * 1.2
+  // modifier = 1.3 * 1.1 * 1.2 * 1.0 * 1.25 = 2.145
+  const modifier = 1.3 * 1.1 * 1.2 * 1.25
   approx(result.scopes[0].raw_paint_hours, (144 * 2 / 100) * modifier)
 })
 

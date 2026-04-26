@@ -19,6 +19,17 @@ create table if not exists public.estimate_room_ceiling_scopes (
   prime_mode            text not null default 'NONE' check (prime_mode in ('NONE', 'SPOT', 'FULL')),
   spot_prime_percent    numeric null,
   ceiling_type_id       text null,   -- references catalog ceiling_types.id
+  ceiling_geometry_mode text null check (ceiling_geometry_mode in ('FLAT', 'VAULTED', 'TRAY', 'COFFERED', 'MANUAL')),
+  vaulted_area_factor   numeric null,
+  tray_perimeter_in     numeric null,
+  tray_step_height_in   numeric null,
+  tray_band_width_in    numeric null,
+  coffer_section_length_in numeric null,
+  coffer_section_width_in  numeric null,
+  coffer_section_count     numeric null,
+  coffer_face_height_in    numeric null,
+  coffer_bottom_width_in   numeric null,
+  helper_extra_area_sf     numeric null,
   -- RECT geometry (area_sf is an alternative to L×W)
   length_in       numeric null,
   width_in        numeric null,

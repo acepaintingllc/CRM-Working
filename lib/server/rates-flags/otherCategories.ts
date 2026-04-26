@@ -142,6 +142,7 @@ export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'scope', label: 'Scope' },
       { key: 'unit', label: 'Unit' },
       { key: 'cost_per', label: 'Cost', align: 'right' },
+      { key: 'crew_multiplier', label: 'Crew Mult.', align: 'center' },
       { key: 'active', label: 'Status', align: 'center' },
     ],
     fields: [
@@ -151,6 +152,7 @@ export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'scope', label: 'Scope', type: 'text', headers: ['Scope'] },
       { key: 'unit', label: 'Unit', type: 'text', headers: ['Unit', 'UOM'], writeDefault: 'per color' },
       { key: 'cost_per', label: 'Cost', type: 'number', required: true, headers: ['CostPer', 'Value', 'Rate', 'Amount'] },
+      { key: 'crew_multiplier', label: 'Crew Multiplier', type: 'select', options: ['Y', 'N'], headers: ['CrewMultiplier', 'crew_multiplier'], writeDefault: 'N' },
       { key: 'notes', label: 'Notes', type: 'text', headers: ['Notes', 'Note'] },
     ],
     rowFilter(row) {
@@ -164,6 +166,7 @@ export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
         scope: asText(values.scope),
         unit: asText(values.unit),
         cost_per: asText(values.cost_per),
+        crew_multiplier: asText(values.crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
         size_in: '',
         price_each: '',
         notes: asText(values.notes),
@@ -184,6 +187,7 @@ export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'scope', label: 'Scope' },
       { key: 'unit', label: 'Unit' },
       { key: 'cost_per', label: 'Cost', align: 'right' },
+      { key: 'crew_multiplier', label: 'Crew Mult.', align: 'center' },
       { key: 'active', label: 'Status', align: 'center' },
     ],
     fields: [
@@ -235,6 +239,7 @@ export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'scope', label: 'Scope', type: 'text', headers: ['Scope'] },
       { key: 'unit', label: 'Unit', type: 'text', headers: ['Unit', 'UOM'] },
       { key: 'cost_per', label: 'Cost', type: 'number', required: true, headers: ['CostPer', 'Value', 'Rate', 'Amount'] },
+      { key: 'crew_multiplier', label: 'Crew Multiplier', type: 'select', options: ['Y', 'N'], headers: ['CrewMultiplier', 'crew_multiplier'], writeDefault: 'N' },
       { key: 'notes', label: 'Notes', type: 'text', headers: ['Notes', 'Note'] },
     ],
     rowFilter(row) {
@@ -248,6 +253,7 @@ export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
         scope: asText(values.scope),
         unit: asText(values.unit),
         cost_per: asText(values.cost_per),
+        crew_multiplier: asText(values.crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
         size_in: '',
         price_each: '',
         notes: asText(values.notes),
