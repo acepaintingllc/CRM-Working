@@ -4,9 +4,9 @@ import { useEstimateV2Editor } from '../_state/useEstimateV2Editor'
 import { useEstimateV2EditorPageUiState } from '../_state/useEstimateV2EditorPageUiState'
 import { useCallback } from 'react'
 import {
-  estimateRouteFamily,
-  quoteRouteFamily,
+  resolveEstimateRouteFamily,
   type EstimateRouteFamily,
+  type EstimateRouteFamilyKey,
 } from '../../estimateRouteFamily'
 import pageStyles from './EstimateV2EditorPageContent.module.css'
 import { EstimateV2EditorFooterBar } from './EstimateV2EditorFooterBar'
@@ -17,18 +17,18 @@ import { EstimateV2SettingsDrawer } from './EstimateV2SettingsDrawer'
 import { EstimateV2Sidebar } from './EstimateV2Sidebar'
 import { EstimateV2SummaryRail } from './EstimateV2SummaryRail'
 import { estimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
+import { useEstimateV2SidebarCollapse } from './useEstimateV2SidebarCollapse'
 
 export function EstimateV2EditorPageContent({
   estimateId,
-  routeFamilyKey = 'estimate',
   routeFamily,
+  routeFamilyKey = 'estimate',
 }: {
   estimateId?: string
-  routeFamilyKey?: 'estimate' | 'quote'
   routeFamily?: EstimateRouteFamily
+  routeFamilyKey?: EstimateRouteFamilyKey
 }) {
-  const resolvedRouteFamily =
-    routeFamily ?? (routeFamilyKey === 'quote' ? quoteRouteFamily : estimateRouteFamily)
+  const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
   const {
     pageVm,
     headerVm,
@@ -55,6 +55,7 @@ export function EstimateV2EditorPageContent({
     toggleWallsInclude: wallsVm.toggleRoomInclude,
     toggleCeilingsInclude: ceilingsVm.toggleRoomInclude,
   })
+  const sidebarCollapse = useEstimateV2SidebarCollapse()
 
   return (
     <div className={`${pageStyles.root} ace-v2-shell`} style={estimateV2EditorPageStyles.page}>
@@ -67,12 +68,21 @@ export function EstimateV2EditorPageContent({
         confirmNavigation={confirmNavigation}
       />
 
-      <div style={estimateV2EditorPageStyles.shell} className="ace-v2-rooms-layout walls-v2-shell">
+      <div
+        style={{
+          ...estimateV2EditorPageStyles.shell,
+          gridTemplateColumns: sidebarCollapse.collapsed ? '48px minmax(0, 1fr)' : 'minmax(240px, 320px) minmax(0, 1fr)',
+        }}
+        className="ace-v2-rooms-layout walls-v2-shell"
+      >
         <EstimateV2Sidebar
           styles={estimateV2EditorPageStyles}
           roomVm={roomVm}
           jobSettingsVm={jobSettingsVm}
           toDisplayNumber={toDisplayNumber}
+          collapsed={sidebarCollapse.collapsed}
+          onCollapse={sidebarCollapse.collapseSidebar}
+          onExpand={sidebarCollapse.expandSidebar}
         />
 
         <main style={{ display: 'grid', gap: 14, paddingBottom: 88 }}>
@@ -144,6 +154,8 @@ export function EstimateV2EditorPageContent({
                   setOpenCeilingAdvanced={uiState.setOpenCeilingAdvanced}
                   openTrimSection={uiState.openTrimSection}
                   setOpenTrimSection={uiState.setOpenTrimSection}
+                  openTrimAdvanced={uiState.openTrimAdvanced}
+                  setOpenTrimAdvanced={uiState.setOpenTrimAdvanced}
                   toDisplayNumber={toDisplayNumber}
                 />
               </div>
@@ -160,11 +172,11 @@ export function EstimateV2EditorPageContent({
 
       <EstimateV2EditorFooterBar
         styles={estimateV2EditorPageStyles}
+        estimateId={estimateId}
+        routeFamily={resolvedRouteFamily}
         pageVm={pageVm}
         saveVm={saveVm}
         summaryVm={summaryVm}
-        estimateId={estimateId}
-        routeFamily={resolvedRouteFamily}
       />
 
       <EstimateV2SettingsDrawer styles={estimateV2EditorPageStyles} jobSettingsVm={jobSettingsVm} />

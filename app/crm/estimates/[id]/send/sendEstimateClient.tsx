@@ -6,9 +6,9 @@ import type { CSSProperties, ReactNode } from 'react'
 import { templatePresets } from '@/lib/customer-estimates/presets'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import {
-  estimateRouteFamily,
-  quoteRouteFamily,
+  resolveEstimateRouteFamily,
   type EstimateRouteFamily,
+  type EstimateRouteFamilyKey,
 } from '../estimateRouteFamily'
 import {
   asText,
@@ -149,16 +149,15 @@ function draftPayload(form: CustomerSendComposerDraft) {
 export default function SendEstimateClient({
   estimateId,
   catalogSource,
-  routeFamilyKey = 'estimate',
   routeFamily,
+  routeFamilyKey = 'estimate',
 }: {
   estimateId: string
   catalogSource?: 'estimate' | 'v2'
-  routeFamilyKey?: 'estimate' | 'quote'
   routeFamily?: EstimateRouteFamily
+  routeFamilyKey?: EstimateRouteFamilyKey
 }) {
-  const resolvedRouteFamily =
-    routeFamily ?? (routeFamilyKey === 'quote' ? quoteRouteFamily : estimateRouteFamily)
+  const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
   const {
     loading,
     busy,

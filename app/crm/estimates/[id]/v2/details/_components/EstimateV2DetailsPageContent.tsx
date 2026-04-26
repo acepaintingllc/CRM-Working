@@ -32,6 +32,10 @@ function IconLabel({ icon, children }: { icon: ReactNode; children: ReactNode })
   )
 }
 
+function rollerPlanningRowCount(vm: { wallRollerRows: unknown[]; ceilingRollerRow: unknown | null }) {
+  return vm.wallRollerRows.length + (vm.ceilingRollerRow ? 1 : 0)
+}
+
 export function EstimateV2DetailsPageContent({
   estimateId,
   routeFamilyKey = 'estimate',
@@ -46,6 +50,7 @@ export function EstimateV2DetailsPageContent({
   const page = useEstimateV2DetailsPage({ estimateId, routeFamily: resolvedRouteFamily })
   const { vm, actions } = page
   const saveError = page.error && page.estimate ? page.error.message : null
+  const rollerRowCount = rollerPlanningRowCount(vm)
 
   if (page.loading) {
     return (
@@ -73,7 +78,7 @@ export function EstimateV2DetailsPageContent({
     <CrmPageShell className="max-w-[1480px]">
       <CrmPageHeader
         title="Details & Overrides"
-        description="Material planning, gallon overrides, persisted roller and trim applicator planning, and final validation before summary."
+        description="Material planning, gallon overrides, persisted wall and ceiling roller planning, and final validation before summary."
         eyebrow="Estimate V2"
         backAction={
           <CrmButton type="button" tone="secondary" onClick={() => void actions.returnToEditor()}>
@@ -118,8 +123,42 @@ export function EstimateV2DetailsPageContent({
         </CrmNotice>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
         <main className="grid min-w-0 gap-4">
+          <CrmSectionCard
+            title="Rollers"
+            description={`${rollerRowCount} required persisted planning row${rollerRowCount === 1 ? '' : 's'}.`}
+          >
+            <div className="grid gap-5">
+              {vm.rollerOptionsState.status !== 'loaded' ? (
+                <CrmNotice
+                  tone={vm.rollerOptionsState.status === 'unavailable' ? 'error' : 'warning'}
+                  compact
+                >
+                  {vm.rollerOptionsState.message}
+                </CrmNotice>
+              ) : null}
+              <div className="grid gap-2">
+                <div className={labelClassName}>Wall Rollers</div>
+                <EstimateV2DetailsRollerRows
+                  rows={vm.wallRollerRows}
+                  options={vm.wallRollerOptions}
+                  onChange={actions.setRollerRow}
+                />
+              </div>
+              {vm.ceilingRollerRow ? (
+                <div className="grid gap-2">
+                  <div className={labelClassName}>Ceiling Rollers</div>
+                  <EstimateV2DetailsRollerRows
+                    rows={[vm.ceilingRollerRow]}
+                    options={vm.ceilingRollerOptions}
+                    onChange={actions.setRollerRow}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </CrmSectionCard>
+
           <CrmSectionCard title="Material Overview" description="Final gallons use saved overrides when present.">
             <EstimateV2DetailsMaterialOverview materialCards={vm.materialCards} />
           </CrmSectionCard>
@@ -149,48 +188,6 @@ export function EstimateV2DetailsPageContent({
               emptyTitle={vm.materialPlanningSections.trim.emptyTitle}
               emptyMessage={vm.materialPlanningSections.trim.emptyMessage}
             />
-          </CrmSectionCard>
-
-          <CrmSectionCard title="Rollers & Applicators" description={`${vm.wallRollerRows.length + (vm.ceilingRollerRow ? 1 : 0) + (vm.trimApplicatorRow ? 1 : 0)} required persisted planning row${vm.wallRollerRows.length + (vm.ceilingRollerRow ? 1 : 0) + (vm.trimApplicatorRow ? 1 : 0) === 1 ? '' : 's'}.`}>
-            <div className="grid gap-5">
-              {vm.rollerOptionsState.status !== 'loaded' ? (
-                <CrmNotice
-                  tone={vm.rollerOptionsState.status === 'unavailable' ? 'error' : 'warning'}
-                  compact
-                >
-                  {vm.rollerOptionsState.message}
-                </CrmNotice>
-              ) : null}
-              <div className="grid gap-2">
-                <div className={labelClassName}>Wall Rollers</div>
-                <EstimateV2DetailsRollerRows
-                  rows={vm.wallRollerRows}
-                  options={vm.wallRollerOptions}
-                  onChange={actions.setRollerRow}
-                />
-              </div>
-              {vm.ceilingRollerRow ? (
-                <div className="grid gap-2">
-                  <div className={labelClassName}>Ceiling Rollers</div>
-                  <EstimateV2DetailsRollerRows
-                    rows={[vm.ceilingRollerRow]}
-                    options={vm.ceilingRollerOptions}
-                    onChange={actions.setRollerRow}
-                  />
-                </div>
-              ) : null}
-              {vm.trimApplicatorRow ? (
-                <div className="grid gap-2">
-                  <div className={labelClassName}>Trim Applicators</div>
-                  <EstimateV2DetailsRollerRows
-                    rows={[vm.trimApplicatorRow]}
-                    options={vm.trimApplicatorOptions}
-                    onChange={actions.setRollerRow}
-                    selectPlaceholder="Select applicator"
-                  />
-                </div>
-              ) : null}
-            </div>
           </CrmSectionCard>
 
           <CrmSectionCard title="Active Overrides" description="Saved gallon overrides that will affect material totals.">

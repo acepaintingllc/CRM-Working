@@ -176,38 +176,6 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
     ],
     [
       {
-        id: 'roller-1',
-        scope: 'Wall',
-        wallColorId: 'A',
-        selectedOptionId: 'WALL_9',
-        rollerSizeIn: '9',
-        coversQty: '2',
-        notes: 'Use shed-resistant cover',
-        position: 0,
-      },
-      {
-        id: 'trim-applicator-1',
-        scope: 'Trim',
-        wallColorId: '',
-        selectedOptionId: 'TRIM_4',
-        rollerSizeIn: '4',
-        coversQty: ' 2 ',
-        notes: 'Foam trim applicator',
-        position: 1,
-      },
-      {
-        id: 'ceiling-roller-1',
-        scope: 'Ceiling',
-        wallColorId: '',
-        selectedOptionId: 'CEIL_14',
-        rollerSizeIn: '14',
-        coversQty: '1.5',
-        notes: 'Invalid decimal stays blocked upstream and converts to null',
-        position: 2,
-      },
-    ],
-    [
-      {
         id: 'ceil-1',
         roomId: 'R001',
         position: 0,
@@ -253,6 +221,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         helperSource: '',
         measurementValue: '42',
         helperValue: '',
+        baseboardOpeningCount: '1.5',
         colorId: 'A',
         paintProductId: 'PAINT-3',
         primerProductId: 'PRIMER-3',
@@ -270,12 +239,12 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         caulkFillFactor: '1',
         paintCoats: '1',
         primerCoats: '1',
-        overrideMeasurement: '',
-        overrideHours: '',
-        overrideGallons: '',
-        overrideSupplyCost: '',
-        overrideTotal: '',
-        overrideDescription: '',
+        overrideMeasurement: '10',
+        overrideHours: '2',
+        overrideGallons: '3',
+        overrideSupplyCost: '4',
+        overrideTotal: '5',
+        overrideDescription: 'hidden override',
         notes: '',
       },
     ]
@@ -284,71 +253,14 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.rooms.length, 1)
   assert.equal(payload.room_wall_scopes.length, 1)
   assert.equal(payload.room_flags.length, 1)
-  assert.equal(payload.rollers.length, 3)
   assert.equal(payload.room_ceiling_scopes.length, 1)
   assert.equal(payload.room_trim_scopes.length, 1)
   assert.equal(payload.rooms[0].room_id, 'R001')
   assert.equal(payload.room_wall_scopes[0].room_id, 'R001')
-  assert.equal(payload.rollers[0].roller_size_in, 9)
-  assert.equal(payload.rollers[0].selected_option_id, 'WALL_9')
-  assert.equal(payload.rollers[1].scope, 'Trim')
-  assert.equal(payload.rollers[1].wall_color_id, null)
-  assert.equal(payload.rollers[1].selected_option_id, 'TRIM_4')
-  assert.equal(payload.rollers[1].covers_qty, 2)
-  assert.equal(payload.rollers[2].scope, 'Ceiling')
-  assert.equal(payload.rollers[2].covers_qty, null)
+  assert.equal(payload.room_ceiling_scopes[0].color_id, 'COLOR0')
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
-})
-
-test('buildEstimateV2SavePayload preserves unassigned wall scope roller identity', () => {
-  const payload = buildEstimateV2SavePayload(
-    [
-      {
-        id: 'room-1',
-        roomId: 'R001',
-        roomName: 'Living',
-        roomTypeId: '',
-        lengthIn: '',
-        widthIn: '',
-        heightIn: '',
-        wallComplexityId: '',
-        notes: '',
-        position: 0,
-      },
-    ],
-    [],
-    [],
-    [],
-    [
-      {
-        id: 'roller-unassigned',
-        scope: 'Wall',
-        wallColorId: 'scope:wall-unassigned',
-        selectedOptionId: 'WALL_9',
-        rollerSizeIn: '9',
-        coversQty: '1',
-        notes: '',
-        position: 0,
-      },
-      {
-        id: 'roller-color',
-        scope: 'Wall',
-        wallColorId: 'color1',
-        selectedOptionId: 'WALL_9',
-        rollerSizeIn: '9',
-        coversQty: '2',
-        notes: '',
-        position: 1,
-      },
-    ],
-    [],
-    [],
-    []
-  )
-
-  assert.equal(payload.rollers[0].wall_color_id, 'scope:wall-unassigned')
-  assert.equal(payload.rollers[0].selected_option_id, 'WALL_9')
-  assert.equal(payload.rollers[0].roller_size_in, 9)
-  assert.equal(payload.rollers[0].covers_qty, 1)
-  assert.equal(payload.rollers[1].wall_color_id, 'COLOR1')
+  assert.equal(payload.room_trim_scopes[0].baseboard_opening_count, 1.5)
+  assert.equal(payload.room_trim_scopes[0].override_measurement, null)
+  assert.equal(payload.room_trim_scopes[0].override_total, null)
+  assert.equal(payload.room_trim_scopes[0].override_description, null)
 })

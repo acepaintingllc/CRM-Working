@@ -19,18 +19,17 @@ import type {
   EstimateV2JobDefaultProducts,
   EstimateV2JobMeta,
   EstimateV2JobSettingsDraft as JobSettingsDraft,
-  EstimateV2RoomFlagDraft as RoomFlagDraft,
   EstimateV2RollerDraft,
+  EstimateV2RollerScope,
+  EstimateV2RoomFlagDraft as RoomFlagDraft,
   EstimateV2TrimTypeOption,
 } from '@/types/estimator/v2'
-import { inferTrimUnitTypeFromText } from '../_lib/estimateV2EditorNormalize'
 import { recalculateEditorDraftFactors } from '../_lib/estimateV2EditorRecalculate'
 import {
   normalizeCeilingScope,
   normalizeCeilingSegment,
   normalizeRoom,
   normalizeRoomFlag,
-  normalizeRoller,
   normalizeScope,
   normalizeSegment,
   normalizeTrimScope,
@@ -64,6 +63,7 @@ export type EstimateV2SanitizedLoadResult = {
     wallCalculations: EstimateResponse['wall_calculations']
     ceilingCalculations: EstimateResponse['ceiling_calculations']
     trimCalculations: EstimateResponse['trim_calculations']
+    pricingSummary: EstimateResponse['pricing_summary']
     selectedRoomId: string
     lastSavedSnapshot: ReturnType<typeof buildEstimateV2DirtySnapshot>
     saveStatus: 'saved'
@@ -139,22 +139,36 @@ export function mergeEstimateV2Catalogs(params: {
   }
 }
 
-function buildTrimTypeOptions(
-  productionRates: CatalogsPayload['catalogs']['production_rates']
-): EstimateV2TrimTypeOption[] {
-  return (productionRates ?? [])
-    .filter((option) => asText(option?.scope_id).toUpperCase() === 'TRIM')
-    .map((rate) => ({
-      id: rate.id,
-      label: rate.label || rate.id,
-      family: rate.surface_type || null,
-      category: rate.condition || rate.surface_type || null,
-      unit_type: inferTrimUnitTypeFromText(
-        `${rate.id} ${rate.label} ${rate.surface_type} ${rate.condition}`
-      ),
-      helper_allowed: false,
-      default_production_rate_id: rate.id,
-    }))
+function buildTrimTypeOptions(catalogs: CatalogsPayload['catalogs']): EstimateV2TrimTypeOption[] {
+  return (catalogs.trim_items ?? []).map((item) => ({
+    id: item.id,
+    label: item.label || item.id,
+    family: item.family || null,
+    category: item.category || item.family || null,
+    unit_type: item.unit_type,
+    helper_allowed: !!item.helper_allowed,
+    default_production_rate_id: item.default_production_rate_id,
+  }))
+}
+
+function normalizeRollerScope(value: unknown): EstimateV2RollerScope {
+  const raw = asText(value).toLowerCase()
+  if (raw === 'ceiling') return 'Ceiling'
+  if (raw === 'trim') return 'Trim'
+  return 'Wall'
+}
+
+function normalizeRoller(row: Unsafe, index: number): EstimateV2RollerDraft {
+  return {
+    id: asText(row.id),
+    scope: normalizeRollerScope(row.scope),
+    wallColorId: asText(row.wallColorId ?? row.wall_color_id),
+    selectedOptionId: asText(row.selectedOptionId ?? row.selected_option_id),
+    rollerSizeIn: asText(row.rollerSizeIn ?? row.roller_size_in),
+    coversQty: asText(row.coversQty ?? row.covers_qty),
+    notes: asText(row.notes),
+    position: Number(row.position ?? index),
+  }
 }
 
 export function sanitizeEstimateV2EditorLoad(params: {
@@ -163,7 +177,7 @@ export function sanitizeEstimateV2EditorLoad(params: {
   selectedRoomId: string
 }) {
   const { estimatePayload, catalogs, selectedRoomId } = params
-  const trimTypeOptions = buildTrimTypeOptions(catalogs.production_rates)
+  const trimTypeOptions = buildTrimTypeOptions(catalogs)
   const js = estimatePayload.inputs?.jobsettings ?? null
   const orgDefaults = (estimatePayload.inputs?.org_defaults ?? null) as Unsafe | null
   const orgWallDefault = asText(orgDefaults?.walls_paint_id)
@@ -255,7 +269,6 @@ export function sanitizeEstimateV2EditorLoad(params: {
     primerProductId:
       scope.primerProductId === normalizedTrimPrimerDefault ? '' : scope.primerProductId,
   }))
-
   const recalculated = recalculateEditorDraftFactors({
     rooms: normalizedRooms,
     wallScopes: wallScopesWithoutDefaults,
@@ -276,10 +289,10 @@ export function sanitizeEstimateV2EditorLoad(params: {
     scopes: recalculated.wallScopes,
     segments: sanitizedWalls.segments,
     roomFlags: normalizedRoomFlags,
-    rollers: normalizedRollers,
     ceilingScopes: recalculated.ceilingScopes,
     ceilingSegments: sanitizedCeilings.ceilingSegments,
     trimScopes: recalculated.trimScopes,
+    rollers: normalizedRollers,
   })
 
   return {
@@ -290,15 +303,16 @@ export function sanitizeEstimateV2EditorLoad(params: {
       scopes: recalculated.wallScopes,
       segments: sanitizedWalls.segments,
       roomFlags: normalizedRoomFlags,
-      rollers: normalizedRollers,
       ceilingScopes: recalculated.ceilingScopes,
       ceilingSegments: sanitizedCeilings.ceilingSegments,
       trimScopes: recalculated.trimScopes,
+      rollers: normalizedRollers,
     },
     meta: {
       wallCalculations: estimatePayload.wall_calculations ?? null,
       ceilingCalculations: estimatePayload.ceiling_calculations ?? null,
       trimCalculations: estimatePayload.trim_calculations ?? null,
+      pricingSummary: estimatePayload.pricing_summary ?? null,
       selectedRoomId: nextSelectedRoomId,
       lastSavedSnapshot,
       saveStatus: 'saved' as const,

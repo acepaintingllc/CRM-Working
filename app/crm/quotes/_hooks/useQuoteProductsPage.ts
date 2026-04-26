@@ -23,6 +23,7 @@ export function useQuoteProductsPage() {
   const actions: QuoteProductsActions = {
     setActiveFamily: controller.actions.setActiveFamily,
     setStatusFilter: controller.actions.setStatusFilter,
+    setScopeFilter: controller.actions.setScopeFilter,
     setSearch: controller.actions.setSearch,
     setSelectedId: controller.actions.setSelectedId,
     updateDraftField: <K extends keyof QuoteProductDraft>(field: K, value: QuoteProductDraft[K]) =>

@@ -163,6 +163,7 @@ function trimScope(patch: Partial<EstimateV2TrimScopeDraft>): EstimateV2TrimScop
     helperSource: '',
     measurementValue: '',
     helperValue: '',
+    baseboardOpeningCount: '',
     colorId: '',
     paintProductId: 'P-TRIM',
     primerProductId: '',
@@ -346,7 +347,7 @@ describe('estimate details VM', () => {
       quantity: '2',
     })
     expect(rollerPlanning.ceilingRollerRow).toMatchObject({ id: 'ceiling' })
-    expect(rollerPlanning.trimApplicatorRow).toMatchObject({ id: 'trim' })
+    expect(rollerPlanning.trimApplicatorRow).toBeNull()
   })
 
   it('builds validation and totals VMs from focused orchestration helpers', () => {
@@ -1389,7 +1390,7 @@ describe('estimate details VM', () => {
     const vm = buildVm()
     expect(validationMessages(vm)).toContain('Primary roller cover is required')
     expect(validationMessages(vm)).toContain('Ceilings quantity is required')
-    expect(validationMessages(vm)).toContain('Trim & Baseboards applicator is required')
+    expect(validationMessages(vm)).not.toContain('Trim & Baseboards applicator is required')
     expect(vm.canContinueToSummary).toBe(false)
     expect(vm.validationSummary).toMatchObject({
       status: 'blocked',
@@ -1481,7 +1482,7 @@ describe('estimate details VM', () => {
     expect(vm.rollerOptionsState.status).toBe('empty')
     expect(validationMessages(vm)).toContain('Wall roller cover options are not configured')
     expect(validationMessages(vm)).toContain('Ceiling roller cover options are not configured')
-    expect(validationMessages(vm)).toContain('Trim applicator options are not configured')
+    expect(validationMessages(vm)).not.toContain('Trim applicator options are not configured')
     expect(validationMessages(vm)).not.toContain('Primary roller cover is required')
   })
 
@@ -1852,12 +1853,7 @@ describe('estimate details VM', () => {
       quantity: '1',
       errors: [],
     })
-    expect(vm.trimApplicatorRow).toMatchObject({
-      coverId: 'TRIM_4_DETAIL',
-      quantity: '2',
-      notes: 'Saved trim note',
-      errors: [],
-    })
+    expect(vm.trimApplicatorRow).toBeNull()
     expect(vm.canContinueToSummary).toBe(false)
     expect(validationMessages(vm)).not.toContain(
       'Primary saved wall roller cover size 9" matches multiple active options; make sizes unique before continuing.'
@@ -1913,13 +1909,7 @@ describe('estimate details VM', () => {
       notes: 'Aggregate ignores color',
       errors: [],
     })
-    expect(vm.trimApplicatorRow).toMatchObject({
-      id: 'trim',
-      coverId: 'TRIM_4',
-      quantity: '3',
-      notes: 'Trim ignores color',
-      errors: [],
-    })
+    expect(vm.trimApplicatorRow).toBeNull()
   })
 
   it('hydrates legacy size-only roller selections from persisted roller rows', () => {
@@ -1966,12 +1956,7 @@ describe('estimate details VM', () => {
       quantity: '1',
       errors: [],
     })
-    expect(vm.trimApplicatorRow).toMatchObject({
-      coverId: 'TRIM_4',
-      quantity: '2',
-      notes: 'Saved trim note',
-      errors: [],
-    })
+    expect(vm.trimApplicatorRow).toBeNull()
   })
 
   it('surfaces a stale saved selected option id through details VM validation', () => {
@@ -2123,11 +2108,11 @@ describe('estimate details VM', () => {
     })
 
     expect(vm.ceilingRollerRow).toMatchObject({ coverId: '', quantity: '1' })
-    expect(vm.trimApplicatorRow).toMatchObject({ coverId: '', quantity: '1' })
+    expect(vm.trimApplicatorRow).toBeNull()
     expect(validationMessages(vm)).toContain(
       'Ceilings saved ceiling roller cover size 14" matches multiple active options; make sizes unique before continuing.'
     )
-    expect(validationMessages(vm)).toContain(
+    expect(validationMessages(vm)).not.toContain(
       'Trim & Baseboards saved trim applicator size 4" matches multiple active options; make sizes unique before continuing.'
     )
     expect(vm.canContinueToSummary).toBe(false)

@@ -60,7 +60,7 @@ describe('estimate product service', () => {
     await expect(
       listEstimateProducts(
         'org-1',
-        new URLSearchParams('status=bogus&family=Paint&search=%super_')
+        new URLSearchParams('status=bogus&family=Paint&scope=Walls&search=%super_')
       )
     ).resolves.toEqual({
       ok: true,
@@ -72,6 +72,7 @@ describe('estimate product service', () => {
       {
         status: 'active',
         family: 'Paint',
+        scope: 'Walls',
         search: '%super_',
       },
       {}

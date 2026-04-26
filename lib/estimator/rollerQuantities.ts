@@ -11,6 +11,7 @@ export type RollerApplicatorQuantityNormalization =
       displayValue: string
       persistenceValue: string
       numberValue: number
+      value: number
       reason: null
     }
   | {
@@ -19,6 +20,7 @@ export type RollerApplicatorQuantityNormalization =
       displayValue: string
       persistenceValue: null
       numberValue: null
+      value: null
       reason: RollerApplicatorQuantityReason
     }
 
@@ -33,6 +35,7 @@ export function normalizeRollerApplicatorQuantity(
       displayValue,
       persistenceValue: null,
       numberValue: null,
+      value: null,
       reason: 'empty',
     }
   }
@@ -45,6 +48,7 @@ export function normalizeRollerApplicatorQuantity(
       displayValue,
       persistenceValue: null,
       numberValue: null,
+      value: null,
       reason: 'not-number',
     }
   }
@@ -56,6 +60,7 @@ export function normalizeRollerApplicatorQuantity(
       displayValue,
       persistenceValue: null,
       numberValue: null,
+      value: null,
       reason: 'not-integer',
     }
   }
@@ -67,6 +72,7 @@ export function normalizeRollerApplicatorQuantity(
       displayValue,
       persistenceValue: null,
       numberValue: null,
+      value: null,
       reason: 'not-positive',
     }
   }
@@ -77,6 +83,7 @@ export function normalizeRollerApplicatorQuantity(
     displayValue: String(numberValue),
     persistenceValue: String(numberValue),
     numberValue,
+    value: numberValue,
     reason: null,
   }
 }

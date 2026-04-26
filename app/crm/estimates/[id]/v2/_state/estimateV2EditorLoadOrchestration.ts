@@ -46,7 +46,7 @@ export function buildEstimateV2EditorLoadState(params: {
       wallCalculations: sanitized.meta.wallCalculations,
       ceilingCalculations: sanitized.meta.ceilingCalculations,
       trimCalculations: sanitized.meta.trimCalculations,
-      pricingSummary: estimatePayload.pricing_summary ?? null,
+      pricingSummary: sanitized.meta.pricingSummary,
       selectedRoomId: sanitized.meta.selectedRoomId,
       error: catalogsError,
       validationIssues: [] as string[],

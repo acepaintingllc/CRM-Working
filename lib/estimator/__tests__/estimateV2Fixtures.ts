@@ -7,9 +7,9 @@ import type {
   EstimateV2JobMeta,
   EstimateV2JobSettingsDraft,
   EstimateV2PricingSummary,
+  EstimateV2RollerDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
-  EstimateV2RollerDraft,
   EstimateV2SummaryPageData,
   EstimateV2TrimPaint,
   EstimateV2TrimScopeDraft,
@@ -458,6 +458,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       helperSource: 'ROOM_PERIMETER',
       measurementValue: '',
       helperValue: '44',
+      baseboardOpeningCount: '',
       colorId: 'COLOR3',
       paintProductId: 'P-TRIM',
       primerProductId: 'P-TRIM-PRIMER',
@@ -496,6 +497,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       helperSource: '',
       measurementValue: '12',
       helperValue: '',
+      baseboardOpeningCount: '',
       colorId: 'COLOR3',
       paintProductId: 'P-TRIM',
       primerProductId: 'P-TRIM-PRIMER',
@@ -528,10 +530,10 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     scopes,
     segments,
     roomFlags,
-    rollers,
     ceilingScopes,
     ceilingSegments,
-    trimScopes
+    trimScopes,
+    rollers
   )
 
   const wallCalculations: EstimateV2WallCalculationsPayload = {

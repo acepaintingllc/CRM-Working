@@ -439,6 +439,7 @@ export type EstimateV2TrimScopeDraft = {
   helperSource: 'ROOM_PERIMETER' | ''
   measurementValue: string
   helperValue: string
+  baseboardOpeningCount: string
   colorId: string
   paintProductId: string
   primerProductId: string

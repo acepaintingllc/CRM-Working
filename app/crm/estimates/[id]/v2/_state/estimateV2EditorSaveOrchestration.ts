@@ -36,6 +36,7 @@ export type EstimateV2PreparedSaveState = {
     ceilingScopes: EstimateV2SaveCollections['ceilingScopes']
     ceilingSegments: EstimateV2SaveCollections['ceilingSegments']
     trimScopes: EstimateV2SaveCollections['trimScopes']
+    rollers: EstimateV2SaveCollections['rollers']
   }
   payloadSnapshot: EstimateV2DirtySnapshot
 }
@@ -84,6 +85,7 @@ export function prepareEstimateV2SaveState(
     ceilingScopes: sanitizedCeilings.ceilingScopes,
     ceilingSegments: sanitizedCeilings.ceilingSegments,
     trimScopes: sanitizedTrim.trimScopes,
+    rollers: currentState.collections.rollers,
   }
 
   return {
@@ -95,10 +97,10 @@ export function prepareEstimateV2SaveState(
       scopes: collections.scopes,
       segments: collections.segments,
       roomFlags: currentState.collections.roomFlags,
-      rollers: currentState.collections.rollers,
       ceilingScopes: collections.ceilingScopes,
       ceilingSegments: collections.ceilingSegments,
       trimScopes: collections.trimScopes,
+      rollers: collections.rollers,
     }),
   }
 }
@@ -273,6 +275,7 @@ export function resolveEstimateV2SaveResponseState(params: {
       ceilingScopes: nextCeilingScopes,
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
+      rollers: currentState.collections.rollers,
     },
     calculations: {
       wallCalculations: nextWallCalculations,
@@ -285,10 +288,10 @@ export function resolveEstimateV2SaveResponseState(params: {
       scopes: nextScopes,
       segments: nextSegments,
       roomFlags: currentState.collections.roomFlags,
-      rollers: currentState.collections.rollers,
       ceilingScopes: nextCeilingScopes,
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
+      rollers: currentState.collections.rollers,
     }),
   }
 }

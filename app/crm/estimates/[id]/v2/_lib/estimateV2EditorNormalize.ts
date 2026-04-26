@@ -1,5 +1,6 @@
 import { asNullableNumber, asText } from '../../../../../../lib/estimator/parsing.ts'
 import { normalizeWallRollerTargetId } from '../../../../../../lib/estimator/rollerIdentity.ts'
+import { HIDDEN_CEILING_COLOR_ID } from '../../../../../../lib/estimator/scopeRules.ts'
 import type {
   EstimateV2CeilingPrimeMode,
   EstimateV2CeilingScopeDraft,
@@ -222,24 +223,21 @@ export function normalizeRoomFlag(row: UnsafeRecord, index: number): EstimateV2R
   }
 }
 
-function parseRollerScope(value: unknown): EstimateV2RollerScope {
+function normalizeRollerScope(value: unknown): EstimateV2RollerScope {
   const raw = asText(value).toLowerCase()
-  if (raw.startsWith('ceil')) return 'Ceiling'
-  if (raw.startsWith('trim')) return 'Trim'
+  if (raw === 'ceiling') return 'Ceiling'
+  if (raw === 'trim') return 'Trim'
   return 'Wall'
 }
 
-export function normalizeRoller(row: UnsafeRecord, index: number): EstimateV2RollerDraft | null {
-  const scope = parseRollerScope(row.scope)
-  const wallColorId = normalizeWallRollerTargetId(asText(row.wall_color_id))
-  if (scope === 'Wall' && !wallColorId) return null
+export function normalizeRoller(row: UnsafeRecord, index: number): EstimateV2RollerDraft {
   return {
     id: asText(row.id) || createUuid(),
-    scope,
-    wallColorId,
-    selectedOptionId: asText(row.selected_option_id),
-    rollerSizeIn: toInputNumber(row.roller_size_in),
-    coversQty: toInputNumber(row.covers_qty),
+    scope: normalizeRollerScope(row.scope),
+    wallColorId: normalizeWallRollerTargetId(row.wallColorId ?? row.wall_color_id),
+    selectedOptionId: asText(row.selectedOptionId ?? row.selected_option_id),
+    rollerSizeIn: toInputNumber(row.rollerSizeIn ?? row.roller_size_in),
+    coversQty: toInputNumber(row.coversQty ?? row.covers_qty),
     notes: asText(row.notes),
     position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
   }
@@ -326,7 +324,7 @@ export function createDefaultCeilingScope(
     mode,
     include: 'Y',
     scopeName: '',
-    colorId: '',
+    colorId: HIDDEN_CEILING_COLOR_ID,
     paintProductId: '',
     primerProductId: '',
     primeMode: 'NONE',
@@ -395,7 +393,7 @@ export function normalizeCeilingScope(row: UnsafeRecord, index: number): Estimat
     mode: asText(row.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT',
     include: asText(row.include).toUpperCase() === 'N' ? 'N' : 'Y',
     scopeName: asText(row.scope_name),
-    colorId: asText(row.color_id).toUpperCase(),
+    colorId: asText(row.color_id).toUpperCase() || HIDDEN_CEILING_COLOR_ID,
     paintProductId: asText(row.paint_product_id),
     primerProductId: asText(row.primer_product_id),
     primeMode: parseCeilingPrimeMode(row.prime_mode),
@@ -453,6 +451,7 @@ export function createDefaultTrimScope(roomId: string): EstimateV2TrimScopeDraft
     helperSource: '',
     measurementValue: '',
     helperValue: '',
+    baseboardOpeningCount: '',
     colorId: '',
     paintProductId: '',
     primerProductId: '',
@@ -500,6 +499,7 @@ export function normalizeTrimScope(row: UnsafeRecord, index: number): EstimateV2
     helperSource: asText(row.helper_source).toUpperCase() === 'ROOM_PERIMETER' ? 'ROOM_PERIMETER' : '',
     measurementValue: toInputNumber(row.measurement_value ?? row.qty),
     helperValue: toInputNumber(row.helper_value),
+    baseboardOpeningCount: toInputNumber(row.baseboard_opening_count),
     colorId: asText(row.color_id).toUpperCase(),
     paintProductId: asText(row.paint_product_id),
     primerProductId: asText(row.primer_product_id),

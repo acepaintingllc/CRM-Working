@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   PrimerModeButtons,
+  PaintOverrideFields,
   ReorderDeleteActions,
   ScopeSummaryChips,
 } from '../EstimateV2EditorPrimitives'
@@ -61,5 +62,30 @@ describe('EstimateV2EditorPrimitives', () => {
     fireEvent.click(screen.getByText('Full'))
 
     expect(onChange).toHaveBeenCalledWith('FULL')
+  })
+
+  it('can hide primer and color selectors from the shared paint override fields', () => {
+    render(
+      <PaintOverrideFields
+        styles={{ label: {}, mono: {}, panel: {}, input: {} }}
+        paintLabel="Wall Paint"
+        paintValue=""
+        onPaintChange={vi.fn()}
+        paintOptions={[]}
+        primerLabel="Wall Primer"
+        primerValue=""
+        onPrimerChange={vi.fn()}
+        primerOptions={[]}
+        colorValue="COLOR1"
+        onColorChange={vi.fn()}
+        colorOptions={[{ id: 'COLOR1', label: 'Color 1' }]}
+        hidePrimer
+        hideColor
+      />
+    )
+
+    expect(screen.getByText('Paint Override')).toBeInTheDocument()
+    expect(screen.queryByText('Primer Override')).not.toBeInTheDocument()
+    expect(screen.queryByText('Color Slot')).not.toBeInTheDocument()
   })
 })

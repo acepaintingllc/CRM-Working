@@ -10,7 +10,6 @@ import {
   CeilingsScopePanel,
   Field,
   ItemActionRow,
-  PaintOverrideFields,
   PrimerModeButtons,
   ReorderDeleteActions,
   SharedSegmentGrid,
@@ -127,29 +126,11 @@ export function EstimateV2CeilingsSectionBody({
                       ))}
                     </select>
                   </Field>
-                  <PaintOverrideFields
-                    styles={{ ...sharedStyles(styles), input: styles.input }}
-                    paintLabel={effectiveCeilingPaintLabel}
-                    paintValue={firstCeilingScope.paintProductId}
-                    onPaintChange={(value) =>
-                      updateScope(firstCeilingScope.id, { paintProductId: value })
-                    }
-                    paintOptions={ceilingPaintOptions}
-                    primerLabel={effectiveCeilingPrimerLabel}
-                    primerValue={firstCeilingScope.primerProductId}
-                    onPrimerChange={(value) =>
-                      updateScope(firstCeilingScope.id, { primerProductId: value })
-                    }
-                    primerOptions={ceilingPrimerOptions}
-                    colorValue={firstCeilingScope.colorId}
-                    onColorChange={(value) => updateScope(firstCeilingScope.id, { colorId: value })}
-                    colorOptions={colorCodeOptions}
-                  />
                 </div>
                 <Field label="Primer Mode" styles={sharedStyles(styles)}>
                   <PrimerModeButtons
                     currentMode={firstCeilingScope.primeMode}
-                    onChange={(mode) => updateScope(firstCeilingScope.id, { primeMode: mode })}
+                    onChange={(mode) => updateScope(firstCeilingScope.id, { primeMode: mode, primerProductId: mode === 'NONE' ? '' : firstCeilingScope.primerProductId })}
                     styles={{ button: styles.button }}
                   />
                 </Field>
@@ -222,22 +203,6 @@ export function EstimateV2CeilingsSectionBody({
                           ))}
                         </select>
                       </Field>
-                      <PaintOverrideFields
-                        styles={{ ...sharedStyles(styles), input: styles.input }}
-                        paintLabel={effectiveCeilingPaintLabel}
-                        paintValue={scope.paintProductId}
-                        onPaintChange={(value) => updateScope(scope.id, { paintProductId: value })}
-                        paintOptions={ceilingPaintOptions}
-                        primerLabel={effectiveCeilingPrimerLabel}
-                        primerValue={scope.primerProductId}
-                        onPrimerChange={(value) =>
-                          updateScope(scope.id, { primerProductId: value })
-                        }
-                        primerOptions={ceilingPrimerOptions}
-                        colorValue={scope.colorId}
-                        onColorChange={(value) => updateScope(scope.id, { colorId: value })}
-                        colorOptions={colorCodeOptions}
-                      />
                     </div>
                     <button type="button" style={styles.button} onClick={() => addSegment(selectedRoom.roomId, scope.id)}>
                       + Add segment
@@ -310,16 +275,17 @@ export function EstimateV2CeilingsSectionBody({
                     <Field label="Ceiling Flag Factor" styles={sharedStyles(styles)}><input value={firstCeilingScope.ceilingFlagFactor} readOnly style={{ ...styles.input, opacity: 0.7, cursor: 'not-allowed' }} /></Field>
                     <Field label="Paint Coats" styles={sharedStyles(styles)}><input value={firstCeilingScope.paintCoats} onChange={(e) => updateScope(firstCeilingScope.id, { paintCoats: e.target.value })} style={styles.input} /></Field>
                   </div>
-                  <Field label="Primer Override" styles={sharedStyles(styles)}><select value={firstCeilingScope.primerProductId} onChange={(e) => updateScope(firstCeilingScope.id, { primerProductId: e.target.value })} style={styles.input}><option value="">{effectiveCeilingPrimerLabel}</option>{ceilingPrimerOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
                   <div>
                     <div style={{ ...styles.mono, marginBottom: 6 }}>Overrides</div>
                     <div className="advanced-grid">
                       <Field label="Paint Override" styles={sharedStyles(styles)}><select value={firstCeilingScope.paintProductId} onChange={(e) => updateScope(firstCeilingScope.id, { paintProductId: e.target.value })} style={styles.input}><option value="">{effectiveCeilingPaintLabel}</option>{ceilingPaintOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
+                      {firstCeilingScope.primeMode !== 'NONE' && (
+                        <Field label="Primer Override" styles={sharedStyles(styles)}><select value={firstCeilingScope.primerProductId} onChange={(e) => updateScope(firstCeilingScope.id, { primerProductId: e.target.value })} style={styles.input}><option value="">{effectiveCeilingPrimerLabel}</option>{ceilingPrimerOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
+                      )}
+                      <Field label="Color Slot" styles={sharedStyles(styles)}><select value={firstCeilingScope.colorId} onChange={(e) => updateScope(firstCeilingScope.id, { colorId: e.target.value })} style={styles.input}>{colorCodeOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}</select></Field>
                       <Field label="Area (sf)" styles={sharedStyles(styles)}><input value={firstCeilingScope.overrideAreaSqFt} onChange={(e) => updateScope(firstCeilingScope.id, { overrideAreaSqFt: e.target.value })} style={styles.input} /></Field>
                       <Field label="Paint Hrs" styles={sharedStyles(styles)}><input value={firstCeilingScope.overridePaintHours} onChange={(e) => updateScope(firstCeilingScope.id, { overridePaintHours: e.target.value })} style={styles.input} /></Field>
                       <Field label="Primer Hrs" styles={sharedStyles(styles)}><input value={firstCeilingScope.overridePrimerHours} onChange={(e) => updateScope(firstCeilingScope.id, { overridePrimerHours: e.target.value })} style={styles.input} /></Field>
-                      <Field label="Paint Gal" styles={sharedStyles(styles)}><input value={firstCeilingScope.overridePaintGallons} onChange={(e) => updateScope(firstCeilingScope.id, { overridePaintGallons: e.target.value })} style={styles.input} /></Field>
-                      <Field label="Primer Gal" styles={sharedStyles(styles)}><input value={firstCeilingScope.overridePrimerGallons} onChange={(e) => updateScope(firstCeilingScope.id, { overridePrimerGallons: e.target.value })} style={styles.input} /></Field>
                       <Field label="Supply Cost" styles={sharedStyles(styles)}><input value={firstCeilingScope.overrideSupplyCost} onChange={(e) => updateScope(firstCeilingScope.id, { overrideSupplyCost: e.target.value })} style={styles.input} /></Field>
                       <Field label="Total" styles={sharedStyles(styles)}><input value={firstCeilingScope.overrideTotal} onChange={(e) => updateScope(firstCeilingScope.id, { overrideTotal: e.target.value })} style={styles.input} /></Field>
                     </div>

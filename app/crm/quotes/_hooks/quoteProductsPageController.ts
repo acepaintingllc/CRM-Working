@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react'
 import {
   normalizeQuoteProductStatusFilter,
+  normalizeQuoteProductScopeFilter,
   validateQuoteProductDraft,
   type QuoteProductDraft,
 } from '@/lib/quotes/productsForm'
@@ -165,6 +166,13 @@ export function useQuoteProductsPageController() {
     })
   }
 
+  function setScopeFilter(next: string) {
+    return requestIntent({
+      type: 'setScopeFilter',
+      scope: normalizeQuoteProductScopeFilter(next, 'all'),
+    })
+  }
+
   function setSearch(search: string) {
     return requestIntent({ type: 'setSearch', search })
   }
@@ -300,6 +308,7 @@ export function useQuoteProductsPageController() {
     actions: {
       setActiveFamily,
       setStatusFilter,
+      setScopeFilter,
       setSearch,
       setSelectedId,
       updateDraftField,

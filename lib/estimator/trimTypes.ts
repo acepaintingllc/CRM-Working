@@ -24,6 +24,7 @@ export type TrimCalculationScopeRow = {
   helper_source: TrimHelperSource | null
   measurement_value: number | null
   helper_value: number | null
+  baseboard_opening_count?: number | null
   color_id: string | null
   paint_product_id: string | null
   primer_product_id: string | null
@@ -69,6 +70,7 @@ export type TrimCalculationScopeRow = {
   primer_coverage_units_per_gal_per_coat?: number | null
   area_supply_cost_per_unit?: number | null
   per_color_supply_cost?: number | null
+  primer_supply_cost?: number | null
   labor_rate_per_hour?: number | null
   paint_price_per_gal?: number | null
   primer_price_per_gal?: number | null

@@ -15,6 +15,7 @@ import type {
   WallRoomTotal,
   YN,
 } from './wallsTypes.ts'
+import { deductBaseboardOpenings, resolvePrimerSupplyCost } from './scopeRules.ts'
 import type {
   TrimCalculationInput,
   TrimCalculationOutput,
@@ -38,6 +39,7 @@ type ScopeCalc = {
   raw_primer_gallons: number | null
   effective_primer_gallons: number | null
   area_supply_cost: number | null
+  primer_supply_cost: number | null
   color_group_key: string | null
   color_allocated_cost: number
   raw_supply_cost: number | null
@@ -89,6 +91,13 @@ function buildTrimTypeRateMaps(catalogs: TrimCalculationInput['catalogs']) {
   }
 
   return byId
+}
+
+function isBaseboardLfScope(scope: TrimCalculationScopeRow) {
+  if (scope.unit_type !== 'LF') return false
+  return [scope.trim_family, scope.scope_name, scope.trim_type_id].some((value) =>
+    String(value ?? '').toLowerCase().includes('baseboard')
+  )
 }
 
 function applyScopeCosts(
@@ -244,8 +253,12 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       })
     }
 
+    const openingAdjustedMeasurement = isBaseboardLfScope(scope)
+      ? deductBaseboardOpenings(rawMeasurement, nonNeg(n(scope.baseboard_opening_count)))
+      : rawMeasurement
+
     const effectiveMeasurement =
-      include === 'Y' ? round4(nonNeg(n(scope.override_measurement)) ?? rawMeasurement ?? 0) : 0
+      include === 'Y' ? round4(nonNeg(n(scope.override_measurement)) ?? openingAdjustedMeasurement ?? 0) : 0
 
     let productionRateRow: TrimProductionRateCatalogRow | undefined
     const explicitProductionRateId = scope.production_rate_id ? scope.production_rate_id.toUpperCase() : null
@@ -338,6 +351,17 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
 
     const areaRate = pos(n(scope.area_supply_cost_per_unit)) ?? settings.area_supply_cost_per_sf
     const areaSupplyCost = include === 'Y' ? round4(effectiveMeasurement * areaRate) : 0
+    const primerSupplyCost =
+      include === 'Y'
+        ? round4(
+            pos(n(scope.primer_supply_cost)) ??
+              resolvePrimerSupplyCost({
+                primeMode: scope.prime_mode,
+                scope: 'trim',
+                suppliesRates: input.catalogs?.supplies_rates,
+              })
+          )
+        : 0
 
     const colorGroupKey =
       include === 'Y' && scope.color_id && paintEnabled === 'Y'
@@ -348,7 +372,7 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       scope_key: scopeKey,
       scope_id: scope.id ?? null,
       row: { ...scope, include },
-      raw_measurement: include === 'Y' ? rawMeasurement : 0,
+      raw_measurement: include === 'Y' ? openingAdjustedMeasurement : 0,
       effective_measurement: effectiveMeasurement,
       raw_paint_hours: rawPaintHours,
       effective_paint_hours: effectiveHours.primary,
@@ -359,10 +383,11 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       raw_primer_gallons: rawPrimerGallons,
       effective_primer_gallons: effectiveGallons.secondary,
       area_supply_cost: areaSupplyCost,
+      primer_supply_cost: primerSupplyCost,
       color_group_key: colorGroupKey,
       color_allocated_cost: 0,
-      raw_supply_cost: areaSupplyCost,
-      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost),
+      raw_supply_cost: round4(areaSupplyCost + primerSupplyCost),
+      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost + primerSupplyCost),
       raw_total: 0,
       effective_total_before_override: 0,
       effective_total: 0,
@@ -408,7 +433,9 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
     for (const scope of scopes) {
       const weight = totalMeasurement > 0 ? (scope.effective_measurement ?? 0) / totalMeasurement : 1 / scopes.length
       scope.color_allocated_cost = round4(totalCost * weight)
-      scope.raw_supply_cost = round4((scope.area_supply_cost ?? 0) + scope.color_allocated_cost)
+      scope.raw_supply_cost = round4(
+        (scope.area_supply_cost ?? 0) + (scope.primer_supply_cost ?? 0) + scope.color_allocated_cost
+      )
       scope.effective_supply_cost = round4(nonNeg(n(scope.row.override_supply_cost)) ?? scope.raw_supply_cost)
       applyScopeCosts(scope, settings, products)
     }

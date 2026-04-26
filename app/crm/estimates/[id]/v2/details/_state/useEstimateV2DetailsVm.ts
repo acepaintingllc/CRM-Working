@@ -20,7 +20,7 @@ export function useEstimateV2DetailsVm(params: {
     wallScopes: current.collections.scopes,
     ceilingScopes: current.collections.ceilingScopes,
     trimScopes: current.collections.trimScopes,
-    rollers: current.collections.rollers,
+    rollers: current.collections.rollers ?? [],
     loading: current.meta.loading,
     saving: current.meta.saving,
     error: current.meta.error,

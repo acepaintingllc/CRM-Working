@@ -321,6 +321,7 @@ test('buildV2TrimScopeRows maps trim row fields and validates room IDs', () => {
         measurement_mode: 'room_helper',
         helper_source: 'ROOM_PERIMETER',
         helper_value: '120',
+        baseboard_opening_count: '1.5',
         production_rate_id: 'trim_base',
         prime_mode: 'SPOT',
         paint_enabled: 'Y',
@@ -338,6 +339,7 @@ test('buildV2TrimScopeRows maps trim row fields and validates room IDs', () => {
   assert.equal(row.measurement_mode, 'ROOM_HELPER')
   assert.equal(row.helper_source, 'ROOM_PERIMETER')
   assert.equal(row.helper_value, 120)
+  assert.equal(row.baseboard_opening_count, 1.5)
   assert.equal(row.prime_mode, 'SPOT')
   assert.equal(row.spot_prime_percent, 35)
 

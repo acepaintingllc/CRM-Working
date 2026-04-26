@@ -14,6 +14,7 @@ import type {
 import { asNullableNumber } from './parsing.ts'
 import { normalizeRollerApplicatorQuantity } from './rollerQuantities.ts'
 import { normalizeWallRollerTargetId } from './rollerIdentity.ts'
+import { HIDDEN_CEILING_COLOR_ID } from './scopeRules.ts'
 
 const STANDARD_DOOR_DEDUCTION_SF = 21
 const STANDARD_WINDOW_DEDUCTION_SF = 15
@@ -90,10 +91,10 @@ export function buildEstimateV2SavePayload(
   scopes: EstimateV2WallScopeDraft[],
   segments: EstimateV2WallSegmentDraft[],
   roomFlags: EstimateV2RoomFlagDraft[],
-  rollers: EstimateV2RollerDraft[],
   ceilingScopes: EstimateV2CeilingScopeDraft[],
   ceilingSegments: EstimateV2CeilingSegmentDraft[],
-  trimScopes: EstimateV2TrimScopeDraft[]
+  trimScopes: EstimateV2TrimScopeDraft[],
+  rollers: EstimateV2RollerDraft[] = []
 ): EstimateV2SavePayload {
   const orderedRooms = sortByPosition(rooms).map((room, index) => ({
     id: room.id,
@@ -198,21 +199,6 @@ export function buildEstimateV2SavePayload(
       active: 'Y' as const,
     }))
 
-  const orderedRollers = [...rollers]
-    .sort((a, b) => a.position - b.position)
-    .map((roller, index) => ({
-      id: roller.id,
-      scope: roller.scope,
-      wall_color_id:
-        roller.scope === 'Wall' ? normalizeWallRollerTargetId(roller.wallColorId) || null : null,
-      selected_option_id: roller.selectedOptionId?.trim() || null,
-      roller_size_in: toNullableDraftNumber(roller.rollerSizeIn),
-      covers_qty: normalizeRollerApplicatorQuantity(roller.coversQty).numberValue,
-      notes: roller.notes.trim() || null,
-      position: index,
-    }))
-    .filter((roller) => roller.scope === 'Ceiling' || roller.scope === 'Trim' || roller.wall_color_id)
-
   const orderedCeilingScopes = orderedRooms.flatMap((room) =>
     sortByPosition(ceilingScopes.filter((scope) => scope.roomId === room.room_id)).map((scope, index) => ({
       id: scope.id,
@@ -221,7 +207,7 @@ export function buildEstimateV2SavePayload(
       mode: scope.mode,
       include: scope.include,
       scope_name: scope.scopeName.trim() || null,
-      color_id: scope.colorId.trim() || null,
+      color_id: HIDDEN_CEILING_COLOR_ID,
       paint_product_id: scope.paintProductId.trim() || null,
       primer_product_id: scope.primerProductId.trim() || null,
       prime_mode: scope.primeMode,
@@ -282,9 +268,10 @@ export function buildEstimateV2SavePayload(
       helper_source: scope.measurementMode === 'ROOM_HELPER' ? 'ROOM_PERIMETER' : null,
       measurement_value: scope.measurementMode === 'MANUAL' ? toNullableDraftNumber(scope.measurementValue) : null,
       helper_value: scope.measurementMode === 'ROOM_HELPER' ? toNullableDraftNumber(scope.helperValue) : null,
+      baseboard_opening_count: toNullableDraftNumber(scope.baseboardOpeningCount),
       color_id: scope.colorId.trim() || null,
-      paint_product_id: scope.paintProductId.trim() || null,
-      primer_product_id: scope.primerProductId.trim() || null,
+      paint_product_id: null,
+      primer_product_id: null,
       paint_enabled: scope.paintEnabled,
       prime_mode: scope.primeMode,
       spot_prime_percent: toNullableDraftNumber(scope.spotPrimePercent),
@@ -299,24 +286,38 @@ export function buildEstimateV2SavePayload(
       caulk_fill_factor: toNullableDraftNumber(scope.caulkFillFactor),
       paint_coats: toNullableDraftNumber(scope.paintCoats),
       primer_coats: toNullableDraftNumber(scope.primerCoats),
-      override_measurement: toNullableDraftNumber(scope.overrideMeasurement),
-      override_hours: toNullableDraftNumber(scope.overrideHours),
+      override_measurement: null,
+      override_hours: null,
       override_gallons: toNullableDraftNumber(scope.overrideGallons),
-      override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
-      override_total: toNullableDraftNumber(scope.overrideTotal),
-      override_description: scope.overrideDescription.trim() || null,
+      override_supply_cost: null,
+      override_total: null,
+      override_description: null,
       notes: scope.notes.trim() || null,
     }))
   )
+
+  const orderedRollers = sortByPosition(rollers)
+    .map((roller, index) => ({
+      id: roller.id,
+      position: index,
+      scope: roller.scope,
+      wall_color_id:
+        roller.scope === 'Wall' ? normalizeWallRollerTargetId(roller.wallColorId) || null : null,
+      selected_option_id: roller.selectedOptionId?.trim() || null,
+      roller_size_in: toNullableDraftNumber(roller.rollerSizeIn),
+      covers_qty: normalizeRollerApplicatorQuantity(roller.coversQty).numberValue,
+      notes: roller.notes.trim() || null,
+    }))
+    .filter((roller) => roller.scope === 'Ceiling' || roller.scope === 'Trim' || roller.wall_color_id)
 
   return {
     rooms: orderedRooms,
     room_wall_scopes: orderedScopes,
     wall_segments: orderedSegments,
     room_flags: orderedRoomFlags,
-    rollers: orderedRollers,
     room_ceiling_scopes: orderedCeilingScopes,
     ceiling_scope_segments: orderedCeilingSegments,
     room_trim_scopes: orderedTrimScopes,
+    rollers: orderedRollers,
   }
 }

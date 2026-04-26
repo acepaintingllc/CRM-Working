@@ -3,6 +3,7 @@
 import { buildDenseQuotePageUiState } from '@/app/crm/quotes/_hooks/denseQuotePageUiState'
 import {
   QUOTE_PRODUCT_FAMILIES,
+  QUOTE_PRODUCT_SCOPE_FILTERS,
   type QuoteProductDraft,
   type QuoteProductRow,
   type QuoteProductValidationState,
@@ -14,6 +15,8 @@ export type QuoteProductsCatalogVm = {
   activeFamily: QuoteProductsWorkflowState['navigation']['activeFamily']
   families: typeof QUOTE_PRODUCT_FAMILIES
   statusFilter: QuoteProductsWorkflowState['navigation']['statusFilter']
+  scopeFilters: typeof QUOTE_PRODUCT_SCOPE_FILTERS
+  scopeFilter: QuoteProductsWorkflowState['navigation']['scopeFilter']
   search: string
   products: QuoteProductRow[]
   selectedId: string | null
@@ -49,6 +52,7 @@ export type QuoteProductDeleteVm = {
 export type QuoteProductsActions = {
   setActiveFamily: (nextFamily: QuoteProductsWorkflowState['navigation']['activeFamily']) => boolean
   setStatusFilter: (next: string) => boolean
+  setScopeFilter: (next: string) => boolean
   setSearch: (value: string) => boolean
   setSelectedId: (id: string | null) => boolean
   updateDraftField: <K extends keyof QuoteProductDraft>(field: K, value: QuoteProductDraft[K]) => void
@@ -126,6 +130,8 @@ export function buildQuoteProductsPageVm(params: {
       activeFamily: workflowState.navigation.activeFamily,
       families: QUOTE_PRODUCT_FAMILIES,
       statusFilter: workflowState.navigation.statusFilter,
+      scopeFilters: QUOTE_PRODUCT_SCOPE_FILTERS,
+      scopeFilter: workflowState.navigation.scopeFilter,
       search: workflowState.navigation.search,
       products: resource.data,
       selectedId: workflowState.selectedId,

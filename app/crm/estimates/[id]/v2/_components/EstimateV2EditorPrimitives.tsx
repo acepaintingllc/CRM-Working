@@ -244,6 +244,8 @@ export function PaintOverrideFields({
   colorValue,
   onColorChange,
   colorOptions,
+  hidePrimer = false,
+  hideColor = false,
 }: {
   styles: SharedStyles & { input: CSSProperties }
   paintLabel: string
@@ -257,6 +259,8 @@ export function PaintOverrideFields({
   colorValue: string
   onColorChange: (value: string) => void
   colorOptions: Array<{ id: string; label: string }>
+  hidePrimer?: boolean
+  hideColor?: boolean
 }) {
   return (
     <div className="paint-setup-grid">
@@ -270,25 +274,29 @@ export function PaintOverrideFields({
           ))}
         </select>
       </Field>
-      <Field label="Primer Override" styles={styles}>
-        <select value={primerValue} onChange={(e) => onPrimerChange(e.target.value)} style={styles.input}>
-          <option value="">{primerLabel}</option>
-          {primerOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Color Slot" styles={styles}>
-        <select value={colorValue} onChange={(e) => onColorChange(e.target.value)} style={styles.input}>
-          {colorOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </Field>
+      {!hidePrimer && (
+        <Field label="Primer Override" styles={styles}>
+          <select value={primerValue} onChange={(e) => onPrimerChange(e.target.value)} style={styles.input}>
+            <option value="">{primerLabel}</option>
+            {primerOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      {!hideColor && (
+        <Field label="Color Slot" styles={styles}>
+          <select value={colorValue} onChange={(e) => onColorChange(e.target.value)} style={styles.input}>
+            {colorOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
     </div>
   )
 }

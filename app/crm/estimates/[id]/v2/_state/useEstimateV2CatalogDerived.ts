@@ -8,7 +8,6 @@ import {
   buildProductionRateById,
   buildRoomFlagById,
 } from '../_lib/estimateV2EditorDerived'
-import { inferTrimUnitTypeFromText } from '../_lib/estimateV2EditorNormalize'
 import type {
   EstimateV2EditorCollections,
   EstimateV2EditorMetaState,
@@ -52,18 +51,16 @@ export function useEstimateV2CatalogDerived(params: {
   )
   const trimTypeOptions = useMemo<TrimTypeOption[]>(
     () =>
-      trimProductionRates.map((rate) => ({
-        id: rate.id,
-        label: rate.label || rate.id,
-        family: rate.surface_type || null,
-        category: rate.condition || rate.surface_type || null,
-        unit_type: inferTrimUnitTypeFromText(
-          `${rate.id} ${rate.label} ${rate.surface_type} ${rate.condition}`
-        ),
-        helper_allowed: false,
-        default_production_rate_id: rate.id,
+      (meta.catalogs.trim_items ?? []).map((item) => ({
+        id: item.id,
+        label: item.label || item.id,
+        family: item.family || null,
+        category: item.category || item.family || null,
+        unit_type: item.unit_type,
+        helper_allowed: !!item.helper_allowed,
+        default_production_rate_id: item.default_production_rate_id,
       })),
-    [trimProductionRates]
+    [meta.catalogs.trim_items]
   )
   const roomFlagById = useMemo(
     () => buildRoomFlagById(meta.catalogs.room_flags),

@@ -7,6 +7,102 @@ function approx(actual: number | null | undefined, expected: number, epsilon = 0
   assert.ok(Math.abs((actual as number) - expected) <= epsilon, `expected ${expected}, got ${actual}`)
 }
 
+function makeWallScope(overrides: Partial<WallCalculationInput['scopes'][0]> = {}): WallCalculationInput['scopes'][0] {
+  return {
+    id: 'scope-decimal',
+    room_id: 'R001',
+    position: 0,
+    mode: 'RECT',
+    include: 'Y',
+    scope_name: null,
+    color_id: 'A',
+    paint_product_id: null,
+    primer_product_id: null,
+    prime_mode: 'NONE',
+    height_in: 96,
+    perimeter_in: 600,
+    standard_door_count: 0,
+    standard_window_count: 0,
+    height_factor: 1,
+    complexity_factor: 1,
+    wall_flag_factor: 1,
+    cut_in_top_factor: 1,
+    cut_in_bottom_factor: 1,
+    raw_area_sf: null,
+    override_area_sf: null,
+    effective_area_sf: null,
+    raw_paint_hours: null,
+    override_paint_hours: null,
+    effective_paint_hours: null,
+    raw_primer_hours: null,
+    override_primer_hours: null,
+    effective_primer_hours: null,
+    raw_paint_gallons: null,
+    override_paint_gallons: null,
+    effective_paint_gallons: null,
+    raw_primer_gallons: null,
+    override_primer_gallons: null,
+    effective_primer_gallons: null,
+    raw_supply_cost: null,
+    override_supply_cost: null,
+    effective_supply_cost: null,
+    raw_total: null,
+    override_total: null,
+    effective_total: null,
+    notes: null,
+    ...overrides,
+  }
+}
+
+test('wall deductions accept decimal door and window counts in RECT and SEG inputs', () => {
+  const rect = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeWallScope({ standard_door_count: 0.5, standard_window_count: 1.5 })],
+    segments: [],
+  })
+  approx(rect.scopes[0].raw_area_sf, 367)
+
+  const seg = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeWallScope({ id: 'seg-scope', mode: 'SEG', standard_door_count: null, standard_window_count: null })],
+    segments: [
+      {
+        id: 'seg-1',
+        wall_scope_id: 'seg-scope',
+        room_id: 'R001',
+        position: 0,
+        segment_name: null,
+        include: 'Y',
+        shape_type: 'MANUAL',
+        quantity: 1,
+        width_in: null,
+        height_in: null,
+        base_in: null,
+        manual_area_sf: 100,
+        standard_door_count: 0.5,
+        standard_window_count: 0.5,
+        raw_area_sf: null,
+        override_area_sf: null,
+        effective_area_sf: null,
+        notes: null,
+      },
+    ],
+  })
+  approx(seg.scopes[0].raw_area_sf, 82)
+})
+
+test('wall primer supply cost applies only for SPOT and FULL prime modes', () => {
+  const catalogs = { supplies_rates: [{ key: 'PRIMER_WALL', scope: 'Walls', unit: 'primer per scope', value: 7 }] }
+  const none = calculateWalls({ catalogs, scopes: [makeWallScope({ color_id: null })], segments: [] })
+  const spot = calculateWalls({ catalogs, scopes: [makeWallScope({ color_id: null, prime_mode: 'SPOT' })], segments: [] })
+  const full = calculateWalls({ catalogs, scopes: [makeWallScope({ color_id: null, prime_mode: 'FULL' })], segments: [] })
+
+  approx(none.scopes[0].raw_supply_cost, 32)
+  approx(spot.scopes[0].raw_supply_cost, 39)
+  approx(full.scopes[0].raw_supply_cost, 39)
+  approx(spot.scope_traces[0].supplies.primer_supply_cost, 7)
+})
+
 test('RECT scope calculates area, labor, gallons, supplies, and totals', () => {
   const input: WallCalculationInput = {
     settings: {

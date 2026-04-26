@@ -39,11 +39,7 @@ async function loadEstimateV2DataEnvelope<TPayload>(params: {
     if (!response.ok) {
       return {
         ok: false,
-        message: getApiErrorMessage(
-          response,
-          parsed,
-          params.failureMessage
-        ),
+        message: getApiErrorMessage(response, parsed, params.failureMessage),
       }
     }
 

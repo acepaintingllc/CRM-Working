@@ -25,13 +25,9 @@ export function EstimateV2Header({
   confirmNavigation: () => boolean
   onNext: () => void
 }) {
-  const detailsHref = vm.estimateId
-    ? routeFamily.detailsHref?.(vm.estimateId) ?? routeFamily.summaryHref(vm.estimateId)
-    : null
-
   return (
-    <div style={styles.header}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div className="estimate-v2-header" style={styles.header}>
+      <div className="estimate-v2-header-copy" style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Link
             href={routeFamily.listHref}
@@ -62,7 +58,7 @@ export function EstimateV2Header({
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="estimate-v2-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <button
           type="button"
           className="v2-btn"
@@ -72,24 +68,6 @@ export function EstimateV2Header({
         >
           Settings
         </button>
-        {detailsHref ? (
-          <Link
-            href={detailsHref}
-            onClick={(event) => {
-              if (!confirmNavigation()) event.preventDefault()
-            }}
-            style={{
-              ...styles.button,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              textDecoration: 'none',
-              fontSize: 'calc(11px + 4pt)',
-            }}
-          >
-            {'Details ->'}
-          </Link>
-        ) : null}
         <button
           type="button"
           className="v2-btn"
@@ -108,7 +86,7 @@ export function EstimateV2Header({
           disabled={vm.saving}
           style={{ ...styles.buttonPrimary, opacity: vm.saving ? 0.65 : 1, cursor: vm.saving ? 'not-allowed' : 'pointer' }}
         >
-          {vm.saving ? 'Saving...' : 'Next: Details ->'}
+          {vm.saving ? 'Saving...' : 'Next: Details & Overrides ->'}
         </button>
       </div>
     </div>

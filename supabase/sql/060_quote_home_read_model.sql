@@ -121,7 +121,7 @@ begin
         j.scheduled_email_sent_at,
         j.completed_at,
         j.completed_email_sent_at,
-        j.closeout_notes::text as closeout_notes,
+        j.closeout_notes,
         j.linked_estimate_id
       from public.jobs j
       join public.customers c

@@ -32,20 +32,20 @@ export function buildEstimateV2DirtySnapshot(params: {
   scopes: EstimateV2WallScopeDraft[]
   segments: EstimateV2WallSegmentDraft[]
   roomFlags: EstimateV2RoomFlagDraft[]
-  rollers: EstimateV2RollerDraft[]
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
+  rollers?: EstimateV2RollerDraft[]
 }): EstimateV2DirtySnapshot {
   const payload = buildEstimateV2SavePayload(
     params.rooms,
     params.scopes,
     params.segments,
     params.roomFlags,
-    params.rollers,
     params.ceilingScopes,
     params.ceilingSegments,
-    params.trimScopes
+    params.trimScopes,
+    params.rollers ?? []
   )
 
   return createEstimateV2DirtySnapshot(payload)

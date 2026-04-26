@@ -25,9 +25,6 @@ export function EstimateV2EditorHeaderArea({
   confirmNavigation: () => boolean
 }) {
   const router = useRouter()
-  const detailsHref = estimateId
-    ? routeFamily.detailsHref?.(estimateId) ?? routeFamily.summaryHref(estimateId)
-    : null
 
   return (
     <EstimateV2Header
@@ -36,9 +33,15 @@ export function EstimateV2EditorHeaderArea({
       vm={headerVm}
       confirmNavigation={confirmNavigation}
       onNext={() =>
-        void saveVm.save().then((ok) => {
-          if (ok && detailsHref) router.push(detailsHref)
-        })
+        void (async () => {
+          if (!estimateId) return
+          if (!saveVm.dirty) {
+            router.push(routeFamily.detailsHref(estimateId))
+            return
+          }
+          const ok = await saveVm.save()
+          if (ok) router.push(routeFamily.detailsHref(estimateId))
+        })()
       }
     />
   )

@@ -1,4 +1,5 @@
 export type EstimateRouteCatalogSource = 'estimate' | 'v2'
+export type EstimateRouteFamilyKey = 'estimate' | 'quote'
 
 export type EstimateRouteFamily = {
   listHref: string
@@ -45,4 +46,8 @@ export const quoteRouteFamily: EstimateRouteFamily = {
     withCatalogSourceQuery(`/api/quotes/${estimateId}/catalogs`, options?.catalogSource),
   customerSendApiHref: (estimateId, options) =>
     withCatalogSourceQuery(`/api/quotes/${estimateId}/customer-send`, options?.catalogSource),
+}
+
+export function resolveEstimateRouteFamily(key: EstimateRouteFamilyKey = 'estimate') {
+  return key === 'quote' ? quoteRouteFamily : estimateRouteFamily
 }

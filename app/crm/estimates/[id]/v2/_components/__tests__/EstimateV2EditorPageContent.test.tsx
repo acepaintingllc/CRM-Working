@@ -253,16 +253,12 @@ vi.mock('../EstimateV2TrimSectionBody', () => ({
 
 describe('EstimateV2EditorPageContent', () => {
   beforeEach(() => {
-    push.mockReset()
-    save.mockClear()
-    addRoom.mockClear()
+    vi.clearAllMocks()
     mockUseEstimateV2Editor.mockReturnValue(baseEditorState)
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
   afterEach(() => {
     cleanup()
-    vi.restoreAllMocks()
   })
 
   it('renders from grouped VMs and routes header save/navigation actions', async () => {
@@ -276,7 +272,7 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.getAllByText('364 sf').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getAllByText('+ Add room')[0])
-    fireEvent.click(screen.getByText('Next: Details ->'))
+    fireEvent.click(screen.getByText('Next: Details & Overrides ->'))
 
     expect(addRoom).toHaveBeenCalled()
     await waitFor(() => {
@@ -285,29 +281,23 @@ describe('EstimateV2EditorPageContent', () => {
     })
   })
 
-  it('cancels dirty header details navigation when confirmation is declined', () => {
-    vi.mocked(window.confirm).mockReturnValueOnce(false)
+  it('lets footer continue navigate even when there are no dirty changes', async () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+      },
+    })
 
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
 
-    const detailsLink = screen.getByRole('link', { name: 'Details ->' })
-    const navigationAllowed = fireEvent.click(detailsLink)
+    fireEvent.click(screen.getByText('Save & continue ->'))
 
-    expect(window.confirm).toHaveBeenCalledWith('You have unsaved changes. Leave this workspace?')
-    expect(navigationAllowed).toBe(false)
-    expect(push).not.toHaveBeenCalled()
-  })
-
-  it('allows dirty header details navigation when confirmation is accepted', () => {
-    vi.mocked(window.confirm).mockReturnValueOnce(true)
-
-    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
-
-    const detailsLink = screen.getByRole('link', { name: 'Details ->' })
-    const navigationAllowed = fireEvent.click(detailsLink)
-
-    expect(window.confirm).toHaveBeenCalledWith('You have unsaved changes. Leave this workspace?')
-    expect(navigationAllowed).toBe(true)
+    expect(save).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/details')
+    })
   })
 
   it('exposes accessible loading and error semantics', () => {

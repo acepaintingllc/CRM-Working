@@ -40,3 +40,34 @@ test('sanitizeV2TrimDrafts reorders rows and strips helper mode in SEG rooms', (
   assert.equal(result.trimScopes[1].measurementMode, 'ROOM_HELPER')
   assert.equal(result.trimScopes[1].helperSource, 'ROOM_PERIMETER')
 })
+
+test('sanitizeV2TrimDrafts clears hidden trim product and override state', () => {
+  const result = sanitizeV2TrimDrafts({
+    rooms: [{ roomId: 'R001', mode: 'RECT', position: 0 }],
+    trimScopes: [
+      {
+        id: 'T1',
+        roomId: 'R001',
+        position: 0,
+        measurementMode: 'MANUAL',
+        helperSource: '',
+        helperValue: '',
+        paintProductId: 'P-TRIM',
+        primerProductId: 'PRIMER-TRIM',
+        overrideMeasurement: '10',
+        overrideHours: '1',
+        overrideGallons: '2',
+        overrideSupplyCost: '3',
+        overrideTotal: '4',
+        overrideDescription: 'hidden',
+      },
+    ],
+  })
+
+  assert.equal(result.changed, true)
+  assert.equal(result.trimScopes[0].paintProductId, '')
+  assert.equal(result.trimScopes[0].primerProductId, '')
+  assert.equal(result.trimScopes[0].overrideMeasurement, '')
+  assert.equal(result.trimScopes[0].overrideTotal, '')
+  assert.equal(result.trimScopes[0].overrideDescription, '')
+})

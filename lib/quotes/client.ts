@@ -8,6 +8,7 @@ import {
 import type {
   ProductFamily,
   QuoteProductPayload,
+  QuoteProductScope,
   QuoteProductStatusFilter,
 } from '@/lib/quotes/productsForm'
 import type { CreateQuoteVersionInput } from '@/lib/quotes/versionCreation'
@@ -98,11 +99,13 @@ export async function deleteQuoteVersion(id: string) {
 export async function loadQuoteProducts<T>(options: {
   status: QuoteProductStatusFilter
   family?: ProductFamily | null
+  scope?: QuoteProductScope | null
   search?: string | null
 }) {
   const params = new URLSearchParams()
   params.set('status', options.status)
   if (options.family) params.set('family', options.family)
+  if (options.scope) params.set('scope', options.scope)
   if (options.search?.trim()) params.set('search', options.search.trim())
 
   return loadData<T>(`/api/quotes/products?${params.toString()}`, {

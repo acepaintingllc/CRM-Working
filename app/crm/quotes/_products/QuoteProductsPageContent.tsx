@@ -32,6 +32,7 @@ export function QuoteProductsPageContent() {
             actions={{
               setSearch: controller.actions.setSearch,
               setStatusFilter: controller.actions.setStatusFilter,
+              setScopeFilter: controller.actions.setScopeFilter,
               setActiveFamily: controller.actions.setActiveFamily,
               setSelectedId: controller.actions.setSelectedId,
               startCreate: controller.actions.startCreate,
