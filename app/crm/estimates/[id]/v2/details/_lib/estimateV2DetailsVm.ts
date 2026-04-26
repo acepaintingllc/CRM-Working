@@ -5,7 +5,15 @@ import type {
   EstimateV2RollerDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
+  EstimateV2ConditionModifier,
+  EstimateV2ConditionSelections,
+  ConditionScopeFactors,
 } from '@/types/estimator/v2'
+import {
+  resolveAllConditionFactors,
+  countActiveConditions,
+  emptyConditionSelections,
+} from './estimateV2DetailsConditions'
 import {
   createAggregateRow,
   createWallRows,
@@ -120,6 +128,17 @@ export type DetailsOverrideVm = {
   newValue: number
 }
 
+export type DetailsConditionsVm = {
+  available: boolean
+  conditions: EstimateV2ConditionModifier[]
+  selections: EstimateV2ConditionSelections
+  roomActiveCount: number
+  wallActiveCount: number
+  ceilingActiveCount: number
+  trimActiveCount: number
+  scopeFactors: ConditionScopeFactors
+}
+
 export type EstimateV2DetailsVm = {
   crewSize: number
   wallRows: DetailsScopeLineVm[]
@@ -172,6 +191,7 @@ export type EstimateV2DetailsVm = {
   estimatedMaterialCost: number
   hasCeilings: boolean
   hasTrim: boolean
+  conditions: DetailsConditionsVm
 }
 
 export type BuildDetailsVmParams = {
@@ -189,6 +209,8 @@ export type BuildDetailsVmParams = {
   rollerOptions: DetailsRollerCoverOption[]
   rollerOptionsState?: DetailsRollerOptionsState
   rollers: EstimateV2RollerDraft[]
+  conditionModifiers?: EstimateV2ConditionModifier[]
+  conditionSelections?: EstimateV2ConditionSelections
 }
 
 export type EstimateV2DetailsMaterialPlanningVm = Pick<
@@ -401,6 +423,23 @@ export function buildEstimateV2TotalsVm(params: {
   }
 }
 
+function buildEstimateV2ConditionsVm(params: BuildDetailsVmParams): DetailsConditionsVm {
+  const conditions = params.conditionModifiers ?? []
+  const selections = params.conditionSelections ?? emptyConditionSelections()
+  const available = conditions.length > 0
+  const scopeFactors = resolveAllConditionFactors(conditions, selections)
+  return {
+    available,
+    conditions,
+    selections,
+    roomActiveCount: countActiveConditions(selections.room),
+    wallActiveCount: countActiveConditions(selections.wall),
+    ceilingActiveCount: countActiveConditions(selections.ceiling),
+    trimActiveCount: countActiveConditions(selections.trim),
+    scopeFactors,
+  }
+}
+
 export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): EstimateV2DetailsVm {
   const materialPlanning = buildEstimateV2MaterialPlanningVm(params)
   const rollerPlanning = buildEstimateV2RollerPlanningVm({
@@ -421,5 +460,6 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     ...rollerPlanning,
     ...validation,
     ...totals,
+    conditions: buildEstimateV2ConditionsVm(params),
   }
 }
