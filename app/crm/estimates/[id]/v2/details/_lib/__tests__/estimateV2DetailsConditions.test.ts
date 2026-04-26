@@ -8,32 +8,31 @@ import {
   countActiveConditions,
   emptyConditionSelections,
 } from '../estimateV2DetailsConditions'
-import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
+import type { ConditionModifierCatalogRow, RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 import type { EstimateV2ConditionModifier, EstimateV2ConditionSelections } from '@/types/estimator/v2'
 
-function makePayload(rows: object[]): RatesFlagsPayload {
+function makePayload(rows: ConditionModifierCatalogRow[]): RatesFlagsPayload {
   return {
     source: 'db',
     seeded: true,
     template_version: 1,
-    categories: [
-      {
-        key: 'condition_modifiers',
-        tab: 'flags',
-        group: 'condition_modifiers',
-        label: 'Conditions',
-        table_title: '',
-        description: '',
-        columns: [],
-        fields: [],
-        rows: rows as any,
-      },
-    ],
+    categories: [],
+    condition_modifier_catalog: rows,
   }
 }
 
-function makeRow(overrides: object) {
-  return { row_id: 'ROW', display_name: '', active: 'Y', values_json: {}, ...overrides }
+function makeRow(overrides: Partial<ConditionModifierCatalogRow>): ConditionModifierCatalogRow {
+  return {
+    id: 'ROW',
+    label: '',
+    scope: 'trim',
+    modifier_type: 'binary',
+    factor_field: null,
+    levels: {},
+    notes: null,
+    active: 'Y',
+    ...overrides,
+  }
 }
 
 const TRIM_OIL: EstimateV2ConditionModifier = {
@@ -64,49 +63,63 @@ const ROOM_FURNISHED: EstimateV2ConditionModifier = {
 }
 
 describe('parseConditionModifiers', () => {
-  it('returns empty array when no condition_modifiers category', () => {
+  it('returns empty array when no condition_modifier_catalog', () => {
     const payload: RatesFlagsPayload = { source: 'db', seeded: true, template_version: 1, categories: [] }
     expect(parseConditionModifiers(payload)).toEqual([])
   })
 
-  it('parses binary condition from payload row', () => {
+  it('returns empty array when condition_modifier_catalog is empty', () => {
+    const payload = makePayload([])
+    expect(parseConditionModifiers(payload)).toEqual([])
+  })
+
+  it('parses binary condition from catalog row', () => {
     const payload = makePayload([
       makeRow({
-        row_id: 'TRIM_OIL_BASED',
-        display_name: 'Old oil-based paint',
+        id: 'TRIM_OIL_BASED',
+        label: 'Old oil-based paint',
         active: 'Y',
-        values_json: {
-          id: 'TRIM_OIL_BASED',
-          display_name: 'Old oil-based paint',
-          scope: 'trim',
-          modifier_type: 'binary',
-          factor_field: 'difficult_finish_factor',
-          levels: { active: 1.35 },
-        },
+        scope: 'trim',
+        modifier_type: 'binary',
+        factor_field: 'difficult_finish_factor',
+        levels: { active: 1.35 },
       }),
     ])
     const result = parseConditionModifiers(payload)
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({
       id: 'TRIM_OIL_BASED',
+      displayName: 'Old oil-based paint',
       scope: 'trim',
       modifierType: 'binary',
+      factorField: 'difficult_finish_factor',
       levels: { active: 1.35 },
     })
   })
 
   it('skips inactive rows', () => {
     const payload = makePayload([
-      makeRow({ row_id: 'X', active: 'N', values_json: { id: 'X', scope: 'trim', modifier_type: 'binary', levels: {} } }),
+      makeRow({ id: 'X', active: 'N', scope: 'trim', modifier_type: 'binary', levels: {} }),
     ])
     expect(parseConditionModifiers(payload)).toHaveLength(0)
   })
 
-  it('skips rows with unknown scope', () => {
+  it('uses empty string for null factor_field', () => {
     const payload = makePayload([
-      makeRow({ row_id: 'X', active: 'Y', values_json: { id: 'X', scope: 'doors', modifier_type: 'binary', levels: {} } }),
+      makeRow({ id: 'X', active: 'Y', scope: 'room', modifier_type: 'binary', factor_field: null, levels: { active: 1.1 } }),
     ])
-    expect(parseConditionModifiers(payload)).toHaveLength(0)
+    const result = parseConditionModifiers(payload)
+    expect(result[0].factorField).toBe('')
+  })
+
+  it('sorts results by id', () => {
+    const payload = makePayload([
+      makeRow({ id: 'ZZZ', active: 'Y', scope: 'trim', modifier_type: 'binary', levels: {} }),
+      makeRow({ id: 'AAA', active: 'Y', scope: 'room', modifier_type: 'binary', levels: {} }),
+    ])
+    const result = parseConditionModifiers(payload)
+    expect(result[0].id).toBe('AAA')
+    expect(result[1].id).toBe('ZZZ')
   })
 })
 

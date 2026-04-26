@@ -369,12 +369,24 @@ export type RatesFlagsCategory = {
   rows: RatesFlagsRow[]
 }
 
+export type ConditionModifierCatalogRow = {
+  id: string
+  label: string
+  scope: 'room' | 'wall' | 'ceiling' | 'trim'
+  modifier_type: 'binary' | 'severity'
+  factor_field: string | null
+  levels: Partial<Record<'active' | 'minor' | 'moderate' | 'major', number>>
+  notes: string | null
+  active: 'Y' | 'N'
+}
+
 export type RatesFlagsPayload = {
   source: 'db' | 'sheet'
   seeded: boolean
   template_version: number | null
   schema_version?: string
   categories: RatesFlagsCategory[]
+  condition_modifier_catalog?: ConditionModifierCatalogRow[]
 }
 
 export type RatesFlagsMutationAction = 'create' | 'update' | 'archive' | 'reactivate'

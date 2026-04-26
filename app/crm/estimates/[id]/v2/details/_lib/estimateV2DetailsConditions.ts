@@ -4,32 +4,25 @@ import type {
   EstimateV2ConditionModifier,
   EstimateV2ConditionSelections,
 } from '@/types/estimator/v2'
-import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
+import type { ConditionModifierCatalogRow, RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 
 export function emptyConditionSelections(): EstimateV2ConditionSelections {
   return { room: {}, wall: {}, ceiling: {}, trim: {} }
 }
 
 export function parseConditionModifiers(payload: RatesFlagsPayload): EstimateV2ConditionModifier[] {
-  const category = payload.categories.find((c) => c.key === 'condition_modifiers')
-  if (!category) return []
-  return (category.rows as unknown as Record<string, unknown>[])
-    .filter((row) => row.active === 'Y')
-    .flatMap((row) => {
-      const v = row.values_json as Record<string, unknown>
-      const scope = String(v.scope ?? '')
-      if (!['room', 'wall', 'ceiling', 'trim'].includes(scope)) return []
-      return [
-        {
-          id: String(v.id ?? row.row_id),
-          displayName: String(v.display_name ?? row.display_name ?? ''),
-          scope: scope as EstimateV2ConditionModifier['scope'],
-          modifierType: String(v.modifier_type ?? 'binary') as 'binary' | 'severity',
-          factorField: String(v.factor_field ?? ''),
-          levels: (v.levels ?? {}) as Partial<Record<ConditionLevel, number>>,
-        },
-      ]
-    })
+  const catalog = payload.condition_modifier_catalog
+  if (!catalog || catalog.length === 0) return []
+  return catalog
+    .filter((row: ConditionModifierCatalogRow) => row.active === 'Y')
+    .map((row: ConditionModifierCatalogRow): EstimateV2ConditionModifier => ({
+      id: row.id,
+      displayName: row.label,
+      scope: row.scope,
+      modifierType: row.modifier_type,
+      factorField: row.factor_field ?? '',
+      levels: row.levels,
+    }))
     .sort((a, b) => a.id.localeCompare(b.id))
 }
 
