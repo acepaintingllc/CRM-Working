@@ -439,6 +439,9 @@ export type EstimateV2CeilingScopeDraft = {
   ceilingTypeId: string
   ceilingGeometryMode?: string
   vaultedAreaFactor?: string
+  vaultedRidgeLengthIn?: string
+  vaultedSlopeLengthIn?: string
+  vaultedPlaneCount?: string
   trayPerimeterIn?: string
   trayStepHeightIn?: string
   trayBandWidthIn?: string

@@ -334,9 +334,12 @@ export function createDefaultCeilingScope(
     primerProductId: '',
     primeMode: 'NONE',
     spotPrimePercent: '',
-    ceilingTypeId: '',
+    ceilingTypeId: 'FLAT',
     ceilingGeometryMode: 'FLAT',
     vaultedAreaFactor: '',
+    vaultedRidgeLengthIn: '',
+    vaultedSlopeLengthIn: '',
+    vaultedPlaneCount: '2',
     trayPerimeterIn: '',
     trayStepHeightIn: '',
     trayBandWidthIn: '',
@@ -408,11 +411,12 @@ function parseCeilingGeometryMode(value: unknown): string {
 }
 
 export function normalizeCeilingScope(row: UnsafeRecord, index: number): EstimateV2CeilingScopeDraft {
+  const mode = asText(row.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT'
   return {
     id: asText(row.id) || createUuid(),
     roomId: asText(row.room_id).toUpperCase(),
     position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
-    mode: asText(row.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT',
+    mode,
     include: asText(row.include).toUpperCase() === 'N' ? 'N' : 'Y',
     scopeName: asText(row.scope_name),
     colorId: asText(row.color_id).toUpperCase() || HIDDEN_CEILING_COLOR_ID,
@@ -420,9 +424,12 @@ export function normalizeCeilingScope(row: UnsafeRecord, index: number): Estimat
     primerProductId: asText(row.primer_product_id),
     primeMode: parseCeilingPrimeMode(row.prime_mode),
     spotPrimePercent: toInputNumber(row.spot_prime_percent),
-    ceilingTypeId: asText(row.ceiling_type_id).toUpperCase(),
-    ceilingGeometryMode: parseCeilingGeometryMode(row.ceiling_geometry_mode),
+    ceilingTypeId: mode === 'SEG' ? 'FLAT' : asText(row.ceiling_type_id).toUpperCase() || 'FLAT',
+    ceilingGeometryMode: mode === 'SEG' ? 'FLAT' : parseCeilingGeometryMode(row.ceiling_geometry_mode),
     vaultedAreaFactor: toInputNumber(row.vaulted_area_factor),
+    vaultedRidgeLengthIn: toInputNumber(row.vaulted_ridge_length_in),
+    vaultedSlopeLengthIn: toInputNumber(row.vaulted_slope_length_in),
+    vaultedPlaneCount: toInputNumber(row.vaulted_plane_count) || '2',
     trayPerimeterIn: toInputNumber(row.tray_perimeter_in),
     trayStepHeightIn: toInputNumber(row.tray_step_height_in),
     trayBandWidthIn: toInputNumber(row.tray_band_width_in),

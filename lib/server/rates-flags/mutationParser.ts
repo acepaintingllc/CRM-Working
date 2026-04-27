@@ -53,6 +53,13 @@ function parseNumberString(value: string) {
   return Number.isFinite(parsed)
 }
 
+function parseDelimitedValues(value: string) {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
 function parseFieldValue(
   spec: RatesFlagsMutationFieldSpec,
   raw: unknown
@@ -100,6 +107,18 @@ function parseFieldValue(
       ok: false,
       error: `${spec.label} must be one of: ${spec.options.join(', ')}.`,
     }
+  }
+
+  if (spec.kind === 'checkbox_group') {
+    const selected = parseDelimitedValues(value)
+    const invalid = selected.find((entry) => !spec.options.includes(entry))
+    if (invalid) {
+      return {
+        ok: false,
+        error: `${spec.label} must only include: ${spec.options.join(', ')}.`,
+      }
+    }
+    return { ok: true, value: selected.join(',') }
   }
 
   return { ok: true, value }

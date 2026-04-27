@@ -199,6 +199,30 @@ test('validation requires area for MANUAL ceiling segments', () => {
   assert.ok(issues.some((i) => i.includes('manual ceiling segments require area')))
 })
 
+test('validation allows incomplete SEG ceiling geometry for autosave drafts', () => {
+  const issues = validateV2CeilingsBeforeSave({
+    rooms: [makeBaseRoom()],
+    ceilingScopes: [{ ...makeRectScope(), id: 'scope-seg', mode: 'SEG' }],
+    ceilingSegments: [
+      {
+        id: 'seg-manual',
+        ceilingScopeId: 'scope-seg',
+        roomId: 'R001',
+        include: 'Y',
+        shapeType: 'MANUAL' as const,
+        quantity: '1',
+        widthIn: '',
+        heightIn: '',
+        baseIn: '',
+        manualAreaSqFt: '',
+      },
+    ],
+    allowIncomplete: true,
+  })
+
+  assert.deepEqual(issues, [])
+})
+
 test('validation skips RECT/SEG required geometry checks when scope include=N', () => {
   const issues = validateV2CeilingsBeforeSave({
     rooms: [

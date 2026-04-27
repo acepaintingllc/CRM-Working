@@ -10,21 +10,40 @@ import {
   CeilingsScopePanel,
   Field,
   ItemActionRow,
+  PaintCoatButtons,
   PrimerModeButtons,
   ReorderDeleteActions,
   SharedSegmentGrid,
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
-import type { EstimateV2CeilingSegmentShape as CeilingSegmentShape } from '@/types/estimator/v2'
+import type {
+  EstimateV2CeilingGeometryMode,
+  EstimateV2CeilingSegmentDraft,
+  EstimateV2CeilingSegmentShape as CeilingSegmentShape,
+} from '@/types/estimator/v2'
 import type { EstimateV2CeilingScopeDraft, EstimateV2RoomDraft } from '@/types/estimator/v2'
 
 type EditorStyles = Record<string, CSSProperties>
+
+const coreMeasurementGroupStyle: CSSProperties = {
+  border: '1px solid rgba(148, 163, 184, 0.18)',
+  background: 'rgba(148, 163, 184, 0.045)',
+  borderRadius: 8,
+  padding: 10,
+}
 
 const sharedStyles = (styles: EditorStyles) => ({
   label: styles.label,
   mono: styles.mono,
   panel: styles.panel,
 })
+
+type CeilingTypeShapeOption = {
+  value: string
+  label: string
+  ceilingTypeId: string
+  ceilingGeometryMode: EstimateV2CeilingGeometryMode
+}
 
 function ceilingTypeAreaFactor(
   catalogs: EstimateV2EditorCeilingsVm['catalogs'],
@@ -35,26 +54,127 @@ function ceilingTypeAreaFactor(
   return typeof factor === 'number' && Number.isFinite(factor) && factor > 0 ? factor : 1
 }
 
-function ceilingBaseArea(scope: EstimateV2CeilingScopeDraft, room: EstimateV2RoomDraft | null) {
+function inferCeilingGeometryMode(option: { id: string; label: string } | null): EstimateV2CeilingGeometryMode {
+  const text = `${option?.id ?? ''} ${option?.label ?? ''}`.toUpperCase()
+  if (text.includes('COFFER')) return 'COFFERED'
+  if (text.includes('TRAY')) return 'TRAY'
+  if (text.includes('VAULT') || text.includes('SLOPE') || text.includes('CATHEDRAL')) return 'VAULTED'
+  if (text.includes('MANUAL')) return 'MANUAL'
+  return 'FLAT'
+}
+
+function ceilingTypeShapeOptions(catalogs: EstimateV2EditorCeilingsVm['catalogs']) {
+  const catalogOptions = catalogs.ceiling_types.map((opt): CeilingTypeShapeOption => ({
+    value: opt.id,
+    label: opt.label,
+    ceilingTypeId: opt.id,
+    ceilingGeometryMode: inferCeilingGeometryMode(opt),
+  }))
+  if (catalogOptions.some((opt) => opt.value === 'FLAT' || opt.label.toUpperCase() === 'FLAT')) {
+    return catalogOptions
+  }
+  return [
+    { value: 'FLAT', label: 'Flat', ceilingTypeId: 'FLAT', ceilingGeometryMode: 'FLAT' },
+    ...catalogOptions,
+  ]
+}
+
+function CeilingTypeShapeField({
+  scope,
+  catalogs,
+  styles,
+  updateScope,
+}: {
+  scope: EstimateV2CeilingScopeDraft
+  catalogs: EstimateV2EditorCeilingsVm['catalogs']
+  styles: EditorStyles
+  updateScope: EstimateV2EditorCeilingsVm['updateScope']
+}) {
+  const options = ceilingTypeShapeOptions(catalogs)
+  const flatOption = options.find((opt) => opt.value === 'FLAT') ?? options.find((opt) => opt.ceilingGeometryMode === 'FLAT')
+  const value = options.some((opt) => opt.value === scope.ceilingTypeId)
+    ? scope.ceilingTypeId
+    : flatOption?.value ?? options[0]?.value ?? 'FLAT'
+
+  return (
+    <Field label="Ceiling Type" styles={sharedStyles(styles)}>
+      <select
+        value={value}
+        onChange={(e) => {
+          const selected = options.find((opt) => opt.value === e.target.value)
+          if (!selected) return
+          updateScope(scope.id, {
+            ceilingTypeId: selected.ceilingTypeId,
+            ceilingGeometryMode: selected.ceilingGeometryMode,
+          })
+        }}
+        style={styles.input}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </Field>
+  )
+}
+
+function ceilingSegmentArea(segment: EstimateV2CeilingSegmentDraft) {
+  if (segment.include === 'N') return 0
+  const quantity = numberOrNull(segment.quantity) ?? 1
+  if (quantity <= 0) return 0
+  if (segment.shapeType === 'RECTANGLE') {
+    const width = numberOrNull(segment.widthIn)
+    const height = numberOrNull(segment.heightIn)
+    return width != null && height != null ? (width * height * quantity) / 144 : 0
+  }
+  if (segment.shapeType === 'TRIANGLE') {
+    const base = numberOrNull(segment.baseIn)
+    const height = numberOrNull(segment.heightIn)
+    return base != null && height != null ? ((base * height) / 2 / 144) * quantity : 0
+  }
+  return (numberOrNull(segment.manualAreaSqFt) ?? 0) * quantity
+}
+
+function ceilingBaseArea(
+  scope: EstimateV2CeilingScopeDraft,
+  room: EstimateV2RoomDraft | null,
+  segments: EstimateV2CeilingSegmentDraft[] = []
+) {
+  if (scope.mode === 'SEG') return segments.reduce((sum, segment) => sum + ceilingSegmentArea(segment), 0)
   const direct = numberOrNull(scope.areaSf)
   if (direct != null) return direct
+  if ((scope.ceilingGeometryMode || 'FLAT') === 'VAULTED') {
+    const vaultedArea = vaultedMeasuredArea(scope, room)
+    if (vaultedArea != null) return vaultedArea
+  }
   const length = numberOrNull(scope.lengthIn) ?? numberOrNull(room?.lengthIn ?? '')
   const width = numberOrNull(scope.widthIn) ?? numberOrNull(room?.widthIn ?? '')
   return length != null && width != null ? (length * width) / 144 : null
 }
 
-function ceilingHelperExtraArea(scope: EstimateV2CeilingScopeDraft, baseArea: number | null) {
+function vaultedMeasuredArea(scope: EstimateV2CeilingScopeDraft, room: EstimateV2RoomDraft | null) {
+  const ridgeLength =
+    numberOrNull(scope.vaultedRidgeLengthIn ?? '') ??
+    numberOrNull(scope.lengthIn ?? '') ??
+    numberOrNull(room?.lengthIn ?? '')
+  const slopeLength = numberOrNull(scope.vaultedSlopeLengthIn ?? '')
+  const planeCount = Math.max(1, Math.floor(numberOrNull(scope.vaultedPlaneCount ?? '') ?? 2))
+  return ridgeLength != null && slopeLength != null ? (ridgeLength * slopeLength * planeCount) / 144 : null
+}
+
+function ceilingHelperExtraArea(
+  scope: EstimateV2CeilingScopeDraft,
+  baseArea: number | null
+) {
   const base = baseArea ?? 0
   if (base <= 0) return 0
   if (scope.ceilingGeometryMode === 'VAULTED') {
+    if (numberOrNull(scope.areaSf) != null) return 0
+    if (vaultedMeasuredArea(scope, null) != null) return 0
     const factor = numberOrNull(scope.vaultedAreaFactor ?? '') ?? 1.2
     return Math.max(base * factor - base, 0)
-  }
-  if (scope.ceilingGeometryMode === 'TRAY') {
-    const perimeter = numberOrNull(scope.trayPerimeterIn ?? '') ?? 0
-    const stepHeight = numberOrNull(scope.trayStepHeightIn ?? '') ?? 0
-    const bandWidth = numberOrNull(scope.trayBandWidthIn ?? '') ?? 0
-    return (perimeter * stepHeight) / 144 + (perimeter * bandWidth) / 144
   }
   if (scope.ceilingGeometryMode === 'COFFERED') {
     const sectionLength = numberOrNull(scope.cofferSectionLengthIn ?? '') ?? 0
@@ -71,6 +191,7 @@ function ceilingHelperExtraArea(scope: EstimateV2CeilingScopeDraft, baseArea: nu
 function CeilingGeometryFields({
   scope,
   room,
+  segments = [],
   catalogs,
   styles,
   updateScope,
@@ -78,55 +199,73 @@ function CeilingGeometryFields({
 }: {
   scope: EstimateV2CeilingScopeDraft
   room: EstimateV2RoomDraft | null
+  segments?: EstimateV2CeilingSegmentDraft[]
   catalogs: EstimateV2EditorCeilingsVm['catalogs']
   styles: EditorStyles
   updateScope: EstimateV2EditorCeilingsVm['updateScope']
   toDisplayNumber: (value: number | null | undefined) => string
 }) {
   const mode = scope.ceilingGeometryMode || 'FLAT'
-  const baseArea = ceilingBaseArea(scope, room)
+  const baseArea = ceilingBaseArea(scope, room, segments)
   const helperExtra = ceilingHelperExtraArea(scope, baseArea)
   const areaFactor = ceilingTypeAreaFactor(catalogs, scope.ceilingTypeId)
   const finalArea = baseArea == null ? null : (baseArea + helperExtra) * areaFactor
 
   return (
     <div style={{ display: 'grid', gap: 10 }}>
-      <div className="paint-setup-grid">
-        <Field label="Ceiling Shape" styles={sharedStyles(styles)}>
-          <select
-            value={mode}
-            onChange={(e) => updateScope(scope.id, { ceilingGeometryMode: e.target.value })}
-            style={styles.input}
-          >
-            <option value="FLAT">Flat</option>
-            <option value="VAULTED">Vaulted</option>
-            <option value="TRAY">Tray</option>
-            <option value="COFFERED">Coffered</option>
-            <option value="MANUAL">Manual</option>
-          </select>
-        </Field>
-        {mode === 'VAULTED' && (
-          <Field label="Vaulted Area Factor" styles={sharedStyles(styles)}>
-            <input value={scope.vaultedAreaFactor ?? ''} onChange={(e) => updateScope(scope.id, { vaultedAreaFactor: e.target.value })} style={styles.input} type="number" min="0" placeholder="1.20" />
-          </Field>
-        )}
-        {mode === 'TRAY' && (
-          <>
-            <Field label="Tray Perimeter (in)" styles={sharedStyles(styles)}><input value={scope.trayPerimeterIn ?? ''} onChange={(e) => updateScope(scope.id, { trayPerimeterIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
-            <Field label="Step Height (in)" styles={sharedStyles(styles)}><input value={scope.trayStepHeightIn ?? ''} onChange={(e) => updateScope(scope.id, { trayStepHeightIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
-            <Field label="Band Width (in)" styles={sharedStyles(styles)}><input value={scope.trayBandWidthIn ?? ''} onChange={(e) => updateScope(scope.id, { trayBandWidthIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
-          </>
-        )}
-        {mode === 'COFFERED' && (
-          <>
-            <Field label="Section Length (in)" styles={sharedStyles(styles)}><input value={scope.cofferSectionLengthIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferSectionLengthIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
-            <Field label="Section Width (in)" styles={sharedStyles(styles)}><input value={scope.cofferSectionWidthIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferSectionWidthIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
-            <Field label="Section Count" styles={sharedStyles(styles)}><input value={scope.cofferSectionCount ?? ''} onChange={(e) => updateScope(scope.id, { cofferSectionCount: e.target.value })} style={styles.input} type="number" min="0" /></Field>
-            <Field label="Face Height (in)" styles={sharedStyles(styles)}><input value={scope.cofferFaceHeightIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferFaceHeightIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
-            <Field label="Bottom Width (in)" styles={sharedStyles(styles)}><input value={scope.cofferBottomWidthIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferBottomWidthIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
-          </>
-        )}
-      </div>
+      {(mode === 'VAULTED' || mode === 'COFFERED') && (
+        <div style={coreMeasurementGroupStyle}>
+          <div className="paint-setup-grid">
+            {mode === 'VAULTED' && (
+              <>
+                <Field label="Ridge Length (in)" styles={sharedStyles(styles)}>
+                  <input
+                    value={scope.vaultedRidgeLengthIn ?? ''}
+                    onChange={(e) => updateScope(scope.id, { vaultedRidgeLengthIn: e.target.value })}
+                    style={styles.input}
+                    type="number"
+                    min="0"
+                    placeholder={room?.lengthIn || 'room length'}
+                  />
+                </Field>
+                <Field label="Slope Length (in)" styles={sharedStyles(styles)}>
+                  <input
+                    value={scope.vaultedSlopeLengthIn ?? ''}
+                    onChange={(e) => updateScope(scope.id, { vaultedSlopeLengthIn: e.target.value })}
+                    style={styles.input}
+                    type="number"
+                    min="0"
+                    placeholder="eave to ridge"
+                  />
+                </Field>
+                <Field label="Planes" styles={sharedStyles(styles)}>
+                  <input
+                    value={scope.vaultedPlaneCount ?? '2'}
+                    onChange={(e) => updateScope(scope.id, { vaultedPlaneCount: e.target.value })}
+                    style={styles.input}
+                    type="number"
+                    min="1"
+                    step="1"
+                  />
+                </Field>
+              </>
+            )}
+            {mode === 'COFFERED' && (
+              <>
+                <Field label="Section Length (in)" styles={sharedStyles(styles)}><input value={scope.cofferSectionLengthIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferSectionLengthIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
+                <Field label="Section Width (in)" styles={sharedStyles(styles)}><input value={scope.cofferSectionWidthIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferSectionWidthIn: e.target.value })} style={styles.input} type="number" min="0" /></Field>
+                <Field label="Section Count" styles={sharedStyles(styles)}><input value={scope.cofferSectionCount ?? ''} onChange={(e) => updateScope(scope.id, { cofferSectionCount: e.target.value })} style={styles.input} type="number" min="0" /></Field>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {mode === 'COFFERED' && (
+        <div className="paint-setup-grid">
+          <Field label="Recess Depth Optional (in)" styles={sharedStyles(styles)}><input value={scope.cofferFaceHeightIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferFaceHeightIn: e.target.value })} style={styles.input} type="number" min="0" placeholder="optional" /></Field>
+          <Field label="Beam Width Optional (in)" styles={sharedStyles(styles)}><input value={scope.cofferBottomWidthIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferBottomWidthIn: e.target.value })} style={styles.input} type="number" min="0" placeholder="optional" /></Field>
+        </div>
+      )}
       <div className="paint-setup-grid">
         <div className="walksqft-box"><div style={styles.mono}>Base Sq Ft</div><div style={styles.computedBig}>{toDisplayNumber(baseArea)}</div></div>
         <div className="walksqft-box"><div style={styles.mono}>Helper Extra</div><div style={styles.computedBig}>{toDisplayNumber(helperExtra)}</div></div>
@@ -192,24 +331,22 @@ export function EstimateV2CeilingsSectionBody({
           )}
 
           {selectedRoomGeometryMode === 'RECT' && firstCeilingScope && (() => {
-            const ceilLenSf =
-              numberOrNull(firstCeilingScope.areaSf) ??
-              (() => {
-                const L = numberOrNull(selectedRoom.lengthIn)
-                const W = numberOrNull(selectedRoom.widthIn)
-                return L && W ? (L * W) / 144 : null
-              })()
+            const ceilingGeometryMode = firstCeilingScope.ceilingGeometryMode || 'FLAT'
+            const ceilLenSf = ceilingBaseArea(firstCeilingScope, selectedRoom)
             return (
               <>
                 <div className="geometry-primary-grid">
-                  <Field label="Area Override (sf)" styles={sharedStyles(styles)}>
+                  <Field
+                    label={ceilingGeometryMode === 'VAULTED' ? 'Vaulted Sq Ft Override' : 'Area Override (sf)'}
+                    styles={sharedStyles(styles)}
+                  >
                     <input
                       value={firstCeilingScope.areaSf}
                       onChange={(e) => updateScope(firstCeilingScope.id, { areaSf: e.target.value })}
                       style={styles.input}
                       type="number"
                       min="0"
-                      placeholder="optional - uses room LxW"
+                      placeholder={ceilingGeometryMode === 'VAULTED' ? 'optional direct total' : 'optional - uses room LxW'}
                     />
                   </Field>
                   <div className={ceilLenSf != null ? 'walksqft-box' : 'walksqft-box-empty'}>
@@ -224,21 +361,15 @@ export function EstimateV2CeilingsSectionBody({
                     </div>
                   </div>
                 </div>
-                <div className="paint-setup-grid">
-                  <Field label="Ceiling Type" styles={sharedStyles(styles)}>
-                    <select
-                      value={firstCeilingScope.ceilingTypeId}
-                      onChange={(e) => updateScope(firstCeilingScope.id, { ceilingTypeId: e.target.value })}
-                      style={styles.input}
-                    >
-                      <option value="">Flat (1.0x)</option>
-                      {catalogs.ceiling_types.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                <div style={coreMeasurementGroupStyle}>
+                  <div className="paint-setup-grid">
+                    <CeilingTypeShapeField
+                      scope={firstCeilingScope}
+                      catalogs={catalogs}
+                      styles={styles}
+                      updateScope={updateScope}
+                    />
+                  </div>
                 </div>
                 <CeilingGeometryFields
                   scope={firstCeilingScope}
@@ -248,6 +379,13 @@ export function EstimateV2CeilingsSectionBody({
                   updateScope={updateScope}
                   toDisplayNumber={toDisplayNumber}
                 />
+                <Field label="Coats" styles={sharedStyles(styles)}>
+                  <PaintCoatButtons
+                    value={firstCeilingScope.paintCoats}
+                    onChange={(value) => updateScope(firstCeilingScope.id, { paintCoats: value })}
+                    styles={{ button: styles.button }}
+                  />
+                </Field>
                 <Field label="Primer Mode" styles={sharedStyles(styles)}>
                   <PrimerModeButtons
                     currentMode={firstCeilingScope.primeMode}
@@ -273,16 +411,20 @@ export function EstimateV2CeilingsSectionBody({
 
           {selectedRoomGeometryMode === 'SEG' && (
             <div style={{ display: 'grid', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ fontSize: 'calc(15px + 4pt)', fontWeight: 700 }}>Ceiling Scopes</div>
+              {selectedRoomCeilingScopes.length === 0 && (
                 <button type="button" style={styles.button} onClick={() => addScope(selectedRoom.roomId)}>
-                  + Add scope
+                  + Add ceiling segments
                 </button>
-              </div>
+              )}
               {selectedRoomCeilingScopes.map((scope, scopeIndex) => {
                 const scopeSegs = sortByPosition(
                   ceilingSegments.filter((segment) => segment.ceilingScopeId === scope.id)
                 )
+                const segmentFlatScope = {
+                  ...scope,
+                  ceilingTypeId: 'FLAT',
+                  ceilingGeometryMode: 'FLAT' as const,
+                }
                 return (
                   <div
                     key={scope.id}
@@ -294,45 +436,63 @@ export function EstimateV2CeilingsSectionBody({
                       gap: 12,
                     }}
                   >
-                    <ItemActionRow
-                      styles={{ mono: styles.mono }}
-                      meta={`Scope ${scopeIndex + 1}`}
-                      title={scope.scopeName || 'Ceiling scope'}
-                      actions={
-                        <ReorderDeleteActions
-                          styles={{ button: styles.button }}
-                          disableMoveUp={scopeIndex === 0}
-                          disableMoveDown={scopeIndex === selectedRoomCeilingScopes.length - 1}
-                          onMoveUp={() => moveScope(selectedRoom.roomId, scope.id, -1)}
-                          onMoveDown={() => moveScope(selectedRoom.roomId, scope.id, 1)}
-                          onDelete={() => deleteScope(selectedRoom.roomId, scope.id)}
-                        />
-                      }
-                    />
-                    <div className="paint-setup-grid">
-                      <Field label="Ceiling Type" styles={sharedStyles(styles)}>
-                        <select
-                          value={scope.ceilingTypeId}
-                          onChange={(e) => updateScope(scope.id, { ceilingTypeId: e.target.value })}
-                          style={styles.input}
-                        >
-                          <option value="">Flat (1.0x)</option>
-                          {catalogs.ceiling_types.map((opt) => (
-                            <option key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                    </div>
+                    {selectedRoomCeilingScopes.length > 1 && (
+                      <ItemActionRow
+                        styles={{ mono: styles.mono }}
+                        meta={`Area ${scopeIndex + 1}`}
+                        title={scope.scopeName || 'Ceiling area'}
+                        actions={
+                          <ReorderDeleteActions
+                            styles={{ button: styles.button }}
+                            disableMoveUp={scopeIndex === 0}
+                            disableMoveDown={scopeIndex === selectedRoomCeilingScopes.length - 1}
+                            onMoveUp={() => moveScope(selectedRoom.roomId, scope.id, -1)}
+                            onMoveDown={() => moveScope(selectedRoom.roomId, scope.id, 1)}
+                            onDelete={() => deleteScope(selectedRoom.roomId, scope.id)}
+                          />
+                        }
+                      />
+                    )}
                     <CeilingGeometryFields
-                      scope={scope}
+                      scope={segmentFlatScope}
                       room={selectedRoom}
+                      segments={scopeSegs}
                       catalogs={catalogs}
                       styles={styles}
                       updateScope={updateScope}
                       toDisplayNumber={toDisplayNumber}
                     />
+                    <Field label="Coats" styles={sharedStyles(styles)}>
+                      <PaintCoatButtons
+                        value={scope.paintCoats}
+                        onChange={(value) => updateScope(scope.id, { paintCoats: value })}
+                        styles={{ button: styles.button }}
+                      />
+                    </Field>
+                    <Field label="Primer Mode" styles={sharedStyles(styles)}>
+                      <PrimerModeButtons
+                        currentMode={scope.primeMode}
+                        onChange={(mode) =>
+                          updateScope(scope.id, {
+                            primeMode: mode,
+                            primerProductId: mode === 'NONE' ? '' : scope.primerProductId,
+                          })
+                        }
+                        styles={{ button: styles.button }}
+                      />
+                    </Field>
+                    {scope.primeMode === 'SPOT' && (
+                      <Field label="Spot Primer %" styles={sharedStyles(styles)}>
+                        <input
+                          value={scope.spotPrimePercent}
+                          onChange={(e) => updateScope(scope.id, { spotPrimePercent: e.target.value })}
+                          style={styles.input}
+                          type="number"
+                          min="0"
+                          max="100"
+                        />
+                      </Field>
+                    )}
                     <button type="button" style={styles.button} onClick={() => addSegment(selectedRoom.roomId, scope.id)}>
                       + Add segment
                     </button>
@@ -368,10 +528,21 @@ export function EstimateV2CeilingsSectionBody({
                           <Field label="Include" styles={sharedStyles(styles)}><select value={segment.include} onChange={(e) => updateSegment(segment.id, { include: e.target.value as 'Y' | 'N' })} style={styles.input}><option value="Y">Included</option><option value="N">Excluded</option></select></Field>
                           <Field label="Shape" styles={sharedStyles(styles)}><select value={segment.shapeType} onChange={(e) => updateSegment(segment.id, { shapeType: e.target.value as CeilingSegmentShape })} style={styles.input}><option value="RECTANGLE">Rectangle</option><option value="TRIANGLE">Triangle</option><option value="MANUAL">Manual</option></select></Field>
                           <Field label="Qty" styles={sharedStyles(styles)}><input value={segment.quantity} onChange={(e) => updateSegment(segment.id, { quantity: e.target.value })} style={styles.input} /></Field>
-                          <Field label="Width (in)" styles={sharedStyles(styles)}><input value={segment.widthIn} onChange={(e) => updateSegment(segment.id, { widthIn: e.target.value })} style={{ ...styles.input, opacity: segment.shapeType === 'RECTANGLE' ? 1 : 0.5 }} disabled={segment.shapeType !== 'RECTANGLE'} /></Field>
-                          <Field label="Height (in)" styles={sharedStyles(styles)}><input value={segment.heightIn} onChange={(e) => updateSegment(segment.id, { heightIn: e.target.value })} style={{ ...styles.input, opacity: segment.shapeType !== 'MANUAL' ? 1 : 0.5 }} disabled={segment.shapeType === 'MANUAL'} /></Field>
-                          <Field label="Base (in)" styles={sharedStyles(styles)}><input value={segment.baseIn} onChange={(e) => updateSegment(segment.id, { baseIn: e.target.value })} style={{ ...styles.input, opacity: segment.shapeType === 'TRIANGLE' ? 1 : 0.5 }} disabled={segment.shapeType !== 'TRIANGLE'} /></Field>
-                          <Field label="Manual Area (sf)" styles={sharedStyles(styles)}><input value={segment.manualAreaSqFt} onChange={(e) => updateSegment(segment.id, { manualAreaSqFt: e.target.value })} style={{ ...styles.input, opacity: segment.shapeType === 'MANUAL' ? 1 : 0.5 }} disabled={segment.shapeType !== 'MANUAL'} /></Field>
+                          {segment.shapeType === 'RECTANGLE' && (
+                            <>
+                              <Field label="Width (in)" styles={sharedStyles(styles)}><input value={segment.widthIn} onChange={(e) => updateSegment(segment.id, { widthIn: e.target.value })} style={styles.input} /></Field>
+                              <Field label="Length (in)" styles={sharedStyles(styles)}><input value={segment.heightIn} onChange={(e) => updateSegment(segment.id, { heightIn: e.target.value })} style={styles.input} /></Field>
+                            </>
+                          )}
+                          {segment.shapeType === 'TRIANGLE' && (
+                            <>
+                              <Field label="Triangle Base Edge (in)" styles={sharedStyles(styles)}><input value={segment.baseIn} onChange={(e) => updateSegment(segment.id, { baseIn: e.target.value })} style={styles.input} /></Field>
+                              <Field label="Triangle Depth (in)" styles={sharedStyles(styles)}><input value={segment.heightIn} onChange={(e) => updateSegment(segment.id, { heightIn: e.target.value })} style={styles.input} /></Field>
+                            </>
+                          )}
+                          {segment.shapeType === 'MANUAL' && (
+                            <Field label="Manual Area (sf)" styles={sharedStyles(styles)}><input value={segment.manualAreaSqFt} onChange={(e) => updateSegment(segment.id, { manualAreaSqFt: e.target.value })} style={styles.input} /></Field>
+                          )}
                         </SharedSegmentGrid>
                       </div>
                     ))}
@@ -380,8 +551,20 @@ export function EstimateV2CeilingsSectionBody({
               })}
             </div>
           )}
+        </div>
+      </Advanced>
 
-          {firstCeilingScope && (
+      <EstimateV2ConditionsPanel
+        title="Ceiling Conditions"
+        scope="ceiling"
+        catalog={ceilingsVm.conditionModifiers ?? []}
+        selections={ceilingsVm.conditionSelections}
+        onChange={ceilingsVm.setSelectedRoomCeilingCondition ?? (() => undefined)}
+        styles={styles}
+      />
+
+      {firstCeilingScope && (
+        <Advanced styles={sharedStyles(styles)}>
             <div style={{ border: '1px solid var(--v2-line)', borderRadius: 9, padding: 10 }}>
               <AdvancedPanelToggle
                 label="Ceiling Overrides"
@@ -423,17 +606,8 @@ export function EstimateV2CeilingsSectionBody({
                 </div>
               )}
             </div>
-          )}
-        </div>
-      </Advanced>
-      <EstimateV2ConditionsPanel
-        title="Ceiling Conditions"
-        scope="ceiling"
-        catalog={ceilingsVm.conditionModifiers ?? []}
-        selections={ceilingsVm.conditionSelections}
-        onChange={ceilingsVm.setSelectedRoomCeilingCondition ?? (() => undefined)}
-        styles={styles}
-      />
+        </Advanced>
+      )}
     </CeilingsScopePanel>
   )
 }

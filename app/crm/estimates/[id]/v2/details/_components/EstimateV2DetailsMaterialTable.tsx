@@ -1,8 +1,10 @@
 import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
 import { formatDetailsNumber } from '../_lib/estimateV2DetailsShared'
-import type { DetailsScopeLineVm } from '../_lib/estimateV2DetailsVm'
+import type { DetailsConditionsVm, DetailsScopeLineVm } from '../_lib/estimateV2DetailsVm'
 import { useEstimateV2DetailsMaterialTableInputState } from '../_state/useEstimateV2DetailsMaterialTableInputState'
+import type { ConditionLevel } from '@/types/estimator/v2'
+import { EstimateV2DetailsConditionsPanel } from './EstimateV2DetailsConditionsPanel'
 
 const labelClassName =
   'ace-crm-mono text-[11px] font-black uppercase text-[color:var(--crm-ui-muted-2)]'
@@ -12,11 +14,17 @@ export function EstimateV2DetailsMaterialTable({
   onOverride,
   emptyTitle = 'No Active Scopes',
   emptyMessage = 'There are no active scopes to plan in this section.',
+  scope,
+  conditionsVm,
+  onConditionToggle,
 }: {
   rows: DetailsScopeLineVm[]
   onOverride: (row: DetailsScopeLineVm, value: string) => void
   emptyTitle?: string
   emptyMessage?: string
+  scope?: 'wall' | 'ceiling' | 'trim'
+  conditionsVm?: DetailsConditionsVm
+  onConditionToggle?: (conditionId: string, level: ConditionLevel | null) => void
 }) {
   const {
     overrideDisplayValue,
@@ -25,11 +33,28 @@ export function EstimateV2DetailsMaterialTable({
     onChangeOverride,
   } = useEstimateV2DetailsMaterialTableInputState({ rows, onOverride })
 
+  const conditionsPanel =
+    scope && conditionsVm && onConditionToggle ? (
+      <EstimateV2DetailsConditionsPanel
+        scope={scope}
+        conditions={conditionsVm.conditions}
+        selections={conditionsVm.selections[scope]}
+        onToggle={onConditionToggle}
+        available={conditionsVm.available}
+      />
+    ) : null
+
   if (rows.length === 0) {
-    return <CrmEmptyState compact title={emptyTitle} description={emptyMessage} />
+    return (
+      <div>
+        <CrmEmptyState compact title={emptyTitle} description={emptyMessage} />
+        {conditionsPanel}
+      </div>
+    )
   }
 
   return (
+    <div>
     <div className="overflow-x-auto">
       <table className="min-w-[980px] w-full border-separate border-spacing-0 text-left text-sm">
         <thead>
@@ -121,6 +146,8 @@ export function EstimateV2DetailsMaterialTable({
           })}
         </tbody>
       </table>
+    </div>
+    {conditionsPanel}
     </div>
   )
 }

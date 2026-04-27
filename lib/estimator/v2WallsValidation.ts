@@ -44,6 +44,7 @@ export function validateV2WallsBeforeSave(params: {
   rooms: V2RoomDraftLike[]
   scopes: V2WallScopeDraftLike[]
   segments: V2WallSegmentDraftLike[]
+  allowIncomplete?: boolean
 }) {
   const issues: string[] = []
   const { rooms, scopes, segments } = params
@@ -110,15 +111,16 @@ export function validateV2WallsBeforeSave(params: {
 
       if (scope.mode !== 'SEG') continue
       const scopeSegments = segments.filter((segment) => segment.wallScopeId === scope.id)
-      if (scope.include === 'Y' && !scopeSegments.some((segment) => segment.include === 'Y')) {
+      if (!params.allowIncomplete && scope.include === 'Y' && !scopeSegments.some((segment) => segment.include === 'Y')) {
         issues.push(`${room.roomId}: SEG scope requires at least one included segment`)
       }
 
       for (const segment of scopeSegments) {
         const quantity = asNullableNumber(segment.quantity)
-        if (quantity == null || quantity <= 0) {
+        if (!params.allowIncomplete && (quantity == null || quantity <= 0)) {
           issues.push(`${room.roomId}: segment quantity must be greater than 0`)
         }
+        if (params.allowIncomplete) continue
         if (segment.shapeType === 'RECTANGLE') {
           if (asNullableNumber(segment.widthIn) == null || asNullableNumber(segment.heightIn) == null) {
             issues.push(`${room.roomId}: rectangle segments require width and height`)

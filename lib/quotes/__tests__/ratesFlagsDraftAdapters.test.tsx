@@ -324,6 +324,51 @@ describe('ratesFlagsDraftAdapters', () => {
     expect(adapter.validateDraft(baseCategory, blankSelect)).toEqual({ ok: true })
   })
 
+  it('normalizes and validates checkbox group fields', () => {
+    const category = {
+      ...baseCategory,
+      key: 'condition_modifiers',
+      tab: 'flags',
+      group: 'condition_modifiers',
+      fields: [
+        { key: 'id', label: 'ID', type: 'text', required: true },
+        { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+        {
+          key: 'scope',
+          label: 'Applies To',
+          type: 'checkbox_group',
+          required: true,
+          options: ['room', 'wall', 'ceiling', 'trim'],
+        },
+        { key: 'notes', label: 'Notes', type: 'text' },
+      ],
+    } as RatesFlagsEditableCategory<'condition_modifiers'>
+    const adapter = getRatesFlagsDraftAdapter(category.key)
+    const draft = adapter.updateDraftField(
+      category,
+      {
+        ...adapter.createEmptyDraft(category),
+        id: 'NEEDS_WASH',
+        display_name: 'Needs wash',
+      },
+      'scope',
+      ' wall, trim, '
+    )
+
+    expect(adapter.formatDraftValue(category, draft, 'scope')).toBe('wall,trim')
+    expect(adapter.validateDraft(category, draft)).toEqual({ ok: true })
+    expect(
+      adapter.validateDraft(category, {
+        ...draft,
+        scope: 'wall,bad',
+      })
+    ).toEqual({
+      ok: false,
+      error: 'Applies To must only include: room, wall, ceiling, trim.',
+      fieldKey: 'scope',
+    })
+  })
+
   it('validates read-only literal fields when a loaded draft contains an invalid value', () => {
     const adapter = getRatesFlagsDraftAdapter(baseCategory.key)
     const draft = {

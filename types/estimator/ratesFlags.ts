@@ -232,7 +232,7 @@ export type RatesFlagsCategoryKey =
   | RatesFlagsEditableCategoryKey
   | RatesFlagsLegacyCategoryKey
 
-export type RatesFlagsFieldType = 'text' | 'number' | 'select'
+export type RatesFlagsFieldType = 'text' | 'number' | 'select' | 'checkbox_group'
 
 export type RatesFlagsFieldDef = {
   key: string
@@ -310,9 +310,16 @@ export type MultiplierRow = RatesFlagsBaseRow & {
 }
 
 export type ConditionModifierRow = RatesFlagsBaseRow & {
-  wall_factor: string
-  ceil_factor: string
-  trim_factor: string
+  scope?: string
+  modifier_type?: string
+  active_factor?: string
+  minor_factor?: string
+  moderate_factor?: string
+  major_factor?: string
+  factor_field?: string
+  wall_factor?: string
+  ceil_factor?: string
+  trim_factor?: string
 }
 
 export type RoomTypeDefaultRow = RatesFlagsBaseRow & {
@@ -529,9 +536,13 @@ export type CeilingTypeMutationValues = {
 export type ConditionModifierMutationValues = {
   id: string
   display_name: string
-  wall_factor: string
-  ceil_factor: string
-  trim_factor: string
+  scope: string
+  modifier_type: string
+  active_factor: string
+  minor_factor: string
+  moderate_factor: string
+  major_factor: string
+  factor_field: string
   notes: string
   active: 'Y' | 'N'
 }
@@ -796,9 +807,13 @@ export type CeilingTypeDraft = {
 export type ConditionModifierDraft = {
   id: string
   display_name: string
-  wall_factor: RatesFlagsNumberDraftValue
-  ceil_factor: RatesFlagsNumberDraftValue
-  trim_factor: RatesFlagsNumberDraftValue
+  scope: string
+  modifier_type: string
+  active_factor: RatesFlagsNumberDraftValue
+  minor_factor: RatesFlagsNumberDraftValue
+  moderate_factor: RatesFlagsNumberDraftValue
+  major_factor: RatesFlagsNumberDraftValue
+  factor_field: string
   notes: string
 }
 

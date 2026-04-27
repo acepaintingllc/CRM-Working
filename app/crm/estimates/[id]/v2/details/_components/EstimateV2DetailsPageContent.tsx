@@ -19,6 +19,7 @@ import { EstimateV2DetailsMaterialOverview } from './EstimateV2DetailsMaterialOv
 import { EstimateV2DetailsMaterialTable } from './EstimateV2DetailsMaterialTable'
 import { EstimateV2DetailsRollerRows } from './EstimateV2DetailsRollerRows'
 import { EstimateV2DetailsSummaryRail } from './EstimateV2DetailsSummaryRail'
+import { EstimateV2DetailsRoomConditions } from './EstimateV2DetailsRoomConditions'
 import { useEstimateV2DetailsPage } from '../_state/useEstimateV2DetailsPage'
 import { DETAILS_UNSAVED_CHANGES_MESSAGE } from '../_state/useEstimateV2DetailsController'
 
@@ -188,12 +189,25 @@ export function EstimateV2DetailsPageContent({
             <EstimateV2DetailsMaterialOverview materialCards={vm.materialCards} />
           </CrmSectionCard>
 
+          {vm.conditions.conditions.some((c) => c.scope === 'room') ? (
+            <CrmSectionCard title="Room Conditions" description="Conditions that apply a factor across all scopes in every room.">
+              <EstimateV2DetailsRoomConditions
+                conditions={vm.conditions.conditions}
+                selections={vm.conditions.selections}
+                onToggle={(id, level) => actions.setRoomCondition('room', id, level)}
+              />
+            </CrmSectionCard>
+          ) : null}
+
           <CrmSectionCard title="Paint Planning" description={vm.materialPlanningSections.walls.description}>
             <EstimateV2DetailsMaterialTable
               rows={vm.wallRows}
               onOverride={(row, value) => actions.setWallOverride(row.colorId ?? row.id, value)}
               emptyTitle={vm.materialPlanningSections.walls.emptyTitle}
               emptyMessage={vm.materialPlanningSections.walls.emptyMessage}
+              scope="wall"
+              conditionsVm={vm.conditions}
+              onConditionToggle={(id, level) => actions.setRoomCondition('wall', id, level)}
             />
           </CrmSectionCard>
 
@@ -203,6 +217,9 @@ export function EstimateV2DetailsPageContent({
               onOverride={(_, value) => actions.setCeilingOverride(value)}
               emptyTitle={vm.materialPlanningSections.ceilings.emptyTitle}
               emptyMessage={vm.materialPlanningSections.ceilings.emptyMessage}
+              scope="ceiling"
+              conditionsVm={vm.conditions}
+              onConditionToggle={(id, level) => actions.setRoomCondition('ceiling', id, level)}
             />
           </CrmSectionCard>
 
@@ -212,6 +229,9 @@ export function EstimateV2DetailsPageContent({
               onOverride={(_, value) => actions.setTrimOverride(value)}
               emptyTitle={vm.materialPlanningSections.trim.emptyTitle}
               emptyMessage={vm.materialPlanningSections.trim.emptyMessage}
+              scope="trim"
+              conditionsVm={vm.conditions}
+              onConditionToggle={(id, level) => actions.setRoomCondition('trim', id, level)}
             />
           </CrmSectionCard>
 

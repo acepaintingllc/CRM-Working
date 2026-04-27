@@ -96,6 +96,23 @@ describe('estimateV2EditorPresentation', () => {
     ])
   })
 
+  it('omits primer summary chips when primer is inactive', () => {
+    expect(
+      buildSectionSummaryChips({
+        modeLabel: 'RECT',
+        primaryValue: '144',
+        primaryUnit: 'Sq Ft',
+        paintLabel: 'Ceiling Paint',
+        primerLabel: 'Ceiling Primer',
+        showPrimer: false,
+      })
+    ).toEqual([
+      { label: 'Mode: RECT' },
+      { label: 'Sq Ft: 144' },
+      { label: 'Paint: Ceiling Paint' },
+    ])
+  })
+
   it('builds wall-only room flag modifier hints from canonical factors', () => {
     expect(
       buildRoomFlagModifierHint({

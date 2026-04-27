@@ -142,3 +142,33 @@ test('validation enforces SEG shape fields and quantity rules', () => {
   assert.ok(issues.some((issue) => issue.includes('rectangle segments require width and height')))
   assert.ok(issues.some((issue) => issue.includes('triangle segments require base and height')))
 })
+
+test('validation allows incomplete SEG geometry for autosave drafts', () => {
+  const issues = validateV2WallsBeforeSave({
+    rooms: [makeBaseRoom()],
+    scopes: [
+      {
+        ...makeRectScope(),
+        id: 'scope-seg',
+        mode: 'SEG',
+      },
+    ],
+    segments: [
+      {
+        id: 'seg-r',
+        wallScopeId: 'scope-seg',
+        roomId: 'R001',
+        include: 'Y',
+        shapeType: 'RECTANGLE',
+        quantity: '1',
+        widthIn: '',
+        heightIn: '',
+        baseIn: '',
+        manualAreaSqFt: '',
+      },
+    ],
+    allowIncomplete: true,
+  })
+
+  assert.deepEqual(issues, [])
+})

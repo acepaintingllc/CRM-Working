@@ -75,6 +75,18 @@ function parseNumberValue(value: unknown): number | null | string {
   return Number.isFinite(parsed) ? parsed : value
 }
 
+function normalizeCheckboxGroupValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).trim()).filter(Boolean).join(',')
+  }
+  if (value == null) return ''
+  return String(value)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .join(',')
+}
+
 function parseFieldValue(field: RatesFlagsFieldDef, raw: unknown): DraftValue {
   if (isYnSelect(field)) {
     if (raw === true || raw === 'Y') return true
@@ -84,6 +96,7 @@ function parseFieldValue(field: RatesFlagsFieldDef, raw: unknown): DraftValue {
   }
 
   if (field.type === 'number') return parseNumberValue(raw)
+  if (field.type === 'checkbox_group') return normalizeCheckboxGroupValue(raw)
   if (raw == null) return ''
   return String(raw)
 }
@@ -206,6 +219,19 @@ function validateTypedDraft<TDraft extends RatesFlagsDraft>(
         return {
           ok: false,
           error: `${field.label} must be one of: ${field.options.join(', ')}.`,
+          fieldKey: field.key,
+        }
+      }
+    } else if (field.type === 'checkbox_group' && field.options && field.options.length > 0) {
+      const selected = asDraftString(value as DraftValue)
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+      const invalid = selected.find((entry) => !field.options?.includes(entry))
+      if (invalid) {
+        return {
+          ok: false,
+          error: `${field.label} must only include: ${field.options.join(', ')}.`,
           fieldKey: field.key,
         }
       }

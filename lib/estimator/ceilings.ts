@@ -160,15 +160,10 @@ function resolveCeilingHelperArea(scope: CeilingCalculationScopeRow, baseArea: n
   if (base <= 0) return 0
 
   if (mode === 'VAULTED') {
+    if (pos(n(scope.area_sf)) != null) return 0
+    if (resolveVaultedMeasuredArea(scope) != null) return 0
     const factor = pos(n(scope.vaulted_area_factor)) ?? 1.2
     return round4(Math.max(base * factor - base, 0))
-  }
-
-  if (mode === 'TRAY') {
-    const perimeter = nonNeg(n(scope.tray_perimeter_in)) ?? 0
-    const stepHeight = nonNeg(n(scope.tray_step_height_in)) ?? 0
-    const bandWidth = nonNeg(n(scope.tray_band_width_in)) ?? 0
-    return round4((perimeter * stepHeight) / 144 + (perimeter * bandWidth) / 144)
   }
 
   if (mode === 'COFFERED') {
@@ -184,6 +179,15 @@ function resolveCeilingHelperArea(scope: CeilingCalculationScopeRow, baseArea: n
   }
 
   return 0
+}
+
+function resolveVaultedMeasuredArea(scope: CeilingCalculationScopeRow) {
+  if ((scope.ceiling_geometry_mode ?? 'FLAT') !== 'VAULTED') return null
+  const ridgeLength = pos(n(scope.vaulted_ridge_length_in))
+  const slopeLength = pos(n(scope.vaulted_slope_length_in))
+  const planeCount = Math.max(1, Math.floor(pos(n(scope.vaulted_plane_count)) ?? 2))
+  if (ridgeLength == null || slopeLength == null) return null
+  return round4((ridgeLength * slopeLength * planeCount) / 144)
 }
 
 function applyScopeCosts(
@@ -319,6 +323,11 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
         geometry = directArea
         rawArea = directArea
       } else {
+        const vaultedMeasuredArea = resolveVaultedMeasuredArea(scope)
+        if (vaultedMeasuredArea != null) {
+          geometry = vaultedMeasuredArea
+          rawArea = vaultedMeasuredArea
+        } else {
         const lengthIn = pos(n(scope.length_in))
         const widthIn = pos(n(scope.width_in))
         if (lengthIn == null || widthIn == null) {
@@ -347,6 +356,7 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
           rawArea = geometry
         }
       }
+      }
     } else {
       // SEG mode: sum included segment areas
       const includedSegments = segments.filter((seg) => seg.include === 'Y')
@@ -364,8 +374,10 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
       rawArea = sumNumbers(includedSegments.map((seg) => seg.effective_area_sf))
     }
 
-    const typeInfo = scope.ceiling_type_id ? ceilingTypeInfoMap.get(scope.ceiling_type_id) : undefined
-    const helperExtraArea = resolveCeilingHelperArea(scope, rawArea)
+    const isSegmentScope = scope.mode === 'SEG'
+    const typeInfo =
+      !isSegmentScope && scope.ceiling_type_id ? ceilingTypeInfoMap.get(scope.ceiling_type_id) : undefined
+    const helperExtraArea = isSegmentScope ? 0 : resolveCeilingHelperArea(scope, rawArea)
     const areaFactor = typeInfo?.area_factor ?? 1
     const factoredRawArea = rawArea == null ? null : round4((rawArea + helperExtraArea) * areaFactor)
     const overrideArea = nonNeg(n(scope.override_area_sf))

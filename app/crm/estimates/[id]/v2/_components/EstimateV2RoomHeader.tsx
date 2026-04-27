@@ -79,6 +79,7 @@ export function EstimateV2RoomHeader({
   )
 
   const roomTypeUnavailable = roomVm.roomTypeOptions.length === 0
+  const isSegmentedRoom = roomVm.selectedRoomGeometryMode === 'SEG'
 
   return (
     <>
@@ -172,15 +173,19 @@ export function EstimateV2RoomHeader({
               ))}
             </div>
           </Field>
-          <Field label="Length (in)" styles={styles}>
-            <input value={room.lengthIn} onChange={(event) => roomVm.updateSelectedRoomDimensions('lengthIn', event.target.value)} style={styles.input} placeholder="0" type="number" min="0" />
-            {lengthHelper && <span className="dim-helper-text">{lengthHelper}</span>}
-          </Field>
-          <Field label="Width (in)" styles={styles}>
-            <input value={room.widthIn} onChange={(event) => roomVm.updateSelectedRoomDimensions('widthIn', event.target.value)} style={styles.input} placeholder="0" type="number" min="0" />
-            {widthHelper && <span className="dim-helper-text">{widthHelper}</span>}
-          </Field>
-          <Field label="Height (in)" styles={styles}>
+          {!isSegmentedRoom && (
+            <>
+              <Field label="Length (in)" styles={styles}>
+                <input value={room.lengthIn} onChange={(event) => roomVm.updateSelectedRoomDimensions('lengthIn', event.target.value)} style={styles.input} placeholder="0" type="number" min="0" />
+                {lengthHelper && <span className="dim-helper-text">{lengthHelper}</span>}
+              </Field>
+              <Field label="Width (in)" styles={styles}>
+                <input value={room.widthIn} onChange={(event) => roomVm.updateSelectedRoomDimensions('widthIn', event.target.value)} style={styles.input} placeholder="0" type="number" min="0" />
+                {widthHelper && <span className="dim-helper-text">{widthHelper}</span>}
+              </Field>
+            </>
+          )}
+          <Field label={isSegmentedRoom ? 'Height Override (in)' : 'Height (in)'} styles={styles}>
             <input value={room.heightIn} onChange={(event) => roomVm.updateSelectedRoomDimensions('heightIn', event.target.value)} style={styles.input} placeholder="0" type="number" min="0" />
             {heightHelper && <span className="dim-helper-text">{heightHelper}</span>}
           </Field>

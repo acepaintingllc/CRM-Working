@@ -91,7 +91,7 @@ test('buildV2WallScopeRows maps v2 wall fields including coats and spot prime al
   assert.equal(parsed.modeByRoom.get('R001'), 'RECT')
 })
 
-test('buildV2WallSegmentRows enforces SEG-only ownership and shape-required dimensions', () => {
+test('buildV2WallSegmentRows enforces SEG-only ownership and allows partial dimensions', () => {
   const scopeRows = buildV2WallScopeRows(
     [
       {
@@ -117,14 +117,13 @@ test('buildV2WallSegmentRows enforces SEG-only ownership and shape-required dime
     /segments can only belong to SEG scopes/i
   )
 
-  assert.throws(
-    () =>
-      buildV2WallSegmentRows(
-        [{ wall_scope_id: '33333333-3333-4333-8333-333333333333', shape_type: 'TRIANGLE', height_in: 96, quantity: 1 }],
-        scopeRows
-      ),
-    /triangle segments require base and height/i
+  const partial = buildV2WallSegmentRows(
+    [{ wall_scope_id: '33333333-3333-4333-8333-333333333333', shape_type: 'TRIANGLE', height_in: 96, quantity: 1 }],
+    scopeRows
   )
+  assert.equal(partial[0].shape_type, 'TRIANGLE')
+  assert.equal(partial[0].base_in, null)
+  assert.equal(partial[0].height_in, 96)
 
   const segments = buildV2WallSegmentRows(
     [
@@ -263,7 +262,7 @@ test('buildV2CeilingScopeRows maps ceiling-specific fields and auto-assigns posi
   assert.equal(parsed.modeByRoom.get('R001'), 'RECT')
 })
 
-test('buildV2CeilingSegmentRows enforces SEG-only ownership and shape-required dimensions, maps valid rows', () => {
+test('buildV2CeilingSegmentRows enforces SEG-only ownership and allows partial dimensions', () => {
   const scopeRows = buildV2CeilingScopeRows(
     [
       { id: '22222222-2222-4222-8222-222222222222', room_id: 'R100', mode: 'RECT' },
@@ -281,14 +280,13 @@ test('buildV2CeilingSegmentRows enforces SEG-only ownership and shape-required d
     /segments can only belong to SEG scopes/i
   )
 
-  assert.throws(
-    () =>
-      buildV2CeilingSegmentRows(
-        [{ ceiling_scope_id: '33333333-3333-4333-8333-333333333333', shape_type: 'TRIANGLE', height_in: 96, quantity: 1 }],
-        scopeRows
-      ),
-    /triangle segments require base and height/i
+  const partial = buildV2CeilingSegmentRows(
+    [{ ceiling_scope_id: '33333333-3333-4333-8333-333333333333', shape_type: 'TRIANGLE', height_in: 96, quantity: 1 }],
+    scopeRows
   )
+  assert.equal(partial[0].shape_type, 'TRIANGLE')
+  assert.equal(partial[0].base_in, null)
+  assert.equal(partial[0].height_in, 96)
 
   const segments = buildV2CeilingSegmentRows(
     [

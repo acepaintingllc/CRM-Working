@@ -8,8 +8,11 @@ import {
   AdvancedPanelToggle,
   Field,
   ItemActionRow,
+  OptionalInputFrame,
   PrimerModeButtons,
+  RequiredInputFrame,
   ReorderDeleteActions,
+  ScopeHelperBar,
   TrimScopePanel,
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
@@ -23,6 +26,12 @@ const sharedStyles = (styles: EditorStyles) => ({
   mono: styles.mono,
   panel: styles.panel,
 })
+
+function roomPerimeter(room: EstimateV2EditorTrimVm['selectedRoom']) {
+  const length = numberOrNull(room?.lengthIn ?? '')
+  const width = numberOrNull(room?.widthIn ?? '')
+  return length != null && width != null ? (2 * (length + width)) / 12 : null
+}
 
 export function EstimateV2TrimSectionBody({
   styles,
@@ -98,6 +107,13 @@ export function EstimateV2TrimSectionBody({
           ].some((value) => String(value ?? '').toLowerCase().includes('baseboard'))
         const rowMeasurement = trimScopeEffectiveMeasurementById.get(trimScope.id)
         const rowSubtotal = trimScopeEffectiveTotalById.get(trimScope.id)
+        const helperValue =
+          numberOrNull(trimScope.helperValue) ??
+          (trimScope.measurementMode === 'ROOM_HELPER' && helperEligible ? roomPerimeter(selectedRoom) : null)
+        const baseMeasurement =
+          trimScope.measurementMode === 'ROOM_HELPER'
+            ? helperValue
+            : numberOrNull(trimScope.measurementValue)
         const rowModifierCount = [
           trimScope.prepFactor,
           trimScope.heightFactor,
@@ -154,90 +170,115 @@ export function EstimateV2TrimSectionBody({
                 : ''}
             </div>
 
+            <div style={{ ...styles.mono, marginTop: 2 }}>Trim Setup</div>
+            <ScopeHelperBar
+              styles={{ mono: styles.mono, computedBig: styles.computedBig }}
+              metrics={[
+                { label: 'Base Measurement', value: toDisplayNumber(baseMeasurement), muted: baseMeasurement == null },
+                { label: 'Helper Value', value: toDisplayNumber(helperValue), muted: helperValue == null },
+                { label: 'Factor Count', value: rowModifierCount },
+                { label: 'Final Measurement', value: toDisplayNumber(rowMeasurement), muted: rowMeasurement == null },
+              ]}
+            />
+
             <div className="paint-setup-grid">
               <Field label="Trim Type" styles={sharedStyles(styles)}>
-                <EstimateV2TrimTypePicker
-                  value={trimScope.trimTypeId}
-                  options={trimTypeOptions}
-                  onChange={(trimTypeId) => updateTrimType(trimScope.id, trimTypeId)}
-                  styles={{ input: styles.input, mono: styles.mono }}
-                />
+                <RequiredInputFrame>
+                  <EstimateV2TrimTypePicker
+                    value={trimScope.trimTypeId}
+                    options={trimTypeOptions}
+                    onChange={(trimTypeId) => updateTrimType(trimScope.id, trimTypeId)}
+                    styles={{ input: styles.input, mono: styles.mono }}
+                  />
+                </RequiredInputFrame>
               </Field>
               <Field label="Include" styles={sharedStyles(styles)}>
-                <select
-                  value={trimScope.include}
-                  onChange={(e) =>
-                    updateScope(trimScope.id, { include: e.target.value as 'Y' | 'N' })
-                  }
-                  style={styles.input}
-                >
-                  <option value="Y">Included</option>
-                  <option value="N">Excluded</option>
-                </select>
+                <OptionalInputFrame>
+                  <select
+                    value={trimScope.include}
+                    onChange={(e) =>
+                      updateScope(trimScope.id, { include: e.target.value as 'Y' | 'N' })
+                    }
+                    style={styles.input}
+                  >
+                    <option value="Y">Included</option>
+                    <option value="N">Excluded</option>
+                  </select>
+                </OptionalInputFrame>
               </Field>
               <Field label="Measurement Mode" styles={sharedStyles(styles)}>
-                <select
-                  value={trimScope.measurementMode}
-                  onChange={(e) => {
-                    const nextMode = e.target.value as TrimMeasurementMode
-                    updateScope(trimScope.id, {
-                      measurementMode: nextMode,
-                      helperSource: nextMode === 'ROOM_HELPER' ? 'ROOM_PERIMETER' : '',
-                    })
-                  }}
-                  style={styles.input}
-                >
-                  <option value="MANUAL">Manual</option>
-                  <option value="ROOM_HELPER" disabled={!helperEligible}>
-                    Room helper
-                  </option>
-                </select>
+                <RequiredInputFrame>
+                  <select
+                    value={trimScope.measurementMode}
+                    onChange={(e) => {
+                      const nextMode = e.target.value as TrimMeasurementMode
+                      updateScope(trimScope.id, {
+                        measurementMode: nextMode,
+                        helperSource: nextMode === 'ROOM_HELPER' ? 'ROOM_PERIMETER' : '',
+                      })
+                    }}
+                    style={styles.input}
+                  >
+                    <option value="MANUAL">Manual</option>
+                    <option value="ROOM_HELPER" disabled={!helperEligible}>
+                      Room helper
+                    </option>
+                  </select>
+                </RequiredInputFrame>
               </Field>
               <Field label={`Measurement (${trimScope.unitType})`} styles={sharedStyles(styles)}>
                 {trimScope.measurementMode === 'ROOM_HELPER' ? (
-                  <input
-                    value={trimScope.helperValue}
-                    onChange={(e) => updateScope(trimScope.id, { helperValue: e.target.value })}
-                    style={styles.input}
-                    placeholder="auto perimeter fallback"
-                  />
+                  <OptionalInputFrame>
+                    <input
+                      value={trimScope.helperValue}
+                      onChange={(e) => updateScope(trimScope.id, { helperValue: e.target.value })}
+                      style={styles.input}
+                      placeholder="auto perimeter fallback"
+                    />
+                  </OptionalInputFrame>
                 ) : (
-                  <input
-                    value={trimScope.measurementValue}
-                    onChange={(e) =>
-                      updateScope(trimScope.id, { measurementValue: e.target.value })
-                    }
-                    style={styles.input}
-                    type="number"
-                    min="0"
-                  />
+                  <RequiredInputFrame>
+                    <input
+                      value={trimScope.measurementValue}
+                      onChange={(e) =>
+                        updateScope(trimScope.id, { measurementValue: e.target.value })
+                      }
+                      style={styles.input}
+                      type="number"
+                      min="0"
+                    />
+                  </RequiredInputFrame>
                 )}
               </Field>
               {isBaseboardLf && (
                 <Field label="Openings" styles={sharedStyles(styles)}>
-                  <input
-                    value={trimScope.baseboardOpeningCount}
-                    onChange={(e) =>
-                      updateScope(trimScope.id, { baseboardOpeningCount: e.target.value })
-                    }
-                    style={styles.input}
-                    type="number"
-                    min="0"
-                    step="0.5"
-                  />
+                  <OptionalInputFrame>
+                    <input
+                      value={trimScope.baseboardOpeningCount}
+                      onChange={(e) =>
+                        updateScope(trimScope.id, { baseboardOpeningCount: e.target.value })
+                      }
+                      style={styles.input}
+                      type="number"
+                      min="0"
+                      step="0.5"
+                    />
+                  </OptionalInputFrame>
                 </Field>
               )}
               <Field label="Primer Mode" styles={sharedStyles(styles)}>
-                <PrimerModeButtons
-                  currentMode={trimScope.primeMode}
-                  onChange={(mode) =>
-                    updateScope(trimScope.id, {
-                      primeMode: mode,
-                      primerProductId: mode === 'NONE' ? '' : trimScope.primerProductId,
-                    })
-                  }
-                  styles={{ button: styles.button }}
-                />
+                <RequiredInputFrame>
+                  <PrimerModeButtons
+                    currentMode={trimScope.primeMode}
+                    onChange={(mode) =>
+                      updateScope(trimScope.id, {
+                        primeMode: mode,
+                        primerProductId: mode === 'NONE' ? '' : trimScope.primerProductId,
+                      })
+                    }
+                    styles={{ button: styles.button }}
+                  />
+                </RequiredInputFrame>
               </Field>
             </div>
 
@@ -254,6 +295,7 @@ export function EstimateV2TrimSectionBody({
                 styles={{ mono: styles.mono }}
               />
               {advancedOpen && (
+                <OptionalInputFrame>
                 <div style={{ display: 'grid', gap: 10 }}>
                   <div className="advanced-grid">
                     <Field label="Scope Name" styles={sharedStyles(styles)}>
@@ -372,6 +414,7 @@ export function EstimateV2TrimSectionBody({
                     />
                   </Field>
                 </div>
+                </OptionalInputFrame>
               )}
             </Advanced>
           </div>

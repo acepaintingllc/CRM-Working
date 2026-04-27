@@ -257,11 +257,55 @@ test('vaulted helper area uses slope factor and labor multiplier remains labor-o
   approx(result.scopes[0].raw_paint_hours, 5.184)
 })
 
-test('tray helper adds vertical and band drywall sqft', () => {
+test('vaulted direct area is treated as total ceiling sqft without applying slope factor again', () => {
   const result = calculateCeilings({
     settings: BASE_SETTINGS,
     scopes: [
       makeScope({
+        ceiling_geometry_mode: 'VAULTED',
+        area_sf: 220,
+        vaulted_area_factor: 1.2,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 220)
+  approx(result.scopes[0].raw_paint_gallons, 2.2)
+})
+
+test('vaulted measured inputs calculate total ceiling sqft', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_ridge_length_in: 180,
+        vaulted_slope_length_in: 120,
+        vaulted_plane_count: 2,
+        vaulted_area_factor: 1.2,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 300)
+  approx(result.scopes[0].raw_paint_gallons, 3)
+})
+
+test('tray ceiling uses catalog area factor instead of geometry helper sqft', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'tray', labor_mult: 1, area_factor: 1.15 }],
+    },
+    scopes: [
+      makeScope({
+        ceiling_type_id: 'tray',
         ceiling_geometry_mode: 'TRAY',
         tray_perimeter_in: 480,
         tray_step_height_in: 12,
@@ -272,8 +316,29 @@ test('tray helper adds vertical and band drywall sqft', () => {
     segments: [],
   })
 
-  approx(result.scopes[0].helper_extra_area_sf ?? null, 100)
-  approx(result.scopes[0].raw_area_sf, 244)
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 165.6)
+})
+
+test('tray geometry fields do not add ceiling helper sqft', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'TRAY',
+        tray_perimeter_in: null,
+        tray_step_height_in: 12,
+        tray_band_width_in: 18,
+        length_in: 120,
+        width_in: 144,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 120)
 })
 
 test('coffered helper calculates extra drywall sqft from section size and count', () => {
@@ -518,6 +583,57 @@ test('SEG mode: sums included segment areas', () => {
   // total: 144 sf
   approx(result.scopes[0].effective_area_sf, 144)
   assert.equal(result.missing_inputs.length, 0)
+})
+
+test('SEG mode: prices as flat even if older saved data has a non-flat ceiling type', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'coffered', labor_mult: 1.5, area_factor: 1.25 }],
+    },
+    scopes: [
+      {
+        ...makeScope({
+          mode: 'SEG',
+          prime_mode: 'NONE',
+          length_in: null,
+          width_in: null,
+          ceiling_type_id: 'coffered',
+          ceiling_geometry_mode: 'COFFERED',
+          coffer_section_length_in: 48,
+          coffer_section_width_in: 36,
+          coffer_section_count: 6,
+          coffer_face_height_in: 6,
+          coffer_bottom_width_in: 4,
+        }),
+        id: 'scope-seg-flat-only',
+      },
+    ],
+    segments: [
+      {
+        id: 'seg-flat-only',
+        ceiling_scope_id: 'scope-seg-flat-only',
+        room_id: 'R001',
+        position: 0,
+        segment_name: 'Manual segment',
+        include: 'Y',
+        shape_type: 'MANUAL',
+        quantity: 1,
+        width_in: null,
+        height_in: null,
+        base_in: null,
+        manual_area_sf: 100,
+        raw_area_sf: null,
+        override_area_sf: null,
+        effective_area_sf: null,
+        notes: null,
+      },
+    ],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 100)
+  approx(result.scopes[0].raw_paint_hours, 2)
 })
 
 test('SEG mode: excluded segment not included in area', () => {

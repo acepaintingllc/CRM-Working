@@ -15,6 +15,7 @@ import {
 } from '@/lib/estimator/v2WallsAutosave'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
+import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import {
   prepareEstimateV2SaveState,
   resolveEstimateV2SaveResponseState,
@@ -65,6 +66,7 @@ export function useEstimateV2SaveController(params: {
       const issues = validateEstimateV2PreparedSave({
         currentState,
         prepared: preparedSave,
+        trigger,
       })
       if (issues.length > 0) {
         if (trigger === 'manual') {
@@ -132,6 +134,23 @@ export function useEstimateV2SaveController(params: {
         })
         meta.setError(createEstimateV2Error(message, { retryable: true }))
         meta.setSaveStatus('error')
+        return false
+      }
+
+      const latestState = store.getState()
+      const latestSnapshot = buildEstimateV2DirtySnapshot({
+        jobSettingsDraft: latestState.meta.jobSettingsDraft,
+        rooms: latestState.collections.rooms,
+        scopes: latestState.collections.scopes,
+        segments: latestState.collections.segments,
+        roomFlags: latestState.collections.roomFlags,
+        ceilingScopes: latestState.collections.ceilingScopes,
+        ceilingSegments: latestState.collections.ceilingSegments,
+        trimScopes: latestState.collections.trimScopes,
+        rollers: latestState.collections.rollers,
+      })
+      if (latestSnapshot.comparisonKey !== preparedSave.payloadSnapshot.comparisonKey) {
+        meta.setSaveStatus('idle')
         return false
       }
 

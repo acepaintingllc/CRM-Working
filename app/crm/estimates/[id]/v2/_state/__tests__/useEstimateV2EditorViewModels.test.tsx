@@ -256,4 +256,58 @@ describe('useEstimateV2EditorViewModels', () => {
     expect(result.current.summaryVm.trim).not.toBe(initialTrimSummary)
     expect(result.current.summaryVm.trim.secondaryValue).toBe('$245.00')
   })
+
+  it('hides wall and trim primer summary chips unless an included scope uses primer', () => {
+    const baseParams = createViewModelParams()
+    const params = {
+      ...baseParams,
+      derived: {
+        ...baseParams.derived,
+        room: {
+          ...baseParams.derived.room,
+          selectedRoomScopes: baseParams.derived.room.selectedRoomScopes.map((scope) => ({
+            ...scope,
+            primeMode: 'NONE' as (typeof scope)['primeMode'],
+          })),
+          selectedRoomTrimScopes: baseParams.derived.room.selectedRoomTrimScopes.map((scope) => ({
+            ...scope,
+            primeMode: 'NONE' as (typeof scope)['primeMode'],
+          })),
+        },
+      },
+    }
+
+    const { result, rerender } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: params } }
+    )
+
+    expect(result.current.summaryVm.walls.showPrimer).toBe(false)
+    expect(result.current.summaryVm.walls.chips.some((chip) => chip.label.startsWith('Primer:'))).toBe(false)
+    expect(result.current.summaryVm.trim.showPrimer).toBe(false)
+    expect(result.current.summaryVm.trim.chips.some((chip) => chip.label.startsWith('Primer:'))).toBe(false)
+
+    rerender({
+      nextParams: {
+        ...params,
+        derived: {
+          ...params.derived,
+          room: {
+            ...params.derived.room,
+            selectedRoomScopes: [
+              { ...params.derived.room.selectedRoomScopes[0], primeMode: 'SPOT' },
+            ],
+            selectedRoomTrimScopes: [
+              { ...params.derived.room.selectedRoomTrimScopes[0], primeMode: 'FULL' },
+            ],
+          },
+        },
+      },
+    })
+
+    expect(result.current.summaryVm.walls.showPrimer).toBe(true)
+    expect(result.current.summaryVm.walls.chips.some((chip) => chip.label === 'Primer: Wall Primer')).toBe(true)
+    expect(result.current.summaryVm.trim.showPrimer).toBe(true)
+    expect(result.current.summaryVm.trim.chips.some((chip) => chip.label === 'Primer: Trim Primer')).toBe(true)
+  })
 })

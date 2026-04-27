@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   QuoteRatesActions,
@@ -146,5 +146,36 @@ describe('QuoteRatesEditorSection', () => {
     expect(
       screen.queryByText('This category is a legacy data type and cannot be edited here.')
     ).not.toBeInTheDocument()
+  })
+
+  it('renders checkbox group fields and serializes checked values in option order', () => {
+    const category = {
+      ...editableCategory,
+      fields: [
+        { key: 'scope', label: 'Applies To', type: 'checkbox_group', required: true, options: ['room', 'wall', 'ceiling', 'trim'] },
+      ],
+    } satisfies RatesFlagsCategory
+    const checkboxActions = {
+      ...actions,
+      formatDraftValue: vi.fn(() => 'wall,trim'),
+    }
+
+    render(
+      <QuoteRatesEditorSection
+        vm={buildEditorVm({ activeCategory: category })}
+        templateVersion={2}
+        actions={checkboxActions}
+      />
+    )
+
+    expect(screen.getByRole('checkbox', { name: 'wall' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'ceiling' })).not.toBeChecked()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'ceiling' }))
+
+    expect(checkboxActions.updateDraftValue).toHaveBeenCalledWith(
+      'scope',
+      'wall,ceiling,trim'
+    )
   })
 })
