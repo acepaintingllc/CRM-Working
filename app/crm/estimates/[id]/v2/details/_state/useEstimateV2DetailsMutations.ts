@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react'
 import type { EstimateV2EditorStoreApi } from '@/lib/estimates/v2/store/estimateV2Store'
+import type { ConditionLevel, EstimateV2ConditionModifier } from '@/types/estimator/v2'
 import {
   applyCeilingGallonOverride,
   applyTrimGallonOverride,
@@ -13,6 +14,11 @@ import {
   type EstimateV2DetailsVm,
 } from '../_lib/estimateV2DetailsVm'
 import { applyDetailsRollerRowPatch } from '../_lib/estimateV2DetailsRollerDrafts'
+import {
+  emptyConditionSelections,
+  resolveAllConditionFactors,
+  setConditionSelection,
+} from '../_lib/estimateV2DetailsConditions'
 
 type DetailsCollectionSetter<TItem> = (value: TItem[] | ((prev: TItem[]) => TItem[])) => void
 
@@ -33,6 +39,7 @@ export function useEstimateV2DetailsMutations(params: {
   store: EstimateV2EditorStoreApi
   rollerOptions: DetailsRollerCoverOption[]
   vm: EstimateV2DetailsVm
+  conditionModifiers: EstimateV2ConditionModifier[]
 }) {
   const recordDebugDirtySource = useCallback(() => {
     // Debug-only instrumentation; snapshot comparison controls actual dirty state.
@@ -109,12 +116,35 @@ export function useEstimateV2DetailsMutations(params: {
     [params.store, recordDebugDirtySource]
   )
 
+  const setRoomCondition = useCallback(
+    (
+      scope: EstimateV2ConditionModifier['scope'],
+      conditionId: string,
+      level: ConditionLevel | null
+    ) => {
+      const current =
+        params.store.getState().meta.jobSettingsDraft.conditionSelections ??
+        emptyConditionSelections()
+      const next = setConditionSelection(current, scope, conditionId, level)
+      if (JSON.stringify(current[scope]) === JSON.stringify(next[scope])) return
+      const factors = resolveAllConditionFactors(params.conditionModifiers, next)
+      params.store.getState().setJobSettingsDraft((prev) => ({
+        ...prev,
+        conditionSelections: next,
+        resolvedConditionFactors: factors,
+      }))
+      recordDebugDirtySource()
+    },
+    [params.store, params.conditionModifiers, recordDebugDirtySource]
+  )
+
   return {
     setCrewSize,
     setRollerRow,
     setWallOverride,
     setCeilingOverride,
     setTrimOverride,
+    setRoomCondition,
   }
 }
 
