@@ -368,6 +368,7 @@ export function buildEstimateV2ValidationVm(params: {
     EstimateV2DetailsRollerPlanningVm,
     'wallRollerRows' | 'ceilingRollerRow'
   >
+  conditionsVm?: DetailsConditionsVm
 }): EstimateV2DetailsValidationVm {
   const validationIssues = createValidationIssues({
     wallRows: params.materialPlanning.wallRows,
@@ -379,6 +380,7 @@ export function buildEstimateV2ValidationVm(params: {
       params.materialPlanning.wallRows.length +
       (params.materialPlanning.ceilingRow ? 1 : 0) +
       (params.materialPlanning.trimRow ? 1 : 0),
+    conditionsVm: params.conditionsVm,
   })
   const blockingValidationIssues = getBlockingValidationIssues(validationIssues)
   const canContinueToSummary = blockingValidationIssues.length === 0
@@ -448,7 +450,8 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     rollerOptionsState: params.rollerOptionsState,
     rollers: params.rollers,
   })
-  const validation = buildEstimateV2ValidationVm({ materialPlanning, rollerPlanning })
+  const conditions = buildEstimateV2ConditionsVm(params)
+  const validation = buildEstimateV2ValidationVm({ materialPlanning, rollerPlanning, conditionsVm: conditions })
   const totals = buildEstimateV2TotalsVm({
     materialPlanning,
     pricingSummary: params.pricingSummary,
@@ -460,6 +463,6 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     ...rollerPlanning,
     ...validation,
     ...totals,
-    conditions: buildEstimateV2ConditionsVm(params),
+    conditions,
   }
 }

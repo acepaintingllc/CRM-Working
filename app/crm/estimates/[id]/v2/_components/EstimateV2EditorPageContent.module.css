@@ -186,6 +186,37 @@
   align-items: end;
 }
 
+:global(.scope-helper-bar) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+:global(.required-input-frame input),
+:global(.required-input-frame select),
+:global(.required-input-frame textarea),
+:global(.required-input-frame .trim-type-picker-trigger),
+:global(.required-input-frame .primer-mode-row button),
+:global(.required-input-frame > div) {
+  border-color: rgba(203, 213, 225, 0.42) !important;
+}
+
+:global(.optional-input-frame input),
+:global(.optional-input-frame select),
+:global(.optional-input-frame textarea),
+:global(.optional-input-frame .trim-type-picker-trigger),
+:global(.optional-input-frame > div) {
+  border-color: transparent !important;
+}
+
+:global(.optional-input-frame input:focus),
+:global(.optional-input-frame select:focus),
+:global(.optional-input-frame textarea:focus),
+:global(.optional-input-frame .trim-type-picker-trigger:focus) {
+  border-color: rgba(132,204,147,0.55) !important;
+}
+
 :global(.primer-mode-row) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -363,6 +394,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  :global(.scope-helper-bar) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   :global(.modifier-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -376,6 +411,7 @@
   :global(.geometry-primary-grid),
   :global(.geometry-secondary-grid),
   :global(.paint-setup-grid),
+  :global(.scope-helper-bar),
   :global(.modifier-grid),
   :global(.advanced-grid) {
     grid-template-columns: 1fr !important;

@@ -102,9 +102,19 @@ function buildSampleConstantsValues() {
     ['CeilingTypeID', 'DisplayName', 'LaborMult', 'Surcharge_per_sqft', 'Active?'],
     ['VAULT', 'Vaulted', '1.25', '0.25', 'Y'],
     [],
-    ['CAT_RoomFlags'],
-    ['FlagID', 'DisplayName', 'WallFactor', 'CeilFactor', 'TrimFactor', 'Active?'],
-    ['FURN', 'Heavy furniture', '1.2', '1.1', '1.3', 'Y'],
+    ['CAT_ConditionModifiers'],
+    [
+      'ConditionID',
+      'DisplayName',
+      'Scope',
+      'ModifierType',
+      'ActiveFactor',
+      'MinorFactor',
+      'ModerateFactor',
+      'MajorFactor',
+      'Active?',
+    ],
+    ['NEEDS_WASH', 'Surface needs washing', 'wall,ceiling,trim', 'severity', '', '1.05', '1.1', '1.2', 'Y'],
     [],
     ['SettingKey', 'DefaultValue'],
     ['SchemaVersion', 'v6'],
@@ -228,7 +238,8 @@ test('payload category grouping returns rates, flags, and room defaults tabs', (
   const condition = findCategoryOrThrow(payload, 'condition_modifiers')
   const first = condition.rows[0]
   assert.ok(first)
-  assert.equal(getRowString(first, 'trim_factor'), '1.3')
+  assert.equal(getRowString(first, 'scope'), 'wall,ceiling,trim')
+  assert.equal(getRowString(first, 'moderate_factor'), '1.1')
 })
 
 test('mutation plan create/update/archive/reactivate and validation', () => {
@@ -872,6 +883,40 @@ test('buildOverlayFromRows maps trim items and room types from DB rows', () => {
   assert.equal(overlay.room_types[0].default_wall_mode, 'RECT')
   assert.equal(overlay.production_rates.length, 1)
   assert.equal(overlay.production_rates[0].id, 'TRIM_BASE_STD')
+})
+
+test('buildOverlayFromRows expands condition modifier scope checkboxes', () => {
+  const overlay = _test.buildOverlayFromRows({
+    templateVersion: 3,
+    rows: [
+      {
+        id: 'row-condition',
+        org_id: 'org-1',
+        template_id: 'tmpl-1',
+        category_key: 'condition_modifiers',
+        row_id: 'NEEDS_WASH',
+        display_name: 'Surface needs washing',
+        active: 'Y',
+        sort_order: 0,
+        values_json: {
+          id: 'NEEDS_WASH',
+          display_name: 'Surface needs washing',
+          scope: 'wall,ceiling,trim',
+          modifier_type: 'severity',
+          minor_factor: '1.05',
+          moderate_factor: '1.1',
+          major_factor: '1.2',
+        },
+      },
+    ],
+  })
+
+  assert.deepEqual(
+    overlay.condition_modifiers.map((row) => row.scope),
+    ['wall', 'ceiling', 'trim']
+  )
+  assert.equal(overlay.condition_modifiers[1].id, 'NEEDS_WASH')
+  assert.equal(overlay.condition_modifiers[1].levels.moderate, 1.1)
 })
 
 test('ensureTemplateState creates an empty template on first access', async () => {

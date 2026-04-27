@@ -109,12 +109,15 @@ export function prepareEstimateV2SaveState(
 export function validateEstimateV2PreparedSave(params: {
   currentState: EstimateV2EditorStoreState
   prepared: EstimateV2PreparedSaveState
+  trigger?: 'manual' | 'auto'
 }) {
   const { currentState, prepared } = params
+  const allowIncomplete = params.trigger === 'auto'
   const wallIssues = validateV2WallsBeforeSave({
     rooms: currentState.collections.rooms,
     scopes: prepared.collections.scopes,
     segments: prepared.collections.segments,
+    allowIncomplete,
   })
   const ceilingIssues = validateV2CeilingsBeforeSave({
     rooms: currentState.collections.rooms.map((room) => ({
@@ -124,6 +127,7 @@ export function validateEstimateV2PreparedSave(params: {
     })),
     ceilingScopes: prepared.collections.ceilingScopes,
     ceilingSegments: prepared.collections.ceilingSegments,
+    allowIncomplete,
   })
   const trimIssues = validateV2TrimBeforeSave({
     rooms: currentState.collections.rooms.map((room) => ({
@@ -142,6 +146,7 @@ export function validateEstimateV2PreparedSave(params: {
       helperSource: scope.helperSource || null,
       measurementValue: scope.measurementValue,
     })),
+    allowIncomplete,
   })
 
   return [...wallIssues, ...ceilingIssues, ...trimIssues]

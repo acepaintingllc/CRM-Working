@@ -5,6 +5,7 @@ import { EstimateV2SummaryAlerts } from '../../summary/_components/EstimateV2Sum
 import { EstimateV2SummaryKPIRail } from '../../summary/_components/EstimateV2SummaryKPIRail'
 import { EstimateV2SummaryPricingTable } from '../../summary/_components/EstimateV2SummaryPricingTable'
 import { EstimateV2SummaryRoomBlock } from '../../summary/_components/EstimateV2SummaryRoomBlock'
+import { EstimateV2SummaryRail } from '../EstimateV2SummaryRail'
 
 const cardStyle = { border: '1px solid #333', padding: 8, background: '#111' }
 const pricingColors = {
@@ -115,6 +116,64 @@ describe('Estimate V2 summary extracted components', () => {
     fireEvent.click(toggle)
     expect(onToggle).toHaveBeenCalled()
     expect(screen.getAllByText('Walls').length).toBeGreaterThan(0)
+  })
+
+  it('hides primer in the editor summary rail when a section does not use primer', () => {
+    render(
+      <EstimateV2SummaryRail
+        styles={{
+          mono: { fontFamily: 'monospace' },
+        } as never}
+        vm={{
+          roomLabel: 'R001',
+          roomName: 'Living Room',
+          roomSubtitle: 'Living Room - Ceilings',
+          includedScopeLabels: 'Ceilings',
+          scopeToggleLabels: { walls: 'Walls excluded', ceilings: 'Ceilings included', trim: 'Trim excluded' },
+          validationText: 'No open issues',
+          validationColor: '#ccc',
+          calculationStateText: 'Saved',
+          calculationStateColor: '#ccc',
+          totalEffectiveAreaText: '144 sf',
+          runningTotalLabel: 'Running total - 1 room - active scopes',
+          saveStatusText: 'Saved',
+          saveStatusColor: '#ccc',
+          walls: {
+            visible: false,
+            title: 'Walls',
+            primaryValue: '0',
+            primaryUnit: 'Sq Ft',
+            paintLabel: 'Wall Paint',
+            primerLabel: 'Wall Primer',
+            chips: [],
+          },
+          ceilings: {
+            visible: true,
+            title: 'Ceilings',
+            modeLabel: 'RECT',
+            primaryValue: '144',
+            primaryUnit: 'Sq Ft',
+            paintLabel: 'Ceiling Paint',
+            primerLabel: 'Ceiling Primer',
+            showPrimer: false,
+            chips: [],
+          },
+          trim: {
+            visible: false,
+            title: 'Trim',
+            primaryValue: '0',
+            primaryUnit: 'LF / EA / SF',
+            paintLabel: 'Trim Paint',
+            primerLabel: 'Trim Primer',
+            chips: [],
+          },
+        }}
+        onFocusSection={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('Paint: Ceiling Paint')).toBeInTheDocument()
+    expect(screen.queryByText('Primer: Ceiling Primer')).not.toBeInTheDocument()
   })
 })
 

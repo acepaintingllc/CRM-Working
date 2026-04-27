@@ -193,6 +193,7 @@ export function EstimateV2TrimTypePicker({
       {/* Trigger button */}
       <button
         type="button"
+        className="trim-type-picker-trigger"
         onClick={() => setIsOpen((prev) => !prev)}
         style={{
           ...styles.input,

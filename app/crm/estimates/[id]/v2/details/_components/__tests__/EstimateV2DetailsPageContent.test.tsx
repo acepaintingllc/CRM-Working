@@ -134,6 +134,16 @@ const basePage = {
     estimatedMaterialCost: 100,
     hasCeilings: false,
     hasTrim: false,
+    conditions: {
+      available: false,
+      conditions: [],
+      selections: { room: {}, wall: {}, ceiling: {}, trim: {} },
+      roomActiveCount: 0,
+      wallActiveCount: 0,
+      ceilingActiveCount: 0,
+      trimActiveCount: 0,
+      scopeFactors: { room: 1, wall: 1, ceiling: 1, trim: 1 },
+    },
   },
   actions: {
     returnToEditor,
@@ -145,6 +155,7 @@ const basePage = {
     setWallOverride: vi.fn(),
     setCeilingOverride: vi.fn(),
     setTrimOverride: vi.fn(),
+    setRoomCondition: vi.fn(),
   },
 }
 

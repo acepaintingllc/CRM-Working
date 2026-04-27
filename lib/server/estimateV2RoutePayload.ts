@@ -232,16 +232,6 @@ export function buildV2WallSegmentRows(rows: Unsafe[], scopeRows: V2WallScopeSav
     const heightIn = asNullableNumber(row.height_in)
     const baseIn = asNullableNumber(row.base_in)
     const manualAreaSf = asNullableNumber(row.manual_area_sf)
-    if (shapeType === 'RECTANGLE' && (widthIn == null || heightIn == null)) {
-      throw new Error(`Wall segment ${idx + 1}: rectangle segments require width and height`)
-    }
-    if (shapeType === 'TRIANGLE' && (baseIn == null || heightIn == null)) {
-      throw new Error(`Wall segment ${idx + 1}: triangle segments require base and height`)
-    }
-    if (shapeType === 'MANUAL' && manualAreaSf == null) {
-      throw new Error(`Wall segment ${idx + 1}: manual segments require area`)
-    }
-
     const nextPosition = positionByScope.get(scopeId) ?? 0
     positionByScope.set(scopeId, nextPosition + 1)
 
@@ -360,6 +350,9 @@ export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       // Geometry helper fields
       ceiling_geometry_mode: ceilingGeometryMode,
       vaulted_area_factor: asNullableNumber(row.vaulted_area_factor),
+      vaulted_ridge_length_in: asNullableNumber(row.vaulted_ridge_length_in),
+      vaulted_slope_length_in: asNullableNumber(row.vaulted_slope_length_in),
+      vaulted_plane_count: asNullableNumber(row.vaulted_plane_count),
       tray_perimeter_in: asNullableNumber(row.tray_perimeter_in),
       tray_step_height_in: asNullableNumber(row.tray_step_height_in),
       tray_band_width_in: asNullableNumber(row.tray_band_width_in),
@@ -453,16 +446,6 @@ export function buildV2CeilingSegmentRows(rows: Unsafe[], scopeRows: V2CeilingSc
     const heightIn = asNullableNumber(row.height_in)
     const baseIn = asNullableNumber(row.base_in)
     const manualAreaSf = asNullableNumber(row.manual_area_sf)
-    if (shapeType === 'RECTANGLE' && (widthIn == null || heightIn == null)) {
-      throw new Error(`Ceiling segment ${idx + 1}: rectangle segments require width and height`)
-    }
-    if (shapeType === 'TRIANGLE' && (baseIn == null || heightIn == null)) {
-      throw new Error(`Ceiling segment ${idx + 1}: triangle segments require base and height`)
-    }
-    if (shapeType === 'MANUAL' && manualAreaSf == null) {
-      throw new Error(`Ceiling segment ${idx + 1}: manual segments require area`)
-    }
-
     const nextPosition = positionByScope.get(scopeId) ?? 0
     positionByScope.set(scopeId, nextPosition + 1)
 

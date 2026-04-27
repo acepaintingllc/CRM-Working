@@ -88,7 +88,7 @@ describe('useEstimateV2SaveController', () => {
     authedFetch.mockReset()
   })
 
-  it('blocks invalid autosaves and records debug metadata without issuing a request', async () => {
+  it('lets autosave persist partial drafts without blocking on incomplete measurement inputs', async () => {
     const harness = createSaveHarness()
     harness.store.getState().setTrimScopes((prev) =>
       prev.map((scope) =>
@@ -100,9 +100,10 @@ describe('useEstimateV2SaveController', () => {
               helperValue: '',
               measurementValue: '',
             }
-          : scope
+        : scope
       )
     )
+    authedFetch.mockResolvedValue(createResponse(true, { autosave: true }))
 
     const { result } = renderHook(() =>
       useEstimateV2SaveController({
@@ -115,11 +116,11 @@ describe('useEstimateV2SaveController', () => {
       })
     )
 
-    await expect(result.current.save('auto')).resolves.toBe(false)
+    await expect(result.current.save('auto')).resolves.toBe(true)
 
-    expect(authedFetch).not.toHaveBeenCalled()
-    expect(harness.store.getState().meta.saveStatus).toBe('blocked')
-    expect(harness.store.getState().meta.autoSaveHint).toBeTruthy()
+    expect(authedFetch).toHaveBeenCalledTimes(1)
+    expect(harness.store.getState().meta.saveStatus).toBe('saved')
+    expect(harness.store.getState().meta.autoSaveHint).toBe(null)
     expect(harness.store.getState().meta.debugMeta.lastSaveTrigger).toBe('auto')
   })
 
@@ -288,5 +289,54 @@ describe('useEstimateV2SaveController', () => {
         expectedSavedSnapshot
       )
     ).toBe(true)
+  })
+
+  it('does not apply an older save response over newer local ceiling edits', async () => {
+    const harness = createSaveHarness()
+    const ceilingScopeId = harness.fixture.ceilingScopes[0].id
+    harness.store.getState().setCeilingScopes((prev) =>
+      prev.map((scope) =>
+        scope.id === ceilingScopeId
+          ? { ...scope, ceilingTypeId: 'VAULT', ceilingGeometryMode: 'VAULTED' }
+          : scope
+      )
+    )
+
+    const pending = deferred<ReturnType<typeof createResponse>>()
+    authedFetch.mockReturnValue(pending.promise)
+
+    const { result } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: harness.fixture.currentSnapshot,
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    const savePromise = result.current.save('auto')
+    expect(authedFetch).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      harness.store.getState().setCeilingScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === ceilingScopeId
+            ? { ...scope, ceilingTypeId: 'FLAT', ceilingGeometryMode: 'FLAT' }
+            : scope
+        )
+      )
+    })
+
+    pending.resolve(createResponse(true, harness.fixture.summaryData))
+    await expect(savePromise).resolves.toBe(false)
+
+    const scope = harness.store
+      .getState()
+      .collections.ceilingScopes.find((entry) => entry.id === ceilingScopeId)
+    expect(scope?.ceilingTypeId).toBe('FLAT')
+    expect(scope?.ceilingGeometryMode).toBe('FLAT')
+    expect(harness.store.getState().meta.saveStatus).toBe('idle')
   })
 })

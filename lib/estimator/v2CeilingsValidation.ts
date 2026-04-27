@@ -45,6 +45,7 @@ export function validateV2CeilingsBeforeSave(params: {
   rooms: V2CeilingsRoomLike[]
   ceilingScopes: V2CeilingScopeDraftLike[]
   ceilingSegments: V2CeilingSegmentDraftLike[]
+  allowIncomplete?: boolean
 }) {
   const issues: string[] = []
   const { rooms, ceilingScopes, ceilingSegments } = params
@@ -106,15 +107,16 @@ export function validateV2CeilingsBeforeSave(params: {
 
       if (scope.mode !== 'SEG') continue
       const scopeSegments = ceilingSegments.filter((segment) => segment.ceilingScopeId === scope.id)
-      if (scope.include === 'Y' && !scopeSegments.some((segment) => segment.include === 'Y')) {
+      if (!params.allowIncomplete && scope.include === 'Y' && !scopeSegments.some((segment) => segment.include === 'Y')) {
         issues.push(`${room.roomId}: SEG ceiling scope requires at least one included segment`)
       }
 
       for (const segment of scopeSegments) {
         const quantity = asNullableNumber(segment.quantity)
-        if (quantity == null || quantity <= 0) {
+        if (!params.allowIncomplete && (quantity == null || quantity <= 0)) {
           issues.push(`${room.roomId}: ceiling segment quantity must be greater than 0`)
         }
+        if (params.allowIncomplete) continue
         if (segment.shapeType === 'RECTANGLE') {
           if (asNullableNumber(segment.widthIn) == null || asNullableNumber(segment.heightIn) == null) {
             issues.push(`${room.roomId}: rectangle ceiling segments require width and height`)

@@ -439,6 +439,9 @@ export type EstimateV2CeilingScopeDraft = {
   ceilingTypeId: string
   ceilingGeometryMode?: string
   vaultedAreaFactor?: string
+  vaultedRidgeLengthIn?: string
+  vaultedSlopeLengthIn?: string
+  vaultedPlaneCount?: string
   trayPerimeterIn?: string
   trayStepHeightIn?: string
   trayBandWidthIn?: string
@@ -554,6 +557,7 @@ export type EstimateV2SavePayload = {
     ceiling_primer_id: string | null
     trim_paint_id: string | null
     trim_primer_id: string | null
+    condition_selections: EstimateV2ConditionSelections | null
   }
   rooms: Array<{
     id: string

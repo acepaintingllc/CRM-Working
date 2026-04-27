@@ -550,8 +550,11 @@ function useSummaryVm(
   }))
 
   const wallSectionSummary = useMemo(
-    () =>
-      buildSectionSummaryVm({
+    () => {
+      const wallUsesPrimer = derived.room.selectedRoomScopes.some(
+        (scope) => scope.include === 'Y' && scope.primeMode !== 'NONE'
+      )
+      return buildSectionSummaryVm({
         visible: derived.room.wallsIncluded,
         title: 'Walls',
         modeLabel: derived.room.selectedRoomGeometryMode,
@@ -559,28 +562,35 @@ function useSummaryVm(
         primaryUnit: 'Sq Ft',
         paintLabel: derived.productLabels.wallPaintLabel,
         primerLabel: derived.productLabels.wallPrimerLabel,
+        showPrimer: wallUsesPrimer,
         chips: buildSectionSummaryChips({
           modeLabel: derived.room.selectedRoomGeometryMode,
           primaryValue: toDisplayNumber(derived.calculation.selectedRoomEffectiveSqFt),
           primaryUnit: 'Sq Ft',
           paintLabel: derived.productLabels.wallPaintLabel,
           primerLabel: derived.productLabels.wallPrimerLabel,
+          showPrimer: wallUsesPrimer,
           validationIssueCount: derived.room.selectedRoomIssueCount,
         }),
-      }),
+      })
+    },
     [
       derived.calculation.selectedRoomEffectiveSqFt,
       derived.productLabels.wallPaintLabel,
       derived.productLabels.wallPrimerLabel,
       derived.room.selectedRoomGeometryMode,
       derived.room.selectedRoomIssueCount,
+      derived.room.selectedRoomScopes,
       derived.room.wallsIncluded,
     ]
   )
 
   const ceilingSectionSummary = useMemo(
-    () =>
-      buildSectionSummaryVm({
+    () => {
+      const ceilingUsesPrimer = derived.room.selectedRoomCeilingScopes.some(
+        (scope) => scope.include === 'Y' && scope.primeMode !== 'NONE'
+      )
+      return buildSectionSummaryVm({
         visible: derived.room.ceilingsIncluded,
         title: 'Ceilings',
         modeLabel: derived.room.selectedRoomGeometryMode,
@@ -588,34 +598,42 @@ function useSummaryVm(
         primaryUnit: 'Sq Ft',
         paintLabel: derived.productLabels.ceilingPaintLabel,
         primerLabel: derived.productLabels.ceilingPrimerLabel,
+        showPrimer: ceilingUsesPrimer,
         chips: buildSectionSummaryChips({
           modeLabel: derived.room.selectedRoomGeometryMode,
           primaryValue: toDisplayNumber(derived.calculation.selectedCeilingEffectiveSqFt),
           primaryUnit: 'Sq Ft',
           paintLabel: derived.productLabels.ceilingPaintLabel,
           primerLabel: derived.productLabels.ceilingPrimerLabel,
+          showPrimer: ceilingUsesPrimer,
           validationIssueCount: derived.room.selectedRoomIssueCount,
         }),
-      }),
+      })
+    },
     [
       derived.calculation.selectedCeilingEffectiveSqFt,
       derived.productLabels.ceilingPaintLabel,
       derived.productLabels.ceilingPrimerLabel,
       derived.room.ceilingsIncluded,
       derived.room.selectedRoomGeometryMode,
+      derived.room.selectedRoomCeilingScopes,
       derived.room.selectedRoomIssueCount,
     ]
   )
 
   const trimSectionSummary = useMemo(
-    () =>
-      buildSectionSummaryVm({
+    () => {
+      const trimUsesPrimer = derived.room.selectedRoomTrimScopes.some(
+        (scope) => scope.include === 'Y' && scope.primeMode !== 'NONE'
+      )
+      return buildSectionSummaryVm({
         visible: derived.room.trimsIncluded,
         title: 'Trim',
         primaryValue: toDisplayNumber(derived.calculation.selectedTrimMeasurement),
         primaryUnit: 'LF / EA / SF',
         paintLabel: derived.productLabels.trimPaintLabel,
         primerLabel: derived.productLabels.trimPrimerLabel,
+        showPrimer: trimUsesPrimer,
         secondaryValue:
           derived.calculation.selectedTrimSubtotal == null
             ? '--'
@@ -627,19 +645,21 @@ function useSummaryVm(
           primaryUnit: 'Measure',
           paintLabel: derived.productLabels.trimPaintLabel,
           primerLabel: derived.productLabels.trimPrimerLabel,
+          showPrimer: trimUsesPrimer,
           secondaryValue:
             derived.calculation.selectedTrimSubtotal == null
               ? '--'
               : `$${derived.calculation.selectedTrimSubtotal.toFixed(2)}`,
           secondaryLabel: 'Subtotal',
         }),
-      }),
+      })
+    },
     [
       derived.calculation.selectedTrimMeasurement,
       derived.calculation.selectedTrimSubtotal,
       derived.productLabels.trimPaintLabel,
       derived.productLabels.trimPrimerLabel,
-      derived.room.selectedRoomTrimScopes.length,
+      derived.room.selectedRoomTrimScopes,
       derived.room.trimsIncluded,
     ]
   )

@@ -37,6 +37,41 @@ export function buildOverlayFromRows(params: {
   const trim_items: RatesFlagsCatalogOverlay['trim_items'] = []
   const area_supplies_rates: RatesFlagsCatalogOverlay['area_supplies_rates'] = []
 
+  function normalizeConditionScopes(value: unknown): Array<'room' | 'wall' | 'ceiling' | 'trim'> {
+    const scopes = new Set<'room' | 'wall' | 'ceiling' | 'trim'>()
+    for (const part of asText(value).split(/[,;|]/)) {
+      const scope = part.trim().toLowerCase()
+      if (scope === 'room') scopes.add('room')
+      else if (scope === 'wall' || scope === 'walls') scopes.add('wall')
+      else if (scope === 'ceiling' || scope === 'ceil' || scope === 'ceilings') scopes.add('ceiling')
+      else if (scope === 'trim') scopes.add('trim')
+    }
+    return [...scopes]
+  }
+
+  function parseConditionLevels(valuesJson: Record<string, unknown>, values: Record<string, string>) {
+    if (valuesJson.levels && typeof valuesJson.levels === 'object' && !Array.isArray(valuesJson.levels)) {
+      const levels = Object.fromEntries(
+        Object.entries(valuesJson.levels as Record<string, unknown>)
+          .map(([key, value]) => [key.toLowerCase(), parseNumber(value)] as const)
+          .filter((entry): entry is [string, number] => entry[1] != null)
+      )
+      if (Object.keys(levels).length > 0) return levels
+    }
+
+    const levels = Object.fromEntries(
+      [
+        ['active', values.active_factor],
+        ['minor', values.minor_factor],
+        ['moderate', values.moderate_factor],
+        ['major', values.major_factor],
+      ]
+        .map(([key, value]) => [key, parseNumber(value)] as const)
+        .filter((entry): entry is [string, number] => entry[1] != null)
+    )
+    return Object.keys(levels).length > 0 ? levels : null
+  }
+
   const productionRows = [
     ...(grouped.get('production_rates_walls') ?? []),
     ...(grouped.get('production_rates_ceilings') ?? []),
@@ -122,44 +157,50 @@ export function buildOverlayFromRows(params: {
   for (const row of grouped.get('condition_modifiers') ?? []) {
     const valuesJson = (row.values_json ?? {}) as Record<string, unknown>
     const values = toStringRecord(row.values_json)
-    const levels =
-      valuesJson.levels && typeof valuesJson.levels === 'object' && !Array.isArray(valuesJson.levels)
-        ? Object.fromEntries(
-            Object.entries(valuesJson.levels as Record<string, unknown>)
-              .map(([key, value]) => [key.toLowerCase(), parseNumber(value)] as const)
-              .filter((entry): entry is [string, number] => entry[1] != null)
-          )
-        : null
-    const scope = asText(values.scope).toLowerCase()
-    const normalizedScope =
-      scope === 'room' || scope === 'wall' || scope === 'ceiling' || scope === 'trim'
-        ? scope
-        : scope === 'ceil' || scope === 'ceilings'
-          ? 'ceiling'
-          : scope === 'walls'
-            ? 'wall'
-            : ''
-    if (normalizedScope && levels) {
-      condition_modifiers.push({
+    const levels = parseConditionLevels(valuesJson, values)
+    const scopes = normalizeConditionScopes(values.scope)
+    if (scopes.length > 0 && levels) {
+      for (const scope of scopes) {
+        condition_modifiers.push({
+          id: normalizeId(values.id || row.row_id),
+          label: asText(values.display_name) || row.display_name,
+          scope,
+          modifier_type: asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity',
+          factor_field: asText(values.factor_field) || null,
+          levels,
+          notes: asText(values.notes) || null,
+          active: row.active,
+        })
+      }
+    } else if (valuesJson.levels && levels) {
+      const legacyScope = normalizeConditionScopes(valuesJson.scope)
+      for (const scope of legacyScope) {
+        condition_modifiers.push({
+          id: normalizeId(values.id || row.row_id),
+          label: asText(values.display_name) || row.display_name,
+          scope,
+          modifier_type: asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity',
+          factor_field: asText(values.factor_field) || null,
+          levels,
+          notes: asText(values.notes) || null,
+          active: row.active,
+        })
+      }
+    }
+    if (scopes.length > 0 && levels) {
+      continue
+    }
+    if (values.wall_factor || values.ceil_factor || values.trim_factor) {
+      room_flags.push({
         id: normalizeId(values.id || row.row_id),
         label: asText(values.display_name) || row.display_name,
-        scope: normalizedScope,
-        modifier_type: asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity',
-        factor_field: asText(values.factor_field) || null,
-        levels,
+        wall_factor: parseNumber(values.wall_factor),
+        ceil_factor: parseNumber(values.ceil_factor),
+        trim_factor: parseNumber(values.trim_factor),
         notes: asText(values.notes) || null,
         active: row.active,
       })
     }
-    room_flags.push({
-      id: normalizeId(values.id || row.row_id),
-      label: asText(values.display_name) || row.display_name,
-      wall_factor: parseNumber(values.wall_factor),
-      ceil_factor: parseNumber(values.ceil_factor),
-      trim_factor: parseNumber(values.trim_factor),
-      notes: asText(values.notes) || null,
-      active: row.active,
-    })
   }
 
   const accessRows = [

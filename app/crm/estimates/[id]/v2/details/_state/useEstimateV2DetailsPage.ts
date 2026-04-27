@@ -61,6 +61,7 @@ export function useEstimateV2DetailsPage({
     store,
     rollerOptions: rollerOptionsState.options,
     vm,
+    conditionModifiers: vm.conditions.conditions,
   })
 
   const controller = useEstimateV2DetailsController({

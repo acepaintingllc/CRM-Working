@@ -150,6 +150,56 @@ export function updateWallScopeMutation(
   return scopes.map((scope) => (scope.id === scopeId ? { ...scope, ...patch } : scope))
 }
 
+export const TRAY_CEILING_WALL_CUT_IN_FACTOR = '1.15'
+
+function hasIncludedTrayCeiling(scope: EstimateV2CeilingScopeDraft) {
+  return scope.mode !== 'SEG' && scope.include !== 'N' && scope.ceilingGeometryMode === 'TRAY'
+}
+
+function applyTrayCutInFactor(currentValue: string, hasTrayCeiling: boolean) {
+  const current = numberOrNull(currentValue) ?? 1
+  const trayFactor = numberOrNull(TRAY_CEILING_WALL_CUT_IN_FACTOR) ?? 1
+  if (hasTrayCeiling) return String(Math.max(current, trayFactor))
+  return currentValue === TRAY_CEILING_WALL_CUT_IN_FACTOR ? '1' : currentValue
+}
+
+function forceSegmentCeilingScopeFlat(scope: EstimateV2CeilingScopeDraft): EstimateV2CeilingScopeDraft {
+  return {
+    ...scope,
+    mode: 'SEG',
+    ceilingTypeId: 'FLAT',
+    ceilingGeometryMode: 'FLAT',
+    lengthIn: '',
+    widthIn: '',
+    areaSf: '',
+    vaultedAreaFactor: '',
+    vaultedRidgeLengthIn: '',
+    vaultedSlopeLengthIn: '',
+    vaultedPlaneCount: '2',
+    trayPerimeterIn: '',
+    trayStepHeightIn: '',
+    trayBandWidthIn: '',
+    cofferSectionLengthIn: '',
+    cofferSectionWidthIn: '',
+    cofferSectionCount: '',
+    cofferFaceHeightIn: '',
+    cofferBottomWidthIn: '',
+  }
+}
+
+export function syncWallCutInFromTrayCeilings(params: {
+  wallScopes: EstimateV2WallScopeDraft[]
+  ceilingScopes: EstimateV2CeilingScopeDraft[]
+}) {
+  const trayRoomIds = new Set(
+    params.ceilingScopes.filter(hasIncludedTrayCeiling).map((scope) => scope.roomId)
+  )
+  return params.wallScopes.map((scope) => ({
+    ...scope,
+    cutInTopFactor: applyTrayCutInFactor(scope.cutInTopFactor, trayRoomIds.has(scope.roomId)),
+  }))
+}
+
 export function addWallScopeMutation(params: {
   scopes: EstimateV2WallScopeDraft[]
   roomId: string
@@ -410,7 +460,7 @@ export function toggleRoomCeilingIncludeMutation(params: {
     const nextScope = createDefaultCeilingScope(params.roomId, params.roomMode)
     nextScope.heightFactor = params.defaultHeightFactor
     nextScope.include = 'Y'
-    return [...params.scopes, nextScope]
+    return [...params.scopes, params.roomMode === 'SEG' ? forceSegmentCeilingScopeFlat(nextScope) : nextScope]
   }
   const nextInclude: 'Y' | 'N' = roomScopes.some((scope) => scope.include === 'Y') ? 'N' : 'Y'
   const scopeIds = new Set(roomScopes.map((scope) => scope.id))
@@ -430,10 +480,25 @@ export function applyCeilingRoomModeMutation(params: {
   if (roomScopes.length === 0) {
     const nextScope = createDefaultCeilingScope(params.roomId, params.nextMode)
     nextScope.heightFactor = params.defaultHeightFactor
-    return { scopes: [...params.scopes, nextScope], segments: params.segments }
+    return {
+      scopes: [
+        ...params.scopes,
+        params.nextMode === 'SEG' ? forceSegmentCeilingScopeFlat(nextScope) : nextScope,
+      ],
+      segments: params.segments,
+    }
   }
 
   if (currentMode === params.nextMode) {
+    if (params.nextMode === 'SEG') {
+      const roomScopeIds = new Set(roomScopes.map((scope) => scope.id))
+      return {
+        scopes: params.scopes.map((scope) =>
+          roomScopeIds.has(scope.id) ? forceSegmentCeilingScopeFlat(scope) : scope
+        ),
+        segments: params.segments,
+      }
+    }
     return { scopes: params.scopes, segments: params.segments }
   }
 
@@ -441,7 +506,7 @@ export function applyCeilingRoomModeMutation(params: {
     return {
       scopes: params.scopes.map((scope) =>
         scope.id === roomScopes[0].id
-          ? { ...scope, mode: 'SEG', lengthIn: '', widthIn: '', areaSf: '', position: 0 }
+          ? { ...forceSegmentCeilingScopeFlat(scope), position: 0 }
           : scope
       ),
       segments: params.segments,

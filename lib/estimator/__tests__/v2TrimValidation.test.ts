@@ -67,3 +67,26 @@ test('validateV2TrimBeforeSave flags missing measurement and invalid helper mode
   assert.ok(issues.some((issue) => issue.includes('trim measurement must be greater than 0')))
   assert.ok(issues.some((issue) => issue.includes('ROOM_HELPER is only allowed in RECT rooms')))
 })
+
+test('validateV2TrimBeforeSave allows missing manual measurement for autosave drafts', () => {
+  const issues = validateV2TrimBeforeSave({
+    rooms: [
+      { roomId: 'R001', roomName: 'Hall', mode: 'SEG', position: 0 },
+    ],
+    trimScopes: [
+      {
+        id: 'T1',
+        roomId: 'R001',
+        position: 0,
+        include: 'Y',
+        trimTypeId: 'BASE_STD',
+        measurementMode: 'MANUAL',
+        helperSource: null,
+        measurementValue: '',
+      },
+    ],
+    allowIncomplete: true,
+  })
+
+  assert.deepEqual(issues, [])
+})

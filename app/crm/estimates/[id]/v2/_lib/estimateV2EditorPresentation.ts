@@ -132,6 +132,7 @@ export function buildSectionSummaryChips(params: {
   primaryUnit: string
   paintLabel: string
   primerLabel: string
+  showPrimer?: boolean
   validationIssueCount?: number
   itemCount?: number
   secondaryValue?: string
@@ -143,7 +144,7 @@ export function buildSectionSummaryChips(params: {
   if (params.itemCount != null) chips.push({ label: `Items: ${params.itemCount}` })
   chips.push({ label: `${params.primaryUnit}: ${params.primaryValue}` })
   chips.push({ label: `Paint: ${params.paintLabel}` })
-  chips.push({ label: `Primer: ${params.primerLabel}` })
+  if (params.showPrimer ?? true) chips.push({ label: `Primer: ${params.primerLabel}` })
 
   if (params.secondaryValue && params.secondaryLabel) {
     chips.push({ label: `${params.secondaryLabel}: ${params.secondaryValue}` })

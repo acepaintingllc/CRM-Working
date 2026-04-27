@@ -6,6 +6,14 @@ import {
   deriveEstimateV2Segment,
   sortByPosition,
 } from '../v2DraftPayload.ts'
+import type {
+  EstimateV2CeilingScopeDraft,
+  EstimateV2ConditionSelections,
+  EstimateV2JobSettingsDraft,
+  EstimateV2RoomDraft,
+  EstimateV2TrimScopeDraft,
+  EstimateV2WallScopeDraft,
+} from '../../../types/estimator/v2.ts'
 
 test('sortByPosition returns rows ordered by ascending position', () => {
   const rows = sortByPosition([
@@ -210,6 +218,9 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         ceilingTypeId: 'flat',
         ceilingGeometryMode: 'TRAY',
         vaultedAreaFactor: '',
+        vaultedRidgeLengthIn: '180',
+        vaultedSlopeLengthIn: '120',
+        vaultedPlaneCount: '2',
         trayPerimeterIn: '480',
         trayStepHeightIn: '12',
         trayBandWidthIn: '18',
@@ -344,6 +355,9 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.room_ceiling_scopes[0].tray_perimeter_in, 480)
   assert.equal(payload.room_ceiling_scopes[0].tray_step_height_in, 12)
   assert.equal(payload.room_ceiling_scopes[0].tray_band_width_in, 18)
+  assert.equal(payload.room_ceiling_scopes[0].vaulted_ridge_length_in, 180)
+  assert.equal(payload.room_ceiling_scopes[0].vaulted_slope_length_in, 120)
+  assert.equal(payload.room_ceiling_scopes[0].vaulted_plane_count, 2)
   assert.equal(payload.room_ceiling_scopes[0].helper_extra_area_sf, null)
   assert.deepEqual(payload.room_ceiling_scopes[0].condition_selections, { CEIL_TEXTURE: 'major' })
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
@@ -380,4 +394,256 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
       },
     ]
   )
+})
+
+function minimalJobSettings(overrides: Partial<EstimateV2JobSettingsDraft> = {}): EstimateV2JobSettingsDraft {
+  return {
+    laborDayEnabled: false,
+    dayhours: 8,
+    roundingIncrementHours: 4,
+    laborRate: 60,
+    jobMinEnabled: false,
+    jobMinAmount: 0,
+    crewSize: 1,
+    wallPaintProductId: '',
+    wallPrimerProductId: '',
+    ceilingPaintProductId: '',
+    ceilingPrimerProductId: '',
+    trimPaintProductId: '',
+    trimPrimerProductId: '',
+    ...overrides,
+  }
+}
+
+function minimalRoom(): EstimateV2RoomDraft {
+  return {
+    id: 'room-1',
+    roomId: 'R001',
+    roomName: 'Room',
+    roomTypeId: '',
+    lengthIn: '',
+    widthIn: '',
+    heightIn: '',
+    wallComplexityId: '',
+    notes: '',
+    position: 0,
+  }
+}
+
+function minimalWallScope(): EstimateV2WallScopeDraft {
+  return {
+    id: 'wall-1',
+    roomId: 'R001',
+    position: 0,
+    mode: 'RECT',
+    include: 'Y',
+    scopeName: '',
+    colorId: 'A',
+    paintProductId: '',
+    primerProductId: '',
+    primeMode: 'NONE',
+    heightIn: '',
+    perimeterIn: '',
+    standardDoorCount: '',
+    standardWindowCount: '',
+    heightFactor: '1',
+    complexityFactor: '1',
+    wallFlagFactor: '1',
+    cutInTopFactor: '1',
+    cutInBottomFactor: '1',
+    paintCoats: '2',
+    primerCoats: '1',
+    spotPrimePercent: '',
+    overrideAreaSqFt: '',
+    overridePaintHours: '',
+    overridePrimerHours: '',
+    overridePaintGallons: '',
+    overridePrimerGallons: '',
+    overrideSupplyCost: '',
+    overrideTotal: '',
+    notes: '',
+  }
+}
+
+function minimalCeilingScope(): EstimateV2CeilingScopeDraft {
+  return {
+    id: 'ceil-1',
+    roomId: 'R001',
+    position: 0,
+    mode: 'RECT',
+    include: 'Y',
+    scopeName: '',
+    colorId: '',
+    paintProductId: '',
+    primerProductId: '',
+    primeMode: 'NONE',
+    spotPrimePercent: '',
+    ceilingTypeId: '',
+    lengthIn: '',
+    widthIn: '',
+    areaSf: '',
+    heightFactor: '1',
+    complexityFactor: '1',
+    ceilingFlagFactor: '1',
+    paintCoats: '2',
+    primerCoats: '1',
+    overrideAreaSqFt: '',
+    overridePaintHours: '',
+    overridePrimerHours: '',
+    overridePaintGallons: '',
+    overridePrimerGallons: '',
+    overrideSupplyCost: '',
+    overrideTotal: '',
+    notes: '',
+  }
+}
+
+function minimalTrimScope(): EstimateV2TrimScopeDraft {
+  return {
+    id: 'trim-1',
+    roomId: 'R001',
+    position: 0,
+    include: 'Y',
+    scopeName: '',
+    trimTypeId: '',
+    trimFamily: '',
+    unitType: 'LF',
+    measurementMode: 'MANUAL',
+    helperSource: '',
+    measurementValue: '',
+    helperValue: '',
+    baseboardOpeningCount: '',
+    colorId: '',
+    paintProductId: '',
+    primerProductId: '',
+    paintEnabled: 'Y',
+    primeMode: 'NONE',
+    spotPrimePercent: '',
+    productionRateId: '',
+    prepFactor: '1',
+    heightFactor: '1',
+    profileFactor: '1',
+    roomFlagFactor: '1',
+    maskingFactor: '1',
+    stairFactor: '1',
+    difficultFinishFactor: '1',
+    caulkFillFactor: '1',
+    paintCoats: '2',
+    primerCoats: '1',
+    overrideMeasurement: '',
+    overrideHours: '',
+    overrideGallons: '',
+    overrideSupplyCost: '',
+    overrideTotal: '',
+    overrideDescription: '',
+    notes: '',
+  }
+}
+
+test('condition_factor is null on all scope types when no resolvedConditionFactors set', () => {
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings(),
+    [minimalRoom()],
+    [minimalWallScope()],
+    [],
+    [],
+    [minimalCeilingScope()],
+    [],
+    [minimalTrimScope()]
+  )
+  assert.equal(payload.room_wall_scopes[0].condition_factor, null)
+  assert.equal(payload.room_ceiling_scopes[0].condition_factor, null)
+  assert.equal(payload.room_trim_scopes[0].condition_factor, null)
+})
+
+test('condition_factor writes wall * room product onto wall scopes', () => {
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings({ resolvedConditionFactors: { room: 1.15, wall: 1.2, ceiling: 1, trim: 1 } }),
+    [minimalRoom()],
+    [minimalWallScope()],
+    [],
+    [],
+    [],
+    [],
+    []
+  )
+  assert.ok(Math.abs(Number(payload.room_wall_scopes[0].condition_factor) - 1.15 * 1.2) < 0.0001)
+})
+
+test('condition_factor writes ceiling * room product onto ceiling scopes', () => {
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings({ resolvedConditionFactors: { room: 1.1, wall: 1, ceiling: 1.3, trim: 1 } }),
+    [minimalRoom()],
+    [],
+    [],
+    [],
+    [minimalCeilingScope()],
+    [],
+    []
+  )
+  assert.ok(Math.abs(Number(payload.room_ceiling_scopes[0].condition_factor) - 1.1 * 1.3) < 0.0001)
+})
+
+test('condition_factor writes trim * room product onto trim scopes', () => {
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings({ resolvedConditionFactors: { room: 1.05, wall: 1, ceiling: 1, trim: 1.25 } }),
+    [minimalRoom()],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [minimalTrimScope()]
+  )
+  assert.ok(Math.abs(Number(payload.room_trim_scopes[0].condition_factor) - 1.05 * 1.25) < 0.0001)
+})
+
+test('condition_factor is null when scope factor is 1 and room factor is 1', () => {
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings({ resolvedConditionFactors: { room: 1, wall: 1, ceiling: 1, trim: 1 } }),
+    [minimalRoom()],
+    [minimalWallScope()],
+    [],
+    [],
+    [minimalCeilingScope()],
+    [],
+    [minimalTrimScope()]
+  )
+  assert.equal(payload.room_wall_scopes[0].condition_factor, null)
+  assert.equal(payload.room_ceiling_scopes[0].condition_factor, null)
+  assert.equal(payload.room_trim_scopes[0].condition_factor, null)
+})
+
+test('jobsettings.condition_selections is null when not set on draft', () => {
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings(),
+    [minimalRoom()],
+    [],
+    [],
+    [],
+    [],
+    [],
+    []
+  )
+  assert.equal(payload.jobsettings.condition_selections, null)
+})
+
+test('jobsettings.condition_selections is persisted from draft', () => {
+  const selections: EstimateV2ConditionSelections = {
+    room: { ROOM_FURNISHED: 'active' },
+    wall: {},
+    ceiling: {},
+    trim: { TRIM_CAULK: 'minor' },
+  }
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings({ conditionSelections: selections }),
+    [minimalRoom()],
+    [],
+    [],
+    [],
+    [],
+    [],
+    []
+  )
+  assert.deepEqual(payload.jobsettings.condition_selections, selections)
 })

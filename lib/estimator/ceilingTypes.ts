@@ -26,6 +26,9 @@ export type CeilingCalculationScopeRow = {
   // Ceiling geometry helper mode and fields
   ceiling_geometry_mode?: CeilingGeometryMode | null
   vaulted_area_factor?: number | null        // VAULTED: slope/area multiplier (default 1.20)
+  vaulted_ridge_length_in?: number | null    // VAULTED: ridge/run length in inches
+  vaulted_slope_length_in?: number | null    // VAULTED: eave-to-ridge slope length in inches
+  vaulted_plane_count?: number | null        // VAULTED: number of sloped planes (default 2)
   tray_perimeter_in?: number | null          // TRAY: perimeter of the step
   tray_step_height_in?: number | null        // TRAY: vertical rise of the step
   tray_band_width_in?: number | null         // TRAY: width of the horizontal band

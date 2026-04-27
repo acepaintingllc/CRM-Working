@@ -31,6 +31,8 @@ import type {
 } from '../estimateV2RoutePayload.ts'
 import type { EstimateTemplateSettingsRow } from '../estimateTemplateSettings.ts'
 
+const TRAY_CEILING_WALL_CUT_IN_FACTOR = 1.15
+
 function roomConditionSelectionsById(rooms: Unsafe[]) {
   const result = new Map<string, ReturnType<typeof normalizeConditionSelections>>()
   for (const room of rooms) {
@@ -60,6 +62,27 @@ function resolveCombinedConditionFactor(params: {
       selections: normalizeConditionSelections(params.selections),
     })
   return factor === 1 ? null : factor
+}
+
+function trayCeilingRoomIds(scopes: Unsafe[]) {
+  const roomIds = new Set<string>()
+  for (const scope of scopes) {
+    const roomId = asText(scope.room_id).toUpperCase()
+    const scopeMode = asText(scope.mode).toUpperCase()
+    const mode = asText(scope.ceiling_geometry_mode).toUpperCase()
+    const include = asText(scope.include).toUpperCase()
+    if (roomId && scopeMode !== 'SEG' && mode === 'TRAY' && include !== 'N') roomIds.add(roomId)
+  }
+  return roomIds
+}
+
+function applyTrayCeilingWallCutInFactor(row: V2WallScopeSaveRow, trayRoomIds: Set<string>) {
+  const roomId = asText((row as unknown as Unsafe).room_id).toUpperCase()
+  if (!trayRoomIds.has(roomId)) return row.cut_in_top_factor
+  return Math.max(
+    asNullableNumber((row as unknown as Unsafe).cut_in_top_factor) ?? 1,
+    TRAY_CEILING_WALL_CUT_IN_FACTOR
+  )
 }
 
 export async function loadCalculatedEstimateV2Artifacts(params: {
@@ -113,6 +136,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   })
 
   const conditionSelectionsByRoomId = roomConditionSelectionsById(params.rooms)
+  const trayRoomIds = trayCeilingRoomIds(params.roomCeilingScopes)
   const wallScopeRowsForSave = params.roomWallScopes as unknown as V2WallScopeSaveRow[]
   const wallScopePaintById = new Map<string, string | null>()
   const wallScopePrimerById = new Map<string, string | null>()
@@ -131,6 +155,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
         scope: 'wall',
         selections: (row as unknown as Unsafe).condition_selections,
       }),
+      cut_in_top_factor: applyTrayCeilingWallCutInFactor(row, trayRoomIds),
       paint_product_id: paintProductId || wallDefaultPaintId,
       primer_product_id: primerProductId || wallDefaultPrimerId,
       paint_coats: asNullableNumberFromKeys(row as unknown as Unsafe, ['paint_coats', 'wall_coats', 'walls_topcoats']),

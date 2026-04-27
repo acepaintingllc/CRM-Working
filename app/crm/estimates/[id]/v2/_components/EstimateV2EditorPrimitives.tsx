@@ -21,6 +21,40 @@ export function Field({
   )
 }
 
+export function RequiredInputFrame({ children }: { children: ReactNode }) {
+  return <div className="required-input-frame">{children}</div>
+}
+
+export function OptionalInputFrame({ children }: { children: ReactNode }) {
+  return <div className="optional-input-frame">{children}</div>
+}
+
+export function ScopeHelperBar({
+  metrics,
+  styles,
+}: {
+  metrics: Array<{ label: string; value: ReactNode; muted?: boolean }>
+  styles: Pick<SharedStyles, 'mono'> & { computedBig: CSSProperties }
+}) {
+  return (
+    <div className="scope-helper-bar">
+      {metrics.map((metric) => (
+        <div key={metric.label} className={metric.muted ? 'walksqft-box-empty' : 'walksqft-box'}>
+          <div style={styles.mono}>{metric.label}</div>
+          <div
+            style={{
+              ...styles.computedBig,
+              color: metric.muted ? 'var(--v2-ink-3)' : styles.computedBig.color,
+            }}
+          >
+            {metric.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ScopeSummaryChips({
   chips,
   chipStyle,
@@ -330,6 +364,45 @@ export function PrimerModeButtons({
           {mode === 'NONE' ? 'None' : mode === 'SPOT' ? 'Spot' : 'Full'}
         </button>
       ))}
+    </div>
+  )
+}
+
+export function PaintCoatButtons({
+  value,
+  onChange,
+  styles,
+}: {
+  value: string
+  onChange: (value: string) => void
+  styles: { button: CSSProperties }
+}) {
+  const currentCoats = Math.max(1, Math.round(Number.parseFloat(value) || 2))
+
+  return (
+    <div style={{ display: 'flex', border: '1px solid var(--v2-line)', borderRadius: 9, overflow: 'hidden', height: 34 }}>
+      {[1, 2, 3].map((n) => {
+        const isActive = currentCoats === n
+        return (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(String(n))}
+            style={{
+              ...styles.button,
+              border: 'none',
+              borderRadius: 0,
+              borderRight: n < 3 ? '1px solid var(--v2-line)' : 'none',
+              background: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
+              color: isActive ? 'var(--v2-ink)' : 'var(--v2-ink-3)',
+              minWidth: 40,
+              padding: '0 12px',
+            }}
+          >
+            {n}
+          </button>
+        )
+      })}
     </div>
   )
 }

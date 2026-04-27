@@ -2,10 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   addRoomMutation,
+  applyCeilingRoomModeMutation,
   applyWallRoomModeMutation,
   deleteRoomCascadeMutation,
   moveTrimScopeMutation,
+  syncWallCutInFromTrayCeilings,
   stripInvalidTrimHelperModeMutation,
+  TRAY_CEILING_WALL_CUT_IN_FACTOR,
   toggleRoomFlagMutation,
   updateRoomDimensionsMutation,
 } from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorMutations.ts'
@@ -168,6 +171,83 @@ test('updateRoomDimensionsMutation syncs both RECT wall and RECT ceiling geometr
   assert.equal(ceilingScope?.lengthIn, '130')
   assert.equal(ceilingScope?.widthIn, '144')
   assert.equal(ceilingScope?.areaSf, '88')
+})
+
+test('syncWallCutInFromTrayCeilings applies tray top cut-in factor without lowering manual overrides', () => {
+  const ceilingScopes = [
+    makeCeilingScope({
+      ceilingGeometryMode: 'TRAY',
+      include: 'Y',
+    }),
+  ]
+
+  const synced = syncWallCutInFromTrayCeilings({
+    wallScopes: [
+      makeWallScope(),
+      makeWallScope({ id: 'wall-2', cutInTopFactor: '1.3' }),
+      makeWallScope({ id: 'wall-3', roomId: 'R002' }),
+    ],
+    ceilingScopes,
+  })
+
+  assert.equal(synced[0].cutInTopFactor, TRAY_CEILING_WALL_CUT_IN_FACTOR)
+  assert.equal(synced[1].cutInTopFactor, '1.3')
+  assert.equal(synced[2].cutInTopFactor, '1')
+})
+
+test('syncWallCutInFromTrayCeilings removes only the default tray top cut-in factor when tray is removed', () => {
+  const synced = syncWallCutInFromTrayCeilings({
+    wallScopes: [
+      makeWallScope({ cutInTopFactor: TRAY_CEILING_WALL_CUT_IN_FACTOR }),
+      makeWallScope({ id: 'wall-2', cutInTopFactor: '1.3' }),
+    ],
+    ceilingScopes: [makeCeilingScope({ ceilingGeometryMode: 'FLAT', include: 'Y' })],
+  })
+
+  assert.equal(synced[0].cutInTopFactor, '1')
+  assert.equal(synced[1].cutInTopFactor, '1.3')
+})
+
+test('syncWallCutInFromTrayCeilings ignores stale tray metadata on SEG ceilings', () => {
+  const synced = syncWallCutInFromTrayCeilings({
+    wallScopes: [makeWallScope()],
+    ceilingScopes: [
+      makeCeilingScope({
+        mode: 'SEG',
+        ceilingGeometryMode: 'TRAY',
+        include: 'Y',
+      }),
+    ],
+  })
+
+  assert.equal(synced[0].cutInTopFactor, '1')
+})
+
+test('applyCeilingRoomModeMutation forces SEG ceiling scopes to flat', () => {
+  const result = applyCeilingRoomModeMutation({
+    scopes: [
+      makeCeilingScope({
+        ceilingTypeId: 'COFFERED',
+        ceilingGeometryMode: 'COFFERED',
+        cofferSectionLengthIn: '48',
+        cofferSectionWidthIn: '36',
+        cofferSectionCount: '6',
+        cofferFaceHeightIn: '4',
+        cofferBottomWidthIn: '3',
+      }),
+    ],
+    segments: [],
+    roomId: 'R001',
+    nextMode: 'SEG',
+    defaultHeightFactor: '1',
+  })
+
+  const scope = result.scopes[0]
+  assert.equal(scope.mode, 'SEG')
+  assert.equal(scope.ceilingTypeId, 'FLAT')
+  assert.equal(scope.ceilingGeometryMode, 'FLAT')
+  assert.equal(scope.cofferSectionLengthIn, '')
+  assert.equal(scope.cofferFaceHeightIn, '')
 })
 
 test('updateRoomDimensionsMutation does not overwrite SEG ceiling scopes', () => {

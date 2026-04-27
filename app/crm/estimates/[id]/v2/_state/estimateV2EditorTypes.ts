@@ -323,6 +323,7 @@ export type EstimateV2EditorSectionSummaryVm = {
   primaryUnit: string
   paintLabel: string
   primerLabel: string
+  showPrimer?: boolean
   secondaryValue?: string
   secondaryLabel?: string
   chips: EstimateV2EditorSectionChipVm[]

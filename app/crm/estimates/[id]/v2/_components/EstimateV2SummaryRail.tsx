@@ -85,7 +85,9 @@ function SectionCard({
       <div className="summary-kpi">{section.primaryValue}</div>
       <div style={{ ...styles.mono, color: 'var(--v2-ink-3)', marginTop: 2 }}>{section.primaryUnit}</div>
       <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 8 }}>Paint: {section.paintLabel}</div>
-      <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 2 }}>Primer: {section.primerLabel}</div>
+      {section.showPrimer ?? true ? (
+        <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 2 }}>Primer: {section.primerLabel}</div>
+      ) : null}
       {section.secondaryLabel && section.secondaryValue ? (
         <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 8 }}>
           {section.secondaryLabel}: {section.secondaryValue}
