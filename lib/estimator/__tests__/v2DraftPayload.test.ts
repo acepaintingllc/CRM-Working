@@ -6,6 +6,14 @@ import {
   deriveEstimateV2Segment,
   sortByPosition,
 } from '../v2DraftPayload.ts'
+import type {
+  EstimateV2CeilingScopeDraft,
+  EstimateV2ConditionSelections,
+  EstimateV2JobSettingsDraft,
+  EstimateV2RoomDraft,
+  EstimateV2TrimScopeDraft,
+  EstimateV2WallScopeDraft,
+} from '../../../types/estimator/v2.ts'
 
 test('sortByPosition returns rows ordered by ascending position', () => {
   const rows = sortByPosition([
@@ -388,7 +396,7 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   )
 })
 
-function minimalJobSettings(overrides = {}) {
+function minimalJobSettings(overrides: Partial<EstimateV2JobSettingsDraft> = {}): EstimateV2JobSettingsDraft {
   return {
     laborDayEnabled: false,
     dayhours: 8,
@@ -407,7 +415,7 @@ function minimalJobSettings(overrides = {}) {
   }
 }
 
-function minimalRoom() {
+function minimalRoom(): EstimateV2RoomDraft {
   return {
     id: 'room-1',
     roomId: 'R001',
@@ -422,7 +430,7 @@ function minimalRoom() {
   }
 }
 
-function minimalWallScope() {
+function minimalWallScope(): EstimateV2WallScopeDraft {
   return {
     id: 'wall-1',
     roomId: 'R001',
@@ -457,7 +465,7 @@ function minimalWallScope() {
   }
 }
 
-function minimalCeilingScope() {
+function minimalCeilingScope(): EstimateV2CeilingScopeDraft {
   return {
     id: 'ceil-1',
     roomId: 'R001',
@@ -490,7 +498,7 @@ function minimalCeilingScope() {
   }
 }
 
-function minimalTrimScope() {
+function minimalTrimScope(): EstimateV2TrimScopeDraft {
   return {
     id: 'trim-1',
     roomId: 'R001',
@@ -559,7 +567,7 @@ test('condition_factor writes wall * room product onto wall scopes', () => {
     [],
     []
   )
-  assert.ok(Math.abs(payload.room_wall_scopes[0].condition_factor - 1.15 * 1.2) < 0.0001)
+  assert.ok(Math.abs(Number(payload.room_wall_scopes[0].condition_factor) - 1.15 * 1.2) < 0.0001)
 })
 
 test('condition_factor writes ceiling * room product onto ceiling scopes', () => {
@@ -573,7 +581,7 @@ test('condition_factor writes ceiling * room product onto ceiling scopes', () =>
     [],
     []
   )
-  assert.ok(Math.abs(payload.room_ceiling_scopes[0].condition_factor - 1.1 * 1.3) < 0.0001)
+  assert.ok(Math.abs(Number(payload.room_ceiling_scopes[0].condition_factor) - 1.1 * 1.3) < 0.0001)
 })
 
 test('condition_factor writes trim * room product onto trim scopes', () => {
@@ -587,7 +595,7 @@ test('condition_factor writes trim * room product onto trim scopes', () => {
     [],
     [minimalTrimScope()]
   )
-  assert.ok(Math.abs(payload.room_trim_scopes[0].condition_factor - 1.05 * 1.25) < 0.0001)
+  assert.ok(Math.abs(Number(payload.room_trim_scopes[0].condition_factor) - 1.05 * 1.25) < 0.0001)
 })
 
 test('condition_factor is null when scope factor is 1 and room factor is 1', () => {
@@ -621,7 +629,12 @@ test('jobsettings.condition_selections is null when not set on draft', () => {
 })
 
 test('jobsettings.condition_selections is persisted from draft', () => {
-  const selections = { room: { ROOM_FURNISHED: 'active' }, wall: {}, ceiling: {}, trim: { TRIM_CAULK: 'minor' } }
+  const selections: EstimateV2ConditionSelections = {
+    room: { ROOM_FURNISHED: 'active' },
+    wall: {},
+    ceiling: {},
+    trim: { TRIM_CAULK: 'minor' },
+  }
   const payload = buildEstimateV2SavePayload(
     minimalJobSettings({ conditionSelections: selections }),
     [minimalRoom()],

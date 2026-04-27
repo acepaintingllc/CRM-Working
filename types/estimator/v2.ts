@@ -557,6 +557,7 @@ export type EstimateV2SavePayload = {
     ceiling_primer_id: string | null
     trim_paint_id: string | null
     trim_primer_id: string | null
+    condition_selections: EstimateV2ConditionSelections | null
   }
   rooms: Array<{
     id: string
