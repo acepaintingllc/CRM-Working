@@ -1,4 +1,5 @@
 import type {
+  DetailsConditionsVm,
   DetailsOverrideVm,
   DetailsRollerVm,
   DetailsScopeLineVm,
@@ -115,6 +116,25 @@ export function createActiveOverrides(params: {
     }))
 }
 
+function createConditionsUnavailableIssues(conditionsVm: DetailsConditionsVm): DetailsValidationIssue[] {
+  if (conditionsVm.available) return []
+  const hasSelections =
+    conditionsVm.roomActiveCount > 0 ||
+    conditionsVm.wallActiveCount > 0 ||
+    conditionsVm.ceilingActiveCount > 0 ||
+    conditionsVm.trimActiveCount > 0
+  if (!hasSelections) return []
+  return [
+    createDetailsWarningIssue({
+      id: 'conditions:template-unavailable',
+      section: 'material',
+      targetId: 'conditions',
+      message:
+        'Condition modifiers are not configured in your template. Saved selections will not apply factors until the template is seeded.',
+    }),
+  ]
+}
+
 export function createValidationIssues(params: {
   wallRows: DetailsScopeLineVm[]
   ceilingRow: DetailsScopeLineVm | null
@@ -122,6 +142,7 @@ export function createValidationIssues(params: {
   wallRollerRows: DetailsRollerVm[]
   ceilingRollerRow: DetailsRollerVm | null
   activeMaterialScopeCount?: number
+  conditionsVm?: DetailsConditionsVm
 }) {
   const emptyMaterialIssues: DetailsValidationIssue[] =
     params.activeMaterialScopeCount === 0
@@ -140,11 +161,15 @@ export function createValidationIssues(params: {
     ...(params.ceilingRow?.errors ?? []),
     ...(params.trimRow?.errors ?? []),
   ]
+  const conditionIssues = params.conditionsVm
+    ? createConditionsUnavailableIssues(params.conditionsVm)
+    : []
   const issuesById = new Map<string, DetailsValidationIssue>()
   for (const issue of [
     ...materialValidationIssues,
     ...params.wallRollerRows.flatMap((row) => row.errors),
     ...(params.ceilingRollerRow?.errors ?? []),
+    ...conditionIssues,
   ]) {
     if (!issuesById.has(issue.id)) issuesById.set(issue.id, issue)
   }
