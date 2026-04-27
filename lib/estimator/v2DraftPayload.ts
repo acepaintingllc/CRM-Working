@@ -145,6 +145,13 @@ export function buildEstimateV2SavePayload(
   trimScopes: EstimateV2TrimScopeDraft[],
   rollers: EstimateV2RollerDraft[] = []
 ): EstimateV2SavePayload {
+  const resolvedFactors = jobSettingsDraft.resolvedConditionFactors ?? {
+    room: 1,
+    wall: 1,
+    ceiling: 1,
+    trim: 1,
+  }
+
   const jobsettings = {
     labor_day_policy_enabled: jobSettingsDraft.laborDayEnabled,
     dayhours: jobSettingsDraft.dayhours,
@@ -159,6 +166,7 @@ export function buildEstimateV2SavePayload(
     ceiling_primer_id: toNullableText(jobSettingsDraft.ceilingPrimerProductId),
     trim_paint_id: toNullableText(jobSettingsDraft.trimPaintProductId),
     trim_primer_id: toNullableText(jobSettingsDraft.trimPrimerProductId),
+    condition_selections: jobSettingsDraft.conditionSelections ?? null,
   }
 
   const orderedRooms = sortByPosition(rooms).map((room, index) => ({
@@ -223,6 +231,9 @@ export function buildEstimateV2SavePayload(
         effective_total: null,
         notes: scope.notes.trim() || null,
         condition_selections: toPersistedConditionSelections(scope.conditionSelections),
+        condition_factor: resolvedFactors.wall !== 1 || resolvedFactors.room !== 1
+          ? resolvedFactors.wall * resolvedFactors.room
+          : null,
       }
     })
   )
@@ -275,6 +286,9 @@ export function buildEstimateV2SavePayload(
       ceiling_type_id: scope.ceilingTypeId.trim() || null,
       ceiling_geometry_mode: scope.ceilingGeometryMode?.trim() || 'FLAT',
       vaulted_area_factor: toNullableDraftNumber(scope.vaultedAreaFactor ?? ''),
+      vaulted_ridge_length_in: toNullableDraftNumber(scope.vaultedRidgeLengthIn ?? ''),
+      vaulted_slope_length_in: toNullableDraftNumber(scope.vaultedSlopeLengthIn ?? ''),
+      vaulted_plane_count: toNullableDraftNumber(scope.vaultedPlaneCount ?? ''),
       tray_perimeter_in: toNullableDraftNumber(scope.trayPerimeterIn ?? ''),
       tray_step_height_in: toNullableDraftNumber(scope.trayStepHeightIn ?? ''),
       tray_band_width_in: toNullableDraftNumber(scope.trayBandWidthIn ?? ''),
@@ -301,6 +315,9 @@ export function buildEstimateV2SavePayload(
       override_total: toNullableDraftNumber(scope.overrideTotal),
       notes: scope.notes.trim() || null,
       condition_selections: toPersistedConditionSelections(scope.conditionSelections),
+      condition_factor: resolvedFactors.ceiling !== 1 || resolvedFactors.room !== 1
+        ? resolvedFactors.ceiling * resolvedFactors.room
+        : null,
     }))
   )
 
@@ -366,6 +383,9 @@ export function buildEstimateV2SavePayload(
       override_description: null,
       notes: scope.notes.trim() || null,
       condition_selections: toPersistedConditionSelections(scope.conditionSelections),
+      condition_factor: resolvedFactors.trim !== 1 || resolvedFactors.room !== 1
+        ? resolvedFactors.trim * resolvedFactors.room
+        : null,
     }))
   )
 
