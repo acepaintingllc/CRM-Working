@@ -183,10 +183,11 @@ describe('JobPhotosPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Kitchen repaint/i }))
     const uploadSection = screen.getByRole('region', { name: 'Upload photos' })
-    fireEvent.click(within(uploadSection).getByRole('button', { name: 'Upload photos' }))
+    const uploadButton = within(uploadSection).getByRole('button', { name: 'Upload 0 photos' }) as HTMLButtonElement
 
-    expect(await screen.findByText('Add at least one photo before uploading.')).toBeTruthy()
+    expect(uploadButton.disabled).toBe(true)
     expect(mockUploadJobSitePhotos).not.toHaveBeenCalled()
   })
 })
+
 
