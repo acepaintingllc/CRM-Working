@@ -54,20 +54,20 @@ export function ActivityFeedCard({ viewModel }: ActivityFeedCardProps) {
         ]}
       />
 
-      <div id={activityPanelId} role="tabpanel" aria-labelledby={activityTabId} className="px-5 py-4">
+      <div id={activityPanelId} role="tabpanel" aria-labelledby={activityTabId} className="px-4 py-3 md:px-5 md:py-4">
         {viewModel.isUnavailable ? (
           <DashboardEmptyState message={viewModel.unavailableMessage} />
         ) : viewModel.isEmpty ? (
           <DashboardEmptyState message={viewModel.emptyMessage} />
         ) : (
           <DashboardDividedList>
-            {viewModel.items.map((item) => {
+            {viewModel.items.map((item, index) => {
               const status = getActivityStatusDisplay(item.status)
               return (
                 <Link
                   key={item.id}
                   href={item.href}
-                  className="group flex gap-3 py-3 transition"
+                  className={`group flex min-w-0 gap-3 py-3 transition ${index >= 3 ? 'hidden md:flex' : ''}`}
                 >
                   <div
                     className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-extrabold"
@@ -90,7 +90,7 @@ export function ActivityFeedCard({ viewModel }: ActivityFeedCardProps) {
                       ) : null}
                     </div>
                   </div>
-                  <div className="flex-shrink-0 self-center text-xs font-semibold" style={crmMutedTextStyle}>
+                  <div className="hidden max-w-[5.5rem] flex-shrink-0 truncate self-center text-xs font-semibold sm:block" style={crmMutedTextStyle}>
                     {formatStatus(item.status)}
                   </div>
                 </Link>

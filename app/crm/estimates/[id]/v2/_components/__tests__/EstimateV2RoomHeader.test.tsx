@@ -116,6 +116,52 @@ describe('EstimateV2RoomHeader', () => {
     expect(screen.queryByText('Walls x1.2')).not.toBeInTheDocument()
   })
 
+  it('renders the furnished room condition as a room-level modifier chip', () => {
+    const setSelectedRoomCondition = vi.fn()
+    const selectedRoom = {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living Room',
+      roomTypeId: '',
+      lengthIn: '120',
+      widthIn: '144',
+      heightIn: '108',
+      wallComplexityId: '',
+      notes: '',
+      position: 0,
+      conditionSelections: { ROOM_FURNISHED: 'active' as const },
+    }
+
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({
+          selectedRoom,
+          roomFlagsEnabled: false,
+          conditionModifiers: [
+            {
+              id: 'ROOM_FURNISHED',
+              label: 'Room is furnished',
+              scope: 'room',
+              modifier_type: 'binary',
+              factor_field: null,
+              levels: { active: 1.15 },
+            },
+          ],
+          setSelectedRoomCondition,
+        })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    const furnishedButton = screen.getByRole('button', { name: 'Room is furnished' })
+    expect(furnishedButton).toHaveAttribute('aria-pressed', 'true')
+    expect(furnishedButton).toHaveAttribute('title', 'Room x1.15')
+
+    fireEvent.click(furnishedButton)
+    expect(setSelectedRoomCondition).toHaveBeenCalledWith('ROOM_FURNISHED', 'none')
+  })
+
   it('disables the active geometry mode so no-op clicks do not dispatch mode changes', () => {
     const switchSelectedRoomGeometryMode = vi.fn()
 

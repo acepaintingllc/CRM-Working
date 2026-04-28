@@ -60,7 +60,7 @@ export function QuoteRatesPageContent() {
 
         <CrmDetailLayout
           main={
-            <div className="grid gap-4">
+            <div className="grid content-start gap-4">
               <QuoteRatesCategorySection
                 filtersVm={controller.filtersVm}
                 tableVm={{ activeCategory: controller.tableVm.activeCategory }}

@@ -14,6 +14,7 @@ type CrmPageHeaderProps = {
   backHref?: string
   backLabel?: string
   backAction?: ReactNode
+  className?: string
 }
 
 export function CrmPageHeader({
@@ -27,9 +28,10 @@ export function CrmPageHeader({
   backHref,
   backLabel = 'Back',
   backAction,
+  className = '',
 }: CrmPageHeaderProps) {
   return (
-    <section className="ace-crm-surface overflow-hidden px-5 py-5 md:px-6 md:py-6">
+    <section className={`ace-crm-surface overflow-hidden px-5 py-5 md:px-6 md:py-6 ${className}`.trim()}>
       {backAction ? <div className="mb-4">{backAction}</div> : null}
       {!backAction && backHref ? (
         <div className="mb-4">

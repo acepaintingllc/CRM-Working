@@ -19,7 +19,7 @@ function actionIcon(icon: 'calendar' | 'notes') {
 
 export function SignalsFooterActions({ actions }: SignalsFooterActionsProps) {
   return (
-    <CrmDenseActionRow className="border-t px-5 py-3" style={crmBorderStyle}>
+    <CrmDenseActionRow className="hidden border-t px-5 py-3 md:flex" style={crmBorderStyle}>
       {actions.map((action) => (
         <CrmButton
           key={action.href}

@@ -11,6 +11,8 @@ import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import { EstimateV2RoomHeader } from './EstimateV2RoomHeader'
 
+const ROOM_LEVEL_MODIFIER_CONDITION_IDS = new Set(['ROOM_FURNISHED'])
+
 export function EstimateV2EditorRoomSetupArea({
   styles,
   roomVm,
@@ -36,19 +38,30 @@ export function EstimateV2EditorRoomSetupArea({
 
   if (!selectedRoom) return null
 
+  const roomConditionCatalog = (roomVm.conditionModifiers ?? []).filter(
+    (condition) => !ROOM_LEVEL_MODIFIER_CONDITION_IDS.has(condition.id)
+  )
+  const roomConditionSelections = Object.fromEntries(
+    Object.entries(selectedRoom.conditionSelections ?? {}).filter(
+      ([conditionId]) => !ROOM_LEVEL_MODIFIER_CONDITION_IDS.has(conditionId.toUpperCase())
+    )
+  )
+
   return (
     <>
       <EstimateV2RoomHeader styles={styles} roomVm={roomVm} toDisplayNumber={toDisplayNumber} />
 
-      <EstimateV2ConditionsPanel
-        title="Room Conditions"
-        scope="room"
-        catalog={roomVm.conditionModifiers ?? []}
-        selections={selectedRoom.conditionSelections ?? {}}
-        onChange={roomVm.setSelectedRoomCondition ?? (() => undefined)}
-        styles={styles}
-        collapsible={false}
-      />
+      {roomConditionCatalog.some((condition) => condition.scope === 'room' && condition.active !== 'N') ? (
+        <EstimateV2ConditionsPanel
+          title="Room Conditions"
+          scope="room"
+          catalog={roomConditionCatalog}
+          selections={roomConditionSelections}
+          onChange={roomVm.setSelectedRoomCondition ?? (() => undefined)}
+          styles={styles}
+          collapsible={false}
+        />
+      ) : null}
 
       <div className="scope-chip-row">
         <button

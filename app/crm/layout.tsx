@@ -339,11 +339,11 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── Main content column ── */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+      <div className="crm-main-column" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
 
         {/* Mobile top bar */}
         <div
-          className="lg:hidden"
+          className="crm-mobile-topbar lg:hidden"
           style={{
             position: "sticky",
             top: 0,
@@ -351,6 +351,8 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
             borderBottom: "1px solid var(--crm-border)",
             background: "var(--crm-nav-bg)",
             backdropFilter: "blur(8px)",
+            maxWidth: "100vw",
+            overflow: "hidden",
           }}
         >
           <div
@@ -419,12 +421,14 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div
+            className="crm-mobile-nav"
             style={{
               overflowX: "auto",
               display: "flex",
               gap: 6,
               padding: "0 14px 10px",
               scrollbarWidth: "none",
+              maxWidth: "100%",
             }}
           >
             {navItems.map((item) => {
@@ -465,7 +469,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Page content */}
-        <div style={{ flex: 1 }}>
+        <div className="crm-page-content" style={{ flex: 1 }}>
           <SWRConfig
             value={{
               fetcher: (url: string) => authedFetch(url).then((response) => response.json()),

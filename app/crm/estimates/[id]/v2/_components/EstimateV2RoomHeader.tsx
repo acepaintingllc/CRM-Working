@@ -1,6 +1,7 @@
 'use client'
 
 import type { CSSProperties } from 'react'
+import type { EstimateV2ConditionModifier } from '@/lib/estimator/conditionModifiers'
 import type { EstimateV2EditorRoomVm } from '../_state/estimateV2EditorTypes'
 import { buildRoomFlagChipVms } from '../_lib/estimateV2EditorPresentation'
 import {
@@ -17,6 +18,8 @@ type RoomHeaderStyles = SharedStyles & {
   computedBig: CSSProperties
   flagChip: CSSProperties
 }
+
+const ROOM_FURNISHED_CONDITION_ID = 'ROOM_FURNISHED'
 
 function formatTotalInchesAsFeetInches(value: string): string | null {
   const parsed = Number(value)
@@ -50,6 +53,23 @@ function wallFormulaText(
   return `Perimeter ${formatCompactNumber(perimeter)} in x Height ${formatCompactNumber(height)} in`
 }
 
+function findRoomFurnishedCondition(
+  conditions: EstimateV2ConditionModifier[] | null | undefined
+) {
+  return conditions?.find(
+    (condition) =>
+      condition.id === ROOM_FURNISHED_CONDITION_ID &&
+      condition.scope === 'room' &&
+      condition.modifier_type === 'binary' &&
+      condition.active !== 'N'
+  )
+}
+
+function isLegacyFurnishedOccupancyFlag(label: string) {
+  const normalized = label.toLowerCase()
+  return normalized.includes('furnished') && normalized.includes('occupied')
+}
+
 export function EstimateV2RoomHeader({
   styles,
   roomVm,
@@ -61,11 +81,19 @@ export function EstimateV2RoomHeader({
 }) {
   const room = roomVm.selectedRoom
   if (!room) return null
+  const furnishedCondition = findRoomFurnishedCondition(roomVm.conditionModifiers)
   const roomFlagChips = buildRoomFlagChipVms({
     roomId: room.roomId,
     flags: roomVm.roomFlagsCatalog,
     selectedFlags: roomVm.roomFlags,
-  })
+  }).filter(
+    (flag) =>
+      !furnishedCondition ||
+      flag.active ||
+      !isLegacyFurnishedOccupancyFlag(flag.label)
+  )
+  const furnishedActive =
+    room.conditionSelections?.[ROOM_FURNISHED_CONDITION_ID] === 'active'
 
   const lengthHelper = formatTotalInchesAsFeetInches(room.lengthIn)
   const widthHelper = formatTotalInchesAsFeetInches(room.widthIn)
@@ -203,14 +231,14 @@ export function EstimateV2RoomHeader({
         </div>
       </RoomHeaderSetup>
 
-      {roomVm.roomFlagsEnabled ? (
+      {roomVm.roomFlagsEnabled || furnishedCondition ? (
         <RoomLevelModifiers styles={styles}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 'calc(15px + 4pt)', fontWeight: 700 }}>Room-Level Modifiers</div>
             <span style={{ ...styles.mono, color: 'var(--v2-ink-3)' }}>room-wide defaults and conditions</span>
           </div>
           <div className="modifier-grid">
-            {roomFlagChips.map((flag) => {
+            {roomVm.roomFlagsEnabled ? roomFlagChips.map((flag) => {
               return (
                 <button
                   key={flag.id}
@@ -229,7 +257,31 @@ export function EstimateV2RoomHeader({
                   <span className="flag-chip-label" style={{ fontWeight: flag.active ? 700 : 500 }}>{flag.label}</span>
                 </button>
               )
-            })}
+            }) : null}
+            {furnishedCondition ? (
+              <button
+                type="button"
+                className={`flag-chip${furnishedActive ? ' flag-chip-active' : ''}`}
+                onClick={() =>
+                  roomVm.setSelectedRoomCondition?.(
+                    ROOM_FURNISHED_CONDITION_ID,
+                    furnishedActive ? 'none' : 'active'
+                  )
+                }
+                title={`Room x${formatCompactNumber(furnishedCondition.levels.active ?? 1)}`}
+                aria-pressed={furnishedActive}
+                style={{
+                  ...styles.flagChip,
+                  borderColor: furnishedActive ? 'rgba(134,239,172,0.46)' : 'var(--v2-line)',
+                  background: furnishedActive ? 'rgba(74,222,128,0.12)' : '#0d0d0d',
+                  color: furnishedActive ? 'var(--v2-green-2)' : 'var(--v2-ink-2)',
+                }}
+              >
+                <span className="flag-chip-label" style={{ fontWeight: furnishedActive ? 700 : 500 }}>
+                  {furnishedCondition.label}
+                </span>
+              </button>
+            ) : null}
           </div>
         </RoomLevelModifiers>
       ) : null}
