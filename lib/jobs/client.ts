@@ -148,10 +148,10 @@ export type JobSitePhotoRecord = {
   createdAt: string | null
 }
 
-export type JobSitePhotoFolder = { id: string; webViewLink: string | null }
+export type JobSitePhotoFolder = { id: string | null; webViewLink: string | null }
 
 export type ListJobSitePhotosResponse = {
-  photosByCategory: Record<JobSitePhotoCategory, JobSitePhotoRecord[]>
+  photos: Record<JobSitePhotoCategory, JobSitePhotoRecord[]>
   jobFolder: JobSitePhotoFolder | null
   categoryFolders: Record<JobSitePhotoCategory, JobSitePhotoFolder | null>
 }
