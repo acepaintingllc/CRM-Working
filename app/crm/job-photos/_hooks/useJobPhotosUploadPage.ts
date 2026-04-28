@@ -65,6 +65,7 @@ export function useJobPhotosUploadPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [folderUrl, setFolderUrl] = useState<string | null>(null)
   const queueRef = useRef<QueuedJobPhoto[]>([])
+  const uploadInFlightRef = useRef(false)
 
   useEffect(() => {
     queueRef.current = queue
@@ -116,76 +117,80 @@ export function useJobPhotosUploadPage() {
     const incomingFiles = Array.from(files)
     if (incomingFiles.length === 0) return
 
-    setError(null)
+    const availableSlots = Math.max(MAX_FILES - queueRef.current.length, 0)
+    const rejectedMessages: string[] = []
+    const nextPhotos: QueuedJobPhoto[] = []
+
+    for (const file of incomingFiles) {
+      const validationError = getFileValidationError(file)
+      if (validationError) {
+        rejectedMessages.push(`${file.name}: ${validationError}`)
+        continue
+      }
+
+      if (nextPhotos.length >= availableSlots) {
+        rejectedMessages.push(`Only ${MAX_FILES} photos can be queued at once.`)
+        break
+      }
+
+      nextPhotos.push({
+        id: createQueueId(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        capturedAt: getCapturedAt(file),
+      })
+    }
+
+    setError(rejectedMessages.length > 0 ? rejectedMessages.join(' ') : null)
     setNotice(null)
 
-    setQueue((currentQueue) => {
-      const availableSlots = Math.max(MAX_FILES - currentQueue.length, 0)
-      const acceptedFiles = incomingFiles.slice(0, availableSlots)
-      const rejectedMessages: string[] = []
+    if (nextPhotos.length === 0) return
 
-      if (incomingFiles.length > availableSlots) {
-        rejectedMessages.push(`Only ${MAX_FILES} photos can be queued at once.`)
-      }
-
-      const nextPhotos: QueuedJobPhoto[] = []
-
-      for (const file of acceptedFiles) {
-        const validationError = getFileValidationError(file)
-        if (validationError) {
-          rejectedMessages.push(`${file.name}: ${validationError}`)
-          continue
-        }
-
-        nextPhotos.push({
-          id: createQueueId(),
-          file,
-          previewUrl: URL.createObjectURL(file),
-          capturedAt: getCapturedAt(file),
-        })
-      }
-
-      if (rejectedMessages.length > 0) {
-        setError(rejectedMessages.join(' '))
-      }
-
-      return [...currentQueue, ...nextPhotos]
-    })
+    const nextQueue = [...queueRef.current, ...nextPhotos]
+    queueRef.current = nextQueue
+    setQueue(nextQueue)
   }, [])
 
   const removeQueuedPhoto = useCallback((id: string) => {
-    setQueue((currentQueue) => {
-      const removedPhoto = currentQueue.find((photo) => photo.id === id)
-      if (removedPhoto) revokeQueuedPhoto(removedPhoto)
-      return currentQueue.filter((photo) => photo.id !== id)
-    })
+    const removedPhoto = queueRef.current.find((photo) => photo.id === id)
+    if (removedPhoto) revokeQueuedPhoto(removedPhoto)
+
+    const nextQueue = queueRef.current.filter((photo) => photo.id !== id)
+    queueRef.current = nextQueue
+    setQueue(nextQueue)
   }, [])
 
   const upload = useCallback(async () => {
-    if (uploading) return
+    if (uploadInFlightRef.current) return
 
+    uploadInFlightRef.current = true
     setError(null)
     setNotice(null)
 
     if (!selectedJobId) {
       setError('Choose a job before uploading photos.')
+      uploadInFlightRef.current = false
       return
     }
 
     if (!category) {
       setError('Choose a photo category before uploading photos.')
+      uploadInFlightRef.current = false
       return
     }
 
-    if (queue.length === 0) {
+    const queuedPhotos = queueRef.current
+
+    if (queuedPhotos.length === 0) {
       setError('Add at least one photo before uploading.')
+      uploadInFlightRef.current = false
       return
     }
 
     const form = new FormData()
     form.append('category', category)
 
-    for (const photo of queue) {
+    for (const photo of queuedPhotos) {
       form.append('clientLocalId', photo.id)
       form.append('capturedAt', photo.capturedAt)
       form.append('photos', photo.file)
@@ -206,39 +211,29 @@ export function useJobPhotosUploadPage() {
         failuresById.set(failure.clientLocalId, failure)
       }
 
-      const successfulIds = new Set(
-        data.photos.map((photo) => photo.clientLocalId).filter((id): id is string => Boolean(id))
-      )
+      const remainingPhotos: QueuedJobPhoto[] = []
+      let uploadedCount = 0
 
-      setQueue((currentQueue) => {
-        const remainingPhotos: QueuedJobPhoto[] = []
+      for (const photo of queuedPhotos) {
+        const failure = failuresById.get(photo.id)
 
-        for (const photo of currentQueue) {
-          const failure = failuresById.get(photo.id)
-
-          if (failure) {
-            remainingPhotos.push({ ...photo, error: failure.message })
-            continue
-          }
-
-          if (successfulIds.has(photo.id)) {
-            revokeQueuedPhoto(photo)
-            continue
-          }
-
-          remainingPhotos.push(photo)
+        if (failure) {
+          remainingPhotos.push({ ...photo, error: failure.message })
+          continue
         }
 
-        return remainingPhotos
-      })
+        uploadedCount += 1
+        revokeQueuedPhoto(photo)
+      }
 
+      queueRef.current = remainingPhotos
+      setQueue(remainingPhotos)
       setFolderUrl(data.jobFolder.webViewLink ?? getJobPhotosFolderUrl(data.jobFolder.id))
 
       if (failuresById.size > 0) {
         setError(`${failuresById.size} photo${failuresById.size === 1 ? '' : 's'} failed to upload.`)
       }
 
-      const uploadedCount = successfulIds.size
       if (uploadedCount > 0) {
         setNotice(
           response.notice ??
@@ -248,9 +243,10 @@ export function useJobPhotosUploadPage() {
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload photos.')
     } finally {
+      uploadInFlightRef.current = false
       setUploading(false)
     }
-  }, [category, queue, selectedJobId, uploading])
+  }, [category, selectedJobId])
 
   return {
     jobs,
