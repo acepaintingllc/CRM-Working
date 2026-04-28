@@ -174,7 +174,9 @@ describe('JobPhotosPage', () => {
     fireEvent.change(screen.getByLabelText('Take Photos'), { target: { files: [imageFile('orphan.png')] } })
     fireEvent.click(await screen.findByRole('button', { name: 'Upload 1 photo' }))
 
-    expect(await screen.findByText('Choose a job before uploading photos.')).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getAllByText('Choose a job before uploading photos.')).toHaveLength(2)
+    })
     expect(mockUploadJobSitePhotos).not.toHaveBeenCalled()
   })
 
@@ -189,5 +191,6 @@ describe('JobPhotosPage', () => {
     expect(mockUploadJobSitePhotos).not.toHaveBeenCalled()
   })
 })
+
 
 
