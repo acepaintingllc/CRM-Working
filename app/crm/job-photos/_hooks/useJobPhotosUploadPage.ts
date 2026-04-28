@@ -211,6 +211,22 @@ export function useJobPhotosUploadPage() {
         failuresById.set(failure.clientLocalId, failure)
       }
 
+      const queuedIds = new Set(queuedPhotos.map((photo) => photo.id))
+      const successfulIds = new Set(
+        data.photos
+          .map((photo) => photo.clientLocalId)
+          .filter((id): id is string => Boolean(id) && queuedIds.has(id))
+      )
+
+      if (successfulIds.size === 0 && data.photos.length > 0) {
+        const unfailedCount = queuedPhotos.length - failuresById.size
+        if (data.photos.length === unfailedCount) {
+          for (const photo of queuedPhotos) {
+            if (!failuresById.has(photo.id)) successfulIds.add(photo.id)
+          }
+        }
+      }
+
       const remainingPhotos: QueuedJobPhoto[] = []
       let uploadedCount = 0
 
@@ -222,8 +238,13 @@ export function useJobPhotosUploadPage() {
           continue
         }
 
-        uploadedCount += 1
-        revokeQueuedPhoto(photo)
+        if (successfulIds.has(photo.id)) {
+          uploadedCount += 1
+          revokeQueuedPhoto(photo)
+          continue
+        }
+
+        remainingPhotos.push({ ...photo, error: 'Upload status was not confirmed. Try again.' })
       }
 
       queueRef.current = remainingPhotos
@@ -270,3 +291,4 @@ export function useJobPhotosUploadPage() {
     upload,
   }
 }
+
