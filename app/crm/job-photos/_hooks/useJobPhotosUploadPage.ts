@@ -218,14 +218,7 @@ export function useJobPhotosUploadPage() {
           .filter((id): id is string => Boolean(id) && queuedIds.has(id))
       )
 
-      if (successfulIds.size === 0 && data.photos.length > 0) {
-        const unfailedCount = queuedPhotos.length - failuresById.size
-        if (data.photos.length === unfailedCount) {
-          for (const photo of queuedPhotos) {
-            if (!failuresById.has(photo.id)) successfulIds.add(photo.id)
-          }
-        }
-      }
+
 
       const remainingPhotos: QueuedJobPhoto[] = []
       let uploadedCount = 0
@@ -291,4 +284,5 @@ export function useJobPhotosUploadPage() {
     upload,
   }
 }
+
 
