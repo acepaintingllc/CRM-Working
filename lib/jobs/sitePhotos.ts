@@ -118,7 +118,7 @@ export type UploadJobSitePhotosData = {
   categoryFolder: DriveFolderSummary
 }
 
-type QueryResponse<T> = { data: T | null; error: { message?: string | null } | null }
+type QueryResponse<T> = { data: T | null; error: { code?: string | null; message?: string | null } | null }
 type QueryBuilder = {
   select(columns: string): QueryBuilder
   eq(column: string, value: unknown): QueryBuilder
@@ -175,6 +175,7 @@ const sitePhotoSelect = [
   'captured_at',
   'uploaded_at',
   'client_local_id',
+  'created_at',
 ].join(', ')
 
 async function getDb(depsOverride?: SitePhotoDepsOverride): Promise<DbClient> {
@@ -377,6 +378,16 @@ export function buildDriveFolderUrl(folderId: string | null | undefined): string
   return `https://drive.google.com/drive/folders/${folderId}`
 }
 
+function buildDriveFileUrl(fileId: string): string {
+  return `https://drive.google.com/file/d/${fileId}/view`
+}
+
+function isUniqueConflict(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return error.code === '23505' || message.includes('duplicate') || message.includes('unique')
+}
+
 export async function listJobSitePhotos(
   orgId: string,
   jobId: string,
@@ -437,6 +448,8 @@ export async function uploadJobSitePhotos(
   let categoryFolderId: string | null = null
 
   for (const file of input.files) {
+    // Client-provided IDs are the idempotency mechanism. This generated fallback is
+    // intentionally non-idempotent and only supports clients that do not supply one.
     const clientLocalId = file.clientLocalId?.trim() || deps.randomUUID()
     const duplicate = await deps.db
       .from('job_site_photos')
@@ -508,7 +521,7 @@ export async function uploadJobSitePhotos(
         job_drive_folder_id: jobFolderId,
         drive_file_id: uploaded.file.id,
         drive_folder_id: categoryFolderId,
-        url: uploaded.file.webViewLink ?? null,
+        url: uploaded.file.webViewLink ?? buildDriveFileUrl(uploaded.file.id),
         caption: null,
         created_by_user_id: input.createdByUserId ?? input.userId,
         captured_at: capturedAt,
@@ -517,6 +530,25 @@ export async function uploadJobSitePhotos(
       .select(sitePhotoSelect)
       .single<SitePhotoRow>()
     if (insertError || !inserted) {
+      if (isUniqueConflict(insertError)) {
+        const recovered = await deps.db
+          .from('job_site_photos')
+          .select(sitePhotoSelect)
+          .eq('org_id', input.orgId)
+          .eq('job_id', input.jobId)
+          .eq('client_local_id', clientLocalId)
+          .maybeSingle<SitePhotoRow>()
+
+        if (!recovered.error && recovered.data) {
+          const existingPhoto = toPhotoResponse(recovered.data)
+          photos.push(existingPhoto)
+          jobFolderId = jobFolderId ?? existingPhoto.job_drive_folder_id
+          if (existingPhoto.category === validation) {
+            categoryFolderId = categoryFolderId ?? existingPhoto.drive_folder_id
+          }
+          continue
+        }
+      }
       failed.push({ originalName: file.originalName, clientLocalId, message: insertError?.message ?? 'Unable to save the uploaded photo.' })
       continue
     }

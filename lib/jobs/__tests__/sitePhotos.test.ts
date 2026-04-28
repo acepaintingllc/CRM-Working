@@ -15,7 +15,7 @@ import {
 
 type MockQueryResult = {
   data: unknown
-  error: { message: string } | null
+  error: { code?: string; message: string } | null
 }
 
 type MockCall = {
@@ -156,8 +156,8 @@ test('listJobSitePhotos verifies org-scoped job and groups rows by category', as
     jobs: [{ data: { id: 'job-1', title: 'Interior repaint', customer_id: 'customer-1', customer: { address: '123 Main St' } }, error: null }],
     job_site_photos: [{
       data: [
-        { id: 'photo-before', job_id: 'job-1', category: 'before', job_drive_folder_id: 'job-folder', drive_file_id: 'file-before', drive_folder_id: 'before-folder', url: 'https://drive/photo-before', caption: null, captured_at: '2026-04-28T15:00:00.000Z', uploaded_at: '2026-04-28T15:01:00.000Z', client_local_id: 'before-1' },
-        { id: 'photo-damage', job_id: 'job-1', category: 'damage', job_drive_folder_id: 'job-folder', drive_file_id: 'file-damage', drive_folder_id: 'damage-folder', url: 'https://drive/photo-damage', caption: null, captured_at: '2026-04-28T14:00:00.000Z', uploaded_at: '2026-04-28T14:01:00.000Z', client_local_id: 'damage-1' },
+        { id: 'photo-before', job_id: 'job-1', category: 'before', job_drive_folder_id: 'job-folder', drive_file_id: 'file-before', drive_folder_id: 'before-folder', url: 'https://drive/photo-before', caption: null, captured_at: '2026-04-28T15:00:00.000Z', uploaded_at: '2026-04-28T15:01:00.000Z', client_local_id: 'before-1', created_at: '2026-04-28T15:02:00.000Z' },
+        { id: 'photo-damage', job_id: 'job-1', category: 'damage', job_drive_folder_id: 'job-folder', drive_file_id: 'file-damage', drive_folder_id: 'damage-folder', url: 'https://drive/photo-damage', caption: null, captured_at: '2026-04-28T14:00:00.000Z', uploaded_at: '2026-04-28T14:01:00.000Z', client_local_id: 'damage-1', created_at: '2026-04-28T14:02:00.000Z' },
       ],
       error: null,
     }],
@@ -169,6 +169,7 @@ test('listJobSitePhotos verifies org-scoped job and groups rows by category', as
   assert.equal(result.data.photos.before.length, 1)
   assert.equal(result.data.photos.damage.length, 1)
   assert.equal(result.data.photos.after.length, 0)
+  assert.equal(result.data.photos.before[0]?.created_at, '2026-04-28T15:02:00.000Z')
   assert.equal(result.data.jobFolder.webViewLink, 'https://drive.google.com/drive/folders/job-folder')
   assert.equal(result.data.categoryFolders.before.webViewLink, 'https://drive.google.com/drive/folders/before-folder')
   assert.equal(result.data.categoryFolders.damage.webViewLink, 'https://drive.google.com/drive/folders/damage-folder')
@@ -203,7 +204,8 @@ test('uploadJobSitePhotos rejects invalid category, empty files, too many files,
 })
 
 test('uploadJobSitePhotos ensures job folder, ensures category folder, uploads images, inserts rows, and returns partial failures', async () => {
-  const insertedRow = { id: 'photo-1', job_id: 'job-1', category: 'before', job_drive_folder_id: 'job-folder', drive_file_id: 'drive-file-1', drive_folder_id: 'before-folder', url: 'https://drive/photo-1', caption: null, captured_at: '2026-04-28T15:04:05.000Z', uploaded_at: '2026-04-28T15:04:06.000Z', client_local_id: 'local-1' }
+  const fallbackUrl = 'https://drive.google.com/file/d/drive-file-1/view'
+  const insertedRow = { id: 'photo-1', job_id: 'job-1', category: 'before', job_drive_folder_id: 'job-folder', drive_file_id: 'drive-file-1', drive_folder_id: 'before-folder', url: fallbackUrl, caption: null, captured_at: '2026-04-28T15:04:05.000Z', uploaded_at: '2026-04-28T15:04:06.000Z', client_local_id: 'local-1', created_at: '2026-04-28T15:04:07.000Z' }
   const { db, calls } = createDbMock({
     jobs: [{ data: { id: 'job-1', title: 'Interior repaint', customer: { address: '123 Main St' } }, error: null }],
     job_site_photos: [{ data: null, error: null }, { data: insertedRow, error: null }, { data: null, error: null }],
@@ -224,7 +226,7 @@ test('uploadJobSitePhotos ensures job folder, ensures category folder, uploads i
       uploadCalls.push(params)
       const name = (params as { name: string }).name
       if (name.includes('local-2')) return { error: 'Drive upload failed' }
-      return { file: { id: 'drive-file-1', name, webViewLink: 'https://drive/photo-1' } }
+      return { file: { id: 'drive-file-1', name, webViewLink: null } }
     },
   }
 
@@ -239,12 +241,85 @@ test('uploadJobSitePhotos ensures job folder, ensures category folder, uploads i
   assert.equal(result.data.failed[0]?.message, 'Drive upload failed')
   assert.equal(result.data.photos[0]?.job_drive_folder_id, 'job-folder')
   assert.equal(result.data.photos[0]?.drive_folder_id, 'before-folder')
+  assert.equal(result.data.photos[0]?.url, fallbackUrl)
+  assert.equal(result.data.photos[0]?.created_at, '2026-04-28T15:04:07.000Z')
   assert.equal((ensureCalls[0] as { parentFolderId: string }).parentFolderId, 'root-folder')
   assert.equal((ensureCalls[1] as { parentFolderId: string }).parentFolderId, 'job-folder')
   assert.equal((ensureCalls[1] as { name: string }).name, 'Before')
   assert.equal(uploadCalls.length, 2)
   assert.equal((uploadCalls[0] as { folderId: string }).folderId, 'before-folder')
-  assert.ok(calls.some((call) => call.table === 'job_site_photos' && call.method === 'insert'))
+  const insertCall = calls.find((call) => call.table === 'job_site_photos' && call.method === 'insert')
+  assert.ok(insertCall)
+  assert.equal((insertCall.value as { url: string }).url, fallbackUrl)
+})
+
+test('uploadJobSitePhotos recovers existing row when insert hits client_local_id unique conflict', async () => {
+  const existingRow = { id: 'photo-race', job_id: 'job-1', category: 'before', job_drive_folder_id: 'job-folder', drive_file_id: 'drive-existing', drive_folder_id: 'before-folder', url: 'https://drive/photo-race', caption: null, captured_at: '2026-04-28T15:04:05.000Z', uploaded_at: '2026-04-28T15:04:06.000Z', client_local_id: 'local-1', created_at: '2026-04-28T15:04:07.000Z' }
+  const { db, calls } = createDbMock({
+    jobs: [{ data: { id: 'job-1', title: 'Interior repaint', customer_id: 'customer-1', customer: { address: '123 Main St' } }, error: null }],
+    job_site_photos: [
+      { data: null, error: null },
+      { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "job_site_photos_org_id_job_id_client_local_id_key"' } },
+      { data: existingRow, error: null },
+    ],
+  })
+  const uploadCalls: unknown[] = []
+
+  const result = await uploadJobSitePhotos(
+    { orgId: 'org-1', jobId: 'job-1', userId: 'user-1', createdByUserId: 'user-1', origin: 'https://example.test', category: 'before', files: [validUploadFile] },
+    {
+      db,
+      env: { GOOGLE_DRIVE_JOB_PHOTOS_FOLDER_ID: 'root-folder' },
+      now: () => new Date('2026-04-28T15:04:06.000Z'),
+      ensureDriveFolder: async (params: unknown) => {
+        const parentFolderId = (params as { parentFolderId: string }).parentFolderId
+        return { folder: parentFolderId === 'root-folder' ? { id: 'job-folder', name: '123 Main St', webViewLink: null } : { id: 'before-folder', name: 'Before', webViewLink: null } }
+      },
+      uploadDriveFile: async (params: unknown) => {
+        uploadCalls.push(params)
+        return { file: { id: 'drive-new-race', name: (params as { name: string }).name, webViewLink: 'https://drive/new-race' } }
+      },
+    }
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.data.failed.length, 0)
+  assert.equal(result.data.photos.length, 1)
+  assert.equal(result.data.photos[0]?.id, 'photo-race')
+  assert.equal(result.data.photos[0]?.drive_file_id, 'drive-existing')
+  assert.equal(result.data.photos[0]?.created_at, '2026-04-28T15:04:07.000Z')
+  assert.equal(uploadCalls.length, 1)
+  assert.equal(calls.filter((call) => call.table === 'job_site_photos' && call.method === 'maybeSingle').length, 2)
+})
+
+test('uploadJobSitePhotos generates a client local id only when one is missing', async () => {
+  const insertedRow = { id: 'photo-generated', job_id: 'job-1', category: 'after', job_drive_folder_id: 'job-folder', drive_file_id: 'drive-generated', drive_folder_id: 'after-folder', url: 'https://drive/generated', caption: null, captured_at: '2026-04-28T15:04:05.000Z', uploaded_at: '2026-04-28T15:04:06.000Z', client_local_id: 'generated-local-id', created_at: '2026-04-28T15:04:07.000Z' }
+  const { db, calls } = createDbMock({
+    jobs: [{ data: { id: 'job-1', title: 'Interior repaint', customer_id: 'customer-1', customer: { address: '123 Main St' } }, error: null }],
+    job_site_photos: [{ data: null, error: null }, { data: insertedRow, error: null }],
+  })
+
+  const result = await uploadJobSitePhotos(
+    { orgId: 'org-1', jobId: 'job-1', userId: 'user-1', createdByUserId: 'user-1', origin: 'https://example.test', category: 'after', files: [{ ...validUploadFile, clientLocalId: null }] },
+    {
+      db,
+      env: { GOOGLE_DRIVE_JOB_PHOTOS_FOLDER_ID: 'root-folder' },
+      randomUUID: () => 'generated-local-id',
+      now: () => new Date('2026-04-28T15:04:06.000Z'),
+      ensureDriveFolder: async (params: unknown) => {
+        const parentFolderId = (params as { parentFolderId: string }).parentFolderId
+        return { folder: parentFolderId === 'root-folder' ? { id: 'job-folder', name: '123 Main St', webViewLink: null } : { id: 'after-folder', name: 'After', webViewLink: null } }
+      },
+      uploadDriveFile: async (params: unknown) => ({ file: { id: 'drive-generated', name: (params as { name: string }).name, webViewLink: 'https://drive/generated' } }),
+    }
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.data.photos[0]?.client_local_id, 'generated-local-id')
+  assert.ok(calls.some((call) => call.table === 'job_site_photos' && call.method === 'eq' && call.column === 'client_local_id' && call.value === 'generated-local-id'))
+  const insertCall = calls.find((call) => call.table === 'job_site_photos' && call.method === 'insert')
+  assert.ok(insertCall)
+  assert.equal((insertCall.value as { client_local_id: string }).client_local_id, 'generated-local-id')
 })
 
 test('uploadJobSitePhotos does not reuse a duplicate photo folder from another requested category', async () => {
