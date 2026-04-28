@@ -11,6 +11,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   CalendarDays,
   Calculator,
+  Camera,
   ChevronLeft,
   ChevronRight,
   Cog,
@@ -47,6 +48,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       { href: "/crm", label: "Home", Icon: Home },
       { href: "/crm/customers", label: "Customers", Icon: Users },
       { href: "/crm/jobs", label: "Job Center", Icon: Wrench },
+      { href: "/crm/job-photos", label: "Job Photos", Icon: Camera },
       { href: "/crm/quotes", label: "Quotes", Icon: Calculator },
       { href: "/crm/tasks", label: "Tasks", Icon: ListTodo },
       { href: "/crm/calendar", label: "Calendar", Icon: CalendarDays },
