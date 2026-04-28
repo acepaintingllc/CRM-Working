@@ -12,6 +12,12 @@ import {
 } from '@/lib/jobs/sitePhotos'
 
 type RouteContext = { params: { id: string } | Promise<{ id: string }> }
+type FileLike = {
+  name: string
+  size: number
+  type?: string
+  arrayBuffer: () => Promise<ArrayBuffer>
+}
 
 async function readJobId(context: RouteContext) {
   const params = await resolveParams(context)
@@ -21,6 +27,18 @@ async function readJobId(context: RouteContext) {
 function readIndexedString(values: FormDataEntryValue[], index: number): string | null {
   const value = values[index]
   return typeof value === 'string' && value.trim() ? value : null
+}
+
+function isFileLike(entry: FormDataEntryValue): entry is FileLike {
+  if (typeof File !== 'undefined' && entry instanceof File) return true
+  if (!entry || typeof entry !== 'object') return false
+  const candidate = entry as Partial<FileLike>
+  return (
+    typeof candidate.name === 'string' &&
+    typeof candidate.size === 'number' &&
+    typeof candidate.arrayBuffer === 'function' &&
+    (candidate.type === undefined || typeof candidate.type === 'string')
+  )
 }
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -43,25 +61,34 @@ export async function POST(request: Request, context: RouteContext) {
   const jobId = await readJobId(context)
   if (!jobId.ok) return jobId.response
 
-  const formData = await request.formData()
-  const category = formData.get('category')
-  const photoEntries = formData.getAll('photos').filter((entry): entry is File => entry instanceof File)
+  let formData: FormData
+  try {
+    formData = await request.formData()
+  } catch {
+    return jsonError('Invalid multipart form data.', 400)
+  }
+
+  const categoryValue = formData.get('category')
+  const category = typeof categoryValue === 'string' ? categoryValue : null
+  const photoEntries = formData.getAll('photos').filter(isFileLike)
   if (photoEntries.length === 0) {
     return jsonError('Add at least one photo before uploading.', 400)
   }
 
   const clientLocalIds = formData.getAll('clientLocalId')
   const capturedAtValues = formData.getAll('capturedAt')
-  const files: JobSitePhotoUploadFile[] = await Promise.all(
-    photoEntries.map(async (file, index) => ({
+  const files: JobSitePhotoUploadFile[] = []
+  for (let index = 0; index < photoEntries.length; index += 1) {
+    const file = photoEntries[index]
+    files.push({
       buffer: await file.arrayBuffer(),
       originalName: file.name,
-      mimeType: file.type,
+      mimeType: typeof file.type === 'string' ? file.type : '',
       sizeBytes: file.size,
       clientLocalId: readIndexedString(clientLocalIds, index),
       capturedAt: readIndexedString(capturedAtValues, index),
-    }))
-  )
+    })
+  }
 
   return serviceResultResponse(
     await uploadJobSitePhotos({

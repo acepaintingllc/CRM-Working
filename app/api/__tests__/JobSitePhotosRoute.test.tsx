@@ -138,6 +138,21 @@ describe('job site photos route', () => {
     })
   })
 
+  it('POST returns 400 when multipart form data cannot be parsed', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/jobs/job-1/site-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: 'before' }),
+      }),
+      { params: { id: 'job-1' } }
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockUploadJobSitePhotos).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid multipart form data.' })
+  })
+
   it('maps service validation errors', async () => {
     const formData = new FormData()
     formData.set('category', 'unsupported')
@@ -173,6 +188,27 @@ describe('job site photos route', () => {
     expect(response.status).toBe(401)
     expect(mockResolveParams).not.toHaveBeenCalled()
     expect(mockListJobSitePhotos).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' })
+  })
+
+  it('POST returns auth responses before parsing the body', async () => {
+    mockRequireSessionUserOrg.mockResolvedValueOnce({
+      ok: false,
+      response: new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }),
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/jobs/job-1/site-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: 'before' }),
+      }),
+      { params: { id: 'job-1' } }
+    )
+
+    expect(response.status).toBe(401)
+    expect(mockResolveParams).not.toHaveBeenCalled()
+    expect(mockUploadJobSitePhotos).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' })
   })
 
