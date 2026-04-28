@@ -1,17 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from "next/link";
 import { ArrowRight, Mail, MapPin, Phone, Plus } from "lucide-react";
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
 import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
+import { useEntityDetailActions } from '@/app/crm/_hooks/useEntityDetailActions'
+import { CrmModalHeader } from '@/app/crm/_components/CrmModalHeader'
+import { CrmModalShell } from '@/app/crm/_components/CrmModalShell'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
 import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { CustomerDetailCard } from '@/app/crm/customers/_components/CustomerDetailCard'
+import { CustomerTimelinePanel } from '@/app/crm/customers/_components/CustomerTimelinePanel'
+import { useCustomerDetail } from '@/app/crm/customers/_hooks/useCustomerDetail'
 import { useCustomerList } from '@/app/crm/customers/_hooks/useCustomerList'
+import { useCustomerTimeline } from '@/app/crm/customers/_hooks/useCustomerTimeline'
 import { useOrg } from '@/app/crm/customers/customers-orgproviders'
 
 export default function CustomersPage() {
@@ -20,6 +26,7 @@ export default function CustomersPage() {
     enabled: !orgLoading && !orgError && Boolean(orgId),
   });
   const [searchInput, setSearchInput] = useState(search);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
 
   useEffect(() => {
     setSearchInput(search);
@@ -103,10 +110,11 @@ export default function CustomersPage() {
 
       <div className="grid gap-3">
         {customers.map((customer) => (
-          <Link
+          <button
             key={customer.id}
-            href={`/crm/customers/${customer.id}`}
-            className="ace-crm-surface block p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_56px_rgba(17,24,39,0.12)] focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-ui-accent-border)]"
+            type="button"
+            onClick={() => setSelectedCustomerId(customer.id)}
+            className="ace-crm-surface block w-full p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_56px_rgba(17,24,39,0.12)] focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-ui-accent-border)]"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
@@ -142,9 +150,80 @@ export default function CustomersPage() {
                 </span>
               </div>
             </div>
-          </Link>
+          </button>
         ))}
       </div>
+
+      {selectedCustomerId ? (
+        <CustomerDetailModal
+          customerId={selectedCustomerId}
+          onClose={() => setSelectedCustomerId(null)}
+          onDeleted={() => setSelectedCustomerId(null)}
+        />
+      ) : null}
     </CrmPageShell>
   );
+}
+
+type CustomerDetailModalProps = {
+  customerId: string
+  onClose: () => void
+  onDeleted: () => void
+}
+
+function CustomerDetailModal({ customerId, onClose, onDeleted }: CustomerDetailModalProps) {
+  const {
+    customer,
+    loading,
+    deleting,
+    error,
+    deleteCustomer,
+  } = useCustomerDetail(customerId)
+  const { timelineEvents, timelineLoading, timelineError, noteBody, setNoteBody, noteSaving, saveNote } =
+    useCustomerTimeline(customerId)
+  const detailActions = useEntityDetailActions({
+    deleteMessage: 'Delete this customer? This cannot be undone.',
+    deleteAction: deleteCustomer,
+  })
+
+  const title = customer?.name ?? 'Customer details'
+
+  return (
+    <CrmModalShell labelledBy="customer-detail-modal-title" onClose={onClose} widthClassName="max-w-4xl">
+      <CrmModalHeader
+        labelledBy="customer-detail-modal-title"
+        eyebrow="Customer profile"
+        title={title}
+        description="Contact details, timeline activity, and quick CRM actions."
+        closeLabel="Close customer details"
+        onClose={onClose}
+      />
+      <div className="grid max-h-[calc(88vh-92px)] gap-4 overflow-y-auto p-4">
+        <CustomerDetailCard
+          customer={customer}
+          loading={loading}
+          error={error}
+          statusMessage={detailActions.statusMessage}
+          deleting={deleting}
+          detailPathWithQuery={`/crm/customers/${customerId}`}
+          onBack={onClose}
+          onCopy={(label, value) => void detailActions.copyValue(label, value)}
+          onDelete={async () => {
+            const deleted = await detailActions.confirmAndDelete()
+            if (deleted) onDeleted()
+          }}
+        />
+
+        <CustomerTimelinePanel
+          timelineEvents={timelineEvents}
+          timelineLoading={timelineLoading}
+          timelineError={timelineError}
+          noteBody={noteBody}
+          noteSaving={noteSaving}
+          setNoteBody={setNoteBody}
+          onAddNote={() => void saveNote()}
+        />
+      </div>
+    </CrmModalShell>
+  )
 }

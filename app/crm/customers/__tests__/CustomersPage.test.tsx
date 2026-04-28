@@ -13,6 +13,28 @@ vi.mock('@/app/crm/customers/_hooks/useCustomerList', () => ({
   useCustomerList: () => mockUseCustomerList(),
 }))
 
+vi.mock('@/app/crm/customers/_hooks/useCustomerDetail', () => ({
+  useCustomerDetail: () => ({
+    customer: null,
+    loading: false,
+    deleting: false,
+    error: null,
+    deleteCustomer: vi.fn(),
+  }),
+}))
+
+vi.mock('@/app/crm/customers/_hooks/useCustomerTimeline', () => ({
+  useCustomerTimeline: () => ({
+    timelineEvents: [],
+    timelineLoading: false,
+    timelineError: null,
+    noteBody: '',
+    setNoteBody: vi.fn(),
+    noteSaving: false,
+    saveNote: vi.fn(),
+  }),
+}))
+
 describe('CustomersPage', () => {
   beforeEach(() => {
     mockUseOrg.mockReset()

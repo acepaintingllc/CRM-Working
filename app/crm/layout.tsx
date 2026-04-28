@@ -119,7 +119,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
     >
       {/* ── Desktop sidebar ── */}
       <aside
-        className="hidden lg:flex"
+        className="hidden md:flex"
         style={{
           width: sidebarCollapsed ? 64 : 220,
           flexShrink: 0,
@@ -343,7 +343,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile top bar */}
         <div
-          className="crm-mobile-topbar lg:hidden"
+          className="crm-mobile-topbar md:hidden"
           style={{
             position: "sticky",
             top: 0,
