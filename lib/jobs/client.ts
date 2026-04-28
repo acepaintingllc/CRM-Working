@@ -152,8 +152,8 @@ export type JobSitePhotoFolder = { id: string | null; webViewLink: string | null
 
 export type ListJobSitePhotosResponse = {
   photos: Record<JobSitePhotoCategory, JobSitePhotoRecord[]>
-  jobFolder: JobSitePhotoFolder | null
-  categoryFolders: Record<JobSitePhotoCategory, JobSitePhotoFolder | null>
+  jobFolder: JobSitePhotoFolder
+  categoryFolders: Record<JobSitePhotoCategory, JobSitePhotoFolder>
 }
 
 export type UploadJobSitePhotoFailure = {
@@ -164,8 +164,8 @@ export type UploadJobSitePhotoFailure = {
 
 export type UploadJobSitePhotosResponse = {
   photos: JobSitePhotoRecord[]
-  jobFolder: JobSitePhotoFolder | null
-  categoryFolder: JobSitePhotoFolder | null
+  jobFolder: JobSitePhotoFolder
+  categoryFolder: JobSitePhotoFolder
   failed: UploadJobSitePhotoFailure[]
 }
 export async function fetchJobList() {
