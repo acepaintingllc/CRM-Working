@@ -155,6 +155,7 @@ export function useJobDetailPage() {
 
   const loadPhotosData = useCallback(async () => {
     if (!id || typeof id !== 'string') {
+      photosRequestIdRef.current += 1
       setPhotosFolderUrl(null)
       setPhotosLoading(false)
       return true
