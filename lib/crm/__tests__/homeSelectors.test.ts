@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildCrmHomeMetrics,
+  buildCurrentJobs,
   buildNotesReminders,
   buildSearchResults,
 } from '../home/selectors.ts'
@@ -73,6 +74,46 @@ test('buildSearchResults trims, lowercases, and enforces limits', () => {
   assert.equal(results.customers[0]?.id, '1')
   assert.equal(results.jobs.length, 1)
   assert.equal(results.jobs[0]?.id, 'j1')
+})
+
+test('buildCurrentJobs returns scheduled jobs starting soon until completed or lost', () => {
+  const now = new Date('2026-04-21T12:00:00.000Z')
+  const currentJobs = buildCurrentJobs(
+    [
+      makeJob({
+        id: 'later',
+        status: 'scheduled',
+        scheduled_date: '2026-04-23T11:00:00.000Z',
+      }),
+      makeJob({
+        id: 'active',
+        status: 'scheduled',
+        scheduled_date: '2026-04-20T13:00:00.000Z',
+        scheduled_end_date: '2026-04-22T18:00:00.000Z',
+      }),
+      makeJob({
+        id: 'too-far',
+        status: 'scheduled',
+        scheduled_date: '2026-04-25T13:00:00.000Z',
+      }),
+      makeJob({
+        id: 'closed',
+        status: 'completed',
+        scheduled_date: '2026-04-21T13:00:00.000Z',
+      }),
+      makeJob({
+        id: 'lost',
+        status: 'lost',
+        scheduled_date: '2026-04-21T14:00:00.000Z',
+      }),
+    ],
+    now
+  )
+
+  assert.deepEqual(
+    currentJobs.map((job) => job.id),
+    ['active', 'later']
+  )
 })
 
 test('buildNotesReminders orders overdue before due today and applies limits', () => {

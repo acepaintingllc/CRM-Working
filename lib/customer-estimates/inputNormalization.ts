@@ -4,6 +4,7 @@ import type {
   CustomerEstimateSectionKey,
   Unsafe,
 } from './types.ts'
+import type { QuoteTermsSections } from './termsDefaults.ts'
 import {
   asNum,
   asText,
@@ -119,11 +120,13 @@ export interface CustomerEstimateInput {
     trim_items?: CustomerEstimateRow[]
     other?: CustomerEstimateRow[]
     jobsettings?: CustomerEstimateRow | null
+    org_defaults?: CustomerEstimateRow | null
   }
   catalogs?: CustomerEstimateCatalogs | null
   settings?: {
     quote_validity_days?: number | null
     terms_text?: string | null
+    terms_sections?: QuoteTermsSections | null
     default_template_key?: string | null
   }
   pricingSummary?: CustomerEstimatePricingSummary | null
@@ -366,10 +369,18 @@ export function normalizeCustomerEstimateInput(
     }),
     otherRows: rowsOf(input.inputs.other).map(normalizeOtherRow),
     jobsettings: {
-      wallPaintProductId:
-        asText(input.inputs.jobsettings?.walls_paint_id || input.inputs.jobsettings?.wall_paint_id).toUpperCase(),
-      ceilingPaintProductId: asText(input.inputs.jobsettings?.ceiling_paint_id).toUpperCase(),
-      trimPaintProductId: asText(input.inputs.jobsettings?.trim_paint_id).toUpperCase(),
+      wallPaintProductId: asText(
+        input.inputs.jobsettings?.walls_paint_id ||
+          input.inputs.jobsettings?.wall_paint_id ||
+          input.inputs.org_defaults?.walls_paint_id ||
+          input.inputs.org_defaults?.wall_paint_id
+      ).toUpperCase(),
+      ceilingPaintProductId: asText(
+        input.inputs.jobsettings?.ceiling_paint_id || input.inputs.org_defaults?.ceiling_paint_id
+      ).toUpperCase(),
+      trimPaintProductId: asText(
+        input.inputs.jobsettings?.trim_paint_id || input.inputs.org_defaults?.trim_paint_id
+      ).toUpperCase(),
     },
     paintCatalogRows: rowsOf(input.catalogs?.paint_products).map((row) => ({
       id: asText(row.id).toUpperCase(),

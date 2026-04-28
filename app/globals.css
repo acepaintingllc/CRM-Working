@@ -523,6 +523,7 @@ a {
   .ace-crm-shell > div,
   .crm-main-column,
   .crm-page-content,
+  .crm-page-shell-inner,
   .crm-mobile-topbar,
   .crm-mobile-nav,
   .crm-home-main,
@@ -531,6 +532,21 @@ a {
     max-width: 100%;
     min-width: 0;
     overflow-x: hidden;
+  }
+
+  .ace-crm-shell :where(.crm-contained-surface, .ace-crm-surface, .crm-card) {
+    contain: inline-size;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .ace-crm-shell :where(.crm-contained-surface, .ace-crm-surface, .crm-card) :where(.grid, .flex) > * {
+    min-width: 0;
+  }
+
+  .ace-crm-shell :where(.crm-contained-surface, .ace-crm-surface, .crm-card) :where(h1, h2, h3, h4, p, a, button, span, div) {
+    max-width: 100%;
   }
 
   .crm-mobile-nav {
@@ -576,6 +592,118 @@ a {
     font-size: 0.9rem;
   }
 
+  .crm-customers-page-header {
+    border-radius: 12px;
+    padding: 0.75rem 0.8rem !important;
+    box-shadow: none;
+  }
+
+  .crm-customers-page-header > .flex {
+    gap: 0.65rem;
+  }
+
+  .crm-customers-page-header .mb-3 {
+    margin-bottom: 0.45rem;
+  }
+
+  .crm-customers-page-header .ace-crm-mono,
+  .crm-customers-page-header p {
+    display: none;
+  }
+
+  .crm-customers-page-header h1 {
+    font-size: 1.25rem;
+    line-height: 1.1;
+    letter-spacing: 0;
+  }
+
+  .crm-customers-page-header .ace-crm-surface-muted {
+    width: 32px;
+    height: 32px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+  }
+
+  .crm-customers-page-header .flex.items-start.gap-3 {
+    gap: 0.55rem;
+  }
+
+  .crm-customers-page-header a {
+    min-height: 2.15rem;
+    border-radius: 0.75rem;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.8rem;
+  }
+
+  .crm-job-detail-shell {
+    gap: 0.75rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .crm-job-detail-page-header {
+    border-radius: 12px;
+    padding: 0.55rem 0.65rem !important;
+    box-shadow: none;
+  }
+
+  .crm-job-detail-page-header > div:first-child {
+    margin-bottom: 0.45rem;
+  }
+
+  .crm-job-detail-page-header a {
+    min-height: 2rem;
+    border-radius: 0.65rem;
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+    font-size: 0.75rem;
+  }
+
+  .crm-job-detail-page-header .ace-crm-mono,
+  .crm-job-detail-page-header p,
+  .crm-job-detail-page-header .ace-crm-surface-muted {
+    display: none;
+  }
+
+  .crm-job-detail-page-header h1 {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.05rem;
+    line-height: 1.15;
+    letter-spacing: 0;
+  }
+
+  .crm-job-detail-page-header .flex.items-start.gap-3 {
+    gap: 0;
+  }
+
+  .crm-job-detail-controls {
+    border: 1px solid var(--crm-ui-border);
+    border-radius: 12px;
+    background: var(--crm-ui-surface);
+    padding: 0.65rem;
+  }
+
+  .crm-job-detail-controls .ace-crm-mono {
+    font-size: 0.55rem;
+    letter-spacing: 0.16em;
+  }
+
+  .crm-modal-close-button {
+    width: 3.25rem;
+    height: 3.25rem;
+    min-width: 3.25rem;
+    min-height: 3.25rem;
+    border-radius: 1rem;
+  }
+
+  .crm-modal-close-button svg {
+    width: 1.7rem;
+    height: 1.7rem;
+  }
+
   .crm-home-header > div:last-child,
   .crm-home-header > div:last-child > div:last-child {
     width: 100%;
@@ -583,6 +711,15 @@ a {
 
   .crm-home-header > div:last-child > div:last-child {
     display: none;
+  }
+
+  .crm-today-card,
+  .crm-today-card *,
+  .crm-current-jobs-card,
+  .crm-current-jobs-card *,
+  .crm-quick-actions-card,
+  .crm-quick-actions-card * {
+    min-width: 0;
   }
 
   .crm-today-card [role='tablist'] {
@@ -601,8 +738,54 @@ a {
     padding-bottom: 0.65rem;
   }
 
+  .crm-today-card [role='tabpanel'],
+  .crm-today-card [role='tabpanel'] > .divide-y {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .crm-today-card [role='tabpanel'] div {
+    overflow-wrap: anywhere;
+  }
+
   .crm-calendar-open-link {
     display: none;
+  }
+
+  .crm-current-jobs-card {
+    padding: 12px !important;
+    border-radius: 14px;
+  }
+
+  .crm-current-jobs-card .mt-2 {
+    margin-top: 0.25rem;
+  }
+
+  .crm-current-jobs-card a {
+    overflow: hidden;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+  }
+
+  .crm-current-jobs-card a > div:first-child {
+    height: 1.75rem;
+    width: 1.75rem;
+  }
+
+  .crm-current-jobs-card a > div:first-child svg {
+    height: 0.8rem;
+    width: 0.8rem;
+  }
+
+  .crm-current-jobs-card a .text-sm {
+    font-size: 0.78rem;
+    line-height: 1rem;
+  }
+
+  .crm-current-jobs-card a .text-xs {
+    font-size: 0.68rem;
+    line-height: 0.95rem;
   }
 
   .crm-quick-actions-card {
@@ -613,6 +796,9 @@ a {
   }
 
   .crm-quick-actions-card > div:last-child {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.5rem;
     max-width: 100%;
     min-width: 0;
   }
@@ -621,6 +807,18 @@ a {
     width: 100%;
     max-width: 100%;
     min-width: 0;
+    overflow: hidden;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .crm-quick-actions-card a span {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
@@ -671,8 +869,26 @@ a {
     grid-template-columns: 1fr;
   }
   .ace-v2-home-stats {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .quotes-home-summary-card {
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+  }
+  .quotes-home-summary-card-label {
+    font-size: 9px !important;
+    margin-bottom: 6px !important;
+  }
+  .quotes-home-summary-card-value {
+    font-size: 17px !important;
+    line-height: 1.1 !important;
+    margin-bottom: 4px !important;
+  }
+  .quotes-home-summary-card-subtext {
+    font-size: 11px !important;
+    line-height: 1.35 !important;
   }
 
   /* Mobile top bar */

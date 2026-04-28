@@ -197,6 +197,7 @@ export type EstimateV2JobSettingsInput = {
   trim_paint_id?: string | null
   trim_primer_id?: string | null
   primer_id?: string | null
+  condition_selections?: EstimateV2ConditionSelections | null
 }
 
 export type EstimateV2PaintProductRow = {

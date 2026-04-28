@@ -62,4 +62,59 @@ describe('useEstimateV2EditorLoader', () => {
       setCollectionsSpy.mock.invocationCallOrder[0]
     )
   })
+
+  it('hydrates saved job-level condition selections into job settings draft', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    const store = createEstimateV2Store()
+    const estimatePayload = {
+      ...fixture.summaryData,
+      inputs: {
+        ...fixture.summaryData.inputs,
+        jobsettings: {
+          ...fixture.summaryData.inputs.jobsettings,
+          condition_selections: {
+            room: { ROOM_FURNISHED: 'active' },
+            wall: { WALL_TEXTURE: 'moderate' },
+            ceiling: {},
+            trim: { TRIM_OIL_BASED: 'active' },
+          },
+        },
+        wall_segments: fixture.segments,
+        ceiling_scope_segments: fixture.ceilingSegments,
+      },
+    }
+
+    authedFetch
+      .mockResolvedValueOnce(createResponse(true, { data: estimatePayload }))
+      .mockResolvedValueOnce(createResponse(true, { data: { catalogs: fixture.catalogs } }))
+      .mockResolvedValueOnce(createResponse(true, { data: fixture.job }))
+
+    renderHook(() =>
+      useEstimateV2EditorLoader({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store,
+      })
+    )
+
+    await waitFor(() => {
+      expect(store.getState().meta.loading).toBe(false)
+    })
+
+    expect(store.getState().meta.jobSettingsDraft.conditionSelections).toEqual({
+      room: { ROOM_FURNISHED: 'active' },
+      wall: { WALL_TEXTURE: 'moderate' },
+      ceiling: {},
+      trim: { TRIM_OIL_BASED: 'active' },
+    })
+    expect(store.getState().collections.rooms[0].conditionSelections).toMatchObject({
+      ROOM_FURNISHED: 'active',
+    })
+    expect(store.getState().collections.scopes[0].conditionSelections).toMatchObject({
+      WALL_TEXTURE: 'moderate',
+    })
+    expect(store.getState().collections.trimScopes[0].conditionSelections).toMatchObject({
+      TRIM_OIL_BASED: 'active',
+    })
+  })
 })

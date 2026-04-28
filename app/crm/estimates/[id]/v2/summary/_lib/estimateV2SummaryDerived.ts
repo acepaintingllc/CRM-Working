@@ -1,13 +1,15 @@
 'use client'
 
 import { reconcileWholeDollarRows } from '@/lib/estimator/pricingPolicies'
-import { asMaybeNumber } from '@/lib/estimator/parsing'
+import { asMaybeNumber, asNullableNumber } from '@/lib/estimator/parsing'
+import { DEFAULT_LABOR_RATE } from '@/lib/estimator/defaults'
 import {
   SCOPE_KIND_LABELS,
   SCOPE_KIND_ORDER,
   type ScopeKind,
 } from '@/lib/estimator/scopeKinds'
 import type {
+  EstimateV2JobSettingsInput,
   EstimateV2PaintProductRow,
   EstimateV2PricingSummary,
   EstimateV2RoomFlagRow,
@@ -65,6 +67,7 @@ export type EstimateV2SummaryScopeRowVm = {
   suppliesCost: number | null
   subtotal: number | null
   hasOverride: boolean
+  overrideSummary: string | null
   missingProduct: boolean
   conditionSelections: EstimateV2ConditionSelections
 }
@@ -172,6 +175,55 @@ function asNullableString(value: unknown) {
   return typeof value === 'string' ? value : null
 }
 
+function formatOverrideNumber(value: number) {
+  return Number.isInteger(value)
+    ? value.toLocaleString('en-US')
+    : value.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+function formatOverrideCurrency(value: number) {
+  return `$${formatOverrideNumber(value)}`
+}
+
+function formatOverrideValue(value: number, unit?: string) {
+  return `${formatOverrideNumber(value)}${unit ? ` ${unit}` : ''}`
+}
+
+function activeOverride(label: string, value: number | null | undefined, unit?: string) {
+  return value == null ? null : `${label}: ${formatOverrideValue(value, unit)}`
+}
+
+function activeCurrencyOverride(label: string, value: number | null | undefined) {
+  return value == null ? null : `${label}: ${formatOverrideCurrency(value)}`
+}
+
+function buildOverrideSummary(kind: ScopeKind, scope: SummaryScopeSourceRow) {
+  const entries =
+    kind === 'trim'
+      ? [
+          activeOverride('Measurement', scope.override_measurement, 'lf'),
+          activeOverride('Labor hours', scope.override_hours, 'h'),
+          activeOverride('Gallons', scope.override_gallons, 'gal'),
+          activeCurrencyOverride('Supply cost', scope.override_supply_cost),
+          activeCurrencyOverride('Total', scope.override_total),
+          scope.override_description?.trim()
+            ? `Description: ${scope.override_description.trim()}`
+            : null,
+        ]
+      : [
+          activeOverride('Area', scope.override_area_sf, 'sf'),
+          activeOverride('Paint hours', scope.override_paint_hours, 'h'),
+          activeOverride('Primer hours', scope.override_primer_hours, 'h'),
+          activeOverride('Paint gallons', scope.override_paint_gallons, 'gal'),
+          activeOverride('Primer gallons', scope.override_primer_gallons, 'gal'),
+          activeCurrencyOverride('Supply cost', scope.override_supply_cost),
+          activeCurrencyOverride('Total', scope.override_total),
+        ]
+
+  const activeEntries = entries.filter((entry): entry is string => entry != null)
+  return activeEntries.length ? `Override: ${activeEntries.join(', ')}` : null
+}
+
 function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
   if (!isObjectRecord(value)) return null
   const id = asString(value.id)
@@ -189,20 +241,20 @@ function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
     effective_primer_hours: asMaybeNumber(value.effective_primer_hours),
     effective_supply_cost: asMaybeNumber(value.effective_supply_cost),
     effective_total: asMaybeNumber(value.effective_total),
-    override_area_sf: asMaybeNumber(value.override_area_sf),
-    override_paint_hours: asMaybeNumber(value.override_paint_hours),
-    override_primer_hours: asMaybeNumber(value.override_primer_hours),
-    override_paint_gallons: asMaybeNumber(value.override_paint_gallons),
-    override_primer_gallons: asMaybeNumber(value.override_primer_gallons),
-    override_supply_cost: asMaybeNumber(value.override_supply_cost),
-    override_total: asMaybeNumber(value.override_total),
+    override_area_sf: asNullableNumber(value.override_area_sf),
+    override_paint_hours: asNullableNumber(value.override_paint_hours),
+    override_primer_hours: asNullableNumber(value.override_primer_hours),
+    override_paint_gallons: asNullableNumber(value.override_paint_gallons),
+    override_primer_gallons: asNullableNumber(value.override_primer_gallons),
+    override_supply_cost: asNullableNumber(value.override_supply_cost),
+    override_total: asNullableNumber(value.override_total),
     paint_product_id: asNullableString(value.paint_product_id),
     paint_product_label: asNullableString(value.paint_product_label),
     raw_paint_gallons: asMaybeNumber(value.raw_paint_gallons),
     allocated_paint_material_cost: asMaybeNumber(value.allocated_paint_material_cost),
-    override_measurement: asMaybeNumber(value.override_measurement),
-    override_hours: asMaybeNumber(value.override_hours),
-    override_gallons: asMaybeNumber(value.override_gallons),
+    override_measurement: asNullableNumber(value.override_measurement),
+    override_hours: asNullableNumber(value.override_hours),
+    override_gallons: asNullableNumber(value.override_gallons),
     override_description: asNullableString(value.override_description),
     condition_selections: normalizeConditionSelections(value.condition_selections),
   }
@@ -258,6 +310,7 @@ export function createPaintProductLabelResolver(paintProducts: EstimateV2PaintPr
 
 function buildScopeRow(kind: ScopeKind, scope: SummaryScopeSourceRow): EstimateV2SummaryScopeRowVm {
   const config = SCOPE_MAPPING_CONFIG[kind]
+  const overrideSummary = buildOverrideSummary(kind, scope)
 
   return {
     id: scope.id,
@@ -270,6 +323,7 @@ function buildScopeRow(kind: ScopeKind, scope: SummaryScopeSourceRow): EstimateV
     suppliesCost: scope.effective_supply_cost ?? null,
     subtotal: scope.effective_total ?? null,
     hasOverride: config.hasOverride(scope),
+    overrideSummary,
     missingProduct: config.missingProduct(scope),
     conditionSelections: scope.condition_selections ?? {},
   }
@@ -486,6 +540,17 @@ export function buildPricingKpis(params: {
     rooms: params.roomsCount,
     laborRate: params.laborRateEffective,
   }
+}
+
+export function hasActiveLaborRateOverride(
+  jobsettings: EstimateV2JobSettingsInput | null | undefined,
+  orgDefaults: EstimateV2JobSettingsInput | null | undefined
+) {
+  const jobRate = asNullableNumber(jobsettings?.override_labor_rate)
+  if (jobRate == null) return false
+
+  const defaultRate = asNullableNumber(orgDefaults?.override_labor_rate) ?? DEFAULT_LABOR_RATE
+  return Math.abs(jobRate - defaultRate) > 0.0001
 }
 
 export function buildSummaryAlerts(params: {

@@ -27,6 +27,10 @@ import type {
 } from '@/types/estimator/v2'
 import { recalculateEditorDraftFactors } from '../_lib/estimateV2EditorRecalculate'
 import {
+  hydrateConditionSelections,
+  resolveAllConditionFactors,
+} from '../details/_lib/estimateV2DetailsConditions'
+import {
   normalizeCeilingScope,
   normalizeCeilingSegment,
   normalizeRoom,
@@ -78,9 +82,11 @@ export type EstimateV2SanitizedLoadResult = {
 function buildJobSettingsDraft(
   jobsettings: Unsafe | null,
   orgDefaults: Unsafe | null,
+  catalogs: CatalogsPayload['catalogs'],
   overrides: ProductOverrideInputs
 ) {
   const crewSize = Number(jobsettings?.crew_size ?? 1)
+  const conditionSelections = hydrateConditionSelections(jobsettings?.condition_selections)
   return {
     laborDayEnabled:
       typeof jobsettings?.labor_day_policy_enabled === 'boolean'
@@ -115,6 +121,18 @@ function buildJobSettingsDraft(
     ceilingPrimerProductId: overrides.ceilingPrimerOverride,
     trimPaintProductId: overrides.trimPaintOverride,
     trimPrimerProductId: overrides.trimPrimerOverride,
+    conditionSelections,
+    resolvedConditionFactors: resolveAllConditionFactors(
+      (catalogs.condition_modifiers ?? []).map((condition) => ({
+        id: condition.id,
+        displayName: condition.label,
+        scope: condition.scope,
+        modifierType: condition.modifier_type,
+        factorField: condition.factor_field ?? '',
+        levels: condition.levels,
+      })),
+      conditionSelections
+    ),
   } satisfies JobSettingsDraft
 }
 
@@ -152,6 +170,15 @@ function buildTrimTypeOptions(catalogs: CatalogsPayload['catalogs']): EstimateV2
     helper_allowed: !!item.helper_allowed,
     default_production_rate_id: item.default_production_rate_id,
   }))
+}
+
+function mergeLoadedConditionSelections<
+  TSelections extends Record<string, unknown> | null | undefined,
+>(base: TSelections, override: TSelections) {
+  return {
+    ...(base ?? {}),
+    ...(override ?? {}),
+  }
 }
 
 function normalizeRollerScope(value: unknown): EstimateV2RollerScope {
@@ -202,10 +229,38 @@ export function sanitizeEstimateV2EditorLoad(params: {
   const normalizedCeilingPrimerDefault = ceilingPrimerOverride || orgCeilingPrimerDefault
   const normalizedTrimDefault = trimPaintOverride || orgTrimDefault
   const normalizedTrimPrimerDefault = trimPrimerOverride || orgTrimPrimerDefault
+  const jobSettingsDraft = buildJobSettingsDraft(js, orgDefaults, catalogs, {
+    wallPaintOverride,
+    wallPrimerOverride,
+    ceilingPaintOverride,
+    ceilingPrimerOverride,
+    trimPaintOverride,
+    trimPrimerOverride,
+  })
 
-  const normalizedRooms = sortByPosition((estimatePayload.inputs.rooms ?? []).map(normalizeRoom))
+  const normalizedRooms = sortByPosition(
+    (estimatePayload.inputs.rooms ?? []).map((row, index) => {
+      const room = normalizeRoom(row, index)
+      return {
+        ...room,
+        conditionSelections: mergeLoadedConditionSelections(
+          jobSettingsDraft.conditionSelections?.room,
+          room.conditionSelections
+        ),
+      }
+    })
+  )
   const loadedScopes = sortByPosition(
-    (estimatePayload.inputs.room_wall_scopes ?? []).map(normalizeScope)
+    (estimatePayload.inputs.room_wall_scopes ?? []).map((row, index) => {
+      const scope = normalizeScope(row, index)
+      return {
+        ...scope,
+        conditionSelections: mergeLoadedConditionSelections(
+          jobSettingsDraft.conditionSelections?.wall,
+          scope.conditionSelections
+        ),
+      }
+    })
   )
   const loadedSegments = sortByPosition(
     (estimatePayload.inputs.wall_segments ?? []).map(normalizeSegment)
@@ -233,7 +288,16 @@ export function sanitizeEstimateV2EditorLoad(params: {
   )
 
   const normalizedCeilingScopes = sortByPosition(
-    (estimatePayload.inputs.room_ceiling_scopes ?? []).map(normalizeCeilingScope)
+    (estimatePayload.inputs.room_ceiling_scopes ?? []).map((row, index) => {
+      const scope = normalizeCeilingScope(row, index)
+      return {
+        ...scope,
+        conditionSelections: mergeLoadedConditionSelections(
+          jobSettingsDraft.conditionSelections?.ceiling,
+          scope.conditionSelections
+        ),
+      }
+    })
   )
   const normalizedCeilingSegments = sortByPosition(
     (estimatePayload.inputs.ceiling_scope_segments ?? []).map(normalizeCeilingSegment)
@@ -257,7 +321,16 @@ export function sanitizeEstimateV2EditorLoad(params: {
   }))
 
   const normalizedTrimScopes = sortByPosition(
-    (estimatePayload.inputs.room_trim_scopes ?? []).map(normalizeTrimScope)
+    (estimatePayload.inputs.room_trim_scopes ?? []).map((row, index) => {
+      const scope = normalizeTrimScope(row, index)
+      return {
+        ...scope,
+        conditionSelections: mergeLoadedConditionSelections(
+          jobSettingsDraft.conditionSelections?.trim,
+          scope.conditionSelections
+        ),
+      }
+    })
   )
   const sanitizedTrim = sanitizeV2TrimDrafts({
     rooms: normalizedRooms.map((room) => ({
@@ -289,14 +362,7 @@ export function sanitizeEstimateV2EditorLoad(params: {
       : normalizedRooms[0]?.roomId ?? ''
 
   const lastSavedSnapshot = buildEstimateV2DirtySnapshot({
-    jobSettingsDraft: buildJobSettingsDraft(js, orgDefaults, {
-      wallPaintOverride,
-      wallPrimerOverride,
-      ceilingPaintOverride,
-      ceilingPrimerOverride,
-      trimPaintOverride,
-      trimPrimerOverride,
-    }),
+    jobSettingsDraft,
     rooms: normalizedRooms,
     scopes: recalculated.wallScopes,
     segments: sanitizedWalls.segments,
@@ -342,14 +408,7 @@ export function sanitizeEstimateV2EditorLoad(params: {
         trimPaintProductId: orgTrimDefault,
         trimPrimerProductId: orgTrimPrimerDefault,
       },
-      jobSettingsDraft: buildJobSettingsDraft(js, orgDefaults, {
-        wallPaintOverride,
-        wallPrimerOverride,
-        ceilingPaintOverride,
-        ceilingPrimerOverride,
-        trimPaintOverride,
-        trimPrimerOverride,
-      }),
+      jobSettingsDraft,
     },
   } satisfies EstimateV2SanitizedLoadResult
 }

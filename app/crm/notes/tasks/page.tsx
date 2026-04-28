@@ -2,10 +2,16 @@
 
 import { useTaskList } from '@/lib/notes/client/useTaskList'
 import { formatDue } from '@/lib/notes/time'
-import Link from 'next/link'
 import { useMemo, type ReactNode } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Check, Clock3, EllipsisVertical, Repeat, Star, PencilLine } from 'lucide-react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import { buildNotesModuleHref } from '../_components'
 import { recurrenceLabel } from '../_lib'
 
@@ -44,27 +50,23 @@ export default function NotesTasksPage() {
 
   return (
     <div className="grid gap-4">
-      <section className="rounded-[28px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="text-xs font-extrabold uppercase tracking-[0.24em] text-emerald-300/80">Tasks</div>
-            <h2 className="mt-2 text-2xl font-extrabold text-white">Compact task manager</h2>
-            <p className="mt-1 text-sm text-neutral-400">Filter quickly, act inline, and open editing in the dedicated task composer.</p>
-          </div>
-          <div className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs font-bold text-neutral-400">
-            {taskCountLabel}
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 xl:grid-cols-[auto_auto_auto_auto_minmax(0,1fr)]">
-          <div className="inline-flex rounded-2xl bg-neutral-900 p-1">
+      <CrmSectionCard
+        eyebrow="Tasks"
+        title="Compact task manager"
+        description="Filter quickly, act inline, and open editing in the dedicated task composer."
+        badge={<CrmChip>{taskCountLabel}</CrmChip>}
+      >
+        <div className="grid gap-3 xl:grid-cols-[auto_auto_auto_auto_minmax(0,1fr)]">
+          <div className="ace-crm-surface-muted inline-flex rounded-2xl p-1">
             {(['active', 'completed', 'archived'] as const).map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setStatus(value)}
                 className={`rounded-xl px-3 py-2 text-sm font-extrabold transition ${
-                  filters.status === value ? 'bg-emerald-400 text-neutral-950' : 'text-neutral-400 hover:text-white'
+                  filters.status === value
+                    ? 'bg-[color:var(--crm-ui-accent)] text-black'
+                    : 'text-[color:var(--crm-ui-muted)] hover:text-[color:var(--crm-ui-text)]'
                 }`}
               >
                 {value[0].toUpperCase() + value.slice(1)}
@@ -76,7 +78,7 @@ export default function NotesTasksPage() {
             value={filters.status === 'active' ? filters.due : 'all'}
             disabled={filters.status !== 'active'}
             onChange={(event) => setDue(event.target.value as 'all' | 'overdue' | 'today' | 'upcoming')}
-            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-emerald-400 disabled:opacity-50"
+            className={crmInputClassName('disabled:opacity-50')}
           >
             <option value="all">All due states</option>
             <option value="overdue">Overdue</option>
@@ -87,7 +89,7 @@ export default function NotesTasksPage() {
           <select
             value={filters.priority}
             onChange={(event) => setPriority(event.target.value as 'all' | 'low' | 'medium' | 'high')}
-            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-emerald-400"
+            className={crmInputClassName()}
           >
             <option value="all">All priorities</option>
             <option value="low">Low</option>
@@ -95,39 +97,44 @@ export default function NotesTasksPage() {
             <option value="high">High</option>
           </select>
 
-          <label className="inline-flex items-center gap-2 rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-semibold text-neutral-200">
+          <label className="ace-crm-surface-muted inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[color:var(--crm-ui-text)]">
             <input type="checkbox" checked={filters.starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
             <span>Starred only</span>
           </label>
 
-          <input
+          <CrmSearchBar
             value={filters.search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={setSearch}
             placeholder="Search tasks..."
-            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
           />
         </div>
-      </section>
+      </CrmSectionCard>
 
-      {loading && <div className="text-sm text-neutral-400">Loading tasks...</div>}
-      {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
+      {loading && <CrmSectionCard title="Loading tasks">Loading tasks...</CrmSectionCard>}
+      {error && (
+        <CrmNotice tone="error" title="Unable to load tasks">
+          {error}
+        </CrmNotice>
+      )}
 
       {!loading && (
         <section className="grid gap-2">
           {tasks.length === 0 && (
-            <div className="rounded-[28px] border border-dashed border-neutral-800 bg-neutral-950 p-6 text-sm text-neutral-500 shadow-sm">
-              No tasks found for the current filters.
-            </div>
+            <CrmEmptyState
+              title="No tasks found"
+              description="No tasks match the current filters."
+              compact
+            />
           )}
           {tasks.map((task) => {
             const isFocused = focusId === task.id
             return (
               <article
                 key={task.id}
-                className={`grid gap-3 rounded-[26px] border p-4 shadow-sm transition ${
+                className={`grid gap-3 rounded-2xl border p-4 shadow-sm transition ${
                   isFocused
-                    ? 'border-emerald-400/60 bg-neutral-900 ring-1 ring-emerald-400/30'
-                    : 'border-neutral-800 bg-neutral-950 hover:border-neutral-700'
+                    ? 'border-[color:var(--crm-ui-accent-border)] bg-[color:var(--crm-ui-accent-soft)] ring-1 ring-[color:var(--crm-ui-accent-border)]'
+                    : 'ace-crm-surface hover:border-[color:var(--crm-ui-accent-border)]'
                 }`}
               >
                 <div className="flex flex-wrap items-start gap-3">
@@ -137,8 +144,8 @@ export default function NotesTasksPage() {
                     onClick={() => void (task.status === 'active' ? completeTask(task.id) : reopenTask(task.id))}
                     className={`mt-0.5 inline-flex size-9 items-center justify-center rounded-full border ${
                       task.status === 'completed'
-                        ? 'border-emerald-400/40 bg-emerald-400 text-neutral-950'
-                        : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-emerald-400 hover:text-emerald-300'
+                        ? 'border-[color:var(--crm-ui-accent-border)] bg-[color:var(--crm-ui-accent)] text-black'
+                        : 'border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface-muted)] text-[color:var(--crm-ui-muted)] hover:border-[color:var(--crm-ui-accent-border)] hover:text-[color:var(--crm-ui-accent)]'
                     }`}
                   >
                     <Check size={16} aria-hidden="true" />
@@ -146,15 +153,15 @@ export default function NotesTasksPage() {
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-extrabold text-white">{task.title}</h3>
+                      <h3 className="text-base font-extrabold text-[color:var(--crm-ui-text)]">{task.title}</h3>
                       {task.starred && <Star size={14} className="fill-amber-400 text-amber-400" aria-hidden="true" />}
                       <TaskPill>{task.priority ?? 'none'} priority</TaskPill>
                       {task.recurrence_rule && (
                         <TaskPill icon={<Repeat size={13} aria-hidden="true" />}>{recurrenceLabel(task.recurrence_rule)}</TaskPill>
                       )}
                     </div>
-                    {task.description && <p className="mt-1 line-clamp-2 text-sm text-neutral-400">{task.description}</p>}
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
+                    {task.description && <p className="mt-1 line-clamp-2 text-sm text-[color:var(--crm-ui-muted)]">{task.description}</p>}
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-[color:var(--crm-ui-muted)]">
                       <TaskPill icon={<Clock3 size={13} aria-hidden="true" />}>
                         {formatDue(task.due_at, task.is_all_day, task.has_due_time)}
                       </TaskPill>
@@ -163,36 +170,36 @@ export default function NotesTasksPage() {
                   </div>
 
                   <div className="ml-auto flex items-center gap-2">
-                    <Link
+                    <CrmButton
                       href={taskHref(task.id)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
+                      className="px-3 py-2 text-xs"
                     >
                       <PencilLine size={14} aria-hidden="true" />
                       <span>Edit</span>
-                    </Link>
+                    </CrmButton>
                     {task.status === 'active' && (
                       <>
-                        <button
+                        <CrmButton
                           type="button"
                           onClick={() => void snoozeTask(task.id, 'tomorrow')}
-                          className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
+                          className="px-3 py-2 text-xs"
                         >
                           Snooze
-                        </button>
-                        <button
+                        </CrmButton>
+                        <CrmButton
                           type="button"
                           onClick={() => void archiveTask(task.id)}
-                          className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
+                          className="px-3 py-2 text-xs"
                         >
                           Archive
-                        </button>
+                        </CrmButton>
                       </>
                     )}
                     <details className="relative">
-                      <summary className="flex size-9 cursor-pointer list-none items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800 [&::-webkit-details-marker]:hidden">
+                      <summary className="ace-crm-btn ace-crm-btn-secondary flex size-9 cursor-pointer list-none items-center justify-center p-0 [&::-webkit-details-marker]:hidden">
                         <EllipsisVertical size={15} aria-hidden="true" />
                       </summary>
-                      <div className="absolute right-0 top-11 z-20 min-w-40 rounded-2xl border border-neutral-800 bg-neutral-950 p-1 shadow-xl">
+                      <div className="ace-crm-surface absolute right-0 top-11 z-20 min-w-40 p-1 shadow-xl">
                         {task.status === 'active' && (
                           <>
                             <MenuAction onClick={() => void completeTask(task.id)}>Complete</MenuAction>
@@ -218,14 +225,13 @@ export default function NotesTasksPage() {
           })}
           {hasMore && (
             <div className="flex justify-center pt-2">
-              <button
+              <CrmButton
                 type="button"
                 onClick={() => void loadMore()}
                 disabled={loadingMore}
-                className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800 disabled:opacity-60"
               >
                 {loadingMore ? 'Loading...' : 'Load More Tasks'}
-              </button>
+              </CrmButton>
             </div>
           )}
         </section>
@@ -236,10 +242,10 @@ export default function NotesTasksPage() {
 
 function TaskPill(props: { children: ReactNode; icon?: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-400">
+    <CrmChip className="text-xs">
       {props.icon}
       <span>{props.children}</span>
-    </span>
+    </CrmChip>
   )
 }
 
@@ -249,7 +255,9 @@ function MenuAction(props: { children: ReactNode; onClick: () => void; danger?: 
       type="button"
       onClick={props.onClick}
       className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
-        props.danger ? 'text-red-300 hover:bg-red-500/10' : 'text-neutral-200 hover:bg-neutral-900'
+        props.danger
+          ? 'text-[color:var(--crm-ui-danger-text)] hover:bg-[color:var(--crm-ui-danger-bg)]'
+          : 'text-[color:var(--crm-ui-text)] hover:bg-[color:var(--crm-ui-surface-muted)]'
       }`}
     >
       {props.children}

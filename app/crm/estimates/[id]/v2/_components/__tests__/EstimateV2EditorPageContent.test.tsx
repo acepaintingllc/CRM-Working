@@ -26,6 +26,10 @@ const baseEditorState = {
   },
   headerVm: {
     estimateId: 'estimate-1',
+    resumeRecord: {
+      estimate: null,
+      job: null,
+    },
     titleText: 'Version A',
     subtitleText: 'Job - Ada - 123 Main',
     workflowText: 'Estimate V2 Editor',
@@ -261,7 +265,7 @@ describe('EstimateV2EditorPageContent', () => {
     cleanup()
   })
 
-  it('renders from grouped VMs and routes header save/navigation actions', async () => {
+  it('renders from grouped VMs without duplicate header workflow actions', () => {
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
 
     expect(screen.getByText('Version A')).toBeInTheDocument()
@@ -270,15 +274,7 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.getByText('Trim Body')).toBeInTheDocument()
     expect(screen.getAllByText('Living Room').length).toBeGreaterThan(0)
     expect(screen.getAllByText('364 sf').length).toBeGreaterThan(0)
-
-    fireEvent.click(screen.getAllByText('+ Add room')[0])
-    fireEvent.click(screen.getByText('Next: Details & Overrides ->'))
-
-    expect(addRoom).toHaveBeenCalled()
-    await waitFor(() => {
-      expect(save).toHaveBeenCalled()
-      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/details')
-    })
+    expect(screen.queryByText('Next: Details & Overrides ->')).not.toBeInTheDocument()
   })
 
   it('lets footer continue navigate even when there are no dirty changes', async () => {

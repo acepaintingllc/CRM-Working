@@ -22,20 +22,36 @@ export async function loadEstimateCollectionBootstrapPayload(
   const resolvedDeps = withEstimateCollectionServiceDeps(deps)
   const {
     buildQuoteHomeBootstrapReadModel,
+    buildQuoteHomeLatestVersionReadModel,
     buildQuoteHomeJobsPageReadModel,
     buildQuoteHomeSummaryFromRow,
     buildQuoteJobVersionsReadModel,
     loadEstimateCollectionJobVersionsPage,
+    loadEstimateCollectionRowsForOrg,
     loadEstimateCollectionSummary,
   } = resolvedDeps
 
   const startedAt = Date.now()
-  const [summaryResult, jobsResult] = await Promise.all([
+  const [summaryResult, jobsResult, latestVersionRowsResult] = await Promise.all([
     loadEstimateCollectionSummary(orgId),
     loadEligibleJobsPage(orgId, { limit: HOME_BOOTSTRAP_JOB_LIMIT }, resolvedDeps),
+    loadEstimateCollectionRowsForOrg(orgId, { limit: 1 }),
   ])
   if (!summaryResult.ok) return summaryResult
   if (!jobsResult.ok) return jobsResult
+  if (!latestVersionRowsResult.ok) return latestVersionRowsResult
+
+  const latestVersionRows = latestVersionRowsResult.data
+  const latestVersionDecoratedRowsResult = await decorateRowsForReadModel(
+    orgId,
+    latestVersionRows,
+    true,
+    resolvedDeps
+  )
+  if (!latestVersionDecoratedRowsResult.ok) return latestVersionDecoratedRowsResult
+  const latestVersion = buildQuoteHomeLatestVersionReadModel(
+    latestVersionDecoratedRowsResult.data
+  )
 
   const selectedJobId = jobsResult.data.items[0]?.id ?? null
   let selectedJobVersions = null
@@ -80,6 +96,7 @@ export async function loadEstimateCollectionBootstrapPayload(
       items: jobsResult.data.items,
     }),
     selectedJobVersions,
+    latestVersion,
   })
 
   logQuoteHomeRead('bootstrap', {
@@ -88,6 +105,7 @@ export async function loadEstimateCollectionBootstrapPayload(
     jobsReturned: payload.jobs.items.length,
     selectedJobId: payload.selected_job_id,
     selectedJobVersions: payload.selected_job_versions?.items.length ?? 0,
+    latestVersionId: payload.latest_version?.estimate_id ?? null,
     jobsNextCursor: payload.jobs.next_cursor,
     payloadBytes: bytesForLog(payload),
   })

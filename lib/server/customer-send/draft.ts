@@ -39,6 +39,24 @@ function normalizeScopeTextForComparison(value: string): string {
     .trim()
 }
 
+function stripGeneratedProductClause(value: string): string {
+  return value
+    .replace(/,\s*using\s+[^.,;!?]+(?=\s*(?:,\s*with\b|[.,;!?]?$))/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([.,;:!?])/g, '$1')
+    .trim()
+}
+
+function matchesGeneratedScopeText(value: string, baseText: string) {
+  const normalizedValue = normalizeScopeTextForComparison(value)
+  const normalizedBase = normalizeScopeTextForComparison(baseText)
+
+  return (
+    normalizedValue === normalizedBase ||
+    normalizedValue === stripGeneratedProductClause(normalizedBase)
+  )
+}
+
 export function sanitizeCustomerSendDraft(
   body: Record<string, unknown> | null | undefined
 ): CustomerSendDraft {
@@ -94,7 +112,7 @@ export function normalizeCustomerSendDraftScopeText(params: {
     const baseText = asText(baselineByKey.get(key))
     if (
       baseText &&
-      normalizeScopeTextForComparison(value) === normalizeScopeTextForComparison(baseText)
+      matchesGeneratedScopeText(value, baseText)
     ) {
       normalizedScopeTextEdits[key] = ''
       continue

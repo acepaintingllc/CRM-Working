@@ -1,29 +1,13 @@
-import { ArrowRight } from 'lucide-react'
-import type { ReactNode } from 'react'
-import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { formatDetailsNumber } from '../_lib/estimateV2DetailsShared'
 import type { EstimateV2DetailsVm } from '../_lib/estimateV2DetailsVm'
 
-function IconLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-2">
-      {icon}
-      <span>{children}</span>
-    </span>
-  )
-}
-
 export function EstimateV2DetailsSummaryRail({
   vm,
-  saving,
-  onContinue,
 }: {
   vm: EstimateV2DetailsVm
-  saving: boolean
-  onContinue: () => void
 }) {
   return (
     <aside className="order-first grid gap-4 md:grid-cols-2 xl:order-none xl:sticky xl:top-4 xl:grid-cols-1">
@@ -52,19 +36,6 @@ export function EstimateV2DetailsSummaryRail({
               </ul>
             </CrmNotice>
           )}
-          <CrmButton
-            type="button"
-            tone="primary"
-            onClick={onContinue}
-            disabled={saving || !vm.canContinueToSummary}
-            aria-disabled={saving || !vm.canContinueToSummary}
-            title={vm.continueBlockedReason ?? undefined}
-            className="justify-center"
-          >
-            <IconLabel icon={<ArrowRight size={16} aria-hidden="true" />}>
-              Continue to Summary
-            </IconLabel>
-          </CrmButton>
           {vm.continueBlockedReason ? (
             <div className="text-xs font-semibold text-[color:var(--crm-ui-muted)]">
               {vm.continueBlockedReason}

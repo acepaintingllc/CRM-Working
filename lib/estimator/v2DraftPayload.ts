@@ -46,6 +46,16 @@ function toPersistedConditionSelections(
   return entries.length > 0 ? Object.fromEntries(entries) : null
 }
 
+function mergePersistedConditionSelections(
+  base: EstimateV2ConditionSelections | null | undefined,
+  override: EstimateV2ConditionSelections | null | undefined
+) {
+  return toPersistedConditionSelections({
+    ...(base ?? {}),
+    ...(override ?? {}),
+  })
+}
+
 function buildOrderedRoomFlags(
   roomFlags: EstimateV2RoomFlagDraft[],
   roomIds: Set<string>
@@ -178,7 +188,10 @@ export function buildEstimateV2SavePayload(
     length_in: toNullableDraftNumber(room.lengthIn),
     width_in: toNullableDraftNumber(room.widthIn),
     wallheight_in: toNullableDraftNumber(room.heightIn),
-    condition_selections: toPersistedConditionSelections(room.conditionSelections),
+    condition_selections: mergePersistedConditionSelections(
+      jobSettingsDraft.conditionSelections?.room,
+      room.conditionSelections
+    ),
   }))
 
   const orderedScopes = orderedRooms.flatMap((room) =>
@@ -230,7 +243,10 @@ export function buildEstimateV2SavePayload(
         override_total: toNullableDraftNumber(scope.overrideTotal),
         effective_total: null,
         notes: scope.notes.trim() || null,
-        condition_selections: toPersistedConditionSelections(scope.conditionSelections),
+        condition_selections: mergePersistedConditionSelections(
+          jobSettingsDraft.conditionSelections?.wall,
+          scope.conditionSelections
+        ),
         condition_factor: resolvedFactors.wall !== 1 || resolvedFactors.room !== 1
           ? resolvedFactors.wall * resolvedFactors.room
           : null,
@@ -314,7 +330,10 @@ export function buildEstimateV2SavePayload(
       override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
       override_total: toNullableDraftNumber(scope.overrideTotal),
       notes: scope.notes.trim() || null,
-      condition_selections: toPersistedConditionSelections(scope.conditionSelections),
+      condition_selections: mergePersistedConditionSelections(
+        jobSettingsDraft.conditionSelections?.ceiling,
+        scope.conditionSelections
+      ),
       condition_factor: resolvedFactors.ceiling !== 1 || resolvedFactors.room !== 1
         ? resolvedFactors.ceiling * resolvedFactors.room
         : null,
@@ -375,14 +394,17 @@ export function buildEstimateV2SavePayload(
       caulk_fill_factor: toNullableDraftNumber(scope.caulkFillFactor),
       paint_coats: toNullableDraftNumber(scope.paintCoats),
       primer_coats: toNullableDraftNumber(scope.primerCoats),
-      override_measurement: null,
-      override_hours: null,
+      override_measurement: toNullableDraftNumber(scope.overrideMeasurement),
+      override_hours: toNullableDraftNumber(scope.overrideHours),
       override_gallons: toNullableDraftNumber(scope.overrideGallons),
-      override_supply_cost: null,
-      override_total: null,
-      override_description: null,
+      override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
+      override_total: toNullableDraftNumber(scope.overrideTotal),
+      override_description: toNullableText(scope.overrideDescription),
       notes: scope.notes.trim() || null,
-      condition_selections: toPersistedConditionSelections(scope.conditionSelections),
+      condition_selections: mergePersistedConditionSelections(
+        jobSettingsDraft.conditionSelections?.trim,
+        scope.conditionSelections
+      ),
       condition_factor: resolvedFactors.trim !== 1 || resolvedFactors.room !== 1
         ? resolvedFactors.trim * resolvedFactors.room
         : null,

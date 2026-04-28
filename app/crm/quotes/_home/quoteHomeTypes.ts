@@ -71,6 +71,12 @@ export type QuotesHomeFeedbackBannerVm = QuoteHomeFeedbackVm | null
 
 export type QuotesHomeHeaderVm = {
   heroSummaryText: string
+  resume: {
+    href: string
+    label: string
+    title: string
+    meta: string
+  } | null
   searchFocused: boolean
   searchQuery: string
   searchLoading: boolean

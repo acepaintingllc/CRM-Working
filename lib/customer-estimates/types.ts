@@ -1,3 +1,5 @@
+import type { QuoteTermsSections } from './termsDefaults.ts'
+
 export type Unsafe = Record<string, unknown>
 
 export type EstimatePublicStatus =
@@ -75,6 +77,7 @@ export type CustomerEstimateDocumentSourceMeta = {
   settings: {
     quote_validity_days: boolean
     terms_text: boolean
+    terms_sections?: boolean
   }
   overrides: {
     title: boolean
@@ -111,6 +114,7 @@ type CustomerEstimateDocumentBase = {
   scopes: CustomerEstimateSection[]
   total: number | null
   terms: string[]
+  terms_sections?: QuoteTermsSections | null
   source_meta: CustomerEstimateDocumentSourceMeta
 }
 

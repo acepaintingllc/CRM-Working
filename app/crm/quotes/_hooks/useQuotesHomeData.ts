@@ -6,6 +6,7 @@ import {
   type QuoteHomeBootstrapReadModel,
   type QuoteHomeJobsPageReadModel,
 } from '@/lib/quotes/quoteHomeTypes'
+import { readLastOpenedQuote } from '@/lib/quotes/lastOpenedQuote'
 import { loadQuoteHomeBootstrap } from '@/lib/quotes/client'
 import {
   cancelQuotePagedAsyncRequests,
@@ -31,6 +32,7 @@ const EMPTY_BOOTSTRAP: QuoteHomeBootstrapReadModel = {
   },
   selected_job_id: null,
   selected_job_versions: null,
+  latest_version: null,
 }
 
 function toLoadErrorMessage(scope: string, loadError: unknown) {
@@ -67,6 +69,7 @@ export type QuoteHomeDataResourceContract = {
   hasMore: boolean
   initialSelectedJobId: string | null
   initialSelectedJobVersions: QuoteHomeBootstrapReadModel['selected_job_versions']
+  latestVersion: QuoteHomeBootstrapReadModel['latest_version']
   jobsLoading: boolean
   loading: boolean
   bootstrapError: string | null
@@ -190,6 +193,13 @@ export function useQuotesHomeData(
   options?: UseQuotesHomeDataOptions,
 ): QuoteHomeDataResourceContract {
   const bootstrapResource = useQuoteHomeBootstrapResource(initialData)
+  const [lastOpenedQuote, setLastOpenedQuote] =
+    useState<QuoteHomeBootstrapReadModel['latest_version']>(null)
+
+  useEffect(() => {
+    setLastOpenedQuote(readLastOpenedQuote(window.localStorage))
+  }, [])
+
   const activeJobQuery = normalizeQuoteHomeJobQuery(
     options?.jobQuery ?? bootstrapResource.bootstrapData.jobs.query,
   )
@@ -244,6 +254,7 @@ export function useQuotesHomeData(
     hasMore: jobsResource.hasMoreJobs,
     initialSelectedJobId: bootstrap.selected_job_id,
     initialSelectedJobVersions: bootstrap.selected_job_versions,
+    latestVersion: lastOpenedQuote ?? bootstrap.latest_version,
     jobsLoading: jobsResource.jobsLoading,
     loading: bootstrapResource.bootstrapLoading,
     bootstrapError: bootstrapResource.bootstrapError,

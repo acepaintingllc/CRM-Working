@@ -1,9 +1,13 @@
-import { templatePresets } from '../customer-estimates/presets.ts'
+import { templatePresets, type TemplatePreset } from '../customer-estimates/presets.ts'
 import {
   DEFAULT_ESTIMATE_TEMPLATE_KEY,
   DEFAULT_QUOTE_VALIDITY_DAYS,
   DEFAULT_TERMS_TEXT,
 } from '../estimator/defaults.ts'
+import {
+  defaultQuoteTermsSections,
+  normalizeQuoteTermsSections,
+} from '../customer-estimates/termsDefaults.ts'
 import type { QuoteSendDefaults } from './types.ts'
 
 type Unsafe = Record<string, unknown>
@@ -16,9 +20,9 @@ export const emptyQuoteSendDefaults: QuoteSendDefaults = {
   default_template_key: DEFAULT_ESTIMATE_TEMPLATE_KEY,
   quote_validity_days: DEFAULT_QUOTE_VALIDITY_DAYS,
   terms_text: DEFAULT_TERMS_TEXT,
+  terms_sections: defaultQuoteTermsSections,
+  template_presets: templatePresets,
 }
-
-const allowedTemplateKeys = new Set(templatePresets.map((preset) => preset.key))
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
@@ -37,11 +41,34 @@ function asInteger(value: unknown) {
   return Math.trunc(parsed)
 }
 
+function normalizeTemplatePresets(value: unknown): TemplatePreset[] {
+  const rows = Array.isArray(value) ? value : []
+  const byKey = new Map(
+    rows
+      .filter((row): row is Unsafe => !!row && typeof row === 'object' && !Array.isArray(row))
+      .map((row) => [asText(row.key), row] as const)
+      .filter(([key]) => !!key)
+  )
+
+  return templatePresets.map((fallback) => {
+    const row = byKey.get(fallback.key)
+    return {
+      key: fallback.key,
+      label: asText(row?.label) || fallback.label,
+      subject: asText(row?.subject) || fallback.subject,
+      body: asText(row?.body) || fallback.body,
+    }
+  })
+}
+
 export function normalizeQuoteSendDefaults(row: Unsafe | null | undefined): QuoteSendDefaults {
+  const normalizedTemplatePresets = normalizeTemplatePresets(row?.template_presets)
   return {
     default_template_key: asText(row?.default_template_key) || emptyQuoteSendDefaults.default_template_key,
     quote_validity_days: asInteger(row?.quote_validity_days) ?? emptyQuoteSendDefaults.quote_validity_days,
     terms_text: asNormalizedTerms(row?.terms_text) || emptyQuoteSendDefaults.terms_text,
+    terms_sections: normalizeQuoteTermsSections(row?.terms_sections),
+    template_presets: normalizedTemplatePresets,
   }
 }
 
@@ -53,6 +80,7 @@ export function parseQuoteSendDefaults(input: unknown): ParseResult<QuoteSendDef
 
   const data = normalizeQuoteSendDefaults(row)
 
+  const allowedTemplateKeys = new Set(data.template_presets.map((preset) => preset.key))
   if (!allowedTemplateKeys.has(data.default_template_key)) {
     return { ok: false, error: 'Default template preset is invalid.' }
   }
@@ -61,6 +89,15 @@ export function parseQuoteSendDefaults(input: unknown): ParseResult<QuoteSendDef
   }
   if (data.terms_text.length > 8000) {
     return { ok: false, error: 'Terms and conditions must be 8000 characters or fewer.' }
+  }
+  const termsSectionsText = JSON.stringify(data.terms_sections)
+  if (termsSectionsText.length > 20000) {
+    return { ok: false, error: 'Structured quote terms must be 20000 characters or fewer.' }
+  }
+  for (const preset of data.template_presets) {
+    if (preset.label.length > 80 || preset.subject.length > 200 || preset.body.length > 4000) {
+      return { ok: false, error: 'Template presets contain text that is too long.' }
+    }
   }
 
   return { ok: true, data }

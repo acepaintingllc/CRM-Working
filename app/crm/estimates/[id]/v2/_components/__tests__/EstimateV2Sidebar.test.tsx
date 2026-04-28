@@ -61,6 +61,8 @@ describe('EstimateV2Sidebar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse estimator room navigation' }))
     expect(onCollapse).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Navigation')).not.toBeInTheDocument()
+    expect(screen.getByText('Paint Defaults')).toBeInTheDocument()
 
     rerender(
       <EstimateV2Sidebar
@@ -74,7 +76,7 @@ describe('EstimateV2Sidebar', () => {
       />
     )
 
-    expect(screen.queryByText('Job Defaults')).not.toBeInTheDocument()
+    expect(screen.queryByText('Paint Defaults')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Expand estimator room navigation' }))
     expect(onExpand).toHaveBeenCalledTimes(1)
   })

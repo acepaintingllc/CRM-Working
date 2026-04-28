@@ -132,6 +132,18 @@ test('baseboard LF scopes deduct standard opening counts before overrides and cl
   const one = calculateTrim({ rooms, scopes: [makeTrimScope({ measurement_value: 12, baseboard_opening_count: 1 })] })
   const multiple = calculateTrim({ rooms, scopes: [makeTrimScope({ measurement_value: 12, baseboard_opening_count: 2 })] })
   const clamped = calculateTrim({ rooms, scopes: [makeTrimScope({ measurement_value: 4, baseboard_opening_count: 2 })] })
+  const baseCode = calculateTrim({
+    rooms,
+    scopes: [
+      makeTrimScope({
+        scope_name: 'Base',
+        trim_type_id: 'BASE_STD_LF',
+        trim_family: 'BASE',
+        measurement_value: 12,
+        baseboard_opening_count: 1,
+      }),
+    ],
+  })
   const overridden = calculateTrim({
     rooms,
     scopes: [makeTrimScope({ measurement_value: 12, baseboard_opening_count: 2, override_measurement: 11 })],
@@ -141,6 +153,7 @@ test('baseboard LF scopes deduct standard opening counts before overrides and cl
   assert.equal(one.scopes[0].raw_measurement, 9)
   assert.equal(multiple.scopes[0].raw_measurement, 6)
   assert.equal(clamped.scopes[0].raw_measurement, 0)
+  assert.equal(baseCode.scopes[0].raw_measurement, 9)
   assert.equal(overridden.scopes[0].effective_measurement, 11)
 })
 

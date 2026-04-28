@@ -3,6 +3,7 @@ import {
 } from '@/lib/customer-estimates/build'
 import { assembleCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
+import type { QuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
 import {
   errorResult,
   okResult,
@@ -90,10 +91,11 @@ export function buildCustomerDocumentFromSendContext(params: {
     inputs: params.context.inputs,
     catalogs: params.context.catalogs as Record<string, unknown> | null,
     settings: params.context.settings as
-      | {
+        | {
           default_template_key?: string | null
           quote_validity_days?: number | null
           terms_text?: string | null
+          terms_sections?: QuoteTermsSections | null
         }
       | undefined,
     pricingSummary: params.context.pricing_summary as { finalTotal: number | null } | null,

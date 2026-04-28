@@ -135,6 +135,17 @@ export function QuotesHomeHeader({
         </div>
 
         <div style={S.topControls}>
+          {vm.resume ? (
+            <Link
+              href={vm.resume.href}
+              style={S.resumeButton}
+              aria-label={`Resume quote ${vm.resume.title}`}
+            >
+              <span style={S.resumeButtonLabel}>{vm.resume.label}</span>
+              <span style={S.resumeButtonMeta}>{vm.resume.title}</span>
+              <span style={S.resumeButtonDetail}>{vm.resume.meta}</span>
+            </Link>
+          ) : null}
           <div style={S.searchWrap}>
             <div
               ref={searchContainerRef}

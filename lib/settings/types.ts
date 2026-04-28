@@ -1,3 +1,6 @@
+import type { QuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
+import type { TemplatePreset } from '@/lib/customer-estimates/presets'
+
 export type CompanyProfileSettings = {
   business_name: string
   timezone: string
@@ -13,6 +16,8 @@ export type QuoteSendDefaults = {
   default_template_key: string
   quote_validity_days: number
   terms_text: string
+  terms_sections: QuoteTermsSections
+  template_presets: TemplatePreset[]
 }
 
 export type QuoteDefaults = {

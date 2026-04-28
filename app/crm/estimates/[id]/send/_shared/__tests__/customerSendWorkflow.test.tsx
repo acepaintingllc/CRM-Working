@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { quoteRouteFamily } from '@/app/crm/estimates/[id]/estimateRouteFamily'
 import {
   buildCustomerSendComposerDraft,
+  buildCustomerSendComposerPreview,
+  buildCustomerSendReviewDraft,
   customerSendUrl,
   deriveCustomerSendLabels,
   isPositiveInteger,
@@ -40,12 +42,15 @@ const basePayload = {
   },
   company: {
     business_name: 'ACE Painting',
+    business_email: 'owner@example.com',
   },
   inputs: {},
   catalogs: null,
   pricing_summary: { finalTotal: 1200 },
   settings: {
     default_template_key: 'friendly',
+    quote_validity_days: 90,
+    terms_text: 'Configured quote terms.',
   },
   draft: {
     template_key: 'default',
@@ -67,6 +72,20 @@ const basePayload = {
       email: 'customer@example.com',
     },
     quote_validity_days: 90,
+    scopes: [
+      {
+        key: 'walls',
+        label: 'Walls',
+        text: 'Prep and paint 2 coats on walls in Kitchen.',
+        total: 700,
+      },
+      {
+        key: 'ceilings',
+        label: 'Ceilings',
+        text: 'Prep and paint 2 coats on ceilings in Kitchen.',
+        total: 300,
+      },
+    ],
   },
   versions: [],
 }
@@ -82,12 +101,46 @@ describe('customerSendWorkflow', () => {
     const draft = buildCustomerSendComposerDraft(basePayload as never, basePayload.draft, true)
 
     expect(draft.to_email).toBe('customer@example.com')
+    expect(draft.bcc_email).toBe('owner@example.com')
     expect(draft.scope_text_edits.walls).toBe('Custom walls copy')
+    expect(draft.scope_text_edits.ceilings).toBe(
+      'Prep and paint 2 coats on ceilings in Kitchen.'
+    )
     expect(customerSendUrl('estimate-1', 'v2')).toBe('/api/estimates/estimate-1/customer-send?v2=1')
     expect(customerSendUrl('estimate-1', 'v2', quoteRouteFamily)).toBe(
       '/api/quotes/estimate-1/customer-send?v2=1'
     )
     expect(deriveCustomerSendLabels(basePayload as never).document).toBe('Quote')
+  })
+
+  it('prefills scope wording edits from document text and preserves saved overrides', () => {
+    const noOverrideDraft = buildCustomerSendComposerDraft(
+      {
+        ...basePayload,
+        draft: { scope_text_edits: {} },
+      } as never,
+      {},
+      true
+    )
+    const overrideDraft = buildCustomerSendReviewDraft(basePayload as never, basePayload.draft)
+
+    expect(noOverrideDraft.scope_text_edits.walls).toBe(
+      'Prep and paint 2 coats on walls in Kitchen.'
+    )
+    expect(noOverrideDraft.scope_text_edits.ceilings).toBe(
+      'Prep and paint 2 coats on ceilings in Kitchen.'
+    )
+    expect(overrideDraft.scope_text_edits.walls).toBe('Custom walls copy')
+    expect(overrideDraft.scope_text_edits.ceilings).toBe(
+      'Prep and paint 2 coats on ceilings in Kitchen.'
+    )
+    expect(
+      buildCustomerSendComposerDraft(
+        basePayload as never,
+        { bcc_email: 'bookkeeper@example.com' },
+        true
+      ).bcc_email
+    ).toBe('bookkeeper@example.com')
   })
 
   it('derives estimate labels when the flow is not the quote alias', () => {
@@ -103,6 +156,16 @@ describe('customerSendWorkflow', () => {
         },
       } as never).document
     ).toBe('Estimate')
+  })
+
+  it('builds the composer preview from configured quote terms', () => {
+    const form = buildCustomerSendComposerDraft(basePayload as never, {}, true)
+    const document = buildCustomerSendComposerPreview(basePayload as never, form, null)
+
+    expect(document.terms_page.sections.find((section) => section.key === 'terms_and_conditions'))
+      .toEqual(expect.objectContaining({ paragraphs: ['Configured quote terms.'] }))
+    expect(document.assembly_meta.missing_payment_fields).toEqual([])
+    expect(document.assembly_meta.missing_legal_fields).toEqual([])
   })
 
   it('loads, saves, and submits through the shared workflow hook', async () => {

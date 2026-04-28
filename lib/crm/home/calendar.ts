@@ -73,6 +73,13 @@ export function formatEventWindow(start: string | null, end: string | null) {
     return `${startDate.toLocaleDateString()} (all day)`
   }
   if (endDate) {
+    const dateTimeOptions: Intl.DateTimeFormatOptions = {
+      month: 'numeric',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }
     const sameDay =
       startDate.getFullYear() === endDate.getFullYear() &&
       startDate.getMonth() === endDate.getMonth() &&
@@ -83,7 +90,13 @@ export function formatEventWindow(start: string | null, end: string | null) {
         minute: '2-digit',
       })} - ${endDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
     }
-    return `${startDate.toLocaleString()} - ${endDate.toLocaleString()}`
+    return `${startDate.toLocaleString([], dateTimeOptions)} - ${endDate.toLocaleString([], dateTimeOptions)}`
   }
-  return startDate.toLocaleString()
+  return startDate.toLocaleString([], {
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }

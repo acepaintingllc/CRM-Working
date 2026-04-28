@@ -28,7 +28,7 @@ export default function JobDetailPage() {
     action.tone === 'accent' ? 'primary' : action.tone === 'danger' ? 'danger' : 'secondary'
 
   return (
-    <CrmPageShell className="max-w-6xl">
+    <CrmPageShell className="crm-job-detail-shell max-w-6xl">
       <CrmPageHeader
         eyebrow="Pipeline workflow"
         emoji="🧾"
@@ -36,6 +36,7 @@ export default function JobDetailPage() {
         description="Full job overview and schedule."
         backHref="/crm/jobs"
         backLabel="Back to jobs"
+        className="crm-job-detail-page-header"
       />
 
       <CrmResourceState

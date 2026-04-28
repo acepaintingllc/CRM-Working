@@ -24,6 +24,7 @@ export type QuoteHomeVmDeleteResource = QuoteHomePageVmResources['delete']
 
 export type QuoteHomeVmHomeResourceInput = {
   summary: QuoteHomeBootstrapReadModel['summary']
+  latestVersion: QuoteHomeBootstrapReadModel['latest_version']
   jobs: QuoteHomeJobListItemReadModel[]
   hasMore: boolean
   jobsLoading: boolean
@@ -109,6 +110,7 @@ export function buildQuoteHomePageVmResourceInputs({
   return {
     home: {
       summary: homeResource.summary,
+      latestVersion: homeResource.latestVersion,
       jobs: homeResource.jobs,
       hasMore: homeResource.hasMore,
       jobsLoading: homeResource.jobsLoading,
@@ -155,6 +157,7 @@ export function buildQuoteHomePageVmResources({
   return {
     home: {
       summary: home.summary,
+      latestVersion: home.latestVersion,
       jobs: home.jobs,
       hasMore: home.hasMore,
       jobsLoading: home.jobsLoading,

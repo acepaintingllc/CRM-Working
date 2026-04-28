@@ -321,6 +321,92 @@ test('buildCustomerEstimateDocument falls back to jobsettings paint products for
   assert.match(document.quote_rows[1]?.description ?? '', /spot prime/i)
 })
 
+test('buildCustomerEstimateDocument falls back to org default paint products for walls and ceilings', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-3A',
+      version_name: 'V2 Internal',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Taylor Jones',
+      customer_address: '123 Main St',
+      estimate_date: '2026-04-20',
+    },
+    customer: {
+      name: 'Taylor Jones',
+      email: 'taylor@example.com',
+      phone: '812-555-0100',
+      address: '123 Main St\nNewburgh, IN 47630',
+      street: '123 Main St',
+      city: 'Newburgh',
+      state: 'IN',
+      zip: '47630',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Living Room' }],
+      room_wall_scopes: [
+        {
+          id: 'W-1',
+          room_id: 'R001',
+          include: 'Y',
+          scope_name: 'Walls',
+          effective_total: 300,
+          paint_coats: 2,
+        },
+      ],
+      room_ceiling_scopes: [
+        {
+          id: 'C-1',
+          room_id: 'R001',
+          include: 'Y',
+          scope_name: 'Ceilings',
+          effective_total: 255,
+          paint_coats: 2,
+        },
+      ],
+      room_trim_scopes: [],
+      trim_items: [],
+      other: [],
+      jobsettings: {},
+      org_defaults: {
+        walls_paint_id: 'WALL-DEFAULT',
+        ceiling_paint_id: 'CEIL-DEFAULT',
+      },
+    },
+    catalogs: {
+      paint_products: [
+        { id: 'WALL-DEFAULT', display_name: 'SW Cashmere Low Lustre', display_id: 'WALL-D' },
+        { id: 'CEIL-DEFAULT', display_name: 'SW Premium Ceiling Paint', display_id: 'CEIL-D' },
+      ],
+      trim_items: [],
+    },
+    settings: {
+      quote_validity_days: 30,
+      terms_text: '',
+    },
+    pricingSummary: {
+      finalTotal: 555,
+    },
+  })
+
+  assert.equal(document.quote_rows.length, 2)
+  assert.match(document.quote_rows[0]?.description ?? '', /using SW Cashmere Low Lustre/)
+  assert.match(document.quote_rows[1]?.description ?? '', /using SW Premium Ceiling Paint/)
+})
+
 test('buildCustomerEstimateDocument resolves paint labels from display ids when necessary', () => {
   const document = buildCustomerEstimateDocument({
     estimate: {

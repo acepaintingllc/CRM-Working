@@ -52,6 +52,10 @@ function rollerQuantityIssueDetails(reason: RollerApplicatorQuantityReason) {
   }
 }
 
+function rollerQuantityFieldLabel(row: DetailsRollerVm) {
+  return row.id === 'trim' ? 'applicator quantity' : 'roller quantity'
+}
+
 export function validateRollerRow(
   row: DetailsRollerVm,
   optionsState: DetailsRollerOptionsState,
@@ -99,7 +103,7 @@ export function validateRollerRow(
       section: 'rollers',
       targetId: row.id,
       field: 'quantity',
-      message: `${row.label} quantity ${details.messageSuffix}`,
+      message: `${row.label} ${rollerQuantityFieldLabel(row)} ${details.messageSuffix}`,
     }))
   }
   return issues

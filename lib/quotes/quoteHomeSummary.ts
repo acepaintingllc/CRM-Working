@@ -86,6 +86,7 @@ export function buildQuoteHomeBootstrapReadModel(params: {
   summary: QuoteHomeSummaryReadModel
   jobs: QuoteHomeJobsPageReadModel
   selectedJobVersions: QuoteJobVersionsPageReadModel | null
+  latestVersion: QuoteHomeJobVersionItemReadModel | null
 }): QuoteHomeBootstrapReadModel {
   const firstJobId = asRequiredText(params.jobs.items[0]?.id, '')
 
@@ -95,7 +96,14 @@ export function buildQuoteHomeBootstrapReadModel(params: {
     selected_job_id:
       asRequiredText(params.selectedJobVersions?.job_id, firstJobId) || null,
     selected_job_versions: params.selectedJobVersions,
+    latest_version: params.latestVersion,
   }
+}
+
+export function buildQuoteHomeLatestVersionReadModel(
+  rows: EstimateCollectionDecoratedRowInput[]
+): QuoteHomeJobVersionItemReadModel | null {
+  return rows.map(toQuoteHomeJobVersionItem)[0] ?? null
 }
 
 export function buildQuoteHomeSearchReadModel(

@@ -4,6 +4,7 @@ import { QuotesHomeHeader } from '../QuotesHomeHeader'
 
 const baseVm = {
   heroSummaryText: '3 total versions',
+  resume: null,
   searchFocused: true,
   searchQuery: 'revision',
   searchLoading: false,
@@ -38,6 +39,31 @@ describe('QuotesHomeHeader', () => {
       'true'
     )
     expect(screen.getByRole('status')).toHaveTextContent('Searching quote versions')
+  })
+
+  it('renders the resume quote action with quote, customer, and job context', () => {
+    render(
+      <QuotesHomeHeader
+        vm={{
+          ...baseVm,
+          resume: {
+            href: '/crm/quotes/estimate-1',
+            label: 'Resume quote',
+            title: 'Version B',
+            meta: 'Alice · Kitchen · Draft',
+          },
+        }}
+        onSearchFocusedChange={() => {}}
+        onSearchQueryChange={() => {}}
+        onSearchRetry={() => {}}
+      />
+    )
+
+    const resumeLink = screen.getByRole('link', { name: 'Resume quote Version B' })
+
+    expect(resumeLink).toHaveAttribute('href', '/crm/quotes/estimate-1')
+    expect(screen.getByText('Version B')).toBeInTheDocument()
+    expect(screen.getByText('Alice · Kitchen · Draft')).toBeInTheDocument()
   })
 
   it('shows an empty search state separately from errors', () => {

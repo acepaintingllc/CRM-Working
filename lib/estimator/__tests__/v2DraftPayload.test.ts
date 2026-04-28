@@ -363,9 +363,12 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
   assert.deepEqual(payload.room_trim_scopes[0].condition_selections, { TRIM_CAULKING: 'minor' })
   assert.equal(payload.room_trim_scopes[0].baseboard_opening_count, 1.5)
-  assert.equal(payload.room_trim_scopes[0].override_measurement, null)
-  assert.equal(payload.room_trim_scopes[0].override_total, null)
-  assert.equal(payload.room_trim_scopes[0].override_description, null)
+  assert.equal(payload.room_trim_scopes[0].override_measurement, 10)
+  assert.equal(payload.room_trim_scopes[0].override_hours, 2)
+  assert.equal(payload.room_trim_scopes[0].override_gallons, 3)
+  assert.equal(payload.room_trim_scopes[0].override_supply_cost, 4)
+  assert.equal(payload.room_trim_scopes[0].override_total, 5)
+  assert.equal(payload.room_trim_scopes[0].override_description, 'hidden override')
   assert.deepEqual(
     payload.rollers.map((roller) => ({
       id: roller.id,
@@ -646,4 +649,69 @@ test('jobsettings.condition_selections is persisted from draft', () => {
     []
   )
   assert.deepEqual(payload.jobsettings.condition_selections, selections)
+})
+
+test('job-level condition selections are merged into room and scope rows', () => {
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings({
+      conditionSelections: {
+        room: { ROOM_FURNISHED: 'active' },
+        wall: { WALL_TEXTURE: 'moderate' },
+        ceiling: { CEIL_TEXTURE: 'major' },
+        trim: { TRIM_OIL_BASED: 'active' },
+      },
+    }),
+    [minimalRoom()],
+    [minimalWallScope()],
+    [],
+    [],
+    [minimalCeilingScope()],
+    [],
+    [minimalTrimScope()]
+  )
+
+  assert.deepEqual(payload.rooms[0].condition_selections, { ROOM_FURNISHED: 'active' })
+  assert.deepEqual(payload.room_wall_scopes[0].condition_selections, { WALL_TEXTURE: 'moderate' })
+  assert.deepEqual(payload.room_ceiling_scopes[0].condition_selections, { CEIL_TEXTURE: 'major' })
+  assert.deepEqual(payload.room_trim_scopes[0].condition_selections, { TRIM_OIL_BASED: 'active' })
+})
+
+test('row condition selections override matching job-level selections', () => {
+  const room = minimalRoom()
+  room.conditionSelections = { ROOM_FURNISHED: 'active' }
+  const wallScope = minimalWallScope()
+  wallScope.conditionSelections = { WALL_TEXTURE: 'major' }
+  const ceilingScope = minimalCeilingScope()
+  ceilingScope.conditionSelections = { CEIL_TEXTURE: 'minor' }
+  const trimScope = minimalTrimScope()
+  trimScope.conditionSelections = { TRIM_CAULK: 'major' }
+
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings({
+      conditionSelections: {
+        room: { ROOM_FURNISHED: 'minor' },
+        wall: { WALL_TEXTURE: 'moderate', WALL_CUT_IN: 'active' },
+        ceiling: { CEIL_TEXTURE: 'moderate' },
+        trim: { TRIM_CAULK: 'minor', TRIM_OIL_BASED: 'active' },
+      },
+    }),
+    [room],
+    [wallScope],
+    [],
+    [],
+    [ceilingScope],
+    [],
+    [trimScope]
+  )
+
+  assert.deepEqual(payload.rooms[0].condition_selections, { ROOM_FURNISHED: 'active' })
+  assert.deepEqual(payload.room_wall_scopes[0].condition_selections, {
+    WALL_TEXTURE: 'major',
+    WALL_CUT_IN: 'active',
+  })
+  assert.deepEqual(payload.room_ceiling_scopes[0].condition_selections, { CEIL_TEXTURE: 'minor' })
+  assert.deepEqual(payload.room_trim_scopes[0].condition_selections, {
+    TRIM_CAULK: 'major',
+    TRIM_OIL_BASED: 'active',
+  })
 })

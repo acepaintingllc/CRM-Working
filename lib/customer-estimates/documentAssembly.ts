@@ -18,6 +18,7 @@ import type {
 } from './inputNormalization.ts'
 import { buildCustomerEstimateSections, splitParagraphs } from './textGeneration.ts'
 import type { ScopeBuckets } from './scopeExtraction.ts'
+import { normalizeQuoteTermsSections } from './termsDefaults.ts'
 
 export function buildCustomerProfile(params: {
   customer?: NormalizedCustomerRecord | null
@@ -74,6 +75,9 @@ export function assembleCustomerEstimateBuild(params: {
     normalized.overrides?.card_fee_note?.trim() ||
     'Credit card payments are subject to a processing fee.'
   const termsText = normalized.settings?.terms_text?.trim() || ''
+  const termsSections = normalized.settings?.terms_sections
+    ? normalizeQuoteTermsSections(normalized.settings.terms_sections)
+    : null
   const terms = splitParagraphs(
     termsText ||
       buildDefaultTermsText({
@@ -126,6 +130,7 @@ export function assembleCustomerEstimateBuild(params: {
     scopes: sections,
     total: computedTotal,
     terms,
+    terms_sections: termsSections,
     source_meta: {
       company: {
         business_name: !!asText(normalized.company.business_name),
@@ -141,6 +146,7 @@ export function assembleCustomerEstimateBuild(params: {
           normalized.overrides?.quote_validity_days != null ||
           normalized.settings?.quote_validity_days != null,
         terms_text: !!normalized.settings?.terms_text?.trim(),
+        terms_sections: !!termsSections,
       },
       overrides: {
         title: !!normalized.overrides?.title?.trim(),

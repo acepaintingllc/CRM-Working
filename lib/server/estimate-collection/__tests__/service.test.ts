@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   buildQuoteHomeBootstrapReadModel: vi.fn(),
+  buildQuoteHomeLatestVersionReadModel: vi.fn(),
   buildQuoteHomeJobsPageReadModel: vi.fn(),
   buildQuoteHomeSummaryFromRow: vi.fn(),
   buildQuoteCreateJobContextReadModel: vi.fn(),
@@ -37,6 +38,7 @@ import {
 
 const deps = {
   buildQuoteHomeBootstrapReadModel: mocks.buildQuoteHomeBootstrapReadModel,
+  buildQuoteHomeLatestVersionReadModel: mocks.buildQuoteHomeLatestVersionReadModel,
   buildQuoteHomeJobsPageReadModel: mocks.buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeSummaryFromRow: mocks.buildQuoteHomeSummaryFromRow,
   buildQuoteCreateJobContextReadModel: mocks.buildQuoteCreateJobContextReadModel,
@@ -156,21 +158,26 @@ describe('estimate collection service', () => {
       next_cursor: null,
       items: decoratedRows,
     }
+    const latestVersionRows = [{ id: 'estimate-latest', job_id: 'job-1' }]
+    const latestVersion = { estimate_id: 'estimate-latest', job_id: 'job-1' }
     const payload = {
       summary,
       jobs: jobsPayload,
       selected_job_id: 'job-1',
       selected_job_versions: selectedJobVersions,
+      latest_version: latestVersion,
     }
 
     mocks.loadEstimateCollectionSummary.mockResolvedValue({ ok: true, data: summary })
     mocks.loadEstimateCollectionJobsPage.mockResolvedValue({ ok: true, data: jobsPage })
+    mocks.loadEstimateCollectionRowsForOrg.mockResolvedValue({ ok: true, data: latestVersionRows })
     mocks.loadEstimateCollectionJobVersionsPage.mockResolvedValue({ ok: true, data: versionsPage })
     mocks.buildQuoteHomeSummaryFromRow.mockReturnValue(summary)
     mocks.decorateEstimateCollectionRows.mockReturnValue(decoratedRows)
     mocks.toQuoteHomeEligibleJobReadModel.mockReturnValue(jobItems[0])
     mocks.buildQuoteHomeJobsPageReadModel.mockReturnValue(jobsPayload)
     mocks.buildQuoteJobVersionsReadModel.mockReturnValue(selectedJobVersions)
+    mocks.buildQuoteHomeLatestVersionReadModel.mockReturnValue(latestVersion)
     mocks.buildQuoteHomeBootstrapReadModel.mockReturnValue(payload)
 
     await expect(loadEstimateCollectionBootstrapPayload('org-1', deps)).resolves.toEqual({
@@ -178,6 +185,7 @@ describe('estimate collection service', () => {
       data: payload,
     })
     expect(mocks.loadEstimateCollectionSummary).toHaveBeenCalledWith('org-1')
+    expect(mocks.loadEstimateCollectionRowsForOrg).toHaveBeenCalledWith('org-1', { limit: 1 })
     expect(mocks.loadEstimateCollectionJobsPage).toHaveBeenCalledWith('org-1', {
       query: '',
       limit: 25,
@@ -190,6 +198,10 @@ describe('estimate collection service', () => {
     expect(mocks.loadEstimateCollectionRelatedRows).toHaveBeenCalledWith('org-1', versionsPage.rows, {
       includeRollups: true,
     })
+    expect(mocks.loadEstimateCollectionRelatedRows).toHaveBeenCalledWith('org-1', latestVersionRows, {
+      includeRollups: true,
+    })
+    expect(mocks.buildQuoteHomeLatestVersionReadModel).toHaveBeenCalledWith(decoratedRows)
     expect(mocks.buildQuoteHomeJobsPageReadModel).toHaveBeenCalledWith({
       query: '',
       limit: 25,
@@ -206,6 +218,7 @@ describe('estimate collection service', () => {
       summary,
       jobs: jobsPayload,
       selectedJobVersions,
+      latestVersion,
     })
   })
 

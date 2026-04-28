@@ -293,6 +293,37 @@ describe('estimate details VM', () => {
     })
   })
 
+  it('formats system wall color ids as readable fallback labels', () => {
+    const baseParams = {
+      rooms,
+      wallScopes: [wallScope({})],
+      ceilingScopes: [],
+      trimScopes: [],
+      wallCalculations: [
+        wallCalculationRow({ id: 'wall-1', effectiveAreaSf: 100, rawPaintGallons: 1.2 }),
+      ],
+      ceilingCalculations: [],
+      trimCalculations: [],
+      pricingSummary: null,
+      paintProductLabelById: new Map([['P-WALL', 'Wall Paint']]),
+      rollerOptions: [],
+      rollers: [],
+    }
+
+    expect(createWallRows({ ...baseParams, colorLabelById: new Map() })[0]).toMatchObject({
+      id: 'COLOR1',
+      label: 'Color 1',
+      colorName: 'Color 1',
+    })
+    expect(
+      createWallRows({ ...baseParams, colorLabelById: new Map([['COLOR1', 'COLOR1']]) })[0]
+    ).toMatchObject({
+      id: 'COLOR1',
+      label: 'Color 1',
+      colorName: 'Color 1',
+    })
+  })
+
   it('builds the material planning VM as an isolated pure planning step', () => {
     const materialPlanning = buildEstimateV2MaterialPlanningVm(buildVmParams({
       wallScopes: [wallScope({ overridePaintGallons: '4' })],
@@ -864,11 +895,11 @@ describe('estimate details VM', () => {
       errors: [],
     }
     const cases = [
-      ['', 'rollers:wall:COLOR1:quantity:required', 'Primary quantity is required'],
-      ['abc', 'rollers:wall:COLOR1:quantity:invalid-number', 'Primary quantity must be a number'],
-      ['1.5', 'rollers:wall:COLOR1:quantity:whole-number', 'Primary quantity must be a whole number'],
-      ['0', 'rollers:wall:COLOR1:quantity:positive-number', 'Primary quantity must be greater than zero'],
-      ['-1', 'rollers:wall:COLOR1:quantity:positive-number', 'Primary quantity must be greater than zero'],
+      ['', 'rollers:wall:COLOR1:quantity:required', 'Primary roller quantity is required'],
+      ['abc', 'rollers:wall:COLOR1:quantity:invalid-number', 'Primary roller quantity must be a number'],
+      ['1.5', 'rollers:wall:COLOR1:quantity:whole-number', 'Primary roller quantity must be a whole number'],
+      ['0', 'rollers:wall:COLOR1:quantity:positive-number', 'Primary roller quantity must be greater than zero'],
+      ['-1', 'rollers:wall:COLOR1:quantity:positive-number', 'Primary roller quantity must be greater than zero'],
     ] as const
 
     for (const [quantity, id, message] of cases) {
@@ -1183,7 +1214,7 @@ describe('estimate details VM', () => {
       section: 'rollers',
       targetId: 'wall:COLOR1',
       field: 'quantity',
-      message: 'Primary quantity is required',
+      message: 'Primary roller quantity is required',
     })
 
     expect(getBlockingValidationIssues([warning])).toEqual([])
@@ -1415,7 +1446,7 @@ describe('estimate details VM', () => {
   it('validates missing required roller settings', () => {
     const vm = buildVm()
     expect(validationMessages(vm)).toContain('Primary roller cover is required')
-    expect(validationMessages(vm)).toContain('Ceilings quantity is required')
+    expect(validationMessages(vm)).toContain('Ceilings roller quantity is required')
     expect(vm.canContinueToSummary).toBe(false)
     expect(vm.validationSummary).toMatchObject({
       status: 'blocked',
@@ -1474,7 +1505,7 @@ describe('estimate details VM', () => {
       errors: [],
     })
     expect(validationIds(vm)).toContain('rollers:wall:COLOR1:quantity:whole-number')
-    expect(validationMessages(vm)).toContain('Primary quantity must be a whole number')
+    expect(validationMessages(vm)).toContain('Primary roller quantity must be a whole number')
     expect(vm.canContinueToSummary).toBe(false)
   })
 

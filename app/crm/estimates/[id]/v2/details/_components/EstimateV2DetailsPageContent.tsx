@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeft, ArrowRight, Save } from 'lucide-react'
+import { ArrowLeft, Save } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
@@ -14,6 +14,7 @@ import {
   quoteRouteFamily,
   type EstimateRouteFamily,
 } from '../../../estimateRouteFamily'
+import { EstimateV2WorkflowFooterBar } from '../../_components/EstimateV2WorkflowFooterBar'
 import { EstimateV2DetailsActiveOverrides } from './EstimateV2DetailsActiveOverrides'
 import { EstimateV2DetailsMaterialOverview } from './EstimateV2DetailsMaterialOverview'
 import { EstimateV2DetailsMaterialTable } from './EstimateV2DetailsMaterialTable'
@@ -22,6 +23,7 @@ import { EstimateV2DetailsSummaryRail } from './EstimateV2DetailsSummaryRail'
 import { EstimateV2DetailsRoomConditions } from './EstimateV2DetailsRoomConditions'
 import { useEstimateV2DetailsPage } from '../_state/useEstimateV2DetailsPage'
 import { DETAILS_UNSAVED_CHANGES_MESSAGE } from '../_state/useEstimateV2DetailsController'
+import { formatDetailsNumber } from '../_lib/estimateV2DetailsShared'
 
 const labelClassName =
   'ace-crm-mono text-[11px] font-black uppercase text-[color:var(--crm-ui-muted-2)]'
@@ -94,17 +96,6 @@ export function EstimateV2DetailsPageContent({
             <CrmButton type="button" onClick={() => void actions.saveDraft()} disabled={page.saving}>
               <IconLabel icon={<Save size={16} aria-hidden="true" />}>
                 {page.saving ? 'Saving...' : 'Save Draft'}
-              </IconLabel>
-            </CrmButton>
-            <CrmButton
-              type="button"
-              tone="primary"
-              onClick={() => void actions.continueToSummary()}
-              disabled={page.saving || !vm.canContinueToSummary}
-              title={vm.continueBlockedReason ?? undefined}
-            >
-              <IconLabel icon={<ArrowRight size={16} aria-hidden="true" />}>
-                Continue to Summary
               </IconLabel>
             </CrmButton>
           </>
@@ -240,12 +231,36 @@ export function EstimateV2DetailsPageContent({
           </CrmSectionCard>
         </main>
 
-        <EstimateV2DetailsSummaryRail
-          vm={vm}
-          saving={page.saving}
-          onContinue={() => void actions.continueToSummary()}
-        />
+        <EstimateV2DetailsSummaryRail vm={vm} />
       </div>
+      <EstimateV2WorkflowFooterBar
+        label="Material planning total"
+        value={`${formatDetailsNumber(vm.gallonsByScope.total)} gal`}
+        metrics={[
+          { label: 'Material est.', value: `$${Math.round(vm.estimatedMaterialCost).toLocaleString('en-US')}` },
+          { label: 'Overrides', value: vm.activeOverrides.length },
+          { label: 'Validation', value: vm.validationSummary.title },
+        ]}
+        status={`Status: ${page.saveStatusText}`}
+        backAction={{
+          type: 'button',
+          label: '<- Back',
+          onClick: () => void actions.returnToEditor(),
+          disabled: page.saving,
+        }}
+        secondaryAction={{
+          label: page.saving ? 'Saving...' : 'Save details',
+          onClick: () => void actions.saveDraft(),
+          disabled: page.saving || !page.dirty,
+        }}
+        primaryAction={{
+          type: 'button',
+          label: page.saving ? 'Saving...' : 'Continue to summary ->',
+          onClick: () => void actions.continueToSummary(),
+          disabled: page.saving || !vm.canContinueToSummary,
+          title: vm.continueBlockedReason ?? undefined,
+        }}
+      />
       <CrmConfirmDialog
         isOpen={page.discardVm.isOpen}
         labelledBy="estimate-details-discard-title"

@@ -1,6 +1,7 @@
 import { normalizeQuoteHomeSearchQuery } from '@/lib/quotes/quoteHomeCursors'
 import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type {
+  QuoteHomeJobVersion,
   NavItem,
   QuoteHomeSearchResult,
   QuotesHomeSearchStatusVm,
@@ -40,6 +41,17 @@ export function buildSearchResultVm(
     href: estimateWorkspaceHref(estimate.estimate_id),
     title: estimate.version_name,
     meta: `${estimate.job_title}\n${estimate.customer_name} / ${formatVersionState(estimate.version_state)}`,
+  }
+}
+
+export function buildQuotesHomeResumeVm(version: QuoteHomeJobVersion | null) {
+  if (!version) return null
+
+  return {
+    href: estimateWorkspaceHref(version.estimate_id),
+    label: 'Resume quote',
+    title: version.version_name,
+    meta: `${version.customer_name}${QUOTE_META_SEPARATOR}${version.job_title}${QUOTE_META_SEPARATOR}${formatVersionState(version.version_state)}`,
   }
 }
 

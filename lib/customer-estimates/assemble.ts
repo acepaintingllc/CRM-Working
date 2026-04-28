@@ -15,6 +15,11 @@ import {
   DEFAULT_THANK_YOU,
   DOCUMENT_PLACEHOLDERS,
 } from './documentFallbacks.ts'
+import {
+  normalizeQuoteTermsSections,
+  splitTermsParagraphs,
+  type QuoteTermsSections,
+} from './termsDefaults.ts'
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
@@ -99,10 +104,63 @@ function buildPricingTermsSection(document: BuiltCustomerEstimateDocument) {
 function buildAdditionalTermsSection(document: BuiltCustomerEstimateDocument) {
   if (!document.terms.length) return null
   return {
-    key: 'additional_terms',
-    title: document.source_meta.settings.terms_text ? 'Additional Terms' : 'Terms & Conditions',
+    key: document.source_meta.settings.terms_text ? 'terms_and_conditions' : 'additional_terms',
+    title: 'Terms & Conditions',
     paragraphs: document.terms,
   } satisfies CustomerEstimateTermsSection
+}
+
+function buildStructuredTermsSections(
+  terms: QuoteTermsSections,
+  quoteValidityDays: number
+): CustomerEstimateTermsSection[] {
+  return [
+    {
+      key: 'included_preparation',
+      title: 'Included Preparation',
+      paragraphs: [
+        `Walls: ${terms.included_preparation.walls}`,
+        `Ceilings: ${terms.included_preparation.ceilings}`,
+        `Trim: ${terms.included_preparation.trim}`,
+      ].filter((value) => !!asText(value.replace(/^[^:]+:\s*/, ''))),
+    },
+    {
+      key: 'customer_responsibilities',
+      title: 'Customer Responsibilities',
+      paragraphs: splitTermsParagraphs(terms.customer_responsibilities),
+    },
+    {
+      key: 'exclusions',
+      title: 'Exclusions',
+      paragraphs: splitTermsParagraphs(terms.exclusions),
+    },
+    {
+      key: 'changes_to_scope',
+      title: 'Changes to Scope',
+      paragraphs: splitTermsParagraphs(terms.scope_changes),
+    },
+    {
+      key: 'pricing_payment',
+      title: 'Pricing & Payment Terms',
+      paragraphs: [
+        terms.pricing_payment.payment_instructions,
+        `Pricing is valid for ${quoteValidityDays} days from the date of this quote.`,
+        terms.pricing_payment.deposit_terms,
+        terms.pricing_payment.balance_due,
+        terms.pricing_payment.card_fee_note,
+      ].map(asText).filter(Boolean),
+    },
+    {
+      key: 'insurance',
+      title: 'Insurance',
+      paragraphs: splitTermsParagraphs(terms.insurance),
+    },
+    {
+      key: 'thank_you',
+      title: 'Thank you',
+      paragraphs: splitTermsParagraphs(terms.thank_you),
+    },
+  ].filter((section) => section.paragraphs.length > 0)
 }
 
 export function assembleCustomerEstimateDocument(
@@ -134,43 +192,57 @@ export function assembleCustomerEstimateDocument(
   missingLegalFields.push(insuranceStatement)
 
   const additionalTerms = buildAdditionalTermsSection(document)
+  const structuredTerms = document.terms_sections
+    ? normalizeQuoteTermsSections(document.terms_sections)
+    : null
 
-  const termsSections: CustomerEstimateTermsSection[] = [
-    {
-      key: 'included_preparation',
-      title: 'Included Preparation',
-      paragraphs: DEFAULT_INCLUDED_PREPARATION.map(
-        (item) => `${item.title}: ${item.text}`
-      ),
-    },
-    {
-      key: 'customer_responsibilities',
-      title: 'Customer Responsibilities',
-      paragraphs: DEFAULT_CUSTOMER_RESPONSIBILITIES,
-    },
-    {
-      key: 'exclusions',
-      title: 'Exclusions',
-      paragraphs: DEFAULT_EXCLUSIONS,
-    },
-    {
-      key: 'changes_to_scope',
-      title: 'Changes to Scope',
-      paragraphs: DEFAULT_SCOPE_CHANGE_TERMS,
-    },
-    pricingTerms.section,
-    {
-      key: 'insurance',
-      title: 'Insurance',
-      paragraphs: [insuranceStatement],
-    },
-    ...(additionalTerms ? [additionalTerms] : []),
-    {
-      key: 'thank_you',
-      title: 'Thank you',
-      paragraphs: DEFAULT_THANK_YOU,
-    },
-  ]
+  const termsSections: CustomerEstimateTermsSection[] = structuredTerms
+    ? buildStructuredTermsSections(structuredTerms, document.quote_validity_days)
+    : document.source_meta.settings.terms_text
+    ? [
+        ...(additionalTerms ? [additionalTerms] : []),
+        {
+          key: 'thank_you',
+          title: 'Thank you',
+          paragraphs: DEFAULT_THANK_YOU,
+        },
+      ]
+    : [
+        {
+          key: 'included_preparation',
+          title: 'Included Preparation',
+          paragraphs: DEFAULT_INCLUDED_PREPARATION.map(
+            (item) => `${item.title}: ${item.text}`
+          ),
+        },
+        {
+          key: 'customer_responsibilities',
+          title: 'Customer Responsibilities',
+          paragraphs: DEFAULT_CUSTOMER_RESPONSIBILITIES,
+        },
+        {
+          key: 'exclusions',
+          title: 'Exclusions',
+          paragraphs: DEFAULT_EXCLUSIONS,
+        },
+        {
+          key: 'changes_to_scope',
+          title: 'Changes to Scope',
+          paragraphs: DEFAULT_SCOPE_CHANGE_TERMS,
+        },
+        pricingTerms.section,
+        {
+          key: 'insurance',
+          title: 'Insurance',
+          paragraphs: [insuranceStatement],
+        },
+        ...(additionalTerms ? [additionalTerms] : []),
+        {
+          key: 'thank_you',
+          title: 'Thank you',
+          paragraphs: DEFAULT_THANK_YOU,
+        },
+      ]
 
   return {
     ...document,
@@ -195,13 +267,17 @@ export function assembleCustomerEstimateDocument(
     },
     assembly_meta: {
       missing_company_fields: missingCompanyFields,
-      missing_payment_fields: pricingTerms.missingPaymentFields,
-      missing_legal_fields: missingLegalFields,
+      missing_payment_fields: structuredTerms || document.source_meta.settings.terms_text
+        ? []
+        : pricingTerms.missingPaymentFields,
+      missing_legal_fields: structuredTerms || document.source_meta.settings.terms_text ? [] : missingLegalFields,
       used_placeholder_fallbacks:
         missingCompanyFields.length > 0 ||
-        pricingTerms.missingPaymentFields.length > 0 ||
-        missingLegalFields.length > 0,
-      used_explicit_terms_text: document.source_meta.settings.terms_text,
+        (!structuredTerms &&
+          !document.source_meta.settings.terms_text &&
+          (pricingTerms.missingPaymentFields.length > 0 || missingLegalFields.length > 0)),
+      used_explicit_terms_text:
+        document.source_meta.settings.terms_text || !!document.source_meta.settings.terms_sections,
     },
   }
 }
@@ -221,6 +297,7 @@ function deriveSourceMeta(document: Record<string, unknown>): CustomerEstimateDo
     settings: {
       quote_validity_days: document.quote_validity_days != null,
       terms_text: Array.isArray(document.terms) && document.terms.length > 0,
+      terms_sections: !!document.terms_sections,
     },
     overrides: {
       title: !!asText((document.meta as Record<string, unknown> | null | undefined)?.title),
@@ -297,6 +374,9 @@ export function ensureAssembledCustomerEstimateDocument(
         ? document.total
         : null,
     terms: (document.terms as string[] | undefined) ?? [],
+    terms_sections:
+      ((document as Record<string, unknown>).terms_sections as BuiltCustomerEstimateDocument['terms_sections'] | undefined) ??
+      null,
     source_meta:
       ((document as Record<string, unknown>).source_meta as CustomerEstimateDocumentSourceMeta | undefined) ??
       deriveSourceMeta(document as Record<string, unknown>),
