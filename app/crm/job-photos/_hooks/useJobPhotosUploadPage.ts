@@ -114,6 +114,11 @@ export function useJobPhotosUploadPage() {
   }, [jobs, selectedJobId])
 
   const addFiles = useCallback((files: FileList | File[]) => {
+    if (uploadInFlightRef.current) {
+      setError('Wait for the current upload to finish before adding more photos.')
+      return
+    }
+
     const incomingFiles = Array.from(files)
     if (incomingFiles.length === 0) return
 
@@ -152,6 +157,11 @@ export function useJobPhotosUploadPage() {
   }, [])
 
   const removeQueuedPhoto = useCallback((id: string) => {
+    if (uploadInFlightRef.current) {
+      setError('Wait for the current upload to finish before removing photos.')
+      return
+    }
+
     const removedPhoto = queueRef.current.find((photo) => photo.id === id)
     if (removedPhoto) revokeQueuedPhoto(removedPhoto)
 
@@ -284,5 +294,6 @@ export function useJobPhotosUploadPage() {
     upload,
   }
 }
+
 
 
