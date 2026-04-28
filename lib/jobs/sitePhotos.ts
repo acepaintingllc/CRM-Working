@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 export const JOB_SITE_PHOTO_CATEGORIES = ['before', 'damage', 'after'] as const
 
 export type JobSitePhotoCategory = (typeof JOB_SITE_PHOTO_CATEGORIES)[number]
@@ -75,67 +74,6 @@ export type UploadJobSitePhotosInput = {
   jobId: string
   files: JobSitePhotoUploadFile[]
 }
-
-type DriveFileReference = {
-  id: string
-  name: string
-  webViewLink: string | null
-}
-
-type DriveError = {
-  error: string
-  status?: number
-}
-
-type EnsureDriveFolderParams = {
-  origin: string
-  orgId: string
-  userId: string
-  parentFolderId: string
-  name: string
-}
-
-type UploadDriveFileParams = {
-  origin: string
-  orgId: string
-  userId: string
-  folderId: string
-  name: string
-  mimeType: string
-  data: Buffer
-}
-
-type EnsureDriveFolderResult = { folder: DriveFileReference } | DriveError
-
-type UploadDriveFileResult = { file: DriveFileReference } | DriveError
-
-type SitePhotoDeps = {
-  rootFolderId: string | null
-  ensureDriveFolder: (params: EnsureDriveFolderParams) => Promise<EnsureDriveFolderResult>
-  uploadDriveFile: (params: UploadDriveFileParams) => Promise<UploadDriveFileResult>
-  randomId: () => string
-  now: () => Date
-  db: () => Promise<unknown>
-}
-
-const defaultDeps: SitePhotoDeps = {
-  rootFolderId: process.env.GOOGLE_DRIVE_JOB_PHOTOS_FOLDER_ID ?? null,
-  ensureDriveFolder: async (...args) => {
-    const { ensureDriveFolder } = await import('../server/googleDrive.ts')
-    return ensureDriveFolder(...args)
-  },
-  uploadDriveFile: async (...args) => {
-    const { uploadDriveFile } = await import('../server/googleDrive.ts')
-    return uploadDriveFile(...args)
-  },
-  randomId: randomUUID,
-  now: () => new Date(),
-  db: async () => {
-    const { supabaseAdmin } = await import('../server/org.ts')
-    return supabaseAdmin
-  },
-}
-
 
 export function isJobSitePhotoCategory(value: unknown): value is JobSitePhotoCategory {
   return typeof value === 'string' && JOB_SITE_PHOTO_CATEGORIES.includes(value as JobSitePhotoCategory)
@@ -227,4 +165,3 @@ export function buildDriveFolderUrl(folderId: string | null | undefined): string
   if (!folderId) return null
   return `https://drive.google.com/drive/folders/${folderId}`
 }
-
