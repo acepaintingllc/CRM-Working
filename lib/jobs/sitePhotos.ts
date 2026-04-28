@@ -190,27 +190,26 @@ async function getUploadDeps(depsOverride?: SitePhotoDepsOverride): Promise<Uplo
       ? null
       : await import('../server/googleDrive.ts')
 
-  const ensureDriveFolder: EnsureDriveFolder =
-    depsOverride?.ensureDriveFolder ??
-    (async (params) => {
-      const result = await driveModule!.ensureDriveFolder(params)
-      if ('folder' in result) return { folder: result.folder }
-      return {
-        error: result.error ?? 'Unable to prepare Drive folder.',
-        status: 'status' in result && typeof result.status === 'number' ? result.status : undefined,
-      }
-    })
+  const ensureDriveFolderFromDrive: EnsureDriveFolder = async (params) => {
+    const result = await driveModule!.ensureDriveFolder(params)
+    if ('folder' in result && result.folder) return { folder: result.folder }
+    return {
+      error: 'error' in result && result.error ? result.error : 'Unable to prepare Drive folder.',
+      status: 'status' in result && typeof result.status === 'number' ? result.status : undefined,
+    }
+  }
 
-  const uploadDriveFile: UploadDriveFile =
-    depsOverride?.uploadDriveFile ??
-    (async (params) => {
-      const result = await driveModule!.uploadDriveFile(params)
-      if ('file' in result) return { file: result.file }
-      return {
-        error: result.error ?? 'Unable to upload Drive file.',
-        status: 'status' in result && typeof result.status === 'number' ? result.status : undefined,
-      }
-    })
+  const uploadDriveFileFromDrive: UploadDriveFile = async (params) => {
+    const result = await driveModule!.uploadDriveFile(params)
+    if ('file' in result && result.file) return { file: result.file }
+    return {
+      error: 'error' in result && result.error ? result.error : 'Unable to upload Drive file.',
+      status: 'status' in result && typeof result.status === 'number' ? result.status : undefined,
+    }
+  }
+
+  const ensureDriveFolder = depsOverride?.ensureDriveFolder ?? ensureDriveFolderFromDrive
+  const uploadDriveFile = depsOverride?.uploadDriveFile ?? uploadDriveFileFromDrive
 
   return {
     db: await getDb(depsOverride),

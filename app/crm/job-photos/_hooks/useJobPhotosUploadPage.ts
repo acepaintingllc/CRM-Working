@@ -225,7 +225,7 @@ export function useJobPhotosUploadPage() {
       const successfulIds = new Set(
         data.photos
           .map((photo) => photo.clientLocalId)
-          .filter((id): id is string => Boolean(id) && queuedIds.has(id))
+          .filter((id): id is string => typeof id === 'string' && queuedIds.has(id))
       )
 
 
