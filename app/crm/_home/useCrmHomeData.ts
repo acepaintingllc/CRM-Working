@@ -31,7 +31,7 @@ export function useCrmHomeData() {
         'customers',
         'calendarStatus',
         'calendarEvents',
-        'notes',
+        'tasks',
       ])
     )
 

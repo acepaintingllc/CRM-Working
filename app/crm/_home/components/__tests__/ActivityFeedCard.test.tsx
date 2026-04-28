@@ -38,7 +38,7 @@ describe('ActivityFeedCard', () => {
           isUnavailable: false,
           emptyMessage: 'No activity yet.',
           unavailableMessage: 'Activity is unavailable right now.',
-          tasksHref: '/crm/notes/tasks',
+          tasksHref: '/crm/tasks',
           viewAllHref: '/crm/jobs',
           viewAllLabel: 'View all 4 jobs',
         }}
@@ -47,7 +47,7 @@ describe('ActivityFeedCard', () => {
 
     expect(screen.getByRole('tablist', { name: 'Activity feed sections' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('tab', { name: 'Tasks' }).getAttribute('href')).toBe('/crm/notes/tasks')
+    expect(screen.getByRole('tab', { name: 'Tasks' }).getAttribute('href')).toBe('/crm/tasks')
     expect(screen.getByRole('link', { name: /View all 4 jobs/i })).toBeTruthy()
   })
 
@@ -60,7 +60,7 @@ describe('ActivityFeedCard', () => {
           isUnavailable: false,
           emptyMessage: 'No activity yet. Create your first job to get started.',
           unavailableMessage: 'Activity is unavailable right now.',
-          tasksHref: '/crm/notes/tasks',
+          tasksHref: '/crm/tasks',
           viewAllHref: null,
           viewAllLabel: null,
         }}
@@ -80,7 +80,7 @@ describe('ActivityFeedCard', () => {
           isUnavailable: true,
           emptyMessage: 'No activity yet. Create your first job to get started.',
           unavailableMessage: 'Unable to load jobs.',
-          tasksHref: '/crm/notes/tasks',
+          tasksHref: '/crm/tasks',
           viewAllHref: null,
           viewAllLabel: null,
         }}
@@ -109,7 +109,7 @@ describe('ActivityFeedCard', () => {
           isUnavailable: false,
           emptyMessage: 'No activity yet. Create your first job to get started.',
           unavailableMessage: 'Unable to load jobs.',
-          tasksHref: '/crm/notes/tasks',
+          tasksHref: '/crm/tasks',
           viewAllHref: null,
           viewAllLabel: null,
         }}

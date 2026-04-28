@@ -59,7 +59,7 @@ describe('useCrmHomeData', () => {
       if (url === '/api/google-calendar/status') {
         return createJsonResponse(true, { data: { connected: false } })
       }
-      if (url === '/api/notes/dashboard') {
+      if (url === '/api/tasks/dashboard') {
         return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
       }
       throw new Error(`Unexpected URL: ${url}`)
@@ -97,7 +97,7 @@ describe('useCrmHomeData', () => {
       if (url === '/api/google-calendar/status') {
         return createJsonResponse(true, { data: { connected: false } })
       }
-      if (url === '/api/notes/dashboard') {
+      if (url === '/api/tasks/dashboard') {
         return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
       }
       throw new Error(`Unexpected URL: ${url}`)
@@ -148,7 +148,7 @@ describe('useCrmHomeData', () => {
       if (url === '/api/google-calendar/status') {
         return createJsonResponse(true, { data: { connected: false } })
       }
-      if (url === '/api/notes/dashboard') {
+      if (url === '/api/tasks/dashboard') {
         return createJsonResponse(true, { tasks: { overdue: [], due_today: [] } })
       }
       throw new Error(`Unexpected URL: ${url}`)
@@ -160,22 +160,22 @@ describe('useCrmHomeData', () => {
       expect(result.current.summary.isBusy).toBe(false)
     })
 
-    const notesRequest = createDeferred<Promise<MockJsonResponse>>()
+    const tasksRequest = createDeferred<Promise<MockJsonResponse>>()
     mockAuthedFetch.mockImplementationOnce(
-      () => notesRequest.promise
+      () => tasksRequest.promise
     )
 
     act(() => {
-      void result.current.refreshSource('notes')
+      void result.current.refreshSource('tasks')
     })
 
-    expect(result.current.sources.notes.status).toBe('loading')
+    expect(result.current.sources.tasks.status).toBe('loading')
     expect(result.current.sources.jobs.status).toBe('ready')
 
-    notesRequest.resolve(createJsonResponse(true, { tasks: { overdue: [], due_today: [] } }))
+    tasksRequest.resolve(createJsonResponse(true, { tasks: { overdue: [], due_today: [] } }))
 
     await waitFor(() => {
-      expect(result.current.sources.notes.status).toBe('ready')
+      expect(result.current.sources.tasks.status).toBe('ready')
     })
   })
 })

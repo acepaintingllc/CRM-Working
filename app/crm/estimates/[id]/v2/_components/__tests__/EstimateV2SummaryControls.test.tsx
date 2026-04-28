@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, fireEvent } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EstimateV2SummaryPolicyControls } from '../EstimateV2SummaryPolicyControls'
 import { EstimateV2SummaryTrimPaintPanel } from '../EstimateV2SummaryTrimPaintPanel'
 
@@ -14,7 +14,73 @@ const colors = {
   radiusSm: 6,
 }
 
+afterEach(() => {
+  cleanup()
+})
+
 describe('EstimateV2 summary controls', () => {
+  it('collapses pricing policy controls behind a compact status summary', () => {
+    const update = vi.fn()
+    const onToggleOpen = vi.fn()
+    const { rerender } = render(
+      <EstimateV2SummaryPolicyControls
+        vm={{
+          draft: {
+            laborDayEnabled: true,
+            dayhours: 8,
+            roundIncrement: 4,
+            laborRate: 65,
+            jobMinEnabled: false,
+            jobMinAmount: 1200,
+          },
+          update,
+          saving: false,
+        }}
+        card={card}
+        inputStyle={inputStyle}
+        colors={colors}
+        open={false}
+        onToggleOpen={onToggleOpen}
+      />
+    )
+
+    expect(screen.getByText('Policies: Labor Day On • Job Minimum Off')).toBeInTheDocument()
+    expect(screen.getByText('Edit')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Hours per day')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Job minimum amount dollars')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand pricing policies' }))
+    expect(onToggleOpen).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <EstimateV2SummaryPolicyControls
+        vm={{
+          draft: {
+            laborDayEnabled: true,
+            dayhours: 8,
+            roundIncrement: 4,
+            laborRate: 65,
+            jobMinEnabled: false,
+            jobMinAmount: 1200,
+          },
+          update,
+          saving: false,
+        }}
+        card={card}
+        inputStyle={inputStyle}
+        colors={colors}
+        open
+        onToggleOpen={onToggleOpen}
+      />
+    )
+
+    expect(screen.getByLabelText('Hours per day')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Toggle job minimum' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse labor day policy settings' }))
+    expect(screen.queryByLabelText('Hours per day')).not.toBeInTheDocument()
+  })
+
   it('routes policy field edits through the shared policy vm', () => {
     const update = vi.fn()
     render(

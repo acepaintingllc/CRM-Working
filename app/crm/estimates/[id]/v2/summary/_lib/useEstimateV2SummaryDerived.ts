@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import type { EstimateV2SummaryPageData, EstimateV2TrimPaint } from '@/types/estimator/v2'
 import {
   buildPaintSupplyRows,
+  buildPaintSupplyProductLabels,
   buildPriceBreakdownRows,
   buildPricingKpis,
   buildRoomAlertsByRoom,
@@ -185,16 +186,38 @@ export function useEstimateV2SummaryDerived(params: {
   const priceAdjustment = pricingSummary
     ? pricingSummary.postLaborPolicyTotal - pricingSummary.prePolicyTotal
     : null
-  const paintSuppliesTotal = calculatePaintSuppliesTotal(pricingSummary)
+  const paintSuppliesTotal = calculatePaintSuppliesTotal(pricingSummary, trimPaint)
 
   const priceBreakdownRows = useMemo<EstimateV2SummaryPricingTableRow[]>(
     () => buildPriceBreakdownRows(pricingSummary),
     [pricingSummary]
   )
 
+  const paintSupplyProductLabels = useMemo(
+    () =>
+      buildPaintSupplyProductLabels({
+        jobsettings: data?.inputs?.jobsettings,
+        orgDefaults: data?.inputs?.org_defaults,
+        wallScopes,
+        ceilingScopes,
+        trimScopes,
+        trimPaint,
+        resolvePaintProductLabel,
+      }),
+    [
+      ceilingScopes,
+      data?.inputs?.jobsettings,
+      data?.inputs?.org_defaults,
+      resolvePaintProductLabel,
+      trimPaint,
+      trimScopes,
+      wallScopes,
+    ]
+  )
+
   const paintSupplyRows = useMemo<EstimateV2SummaryPricingTableRow[]>(
-    () => buildPaintSupplyRows(pricingSummary),
-    [pricingSummary]
+    () => buildPaintSupplyRows(pricingSummary, trimPaint, paintSupplyProductLabels),
+    [paintSupplyProductLabels, pricingSummary, trimPaint]
   )
 
   return {

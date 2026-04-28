@@ -7,8 +7,8 @@ import type {
   CrmHomeSearchResults,
   DashboardCustomer,
   DashboardJob,
-  NotesDashboardPayload,
-  NotesReminderSignal,
+  TasksDashboardPayload,
+  TaskReminderSignal,
 } from './types.ts'
 
 function getPositiveAmount(value: number | string | null | undefined) {
@@ -94,7 +94,7 @@ export function buildSearchResults(
   }
 }
 
-export function sortNotesSignals(signals: NotesReminderSignal[]) {
+export function sortTaskSignals(signals: TaskReminderSignal[]) {
   return [...signals].sort((left, right) => {
     if (left.kind !== right.kind) return left.kind === 'overdue' ? -1 : 1
     const leftDue = left.task.due_at ? new Date(left.task.due_at).getTime() : Number.MAX_SAFE_INTEGER
@@ -103,13 +103,13 @@ export function sortNotesSignals(signals: NotesReminderSignal[]) {
   })
 }
 
-export function buildNotesReminders(payload: NotesDashboardPayload | null | undefined, limit = 8) {
+export function buildTaskReminders(payload: TasksDashboardPayload | null | undefined, limit = 8) {
   const overdue = (payload?.tasks?.overdue ?? []).map((task) => ({ kind: 'overdue' as const, task }))
   const dueToday = (payload?.tasks?.due_today ?? []).map((task) => ({
     kind: 'due_today' as const,
     task,
   }))
-  return sortNotesSignals([...overdue, ...dueToday]).slice(0, limit)
+  return sortTaskSignals([...overdue, ...dueToday]).slice(0, limit)
 }
 
 export function buildCalendarTodayEvents(events: CalendarEvent[], now: Date, limit = 8) {
@@ -152,14 +152,14 @@ export function createCrmHomeData({
   customers,
   calendarConnected,
   calendarTodayEvents,
-  notesReminders,
+  taskReminders,
   now = new Date(),
 }: {
   jobs: DashboardJob[]
   customers: DashboardCustomer[]
   calendarConnected: boolean | null
   calendarTodayEvents: CalendarEvent[]
-  notesReminders: NotesReminderSignal[]
+  taskReminders: TaskReminderSignal[]
   now?: Date
 }): CrmHomeData {
   return {
@@ -171,7 +171,7 @@ export function createCrmHomeData({
     signals: {
       calendarConnected,
       calendarTodayEvents,
-      notesReminders,
+      taskReminders,
     },
     greeting: getGreeting(now),
     todayLabel: formatTodayLabel(now),

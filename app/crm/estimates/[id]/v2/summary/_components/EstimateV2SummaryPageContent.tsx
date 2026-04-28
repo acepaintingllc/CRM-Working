@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmChip } from '@/app/crm/_components/CrmChip'
@@ -12,7 +12,6 @@ import { loadData } from '@/lib/client/api'
 import type { UnsafeRecord } from '@/types/estimator/v2'
 import { EstimateV2WorkflowFooterBar } from '../../_components/EstimateV2WorkflowFooterBar'
 import { EstimateV2SummaryPolicyControls } from '../../_components/EstimateV2SummaryPolicyControls'
-import { EstimateV2SummaryTrimPaintPanel } from '../../_components/EstimateV2SummaryTrimPaintPanel'
 import { useEstimateV2SummaryData } from '../../_state/useEstimateV2SummaryData'
 import {
   resolveEstimateRouteFamily,
@@ -189,6 +188,10 @@ export function EstimateV2SummaryPageContent({
   pageEyebrow?: string
 }) {
   const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
+  const customerSendApiHref = useMemo(
+    () => resolvedRouteFamily.customerSendApiHref(estimateId),
+    [estimateId, resolvedRouteFamily]
+  )
   const {
     data,
     job,
@@ -196,9 +199,9 @@ export function EstimateV2SummaryPageContent({
     error,
     policySaving,
     jobSettingsVm,
-    trimPaintVm,
   } = useEstimateV2SummaryData(estimateId, resolvedRouteFamily)
   const [openRooms, setOpenRooms] = useState<Record<string, boolean>>({})
+  const [policiesOpen, setPoliciesOpen] = useState(false)
   const [sendStatus, setSendStatus] = useState<SendStatus | null>(null)
   const derived = useEstimateV2SummaryDerived({
     data,
@@ -211,7 +214,6 @@ export function EstimateV2SummaryPageContent({
 
   useEffect(() => {
     let cancelled = false
-    const url = resolvedRouteFamily.customerSendApiHref(estimateId)
     loadData<{
       version?: {
         status?: string
@@ -221,7 +223,7 @@ export function EstimateV2SummaryPageContent({
         declined_at?: string | null
       } | null
       public_url?: string | null
-    }>(url)
+    }>(customerSendApiHref)
       .then((res) => {
         if (cancelled) return
         const version = res?.version
@@ -242,7 +244,7 @@ export function EstimateV2SummaryPageContent({
     return () => {
       cancelled = true
     }
-  }, [estimateId, resolvedRouteFamily])
+  }, [customerSendApiHref])
 
   if (loading) {
     return (
@@ -338,7 +340,7 @@ export function EstimateV2SummaryPageContent({
           <MetricCard label="Supplies" value={fmtUSD(derived.pricingKpis.suppliesCost)} />
         </section>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+        <div className="grid gap-4">
           <div className="grid min-w-0 gap-4">
             {derived.summaryAlerts.length > 0 ? (
               <CrmSectionCard title="System Alerts">
@@ -355,6 +357,27 @@ export function EstimateV2SummaryPageContent({
 
             <section className="grid gap-4 lg:grid-cols-2">
               <CrmSectionCard title="Price Breakdown" description="Policy-adjusted pricing used for the customer quote.">
+                <div className="mb-4 grid gap-2">
+                  {policySaving ? (
+                    <CrmNotice tone="info" compact>
+                      Saving summary policy changes...
+                    </CrmNotice>
+                  ) : null}
+                  <EstimateV2SummaryPolicyControls
+                    vm={jobSettingsVm}
+                    card={summaryCardStyle}
+                    inputStyle={summaryInputStyle}
+                    colors={{
+                      border: 'var(--crm-ui-border)',
+                      ink3: 'var(--crm-ui-muted)',
+                      green: 'var(--crm-ui-accent)',
+                      cardDark: 'var(--crm-ui-surface)',
+                    }}
+                    open={policiesOpen}
+                    onToggleOpen={() => setPoliciesOpen((current) => !current)}
+                    compact
+                  />
+                </div>
                 <SummaryRows rows={derived.priceBreakdownRows} />
                 <div className="mt-4 flex items-baseline justify-between gap-4 border-t border-[color:var(--crm-ui-border)] pt-4">
                   <span className={labelClassName}>Final Total</span>
@@ -484,46 +507,6 @@ export function EstimateV2SummaryPageContent({
               )}
             </CrmSectionCard>
           </div>
-
-          <aside className="grid gap-4 xl:sticky xl:top-4">
-            {policySaving ? (
-              <CrmNotice tone="info" compact>
-                Saving summary policy changes...
-              </CrmNotice>
-            ) : null}
-            <CrmSectionCard title="Policy Inputs" variant="rail">
-              <EstimateV2SummaryPolicyControls
-                vm={jobSettingsVm}
-                card={summaryCardStyle}
-                inputStyle={summaryInputStyle}
-                colors={{
-                  border: 'var(--crm-ui-border)',
-                  ink3: 'var(--crm-ui-muted)',
-                  green: 'var(--crm-ui-accent)',
-                  cardDark: 'var(--crm-ui-surface)',
-                }}
-                open
-              />
-            </CrmSectionCard>
-            <CrmSectionCard title="Trim Paint" variant="rail">
-              <EstimateV2SummaryTrimPaintPanel
-                vm={trimPaintVm}
-                trimPaint={derived.trimPaint}
-                hasTrimPaint={derived.hasTrimPaint}
-                resolvePaintProductLabel={derived.resolvePaintProductLabel}
-                card={summaryCardStyle}
-                inputStyle={summaryInputStyle}
-                colors={{
-                  ink: 'var(--crm-ui-ink)',
-                  ink3: 'var(--crm-ui-muted)',
-                  green: 'var(--crm-ui-accent)',
-                  cardDark: 'var(--crm-ui-surface)',
-                  border: 'var(--crm-ui-border)',
-                  radiusSm: 6,
-                }}
-              />
-            </CrmSectionCard>
-          </aside>
         </div>
       </main>
 

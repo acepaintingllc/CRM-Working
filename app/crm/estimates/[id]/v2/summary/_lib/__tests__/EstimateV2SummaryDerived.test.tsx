@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildPaintSupplyRows,
+  buildPaintSupplyProductLabels,
   buildPriceBreakdownRows,
   buildRoomAlertsByRoom,
   buildRoomBlocks,
@@ -9,11 +10,12 @@ import {
   buildSummaryAlerts,
   calculatePaintSuppliesTotal,
   createDisplayScopePaintCostCalculator,
+  createPaintProductLabelResolver,
   hasActiveLaborRateOverride,
   normalizeSummaryScopeRows,
 } from '../estimateV2SummaryDerived'
 import { SCOPE_KIND_LABELS, SCOPE_KIND_ORDER } from '@/lib/estimator/scopeKinds'
-import type { EstimateV2PricingSummary, EstimateV2RoomInputRow } from '@/types/estimator/v2'
+import type { EstimateV2PricingSummary, EstimateV2RoomInputRow, EstimateV2TrimPaint } from '@/types/estimator/v2'
 
 const rooms: EstimateV2RoomInputRow[] = [
   { id: 'room-1', room_id: 'room-1', room_name: 'Living Room' },
@@ -279,11 +281,114 @@ describe('estimateV2SummaryDerived helpers', () => {
       { label: 'Trim paint', value: '$40' },
       { label: 'Primer', value: '$30' },
       { label: 'Supplies', value: '$50' },
+      { label: 'Total gallons', value: '0 gal' },
     ])
     expect(calculatePaintSuppliesTotal(pricingSummary)).toBe(290)
     expect(pricingSummary.prePolicyTotal + (pricingSummary.postLaborPolicyTotal - pricingSummary.prePolicyTotal) + pricingSummary.minimumAdjustmentAmount).toBe(
       pricingSummary.finalTotal
     )
+  })
+
+  it('appends selected product names to paint supply scope labels and includes total gallons', () => {
+    const paintRows = buildPaintSupplyRows(pricingSummary, null, {
+      wallPaintProductLabel: 'SW Cashmere',
+      ceilingPaintProductLabel: 'SW ProMar Ceiling',
+      trimPaintProductLabel: 'SW Emerald Urethane',
+      primerProductLabel: 'SW PrepRite',
+      totalGallons: 7.25,
+    })
+
+    expect(paintRows).toEqual([
+      { label: 'Wall paint - SW Cashmere', value: '$120' },
+      { label: 'Ceiling paint - SW ProMar Ceiling', value: '$80' },
+      { label: 'Trim paint - SW Emerald Urethane', value: '$40' },
+      { label: 'Primer - SW PrepRite', value: '$30' },
+      { label: 'Supplies', value: '$50' },
+      { label: 'Total gallons', value: '7.25 gal' },
+    ])
+  })
+
+  it('keeps paint supply scope labels plain when no product is selected', () => {
+    const paintRows = buildPaintSupplyRows(pricingSummary, null, {
+      wallPaintProductLabel: '-',
+      ceilingPaintProductLabel: '',
+      trimPaintProductLabel: null,
+      primerProductLabel: undefined,
+      totalGallons: 0,
+    })
+
+    expect(paintRows.map((row) => row.label)).toEqual([
+      'Wall paint',
+      'Ceiling paint',
+      'Trim paint',
+      'Primer',
+      'Supplies',
+      'Total gallons',
+    ])
+  })
+
+  it('resolves paint supply product labels from selected job products', () => {
+    const labels = buildPaintSupplyProductLabels({
+      jobsettings: {
+        walls_paint_id: 'wall-paint-1',
+        ceiling_paint_id: 'ceiling-paint-1',
+        trim_paint_id: 'trim-paint-1',
+        walls_primer_id: 'primer-1',
+        ceiling_primer_id: 'primer-1',
+        trim_primer_id: 'primer-1',
+      },
+      orgDefaults: null,
+      wallScopes: normalizeSummaryScopeRows([
+        { id: 'wall-1', room_id: 'room-1', raw_paint_gallons: 1.25, raw_primer_gallons: 0.5 },
+      ]),
+      ceilingScopes: normalizeSummaryScopeRows([
+        { id: 'ceiling-1', room_id: 'room-1', raw_paint_gallons: 0.75 },
+      ]),
+      trimScopes: [],
+      trimPaint: {
+        paint_product_id: 'trim-paint-override',
+        paint_product_label: 'Trim Paint Override',
+        gallons: 1,
+        quarts: 0,
+        normalized_gallons: 1,
+        paint_cost: 40,
+      },
+      resolvePaintProductLabel: createPaintProductLabelResolver([
+        { id: 'wall-paint-1', name: 'SW Cashmere' },
+        { id: 'ceiling-paint-1', display_name: 'SW ProMar Ceiling' },
+        { id: 'trim-paint-override', name: 'SW Emerald Urethane' },
+        { id: 'primer-1', name: 'SW PrepRite' },
+      ]),
+    })
+
+    expect(labels).toEqual({
+      wallPaintProductLabel: 'SW Cashmere',
+      ceilingPaintProductLabel: 'SW ProMar Ceiling',
+      trimPaintProductLabel: 'Trim Paint Override',
+      primerProductLabel: 'SW PrepRite',
+      totalGallons: 3.5,
+    })
+  })
+
+  it('falls back to persisted trim paint cost when the pricing summary trim cost is stale', () => {
+    const trimPaint: EstimateV2TrimPaint = {
+      paint_product_id: 'trim-paint-1',
+      paint_product_label: 'Trim Paint',
+      gallons: 1,
+      quarts: 2,
+      normalized_gallons: 1.5,
+      paint_cost: 45,
+    }
+    const stalePricingSummary = {
+      ...pricingSummary,
+      trimPaintMaterialCost: 0,
+    }
+
+    expect(buildPaintSupplyRows(stalePricingSummary, trimPaint)).toContainEqual({
+      label: 'Trim paint',
+      value: '$45',
+    })
+    expect(calculatePaintSuppliesTotal(stalePricingSummary, trimPaint)).toBe(295)
   })
 
   it('keeps scope kind labels and ordering aligned with the shared single source of truth', () => {

@@ -190,41 +190,47 @@ export function EstimateV2DetailsPageContent({
             </CrmSectionCard>
           ) : null}
 
-          <CrmSectionCard title="Paint Planning" description={vm.materialPlanningSections.walls.description}>
-            <EstimateV2DetailsMaterialTable
-              rows={vm.wallRows}
-              onOverride={(row, value) => actions.setWallOverride(row.colorId ?? row.id, value)}
-              emptyTitle={vm.materialPlanningSections.walls.emptyTitle}
-              emptyMessage={vm.materialPlanningSections.walls.emptyMessage}
-              scope="wall"
-              conditionsVm={vm.conditions}
-              onConditionToggle={(id, level) => actions.setRoomCondition('wall', id, level)}
-            />
-          </CrmSectionCard>
+          {vm.wallRows.length > 0 ? (
+            <CrmSectionCard title="Paint Planning" description={vm.materialPlanningSections.walls.description}>
+              <EstimateV2DetailsMaterialTable
+                rows={vm.wallRows}
+                onOverride={(row, value) => actions.setWallOverride(row.colorId ?? row.id, value)}
+                emptyTitle={vm.materialPlanningSections.walls.emptyTitle}
+                emptyMessage={vm.materialPlanningSections.walls.emptyMessage}
+                scope="wall"
+                conditionsVm={vm.conditions}
+                onConditionToggle={(id, level) => actions.setRoomCondition('wall', id, level)}
+              />
+            </CrmSectionCard>
+          ) : null}
 
-          <CrmSectionCard title="Ceiling Paint Planning" description={vm.materialPlanningSections.ceilings.description}>
-            <EstimateV2DetailsMaterialTable
-              rows={vm.ceilingRow ? [vm.ceilingRow] : []}
-              onOverride={(_, value) => actions.setCeilingOverride(value)}
-              emptyTitle={vm.materialPlanningSections.ceilings.emptyTitle}
-              emptyMessage={vm.materialPlanningSections.ceilings.emptyMessage}
-              scope="ceiling"
-              conditionsVm={vm.conditions}
-              onConditionToggle={(id, level) => actions.setRoomCondition('ceiling', id, level)}
-            />
-          </CrmSectionCard>
+          {vm.ceilingRow ? (
+            <CrmSectionCard title="Ceiling Paint Planning" description={vm.materialPlanningSections.ceilings.description}>
+              <EstimateV2DetailsMaterialTable
+                rows={[vm.ceilingRow]}
+                onOverride={(_, value) => actions.setCeilingOverride(value)}
+                emptyTitle={vm.materialPlanningSections.ceilings.emptyTitle}
+                emptyMessage={vm.materialPlanningSections.ceilings.emptyMessage}
+                scope="ceiling"
+                conditionsVm={vm.conditions}
+                onConditionToggle={(id, level) => actions.setRoomCondition('ceiling', id, level)}
+              />
+            </CrmSectionCard>
+          ) : null}
 
-          <CrmSectionCard title="Trim Paint Planning" description={vm.materialPlanningSections.trim.description}>
-            <EstimateV2DetailsMaterialTable
-              rows={vm.trimRow ? [vm.trimRow] : []}
-              onOverride={(_, value) => actions.setTrimOverride(value)}
-              emptyTitle={vm.materialPlanningSections.trim.emptyTitle}
-              emptyMessage={vm.materialPlanningSections.trim.emptyMessage}
-              scope="trim"
-              conditionsVm={vm.conditions}
-              onConditionToggle={(id, level) => actions.setRoomCondition('trim', id, level)}
-            />
-          </CrmSectionCard>
+          {vm.trimRow ? (
+            <CrmSectionCard title="Trim Paint Planning" description={vm.materialPlanningSections.trim.description}>
+              <EstimateV2DetailsMaterialTable
+                rows={[vm.trimRow]}
+                onOverride={(_, value) => actions.setTrimOverride(value)}
+                emptyTitle={vm.materialPlanningSections.trim.emptyTitle}
+                emptyMessage={vm.materialPlanningSections.trim.emptyMessage}
+                scope="trim"
+                conditionsVm={vm.conditions}
+                onConditionToggle={(id, level) => actions.setRoomCondition('trim', id, level)}
+              />
+            </CrmSectionCard>
+          ) : null}
 
           <CrmSectionCard title="Active Overrides" description="Saved gallon overrides that will affect material totals.">
             <EstimateV2DetailsActiveOverrides activeOverrides={vm.activeOverrides} />

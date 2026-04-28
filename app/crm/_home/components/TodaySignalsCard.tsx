@@ -41,7 +41,7 @@ type TodaySignalsCardProps = {
     footerActions: Array<{
       href: string
       label: string
-      icon: 'calendar' | 'notes'
+      icon: 'calendar' | 'tasks'
     }>
   }
 }

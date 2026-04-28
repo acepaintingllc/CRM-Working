@@ -83,7 +83,7 @@ test('loadCrmHomeData resolves successful source data into a ready home state', 
           },
           errorMessage: null,
         },
-        notes: {
+        tasks: {
           ok: true,
           payload: {
             tasks: {
@@ -116,7 +116,7 @@ test('loadCrmHomeData resolves successful source data into a ready home state', 
   assert.equal(state.data.metrics.salesTotal, 1200)
   assert.equal(state.data.signals.calendarConnected, true)
   assert.equal(state.data.signals.calendarTodayEvents.length, 1)
-  assert.equal(state.data.signals.notesReminders.length, 1)
+  assert.equal(state.data.signals.taskReminders.length, 1)
   assert.equal(state.sources.jobs.availability, 'available')
   assert.equal(state.sources.customers.availability, 'available')
   assert.equal(state.data.customers.length, 1)
@@ -144,7 +144,7 @@ test('loadCrmHomeData treats jobs failure as a critical dashboard error', async 
           payload: { connected: false },
           errorMessage: null,
         },
-        notes: {
+        tasks: {
           ok: true,
           payload: { tasks: { overdue: [], due_today: [] } },
           errorMessage: null,
@@ -162,7 +162,7 @@ test('loadCrmHomeData treats jobs failure as a critical dashboard error', async 
   assert.equal(state.sources.jobs.errorMessage, 'Jobs failed')
 })
 
-test('loadCrmHomeData treats customers and notes failures as warnings only', async () => {
+test('loadCrmHomeData treats customers and tasks failures as warnings only', async () => {
   const state = await loadCrmHomeData({
     now: new Date('2026-04-21T12:00:00.000Z'),
     fetchJson: createFetchJsonStub(
@@ -193,10 +193,10 @@ test('loadCrmHomeData treats customers and notes failures as warnings only', asy
           payload: { connected: false },
           errorMessage: null,
         },
-        notes: {
+        tasks: {
           ok: false,
-          payload: { error: 'Notes failed' },
-          errorMessage: 'Notes failed',
+          payload: { error: 'Tasks failed' },
+          errorMessage: 'Tasks failed',
         },
       },
       []
@@ -207,9 +207,9 @@ test('loadCrmHomeData treats customers and notes failures as warnings only', asy
 
   assert.equal(state.summary.hasCriticalError, false)
   assert.equal(state.summary.hasWarnings, true)
-  assert.deepEqual(state.summary.warningSources, ['customers', 'notes'])
+  assert.deepEqual(state.summary.warningSources, ['customers', 'tasks'])
   assert.equal(state.sources.customers.availability, 'unavailable')
-  assert.equal(state.sources.notes.availability, 'unavailable')
+  assert.equal(state.sources.tasks.availability, 'unavailable')
 })
 
 test('loadCrmHomeData logs malformed payloads and skips calendar events when disconnected', async () => {
@@ -235,7 +235,7 @@ test('loadCrmHomeData logs malformed payloads and skips calendar events when dis
           payload: { connected: false },
           errorMessage: null,
         },
-        notes: {
+        tasks: {
           ok: true,
           payload: { tasks: 'bad' },
           errorMessage: null,
@@ -254,7 +254,7 @@ test('loadCrmHomeData logs malformed payloads and skips calendar events when dis
   assert.equal(state.sources.calendarEvents.availability, 'missing')
   assert.deepEqual(logCalls, [
     { source: 'customers', message: 'Malformed customers response.' },
-    { source: 'notes', message: 'Malformed notes dashboard response.' },
+    { source: 'tasks', message: 'Malformed tasks dashboard response.' },
   ])
 })
 
@@ -264,7 +264,7 @@ test('loadCrmHomeSources marks malformed payloads invalid and keeps partial refr
       now: new Date('2026-04-21T12:00:00.000Z'),
       fetchJson: createFetchJsonStub(
         {
-          notes: {
+          tasks: {
             ok: true,
             payload: { nope: true },
             errorMessage: null,
@@ -275,11 +275,11 @@ test('loadCrmHomeSources marks malformed payloads invalid and keeps partial refr
       readSelectedCalendarIds: () => null,
       logError: () => undefined,
     },
-    ['notes']
+    ['tasks']
   )
 
-  assert.equal(patch.notes?.source.availability, 'invalid')
-  assert.equal(patch.notes?.source.status, 'degraded')
+  assert.equal(patch.tasks?.source.availability, 'invalid')
+  assert.equal(patch.tasks?.source.status, 'degraded')
   assert.equal(patch.jobs, undefined)
 })
 
@@ -291,7 +291,7 @@ test('partial refresh updates only requested sources and calendar dependencies',
         jobs: { ok: true, payload: { jobs: [] }, errorMessage: null },
         customers: { ok: true, payload: { customers: [] }, errorMessage: null },
         calendarStatus: { ok: true, payload: { connected: false }, errorMessage: null },
-        notes: { ok: true, payload: { tasks: { overdue: [], due_today: [] } }, errorMessage: null },
+        tasks: { ok: true, payload: { tasks: { overdue: [], due_today: [] } }, errorMessage: null },
       },
       []
     ),
