@@ -12,6 +12,8 @@ import {
 } from '@/lib/jobs/actions'
 import {
   deleteJob as deleteJobRequest,
+  getJobPhotosFolderUrl,
+  listJobSitePhotos,
   listPaintLogs,
   patchJobDateFields,
   patchJobStatus,
@@ -148,10 +150,46 @@ export function useJobDetailPage() {
     void loadSecondaryData()
   }, [loadSecondaryData])
 
+  const loadPhotosData = useCallback(async () => {
+    if (!id || typeof id !== 'string') {
+      setPhotosFolderUrl(null)
+      setPhotosLoading(false)
+      return true
+    }
+
+    const requestId = ++photosRequestIdRef.current
+    setPhotosLoading(true)
+
+    try {
+      const result = await listJobSitePhotos(id)
+      if (photosRequestIdRef.current !== requestId) return false
+      setPhotosFolderUrl(
+        result?.jobFolder?.webViewLink ?? getJobPhotosFolderUrl(result?.jobFolder?.id) ?? null
+      )
+      return true
+    } catch {
+      if (photosRequestIdRef.current !== requestId) return false
+      setPhotosFolderUrl(null)
+      return true
+    } finally {
+      if (photosRequestIdRef.current === requestId) {
+        setPhotosLoading(false)
+      }
+    }
+  }, [id])
+
+  useEffect(() => {
+    void loadPhotosData()
+  }, [loadPhotosData])
+
   const refreshResource = useCallback(async () => {
-    const [jobOk, secondaryOk] = await Promise.all([jobResource.refresh(), loadSecondaryData()])
+    const [jobOk, secondaryOk] = await Promise.all([
+      jobResource.refresh(),
+      loadSecondaryData(),
+      loadPhotosData(),
+    ])
     return jobOk && secondaryOk
-  }, [jobResource, loadSecondaryData])
+  }, [jobResource, loadSecondaryData, loadPhotosData])
 
   const resource: {
     data: JobDetailResource
@@ -421,6 +459,8 @@ export function useJobDetailPage() {
     estimateFile: resource.data.estimateFile,
     estimateFileError: resource.data.estimateFileError,
     paintLogs: resource.data.paintLogs,
+    photosFolderUrl,
+    photosLoading,
     copy: detailActions.copyValue,
     patchJob,
     deleteJob: detailActions.confirmAndDelete,
