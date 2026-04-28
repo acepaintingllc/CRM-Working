@@ -156,7 +156,7 @@ type UploadDeps = {
 type JobLookupRow = {
   id?: string | null
   title?: string | null
-  customer_address?: string | null
+  customer_id?: string | null
   address?: string | null
   customer?: { address?: string | null } | { address?: string | null }[] | null
   customers?: { address?: string | null } | { address?: string | null }[] | null
@@ -221,13 +221,13 @@ function asCustomerAddress(value: unknown): string | null {
 }
 
 function readJobAddress(row: JobLookupRow): string | null {
-  return asString(row.customer_address) ?? asString(row.address) ?? asCustomerAddress(row.customer) ?? asCustomerAddress(row.customers)
+  return asString(row.address) ?? asCustomerAddress(row.customer) ?? asCustomerAddress(row.customers)
 }
 
 async function loadJobForSitePhotos(deps: JobPhotoDbDeps, orgId: string, jobId: string): Promise<ServiceResult<JobLookupRow>> {
   const { data, error } = await deps.db
     .from('jobs')
-    .select('id, title, customer_address, customer:customers(address)')
+    .select('id, title, customer_id, customer:customers(address)')
     .eq('org_id', orgId)
     .eq('id', jobId)
     .maybeSingle<JobLookupRow>()
@@ -412,6 +412,7 @@ function validateUploadInput(input: UploadJobSitePhotosInput): JobSitePhotoCateg
   if (input.files.length > JOB_SITE_PHOTO_LIMITS.maxFiles) return errorResult('invalid_input', 'Upload at most 20 photos at a time.')
   const acceptedMimeTypes = new Set<string>(JOB_SITE_PHOTO_LIMITS.acceptedMimeTypes)
   for (const file of input.files) {
+    if (file.sizeBytes <= 0) return errorResult('invalid_input', `${file.originalName} is empty.`)
     if (!acceptedMimeTypes.has(file.mimeType)) return errorResult('invalid_input', `${file.originalName} is not a supported image type.`)
     if (file.sizeBytes > JOB_SITE_PHOTO_LIMITS.maxBytesPerFile) return errorResult('invalid_input', `${file.originalName} is larger than the 15 MB limit.`)
   }
@@ -452,7 +453,9 @@ export async function uploadJobSitePhotos(
       const existingPhoto = toPhotoResponse(duplicate.data)
       photos.push(existingPhoto)
       jobFolderId = jobFolderId ?? existingPhoto.job_drive_folder_id
-      categoryFolderId = categoryFolderId ?? existingPhoto.drive_folder_id
+      if (existingPhoto.category === validation) {
+        categoryFolderId = categoryFolderId ?? existingPhoto.drive_folder_id
+      }
       continue
     }
 
