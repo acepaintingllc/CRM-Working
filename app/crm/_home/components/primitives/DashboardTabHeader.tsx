@@ -42,7 +42,7 @@ export function DashboardTabHeader({
     <div
       role="tablist"
       aria-label={label}
-      className="flex items-center gap-3 border-b px-5 pt-5 pb-3"
+      className="flex items-center gap-3 border-b px-4 pt-4 pb-3 md:px-5 md:pt-5"
       style={crmBorderStyle}
     >
       {items.map((item) => {

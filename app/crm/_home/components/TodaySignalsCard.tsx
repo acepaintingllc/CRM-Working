@@ -55,7 +55,7 @@ export function TodaySignalsCard({ viewModel }: TodaySignalsCardProps) {
   const remindersPanelId = `${id}-reminders-panel`
 
   return (
-    <DashboardCardShell className="p-0">
+    <DashboardCardShell className="crm-today-card p-0">
       <SignalsTabs
         calendarTabId={calendarTabId}
         remindersTabId={remindersTabId}
@@ -67,7 +67,7 @@ export function TodaySignalsCard({ viewModel }: TodaySignalsCardProps) {
         onSelectTab={setActiveTab}
       />
 
-      <div className="px-5 py-4">
+      <div className="px-4 py-3 md:px-5 md:py-4">
         {activeTab === 'calendar' ? (
           <CalendarSignalsPanel
             panelId={calendarPanelId}

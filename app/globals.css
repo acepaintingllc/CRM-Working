@@ -126,6 +126,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  overflow-x: hidden;
 }
 
 .crm-shell {
@@ -389,6 +390,7 @@ a {
   color: var(--crm-ui-text);
   font-family: var(--crm-ui-sans);
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
 
 .ace-crm-shell input,
@@ -495,6 +497,140 @@ a {
 .ace-crm-input:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+@media (max-width: 767px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body > div {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .ace-crm-shell {
+    background: var(--crm-ui-page);
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .ace-crm-shell > div,
+  .crm-main-column,
+  .crm-page-content,
+  .crm-mobile-topbar,
+  .crm-mobile-nav,
+  .crm-home-main,
+  .crm-home-main > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .crm-mobile-nav {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .crm-mobile-nav a {
+    max-width: calc(100vw - 28px);
+  }
+
+  .crm-home-header {
+    max-width: 100%;
+    min-width: 0;
+    border-radius: 14px;
+    padding: 12px 14px !important;
+    box-shadow: none;
+  }
+
+  .crm-home-header h1 {
+    font-size: 1.25rem;
+    letter-spacing: 0;
+    line-height: 1.1;
+  }
+
+  .crm-home-header .ace-crm-mono {
+    font-size: 0.48rem;
+    letter-spacing: 0.18em;
+  }
+
+  .crm-home-header .mb-3 {
+    margin-bottom: 0.45rem;
+  }
+
+  .crm-home-header p {
+    display: none;
+  }
+
+  .crm-home-header .ace-crm-surface-muted {
+    width: 32px;
+    height: 32px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+  }
+
+  .crm-home-header > div:last-child,
+  .crm-home-header > div:last-child > div:last-child {
+    width: 100%;
+  }
+
+  .crm-home-header > div:last-child > div:last-child {
+    display: none;
+  }
+
+  .crm-today-card [role='tablist'] {
+    gap: 0.5rem;
+    padding: 0.65rem 0.85rem 0.55rem;
+  }
+
+  .crm-today-card [role='tab'] {
+    min-height: 2rem;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.72rem;
+  }
+
+  .crm-today-card [role='tabpanel'] > .divide-y > div {
+    padding-top: 0.65rem;
+    padding-bottom: 0.65rem;
+  }
+
+  .crm-calendar-open-link {
+    display: none;
+  }
+
+  .crm-quick-actions-card {
+    max-width: 100%;
+    min-width: 0;
+    padding: 12px !important;
+    border-radius: 14px;
+  }
+
+  .crm-quick-actions-card > div:last-child {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .crm-quick-actions-card a {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .crm-quick-actions-card .mb-3 {
+    margin-bottom: 0.55rem;
+  }
+
+  .crm-quick-actions-card h3 {
+    font-size: 0.8rem;
+  }
 }
 
 
