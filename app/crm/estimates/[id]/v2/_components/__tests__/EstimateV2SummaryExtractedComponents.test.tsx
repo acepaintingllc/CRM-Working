@@ -84,7 +84,8 @@ describe('Estimate V2 summary extracted components', () => {
                 paintCost: 120,
                 suppliesCost: 40,
                 subtotal: 900,
-                hasOverride: false,
+                hasOverride: true,
+                overrideSummary: 'Override: Area: 220 sf',
                 missingProduct: false,
                 conditionSelections: {},
               },
@@ -96,7 +97,7 @@ describe('Estimate V2 summary extracted components', () => {
             roomPct: 0.21,
             totals: { labor: 8, paint: 120, supplies: 40 },
             flagsLabel: 'None',
-            alerts: { missingProduct: 0, overrides: 0, flags: 0 },
+            alerts: { missingProduct: 0, overrides: 1, flags: 0 },
             conditionBadges: [],
           }}
           open
@@ -110,6 +111,10 @@ describe('Estimate V2 summary extracted components', () => {
     expect(screen.getByText('Labor Adjustment')).toBeInTheDocument()
     expect(screen.getByText('Living Room')).toBeInTheDocument()
     expect(screen.getAllByText('$900').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Override: Area: 220 sf')).toHaveAttribute(
+      'title',
+      'Override: Area: 220 sf'
+    )
 
     const toggle = screen.getByRole('button', { name: /living room room details/i })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')

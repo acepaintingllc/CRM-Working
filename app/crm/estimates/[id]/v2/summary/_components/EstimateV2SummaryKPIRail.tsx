@@ -153,7 +153,7 @@ function kpiTitleStyle(ink3: string): CSSProperties {
 function mobilePrimaryValueStyle(colors: Colors): CSSProperties {
   return {
     fontFamily: colors.mono,
-    fontSize: 30,
+    fontSize: 24,
     lineHeight: 1,
     fontWeight: 900,
     fontVariantNumeric: 'tabular-nums',
@@ -163,7 +163,7 @@ function mobilePrimaryValueStyle(colors: Colors): CSSProperties {
 function mobileSecondaryValueStyle(colors: Colors): CSSProperties {
   return {
     fontFamily: colors.mono,
-    fontSize: 27,
+    fontSize: 22,
     lineHeight: 1,
     fontWeight: 900,
     color: colors.ink,

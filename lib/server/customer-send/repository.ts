@@ -147,3 +147,28 @@ export async function markEstimatePublicVersionSent(params: {
 
   return okResult(result.data as EstimatePublicVersionRow)
 }
+
+export async function updateEstimatePublicVersionSnapshot(params: {
+  orgId: string
+  versionId: string
+  snapshot: Record<string, unknown>
+}): Promise<ServiceResult<EstimatePublicVersionRow>> {
+  const result = await supabaseAdmin
+    .from('estimate_public_versions')
+    .update({
+      snapshot_json: params.snapshot,
+    })
+    .eq('org_id', params.orgId)
+    .eq('id', params.versionId)
+    .select('*')
+    .single()
+
+  if (result.error || !result.data) {
+    return errorResult(
+      'server_error',
+      result.error?.message ?? 'Unable to save quote PDF metadata'
+    )
+  }
+
+  return okResult(result.data as EstimatePublicVersionRow)
+}

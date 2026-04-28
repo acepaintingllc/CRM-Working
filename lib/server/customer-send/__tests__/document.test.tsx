@@ -116,6 +116,7 @@ describe('customer send document builder', () => {
         trim_items: [],
         other: [],
         jobsettings: {},
+        org_defaults: { updated_at: null },
       },
       catalogs: { paints: [] },
       settings: {

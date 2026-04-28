@@ -5,6 +5,14 @@ import { useLockBodyScroll } from '@/lib/hooks/useLockBodyScroll'
 import Link from 'next/link'
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { EllipsisVertical, FileText, Folder, FolderOpen, Star } from 'lucide-react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmField } from '@/app/crm/_components/CrmField'
+import { CrmModalHeader } from '@/app/crm/_components/CrmModalHeader'
+import { CrmModalSection } from '@/app/crm/_components/CrmModalSection'
+import { CrmModalShell } from '@/app/crm/_components/CrmModalShell'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 
 export type NotesBrowserStatus = 'active' | 'archived'
 
@@ -92,14 +100,14 @@ function OverflowMenu(props: { label: string; children: ReactNode }) {
   return (
     <details className="relative">
       <summary
-        className="flex size-9 cursor-pointer list-none items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800 [&::-webkit-details-marker]:hidden"
+        className="ace-crm-btn ace-crm-btn-secondary flex size-9 cursor-pointer list-none items-center justify-center p-0 [&::-webkit-details-marker]:hidden"
         onClick={(event) => event.stopPropagation()}
       >
         <EllipsisVertical size={16} aria-hidden="true" />
         <span className="sr-only">{props.label}</span>
       </summary>
       <div
-        className="absolute right-0 top-11 z-20 min-w-40 rounded-2xl border border-neutral-800 bg-neutral-950 p-1.5 shadow-xl"
+        className="ace-crm-surface absolute right-0 top-11 z-20 min-w-40 p-1.5 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         {props.children}
@@ -115,8 +123,8 @@ function MenuButton(props: {
 }) {
   const color =
     props.variant === 'danger'
-      ? 'text-red-300 hover:bg-red-500/10'
-      : 'text-neutral-200 hover:bg-neutral-900'
+      ? 'text-[color:var(--crm-ui-danger-text)] hover:bg-[color:var(--crm-ui-danger-bg)]'
+      : 'text-[color:var(--crm-ui-text)] hover:bg-[color:var(--crm-ui-surface-muted)]'
 
   return (
     <button
@@ -134,13 +142,16 @@ export function NotesStatusTabs(props: {
   buildHref: (status: NotesBrowserStatus) => string
 }) {
   return (
-    <div className="inline-flex rounded-2xl bg-neutral-900 p-1">
+    <div className="ace-crm-surface-muted inline-flex rounded-2xl p-1">
       {(['active', 'archived'] as NotesBrowserStatus[]).map((value) => (
         <Link
           key={value}
           href={props.buildHref(value)}
-          className={`rounded-xl px-3 py-2 text-sm font-extrabold transition ${
-            props.status === value ? 'bg-emerald-400 text-neutral-950 shadow-sm' : 'text-neutral-400'
+          aria-current={props.status === value ? 'page' : undefined}
+          className={`rounded-xl px-3 py-2 text-sm font-extrabold no-underline transition ${
+            props.status === value
+              ? 'bg-[color:var(--crm-ui-accent)] text-black shadow-sm'
+              : 'text-[color:var(--crm-ui-muted)] hover:text-[color:var(--crm-ui-text)]'
           }`}
         >
           {value === 'active' ? 'Active' : 'Archived'}
@@ -156,16 +167,9 @@ export function NotesToolbarLink(props: {
   children: ReactNode
 }) {
   return (
-    <Link
-      href={props.href}
-      className={`inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-extrabold transition ${
-        props.primary
-          ? 'bg-emerald-400 text-neutral-950 hover:bg-emerald-300'
-          : 'border border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-600 hover:bg-neutral-800'
-      }`}
-    >
+    <CrmButton href={props.href} tone={props.primary ? 'primary' : 'secondary'}>
       {props.children}
-    </Link>
+    </CrmButton>
   )
 }
 
@@ -188,10 +192,10 @@ export function FolderTile(props: {
 
   return (
     <article
-      className={`relative rounded-[28px] border bg-neutral-950 p-5 shadow-sm transition ${
+      className={`ace-crm-surface relative p-5 transition ${
         props.selected
-          ? 'border-emerald-400/60 ring-2 ring-emerald-400/20'
-          : 'border-neutral-800 hover:border-neutral-700'
+          ? 'border-[color:var(--crm-ui-accent-border)] ring-2 ring-[color:var(--crm-ui-accent-border)]'
+          : 'hover:border-[color:var(--crm-ui-accent-border)]'
       }`}
     >
       <div className="absolute right-4 top-4">
@@ -218,23 +222,23 @@ export function FolderTile(props: {
         className="grid gap-4 pr-12 text-left"
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="inline-flex size-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300">
+          <div className="ace-crm-surface-muted inline-flex size-14 items-center justify-center text-[color:var(--crm-ui-accent)]">
             {props.selected ? <FolderOpen size={28} aria-hidden="true" /> : <Folder size={28} aria-hidden="true" />}
           </div>
-          <div className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs font-bold text-neutral-500">
+          <CrmChip className="text-xs">
             {props.noteCount} {props.noteCount === 1 ? 'note' : 'notes'}
-          </div>
+          </CrmChip>
         </div>
 
         <div>
-          <h3 className="text-lg font-extrabold text-white">{props.folder.name}</h3>
-          <p className="mt-1 text-sm text-neutral-400">
+          <h3 className="text-lg font-extrabold text-[color:var(--crm-ui-text)]">{props.folder.name}</h3>
+          <p className="mt-1 text-sm text-[color:var(--crm-ui-muted)]">
             {props.latestNote
               ? `Last updated ${formatNoteTimestamp(props.latestNote.updated_at)}`
               : 'No notes in this view yet.'}
           </p>
           {props.latestNote && (
-            <p className="mt-2 line-clamp-2 text-sm text-neutral-500">
+            <p className="mt-2 line-clamp-2 text-sm text-[color:var(--crm-ui-muted)]">
               {props.latestNote.title}: {noteSnippet(props.latestNote.body)}
             </p>
           )}
@@ -243,22 +247,22 @@ export function FolderTile(props: {
 
       {props.manageMode && (
         <div className="mt-4 flex gap-2">
-          <button
+          <CrmButton
             type="button"
             onClick={props.onMoveUp}
             disabled={!props.canMoveUp}
-            className="rounded-xl border border-neutral-700 px-3 py-2 text-xs font-bold text-neutral-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="px-3 py-2 text-xs"
           >
             Move Up
-          </button>
-          <button
+          </CrmButton>
+          <CrmButton
             type="button"
             onClick={props.onMoveDown}
             disabled={!props.canMoveDown}
-            className="rounded-xl border border-neutral-700 px-3 py-2 text-xs font-bold text-neutral-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="px-3 py-2 text-xs"
           >
             Move Down
-          </button>
+          </CrmButton>
         </div>
       )}
     </article>
@@ -276,10 +280,10 @@ export function NotePreviewCard(props: {
 
   return (
     <article
-      className={`rounded-[24px] border bg-neutral-950 p-4 shadow-sm transition ${
+      className={`ace-crm-surface p-4 transition ${
         props.selected
-          ? 'border-emerald-400/60 ring-2 ring-emerald-400/20'
-          : 'border-neutral-800 hover:border-neutral-700'
+          ? 'border-[color:var(--crm-ui-accent-border)] ring-2 ring-[color:var(--crm-ui-accent-border)]'
+          : 'hover:border-[color:var(--crm-ui-accent-border)]'
       }`}
     >
       <div
@@ -297,33 +301,27 @@ export function NotePreviewCard(props: {
         className="grid gap-3 text-left"
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="inline-flex size-10 items-center justify-center rounded-2xl bg-neutral-900 text-neutral-400">
+          <div className="ace-crm-surface-muted inline-flex size-10 items-center justify-center text-[color:var(--crm-ui-muted)]">
             <FileText size={22} aria-hidden="true" />
           </div>
-          <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <div className="flex items-center gap-2 text-xs text-[color:var(--crm-ui-muted)]">
             {props.note.starred && <Star size={14} className="fill-current text-amber-500" aria-hidden="true" />}
             <span>{formatNoteTimestamp(props.note.updated_at)}</span>
           </div>
         </div>
 
         <div>
-          <h3 className="text-sm font-extrabold text-white">{props.note.title}</h3>
-          <p className="mt-1 line-clamp-2 text-sm text-neutral-400">{noteSnippet(props.note.body)}</p>
+          <h3 className="text-sm font-extrabold text-[color:var(--crm-ui-text)]">{props.note.title}</h3>
+          <p className="mt-1 line-clamp-2 text-sm text-[color:var(--crm-ui-muted)]">{noteSnippet(props.note.body)}</p>
         </div>
 
-        <div className="flex flex-wrap gap-2 text-xs font-semibold text-neutral-500">
+        <div className="flex flex-wrap gap-2 text-xs font-semibold text-[color:var(--crm-ui-muted)]">
           {props.contextLabel && (
-            <span className="rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-1">{props.contextLabel}</span>
+            <CrmChip className="text-xs">{props.contextLabel}</CrmChip>
           )}
-          <span
-            className={`rounded-full px-2.5 py-1 ${
-              props.note.status === 'archived'
-                ? 'bg-neutral-800 text-neutral-400'
-                : 'bg-emerald-500/10 text-emerald-300'
-            }`}
-          >
+          <CrmChip tone={props.note.status === 'archived' ? 'default' : 'accent'} className="text-xs">
             {props.note.status === 'archived' ? 'Archived' : 'Active'}
-          </span>
+          </CrmChip>
         </div>
       </div>
     </article>
@@ -362,74 +360,78 @@ export function FolderActionModal(props: {
   }, [onClose, open])
 
   if (!open || !props.mode) return null
+  const labelledBy = 'notes-folder-action-title'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-lg rounded-[28px] border border-neutral-800 bg-neutral-950 p-5 shadow-2xl">
+    <CrmModalShell labelledBy={labelledBy} onClose={props.onClose} widthClassName="max-w-lg">
+      <div className="max-h-[88vh] overflow-auto">
         {props.mode === 'rename' && (
           <>
-            <div>
-              <h2 className="text-xl font-extrabold text-white">Rename Folder</h2>
-              <p className="mt-1 text-sm text-neutral-400">Update the folder name without changing its notes.</p>
-            </div>
-            <div className="mt-4 grid gap-2">
-              <label className="grid gap-1 text-sm font-semibold text-neutral-300">
-                Folder name
+            <CrmModalHeader
+              title="Rename Folder"
+              description="Update the folder name without changing its notes."
+              labelledBy={labelledBy}
+              onClose={props.onClose}
+              closeLabel="Close folder rename"
+            />
+            <CrmModalSection className="m-5" title="Folder name">
+              <CrmField label="Folder name">
                 <input
                   value={props.renameValue}
                   onChange={(event) => props.onRenameValueChange(event.target.value)}
-                  className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                  className={crmInputClassName()}
                 />
-              </label>
-            </div>
+              </CrmField>
+            </CrmModalSection>
           </>
         )}
 
         {props.mode === 'delete_choice' && (
           <>
-            <div>
-              <h2 className="text-xl font-extrabold text-white">Delete Folder</h2>
-              <p className="mt-1 text-sm text-neutral-400">
-                &quot;{props.folderName}&quot; still contains {props.noteCount}{' '}
-                {props.noteCount === 1 ? 'note' : 'notes'}.
-              </p>
-            </div>
-            <div className="mt-4 grid gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/60 p-4">
-              <button
-                type="button"
-                onClick={props.onChooseUncategorize}
-                disabled={props.saving}
-                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 disabled:opacity-60"
-              >
-                Move notes to Uncategorized
-              </button>
-              <button
-                type="button"
-                onClick={props.onChooseMove}
-                disabled={props.saving}
-                className="rounded-2xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm font-extrabold text-neutral-200 disabled:opacity-60"
-              >
-                Move notes into another folder
-              </button>
-            </div>
+            <CrmModalHeader
+              title="Delete Folder"
+              description={`"${props.folderName}" still contains ${props.noteCount} ${props.noteCount === 1 ? 'note' : 'notes'}.`}
+              labelledBy={labelledBy}
+              onClose={props.onClose}
+              closeLabel="Close folder delete"
+            />
+            <CrmModalSection className="m-5" tone="muted">
+              <div className="grid gap-3">
+                <CrmButton
+                  type="button"
+                  onClick={props.onChooseUncategorize}
+                  disabled={props.saving}
+                  tone="primary"
+                >
+                  Move notes to Uncategorized
+                </CrmButton>
+                <CrmButton
+                  type="button"
+                  onClick={props.onChooseMove}
+                  disabled={props.saving}
+                >
+                  Move notes into another folder
+                </CrmButton>
+              </div>
+            </CrmModalSection>
           </>
         )}
 
         {props.mode === 'delete_move' && (
           <>
-            <div>
-              <h2 className="text-xl font-extrabold text-white">Move Notes Before Delete</h2>
-              <p className="mt-1 text-sm text-neutral-400">
-                Choose where to move notes from &quot;{props.folderName}&quot; before the folder is deleted.
-              </p>
-            </div>
-            <div className="mt-4 grid gap-2">
-              <label className="grid gap-1 text-sm font-semibold text-neutral-300">
-                Destination folder
+            <CrmModalHeader
+              title="Move Notes Before Delete"
+              description={`Choose where to move notes from "${props.folderName}" before the folder is deleted.`}
+              labelledBy={labelledBy}
+              onClose={props.onClose}
+              closeLabel="Close folder move"
+            />
+            <CrmModalSection className="m-5" title="Destination folder">
+              <CrmField label="Destination folder">
                 <select
                   value={props.selectedMoveTargetId}
                   onChange={(event) => props.onSelectedMoveTargetIdChange(event.target.value)}
-                  className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+                  className={crmInputClassName()}
                 >
                   <option value="">Select a folder</option>
                   {props.availableMoveTargets.map((folder) => (
@@ -438,48 +440,49 @@ export function FolderActionModal(props: {
                     </option>
                   ))}
                 </select>
-              </label>
-            </div>
+              </CrmField>
+            </CrmModalSection>
           </>
         )}
 
         {props.error && (
-          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-            {props.error}
+          <div className="px-5">
+            <CrmNotice tone="error" compact>
+              {props.error}
+            </CrmNotice>
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[color:var(--crm-ui-border)] px-5 py-4">
+          <CrmButton
             type="button"
             onClick={props.onClose}
             disabled={props.saving}
-            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-bold text-neutral-200 disabled:opacity-60"
           >
             Cancel
-          </button>
+          </CrmButton>
           {props.mode === 'rename' && (
-            <button
+            <CrmButton
               type="button"
               onClick={props.onSubmitRename}
               disabled={props.saving}
-              className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 disabled:opacity-60"
+              tone="primary"
             >
               {props.saving ? 'Saving...' : 'Save Name'}
-            </button>
+            </CrmButton>
           )}
           {props.mode === 'delete_move' && (
-            <button
+            <CrmButton
               type="button"
               onClick={props.onSubmitMove}
               disabled={props.saving}
-              className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+              tone="danger"
             >
               {props.saving ? 'Deleting...' : 'Move Notes and Delete'}
-            </button>
+            </CrmButton>
           )}
         </div>
       </div>
-    </div>
+    </CrmModalShell>
   )
 }

@@ -63,9 +63,10 @@ export function NotesOverlayShell(props: OverlayShellProps) {
           <button
             type="button"
             onClick={props.onClose}
-            className="inline-flex size-10 items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800 hover:text-white"
+            aria-label="Close composer"
+            className="crm-modal-close-button inline-flex size-12 shrink-0 items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800 hover:text-white"
           >
-            <X size={18} aria-hidden="true" />
+            <X size={24} strokeWidth={2.5} aria-hidden="true" />
           </button>
         </header>
         <div className="overflow-y-auto">{props.children}</div>

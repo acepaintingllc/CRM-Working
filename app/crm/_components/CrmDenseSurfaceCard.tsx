@@ -29,7 +29,7 @@ export function CrmDenseSurfaceCard({
     : ''
 
   return (
-    <div className={`${baseClassName} rounded-[18px] px-4 py-4 ${interactiveClassName} ${className}`.trim()}>
+    <div className={`${baseClassName} crm-contained-surface rounded-[18px] px-4 py-4 ${interactiveClassName} ${className}`.trim()}>
       {title ? (
         <CrmDenseSectionHeader
           title={title}

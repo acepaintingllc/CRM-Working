@@ -123,6 +123,30 @@ export function buildActivityJobs(jobs: DashboardJob[], limit = 8) {
   return jobs.slice(0, limit)
 }
 
+function parseJobDate(value: string | null | undefined) {
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+export function buildCurrentJobs(jobs: DashboardJob[], now: Date, lookaheadDays = 2, limit = 4) {
+  const windowEnd = new Date(now)
+  windowEnd.setDate(windowEnd.getDate() + lookaheadDays)
+
+  return jobs
+    .filter((job) => job.status !== 'completed' && job.status !== 'lost')
+    .map((job) => ({
+      job,
+      start: parseJobDate(job.scheduled_date),
+      end: parseJobDate(job.scheduled_end_date),
+    }))
+    .filter((item): item is { job: DashboardJob; start: Date; end: Date | null } => item.start != null)
+    .filter((item) => item.start <= windowEnd || (item.end != null && item.end >= now))
+    .sort((left, right) => left.start.getTime() - right.start.getTime())
+    .slice(0, limit)
+    .map((item) => item.job)
+}
+
 export function createCrmHomeData({
   jobs,
   customers,
@@ -143,6 +167,7 @@ export function createCrmHomeData({
     customers,
     metrics: buildCrmHomeMetrics(jobs),
     activityJobs: buildActivityJobs(jobs),
+    currentJobs: buildCurrentJobs(jobs, now),
     signals: {
       calendarConnected,
       calendarTodayEvents,

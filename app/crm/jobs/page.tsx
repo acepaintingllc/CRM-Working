@@ -38,7 +38,8 @@ import {
 } from 'lucide-react'
 
 const iconSizeSm = 16
-const iconSizeMd = 18
+const headerActionClassName =
+  'min-h-0 justify-center rounded-[10px] px-2.5 py-1.5 text-xs max-[420px]:px-2 max-[420px]:text-[11px] sm:min-h-11 sm:px-4 sm:py-2 sm:text-sm'
 
 function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
   return (
@@ -107,6 +108,9 @@ export default function JobsPage() {
 
   const actionTone = (action: JobWorkflowResolvedAction) =>
     action.tone === 'accent' ? 'primary' : action.tone === 'danger' ? 'danger' : 'secondary'
+  const boardColumns = compactActions
+    ? visibleColumns.filter((column) => column.key !== 'follow_up')
+    : visibleColumns
 
   const actionIcon = (action: JobWorkflowResolvedAction) => {
     switch (action.id) {
@@ -195,18 +199,20 @@ export default function JobsPage() {
         title="Jobs"
         description="Track every job through your pipeline from estimate to completion with one operational board."
         badge={<CrmChip tone="accent">Board workflow</CrmChip>}
+        className="max-sm:px-3 max-sm:py-3 max-sm:[&_.ace-crm-mono]:text-[9px] max-sm:[&_.ace-crm-surface-muted]:h-8 max-sm:[&_.ace-crm-surface-muted]:w-8 max-sm:[&_.ace-crm-surface-muted]:text-base max-sm:[&_h1]:text-[1.45rem] max-sm:[&_h1]:tracking-normal max-sm:[&_p]:hidden"
         actions={
-          <>
+          <div className="grid w-full grid-cols-2 gap-1.5 min-[420px]:grid-cols-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-2">
             <CrmButton
               type="button"
               onClick={() => setShowEmptyStages((prev) => !prev)}
               aria-label={showEmptyStages ? 'Hide empty stages' : 'Show empty stages'}
               tone={showEmptyStages ? 'primary' : 'secondary'}
+              className={headerActionClassName}
             >
               {iconLabel(
                 ChevronDown,
                 showEmptyStages ? 'Hide empty stages' : 'Show empty stages',
-                iconSizeMd
+                iconSizeSm
               )}
             </CrmButton>
             <CrmButton
@@ -214,29 +220,37 @@ export default function JobsPage() {
               onClick={() => setShowCompleted((prev) => !prev)}
               aria-label={showCompleted ? 'Hide completed jobs' : 'Show completed jobs'}
               tone={showCompleted ? 'primary' : 'secondary'}
+              className={headerActionClassName}
             >
-              {iconLabel(CheckCircle2, showCompleted ? 'Hide completed' : 'Show completed', iconSizeMd)}
+              {iconLabel(CheckCircle2, showCompleted ? 'Hide completed' : 'Show completed', iconSizeSm)}
             </CrmButton>
             <CrmButton
               type="button"
               onClick={() => setShowLost((prev) => !prev)}
               aria-label={showLost ? 'Hide lost jobs' : 'Show lost jobs'}
               tone={showLost ? 'primary' : 'secondary'}
+              className={headerActionClassName}
             >
-              {iconLabel(XCircle, showLost ? 'Hide lost' : 'Show lost', iconSizeMd)}
+              {iconLabel(XCircle, showLost ? 'Hide lost' : 'Show lost', iconSizeSm)}
             </CrmButton>
             <CrmButton
               type="button"
               onClick={() => void load()}
               aria-label="Refresh jobs"
               tone="secondary"
+              className={headerActionClassName}
             >
-              {iconLabel(RefreshCw, 'Refresh', iconSizeMd)}
+              {iconLabel(RefreshCw, 'Refresh', iconSizeSm)}
             </CrmButton>
-            <CrmButton href="/crm/jobs/new" tone="primary" className="no-underline" aria-label="Add job">
-              {iconLabel(Plus, 'Add job', iconSizeMd)}
+            <CrmButton
+              href="/crm/jobs/new"
+              tone="primary"
+              className={`${headerActionClassName} no-underline`}
+              aria-label="Add job"
+            >
+              {iconLabel(Plus, 'Add job', iconSizeSm)}
             </CrmButton>
-          </>
+          </div>
         }
       />
 
@@ -253,11 +267,11 @@ export default function JobsPage() {
             className={`grid gap-3 ${compactActions ? 'min-w-max' : ''}`}
             style={{
               gridTemplateColumns: compactActions
-                ? `repeat(${Math.max(1, visibleColumns.length)}, minmax(200px, 1fr))`
-                : `repeat(${Math.max(1, visibleColumns.length)}, minmax(0, 1fr))`,
+                ? `repeat(${Math.max(1, boardColumns.length)}, minmax(200px, 1fr))`
+                : `repeat(${Math.max(1, boardColumns.length)}, minmax(0, 1fr))`,
             }}
           >
-            {visibleColumns.map((col) => (
+            {boardColumns.map((col) => (
               <CrmSectionCard
                 key={col.key}
                 className="bg-[color:var(--crm-ui-surface)]/95 p-2.5 backdrop-blur"

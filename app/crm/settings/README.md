@@ -7,11 +7,12 @@ This settings slice is organized around explicit domains rather than page-local 
 - `company profile`
   Canonical business identity and sender defaults used in customer-facing flows.
 - `quote send defaults`
-  Defaults used by the quote send/review flow and customer-facing quote documents.
+  Defaults used by the Quote V2 send/review flow and customer-facing quote documents.
 - `integrations`
   Navigation surface for provider setup and diagnostics, not a persisted settings blob.
 
 Quote creation defaults are exposed through `/api/settings/quote-defaults` and back the Quotes defaults UI directly.
+Quote V2 customer document settings live at `/crm/settings/quote-v2`.
 
 ## Route Contracts
 

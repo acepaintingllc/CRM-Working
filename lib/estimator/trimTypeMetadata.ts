@@ -75,6 +75,14 @@ function includesAny(text: string, terms: string[]) {
   return terms.some((term) => text.includes(term))
 }
 
+function hasBaseTrimTerm(text: string) {
+  const spaced = text.replace(/[_-]+/g, ' ')
+  return (
+    includesAny(spaced, ['baseboard', 'base board', 'base molding', 'shoe', 'quarter round']) ||
+    spaced.split(/\s+/).includes('base')
+  )
+}
+
 function inferCategory(input: TrimTypeMetadataInput): EstimateV2TrimCategory {
   const text = [
     input.id,
@@ -86,7 +94,7 @@ function inferCategory(input: TrimTypeMetadataInput): EstimateV2TrimCategory {
     .map(lower)
     .join(' ')
 
-  if (includesAny(text, ['baseboard', 'base board', 'shoe', 'quarter round', 'quarter-round'])) {
+  if (hasBaseTrimTerm(text)) {
     return 'base'
   }
   if (text.includes('crown')) return 'crown'
@@ -132,4 +140,8 @@ export function inferTrimTypeMetadata(input: TrimTypeMetadataInput): TrimTypeMet
     measurement_class: measurementClass,
     picker_group: pickerGroup,
   }
+}
+
+export function isBaseTrimType(input: TrimTypeMetadataInput) {
+  return inferTrimTypeMetadata(input).trim_category === 'base'
 }

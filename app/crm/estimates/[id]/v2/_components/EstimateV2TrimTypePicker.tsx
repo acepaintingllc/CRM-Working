@@ -235,20 +235,23 @@ export function EstimateV2TrimTypePicker({
       {/* Dropdown */}
       {isOpen && (
         <div
+          className="trim-type-picker-dropdown"
           style={{
             position: 'absolute',
             top: '100%',
             left: 0,
-            right: 0,
             zIndex: 100,
             marginTop: 4,
             background: '#1a1a1a',
             border: '1px solid var(--v2-line)',
             borderRadius: 8,
-            maxHeight: 400,
+            width: 'min(640px, calc(100vw - 32px))',
+            minWidth: 'max(360px, 100%)',
+            maxHeight: 'min(620px, calc(100vh - 140px))',
             display: 'flex',
             flexDirection: 'column',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            overflow: 'hidden',
           }}
         >
           {/* Search input */}
@@ -303,7 +306,7 @@ export function EstimateV2TrimTypePicker({
           </div>
 
           {/* Options list */}
-          <div style={{ overflowY: 'auto', flex: 1 }}>
+          <div style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
             {grouped.length === 0 ? (
               <div
                 style={{
@@ -345,10 +348,10 @@ export function EstimateV2TrimTypePicker({
                         style={{
                           display: 'flex',
                           justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: 8,
+                          alignItems: 'flex-start',
+                          gap: 14,
                           width: '100%',
-                          padding: '8px 10px',
+                          padding: '12px 14px',
                           border: 'none',
                           borderBottom: '1px solid var(--v2-line)',
                           background: isSelected
@@ -373,9 +376,9 @@ export function EstimateV2TrimTypePicker({
                           <div
                             style={{
                               fontWeight: isSelected ? 700 : 400,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
+                              overflowWrap: 'anywhere',
+                              whiteSpace: 'normal',
+                              lineHeight: 1.25,
                             }}
                           >
                             {opt.label || opt.id}
@@ -387,6 +390,7 @@ export function EstimateV2TrimTypePicker({
                               color: 'var(--v2-ink-3)',
                               display: 'flex',
                               gap: 8,
+                              flexWrap: 'wrap',
                               marginTop: 2,
                             }}
                           >

@@ -919,6 +919,57 @@ test('buildOverlayFromRows expands condition modifier scope checkboxes', () => {
   assert.equal(overlay.condition_modifiers[1].levels.moderate, 1.1)
 })
 
+test('buildOverlayFromRows keeps scoped condition modifiers with blank factors as no-op modifiers', () => {
+  const overlay = _test.buildOverlayFromRows({
+    templateVersion: 3,
+    rows: [
+      {
+        id: 'row-condition',
+        org_id: 'org-1',
+        template_id: 'tmpl-1',
+        category_key: 'condition_modifiers',
+        row_id: 'DARK_COLOR',
+        display_name: 'Dark / difficult color',
+        active: 'Y',
+        sort_order: 0,
+        values_json: {
+          id: 'DARK_COLOR',
+          display_name: 'Dark / difficult color',
+          scope: 'wall,ceiling,trim',
+          modifier_type: 'severity',
+          minor_factor: '',
+          moderate_factor: '',
+          major_factor: '',
+        },
+      },
+      {
+        id: 'row-binary',
+        org_id: 'org-1',
+        template_id: 'tmpl-1',
+        category_key: 'condition_modifiers',
+        row_id: 'ROOM_FURNISHED',
+        display_name: 'Room is furnished',
+        active: 'Y',
+        sort_order: 1,
+        values_json: {
+          id: 'ROOM_FURNISHED',
+          display_name: 'Room is furnished',
+          scope: 'room',
+          modifier_type: 'binary',
+          active_factor: '',
+        },
+      },
+    ],
+  })
+
+  assert.deepEqual(
+    overlay.condition_modifiers.map((row) => `${row.id}:${row.scope}`),
+    ['DARK_COLOR:wall', 'DARK_COLOR:ceiling', 'DARK_COLOR:trim', 'ROOM_FURNISHED:room']
+  )
+  assert.deepEqual(overlay.condition_modifiers[0].levels, { minor: 1, moderate: 1, major: 1 })
+  assert.deepEqual(overlay.condition_modifiers[3].levels, { active: 1 })
+})
+
 test('ensureTemplateState creates an empty template on first access', async () => {
   const calls: string[] = []
   const fakeSupabase = {

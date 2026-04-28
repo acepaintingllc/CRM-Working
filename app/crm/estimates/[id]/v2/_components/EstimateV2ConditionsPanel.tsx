@@ -41,8 +41,28 @@ export function EstimateV2ConditionsPanel({
     )
   }
 
+  const conditionGridStyle: CSSProperties = {
+    display: 'grid',
+    gap: 12,
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))',
+    alignItems: 'start',
+  }
+
+  const conditionItemStyle: CSSProperties = {
+    display: 'grid',
+    gap: 6,
+    minWidth: 0,
+  }
+
+  const levelGridStyle: CSSProperties = {
+    display: 'grid',
+    gap: 6,
+    gridTemplateColumns: 'repeat(auto-fit, minmax(72px, max-content))',
+    alignItems: 'center',
+  }
+
   const content = (
-    <div style={{ display: 'grid', gap: 10 }}>
+    <div style={conditionGridStyle}>
       {rows.map((condition) => {
         const current = selections[condition.id]
         if (condition.modifier_type === 'binary') {
@@ -50,9 +70,10 @@ export function EstimateV2ConditionsPanel({
             <label
               key={condition.id}
               style={{
-                display: 'flex',
+                ...conditionItemStyle,
+                gridTemplateColumns: 'auto minmax(0, 1fr)',
                 alignItems: 'center',
-                gap: 10,
+                columnGap: 10,
                 color: 'var(--v2-ink)',
                 fontSize: 'calc(13px + 4pt)',
               }}
@@ -67,11 +88,11 @@ export function EstimateV2ConditionsPanel({
           )
         }
         return (
-          <div key={condition.id} style={{ display: 'grid', gap: 6 }}>
+          <div key={condition.id} style={conditionItemStyle}>
             <div style={{ color: 'var(--v2-ink)', fontSize: 'calc(13px + 4pt)', fontWeight: 700 }}>
               {condition.label}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <div style={levelGridStyle}>
               {LEVELS.map((level) => {
                 const active = (level.value === 'none' && !current) || current === level.value
                 return (

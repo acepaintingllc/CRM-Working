@@ -17,6 +17,7 @@ import {
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import { EstimateV2TrimTypePicker } from './EstimateV2TrimTypePicker'
+import { isBaseTrimType } from '@/lib/estimator/trimTypeMetadata'
 import type { EstimateV2TrimMeasurementMode as TrimMeasurementMode } from '@/types/estimator/v2'
 
 type EditorStyles = Record<string, CSSProperties>
@@ -97,14 +98,15 @@ export function EstimateV2TrimSectionBody({
         const helperEligible = selectedRoomResolvedMode === 'RECT' && !!typeMeta?.helper_allowed
         const isBaseboardLf =
           trimScope.unitType === 'LF' &&
-          [
-            typeMeta?.family,
-            typeMeta?.category,
-            typeMeta?.label,
-            trimScope.trimFamily,
-            trimScope.scopeName,
-            trimScope.trimTypeId,
-          ].some((value) => String(value ?? '').toLowerCase().includes('baseboard'))
+          isBaseTrimType({
+            id: trimScope.trimTypeId,
+            label: typeMeta?.label ?? trimScope.scopeName,
+            family: typeMeta?.family ?? trimScope.trimFamily,
+            category: typeMeta?.category,
+            trimCategory: typeMeta?.trim_category,
+            pickerGroup: typeMeta?.picker_group,
+            unitType: trimScope.unitType,
+          })
         const rowMeasurement = trimScopeEffectiveMeasurementById.get(trimScope.id)
         const rowSubtotal = trimScopeEffectiveTotalById.get(trimScope.id)
         const helperValue =
@@ -181,7 +183,7 @@ export function EstimateV2TrimSectionBody({
               ]}
             />
 
-            <div className="paint-setup-grid">
+            <div className="trim-setup-grid">
               <Field label="Trim Type" styles={sharedStyles(styles)}>
                 <RequiredInputFrame>
                   <EstimateV2TrimTypePicker
@@ -266,20 +268,38 @@ export function EstimateV2TrimSectionBody({
                   </OptionalInputFrame>
                 </Field>
               )}
-              <Field label="Primer Mode" styles={sharedStyles(styles)}>
-                <RequiredInputFrame>
-                  <PrimerModeButtons
-                    currentMode={trimScope.primeMode}
-                    onChange={(mode) =>
-                      updateScope(trimScope.id, {
-                        primeMode: mode,
-                        primerProductId: mode === 'NONE' ? '' : trimScope.primerProductId,
-                      })
-                    }
-                    styles={{ button: styles.button }}
-                  />
-                </RequiredInputFrame>
-              </Field>
+              <div className="trim-primer-mode-field">
+                <Field label="Primer Mode" styles={sharedStyles(styles)}>
+                  <RequiredInputFrame>
+                    <PrimerModeButtons
+                      currentMode={trimScope.primeMode}
+                      onChange={(mode) =>
+                        updateScope(trimScope.id, {
+                          primeMode: mode,
+                          primerProductId: mode === 'NONE' ? '' : trimScope.primerProductId,
+                        })
+                      }
+                      styles={{ button: styles.button }}
+                    />
+                  </RequiredInputFrame>
+                </Field>
+              </div>
+              {trimScope.primeMode === 'SPOT' && (
+                <Field label="Spot Primer %" styles={sharedStyles(styles)}>
+                  <OptionalInputFrame>
+                    <input
+                      value={trimScope.spotPrimePercent}
+                      onChange={(e) => updateScope(trimScope.id, { spotPrimePercent: e.target.value })}
+                      style={styles.input}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      placeholder="0 - 100"
+                    />
+                  </OptionalInputFrame>
+                </Field>
+              )}
             </div>
 
             <Advanced styles={sharedStyles(styles)}>

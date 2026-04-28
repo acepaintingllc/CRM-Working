@@ -106,6 +106,7 @@ export const quoteHomeBootstrap: QuoteHomeBootstrapReadModel = {
   },
   selected_job_id: 'job-1',
   selected_job_versions: quoteHomeJob1Versions,
+  latest_version: quoteHomeJob1Versions.items[0] ?? null,
 }
 
 export const quoteHomeEmptyBootstrap: QuoteHomeBootstrapReadModel = {
@@ -124,6 +125,7 @@ export const quoteHomeEmptyBootstrap: QuoteHomeBootstrapReadModel = {
   },
   selected_job_id: null,
   selected_job_versions: null,
+  latest_version: null,
 }
 
 export function makeQuoteHomeSearchResult(

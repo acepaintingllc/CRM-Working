@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QuotesHomeCreatePanel } from '../QuotesHomeCreatePanel'
 import { QuotesHomeDeleteDialog } from '../QuotesHomeDeleteDialog'
 import { QuotesHomeJobList } from '../QuotesHomeJobList'
-import { QuotesHomeSelectedJobPanel } from '../QuotesHomeSelectedJobPanel'
+import {
+  QuotesHomeSelectedJobPanel,
+  QuotesHomeSelectedJobResponsivePanel,
+} from '../QuotesHomeSelectedJobPanel'
 import { QuotesHomeSummaryCards } from '../QuotesHomeSummaryCards'
 import { QuotesHomeVersionList } from '../QuotesHomeVersionList'
 import { QUOTES_HOME_JOB_LIST_NO_JOBS_BODY } from '../quoteHomePresentation'
@@ -753,6 +756,7 @@ describe('Quotes home panels', () => {
     expect(screen.getByText('...')).toBeInTheDocument()
     expect(screen.queryByText('1')).not.toBeInTheDocument()
     expect(screen.getByText('1 draft version')).toBeInTheDocument()
+    expect(document.querySelector('.quotes-home-summary-card')).not.toBeNull()
   })
 
   it('owns the selected-job stats grid locally and no longer uses the page-injected class', () => {
@@ -781,5 +785,51 @@ describe('Quotes home panels', () => {
       document.querySelector('.quotes-home-selected-job-stats'),
     ).not.toBeNull()
     expect(document.querySelector('.v2-hub-job-stats')).toBeNull()
+  })
+
+  it('shows selected-job details in a modal on mobile', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(max-width: 900px)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+
+    render(
+      <QuotesHomeSelectedJobResponsivePanel
+        vm={{
+          loading: false,
+          emptyMessage: null,
+          title: 'Kitchen Remodel',
+          customerLine: 'Alice / 123 Main',
+          jobHref: '/crm/jobs/job-1',
+          stats: [
+            { label: 'Customer', value: 'Alice' },
+            { label: 'Job Status', value: 'Estimate Pending' },
+            { label: 'Versions', value: '2' },
+          ],
+        }}
+      />,
+    )
+
+    const infoButton = await screen.findByRole('button', {
+      name: 'View selected job info',
+    })
+    fireEvent.click(infoButton)
+
+    expect(
+      screen.getByRole('dialog', { name: 'Kitchen Remodel' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open job' })).toHaveAttribute(
+      'href',
+      '/crm/jobs/job-1',
+    )
   })
 })

@@ -267,11 +267,11 @@ describe('customer send context loader', () => {
           business_name: '',
           timezone: 'America/Chicago',
         }),
-        quoteDefaults: {
+        quoteDefaults: expect.objectContaining({
           default_template_key: 'default',
           quote_validity_days: 90,
           terms_text: '',
-        },
+        }),
         catalogs: null,
       })
     )

@@ -54,6 +54,20 @@ type ActivityItemVm = {
   status: string | null
 }
 
+type CurrentJobItemVm = {
+  id: string
+  href: string
+  title: string
+  customerName: string
+  scheduleLabel: string
+  status: string | null
+}
+
+type CurrentJobsCardVm = {
+  items: CurrentJobItemVm[]
+  isEmpty: boolean
+}
+
 type ActivityCardVm = {
   items: ActivityItemVm[]
   isEmpty: boolean
@@ -129,6 +143,7 @@ export type CrmHomePageViewModel = {
   topBar: HomeTopBarVm
   statusBanner: HomeStatusBannerVm | null
   metrics: HomeMetricsVm
+  currentJobs: CurrentJobsCardVm
   activity: ActivityCardVm
   signals: HomeSignalsVm
   quickActions: HomeQuickActionsVm
@@ -194,6 +209,22 @@ function buildActivityVm(
     tasksHref: '/crm/notes/tasks',
     viewAllHref: data.jobs.length > items.length ? '/crm/jobs' : null,
     viewAllLabel: data.jobs.length > items.length ? `View all ${data.jobs.length} jobs` : null,
+  }
+}
+
+function buildCurrentJobsVm(data: CrmHomeData): CurrentJobsCardVm {
+  const items = data.currentJobs.map((job) => ({
+    id: job.id,
+    href: `/crm/jobs/${job.id}`,
+    title: job.title ?? 'Untitled job',
+    customerName: job.customer_name ?? 'No customer',
+    scheduleLabel: formatEventWindow(job.scheduled_date ?? null, job.scheduled_end_date ?? null),
+    status: job.status,
+  }))
+
+  return {
+    items,
+    isEmpty: items.length === 0,
   }
 }
 
@@ -292,6 +323,7 @@ export function buildCrmHomePageViewModel(params: {
         !summary.isInitialLoading &&
         (sources.jobs.status === 'error' || sources.jobs.status === 'degraded'),
     },
+    currentJobs: buildCurrentJobsVm(data),
     activity: buildActivityVm(data, sources, summary),
     signals: buildSignalsVm(data, sources),
     quickActions: buildQuickActionsVm(),

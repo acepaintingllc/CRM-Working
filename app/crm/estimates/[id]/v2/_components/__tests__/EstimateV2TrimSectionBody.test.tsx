@@ -162,4 +162,76 @@ describe('EstimateV2TrimSectionBody', () => {
 
     expect(screen.getByText('Measurement (LF)').nextElementSibling).toHaveClass('optional-input-frame')
   })
+
+  it('shows openings for base trim catalog codes', () => {
+    render(
+      <EstimateV2TrimSectionBody
+        styles={styles}
+        trimVm={
+          makeVm({
+            selectedRoomTrimScopes: [
+              {
+                ...trimScope,
+                scopeName: 'Base',
+                trimTypeId: 'BASE_STD_LF',
+                trimFamily: 'BASE',
+              },
+            ],
+            trimTypeOptions: [
+              {
+                id: 'BASE_STD_LF',
+                label: 'Base Molding',
+                family: 'BASE',
+                category: 'BASE',
+                unit_type: 'LF',
+                helper_allowed: true,
+              },
+            ],
+          }) as never
+        }
+        openTrimAdvanced={{}}
+        setOpenTrimAdvanced={vi.fn()}
+        toDisplayNumber={(value) => (value == null ? '--' : String(value))}
+      />
+    )
+
+    expect(screen.getByText('Openings').nextElementSibling).toHaveClass('optional-input-frame')
+  })
+
+  it('shows spot primer percent only for spot primer mode', () => {
+    const { rerender } = render(
+      <EstimateV2TrimSectionBody
+        styles={styles}
+        trimVm={makeVm() as never}
+        openTrimAdvanced={{}}
+        setOpenTrimAdvanced={vi.fn()}
+        toDisplayNumber={(value) => (value == null ? '--' : String(value))}
+      />
+    )
+
+    expect(screen.queryByText('Spot Primer %')).not.toBeInTheDocument()
+
+    rerender(
+      <EstimateV2TrimSectionBody
+        styles={styles}
+        trimVm={
+          makeVm({
+            selectedRoomTrimScopes: [
+              {
+                ...trimScope,
+                primeMode: 'SPOT',
+                spotPrimePercent: '25',
+              },
+            ],
+          }) as never
+        }
+        openTrimAdvanced={{}}
+        setOpenTrimAdvanced={vi.fn()}
+        toDisplayNumber={(value) => (value == null ? '--' : String(value))}
+      />
+    )
+
+    expect(screen.getByText('Spot Primer %').nextElementSibling).toHaveClass('optional-input-frame')
+    expect(screen.getByDisplayValue('25')).toBeInTheDocument()
+  })
 })

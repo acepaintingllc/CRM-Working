@@ -19,6 +19,7 @@ describe('estimateCollectionData', () => {
         jobs: { query: '', limit: 25, next_cursor: null, items: [] },
         selected_job_id: null,
         selected_job_versions: null,
+        latest_version: null,
       },
     })
 
@@ -29,6 +30,7 @@ describe('estimateCollectionData', () => {
         jobs: { query: '', limit: 25, next_cursor: null, items: [] },
         selected_job_id: null,
         selected_job_versions: null,
+        latest_version: null,
       },
     })
     expect(loadEstimateCollectionBootstrapPayload).toHaveBeenCalledWith('org-1')

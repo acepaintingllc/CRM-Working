@@ -9,6 +9,7 @@ import {
   buildSummaryAlerts,
   calculatePaintSuppliesTotal,
   createDisplayScopePaintCostCalculator,
+  hasActiveLaborRateOverride,
   normalizeSummaryScopeRows,
 } from '../estimateV2SummaryDerived'
 import { SCOPE_KIND_LABELS, SCOPE_KIND_ORDER } from '@/lib/estimator/scopeKinds'
@@ -102,6 +103,75 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(roomBlocks[0]?.roomTotal).toBe(1031)
     expect(roomBlocks[0]?.displayScopeSubtotalMap.get('trim-1')).toBeTypeOf('number')
     expect(roomBlocks[0]?.alerts).toEqual({ missingProduct: 0, overrides: 1, flags: 1 })
+    expect(roomBlocks[0]?.scopeRows.find((scope) => scope.id === 'trim-1')?.overrideSummary).toBe(
+      'Override: Labor hours: 1 h'
+    )
+  })
+
+  it('describes active wall and ceiling override fields for summary badges', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: normalizeSummaryScopeRows([
+        {
+          id: 'wall-1',
+          room_id: 'room-1',
+          scope_name: 'Walls',
+          effective_area_sf: 120,
+          effective_total: 400,
+          paint_product_id: 'paint-1',
+          override_area_sf: 130,
+          override_supply_cost: 25.5,
+        },
+      ]),
+      ceilingScopes: normalizeSummaryScopeRows([
+        {
+          id: 'ceiling-1',
+          room_id: 'room-1',
+          scope_name: 'Ceilings',
+          effective_area_sf: 80,
+          effective_total: 250,
+          paint_product_label: 'Ceiling White',
+          override_total: 275,
+        },
+      ]),
+      trimScopes: [],
+    })
+
+    expect(roomScopeRows.get('room-1')?.find((scope) => scope.id === 'wall-1')?.overrideSummary).toBe(
+      'Override: Area: 130 sf, Supply cost: $25.5'
+    )
+    expect(roomScopeRows.get('room-1')?.find((scope) => scope.id === 'ceiling-1')?.overrideSummary).toBe(
+      'Override: Total: $275'
+    )
+  })
+
+  it('does not treat blank override inputs as zero-value active overrides', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: normalizeSummaryScopeRows([
+        {
+          id: 'wall-1',
+          room_id: 'room-1',
+          scope_name: 'Walls',
+          effective_area_sf: 120,
+          effective_total: 400,
+          paint_product_id: 'paint-1',
+          override_area_sf: '',
+          override_paint_hours: '',
+          override_primer_hours: '',
+          override_paint_gallons: '',
+          override_primer_gallons: '',
+          override_supply_cost: '',
+          override_total: '',
+        },
+      ]),
+      ceilingScopes: [],
+      trimScopes: [],
+    })
+    const wallRow = roomScopeRows.get('room-1')?.find((scope) => scope.id === 'wall-1')
+
+    expect(wallRow).toMatchObject({
+      hasOverride: false,
+      overrideSummary: null,
+    })
   })
 
   it('generates missing-product, override, and clean summary alerts', () => {
@@ -174,6 +244,24 @@ describe('estimateV2SummaryDerived helpers', () => {
     ).toEqual([
       { kind: 'info', title: 'No active alerts', detail: 'Estimate is currently clean' },
     ])
+  })
+
+  it('treats a persisted default labor rate as clean unless it differs from org defaults', () => {
+    expect(
+      hasActiveLaborRateOverride(
+        { override_labor_rate: 65 },
+        { override_labor_rate: 65 }
+      )
+    ).toBe(false)
+
+    expect(
+      hasActiveLaborRateOverride(
+        { override_labor_rate: 70 },
+        { override_labor_rate: 65 }
+      )
+    ).toBe(true)
+
+    expect(hasActiveLaborRateOverride({ override_labor_rate: null }, { override_labor_rate: 65 })).toBe(false)
   })
 
   it('builds pricing rows and reconciles their totals against the displayed summary totals', () => {

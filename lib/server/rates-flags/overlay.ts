@@ -72,6 +72,12 @@ export function buildOverlayFromRows(params: {
     return Object.keys(levels).length > 0 ? levels : null
   }
 
+  function defaultConditionLevels(modifierType: string) {
+    return modifierType.toLowerCase() === 'binary'
+      ? { active: 1 }
+      : { minor: 1, moderate: 1, major: 1 }
+  }
+
   const productionRows = [
     ...(grouped.get('production_rates_walls') ?? []),
     ...(grouped.get('production_rates_ceilings') ?? []),
@@ -157,17 +163,19 @@ export function buildOverlayFromRows(params: {
   for (const row of grouped.get('condition_modifiers') ?? []) {
     const valuesJson = (row.values_json ?? {}) as Record<string, unknown>
     const values = toStringRecord(row.values_json)
+    const modifierType = asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity'
     const levels = parseConditionLevels(valuesJson, values)
     const scopes = normalizeConditionScopes(values.scope)
-    if (scopes.length > 0 && levels) {
+    if (scopes.length > 0) {
+      const effectiveLevels = levels ?? defaultConditionLevels(modifierType)
       for (const scope of scopes) {
         condition_modifiers.push({
           id: normalizeId(values.id || row.row_id),
           label: asText(values.display_name) || row.display_name,
           scope,
-          modifier_type: asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity',
+          modifier_type: modifierType,
           factor_field: asText(values.factor_field) || null,
-          levels,
+          levels: effectiveLevels,
           notes: asText(values.notes) || null,
           active: row.active,
         })
@@ -179,7 +187,7 @@ export function buildOverlayFromRows(params: {
           id: normalizeId(values.id || row.row_id),
           label: asText(values.display_name) || row.display_name,
           scope,
-          modifier_type: asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity',
+          modifier_type: modifierType,
           factor_field: asText(values.factor_field) || null,
           levels,
           notes: asText(values.notes) || null,
@@ -187,7 +195,7 @@ export function buildOverlayFromRows(params: {
         })
       }
     }
-    if (scopes.length > 0 && levels) {
+    if (scopes.length > 0) {
       continue
     }
     if (values.wall_factor || values.ceil_factor || values.trim_factor) {

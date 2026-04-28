@@ -17,6 +17,7 @@ import type {
   YN,
 } from './wallsTypes.ts'
 import { deductBaseboardOpenings, resolvePrimerSupplyCost } from './scopeRules.ts'
+import { isBaseTrimType } from './trimTypeMetadata.ts'
 import type {
   TrimCalculationInput,
   TrimCalculationOutput,
@@ -96,9 +97,12 @@ function buildTrimTypeRateMaps(catalogs: TrimCalculationInput['catalogs']) {
 
 function isBaseboardLfScope(scope: TrimCalculationScopeRow) {
   if (scope.unit_type !== 'LF') return false
-  return [scope.trim_family, scope.scope_name, scope.trim_type_id].some((value) =>
-    String(value ?? '').toLowerCase().includes('baseboard')
-  )
+  return isBaseTrimType({
+    id: scope.trim_type_id,
+    label: scope.scope_name,
+    family: scope.trim_family,
+    unitType: scope.unit_type,
+  })
 }
 
 function applyScopeCosts(

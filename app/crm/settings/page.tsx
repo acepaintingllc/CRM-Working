@@ -1,6 +1,6 @@
 'use client'
 
-import { Building2, FileStack, Link2, Settings as SettingsIcon } from 'lucide-react'
+import { Building2, FileStack, Link2, Settings as SettingsIcon, ScrollText } from 'lucide-react'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
 import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
@@ -15,7 +15,7 @@ export default function SettingsPage() {
         title="CRM Settings"
         description="Manage company identity, quote send defaults, and integrations from one organized settings area."
       />
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-4">
         <SettingsNavTile
           href="/crm/settings/company"
           title="Company profile"
@@ -30,9 +30,15 @@ export default function SettingsPage() {
         />
         <SettingsNavTile
           href="/crm/settings/templates"
-          title="Templates and send defaults"
-          description="Email template access plus dedicated quote send defaults."
+          title="Templates"
+          description="Stage email template access for job workflow messages."
           Icon={FileStack}
+        />
+        <SettingsNavTile
+          href="/crm/settings/quote-v2"
+          title="Quote V2"
+          description="Quote send presets, terms sections, and customer document defaults."
+          Icon={ScrollText}
         />
       </section>
 

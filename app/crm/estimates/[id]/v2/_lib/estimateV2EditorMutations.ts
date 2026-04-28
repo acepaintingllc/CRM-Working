@@ -1,4 +1,5 @@
 import { sortByPosition } from '../../../../../../lib/estimator/v2DraftPayload.ts'
+import { isBaseTrimType } from '../../../../../../lib/estimator/trimTypeMetadata.ts'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingScopeMode,
@@ -622,9 +623,15 @@ export function applyTrimTypeMutation(params: {
     const nextUnitType = (trimType?.unit_type ?? scope.unitType ?? 'LF') as EstimateV2TrimUnitType
     const isBaseboard =
       nextUnitType === 'LF' &&
-      [trimType?.family, trimType?.category, trimType?.label, scope.trimFamily, scope.scopeName, params.trimTypeId].some(
-        (value) => String(value ?? '').toLowerCase().includes('baseboard')
-      )
+      isBaseTrimType({
+        id: params.trimTypeId,
+        label: trimType?.label ?? scope.scopeName,
+        family: trimType?.family ?? scope.trimFamily,
+        category: trimType?.category,
+        trimCategory: trimType?.trim_category,
+        pickerGroup: trimType?.picker_group,
+        unitType: nextUnitType,
+      })
     return {
       ...scope,
       trimTypeId: params.trimTypeId,

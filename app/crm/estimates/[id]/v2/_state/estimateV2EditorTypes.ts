@@ -300,6 +300,10 @@ export type EstimateV2EditorPageVm = {
 
 export type EstimateV2EditorHeaderVm = {
   estimateId?: string
+  resumeRecord: {
+    estimate: EstimateV2EstimateMeta | null
+    job: EstimateV2JobMeta | null
+  }
   titleText: string
   subtitleText: string
   workflowText: string

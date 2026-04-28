@@ -75,6 +75,7 @@ const refreshedQuoteHomeBootstrap = {
     next_cursor: null,
     items: [quoteHomeJob1Versions.items[0]],
   },
+  latest_version: quoteHomeJob1Versions.items[0] ?? null,
 }
 
 const refreshedQuoteHomeJob1Versions = {

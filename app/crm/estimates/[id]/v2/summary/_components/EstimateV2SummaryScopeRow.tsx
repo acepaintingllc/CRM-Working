@@ -49,7 +49,11 @@ export function EstimateV2SummaryScopeRow({
           {derivedPaint != null && <span>Paint {fmtUSD(derivedPaint)}</span>}
           {scope.suppliesCost != null && <span>Supplies {fmtUSD(scope.suppliesCost)}</span>}
           {scope.hasOverride && (
-            <span style={{ color: '#fbbf24', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <span
+              title={scope.overrideSummary ?? 'Override active'}
+              aria-label={scope.overrideSummary ?? 'Override active'}
+              style={{ color: '#fbbf24', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+            >
               Override
             </span>
           )}
@@ -75,7 +79,11 @@ export function EstimateV2SummaryScopeRow({
           {scope.label}
         </span>
         {scope.hasOverride && (
-          <span style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <span
+            title={scope.overrideSummary ?? 'Override active'}
+            aria-label={scope.overrideSummary ?? 'Override active'}
+            style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.08em' }}
+          >
             Override
           </span>
         )}

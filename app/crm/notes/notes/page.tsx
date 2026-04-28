@@ -3,6 +3,13 @@
 import type { NotesNoteRow } from '@/lib/notes/types'
 import { useNotesExplorer } from '@/lib/notes/client/useNotesExplorer'
 import { useState } from 'react'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
+import { CrmChip } from '@/app/crm/_components/CrmChip'
+import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
+import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
+import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
+import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import {
   buildNotesHref,
   FolderActionModal,
@@ -60,64 +67,49 @@ export default function NotesExplorerHomePage() {
 
   return (
     <div className="grid gap-4">
-      <section className="rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="grid gap-2">
-            <div className="text-xs font-extrabold uppercase tracking-[0.24em] text-emerald-300/80">
-              Notes Explorer
-            </div>
-            <div>
-              <h2 className="text-2xl font-extrabold text-white">Browse notes like a workspace</h2>
-              <p className="mt-1 max-w-2xl text-sm text-neutral-400">
-                Search first, skim dense previews, then open the note editor as a dedicated destination.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+      <CrmSectionCard
+        eyebrow="Notes Explorer"
+        title="Browse notes like a workspace"
+        description="Search first, skim dense previews, then open the note editor as a dedicated destination."
+        actions={
+          <>
             <NotesStatusTabs
               status={status}
               buildHref={(nextStatus) => buildNotesHref('/crm/notes/notes', nextStatus)}
             />
-            <button
+            <CrmButton
               type="button"
               onClick={() => setCreateFolderOpen((current) => !current)}
-              className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800"
             >
               New Folder
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-          <input
+            </CrmButton>
+          </>
+        }
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <CrmSearchBar
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={setSearch}
             placeholder="Search all notes..."
-            className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
           />
-          <button
+          <CrmButton
             type="button"
             onClick={() => setManageFolders((current) => !current)}
-            className={`rounded-2xl px-4 py-3 text-sm font-extrabold transition ${
-              manageFolders
-                ? 'bg-emerald-400 text-neutral-950'
-                : 'border border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-600 hover:bg-neutral-800'
-            }`}
+            tone={manageFolders ? 'primary' : 'secondary'}
           >
             {manageFolders ? 'Done Managing Folders' : 'Manage Folders'}
-          </button>
+          </CrmButton>
         </div>
 
         {createFolderOpen && (
-          <div className="mt-4 grid gap-3 rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-4 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="ace-crm-surface-muted mt-4 grid gap-3 border-dashed p-4 md:grid-cols-[minmax(0,1fr)_auto]">
             <input
               value={newFolderName}
               onChange={(event) => setNewFolderName(event.target.value)}
               placeholder="Folder name"
-              className="rounded-2xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400"
+              className={crmInputClassName()}
             />
-            <button
+            <CrmButton
               type="button"
               disabled={saving}
               onClick={async () => {
@@ -126,16 +118,20 @@ export default function NotesExplorerHomePage() {
                 setNewFolderName('')
                 setCreateFolderOpen(false)
               }}
-              className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-extrabold text-neutral-950 disabled:opacity-60"
+              tone="primary"
             >
               {saving ? 'Creating...' : 'Create Folder'}
-            </button>
+            </CrmButton>
           </div>
         )}
-      </section>
+      </CrmSectionCard>
 
-      {loading && <div className="text-sm text-neutral-400">Loading notes explorer...</div>}
-      {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
+      {loading && <CrmSectionCard title="Loading notes explorer">Loading notes explorer...</CrmSectionCard>}
+      {error && (
+        <CrmNotice tone="error" title="Unable to load notes explorer">
+          {error}
+        </CrmNotice>
+      )}
       <FolderActionModal
         open={modalState.open}
         mode={modalState.mode}
@@ -157,23 +153,17 @@ export default function NotesExplorerHomePage() {
 
       {!loading && (
         <>
-          <section className="grid gap-3 rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-extrabold uppercase tracking-[0.2em] text-neutral-500">Folders</h3>
-                <p className="mt-1 text-sm text-neutral-400">
-                  Open folders for deeper navigation. Management stays secondary unless you turn it on.
-                </p>
-              </div>
-              <div className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs font-bold text-neutral-500">
-                {folders.length} folders
-              </div>
-            </div>
-
+          <CrmSectionCard
+            title="Folders"
+            description="Open folders for deeper navigation. Management stays secondary unless you turn it on."
+            badge={<CrmChip>{folders.length} folders</CrmChip>}
+          >
             {folders.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-6 text-sm text-neutral-500">
-                No folders yet. Create one or start with uncategorized notes.
-              </div>
+              <CrmEmptyState
+                title="No folders yet"
+                description="Create one or start with uncategorized notes."
+                compact
+              />
             ) : (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {folders.map((folder, index) => {
@@ -199,7 +189,7 @@ export default function NotesExplorerHomePage() {
                 })}
               </div>
             )}
-          </section>
+          </CrmSectionCard>
 
           {search.trim() ? (
             <ExplorerSection
@@ -248,28 +238,26 @@ export default function NotesExplorerHomePage() {
               </div>
               {hasMore && (
                 <div className="flex justify-center">
-                  <button
+                  <CrmButton
                     type="button"
                     onClick={() => void loadMore()}
                     disabled={loadingMore}
-                    className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800 disabled:opacity-60"
                   >
                     {loadingMore ? 'Loading...' : 'Load More Notes'}
-                  </button>
+                  </CrmButton>
                 </div>
               )}
             </>
           )}
           {search.trim() && hasMore && (
             <div className="flex justify-center">
-              <button
+              <CrmButton
                 type="button"
                 onClick={() => void loadMore()}
                 disabled={loadingMore}
-                className="rounded-2xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-extrabold text-neutral-200 transition hover:border-neutral-600 hover:bg-neutral-800 disabled:opacity-60"
               >
                 {loadingMore ? 'Loading...' : 'Load More Notes'}
-              </button>
+              </CrmButton>
             </div>
           )}
         </>
@@ -288,16 +276,13 @@ function ExplorerSection(props: {
   getContextLabel: (note: NotesNoteRow) => string
 }) {
   return (
-    <section className="grid gap-3 rounded-[30px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
-      <div>
-        <h3 className="text-lg font-extrabold text-white">{props.title}</h3>
-        <p className="mt-1 text-sm text-neutral-400">{props.description}</p>
-      </div>
-
+    <CrmSectionCard title={props.title} description={props.description}>
       {props.notes.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-neutral-800 bg-neutral-900/70 p-6 text-sm text-neutral-500">
-          Nothing to show here yet.
-        </div>
+        <CrmEmptyState
+          title="Nothing to show"
+          description="Nothing to show here yet."
+          compact
+        />
       ) : (
         <div className="grid gap-3">
           {props.notes.map((note) => (
@@ -312,6 +297,6 @@ function ExplorerSection(props: {
           ))}
         </div>
       )}
-    </section>
+    </CrmSectionCard>
   )
 }

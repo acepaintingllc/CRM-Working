@@ -35,10 +35,10 @@ export function CrmModalHeader({
       <button
         type="button"
         onClick={onClose}
-        className="ace-crm-btn ace-crm-btn-secondary h-10 w-10 justify-center px-0"
+        className="ace-crm-btn ace-crm-btn-secondary crm-modal-close-button size-12 shrink-0 justify-center px-0"
         aria-label={closeLabel}
       >
-        <X size={18} aria-hidden="true" />
+        <X size={24} strokeWidth={2.5} aria-hidden="true" />
       </button>
     </div>
   )

@@ -4,6 +4,8 @@ import type {
   CustomerEstimateSectionKey,
   Unsafe,
 } from '@/lib/customer-estimates/types'
+import type { QuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
+import type { TemplatePreset } from '@/lib/customer-estimates/presets'
 
 export const CUSTOMER_SEND_SCOPE_KEYS = [
   'walls',
@@ -56,6 +58,10 @@ export type EstimateTemplateSettingsRow = {
   override_labor_rate?: number | null
   job_minimum_enabled?: boolean | null
   job_minimum_amount?: number | null
+  walls_paint_id?: string | null
+  wall_paint_id?: string | null
+  ceiling_paint_id?: string | null
+  trim_paint_id?: string | null
   updated_at: string | null
 }
 
@@ -77,12 +83,16 @@ export type QuoteSendDefaults = {
   default_template_key: string
   quote_validity_days: number
   terms_text: string
+  terms_sections?: QuoteTermsSections
+  template_presets?: TemplatePreset[]
 }
 
 export type EstimateCustomerSendSettings = {
   default_template_key?: string | null
   quote_validity_days?: number | null
   terms_text?: string | null
+  terms_sections?: QuoteTermsSections | null
+  template_presets?: TemplatePreset[] | null
   updated_at?: string | null
 }
 
@@ -98,6 +108,7 @@ export type EstimateCustomerSendInputs = {
   trim_items: Unsafe[]
   other: Unsafe[]
   jobsettings: EstimateJobSettingsRow
+  org_defaults: EstimateTemplateSettingsRow
 }
 
 export type EstimateCustomerSendContextData = {

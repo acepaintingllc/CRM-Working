@@ -93,4 +93,46 @@ describe('customer send draft helpers', () => {
       other: '',
     })
   })
+
+  it('collapses stale generated scope wording that predates product labels', () => {
+    mockBuildCustomerSendDocument.mockReturnValue({
+      ok: true,
+      data: {
+        scopes: [
+          {
+            key: 'walls',
+            text: 'Prep and paint 2 coats on walls in Living Room, using SW Duration Home.',
+          },
+          {
+            key: 'ceilings',
+            text: 'Prep and paint 2 coats on ceilings in Living Room, using SW ProMar Ceiling.',
+          },
+        ],
+      },
+    })
+
+    const normalized = normalizeCustomerSendDraftScopeText({
+      context: {
+        public_versions: [],
+      } as never,
+      draft: sanitizeCustomerSendDraft({
+        scope_text_edits: {
+          walls: 'Prep and paint 2 coats on walls in Living Room.',
+          ceilings: 'Customer-approved ceiling wording.',
+        },
+      }),
+    })
+
+    expect(normalized.ok).toBe(true)
+    if (!normalized.ok) return
+
+    expect(normalized.data.scope_text_edits).toEqual({
+      walls: '',
+      ceilings: 'Customer-approved ceiling wording.',
+      trim: '',
+      doors: '',
+      cabinets: '',
+      other: '',
+    })
+  })
 })

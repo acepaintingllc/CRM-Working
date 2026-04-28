@@ -84,6 +84,7 @@ const bootstrapWithActiveVersions: QuoteHomeBootstrapReadModel = {
   },
   selected_job_id: 'job-1',
   selected_job_versions: makeVersionsPage('job-1', [versionItem]),
+  latest_version: versionItem,
 }
 
 function deferred<T>() {

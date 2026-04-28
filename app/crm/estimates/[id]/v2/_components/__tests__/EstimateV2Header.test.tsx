@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import type React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EstimateV2Header } from '../EstimateV2Header'
@@ -35,6 +35,10 @@ const routeFamily = {
 
 const vm = {
   estimateId: 'estimate-1',
+  resumeRecord: {
+    estimate: null,
+    job: null,
+  },
   titleText: 'Version A',
   subtitleText: 'Job - Ada - 123 Main',
   workflowText: 'Estimate V2 Editor',
@@ -51,25 +55,19 @@ describe('EstimateV2Header', () => {
     vi.clearAllMocks()
   })
 
-  it('renders the streamlined header actions and routes the primary next action', () => {
-    const onNext = vi.fn()
-
+  it('renders the streamlined header actions without workflow navigation controls', () => {
     render(
       <EstimateV2Header
         styles={estimateV2EditorPageStyles}
         routeFamily={routeFamily}
         vm={vm}
         confirmNavigation={() => true}
-        onNext={onNext}
       />
     )
 
     expect(screen.queryByRole('button', { name: 'Collapse estimator header' })).not.toBeInTheDocument()
     expect(screen.queryByText('Summary ->')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Next: Details & Overrides ->' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Next: Details & Overrides ->' }))
-
-    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Next: Details & Overrides ->' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '+ Add room' })).not.toBeInTheDocument()
   })
 })

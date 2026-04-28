@@ -56,6 +56,18 @@ function validateOverrideInput(params: { label: string; targetId: string; value:
   })
 }
 
+function formatSystemColorLabel(value: string) {
+  const normalized = value.trim()
+  const match = normalized.match(/^COLOR[\s_-]*(\d+)$/i)
+  return match ? `Color ${match[1]}` : normalized
+}
+
+function resolveColorLabel(colorId: string, colorLabelById: Map<string, string>) {
+  const catalogLabel = colorLabelById.get(colorId)?.trim()
+  if (catalogLabel) return formatSystemColorLabel(catalogLabel)
+  return formatSystemColorLabel(colorId)
+}
+
 function resolveWallGroupIdentity(params: {
   groupKey: string
   scopes: EstimateV2WallScopeDraft[]
@@ -63,7 +75,7 @@ function resolveWallGroupIdentity(params: {
 }) {
   const colorId = params.scopes.find((scope) => scope.colorId)?.colorId || null
   if (colorId) {
-    const colorName = params.colorLabelById.get(colorId)?.trim() || `Color ${colorId}`
+    const colorName = resolveColorLabel(colorId, params.colorLabelById)
     return {
       id: colorId,
       colorId,

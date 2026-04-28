@@ -78,6 +78,9 @@ function createHookValue({
     customer_name: string | null
     customer_address: string | null
     estimate_total_amount: number | string | null
+    scheduled_date?: string | null
+    scheduled_end_date?: string | null
+    completed_at?: string | null
   }>
   customers?: Array<{
     id: string
@@ -216,6 +219,44 @@ describe('CrmHomePageContent', () => {
     expect(alert.textContent).toContain('Some dashboard data is degraded.')
     expect(alert.textContent).toContain('Customers')
     expect(alert.textContent).toContain('Notes')
+  })
+
+  it('renders current scheduled jobs as links to job details', () => {
+    mockUseCrmHomeData.mockReturnValue(
+      createHookValue({
+        jobs: [
+          {
+            id: 'job-current',
+            status: 'scheduled',
+            title: 'Exterior repaint',
+            customer_name: 'Nancy Briggs',
+            customer_address: '400 Paint Ln',
+            estimate_total_amount: 2400,
+            scheduled_date: '2026-04-22T13:00:00.000Z',
+            scheduled_end_date: '2026-04-22T21:00:00.000Z',
+          },
+          {
+            id: 'job-far-away',
+            status: 'scheduled',
+            title: 'Future repaint',
+            customer_name: 'Later Customer',
+            customer_address: '500 Paint Ln',
+            estimate_total_amount: 1400,
+            scheduled_date: '2026-04-29T13:00:00.000Z',
+          },
+        ],
+      })
+    )
+
+    render(<CrmHomePageContent />)
+
+    expect(screen.getByText('Current jobs')).toBeTruthy()
+    const currentJobLink = screen
+      .getAllByRole('link', { name: /Exterior repaint/i })
+      .find((link) => link.textContent?.includes('4/22/2026'))
+    expect(currentJobLink).toBeTruthy()
+    expect(currentJobLink?.textContent).toContain('Nancy Briggs')
+    expect(currentJobLink?.textContent).toContain('4/22/2026')
   })
 
   it('disables retry while reloading', () => {

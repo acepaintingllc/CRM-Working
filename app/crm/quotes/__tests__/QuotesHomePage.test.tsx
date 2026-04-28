@@ -123,6 +123,9 @@ vi.mock('../_home/QuotesHomeSummaryCards', () => ({
 
 vi.mock('../_home/QuotesHomeSelectedJobPanel', () => ({
   QuotesHomeSelectedJobPanel: ({ vm }: MockSelectedJobPanelProps) => <div>selected-job:{vm.title ?? 'none'}</div>,
+  QuotesHomeSelectedJobResponsivePanel: ({ vm }: MockSelectedJobPanelProps) => (
+    <div>selected-job:{vm.title ?? 'none'}</div>
+  ),
 }))
 
 vi.mock('../_home/QuotesHomeVersionList', () => ({

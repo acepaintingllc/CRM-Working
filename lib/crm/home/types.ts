@@ -7,6 +7,9 @@ export type DashboardJob = {
   customer_name: string | null
   customer_address: string | null
   estimate_total_amount: number | string | null
+  scheduled_date?: string | null
+  scheduled_end_date?: string | null
+  completed_at?: string | null
 }
 
 export type DashboardCustomer = {
@@ -76,6 +79,7 @@ export type CrmHomeData = {
   customers: DashboardCustomer[]
   metrics: CrmHomeMetrics
   activityJobs: DashboardJob[]
+  currentJobs: DashboardJob[]
   signals: CrmHomeSignals
   greeting: string
   todayLabel: string

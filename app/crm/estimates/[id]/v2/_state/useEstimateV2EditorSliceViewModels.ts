@@ -93,6 +93,10 @@ function useHeaderVm(
   return useMemo(
     () => ({
       estimateId,
+      resumeRecord: {
+        estimate: headerState.estimate,
+        job: headerState.job,
+      },
       titleText: headerState.estimate?.version_name ?? 'Estimate Version',
       subtitleText: buildHeaderSubtitle(headerState.job),
       workflowText: 'Walls-first wizard - Rooms',
@@ -106,7 +110,7 @@ function useHeaderVm(
       addRoom,
       derived.calculation.dirty,
       estimateId,
-      headerState.estimate?.version_name,
+      headerState.estimate,
       headerState.job,
       headerState.saving,
       setSettingsOpen,

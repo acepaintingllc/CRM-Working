@@ -112,17 +112,13 @@ test('assembleCustomerEstimateDocument surfaces payment placeholders when no exp
   ])
 })
 
-test('assembleCustomerEstimateDocument prefers explicit terms text and payment overrides', () => {
+test('assembleCustomerEstimateDocument uses explicit terms text as the customer terms page', () => {
   const document = assembleCustomerEstimateDocument(
     buildCustomerEstimateDocument(
       createInput({
         settings: {
           quote_validity_days: 45,
           terms_text: 'Line one.\n\nLine two.',
-        },
-        overrides: {
-          deposit_language: 'Half due to schedule.',
-          card_fee_note: 'Cards add 3%.',
         },
       })
     )
@@ -131,16 +127,20 @@ test('assembleCustomerEstimateDocument prefers explicit terms text and payment o
   const pricingSection = document.terms_page.sections.find(
     (section) => section.key === 'pricing_payment'
   )
-  const additionalTerms = document.terms_page.sections.find(
-    (section) => section.key === 'additional_terms'
+  const insuranceSection = document.terms_page.sections.find(
+    (section) => section.key === 'insurance'
+  )
+  const terms = document.terms_page.sections.find(
+    (section) => section.key === 'terms_and_conditions'
   )
 
-  assert.ok(pricingSection)
-  assert.match(pricingSection?.paragraphs.join('\n') ?? '', /Half due to schedule\./)
-  assert.match(pricingSection?.paragraphs.join('\n') ?? '', /Cards add 3%\./)
+  assert.equal(pricingSection, undefined)
+  assert.equal(insuranceSection, undefined)
   assert.deepEqual(document.assembly_meta.missing_payment_fields, [])
+  assert.deepEqual(document.assembly_meta.missing_legal_fields, [])
+  assert.equal(document.assembly_meta.used_placeholder_fallbacks, false)
   assert.equal(document.assembly_meta.used_explicit_terms_text, true)
-  assert.deepEqual(additionalTerms?.paragraphs, ['Line one.', 'Line two.'])
+  assert.deepEqual(terms?.paragraphs, ['Line one.', 'Line two.'])
 })
 
 test('assembleCustomerEstimateDocument preserves built scope and pricing rows without recomposing policy text', () => {

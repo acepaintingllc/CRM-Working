@@ -69,14 +69,15 @@ export function EstimateV2Sidebar({
         title="Collapse room navigation"
         style={{
           ...styles.button,
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'space-between',
+          width: 34,
+          minHeight: 34,
+          padding: 0,
+          display: 'inline-flex',
+          justifySelf: 'end',
+          justifyContent: 'center',
           alignItems: 'center',
-          padding: '6px 10px',
         }}
       >
-        <span style={styles.mono}>Navigation</span>
         <span aria-hidden="true">&lt;</span>
       </button>
 
@@ -95,7 +96,7 @@ export function EstimateV2Sidebar({
             borderColor: 'rgba(134,239,172,0.18)',
           }}
         >
-          <span style={styles.mono}>Job Defaults</span>
+          <span style={styles.mono}>Paint Defaults</span>
           <span style={{ ...styles.mono, color: 'var(--v2-green-2)' }}>
             {jobSettingsVm.jobDefaultsOpen ? 'v' : '^'}
           </span>

@@ -34,6 +34,9 @@ export function createHomeResolvedState(options?: {
     customer_name: string | null
     customer_address: string | null
     estimate_total_amount: number | string | null
+    scheduled_date?: string | null
+    scheduled_end_date?: string | null
+    completed_at?: string | null
   }>
   customers?: Array<{
     id: string

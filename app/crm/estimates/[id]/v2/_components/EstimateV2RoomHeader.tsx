@@ -112,14 +112,14 @@ export function EstimateV2RoomHeader({
   return (
     <>
       <RoomHeaderSetup styles={styles}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-          <div>
+        <div className="room-header-top">
+          <div style={{ minWidth: 0 }}>
             <div style={styles.mono}>Room Setup</div>
-            <h2 style={{ fontSize: 'calc(18px + 4pt)', fontWeight: 800, letterSpacing: '-0.02em', margin: '3px 0 0' }}>
+            <h2 className="estimate-v2-room-title" style={{ fontSize: 'calc(18px + 4pt)', fontWeight: 800, letterSpacing: 0, margin: '3px 0 0' }}>
               {room.roomId} - {room.roomName || 'New room'}
             </h2>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
             {room.roomTypeId ? (
               <span style={{ ...styles.mono, border: '1px solid var(--v2-line)', borderRadius: 8, padding: '3px 8px' }}>
                 template: {roomVm.roomTypeOptions.find((type) => type.id === room.roomTypeId)?.label ?? room.roomTypeId}
@@ -179,28 +179,30 @@ export function EstimateV2RoomHeader({
         </div>
 
         <div className="geometry-primary-grid">
-          <Field label="Geometry Mode" styles={styles}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {(['RECT', 'SEG'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  disabled={roomVm.selectedRoomGeometryMode === mode}
-                  onClick={() => roomVm.switchSelectedRoomGeometryMode(mode)}
-                  style={{
-                    ...styles.button,
-                    flex: 1,
-                    cursor: roomVm.selectedRoomGeometryMode === mode ? 'default' : 'pointer',
-                    borderColor: roomVm.selectedRoomGeometryMode === mode ? 'rgba(134,239,172,0.34)' : 'var(--v2-line)',
-                    background: roomVm.selectedRoomGeometryMode === mode ? 'rgba(74,222,128,0.08)' : '#111111',
-                    color: roomVm.selectedRoomGeometryMode === mode ? 'var(--v2-green-2)' : 'var(--v2-ink)',
-                  }}
-                >
-                  {mode === 'RECT' ? 'Rectangle' : 'Segments'}
-                </button>
-              ))}
-            </div>
-          </Field>
+          <div className="geometry-mode-field">
+            <Field label="Geometry Mode" styles={styles}>
+              <div className="geometry-mode-buttons">
+                {(['RECT', 'SEG'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    disabled={roomVm.selectedRoomGeometryMode === mode}
+                    onClick={() => roomVm.switchSelectedRoomGeometryMode(mode)}
+                    style={{
+                      ...styles.button,
+                      minWidth: 0,
+                      cursor: roomVm.selectedRoomGeometryMode === mode ? 'default' : 'pointer',
+                      borderColor: roomVm.selectedRoomGeometryMode === mode ? 'rgba(134,239,172,0.34)' : 'var(--v2-line)',
+                      background: roomVm.selectedRoomGeometryMode === mode ? 'rgba(74,222,128,0.08)' : '#111111',
+                      color: roomVm.selectedRoomGeometryMode === mode ? 'var(--v2-green-2)' : 'var(--v2-ink)',
+                    }}
+                  >
+                    {mode === 'RECT' ? 'Rectangle' : 'Segments'}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          </div>
           {!isSegmentedRoom && (
             <>
               <Field label="Length (in)" styles={styles}>

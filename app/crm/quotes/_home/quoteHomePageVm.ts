@@ -2,6 +2,7 @@ import type { QuoteHomeSummaryReadModel } from '@/lib/quotes/quoteHomeTypes'
 import type { QuoteVersionKind } from '@/lib/quotes/versionCreation'
 import {
   buildHeroSummaryText,
+  buildQuotesHomeResumeVm,
   buildQuoteHomeJobListItemVm,
   buildQuotesHomeCreateVm,
   buildQuotesHomeJobListEmptyState,
@@ -72,6 +73,7 @@ export type QuoteHomePageVmState = {
 export type QuoteHomePageVmResources = {
   home: {
     summary: QuoteHomeSummaryReadModel | null
+    latestVersion: QuoteHomeJobVersion | null
     jobs: QuoteHomeJob[]
     hasMore: boolean
     jobsLoading: boolean
@@ -167,6 +169,7 @@ function buildHeaderVm(
 
   return {
     heroSummaryText: buildHeroSummaryText(resources.home.summary),
+    resume: buildQuotesHomeResumeVm(resources.home.latestVersion),
     searchQuery: state.searchQuery,
     searchFocused: state.searchFocused,
     searchLoading: resources.search.loading,

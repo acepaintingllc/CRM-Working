@@ -3,11 +3,15 @@ import { submitCustomerSendMessage } from '../delivery'
 
 const {
   mockSendGmailMessage,
+  mockUploadDriveFile,
   mockMarkEstimatePublicVersionSent,
+  mockUpdateEstimatePublicVersionSnapshot,
   mockWriteEstimatePublicEvent,
 } = vi.hoisted(() => ({
   mockSendGmailMessage: vi.fn(),
+  mockUploadDriveFile: vi.fn(),
   mockMarkEstimatePublicVersionSent: vi.fn(),
+  mockUpdateEstimatePublicVersionSnapshot: vi.fn(),
   mockWriteEstimatePublicEvent: vi.fn(),
 }))
 
@@ -23,8 +27,13 @@ vi.mock('@/lib/server/googleMail', () => ({
   sendGmailMessage: mockSendGmailMessage,
 }))
 
+vi.mock('@/lib/server/googleDrive', () => ({
+  uploadDriveFile: mockUploadDriveFile,
+}))
+
 vi.mock('../repository', () => ({
   markEstimatePublicVersionSent: mockMarkEstimatePublicVersionSent,
+  updateEstimatePublicVersionSnapshot: mockUpdateEstimatePublicVersionSnapshot,
   writeEstimatePublicEvent: mockWriteEstimatePublicEvent,
 }))
 
@@ -64,6 +73,7 @@ const baseParams = {
     },
     company: {
       business_name: 'ACE Painting',
+      business_email: 'owner@example.com',
       sender_signature: 'Thanks,\nACE Painting',
     },
     public_url: null,
@@ -75,12 +85,98 @@ const baseParams = {
   },
 }
 
+const assembledDocument = {
+  meta: {
+    estimate_id: 'estimate-1',
+    version_name: 'Estimate Version 1',
+    version_state: 'draft',
+    flow_version: 'v2',
+    title: 'Living Room Quote',
+    quote_date: '2026-04-28',
+    sent_at: null,
+    viewed_at: null,
+    accepted_at: null,
+    declined_at: null,
+    status: 'draft',
+    public_token: null,
+  },
+  company: {
+    business_name: 'ACE Painting',
+    timezone: 'America/Chicago',
+    main_phone: '',
+    business_email: '',
+    address: '',
+    website: '',
+    sender_signature: '',
+    logo_url: '',
+  },
+  customer: {
+    name: 'Taylor',
+    email: 'customer@example.com',
+    phone: '',
+    address: '123 Main St',
+    street: '123 Main St',
+    city: '',
+    state: '',
+    zip: '',
+  },
+  header: {
+    company_name: 'ACE Painting',
+    contact_lines: ['Austin, TX'],
+    logo_url: '',
+    document_label: 'QUOTE',
+    quote_date_label: '4/28/26',
+  },
+  customer_block: {
+    lines: ['Taylor', '123 Main St'],
+  },
+  pricing_block: {
+    rows: [
+      {
+        key: 'walls',
+        label: 'Walls',
+        description: 'Paint walls in the listed rooms.',
+        price: 1200,
+      },
+    ],
+    total: 1200,
+    footer_note: 'Thank you for the opportunity.',
+  },
+  terms_page: {
+    title: 'Terms',
+    sections: [
+      {
+        key: 'pricing',
+        title: 'Pricing & Payment Terms',
+        paragraphs: ['Pricing is valid for 30 days.'],
+      },
+    ],
+  },
+}
+
 describe('customer send delivery', () => {
   beforeEach(() => {
     mockSendGmailMessage.mockReset()
+    mockUploadDriveFile.mockReset()
     mockMarkEstimatePublicVersionSent.mockReset()
+    mockUpdateEstimatePublicVersionSnapshot.mockReset()
     mockWriteEstimatePublicEvent.mockReset()
+    delete process.env.GOOGLE_DRIVE_ESTIMATES_FOLDER_ID
     mockSendGmailMessage.mockResolvedValue({ id: 'gmail-1' })
+    mockUploadDriveFile.mockResolvedValue({
+      file: {
+        id: 'drive-1',
+        name: 'ACE-Painting_123-Main-St_2026-04-28_Living-Room-Quote.pdf',
+        webViewLink: 'https://drive.test/file/drive-1',
+      },
+    })
+    mockUpdateEstimatePublicVersionSnapshot.mockImplementation(async (params: { snapshot: Record<string, unknown> }) => ({
+      ok: true,
+      data: {
+        id: 'draft-1',
+        snapshot_json: params.snapshot,
+      },
+    }))
     mockWriteEstimatePublicEvent.mockResolvedValue({ ok: true, data: null })
   })
 
@@ -221,6 +317,61 @@ describe('customer send delivery', () => {
         to: 'customer@example.com',
         cc: 'team@example.com',
         bcc: 'owner@example.com',
+      })
+    )
+  })
+
+  it('attaches the generated quote PDF to the email', async () => {
+    await submitCustomerSendMessage({
+      ...baseParams,
+      mode: 'test',
+      version: {
+        id: 'draft-1',
+        snapshot_json: { document: assembledDocument },
+      },
+    } as never)
+
+    expect(mockSendGmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachment: expect.objectContaining({
+          filename: 'ACE-Painting_123-Main-St_2026-04-28_Living-Room-Quote.pdf',
+          contentType: 'application/pdf',
+          data: expect.any(Buffer),
+        }),
+      })
+    )
+  })
+
+  it('uploads the generated quote PDF to Drive when the estimates folder is configured', async () => {
+    process.env.GOOGLE_DRIVE_ESTIMATES_FOLDER_ID = 'folder-1'
+
+    await submitCustomerSendMessage({
+      ...baseParams,
+      mode: 'test',
+      version: {
+        id: 'draft-1',
+        snapshot_json: { document: assembledDocument },
+      },
+    } as never)
+
+    expect(mockUploadDriveFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        folderId: 'folder-1',
+        name: 'ACE-Painting_123-Main-St_2026-04-28_Living-Room-Quote.pdf',
+        mimeType: 'application/pdf',
+        data: expect.any(Buffer),
+      })
+    )
+    expect(mockUpdateEstimatePublicVersionSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        versionId: 'draft-1',
+        snapshot: expect.objectContaining({
+          pdf: expect.objectContaining({
+            drive_file_id: 'drive-1',
+            drive_file_name: 'ACE-Painting_123-Main-St_2026-04-28_Living-Room-Quote.pdf',
+            drive_web_view_link: 'https://drive.test/file/drive-1',
+          }),
+        }),
       })
     )
   })

@@ -52,7 +52,7 @@ function readNotesTaskSignal(value: unknown) {
   }
 }
 
-function readJob(value: unknown) {
+function readJob(value: unknown): DashboardJob | null {
   if (!isRecord(value)) return null
   const id = readString(value.id)
   if (!id) return null
@@ -62,6 +62,9 @@ function readJob(value: unknown) {
     title: readString(value.title),
     customer_name: readString(value.customer_name),
     customer_address: readString(value.customer_address),
+    scheduled_date: readString(value.scheduled_date),
+    scheduled_end_date: readString(value.scheduled_end_date),
+    completed_at: readString(value.completed_at),
     estimate_total_amount:
       typeof value.estimate_total_amount === 'number' || typeof value.estimate_total_amount === 'string'
         ? value.estimate_total_amount

@@ -44,6 +44,7 @@ export default function CalendarPage() {
   return (
     <CrmPageShell className="max-w-[1460px]">
       <CrmPageHeader
+        className="calendar-page-header"
         eyebrow="Scheduling"
         emoji="🗓️"
         title="Calendar"
@@ -89,6 +90,7 @@ export default function CalendarPage() {
       ) : (
         <>
           <CrmSectionCard
+            className="calendar-picker-card"
             title="Visible calendars"
             description="Choose which Google calendars appear on the month board."
             variant="compact"
@@ -349,6 +351,93 @@ export default function CalendarPage() {
         }
 
         @media (max-width: 760px) {
+          .calendar-page-header {
+            padding: 12px;
+          }
+
+          .calendar-page-header > div {
+            gap: 10px;
+          }
+
+          .calendar-page-header .ace-crm-mono {
+            font-size: 9px;
+          }
+
+          .calendar-page-header .ace-crm-surface-muted {
+            width: 32px;
+            height: 32px;
+            font-size: 15px;
+          }
+
+          .calendar-page-header h1 {
+            font-size: 1.25rem;
+            line-height: 1.1;
+            letter-spacing: 0;
+          }
+
+          .calendar-page-header p {
+            display: none;
+          }
+
+          .calendar-page-header .ace-crm-btn {
+            min-height: 32px;
+            border-radius: 10px;
+            padding: 0 10px;
+            font-size: 12px;
+          }
+
+          .calendar-picker-card {
+            padding: 12px;
+          }
+
+          .calendar-picker-card > div:first-child {
+            margin-bottom: 10px;
+            gap: 8px;
+          }
+
+          .calendar-picker-card h2 {
+            font-size: 1rem;
+            letter-spacing: 0;
+          }
+
+          .calendar-picker-card p {
+            display: none;
+          }
+
+          .calendar-picker {
+            gap: 8px;
+          }
+
+          .calendar-picker-header h3 {
+            font-size: 12px;
+          }
+
+          .calendar-picker-header .ace-crm-chip {
+            padding: 3px 7px;
+            font-size: 10px;
+          }
+
+          .calendar-picker-grid {
+            grid-template-columns: 1fr !important;
+            gap: 6px !important;
+          }
+
+          .calendar-picker-option {
+            gap: 6px;
+            border-radius: 10px;
+            padding: 6px 8px;
+          }
+
+          .calendar-picker-option input {
+            width: 14px;
+            height: 14px;
+          }
+
+          .calendar-picker-option-name {
+            font-size: 12px !important;
+            line-height: 1.25;
+          }
+
           .month-toolbar {
             align-items: flex-start;
             flex-direction: column;

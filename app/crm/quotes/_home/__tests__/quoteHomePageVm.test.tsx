@@ -138,6 +138,7 @@ function buildResources(
       bootstrapError: null,
       jobsError: null,
       ...overrides?.home,
+      latestVersion: overrides?.home?.latestVersion ?? null,
     },
     search: {
       query: '',

@@ -118,6 +118,19 @@
   flex: 1 1 360px;
 }
 
+:global(.estimate-v2-header-title),
+:global(.estimate-v2-header-subtitle),
+:global(.estimate-v2-room-title) {
+  overflow-wrap: anywhere;
+}
+
+:global(.room-header-top) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
 :global(.room-workspace) {
   display: grid;
   grid-template-columns: minmax(0, 2.1fr) minmax(240px, 0.9fr);
@@ -134,9 +147,17 @@
 
 :global(.room-setup-grid) {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
   gap: 8px;
   align-items: end;
+  min-width: 0;
+}
+
+:global(.room-setup-grid > *),
+:global(.geometry-primary-grid > *),
+:global(.geometry-secondary-grid > *),
+:global(.paint-setup-grid > *) {
+  min-width: 0;
 }
 
 :global(.dim-helper-text) {
@@ -167,9 +188,27 @@
 
 :global(.geometry-primary-grid) {
   display: grid;
-  grid-template-columns: minmax(130px, 1.1fr) repeat(3, minmax(84px, 0.85fr)) minmax(110px, 0.9fr);
+  grid-template-columns: minmax(170px, 1.25fr) repeat(3, minmax(92px, 0.85fr)) minmax(120px, 0.9fr);
   gap: 8px;
   align-items: end;
+  min-width: 0;
+}
+
+:global(.geometry-mode-field) {
+  min-width: 0;
+}
+
+:global(.geometry-mode-buttons) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+:global(.geometry-mode-buttons button) {
+  width: 100%;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+  overflow-wrap: anywhere;
 }
 
 :global(.geometry-secondary-grid) {
@@ -184,6 +223,27 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   align-items: end;
+}
+
+:global(.trim-setup-grid) {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.6fr) minmax(150px, 0.8fr) minmax(190px, 1fr);
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+:global(.trim-setup-grid > *) {
+  min-width: 0;
+}
+
+:global(.trim-primer-mode-field) {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+:global(.trim-primer-mode-field .primer-mode-row) {
+  max-width: 220px;
 }
 
 :global(.scope-helper-bar) {
@@ -217,10 +277,21 @@
   border-color: rgba(132,204,147,0.55) !important;
 }
 
+:global(.trim-type-picker-dropdown) {
+  scrollbar-gutter: stable;
+}
+
 :global(.primer-mode-row) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+  min-width: 0;
+}
+
+:global(.primer-mode-row button) {
+  min-width: 0;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
 }
 
 :global(.modifier-grid) {
@@ -394,6 +465,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  :global(.trim-setup-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :global(.trim-primer-mode-field) {
+    grid-column: span 1;
+  }
+
+  :global(.trim-primer-mode-field .primer-mode-row) {
+    max-width: none;
+  }
+
   :global(.scope-helper-bar) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -404,16 +487,61 @@
 }
 
 @media (max-width: 900px) {
+  :global(.room-header-top) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.estimate-v2-header) {
+    gap: 10px !important;
+    padding: 10px 12px !important;
+  }
+
+  :global(.estimate-v2-header-title) {
+    font-size: 22px !important;
+    line-height: 1.15 !important;
+  }
+
+  :global(.estimate-v2-header-subtitle) {
+    display: none !important;
+  }
+
+  :global(.estimate-v2-header-actions) {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+  }
+
+  :global(.estimate-v2-header-actions button) {
+    width: 100%;
+    min-height: 40px;
+    font-size: 13px !important;
+  }
+
+  :global(.estimate-v2-room-title) {
+    font-size: 20px !important;
+    line-height: 1.15 !important;
+  }
+
+  :global(.summary-kpi) {
+    font-size: 26px !important;
+    letter-spacing: 0 !important;
+  }
+
   :global(.walls-room-grid),
   :global(.walls-field-grid),
   :global(.walls-segment-grid),
   :global(.room-setup-grid),
   :global(.geometry-primary-grid),
   :global(.geometry-secondary-grid),
-  :global(.paint-setup-grid),
+    :global(.paint-setup-grid),
+    :global(.trim-setup-grid),
   :global(.scope-helper-bar),
   :global(.modifier-grid),
   :global(.advanced-grid) {
     grid-template-columns: 1fr !important;
+  }
+
+  :global(.trim-primer-mode-field) {
+    grid-column: auto;
   }
 }

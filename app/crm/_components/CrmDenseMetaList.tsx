@@ -19,7 +19,7 @@ export function CrmDenseMetaList({ items, className = '' }: CrmDenseMetaListProp
           <div className="ace-crm-mono text-[11px] font-bold text-[color:var(--crm-ui-muted)]">
             {item.label}
           </div>
-          <div className="flex items-start gap-2">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start">
             <div className="min-w-0 flex-1 text-sm font-semibold text-[color:var(--crm-ui-text)]">
               {item.value}
             </div>

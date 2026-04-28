@@ -54,6 +54,7 @@ export default function CustomersPage() {
         title="Customers"
         description="Search and manage customer profiles across the CRM with one consistent list, detail, and create flow."
         badge={<CrmChip tone="accent">Org: {orgId || "Loading..."}</CrmChip>}
+        className="crm-customers-page-header"
         actions={
           <CrmButton href="/crm/customers/new" tone="primary">
             <Plus size={16} aria-hidden="true" />

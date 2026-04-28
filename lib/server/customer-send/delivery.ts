@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { uploadDriveFile } from '@/lib/server/googleDrive'
 import { sendGmailMessage } from '@/lib/server/googleMail'
 import {
   errorResult,
@@ -11,8 +12,10 @@ import {
 } from './document'
 import {
   markEstimatePublicVersionSent,
+  updateEstimatePublicVersionSnapshot,
   writeEstimatePublicEvent,
 } from './repository'
+import { buildCustomerSendPdfAttachment } from './pdf'
 import type {
   CustomerSendCopy,
   CustomerSendDraft,
@@ -23,6 +26,15 @@ import type {
 
 function readSnapshotDocument(snapshot: Record<string, unknown> | null | undefined) {
   return ((snapshot?.document as Record<string, unknown> | null | undefined) ?? snapshot ?? null)
+}
+
+function readSnapshotRecord(snapshot: unknown) {
+  return snapshot && typeof snapshot === 'object' ? (snapshot as Record<string, unknown>) : {}
+}
+
+function readDriveEstimatesFolderId() {
+  const folderId = process.env.GOOGLE_DRIVE_ESTIMATES_FOLDER_ID
+  return typeof folderId === 'string' && folderId.trim() ? folderId.trim() : null
 }
 
 function buildDefaultEmailBody(params: {
@@ -105,6 +117,47 @@ export async function submitCustomerSendMessage(params: {
     publicUrl,
     mode: params.mode,
   })
+  const document = readSnapshotDocument(
+    (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
+  )
+  const pdfAttachment = buildCustomerSendPdfAttachment(document)
+
+  if (pdfAttachment) {
+    const folderId = readDriveEstimatesFolderId()
+    if (folderId) {
+      const upload = await uploadDriveFile({
+        origin: params.origin,
+        orgId: params.orgId,
+        userId: params.userId,
+        folderId,
+        name: pdfAttachment.filename,
+        mimeType: pdfAttachment.contentType,
+        data: pdfAttachment.data,
+      })
+
+      if (!('error' in upload)) {
+        const snapshot = readSnapshotRecord(publicVersion.snapshot_json)
+        const updatedVersion = await updateEstimatePublicVersionSnapshot({
+          orgId: params.orgId,
+          versionId: asText(publicVersion.id),
+          snapshot: {
+            ...snapshot,
+            pdf: {
+              drive_file_id: upload.file.id,
+              drive_file_name: upload.file.name,
+              drive_web_view_link: upload.file.webViewLink ?? null,
+              filename: pdfAttachment.filename,
+              mime_type: pdfAttachment.contentType,
+              saved_at: new Date().toISOString(),
+            },
+          },
+        })
+        if (updatedVersion.ok) {
+          publicVersion = updatedVersion.data
+        }
+      }
+    }
+  }
 
   const send = await sendGmailMessage({
     origin: params.origin,
@@ -115,6 +168,7 @@ export async function submitCustomerSendMessage(params: {
     bcc: params.draft.bcc_email,
     subject,
     bodyText,
+    attachment: pdfAttachment,
   })
   if ('error' in send) {
     return errorResult('invalid_input', send.error ?? params.copy.sendFailureMessage)

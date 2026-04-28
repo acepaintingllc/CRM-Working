@@ -1,5 +1,6 @@
 import {
   buildQuoteHomeBootstrapReadModel,
+  buildQuoteHomeLatestVersionReadModel,
   buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeSummaryFromRow,
   buildQuoteCreateJobContextReadModel,
@@ -31,6 +32,7 @@ import {
 
 export type EstimateCollectionServiceDeps = {
   buildQuoteHomeBootstrapReadModel: typeof buildQuoteHomeBootstrapReadModel
+  buildQuoteHomeLatestVersionReadModel: typeof buildQuoteHomeLatestVersionReadModel
   buildQuoteHomeJobsPageReadModel: typeof buildQuoteHomeJobsPageReadModel
   buildQuoteHomeSummaryFromRow: typeof buildQuoteHomeSummaryFromRow
   buildQuoteCreateJobContextReadModel: typeof buildQuoteCreateJobContextReadModel
@@ -56,6 +58,7 @@ export type EstimateCollectionServiceDeps = {
 
 const defaultDeps: EstimateCollectionServiceDeps = {
   buildQuoteHomeBootstrapReadModel,
+  buildQuoteHomeLatestVersionReadModel,
   buildQuoteHomeJobsPageReadModel,
   buildQuoteHomeSummaryFromRow,
   buildQuoteCreateJobContextReadModel,

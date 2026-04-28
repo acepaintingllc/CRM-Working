@@ -2,7 +2,11 @@
 
 import { useEstimateV2Editor } from '../_state/useEstimateV2Editor'
 import { useEstimateV2EditorPageUiState } from '../_state/useEstimateV2EditorPageUiState'
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
+import {
+  buildLastOpenedQuoteRecord,
+  writeLastOpenedQuote,
+} from '@/lib/quotes/lastOpenedQuote'
 import {
   resolveEstimateRouteFamily,
   type EstimateRouteFamily,
@@ -47,6 +51,12 @@ export function EstimateV2EditorPageContent({
     return window.confirm('You have unsaved changes. Leave this workspace?')
   }, [saveVm.dirty])
 
+  useEffect(() => {
+    const record = buildLastOpenedQuoteRecord(headerVm.resumeRecord)
+    if (!record) return
+    writeLastOpenedQuote(window.localStorage, record)
+  }, [headerVm.resumeRecord])
+
   const selectedRoom = roomVm.selectedRoom
   const uiState = useEstimateV2EditorPageUiState({
     selectedRoomId: selectedRoom?.roomId,
@@ -61,10 +71,8 @@ export function EstimateV2EditorPageContent({
     <div className={`${pageStyles.root} ace-v2-shell`} style={estimateV2EditorPageStyles.page}>
       <EstimateV2EditorHeaderArea
         styles={estimateV2EditorPageStyles}
-        estimateId={estimateId}
         routeFamily={resolvedRouteFamily}
         headerVm={headerVm}
-        saveVm={saveVm}
         confirmNavigation={confirmNavigation}
       />
 

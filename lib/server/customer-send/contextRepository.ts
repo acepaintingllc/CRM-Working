@@ -2,6 +2,8 @@ import { getEstimateCatalogs } from '@/lib/server/estimateCatalogs'
 import { supabaseAdmin } from '@/lib/server/org'
 import { loadCompanyProfileSettings } from '@/lib/server/settings/companyProfileStore'
 import { loadQuoteSendDefaults } from '@/lib/server/settings/quoteSendDefaultsStore'
+import { defaultQuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
+import { templatePresets } from '@/lib/customer-estimates/presets'
 import type { CompanyProfile, Unsafe } from '@/lib/customer-estimates/types'
 import type {
   EstimateCustomerSendCoreResources,
@@ -30,6 +32,8 @@ const DEFAULT_QUOTE_SEND_DEFAULTS: QuoteSendDefaults = {
   default_template_key: 'default',
   quote_validity_days: 90,
   terms_text: '',
+  terms_sections: defaultQuoteTermsSections,
+  template_presets: templatePresets,
 }
 
 type QueryError = { error: string }

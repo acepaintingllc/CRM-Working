@@ -58,6 +58,8 @@ export function buildEstimateCustomerSendContext(params: {
       default_template_key: params.resources.quoteDefaults.default_template_key,
       quote_validity_days: params.resources.quoteDefaults.quote_validity_days,
       terms_text: params.resources.quoteDefaults.terms_text,
+      terms_sections: params.resources.quoteDefaults.terms_sections,
+      template_presets: params.resources.quoteDefaults.template_presets,
       updated_at: null,
     },
     inputs: {
@@ -72,6 +74,7 @@ export function buildEstimateCustomerSendContext(params: {
       trim_items: params.resources.trimItems,
       other: params.resources.other,
       jobsettings: params.resources.jobsettings,
+      org_defaults: params.resources.settingsRow,
     },
     catalogs: params.resources.catalogs,
     pricing_summary: params.calculated.pricingSummary,

@@ -4,6 +4,8 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ClipboardCheck, ListTodo, NotebookText } from 'lucide-react'
+import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
+import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { NotesComposerMount, NotesModuleHeaderActions } from './_components'
 
 const tabs = [
@@ -16,19 +18,13 @@ export default function NotesLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-4 pb-16">
-      <section className="rounded-[28px] border border-neutral-800 bg-neutral-950 p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="text-xs font-extrabold uppercase tracking-[0.24em] text-emerald-300/80">Notes Module</div>
-            <h1 className="mt-2 text-3xl font-extrabold text-white">Notes</h1>
-            <p className="mt-2 max-w-2xl text-sm text-neutral-400">
-              Separate task and note workflows with a faster daily dashboard, denser lists, and less clutter.
-            </p>
-          </div>
-          <NotesModuleHeaderActions />
-        </div>
-      </section>
+    <CrmPageShell className="max-w-6xl pb-16">
+      <CrmPageHeader
+        eyebrow="Notes Module"
+        title="Notes"
+        description="Separate task and note workflows with a faster daily dashboard, denser lists, and less clutter."
+        actions={<NotesModuleHeaderActions />}
+      />
 
       <nav className="grid grid-cols-3 gap-2">
         {tabs.map((tab) => {
@@ -37,10 +33,11 @@ export default function NotesLayout({ children }: { children: ReactNode }) {
             <Link
               key={tab.href}
               href={tab.href}
-              className={`inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold transition ${
+              aria-current={active ? 'page' : undefined}
+              className={`inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold no-underline transition ${
                 active
-                  ? 'border-emerald-400/60 bg-emerald-400 text-neutral-950'
-                  : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900'
+                  ? 'border-[color:var(--crm-ui-accent-border)] bg-[color:var(--crm-ui-accent-soft)] text-[color:var(--crm-ui-accent)]'
+                  : 'ace-crm-surface text-[color:var(--crm-ui-muted)] hover:border-[color:var(--crm-ui-accent-border)] hover:text-[color:var(--crm-ui-text)]'
               }`}
             >
               <tab.Icon size={16} aria-hidden="true" />
@@ -52,6 +49,6 @@ export default function NotesLayout({ children }: { children: ReactNode }) {
 
       <div>{children}</div>
       <NotesComposerMount />
-    </div>
+    </CrmPageShell>
   )
 }
