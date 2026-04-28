@@ -15,6 +15,7 @@ import type {
 import {
   normalizeCeilingScope,
   normalizeCeilingSegment,
+  normalizeDoorScope,
   normalizeScope,
   normalizeSegment,
   normalizeTrimScope,
@@ -36,6 +37,7 @@ export type EstimateV2PreparedSaveState = {
     ceilingScopes: EstimateV2SaveCollections['ceilingScopes']
     ceilingSegments: EstimateV2SaveCollections['ceilingSegments']
     trimScopes: EstimateV2SaveCollections['trimScopes']
+    doorScopes: EstimateV2SaveCollections['doorScopes']
     rollers: EstimateV2SaveCollections['rollers']
   }
   payloadSnapshot: EstimateV2DirtySnapshot
@@ -85,6 +87,7 @@ export function prepareEstimateV2SaveState(
     ceilingScopes: sanitizedCeilings.ceilingScopes,
     ceilingSegments: sanitizedCeilings.ceilingSegments,
     trimScopes: sanitizedTrim.trimScopes,
+    doorScopes: currentState.collections.doorScopes ?? [],
     rollers: currentState.collections.rollers,
   }
 
@@ -101,6 +104,7 @@ export function prepareEstimateV2SaveState(
       ceilingScopes: collections.ceilingScopes,
       ceilingSegments: collections.ceilingSegments,
       trimScopes: collections.trimScopes,
+      doorScopes: collections.doorScopes ?? [],
       rollers: collections.rollers,
     }),
   }
@@ -161,7 +165,7 @@ export function resolveEstimateV2SaveResponseState(params: {
   payload: unknown
   meta: Pick<
     EstimateV2SaveMeta,
-    'wallCalculations' | 'ceilingCalculations' | 'trimCalculations'
+    'wallCalculations' | 'ceilingCalculations' | 'trimCalculations' | 'doorCalculations'
   >
   prepared: EstimateV2PreparedSaveState
   currentState: EstimateV2EditorStoreState
@@ -274,6 +278,21 @@ export function resolveEstimateV2SaveResponseState(params: {
           null) as EstimateV2PricingSummary | null)
       : null
 
+  const nextDoorCalculations =
+    payload != null && typeof payload === 'object' && 'door_calculations' in payload
+      ? ((payload as { door_calculations?: Unsafe }).door_calculations ?? null)
+      : meta.doorCalculations
+  let nextDoorScopes = prepared.collections.doorScopes
+  if (
+    trigger === 'manual' &&
+    nextDoorCalculations &&
+    Array.isArray((nextDoorCalculations as Unsafe).scopes)
+  ) {
+    nextDoorScopes = sortByPosition(
+      ((nextDoorCalculations as Unsafe).scopes as Unsafe[]).map(normalizeDoorScope)
+    )
+  }
+
   return {
     collections: {
       scopes: nextScopes,
@@ -281,12 +300,14 @@ export function resolveEstimateV2SaveResponseState(params: {
       ceilingScopes: nextCeilingScopes,
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
+      doorScopes: nextDoorScopes,
       rollers: currentState.collections.rollers,
     },
     calculations: {
       wallCalculations: nextWallCalculations,
       ceilingCalculations: nextCeilingCalculations,
       trimCalculations: nextTrimCalculations,
+      doorCalculations: nextDoorCalculations,
       pricingSummary: nextPricingSummary,
     },
     lastSavedSnapshot: buildEstimateV2DirtySnapshot({
@@ -298,6 +319,7 @@ export function resolveEstimateV2SaveResponseState(params: {
       ceilingScopes: nextCeilingScopes,
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
+      doorScopes: nextDoorScopes,
       rollers: currentState.collections.rollers,
     }),
   }

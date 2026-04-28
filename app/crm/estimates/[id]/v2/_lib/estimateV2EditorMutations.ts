@@ -4,6 +4,7 @@ import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingScopeMode,
   EstimateV2CeilingSegmentDraft,
+  EstimateV2DoorScopeDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2TrimMeasurementMode,
@@ -17,6 +18,7 @@ import type {
 import {
   createDefaultCeilingScope,
   createDefaultCeilingSegment,
+  createDefaultDoorScope,
   createDefaultRoom,
   createDefaultScope,
   createDefaultSegment,
@@ -108,6 +110,7 @@ export function deleteRoomCascadeMutation(params: {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
+  doorScopes?: EstimateV2DoorScopeDraft[]
   roomId: string
   selectedRoomId: string
 }) {
@@ -123,6 +126,7 @@ export function deleteRoomCascadeMutation(params: {
     ceilingScopes: params.ceilingScopes.filter((scope) => scope.roomId !== params.roomId),
     ceilingSegments: params.ceilingSegments.filter((segment) => segment.roomId !== params.roomId),
     trimScopes: params.trimScopes.filter((scope) => scope.roomId !== params.roomId),
+    doorScopes: (params.doorScopes ?? []).filter((scope) => scope.roomId !== params.roomId),
     selectedRoomId: nextSelectedRoomId,
   }
 }
@@ -571,6 +575,61 @@ export function toggleRoomTrimIncludeMutation(
   const roomScopes = sortByPosition(scopes.filter((scope) => scope.roomId === roomId))
   if (roomScopes.length === 0) {
     const nextScope = createDefaultTrimScope(roomId)
+    nextScope.include = 'Y'
+    return [...scopes, nextScope]
+  }
+  const hasIncluded = roomScopes.some((scope) => scope.include === 'Y')
+  return scopes.map((scope) => (scope.roomId === roomId ? { ...scope, include: hasIncluded ? 'N' : 'Y' } : scope))
+}
+
+export function updateDoorScopeMutation(
+  scopes: EstimateV2DoorScopeDraft[],
+  scopeId: string,
+  patch: Partial<EstimateV2DoorScopeDraft>
+) {
+  return scopes.map((scope) => (scope.id === scopeId ? { ...scope, ...patch } : scope))
+}
+
+export function addDoorScopeMutation(scopes: EstimateV2DoorScopeDraft[], roomId: string) {
+  const roomScopes = sortByPosition(scopes.filter((scope) => scope.roomId === roomId))
+  const nextScope = createDefaultDoorScope(roomId)
+  nextScope.position = roomScopes.length
+  return [...scopes, nextScope]
+}
+
+export function moveDoorScopeMutation(params: {
+  scopes: EstimateV2DoorScopeDraft[]
+  roomId: string
+  scopeId: string
+  direction: -1 | 1
+}) {
+  const roomScopes = sortByPosition(params.scopes.filter((scope) => scope.roomId === params.roomId))
+  const index = roomScopes.findIndex((scope) => scope.id === params.scopeId)
+  if (index === -1) return params.scopes
+  const reordered = moveItem(roomScopes, index, index + params.direction).map((scope, position) => ({
+    ...scope,
+    position,
+  }))
+  return [...params.scopes.filter((scope) => scope.roomId !== params.roomId), ...reordered]
+}
+
+export function deleteDoorScopeMutation(
+  scopes: EstimateV2DoorScopeDraft[],
+  roomId: string,
+  scopeId: string
+) {
+  const remaining = scopes.filter((scope) => !(scope.roomId === roomId && scope.id === scopeId))
+  const roomScopes = reindexByPosition(remaining.filter((scope) => scope.roomId === roomId))
+  return [...remaining.filter((scope) => scope.roomId !== roomId), ...roomScopes]
+}
+
+export function toggleRoomDoorIncludeMutation(
+  scopes: EstimateV2DoorScopeDraft[],
+  roomId: string
+): EstimateV2DoorScopeDraft[] {
+  const roomScopes = sortByPosition(scopes.filter((scope) => scope.roomId === roomId))
+  if (roomScopes.length === 0) {
+    const nextScope = createDefaultDoorScope(roomId)
     nextScope.include = 'Y'
     return [...scopes, nextScope]
   }

@@ -147,6 +147,7 @@ export function useEstimateV2SaveController(params: {
         ceilingScopes: latestState.collections.ceilingScopes,
         ceilingSegments: latestState.collections.ceilingSegments,
         trimScopes: latestState.collections.trimScopes,
+        doorScopes: latestState.collections.doorScopes,
         rollers: latestState.collections.rollers,
       })
       if (latestSnapshot.comparisonKey !== preparedSave.payloadSnapshot.comparisonKey) {

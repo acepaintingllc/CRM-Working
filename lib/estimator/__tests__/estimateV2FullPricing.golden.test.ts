@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { calculateCeilings, type CeilingCalculationInput } from '../ceilings.ts'
+import { calculateDoors, type DoorCalculationInput } from '../doors.ts'
 import { buildEstimatePricingSummary, buildEstimatePricingSummaryFromEngines } from '../pricingPolicies.ts'
 import { calculateTrim, type TrimCalculationInput } from '../trim.ts'
 import { calculateWalls, type WallCalculationInput } from '../walls.ts'
@@ -215,6 +216,48 @@ function trimScope(overrides: Partial<TrimCalculationInput['scopes'][0]> = {}): 
     raw_supply_cost: null,
     effective_supply_cost: null,
     raw_total: null,
+    effective_total: null,
+    notes: null,
+    ...overrides,
+  }
+}
+
+function doorScope(overrides: Partial<DoorCalculationInput['scopes'][0]> = {}): DoorCalculationInput['scopes'][0] {
+  return {
+    id: 'door-1',
+    room_id: 'R001',
+    position: 0,
+    include: 'Y',
+    scope_name: 'Panel Door',
+    door_type_id: 'PANEL',
+    color_id: null,
+    paint_product_id: 'WALL-PAINT',
+    primer_product_id: 'PRIMER',
+    prime_mode: 'NONE',
+    quantity: 1,
+    sides: 2,
+    paint_coats: 1,
+    primer_coats: 1,
+    spot_prime_percent: null,
+    condition_factor: 1,
+    labor_rate: null,
+    material_rate: null,
+    raw_units: null,
+    effective_units: null,
+    raw_paint_hours: null,
+    override_paint_hours: null,
+    effective_paint_hours: null,
+    raw_primer_hours: null,
+    override_primer_hours: null,
+    effective_primer_hours: null,
+    raw_material_cost: null,
+    override_material_cost: null,
+    effective_material_cost: null,
+    raw_supply_cost: null,
+    override_supply_cost: null,
+    effective_supply_cost: null,
+    raw_total: null,
+    override_total: null,
     effective_total: null,
     notes: null,
     ...overrides,
@@ -445,9 +488,45 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
     ],
   })
 
+  const doors = calculateDoors({
+    settings: { labor_rate_per_hour: SETTINGS.labor_rate_per_hour },
+    catalogs: {
+      door_unit_rates: [
+        {
+          id: 'PANEL',
+          label: 'Panel Door',
+          unit_rate_type: 'interior',
+          unit: 'door side',
+          default_qty: 1,
+          labor_rate: 0.5,
+          material_rate: 5,
+          amount: 0,
+        },
+      ],
+    },
+    scopes: [
+      doorScope({
+        id: 'door-kitchen-panel',
+        room_id: 'R002',
+        scope_name: 'Kitchen painted door',
+        quantity: 2,
+        sides: 2,
+        prime_mode: 'FULL',
+      }),
+      doorScope({
+        id: 'door-bedroom-excluded',
+        room_id: 'R003',
+        include: 'N',
+        quantity: 3,
+        sides: 2,
+        override_total: 999,
+      }),
+    ],
+  })
+
   assert.deepEqual(
-    [walls.missing_inputs.length, ceilings.missing_inputs.length, trim.missing_inputs.length],
-    [0, 0, 0]
+    [walls.missing_inputs.length, ceilings.missing_inputs.length, trim.missing_inputs.length, doors.missing_inputs.length],
+    [0, 0, 0, 0]
   )
 
   approx(walls.scopes.find((scope) => scope.id === 'wall-living')?.raw_area_sf, 360)
@@ -456,6 +535,9 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
   approx(ceilings.scopes.find((scope) => scope.id === 'ceiling-kitchen')?.effective_total, 0)
   approx(trim.scopes.find((scope) => scope.id === 'trim-living-base')?.raw_measurement, 48)
   approx(trim.scopes.find((scope) => scope.id === 'trim-bedroom-base')?.raw_measurement, 39.5)
+  approx(doors.scopes.find((scope) => scope.id === 'door-kitchen-panel')?.effective_units, 4)
+  approx(doors.scopes.find((scope) => scope.id === 'door-kitchen-panel')?.effective_total, 60)
+  approx(doors.scopes.find((scope) => scope.id === 'door-bedroom-excluded')?.effective_total, 0)
 
   const sharedWallPaint = walls.paint_material_groups.find((group) => group.group_key === 'WALL-PAINT')
   assert.ok(sharedWallPaint)
@@ -465,8 +547,13 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
     ['wall-living', 'wall-kitchen', 'wall-bedroom']
   )
 
-  const pricing = buildEstimatePricingSummary(
-    [walls, ceilings, trim],
+  const pricing = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'walls', output: walls },
+      { kind: 'ceilings', output: ceilings },
+      { kind: 'trim', output: trim },
+      { kind: 'doors', output: doors },
+    ],
     { enabled: true, dayhours: 8, roundingIncrementHours: 4 },
     { enabled: true, amount: 1_500 },
     {
@@ -479,27 +566,30 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
     }
   )
 
-  approx(pricing.rawLaborHours, 32.6042)
-  assert.equal(pricing.effectiveLaborHours, 36)
+  approx(pricing.rawLaborHours, 36.6042)
+  assert.equal(pricing.effectiveLaborHours, 40)
   approx(pricing.laborAdjustmentHours, 3.3958)
   approx(pricing.wallPaintMaterialCost, 160)
   approx(pricing.ceilingPaintMaterialCost, 54)
-  approx(pricing.trimPaintMaterialCost, 45)
-  approx(pricing.paintMaterialCost, 259)
-  approx(pricing.prePolicyTotal, 852.5)
-  approx(pricing.postLaborPolicyTotal, 886.46)
-  approx(pricing.minimumAdjustmentAmount, 613.54)
+  approx(pricing.trimPaintMaterialCost, 85)
+  approx(pricing.paintMaterialCost, 299)
+  approx(pricing.prePolicyTotal, 912.5)
+  approx(pricing.postLaborPolicyTotal, 946.46)
+  approx(pricing.minimumAdjustmentAmount, 553.54)
   approx(pricing.finalTotal, 1500)
-  const allIncludedScopes = [...walls.scopes, ...ceilings.scopes, ...trim.scopes].filter(
+  const allIncludedScopes = [...walls.scopes, ...ceilings.scopes, ...trim.scopes, ...doors.scopes].filter(
     (scope) => scope.include === 'Y'
   )
   const expectedPrimerMaterialCost = allIncludedScopes.reduce(
-    (sum, scope) => sum + (scope.effective_primer_gallons ?? 0) * (scope.primer_price_per_gal ?? 0),
+    (sum, scope) =>
+      sum +
+      (scope.effective_primer_gallons ?? 0) *
+        ((scope as { primer_price_per_gal?: number | null }).primer_price_per_gal ?? 0),
     0
   )
   const expectedSupplyCost =
     allIncludedScopes.reduce((sum, scope) => sum + (scope.effective_supply_cost ?? 0), 0) +
-    [...walls.per_color_supply_groups, ...ceilings.per_color_supply_groups, ...trim.per_color_supply_groups].reduce(
+    [...walls.per_color_supply_groups, ...ceilings.per_color_supply_groups, ...trim.per_color_supply_groups, ...doors.per_color_supply_groups].reduce(
       (sum, group) =>
         sum + group.allocations.reduce((groupSum, allocation) => groupSum + allocation.allocated_supply_cost, 0),
       0

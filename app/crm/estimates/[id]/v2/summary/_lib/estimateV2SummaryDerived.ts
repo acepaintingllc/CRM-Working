@@ -28,6 +28,7 @@ type SummaryScopeSourceRow = {
   include?: string | null
   effective_area_sf?: number | null
   effective_measurement?: number | null
+  effective_units?: number | null
   effective_paint_hours?: number | null
   effective_primer_hours?: number | null
   effective_supply_cost?: number | null
@@ -37,6 +38,7 @@ type SummaryScopeSourceRow = {
   override_primer_hours?: number | null
   override_paint_gallons?: number | null
   override_primer_gallons?: number | null
+  override_material_cost?: number | null
   override_supply_cost?: number | null
   override_total?: number | null
   paint_product_id?: string | null
@@ -170,6 +172,18 @@ const SCOPE_MAPPING_CONFIG: Record<ScopeKind, ScopeMappingConfig> = {
       !!scope.override_description,
     missingProduct: () => false,
   },
+  doors: {
+    fallbackLabel: 'Doors',
+    quantity: (scope) => scope.effective_units ?? null,
+    paintCost: () => null,
+    hasOverride: (scope) =>
+      scope.override_paint_hours != null ||
+      scope.override_primer_hours != null ||
+      scope.override_material_cost != null ||
+      scope.override_supply_cost != null ||
+      scope.override_total != null,
+    missingProduct: () => false,
+  },
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -219,6 +233,14 @@ function buildOverrideSummary(kind: ScopeKind, scope: SummaryScopeSourceRow) {
             ? `Description: ${scope.override_description.trim()}`
             : null,
         ]
+      : kind === 'doors'
+        ? [
+            activeOverride('Paint hours', scope.override_paint_hours, 'h'),
+            activeOverride('Primer hours', scope.override_primer_hours, 'h'),
+            activeCurrencyOverride('Material cost', scope.override_material_cost),
+            activeCurrencyOverride('Supply cost', scope.override_supply_cost),
+            activeCurrencyOverride('Total', scope.override_total),
+          ]
       : [
           activeOverride('Area', scope.override_area_sf, 'sf'),
           activeOverride('Paint hours', scope.override_paint_hours, 'h'),
@@ -246,6 +268,7 @@ function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
     include: asNullableString(value.include),
     effective_area_sf: asMaybeNumber(value.effective_area_sf),
     effective_measurement: asMaybeNumber(value.effective_measurement),
+    effective_units: asMaybeNumber(value.effective_units),
     effective_paint_hours: asMaybeNumber(value.effective_paint_hours),
     effective_primer_hours: asMaybeNumber(value.effective_primer_hours),
     effective_supply_cost: asMaybeNumber(value.effective_supply_cost),
@@ -255,6 +278,7 @@ function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
     override_primer_hours: asNullableNumber(value.override_primer_hours),
     override_paint_gallons: asNullableNumber(value.override_paint_gallons),
     override_primer_gallons: asNullableNumber(value.override_primer_gallons),
+    override_material_cost: asNullableNumber(value.override_material_cost),
     override_supply_cost: asNullableNumber(value.override_supply_cost),
     override_total: asNullableNumber(value.override_total),
     paint_product_id: asNullableString(value.paint_product_id),
@@ -291,6 +315,7 @@ export function hasMeaningfulScopeContent(scope: SummaryScopeSourceRow) {
   const hasValue =
     (scope.effective_area_sf ?? 0) > 0 ||
     (scope.effective_measurement ?? 0) > 0 ||
+    (scope.effective_units ?? 0) > 0 ||
     (scope.raw_paint_gallons ?? 0) > 0 ||
     (scope.allocated_paint_material_cost ?? 0) > 0 ||
     (scope.effective_total ?? 0) > 0
@@ -385,6 +410,7 @@ export function buildPaintSupplyProductLabels(params: {
   wallScopes: SummaryScopeSourceRow[]
   ceilingScopes: SummaryScopeSourceRow[]
   trimScopes: SummaryScopeSourceRow[]
+  doorScopes?: SummaryScopeSourceRow[]
   trimPaint: EstimateV2TrimPaint | null | undefined
   resolvePaintProductLabel: (productId?: string | null, fallbackLabel?: string | null) => string
 }): EstimateV2PaintSupplyProductLabels {
@@ -483,6 +509,7 @@ export function buildRoomScopeRows(params: {
   wallScopes: SummaryScopeSourceRow[]
   ceilingScopes: SummaryScopeSourceRow[]
   trimScopes: SummaryScopeSourceRow[]
+  doorScopes?: SummaryScopeSourceRow[]
 }) {
   const next = new Map<string, EstimateV2SummaryScopeRowVm[]>()
 
@@ -505,6 +532,11 @@ export function buildRoomScopeRows(params: {
   for (const scope of params.trimScopes) {
     if (scope.include === 'N' || !hasMeaningfulScopeContent(scope)) continue
     push(buildScopeRow('trim', scope))
+  }
+
+  for (const scope of params.doorScopes ?? []) {
+    if (scope.include === 'N' || !hasMeaningfulScopeContent(scope)) continue
+    push(buildScopeRow('doors', scope))
   }
 
   for (const [roomId, rows] of next.entries()) {

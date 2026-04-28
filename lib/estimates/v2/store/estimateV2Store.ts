@@ -34,9 +34,12 @@ type EstimateV2CollectionsState = Omit<
   | 'setCeilingScopes'
   | 'setCeilingSegments'
   | 'setTrimScopes'
+  | 'doorScopes'
+  | 'setDoorScopes'
   | 'setRollers'
 > & {
   rollers?: EstimateV2EditorCollections['rollers']
+  doorScopes?: EstimateV2EditorCollections['doorScopes']
 }
 
 type EstimateV2MetaFields = Omit<
@@ -50,6 +53,8 @@ type EstimateV2MetaFields = Omit<
   | 'setWallCalculations'
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
+  | 'doorCalculations'
+  | 'setDoorCalculations'
   | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
@@ -65,12 +70,15 @@ type EstimateV2MetaFields = Omit<
   | 'setDebugMeta'
 > & {
   pricingSummary?: EstimateV2EditorMetaState['pricingSummary']
+  doorCalculations?: EstimateV2EditorMetaState['doorCalculations']
 }
 
 export type EstimateV2EditorStoreState = {
   collections: EstimateV2CollectionsState
   meta: EstimateV2MetaFields
 }
+
+const EMPTY_DOOR_SCOPES: NonNullable<EstimateV2CollectionsState['doorScopes']> = []
 
 export type EstimateV2EditorViewState = EstimateV2CollectionsState &
   Pick<
@@ -104,6 +112,7 @@ type EstimateV2CollectionSetters = Pick<
   | 'setCeilingScopes'
   | 'setCeilingSegments'
   | 'setTrimScopes'
+  | 'setDoorScopes'
   | 'setRollers'
 >
 
@@ -117,6 +126,7 @@ type EstimateV2MetaSetters = Pick<
   | 'setWallCalculations'
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
+  | 'setDoorCalculations'
   | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
@@ -152,6 +162,7 @@ function createEmptyCatalogs(): EstimateV2CatalogsPayload['catalogs'] {
     room_flags: [],
     ceiling_types: [],
     trim_items: [],
+    door_types: [],
     condition_modifiers: [],
   }
 }
@@ -213,6 +224,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       ceilingScopes: [],
       ceilingSegments: [],
       trimScopes: [],
+      doorScopes: [],
       rollers: [],
     },
     meta: {
@@ -224,6 +236,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       wallCalculations: null,
       ceilingCalculations: null,
       trimCalculations: null,
+      doorCalculations: null,
       pricingSummary: null,
       selectedRoomId: '',
       error: null,
@@ -316,6 +329,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
           trimScopes: resolveUpdater(state.collections.trimScopes, value),
         },
       })),
+    setDoorScopes: (value) =>
+      set((state) => ({
+        collections: {
+          ...state.collections,
+          doorScopes: resolveUpdater(state.collections.doorScopes ?? [], value),
+        },
+      })),
     setRollers: (value) =>
       set((state) => ({
         collections: {
@@ -362,6 +382,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
         meta: {
           ...state.meta,
           trimCalculations: resolveUpdater(state.meta.trimCalculations, value),
+        },
+      })),
+    setDoorCalculations: (value) =>
+      set((state) => ({
+        meta: {
+          ...state.meta,
+          doorCalculations: resolveUpdater(state.meta.doorCalculations ?? null, value),
         },
       })),
     setPricingSummary: (value) =>
@@ -497,6 +524,8 @@ function selectCollectionsWithSetters(state: EstimateV2EditorStore): EstimateV2E
     setCeilingSegments: state.setCeilingSegments,
     trimScopes: state.collections.trimScopes,
     setTrimScopes: state.setTrimScopes,
+    doorScopes: state.collections.doorScopes ?? EMPTY_DOOR_SCOPES,
+    setDoorScopes: state.setDoorScopes,
     rollers: state.collections.rollers ?? [],
     setRollers: state.setRollers,
   }
@@ -520,6 +549,8 @@ function selectMetaWithSetters(state: EstimateV2EditorStore): EstimateV2EditorMe
     setCeilingCalculations: state.setCeilingCalculations,
     trimCalculations: state.meta.trimCalculations,
     setTrimCalculations: state.setTrimCalculations,
+    doorCalculations: state.meta.doorCalculations ?? null,
+    setDoorCalculations: state.setDoorCalculations,
     pricingSummary: state.meta.pricingSummary ?? null,
     setPricingSummary: state.setPricingSummary,
     selectedRoomId: state.meta.selectedRoomId,

@@ -35,6 +35,7 @@ export function buildOverlayFromRows(params: {
   const condition_modifiers: RatesFlagsCatalogOverlay['condition_modifiers'] = []
   const access_fees: RatesFlagsCatalogOverlay['access_fees'] = []
   const trim_items: RatesFlagsCatalogOverlay['trim_items'] = []
+  const door_unit_rates: RatesFlagsCatalogOverlay['door_unit_rates'] = []
   const area_supplies_rates: RatesFlagsCatalogOverlay['area_supplies_rates'] = []
 
   function normalizeConditionScopes(value: unknown): Array<'room' | 'wall' | 'ceiling' | 'trim'> {
@@ -251,6 +252,22 @@ export function buildOverlayFromRows(params: {
     })
   }
 
+  for (const row of grouped.get('unit_rates_doors') ?? []) {
+    const values = toStringRecord(row.values_json)
+    door_unit_rates.push({
+      id: normalizeId(values.id || row.row_id),
+      label: asText(values.display_name) || row.display_name || normalizeId(values.id || row.row_id),
+      unit_rate_type: asText(values.unit_rate_type) || null,
+      unit: asText(values.unit) || null,
+      default_qty: parseNumber(values.default_qty),
+      labor_rate: parseNumber(values.labor_rate),
+      material_rate: parseNumber(values.material_rate),
+      amount: parseNumber(values.amount),
+      notes: asText(values.notes) || null,
+      active: row.active,
+    })
+  }
+
   const areaSupplyRows = [
     ...(grouped.get('supply_rates_area_based') ?? []),
     ...(grouped.get('supply_rates_per_color') ?? []),
@@ -289,6 +306,7 @@ export function buildOverlayFromRows(params: {
     condition_modifiers,
     access_fees,
     trim_items,
+    door_unit_rates,
     area_supplies_rates,
   }
 }

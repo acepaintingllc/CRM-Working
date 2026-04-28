@@ -13,6 +13,7 @@ import type {
   TrimMeasurementMode,
   TrimUnitType,
 } from '../estimator/trimTypes.ts'
+import type { DoorCalculationScopeRow } from '../estimator/doorTypes.ts'
 import {
   asNullableNumber,
   asNullableNumberFromKeys,
@@ -304,6 +305,7 @@ function toTrimHelperSource(value: unknown): TrimHelperSource | null {
 export type V2CeilingScopeSaveRow = CeilingCalculationScopeRow
 export type V2CeilingSegmentSaveRow = CeilingCalculationSegmentRow
 export type V2TrimScopeSaveRow = TrimCalculationScopeRow
+export type V2DoorScopeSaveRow = DoorCalculationScopeRow
 
 export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
   const modeByRoom = new Map<string, 'RECT' | 'SEG'>()
@@ -562,6 +564,68 @@ export function buildV2TrimScopeRows(rows: Unsafe[], roomIds: Set<string>) {
   }
 }
 
+// ─── Door scope builders ─────────────────────────────────────────────────────
+
+export function buildV2DoorScopeRows(rows: Unsafe[], roomIds: Set<string>) {
+  const positionByRoom = new Map<string, number>()
+  const scopeRows = rows.map((row, idx) => {
+    const roomId = asText(row.room_id).toUpperCase()
+    if (!roomId || !roomIds.has(roomId)) {
+      throw new Error(`Door scope ${idx + 1}: room is missing or invalid`)
+    }
+    const nextPosition = positionByRoom.get(roomId) ?? 0
+    positionByRoom.set(roomId, nextPosition + 1)
+
+    return {
+      id: isUuid(row.id) ? asText(row.id) : undefined,
+      room_id: roomId,
+      position: nextPosition,
+      include: toYN(row.include, 'Y'),
+      scope_name: asText(row.scope_name) || null,
+      door_type_id: asText(row.door_type_id).toUpperCase() || null,
+      color_id: toColorId(row.color_id) || null,
+      paint_product_id: asText(row.paint_product_id) || null,
+      primer_product_id: asText(row.primer_product_id) || null,
+      prime_mode: toTrimPrimeMode(row.prime_mode),
+      quantity: asNullableNumber(row.quantity),
+      sides: asNullableNumber(row.sides),
+      paint_coats: asNullableNumber(row.paint_coats),
+      primer_coats: asNullableNumber(row.primer_coats),
+      spot_prime_percent: asNullableNumber(row.spot_prime_percent),
+      condition_factor: asNullableNumber(row.condition_factor),
+      labor_rate: asNullableNumber(row.labor_rate),
+      material_rate: asNullableNumber(row.material_rate),
+      raw_units: asNullableNumber(row.raw_units),
+      effective_units: asNullableNumber(row.effective_units),
+      raw_paint_hours: asNullableNumber(row.raw_paint_hours),
+      override_paint_hours: asNullableNumber(row.override_paint_hours),
+      effective_paint_hours: asNullableNumber(row.effective_paint_hours),
+      raw_primer_hours: asNullableNumber(row.raw_primer_hours),
+      override_primer_hours: asNullableNumber(row.override_primer_hours),
+      effective_primer_hours: asNullableNumber(row.effective_primer_hours),
+      raw_material_cost: asNullableNumber(row.raw_material_cost),
+      override_material_cost: asNullableNumber(row.override_material_cost),
+      effective_material_cost: asNullableNumber(row.effective_material_cost),
+      raw_supply_cost: asNullableNumber(row.raw_supply_cost),
+      override_supply_cost: asNullableNumber(row.override_supply_cost),
+      effective_supply_cost: asNullableNumber(row.effective_supply_cost),
+      raw_total: asNullableNumber(row.raw_total),
+      override_total: asNullableNumber(row.override_total),
+      effective_total: asNullableNumber(row.effective_total),
+      notes: asText(row.notes) || null,
+    } satisfies V2DoorScopeSaveRow
+  })
+
+  return {
+    scopeRows,
+    scopeIds: new Set(
+      scopeRows
+        .map((row) => row.id)
+        .filter((value): value is string => !!value)
+    ),
+  }
+}
+
 // ─── Catalog builders ─────────────────────────────────────────────────────────
 
 export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallCalculationCatalogs | null {
@@ -649,5 +713,35 @@ export function toTrimCalculationCatalogs(raw: Unsafe | null | undefined) {
           }))
           .filter((row) => row.id)
       : [],
+  }
+}
+
+export function toDoorCalculationCatalogs(raw: Unsafe | null | undefined) {
+  if (!raw || typeof raw !== 'object') return null
+  const catalogs = raw as { door_types?: Unsafe[]; unit_rates_doors?: Unsafe[]; categories?: Unsafe[] }
+  const categoryRows = Array.isArray(catalogs.categories)
+    ? ((catalogs.categories.find((entry) => asText((entry as Unsafe).key) === 'unit_rates_doors') as Unsafe | undefined)?.rows as Unsafe[] | undefined)
+    : undefined
+  const rows = Array.isArray(catalogs.door_types)
+    ? catalogs.door_types
+    : Array.isArray(catalogs.unit_rates_doors)
+      ? catalogs.unit_rates_doors
+      : Array.isArray(categoryRows)
+        ? categoryRows
+        : []
+  return {
+    door_unit_rates: rows
+      .filter((row) => (row as Unsafe).active !== false)
+      .map((row) => ({
+        id: asText((row as Unsafe).id).toUpperCase(),
+        label: asText((row as Unsafe).label || (row as Unsafe).display_name || (row as Unsafe).id),
+        unit_rate_type: asText((row as Unsafe).unit_rate_type) || null,
+        unit: asText((row as Unsafe).unit) || null,
+        default_qty: asNullableNumber((row as Unsafe).default_qty),
+        labor_rate: asNullableNumber((row as Unsafe).labor_rate),
+        material_rate: asNullableNumber((row as Unsafe).material_rate),
+        amount: asNullableNumber((row as Unsafe).amount),
+      }))
+      .filter((row) => row.id),
   }
 }

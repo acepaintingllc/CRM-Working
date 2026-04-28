@@ -82,11 +82,13 @@ export function buildIncludedScopeLabels(params: {
   wallsIncluded: boolean
   ceilingsIncluded: boolean
   trimsIncluded: boolean
+  doorsIncluded?: boolean
 }) {
   const labels = [
     params.wallsIncluded ? 'Walls' : null,
     params.ceilingsIncluded ? 'Ceilings' : null,
     params.trimsIncluded ? 'Trim' : null,
+    params.doorsIncluded ? 'Doors' : null,
   ].filter(Boolean)
 
   return labels.length > 0 ? labels.join(', ') : 'No scopes included'
@@ -96,11 +98,13 @@ export function buildScopeToggleLabels(params: {
   wallsIncluded: boolean
   ceilingsIncluded: boolean
   trimsIncluded: boolean
+  doorsIncluded?: boolean
 }) {
   return {
     walls: `Walls ${params.wallsIncluded ? 'included' : 'excluded'}`,
     ceilings: `Ceilings ${params.ceilingsIncluded ? 'included' : 'excluded'}`,
     trim: `Trim ${params.trimsIncluded ? 'included' : 'excluded'}`,
+    doors: `Doors ${params.doorsIncluded ? 'included' : 'excluded'}`,
   }
 }
 

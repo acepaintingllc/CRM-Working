@@ -9,24 +9,31 @@ export function useEstimateV2EditorPageUiState({
   selectedRoomId,
   roomScopeByRoomId,
   roomCeilingScopeByRoomId,
+  roomDoorScopeByRoomId,
   toggleWallsInclude,
   toggleCeilingsInclude,
+  toggleDoorsInclude,
 }: {
   selectedRoomId?: string
   roomScopeByRoomId: Map<string, Array<{ id: string; include: string }>>
   roomCeilingScopeByRoomId: Map<string, Array<{ id: string; include: string }>>
+  roomDoorScopeByRoomId: Map<string, Array<{ id: string; include: string }>>
   toggleWallsInclude: (roomId: string) => void
   toggleCeilingsInclude: (roomId: string) => void
+  toggleDoorsInclude: (roomId: string) => void
 }) {
   const wallsSectionRef = useRef<HTMLDivElement | null>(null)
   const ceilingsSectionRef = useRef<HTMLDivElement | null>(null)
   const trimSectionRef = useRef<HTMLDivElement | null>(null)
+  const doorsSectionRef = useRef<HTMLDivElement | null>(null)
   const [openWallsSection, setOpenWallsSection] = useState<ScopeRecord>({})
   const [openAdvanced, setOpenAdvanced] = useState<ScopeRecord>({})
   const [openCeilingSection, setOpenCeilingSection] = useState<ScopeRecord>({})
   const [openCeilingAdvanced, setOpenCeilingAdvanced] = useState<ScopeRecord>({})
   const [openTrimSection, setOpenTrimSection] = useState<ScopeRecord>({})
   const [openTrimAdvanced, setOpenTrimAdvanced] = useState<ScopeRecord>({})
+  const [openDoorsSection, setOpenDoorsSection] = useState<ScopeRecord>({})
+  const [openDoorsAdvanced, setOpenDoorsAdvanced] = useState<ScopeRecord>({})
 
   const toggleRoomWallInclude = useCallback(
     (roomId: string) => {
@@ -50,6 +57,17 @@ export function useEstimateV2EditorPageUiState({
     [roomCeilingScopeByRoomId, toggleCeilingsInclude]
   )
 
+  const toggleRoomDoorInclude = useCallback(
+    (roomId: string) => {
+      const hasRoomScopes = (roomDoorScopeByRoomId.get(roomId)?.length ?? 0) > 0
+      toggleDoorsInclude(roomId)
+      if (!hasRoomScopes) {
+        setOpenDoorsSection((prev) => ({ ...prev, [roomId]: true }))
+      }
+    },
+    [roomDoorScopeByRoomId, toggleDoorsInclude]
+  )
+
   const focusRoomSection = useCallback(
     (section: ScopeKind) => {
       if (!selectedRoomId) return
@@ -59,14 +77,18 @@ export function useEstimateV2EditorPageUiState({
           ? wallsSectionRef
           : section === 'ceilings'
             ? ceilingsSectionRef
-            : trimSectionRef
+            : section === 'trim'
+              ? trimSectionRef
+              : doorsSectionRef
 
       if (section === 'walls') {
         setOpenWallsSection((prev) => ({ ...prev, [selectedRoomId]: true }))
       } else if (section === 'ceilings') {
         setOpenCeilingSection((prev) => ({ ...prev, [selectedRoomId]: true }))
-      } else {
+      } else if (section === 'trim') {
         setOpenTrimSection((prev) => ({ ...prev, [selectedRoomId]: true }))
+      } else {
+        setOpenDoorsSection((prev) => ({ ...prev, [selectedRoomId]: true }))
       }
 
       window.setTimeout(() => {
@@ -80,6 +102,7 @@ export function useEstimateV2EditorPageUiState({
     wallsSectionRef,
     ceilingsSectionRef,
     trimSectionRef,
+    doorsSectionRef,
     openWallsSection,
     setOpenWallsSection,
     openAdvanced,
@@ -92,8 +115,13 @@ export function useEstimateV2EditorPageUiState({
     setOpenTrimSection,
     openTrimAdvanced,
     setOpenTrimAdvanced,
+    openDoorsSection,
+    setOpenDoorsSection,
+    openDoorsAdvanced,
+    setOpenDoorsAdvanced,
     toggleRoomWallInclude,
     toggleRoomCeilingInclude,
+    toggleRoomDoorInclude,
     focusRoomSection,
   }
 }

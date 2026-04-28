@@ -101,6 +101,7 @@ export function useEstimateV2RoomActions(params: {
         setSegments,
         setRoomFlags,
         setCeilingSegments,
+        setDoorScopes,
         setSelectedRoomId,
       } = store.getState()
       const roomScopes = collections.scopes.filter((scope) => scope.roomId === roomId)
@@ -108,6 +109,7 @@ export function useEstimateV2RoomActions(params: {
       const roomCeilScopes = collections.ceilingScopes.filter((scope) => scope.roomId === roomId)
       const roomCeilSegments = collections.ceilingSegments.filter((segment) => segment.roomId === roomId)
       const roomTrimRows = collections.trimScopes.filter((scope) => scope.roomId === roomId)
+      const roomDoorRows = (collections.doorScopes ?? []).filter((scope) => scope.roomId === roomId)
       const room = collections.rooms.find((entry) => entry.roomId === roomId)
       const label = room?.roomName || roomId
       const hasData =
@@ -115,7 +117,8 @@ export function useEstimateV2RoomActions(params: {
         roomSegments.length > 0 ||
         roomCeilScopes.length > 0 ||
         roomCeilSegments.length > 0 ||
-        roomTrimRows.length > 0
+        roomTrimRows.length > 0 ||
+        roomDoorRows.length > 0
       const ok = window.confirm(
         hasData ? `Delete ${label} and all scope rows/segments in it?` : `Delete ${label}?`
       )
@@ -129,6 +132,7 @@ export function useEstimateV2RoomActions(params: {
         ceilingScopes: collections.ceilingScopes,
         ceilingSegments: collections.ceilingSegments,
         trimScopes: collections.trimScopes,
+        doorScopes: collections.doorScopes ?? [],
         roomId,
         selectedRoomId: meta.selectedRoomId,
       })
@@ -136,6 +140,7 @@ export function useEstimateV2RoomActions(params: {
       setSegments(next.segments)
       setRoomFlags(next.roomFlags)
       setCeilingSegments(next.ceilingSegments)
+      setDoorScopes(next.doorScopes)
       setSelectedRoomId(next.selectedRoomId)
       applySynchronizedDrafts(
         next.rooms,

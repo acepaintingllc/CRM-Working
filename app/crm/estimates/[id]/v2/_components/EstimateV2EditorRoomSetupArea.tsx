@@ -6,6 +6,7 @@ import type {
   EstimateV2EditorTrimVm,
   EstimateV2EditorWallsVm,
   EstimateV2EditorCeilingsVm,
+  EstimateV2EditorDoorsVm,
 } from '../_state/estimateV2EditorTypes'
 import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
@@ -20,8 +21,10 @@ export function EstimateV2EditorRoomSetupArea({
   wallsVm,
   ceilingsVm,
   trimVm,
+  doorsVm,
   onToggleWallInclude,
   onToggleCeilingInclude,
+  onToggleDoorInclude,
   toDisplayNumber,
 }: {
   styles: EstimateV2EditorPageStyles
@@ -30,8 +33,10 @@ export function EstimateV2EditorRoomSetupArea({
   wallsVm: EstimateV2EditorWallsVm
   ceilingsVm: EstimateV2EditorCeilingsVm
   trimVm: EstimateV2EditorTrimVm
+  doorsVm: EstimateV2EditorDoorsVm
   onToggleWallInclude: (roomId: string) => void
   onToggleCeilingInclude: (roomId: string) => void
+  onToggleDoorInclude: (roomId: string) => void
   toDisplayNumber: (value: number | null | undefined) => string
 }) {
   const selectedRoom = roomVm.selectedRoom
@@ -109,6 +114,20 @@ export function EstimateV2EditorRoomSetupArea({
           }}
         >
           {summaryVm.scopeToggleLabels.trim}
+        </button>
+        <button
+          type="button"
+          className={doorsVm.doorsIncluded ? 'scope-pill-active' : ''}
+          onClick={() => onToggleDoorInclude(selectedRoom.roomId)}
+          style={{
+            ...styles.scopePill,
+            cursor: 'pointer',
+            borderColor: doorsVm.doorsIncluded ? 'rgba(134,239,172,0.32)' : 'var(--v2-line)',
+            background: doorsVm.doorsIncluded ? 'rgba(74,222,128,0.08)' : 'transparent',
+            color: doorsVm.doorsIncluded ? 'var(--v2-green-2)' : 'var(--v2-ink-3)',
+          }}
+        >
+          {summaryVm.scopeToggleLabels.doors ?? 'Doors excluded'}
         </button>
       </div>
     </>

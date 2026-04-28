@@ -33,8 +33,9 @@ export function useEstimateV2ProductLabels(params: {
   firstScope: { paintProductId: string; primerProductId: string } | null
   firstCeilingScope: { paintProductId: string; primerProductId: string } | null
   firstTrimScope: { paintProductId: string; primerProductId: string } | null
+  firstDoorScope: { paintProductId: string; primerProductId: string } | null
 }) {
-  const { meta, productLabelById, firstScope, firstCeilingScope, firstTrimScope } = params
+  const { meta, productLabelById, firstScope, firstCeilingScope, firstTrimScope, firstDoorScope } = params
 
   const paintLabelForId = useCallback(
     (paintProductId: string) => productLabelById.get(paintProductId) ?? paintProductId,
@@ -167,6 +168,20 @@ export function useEstimateV2ProductLabels(params: {
         labelForId: primerLabelForId,
       })
     : effectiveTrimPrimerLabel
+  const doorPaintLabel = firstDoorScope
+    ? resolveScopeProductStateLabel({
+        productId: firstDoorScope.paintProductId,
+        defaultProductId: effectiveJobProductDefaults.trimPaintProductId,
+        labelForId: paintLabelForId,
+      })
+    : effectiveTrimPaintLabel
+  const doorPrimerLabel = firstDoorScope
+    ? resolveScopeProductStateLabel({
+        productId: firstDoorScope.primerProductId,
+        defaultProductId: effectiveJobProductDefaults.trimPrimerProductId,
+        labelForId: primerLabelForId,
+      })
+    : effectiveTrimPrimerLabel
 
   return {
     effectiveJobProductDefaults,
@@ -188,5 +203,7 @@ export function useEstimateV2ProductLabels(params: {
     ceilingPrimerLabel,
     trimPaintLabel,
     trimPrimerLabel,
+    doorPaintLabel,
+    doorPrimerLabel,
   }
 }

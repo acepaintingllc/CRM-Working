@@ -8,6 +8,7 @@ export type SoftReplaceTable =
   | 'estimate_room_ceiling_scopes'
   | 'estimate_room_ceiling_scope_segments'
   | 'estimate_room_trim_scopes'
+  | 'estimate_room_door_scopes'
   | 'estimate_rollers'
   | 'estimate_prejob'
   | 'estimate_trim_items'

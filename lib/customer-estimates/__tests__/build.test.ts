@@ -176,6 +176,144 @@ test('buildCustomerEstimateDocument pulls V2 room trim scopes into customer quot
   assert.equal(document.quote_rows[0]?.price, 180)
 })
 
+test('buildCustomerEstimateDocument pulls V2 room door scopes into customer quote copy', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-DOOR-SCOPE',
+      version_name: 'Door Scope Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Taylor Jones',
+      customer_address: '123 Main St',
+      estimate_date: 'April 20, 2026',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Living Room' }],
+      room_wall_scopes: [],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      room_door_scopes: [
+        {
+          id: 'door-scope-1',
+          room_id: 'R001',
+          include: 'Y',
+          scope_name: 'Hall Door',
+          door_type_id: 'DOOR_PANEL',
+          paint_product_id: 'P-TRIM',
+          effective_total: 240,
+          paint_coats: 2,
+          prime_mode: 'SPOT',
+          notes: 'sand chipped edge',
+        },
+        {
+          id: 'door-scope-excluded',
+          room_id: 'R001',
+          include: 'N',
+          scope_name: 'Closet Door',
+          door_type_id: 'DOOR_PANEL',
+          paint_product_id: 'P-TRIM',
+          effective_total: 999,
+        },
+      ],
+      trim_items: [],
+      other: [],
+      jobsettings: { trim_paint_id: 'P-TRIM' },
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-TRIM', display_name: 'SW Emerald Urethane', display_id: 'TRIM-PAINT' }],
+      trim_items: [],
+      door_types: [{ id: 'DOOR_PANEL', label: 'Panel Door' }],
+    },
+    pricingSummary: {
+      finalTotal: 240,
+    },
+  })
+
+  assert.equal(document.scopes.length, 1)
+  assert.equal(document.scopes[0]?.key, 'doors')
+  assert.match(document.scopes[0]?.text ?? '', /Living Room/)
+  assert.match(document.scopes[0]?.text ?? '', /Panel Door/)
+  assert.match(document.scopes[0]?.text ?? '', /SW Emerald Urethane/)
+  assert.match(document.scopes[0]?.text ?? '', /spot prime/i)
+  assert.match(document.scopes[0]?.text ?? '', /sand chipped edge/i)
+  assert.doesNotMatch(document.scopes[0]?.text ?? '', /Closet Door|door-scope-1|R001/i)
+  assert.equal(document.quote_rows[0]?.label, 'Doors')
+  assert.equal(document.quote_rows[0]?.price, 240)
+})
+
+test('buildCustomerEstimateDocument degrades unknown V2 door rates into safe customer copy', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-DOOR-MISSING-RATE',
+      version_name: 'Door Missing Rate Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Taylor Jones',
+      customer_address: '123 Main St',
+      estimate_date: 'April 20, 2026',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R002', room_name: 'Hallway' }],
+      room_wall_scopes: [],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      room_door_scopes: [
+        {
+          id: 'door-scope-unknown',
+          room_id: 'R002',
+          include: 'Y',
+          door_type_id: 'DOOR_ARCHIVED',
+          paint_product_id: 'P-TRIM',
+          effective_total: 180,
+          paint_coats: 2,
+        },
+      ],
+      trim_items: [],
+      other: [],
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-TRIM', display_name: 'SW Emerald Urethane', display_id: 'TRIM-PAINT' }],
+      trim_items: [],
+      door_types: [],
+    },
+    pricingSummary: {
+      finalTotal: 180,
+    },
+  })
+
+  assert.equal(document.scopes[0]?.key, 'doors')
+  assert.match(document.scopes[0]?.text ?? '', /Hallway/)
+  assert.match(document.scopes[0]?.text ?? '', /Door Archived/)
+  assert.doesNotMatch(document.scopes[0]?.text ?? '', /DOOR_ARCHIVED|door-scope-unknown|R002/)
+  assert.equal(document.quote_rows[0]?.price, 180)
+})
+
 test('buildCustomerEstimateDocument keeps unclassified V2 trim scopes in the trim quote section', () => {
   const document = buildCustomerEstimateDocument({
     estimate: {

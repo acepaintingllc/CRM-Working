@@ -314,6 +314,90 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(rowIds).not.toContain('excluded')
   })
 
+  it('adds included door rows after trim with units, labor, and door-specific override badges', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: [],
+      ceilingScopes: [],
+      trimScopes: normalizeSummaryScopeRows([
+        {
+          id: 'trim-1',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: 'Baseboards',
+          effective_measurement: 42,
+          effective_total: 180,
+        },
+      ]),
+      doorScopes: normalizeSummaryScopeRows([
+        {
+          id: 'door-1',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: 'Panel Door',
+          effective_units: 2,
+          effective_paint_hours: 1.25,
+          effective_primer_hours: 0.25,
+          effective_supply_cost: 8,
+          effective_total: 210,
+          override_paint_hours: 1.25,
+          override_material_cost: 35,
+          override_total: 210,
+        },
+      ]),
+    })
+    const rows = roomScopeRows.get('room-1') ?? []
+
+    expect(rows.map((row) => row.kind)).toEqual(['trim', 'doors'])
+    expect(rows[1]).toMatchObject({
+      id: 'door-1',
+      label: 'Panel Door',
+      quantity: 2,
+      laborHours: 1.5,
+      suppliesCost: 8,
+      subtotal: 210,
+      hasOverride: true,
+      overrideSummary: 'Override: Paint hours: 1.25 h, Material cost: $35, Total: $210',
+      missingProduct: false,
+    })
+  })
+
+  it('hides excluded and empty door rows from visible summary math rows', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: [],
+      ceilingScopes: [],
+      trimScopes: [],
+      doorScopes: normalizeSummaryScopeRows([
+        {
+          id: 'door-included',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: 'Painted Door',
+          effective_units: 1,
+          effective_total: 120,
+        },
+        {
+          id: 'door-excluded',
+          room_id: 'room-1',
+          include: 'N',
+          scope_name: 'Excluded Door',
+          effective_units: 4,
+          effective_total: 999,
+        },
+        {
+          id: 'door-empty',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: '',
+          effective_units: 0,
+          effective_total: 0,
+        },
+      ]),
+    })
+    const rowIds = roomScopeRows.get('room-1')?.map((row) => row.id) ?? []
+
+    expect(rowIds).toEqual(['door-included'])
+  })
+
   it('treats a persisted default labor rate as clean unless it differs from org defaults', () => {
     expect(
       hasActiveLaborRateOverride(
@@ -538,10 +622,12 @@ describe('estimateV2SummaryDerived helpers', () => {
   it('keeps scope kind labels and ordering aligned with the shared single source of truth', () => {
     expect(SCOPE_KIND_ORDER.walls).toBeLessThan(SCOPE_KIND_ORDER.ceilings)
     expect(SCOPE_KIND_ORDER.ceilings).toBeLessThan(SCOPE_KIND_ORDER.trim)
+    expect(SCOPE_KIND_ORDER.trim).toBeLessThan(SCOPE_KIND_ORDER.doors)
     expect(SCOPE_KIND_LABELS).toEqual({
       walls: 'Walls',
       ceilings: 'Ceilings',
       trim: 'Trim',
+      doors: 'Doors',
     })
   })
 })

@@ -21,6 +21,7 @@ import {
 } from '../_lib/estimateV2EditorPresentation'
 import type {
   EstimateV2EditorCeilingsVm,
+  EstimateV2EditorDoorsVm,
   EstimateV2EditorHeaderVm,
   EstimateV2EditorPageVm,
   EstimateV2EditorRoomVm,
@@ -40,6 +41,7 @@ export type EstimateV2EditorViewModelParams = {
   wallActions: ReturnType<typeof import('./useEstimateV2WallActions').useEstimateV2WallActions>
   ceilingActions: ReturnType<typeof import('./useEstimateV2CeilingActions').useEstimateV2CeilingActions>
   trimActions: ReturnType<typeof import('./useEstimateV2TrimActions').useEstimateV2TrimActions>
+  doorActions: ReturnType<typeof import('./useEstimateV2DoorActions').useEstimateV2DoorActions>
   settingsActions: ReturnType<
     typeof import('./useEstimateV2SettingsActions').useEstimateV2SettingsActions
   >
@@ -153,6 +155,7 @@ function useRoomVm(
       roomScopeByRoomId: derived.room.roomScopeByRoomId,
       roomCeilingScopeByRoomId: derived.room.roomCeilingScopeByRoomId,
       roomTrimScopeByRoomId: derived.room.roomTrimScopeByRoomId,
+      roomDoorScopeByRoomId: derived.room.roomDoorScopeByRoomId,
       displayedRoomEffectiveAreaByRoomId: derived.calculation.displayedRoomEffectiveAreaByRoomId,
       selectedRoomEffectiveSqFt: derived.calculation.selectedRoomEffectiveSqFt,
       activeRoomFlagCount: derived.room.activeRoomFlagCount,
@@ -207,6 +210,7 @@ function useRoomVm(
       derived.catalog.conditionModifiers,
       derived.room.activeRoomFlagCount,
       derived.room.roomCeilingScopeByRoomId,
+      derived.room.roomDoorScopeByRoomId,
       derived.room.roomScopeByRoomId,
       derived.room.roomTrimScopeByRoomId,
       derived.room.selectedRoom,
@@ -253,6 +257,7 @@ function useWallsVm(
       colorCodeOptions: derived.catalog.colorCodeOptions,
       displayedSegmentEffectiveAreaById: derived.calculation.displayedSegmentEffectiveAreaById,
       displayedScopeEffectiveAreaById: derived.calculation.displayedScopeEffectiveAreaById,
+      wallScopeEffectiveTotalById: derived.calculation.wallScopeEffectiveTotalById,
       addScope: wallActions.addScope,
       moveScope: wallActions.moveScope,
       deleteScope: wallActions.deleteScope,
@@ -276,6 +281,7 @@ function useWallsVm(
     [
       derived.calculation.displayedScopeEffectiveAreaById,
       derived.calculation.displayedSegmentEffectiveAreaById,
+      derived.calculation.wallScopeEffectiveTotalById,
       derived.catalog.colorCodeOptions,
       derived.catalog.conditionModifiers,
       derived.catalog.wallPaintOptions,
@@ -324,6 +330,7 @@ function useCeilingsVm(
       ceilingPrimerOptions: derived.catalog.ceilingPrimerOptions,
       colorCodeOptions: derived.catalog.colorCodeOptions,
       selectedCeilingEffectiveSqFt: derived.calculation.selectedCeilingEffectiveSqFt,
+      ceilingScopeEffectiveTotalById: derived.calculation.ceilingScopeEffectiveTotalById,
       updateScope: ceilingActions.updateScope,
       addScope: ceilingActions.addScope,
       deleteScope: ceilingActions.deleteScope,
@@ -347,6 +354,7 @@ function useCeilingsVm(
       ceilingActions,
       ceilingState.catalogs,
       ceilingState.ceilingSegments,
+      derived.calculation.ceilingScopeEffectiveTotalById,
       derived.calculation.selectedCeilingEffectiveSqFt,
       derived.catalog.ceilingPaintOptions,
       derived.catalog.ceilingPrimerOptions,
@@ -426,6 +434,59 @@ function useTrimVm(
       derived.room.selectedRoomTrimScopes,
       derived.room.trimsIncluded,
       trimActions,
+    ]
+  )
+}
+
+function useDoorsVm(
+  derived: EstimateV2EditorDerivedSections,
+  doorActions: EstimateV2EditorViewModelParams['doorActions']
+): EstimateV2EditorDoorsVm {
+  return useMemo(
+    () => ({
+      selectedRoom: derived.room.selectedRoom,
+      selectedRoomDoorScopes: derived.room.selectedRoomDoorScopes,
+      firstDoorScope: derived.room.firstDoorScope,
+      doorsIncluded: derived.room.doorsIncluded,
+      jobDoorsIncluded: derived.room.jobDoorsIncluded,
+      doorPaintLabel: derived.productLabels.doorPaintLabel,
+      doorPrimerLabel: derived.productLabels.doorPrimerLabel,
+      effectiveDoorPaintLabel: derived.productLabels.effectiveTrimPaintLabel,
+      effectiveDoorPrimerLabel: derived.productLabels.effectiveTrimPrimerLabel,
+      doorPaintOptions: derived.catalog.trimPaintOptions,
+      doorPrimerOptions: derived.catalog.trimPrimerOptions,
+      doorTypeOptions: derived.catalog.doorTypeOptions,
+      doorScopeEffectiveUnitsById: derived.calculation.doorScopeEffectiveUnitsById,
+      doorScopeEffectiveTotalById: derived.calculation.doorScopeEffectiveTotalById,
+      selectedDoorSubtotal: derived.calculation.selectedDoorSubtotal,
+      selectedDoorUnits: derived.calculation.selectedDoorUnits,
+      colorCodeOptions: derived.catalog.colorCodeOptions,
+      updateScope: doorActions.updateScope,
+      addScope: doorActions.addScope,
+      moveScope: doorActions.moveScope,
+      deleteScope: doorActions.deleteScope,
+      toggleRoomInclude: doorActions.toggleRoomInclude,
+      updateDoorType: doorActions.updateDoorType,
+    }),
+    [
+      derived.calculation.doorScopeEffectiveTotalById,
+      derived.calculation.doorScopeEffectiveUnitsById,
+      derived.calculation.selectedDoorSubtotal,
+      derived.calculation.selectedDoorUnits,
+      derived.catalog.colorCodeOptions,
+      derived.catalog.doorTypeOptions,
+      derived.catalog.trimPaintOptions,
+      derived.catalog.trimPrimerOptions,
+      derived.productLabels.doorPaintLabel,
+      derived.productLabels.doorPrimerLabel,
+      derived.productLabels.effectiveTrimPaintLabel,
+      derived.productLabels.effectiveTrimPrimerLabel,
+      derived.room.doorsIncluded,
+      derived.room.firstDoorScope,
+      derived.room.jobDoorsIncluded,
+      derived.room.selectedRoom,
+      derived.room.selectedRoomDoorScopes,
+      doorActions,
     ]
   )
 }
@@ -668,14 +729,58 @@ function useSummaryVm(
     ]
   )
 
+  const doorSectionSummary = useMemo(
+    () => {
+      const doorUsesPrimer = derived.room.selectedRoomDoorScopes.some(
+        (scope) => scope.include === 'Y' && scope.primeMode !== 'NONE'
+      )
+      return buildSectionSummaryVm({
+        visible: derived.room.doorsIncluded,
+        title: 'Doors',
+        primaryValue: toDisplayNumber(derived.calculation.selectedDoorUnits),
+        primaryUnit: 'Sides',
+        paintLabel: derived.productLabels.doorPaintLabel,
+        primerLabel: derived.productLabels.doorPrimerLabel,
+        showPrimer: doorUsesPrimer,
+        secondaryValue:
+          derived.calculation.selectedDoorSubtotal == null
+            ? '--'
+            : `$${derived.calculation.selectedDoorSubtotal.toFixed(2)}`,
+        secondaryLabel: 'Subtotal',
+        chips: buildSectionSummaryChips({
+          itemCount: derived.room.selectedRoomDoorScopes.length,
+          primaryValue: toDisplayNumber(derived.calculation.selectedDoorUnits),
+          primaryUnit: 'Sides',
+          paintLabel: derived.productLabels.doorPaintLabel,
+          primerLabel: derived.productLabels.doorPrimerLabel,
+          showPrimer: doorUsesPrimer,
+          secondaryValue:
+            derived.calculation.selectedDoorSubtotal == null
+              ? '--'
+              : `$${derived.calculation.selectedDoorSubtotal.toFixed(2)}`,
+          secondaryLabel: 'Subtotal',
+        }),
+      })
+    },
+    [
+      derived.calculation.selectedDoorSubtotal,
+      derived.calculation.selectedDoorUnits,
+      derived.productLabels.doorPaintLabel,
+      derived.productLabels.doorPrimerLabel,
+      derived.room.doorsIncluded,
+      derived.room.selectedRoomDoorScopes,
+    ]
+  )
+
   const scopeToggleLabels = useMemo(
     () =>
       buildScopeToggleLabels({
         wallsIncluded: derived.room.wallsIncluded,
         ceilingsIncluded: derived.room.ceilingsIncluded,
         trimsIncluded: derived.room.trimsIncluded,
+        doorsIncluded: derived.room.doorsIncluded,
       }),
-    [derived.room.ceilingsIncluded, derived.room.trimsIncluded, derived.room.wallsIncluded]
+    [derived.room.ceilingsIncluded, derived.room.doorsIncluded, derived.room.trimsIncluded, derived.room.wallsIncluded]
   )
 
   return useMemo(() => {
@@ -683,6 +788,7 @@ function useSummaryVm(
       wallsIncluded: derived.room.wallsIncluded,
       ceilingsIncluded: derived.room.ceilingsIncluded,
       trimsIncluded: derived.room.trimsIncluded,
+      doorsIncluded: derived.room.doorsIncluded,
     })
     const validationState = buildValidationState(summaryState.validationIssueCount)
     const calculationStateVm = buildCalculationState(derived.calculation.calculationsStale)
@@ -706,12 +812,15 @@ function useSummaryVm(
       walls: wallSectionSummary,
       ceilings: ceilingSectionSummary,
       trim: trimSectionSummary,
+      doors: doorSectionSummary,
     }
   }, [
     ceilingSectionSummary,
+    doorSectionSummary,
     derived.calculation.calculationsStale,
     derived.calculation.totalEffectiveAreaSqFt,
     derived.room.ceilingsIncluded,
+    derived.room.doorsIncluded,
     derived.room.selectedRoom,
     derived.room.trimsIncluded,
     derived.room.wallsIncluded,
@@ -728,13 +837,14 @@ function useSummaryVm(
 export function useEstimateV2EditorSliceViewModels(
   params: EstimateV2EditorViewModelParams
 ) {
-  const { estimateId, store, derived, roomActions, wallActions, ceilingActions, trimActions, settingsActions, save } = params
+  const { estimateId, store, derived, roomActions, wallActions, ceilingActions, trimActions, doorActions, settingsActions, save } = params
   const pageVm = usePageVm(store)
   const headerVm = useHeaderVm(estimateId, store, derived, roomActions.addRoom)
   const roomVm = useRoomVm(store, derived, roomActions)
   const wallsVm = useWallsVm(store, derived, wallActions, roomActions.updateRoomComplexity)
   const ceilingsVm = useCeilingsVm(store, derived, ceilingActions)
   const trimVm = useTrimVm(derived, trimActions)
+  const doorsVm = useDoorsVm(derived, doorActions)
   const jobSettingsVm = useJobSettingsVm(store, derived, settingsActions)
   const saveVm = useSaveVm(store, derived, save)
   const summaryVm = useSummaryVm(store, derived)
@@ -747,6 +857,7 @@ export function useEstimateV2EditorSliceViewModels(
     wallsVm,
     ceilingsVm,
     trimVm,
+    doorsVm,
     jobSettingsVm,
     saveVm,
     toDisplayNumber,

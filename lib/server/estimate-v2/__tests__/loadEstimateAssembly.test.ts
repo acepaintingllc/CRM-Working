@@ -72,9 +72,11 @@ describe('loadEstimateV2Response', () => {
       quoteWallScopes: [{ id: 'wall-scope-1' }],
       quoteCeilingScopes: [{ id: 'ceiling-scope-1' }],
       quoteTrimScopes: [{ id: 'trim-scope-1' }],
+      quoteDoorScopes: [{ id: 'door-scope-1' }],
       wallCalculations: { scopes: [{ id: 'wall-scope-1' }] },
       ceilingCalculations: { scopes: [{ id: 'ceiling-scope-1' }] },
       trimCalculations: { scopes: [{ id: 'trim-scope-1' }] },
+      doorCalculations: { scopes: [{ id: 'door-scope-1' }] },
       trimPaintInput: { gallons: 1.25 },
       pricingSummary: { final_total: 1200 },
     })
@@ -88,6 +90,7 @@ describe('loadEstimateV2Response', () => {
       ['estimate_room_ceiling_scopes', createOrderedQuery({ data: [{ id: 'ceiling-scope-raw' }], error: null }, 2)],
       ['estimate_room_ceiling_scope_segments', createOrderedQuery({ data: [{ id: 'ceiling-scope-segment-1' }], error: null }, 2)],
       ['estimate_room_trim_scopes', createOrderedQuery({ data: [{ id: 'trim-scope-raw' }], error: null }, 2)],
+      ['estimate_room_door_scopes', createOrderedQuery({ data: [{ id: 'door-scope-raw' }], error: null }, 2)],
       ['estimate_rollers', createOrderedQuery({ data: [{ id: 'roller-1' }, { id: 'applicator-1', scope: 'Trim' }], error: null }, 1)],
       ['estimate_prejob', createOrderedQuery({ data: [{ id: 'prejob-1' }], error: null }, 1)],
       ['estimate_trim_items', createOrderedQuery({ data: [{ id: 'trim-item-1' }], error: null }, 1)],
@@ -134,6 +137,7 @@ describe('loadEstimateV2Response', () => {
       roomCeilingScopes: [{ id: 'ceiling-scope-raw' }],
       ceilingScopeSegments: [{ id: 'ceiling-scope-segment-1' }],
       roomTrimScopes: [{ id: 'trim-scope-raw' }],
+      roomDoorScopes: [{ id: 'door-scope-raw' }],
       orgDefaults: null,
     })
     expect(mocks.buildEstimateGetResponse).toHaveBeenCalledWith(
@@ -144,6 +148,7 @@ describe('loadEstimateV2Response', () => {
           room_wall_scopes: [{ id: 'wall-scope-1' }],
           room_ceiling_scopes: [{ id: 'ceiling-scope-1' }],
           room_trim_scopes: [{ id: 'trim-scope-1' }],
+          room_door_scopes: [{ id: 'door-scope-1' }],
           rollers: [{ id: 'roller-1' }, { id: 'applicator-1', scope: 'Trim' }],
         }),
         pricing_summary: { final_total: 1200 },

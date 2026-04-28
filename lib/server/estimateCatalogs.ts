@@ -88,6 +88,16 @@ type TrimItem = CatalogOption & {
   picker_group?: string | null
 }
 
+type DoorType = CatalogOption & {
+  unit_rate_type: string | null
+  unit: string | null
+  default_qty: number | null
+  labor_rate: number | null
+  material_rate: number | null
+  amount: number | null
+  notes: string | null
+}
+
 type ProductionRate = CatalogOption & {
   scope_id: string | null
   surface_type: string | null
@@ -115,6 +125,7 @@ export type EstimateCatalogs = {
   condition_modifiers: ConditionModifier[]
   access_fees: AccessFee[]
   trim_items: TrimItem[]
+  door_types: DoorType[]
   trim_menu_items: TrimItem[]
   prejob_trips: CatalogOption[]
   supplies_rates: Array<{
@@ -325,6 +336,20 @@ function buildV2CatalogResultFromSources(params: {
         })),
       access_fees: [],
       trim_items: trimItems,
+      door_types: (params.overlay.door_unit_rates ?? [])
+        .filter((row) => row.active === 'Y')
+        .map((row) => ({
+          id: row.id,
+          label: row.label || row.id,
+          active: row.active,
+          unit_rate_type: row.unit_rate_type,
+          unit: row.unit,
+          default_qty: row.default_qty,
+          labor_rate: row.labor_rate,
+          material_rate: row.material_rate,
+          amount: row.amount,
+          notes: row.notes,
+        })),
       trim_menu_items: trimItems,
       prejob_trips: [],
       supplies_rates: params.overlay.area_supplies_rates

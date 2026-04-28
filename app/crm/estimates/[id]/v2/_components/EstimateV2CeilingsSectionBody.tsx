@@ -14,6 +14,7 @@ import {
   PrimerModeButtons,
   ReorderDeleteActions,
   RequiredInputFrame,
+  ScopeHelperBar,
   SharedSegmentGrid,
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
@@ -78,6 +79,10 @@ function ceilingTypeShapeOptions(catalogs: EstimateV2EditorCeilingsVm['catalogs'
     { value: 'FLAT', label: 'Flat', ceilingTypeId: 'FLAT', ceilingGeometryMode: 'FLAT' },
     ...catalogOptions,
   ]
+}
+
+function formatCurrency(value: number | null | undefined) {
+  return value == null || !Number.isFinite(value) ? '--' : `$${value.toFixed(2)}`
 }
 
 function CeilingTypeShapeField({
@@ -199,6 +204,7 @@ function CeilingGeometryFields({
   styles,
   updateScope,
   toDisplayNumber,
+  subtotal,
 }: {
   scope: EstimateV2CeilingScopeDraft
   room: EstimateV2RoomDraft | null
@@ -207,6 +213,7 @@ function CeilingGeometryFields({
   styles: EditorStyles
   updateScope: EstimateV2EditorCeilingsVm['updateScope']
   toDisplayNumber: (value: number | null | undefined) => string
+  subtotal?: number | null
 }) {
   const mode = scope.ceilingGeometryMode || 'FLAT'
   const baseArea = ceilingBaseArea(scope, room, segments)
@@ -269,12 +276,16 @@ function CeilingGeometryFields({
           <Field label="Beam Width Optional (in)" styles={sharedStyles(styles)}><input value={scope.cofferBottomWidthIn ?? ''} onChange={(e) => updateScope(scope.id, { cofferBottomWidthIn: e.target.value })} style={styles.input} type="number" min="0" placeholder="optional" /></Field>
         </div>
       )}
-      <div className="paint-setup-grid">
-        <div className="walksqft-box"><div style={styles.mono}>Base Sq Ft</div><div style={styles.computedBig}>{toDisplayNumber(baseArea)}</div></div>
-        <div className="walksqft-box"><div style={styles.mono}>Helper Extra</div><div style={styles.computedBig}>{toDisplayNumber(helperExtra)}</div></div>
-        <div className="walksqft-box"><div style={styles.mono}>Area Factor</div><div style={styles.computedBig}>{toDisplayNumber(areaFactor)}</div></div>
-        <div className="walksqft-box"><div style={styles.mono}>Final Sq Ft</div><div style={styles.computedBig}>{toDisplayNumber(finalArea)}</div></div>
-      </div>
+      <ScopeHelperBar
+        styles={{ mono: styles.mono, computedBig: styles.computedBig }}
+        metrics={[
+          { label: 'Base Sq Ft', value: toDisplayNumber(baseArea), muted: baseArea == null },
+          { label: 'Helper Extra', value: toDisplayNumber(helperExtra), muted: helperExtra <= 0 },
+          { label: 'Area Factor', value: toDisplayNumber(areaFactor) },
+          { label: 'Final Sq Ft', value: toDisplayNumber(finalArea), muted: finalArea == null },
+          { label: 'Subtotal', value: formatCurrency(subtotal), muted: subtotal == null },
+        ]}
+      />
     </div>
   )
 }
@@ -306,6 +317,7 @@ export function EstimateV2CeilingsSectionBody({
     ceilingPaintOptions,
     ceilingPrimerOptions,
     colorCodeOptions,
+    ceilingScopeEffectiveTotalById,
     updateScope,
     addScope,
     deleteScope,
@@ -336,6 +348,7 @@ export function EstimateV2CeilingsSectionBody({
           {selectedRoomGeometryMode === 'RECT' && firstCeilingScope && (() => {
             const ceilingGeometryMode = firstCeilingScope.ceilingGeometryMode || 'FLAT'
             const ceilLenSf = ceilingBaseArea(firstCeilingScope, selectedRoom)
+            const subtotal = ceilingScopeEffectiveTotalById.get(firstCeilingScope.id) ?? null
             return (
               <>
                 <div className="geometry-primary-grid">
@@ -390,6 +403,7 @@ export function EstimateV2CeilingsSectionBody({
                   styles={styles}
                   updateScope={updateScope}
                   toDisplayNumber={toDisplayNumber}
+                  subtotal={subtotal}
                 />
                 <Field label="Primer Mode" styles={sharedStyles(styles)}>
                   <PrimerModeButtons
@@ -430,6 +444,7 @@ export function EstimateV2CeilingsSectionBody({
                   ceilingTypeId: 'FLAT',
                   ceilingGeometryMode: 'FLAT' as const,
                 }
+                const subtotal = ceilingScopeEffectiveTotalById.get(scope.id) ?? null
                 return (
                   <div
                     key={scope.id}
@@ -466,6 +481,7 @@ export function EstimateV2CeilingsSectionBody({
                       styles={styles}
                       updateScope={updateScope}
                       toDisplayNumber={toDisplayNumber}
+                      subtotal={subtotal}
                     />
                     <Field label="Coats" styles={sharedStyles(styles)}>
                       <PaintCoatButtons
