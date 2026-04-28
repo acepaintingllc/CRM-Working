@@ -29,7 +29,7 @@ function readIndexedString(values: FormDataEntryValue[], index: number): string 
   return typeof value === 'string' && value.trim() ? value : null
 }
 
-function isFileLike(entry: FormDataEntryValue): entry is FileLike {
+function isFileLike(entry: unknown): entry is FileLike {
   if (typeof File !== 'undefined' && entry instanceof File) return true
   if (!entry || typeof entry !== 'object') return false
   const candidate = entry as Partial<FileLike>
@@ -70,7 +70,10 @@ export async function POST(request: Request, context: RouteContext) {
 
   const categoryValue = formData.get('category')
   const category = typeof categoryValue === 'string' ? categoryValue : null
-  const photoEntries = formData.getAll('photos').filter(isFileLike)
+  const photoEntries: FileLike[] = []
+  for (const entry of formData.getAll('photos')) {
+    if (isFileLike(entry)) photoEntries.push(entry)
+  }
   if (photoEntries.length === 0) {
     return jsonError('Add at least one photo before uploading.', 400)
   }
@@ -102,3 +105,4 @@ export async function POST(request: Request, context: RouteContext) {
     (data) => ({ data, notice: 'Photos uploaded.' })
   )
 }
+
