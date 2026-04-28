@@ -43,6 +43,10 @@ export function useEstimateV2SummaryData(
   const [trimPaintGallons, setTrimPaintGallons] = useState(0)
   const [trimPaintQuarts, setTrimPaintQuarts] = useState(0)
   const [policySaving, setPolicySaving] = useState(false)
+  const estimateApiHref = useMemo(
+    () => (estimateId ? routeFamily.estimateApiHref(estimateId) : ''),
+    [estimateId, routeFamily]
+  )
 
   const summaryLoaderState = useMemo(
     () => ({
@@ -64,9 +68,9 @@ export function useEstimateV2SummaryData(
   )
 
   const refreshPricing = useCallback(async () => {
-    if (!estimateId) return
+    if (!estimateId || !estimateApiHref) return
     try {
-      const res = await authedFetch(routeFamily.estimateApiHref(estimateId), {
+      const res = await authedFetch(estimateApiHref, {
         cache: 'no-store',
       })
       const parsed = await parseApiResponse(res)
@@ -93,7 +97,7 @@ export function useEstimateV2SummaryData(
       })
       setError(createEstimateV2Error('Failed to refresh pricing', { retryable: true }))
     }
-  }, [estimateId, routeFamily])
+  }, [estimateApiHref, estimateId])
 
   useEstimateV2SummaryLoader(estimateId, routeFamily, summaryLoaderState)
 

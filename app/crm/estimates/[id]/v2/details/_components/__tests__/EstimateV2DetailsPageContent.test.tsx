@@ -182,6 +182,8 @@ describe('EstimateV2DetailsPageContent', () => {
     expect(screen.getAllByText('Primary roller cover is required').length).toBeGreaterThan(0)
     expect(screen.getByText('Material Overview')).toBeInTheDocument()
     expect(screen.getByText('Paint Planning')).toBeInTheDocument()
+    expect(screen.queryByText('Ceiling Paint Planning')).not.toBeInTheDocument()
+    expect(screen.queryByText('Trim Paint Planning')).not.toBeInTheDocument()
     expect(screen.getByText('Rollers')).toBeInTheDocument()
 
     const continueButtons = screen.getAllByRole('button', { name: /Continue to Summary/i })
@@ -289,7 +291,7 @@ describe('EstimateV2DetailsPageContent', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders VM-provided material empty states for inactive scope sections', () => {
+  it('hides inactive material scope sections instead of rendering empty planning cards', () => {
     const emptyIssue = issue({
       id: 'material:active-scopes:empty',
       section: 'material',
@@ -311,10 +313,85 @@ describe('EstimateV2DetailsPageContent', () => {
 
     render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
 
-    expect(screen.getByText('No Active Wall Scopes')).toBeInTheDocument()
-    expect(screen.getByText('No Active Ceiling Scopes')).toBeInTheDocument()
-    expect(screen.getByText('No Active Trim Scopes')).toBeInTheDocument()
+    expect(screen.queryByText('Paint Planning')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ceiling Paint Planning')).not.toBeInTheDocument()
+    expect(screen.queryByText('Trim Paint Planning')).not.toBeInTheDocument()
+    expect(screen.queryByText('No Active Wall Scopes')).not.toBeInTheDocument()
+    expect(screen.queryByText('No Active Ceiling Scopes')).not.toBeInTheDocument()
+    expect(screen.queryByText('No Active Trim Scopes')).not.toBeInTheDocument()
     expect(screen.getAllByText(emptyIssue.message).length).toBeGreaterThan(0)
+  })
+
+  it('renders the ceiling planning card when only ceiling material rows are active', () => {
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...basePage,
+      vm: {
+        ...basePage.vm,
+        wallRows: [],
+        ceilingRow: {
+          ...basePage.vm.wallRows[0],
+          id: 'ceilings',
+          label: 'Ceilings',
+          colorId: undefined,
+          colorName: 'Ceilings',
+          sqFt: 80,
+          overrideKey: 'ceilings',
+          overrideOwnerScopeId: 'ceiling-1',
+        },
+        trimRow: null,
+        wallRollerRows: [],
+        ceilingRollerRow: null,
+        materialPlanningSections: {
+          ...basePage.vm.materialPlanningSections,
+          ceilings: {
+            ...basePage.vm.materialPlanningSections.ceilings,
+            description: '80 sqft across active ceiling scopes.',
+          },
+        },
+      },
+    })
+
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    expect(screen.queryByText('Paint Planning')).not.toBeInTheDocument()
+    expect(screen.getByText('Ceiling Paint Planning')).toBeInTheDocument()
+    expect(screen.queryByText('Trim Paint Planning')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Ceilings override gallons')).toBeInTheDocument()
+  })
+
+  it('renders the trim planning card when only trim material rows are active', () => {
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...basePage,
+      vm: {
+        ...basePage.vm,
+        wallRows: [],
+        ceilingRow: null,
+        trimRow: {
+          ...basePage.vm.wallRows[0],
+          id: 'trim',
+          label: 'Trim & Baseboards',
+          colorId: undefined,
+          colorName: 'Trim',
+          sqFt: 40,
+          overrideKey: 'trim',
+          overrideOwnerScopeId: 'trim-1',
+        },
+        wallRollerRows: [],
+        ceilingRollerRow: null,
+        trimApplicatorSummary: {
+          active: true,
+          label: '1 brush + 1 roller included automatically per color',
+        },
+        hasTrim: true,
+      },
+    })
+
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    expect(screen.queryByText('Paint Planning')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ceiling Paint Planning')).not.toBeInTheDocument()
+    expect(screen.getByText('Trim Paint Planning')).toBeInTheDocument()
+    expect(screen.getByLabelText('Trim & Baseboards override gallons')).toBeInTheDocument()
   })
 
   it('renders grouped override conflicts in planning and validation surfaces', () => {

@@ -14,8 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Cog,
-  FileText,
   Home,
+  ListTodo,
   Users,
   Wrench,
 } from "lucide-react";
@@ -48,7 +48,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       { href: "/crm/customers", label: "Customers", Icon: Users },
       { href: "/crm/jobs", label: "Job Center", Icon: Wrench },
       { href: "/crm/quotes", label: "Quotes", Icon: Calculator },
-      { href: "/crm/notes", label: "Notes", Icon: FileText },
+      { href: "/crm/tasks", label: "Tasks", Icon: ListTodo },
       { href: "/crm/calendar", label: "Calendar", Icon: CalendarDays },
       { href: "/crm/settings", label: "Settings", Icon: Cog },
     ],

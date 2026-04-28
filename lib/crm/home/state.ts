@@ -12,7 +12,7 @@ import type {
   CrmHomeSummary,
   DashboardCustomer,
   DashboardJob,
-  NotesReminderSignal,
+  TaskReminderSignal,
 } from './types.ts'
 
 const CRM_HOME_SOURCE_KEYS: CrmHomeSourceErrorKey[] = [
@@ -20,7 +20,7 @@ const CRM_HOME_SOURCE_KEYS: CrmHomeSourceErrorKey[] = [
   'customers',
   'calendarStatus',
   'calendarEvents',
-  'notes',
+  'tasks',
 ]
 
 type ParserResult<T> = {
@@ -37,7 +37,7 @@ function readString(value: unknown) {
   return typeof value === 'string' ? value : null
 }
 
-function readNotesTaskSignal(value: unknown) {
+function readTaskSignal(value: unknown) {
   if (!isRecord(value)) return null
   const id = readString(value.id)
   const title = readString(value.title)
@@ -188,29 +188,30 @@ export function readCalendarEventsPayload(payload: unknown): ParserResult<Calend
   }
 }
 
-export function readNotesDashboardPayload(payload: unknown): ParserResult<{
+export function readTasksDashboardPayload(payload: unknown): ParserResult<{
   tasks: {
-    overdue: NonNullable<ReturnType<typeof readNotesTaskSignal>>[]
-    due_today: NonNullable<ReturnType<typeof readNotesTaskSignal>>[]
+    overdue: NonNullable<ReturnType<typeof readTaskSignal>>[]
+    due_today: NonNullable<ReturnType<typeof readTaskSignal>>[]
   }
 } | null> {
-  if (!isRecord(payload) || !isRecord(payload.tasks)) {
+  const data = isRecord(payload) && isRecord(payload.data) ? payload.data : payload
+  if (!isRecord(data) || !isRecord(data.tasks)) {
     return {
       value: null,
       availability: 'invalid',
-      errorMessage: 'Malformed notes dashboard response.',
+      errorMessage: 'Malformed tasks dashboard response.',
     }
   }
 
-  const overdue = Array.isArray(payload.tasks.overdue)
-    ? payload.tasks.overdue
-        .map(readNotesTaskSignal)
-        .filter((task): task is NonNullable<ReturnType<typeof readNotesTaskSignal>> => task != null)
+  const overdue = Array.isArray(data.tasks.overdue)
+    ? data.tasks.overdue
+        .map(readTaskSignal)
+        .filter((task): task is NonNullable<ReturnType<typeof readTaskSignal>> => task != null)
     : []
-  const dueToday = Array.isArray(payload.tasks.due_today)
-    ? payload.tasks.due_today
-        .map(readNotesTaskSignal)
-        .filter((task): task is NonNullable<ReturnType<typeof readNotesTaskSignal>> => task != null)
+  const dueToday = Array.isArray(data.tasks.due_today)
+    ? data.tasks.due_today
+        .map(readTaskSignal)
+        .filter((task): task is NonNullable<ReturnType<typeof readTaskSignal>> => task != null)
     : []
 
   return {
@@ -247,7 +248,7 @@ export function createInitialCrmHomeSourceStateMap(): CrmHomeSourceStateMap {
     customers: createCrmHomeSourceState('loading', 'missing'),
     calendarStatus: createCrmHomeSourceState('loading', 'missing'),
     calendarEvents: createCrmHomeSourceState('loading', 'missing'),
-    notes: createCrmHomeSourceState('loading', 'missing'),
+    tasks: createCrmHomeSourceState('loading', 'missing'),
   }
 }
 
@@ -323,7 +324,7 @@ function createDataFromStateParts(params: {
   customers?: DashboardCustomer[]
   calendarConnected?: boolean | null
   calendarTodayEvents?: CalendarEvent[]
-  notesReminders?: NotesReminderSignal[]
+  taskReminders?: TaskReminderSignal[]
   now?: Date
 }) {
   const { data, now } = params
@@ -332,7 +333,7 @@ function createDataFromStateParts(params: {
     customers: params.customers ?? data.customers,
     calendarConnected: params.calendarConnected ?? data.signals.calendarConnected,
     calendarTodayEvents: params.calendarTodayEvents ?? data.signals.calendarTodayEvents,
-    notesReminders: params.notesReminders ?? data.signals.notesReminders,
+    taskReminders: params.taskReminders ?? data.signals.taskReminders,
     now,
   })
 }
@@ -345,7 +346,7 @@ export function createInitialCrmHomeLoadState(now = new Date()): CrmHomeLoadStat
       customers: [],
       calendarConnected: null,
       calendarTodayEvents: [],
-      notesReminders: [],
+      taskReminders: [],
       now,
     }),
     sources,
@@ -384,7 +385,7 @@ export function applyCrmHomeSourcePatch(
   let customers = previousState.data.customers
   let calendarConnected = previousState.data.signals.calendarConnected
   let calendarTodayEvents = previousState.data.signals.calendarTodayEvents
-  let notesReminders = previousState.data.signals.notesReminders
+  let taskReminders = previousState.data.signals.taskReminders
 
   if (patch.jobs) {
     sources.jobs = sourceResultToState(patch.jobs.source)
@@ -406,9 +407,9 @@ export function applyCrmHomeSourcePatch(
     calendarTodayEvents = patch.calendarEvents.data
   }
 
-  if (patch.notes) {
-    sources.notes = sourceResultToState(patch.notes.source)
-    notesReminders = patch.notes.data
+  if (patch.tasks) {
+    sources.tasks = sourceResultToState(patch.tasks.source)
+    taskReminders = patch.tasks.data
   }
 
   const data = createDataFromStateParts({
@@ -417,7 +418,7 @@ export function applyCrmHomeSourcePatch(
     customers,
     calendarConnected,
     calendarTodayEvents,
-    notesReminders,
+    taskReminders,
     now,
   })
 
@@ -434,7 +435,7 @@ export function createResolvedCrmHomeLoadState(params: {
   customers: DashboardCustomer[]
   calendarConnected: boolean | null
   calendarTodayEvents: CalendarEvent[]
-  notesReminders: NotesReminderSignal[]
+  taskReminders: TaskReminderSignal[]
   sources: Partial<CrmHomeSourceStateMap>
 }): CrmHomeLoadState {
   const baseSources = createInitialCrmHomeSourceStateMap()
@@ -449,7 +450,7 @@ export function createResolvedCrmHomeLoadState(params: {
       customers: params.customers,
       calendarConnected: params.calendarConnected,
       calendarTodayEvents: params.calendarTodayEvents,
-      notesReminders: params.notesReminders,
+      taskReminders: params.taskReminders,
       now: params.now,
     }),
     sources,

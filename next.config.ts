@@ -21,6 +21,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.dirname(fileURLToPath(import.meta.url)),
   },
+  experimental: {
+    workerThreads: true,
+  },
   async headers() {
     return [
       {

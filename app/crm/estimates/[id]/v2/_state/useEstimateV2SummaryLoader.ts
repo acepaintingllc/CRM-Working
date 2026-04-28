@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   getApiErrorMessage,
@@ -118,6 +118,10 @@ export function useEstimateV2SummaryLoader(
     setTrimPaintGallons,
     setTrimPaintQuarts,
   } = state
+  const estimateApiHref = useMemo(
+    () => (estimateId ? routeFamily.estimateApiHref(estimateId) : ''),
+    [estimateId, routeFamily]
+  )
 
   const loadSummary = useCallback(
     async (activeRef: { current: boolean }) => {
@@ -125,7 +129,7 @@ export function useEstimateV2SummaryLoader(
         setLoading(true)
         setError(null)
 
-        const res = await authedFetch(routeFamily.estimateApiHref(estimateId), {
+        const res = await authedFetch(estimateApiHref, {
           cache: 'no-store',
         })
         const parsed = await parseApiResponse(res)
@@ -182,8 +186,8 @@ export function useEstimateV2SummaryLoader(
       }
     },
     [
+      estimateApiHref,
       estimateId,
-      routeFamily,
       setData,
       setDayhours,
       setError,
@@ -201,11 +205,11 @@ export function useEstimateV2SummaryLoader(
   )
 
   useEffect(() => {
-    if (!estimateId) return
+    if (!estimateId || !estimateApiHref) return
     const activeRef = { current: true }
     void loadSummary(activeRef)
     return () => {
       activeRef.current = false
     }
-  }, [estimateId, loadSummary])
+  }, [estimateApiHref, estimateId, loadSummary])
 }

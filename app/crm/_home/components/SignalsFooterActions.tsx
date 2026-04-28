@@ -1,4 +1,4 @@
-import { CalendarCheck, NotebookText } from 'lucide-react'
+import { CalendarCheck, ListTodo } from 'lucide-react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmDenseActionRow } from '@/app/crm/_components/CrmDenseActionRow'
 import { crmBorderStyle } from './primitives/tokens'
@@ -7,14 +7,14 @@ type SignalsFooterActionsProps = {
   actions: Array<{
     href: string
     label: string
-    icon: 'calendar' | 'notes'
+    icon: 'calendar' | 'tasks'
   }>
 }
 
-function actionIcon(icon: 'calendar' | 'notes') {
+function actionIcon(icon: 'calendar' | 'tasks') {
   return icon === 'calendar'
     ? <CalendarCheck size={13} aria-hidden="true" />
-    : <NotebookText size={13} aria-hidden="true" />
+    : <ListTodo size={13} aria-hidden="true" />
 }
 
 export function SignalsFooterActions({ actions }: SignalsFooterActionsProps) {

@@ -60,4 +60,30 @@ describe('useEstimateV2SummaryData', () => {
     await new Promise((resolve) => setTimeout(resolve, 25))
     expect(authedFetch).toHaveBeenCalledTimes(2)
   })
+
+  it('does not refetch when a wrapper recreates an equivalent route family object', async () => {
+    authedFetch
+      .mockResolvedValueOnce(createResponse(true, { data: estimatePayload }))
+      .mockResolvedValueOnce(createResponse(true, { data: { id: 'job-1', customer_name: 'Ada' } }))
+
+    const { result, rerender } = renderHook(
+      ({ routeFamily }) => useEstimateV2SummaryData('estimate-1', routeFamily),
+      {
+        initialProps: {
+          routeFamily: { ...estimateRouteFamily },
+        },
+      }
+    )
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+
+    expect(authedFetch).toHaveBeenCalledTimes(2)
+
+    rerender({ routeFamily: { ...estimateRouteFamily } })
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect(authedFetch).toHaveBeenCalledTimes(2)
+  })
 })

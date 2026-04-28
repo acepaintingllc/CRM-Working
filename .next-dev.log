@@ -1,0 +1,104 @@
+
+> ace-crm@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.4.42:3000
+- Environments: .env.local
+✓ Ready in 467ms
+
+ GET /crm/quotes/f98dd393-4322-4f87-b3d2-4d80a4b10b15/summary 200 in 3.7s (next.js: 2.8s, proxy.ts: 689ms, application-code: 262ms)
+ GET / 307 in 348ms (next.js: 283ms, proxy.ts: 8ms, application-code: 57ms)
+ POST /api/bootstrap-org 200 in 931ms (next.js: 320ms, proxy.ts: 7ms, application-code: 604ms)
+ GET /crm 200 in 741ms (next.js: 470ms, proxy.ts: 147ms, application-code: 124ms)
+ POST /api/bootstrap-org 200 in 277ms (next.js: 5ms, proxy.ts: 7ms, application-code: 266ms)
+ GET /api/customers 200 in 899ms (next.js: 217ms, proxy.ts: 14ms, application-code: 667ms)
+ GET /api/tasks/dashboard 500 in 906ms (next.js: 335ms, proxy.ts: 13ms, application-code: 558ms)
+ GET /api/customers 200 in 939ms (next.js: 213ms, proxy.ts: 15ms, application-code: 711ms)
+ GET /api/google-calendar/status 200 in 959ms (next.js: 303ms, proxy.ts: 13ms, application-code: 643ms)
+ GET /api/tasks/dashboard 500 in 383ms (next.js: 21ms, proxy.ts: 13ms, application-code: 349ms)
+ GET /api/google-calendar/status 200 in 441ms (next.js: 30ms, proxy.ts: 13ms, application-code: 398ms)
+ GET /api/jobs 200 in 1393ms (next.js: 274ms, proxy.ts: 13ms, application-code: 1106ms)
+ GET /api/jobs 200 in 1665ms (next.js: 276ms, proxy.ts: 14ms, application-code: 1374ms)
+ GET /api/google-calendar/events?month=2026-04&limit=250&calendar_ids=c_79f3f7c9da3805e2fccb1a73b9f4f28996e87b3a61abbb67814edef05b957dab%40group.calendar.google.com%2Caustin%40newburghacepainting.com 200 in 922ms (next.js: 4ms, proxy.ts: 6ms, application-code: 912ms)
+ GET /api/google-calendar/events?month=2026-04&limit=250&calendar_ids=c_79f3f7c9da3805e2fccb1a73b9f4f28996e87b3a61abbb67814edef05b957dab%40group.calendar.google.com%2Caustin%40newburghacepainting.com 200 in 1225ms (next.js: 142ms, proxy.ts: 28ms, application-code: 1055ms)
+[quote-home] bootstrap {
+  orgId: '532fd06a-0a3b-4660-a192-8ac82bf5427b',
+  durationMs: 378,
+  jobsReturned: 14,
+  selectedJobId: '9835548a-56eb-4f6a-a544-184d743d3355',
+  selectedJobVersions: 0,
+  latestVersionId: '71a5b4dd-ed0d-45a8-b0f7-da63d355bf8e',
+  jobsNextCursor: null,
+  payloadBytes: 9863
+}
+ GET /crm/quotes 200 in 1248ms (next.js: 564ms, proxy.ts: 80ms, application-code: 604ms)
+ POST /api/bootstrap-org 200 in 173ms (next.js: 8ms, proxy.ts: 12ms, application-code: 152ms)
+[quote-home] bootstrap {
+  orgId: '532fd06a-0a3b-4660-a192-8ac82bf5427b',
+  durationMs: 383,
+  jobsReturned: 14,
+  selectedJobId: '9835548a-56eb-4f6a-a544-184d743d3355',
+  selectedJobVersions: 0,
+  latestVersionId: '71a5b4dd-ed0d-45a8-b0f7-da63d355bf8e',
+  jobsNextCursor: null,
+  payloadBytes: 9863
+}
+ GET /api/quotes/home/bootstrap 200 in 700ms (next.js: 149ms, proxy.ts: 9ms, application-code: 543ms)
+ GET /crm/tasks 200 in 521ms (next.js: 322ms, proxy.ts: 177ms, application-code: 22ms)
+ POST /api/bootstrap-org 200 in 158ms (next.js: 8ms, proxy.ts: 14ms, application-code: 135ms)
+ GET /api/tasks?status=open&due=all 500 in 336ms (next.js: 131ms, proxy.ts: 9ms, application-code: 196ms)
+ GET /crm/tasks 200 in 509ms (next.js: 3ms, proxy.ts: 471ms, application-code: 34ms)
+ POST /api/bootstrap-org 200 in 383ms (next.js: 8ms, proxy.ts: 7ms, application-code: 368ms)
+ GET /api/tasks?status=open&due=all 200 in 418ms (next.js: 5ms, proxy.ts: 4ms, application-code: 409ms)
+[quote-home] bootstrap {
+  orgId: '532fd06a-0a3b-4660-a192-8ac82bf5427b',
+  durationMs: 447,
+  jobsReturned: 14,
+  selectedJobId: '9835548a-56eb-4f6a-a544-184d743d3355',
+  selectedJobVersions: 0,
+  latestVersionId: '71a5b4dd-ed0d-45a8-b0f7-da63d355bf8e',
+  jobsNextCursor: null,
+  payloadBytes: 9863
+}
+ GET /crm/quotes 200 in 1033ms (next.js: 3ms, proxy.ts: 262ms, application-code: 769ms)
+ GET /crm/jobs 200 in 454ms (next.js: 347ms, proxy.ts: 82ms, application-code: 25ms)
+ POST /api/bootstrap-org 200 in 191ms (next.js: 5ms, proxy.ts: 6ms, application-code: 179ms)
+ GET /api/jobs 200 in 306ms (next.js: 3ms, proxy.ts: 5ms, application-code: 298ms)
+ GET /crm/tasks 200 in 198ms (next.js: 4ms, proxy.ts: 175ms, application-code: 19ms)
+ POST /api/bootstrap-org 200 in 166ms (next.js: 8ms, proxy.ts: 8ms, application-code: 150ms)
+ GET /api/tasks?status=open&due=all 200 in 338ms (next.js: 15ms, proxy.ts: 8ms, application-code: 315ms)
+ GET /crm/calendar 200 in 579ms (next.js: 290ms, proxy.ts: 269ms, application-code: 21ms)
+ POST /api/bootstrap-org 200 in 218ms (next.js: 13ms, proxy.ts: 20ms, application-code: 184ms)
+ GET /api/google-calendar/status 200 in 359ms (next.js: 18ms, proxy.ts: 20ms, application-code: 322ms)
+ GET /api/google-calendar/status 200 in 334ms (next.js: 4ms, proxy.ts: 5ms, application-code: 325ms)
+ GET /crm/tasks 200 in 89ms (next.js: 3ms, proxy.ts: 74ms, application-code: 12ms)
+ POST /api/bootstrap-org 200 in 162ms (next.js: 9ms, proxy.ts: 10ms, application-code: 142ms)
+ GET /api/tasks?status=open&due=all 200 in 233ms (next.js: 9ms, proxy.ts: 11ms, application-code: 213ms)
+ GET /api/google-calendar/calendars 200 in 803ms (next.js: 108ms, proxy.ts: 4ms, application-code: 691ms)
+ GET /crm/tasks 200 in 113ms (next.js: 4ms, proxy.ts: 83ms, application-code: 27ms)
+ POST /api/bootstrap-org 200 in 152ms (next.js: 4ms, proxy.ts: 6ms, application-code: 143ms)
+ GET /api/tasks?status=open&due=all 200 in 229ms (next.js: 1875µs, proxy.ts: 3ms, application-code: 224ms)
+✓ Compiled in 284ms
+ GET /crm/tasks 200 in 551ms (next.js: 68ms, proxy.ts: 437ms, application-code: 46ms)
+ GET /crm/tasks 200 in 110ms (next.js: 3ms, proxy.ts: 83ms, application-code: 23ms)
+ GET /api/tasks?status=open&due=all 200 in 611ms (next.js: 117ms, proxy.ts: 9ms, application-code: 485ms)
+ GET /api/jobs 200 in 771ms (next.js: 89ms, proxy.ts: 8ms, application-code: 674ms)
+✓ Compiled in 191ms
+ GET /crm/tasks 200 in 670ms (next.js: 76ms, proxy.ts: 562ms, application-code: 32ms)
+ GET /api/tasks?status=open&due=all 200 in 664ms (next.js: 75ms, proxy.ts: 5ms, application-code: 583ms)
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.4.42:3000
+- Environments: .env.local
+✓ Ready in 462ms
+- Experiments (use with caution):
+  ✓ workerThreads
+
+○ Compiling /crm/tasks ...
+ GET /crm/tasks 200 in 4.2s (next.js: 3.3s, proxy.ts: 657ms, application-code: 307ms)
+ POST /api/bootstrap-org 200 in 1083ms (next.js: 337ms, proxy.ts: 6ms, application-code: 740ms)
+ GET /api/tasks?status=open&due=all 200 in 978ms (next.js: 607ms, proxy.ts: 10ms, application-code: 361ms)
+ GET /api/jobs 200 in 1396ms (next.js: 547ms, proxy.ts: 9ms, application-code: 840ms)
+ GET /api/jobs 200 in 1424ms (next.js: 571ms, proxy.ts: 7ms, application-code: 847ms)

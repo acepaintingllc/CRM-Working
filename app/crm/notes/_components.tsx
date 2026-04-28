@@ -1,6 +1,0 @@
-export { NotesComposerMount } from './_components/NotesComposerMount'
-export { NotesModuleHeaderActions } from './_components/NotesModuleHeaderActions'
-export { NotesOverlayShell, type OverlayShellProps } from './_components/NotesOverlayShell'
-export { TaskComposerOverlay, type TaskComposerProps } from './_components/TaskComposer'
-export { NoteComposerOverlay, type NoteComposerProps } from './_components/NoteComposer'
-export { buildNotesModuleHref, buildNotesCloseHref, type SearchLike } from './_components/notesRouteHelpers'

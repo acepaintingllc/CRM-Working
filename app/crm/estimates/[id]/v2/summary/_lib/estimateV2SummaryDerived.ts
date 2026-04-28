@@ -42,6 +42,7 @@ type SummaryScopeSourceRow = {
   paint_product_id?: string | null
   paint_product_label?: string | null
   raw_paint_gallons?: number | null
+  raw_primer_gallons?: number | null
   allocated_paint_material_cost?: number | null
   override_measurement?: number | null
   override_hours?: number | null
@@ -109,6 +110,14 @@ export type EstimateV2SummaryPricingKpis = {
 export type EstimateV2SummaryPricingTableRow = {
   label: string
   value: string
+}
+
+export type EstimateV2PaintSupplyProductLabels = {
+  wallPaintProductLabel?: string | null
+  ceilingPaintProductLabel?: string | null
+  trimPaintProductLabel?: string | null
+  primerProductLabel?: string | null
+  totalGallons?: number | null
 }
 
 type ScopeMappingConfig = {
@@ -251,6 +260,7 @@ function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
     paint_product_id: asNullableString(value.paint_product_id),
     paint_product_label: asNullableString(value.paint_product_label),
     raw_paint_gallons: asMaybeNumber(value.raw_paint_gallons),
+    raw_primer_gallons: asMaybeNumber(value.raw_primer_gallons),
     allocated_paint_material_cost: asMaybeNumber(value.allocated_paint_material_cost),
     override_measurement: asNullableNumber(value.override_measurement),
     override_hours: asNullableNumber(value.override_hours),
@@ -305,6 +315,99 @@ export function createPaintProductLabelResolver(paintProducts: EstimateV2PaintPr
     if (label && !/^[0-9a-f-]{16,}$/i.test(label)) return label
     if (!/^[0-9a-f-]{16,}$/i.test(productId)) return productId
     return 'Paint product'
+  }
+}
+
+function firstText(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const text = value?.trim()
+    if (text) return text
+  }
+  return null
+}
+
+function resolveSelectedProductLabel(
+  resolvePaintProductLabel: (productId?: string | null, fallbackLabel?: string | null) => string,
+  productId?: string | null,
+  fallbackLabel?: string | null
+) {
+  const label = resolvePaintProductLabel(productId, fallbackLabel)
+  return label === '-' ? null : label
+}
+
+function uniqueLabels(labels: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      labels
+        .map((label) => label?.trim())
+        .filter((label): label is string => !!label && label !== '-')
+    )
+  )
+}
+
+function sumPaintAndPrimerGallons(scopes: SummaryScopeSourceRow[]) {
+  return scopes.reduce(
+    (total, scope) => total + (scope.raw_paint_gallons ?? 0) + (scope.raw_primer_gallons ?? 0),
+    0
+  )
+}
+
+export function buildPaintSupplyProductLabels(params: {
+  jobsettings: EstimateV2JobSettingsInput | null | undefined
+  orgDefaults: EstimateV2JobSettingsInput | null | undefined
+  wallScopes: SummaryScopeSourceRow[]
+  ceilingScopes: SummaryScopeSourceRow[]
+  trimScopes: SummaryScopeSourceRow[]
+  trimPaint: EstimateV2TrimPaint | null | undefined
+  resolvePaintProductLabel: (productId?: string | null, fallbackLabel?: string | null) => string
+}): EstimateV2PaintSupplyProductLabels {
+  const { jobsettings, orgDefaults, resolvePaintProductLabel } = params
+  const wallPaintId = firstText(
+    jobsettings?.walls_paint_id,
+    jobsettings?.wall_paint_id,
+    orgDefaults?.walls_paint_id,
+    orgDefaults?.wall_paint_id
+  )
+  const ceilingPaintId = firstText(jobsettings?.ceiling_paint_id, orgDefaults?.ceiling_paint_id)
+  const trimPaintId = firstText(params.trimPaint?.paint_product_id, jobsettings?.trim_paint_id, orgDefaults?.trim_paint_id)
+  const primerLabels = uniqueLabels([
+    resolveSelectedProductLabel(
+      resolvePaintProductLabel,
+      firstText(
+        jobsettings?.walls_primer_id,
+        jobsettings?.wall_primer_id,
+        jobsettings?.primer_id,
+        orgDefaults?.walls_primer_id,
+        orgDefaults?.wall_primer_id,
+        orgDefaults?.primer_id
+      )
+    ),
+    resolveSelectedProductLabel(
+      resolvePaintProductLabel,
+      firstText(jobsettings?.ceiling_primer_id, jobsettings?.primer_id, orgDefaults?.ceiling_primer_id, orgDefaults?.primer_id)
+    ),
+    resolveSelectedProductLabel(
+      resolvePaintProductLabel,
+      firstText(jobsettings?.trim_primer_id, jobsettings?.primer_id, orgDefaults?.trim_primer_id, orgDefaults?.primer_id)
+    ),
+  ])
+  const primerProductLabel = primerLabels.length > 0 ? primerLabels.join(', ') : null
+  const scopeGallons =
+    sumPaintAndPrimerGallons(params.wallScopes) +
+    sumPaintAndPrimerGallons(params.ceilingScopes) +
+    sumPaintAndPrimerGallons(params.trimScopes)
+  const trimPaintGallons = params.trimPaint?.normalized_gallons ?? 0
+
+  return {
+    wallPaintProductLabel: resolveSelectedProductLabel(resolvePaintProductLabel, wallPaintId),
+    ceilingPaintProductLabel: resolveSelectedProductLabel(resolvePaintProductLabel, ceilingPaintId),
+    trimPaintProductLabel: resolveSelectedProductLabel(
+      resolvePaintProductLabel,
+      trimPaintId,
+      params.trimPaint?.paint_product_label
+    ),
+    primerProductLabel,
+    totalGallons: scopeGallons + trimPaintGallons,
   }
 }
 
@@ -614,6 +717,26 @@ function formatWholeDollar(value: number | null | undefined) {
   return value == null ? '-' : `$${Math.round(value).toLocaleString('en-US')}`
 }
 
+function formatGallons(value: number | null | undefined) {
+  const gallons = Number(value ?? 0)
+  if (!Number.isFinite(gallons)) return '0 gal'
+  return `${Number(gallons.toFixed(2)).toLocaleString('en-US')} gal`
+}
+
+function formatPaintSupplyLabel(scopeLabel: string, productLabel: string | null | undefined) {
+  const label = productLabel?.trim()
+  return label && label !== '-' ? `${scopeLabel} - ${label}` : scopeLabel
+}
+
+function resolveTrimPaintMaterialCost(
+  pricingSummary: EstimateV2PricingSummary | null | undefined,
+  trimPaint?: EstimateV2TrimPaint | null
+) {
+  const summaryCost = pricingSummary?.trimPaintMaterialCost ?? 0
+  if (summaryCost > 0) return summaryCost
+  return trimPaint?.paint_cost ?? pricingSummary?.trimPaint?.paint_cost ?? summaryCost
+}
+
 export function buildPriceBreakdownRows(pricingSummary: EstimateV2PricingSummary | null | undefined) {
   const priceAdjustment = pricingSummary
     ? pricingSummary.postLaborPolicyTotal - pricingSummary.prePolicyTotal
@@ -635,36 +758,49 @@ export function buildPriceBreakdownRows(pricingSummary: EstimateV2PricingSummary
   ]
 }
 
-export function buildPaintSupplyRows(pricingSummary: EstimateV2PricingSummary | null | undefined) {
+export function buildPaintSupplyRows(
+  pricingSummary: EstimateV2PricingSummary | null | undefined,
+  trimPaint?: EstimateV2TrimPaint | null,
+  productLabels: EstimateV2PaintSupplyProductLabels = {}
+) {
+  const trimPaintMaterialCost = resolveTrimPaintMaterialCost(pricingSummary, trimPaint)
+
   return [
     {
-      label: 'Wall paint',
+      label: formatPaintSupplyLabel('Wall paint', productLabels.wallPaintProductLabel),
       value: formatWholeDollar(pricingSummary?.wallPaintMaterialCost),
     },
     {
-      label: 'Ceiling paint',
+      label: formatPaintSupplyLabel('Ceiling paint', productLabels.ceilingPaintProductLabel),
       value: formatWholeDollar(pricingSummary?.ceilingPaintMaterialCost),
     },
     {
-      label: 'Trim paint',
-      value: formatWholeDollar(pricingSummary?.trimPaintMaterialCost),
+      label: formatPaintSupplyLabel('Trim paint', productLabels.trimPaintProductLabel),
+      value: formatWholeDollar(trimPaintMaterialCost),
     },
     {
-      label: 'Primer',
+      label: formatPaintSupplyLabel('Primer', productLabels.primerProductLabel),
       value: formatWholeDollar(pricingSummary?.primerMaterialCost),
     },
     {
       label: 'Supplies',
       value: formatWholeDollar(pricingSummary?.supplyCost),
     },
+    {
+      label: 'Total gallons',
+      value: formatGallons(productLabels.totalGallons),
+    },
   ]
 }
 
-export function calculatePaintSuppliesTotal(pricingSummary: EstimateV2PricingSummary | null | undefined) {
+export function calculatePaintSuppliesTotal(
+  pricingSummary: EstimateV2PricingSummary | null | undefined,
+  trimPaint?: EstimateV2TrimPaint | null
+) {
   return (
     (pricingSummary?.wallPaintMaterialCost ?? 0) +
     (pricingSummary?.ceilingPaintMaterialCost ?? 0) +
-    (pricingSummary?.trimPaintMaterialCost ?? 0) +
+    resolveTrimPaintMaterialCost(pricingSummary, trimPaint) +
     (pricingSummary?.supplyCost ?? 0)
   )
 }

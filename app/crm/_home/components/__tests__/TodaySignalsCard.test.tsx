@@ -49,14 +49,14 @@ const baseViewModel = {
     items: [
       {
         key: 'overdue:task-1',
-        href: '/crm/notes/tasks?focus=task-1',
+        href: '/crm/tasks?focus=task-1',
         title: 'Call Alice',
         subtitle: 'Overdue • 4/20/2026',
         tone: 'danger' as const,
       },
       {
         key: 'due_today:task-2',
-        href: '/crm/notes/tasks?focus=task-2',
+        href: '/crm/tasks?focus=task-2',
         title: 'Send estimate',
         subtitle: 'Due today • 4/21/2026',
         tone: 'default' as const,
@@ -65,7 +65,7 @@ const baseViewModel = {
   },
   footerActions: [
     { href: '/crm/calendar', label: 'Calendar', icon: 'calendar' as const },
-    { href: '/crm/notes', label: 'Notes', icon: 'notes' as const },
+    { href: '/crm/tasks', label: 'Tasks', icon: 'tasks' as const },
   ],
 }
 
@@ -121,8 +121,8 @@ describe('TodaySignalsCard', () => {
 
     const overdueReminder = screen.getByRole('link', { name: /Call Alice/i })
     const dueTodayReminder = screen.getByRole('link', { name: /Send estimate/i })
-    expect(overdueReminder.getAttribute('href')).toBe('/crm/notes/tasks?focus=task-1')
-    expect(dueTodayReminder.getAttribute('href')).toBe('/crm/notes/tasks?focus=task-2')
+    expect(overdueReminder.getAttribute('href')).toBe('/crm/tasks?focus=task-1')
+    expect(dueTodayReminder.getAttribute('href')).toBe('/crm/tasks?focus=task-2')
     expect(overdueReminder.getAttribute('style')).toContain('var(--crm-danger-border)')
     expect(dueTodayReminder.getAttribute('style')).toContain('var(--crm-border)')
   })
@@ -136,7 +136,7 @@ describe('TodaySignalsCard', () => {
             ...baseViewModel.reminders,
             isEmpty: true,
             items: [],
-            errors: ['Malformed notes dashboard response.'],
+            errors: ['Malformed tasks dashboard response.'],
           },
         }}
       />
@@ -144,7 +144,7 @@ describe('TodaySignalsCard', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Reminders' }))
 
-    expect(screen.getByText('Malformed notes dashboard response.')).toBeTruthy()
+    expect(screen.getByText('Malformed tasks dashboard response.')).toBeTruthy()
     expect(screen.queryByText('No reminders today.')).toBeNull()
   })
 

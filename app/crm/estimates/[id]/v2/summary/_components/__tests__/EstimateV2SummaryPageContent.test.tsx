@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { AnchorHTMLAttributes } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { estimateRouteFamily } from '../../../../estimateRouteFamily'
 import { EstimateV2SummaryPageContent } from '../EstimateV2SummaryPageContent'
 
 const mockLoadData = vi.hoisted(() => vi.fn())
@@ -98,7 +99,12 @@ const baseDerivedState = {
 }
 
 describe('EstimateV2SummaryPageContent', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   beforeEach(() => {
+    mockLoadData.mockClear()
     mockLoadData.mockResolvedValue({ version: null, public_url: null })
     mockUseEstimateV2SummaryData.mockReturnValue(baseDataState)
     mockUseEstimateV2SummaryDerived.mockReturnValue(baseDerivedState)
@@ -139,5 +145,46 @@ describe('EstimateV2SummaryPageContent', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('keeps pricing policies inside the price breakdown section', () => {
+    render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
+
+    const priceBreakdownSection = screen.getByRole('heading', { name: 'Price Breakdown' }).closest('section')
+
+    expect(priceBreakdownSection).not.toBeNull()
+    expect(within(priceBreakdownSection as HTMLElement).getByText('Policies: Labor Day Off • Job Minimum Off')).toBeInTheDocument()
+  })
+
+  it('does not render the standalone trim paint rail section', () => {
+    mockUseEstimateV2SummaryDerived.mockReturnValue({
+      ...baseDerivedState,
+      trimPaint: {
+        paint_product_id: 'trim-paint-1',
+        paint_product_label: 'Trim Paint',
+        gallons: 1,
+        quarts: 2,
+        normalized_gallons: 1.5,
+        paint_cost: 45,
+      },
+      hasTrimPaint: true,
+    })
+
+    render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
+
+    expect(screen.queryByRole('heading', { name: 'Trim Paint' })).not.toBeInTheDocument()
+  })
+
+  it('does not reload send status when a wrapper recreates an equivalent route family object', async () => {
+    const { rerender } = render(
+      <EstimateV2SummaryPageContent estimateId="estimate-1" routeFamily={{ ...estimateRouteFamily }} />
+    )
+
+    expect(mockLoadData).toHaveBeenCalledTimes(1)
+
+    rerender(<EstimateV2SummaryPageContent estimateId="estimate-1" routeFamily={{ ...estimateRouteFamily }} />)
+
+    await Promise.resolve()
+    expect(mockLoadData).toHaveBeenCalledTimes(1)
   })
 })

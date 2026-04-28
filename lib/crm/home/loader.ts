@@ -1,5 +1,5 @@
 import { monthKeyLocal } from './calendar.ts'
-import { buildCalendarTodayEvents, buildNotesReminders } from './selectors.ts'
+import { buildCalendarTodayEvents, buildTaskReminders } from './selectors.ts'
 import {
   applyCrmHomeSourcePatch,
   createInitialCrmHomeLoadState,
@@ -8,7 +8,7 @@ import {
   readCalendarStatusPayload,
   readCustomersPayload,
   readJobsPayload,
-  readNotesDashboardPayload,
+  readTasksDashboardPayload,
 } from './state.ts'
 import type {
   CalendarEvent,
@@ -154,23 +154,23 @@ async function loadCustomersPatch(
   }
 }
 
-async function loadNotesPatch(
+async function loadTasksPatch(
   deps: CrmHomeLoaderDependencies,
   now: Date
-): Promise<CrmHomeSourcePatch['notes']> {
-  const response = await deps.fetchJson('notes', '/api/notes/dashboard')
+): Promise<CrmHomeSourcePatch['tasks']> {
+  const response = await deps.fetchJson('tasks', '/api/tasks/dashboard')
   const source = resolveSourceResult(
     response,
-    readNotesDashboardPayload,
+    readTasksDashboardPayload,
     null,
-    'Unable to load notes dashboard.',
+    'Unable to load task dashboard.',
     deps.logError,
     now
   )
 
   return {
     source,
-    data: source.value ? buildNotesReminders(source.value) : [],
+    data: source.value ? buildTaskReminders(source.value) : [],
   }
 }
 
@@ -245,10 +245,10 @@ export async function loadCrmHomeSources(
     )
   }
 
-  if (requested.has('notes')) {
+  if (requested.has('tasks')) {
     parallelTasks.push(
-      loadNotesPatch(deps, now).then((result) => {
-        patch.notes = result
+      loadTasksPatch(deps, now).then((result) => {
+        patch.tasks = result
       })
     )
   }
@@ -278,7 +278,7 @@ export async function loadCrmHomeData(
     'jobs',
     'customers',
     'calendarStatus',
-    'notes',
+    'tasks',
   ])
   return applyCrmHomeSourcePatch(initialState, patch, now)
 }

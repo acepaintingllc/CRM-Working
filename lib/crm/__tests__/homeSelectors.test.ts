@@ -3,13 +3,13 @@ import test from 'node:test'
 import {
   buildCrmHomeMetrics,
   buildCurrentJobs,
-  buildNotesReminders,
+  buildTaskReminders,
   buildSearchResults,
 } from '../home/selectors.ts'
 import type {
   DashboardCustomer,
   DashboardJob,
-  NotesDashboardPayload,
+  TasksDashboardPayload,
 } from '../home/types.ts'
 
 function makeJob(overrides: Partial<DashboardJob> = {}): DashboardJob {
@@ -116,8 +116,8 @@ test('buildCurrentJobs returns scheduled jobs starting soon until completed or l
   )
 })
 
-test('buildNotesReminders orders overdue before due today and applies limits', () => {
-  const payload: NotesDashboardPayload = {
+test('buildTaskReminders orders overdue before due today and applies limits', () => {
+  const payload: TasksDashboardPayload = {
     tasks: {
       overdue: [
         {
@@ -158,7 +158,7 @@ test('buildNotesReminders orders overdue before due today and applies limits', (
     },
   }
 
-  const reminders = buildNotesReminders(payload, 3)
+  const reminders = buildTaskReminders(payload, 3)
 
   assert.deepEqual(
     reminders.map((item) => item.task.id),
