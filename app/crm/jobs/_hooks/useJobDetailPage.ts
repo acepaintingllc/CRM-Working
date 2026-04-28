@@ -91,8 +91,11 @@ export function useJobDetailPage() {
   const [estimateFile, setEstimateFile] = useState<EstimateDriveFile | null>(null)
   const [estimateFileError, setEstimateFileError] = useState<string | null>(null)
   const [paintLogs, setPaintLogs] = useState<PaintLogRow[]>([])
+  const [photosFolderUrl, setPhotosFolderUrl] = useState<string | null>(null)
+  const [photosLoading, setPhotosLoading] = useState(false)
   const [secondaryLoading, setSecondaryLoading] = useState(false)
   const secondaryRequestIdRef = useRef(0)
+  const photosRequestIdRef = useRef(0)
 
   const jobKey = typeof id === 'string' && id ? `/api/jobs/${id}` : null
   const jobsBoardKey = '/api/jobs'
