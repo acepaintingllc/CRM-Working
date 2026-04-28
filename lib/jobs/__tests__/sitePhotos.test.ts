@@ -13,9 +13,9 @@ import {
   uploadJobSitePhotos,
 } from '../sitePhotos.ts'
 
-type MockQueryResult = {
-  data: unknown
-  error: { code?: string; message: string } | null
+type MockQueryResult<T = unknown> = {
+  data: T | null
+  error: { code?: string | null; message?: string | null } | null
 }
 
 type MockCall = {
@@ -44,16 +44,16 @@ function createQueryBuilder(result: MockQueryResult, table: string, calls: MockC
       calls.push({ table, method: 'insert', value })
       return builder
     },
-    maybeSingle() {
+    maybeSingle<T = unknown>() {
       calls.push({ table, method: 'maybeSingle' })
-      return Promise.resolve(result)
+      return Promise.resolve(result as MockQueryResult<T>)
     },
-    single() {
+    single<T = unknown>() {
       calls.push({ table, method: 'single' })
-      return Promise.resolve(result)
+      return Promise.resolve(result as MockQueryResult<T>)
     },
-    then<TResult1 = MockQueryResult, TResult2 = never>(
-      onfulfilled?: ((value: MockQueryResult) => TResult1 | PromiseLike<TResult1>) | null,
+    then<TResult1 = MockQueryResult<unknown>, TResult2 = never>(
+      onfulfilled?: ((value: MockQueryResult<unknown>) => TResult1 | PromiseLike<TResult1>) | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
     ) {
       return Promise.resolve(result).then(onfulfilled, onrejected)

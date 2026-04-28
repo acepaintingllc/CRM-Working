@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -252,7 +252,10 @@ export function useJobPhotosUploadPage() {
 
       queueRef.current = remainingPhotos
       setQueue(remainingPhotos)
-      setFolderUrl(data.jobFolder.webViewLink ?? getJobPhotosFolderUrl(data.jobFolder.id))
+      setFolderUrl(
+        data.jobFolder.webViewLink ??
+          (data.jobFolder.id ? getJobPhotosFolderUrl(data.jobFolder.id) : null)
+      )
 
       if (failuresById.size > 0) {
         setError(`${failuresById.size} photo${failuresById.size === 1 ? '' : 's'} failed to upload.`)

@@ -185,11 +185,37 @@ async function getDb(depsOverride?: SitePhotoDepsOverride): Promise<DbClient> {
 }
 
 async function getUploadDeps(depsOverride?: SitePhotoDepsOverride): Promise<UploadDeps> {
-  const driveModule = depsOverride?.ensureDriveFolder && depsOverride?.uploadDriveFile ? null : await import('../server/googleDrive.ts')
+  const driveModule =
+    depsOverride?.ensureDriveFolder && depsOverride?.uploadDriveFile
+      ? null
+      : await import('../server/googleDrive.ts')
+
+  const ensureDriveFolder: EnsureDriveFolder =
+    depsOverride?.ensureDriveFolder ??
+    (async (params) => {
+      const result = await driveModule!.ensureDriveFolder(params)
+      if ('folder' in result) return { folder: result.folder }
+      return {
+        error: result.error ?? 'Unable to prepare Drive folder.',
+        status: 'status' in result && typeof result.status === 'number' ? result.status : undefined,
+      }
+    })
+
+  const uploadDriveFile: UploadDriveFile =
+    depsOverride?.uploadDriveFile ??
+    (async (params) => {
+      const result = await driveModule!.uploadDriveFile(params)
+      if ('file' in result) return { file: result.file }
+      return {
+        error: result.error ?? 'Unable to upload Drive file.',
+        status: 'status' in result && typeof result.status === 'number' ? result.status : undefined,
+      }
+    })
+
   return {
     db: await getDb(depsOverride),
-    ensureDriveFolder: depsOverride?.ensureDriveFolder ?? driveModule!.ensureDriveFolder,
-    uploadDriveFile: depsOverride?.uploadDriveFile ?? driveModule!.uploadDriveFile,
+    ensureDriveFolder,
+    uploadDriveFile,
     randomUUID: depsOverride?.randomUUID ?? randomUUID,
     now: depsOverride?.now ?? (() => new Date()),
     env: depsOverride?.env ?? process.env,
