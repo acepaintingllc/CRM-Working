@@ -113,10 +113,87 @@ export type CalendarAddResult = {
   skipped?: boolean
 }
 
+export type JobSitePhotoCategory = 'before' | 'damage' | 'after'
+
+export type JobSitePhotoRecord = {
+  id: string
+  job_id: string
+  jobId: string
+  category: JobSitePhotoCategory
+  job_drive_folder_id: string | null
+  jobDriveFolderId: string | null
+  drive_file_id: string
+  driveFileId: string
+  drive_folder_id: string | null
+  driveFolderId: string | null
+  url: string | null
+  drive_url: string | null
+  driveUrl: string | null
+  caption: string | null
+  file_name: string | null
+  fileName: string | null
+  original_name: string | null
+  originalName: string | null
+  mime_type: string | null
+  mimeType: string | null
+  size_bytes: number | null
+  sizeBytes: number | null
+  captured_at: string
+  capturedAt: string
+  uploaded_at: string | null
+  uploadedAt: string | null
+  client_local_id: string | null
+  clientLocalId: string | null
+  created_at: string | null
+  createdAt: string | null
+}
+
+export type JobSitePhotoFolder = { id: string | null; webViewLink: string | null }
+
+export type ListJobSitePhotosResponse = {
+  photos: Record<JobSitePhotoCategory, JobSitePhotoRecord[]>
+  jobFolder: JobSitePhotoFolder
+  categoryFolders: Record<JobSitePhotoCategory, JobSitePhotoFolder>
+}
+
+export type UploadJobSitePhotoFailure = {
+  originalName: string
+  clientLocalId: string
+  message: string
+}
+
+export type UploadJobSitePhotosResponse = {
+  photos: JobSitePhotoRecord[]
+  jobFolder: JobSitePhotoFolder
+  categoryFolder: JobSitePhotoFolder
+  failed: UploadJobSitePhotoFailure[]
+}
 export async function fetchJobList() {
   return loadData<JobSummary[]>('/api/jobs', { cache: 'no-store' })
 }
 
+export function getJobPhotosFolderUrl(folderId: string | null | undefined) {
+  if (!folderId) return null
+  return `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}`
+}
+
+export async function listJobSitePhotos(jobId: string) {
+  const payload = await requestApi<ApiDataEnvelope<ListJobSitePhotosResponse>>(
+    `/api/jobs/${jobId}/site-photos`,
+    { cache: 'no-store' }
+  )
+  return payload.data ?? null
+}
+
+export async function uploadJobSitePhotos(jobId: string, form: FormData) {
+  return requestApi<ApiMutationEnvelope<UploadJobSitePhotosResponse>>(
+    `/api/jobs/${jobId}/site-photos`,
+    {
+      method: 'POST',
+      body: form,
+    }
+  )
+}
 export async function loadJobRecord(jobId: string) {
   const payload = await requestApi<ApiDataEnvelope<JobDetail>>(`/api/jobs/${jobId}`, {
     cache: 'no-store',

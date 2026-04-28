@@ -1,5 +1,6 @@
 'use client'
 
+import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
@@ -77,6 +78,11 @@ export default function JobDetailPage() {
                     />
                   </CrmSectionCard>
                   <CrmSectionCard title="Actions" variant="compact">
+                    {controller.photosFolderUrl ? (
+                      <CrmButton href={controller.photosFolderUrl} target="_blank" rel="noreferrer">
+                        Open Photos
+                      </CrmButton>
+                    ) : null}
                     <JobActionRail
                       actions={detailActions}
                       getActionTone={actionTone}
