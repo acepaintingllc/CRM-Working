@@ -388,6 +388,24 @@ function isUniqueConflict(error: { code?: string | null; message?: string | null
   return error.code === '23505' || message.includes('duplicate') || message.includes('unique')
 }
 
+function applyExistingPhotoFolderContext(
+  photo: JobSitePhotoResponse,
+  requestedCategory: JobSitePhotoCategory,
+  currentJobFolderId: string | null,
+  currentCategoryFolderId: string | null
+): { jobFolderId: string | null; categoryFolderId: string | null } {
+  const nextJobFolderId = currentJobFolderId ?? photo.job_drive_folder_id
+  const canReuseCategoryFolder =
+    photo.category === requestedCategory &&
+    Boolean(photo.job_drive_folder_id) &&
+    photo.job_drive_folder_id === nextJobFolderId
+
+  return {
+    jobFolderId: nextJobFolderId,
+    categoryFolderId: canReuseCategoryFolder ? currentCategoryFolderId ?? photo.drive_folder_id : currentCategoryFolderId,
+  }
+}
+
 export async function listJobSitePhotos(
   orgId: string,
   jobId: string,
@@ -465,10 +483,9 @@ export async function uploadJobSitePhotos(
     if (duplicate.data) {
       const existingPhoto = toPhotoResponse(duplicate.data)
       photos.push(existingPhoto)
-      jobFolderId = jobFolderId ?? existingPhoto.job_drive_folder_id
-      if (existingPhoto.category === validation) {
-        categoryFolderId = categoryFolderId ?? existingPhoto.drive_folder_id
-      }
+      const nextFolderContext = applyExistingPhotoFolderContext(existingPhoto, validation, jobFolderId, categoryFolderId)
+      jobFolderId = nextFolderContext.jobFolderId
+      categoryFolderId = nextFolderContext.categoryFolderId
       continue
     }
 
@@ -542,10 +559,9 @@ export async function uploadJobSitePhotos(
         if (!recovered.error && recovered.data) {
           const existingPhoto = toPhotoResponse(recovered.data)
           photos.push(existingPhoto)
-          jobFolderId = jobFolderId ?? existingPhoto.job_drive_folder_id
-          if (existingPhoto.category === validation) {
-            categoryFolderId = categoryFolderId ?? existingPhoto.drive_folder_id
-          }
+          const nextFolderContext = applyExistingPhotoFolderContext(existingPhoto, validation, jobFolderId, categoryFolderId)
+          jobFolderId = nextFolderContext.jobFolderId
+          categoryFolderId = nextFolderContext.categoryFolderId
           continue
         }
       }

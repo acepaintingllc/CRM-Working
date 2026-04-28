@@ -358,6 +358,44 @@ test('uploadJobSitePhotos does not reuse a duplicate photo folder from another r
   assert.equal((uploadCalls[0] as { folderId: string }).folderId, 'damage-folder')
 })
 
+test('uploadJobSitePhotos does not reuse same-category legacy duplicate folder without a job folder id', async () => {
+  const legacyDuplicateRow = { id: 'photo-legacy', job_id: 'job-1', category: 'damage', job_drive_folder_id: null, drive_file_id: 'drive-legacy', drive_folder_id: 'legacy-damage-folder', url: 'https://drive/photo-legacy', caption: null, captured_at: '2026-04-28T15:04:05.000Z', uploaded_at: '2026-04-28T15:04:06.000Z', client_local_id: 'local-1', created_at: '2026-04-28T15:04:07.000Z' }
+  const insertedRow = { id: 'photo-new', job_id: 'job-1', category: 'damage', job_drive_folder_id: 'new-job-folder', drive_file_id: 'drive-new', drive_folder_id: 'new-damage-folder', url: 'https://drive/photo-new', caption: null, captured_at: '2026-04-28T15:04:05.000Z', uploaded_at: '2026-04-28T15:04:06.000Z', client_local_id: 'local-2', created_at: '2026-04-28T15:04:08.000Z' }
+  const { db } = createDbMock({
+    jobs: [{ data: { id: 'job-1', title: 'Interior repaint', customer_id: 'customer-1', customer: { address: '123 Main St' } }, error: null }],
+    job_site_photos: [{ data: legacyDuplicateRow, error: null }, { data: null, error: null }, { data: insertedRow, error: null }],
+  })
+  const ensureCalls: unknown[] = []
+  const uploadCalls: unknown[] = []
+
+  const result = await uploadJobSitePhotos(
+    { orgId: 'org-1', jobId: 'job-1', userId: 'user-1', createdByUserId: 'user-1', origin: 'https://example.test', category: 'damage', files: [validUploadFile, { ...validUploadFile, originalName: 'new-damage.jpg', clientLocalId: 'local-2' }] },
+    {
+      db,
+      env: { GOOGLE_DRIVE_JOB_PHOTOS_FOLDER_ID: 'root-folder' },
+      now: () => new Date('2026-04-28T15:04:06.000Z'),
+      ensureDriveFolder: async (params: unknown) => {
+        ensureCalls.push(params)
+        const parentFolderId = (params as { parentFolderId: string }).parentFolderId
+        return { folder: parentFolderId === 'root-folder' ? { id: 'new-job-folder', name: '123 Main St', webViewLink: null } : { id: 'new-damage-folder', name: 'Damage', webViewLink: null } }
+      },
+      uploadDriveFile: async (params: unknown) => {
+        uploadCalls.push(params)
+        return { file: { id: 'drive-new', name: (params as { name: string }).name, webViewLink: 'https://drive/photo-new' } }
+      },
+    }
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.data.photos.length, 2)
+  assert.equal(result.data.jobFolder.webViewLink, 'https://drive.google.com/drive/folders/new-job-folder')
+  assert.equal(result.data.categoryFolder.webViewLink, 'https://drive.google.com/drive/folders/new-damage-folder')
+  assert.equal(ensureCalls.length, 2)
+  assert.equal((ensureCalls[0] as { parentFolderId: string }).parentFolderId, 'root-folder')
+  assert.equal((ensureCalls[1] as { parentFolderId: string }).parentFolderId, 'new-job-folder')
+  assert.equal((uploadCalls[0] as { folderId: string }).folderId, 'new-damage-folder')
+})
+
 test('uploadJobSitePhotos treats duplicate client_local_id as already uploaded', async () => {
   const existingRow = { id: 'photo-existing', job_id: 'job-1', category: 'damage', job_drive_folder_id: 'job-folder', drive_file_id: 'drive-existing', drive_folder_id: 'damage-folder', url: 'https://drive/photo-existing', caption: null, captured_at: '2026-04-28T15:04:05.000Z', uploaded_at: '2026-04-28T15:04:06.000Z', client_local_id: 'local-1' }
   const { db, calls } = createDbMock({
