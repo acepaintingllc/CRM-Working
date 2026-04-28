@@ -56,6 +56,8 @@ export type V2RoomRosterRow = {
   id?: string
   room_id: string
   room_name: string
+  room_type_id: string | null
+  wall_complexity_id: string | null
   position: number
   notes: string | null
   length_in: number | null
@@ -84,6 +86,8 @@ export function buildV2RoomRosterRows(rows: Unsafe[]) {
       id: isUuid(row.id) ? asText(row.id) : undefined,
       room_id: roomId,
       room_name: roomName,
+      room_type_id: asText(row.room_type_id).toUpperCase() || null,
+      wall_complexity_id: asText(row.wall_complexity_id).toUpperCase() || null,
       position: idx,
       notes: asText(row.notes) || null,
       length_in: asNullableNumber(row.length_in),

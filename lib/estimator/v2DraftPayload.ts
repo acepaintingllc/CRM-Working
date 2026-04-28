@@ -185,6 +185,8 @@ export function buildEstimateV2SavePayload(
     room_name: room.roomName.trim(),
     notes: room.notes.trim() || null,
     position: index,
+    room_type_id: room.roomTypeId.trim() || null,
+    wall_complexity_id: room.wallComplexityId.trim() || null,
     length_in: toNullableDraftNumber(room.lengthIn),
     width_in: toNullableDraftNumber(room.widthIn),
     wallheight_in: toNullableDraftNumber(room.heightIn),

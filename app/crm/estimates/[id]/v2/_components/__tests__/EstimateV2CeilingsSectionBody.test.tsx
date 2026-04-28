@@ -180,4 +180,28 @@ describe('EstimateV2CeilingsSectionBody', () => {
     expect(screen.getByText('Recess Depth Optional (in)')).toBeInTheDocument()
     expect(screen.getByText('Beam Width Optional (in)')).toBeInTheDocument()
   })
+
+  it('places ceiling coats beside ceiling type in the setup row', () => {
+    const ceilingsVm = makeVm({
+      selectedRoomGeometryMode: 'RECT',
+      selectedRoomCeilingScopes: [{ ...flatCeilingScope, mode: 'RECT' as const }],
+      firstCeilingScope: { ...flatCeilingScope, mode: 'RECT' as const },
+      ceilingSegments: [],
+    })
+
+    render(
+      <EstimateV2CeilingsSectionBody
+        styles={styles}
+        ceilingsVm={ceilingsVm as never}
+        openCeilingAdvanced={{}}
+        setOpenCeilingAdvanced={vi.fn()}
+        switchRoomGeometryMode={vi.fn()}
+        toDisplayNumber={(value) => (value == null ? '--' : String(value))}
+      />
+    )
+
+    const setupRow = screen.getAllByText('Ceiling Type')[0]?.closest('.paint-setup-grid')
+    expect(setupRow).not.toBeNull()
+    expect(within(setupRow as HTMLElement).getByText('Coats')).toBeInTheDocument()
+  })
 })

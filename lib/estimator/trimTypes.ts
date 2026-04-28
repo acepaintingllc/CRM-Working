@@ -6,6 +6,7 @@ import type {
   WallRoomTotal,
   YN,
 } from './wallsTypes.ts'
+import type { PaintMaterialGroup } from './paintMaterial.ts'
 
 export type TrimUnitType = 'LF' | 'EA' | 'SF'
 export type TrimMeasurementMode = 'MANUAL' | 'ROOM_HELPER'
@@ -55,6 +56,10 @@ export type TrimCalculationScopeRow = {
   raw_paint_gallons: number | null
   effective_paint_gallons: number | null
   paint_product_label?: string | null
+  paint_material_group_key?: string | null
+  allocated_paint_gallons?: number | null
+  allocated_paint_material_cost?: number | null
+  raw_paint_material_cost?: number | null
   raw_primer_gallons: number | null
   effective_primer_gallons: number | null
   raw_supply_cost: number | null
@@ -120,6 +125,7 @@ export type TrimCalculationOutput = {
   scopes: TrimCalculationScopeRow[]
   room_totals: WallRoomTotal[]
   per_color_supply_groups: WallPerColorSupplyGroup[]
+  paint_material_groups: PaintMaterialGroup[]
   missing_inputs: MissingInput[]
   assumptions: ResolvedSettings
 }

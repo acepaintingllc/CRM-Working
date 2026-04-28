@@ -132,9 +132,10 @@ describe('Estimate V2 editor/summary parity', () => {
       value: '$45',
     })
     expect(result.current.paintSuppliesTotal).toBe(
-      (data.pricing_summary?.wallPaintMaterialCost ?? 0) +
+        (data.pricing_summary?.wallPaintMaterialCost ?? 0) +
         (data.pricing_summary?.ceilingPaintMaterialCost ?? 0) +
         45 +
+        (data.pricing_summary?.primerMaterialCost ?? 0) +
         (data.pricing_summary?.supplyCost ?? 0)
     )
   })

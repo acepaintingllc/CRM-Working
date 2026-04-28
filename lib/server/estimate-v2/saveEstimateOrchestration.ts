@@ -172,10 +172,9 @@ export async function saveEstimateV2Inputs(params: {
     const useV2WallsSave = Array.isArray(body.room_wall_scopes) || Array.isArray(body.wall_segments)
     const useV2CeilingsSave = Array.isArray(body.room_ceiling_scopes)
     const useV2TrimSave = Array.isArray(body.room_trim_scopes)
+    const useAnyV2ScopeSave = useV2WallsSave || useV2CeilingsSave || useV2TrimSave
     const useStructuredTransactionalSave =
-      !useV2WallsSave &&
-      !useV2CeilingsSave &&
-      !useV2TrimSave &&
+      !useAnyV2ScopeSave &&
       (Array.isArray(body.job_colors) || Array.isArray(body.room_flags) || Array.isArray(body.access_fees))
 
     let v2RoomRows: V2RoomRosterRow[] | null = null
@@ -306,7 +305,7 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.rooms)) {
-      if (useV2WallsSave) {
+      if (useAnyV2ScopeSave) {
         await saveV2RoomRoster({
           orgId: params.orgId,
           estimateId: params.estimateId,
@@ -537,7 +536,7 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (params.autosaveOnly) return { ok: true as const, autosave: true as const }
-    if (useV2WallsSave || useV2CeilingsSave || useV2TrimSave) {
+    if (useAnyV2ScopeSave) {
       return {
         ok: true as const,
         wall_calculations: wallCalculations,

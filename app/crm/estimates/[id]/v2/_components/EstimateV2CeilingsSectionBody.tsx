@@ -13,6 +13,7 @@ import {
   PaintCoatButtons,
   PrimerModeButtons,
   ReorderDeleteActions,
+  RequiredInputFrame,
   SharedSegmentGrid,
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
@@ -98,24 +99,26 @@ function CeilingTypeShapeField({
 
   return (
     <Field label="Ceiling Type" styles={sharedStyles(styles)}>
-      <select
-        value={value}
-        onChange={(e) => {
-          const selected = options.find((opt) => opt.value === e.target.value)
-          if (!selected) return
-          updateScope(scope.id, {
-            ceilingTypeId: selected.ceilingTypeId,
-            ceilingGeometryMode: selected.ceilingGeometryMode,
-          })
-        }}
-        style={styles.input}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <RequiredInputFrame>
+        <select
+          value={value}
+          onChange={(e) => {
+            const selected = options.find((opt) => opt.value === e.target.value)
+            if (!selected) return
+            updateScope(scope.id, {
+              ceilingTypeId: selected.ceilingTypeId,
+              ceilingGeometryMode: selected.ceilingGeometryMode,
+            })
+          }}
+          style={styles.input}
+        >
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </RequiredInputFrame>
     </Field>
   )
 }
@@ -369,6 +372,15 @@ export function EstimateV2CeilingsSectionBody({
                       styles={styles}
                       updateScope={updateScope}
                     />
+                    <Field label="Coats" styles={sharedStyles(styles)}>
+                      <RequiredInputFrame>
+                        <PaintCoatButtons
+                          value={firstCeilingScope.paintCoats}
+                          onChange={(value) => updateScope(firstCeilingScope.id, { paintCoats: value })}
+                          styles={{ button: styles.button }}
+                        />
+                      </RequiredInputFrame>
+                    </Field>
                   </div>
                 </div>
                 <CeilingGeometryFields
@@ -379,13 +391,6 @@ export function EstimateV2CeilingsSectionBody({
                   updateScope={updateScope}
                   toDisplayNumber={toDisplayNumber}
                 />
-                <Field label="Coats" styles={sharedStyles(styles)}>
-                  <PaintCoatButtons
-                    value={firstCeilingScope.paintCoats}
-                    onChange={(value) => updateScope(firstCeilingScope.id, { paintCoats: value })}
-                    styles={{ button: styles.button }}
-                  />
-                </Field>
                 <Field label="Primer Mode" styles={sharedStyles(styles)}>
                   <PrimerModeButtons
                     currentMode={firstCeilingScope.primeMode}

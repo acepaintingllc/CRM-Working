@@ -13,7 +13,7 @@
 ### Task 1: Schema
 
 **Files:**
-- Create: `supabase/sql/069_simple_tasks_rebuild.sql`
+- Create: `supabase/sql/070_simple_tasks_rebuild.sql`
 
 - [ ] Drop old notes module tables.
 - [ ] Create `public.tasks` with `title`, `description`, `status`, `due_at`, optional `customer_id`, `job_id`, `estimate_id`, and timestamps.

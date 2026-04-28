@@ -156,7 +156,7 @@ test('scope extraction classifies mixed trim rows and preserves customer-safe ot
   assert.equal(buckets.doors.price, 125)
   assert.equal(buckets.cabinets.price, 375)
   assert.match(buckets.walls.texts[0] ?? '', /Kitchen/)
-  assert.match(buckets.trim.texts[0] ?? '', /Baseboards/)
+  assert.doesNotMatch(buckets.trim.texts[0] ?? '', /Baseboards|Crown|Chair Rail/i)
   assert.match(buckets.doors.texts[0] ?? '', /Door and Frame/)
   assert.match(buckets.cabinets.texts[0] ?? '', /Cabinets/)
   assert.equal(buckets.other.texts[0], 'Wallpaper removal in Kitchen 2 walls')

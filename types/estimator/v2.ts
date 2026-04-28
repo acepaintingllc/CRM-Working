@@ -566,6 +566,8 @@ export type EstimateV2SavePayload = {
     room_name: string
     notes: string | null
     position: number
+    room_type_id: string | null
+    wall_complexity_id: string | null
     length_in: number | null
     width_in: number | null
     wallheight_in: number | null

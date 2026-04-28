@@ -346,7 +346,11 @@ export function EstimateV2SummaryPageContent({
               <CrmSectionCard title="System Alerts">
                 <div className="grid gap-2">
                   {derived.summaryAlerts.map((alert) => (
-                    <CrmNotice key={`${alert.kind}:${alert.title}`} tone={alert.kind === 'warn' ? 'warning' : 'info'} compact>
+                    <CrmNotice
+                      key={`${alert.kind}:${alert.title}`}
+                      tone={alert.kind === 'error' ? 'error' : alert.kind === 'warn' ? 'warning' : 'info'}
+                      compact
+                    >
                       <strong>{alert.title}</strong>
                       {alert.detail ? <span className="ml-1">{alert.detail}</span> : null}
                     </CrmNotice>

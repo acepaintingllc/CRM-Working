@@ -120,8 +120,8 @@ function applyScopeCosts(scope: ScopeCalc, settings: ResolvedSettings, products:
   scope.raw_total = round4(rawLaborCost + rawMaterialCost + (scope.raw_supply_cost ?? 0))
   scope.effective_total_before_override =
     round4(effectiveLaborCost + effectiveMaterialCost + (scope.effective_supply_cost ?? 0))
-  scope.effective_total =
-    round4(nonNeg(n(scope.row.override_total)) ?? scope.effective_total_before_override)
+  const overrideTotal = scope.row.include === 'Y' ? nonNeg(n(scope.row.override_total)) : null
+  scope.effective_total = round4(overrideTotal ?? scope.effective_total_before_override)
 }
 
 function buildRoomTotals(scopeCalcs: ScopeCalc[]) {

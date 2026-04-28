@@ -86,10 +86,11 @@ export function buildSentence(params: {
   const coatCount = params.bucket.coats.find((value) => Number.isFinite(value)) ?? null
   const primeText = params.bucket.primeModes.includes('FULL')
     ? ', with full prime'
-    : params.bucket.primeModes.includes('SPOT')
-      ? ', with spot prime'
-      : ''
-  const prep = notes.length > 0 ? `Prep, ${listJoin(notes)}, and` : 'Prep and'
+    : ''
+  const prepActions = params.bucket.primeModes.includes('SPOT')
+    ? uniqueText([...notes, 'spot prime as needed'])
+    : notes
+  const prep = prepActions.length > 0 ? `Prep, ${listJoin(prepActions)}, and` : 'Prep and'
   const coatText = coatCount != null ? `paint ${coatCount} coats` : 'paint'
   const subjectText = subjectLabels.length > 0 ? `for ${listJoin(subjectLabels)}` : ''
   const roomText = rooms.length > 0 ? `in ${listJoin(rooms)}` : ''

@@ -29,6 +29,13 @@ export type EngineOutput = {
   }
 }
 
+export type EstimatePricingEngineKind = 'walls' | 'ceilings' | 'trim' | 'drywall' | 'doors' | 'other'
+
+export type EstimatePricingEngineInput = {
+  kind: EstimatePricingEngineKind
+  output: EngineOutput
+}
+
 export type LaborDayPolicySettings = {
   enabled: boolean
   dayhours: number
@@ -284,9 +291,30 @@ export function buildEstimatePricingSummary(
   trimPaint: EstimateTrimPaintInput | null = null,
   extraSupplyCost = 0
 ): EstimatePricingSummary {
+  return buildEstimatePricingSummaryFromEngines(
+    engines.map((output, index) => ({
+      kind: index === 0 ? 'walls' : index === 1 ? 'ceilings' : 'other',
+      output,
+    })),
+    laborPolicy,
+    minimumPolicy,
+    trimPaint,
+    extraSupplyCost
+  )
+}
+
+export function buildEstimatePricingSummaryFromEngines(
+  engineInputs: EstimatePricingEngineInput[],
+  laborPolicy: LaborDayPolicySettings,
+  minimumPolicy: JobMinimumSettings,
+  trimPaint: EstimateTrimPaintInput | null = null,
+  extraSupplyCost = 0
+): EstimatePricingSummary {
+  const engines = engineInputs.map((engine) => engine.output)
   const laborRate = engines[0]?.assumptions.labor_rate_per_hour ?? DEFAULT_LABOR_RATE
-  const wallEngine = engines[0]
-  const ceilingEngine = engines[1]
+  const wallEngines = engineInputs.filter((engine) => engine.kind === 'walls').map((engine) => engine.output)
+  const ceilingEngines = engineInputs.filter((engine) => engine.kind === 'ceilings').map((engine) => engine.output)
+  const trimEngines = engineInputs.filter((engine) => engine.kind === 'trim').map((engine) => engine.output)
 
   // Aggregate from included scopes across all engines
   let rawLaborHours = 0
@@ -305,21 +333,36 @@ export function buildEstimatePricingSummary(
     }
   }
 
-  for (const scope of wallEngine?.scopes ?? []) {
-    if (scope.include !== 'Y') continue
-    wallPaintMaterialCost = round4(
-      wallPaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
-    )
+  for (const engine of wallEngines) {
+    for (const scope of engine.scopes) {
+      if (scope.include !== 'Y') continue
+      wallPaintMaterialCost = round4(
+        wallPaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
+      )
+    }
   }
 
-  for (const scope of ceilingEngine?.scopes ?? []) {
-    if (scope.include !== 'Y') continue
-    ceilingPaintMaterialCost = round4(
-      ceilingPaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
-    )
+  for (const engine of ceilingEngines) {
+    for (const scope of engine.scopes) {
+      if (scope.include !== 'Y') continue
+      ceilingPaintMaterialCost = round4(
+        ceilingPaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
+      )
+    }
   }
 
-  const trimPaintMaterialCost = round2(trimPaint?.paint_cost ?? 0)
+  let trimScopePaintMaterialCost = 0
+  for (const engine of trimEngines) {
+    for (const scope of engine.scopes) {
+      if (scope.include !== 'Y') continue
+      trimScopePaintMaterialCost = round4(
+        trimScopePaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
+      )
+    }
+  }
+
+  const standaloneTrimPaintMaterialCost = round2(trimPaint?.paint_cost ?? 0)
+  const trimPaintMaterialCost = round2(trimScopePaintMaterialCost + standaloneTrimPaintMaterialCost)
   const paintMaterialCost = round2(wallPaintMaterialCost + ceilingPaintMaterialCost + trimPaintMaterialCost)
   // Per-color shared supply costs; aggregate across all engines.
   let perColorSupplyCost = 0
@@ -344,7 +387,7 @@ export function buildEstimatePricingSummary(
   }
 
   const roomBases = [...roomTotalMap.entries()].map(([room_id, baseTotal]) => ({ room_id, baseTotal }))
-  const trimAllocations = allocateMinimumAdjustment(roomBases, trimPaintMaterialCost)
+  const trimAllocations = allocateMinimumAdjustment(roomBases, standaloneTrimPaintMaterialCost)
   const roomBasesWithTrim = roomBases.map((room, idx) => ({
     room_id: room.room_id,
     baseTotal: round2(room.baseTotal + (trimAllocations[idx]?.allocatedMinimumAdjustment ?? 0)),

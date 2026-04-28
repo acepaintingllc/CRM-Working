@@ -2,7 +2,7 @@ import { supabaseAdmin } from '../org.ts'
 import { calculateWalls } from '../../estimator/walls.ts'
 import { calculateCeilings } from '../../estimator/ceilings.ts'
 import { calculateTrim } from '../../estimator/trim.ts'
-import { buildEstimatePricingSummary, buildPerJobSupplyCost } from '../../estimator/pricingPolicies.ts'
+import { buildEstimatePricingSummaryFromEngines, buildPerJobSupplyCost } from '../../estimator/pricingPolicies.ts'
 import {
   DEFAULT_DAY_HOURS,
   DEFAULT_JOB_MINIMUM_AMOUNT,
@@ -273,10 +273,15 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
 
   const trimPaintInput = buildTrimPaintInput({
     jobsettings: js,
+    defaults: orgDefaults,
     catalogs: calculationCatalogs.trim ? productMap(calculationCatalogs.trim) : null,
   })
-  const pricingSummary = buildEstimatePricingSummary(
-    [wallCalculations, ceilingCalculations, trimCalculations],
+  const pricingSummary = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'walls', output: wallCalculations },
+      { kind: 'ceilings', output: ceilingCalculations },
+      { kind: 'trim', output: trimCalculations },
+    ],
     {
       enabled: effectiveLaborDayEnabled !== false,
       dayhours: effectiveDayhours ?? DEFAULT_DAY_HOURS,

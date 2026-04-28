@@ -119,7 +119,20 @@ describe('saveEstimateV2Inputs', () => {
         job_id: 'job-1',
       },
     })
-    mocks.buildV2RoomRosterRows.mockReturnValue([{ room_id: 'R001', room_name: 'Living' }])
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: null,
+        wall_complexity_id: null,
+        position: 0,
+        notes: null,
+        length_in: null,
+        width_in: null,
+        wallheight_in: null,
+        condition_selections: null,
+      },
+    ])
     mocks.buildV2WallScopeRows.mockReturnValue({
       scopeRows: [
         {
@@ -262,7 +275,14 @@ describe('saveEstimateV2Inputs', () => {
       orgId: 'org-1',
       estimateId: 'estimate-1',
       jobId: 'job-1',
-      rows: [{ room_id: 'R001', room_name: 'Living' }],
+      rows: [
+        expect.objectContaining({
+          room_id: 'R001',
+          room_name: 'Living',
+          room_type_id: null,
+          wall_complexity_id: null,
+        }),
+      ],
     })
     expect(mocks.softReplaceRows).toHaveBeenCalledWith({
       table: 'estimate_room_wall_scopes',
@@ -288,6 +308,129 @@ describe('saveEstimateV2Inputs', () => {
         }),
       ],
     })
+  })
+
+  it('uses V2 room roster persistence for ceiling-only scope saves', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: { id: 'estimate-1', job_id: 'job-1' },
+    })
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: 'BEDROOM',
+        wall_complexity_id: 'WALL_STD',
+        position: 0,
+        notes: null,
+        length_in: 120,
+        width_in: 144,
+        wallheight_in: 96,
+        condition_selections: null,
+      },
+    ])
+    mocks.buildV2CeilingScopeRows.mockReturnValue({
+      scopeRows: [],
+      scopeIds: new Set(),
+      modeByRoom: new Map(),
+    })
+    mocks.buildV2CeilingSegmentRows.mockReturnValue([])
+    mocks.calculateCeilingsForSave.mockResolvedValue({
+      ceilingCalculations: { scopes: [] },
+      ceilingScopeRows: [],
+      ceilingSegmentRows: [],
+    })
+    mocks.saveV2RoomRoster.mockResolvedValue(undefined)
+    mocks.softReplaceRows.mockResolvedValue(undefined)
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          rooms: [{ room_id: 'R001', room_name: 'Living' }],
+          room_ceiling_scopes: [],
+        },
+      })
+    ).resolves.toEqual({
+      ok: true,
+      wall_calculations: null,
+      ceiling_calculations: { scopes: [] },
+      trim_calculations: null,
+    })
+
+    expect(mocks.saveV2RoomRoster).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      jobId: 'job-1',
+      rows: [
+        expect.objectContaining({
+          room_id: 'R001',
+          room_type_id: 'BEDROOM',
+          wall_complexity_id: 'WALL_STD',
+        }),
+      ],
+    })
+    expect(mocks.replaceLegacyEstimateRooms).not.toHaveBeenCalled()
+  })
+
+  it('uses V2 room roster persistence for trim-only scope saves', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: { id: 'estimate-1', job_id: 'job-1' },
+    })
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: 'BEDROOM',
+        wall_complexity_id: 'WALL_STD',
+        position: 0,
+        notes: null,
+        length_in: 120,
+        width_in: 144,
+        wallheight_in: 96,
+        condition_selections: null,
+      },
+    ])
+    mocks.buildV2TrimScopeRows.mockReturnValue({ scopeRows: [] })
+    mocks.calculateTrimForSave.mockResolvedValue({ scopes: [] })
+    mocks.saveV2RoomRoster.mockResolvedValue(undefined)
+    mocks.softReplaceRows.mockResolvedValue(undefined)
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          rooms: [{ room_id: 'R001', room_name: 'Living' }],
+          room_trim_scopes: [],
+        },
+      })
+    ).resolves.toEqual({
+      ok: true,
+      wall_calculations: null,
+      ceiling_calculations: null,
+      trim_calculations: { scopes: [] },
+    })
+
+    expect(mocks.saveV2RoomRoster).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      jobId: 'job-1',
+      rows: [
+        expect.objectContaining({
+          room_id: 'R001',
+          room_type_id: 'BEDROOM',
+          wall_complexity_id: 'WALL_STD',
+        }),
+      ],
+    })
+    expect(mocks.replaceLegacyEstimateRooms).not.toHaveBeenCalled()
   })
 
   it('maps roller payload rows to estimate_rollers persistence', async () => {

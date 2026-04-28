@@ -345,6 +345,33 @@ function uniqueLabels(labels: Array<string | null | undefined>) {
   )
 }
 
+function joinUniqueLabels(labels: Array<string | null | undefined>) {
+  const values = uniqueLabels(labels)
+  return values.length > 0 ? values.join(', ') : null
+}
+
+function resolveScopeProductLabel(
+  scope: SummaryScopeSourceRow,
+  resolvePaintProductLabel: (productId?: string | null, fallbackLabel?: string | null) => string
+) {
+  return resolveSelectedProductLabel(
+    resolvePaintProductLabel,
+    scope.paint_product_id,
+    scope.paint_product_label
+  )
+}
+
+function resolveScopeProductLabels(
+  scopes: SummaryScopeSourceRow[],
+  resolvePaintProductLabel: (productId?: string | null, fallbackLabel?: string | null) => string
+) {
+  return joinUniqueLabels(
+    scopes
+      .filter((scope) => scope.include !== 'N' && hasMeaningfulScopeContent(scope))
+      .map((scope) => resolveScopeProductLabel(scope, resolvePaintProductLabel))
+  )
+}
+
 function sumPaintAndPrimerGallons(scopes: SummaryScopeSourceRow[]) {
   return scopes.reduce(
     (total, scope) => total + (scope.raw_paint_gallons ?? 0) + (scope.raw_primer_gallons ?? 0),
@@ -399,8 +426,12 @@ export function buildPaintSupplyProductLabels(params: {
   const trimPaintGallons = params.trimPaint?.normalized_gallons ?? 0
 
   return {
-    wallPaintProductLabel: resolveSelectedProductLabel(resolvePaintProductLabel, wallPaintId),
-    ceilingPaintProductLabel: resolveSelectedProductLabel(resolvePaintProductLabel, ceilingPaintId),
+    wallPaintProductLabel:
+      resolveScopeProductLabels(params.wallScopes, resolvePaintProductLabel) ??
+      resolveSelectedProductLabel(resolvePaintProductLabel, wallPaintId),
+    ceilingPaintProductLabel:
+      resolveScopeProductLabels(params.ceilingScopes, resolvePaintProductLabel) ??
+      resolveSelectedProductLabel(resolvePaintProductLabel, ceilingPaintId),
     trimPaintProductLabel: resolveSelectedProductLabel(
       resolvePaintProductLabel,
       trimPaintId,
@@ -737,6 +768,51 @@ function resolveTrimPaintMaterialCost(
   return trimPaint?.paint_cost ?? pricingSummary?.trimPaint?.paint_cost ?? summaryCost
 }
 
+function buildPaintSupplyDollarRows(
+  pricingSummary: EstimateV2PricingSummary | null | undefined,
+  trimPaint?: EstimateV2TrimPaint | null,
+  productLabels: EstimateV2PaintSupplyProductLabels = {}
+) {
+  const rawRows = [
+    {
+      id: 'wall-paint',
+      label: formatPaintSupplyLabel('Wall paint', productLabels.wallPaintProductLabel),
+      price: pricingSummary?.wallPaintMaterialCost ?? null,
+    },
+    {
+      id: 'ceiling-paint',
+      label: formatPaintSupplyLabel('Ceiling paint', productLabels.ceilingPaintProductLabel),
+      price: pricingSummary?.ceilingPaintMaterialCost ?? null,
+    },
+    {
+      id: 'trim-paint',
+      label: formatPaintSupplyLabel('Trim paint', productLabels.trimPaintProductLabel),
+      price: resolveTrimPaintMaterialCost(pricingSummary, trimPaint),
+    },
+    {
+      id: 'primer',
+      label: formatPaintSupplyLabel('Primer', productLabels.primerProductLabel),
+      price: pricingSummary?.primerMaterialCost ?? null,
+    },
+    {
+      id: 'supplies',
+      label: 'Supplies',
+      price: pricingSummary?.supplyCost ?? null,
+    },
+  ]
+  const rawTotal = rawRows.reduce((sum, row) => sum + (row.price ?? 0), 0)
+  const reconciledRows = reconcileWholeDollarRows(
+    rawRows.map((row) => ({ id: row.id, price: row.price ?? 0 })),
+    rawTotal
+  )
+  const reconciledPriceById = new Map(reconciledRows.map((row) => [row.id, row.price] as const))
+
+  return rawRows.map((row) => ({
+    ...row,
+    displayPrice: row.price == null ? null : reconciledPriceById.get(row.id) ?? 0,
+  }))
+}
+
 export function buildPriceBreakdownRows(pricingSummary: EstimateV2PricingSummary | null | undefined) {
   const priceAdjustment = pricingSummary
     ? pricingSummary.postLaborPolicyTotal - pricingSummary.prePolicyTotal
@@ -763,29 +839,13 @@ export function buildPaintSupplyRows(
   trimPaint?: EstimateV2TrimPaint | null,
   productLabels: EstimateV2PaintSupplyProductLabels = {}
 ) {
-  const trimPaintMaterialCost = resolveTrimPaintMaterialCost(pricingSummary, trimPaint)
+  const dollarRows = buildPaintSupplyDollarRows(pricingSummary, trimPaint, productLabels)
 
   return [
-    {
-      label: formatPaintSupplyLabel('Wall paint', productLabels.wallPaintProductLabel),
-      value: formatWholeDollar(pricingSummary?.wallPaintMaterialCost),
-    },
-    {
-      label: formatPaintSupplyLabel('Ceiling paint', productLabels.ceilingPaintProductLabel),
-      value: formatWholeDollar(pricingSummary?.ceilingPaintMaterialCost),
-    },
-    {
-      label: formatPaintSupplyLabel('Trim paint', productLabels.trimPaintProductLabel),
-      value: formatWholeDollar(trimPaintMaterialCost),
-    },
-    {
-      label: formatPaintSupplyLabel('Primer', productLabels.primerProductLabel),
-      value: formatWholeDollar(pricingSummary?.primerMaterialCost),
-    },
-    {
-      label: 'Supplies',
-      value: formatWholeDollar(pricingSummary?.supplyCost),
-    },
+    ...dollarRows.map((row) => ({
+      label: row.label,
+      value: formatWholeDollar(row.displayPrice),
+    })),
     {
       label: 'Total gallons',
       value: formatGallons(productLabels.totalGallons),
@@ -797,11 +857,9 @@ export function calculatePaintSuppliesTotal(
   pricingSummary: EstimateV2PricingSummary | null | undefined,
   trimPaint?: EstimateV2TrimPaint | null
 ) {
-  return (
-    (pricingSummary?.wallPaintMaterialCost ?? 0) +
-    (pricingSummary?.ceilingPaintMaterialCost ?? 0) +
-    resolveTrimPaintMaterialCost(pricingSummary, trimPaint) +
-    (pricingSummary?.supplyCost ?? 0)
+  return buildPaintSupplyDollarRows(pricingSummary, trimPaint).reduce(
+    (sum, row) => sum + (row.displayPrice ?? 0),
+    0
   )
 }
 

@@ -13,6 +13,7 @@ import {
   type NormalizedRoomRow,
   type NormalizedTrimCatalogRow,
   type NormalizedTrimItemRow,
+  type NormalizedTrimScopeRow,
   jobSettingsPaintProductId,
   paintNameMap,
   resolvePaintProductLabel,
@@ -251,7 +252,7 @@ function collectTrimRows(params: {
     })
     appendScopeBucket(params.sectionBuckets, params.scope, row.price, {
       room: roomName,
-      subjectLabel: row.label,
+      subjectLabel: params.scope === 'trim' ? undefined : row.label,
       paintProduct,
       note: notes.join(', '),
       coat: row.coats,
@@ -262,17 +263,31 @@ function collectTrimRows(params: {
 
 function extractTrimRows(params: {
   sectionBuckets: ScopeBuckets
+  roomTrimScopes: NormalizedTrimScopeRow[]
   trimItems: NormalizedTrimItemRow[]
   trimMetaById: Map<string, NormalizedTrimCatalogRow>
   roomLabels: Map<string, string>
   paintLabels: Map<string, string>
   trimPaintProductId: string | null
 }) {
-  const trimTypeRows = classifyTrimRows(params)
+  const trimTypeRows = classifyTrimRows({
+    ...params,
+    trimItems: [
+      ...params.roomTrimScopes.filter((row) => row.included),
+      ...params.trimItems,
+    ],
+  })
+  const trimCategories = new Set(['baseboard', 'crown', 'window_casing'])
+  const doorCategories = new Set(['door', 'door_casing'])
+  const cabinetCategories = new Set(['cabinet'])
   collectTrimRows({
     sectionBuckets: params.sectionBuckets,
     scope: 'trim',
-    rows: trimTypeRows.filter((row) => ['baseboard', 'crown', 'window_casing'].includes(row.category)),
+    rows: trimTypeRows.filter(
+      (row) =>
+        trimCategories.has(row.category) ||
+        (!doorCategories.has(row.category) && !cabinetCategories.has(row.category))
+    ),
     roomLabels: params.roomLabels,
     paintLabels: params.paintLabels,
     trimPaintProductId: params.trimPaintProductId,
@@ -280,7 +295,7 @@ function extractTrimRows(params: {
   collectTrimRows({
     sectionBuckets: params.sectionBuckets,
     scope: 'doors',
-    rows: trimTypeRows.filter((row) => ['door', 'door_casing'].includes(row.category)),
+    rows: trimTypeRows.filter((row) => doorCategories.has(row.category)),
     roomLabels: params.roomLabels,
     paintLabels: params.paintLabels,
     trimPaintProductId: params.trimPaintProductId,
@@ -288,7 +303,7 @@ function extractTrimRows(params: {
   collectTrimRows({
     sectionBuckets: params.sectionBuckets,
     scope: 'cabinets',
-    rows: trimTypeRows.filter((row) => row.category === 'cabinet'),
+    rows: trimTypeRows.filter((row) => cabinetCategories.has(row.category)),
     roomLabels: params.roomLabels,
     paintLabels: params.paintLabels,
     trimPaintProductId: params.trimPaintProductId,
@@ -318,7 +333,7 @@ export function extractScopeBuckets(params: {
   rooms: NormalizedRoomRow[]
   roomWallScopes: NormalizedPaintScopeRow[]
   roomCeilingScopes: NormalizedPaintScopeRow[]
-  roomTrimScopes: { roomId: string; included: boolean }[]
+  roomTrimScopes: NormalizedTrimScopeRow[]
   trimItems: NormalizedTrimItemRow[]
   otherRows: NormalizedOtherRow[]
   paintCatalogRows: NormalizedPaintCatalogRow[]
@@ -344,6 +359,7 @@ export function extractScopeBuckets(params: {
   })
   extractTrimRows({
     sectionBuckets,
+    roomTrimScopes: params.roomTrimScopes,
     trimItems: params.trimItems,
     trimMetaById,
     roomLabels,

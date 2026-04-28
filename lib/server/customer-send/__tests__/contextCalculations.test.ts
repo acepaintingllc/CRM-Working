@@ -6,14 +6,14 @@ const {
   mockCalculateWalls,
   mockCalculateCeilings,
   mockCalculateTrim,
-  mockBuildEstimatePricingSummary,
+  mockBuildEstimatePricingSummaryFromEngines,
   mockBuildTrimPaintInput,
   mockProductMap,
 } = vi.hoisted(() => ({
   mockCalculateWalls: vi.fn(),
   mockCalculateCeilings: vi.fn(),
   mockCalculateTrim: vi.fn(),
-  mockBuildEstimatePricingSummary: vi.fn(),
+  mockBuildEstimatePricingSummaryFromEngines: vi.fn(),
   mockBuildTrimPaintInput: vi.fn(),
   mockProductMap: vi.fn(),
 }))
@@ -31,7 +31,7 @@ vi.mock('@/lib/estimator/trim', () => ({
 }))
 
 vi.mock('@/lib/estimator/pricingPolicies', () => ({
-  buildEstimatePricingSummary: mockBuildEstimatePricingSummary,
+  buildEstimatePricingSummaryFromEngines: mockBuildEstimatePricingSummaryFromEngines,
 }))
 
 vi.mock('@/lib/server/trimPaint', () => ({
@@ -122,14 +122,14 @@ describe('customer send context calculations', () => {
     mockCalculateWalls.mockReset()
     mockCalculateCeilings.mockReset()
     mockCalculateTrim.mockReset()
-    mockBuildEstimatePricingSummary.mockReset()
+    mockBuildEstimatePricingSummaryFromEngines.mockReset()
     mockBuildTrimPaintInput.mockReset()
     mockProductMap.mockReset()
 
     mockCalculateWalls.mockReturnValue({ scopes: [{ id: 'wall-output' }] })
     mockCalculateCeilings.mockReturnValue({ scopes: [{ id: 'ceiling-output' }] })
     mockCalculateTrim.mockReturnValue({ scopes: [{ id: 'trim-output' }] })
-    mockBuildEstimatePricingSummary.mockReturnValue({ finalTotal: 3200 })
+    mockBuildEstimatePricingSummaryFromEngines.mockReturnValue({ finalTotal: 3200 })
     mockBuildTrimPaintInput.mockReturnValue({})
     mockProductMap.mockReturnValue({})
   })
@@ -144,8 +144,12 @@ describe('customer send context calculations', () => {
         },
       })
     )
-    expect(mockBuildEstimatePricingSummary).toHaveBeenCalledWith(
-      expect.any(Array),
+    expect(mockBuildEstimatePricingSummaryFromEngines).toHaveBeenCalledWith(
+      [
+        { kind: 'walls', output: { scopes: [{ id: 'wall-output' }] } },
+        { kind: 'ceilings', output: { scopes: [{ id: 'ceiling-output' }] } },
+        { kind: 'trim', output: { scopes: [{ id: 'trim-output' }] } },
+      ],
       {
         enabled: false,
         dayhours: 6,

@@ -1,14 +1,23 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { calculateCeilings, type CeilingCalculationInput } from '../ceilings.ts'
-import { buildEstimatePricingSummary } from '../pricingPolicies.ts'
+import { buildEstimatePricingSummary, buildEstimatePricingSummaryFromEngines } from '../pricingPolicies.ts'
 import { calculateTrim, type TrimCalculationInput } from '../trim.ts'
 import { calculateWalls, type WallCalculationInput } from '../walls.ts'
+import {
+  assertMoneyEqual,
+  assertNoNegativeMoney,
+  buildMixedFullPricingScenario,
+} from './estimateV2ShippingFixtures.ts'
 
 function approx(actual: number | null | undefined, expected: number, epsilon = 0.0001) {
   assert.notEqual(actual, null)
   assert.notEqual(actual, undefined)
   assert.ok(Math.abs((actual as number) - expected) <= epsilon, `expected ${expected}, got ${actual}`)
+}
+
+function round2(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 const SETTINGS = {
@@ -477,10 +486,36 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
   approx(pricing.ceilingPaintMaterialCost, 54)
   approx(pricing.trimPaintMaterialCost, 45)
   approx(pricing.paintMaterialCost, 259)
-  approx(pricing.prePolicyTotal, 812.49)
-  approx(pricing.postLaborPolicyTotal, 846.45)
-  approx(pricing.minimumAdjustmentAmount, 653.55)
+  approx(pricing.prePolicyTotal, 852.5)
+  approx(pricing.postLaborPolicyTotal, 886.46)
+  approx(pricing.minimumAdjustmentAmount, 613.54)
   approx(pricing.finalTotal, 1500)
+  const allIncludedScopes = [...walls.scopes, ...ceilings.scopes, ...trim.scopes].filter(
+    (scope) => scope.include === 'Y'
+  )
+  const expectedPrimerMaterialCost = allIncludedScopes.reduce(
+    (sum, scope) => sum + (scope.effective_primer_gallons ?? 0) * (scope.primer_price_per_gal ?? 0),
+    0
+  )
+  const expectedSupplyCost =
+    allIncludedScopes.reduce((sum, scope) => sum + (scope.effective_supply_cost ?? 0), 0) +
+    [...walls.per_color_supply_groups, ...ceilings.per_color_supply_groups, ...trim.per_color_supply_groups].reduce(
+      (sum, group) =>
+        sum + group.allocations.reduce((groupSum, allocation) => groupSum + allocation.allocated_supply_cost, 0),
+      0
+    )
+
+  approx(
+    pricing.prePolicyTotal,
+    pricing.rooms.reduce((sum, room) => sum + room.baseTotal, 0)
+  )
+  approx(pricing.paintMaterialCost, pricing.wallPaintMaterialCost + pricing.ceilingPaintMaterialCost + pricing.trimPaintMaterialCost)
+  approx(pricing.primerMaterialCost, expectedPrimerMaterialCost)
+  approx(pricing.supplyCost, expectedSupplyCost)
+  approx(
+    pricing.postLaborPolicyTotal,
+    round2(pricing.prePolicyTotal + pricing.laborAdjustmentHours * SETTINGS.labor_rate_per_hour)
+  )
   assert.deepEqual(
     pricing.rooms.map((room) => room.room_id),
     ['R001', 'R002', 'R003']
@@ -518,4 +553,104 @@ test('zero-base minimum allocation distributes a policy floor without NaN room t
     [100, 100, 100]
   )
   assert.ok(pricing.rooms.every((room) => Number.isFinite(room.finalTotal)))
+})
+
+test('shipping golden: mixed walls ceilings trim pricing buckets reconcile', () => {
+  const { walls, ceilings, trim, pricing } = buildMixedFullPricingScenario()
+  const engineRoomBase = round2(
+    [...walls.room_totals, ...ceilings.room_totals, ...trim.room_totals].reduce(
+      (sum, room) => sum + room.effective_total,
+      0
+    )
+  )
+  const laborAdjustmentCost = round2(pricing.laborAdjustmentHours * walls.assumptions.labor_rate_per_hour)
+
+  assertNoNegativeMoney(pricing as unknown as Record<string, unknown>)
+  assertMoneyEqual(pricing.prePolicyTotal, engineRoomBase, 'prePolicyTotal')
+  assertMoneyEqual(pricing.postLaborPolicyTotal, pricing.prePolicyTotal + laborAdjustmentCost, 'postLaborPolicyTotal')
+  assertMoneyEqual(pricing.finalTotal, pricing.postLaborPolicyTotal + pricing.minimumAdjustmentAmount, 'finalTotal')
+  assertMoneyEqual(
+    pricing.paintMaterialCost,
+    pricing.wallPaintMaterialCost + pricing.ceilingPaintMaterialCost + pricing.trimPaintMaterialCost,
+    'paintMaterialCost'
+  )
+})
+
+test('shipping golden: future drywall and door engines contribute without paint bucket misclassification', () => {
+  const { walls, ceilings, trim } = buildMixedFullPricingScenario()
+  const drywall = {
+    ...walls,
+    scopes: [
+      {
+        ...walls.scopes[0],
+        include: 'Y' as const,
+        room_id: 'R001',
+        effective_paint_hours: 2,
+        effective_primer_hours: 0,
+        effective_paint_gallons: 2,
+        effective_primer_gallons: 0,
+        effective_supply_cost: 18,
+        allocated_paint_material_cost: 82,
+        raw_paint_material_cost: 82,
+      },
+      {
+        ...walls.scopes[0],
+        include: 'N' as const,
+        room_id: 'R002',
+        effective_paint_hours: 99,
+        effective_primer_hours: 99,
+        effective_paint_gallons: 99,
+        effective_primer_gallons: 99,
+        effective_supply_cost: 99,
+        allocated_paint_material_cost: 999,
+        raw_paint_material_cost: 999,
+      },
+    ],
+    room_totals: [{ ...walls.room_totals[0], room_id: 'R001', effective_total: 180 }],
+    per_color_supply_groups: [],
+  }
+  const doors = {
+    ...walls,
+    scopes: [
+      {
+        ...walls.scopes[0],
+        include: 'Y' as const,
+        room_id: 'R002',
+        effective_paint_hours: 1,
+        effective_primer_hours: 0.5,
+        effective_paint_gallons: 1,
+        effective_primer_gallons: 0.25,
+        effective_supply_cost: 9,
+        allocated_paint_material_cost: 43,
+        raw_paint_material_cost: 43,
+      },
+    ],
+    room_totals: [{ ...walls.room_totals[0], room_id: 'R002', effective_total: 120 }],
+    per_color_supply_groups: [],
+  }
+  const pricing = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'drywall', output: drywall },
+      { kind: 'doors', output: doors },
+      { kind: 'trim', output: trim },
+      { kind: 'ceilings', output: ceilings },
+      { kind: 'walls', output: walls },
+    ],
+    { enabled: false, dayhours: 8, roundingIncrementHours: 4 },
+    { enabled: false, amount: 0 }
+  )
+
+  assertMoneyEqual(pricing.wallPaintMaterialCost, walls.scopes[0].allocated_paint_material_cost ?? 0, 'wall bucket')
+  assertMoneyEqual(pricing.ceilingPaintMaterialCost, ceilings.scopes[0].allocated_paint_material_cost ?? 0, 'ceiling bucket')
+  assertMoneyEqual(
+    pricing.paintMaterialCost,
+    pricing.wallPaintMaterialCost + pricing.ceilingPaintMaterialCost + pricing.trimPaintMaterialCost,
+    'paint buckets exclude future engines until their customer-facing material policy is explicit'
+  )
+  assertMoneyEqual(
+    pricing.prePolicyTotal,
+    [...walls.room_totals, ...ceilings.room_totals, ...trim.room_totals, ...drywall.room_totals, ...doors.room_totals]
+      .reduce((sum, room) => sum + room.effective_total, 0),
+    'future scope room totals'
+  )
 })
