@@ -116,10 +116,7 @@ export default function JobSchedulePage() {
       if (schedule) setRows((prev) => [schedule, ...prev])
       setNotes('')
       if (hadNoSchedules) {
-        const refreshedJob = await loadJobMeta()
-        if (refreshedJob && !refreshedJob.scheduled_email_sent_at) {
-          setEmailStage('scheduled')
-        }
+        await loadJobMeta()
       }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Failed to add schedule block.')

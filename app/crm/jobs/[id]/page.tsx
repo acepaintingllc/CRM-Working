@@ -10,7 +10,6 @@ import { useJobDetailPage } from '@/app/crm/jobs/_hooks/useJobDetailPage'
 import JobCompletionCloseoutModal from '@/app/crm/jobs/_components/JobCompletionCloseoutModal'
 import StageEmailModal from '@/app/crm/jobs/_components/StageEmailModal'
 import JobActionRail from '@/app/crm/jobs/[id]/_components/JobActionRail'
-import JobCloseoutPanel from '@/app/crm/jobs/[id]/_components/JobCloseoutPanel'
 import JobDetailHeader from '@/app/crm/jobs/[id]/_components/JobDetailHeader'
 import JobDetailsPanel from '@/app/crm/jobs/[id]/_components/JobDetailsPanel'
 import JobTimeline from '@/app/crm/jobs/[id]/_components/JobTimeline'
@@ -34,7 +33,7 @@ export default function JobDetailPage() {
         eyebrow="Pipeline workflow"
         emoji="🧾"
         title={controller.job?.title ?? 'Job details'}
-        description="Shared CRM job detail page with workflow actions, schedule context, and closeout data."
+        description="Full job overview and schedule."
         backHref="/crm/jobs"
         backLabel="Back to jobs"
       />
@@ -74,13 +73,6 @@ export default function JobDetailPage() {
                       estimateFile={controller.estimateFile}
                       estimateFileError={controller.estimateFileError}
                       onCopy={(label, value) => void controller.copy(label, value)}
-                    />
-                  </CrmSectionCard>
-                  <CrmSectionCard title="Closeout">
-                    <JobCloseoutPanel
-                      job={controller.job}
-                      paintLogs={controller.paintLogs}
-                      detailActions={detailActions}
                     />
                   </CrmSectionCard>
                   <CrmSectionCard title="Actions" variant="compact">

@@ -137,16 +137,8 @@ describe('customer journey smoke', () => {
         })
       )
       .mockResolvedValueOnce(
-        createDataResponse({
-          data: [
-            { id: 'customer-1', name: 'Taylor Jones', email: 'taylor@example.com', phone: '812-555-0100', address: '123 Main St, Newburgh, IN 47630' },
-          ],
-          total: 1,
-          page: 1,
-          pageSize: 50,
-        })
+        createDataResponse([])
       )
-      .mockResolvedValueOnce(createDataResponse([]))
       .mockResolvedValueOnce(createMutationResponse({ id: 'note-1' }))
       .mockResolvedValueOnce(
         createDataResponse([
