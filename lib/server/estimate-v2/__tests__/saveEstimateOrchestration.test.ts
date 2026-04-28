@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   buildV2CeilingScopeRows: vi.fn(),
   buildV2CeilingSegmentRows: vi.fn(),
+  buildV2DoorScopeRows: vi.fn(),
   buildV2RoomRosterRows: vi.fn(),
   buildV2TrimScopeRows: vi.fn(),
   buildV2WallScopeRows: vi.fn(),
   buildV2WallSegmentRows: vi.fn(),
   calculateCeilingsForSave: vi.fn(),
+  calculateDoorsForSave: vi.fn(),
   calculateTrimForSave: vi.fn(),
   calculateWallsForSave: vi.fn(),
   createCalculationCatalogsLoader: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock('../../org.ts', () => ({
 vi.mock('../../estimateV2RoutePayload.ts', () => ({
   buildV2CeilingScopeRows: mocks.buildV2CeilingScopeRows,
   buildV2CeilingSegmentRows: mocks.buildV2CeilingSegmentRows,
+  buildV2DoorScopeRows: mocks.buildV2DoorScopeRows,
   buildV2RoomRosterRows: mocks.buildV2RoomRosterRows,
   buildV2TrimScopeRows: mocks.buildV2TrimScopeRows,
   buildV2WallScopeRows: mocks.buildV2WallScopeRows,
@@ -39,6 +42,7 @@ vi.mock('../../estimateV2RoutePayload.ts', () => ({
 
 vi.mock('../calculationOrchestration.ts', () => ({
   calculateCeilingsForSave: mocks.calculateCeilingsForSave,
+  calculateDoorsForSave: mocks.calculateDoorsForSave,
   calculateTrimForSave: mocks.calculateTrimForSave,
   calculateWallsForSave: mocks.calculateWallsForSave,
   createCalculationCatalogsLoader: mocks.createCalculationCatalogsLoader,
@@ -119,7 +123,20 @@ describe('saveEstimateV2Inputs', () => {
         job_id: 'job-1',
       },
     })
-    mocks.buildV2RoomRosterRows.mockReturnValue([{ room_id: 'R001', room_name: 'Living' }])
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: null,
+        wall_complexity_id: null,
+        position: 0,
+        notes: null,
+        length_in: null,
+        width_in: null,
+        wallheight_in: null,
+        condition_selections: null,
+      },
+    ])
     mocks.buildV2WallScopeRows.mockReturnValue({
       scopeRows: [
         {
@@ -262,7 +279,14 @@ describe('saveEstimateV2Inputs', () => {
       orgId: 'org-1',
       estimateId: 'estimate-1',
       jobId: 'job-1',
-      rows: [{ room_id: 'R001', room_name: 'Living' }],
+      rows: [
+        expect.objectContaining({
+          room_id: 'R001',
+          room_name: 'Living',
+          room_type_id: null,
+          wall_complexity_id: null,
+        }),
+      ],
     })
     expect(mocks.softReplaceRows).toHaveBeenCalledWith({
       table: 'estimate_room_wall_scopes',
@@ -285,6 +309,300 @@ describe('saveEstimateV2Inputs', () => {
           id: 'segment-1',
           job_id: 'job-1',
           seg_no: 1,
+        }),
+      ],
+    })
+  })
+
+  it('uses V2 room roster persistence for ceiling-only scope saves', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: { id: 'estimate-1', job_id: 'job-1' },
+    })
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: 'BEDROOM',
+        wall_complexity_id: 'WALL_STD',
+        position: 0,
+        notes: null,
+        length_in: 120,
+        width_in: 144,
+        wallheight_in: 96,
+        condition_selections: null,
+      },
+    ])
+    mocks.buildV2CeilingScopeRows.mockReturnValue({
+      scopeRows: [],
+      scopeIds: new Set(),
+      modeByRoom: new Map(),
+    })
+    mocks.buildV2CeilingSegmentRows.mockReturnValue([])
+    mocks.calculateCeilingsForSave.mockResolvedValue({
+      ceilingCalculations: { scopes: [] },
+      ceilingScopeRows: [],
+      ceilingSegmentRows: [],
+    })
+    mocks.saveV2RoomRoster.mockResolvedValue(undefined)
+    mocks.softReplaceRows.mockResolvedValue(undefined)
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          rooms: [{ room_id: 'R001', room_name: 'Living' }],
+          room_ceiling_scopes: [],
+        },
+      })
+    ).resolves.toEqual({
+      ok: true,
+      wall_calculations: null,
+      ceiling_calculations: { scopes: [] },
+      trim_calculations: null,
+    })
+
+    expect(mocks.saveV2RoomRoster).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      jobId: 'job-1',
+      rows: [
+        expect.objectContaining({
+          room_id: 'R001',
+          room_type_id: 'BEDROOM',
+          wall_complexity_id: 'WALL_STD',
+        }),
+      ],
+    })
+    expect(mocks.replaceLegacyEstimateRooms).not.toHaveBeenCalled()
+  })
+
+  it('uses V2 room roster persistence for trim-only scope saves', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: { id: 'estimate-1', job_id: 'job-1' },
+    })
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: 'BEDROOM',
+        wall_complexity_id: 'WALL_STD',
+        position: 0,
+        notes: null,
+        length_in: 120,
+        width_in: 144,
+        wallheight_in: 96,
+        condition_selections: null,
+      },
+    ])
+    mocks.buildV2TrimScopeRows.mockReturnValue({ scopeRows: [] })
+    mocks.calculateTrimForSave.mockResolvedValue({ scopes: [] })
+    mocks.saveV2RoomRoster.mockResolvedValue(undefined)
+    mocks.softReplaceRows.mockResolvedValue(undefined)
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          rooms: [{ room_id: 'R001', room_name: 'Living' }],
+          room_trim_scopes: [],
+        },
+      })
+    ).resolves.toEqual({
+      ok: true,
+      wall_calculations: null,
+      ceiling_calculations: null,
+      trim_calculations: { scopes: [] },
+    })
+
+    expect(mocks.saveV2RoomRoster).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      jobId: 'job-1',
+      rows: [
+        expect.objectContaining({
+          room_id: 'R001',
+          room_type_id: 'BEDROOM',
+          wall_complexity_id: 'WALL_STD',
+        }),
+      ],
+    })
+    expect(mocks.replaceLegacyEstimateRooms).not.toHaveBeenCalled()
+  })
+
+  it('maps V2 door scope saves through calculation and door persistence boundaries', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: { id: 'estimate-1', job_id: 'job-1' },
+    })
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: 'BEDROOM',
+        wall_complexity_id: 'WALL_STD',
+        position: 0,
+        notes: null,
+        length_in: 120,
+        width_in: 144,
+        wallheight_in: 96,
+        condition_selections: null,
+      },
+    ])
+    mocks.buildV2DoorScopeRows.mockReturnValue({
+      scopeRows: [
+        {
+          id: 'door-scope-1',
+          room_id: 'R001',
+          position: 0,
+          include: 'Y',
+          scope_name: 'Panel Door',
+          door_type_id: 'DOOR_PANEL',
+          color_id: 'TRIM_WHITE',
+          paint_product_id: 'P-TRIM',
+          primer_product_id: 'P-TRIM-PRIMER',
+          prime_mode: 'NONE',
+          quantity: 1,
+          sides: 2,
+          paint_coats: 2,
+          primer_coats: 1,
+          spot_prime_percent: null,
+          condition_factor: 1,
+          labor_rate: null,
+          material_rate: null,
+          raw_units: null,
+          effective_units: null,
+          raw_paint_hours: null,
+          override_paint_hours: null,
+          effective_paint_hours: null,
+          raw_primer_hours: null,
+          override_primer_hours: null,
+          effective_primer_hours: null,
+          raw_material_cost: null,
+          override_material_cost: null,
+          effective_material_cost: null,
+          raw_supply_cost: null,
+          override_supply_cost: null,
+          effective_supply_cost: null,
+          raw_total: null,
+          override_total: null,
+          effective_total: null,
+          notes: 'two sides',
+        },
+      ],
+    })
+    mocks.calculateDoorsForSave.mockResolvedValue({
+      scopes: [
+        {
+          id: 'door-scope-1',
+          room_id: 'R001',
+          position: 0,
+          include: 'Y',
+          scope_name: 'Panel Door',
+          door_type_id: 'DOOR_PANEL',
+          color_id: 'TRIM_WHITE',
+          paint_product_id: 'P-TRIM',
+          primer_product_id: 'P-TRIM-PRIMER',
+          prime_mode: 'NONE',
+          quantity: 1,
+          sides: 2,
+          paint_coats: 2,
+          primer_coats: 1,
+          spot_prime_percent: null,
+          condition_factor: 1,
+          labor_rate: null,
+          material_rate: null,
+          raw_units: 2,
+          effective_units: 2,
+          raw_paint_hours: 1,
+          override_paint_hours: null,
+          effective_paint_hours: 1,
+          raw_primer_hours: 0,
+          override_primer_hours: null,
+          effective_primer_hours: 0,
+          raw_material_cost: 12,
+          override_material_cost: null,
+          effective_material_cost: 12,
+          raw_supply_cost: 0,
+          override_supply_cost: null,
+          effective_supply_cost: 0,
+          raw_total: 92,
+          override_total: null,
+          effective_total: 92,
+          notes: 'two sides',
+        },
+      ],
+      room_totals: [{ room_id: 'R001', effective_total: 92 }],
+    })
+    mocks.saveV2RoomRoster.mockResolvedValue(undefined)
+    mocks.softReplaceRows.mockResolvedValue(undefined)
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          rooms: [{ room_id: 'R001', room_name: 'Living' }],
+          room_door_scopes: [{ id: 'door-scope-1', room_id: 'R001', door_type_id: 'DOOR_PANEL' }],
+        },
+      })
+    ).resolves.toEqual({
+      ok: true,
+      wall_calculations: null,
+      ceiling_calculations: null,
+      trim_calculations: null,
+      door_calculations: {
+        scopes: [expect.objectContaining({ id: 'door-scope-1', effective_total: 92 })],
+        room_totals: [{ room_id: 'R001', effective_total: 92 }],
+      },
+    })
+
+    expect(mocks.buildV2DoorScopeRows).toHaveBeenCalledWith(
+      [{ id: 'door-scope-1', room_id: 'R001', door_type_id: 'DOOR_PANEL' }],
+      new Set(['R001'])
+    )
+    expect(mocks.calculateDoorsForSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org-1',
+        estimateId: 'estimate-1',
+        roomRows: [
+          expect.objectContaining({
+            room_id: 'R001',
+            room_name: 'Living',
+          }),
+        ],
+        scopes: [
+          expect.objectContaining({
+            id: 'door-scope-1',
+            door_type_id: 'DOOR_PANEL',
+          }),
+        ],
+        ensureCatalogs: expect.any(Function),
+      })
+    )
+    expect(mocks.softReplaceRows).toHaveBeenCalledWith({
+      table: 'estimate_room_door_scopes',
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      rows: [
+        expect.objectContaining({
+          id: 'door-scope-1',
+          org_id: 'org-1',
+          estimate_id: 'estimate-1',
+          job_id: 'job-1',
+          room_id: 'R001',
+          door_type_id: 'DOOR_PANEL',
+          raw_units: 2,
+          effective_total: 92,
         }),
       ],
     })

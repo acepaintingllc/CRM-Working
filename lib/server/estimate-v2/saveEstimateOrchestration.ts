@@ -2,12 +2,14 @@ import { supabaseAdmin } from '../org.ts'
 import {
   buildV2CeilingScopeRows,
   buildV2CeilingSegmentRows,
+  buildV2DoorScopeRows,
   buildV2RoomRosterRows,
   buildV2TrimScopeRows,
   buildV2WallScopeRows,
   buildV2WallSegmentRows,
   type V2CeilingScopeSaveRow,
   type V2CeilingSegmentSaveRow,
+  type V2DoorScopeSaveRow,
   type V2RoomRosterRow,
   type V2TrimScopeSaveRow,
   type V2WallScopeSaveRow,
@@ -27,6 +29,7 @@ import { normalizeTrimPaintGallons } from '../trimPaint.ts'
 
 import {
   calculateCeilingsForSave,
+  calculateDoorsForSave,
   calculateTrimForSave,
   calculateWallsForSave,
   createCalculationCatalogsLoader,
@@ -172,10 +175,10 @@ export async function saveEstimateV2Inputs(params: {
     const useV2WallsSave = Array.isArray(body.room_wall_scopes) || Array.isArray(body.wall_segments)
     const useV2CeilingsSave = Array.isArray(body.room_ceiling_scopes)
     const useV2TrimSave = Array.isArray(body.room_trim_scopes)
+    const useV2DoorsSave = Array.isArray(body.room_door_scopes)
+    const useAnyV2ScopeSave = useV2WallsSave || useV2CeilingsSave || useV2TrimSave || useV2DoorsSave
     const useStructuredTransactionalSave =
-      !useV2WallsSave &&
-      !useV2CeilingsSave &&
-      !useV2TrimSave &&
+      !useAnyV2ScopeSave &&
       (Array.isArray(body.job_colors) || Array.isArray(body.room_flags) || Array.isArray(body.access_fees))
 
     let v2RoomRows: V2RoomRosterRow[] | null = null
@@ -187,6 +190,8 @@ export async function saveEstimateV2Inputs(params: {
     let ceilingCalculations: Awaited<ReturnType<typeof calculateCeilingsForSave>>['ceilingCalculations'] | null = null
     let v2TrimScopeRows: V2TrimScopeSaveRow[] | null = null
     let trimCalculations: Awaited<ReturnType<typeof calculateTrimForSave>> | null = null
+    let v2DoorScopeRows: V2DoorScopeSaveRow[] | null = null
+    let doorCalculations: Awaited<ReturnType<typeof calculateDoorsForSave>> | null = null
     const ensureCatalogs = createCalculationCatalogsLoader({
       requestOrigin: params.requestOrigin,
       orgId: params.orgId,
@@ -272,6 +277,26 @@ export async function saveEstimateV2Inputs(params: {
       }
     }
 
+    if (useV2DoorsSave) {
+      if (!Array.isArray(body.rooms)) throw new Error('V2 door save requires rooms')
+      if (!v2RoomRows) v2RoomRows = buildV2RoomRosterRows(body.rooms as Unsafe[])
+      v2DoorScopeRows = buildV2DoorScopeRows(
+        body.room_door_scopes as Unsafe[],
+        new Set(v2RoomRows.map((row) => row.room_id))
+      ).scopeRows
+      if (!params.autosaveOnly) {
+        doorCalculations = await calculateDoorsForSave({
+          orgId: params.orgId,
+          estimateId: params.estimateId,
+          scopes: v2DoorScopeRows ?? [],
+          roomRows: v2RoomRows,
+          jobsettings: body.jobsettings as Unsafe | undefined,
+          ensureCatalogs,
+        })
+        v2DoorScopeRows = doorCalculations.scopes as V2DoorScopeSaveRow[]
+      }
+    }
+
     if (useStructuredTransactionalSave) {
       const jobId = asText(estimate.job_id)
       if (uuid.test(jobId)) {
@@ -306,7 +331,7 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.rooms)) {
-      if (useV2WallsSave) {
+      if (useAnyV2ScopeSave) {
         await saveV2RoomRoster({
           orgId: params.orgId,
           estimateId: params.estimateId,
@@ -377,6 +402,17 @@ export async function saveEstimateV2Inputs(params: {
         estimateId: params.estimateId,
         rows: (v2TrimScopeRows ?? []).map((row) => ({
           id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, include: row.include, scope_name: row.scope_name, trim_type_id: row.trim_type_id, trim_family: row.trim_family, unit_type: row.unit_type, measurement_mode: row.measurement_mode, helper_source: row.helper_source, measurement_value: row.measurement_value, helper_value: row.helper_value, baseboard_opening_count: row.baseboard_opening_count, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, paint_enabled: row.paint_enabled, prime_mode: row.prime_mode, spot_prime_percent: row.spot_prime_percent, production_rate_id: row.production_rate_id, prep_factor: row.prep_factor, height_factor: row.height_factor, profile_factor: row.profile_factor, room_flag_factor: row.room_flag_factor, masking_factor: row.masking_factor, stair_factor: row.stair_factor, difficult_finish_factor: row.difficult_finish_factor, caulk_fill_factor: row.caulk_fill_factor, override_measurement: row.override_measurement, override_hours: row.override_hours, override_gallons: row.override_gallons, override_supply_cost: row.override_supply_cost, override_total: row.override_total, override_description: row.override_description, raw_measurement: row.raw_measurement, effective_measurement: row.effective_measurement, raw_paint_hours: row.raw_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, effective_total: row.effective_total, paint_coats: row.paint_coats, primer_coats: row.primer_coats, paint_prod_rate_units_per_hour: row.paint_prod_rate_units_per_hour, primer_prod_rate_units_per_hour: row.primer_prod_rate_units_per_hour, paint_coverage_units_per_gal_per_coat: row.paint_coverage_units_per_gal_per_coat, primer_coverage_units_per_gal_per_coat: row.primer_coverage_units_per_gal_per_coat, area_supply_cost_per_unit: row.area_supply_cost_per_unit, per_color_supply_cost: row.per_color_supply_cost, labor_rate_per_hour: row.labor_rate_per_hour, paint_price_per_gal: row.paint_price_per_gal, primer_price_per_gal: row.primer_price_per_gal, notes: row.notes, condition_selections: row.condition_selections ?? null,
+        })),
+      })
+    }
+
+    if (useV2DoorsSave) {
+      await softReplaceRows({
+        table: 'estimate_room_door_scopes',
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        rows: (v2DoorScopeRows ?? []).map((row) => ({
+          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, include: row.include, scope_name: row.scope_name, door_type_id: row.door_type_id, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, quantity: row.quantity, sides: row.sides, paint_coats: row.paint_coats, primer_coats: row.primer_coats, spot_prime_percent: row.spot_prime_percent, condition_factor: row.condition_factor, labor_rate: row.labor_rate, material_rate: row.material_rate, raw_units: row.raw_units, effective_units: row.effective_units, raw_paint_hours: row.raw_paint_hours, override_paint_hours: row.override_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, override_primer_hours: row.override_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_material_cost: row.raw_material_cost, override_material_cost: row.override_material_cost, effective_material_cost: row.effective_material_cost, raw_supply_cost: row.raw_supply_cost, override_supply_cost: row.override_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, override_total: row.override_total, effective_total: row.effective_total, notes: row.notes,
         })),
       })
     }
@@ -537,13 +573,21 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (params.autosaveOnly) return { ok: true as const, autosave: true as const }
-    if (useV2WallsSave || useV2CeilingsSave || useV2TrimSave) {
-      return {
+    if (useAnyV2ScopeSave) {
+      const result: {
+        ok: true
+        wall_calculations: typeof wallCalculations
+        ceiling_calculations: typeof ceilingCalculations
+        trim_calculations: typeof trimCalculations
+        door_calculations?: typeof doorCalculations
+      } = {
         ok: true as const,
         wall_calculations: wallCalculations,
         ceiling_calculations: ceilingCalculations,
         trim_calculations: trimCalculations,
       }
+      if (useV2DoorsSave) result.door_calculations = doorCalculations
+      return result
     }
     return { ok: true as const }
   } catch (error) {

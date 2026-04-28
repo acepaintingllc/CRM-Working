@@ -82,6 +82,7 @@ function makeVm(overrides: Record<string, unknown> = {}) {
     colorCodeOptions: [{ id: 'COLOR1', label: 'Color 1' }],
     displayedSegmentEffectiveAreaById: new Map(),
     displayedScopeEffectiveAreaById: new Map([['wall-1', 155]]),
+    wallScopeEffectiveTotalById: new Map([['wall-1', 137.82]]),
     addScope: vi.fn(),
     moveScope: vi.fn(),
     deleteScope: vi.fn(),
@@ -116,6 +117,8 @@ describe('EstimateV2WallsSectionBody', () => {
     expect(screen.getByText('Opening Deduct')).toBeInTheDocument()
     expect(screen.getByText('Area Factor')).toBeInTheDocument()
     expect(screen.getByText('Final Sq Ft')).toBeInTheDocument()
+    expect(screen.getByText('Subtotal')).toBeInTheDocument()
+    expect(screen.getByText('$137.82')).toBeInTheDocument()
 
     expect(screen.getByText('Wall Condition / Rate').nextElementSibling).toHaveClass('required-input-frame')
     expect(screen.getByText('Coats').nextElementSibling).toHaveClass('required-input-frame')
@@ -155,6 +158,7 @@ describe('EstimateV2WallsSectionBody', () => {
             segments: [segment],
             displayedSegmentEffectiveAreaById: new Map([['segment-1', 80]]),
             displayedScopeEffectiveAreaById: new Map([['wall-1', 80]]),
+            wallScopeEffectiveTotalById: new Map([['wall-1', 88.5]]),
           }) as never
         }
         openAdvanced={{}}
@@ -169,6 +173,7 @@ describe('EstimateV2WallsSectionBody', () => {
     expect(screen.getByText('Area Override (sf)').nextElementSibling).toHaveClass('optional-input-frame')
     expect(screen.queryByText('SEG Mode Scopes')).not.toBeInTheDocument()
     expect(screen.queryByText('+ Add scope')).not.toBeInTheDocument()
+    expect(screen.getByText('$88.50')).toBeInTheDocument()
     expect(screen.getByText('Base Sq Ft').compareDocumentPosition(screen.getByText('+ Add segment'))).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     )

@@ -4,6 +4,7 @@ import { buildEstimateV2SavePayload } from '@/lib/estimator/v2DraftPayload'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
+  EstimateV2DoorScopeDraft,
   EstimateV2JobSettingsDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
@@ -37,6 +38,7 @@ export function buildEstimateV2DirtySnapshot(params: {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
+  doorScopes?: EstimateV2DoorScopeDraft[]
   rollers?: EstimateV2RollerDraft[]
 }): EstimateV2DirtySnapshot {
   const payload = buildEstimateV2SavePayload(
@@ -48,7 +50,8 @@ export function buildEstimateV2DirtySnapshot(params: {
     params.ceilingScopes,
     params.ceilingSegments,
     params.trimScopes,
-    params.rollers ?? []
+    params.rollers ?? [],
+    params.doorScopes ?? []
   )
 
   return createEstimateV2DirtySnapshot(payload)

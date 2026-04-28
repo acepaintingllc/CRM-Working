@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { recalculateEditorDraftFactors } from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorRecalculate.ts'
+import {
+  normalizeCeilingScope,
+  normalizeCeilingSegment,
+  normalizeRoller,
+  normalizeRoom,
+  normalizeRoomFlag,
+  normalizeScope,
+  normalizeSegment,
+  normalizeTrimScope,
+} from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorNormalize.ts'
+import { buildEstimateV2SavePayload } from '../v2DraftPayload.ts'
 
 test('recalculateEditorDraftFactors syncs wall, ceiling, and trim factors and strips invalid trim helper mode', () => {
   const result = recalculateEditorDraftFactors({
@@ -178,4 +189,294 @@ test('recalculateEditorDraftFactors syncs wall, ceiling, and trim factors and st
   assert.equal(result.trimScopes[0].roomFlagFactor, '1.05')
   assert.equal(result.trimScopes[0].measurementMode, 'MANUAL')
   assert.equal(result.roomModeById.get('R001'), 'SEG')
+})
+
+test('recalculateEditorDraftFactors is stable across save, load, and save again', () => {
+  const rooms = [
+    {
+      id: 'room-1',
+      roomId: 'R001',
+      roomName: 'Living',
+      roomTypeId: '',
+      lengthIn: '144',
+      widthIn: '120',
+      heightIn: '120',
+      wallComplexityId: 'WALL_STD',
+      notes: '',
+      position: 0,
+    },
+  ]
+  const roomFlags = [{ id: 'flag-1', roomId: 'R001', flagId: 'FLAG_HIGH', position: 0 }]
+  const wallScopes = [
+    {
+      id: 'wall-1',
+      roomId: 'R001',
+      position: 0,
+      mode: 'SEG' as const,
+      include: 'Y' as const,
+      scopeName: 'Main walls',
+      colorId: 'COLOR1',
+      paintProductId: 'P-WALL',
+      primerProductId: 'P-PRIMER',
+      primeMode: 'NONE' as const,
+      heightIn: '120',
+      perimeterIn: '',
+      standardDoorCount: '',
+      standardWindowCount: '',
+      heightFactor: '0.5',
+      complexityFactor: '0.5',
+      wallFlagFactor: '0.5',
+      cutInTopFactor: '1',
+      cutInBottomFactor: '1',
+      paintCoats: '2',
+      primerCoats: '1',
+      spotPrimePercent: '',
+      overrideAreaSqFt: '',
+      overridePaintHours: '',
+      overridePrimerHours: '',
+      overridePaintGallons: '',
+      overridePrimerGallons: '',
+      overrideSupplyCost: '',
+      overrideTotal: '',
+      notes: '',
+    },
+  ]
+  const wallSegments = [
+    {
+      id: 'seg-1',
+      wallScopeId: 'wall-1',
+      roomId: 'R001',
+      position: 0,
+      segmentName: 'North wall',
+      include: 'Y' as const,
+      shapeType: 'RECTANGLE' as const,
+      quantity: '1',
+      widthIn: '144',
+      heightIn: '120',
+      baseIn: '',
+      manualAreaSqFt: '',
+      standardDoorCount: '1',
+      standardWindowCount: '0',
+      overrideAreaSqFt: '',
+      notes: '',
+    },
+  ]
+  const ceilingScopes = [
+    {
+      id: 'ceiling-1',
+      roomId: 'R001',
+      position: 0,
+      mode: 'SEG' as const,
+      include: 'Y' as const,
+      scopeName: 'Tray ceiling',
+      colorId: 'COLOR1',
+      paintProductId: 'P-CEIL',
+      primerProductId: '',
+      primeMode: 'SPOT' as const,
+      spotPrimePercent: '25',
+      ceilingTypeId: 'FLAT',
+      ceilingGeometryMode: 'FLAT',
+      vaultedAreaFactor: '',
+      vaultedRidgeLengthIn: '',
+      vaultedSlopeLengthIn: '',
+      vaultedPlaneCount: '2',
+      trayPerimeterIn: '',
+      trayStepHeightIn: '',
+      trayBandWidthIn: '',
+      cofferSectionLengthIn: '',
+      cofferSectionWidthIn: '',
+      cofferSectionCount: '',
+      cofferFaceHeightIn: '',
+      cofferBottomWidthIn: '',
+      lengthIn: '',
+      widthIn: '',
+      areaSf: '',
+      heightFactor: '0.5',
+      complexityFactor: '0.5',
+      ceilingFlagFactor: '0.5',
+      paintCoats: '2',
+      primerCoats: '1',
+      overrideAreaSqFt: '',
+      overridePaintHours: '',
+      overridePrimerHours: '',
+      overridePaintGallons: '',
+      overridePrimerGallons: '',
+      overrideSupplyCost: '',
+      overrideTotal: '',
+      notes: '',
+    },
+  ]
+  const ceilingSegments = [
+    {
+      id: 'ceiling-seg-1',
+      ceilingScopeId: 'ceiling-1',
+      roomId: 'R001',
+      position: 0,
+      segmentName: 'Manual tray',
+      include: 'Y' as const,
+      shapeType: 'MANUAL' as const,
+      quantity: '1',
+      widthIn: '',
+      heightIn: '',
+      baseIn: '',
+      manualAreaSqFt: '64',
+      overrideAreaSqFt: '',
+      notes: '',
+    },
+  ]
+  const trimScopes = [
+    {
+      id: 'trim-1',
+      roomId: 'R001',
+      position: 0,
+      include: 'Y' as const,
+      scopeName: 'Baseboard',
+      trimTypeId: 'TRIM_BASE',
+      trimFamily: 'BASE',
+      unitType: 'LF' as const,
+      measurementMode: 'ROOM_HELPER' as const,
+      helperSource: 'ROOM_PERIMETER' as const,
+      measurementValue: '',
+      helperValue: '44',
+      baseboardOpeningCount: '',
+      colorId: 'COLOR1',
+      paintProductId: 'P-TRIM',
+      primerProductId: '',
+      paintEnabled: 'Y' as const,
+      primeMode: 'NONE' as const,
+      spotPrimePercent: '',
+      productionRateId: 'TRIM_BASE',
+      prepFactor: '1',
+      heightFactor: '0.5',
+      profileFactor: '1',
+      roomFlagFactor: '0.5',
+      maskingFactor: '1',
+      stairFactor: '1',
+      difficultFinishFactor: '1',
+      caulkFillFactor: '1',
+      paintCoats: '2',
+      primerCoats: '1',
+      overrideMeasurement: '',
+      overrideHours: '',
+      overrideGallons: '',
+      overrideSupplyCost: '',
+      overrideTotal: '',
+      overrideDescription: '',
+      notes: '',
+    },
+  ]
+  const rollers = [
+    {
+      id: 'roller-1',
+      scope: 'Wall' as const,
+      wallColorId: 'COLOR1',
+      selectedOptionId: '',
+      rollerSizeIn: '9',
+      coversQty: '2',
+      notes: '',
+      position: 0,
+    },
+  ]
+  const catalogs = {
+    paint_products: [],
+    color_codes: [],
+    production_rates: [
+      {
+        id: 'WALL_STD',
+        label: 'Standard',
+        scope_id: 'WALLS',
+        sqft_per_hr: 100,
+        prep_sqft_per_hr: null,
+        primer_sqft_per_hr: null,
+        surface_type: null,
+        condition: null,
+      },
+    ],
+    height_factors: [
+      { id: 'HEIGHT_TALL', label: 'Tall', min_height_ft: 9, max_height_ft: null, labor_multiplier: 1.2 },
+    ],
+    room_types: [],
+    room_flags: [
+      { id: 'FLAG_HIGH', label: 'Difficult', wall_factor: 1.15, ceil_factor: 1.1, trim_factor: 1.05 },
+    ],
+    ceiling_types: [],
+    trim_items: [
+      {
+        id: 'TRIM_BASE',
+        label: 'Baseboard',
+        family: 'BASE',
+        category: 'Base',
+        unit_type: 'LF' as const,
+        helper_allowed: true,
+        default_production_rate_id: 'TRIM_BASE',
+      },
+    ],
+  }
+  const jobSettingsDraft = {
+    laborDayEnabled: true,
+    dayhours: 8,
+    roundingIncrementHours: 4,
+    laborRate: 62.5,
+    jobMinEnabled: true,
+    jobMinAmount: 400,
+    crewSize: 1,
+    wallPaintProductId: 'P-WALL',
+    wallPrimerProductId: 'P-PRIMER',
+    ceilingPaintProductId: 'P-CEIL',
+    ceilingPrimerProductId: '',
+    trimPaintProductId: 'P-TRIM',
+    trimPrimerProductId: '',
+  }
+  const firstRecalculation = recalculateEditorDraftFactors({
+    rooms,
+    wallScopes,
+    ceilingScopes,
+    trimScopes,
+    roomFlags,
+    catalogs,
+    trimTypeOptions: catalogs.trim_items,
+  })
+  const firstPayload = buildEstimateV2SavePayload(
+    jobSettingsDraft,
+    rooms,
+    firstRecalculation.wallScopes,
+    wallSegments,
+    roomFlags,
+    firstRecalculation.ceilingScopes,
+    ceilingSegments,
+    firstRecalculation.trimScopes,
+    rollers
+  )
+
+  const loadedRooms = firstPayload.rooms.map(normalizeRoom)
+  const loadedWallScopes = firstPayload.room_wall_scopes.map(normalizeScope)
+  const loadedWallSegments = firstPayload.wall_segments.map(normalizeSegment)
+  const loadedRoomFlags = firstPayload.room_flags.map(normalizeRoomFlag).filter((row) => row != null)
+  const loadedCeilingScopes = firstPayload.room_ceiling_scopes.map(normalizeCeilingScope)
+  const loadedCeilingSegments = firstPayload.ceiling_scope_segments.map(normalizeCeilingSegment)
+  const loadedTrimScopes = firstPayload.room_trim_scopes.map(normalizeTrimScope)
+  const loadedRollers = firstPayload.rollers.map(normalizeRoller)
+
+  const secondRecalculation = recalculateEditorDraftFactors({
+    rooms: loadedRooms,
+    wallScopes: loadedWallScopes,
+    ceilingScopes: loadedCeilingScopes,
+    trimScopes: loadedTrimScopes,
+    roomFlags: loadedRoomFlags,
+    catalogs,
+    trimTypeOptions: catalogs.trim_items,
+  })
+  const secondPayload = buildEstimateV2SavePayload(
+    jobSettingsDraft,
+    loadedRooms,
+    secondRecalculation.wallScopes,
+    loadedWallSegments,
+    loadedRoomFlags,
+    secondRecalculation.ceilingScopes,
+    loadedCeilingSegments,
+    secondRecalculation.trimScopes,
+    loadedRollers
+  )
+
+  assert.deepEqual(secondPayload, firstPayload)
 })

@@ -23,6 +23,7 @@ import type {
   EstimateV2RollerDraft,
   EstimateV2RollerScope,
   EstimateV2RoomFlagDraft as RoomFlagDraft,
+  EstimateV2DoorTypeOption,
   EstimateV2TrimTypeOption,
 } from '@/types/estimator/v2'
 import { recalculateEditorDraftFactors } from '../_lib/estimateV2EditorRecalculate'
@@ -33,6 +34,7 @@ import {
 import {
   normalizeCeilingScope,
   normalizeCeilingSegment,
+  normalizeDoorScope,
   normalizeRoom,
   normalizeRoomFlag,
   normalizeScope,
@@ -54,6 +56,7 @@ type ProductOverrideInputs = {
 export type EstimateV2SanitizedLoadResult = {
   catalogs: CatalogsPayload['catalogs']
   trimTypeOptions: EstimateV2TrimTypeOption[]
+  doorTypeOptions: EstimateV2DoorTypeOption[]
   collections: {
     rooms: ReturnType<typeof normalizeRoom>[]
     scopes: ReturnType<typeof normalizeScope>[]
@@ -63,11 +66,13 @@ export type EstimateV2SanitizedLoadResult = {
     ceilingScopes: ReturnType<typeof normalizeCeilingScope>[]
     ceilingSegments: ReturnType<typeof normalizeCeilingSegment>[]
     trimScopes: ReturnType<typeof normalizeTrimScope>[]
+    doorScopes: ReturnType<typeof normalizeDoorScope>[]
   }
   meta: {
     wallCalculations: EstimateResponse['wall_calculations']
     ceilingCalculations: EstimateResponse['ceiling_calculations']
     trimCalculations: EstimateResponse['trim_calculations']
+    doorCalculations: EstimateResponse['door_calculations']
     pricingSummary: EstimateResponse['pricing_summary']
     selectedRoomId: string
     lastSavedSnapshot: ReturnType<typeof buildEstimateV2DirtySnapshot>
@@ -172,6 +177,19 @@ function buildTrimTypeOptions(catalogs: CatalogsPayload['catalogs']): EstimateV2
   }))
 }
 
+function buildDoorTypeOptions(catalogs: CatalogsPayload['catalogs']): EstimateV2DoorTypeOption[] {
+  return (catalogs.door_types ?? []).map((item) => ({
+    id: item.id,
+    label: item.label || item.id,
+    unit_rate_type: item.unit_rate_type ?? null,
+    unit: item.unit ?? null,
+    default_qty: item.default_qty ?? null,
+    labor_rate: item.labor_rate ?? null,
+    material_rate: item.material_rate ?? null,
+    amount: item.amount ?? null,
+  }))
+}
+
 function mergeLoadedConditionSelections<
   TSelections extends Record<string, unknown> | null | undefined,
 >(base: TSelections, override: TSelections) {
@@ -209,6 +227,7 @@ export function sanitizeEstimateV2EditorLoad(params: {
 }) {
   const { estimatePayload, catalogs, selectedRoomId } = params
   const trimTypeOptions = buildTrimTypeOptions(catalogs)
+  const doorTypeOptions = buildDoorTypeOptions(catalogs)
   const js = estimatePayload.inputs?.jobsettings ?? null
   const orgDefaults = (estimatePayload.inputs?.org_defaults ?? null) as Unsafe | null
   const orgWallDefault = asText(orgDefaults?.walls_paint_id)
@@ -346,6 +365,9 @@ export function sanitizeEstimateV2EditorLoad(params: {
     primerProductId:
       scope.primerProductId === normalizedTrimPrimerDefault ? '' : scope.primerProductId,
   }))
+  const normalizedDoorScopes = sortByPosition(
+    (estimatePayload.inputs.room_door_scopes ?? []).map(normalizeDoorScope)
+  )
   const recalculated = recalculateEditorDraftFactors({
     rooms: normalizedRooms,
     wallScopes: wallScopesWithoutDefaults,
@@ -370,12 +392,14 @@ export function sanitizeEstimateV2EditorLoad(params: {
     ceilingScopes: recalculated.ceilingScopes,
     ceilingSegments: sanitizedCeilings.ceilingSegments,
     trimScopes: recalculated.trimScopes,
+    doorScopes: normalizedDoorScopes,
     rollers: normalizedRollers,
   })
 
   return {
     catalogs,
     trimTypeOptions,
+    doorTypeOptions,
     collections: {
       rooms: normalizedRooms,
       scopes: recalculated.wallScopes,
@@ -384,12 +408,14 @@ export function sanitizeEstimateV2EditorLoad(params: {
       ceilingScopes: recalculated.ceilingScopes,
       ceilingSegments: sanitizedCeilings.ceilingSegments,
       trimScopes: recalculated.trimScopes,
+      doorScopes: normalizedDoorScopes,
       rollers: normalizedRollers,
     },
     meta: {
       wallCalculations: estimatePayload.wall_calculations ?? null,
       ceilingCalculations: estimatePayload.ceiling_calculations ?? null,
       trimCalculations: estimatePayload.trim_calculations ?? null,
+      doorCalculations: estimatePayload.door_calculations ?? null,
       pricingSummary: estimatePayload.pricing_summary ?? null,
       selectedRoomId: nextSelectedRoomId,
       lastSavedSnapshot,

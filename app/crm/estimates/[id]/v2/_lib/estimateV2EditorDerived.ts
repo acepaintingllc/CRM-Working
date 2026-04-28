@@ -12,6 +12,7 @@ import {
 } from './estimateV2EditorNormalize.ts'
 import type {
   EstimateV2CeilingScopeDraft,
+  EstimateV2DoorScopeDraft,
   EstimateV2HeightFactorOption,
   EstimateV2PaintProductOption,
   EstimateV2ProductionRateOption,
@@ -54,6 +55,10 @@ export function buildCeilingScopeByRoomId(scopes: EstimateV2CeilingScopeDraft[])
 }
 
 export function buildTrimScopeByRoomId(scopes: EstimateV2TrimScopeDraft[]) {
+  return groupRowsByRoomId(scopes)
+}
+
+export function buildDoorScopeByRoomId(scopes: EstimateV2DoorScopeDraft[]) {
   return groupRowsByRoomId(scopes)
 }
 
@@ -103,9 +108,23 @@ export function buildCeilingScopeEffectiveAreaById(ceilingCalculations: Unsafe |
   return next
 }
 
+export function buildCeilingScopeEffectiveTotalById(ceilingCalculations: Unsafe | null) {
+  const next = new Map<string, number | null>()
+  const calcScopes =
+    ceilingCalculations && typeof ceilingCalculations === 'object' && Array.isArray((ceilingCalculations as Unsafe).scopes)
+      ? ((ceilingCalculations as Unsafe).scopes as Unsafe[])
+      : []
+  for (const scope of calcScopes) {
+    const scopeId = asText(scope.id)
+    if (!scopeId) continue
+    next.set(scopeId, unknownNumberOrNull(scope.effective_total))
+  }
+  return next
+}
+
 export function buildTrimScopeMetricById(
   trimCalculations: Unsafe | null,
-  key: 'effective_measurement' | 'effective_total'
+  key: 'effective_measurement' | 'effective_units' | 'effective_total'
 ) {
   const next = new Map<string, number | null>()
   const calcScopes =
@@ -116,6 +135,16 @@ export function buildTrimScopeMetricById(
     const scopeId = asText(scope.id)
     if (!scopeId) continue
     next.set(scopeId, unknownNumberOrNull(scope[key]))
+  }
+  return next
+}
+
+export function buildWallScopeEffectiveTotalById(wallCalculations: EstimateV2WallCalculationsPayload | null) {
+  const next = new Map<string, number | null>()
+  for (const scope of wallCalculations?.scopes ?? []) {
+    const scopeId = asText((scope as Unsafe).id)
+    if (!scopeId) continue
+    next.set(scopeId, unknownNumberOrNull((scope as Unsafe).effective_total))
   }
   return next
 }

@@ -14,6 +14,7 @@ export function buildCustomerEstimateDocument(params: CustomerEstimateInput) {
       roomWallScopes: normalized.roomWallScopes,
       roomCeilingScopes: normalized.roomCeilingScopes,
       roomTrimScopes: normalized.roomTrimScopes,
+      roomDoorScopes: normalized.roomDoorScopes,
       trimItems: normalized.trimItems,
       otherRows: normalized.otherRows,
       paintCatalogRows: normalized.paintCatalogRows,

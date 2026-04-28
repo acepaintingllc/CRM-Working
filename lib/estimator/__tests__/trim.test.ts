@@ -126,6 +126,37 @@ test('calculateTrim computes manual rows and room totals', () => {
   assert.equal(result.missing_inputs.length, 0)
 })
 
+test('calculateTrim prices trim scope paint gallons from the selected paint product', () => {
+  const result = calculateTrim({
+    rooms: [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' }],
+    scopes: [
+      makeTrimScope({
+        measurement_value: 50,
+        paint_product_id: 'P-TRIM',
+        paint_coats: 2,
+        paint_coverage_units_per_gal_per_coat: 100,
+      }),
+    ],
+    catalogs: {
+      paint_products: [
+        {
+          id: 'P-TRIM',
+          type: 'paint',
+          label: 'SW Emerald Urethane',
+          price_per_gal: 42,
+          coverage_sqft_per_gal_per_coat: 100,
+        },
+      ],
+    },
+  })
+
+  assert.equal(result.scopes[0]?.effective_paint_gallons, 1)
+  assert.equal(result.scopes[0]?.raw_paint_material_cost, 42)
+  assert.equal(result.scopes[0]?.allocated_paint_material_cost, 42)
+  assert.equal(result.room_totals[0]?.effective_paint_material_cost, 42)
+  assert.equal(result.paint_material_groups?.[0]?.total_paint_cost, 42)
+})
+
 test('baseboard LF scopes deduct standard opening counts before overrides and clamp to zero', () => {
   const rooms = [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' as const }]
   const half = calculateTrim({ rooms, scopes: [makeTrimScope({ measurement_value: 12, baseboard_opening_count: 0.5 })] })

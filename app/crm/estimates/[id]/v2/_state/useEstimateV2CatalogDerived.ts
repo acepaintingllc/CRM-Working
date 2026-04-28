@@ -14,6 +14,7 @@ import type {
 } from './estimateV2EditorTypes'
 import type {
   EstimateV2CatalogOption,
+  EstimateV2DoorTypeOption,
   EstimateV2RoomDraft,
   EstimateV2TrimTypeOption as TrimTypeOption,
 } from '@/types/estimator/v2'
@@ -64,6 +65,20 @@ export function useEstimateV2CatalogDerived(params: {
         picker_group: (item as Record<string, unknown>).picker_group as TrimTypeOption['picker_group'],
       })),
     [meta.catalogs.trim_items]
+  )
+  const doorTypeOptions = useMemo<EstimateV2DoorTypeOption[]>(
+    () =>
+      (meta.catalogs.door_types ?? []).map((item) => ({
+        id: item.id,
+        label: item.label || item.id,
+        unit_rate_type: item.unit_rate_type ?? null,
+        unit: item.unit ?? null,
+        default_qty: item.default_qty ?? null,
+        labor_rate: item.labor_rate ?? null,
+        material_rate: item.material_rate ?? null,
+        amount: item.amount ?? null,
+      })),
+    [meta.catalogs.door_types]
   )
   const roomFlagById = useMemo(
     () => buildRoomFlagById(meta.catalogs.room_flags),
@@ -136,6 +151,7 @@ export function useEstimateV2CatalogDerived(params: {
     trimProductionRates,
     wallProductionRateById,
     trimTypeOptions,
+    doorTypeOptions,
     roomFlagById,
     colorCodeOptions,
     defaultColorCodeId,

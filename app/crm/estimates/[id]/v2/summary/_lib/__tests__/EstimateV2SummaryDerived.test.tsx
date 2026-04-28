@@ -41,6 +41,11 @@ const pricingSummary: EstimateV2PricingSummary = {
   trimPaint: null,
 }
 
+function dollars(rowValue: string) {
+  if (rowValue === '-') return 0
+  return Number(rowValue.replace(/[$,]/g, ''))
+}
+
 describe('estimateV2SummaryDerived helpers', () => {
   it('builds ordered room scope rows and room blocks from mixed-scope input', () => {
     const roomScopeRows = buildRoomScopeRows({
@@ -248,6 +253,151 @@ describe('estimateV2SummaryDerived helpers', () => {
     ])
   })
 
+  it('surfaces error readiness when an included painted scope has no product selection', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: normalizeSummaryScopeRows([
+        {
+          id: 'wall-missing-product',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: 'Walls',
+          effective_area_sf: 100,
+          effective_total: 200,
+          raw_paint_gallons: 1,
+          paint_product_id: null,
+        },
+      ]),
+      ceilingScopes: [],
+      trimScopes: [],
+    })
+
+    const alerts = buildSummaryAlerts({
+      pricingSummary,
+      hasJobSettings: true,
+      laborRateOverrideActive: false,
+      roomScopeRows,
+      roomFlags: [],
+      rooms,
+    })
+
+    expect(alerts.some((alert) => alert.kind === 'error')).toBe(true)
+  })
+
+  it('excludes include=N scopes from visible summary math rows', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: normalizeSummaryScopeRows([
+        {
+          id: 'included',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: 'Included',
+          effective_area_sf: 10,
+          effective_total: 100,
+          paint_product_id: 'paint-1',
+        },
+        {
+          id: 'excluded',
+          room_id: 'room-1',
+          include: 'N',
+          scope_name: 'Excluded',
+          effective_area_sf: 99,
+          effective_total: 999,
+          paint_product_id: 'paint-1',
+        },
+      ]),
+      ceilingScopes: [],
+      trimScopes: [],
+    })
+    const rowIds = roomScopeRows.get('room-1')?.map((row) => row.id) ?? []
+
+    expect(rowIds).toContain('included')
+    expect(rowIds).not.toContain('excluded')
+  })
+
+  it('adds included door rows after trim with units, labor, and door-specific override badges', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: [],
+      ceilingScopes: [],
+      trimScopes: normalizeSummaryScopeRows([
+        {
+          id: 'trim-1',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: 'Baseboards',
+          effective_measurement: 42,
+          effective_total: 180,
+        },
+      ]),
+      doorScopes: normalizeSummaryScopeRows([
+        {
+          id: 'door-1',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: 'Panel Door',
+          effective_units: 2,
+          effective_paint_hours: 1.25,
+          effective_primer_hours: 0.25,
+          effective_supply_cost: 8,
+          effective_total: 210,
+          override_paint_hours: 1.25,
+          override_material_cost: 35,
+          override_total: 210,
+        },
+      ]),
+    })
+    const rows = roomScopeRows.get('room-1') ?? []
+
+    expect(rows.map((row) => row.kind)).toEqual(['trim', 'doors'])
+    expect(rows[1]).toMatchObject({
+      id: 'door-1',
+      label: 'Panel Door',
+      quantity: 2,
+      laborHours: 1.5,
+      suppliesCost: 8,
+      subtotal: 210,
+      hasOverride: true,
+      overrideSummary: 'Override: Paint hours: 1.25 h, Material cost: $35, Total: $210',
+      missingProduct: false,
+    })
+  })
+
+  it('hides excluded and empty door rows from visible summary math rows', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: [],
+      ceilingScopes: [],
+      trimScopes: [],
+      doorScopes: normalizeSummaryScopeRows([
+        {
+          id: 'door-included',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: 'Painted Door',
+          effective_units: 1,
+          effective_total: 120,
+        },
+        {
+          id: 'door-excluded',
+          room_id: 'room-1',
+          include: 'N',
+          scope_name: 'Excluded Door',
+          effective_units: 4,
+          effective_total: 999,
+        },
+        {
+          id: 'door-empty',
+          room_id: 'room-1',
+          include: 'Y',
+          scope_name: '',
+          effective_units: 0,
+          effective_total: 0,
+        },
+      ]),
+    })
+    const rowIds = roomScopeRows.get('room-1')?.map((row) => row.id) ?? []
+
+    expect(rowIds).toEqual(['door-included'])
+  })
+
   it('treats a persisted default labor rate as clean unless it differs from org defaults', () => {
     expect(
       hasActiveLaborRateOverride(
@@ -283,10 +433,37 @@ describe('estimateV2SummaryDerived helpers', () => {
       { label: 'Supplies', value: '$50' },
       { label: 'Total gallons', value: '0 gal' },
     ])
-    expect(calculatePaintSuppliesTotal(pricingSummary)).toBe(290)
+    expect(calculatePaintSuppliesTotal(pricingSummary)).toBe(320)
     expect(pricingSummary.prePolicyTotal + (pricingSummary.postLaborPolicyTotal - pricingSummary.prePolicyTotal) + pricingSummary.minimumAdjustmentAmount).toBe(
       pricingSummary.finalTotal
     )
+  })
+
+  it('keeps the paint and supplies displayed total equal to the visible dollar rows', () => {
+    const paintRows = buildPaintSupplyRows(pricingSummary)
+    const visibleDollarTotal = paintRows
+      .filter((row) => row.label !== 'Total gallons')
+      .reduce((sum, row) => sum + dollars(row.value), 0)
+
+    expect(visibleDollarTotal).toBe(calculatePaintSuppliesTotal(pricingSummary))
+  })
+
+  it('reconciles fractional paint and supply rows to the displayed whole-dollar total', () => {
+    const fractionalSummary = {
+      ...pricingSummary,
+      wallPaintMaterialCost: 10.49,
+      ceilingPaintMaterialCost: 10.49,
+      trimPaintMaterialCost: 0,
+      primerMaterialCost: 0,
+      supplyCost: 0,
+    }
+    const paintRows = buildPaintSupplyRows(fractionalSummary)
+    const visibleDollarTotal = paintRows
+      .filter((row) => row.label !== 'Total gallons')
+      .reduce((sum, row) => sum + dollars(row.value), 0)
+
+    expect(calculatePaintSuppliesTotal(fractionalSummary)).toBe(21)
+    expect(visibleDollarTotal).toBe(21)
   })
 
   it('appends selected product names to paint supply scope labels and includes total gallons', () => {
@@ -370,6 +547,57 @@ describe('estimateV2SummaryDerived helpers', () => {
     })
   })
 
+  it('prefers active scope-level paint products over job defaults for paint supply labels', () => {
+    const labels = buildPaintSupplyProductLabels({
+      jobsettings: {
+        walls_paint_id: 'default-wall-paint',
+        ceiling_paint_id: 'default-ceiling-paint',
+      },
+      orgDefaults: null,
+      wallScopes: normalizeSummaryScopeRows([
+        {
+          id: 'wall-1',
+          room_id: 'room-1',
+          paint_product_id: 'wall-paint-1',
+          raw_paint_gallons: 1,
+        },
+        {
+          id: 'wall-2',
+          room_id: 'room-1',
+          paint_product_id: 'wall-paint-2',
+          raw_paint_gallons: 1,
+        },
+        {
+          id: 'wall-excluded',
+          room_id: 'room-1',
+          include: 'N',
+          paint_product_id: 'excluded-wall-paint',
+          raw_paint_gallons: 1,
+        },
+      ]),
+      ceilingScopes: normalizeSummaryScopeRows([
+        {
+          id: 'ceiling-1',
+          room_id: 'room-1',
+          paint_product_label: 'Ceiling Scope Paint',
+          raw_paint_gallons: 1,
+        },
+      ]),
+      trimScopes: [],
+      trimPaint: null,
+      resolvePaintProductLabel: createPaintProductLabelResolver([
+        { id: 'default-wall-paint', name: 'Default Wall Paint' },
+        { id: 'default-ceiling-paint', name: 'Default Ceiling Paint' },
+        { id: 'wall-paint-1', name: 'Wall Scope Paint A' },
+        { id: 'wall-paint-2', name: 'Wall Scope Paint B' },
+        { id: 'excluded-wall-paint', name: 'Excluded Wall Paint' },
+      ]),
+    })
+
+    expect(labels.wallPaintProductLabel).toBe('Wall Scope Paint A, Wall Scope Paint B')
+    expect(labels.ceilingPaintProductLabel).toBe('Ceiling Scope Paint')
+  })
+
   it('falls back to persisted trim paint cost when the pricing summary trim cost is stale', () => {
     const trimPaint: EstimateV2TrimPaint = {
       paint_product_id: 'trim-paint-1',
@@ -388,16 +616,18 @@ describe('estimateV2SummaryDerived helpers', () => {
       label: 'Trim paint',
       value: '$45',
     })
-    expect(calculatePaintSuppliesTotal(stalePricingSummary, trimPaint)).toBe(295)
+    expect(calculatePaintSuppliesTotal(stalePricingSummary, trimPaint)).toBe(325)
   })
 
   it('keeps scope kind labels and ordering aligned with the shared single source of truth', () => {
     expect(SCOPE_KIND_ORDER.walls).toBeLessThan(SCOPE_KIND_ORDER.ceilings)
     expect(SCOPE_KIND_ORDER.ceilings).toBeLessThan(SCOPE_KIND_ORDER.trim)
+    expect(SCOPE_KIND_ORDER.trim).toBeLessThan(SCOPE_KIND_ORDER.doors)
     expect(SCOPE_KIND_LABELS).toEqual({
       walls: 'Walls',
       ceilings: 'Ceilings',
       trim: 'Trim',
+      doors: 'Doors',
     })
   })
 })

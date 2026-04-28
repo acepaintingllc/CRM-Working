@@ -27,7 +27,9 @@ export function useResource<T>({
   const requestIdRef = useRef(0)
   const loadRef = useRef(load)
   const getErrorMessageRef = useRef(getErrorMessage)
+  const initialDataRef = useRef(initialData)
   const skipInitialLoadRef = useRef(skipInitialLoad)
+  const resetOnErrorRef = useRef(resetOnError)
 
   useEffect(() => {
     loadRef.current = load
@@ -36,6 +38,14 @@ export function useResource<T>({
   useEffect(() => {
     getErrorMessageRef.current = getErrorMessage
   }, [getErrorMessage])
+
+  useEffect(() => {
+    initialDataRef.current = initialData
+  }, [initialData])
+
+  useEffect(() => {
+    resetOnErrorRef.current = resetOnError
+  }, [resetOnError])
 
   const attemptRefresh = useCallback(
     async (options?: { preserveDataOnError?: boolean; reportError?: boolean }) => {
@@ -64,8 +74,8 @@ export function useResource<T>({
         }
 
         const nextError = getErrorMessageRef.current(loadError)
-        if (resetOnError && !preserveDataOnError) {
-          setData(initialData)
+        if (resetOnErrorRef.current && !preserveDataOnError) {
+          setData(initialDataRef.current)
         }
         if (reportError) {
           setError(nextError)
@@ -77,7 +87,7 @@ export function useResource<T>({
         }
       }
     },
-    [initialData, resetOnError]
+    []
   )
 
   const refresh = useCallback(async () => {

@@ -9,6 +9,7 @@ import {
   Field,
   ItemActionRow,
   OptionalInputFrame,
+  PaintCoatButtons,
   PrimerModeButtons,
   RequiredInputFrame,
   ReorderDeleteActions,
@@ -207,6 +208,15 @@ export function EstimateV2TrimSectionBody({
                     <option value="N">Excluded</option>
                   </select>
                 </OptionalInputFrame>
+              </Field>
+              <Field label="Coats" styles={sharedStyles(styles)}>
+                <RequiredInputFrame>
+                  <PaintCoatButtons
+                    value={trimScope.paintCoats}
+                    onChange={(value) => updateScope(trimScope.id, { paintCoats: value })}
+                    styles={{ button: styles.button }}
+                  />
+                </RequiredInputFrame>
               </Field>
               <Field label="Measurement Mode" styles={sharedStyles(styles)}>
                 <RequiredInputFrame>

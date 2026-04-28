@@ -470,3 +470,7 @@ export function CeilingsScopePanel({ children }: { children: ReactNode }) {
 export function TrimScopePanel({ children }: { children: ReactNode }) {
   return <div style={{ display: 'grid', gap: 10 }}>{children}</div>
 }
+
+export function DoorsScopePanel({ children }: { children: ReactNode }) {
+  return <div style={{ display: 'grid', gap: 10 }}>{children}</div>
+}

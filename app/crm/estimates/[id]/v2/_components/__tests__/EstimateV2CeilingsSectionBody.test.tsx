@@ -104,6 +104,7 @@ function makeVm(overrides: Record<string, unknown> = {}) {
     ceilingPrimerOptions: [],
     colorCodeOptions: [{ id: 'COLOR1', label: 'Color 1' }],
     selectedCeilingEffectiveSqFt: 120,
+    ceilingScopeEffectiveTotalById: new Map([['ceiling-1', 222.45]]),
     updateScope: vi.fn(),
     addScope: vi.fn(),
     deleteScope: vi.fn(),
@@ -140,6 +141,8 @@ describe('EstimateV2CeilingsSectionBody', () => {
     expect(screen.queryByText('Ceiling Scopes')).not.toBeInTheDocument()
     expect(screen.queryByText('+ Add scope')).not.toBeInTheDocument()
     expect(screen.getByText('Primer Mode')).toBeInTheDocument()
+    expect(screen.getByText('Subtotal')).toBeInTheDocument()
+    expect(screen.getByText('$222.45')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Full'))
     expect(updateScope).toHaveBeenCalledWith('ceiling-1', {
       primeMode: 'FULL',
@@ -179,5 +182,29 @@ describe('EstimateV2CeilingsSectionBody', () => {
     expect(within(requiredGroup as HTMLElement).queryByText('Recess Depth Optional (in)')).not.toBeInTheDocument()
     expect(screen.getByText('Recess Depth Optional (in)')).toBeInTheDocument()
     expect(screen.getByText('Beam Width Optional (in)')).toBeInTheDocument()
+  })
+
+  it('places ceiling coats beside ceiling type in the setup row', () => {
+    const ceilingsVm = makeVm({
+      selectedRoomGeometryMode: 'RECT',
+      selectedRoomCeilingScopes: [{ ...flatCeilingScope, mode: 'RECT' as const }],
+      firstCeilingScope: { ...flatCeilingScope, mode: 'RECT' as const },
+      ceilingSegments: [],
+    })
+
+    render(
+      <EstimateV2CeilingsSectionBody
+        styles={styles}
+        ceilingsVm={ceilingsVm as never}
+        openCeilingAdvanced={{}}
+        setOpenCeilingAdvanced={vi.fn()}
+        switchRoomGeometryMode={vi.fn()}
+        toDisplayNumber={(value) => (value == null ? '--' : String(value))}
+      />
+    )
+
+    const setupRow = screen.getAllByText('Ceiling Type')[0]?.closest('.paint-setup-grid')
+    expect(setupRow).not.toBeNull()
+    expect(within(setupRow as HTMLElement).getByText('Coats')).toBeInTheDocument()
   })
 })

@@ -291,6 +291,55 @@ describe('useEstimateV2SaveController', () => {
     ).toBe(true)
   })
 
+  it('does not treat unchanged door scopes as newer local edits during autosave', async () => {
+    const harness = createSaveHarness()
+    harness.store.getState().setDoorScopes([
+      {
+        id: 'door-r001-main',
+        roomId: 'R001',
+        position: 0,
+        include: 'Y',
+        scopeName: 'Living Room Door',
+        doorTypeId: 'DOOR_PANEL',
+        quantity: '1',
+        sides: '2',
+        colorId: 'COLOR3',
+        paintProductId: 'P-TRIM',
+        primerProductId: 'P-TRIM-PRIMER',
+        primeMode: 'NONE',
+        spotPrimePercent: '',
+        paintCoats: '2',
+        primerCoats: '1',
+        conditionFactor: '1',
+        laborRate: '',
+        materialRate: '',
+        overridePaintHours: '',
+        overridePrimerHours: '',
+        overrideMaterialCost: '',
+        overrideSupplyCost: '',
+        overrideTotal: '',
+        notes: '',
+      },
+    ])
+    authedFetch.mockResolvedValue(createResponse(true, { autosave: true }))
+
+    const { result } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: harness.fixture.currentSnapshot,
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    await expect(result.current.save('auto')).resolves.toBe(true)
+
+    expect(harness.store.getState().meta.saveStatus).toBe('saved')
+    expect(harness.store.getState().meta.lastSavedSnapshot?.payload.room_door_scopes).toHaveLength(1)
+  })
+
   it('does not apply an older save response over newer local ceiling edits', async () => {
     const harness = createSaveHarness()
     const ceilingScopeId = harness.fixture.ceilingScopes[0].id

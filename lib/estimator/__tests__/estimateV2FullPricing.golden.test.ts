@@ -1,14 +1,24 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { calculateCeilings, type CeilingCalculationInput } from '../ceilings.ts'
-import { buildEstimatePricingSummary } from '../pricingPolicies.ts'
+import { calculateDoors, type DoorCalculationInput } from '../doors.ts'
+import { buildEstimatePricingSummary, buildEstimatePricingSummaryFromEngines } from '../pricingPolicies.ts'
 import { calculateTrim, type TrimCalculationInput } from '../trim.ts'
 import { calculateWalls, type WallCalculationInput } from '../walls.ts'
+import {
+  assertMoneyEqual,
+  assertNoNegativeMoney,
+  buildMixedFullPricingScenario,
+} from './estimateV2ShippingFixtures.ts'
 
 function approx(actual: number | null | undefined, expected: number, epsilon = 0.0001) {
   assert.notEqual(actual, null)
   assert.notEqual(actual, undefined)
   assert.ok(Math.abs((actual as number) - expected) <= epsilon, `expected ${expected}, got ${actual}`)
+}
+
+function round2(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 const SETTINGS = {
@@ -206,6 +216,48 @@ function trimScope(overrides: Partial<TrimCalculationInput['scopes'][0]> = {}): 
     raw_supply_cost: null,
     effective_supply_cost: null,
     raw_total: null,
+    effective_total: null,
+    notes: null,
+    ...overrides,
+  }
+}
+
+function doorScope(overrides: Partial<DoorCalculationInput['scopes'][0]> = {}): DoorCalculationInput['scopes'][0] {
+  return {
+    id: 'door-1',
+    room_id: 'R001',
+    position: 0,
+    include: 'Y',
+    scope_name: 'Panel Door',
+    door_type_id: 'PANEL',
+    color_id: null,
+    paint_product_id: 'WALL-PAINT',
+    primer_product_id: 'PRIMER',
+    prime_mode: 'NONE',
+    quantity: 1,
+    sides: 2,
+    paint_coats: 1,
+    primer_coats: 1,
+    spot_prime_percent: null,
+    condition_factor: 1,
+    labor_rate: null,
+    material_rate: null,
+    raw_units: null,
+    effective_units: null,
+    raw_paint_hours: null,
+    override_paint_hours: null,
+    effective_paint_hours: null,
+    raw_primer_hours: null,
+    override_primer_hours: null,
+    effective_primer_hours: null,
+    raw_material_cost: null,
+    override_material_cost: null,
+    effective_material_cost: null,
+    raw_supply_cost: null,
+    override_supply_cost: null,
+    effective_supply_cost: null,
+    raw_total: null,
+    override_total: null,
     effective_total: null,
     notes: null,
     ...overrides,
@@ -436,9 +488,45 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
     ],
   })
 
+  const doors = calculateDoors({
+    settings: { labor_rate_per_hour: SETTINGS.labor_rate_per_hour },
+    catalogs: {
+      door_unit_rates: [
+        {
+          id: 'PANEL',
+          label: 'Panel Door',
+          unit_rate_type: 'interior',
+          unit: 'door side',
+          default_qty: 1,
+          labor_rate: 0.5,
+          material_rate: 5,
+          amount: 0,
+        },
+      ],
+    },
+    scopes: [
+      doorScope({
+        id: 'door-kitchen-panel',
+        room_id: 'R002',
+        scope_name: 'Kitchen painted door',
+        quantity: 2,
+        sides: 2,
+        prime_mode: 'FULL',
+      }),
+      doorScope({
+        id: 'door-bedroom-excluded',
+        room_id: 'R003',
+        include: 'N',
+        quantity: 3,
+        sides: 2,
+        override_total: 999,
+      }),
+    ],
+  })
+
   assert.deepEqual(
-    [walls.missing_inputs.length, ceilings.missing_inputs.length, trim.missing_inputs.length],
-    [0, 0, 0]
+    [walls.missing_inputs.length, ceilings.missing_inputs.length, trim.missing_inputs.length, doors.missing_inputs.length],
+    [0, 0, 0, 0]
   )
 
   approx(walls.scopes.find((scope) => scope.id === 'wall-living')?.raw_area_sf, 360)
@@ -447,6 +535,9 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
   approx(ceilings.scopes.find((scope) => scope.id === 'ceiling-kitchen')?.effective_total, 0)
   approx(trim.scopes.find((scope) => scope.id === 'trim-living-base')?.raw_measurement, 48)
   approx(trim.scopes.find((scope) => scope.id === 'trim-bedroom-base')?.raw_measurement, 39.5)
+  approx(doors.scopes.find((scope) => scope.id === 'door-kitchen-panel')?.effective_units, 4)
+  approx(doors.scopes.find((scope) => scope.id === 'door-kitchen-panel')?.effective_total, 60)
+  approx(doors.scopes.find((scope) => scope.id === 'door-bedroom-excluded')?.effective_total, 0)
 
   const sharedWallPaint = walls.paint_material_groups.find((group) => group.group_key === 'WALL-PAINT')
   assert.ok(sharedWallPaint)
@@ -456,8 +547,13 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
     ['wall-living', 'wall-kitchen', 'wall-bedroom']
   )
 
-  const pricing = buildEstimatePricingSummary(
-    [walls, ceilings, trim],
+  const pricing = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'walls', output: walls },
+      { kind: 'ceilings', output: ceilings },
+      { kind: 'trim', output: trim },
+      { kind: 'doors', output: doors },
+    ],
     { enabled: true, dayhours: 8, roundingIncrementHours: 4 },
     { enabled: true, amount: 1_500 },
     {
@@ -470,17 +566,46 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
     }
   )
 
-  approx(pricing.rawLaborHours, 32.6042)
-  assert.equal(pricing.effectiveLaborHours, 36)
+  approx(pricing.rawLaborHours, 36.6042)
+  assert.equal(pricing.effectiveLaborHours, 40)
   approx(pricing.laborAdjustmentHours, 3.3958)
   approx(pricing.wallPaintMaterialCost, 160)
   approx(pricing.ceilingPaintMaterialCost, 54)
-  approx(pricing.trimPaintMaterialCost, 45)
-  approx(pricing.paintMaterialCost, 259)
-  approx(pricing.prePolicyTotal, 812.49)
-  approx(pricing.postLaborPolicyTotal, 846.45)
-  approx(pricing.minimumAdjustmentAmount, 653.55)
+  approx(pricing.trimPaintMaterialCost, 85)
+  approx(pricing.paintMaterialCost, 299)
+  approx(pricing.prePolicyTotal, 912.5)
+  approx(pricing.postLaborPolicyTotal, 946.46)
+  approx(pricing.minimumAdjustmentAmount, 553.54)
   approx(pricing.finalTotal, 1500)
+  const allIncludedScopes = [...walls.scopes, ...ceilings.scopes, ...trim.scopes, ...doors.scopes].filter(
+    (scope) => scope.include === 'Y'
+  )
+  const expectedPrimerMaterialCost = allIncludedScopes.reduce(
+    (sum, scope) =>
+      sum +
+      (scope.effective_primer_gallons ?? 0) *
+        ((scope as { primer_price_per_gal?: number | null }).primer_price_per_gal ?? 0),
+    0
+  )
+  const expectedSupplyCost =
+    allIncludedScopes.reduce((sum, scope) => sum + (scope.effective_supply_cost ?? 0), 0) +
+    [...walls.per_color_supply_groups, ...ceilings.per_color_supply_groups, ...trim.per_color_supply_groups, ...doors.per_color_supply_groups].reduce(
+      (sum, group) =>
+        sum + group.allocations.reduce((groupSum, allocation) => groupSum + allocation.allocated_supply_cost, 0),
+      0
+    )
+
+  approx(
+    pricing.prePolicyTotal,
+    pricing.rooms.reduce((sum, room) => sum + room.baseTotal, 0)
+  )
+  approx(pricing.paintMaterialCost, pricing.wallPaintMaterialCost + pricing.ceilingPaintMaterialCost + pricing.trimPaintMaterialCost)
+  approx(pricing.primerMaterialCost, expectedPrimerMaterialCost)
+  approx(pricing.supplyCost, expectedSupplyCost)
+  approx(
+    pricing.postLaborPolicyTotal,
+    round2(pricing.prePolicyTotal + pricing.laborAdjustmentHours * SETTINGS.labor_rate_per_hour)
+  )
   assert.deepEqual(
     pricing.rooms.map((room) => room.room_id),
     ['R001', 'R002', 'R003']
@@ -518,4 +643,104 @@ test('zero-base minimum allocation distributes a policy floor without NaN room t
     [100, 100, 100]
   )
   assert.ok(pricing.rooms.every((room) => Number.isFinite(room.finalTotal)))
+})
+
+test('shipping golden: mixed walls ceilings trim pricing buckets reconcile', () => {
+  const { walls, ceilings, trim, pricing } = buildMixedFullPricingScenario()
+  const engineRoomBase = round2(
+    [...walls.room_totals, ...ceilings.room_totals, ...trim.room_totals].reduce(
+      (sum, room) => sum + room.effective_total,
+      0
+    )
+  )
+  const laborAdjustmentCost = round2(pricing.laborAdjustmentHours * walls.assumptions.labor_rate_per_hour)
+
+  assertNoNegativeMoney(pricing as unknown as Record<string, unknown>)
+  assertMoneyEqual(pricing.prePolicyTotal, engineRoomBase, 'prePolicyTotal')
+  assertMoneyEqual(pricing.postLaborPolicyTotal, pricing.prePolicyTotal + laborAdjustmentCost, 'postLaborPolicyTotal')
+  assertMoneyEqual(pricing.finalTotal, pricing.postLaborPolicyTotal + pricing.minimumAdjustmentAmount, 'finalTotal')
+  assertMoneyEqual(
+    pricing.paintMaterialCost,
+    pricing.wallPaintMaterialCost + pricing.ceilingPaintMaterialCost + pricing.trimPaintMaterialCost,
+    'paintMaterialCost'
+  )
+})
+
+test('shipping golden: future drywall and door engines contribute without paint bucket misclassification', () => {
+  const { walls, ceilings, trim } = buildMixedFullPricingScenario()
+  const drywall = {
+    ...walls,
+    scopes: [
+      {
+        ...walls.scopes[0],
+        include: 'Y' as const,
+        room_id: 'R001',
+        effective_paint_hours: 2,
+        effective_primer_hours: 0,
+        effective_paint_gallons: 2,
+        effective_primer_gallons: 0,
+        effective_supply_cost: 18,
+        allocated_paint_material_cost: 82,
+        raw_paint_material_cost: 82,
+      },
+      {
+        ...walls.scopes[0],
+        include: 'N' as const,
+        room_id: 'R002',
+        effective_paint_hours: 99,
+        effective_primer_hours: 99,
+        effective_paint_gallons: 99,
+        effective_primer_gallons: 99,
+        effective_supply_cost: 99,
+        allocated_paint_material_cost: 999,
+        raw_paint_material_cost: 999,
+      },
+    ],
+    room_totals: [{ ...walls.room_totals[0], room_id: 'R001', effective_total: 180 }],
+    per_color_supply_groups: [],
+  }
+  const doors = {
+    ...walls,
+    scopes: [
+      {
+        ...walls.scopes[0],
+        include: 'Y' as const,
+        room_id: 'R002',
+        effective_paint_hours: 1,
+        effective_primer_hours: 0.5,
+        effective_paint_gallons: 1,
+        effective_primer_gallons: 0.25,
+        effective_supply_cost: 9,
+        allocated_paint_material_cost: 43,
+        raw_paint_material_cost: 43,
+      },
+    ],
+    room_totals: [{ ...walls.room_totals[0], room_id: 'R002', effective_total: 120 }],
+    per_color_supply_groups: [],
+  }
+  const pricing = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'drywall', output: drywall },
+      { kind: 'doors', output: doors },
+      { kind: 'trim', output: trim },
+      { kind: 'ceilings', output: ceilings },
+      { kind: 'walls', output: walls },
+    ],
+    { enabled: false, dayhours: 8, roundingIncrementHours: 4 },
+    { enabled: false, amount: 0 }
+  )
+
+  assertMoneyEqual(pricing.wallPaintMaterialCost, walls.scopes[0].allocated_paint_material_cost ?? 0, 'wall bucket')
+  assertMoneyEqual(pricing.ceilingPaintMaterialCost, ceilings.scopes[0].allocated_paint_material_cost ?? 0, 'ceiling bucket')
+  assertMoneyEqual(
+    pricing.paintMaterialCost,
+    pricing.wallPaintMaterialCost + pricing.ceilingPaintMaterialCost + pricing.trimPaintMaterialCost,
+    'paint buckets exclude future engines until their customer-facing material policy is explicit'
+  )
+  assertMoneyEqual(
+    pricing.prePolicyTotal,
+    [...walls.room_totals, ...ceilings.room_totals, ...trim.room_totals, ...drywall.room_totals, ...doors.room_totals]
+      .reduce((sum, room) => sum + room.effective_total, 0),
+    'future scope room totals'
+  )
 })

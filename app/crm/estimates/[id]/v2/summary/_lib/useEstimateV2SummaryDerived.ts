@@ -70,6 +70,11 @@ export function useEstimateV2SummaryDerived(params: {
     [data?.trim_calculations?.scopes]
   )
 
+  const doorScopes = useMemo(
+    () => normalizeSummaryScopeRows(data?.door_calculations?.scopes ?? data?.inputs?.room_door_scopes ?? []),
+    [data?.door_calculations?.scopes, data?.inputs?.room_door_scopes]
+  )
+
   const roomFlagCountMap = useMemo(() => buildRoomFlagCountMap(roomFlags), [roomFlags])
 
   const roomTotalMap = useMemo(() => {
@@ -110,8 +115,8 @@ export function useEstimateV2SummaryDerived(params: {
   )
 
   const roomScopeRows = useMemo(
-    () => buildRoomScopeRows({ wallScopes, ceilingScopes, trimScopes }),
-    [ceilingScopes, trimScopes, wallScopes]
+    () => buildRoomScopeRows({ wallScopes, ceilingScopes, trimScopes, doorScopes }),
+    [ceilingScopes, doorScopes, trimScopes, wallScopes]
   )
 
   const roomAlertsByRoom = useMemo(

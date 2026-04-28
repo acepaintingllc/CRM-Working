@@ -13,6 +13,7 @@ import {
 import { useEstimateV2BeforeUnload } from './useEstimateV2BeforeUnload'
 import { useEstimateV2CeilingActions } from './useEstimateV2CeilingActions'
 import { useEstimateV2DefaultScopeColorSync } from './useEstimateV2DefaultScopeColorSync'
+import { useEstimateV2DoorActions } from './useEstimateV2DoorActions'
 import { useEstimateV2EditorDerivedSections } from './useEstimateV2EditorDerivedSections'
 import { useEstimateV2EditorLoader } from './useEstimateV2EditorLoader'
 import { useEstimateV2EditorViewModels } from './useEstimateV2EditorViewModels'
@@ -68,6 +69,10 @@ export function useEstimateV2Editor({
     roomModeById: derived.room.roomModeById,
     roomHeightFactorByRoomId: derived.room.roomHeightFactorByRoomId,
   })
+  const doorActions = useEstimateV2DoorActions({
+    store,
+    doorTypeOptions: derived.catalog.doorTypeOptions,
+  })
   const settingsActions = useEstimateV2SettingsActions({ estimateId, routeFamily, store })
   const saveController = useEstimateV2SaveController({
     estimateId,
@@ -86,6 +91,7 @@ export function useEstimateV2Editor({
     wallActions,
     ceilingActions,
     trimActions,
+    doorActions,
     settingsActions,
     save: saveController.save,
   })

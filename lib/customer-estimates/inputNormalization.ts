@@ -17,6 +17,7 @@ export type CustomerEstimateRow = Unsafe
 export type CustomerEstimateCatalogs = {
   paint_products?: CustomerEstimateRow[]
   trim_items?: CustomerEstimateRow[]
+  door_types?: CustomerEstimateRow[]
 }
 
 export type NormalizedEstimateMeta = {
@@ -65,6 +66,15 @@ export type NormalizedPaintScopeRow = {
 export type NormalizedTrimScopeRow = {
   roomId: string
   included: boolean
+  trimId: string
+  trimLabel: string
+  family: string
+  price: number
+  paintProductId: string
+  paintProductLabel: string
+  notes: string[]
+  coats: number | null
+  primeMode: 'SPOT' | 'FULL' | null
 }
 
 export type NormalizedTrimItemRow = {
@@ -72,6 +82,19 @@ export type NormalizedTrimItemRow = {
   trimId: string
   trimLabel: string
   family: string
+  price: number
+  paintProductId: string
+  paintProductLabel: string
+  notes: string[]
+  coats: number | null
+  primeMode: 'SPOT' | 'FULL' | null
+}
+
+export type NormalizedDoorScopeRow = {
+  roomId: string
+  included: boolean
+  doorId: string
+  doorLabel: string
   price: number
   paintProductId: string
   paintProductLabel: string
@@ -101,6 +124,11 @@ export type NormalizedTrimCatalogRow = {
   category: string
 }
 
+export type NormalizedDoorCatalogRow = {
+  id: string
+  label: string
+}
+
 export type NormalizedJobSettings = {
   wallPaintProductId: string
   ceilingPaintProductId: string
@@ -117,6 +145,7 @@ export interface CustomerEstimateInput {
     room_wall_scopes?: CustomerEstimateRow[]
     room_ceiling_scopes?: CustomerEstimateRow[]
     room_trim_scopes?: CustomerEstimateRow[]
+    room_door_scopes?: CustomerEstimateRow[]
     trim_items?: CustomerEstimateRow[]
     other?: CustomerEstimateRow[]
     jobsettings?: CustomerEstimateRow | null
@@ -158,11 +187,13 @@ export type NormalizedCustomerEstimateInput = {
   roomWallScopes: NormalizedPaintScopeRow[]
   roomCeilingScopes: NormalizedPaintScopeRow[]
   roomTrimScopes: NormalizedTrimScopeRow[]
+  roomDoorScopes: NormalizedDoorScopeRow[]
   trimItems: NormalizedTrimItemRow[]
   otherRows: NormalizedOtherRow[]
   jobsettings: NormalizedJobSettings
   paintCatalogRows: NormalizedPaintCatalogRow[]
   trimCatalogRows: NormalizedTrimCatalogRow[]
+  doorCatalogRows: NormalizedDoorCatalogRow[]
   pricingSummary: CustomerEstimatePricingSummary | null
   settings: CustomerEstimateInput['settings']
   overrides: CustomerEstimateInput['overrides']
@@ -244,10 +275,64 @@ function normalizePaintScopeRow(
   }
 }
 
-function normalizeTrimScopeRow(row: CustomerEstimateRow): NormalizedTrimScopeRow {
+function normalizeTrimScopeRow(
+  row: CustomerEstimateRow,
+  trimCatalogById: Map<string, NormalizedTrimCatalogRow>
+): NormalizedTrimScopeRow {
+  const trimId = asText(row.trim_type_id || row.trim_menu_id).toUpperCase()
+  const catalogMatch = trimCatalogById.get(trimId)
   return {
     roomId: asText(row.room_id).toUpperCase(),
     included: asText(row.active || row.include).toUpperCase() !== 'N',
+    trimId,
+    trimLabel:
+      catalogMatch?.label ||
+      labelOrFallback(row.scope_name, '') ||
+      labelOrFallback(row.trim_menu_label, '') ||
+      humanizeIdentifier(trimId) ||
+      trimId,
+    family: catalogMatch?.family || asText(row.trim_family),
+    price:
+      asNum(row.effective_total) ??
+      asNum(row.final_total) ??
+      asNum(row.raw_total) ??
+      asNum(row.override_total) ??
+      0,
+    paintProductId: asText(row.paint_product_id).toUpperCase(),
+    paintProductLabel: asText(row.paint_product_label),
+    notes: [asText(row.notes), asText(row.prep_level_override), asText(row.override_description)].filter(Boolean),
+    coats: asNum(row.paint_coats) ?? asNum(row.coats),
+    primeMode: normalizePrimeMode(row.prime_mode),
+  }
+}
+
+function normalizeDoorScopeRow(
+  row: CustomerEstimateRow,
+  doorCatalogById: Map<string, NormalizedDoorCatalogRow>
+): NormalizedDoorScopeRow {
+  const rawDoorId = asText(row.door_type_id)
+  const doorId = rawDoorId.toUpperCase()
+  const catalogMatch = doorCatalogById.get(doorId)
+  return {
+    roomId: asText(row.room_id).toUpperCase(),
+    included: asText(row.active || row.include).toUpperCase() !== 'N',
+    doorId,
+    doorLabel:
+      catalogMatch?.label ||
+      labelOrFallback(row.scope_name, '') ||
+      humanizeIdentifier(rawDoorId.toLowerCase()) ||
+      doorId,
+    price:
+      asNum(row.effective_total) ??
+      asNum(row.final_total) ??
+      asNum(row.raw_total) ??
+      asNum(row.override_total) ??
+      0,
+    paintProductId: asText(row.paint_product_id).toUpperCase(),
+    paintProductLabel: asText(row.paint_product_label),
+    notes: [asText(row.notes)].filter(Boolean),
+    coats: asNum(row.paint_coats) ?? asNum(row.coats),
+    primeMode: normalizePrimeMode(row.prime_mode),
   }
 }
 
@@ -324,6 +409,14 @@ export function normalizeCustomerEstimateInput(
     } satisfies NormalizedTrimCatalogRow
   })
   const trimCatalogById = new Map(trimCatalogRows.map((row) => [row.id, row]))
+  const doorCatalogRows = rowsOf(input.catalogs?.door_types).map((row) => {
+    const id = asText(row.id).toUpperCase()
+    return {
+      id,
+      label: labelOrFallback(row.label, humanizeIdentifier(id)),
+    } satisfies NormalizedDoorCatalogRow
+  })
+  const doorCatalogById = new Map(doorCatalogRows.map((row) => [row.id, row]))
 
   return {
     estimate: normalizeEstimateMeta(input.estimate),
@@ -341,7 +434,12 @@ export function normalizeCustomerEstimateInput(
         ['paint_coats', 'ceiling_coats']
       )
     ),
-    roomTrimScopes: rowsOf(input.inputs.room_trim_scopes).map(normalizeTrimScopeRow),
+    roomTrimScopes: rowsOf(input.inputs.room_trim_scopes).map((row) =>
+      normalizeTrimScopeRow(row, trimCatalogById)
+    ),
+    roomDoorScopes: rowsOf(input.inputs.room_door_scopes).map((row) =>
+      normalizeDoorScopeRow(row, doorCatalogById)
+    ),
     trimItems: rowsOf(input.inputs.trim_items).map((row) => {
       const trimId = asText(row.trim_menu_id).toUpperCase()
       const catalogMatch = trimCatalogById.get(trimId)
@@ -392,6 +490,7 @@ export function normalizeCustomerEstimateInput(
         humanizeIdentifier(asText(row.display_id)),
     })),
     trimCatalogRows,
+    doorCatalogRows,
     pricingSummary: input.pricingSummary ?? null,
     settings: input.settings,
     overrides: input.overrides,

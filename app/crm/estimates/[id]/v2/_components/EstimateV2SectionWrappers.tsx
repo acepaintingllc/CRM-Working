@@ -50,3 +50,7 @@ export function EstimateV2CeilingsSection(props: Omit<Parameters<typeof Estimate
 export function EstimateV2TrimSection(props: Omit<Parameters<typeof EstimateV2SectionAccordion>[0], 'title'>) {
   return <EstimateV2SectionAccordion {...props} title="Trim" />
 }
+
+export function EstimateV2DoorsSection(props: Omit<Parameters<typeof EstimateV2SectionAccordion>[0], 'title'>) {
+  return <EstimateV2SectionAccordion {...props} title="Doors" />
+}

@@ -1,5 +1,5 @@
 import { calculateCeilings } from '@/lib/estimator/ceilings'
-import { buildEstimatePricingSummary } from '@/lib/estimator/pricingPolicies'
+import { buildEstimatePricingSummaryFromEngines } from '@/lib/estimator/pricingPolicies'
 import { calculateTrim } from '@/lib/estimator/trim'
 import { calculateWalls } from '@/lib/estimator/walls'
 import { productMap } from '@/lib/estimator/wallsHelpers'
@@ -122,13 +122,18 @@ export function deriveEstimateCustomerSendCalculatedData(
 
       const trimPaint = buildTrimPaintInput({
         jobsettings: resources.jobsettings as Unsafe,
+        defaults: resources.settingsRow as Unsafe,
         catalogs: productMap(
           resources.catalogs as unknown as Parameters<typeof productMap>[0]
         ),
       })
 
-      const builtPricingSummary = buildEstimatePricingSummary(
-        [wallCalculations, ceilingCalculations, trimCalculations],
+      const builtPricingSummary = buildEstimatePricingSummaryFromEngines(
+        [
+          { kind: 'walls', output: wallCalculations },
+          { kind: 'ceilings', output: ceilingCalculations },
+          { kind: 'trim', output: trimCalculations },
+        ],
         {
           enabled: effectiveLaborDayEnabled !== false,
           dayhours: effectiveDayhours,

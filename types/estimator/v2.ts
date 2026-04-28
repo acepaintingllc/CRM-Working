@@ -108,6 +108,15 @@ export type EstimateV2TrimTypeOption = EstimateV2CatalogOption & {
   picker_group?: string | null
 }
 
+export type EstimateV2DoorTypeOption = EstimateV2CatalogOption & {
+  unit_rate_type: string | null
+  unit: string | null
+  default_qty: number | null
+  labor_rate: number | null
+  material_rate: number | null
+  amount: number | null
+}
+
 export type EstimateV2Catalogs = {
   paint_products: EstimateV2PaintProductOption[]
   color_codes: EstimateV2CatalogOption[]
@@ -117,6 +126,7 @@ export type EstimateV2Catalogs = {
   room_flags: EstimateV2RoomFlagOption[]
   ceiling_types: EstimateV2CeilingTypeOption[]
   trim_items: EstimateV2TrimTypeOption[]
+  door_types?: EstimateV2DoorTypeOption[]
   condition_modifiers?: EstimateV2LegacyConditionModifier[]
 }
 
@@ -255,6 +265,7 @@ export type EstimateV2ResponseInputs = {
   room_ceiling_scopes: UnsafeRecord[]
   ceiling_scope_segments: UnsafeRecord[]
   room_trim_scopes: UnsafeRecord[]
+  room_door_scopes?: UnsafeRecord[]
   rollers: EstimateV2RollerInputRow[]
   prejob: UnsafeRecord[]
   trim_items: UnsafeRecord[]
@@ -270,6 +281,7 @@ export type EstimateV2GetResponse = {
   wall_calculations: EstimateV2WallCalculationsPayload | null
   ceiling_calculations: UnsafeRecord | null
   trim_calculations: UnsafeRecord | null
+  door_calculations?: UnsafeRecord | null
   trim_paint: EstimateV2TrimPaint | null
   pricing_summary: EstimateV2PricingSummary | null
 }
@@ -286,6 +298,10 @@ export type EstimateV2SummaryPageData = {
     room_totals?: EstimateV2RoomTotal[]
   }
   trim_calculations?: {
+    scopes?: UnsafeRecord[]
+    room_totals?: EstimateV2RoomTotal[]
+  }
+  door_calculations?: {
     scopes?: UnsafeRecord[]
     room_totals?: EstimateV2RoomTotal[]
   }
@@ -531,6 +547,33 @@ export type EstimateV2TrimScopeDraft = {
   conditionSelections?: EstimateV2LegacyConditionSelections
 }
 
+export type EstimateV2DoorScopeDraft = {
+  id: string
+  roomId: string
+  position: number
+  include: YN
+  scopeName: string
+  doorTypeId: string
+  quantity: string
+  sides: string
+  colorId: string
+  paintProductId: string
+  primerProductId: string
+  primeMode: 'NONE' | 'SPOT' | 'FULL'
+  spotPrimePercent: string
+  paintCoats: string
+  primerCoats: string
+  conditionFactor: string
+  laborRate: string
+  materialRate: string
+  overridePaintHours: string
+  overridePrimerHours: string
+  overrideMaterialCost: string
+  overrideSupplyCost: string
+  overrideTotal: string
+  notes: string
+}
+
 export type EstimateV2WallSegmentDerived = {
   rawArea: number | null
   deductionArea: number
@@ -566,6 +609,8 @@ export type EstimateV2SavePayload = {
     room_name: string
     notes: string | null
     position: number
+    room_type_id: string | null
+    wall_complexity_id: string | null
     length_in: number | null
     width_in: number | null
     wallheight_in: number | null
@@ -587,4 +632,5 @@ export type EstimateV2SavePayload = {
   room_ceiling_scopes: UnsafeRecord[]
   ceiling_scope_segments: UnsafeRecord[]
   room_trim_scopes: UnsafeRecord[]
+  room_door_scopes?: UnsafeRecord[]
 }

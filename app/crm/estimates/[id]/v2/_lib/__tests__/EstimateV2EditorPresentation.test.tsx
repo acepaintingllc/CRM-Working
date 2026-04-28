@@ -32,6 +32,7 @@ describe('estimateV2EditorPresentation', () => {
       walls: 'Walls included',
       ceilings: 'Ceilings excluded',
       trim: 'Trim included',
+      doors: 'Doors excluded',
     })
   })
 

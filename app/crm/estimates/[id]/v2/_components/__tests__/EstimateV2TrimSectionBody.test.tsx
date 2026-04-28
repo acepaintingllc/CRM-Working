@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EstimateV2TrimSectionBody } from '../EstimateV2TrimSectionBody'
 
@@ -132,9 +132,28 @@ describe('EstimateV2TrimSectionBody', () => {
     expect(screen.getByText('Trim Type').nextElementSibling).toHaveClass('required-input-frame')
     expect(screen.getByText('Measurement Mode').nextElementSibling).toHaveClass('required-input-frame')
     expect(screen.getByText('Measurement (LF)').nextElementSibling).toHaveClass('required-input-frame')
+    expect(screen.getByText('Coats').nextElementSibling).toHaveClass('required-input-frame')
     expect(screen.getByText('Primer Mode').nextElementSibling).toHaveClass('required-input-frame')
     expect(screen.getByText('Include').nextElementSibling).toHaveClass('optional-input-frame')
     expect(screen.getByText('Openings').nextElementSibling).toHaveClass('optional-input-frame')
+  })
+
+  it('updates trim paint coats from the setup selector', () => {
+    const updateScope = vi.fn()
+
+    render(
+      <EstimateV2TrimSectionBody
+        styles={styles}
+        trimVm={makeVm({ updateScope }) as never}
+        openTrimAdvanced={{}}
+        setOpenTrimAdvanced={vi.fn()}
+        toDisplayNumber={(value) => (value == null ? '--' : String(value))}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '3' }))
+
+    expect(updateScope).toHaveBeenCalledWith('trim-1', { paintCoats: '3' })
   })
 
   it('marks room helper measurement value optional when perimeter fallback is available', () => {

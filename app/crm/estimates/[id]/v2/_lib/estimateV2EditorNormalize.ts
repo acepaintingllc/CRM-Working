@@ -8,6 +8,7 @@ import type {
   EstimateV2CeilingScopeMode,
   EstimateV2CeilingSegmentDraft,
   EstimateV2CeilingSegmentShape,
+  EstimateV2DoorScopeDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2RollerDraft,
@@ -520,6 +521,35 @@ export function createDefaultTrimScope(roomId: string): EstimateV2TrimScopeDraft
   }
 }
 
+export function createDefaultDoorScope(roomId: string): EstimateV2DoorScopeDraft {
+  return {
+    id: createUuid(),
+    roomId,
+    position: 0,
+    include: 'Y',
+    scopeName: '',
+    doorTypeId: '',
+    quantity: '1',
+    sides: '2',
+    colorId: '',
+    paintProductId: '',
+    primerProductId: '',
+    primeMode: 'NONE',
+    spotPrimePercent: '',
+    paintCoats: '2',
+    primerCoats: '1',
+    conditionFactor: '1',
+    laborRate: '',
+    materialRate: '',
+    overridePaintHours: '',
+    overridePrimerHours: '',
+    overrideMaterialCost: '',
+    overrideSupplyCost: '',
+    overrideTotal: '',
+    notes: '',
+  }
+}
+
 function parseTrimMeasurementMode(value: unknown): EstimateV2TrimMeasurementMode {
   return asText(value).toUpperCase() === 'ROOM_HELPER' ? 'ROOM_HELPER' : 'MANUAL'
 }
@@ -566,6 +596,36 @@ export function normalizeTrimScope(row: UnsafeRecord, index: number): EstimateV2
     overrideDescription: asText(row.override_description),
     notes: asText(row.notes),
     conditionSelections: normalizeConditionSelections(row.condition_selections),
+  }
+}
+
+export function normalizeDoorScope(row: UnsafeRecord, index: number): EstimateV2DoorScopeDraft {
+  const primeModeRaw = asText(row.prime_mode).toUpperCase()
+  return {
+    id: asText(row.id) || createUuid(),
+    roomId: asText(row.room_id).toUpperCase(),
+    position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
+    include: asText(row.include).toUpperCase() === 'N' ? 'N' : 'Y',
+    scopeName: asText(row.scope_name),
+    doorTypeId: asText(row.door_type_id).toUpperCase(),
+    quantity: toInputNumber(row.quantity) || '1',
+    sides: toInputNumber(row.sides) || '2',
+    colorId: asText(row.color_id).toUpperCase(),
+    paintProductId: asText(row.paint_product_id),
+    primerProductId: asText(row.primer_product_id),
+    primeMode: primeModeRaw === 'SPOT' ? 'SPOT' : primeModeRaw === 'FULL' ? 'FULL' : 'NONE',
+    spotPrimePercent: toInputNumber(row.spot_prime_percent),
+    paintCoats: toPositiveFactorString(row.paint_coats, '2'),
+    primerCoats: toPositiveFactorString(row.primer_coats, '1'),
+    conditionFactor: toPositiveFactorString(row.condition_factor, '1'),
+    laborRate: toInputNumber(row.labor_rate),
+    materialRate: toInputNumber(row.material_rate),
+    overridePaintHours: toInputNumber(row.override_paint_hours),
+    overridePrimerHours: toInputNumber(row.override_primer_hours),
+    overrideMaterialCost: toInputNumber(row.override_material_cost),
+    overrideSupplyCost: toInputNumber(row.override_supply_cost),
+    overrideTotal: toInputNumber(row.override_total),
+    notes: asText(row.notes),
   }
 }
 

@@ -9,7 +9,9 @@ import {
   buildV2CeilingSegmentRows,
   toCeilingCalculationCatalogs,
   buildV2TrimScopeRows,
+  buildV2DoorScopeRows,
   toTrimCalculationCatalogs,
+  toDoorCalculationCatalogs,
 } from '../estimateV2RoutePayload.ts'
 
 test('buildV2RoomRosterRows assigns generated IDs and enforces uniqueness', () => {
@@ -463,4 +465,104 @@ test('toTrimCalculationCatalogs passes through trim_category, measurement_class,
   assert.equal(items[2].trim_category, null)
   assert.equal(items[2].measurement_class, null)
   assert.equal(items[2].picker_group, null)
+})
+
+test('buildV2DoorScopeRows maps door row fields and validates room IDs', () => {
+  const parsed = buildV2DoorScopeRows(
+    [
+      {
+        id: '66666666-6666-4666-8666-666666666666',
+        room_id: 'r001',
+        include: 'Y',
+        scope_name: 'Hall Door',
+        door_type_id: 'panel_std',
+        color_id: 'trim_white',
+        paint_product_id: 'p_trim',
+        primer_product_id: 'p_primer',
+        prime_mode: 'SPOT',
+        quantity: '2',
+        sides: '1',
+        paint_coats: '2',
+        primer_coats: '1',
+        spot_prime_percent: '25',
+        condition_factor: '1.15',
+        labor_rate: '0.35',
+        material_rate: '6',
+        override_paint_hours: '3',
+        override_primer_hours: '0.5',
+        override_material_cost: '22',
+        override_supply_cost: '8',
+        override_total: '250',
+        notes: 'customer only wants hallway side',
+      },
+    ],
+    new Set(['R001'])
+  )
+
+  assert.equal(parsed.scopeRows.length, 1)
+  const row = parsed.scopeRows[0]
+  assert.equal(row.room_id, 'R001')
+  assert.equal(row.position, 0)
+  assert.equal(row.include, 'Y')
+  assert.equal(row.door_type_id, 'PANEL_STD')
+  assert.equal(row.color_id, 'TRIMWHITE')
+  assert.equal(row.paint_product_id, 'p_trim')
+  assert.equal(row.primer_product_id, 'p_primer')
+  assert.equal(row.prime_mode, 'SPOT')
+  assert.equal(row.quantity, 2)
+  assert.equal(row.sides, 1)
+  assert.equal(row.spot_prime_percent, 25)
+  assert.equal(row.condition_factor, 1.15)
+  assert.equal(row.labor_rate, 0.35)
+  assert.equal(row.material_rate, 6)
+  assert.equal(row.override_total, 250)
+
+  assert.throws(
+    () => buildV2DoorScopeRows([{ room_id: 'R404' }], new Set(['R001'])),
+    /room is missing or invalid/i
+  )
+})
+
+test('toDoorCalculationCatalogs normalizes direct and category-based door rate rows', () => {
+  const direct = toDoorCalculationCatalogs({
+    door_types: [
+      {
+        id: 'PANEL_STD',
+        label: 'Panel Door',
+        unit_rate_type: 'interior',
+        unit: 'door side',
+        default_qty: '1',
+        labor_rate: '0.35',
+        material_rate: '6.5',
+        amount: '0',
+      },
+    ],
+  })
+  const category = toDoorCalculationCatalogs({
+    categories: [
+      {
+        key: 'unit_rates_doors',
+        rows: [
+          {
+            id: 'SLAB',
+            display_name: 'Slab Door',
+            unit_rate_type: 'interior',
+            unit: 'door side',
+            default_qty: '2',
+            labor_rate: '0.25',
+            material_rate: '',
+            amount: '4',
+          },
+        ],
+      },
+    ],
+  })
+
+  assert.equal(direct?.door_unit_rates?.[0]?.id, 'PANEL_STD')
+  assert.equal(direct?.door_unit_rates?.[0]?.label, 'Panel Door')
+  assert.equal(direct?.door_unit_rates?.[0]?.labor_rate, 0.35)
+  assert.equal(direct?.door_unit_rates?.[0]?.material_rate, 6.5)
+  assert.equal(category?.door_unit_rates?.[0]?.id, 'SLAB')
+  assert.equal(category?.door_unit_rates?.[0]?.default_qty, 2)
+  assert.equal(category?.door_unit_rates?.[0]?.amount, 4)
 })

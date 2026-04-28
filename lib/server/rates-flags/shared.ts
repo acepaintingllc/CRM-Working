@@ -106,6 +106,19 @@ export type TrimItemCatalogRow = {
   picker_group?: string | null
 }
 
+export type DoorUnitRateCatalogRow = {
+  id: string
+  label: string
+  unit_rate_type: string | null
+  unit: string | null
+  default_qty: number | null
+  labor_rate: number | null
+  material_rate: number | null
+  amount: number | null
+  notes: string | null
+  active: 'Y' | 'N'
+}
+
 export type AreaSupplyCatalogRow = {
   key: string
   supply_group: 'per_color' | 'area_based' | 'per_job'
@@ -128,6 +141,7 @@ export type RatesFlagsCatalogOverlay = {
   condition_modifiers: ConditionModifierCatalogRow[]
   access_fees: AccessFeeCatalogRow[]
   trim_items: TrimItemCatalogRow[]
+  door_unit_rates?: DoorUnitRateCatalogRow[]
   area_supplies_rates: AreaSupplyCatalogRow[]
 }
 

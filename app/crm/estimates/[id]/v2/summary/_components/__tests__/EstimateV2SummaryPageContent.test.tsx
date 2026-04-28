@@ -156,6 +156,24 @@ describe('EstimateV2SummaryPageContent', () => {
     expect(within(priceBreakdownSection as HTMLElement).getByText('Policies: Labor Day Off • Job Minimum Off')).toBeInTheDocument()
   })
 
+  it('renders summary error alerts with error styling', () => {
+    mockUseEstimateV2SummaryDerived.mockReturnValue({
+      ...baseDerivedState,
+      summaryAlerts: [
+        {
+          kind: 'error',
+          title: 'Missing product selection',
+          detail: 'Living Room needs a paint product',
+        },
+      ],
+    })
+
+    render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
+
+    const alert = screen.getByText('Missing product selection').closest('.border-\\[color\\:var\\(--crm-ui-danger-border\\)\\]')
+    expect(alert).toBeInTheDocument()
+  })
+
   it('does not render the standalone trim paint rail section', () => {
     mockUseEstimateV2SummaryDerived.mockReturnValue({
       ...baseDerivedState,

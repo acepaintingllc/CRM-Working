@@ -2,7 +2,8 @@ import { supabaseAdmin } from '../org.ts'
 import { calculateWalls } from '../../estimator/walls.ts'
 import { calculateCeilings } from '../../estimator/ceilings.ts'
 import { calculateTrim } from '../../estimator/trim.ts'
-import { buildEstimatePricingSummary, buildPerJobSupplyCost } from '../../estimator/pricingPolicies.ts'
+import { calculateDoors } from '../../estimator/doors.ts'
+import { buildEstimatePricingSummaryFromEngines, buildPerJobSupplyCost } from '../../estimator/pricingPolicies.ts'
 import {
   DEFAULT_DAY_HOURS,
   DEFAULT_JOB_MINIMUM_AMOUNT,
@@ -24,6 +25,7 @@ import {
 import type {
   V2CeilingScopeSaveRow,
   V2CeilingSegmentSaveRow,
+  V2DoorScopeSaveRow,
   V2RoomRosterRow,
   V2TrimScopeSaveRow,
   V2WallScopeSaveRow,
@@ -97,6 +99,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   roomCeilingScopes: Unsafe[]
   ceilingScopeSegments: Unsafe[]
   roomTrimScopes: Unsafe[]
+  roomDoorScopes?: Unsafe[]
   orgDefaults: EstimateTemplateSettingsRow | null
 }) {
   const js = params.jobsettings
@@ -273,10 +276,54 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
 
   const trimPaintInput = buildTrimPaintInput({
     jobsettings: js,
+    defaults: orgDefaults,
     catalogs: calculationCatalogs.trim ? productMap(calculationCatalogs.trim) : null,
   })
-  const pricingSummary = buildEstimatePricingSummary(
-    [wallCalculations, ceilingCalculations, trimCalculations],
+
+  const doorScopeRowsForSave = (params.roomDoorScopes ?? []) as unknown as V2DoorScopeSaveRow[]
+  const doorScopePaintById = new Map<string, string | null>()
+  const doorScopePrimerById = new Map<string, string | null>()
+  const doorScopeRowsForCalc = doorScopeRowsForSave.map((row) => {
+    const rowId = asText(row.id)
+    const paintProductId = asText((row as unknown as Unsafe).paint_product_id) || null
+    const primerProductId = asText((row as unknown as Unsafe).primer_product_id) || null
+    if (rowId) doorScopePaintById.set(rowId, paintProductId)
+    if (rowId) doorScopePrimerById.set(rowId, primerProductId)
+    return {
+      ...row,
+      condition_factor: resolveCombinedConditionFactor({
+        catalogs: calculationCatalogs,
+        roomSelectionsById: conditionSelectionsByRoomId,
+        roomId: asText((row as unknown as Unsafe).room_id).toUpperCase(),
+        scope: 'trim',
+        selections: (row as unknown as Unsafe).condition_selections,
+      }),
+      paint_product_id: paintProductId || trimDefaultPaintId,
+      primer_product_id: primerProductId || trimDefaultPrimerId,
+    }
+  })
+  const doorCalculations = calculateDoors({
+    scopes: doorScopeRowsForCalc,
+    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize },
+    catalogs: calculationCatalogs.door ?? undefined,
+  })
+  const quoteDoorScopes = ((doorCalculations.scopes ?? []) as Unsafe[]).map((row) => {
+    const rowId = asText((row as Unsafe).id)
+    const originalPaintProductId = rowId ? doorScopePaintById.get(rowId) : null
+    const originalPrimerProductId = rowId ? doorScopePrimerById.get(rowId) : null
+    return {
+      ...row,
+      paint_product_id: originalPaintProductId ?? (asText((row as Unsafe).paint_product_id) || null),
+      primer_product_id: originalPrimerProductId ?? (asText((row as Unsafe).primer_product_id) || null),
+    }
+  })
+  const pricingSummary = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'walls', output: wallCalculations },
+      { kind: 'ceilings', output: ceilingCalculations },
+      { kind: 'trim', output: trimCalculations },
+      { kind: 'doors', output: doorCalculations },
+    ],
     {
       enabled: effectiveLaborDayEnabled !== false,
       dayhours: effectiveDayhours ?? DEFAULT_DAY_HOURS,
@@ -303,9 +350,11 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
     quoteWallScopes,
     quoteCeilingScopes,
     quoteTrimScopes,
+    quoteDoorScopes,
     wallCalculations,
     ceilingCalculations,
     trimCalculations,
+    doorCalculations,
     trimPaintInput,
     pricingSummary,
   }
@@ -454,5 +503,33 @@ export async function calculateTrimForSave(params: {
     })),
     settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
     catalogs: catalogs.trim ?? undefined,
+  })
+}
+
+export async function calculateDoorsForSave(params: {
+  orgId: string
+  estimateId: string
+  scopes: V2DoorScopeSaveRow[]
+  roomRows: V2RoomRosterRow[]
+  jobsettings: Unsafe | undefined
+  ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
+}) {
+  const laborRate = await loadEffectiveLaborRate(params.orgId, params.estimateId, params.jobsettings)
+  const crewSize = Math.max(1, Math.floor(asNullableNumber(params.jobsettings?.crew_size) ?? 1))
+  const catalogs = await params.ensureCatalogs()
+  const conditionSelectionsByRoomId = roomConditionSelectionsById(params.roomRows as unknown as Unsafe[])
+  return calculateDoors({
+    scopes: params.scopes.map((scope) => ({
+      ...scope,
+      condition_factor: resolveCombinedConditionFactor({
+        catalogs,
+        roomSelectionsById: conditionSelectionsByRoomId,
+        roomId: scope.room_id,
+        scope: 'trim',
+        selections: (scope as unknown as Unsafe).condition_selections,
+      }),
+    })),
+    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
+    catalogs: catalogs.door ?? undefined,
   })
 }

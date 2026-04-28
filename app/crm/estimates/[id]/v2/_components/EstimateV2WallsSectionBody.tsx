@@ -54,6 +54,10 @@ function wallAreaFactor(scope: EstimateV2WallScopeDraft) {
   )
 }
 
+function formatCurrency(value: number | null | undefined) {
+  return value == null || !Number.isFinite(value) ? '--' : `$${value.toFixed(2)}`
+}
+
 function rectWallBaseArea(scope: EstimateV2WallScopeDraft, room: EstimateV2RoomDraft | null) {
   const perimeter =
     numberOrNull(scope.perimeterIn) ??
@@ -111,6 +115,7 @@ export function EstimateV2WallsSectionBody({
     colorCodeOptions,
     effectiveWallPaintLabel,
     effectiveWallPrimerLabel,
+    wallScopeEffectiveTotalById,
     updateRoomComplexity,
     updateScope,
     updateSegment,
@@ -171,6 +176,7 @@ export function EstimateV2WallsSectionBody({
             {selectedRoomScopes.map((scope, scopeIndex) => {
               const scopeSegments = sortByPosition(segments.filter((seg) => seg.wallScopeId === scope.id))
               const scopeEffectiveArea = displayedScopeEffectiveAreaById.get(scope.id) ?? null
+              const scopeSubtotal = wallScopeEffectiveTotalById.get(scope.id) ?? null
               const scopeBaseArea = scopeSegments.reduce((sum, segment) => sum + (segmentBaseArea(segment) ?? 0), 0)
               const scopeOpeningDeduct = scopeSegments.reduce((sum, segment) => sum + segmentOpeningDeduct(segment), 0)
               const scopeFactor = wallAreaFactor(scope)
@@ -193,6 +199,7 @@ export function EstimateV2WallsSectionBody({
                       { label: 'Opening Deduct', value: toDisplayNumber(scopeOpeningDeduct), muted: scopeOpeningDeduct <= 0 },
                       { label: 'Area Factor', value: toDisplayNumber(scopeFactor) },
                       { label: 'Final Sq Ft', value: toDisplayNumber(scopeEffectiveArea), muted: scopeEffectiveArea == null },
+                      { label: 'Subtotal', value: formatCurrency(scopeSubtotal), muted: scopeSubtotal == null },
                     ]}
                   />
                   {selectedRoomScopes.length > 1 && (
@@ -272,6 +279,7 @@ export function EstimateV2WallsSectionBody({
               const openingDeduct = wallOpeningDeduct(firstScope)
               const areaFactor = wallAreaFactor(firstScope)
               const finalArea = displayedScopeEffectiveAreaById.get(firstScope.id) ?? null
+              const subtotal = wallScopeEffectiveTotalById.get(firstScope.id) ?? null
               return (
                 <div style={{ display: 'grid', gap: 10 }}>
                   <ScopeHelperBar
@@ -281,6 +289,7 @@ export function EstimateV2WallsSectionBody({
                       { label: 'Opening Deduct', value: toDisplayNumber(openingDeduct), muted: openingDeduct <= 0 },
                       { label: 'Area Factor', value: toDisplayNumber(areaFactor) },
                       { label: 'Final Sq Ft', value: toDisplayNumber(finalArea), muted: finalArea == null },
+                      { label: 'Subtotal', value: formatCurrency(subtotal), muted: subtotal == null },
                     ]}
                   />
                   <div className="geometry-secondary-grid">

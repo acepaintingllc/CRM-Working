@@ -41,6 +41,7 @@ export function EstimateV2EditorPageContent({
     wallsVm,
     ceilingsVm,
     trimVm,
+    doorsVm,
     jobSettingsVm,
     saveVm,
     toDisplayNumber,
@@ -62,8 +63,10 @@ export function EstimateV2EditorPageContent({
     selectedRoomId: selectedRoom?.roomId,
     roomScopeByRoomId: roomVm.roomScopeByRoomId,
     roomCeilingScopeByRoomId: roomVm.roomCeilingScopeByRoomId,
+    roomDoorScopeByRoomId: roomVm.roomDoorScopeByRoomId ?? new Map(),
     toggleWallsInclude: wallsVm.toggleRoomInclude,
     toggleCeilingsInclude: ceilingsVm.toggleRoomInclude,
+    toggleDoorsInclude: doorsVm.toggleRoomInclude,
   })
   const sidebarCollapse = useEstimateV2SidebarCollapse()
 
@@ -137,8 +140,10 @@ export function EstimateV2EditorPageContent({
                   wallsVm={wallsVm}
                   ceilingsVm={ceilingsVm}
                   trimVm={trimVm}
+                  doorsVm={doorsVm}
                   onToggleWallInclude={uiState.toggleRoomWallInclude}
                   onToggleCeilingInclude={uiState.toggleRoomCeilingInclude}
+                  onToggleDoorInclude={uiState.toggleRoomDoorInclude}
                   toDisplayNumber={toDisplayNumber}
                 />
 
@@ -149,9 +154,11 @@ export function EstimateV2EditorPageContent({
                   wallsVm={wallsVm}
                   ceilingsVm={ceilingsVm}
                   trimVm={trimVm}
+                  doorsVm={doorsVm}
                   wallsSectionRef={uiState.wallsSectionRef}
                   ceilingsSectionRef={uiState.ceilingsSectionRef}
                   trimSectionRef={uiState.trimSectionRef}
+                  doorsSectionRef={uiState.doorsSectionRef}
                   openWallsSection={uiState.openWallsSection}
                   setOpenWallsSection={uiState.setOpenWallsSection}
                   openAdvanced={uiState.openAdvanced}
@@ -164,6 +171,10 @@ export function EstimateV2EditorPageContent({
                   setOpenTrimSection={uiState.setOpenTrimSection}
                   openTrimAdvanced={uiState.openTrimAdvanced}
                   setOpenTrimAdvanced={uiState.setOpenTrimAdvanced}
+                  openDoorsSection={uiState.openDoorsSection}
+                  setOpenDoorsSection={uiState.setOpenDoorsSection}
+                  openDoorsAdvanced={uiState.openDoorsAdvanced}
+                  setOpenDoorsAdvanced={uiState.setOpenDoorsAdvanced}
                   toDisplayNumber={toDisplayNumber}
                 />
               </div>

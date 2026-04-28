@@ -1,6 +1,7 @@
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
+  EstimateV2DoorScopeDraft,
   EstimateV2JobSettingsDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
@@ -153,7 +154,8 @@ export function buildEstimateV2SavePayload(
   ceilingScopes: EstimateV2CeilingScopeDraft[],
   ceilingSegments: EstimateV2CeilingSegmentDraft[],
   trimScopes: EstimateV2TrimScopeDraft[],
-  rollers: EstimateV2RollerDraft[] = []
+  rollers: EstimateV2RollerDraft[] = [],
+  doorScopes: EstimateV2DoorScopeDraft[] = []
 ): EstimateV2SavePayload {
   const resolvedFactors = jobSettingsDraft.resolvedConditionFactors ?? {
     room: 1,
@@ -185,6 +187,8 @@ export function buildEstimateV2SavePayload(
     room_name: room.roomName.trim(),
     notes: room.notes.trim() || null,
     position: index,
+    room_type_id: room.roomTypeId.trim() || null,
+    wall_complexity_id: room.wallComplexityId.trim() || null,
     length_in: toNullableDraftNumber(room.lengthIn),
     width_in: toNullableDraftNumber(room.widthIn),
     wallheight_in: toNullableDraftNumber(room.heightIn),
@@ -411,6 +415,35 @@ export function buildEstimateV2SavePayload(
     }))
   )
 
+  const orderedDoorScopes = orderedRooms.flatMap((room) =>
+    sortByPosition(doorScopes.filter((scope) => scope.roomId === room.room_id)).map((scope, index) => ({
+      id: scope.id,
+      room_id: scope.roomId,
+      position: index,
+      include: scope.include,
+      scope_name: scope.scopeName.trim() || null,
+      door_type_id: scope.doorTypeId.trim() || null,
+      quantity: toNullableDraftNumber(scope.quantity),
+      sides: toNullableDraftNumber(scope.sides),
+      color_id: scope.colorId.trim() || null,
+      paint_product_id: scope.paintProductId.trim() || null,
+      primer_product_id: scope.primerProductId.trim() || null,
+      prime_mode: scope.primeMode,
+      spot_prime_percent: toNullableDraftNumber(scope.spotPrimePercent),
+      paint_coats: toNullableDraftNumber(scope.paintCoats),
+      primer_coats: toNullableDraftNumber(scope.primerCoats),
+      condition_factor: toNullableDraftNumber(scope.conditionFactor),
+      labor_rate: toNullableDraftNumber(scope.laborRate),
+      material_rate: toNullableDraftNumber(scope.materialRate),
+      override_paint_hours: toNullableDraftNumber(scope.overridePaintHours),
+      override_primer_hours: toNullableDraftNumber(scope.overridePrimerHours),
+      override_material_cost: toNullableDraftNumber(scope.overrideMaterialCost),
+      override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
+      override_total: toNullableDraftNumber(scope.overrideTotal),
+      notes: scope.notes.trim() || null,
+    }))
+  )
+
   const orderedRollers = sortByPosition(rollers)
     .map((roller, index) => ({
       id: roller.id,
@@ -434,6 +467,7 @@ export function buildEstimateV2SavePayload(
     room_ceiling_scopes: orderedCeilingScopes,
     ceiling_scope_segments: orderedCeilingSegments,
     room_trim_scopes: orderedTrimScopes,
+    room_door_scopes: orderedDoorScopes,
     rollers: orderedRollers,
   }
 }
