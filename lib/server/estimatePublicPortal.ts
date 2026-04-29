@@ -53,6 +53,14 @@ type PublicEstimateViewOptions = {
   metadata?: Record<string, unknown>
 }
 
+type EstimatePublicEventParams = {
+  orgId: string
+  versionId: string
+  eventType: 'accepted' | 'declined' | 'viewed'
+  actorType: 'customer' | 'staff' | 'system'
+  metadata?: Record<string, unknown>
+}
+
 export function buildEstimatePublicSnapshotFromVersion(
   version: Unsafe,
   origin?: string
@@ -217,6 +225,72 @@ async function updatePublicEstimateVersion(params: {
   return okResult(update.data as Unsafe)
 }
 
+async function loadAcceptedEstimateRow(orgId: string, estimateId: string) {
+  const estimateLookup = await supabaseAdmin
+    .from('estimates')
+    .select('id, job_id')
+    .eq('org_id', orgId)
+    .eq('id', estimateId)
+    .maybeSingle()
+  if (estimateLookup.error || !estimateLookup.data) {
+    return errorResult(
+      'server_error',
+      estimateLookup.error?.message ?? 'Accepted estimate missing'
+    )
+  }
+
+  return okResult(estimateLookup.data as Unsafe)
+}
+
+async function applyAcceptedOwnership(params: {
+  orgId: string
+  versionId: string
+  estimateId: string
+  acceptedAt: string
+}) {
+  const estimateLookup = await loadAcceptedEstimateRow(params.orgId, params.estimateId)
+  if (!estimateLookup.ok) return estimateLookup
+
+  return applyAcceptedEstimateSideEffects(supabaseAdmin, {
+    orgId: params.orgId,
+    jobId: asText(estimateLookup.data.job_id),
+    estimateId: params.estimateId,
+    publicVersionId: params.versionId,
+    acceptedAt: params.acceptedAt,
+  })
+}
+
+async function ensureEstimatePublicEvent(params: EstimatePublicEventParams) {
+  const existing = await supabaseAdmin
+    .from('estimate_public_events')
+    .select('id')
+    .eq('org_id', params.orgId)
+    .eq('estimate_public_version_id', params.versionId)
+    .eq('event_type', params.eventType)
+    .eq('actor_type', params.actorType)
+    .maybeSingle()
+
+  if (existing.error) {
+    return errorResult(
+      'server_error',
+      existing.error.message ?? 'Unable to inspect public quote event'
+    )
+  }
+  if (existing.data) {
+    return okResult({ ok: true })
+  }
+
+  return writeEstimatePublicEvent(params)
+}
+
+function buildAcceptedEventMetadata(params: AcceptPublicEstimateParams, signatureType: string) {
+  return {
+    legal_name: asText(params.legalName),
+    signature_type: signatureType,
+    ...(params.origin ? { origin: asText(params.origin) } : {}),
+  }
+}
+
 export async function acceptPublicEstimate(
   params: AcceptPublicEstimateParams
 ): Promise<ServiceResult<EstimatePublicSnapshot>> {
@@ -233,40 +307,43 @@ export async function acceptPublicEstimate(
 
   const loaded = loadedResult.data
   const currentStatus = loaded.snapshot.status
+  const orgId = asText(loaded.version.org_id)
+  const versionId = loaded.snapshot.estimate_version_id
+  const estimateId = asText(loaded.version.estimate_id)
+  const signatureType = asText(params.signatureType) || 'typed'
   if (!canTransitionToTerminalState(currentStatus, 'accepted')) {
     return errorResult('conflict', transitionConflictMessage(currentStatus, 'accepted'))
   }
   if (currentStatus === 'accepted') {
+    const acceptedAt =
+      loaded.snapshot.accepted_at ||
+      asText(loaded.version.accepted_at) ||
+      asText(loaded.version.locked_at) ||
+      new Date().toISOString()
+    const ownershipResult = await applyAcceptedOwnership({
+      orgId,
+      versionId,
+      estimateId,
+      acceptedAt,
+    })
+    if (!ownershipResult.ok) return ownershipResult
+
+    const eventResult = await ensureEstimatePublicEvent({
+      orgId,
+      versionId,
+      eventType: 'accepted',
+      actorType: 'customer',
+      metadata: buildAcceptedEventMetadata(params, signatureType),
+    })
+    if (!eventResult.ok) return eventResult
+
     return okResult(loaded.snapshot)
   }
 
-  const signatureType = asText(params.signatureType) || 'typed'
   const signatureValue = asText(params.signatureValue)
   const now = new Date().toISOString()
-  const orgId = asText(loaded.version.org_id)
-  const versionId = loaded.snapshot.estimate_version_id
-  const estimateId = asText(loaded.version.estimate_id)
-  const estimateLookup = await supabaseAdmin
-    .from('estimates')
-    .select('id, job_id')
-    .eq('org_id', orgId)
-    .eq('id', estimateId)
-    .maybeSingle()
-  if (estimateLookup.error || !estimateLookup.data) {
-    return errorResult(
-      'server_error',
-      estimateLookup.error?.message ?? 'Accepted estimate missing'
-    )
-  }
-
-  const ownershipResult = await applyAcceptedEstimateSideEffects(supabaseAdmin, {
-    orgId,
-    jobId: asText(estimateLookup.data.job_id),
-    estimateId,
-    publicVersionId: versionId,
-    acceptedAt: now,
-  })
-  if (!ownershipResult.ok) return ownershipResult
+  const estimateLookup = await loadAcceptedEstimateRow(orgId, estimateId)
+  if (!estimateLookup.ok) return estimateLookup
 
   const updateResult = await updatePublicEstimateVersion({
     orgId,
@@ -290,16 +367,21 @@ export async function acceptPublicEstimate(
   })
   if (!updateResult.ok) return updateResult
 
-  const eventResult = await writeEstimatePublicEvent({
+  const ownershipResult = await applyAcceptedEstimateSideEffects(supabaseAdmin, {
+    orgId,
+    jobId: asText(estimateLookup.data.job_id),
+    estimateId,
+    publicVersionId: versionId,
+    acceptedAt: now,
+  })
+  if (!ownershipResult.ok) return ownershipResult
+
+  const eventResult = await ensureEstimatePublicEvent({
     orgId,
     versionId,
     eventType: 'accepted',
     actorType: 'customer',
-    metadata: {
-      legal_name: legalName,
-      signature_type: signatureType,
-      ...(params.origin ? { origin: asText(params.origin) } : {}),
-    },
+    metadata: buildAcceptedEventMetadata(params, signatureType),
   })
   if (!eventResult.ok) return eventResult
 
@@ -341,7 +423,7 @@ export async function declinePublicEstimate(
   })
   if (!updateResult.ok) return updateResult
 
-  const eventResult = await writeEstimatePublicEvent({
+  const eventResult = await ensureEstimatePublicEvent({
     orgId,
     versionId,
     eventType: 'declined',
