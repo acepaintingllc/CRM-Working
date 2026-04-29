@@ -14,6 +14,10 @@ function asNumber(value: unknown) {
   return Number.isFinite(number) ? number : 0
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 export function buildAcceptedEstimateUpdatePlan(input: AcceptEstimateOperationalInput) {
   return {
     estimateUpdate: {
@@ -33,6 +37,8 @@ export function buildAcceptedEstimateSource(params: {
   publicVersion: Unsafe
   rollup?: Unsafe | null
 }): AcceptedEstimateSource {
+  const snapshotJson = params.publicVersion.snapshot_json
+
   return {
     org_id: asText(params.estimate.org_id),
     job_id: asText(params.estimate.job_id),
@@ -43,6 +49,6 @@ export function buildAcceptedEstimateSource(params: {
     version_name: asText(params.estimate.version_name) || null,
     version_state: asText(params.estimate.version_state) || null,
     final_total: asNumber(params.rollup?.final_total),
-    snapshot_json: (params.publicVersion.snapshot_json ?? {}) as Record<string, unknown>,
+    snapshot_json: isRecord(snapshotJson) ? snapshotJson : {},
   }
 }

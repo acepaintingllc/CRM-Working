@@ -59,3 +59,107 @@ test('buildAcceptedEstimateSource uses rollup total and public snapshot as invoi
     snapshot_json: { document: { title: 'Quote' } },
   })
 })
+
+test('buildAcceptedEstimateSource returns empty snapshot for non-record public snapshots', () => {
+  const baseParams = {
+    estimate: {
+      org_id: 'org-1',
+      id: 'estimate-1',
+      job_id: 'job-1',
+      customer_id: 'customer-1',
+      version_name: 'Interior repaint',
+      version_state: 'live',
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      accepted_public_version_id: 'public-version-1',
+    },
+    rollup: {
+      final_total: 4250,
+    },
+  }
+
+  assert.deepEqual(
+    buildAcceptedEstimateSource({
+      ...baseParams,
+      publicVersion: { id: 'public-version-1', snapshot_json: null },
+    }).snapshot_json,
+    {}
+  )
+  assert.deepEqual(
+    buildAcceptedEstimateSource({
+      ...baseParams,
+      publicVersion: { id: 'public-version-1', snapshot_json: 'not-a-record' },
+    }).snapshot_json,
+    {}
+  )
+  assert.deepEqual(
+    buildAcceptedEstimateSource({
+      ...baseParams,
+      publicVersion: { id: 'public-version-1', snapshot_json: ['not-a-record'] },
+    }).snapshot_json,
+    {}
+  )
+})
+
+test('buildAcceptedEstimateSource defaults absent and invalid rollup totals to zero', () => {
+  const estimate = {
+    org_id: 'org-1',
+    id: 'estimate-1',
+    job_id: 'job-1',
+    customer_id: 'customer-1',
+    version_name: 'Interior repaint',
+    version_state: 'live',
+    accepted_at: '2026-04-29T10:00:00.000Z',
+    accepted_public_version_id: 'public-version-1',
+  }
+  const publicVersion = {
+    id: 'public-version-1',
+    snapshot_json: { document: { title: 'Quote' } },
+  }
+
+  assert.equal(
+    buildAcceptedEstimateSource({ estimate, publicVersion, rollup: null }).final_total,
+    0
+  )
+  assert.equal(
+    buildAcceptedEstimateSource({
+      estimate,
+      publicVersion,
+      rollup: { final_total: 'not-a-number' },
+    }).final_total,
+    0
+  )
+  assert.equal(
+    buildAcceptedEstimateSource({
+      estimate,
+      publicVersion,
+      rollup: { final_total: Infinity },
+    }).final_total,
+    0
+  )
+})
+
+test('buildAcceptedEstimateSource normalizes blank optional text fields to null', () => {
+  const source = buildAcceptedEstimateSource({
+    estimate: {
+      org_id: 'org-1',
+      id: 'estimate-1',
+      job_id: 'job-1',
+      customer_id: '   ',
+      version_name: null,
+      version_state: '',
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      accepted_public_version_id: 'public-version-1',
+    },
+    publicVersion: {
+      id: 'public-version-1',
+      snapshot_json: { document: { title: 'Quote' } },
+    },
+    rollup: {
+      final_total: 4250,
+    },
+  })
+
+  assert.equal(source.customer_id, null)
+  assert.equal(source.version_name, null)
+  assert.equal(source.version_state, null)
+})
