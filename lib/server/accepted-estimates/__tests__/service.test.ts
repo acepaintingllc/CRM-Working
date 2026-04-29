@@ -18,6 +18,32 @@ type MockQueryCall = {
   filters: Record<string, unknown>
 }
 
+function createUpdateResultChain(
+  result: MockQueryResponse,
+  onUpdate?: (filters: Record<string, unknown>, orFilter: string | null) => void
+) {
+  const filters: Record<string, unknown> = {}
+  let orFilter: string | null = null
+  const chain = {
+    eq(column: string, value: unknown) {
+      filters[column] = value
+      return chain
+    },
+    or(filter: string) {
+      orFilter = filter
+      return chain
+    },
+    select() {
+      return chain
+    },
+    maybeSingle() {
+      onUpdate?.({ ...filters }, orFilter)
+      return Promise.resolve(result)
+    },
+  }
+  return chain
+}
+
 function createReadDb(responses: Record<string, MockQueryResponse>) {
   const calls: MockQueryCall[] = []
   const db = {
@@ -214,23 +240,16 @@ test('applyAcceptedEstimateSideEffects updates estimates first, then jobs with t
     table: string
     payload: Record<string, unknown>
     filters: Record<string, unknown>
+    orFilter: string | null
   }> = []
   const db = {
     from(table: string) {
       return {
         update(payload: Record<string, unknown>) {
-          return {
-            eq(column: string, value: unknown) {
-              const filters: Record<string, unknown> = { [column]: value }
-              return {
-                eq(nextColumn: string, nextValue: unknown) {
-                  filters[nextColumn] = nextValue
-                  calls.push({ table, payload, filters })
-                  return Promise.resolve({ error: null })
-                },
-              }
-            },
-          }
+          return createUpdateResultChain(
+            { data: { id: `${table}-updated` }, error: null },
+            (filters, orFilter) => calls.push({ table, payload, filters, orFilter })
+          )
         },
       }
     },
@@ -252,11 +271,14 @@ test('applyAcceptedEstimateSideEffects updates estimates first, then jobs with t
       table: 'estimates',
       payload: plan.estimateUpdate,
       filters: { org_id: 'org-1', id: 'estimate-1' },
+      orFilter:
+        'accepted_public_version_id.is.null,accepted_public_version_id.eq.public-version-1',
     },
     {
       table: 'jobs',
       payload: plan.jobUpdate,
       filters: { org_id: 'org-1', id: 'job-1' },
+      orFilter: null,
     },
   ])
 })
@@ -268,17 +290,10 @@ test('applyAcceptedEstimateSideEffects returns server_error and skips jobs when 
       calls.push(table)
       return {
         update() {
-          return {
-            eq() {
-              return {
-                eq() {
-                  return Promise.resolve({
-                    error: table === 'estimates' ? { message: 'estimate update failed' } : null,
-                  })
-                },
-              }
-            },
-          }
+          return createUpdateResultChain({
+            data: table === 'estimates' ? null : { id: `${table}-updated` },
+            error: table === 'estimates' ? { message: 'estimate update failed' } : null,
+          })
         },
       }
     },
@@ -305,17 +320,10 @@ test('applyAcceptedEstimateSideEffects returns server_error when the job update 
     from(table: string) {
       return {
         update() {
-          return {
-            eq() {
-              return {
-                eq() {
-                  return Promise.resolve({
-                    error: table === 'jobs' ? { message: 'job update failed' } : null,
-                  })
-                },
-              }
-            },
-          }
+          return createUpdateResultChain({
+            data: table === 'jobs' ? null : { id: `${table}-updated` },
+            error: table === 'jobs' ? { message: 'job update failed' } : null,
+          })
         },
       }
     },
@@ -333,6 +341,64 @@ test('applyAcceptedEstimateSideEffects returns server_error when the job update 
     ok: false,
     kind: 'server_error',
     message: 'job update failed',
+  })
+})
+
+test('applyAcceptedEstimateSideEffects returns conflict when another public version already owns the estimate', async () => {
+  const db = {
+    from(table: string) {
+      return {
+        update() {
+          return createUpdateResultChain({
+            data: table === 'estimates' ? null : { id: `${table}-updated` },
+            error: null,
+          })
+        },
+      }
+    },
+  }
+
+  const result = await applyAcceptedEstimateSideEffects(db, {
+    orgId: 'org-1',
+    jobId: 'job-1',
+    estimateId: 'estimate-1',
+    publicVersionId: 'public-version-2',
+    acceptedAt: '2026-04-29T10:00:00.000Z',
+  })
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'conflict',
+    message: 'Estimate is already accepted by another public version',
+  })
+})
+
+test('applyAcceptedEstimateSideEffects returns server_error when the job update affects no row', async () => {
+  const db = {
+    from(table: string) {
+      return {
+        update() {
+          return createUpdateResultChain({
+            data: table === 'jobs' ? null : { id: `${table}-updated` },
+            error: null,
+          })
+        },
+      }
+    },
+  }
+
+  const result = await applyAcceptedEstimateSideEffects(db, {
+    orgId: 'org-1',
+    jobId: 'missing-job',
+    estimateId: 'estimate-1',
+    publicVersionId: 'public-version-1',
+    acceptedAt: '2026-04-29T10:00:00.000Z',
+  })
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'server_error',
+    message: 'Accepted estimate job missing',
   })
 })
 

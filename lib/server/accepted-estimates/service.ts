@@ -30,7 +30,16 @@ type DbUpdateChain = {
         eq(
           column: string,
           value: unknown
-        ): Promise<{ error: { message?: string } | null }>
+        ): {
+          or(filters: string): {
+            select(columns: string): {
+              maybeSingle(): DbMaybeSingleResponse
+            }
+          }
+          select(columns: string): {
+            maybeSingle(): DbMaybeSingleResponse
+          }
+        }
       }
     }
   }
@@ -95,11 +104,22 @@ export async function applyAcceptedEstimateSideEffects(
     .update(plan.estimateUpdate)
     .eq('org_id', input.orgId)
     .eq('id', input.estimateId)
+    .or(
+      `accepted_public_version_id.is.null,accepted_public_version_id.eq.${input.publicVersionId}`
+    )
+    .select('id')
+    .maybeSingle()
 
   if (estimateUpdate.error) {
     return errorResult(
       'server_error',
       estimateUpdate.error.message ?? 'Unable to mark estimate accepted'
+    )
+  }
+  if (!estimateUpdate.data) {
+    return errorResult(
+      'conflict',
+      'Estimate is already accepted by another public version'
     )
   }
 
@@ -108,12 +128,17 @@ export async function applyAcceptedEstimateSideEffects(
     .update(plan.jobUpdate)
     .eq('org_id', input.orgId)
     .eq('id', input.jobId)
+    .select('id')
+    .maybeSingle()
 
   if (jobUpdate.error) {
     return errorResult(
       'server_error',
       jobUpdate.error.message ?? 'Unable to link accepted estimate to job'
     )
+  }
+  if (!jobUpdate.data) {
+    return errorResult('server_error', 'Accepted estimate job missing')
   }
 
   return okResult({ ok: true })

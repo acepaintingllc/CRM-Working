@@ -62,22 +62,30 @@ function createMaybeSingleChain(
 }
 
 function createUpdateOnlyChain(
-  result: { error: { message?: string } | null },
-  onUpdate?: (filters: Record<string, unknown>) => void
+  result: { data?: unknown; error: { message?: string } | null },
+  onUpdate?: (filters: Record<string, unknown>, orFilter: string | null) => void
 ) {
   const filters: Record<string, unknown> = {}
-  return {
+  let orFilter: string | null = null
+  const chain = {
     eq: vi.fn((column: string, value: unknown) => {
       filters[column] = value
-      return {
-        eq: vi.fn((nextColumn: string, nextValue: unknown) => {
-          filters[nextColumn] = nextValue
-          onUpdate?.({ ...filters })
-          return Promise.resolve(result)
-        }),
-      }
+      return chain
+    }),
+    or: vi.fn((filter: string) => {
+      orFilter = filter
+      return chain
+    }),
+    select: vi.fn(() => chain),
+    maybeSingle: vi.fn(() => {
+      onUpdate?.({ ...filters }, orFilter)
+      return Promise.resolve({
+        data: result.data === undefined ? { id: 'updated-row' } : result.data,
+        error: result.error,
+      })
     }),
   }
+  return chain
 }
 
 function createLoadedVersion(status: string) {
@@ -489,6 +497,69 @@ describe('estimate public portal transitions', () => {
       kind: 'conflict',
       message: 'Quote status changed before this action completed',
     })
+    expect(estimateUpdateSpy).not.toHaveBeenCalled()
+    expect(jobUpdateSpy).not.toHaveBeenCalled()
+    expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
+  })
+
+  it('rejects accepting a stale public version when the estimate is already accepted by another version', async () => {
+    const updateSpy = vi.fn(() =>
+      createMaybeSingleChain({
+        data: createLoadedVersion('accepted'),
+        error: null,
+      })
+    )
+    const estimateUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+    const jobUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: createLoadedVersion('sent'),
+              error: null,
+            })
+          ),
+          update: updateSpy,
+        }
+      }
+      if (table === 'estimates') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: {
+                id: 'estimate-1',
+                job_id: 'job-1',
+                accepted_public_version_id: 'version-2',
+                accepted_at: '2026-04-01T00:00:00.000Z',
+              },
+              error: null,
+            })
+          ),
+          update: estimateUpdateSpy,
+        }
+      }
+      if (table === 'jobs') {
+        return {
+          update: jobUpdateSpy,
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await acceptPublicEstimate({
+      token: 'token-1',
+      legalName: 'Taylor Smith',
+      acceptedTerms: true,
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'conflict',
+      message: 'Estimate is already accepted by another public version',
+    })
+    expect(updateSpy).not.toHaveBeenCalled()
     expect(estimateUpdateSpy).not.toHaveBeenCalled()
     expect(jobUpdateSpy).not.toHaveBeenCalled()
     expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()

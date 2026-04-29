@@ -240,7 +240,7 @@ async function updatePublicEstimateVersion(params: {
 async function loadAcceptedEstimateRow(orgId: string, estimateId: string) {
   const estimateLookup = await supabaseAdmin
     .from('estimates')
-    .select('id, job_id')
+    .select('id, job_id, accepted_at, accepted_public_version_id')
     .eq('org_id', orgId)
     .eq('id', estimateId)
     .maybeSingle()
@@ -262,6 +262,13 @@ async function reconcileAcceptedRetryOwnership(params: {
 }) {
   const estimateLookup = await loadAcceptedEstimateRow(params.orgId, params.estimateId)
   if (!estimateLookup.ok) return estimateLookup
+  const acceptedPublicVersionId = asText(estimateLookup.data.accepted_public_version_id)
+  if (acceptedPublicVersionId && acceptedPublicVersionId !== params.versionId) {
+    return errorResult(
+      'conflict',
+      'Estimate is already accepted by another public version'
+    )
+  }
 
   const estimateUpdate = await supabaseAdmin
     .from('estimates')
@@ -272,11 +279,22 @@ async function reconcileAcceptedRetryOwnership(params: {
     })
     .eq('org_id', params.orgId)
     .eq('id', params.estimateId)
+    .or(
+      `accepted_public_version_id.is.null,accepted_public_version_id.eq.${params.versionId}`
+    )
+    .select('id')
+    .maybeSingle()
 
   if (estimateUpdate.error) {
     return errorResult(
       'server_error',
       estimateUpdate.error.message ?? 'Unable to reconcile accepted estimate'
+    )
+  }
+  if (!estimateUpdate.data) {
+    return errorResult(
+      'conflict',
+      'Estimate is already accepted by another public version'
     )
   }
 
@@ -315,12 +333,17 @@ async function reconcileAcceptedRetryOwnership(params: {
     })
     .eq('org_id', params.orgId)
     .eq('id', jobId)
+    .select('id')
+    .maybeSingle()
 
   if (jobUpdate.error) {
     return errorResult(
       'server_error',
       jobUpdate.error.message ?? 'Unable to link accepted estimate to job'
     )
+  }
+  if (!jobUpdate.data) {
+    return errorResult('server_error', 'Accepted estimate job missing')
   }
 
   return okResult({ ok: true })
@@ -471,6 +494,15 @@ export async function acceptPublicEstimate(
   const now = new Date().toISOString()
   const estimateLookup = await loadAcceptedEstimateRow(orgId, estimateId)
   if (!estimateLookup.ok) return estimateLookup
+  const acceptedPublicVersionId = asText(
+    estimateLookup.data.accepted_public_version_id
+  )
+  if (acceptedPublicVersionId && acceptedPublicVersionId !== versionId) {
+    return errorResult(
+      'conflict',
+      'Estimate is already accepted by another public version'
+    )
+  }
 
   const updateResult = await updatePublicEstimateVersion({
     orgId,
