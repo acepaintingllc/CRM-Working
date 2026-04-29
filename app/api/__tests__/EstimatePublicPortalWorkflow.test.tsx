@@ -113,6 +113,17 @@ function createAcceptedEventLookup(data: unknown) {
   }
 }
 
+function createJobLookup(data: unknown) {
+  return {
+    select: vi.fn(() =>
+      createMaybeSingleChain({
+        data,
+        error: null,
+      })
+    ),
+  }
+}
+
 describe('estimate public portal transitions', () => {
   beforeEach(() => {
     vi.useRealTimers()
@@ -388,6 +399,10 @@ describe('estimate public portal transitions', () => {
       }
       if (table === 'jobs') {
         return {
+          ...createJobLookup({
+            id: 'job-1',
+            linked_estimate_id: null,
+          }),
           update: jobUpdateSpy,
         }
       }
@@ -451,6 +466,10 @@ describe('estimate public portal transitions', () => {
       }
       if (table === 'jobs') {
         return {
+          ...createJobLookup({
+            id: 'job-1',
+            linked_estimate_id: null,
+          }),
           update: jobUpdateSpy,
         }
       }
@@ -480,8 +499,75 @@ describe('estimate public portal transitions', () => {
     })
     expect(jobUpdateSpy).toHaveBeenCalledWith({
       linked_estimate_id: 'estimate-1',
-      status: 'scheduled',
     })
+    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('writes missing accepted event without rescheduling an already linked completed job on repeated accept', async () => {
+    const estimateUpdateSpy = vi.fn(() =>
+      createUpdateOnlyChain({ error: null }, (filters) => {
+        expect(filters).toEqual({ org_id: 'org-1', id: 'estimate-1' })
+      })
+    )
+    const jobUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: createLoadedVersion('accepted'),
+              error: null,
+            })
+          ),
+        }
+      }
+      if (table === 'estimates') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: { id: 'estimate-1', job_id: 'job-1' },
+              error: null,
+            })
+          ),
+          update: estimateUpdateSpy,
+        }
+      }
+      if (table === 'jobs') {
+        return {
+          ...createJobLookup({
+            id: 'job-1',
+            linked_estimate_id: 'estimate-1',
+            status: 'completed',
+          }),
+          update: jobUpdateSpy,
+        }
+      }
+      if (table === 'estimate_public_events') {
+        return createAcceptedEventLookup(null)
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await acceptPublicEstimate({
+      token: 'token-1',
+      legalName: 'Taylor Smith',
+      acceptedTerms: true,
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        estimate_version_id: 'version-1',
+        status: 'accepted',
+      }),
+    })
+    expect(estimateUpdateSpy).toHaveBeenCalledWith({
+      accepted_at: '2026-04-01T00:00:00.000Z',
+      accepted_public_version_id: 'version-1',
+      version_state: 'live',
+    })
+    expect(jobUpdateSpy).not.toHaveBeenCalled()
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
   })
 
@@ -519,6 +605,10 @@ describe('estimate public portal transitions', () => {
       }
       if (table === 'jobs') {
         return {
+          ...createJobLookup({
+            id: 'job-1',
+            linked_estimate_id: null,
+          }),
           update: jobUpdateSpy,
         }
       }
@@ -572,6 +662,10 @@ describe('estimate public portal transitions', () => {
       }
       if (table === 'jobs') {
         return {
+          ...createJobLookup({
+            id: 'job-1',
+            linked_estimate_id: null,
+          }),
           update: jobUpdateSpy,
         }
       }

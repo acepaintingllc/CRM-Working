@@ -61,6 +61,12 @@ type EstimatePublicEventParams = {
   metadata?: Record<string, unknown>
 }
 
+type AcceptedEstimateSideEffectsDb = Parameters<typeof applyAcceptedEstimateSideEffects>[0]
+
+function acceptedEstimateSideEffectsDb() {
+  return supabaseAdmin as unknown as AcceptedEstimateSideEffectsDb
+}
+
 export function buildEstimatePublicSnapshotFromVersion(
   version: Unsafe,
   origin?: string
@@ -251,13 +257,80 @@ async function applyAcceptedOwnership(params: {
   const estimateLookup = await loadAcceptedEstimateRow(params.orgId, params.estimateId)
   if (!estimateLookup.ok) return estimateLookup
 
-  return applyAcceptedEstimateSideEffects(supabaseAdmin, {
+  return applyAcceptedEstimateSideEffects(acceptedEstimateSideEffectsDb(), {
     orgId: params.orgId,
     jobId: asText(estimateLookup.data.job_id),
     estimateId: params.estimateId,
     publicVersionId: params.versionId,
     acceptedAt: params.acceptedAt,
   })
+}
+
+async function reconcileAcceptedRetryOwnership(params: {
+  orgId: string
+  versionId: string
+  estimateId: string
+  acceptedAt: string
+}) {
+  const estimateLookup = await loadAcceptedEstimateRow(params.orgId, params.estimateId)
+  if (!estimateLookup.ok) return estimateLookup
+
+  const estimateUpdate = await supabaseAdmin
+    .from('estimates')
+    .update({
+      accepted_at: params.acceptedAt,
+      accepted_public_version_id: params.versionId,
+      version_state: 'live',
+    })
+    .eq('org_id', params.orgId)
+    .eq('id', params.estimateId)
+
+  if (estimateUpdate.error) {
+    return errorResult(
+      'server_error',
+      estimateUpdate.error.message ?? 'Unable to reconcile accepted estimate'
+    )
+  }
+
+  const jobId = asText(estimateLookup.data.job_id)
+  if (!jobId) {
+    return errorResult('server_error', 'Accepted estimate missing job')
+  }
+
+  const jobLookup = await supabaseAdmin
+    .from('jobs')
+    .select('id, linked_estimate_id')
+    .eq('org_id', params.orgId)
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (jobLookup.error || !jobLookup.data) {
+    return errorResult(
+      'server_error',
+      jobLookup.error?.message ?? 'Accepted estimate job missing'
+    )
+  }
+
+  if (asText((jobLookup.data as Unsafe).linked_estimate_id) === params.estimateId) {
+    return okResult({ ok: true })
+  }
+
+  const jobUpdate = await supabaseAdmin
+    .from('jobs')
+    .update({
+      linked_estimate_id: params.estimateId,
+    })
+    .eq('org_id', params.orgId)
+    .eq('id', jobId)
+
+  if (jobUpdate.error) {
+    return errorResult(
+      'server_error',
+      jobUpdate.error.message ?? 'Unable to link accepted estimate to job'
+    )
+  }
+
+  return okResult({ ok: true })
 }
 
 async function ensureEstimatePublicEvent(params: EstimatePublicEventParams) {
@@ -342,7 +415,7 @@ export async function acceptPublicEstimate(
       asText(loaded.version.accepted_at) ||
       asText(loaded.version.locked_at) ||
       new Date().toISOString()
-    const ownershipResult = await applyAcceptedOwnership({
+    const ownershipResult = await reconcileAcceptedRetryOwnership({
       orgId,
       versionId,
       estimateId,
@@ -389,13 +462,16 @@ export async function acceptPublicEstimate(
   })
   if (!updateResult.ok) return updateResult
 
-  const ownershipResult = await applyAcceptedEstimateSideEffects(supabaseAdmin, {
-    orgId,
-    jobId: asText(estimateLookup.data.job_id),
-    estimateId,
-    publicVersionId: versionId,
-    acceptedAt: now,
-  })
+  const ownershipResult = await applyAcceptedEstimateSideEffects(
+    acceptedEstimateSideEffectsDb(),
+    {
+      orgId,
+      jobId: asText(estimateLookup.data.job_id),
+      estimateId,
+      publicVersionId: versionId,
+      acceptedAt: now,
+    }
+  )
   if (!ownershipResult.ok) return ownershipResult
 
   const eventResult = await ensureEstimatePublicEvent({
