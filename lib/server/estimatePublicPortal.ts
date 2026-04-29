@@ -61,6 +61,12 @@ type EstimatePublicEventParams = {
   metadata?: Record<string, unknown>
 }
 
+const ACCEPTED_RETRY_SCHEDULE_ELIGIBLE_JOB_STATUSES = [
+  'estimate_scheduled',
+  'estimate_sent',
+  'follow_up',
+]
+
 type AcceptedEstimateSideEffectsDb = Parameters<typeof applyAcceptedEstimateSideEffects>[0]
 
 function acceptedEstimateSideEffectsDb() {
@@ -299,7 +305,7 @@ async function reconcileAcceptedRetryOwnership(params: {
 
   const jobLookup = await supabaseAdmin
     .from('jobs')
-    .select('id, linked_estimate_id')
+    .select('id, linked_estimate_id, status')
     .eq('org_id', params.orgId)
     .eq('id', jobId)
     .maybeSingle()
@@ -315,10 +321,15 @@ async function reconcileAcceptedRetryOwnership(params: {
     return okResult({ ok: true })
   }
 
+  const currentJobStatus = asText((jobLookup.data as Unsafe).status)
+  const shouldRepairJobStatus =
+    ACCEPTED_RETRY_SCHEDULE_ELIGIBLE_JOB_STATUSES.includes(currentJobStatus)
+
   const jobUpdate = await supabaseAdmin
     .from('jobs')
     .update({
       linked_estimate_id: params.estimateId,
+      ...(shouldRepairJobStatus ? { status: 'scheduled' } : {}),
     })
     .eq('org_id', params.orgId)
     .eq('id', jobId)
@@ -567,6 +578,7 @@ export async function markPublicEstimateViewed(params: {
     .eq('org_id', params.orgId)
     .eq('id', params.versionId)
     .in('status', ['sent', 'viewed'])
+    .is('viewed_at', null)
     .select('*')
     .maybeSingle()
   if (update.error) return { error: update.error.message } as const

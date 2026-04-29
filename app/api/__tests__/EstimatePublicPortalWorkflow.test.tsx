@@ -30,6 +30,7 @@ function createMaybeSingleChain(
   hooks?: {
     eq?: (column: string, value: unknown) => void
     in?: (column: string, values: unknown[]) => void
+    is?: (column: string, value: unknown) => void
     select?: (columns?: string) => void
     maybeSingle?: () => void
   }
@@ -41,6 +42,10 @@ function createMaybeSingleChain(
     }),
     in: vi.fn((column: string, values: unknown[]) => {
       hooks?.in?.(column, values)
+      return chain
+    }),
+    is: vi.fn((column: string, value: unknown) => {
+      hooks?.is?.(column, value)
       return chain
     }),
     select: vi.fn((columns?: string) => {
@@ -252,6 +257,7 @@ describe('estimate public portal transitions', () => {
 
     const updateFilters: Array<[string, unknown]> = []
     const updateStatusFilters: Array<[string, unknown[]]> = []
+    const nullFilters: Array<[string, unknown]> = []
     const viewedVersion = {
       ...createLoadedVersion('viewed'),
       viewed_at: '2026-04-02T12:00:00.000Z',
@@ -268,6 +274,9 @@ describe('estimate public portal transitions', () => {
           },
           in: (column, values) => {
             updateStatusFilters.push([column, values])
+          },
+          is: (column, value) => {
+            nullFilters.push([column, value])
           },
         }
       )
@@ -304,6 +313,9 @@ describe('estimate public portal transitions', () => {
     ])
     expect(updateStatusFilters).toEqual([
       ['status', ['sent', 'viewed']],
+    ])
+    expect(nullFilters).toEqual([
+      ['viewed_at', null],
     ])
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledWith({
@@ -358,6 +370,51 @@ describe('estimate public portal transitions', () => {
       status: 'viewed',
       viewed_at: '2026-04-02T12:00:00.000Z',
     })
+    expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
+  })
+
+  it('treats already-viewed rows as a no-op and skips viewed event writes', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-02T12:00:00.000Z'))
+
+    const nullFilters: Array<[string, unknown]> = []
+    const updateSpy = vi.fn(() =>
+      createMaybeSingleChain(
+        {
+          data: null,
+          error: null,
+        },
+        {
+          is: (column, value) => {
+            nullFilters.push([column, value])
+          },
+        }
+      )
+    )
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          update: updateSpy,
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await markPublicEstimateViewed({
+      orgId: 'org-1',
+      versionId: 'version-1',
+      actorType: 'customer',
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      viewed_at: null,
+      version: null,
+    })
+    expect(nullFilters).toEqual([
+      ['viewed_at', null],
+    ])
     expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
   })
 
@@ -546,6 +603,127 @@ describe('estimate public portal transitions', () => {
     expect(jobUpdateSpy).toHaveBeenCalledTimes(2)
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(2)
   })
+
+  it.each(['estimate_sent', 'follow_up'])(
+    'repairs accepted retry ownership and status when initial job update fails and job is %s',
+    async (jobStatus) => {
+      const updateSpy = vi.fn(() =>
+        createMaybeSingleChain({
+          data: createLoadedVersion('accepted'),
+          error: null,
+        })
+      )
+      const estimateUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+      const jobUpdateSpy = vi
+        .fn()
+        .mockImplementationOnce(() =>
+          createUpdateOnlyChain({
+            error: { message: 'Unable to update job' },
+          })
+        )
+        .mockImplementation(() => createUpdateOnlyChain({ error: null }))
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'estimate_public_versions') {
+          return {
+            select: vi.fn(() =>
+              createMaybeSingleChain({
+                data: createLoadedVersion('sent'),
+                error: null,
+              })
+            ),
+            update: updateSpy,
+          }
+        }
+        if (table === 'estimates') {
+          return {
+            select: vi.fn(() =>
+              createMaybeSingleChain({
+                data: { id: 'estimate-1', job_id: 'job-1' },
+                error: null,
+              })
+            ),
+            update: estimateUpdateSpy,
+          }
+        }
+        if (table === 'jobs') {
+          return {
+            update: jobUpdateSpy,
+          }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      })
+
+      const firstResult = await acceptPublicEstimate({
+        token: 'token-1',
+        legalName: 'Taylor Smith',
+        acceptedTerms: true,
+      })
+
+      expect(firstResult).toEqual({
+        ok: false,
+        kind: 'server_error',
+        message: 'Unable to update job',
+      })
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'estimate_public_versions') {
+          return {
+            select: vi.fn(() =>
+              createMaybeSingleChain({
+                data: createLoadedVersion('accepted'),
+                error: null,
+              })
+            ),
+          }
+        }
+        if (table === 'estimates') {
+          return {
+            select: vi.fn(() =>
+              createMaybeSingleChain({
+                data: { id: 'estimate-1', job_id: 'job-1' },
+                error: null,
+              })
+            ),
+            update: estimateUpdateSpy,
+          }
+        }
+        if (table === 'jobs') {
+          return {
+            ...createJobLookup({
+              id: 'job-1',
+              linked_estimate_id: null,
+              status: jobStatus,
+            }),
+            update: jobUpdateSpy,
+          }
+        }
+        if (table === 'estimate_public_events') {
+          return createAcceptedEventLookup(null)
+        }
+        throw new Error(`Unexpected table ${table}`)
+      })
+
+      const retryResult = await acceptPublicEstimate({
+        token: 'token-1',
+        legalName: 'Taylor Smith',
+        acceptedTerms: true,
+      })
+
+      expect(retryResult).toEqual({
+        ok: true,
+        data: expect.objectContaining({
+          estimate_version_id: 'version-1',
+          status: 'accepted',
+        }),
+      })
+      expect(jobUpdateSpy).toHaveBeenLastCalledWith({
+        linked_estimate_id: 'estimate-1',
+        status: 'scheduled',
+      })
+      expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
+    }
+  )
 
   it('reconciles ownership and writes missing event for repeated accept', async () => {
     const estimateUpdateSpy = vi.fn(() =>

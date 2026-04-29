@@ -39,6 +39,21 @@ create index if not exists jobs_linked_estimate_fk_idx
   on public.jobs (linked_estimate_id)
   where linked_estimate_id is not null;
 
+with ranked_terminal_events as (
+  select
+    id,
+    row_number() over (
+      partition by estimate_public_version_id
+      order by created_at asc, id asc
+    ) as rn
+  from public.estimate_public_events
+  where event_type in ('accepted', 'declined')
+)
+delete from public.estimate_public_events events
+using ranked_terminal_events ranked
+where events.id = ranked.id
+  and ranked.rn > 1;
+
 create unique index if not exists estimate_public_events_terminal_once_idx
   on public.estimate_public_events (estimate_public_version_id)
   where event_type in ('accepted', 'declined');
