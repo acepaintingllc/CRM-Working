@@ -565,6 +565,71 @@ describe('estimate public portal transitions', () => {
     expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
   })
 
+  it('maps accepted public version unique-index races to conflict', async () => {
+    const updateSpy = vi.fn(() =>
+      createMaybeSingleChain({
+        data: null,
+        error: {
+          message:
+            'duplicate key value violates unique constraint "estimate_public_versions_one_accepted_per_estimate_idx"',
+        },
+      })
+    )
+    const estimateUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+    const jobUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: createLoadedVersion('sent'),
+              error: null,
+            })
+          ),
+          update: updateSpy,
+        }
+      }
+      if (table === 'estimates') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: {
+                id: 'estimate-1',
+                job_id: 'job-1',
+                accepted_public_version_id: null,
+                accepted_at: null,
+              },
+              error: null,
+            })
+          ),
+          update: estimateUpdateSpy,
+        }
+      }
+      if (table === 'jobs') {
+        return {
+          update: jobUpdateSpy,
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await acceptPublicEstimate({
+      token: 'token-1',
+      legalName: 'Taylor Smith',
+      acceptedTerms: true,
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'conflict',
+      message: 'Estimate is already accepted by another public version',
+    })
+    expect(estimateUpdateSpy).not.toHaveBeenCalled()
+    expect(jobUpdateSpy).not.toHaveBeenCalled()
+    expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
+  })
+
   it('can repair ownership and event after event write fails following public accept', async () => {
     const updateSpy = vi.fn(() =>
       createMaybeSingleChain({

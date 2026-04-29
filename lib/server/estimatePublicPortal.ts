@@ -220,6 +220,15 @@ async function updatePublicEstimateVersion(params: {
     .maybeSingle()
 
   if (update.error) {
+    if (
+      params.payload.status === 'accepted' &&
+      isSingleAcceptedPublicVersionMessage(update.error.message ?? '')
+    ) {
+      return errorResult(
+        'conflict',
+        'Estimate is already accepted by another public version'
+      )
+    }
     return errorResult(
       'server_error',
       update.error.message ?? 'Unable to update public quote'
@@ -430,6 +439,14 @@ function isDuplicateTerminalPublicEventMessage(message: string) {
     normalized.includes('duplicate key') ||
     normalized.includes('unique constraint') ||
     normalized.includes('estimate_public_events_terminal_once_idx')
+  )
+}
+
+function isSingleAcceptedPublicVersionMessage(message: string) {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('duplicate key') &&
+    normalized.includes('estimate_public_versions_one_accepted_per_estimate_idx')
   )
 }
 
