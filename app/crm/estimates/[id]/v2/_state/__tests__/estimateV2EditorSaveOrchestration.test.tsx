@@ -16,6 +16,7 @@ function createCurrentState() {
       segments: fixture.segments,
       roomFlags: fixture.roomFlags,
       rollers: fixture.rollers,
+      accessFees: fixture.accessFees,
       ceilingScopes: fixture.ceilingScopes,
       ceilingSegments: fixture.ceilingSegments,
       trimScopes: fixture.trimScopes,

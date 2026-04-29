@@ -2,7 +2,11 @@
 
 import { useCallback } from 'react'
 import type { EstimateV2EditorStoreApi } from '@/lib/estimates/v2/store/estimateV2Store'
-import type { ConditionLevel, EstimateV2ConditionModifier } from '@/types/estimator/v2'
+import type {
+  ConditionLevel,
+  EstimateV2AccessFeeDraft,
+  EstimateV2ConditionModifier,
+} from '@/types/estimator/v2'
 import {
   applyCeilingGallonOverride,
   applyTrimGallonOverride,
@@ -19,6 +23,11 @@ import {
   resolveAllConditionFactors,
   setConditionSelection,
 } from '../_lib/estimateV2DetailsConditions'
+import {
+  addAccessFeeDraft,
+  removeAccessFeeDraft,
+  updateAccessFeeDraft,
+} from '../_lib/estimateV2DetailsAccessFees'
 
 type DetailsCollectionSetter<TItem> = (value: TItem[] | ((prev: TItem[]) => TItem[])) => void
 
@@ -46,6 +55,12 @@ export function useEstimateV2DetailsMutations(params: {
     params.store
       .getState()
       .setDebugMeta((prev) => ({ ...prev, dirtySource: 'details-overrides' }))
+  }, [params.store])
+
+  const recordAccessFeeDirtySource = useCallback(() => {
+    params.store
+      .getState()
+      .setDebugMeta((prev) => ({ ...prev, dirtySource: 'access-fees' }))
   }, [params.store])
 
   const setRollerRow = useCallback(
@@ -138,6 +153,27 @@ export function useEstimateV2DetailsMutations(params: {
     [params.store, params.conditionModifiers, recordDebugDirtySource]
   )
 
+  const addAccessFee = useCallback(() => {
+    params.store.getState().setAccessFees((prev) => addAccessFeeDraft(prev))
+    recordAccessFeeDirtySource()
+  }, [params.store, recordAccessFeeDirtySource])
+
+  const updateAccessFee = useCallback(
+    (rowId: string, patch: Partial<EstimateV2AccessFeeDraft>) => {
+      params.store.getState().setAccessFees((prev) => updateAccessFeeDraft(prev, rowId, patch))
+      recordAccessFeeDirtySource()
+    },
+    [params.store, recordAccessFeeDirtySource]
+  )
+
+  const removeAccessFee = useCallback(
+    (rowId: string) => {
+      params.store.getState().setAccessFees((prev) => removeAccessFeeDraft(prev, rowId))
+      recordAccessFeeDirtySource()
+    },
+    [params.store, recordAccessFeeDirtySource]
+  )
+
   return {
     setCrewSize,
     setRollerRow,
@@ -145,6 +181,9 @@ export function useEstimateV2DetailsMutations(params: {
     setCeilingOverride,
     setTrimOverride,
     setRoomCondition,
+    addAccessFee,
+    updateAccessFee,
+    removeAccessFee,
   }
 }
 

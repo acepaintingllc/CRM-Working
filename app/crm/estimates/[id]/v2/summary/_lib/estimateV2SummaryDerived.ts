@@ -29,6 +29,8 @@ type SummaryScopeSourceRow = {
   effective_area_sf?: number | null
   effective_measurement?: number | null
   effective_units?: number | null
+  effective_quantity?: number | null
+  raw_quantity?: number | null
   effective_paint_hours?: number | null
   effective_primer_hours?: number | null
   effective_supply_cost?: number | null
@@ -50,6 +52,9 @@ type SummaryScopeSourceRow = {
   override_hours?: number | null
   override_gallons?: number | null
   override_description?: string | null
+  repair_type?: string | null
+  surface?: string | null
+  unit?: string | null
   condition_selections?: EstimateV2ConditionSelections | null
 }
 
@@ -184,6 +189,13 @@ const SCOPE_MAPPING_CONFIG: Record<ScopeKind, ScopeMappingConfig> = {
       scope.override_total != null,
     missingProduct: () => false,
   },
+  drywall: {
+    fallbackLabel: 'Drywall',
+    quantity: (scope) => scope.effective_quantity ?? scope.raw_quantity ?? null,
+    paintCost: () => null,
+    hasOverride: (scope) => scope.override_total != null,
+    missingProduct: () => false,
+  },
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -222,7 +234,9 @@ function activeCurrencyOverride(label: string, value: number | null | undefined)
 
 function buildOverrideSummary(kind: ScopeKind, scope: SummaryScopeSourceRow) {
   const entries =
-    kind === 'trim'
+    kind === 'drywall'
+      ? [activeCurrencyOverride('Total', scope.override_total)]
+      : kind === 'trim'
       ? [
           activeOverride('Measurement', scope.override_measurement, 'lf'),
           activeOverride('Labor hours', scope.override_hours, 'h'),
@@ -269,6 +283,8 @@ function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
     effective_area_sf: asMaybeNumber(value.effective_area_sf),
     effective_measurement: asMaybeNumber(value.effective_measurement),
     effective_units: asMaybeNumber(value.effective_units),
+    effective_quantity: asMaybeNumber(value.effective_quantity),
+    raw_quantity: asMaybeNumber(value.raw_quantity),
     effective_paint_hours: asMaybeNumber(value.effective_paint_hours),
     effective_primer_hours: asMaybeNumber(value.effective_primer_hours),
     effective_supply_cost: asMaybeNumber(value.effective_supply_cost),
@@ -290,6 +306,9 @@ function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
     override_hours: asNullableNumber(value.override_hours),
     override_gallons: asNullableNumber(value.override_gallons),
     override_description: asNullableString(value.override_description),
+    repair_type: asNullableString(value.repair_type),
+    surface: asNullableString(value.surface),
+    unit: asNullableString(value.unit),
     condition_selections: normalizeConditionSelections(value.condition_selections),
   }
 }
@@ -316,6 +335,7 @@ export function hasMeaningfulScopeContent(scope: SummaryScopeSourceRow) {
     (scope.effective_area_sf ?? 0) > 0 ||
     (scope.effective_measurement ?? 0) > 0 ||
     (scope.effective_units ?? 0) > 0 ||
+    (scope.effective_quantity ?? scope.raw_quantity ?? 0) > 0 ||
     (scope.raw_paint_gallons ?? 0) > 0 ||
     (scope.allocated_paint_material_cost ?? 0) > 0 ||
     (scope.effective_total ?? 0) > 0
@@ -471,12 +491,19 @@ export function buildPaintSupplyProductLabels(params: {
 function buildScopeRow(kind: ScopeKind, scope: SummaryScopeSourceRow): EstimateV2SummaryScopeRowVm {
   const config = SCOPE_MAPPING_CONFIG[kind]
   const overrideSummary = buildOverrideSummary(kind, scope)
+  const drywallLabel =
+    kind === 'drywall'
+      ? [scope.surface, scope.repair_type]
+          .map((value) => value?.replace(/_/g, ' ').trim())
+          .filter(Boolean)
+          .join(' - ')
+      : ''
 
   return {
     id: scope.id,
     roomId: scope.room_id,
     kind,
-    label: scope.scope_name?.trim() || config.fallbackLabel,
+    label: scope.scope_name?.trim() || drywallLabel || config.fallbackLabel,
     quantity: config.quantity(scope),
     laborHours: (scope.effective_paint_hours ?? 0) + (scope.effective_primer_hours ?? 0),
     paintCost: config.paintCost(scope),
@@ -510,6 +537,7 @@ export function buildRoomScopeRows(params: {
   ceilingScopes: SummaryScopeSourceRow[]
   trimScopes: SummaryScopeSourceRow[]
   doorScopes?: SummaryScopeSourceRow[]
+  drywallScopes?: SummaryScopeSourceRow[]
 }) {
   const next = new Map<string, EstimateV2SummaryScopeRowVm[]>()
 
@@ -537,6 +565,11 @@ export function buildRoomScopeRows(params: {
   for (const scope of params.doorScopes ?? []) {
     if (scope.include === 'N' || !hasMeaningfulScopeContent(scope)) continue
     push(buildScopeRow('doors', scope))
+  }
+
+  for (const scope of params.drywallScopes ?? []) {
+    if (scope.include === 'N' || !hasMeaningfulScopeContent(scope)) continue
+    push(buildScopeRow('drywall', scope))
   }
 
   for (const [roomId, rows] of next.entries()) {
@@ -855,6 +888,14 @@ export function buildPriceBreakdownRows(pricingSummary: EstimateV2PricingSummary
       label: 'Base Estimate / Pre-policy total',
       value: formatWholeDollar(pricingSummary?.prePolicyTotal),
     },
+    ...((pricingSummary?.sharedAccessCost ?? 0) > 0
+      ? [
+          {
+            label: 'Access Fees',
+            value: formatWholeDollar(pricingSummary?.sharedAccessCost ?? null),
+          },
+        ]
+      : []),
     {
       label: 'Labor Adjustment',
       value: formatWholeDollar(priceAdjustment),

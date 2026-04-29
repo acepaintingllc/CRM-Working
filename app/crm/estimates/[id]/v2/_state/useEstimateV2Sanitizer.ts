@@ -16,10 +16,15 @@ import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
 import { sanitizeV2WallsDrafts } from '@/lib/estimator/v2WallsSanitize'
 import type {
   EstimateV2CatalogsPayload as CatalogsPayload,
+  EstimateV2AccessFeeDraft,
   EstimateV2GetResponse as EstimateResponse,
   EstimateV2JobDefaultProducts,
   EstimateV2JobMeta,
   EstimateV2JobSettingsDraft as JobSettingsDraft,
+  EstimateV2OtherItemDraft,
+  EstimateV2OtherCustomerVisibility,
+  EstimateV2OtherPricingMode,
+  EstimateV2OtherRollupTarget,
   EstimateV2RollerDraft,
   EstimateV2RollerScope,
   EstimateV2RoomFlagDraft as RoomFlagDraft,
@@ -35,6 +40,7 @@ import {
   normalizeCeilingScope,
   normalizeCeilingSegment,
   normalizeDoorScope,
+  normalizeDrywallRepair,
   normalizeRoom,
   normalizeRoomFlag,
   normalizeScope,
@@ -63,16 +69,20 @@ export type EstimateV2SanitizedLoadResult = {
     segments: ReturnType<typeof normalizeSegment>[]
     roomFlags: RoomFlagDraft[]
     rollers: EstimateV2RollerDraft[]
+    accessFees: EstimateV2AccessFeeDraft[]
     ceilingScopes: ReturnType<typeof normalizeCeilingScope>[]
     ceilingSegments: ReturnType<typeof normalizeCeilingSegment>[]
     trimScopes: ReturnType<typeof normalizeTrimScope>[]
     doorScopes: ReturnType<typeof normalizeDoorScope>[]
+    drywallRepairs: ReturnType<typeof normalizeDrywallRepair>[]
+    otherItems: EstimateV2OtherItemDraft[]
   }
   meta: {
     wallCalculations: EstimateResponse['wall_calculations']
     ceilingCalculations: EstimateResponse['ceiling_calculations']
     trimCalculations: EstimateResponse['trim_calculations']
     doorCalculations: EstimateResponse['door_calculations']
+    drywallCalculations: EstimateResponse['drywall_calculations']
     pricingSummary: EstimateResponse['pricing_summary']
     selectedRoomId: string
     lastSavedSnapshot: ReturnType<typeof buildEstimateV2DirtySnapshot>
@@ -220,6 +230,72 @@ function normalizeRoller(row: Unsafe, index: number): EstimateV2RollerDraft {
   }
 }
 
+function normalizeAccessFee(row: Unsafe, index: number): EstimateV2AccessFeeDraft {
+  return {
+    id: asText(row.id),
+    roomId: asText(row.roomId ?? row.room_id),
+    accessFeeId: asText(row.accessFeeId ?? row.access_fee_id).toUpperCase(),
+    qty: asText(row.qty),
+    actualCostOverride: asText(row.actualCostOverride ?? row.actual_cost_override),
+    notes: asText(row.notes),
+    position: Number(row.position ?? index),
+  }
+}
+
+function normalizeOtherPricingMode(value: unknown): EstimateV2OtherPricingMode {
+  const raw = asText(value).toLowerCase()
+  if (raw === 'quantity_rate' || raw === 'labor' || raw === 'material_supply') return raw
+  return 'fixed'
+}
+
+function normalizeOtherRollupTarget(value: unknown): EstimateV2OtherRollupTarget {
+  const raw = asText(value).toLowerCase()
+  if (
+    raw === 'walls' ||
+    raw === 'ceilings' ||
+    raw === 'trim' ||
+    raw === 'doors' ||
+    raw === 'drywall' ||
+    raw === 'room_total' ||
+    raw === 'job_total' ||
+    raw === 'other'
+  ) {
+    return raw
+  }
+  if (raw === 'wall' || raw === 'walls') return 'walls'
+  if (raw === 'ceiling' || raw === 'ceilings') return 'ceilings'
+  if (raw === 'door' || raw === 'doors') return 'doors'
+  if (raw === 'room') return 'room_total'
+  if (raw === 'job') return 'job_total'
+  return 'other'
+}
+
+function normalizeOtherVisibility(value: unknown): EstimateV2OtherCustomerVisibility {
+  return asText(value).toLowerCase() === 'rollup' ? 'rollup' : 'standalone'
+}
+
+function normalizeOtherItem(row: Unsafe, index: number): EstimateV2OtherItemDraft {
+  return {
+    id: asText(row.id) || `other-${index + 1}`,
+    roomId: asText(row.roomId ?? row.room_id ?? row.location).toUpperCase(),
+    position: Number(row.position ?? index),
+    include: asText(row.include ?? row.active).toUpperCase() === 'N' ? 'N' : 'Y',
+    description: asText(row.description ?? row.client_description),
+    customerLabel: asText(row.customerLabel ?? row.customer_label ?? row.client_description),
+    pricingMode: normalizeOtherPricingMode(row.pricingMode ?? row.pricing_mode),
+    quantity: asText(row.quantity ?? row.qty),
+    unitRate: asText(row.unitRate ?? row.unit_rate),
+    laborHours: asText(row.laborHours ?? row.labor_hours ?? row.labor_hrs_each),
+    laborRate: asText(row.laborRate ?? row.labor_rate),
+    materialCost: asText(row.materialCost ?? row.material_cost ?? row.materials_each),
+    supplyCost: asText(row.supplyCost ?? row.supply_cost),
+    fixedAmount: asText(row.fixedAmount ?? row.fixed_amount),
+    rollupTarget: normalizeOtherRollupTarget(row.rollupTarget ?? row.rollup_target ?? row.rollup_scope),
+    customerVisibility: normalizeOtherVisibility(row.customerVisibility ?? row.customer_visibility),
+    internalNotes: asText(row.internalNotes ?? row.internal_notes ?? row.notes),
+  }
+}
+
 export function sanitizeEstimateV2EditorLoad(params: {
   estimatePayload: EstimateResponse
   catalogs: CatalogsPayload['catalogs']
@@ -305,6 +381,11 @@ export function sanitizeEstimateV2EditorLoad(params: {
       .map(normalizeRoller)
       .filter((roller): roller is NonNullable<ReturnType<typeof normalizeRoller>> => roller != null)
   )
+  const normalizedAccessFees = sortByPosition(
+    (estimatePayload.inputs.access_fees ?? [])
+      .map(normalizeAccessFee)
+      .filter((row) => row.accessFeeId)
+  )
 
   const normalizedCeilingScopes = sortByPosition(
     (estimatePayload.inputs.room_ceiling_scopes ?? []).map((row, index) => {
@@ -368,6 +449,12 @@ export function sanitizeEstimateV2EditorLoad(params: {
   const normalizedDoorScopes = sortByPosition(
     (estimatePayload.inputs.room_door_scopes ?? []).map(normalizeDoorScope)
   )
+  const normalizedDrywallRepairs = sortByPosition(
+    (estimatePayload.inputs.drywall_repairs ?? []).map(normalizeDrywallRepair)
+  )
+  const normalizedOtherItems = sortByPosition(
+    (estimatePayload.inputs.other ?? []).map(normalizeOtherItem)
+  )
   const recalculated = recalculateEditorDraftFactors({
     rooms: normalizedRooms,
     wallScopes: wallScopesWithoutDefaults,
@@ -393,7 +480,10 @@ export function sanitizeEstimateV2EditorLoad(params: {
     ceilingSegments: sanitizedCeilings.ceilingSegments,
     trimScopes: recalculated.trimScopes,
     doorScopes: normalizedDoorScopes,
+    drywallRepairs: normalizedDrywallRepairs,
     rollers: normalizedRollers,
+    accessFees: normalizedAccessFees,
+    otherItems: normalizedOtherItems,
   })
 
   return {
@@ -409,13 +499,17 @@ export function sanitizeEstimateV2EditorLoad(params: {
       ceilingSegments: sanitizedCeilings.ceilingSegments,
       trimScopes: recalculated.trimScopes,
       doorScopes: normalizedDoorScopes,
+      drywallRepairs: normalizedDrywallRepairs,
       rollers: normalizedRollers,
+      accessFees: normalizedAccessFees,
+      otherItems: normalizedOtherItems,
     },
     meta: {
       wallCalculations: estimatePayload.wall_calculations ?? null,
       ceilingCalculations: estimatePayload.ceiling_calculations ?? null,
       trimCalculations: estimatePayload.trim_calculations ?? null,
       doorCalculations: estimatePayload.door_calculations ?? null,
+      drywallCalculations: estimatePayload.drywall_calculations ?? null,
       pricingSummary: estimatePayload.pricing_summary ?? null,
       selectedRoomId: nextSelectedRoomId,
       lastSavedSnapshot,

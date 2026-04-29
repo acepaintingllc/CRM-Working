@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/server/org'
 import {
   toCeilingCalculationCatalogs,
   toDoorCalculationCatalogs,
+  toDrywallCalculationCatalogs,
   toTrimCalculationCatalogs,
   toWallCalculationCatalogs,
 } from '@/lib/server/estimateV2RoutePayload'
@@ -28,6 +29,7 @@ export async function loadEstimateV2CalculationCatalogs(params: {
     ceiling: toCeilingCalculationCatalogs(source),
     trim: toTrimCalculationCatalogs(source),
     door: toDoorCalculationCatalogs(source),
+    drywall: toDrywallCalculationCatalogs(source),
   }
 }
 

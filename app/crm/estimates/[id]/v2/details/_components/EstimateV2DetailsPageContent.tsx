@@ -21,6 +21,7 @@ import { EstimateV2DetailsMaterialTable } from './EstimateV2DetailsMaterialTable
 import { EstimateV2DetailsRollerRows } from './EstimateV2DetailsRollerRows'
 import { EstimateV2DetailsSummaryRail } from './EstimateV2DetailsSummaryRail'
 import { EstimateV2DetailsRoomConditions } from './EstimateV2DetailsRoomConditions'
+import { EstimateV2DetailsAccessFees } from './EstimateV2DetailsAccessFees'
 import { useEstimateV2DetailsPage } from '../_state/useEstimateV2DetailsPage'
 import { DETAILS_UNSAVED_CHANGES_MESSAGE } from '../_state/useEstimateV2DetailsController'
 import { formatDetailsNumber } from '../_lib/estimateV2DetailsShared'
@@ -135,6 +136,18 @@ export function EstimateV2DetailsPageContent({
                 className="h-10 rounded-[6px] border border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface)] px-3 text-sm font-semibold text-[color:var(--crm-ui-ink)] outline-none focus:border-[color:var(--crm-ui-accent)]"
               />
             </label>
+          </CrmSectionCard>
+
+          <CrmSectionCard
+            title="Access Fees"
+            description="One-time job-level access charges. Optional room context only notes where the fee applies."
+          >
+            <EstimateV2DetailsAccessFees
+              vm={vm.accessFees}
+              onAdd={actions.addAccessFee}
+              onUpdate={actions.updateAccessFee}
+              onRemove={actions.removeAccessFee}
+            />
           </CrmSectionCard>
 
           <CrmSectionCard

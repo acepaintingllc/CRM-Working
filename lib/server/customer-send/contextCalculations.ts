@@ -1,4 +1,5 @@
 import { calculateCeilings } from '@/lib/estimator/ceilings'
+import { calculateDrywallRepairs } from '@/lib/estimator/drywall'
 import { buildEstimatePricingSummaryFromEngines } from '@/lib/estimator/pricingPolicies'
 import { calculateTrim } from '@/lib/estimator/trim'
 import { calculateWalls } from '@/lib/estimator/walls'
@@ -62,6 +63,7 @@ export function deriveEstimateCustomerSendCalculatedData(
   let quoteWallScopes = resources.wallScopes
   let quoteCeilingScopes = resources.ceilingScopes
   let quoteTrimScopes = resources.trimScopes
+  let quoteDrywallScopes = resources.drywallRepairs ?? []
   let pricingSummary: EstimateCustomerSendCalculatedData['pricingSummary'] = null
 
   try {
@@ -74,6 +76,8 @@ export function deriveEstimateCustomerSendCalculatedData(
       const ceilingSegments =
         resources.ceilingScopeSegments as Parameters<typeof calculateCeilings>[0]['segments']
       const trimScopes = resources.trimScopes as Parameters<typeof calculateTrim>[0]['scopes']
+      const drywallRepairs =
+        (resources.drywallRepairs ?? []) as Parameters<typeof calculateDrywallRepairs>[0]['repairs']
       const rooms = resources.rooms as Parameters<typeof calculateTrim>[0]['rooms']
       const roomModeById = resolveRoomModeById({
         rooms: rooms as Unsafe[],
@@ -120,6 +124,14 @@ export function deriveEstimateCustomerSendCalculatedData(
       })
       quoteTrimScopes = (trimCalculations.scopes ?? []) as Unsafe[]
 
+      const drywallCalculations = calculateDrywallRepairs({
+        repairs: drywallRepairs,
+        catalogs: {
+          drywall_unit_rates: ((resources.catalogs as Unsafe).drywall_rates ?? []) as never,
+        },
+      })
+      quoteDrywallScopes = (drywallCalculations.scopes ?? []) as Unsafe[]
+
       const trimPaint = buildTrimPaintInput({
         jobsettings: resources.jobsettings as Unsafe,
         defaults: resources.settingsRow as Unsafe,
@@ -133,6 +145,7 @@ export function deriveEstimateCustomerSendCalculatedData(
           { kind: 'walls', output: wallCalculations },
           { kind: 'ceilings', output: ceilingCalculations },
           { kind: 'trim', output: trimCalculations },
+          { kind: 'drywall', output: drywallCalculations },
         ],
         {
           enabled: effectiveLaborDayEnabled !== false,
@@ -156,6 +169,7 @@ export function deriveEstimateCustomerSendCalculatedData(
     quoteWallScopes,
     quoteCeilingScopes,
     quoteTrimScopes,
+    quoteDrywallScopes,
     pricingSummary,
   }
 }

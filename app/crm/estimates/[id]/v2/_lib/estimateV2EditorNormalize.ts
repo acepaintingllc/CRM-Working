@@ -9,6 +9,7 @@ import type {
   EstimateV2CeilingSegmentDraft,
   EstimateV2CeilingSegmentShape,
   EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2RollerDraft,
@@ -550,6 +551,32 @@ export function createDefaultDoorScope(roomId: string): EstimateV2DoorScopeDraft
   }
 }
 
+function inferDrywallUnit(repairType: string): EstimateV2DrywallRepairDraft['unit'] {
+  return repairType === 'patch_opening_repair' ? 'SQFT' : 'LF'
+}
+
+function parseDrywallSurface(value: unknown): EstimateV2DrywallRepairDraft['surface'] {
+  return asText(value).toLowerCase() === 'ceiling' ? 'ceiling' : 'wall'
+}
+
+export function createDefaultDrywallRepair(
+  roomId: string,
+  surface: EstimateV2DrywallRepairDraft['surface'],
+  repairType: string
+): EstimateV2DrywallRepairDraft {
+  const normalizedRepairType = asText(repairType).toLowerCase() || 'patch_opening_repair'
+  return {
+    id: createUuid(),
+    roomId,
+    position: 0,
+    surface,
+    repairType: normalizedRepairType,
+    unit: inferDrywallUnit(normalizedRepairType),
+    quantity: '1',
+    overrideTotal: '',
+  }
+}
+
 function parseTrimMeasurementMode(value: unknown): EstimateV2TrimMeasurementMode {
   return asText(value).toUpperCase() === 'ROOM_HELPER' ? 'ROOM_HELPER' : 'MANUAL'
 }
@@ -626,6 +653,21 @@ export function normalizeDoorScope(row: UnsafeRecord, index: number): EstimateV2
     overrideSupplyCost: toInputNumber(row.override_supply_cost),
     overrideTotal: toInputNumber(row.override_total),
     notes: asText(row.notes),
+  }
+}
+
+export function normalizeDrywallRepair(row: UnsafeRecord, index: number): EstimateV2DrywallRepairDraft {
+  const repairType = asText(row.repair_type ?? row.repairType).toLowerCase()
+  const unitRaw = asText(row.unit).toUpperCase()
+  return {
+    id: asText(row.id) || createUuid(),
+    roomId: asText(row.room_id ?? row.roomId).toUpperCase(),
+    position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
+    surface: parseDrywallSurface(row.surface),
+    repairType,
+    unit: unitRaw === 'SQFT' ? 'SQFT' : inferDrywallUnit(repairType),
+    quantity: toInputNumber(row.quantity ?? row.raw_quantity) || '1',
+    overrideTotal: toInputNumber(row.override_total ?? row.overrideTotal),
   }
 }
 

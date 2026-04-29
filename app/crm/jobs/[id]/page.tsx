@@ -1,5 +1,8 @@
 'use client'
 
+import { Camera } from 'lucide-react'
+
+import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
@@ -77,6 +80,19 @@ export default function JobDetailPage() {
                     />
                   </CrmSectionCard>
                   <CrmSectionCard title="Actions" variant="compact">
+                    <CrmButton
+                      href={`/crm/job-photos?job=${controller.job.id}`}
+                      tone="secondary"
+                      className="min-h-9 px-3 text-xs"
+                    >
+                      <Camera size={14} aria-hidden="true" />
+                      <span>Job Photos</span>
+                    </CrmButton>
+                    {controller.photosFolderUrl ? (
+                      <CrmButton href={controller.photosFolderUrl} target="_blank" rel="noreferrer">
+                        Open Photos
+                      </CrmButton>
+                    ) : null}
                     <JobActionRail
                       actions={detailActions}
                       getActionTone={actionTone}

@@ -7,9 +7,11 @@ import {
   sortByPosition,
 } from '../v2DraftPayload.ts'
 import type {
+  EstimateV2AccessFeeDraft,
   EstimateV2CeilingScopeDraft,
   EstimateV2ConditionSelections,
   EstimateV2JobSettingsDraft,
+  EstimateV2OtherItemDraft,
   EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
@@ -332,6 +334,19 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
         notes: 'Trim applicator',
         position: 3,
       },
+    ],
+    [],
+    [
+      {
+        id: 'drywall-1',
+        roomId: 'R001',
+        position: 0,
+        surface: 'wall',
+        repairType: 'flat_wall_crack',
+        unit: 'LF',
+        quantity: '6.25',
+        overrideTotal: '125',
+      },
     ]
   )
 
@@ -369,6 +384,18 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.room_trim_scopes[0].override_supply_cost, 4)
   assert.equal(payload.room_trim_scopes[0].override_total, 5)
   assert.equal(payload.room_trim_scopes[0].override_description, 'hidden override')
+  assert.deepEqual(payload.drywall_repairs, [
+    {
+      id: 'drywall-1',
+      room_id: 'R001',
+      position: 0,
+      surface: 'wall',
+      repair_type: 'flat_wall_crack',
+      unit: 'LF',
+      quantity: 6.25,
+      override_total: 125,
+    },
+  ])
   assert.deepEqual(
     payload.rollers.map((roller) => ({
       id: roller.id,
@@ -674,6 +701,112 @@ test('job-level condition selections are merged into room and scope rows', () =>
   assert.deepEqual(payload.room_wall_scopes[0].condition_selections, { WALL_TEXTURE: 'moderate' })
   assert.deepEqual(payload.room_ceiling_scopes[0].condition_selections, { CEIL_TEXTURE: 'major' })
   assert.deepEqual(payload.room_trim_scopes[0].condition_selections, { TRIM_OIL_BASED: 'active' })
+})
+
+test('buildEstimateV2SavePayload defaults whitespace access fee numeric fields', () => {
+  const accessFee: EstimateV2AccessFeeDraft = {
+    id: 'access-fee-1',
+    roomId: '',
+    accessFeeId: ' ladder-tall ',
+    qty: '   ',
+    actualCostOverride: '   ',
+    notes: '',
+    position: 0,
+  }
+
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings(),
+    [minimalRoom()],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [accessFee]
+  )
+
+  assert.deepEqual(payload.access_fees, [
+    {
+      id: 'access-fee-1',
+      room_id: null,
+      access_fee_id: 'LADDER-TALL',
+      qty: 1,
+      actual_cost_override: null,
+      notes: null,
+      position: 0,
+      active: 'Y',
+    },
+  ])
+})
+
+test('buildEstimateV2SavePayload maps Other item drafts to persisted rows', () => {
+  const otherItem: EstimateV2OtherItemDraft = {
+    id: 'other-1',
+    roomId: 'R001',
+    position: 0,
+    include: 'Y',
+    description: 'Custom niche repair',
+    customerLabel: 'Niche repair',
+    pricingMode: 'quantity_rate',
+    quantity: '2',
+    unitRate: '85',
+    laborHours: '',
+    laborRate: '',
+    materialCost: '',
+    supplyCost: '',
+    fixedAmount: '',
+    rollupTarget: 'walls',
+    customerVisibility: 'rollup',
+    internalNotes: 'Internal only',
+  }
+
+  const payload = buildEstimateV2SavePayload(
+    minimalJobSettings(),
+    [minimalRoom()],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [otherItem]
+  )
+
+  assert.deepEqual(payload.other, [
+    {
+      id: 'other-1',
+      room_id: 'R001',
+      position: 0,
+      active: 'Y',
+      description: 'Custom niche repair',
+      customer_label: 'Niche repair',
+      pricing_mode: 'quantity_rate',
+      quantity: 2,
+      unit_rate: 85,
+      labor_hours: null,
+      labor_rate: null,
+      material_cost: null,
+      supply_cost: null,
+      fixed_amount: null,
+      rollup_target: 'walls',
+      customer_visibility: 'rollup',
+      internal_notes: 'Internal only',
+      client_description: 'Niche repair',
+      qty: 2,
+      uom: null,
+      labor_hrs_each: 0,
+      materials_each: 85,
+      rollup_scope: 'Walls',
+    },
+  ])
 })
 
 test('row condition selections override matching job-level selections', () => {

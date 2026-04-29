@@ -3,6 +3,7 @@ import {
   buildV2CeilingScopeRows,
   buildV2CeilingSegmentRows,
   buildV2DoorScopeRows,
+  buildV2DrywallRepairRows,
   buildV2RoomRosterRows,
   buildV2TrimScopeRows,
   buildV2WallScopeRows,
@@ -10,6 +11,7 @@ import {
   type V2CeilingScopeSaveRow,
   type V2CeilingSegmentSaveRow,
   type V2DoorScopeSaveRow,
+  type V2DrywallRepairSaveRow,
   type V2RoomRosterRow,
   type V2TrimScopeSaveRow,
   type V2WallScopeSaveRow,
@@ -30,6 +32,7 @@ import { normalizeTrimPaintGallons } from '../trimPaint.ts'
 import {
   calculateCeilingsForSave,
   calculateDoorsForSave,
+  calculateDrywallForSave,
   calculateTrimForSave,
   calculateWallsForSave,
   createCalculationCatalogsLoader,
@@ -176,7 +179,9 @@ export async function saveEstimateV2Inputs(params: {
     const useV2CeilingsSave = Array.isArray(body.room_ceiling_scopes)
     const useV2TrimSave = Array.isArray(body.room_trim_scopes)
     const useV2DoorsSave = Array.isArray(body.room_door_scopes)
-    const useAnyV2ScopeSave = useV2WallsSave || useV2CeilingsSave || useV2TrimSave || useV2DoorsSave
+    const useV2DrywallSave = Array.isArray(body.drywall_repairs)
+    const useV2OtherSave = Array.isArray(body.other)
+    const useAnyV2ScopeSave = useV2WallsSave || useV2CeilingsSave || useV2TrimSave || useV2DoorsSave || useV2DrywallSave || useV2OtherSave
     const useStructuredTransactionalSave =
       !useAnyV2ScopeSave &&
       (Array.isArray(body.job_colors) || Array.isArray(body.room_flags) || Array.isArray(body.access_fees))
@@ -192,6 +197,8 @@ export async function saveEstimateV2Inputs(params: {
     let trimCalculations: Awaited<ReturnType<typeof calculateTrimForSave>> | null = null
     let v2DoorScopeRows: V2DoorScopeSaveRow[] | null = null
     let doorCalculations: Awaited<ReturnType<typeof calculateDoorsForSave>> | null = null
+    let v2DrywallRepairRows: V2DrywallRepairSaveRow[] | null = null
+    let drywallCalculations: Awaited<ReturnType<typeof calculateDrywallForSave>> | null = null
     const ensureCatalogs = createCalculationCatalogsLoader({
       requestOrigin: params.requestOrigin,
       orgId: params.orgId,
@@ -294,6 +301,22 @@ export async function saveEstimateV2Inputs(params: {
           ensureCatalogs,
         })
         v2DoorScopeRows = doorCalculations.scopes as V2DoorScopeSaveRow[]
+      }
+    }
+
+    if (useV2DrywallSave) {
+      if (!Array.isArray(body.rooms)) throw new Error('V2 drywall save requires rooms')
+      if (!v2RoomRows) v2RoomRows = buildV2RoomRosterRows(body.rooms as Unsafe[])
+      v2DrywallRepairRows = buildV2DrywallRepairRows(
+        body.drywall_repairs as Unsafe[],
+        new Set(v2RoomRows.map((row) => row.room_id))
+      ).repairRows
+      if (!params.autosaveOnly) {
+        drywallCalculations = await calculateDrywallForSave({
+          repairs: v2DrywallRepairRows ?? [],
+          ensureCatalogs,
+        })
+        v2DrywallRepairRows = drywallCalculations.scopes as V2DrywallRepairSaveRow[]
       }
     }
 
@@ -417,6 +440,17 @@ export async function saveEstimateV2Inputs(params: {
       })
     }
 
+    if (useV2DrywallSave) {
+      await softReplaceRows({
+        table: 'estimate_drywall_repairs',
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        rows: (v2DrywallRepairRows ?? []).map((row) => ({
+          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, surface: row.surface, repair_type: row.repair_type, unit: row.unit, quantity: row.quantity, raw_quantity: row.raw_quantity, effective_quantity: row.effective_quantity, base_unit_rate: row.base_unit_rate, ceiling_multiplier: row.ceiling_multiplier, calculated_total: row.calculated_total, override_total: row.override_total, raw_total: row.raw_total, effective_total: row.effective_total,
+        })),
+      })
+    }
+
     if (Array.isArray(body.segments)) {
       const segNoByRoom = new Map<string, number>()
       await softReplaceRows({
@@ -514,7 +548,7 @@ export async function saveEstimateV2Inputs(params: {
           .map((row: Unsafe, idx: number) => ({
             id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, room_id: asText(row.room_id).toUpperCase() || null, segment_num: asNullableNumber(row.segment_num ?? row.segment_id), access_fee_id: asText(row.access_fee_id).toUpperCase(), qty: asNullableNumber(row.qty) ?? 1, active: toYN(row.active, 'Y'), notes: asText(row.notes) || null, actual_cost_override: asNullableNumber(row.actual_cost_override),
           }))
-          .filter((row: { room_id: string | null; access_fee_id: string }) => !!(row.room_id && row.access_fee_id)),
+          .filter((row: { access_fee_id: string }) => !!row.access_fee_id),
       })
     }
 
@@ -554,19 +588,42 @@ export async function saveEstimateV2Inputs(params: {
         orgId: params.orgId,
         estimateId: params.estimateId,
         rows: body.other.map((row: Unsafe, idx: number) => {
-          const rollupScope = toOtherRollupScope(pickValue(row, ['rollup_scope', 'rollupScope', 'RollupScope']))
-          if (!rollupScope) throw new Error(`Other row ${idx + 1}: RollupScope must be Walls, Ceilings, or Trim`)
-          const clientDescription = asText(pickValue(row, ['client_description', 'clientDescription', 'ClientDescription']))
-          if (!clientDescription) throw new Error(`Other row ${idx + 1}: ClientDescription is required`)
+          const rollupTarget = asText(pickValue(row, ['rollup_target', 'rollupTarget'])).toLowerCase() || 'other'
+          const rollupScope =
+            toOtherRollupScope(pickValue(row, ['rollup_scope', 'rollupScope', 'RollupScope'])) ??
+            (rollupTarget === 'ceilings'
+              ? 'Ceilings'
+              : rollupTarget === 'trim' || rollupTarget === 'doors'
+                ? 'Trim'
+                : 'Walls')
+          const clientDescription =
+            asText(pickValue(row, ['client_description', 'clientDescription', 'ClientDescription'])) ||
+            asText(pickValue(row, ['customer_label', 'customerLabel'])) ||
+            asText(pickValue(row, ['description']))
+          if (!clientDescription) throw new Error(`Other row ${idx + 1}: description or customer label is required`)
           const qtyRaw = pickValue(row, ['qty', 'Qty'])
           const qty = qtyRaw == null || qtyRaw === '' ? 1 : asNullableNumber(qtyRaw)
           if (qty == null || qty <= 0) throw new Error(`Other row ${idx + 1}: Qty must be numeric and greater than 0`)
-          const laborHrsEach = asNullableNumber(pickValue(row, ['labor_hrs_each', 'laborHrsEach', 'LaborHrs_Each']))
+          const laborHrsEach = asNullableNumber(pickValue(row, ['labor_hrs_each', 'laborHrsEach', 'LaborHrs_Each', 'labor_hours', 'laborHours'])) ?? 0
           if (laborHrsEach == null || laborHrsEach < 0) throw new Error(`Other row ${idx + 1}: LaborHrs_Each must be numeric and >= 0`)
-          const materialsEach = asNullableNumber(pickValue(row, ['materials_each', 'materialsEach', 'Materials$_Each']))
+          const materialsEach = asNullableNumber(pickValue(row, ['materials_each', 'materialsEach', 'Materials$_Each', 'material_cost', 'materialCost', 'unit_rate', 'unitRate', 'fixed_amount', 'fixedAmount'])) ?? 0
           if (materialsEach == null || materialsEach < 0) throw new Error(`Other row ${idx + 1}: Materials$_Each must be numeric and >= 0`)
           return {
-            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, rollup_scope: rollupScope, location: asText(pickValue(row, ['location', 'Location'])) || null, client_description: clientDescription, qty, uom: asText(pickValue(row, ['uom', 'UOM'])) || null, labor_hrs_each: laborHrsEach, materials_each: materialsEach, notes: asText(pickValue(row, ['notes', 'Notes'])) || null, active: toYN(pickValue(row, ['active', 'Active?', 'Active']), 'Y'),
+            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, rollup_scope: rollupScope, location: asText(pickValue(row, ['location', 'Location', 'room_id', 'roomId'])) || null, client_description: clientDescription, qty, uom: asText(pickValue(row, ['uom', 'UOM'])) || null, labor_hrs_each: laborHrsEach, materials_each: materialsEach, notes: asText(pickValue(row, ['notes', 'Notes', 'internal_notes', 'internalNotes'])) || null, active: toYN(pickValue(row, ['active', 'Active?', 'Active']), 'Y'),
+            room_id: asText(pickValue(row, ['room_id', 'roomId'])).toUpperCase() || null,
+            description: asText(pickValue(row, ['description'])) || null,
+            customer_label: asText(pickValue(row, ['customer_label', 'customerLabel'])) || null,
+            pricing_mode: asText(pickValue(row, ['pricing_mode', 'pricingMode'])) || null,
+            quantity: asNullableNumber(pickValue(row, ['quantity'])),
+            unit_rate: asNullableNumber(pickValue(row, ['unit_rate', 'unitRate'])),
+            labor_hours: asNullableNumber(pickValue(row, ['labor_hours', 'laborHours'])),
+            labor_rate: asNullableNumber(pickValue(row, ['labor_rate', 'laborRate'])),
+            material_cost: asNullableNumber(pickValue(row, ['material_cost', 'materialCost'])),
+            supply_cost: asNullableNumber(pickValue(row, ['supply_cost', 'supplyCost'])),
+            fixed_amount: asNullableNumber(pickValue(row, ['fixed_amount', 'fixedAmount'])),
+            rollup_target: rollupTarget,
+            customer_visibility: asText(pickValue(row, ['customer_visibility', 'customerVisibility'])) || 'standalone',
+            internal_notes: asText(pickValue(row, ['internal_notes', 'internalNotes'])) || null,
           }
         }),
       })
@@ -580,6 +637,7 @@ export async function saveEstimateV2Inputs(params: {
         ceiling_calculations: typeof ceilingCalculations
         trim_calculations: typeof trimCalculations
         door_calculations?: typeof doorCalculations
+        drywall_calculations?: typeof drywallCalculations
       } = {
         ok: true as const,
         wall_calculations: wallCalculations,
@@ -587,6 +645,7 @@ export async function saveEstimateV2Inputs(params: {
         trim_calculations: trimCalculations,
       }
       if (useV2DoorsSave) result.door_calculations = doorCalculations
+      if (useV2DrywallSave) result.drywall_calculations = drywallCalculations
       return result
     }
     return { ok: true as const }

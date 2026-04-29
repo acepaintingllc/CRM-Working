@@ -1070,6 +1070,14 @@ test('buildCustomerEstimateDocument preserves mixed-scope output parity across d
           prime_mode: 'FULL',
         },
       ],
+      access_fees: [
+        {
+          label: 'Ladder setup',
+          access_fee_id: 'LADDER',
+          qty: 2,
+          catalog_amount: 75,
+        },
+      ],
       other: [
         {
           client_description: 'Wallpaper removal in upstairs hall',
@@ -1096,7 +1104,7 @@ test('buildCustomerEstimateDocument preserves mixed-scope output parity across d
       terms_text: '',
     },
     pricingSummary: {
-      finalTotal: 1500,
+      finalTotal: 1650,
     },
   })
 
@@ -1108,12 +1116,10 @@ test('buildCustomerEstimateDocument preserves mixed-scope output parity across d
   assert.match(document.scopes.find((section) => section.key === 'ceilings')?.text ?? '', /stain/i)
   assert.doesNotMatch(document.scopes.find((section) => section.key === 'trim')?.text ?? '', /Baseboards|Crown|Chair Rail/i)
   assert.match(document.scopes.find((section) => section.key === 'doors')?.text ?? '', /Door and Frame/i)
-  assert.equal(
-    document.scopes.find((section) => section.key === 'other')?.text,
-    'Wallpaper removal in upstairs hall in Hall Bath 1 area'
-  )
+  assert.match(document.scopes.find((section) => section.key === 'other')?.text ?? '', /Ladder setup 2 each/)
+  assert.match(document.scopes.find((section) => section.key === 'other')?.text ?? '', /Wallpaper removal in upstairs hall in Hall Bath 1 area/)
   assert.equal(document.quote_rows.length, 5)
-  assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), 1500)
+  assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), 1650)
 })
 
 test('buildCustomerEstimateDocument keeps fractional mixed-scope rows reconciled to rounded quote total', () => {

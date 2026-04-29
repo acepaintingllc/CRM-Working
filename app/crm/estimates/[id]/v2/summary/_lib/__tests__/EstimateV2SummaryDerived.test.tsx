@@ -623,11 +623,13 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(SCOPE_KIND_ORDER.walls).toBeLessThan(SCOPE_KIND_ORDER.ceilings)
     expect(SCOPE_KIND_ORDER.ceilings).toBeLessThan(SCOPE_KIND_ORDER.trim)
     expect(SCOPE_KIND_ORDER.trim).toBeLessThan(SCOPE_KIND_ORDER.doors)
+    expect(SCOPE_KIND_ORDER.doors).toBeLessThan(SCOPE_KIND_ORDER.drywall)
     expect(SCOPE_KIND_LABELS).toEqual({
       walls: 'Walls',
       ceilings: 'Ceilings',
       trim: 'Trim',
       doors: 'Doors',
+      drywall: 'Drywall',
     })
   })
 })

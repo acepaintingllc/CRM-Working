@@ -103,6 +103,17 @@ export type NormalizedDoorScopeRow = {
   primeMode: 'SPOT' | 'FULL' | null
 }
 
+export type NormalizedDrywallScopeRow = {
+  roomId: string
+  included: boolean
+  repairLabel: string
+  surface: string
+  unit: string
+  quantity: number | null
+  price: number
+  notes: string[]
+}
+
 export type NormalizedOtherRow = {
   description: string
   location: string
@@ -146,6 +157,8 @@ export interface CustomerEstimateInput {
     room_ceiling_scopes?: CustomerEstimateRow[]
     room_trim_scopes?: CustomerEstimateRow[]
     room_door_scopes?: CustomerEstimateRow[]
+    drywall_repairs?: CustomerEstimateRow[]
+    access_fees?: CustomerEstimateRow[]
     trim_items?: CustomerEstimateRow[]
     other?: CustomerEstimateRow[]
     jobsettings?: CustomerEstimateRow | null
@@ -188,6 +201,7 @@ export type NormalizedCustomerEstimateInput = {
   roomCeilingScopes: NormalizedPaintScopeRow[]
   roomTrimScopes: NormalizedTrimScopeRow[]
   roomDoorScopes: NormalizedDoorScopeRow[]
+  roomDrywallScopes: NormalizedDrywallScopeRow[]
   trimItems: NormalizedTrimItemRow[]
   otherRows: NormalizedOtherRow[]
   jobsettings: NormalizedJobSettings
@@ -336,6 +350,27 @@ function normalizeDoorScopeRow(
   }
 }
 
+function normalizeDrywallScopeRow(row: CustomerEstimateRow): NormalizedDrywallScopeRow {
+  const repairType = asText(row.repair_type).toLowerCase()
+  const surface = asText(row.surface).toLowerCase()
+  return {
+    roomId: asText(row.room_id).toUpperCase(),
+    included: asText(row.active || row.include).toUpperCase() !== 'N',
+    repairLabel: humanizeIdentifier(repairType) || 'Drywall repair',
+    surface: humanizeIdentifier(surface) || 'Drywall',
+    unit: asText(row.unit).toUpperCase(),
+    quantity: asNum(row.effective_quantity) ?? asNum(row.raw_quantity) ?? asNum(row.quantity),
+    price:
+      asNum(row.effective_total) ??
+      asNum(row.final_total) ??
+      asNum(row.raw_total) ??
+      asNum(row.override_total) ??
+      asNum(row.calculated_total) ??
+      0,
+    notes: [asText(row.notes), 'primer included'].filter(Boolean),
+  }
+}
+
 function normalizeOtherRow(row: CustomerEstimateRow): NormalizedOtherRow {
   return {
     description: asText(row.client_description),
@@ -348,6 +383,30 @@ function normalizeOtherRow(row: CustomerEstimateRow): NormalizedOtherRow {
       asNum(row.raw_total) ??
       asNum(row.override_total) ??
       0,
+  }
+}
+
+function normalizeAccessFeeRow(row: CustomerEstimateRow): NormalizedOtherRow {
+  const qty = asNum(row.qty) ?? 1
+  const description =
+    asText(row.label) ||
+    asText(row.display_name) ||
+    humanizeIdentifier(asText(row.access_fee_id)) ||
+    'Access fee'
+  const price =
+    asNum(row.effective_total) ??
+    asNum(row.final_total) ??
+    asNum(row.raw_total) ??
+    asNum(row.override_total) ??
+    asNum(row.actual_cost_override) ??
+    (asNum(row.catalog_amount) ?? asNum(row.amount) ?? 0) * qty
+
+  return {
+    description,
+    location: asText(row.room_id),
+    qty,
+    uom: asText(row.unit) || 'each',
+    price,
   }
 }
 
@@ -440,6 +499,7 @@ export function normalizeCustomerEstimateInput(
     roomDoorScopes: rowsOf(input.inputs.room_door_scopes).map((row) =>
       normalizeDoorScopeRow(row, doorCatalogById)
     ),
+    roomDrywallScopes: rowsOf(input.inputs.drywall_repairs).map(normalizeDrywallScopeRow),
     trimItems: rowsOf(input.inputs.trim_items).map((row) => {
       const trimId = asText(row.trim_menu_id).toUpperCase()
       const catalogMatch = trimCatalogById.get(trimId)
@@ -465,7 +525,10 @@ export function normalizeCustomerEstimateInput(
         primeMode: normalizePrimeMode(row.prime_mode),
       } satisfies NormalizedTrimItemRow
     }),
-    otherRows: rowsOf(input.inputs.other).map(normalizeOtherRow),
+    otherRows: [
+      ...rowsOf(input.inputs.access_fees).map(normalizeAccessFeeRow),
+      ...rowsOf(input.inputs.other).map(normalizeOtherRow),
+    ],
     jobsettings: {
       wallPaintProductId: asText(
         input.inputs.jobsettings?.walls_paint_id ||

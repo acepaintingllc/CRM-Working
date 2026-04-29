@@ -278,6 +278,7 @@ export type UnitRateRow = RatesFlagsBaseRow & {
   labor_rate: string
   material_rate: string
   amount: string
+  ceiling_multiplier?: string
   trim_category?: string
   measurement_class?: string
   picker_group?: string
@@ -466,6 +467,7 @@ export type DrywallUnitRateMutationValues = {
   labor_rate: string
   material_rate: string
   amount: string
+  ceiling_multiplier: string
   notes: string
   active: 'Y' | 'N'
 }
@@ -748,7 +750,9 @@ export type TrimUnitRateDraft = DoorUnitRateDraft & {
   picker_group?: string
 }
 
-export type DrywallUnitRateDraft = DoorUnitRateDraft
+export type DrywallUnitRateDraft = DoorUnitRateDraft & {
+  ceiling_multiplier: RatesFlagsNumberDraftValue
+}
 
 export type AccessFeeDraft = {
   id: string

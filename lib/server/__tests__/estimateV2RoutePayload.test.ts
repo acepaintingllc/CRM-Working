@@ -10,8 +10,10 @@ import {
   toCeilingCalculationCatalogs,
   buildV2TrimScopeRows,
   buildV2DoorScopeRows,
+  buildV2DrywallRepairRows,
   toTrimCalculationCatalogs,
   toDoorCalculationCatalogs,
+  toDrywallCalculationCatalogs,
 } from '../estimateV2RoutePayload.ts'
 
 test('buildV2RoomRosterRows assigns generated IDs and enforces uniqueness', () => {
@@ -523,6 +525,44 @@ test('buildV2DoorScopeRows maps door row fields and validates room IDs', () => {
   )
 })
 
+test('buildV2DrywallRepairRows validates room, surface, repair type, unit, and quantity', () => {
+  const rows = buildV2DrywallRepairRows(
+    [
+      {
+        id: '55555555-5555-4555-8555-555555555555',
+        room_id: 'r001',
+        surface: 'wall',
+        repair_type: 'patch_opening_repair',
+        quantity: '2.25',
+        override_total: '175',
+      },
+      {
+        room_id: 'R001',
+        surface: 'ceiling',
+        repair_type: 'ceiling_crack',
+        quantity: '3.1',
+      },
+    ],
+    new Set(['R001'])
+  ).repairRows
+
+  assert.equal(rows[0].room_id, 'R001')
+  assert.equal(rows[0].unit, 'SQFT')
+  assert.equal(rows[0].quantity, 2.25)
+  assert.equal(rows[0].override_total, 175)
+  assert.equal(rows[1].unit, 'LF')
+  assert.equal(rows[1].position, 0)
+
+  assert.throws(
+    () =>
+      buildV2DrywallRepairRows(
+        [{ room_id: 'R001', surface: 'ceiling', repair_type: 'flat_wall_crack', quantity: 1 }],
+        new Set(['R001'])
+      ),
+    /not valid for ceiling/i
+  )
+})
+
 test('toDoorCalculationCatalogs normalizes direct and category-based door rate rows', () => {
   const direct = toDoorCalculationCatalogs({
     door_types: [
@@ -565,4 +605,28 @@ test('toDoorCalculationCatalogs normalizes direct and category-based door rate r
   assert.equal(category?.door_unit_rates?.[0]?.id, 'SLAB')
   assert.equal(category?.door_unit_rates?.[0]?.default_qty, 2)
   assert.equal(category?.door_unit_rates?.[0]?.amount, 4)
+})
+
+test('toDrywallCalculationCatalogs normalizes drywall rates with ceiling multiplier', () => {
+  const catalogs = toDrywallCalculationCatalogs({
+    categories: [
+      {
+        key: 'unit_rates_drywall',
+        rows: [
+          {
+            id: 'PATCH_OPENING_REPAIR',
+            display_name: 'Patch/opening repair',
+            unit_rate_type: 'patch_opening_repair',
+            unit: 'SQFT',
+            amount: '45',
+            ceiling_multiplier: '1.25',
+          },
+        ],
+      },
+    ],
+  })
+
+  assert.equal(catalogs?.drywall_unit_rates?.[0]?.id, 'patch_opening_repair')
+  assert.equal(catalogs?.drywall_unit_rates?.[0]?.amount, 45)
+  assert.equal(catalogs?.drywall_unit_rates?.[0]?.ceiling_multiplier, 1.25)
 })

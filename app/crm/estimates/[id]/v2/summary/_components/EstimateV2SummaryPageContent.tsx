@@ -85,11 +85,16 @@ function buildChargeRows(accessFees: UnsafeRecord[], otherCharges: UnsafeRecord[
   const rows: { label: string; value: string; total: number }[] = []
 
   for (const fee of accessFees) {
-    const label = textValue(fee, 'access_fee_id') || 'Access fee'
+    const label =
+      textValue(fee, 'label') ||
+      textValue(fee, 'display_name') ||
+      textValue(fee, 'access_fee_id') ||
+      'Access fee'
     const qty = numberValue(fee, ['qty']) ?? 1
     const total =
       numberValue(fee, ['effective_total', 'final_total', 'raw_total', 'override_total']) ??
-      (numberValue(fee, ['actual_cost_override']) ?? 0) * qty
+      numberValue(fee, ['actual_cost_override']) ??
+      (numberValue(fee, ['catalog_amount', 'amount']) ?? 0) * qty
     rows.push({ label: `${label} x ${qty}`, value: fmtUSD(total), total })
   }
 
@@ -296,6 +301,11 @@ export function EstimateV2SummaryPageContent({
             <CrmChip tone="accent">{derived.statusLabel}</CrmChip>
             {sendStatus ? <SendStatusChip sendStatus={sendStatus} /> : null}
             <CrmChip>Crew: {derived.crewSize}</CrmChip>
+            {(data.pricing_summary?.sharedAccessCost ?? 0) > 0 ? (
+              <CrmChip tone="accent">
+                Access: {fmtUSD(data.pricing_summary?.sharedAccessCost ?? 0)}
+              </CrmChip>
+            ) : null}
             {data.estimate.updated_at ? (
               <CrmChip>
                 Updated{' '}

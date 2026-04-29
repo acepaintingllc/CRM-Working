@@ -1,4 +1,4 @@
-export const SCOPE_KINDS = ['walls', 'ceilings', 'trim', 'doors'] as const
+export const SCOPE_KINDS = ['walls', 'ceilings', 'trim', 'doors', 'drywall'] as const
 
 export type ScopeKind = (typeof SCOPE_KINDS)[number]
 
@@ -7,6 +7,7 @@ export const SCOPE_KIND_LABELS: Record<ScopeKind, string> = {
   ceilings: 'Ceilings',
   trim: 'Trim',
   doors: 'Doors',
+  drywall: 'Drywall',
 }
 
 export const SCOPE_KIND_ORDER = SCOPE_KINDS.reduce<Record<ScopeKind, number>>(
@@ -19,5 +20,6 @@ export const SCOPE_KIND_ORDER = SCOPE_KINDS.reduce<Record<ScopeKind, number>>(
     ceilings: 1,
     trim: 2,
     doors: 3,
+    drywall: 4,
   }
 )

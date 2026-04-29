@@ -8,7 +8,6 @@ import {
   moveTrimScopeMutation,
   syncWallCutInFromTrayCeilings,
   stripInvalidTrimHelperModeMutation,
-  TRAY_CEILING_WALL_CUT_IN_FACTOR,
   toggleRoomFlagMutation,
   updateRoomDimensionsMutation,
 } from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorMutations.ts'
@@ -173,7 +172,7 @@ test('updateRoomDimensionsMutation syncs both RECT wall and RECT ceiling geometr
   assert.equal(ceilingScope?.areaSf, '88')
 })
 
-test('syncWallCutInFromTrayCeilings applies tray top cut-in factor without lowering manual overrides', () => {
+test('syncWallCutInFromTrayCeilings leaves wall cut-in factors unchanged for tray ceilings', () => {
   const ceilingScopes = [
     makeCeilingScope({
       ceilingGeometryMode: 'TRAY',
@@ -190,22 +189,20 @@ test('syncWallCutInFromTrayCeilings applies tray top cut-in factor without lower
     ceilingScopes,
   })
 
-  assert.equal(synced[0].cutInTopFactor, TRAY_CEILING_WALL_CUT_IN_FACTOR)
+  assert.equal(synced[0].cutInTopFactor, '1')
   assert.equal(synced[1].cutInTopFactor, '1.3')
   assert.equal(synced[2].cutInTopFactor, '1')
 })
 
-test('syncWallCutInFromTrayCeilings removes only the default tray top cut-in factor when tray is removed', () => {
+test('syncWallCutInFromTrayCeilings does not reset manual wall cut-in factors when tray is removed', () => {
   const synced = syncWallCutInFromTrayCeilings({
     wallScopes: [
-      makeWallScope({ cutInTopFactor: TRAY_CEILING_WALL_CUT_IN_FACTOR }),
       makeWallScope({ id: 'wall-2', cutInTopFactor: '1.3' }),
     ],
     ceilingScopes: [makeCeilingScope({ ceilingGeometryMode: 'FLAT', include: 'Y' })],
   })
 
-  assert.equal(synced[0].cutInTopFactor, '1')
-  assert.equal(synced[1].cutInTopFactor, '1.3')
+  assert.equal(synced[0].cutInTopFactor, '1.3')
 })
 
 test('syncWallCutInFromTrayCeilings ignores stale tray metadata on SEG ceilings', () => {

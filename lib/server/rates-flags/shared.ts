@@ -4,6 +4,7 @@ import type { StringRecord } from './categoryTypes.ts'
 export type AccessFeeCatalogRow = {
   id: string
   label: string
+  access_group: 'ladders' | 'scaffolding' | 'specialty'
   fee_type: string | null
   amount: number | null
   unit: string | null
@@ -119,6 +120,10 @@ export type DoorUnitRateCatalogRow = {
   active: 'Y' | 'N'
 }
 
+export type DrywallUnitRateCatalogRow = DoorUnitRateCatalogRow & {
+  ceiling_multiplier: number | null
+}
+
 export type AreaSupplyCatalogRow = {
   key: string
   supply_group: 'per_color' | 'area_based' | 'per_job'
@@ -142,6 +147,7 @@ export type RatesFlagsCatalogOverlay = {
   access_fees: AccessFeeCatalogRow[]
   trim_items: TrimItemCatalogRow[]
   door_unit_rates?: DoorUnitRateCatalogRow[]
+  drywall_unit_rates?: DrywallUnitRateCatalogRow[]
   area_supplies_rates: AreaSupplyCatalogRow[]
 }
 

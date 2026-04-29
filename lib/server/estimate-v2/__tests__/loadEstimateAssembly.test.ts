@@ -73,10 +73,34 @@ describe('loadEstimateV2Response', () => {
       quoteCeilingScopes: [{ id: 'ceiling-scope-1' }],
       quoteTrimScopes: [{ id: 'trim-scope-1' }],
       quoteDoorScopes: [{ id: 'door-scope-1' }],
+      quoteDrywallScopes: [{ id: 'drywall-scope-1' }],
       wallCalculations: { scopes: [{ id: 'wall-scope-1' }] },
       ceilingCalculations: { scopes: [{ id: 'ceiling-scope-1' }] },
       trimCalculations: { scopes: [{ id: 'trim-scope-1' }] },
       doorCalculations: { scopes: [{ id: 'door-scope-1' }] },
+      drywallCalculations: { scopes: [{ id: 'drywall-scope-1' }] },
+      otherCalculations: {
+        scopes: [
+          {
+            id: 'other-1',
+            effective_total: 85,
+            pricing_mode: 'fixed',
+          },
+        ],
+      },
+      accessFeeCalculation: {
+        rows: [
+          {
+            id: 'fee-1',
+            label: 'Tall ladder',
+            group: 'ladders',
+            catalogAmount: 75,
+            calculatedTotal: 150,
+            total: 150,
+            overridden: false,
+          },
+        ],
+      },
       trimPaintInput: { gallons: 1.25 },
       pricingSummary: { final_total: 1200 },
     })
@@ -91,6 +115,7 @@ describe('loadEstimateV2Response', () => {
       ['estimate_room_ceiling_scope_segments', createOrderedQuery({ data: [{ id: 'ceiling-scope-segment-1' }], error: null }, 2)],
       ['estimate_room_trim_scopes', createOrderedQuery({ data: [{ id: 'trim-scope-raw' }], error: null }, 2)],
       ['estimate_room_door_scopes', createOrderedQuery({ data: [{ id: 'door-scope-raw' }], error: null }, 2)],
+      ['estimate_drywall_repairs', createOrderedQuery({ data: [{ id: 'drywall-repair-raw' }], error: null }, 2)],
       ['estimate_rollers', createOrderedQuery({ data: [{ id: 'roller-1' }, { id: 'applicator-1', scope: 'Trim' }], error: null }, 1)],
       ['estimate_prejob', createOrderedQuery({ data: [{ id: 'prejob-1' }], error: null }, 1)],
       ['estimate_trim_items', createOrderedQuery({ data: [{ id: 'trim-item-1' }], error: null }, 1)],
@@ -138,6 +163,9 @@ describe('loadEstimateV2Response', () => {
       ceilingScopeSegments: [{ id: 'ceiling-scope-segment-1' }],
       roomTrimScopes: [{ id: 'trim-scope-raw' }],
       roomDoorScopes: [{ id: 'door-scope-raw' }],
+      drywallRepairs: [{ id: 'drywall-repair-raw' }],
+      accessFees: [{ id: 'fee-1' }],
+      other: [{ id: 'other-1' }],
       orgDefaults: null,
     })
     expect(mocks.buildEstimateGetResponse).toHaveBeenCalledWith(
@@ -149,8 +177,24 @@ describe('loadEstimateV2Response', () => {
           room_ceiling_scopes: [{ id: 'ceiling-scope-1' }],
           room_trim_scopes: [{ id: 'trim-scope-1' }],
           room_door_scopes: [{ id: 'door-scope-1' }],
+          drywall_repairs: [{ id: 'drywall-repair-raw' }],
+          access_fees: [
+            expect.objectContaining({
+              id: 'fee-1',
+              label: 'Tall ladder',
+              effective_total: 150,
+            }),
+          ],
+          other: [
+            expect.objectContaining({
+              id: 'other-1',
+              effective_total: 85,
+              pricing_mode: 'fixed',
+            }),
+          ],
           rollers: [{ id: 'roller-1' }, { id: 'applicator-1', scope: 'Trim' }],
         }),
+        drywall_calculations: { scopes: [{ id: 'drywall-scope-1' }] },
         pricing_summary: { final_total: 1200 },
       })
     )

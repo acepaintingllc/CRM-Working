@@ -193,6 +193,37 @@ describe('EstimateV2SummaryPageContent', () => {
     expect(screen.queryByRole('heading', { name: 'Trim Paint' })).not.toBeInTheDocument()
   })
 
+  it('shows access fees as job-level charges with effective total', () => {
+    mockUseEstimateV2SummaryData.mockReturnValue({
+      ...baseDataState,
+      data: {
+        ...baseDataState.data,
+        pricing_summary: {
+          sharedAccessCost: 150,
+        },
+        inputs: {
+          access_fees: [
+            {
+              id: 'row-1',
+              label: 'Ladder',
+              access_fee_id: 'LADDER',
+              qty: 2,
+              catalog_amount: 75,
+              actual_cost_override: null,
+            },
+          ],
+        },
+      },
+    })
+
+    render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('Access: $150')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Access Fees & Other Charges' })).toBeInTheDocument()
+    expect(screen.getByText('Ladder x 2')).toBeInTheDocument()
+    expect(screen.getAllByText('$150').length).toBeGreaterThan(0)
+  })
+
   it('does not reload send status when a wrapper recreates an equivalent route family object', async () => {
     const { rerender } = render(
       <EstimateV2SummaryPageContent estimateId="estimate-1" routeFamily={{ ...estimateRouteFamily }} />

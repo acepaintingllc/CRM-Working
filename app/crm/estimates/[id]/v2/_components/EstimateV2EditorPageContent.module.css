@@ -237,6 +237,18 @@
   min-width: 0;
 }
 
+:global(.drywall-repair-grid) {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.45fr) minmax(112px, 0.75fr) minmax(136px, 0.8fr);
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+:global(.drywall-repair-grid > *) {
+  min-width: 0;
+}
+
 :global(.trim-primer-mode-field) {
   grid-column: span 2;
   min-width: 0;
@@ -469,6 +481,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  :global(.drywall-repair-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   :global(.trim-primer-mode-field) {
     grid-column: span 1;
   }
@@ -535,6 +551,7 @@
   :global(.geometry-secondary-grid),
     :global(.paint-setup-grid),
     :global(.trim-setup-grid),
+    :global(.drywall-repair-grid),
   :global(.scope-helper-bar),
   :global(.modifier-grid),
   :global(.advanced-grid) {

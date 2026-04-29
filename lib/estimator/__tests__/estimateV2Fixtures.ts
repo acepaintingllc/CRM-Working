@@ -2,6 +2,7 @@ import { buildEstimateV2SavePayload } from '../v2DraftPayload.ts'
 import { createEstimateV2DirtySnapshot, type EstimateV2DirtySnapshot } from '../../../app/crm/estimates/[id]/v2/_state/estimateV2DirtySnapshot'
 import type {
   EstimateV2Catalogs,
+  EstimateV2AccessFeeDraft,
   EstimateV2EstimateMeta,
   EstimateV2JobDefaultProducts,
   EstimateV2JobMeta,
@@ -29,6 +30,7 @@ type MixedEstimateFixture = {
   rooms: EstimateV2RoomDraft[]
   roomFlags: EstimateV2RoomFlagDraft[]
   rollers: EstimateV2RollerDraft[]
+  accessFees: EstimateV2AccessFeeDraft[]
   scopes: EstimateV2WallScopeDraft[]
   segments: EstimateV2WallSegmentDraft[]
   ceilingScopes: EstimateV2CeilingScopeDraft[]
@@ -125,6 +127,17 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     ],
     room_flags: [{ id: 'FLAG-HIGH', label: 'High traffic', wall_factor: 1.1, ceil_factor: 1, trim_factor: 1.05 }],
     ceiling_types: [{ id: 'CEIL-FLAT', label: 'Flat ceiling', labor_mult: 1 }],
+    access_fees: [
+      {
+        id: 'ACCESS-LADDER',
+        label: 'Tall ladder',
+        access_group: 'ladders',
+        fee_type: 'flat',
+        amount: 75,
+        unit: 'EA',
+        notes: null,
+      },
+    ],
     trim_items: [
       {
         id: 'TRIM-BASE',
@@ -205,6 +218,18 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       rollerSizeIn: '9',
       coversQty: '2',
       notes: 'Main wall roller',
+      position: 0,
+    },
+  ]
+
+  const accessFees: EstimateV2AccessFeeDraft[] = [
+    {
+      id: 'access-fee-ladder',
+      roomId: 'R001',
+      accessFeeId: 'ACCESS-LADDER',
+      qty: '1',
+      actualCostOverride: '',
+      notes: 'Tall entry setup',
       position: 0,
     },
   ]
@@ -537,7 +562,10 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     ceilingScopes,
     ceilingSegments,
     trimScopes,
-    rollers
+    rollers,
+    [],
+    [],
+    accessFees
   )
 
   const wallCalculations: EstimateV2WallCalculationsPayload = {
@@ -694,6 +722,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       room_wall_scopes: payload.room_wall_scopes,
       room_ceiling_scopes: payload.room_ceiling_scopes,
       room_trim_scopes: payload.room_trim_scopes,
+      access_fees: payload.access_fees,
       paint_products: catalogs.paint_products,
       jobsettings: { override_labor_rate: null },
       org_defaults: null,
@@ -719,6 +748,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     rooms: clone(rooms),
     roomFlags: clone(roomFlags),
     rollers: clone(rollers),
+    accessFees: clone(accessFees),
     scopes: clone(scopes),
     segments: clone(segments),
     ceilingScopes: clone(ceilingScopes),

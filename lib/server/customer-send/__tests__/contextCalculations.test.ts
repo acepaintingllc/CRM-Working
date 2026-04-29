@@ -6,6 +6,7 @@ const {
   mockCalculateWalls,
   mockCalculateCeilings,
   mockCalculateTrim,
+  mockCalculateDrywallRepairs,
   mockBuildEstimatePricingSummaryFromEngines,
   mockBuildTrimPaintInput,
   mockProductMap,
@@ -13,6 +14,7 @@ const {
   mockCalculateWalls: vi.fn(),
   mockCalculateCeilings: vi.fn(),
   mockCalculateTrim: vi.fn(),
+  mockCalculateDrywallRepairs: vi.fn(),
   mockBuildEstimatePricingSummaryFromEngines: vi.fn(),
   mockBuildTrimPaintInput: vi.fn(),
   mockProductMap: vi.fn(),
@@ -28,6 +30,10 @@ vi.mock('@/lib/estimator/ceilings', () => ({
 
 vi.mock('@/lib/estimator/trim', () => ({
   calculateTrim: mockCalculateTrim,
+}))
+
+vi.mock('@/lib/estimator/drywall', () => ({
+  calculateDrywallRepairs: mockCalculateDrywallRepairs,
 }))
 
 vi.mock('@/lib/estimator/pricingPolicies', () => ({
@@ -122,6 +128,7 @@ describe('customer send context calculations', () => {
     mockCalculateWalls.mockReset()
     mockCalculateCeilings.mockReset()
     mockCalculateTrim.mockReset()
+    mockCalculateDrywallRepairs.mockReset()
     mockBuildEstimatePricingSummaryFromEngines.mockReset()
     mockBuildTrimPaintInput.mockReset()
     mockProductMap.mockReset()
@@ -129,6 +136,7 @@ describe('customer send context calculations', () => {
     mockCalculateWalls.mockReturnValue({ scopes: [{ id: 'wall-output' }] })
     mockCalculateCeilings.mockReturnValue({ scopes: [{ id: 'ceiling-output' }] })
     mockCalculateTrim.mockReturnValue({ scopes: [{ id: 'trim-output' }] })
+    mockCalculateDrywallRepairs.mockReturnValue({ scopes: [{ id: 'drywall-output' }] })
     mockBuildEstimatePricingSummaryFromEngines.mockReturnValue({ finalTotal: 3200 })
     mockBuildTrimPaintInput.mockReturnValue({})
     mockProductMap.mockReturnValue({})
@@ -149,6 +157,7 @@ describe('customer send context calculations', () => {
         { kind: 'walls', output: { scopes: [{ id: 'wall-output' }] } },
         { kind: 'ceilings', output: { scopes: [{ id: 'ceiling-output' }] } },
         { kind: 'trim', output: { scopes: [{ id: 'trim-output' }] } },
+        { kind: 'drywall', output: { scopes: [{ id: 'drywall-output' }] } },
       ],
       {
         enabled: false,
@@ -165,6 +174,7 @@ describe('customer send context calculations', () => {
       quoteWallScopes: [{ id: 'wall-output' }],
       quoteCeilingScopes: [{ id: 'ceiling-output' }],
       quoteTrimScopes: [{ id: 'trim-output' }],
+      quoteDrywallScopes: [{ id: 'drywall-output' }],
       pricingSummary: { finalTotal: 3200 },
     })
   })
@@ -180,6 +190,7 @@ describe('customer send context calculations', () => {
       quoteWallScopes: baseResources.wallScopes,
       quoteCeilingScopes: baseResources.ceilingScopes,
       quoteTrimScopes: baseResources.trimScopes,
+      quoteDrywallScopes: [],
       pricingSummary: null,
     })
   })

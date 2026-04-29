@@ -116,6 +116,67 @@ describe('saveEstimateV2Inputs', () => {
     expect(mocks.softReplaceWallSegments).not.toHaveBeenCalled()
   })
 
+  it('falls back with job-level access fees when the structured RPC is unavailable', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: {
+        id: 'estimate-1',
+        job_id: '11111111-1111-4111-8111-111111111111',
+      },
+    })
+    mocks.saveEstimateStructuredInputsTransactional.mockRejectedValue(
+      new Error('function public.save_estimate_v2_inputs does not exist')
+    )
+    mocks.isMissingStructuredEstimateSaveRpc.mockReturnValue(true)
+    mocks.softReplaceRows.mockResolvedValue(undefined)
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          access_fees: [
+            {
+              id: 'access-fee-1',
+              room_id: null,
+              access_fee_id: ' ladder-tall ',
+              qty: '',
+              notes: '',
+              actual_cost_override: '125',
+            },
+            {
+              id: 'blank-access-fee',
+              room_id: null,
+              access_fee_id: ' ',
+            },
+          ],
+        },
+      })
+    ).resolves.toEqual({ ok: true })
+
+    expect(mocks.softReplaceRows).toHaveBeenCalledWith({
+      table: 'estimate_access_fees',
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      rows: [
+        expect.objectContaining({
+          id: 'access-fee-1',
+          org_id: 'org-1',
+          estimate_id: 'estimate-1',
+          job_id: '11111111-1111-4111-8111-111111111111',
+          position: 0,
+          room_id: null,
+          access_fee_id: 'LADDER-TALL',
+          qty: 1,
+          notes: null,
+          actual_cost_override: 125,
+        }),
+      ],
+    })
+  })
+
   it('maps extracted V2 wall seams through calculation and persistence boundaries', async () => {
     mocks.getEstimate.mockResolvedValue({
       estimate: {

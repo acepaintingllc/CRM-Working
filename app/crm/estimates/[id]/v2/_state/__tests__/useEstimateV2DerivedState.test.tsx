@@ -16,6 +16,7 @@ function createDerivedStore() {
       ceilingSegments: fixture.ceilingSegments,
       trimScopes: fixture.trimScopes,
       rollers: fixture.rollers,
+      accessFees: fixture.accessFees,
     },
     meta: {
       loading: false,
