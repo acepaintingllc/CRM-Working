@@ -6,6 +6,23 @@ import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 
 type Unsafe = Record<string, unknown>
 
+type DbMaybeSingleResponse = Promise<{
+  data: Unsafe | null
+  error: { message?: string } | null
+}>
+
+type DbReadChain = {
+  from(table: string): {
+    select(columns: string): {
+      eq(column: string, value: unknown): {
+        eq(column: string, value: unknown): {
+          maybeSingle(): DbMaybeSingleResponse
+        }
+      }
+    }
+  }
+}
+
 type DbUpdateChain = {
   from(table: string): {
     update(payload: Record<string, unknown>): {
@@ -100,4 +117,93 @@ export async function applyAcceptedEstimateSideEffects(
   }
 
   return okResult({ ok: true })
+}
+
+export async function loadAcceptedEstimateSource(
+  db: DbReadChain,
+  orgId: string,
+  jobId: string
+): Promise<ServiceResult<AcceptedEstimateSource>> {
+  const jobResult = await db
+    .from('jobs')
+    .select('id, linked_estimate_id')
+    .eq('org_id', orgId)
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (jobResult.error) {
+    return errorResult('server_error', jobResult.error.message ?? 'Unable to load job')
+  }
+  if (!jobResult.data) {
+    return errorResult('not_found', 'Job not found')
+  }
+
+  const linkedEstimateId = asText(jobResult.data.linked_estimate_id)
+  if (!linkedEstimateId) {
+    return errorResult('invalid_input', 'Job has no accepted estimate')
+  }
+
+  const estimateResult = await db
+    .from('estimates')
+    .select(
+      'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id'
+    )
+    .eq('org_id', orgId)
+    .eq('id', linkedEstimateId)
+    .maybeSingle()
+
+  if (estimateResult.error) {
+    return errorResult(
+      'server_error',
+      estimateResult.error.message ?? 'Unable to load accepted estimate'
+    )
+  }
+  if (!estimateResult.data) {
+    return errorResult('not_found', 'Accepted estimate not found')
+  }
+
+  const acceptedAt = asText(estimateResult.data.accepted_at)
+  const publicVersionId = asText(estimateResult.data.accepted_public_version_id)
+  if (!acceptedAt || !publicVersionId) {
+    return errorResult('invalid_input', 'Linked estimate is not accepted')
+  }
+
+  const publicVersionResult = await db
+    .from('estimate_public_versions')
+    .select('id, snapshot_json')
+    .eq('org_id', orgId)
+    .eq('id', publicVersionId)
+    .maybeSingle()
+
+  if (publicVersionResult.error) {
+    return errorResult(
+      'server_error',
+      publicVersionResult.error.message ?? 'Unable to load accepted public version'
+    )
+  }
+  if (!publicVersionResult.data) {
+    return errorResult('not_found', 'Accepted public version not found')
+  }
+
+  const rollupResult = await db
+    .from('estimate_version_rollups')
+    .select('final_total')
+    .eq('org_id', orgId)
+    .eq('estimate_id', linkedEstimateId)
+    .maybeSingle()
+
+  if (rollupResult.error) {
+    return errorResult(
+      'server_error',
+      rollupResult.error.message ?? 'Unable to load accepted estimate rollup'
+    )
+  }
+
+  return okResult(
+    buildAcceptedEstimateSource({
+      estimate: estimateResult.data,
+      publicVersion: publicVersionResult.data,
+      rollup: rollupResult.data,
+    })
+  )
 }

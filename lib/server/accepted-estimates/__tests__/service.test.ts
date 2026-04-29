@@ -4,7 +4,51 @@ import {
   applyAcceptedEstimateSideEffects,
   buildAcceptedEstimateSource,
   buildAcceptedEstimateUpdatePlan,
+  loadAcceptedEstimateSource,
 } from '../service.ts'
+
+type MockQueryResponse = {
+  data: Record<string, unknown> | null
+  error: { message?: string } | null
+}
+
+type MockQueryCall = {
+  table: string
+  columns: string
+  filters: Record<string, unknown>
+}
+
+function createReadDb(responses: Record<string, MockQueryResponse>) {
+  const calls: MockQueryCall[] = []
+  const db = {
+    from(table: string) {
+      const filters: Record<string, unknown> = {}
+      let selectedColumns = ''
+
+      return {
+        select(columns: string) {
+          selectedColumns = columns
+          return this
+        },
+        eq(column: string, value: unknown) {
+          filters[column] = value
+          return this
+        },
+        maybeSingle() {
+          calls.push({ table, columns: selectedColumns, filters: { ...filters } })
+          return Promise.resolve(
+            responses[table] ?? {
+              data: null,
+              error: null,
+            }
+          )
+        },
+      }
+    },
+  }
+
+  return { db, calls }
+}
 
 test('buildAcceptedEstimateUpdatePlan links the accepted estimate to its job', () => {
   const plan = buildAcceptedEstimateUpdatePlan({
@@ -290,4 +334,196 @@ test('applyAcceptedEstimateSideEffects returns server_error when the job update 
     kind: 'server_error',
     message: 'job update failed',
   })
+})
+
+test('loadAcceptedEstimateSource returns accepted estimate source from job link, public version, and rollup', async () => {
+  const { db, calls } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Interior repaint',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-1',
+      },
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-1',
+        snapshot_json: { document: { title: 'Quote' } },
+      },
+      error: null,
+    },
+    estimate_version_rollups: {
+      data: {
+        final_total: 4250,
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.deepEqual(calls, [
+    {
+      table: 'jobs',
+      columns: 'id, linked_estimate_id',
+      filters: { org_id: 'org-1', id: 'job-1' },
+    },
+    {
+      table: 'estimates',
+      columns:
+        'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id',
+      filters: { org_id: 'org-1', id: 'estimate-1' },
+    },
+    {
+      table: 'estimate_public_versions',
+      columns: 'id, snapshot_json',
+      filters: { org_id: 'org-1', id: 'public-version-1' },
+    },
+    {
+      table: 'estimate_version_rollups',
+      columns: 'final_total',
+      filters: { org_id: 'org-1', estimate_id: 'estimate-1' },
+    },
+  ])
+  assert.deepEqual(result, {
+    ok: true,
+    data: {
+      org_id: 'org-1',
+      job_id: 'job-1',
+      estimate_id: 'estimate-1',
+      customer_id: 'customer-1',
+      accepted_public_version_id: 'public-version-1',
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      version_name: 'Interior repaint',
+      version_state: 'live',
+      final_total: 4250,
+      snapshot_json: { document: { title: 'Quote' } },
+    },
+  })
+})
+
+test('loadAcceptedEstimateSource returns not_found when the job is missing', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: null,
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'not_found',
+    message: 'Job not found',
+  })
+})
+
+test('loadAcceptedEstimateSource returns invalid_input when the job has no accepted estimate link', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: null,
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message: 'Job has no accepted estimate',
+  })
+})
+
+test('loadAcceptedEstimateSource returns invalid_input when the linked estimate is not accepted', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Interior repaint',
+        version_state: 'draft',
+        accepted_at: null,
+        accepted_public_version_id: null,
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message: 'Linked estimate is not accepted',
+  })
+})
+
+test('loadAcceptedEstimateSource allows a missing rollup and defaults final_total to zero', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Interior repaint',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-1',
+      },
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-1',
+        snapshot_json: { document: { title: 'Quote' } },
+      },
+      error: null,
+    },
+    estimate_version_rollups: {
+      data: null,
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.final_total, 0)
+  }
 })
