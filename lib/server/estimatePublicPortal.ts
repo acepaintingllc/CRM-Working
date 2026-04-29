@@ -280,7 +280,29 @@ async function ensureEstimatePublicEvent(params: EstimatePublicEventParams) {
     return okResult({ ok: true })
   }
 
-  return writeEstimatePublicEvent(params)
+  const writeResult = await writeEstimatePublicEvent(params)
+  if (
+    !writeResult.ok &&
+    isTerminalPublicEvent(params.eventType) &&
+    isDuplicateTerminalPublicEventMessage(writeResult.message)
+  ) {
+    return okResult({ ok: true })
+  }
+
+  return writeResult
+}
+
+function isTerminalPublicEvent(eventType: EstimatePublicEventParams['eventType']) {
+  return eventType === 'accepted' || eventType === 'declined'
+}
+
+function isDuplicateTerminalPublicEventMessage(message: string) {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('duplicate key') ||
+    normalized.includes('unique constraint') ||
+    normalized.includes('estimate_public_events_terminal_once_idx')
+  )
 }
 
 function buildAcceptedEventMetadata(params: AcceptPublicEstimateParams, signatureType: string) {
@@ -401,16 +423,29 @@ export async function declinePublicEstimate(
 
   const loaded = loadedResult.data
   const currentStatus = loaded.snapshot.status
+  const orgId = asText(loaded.version.org_id)
+  const versionId = loaded.snapshot.estimate_version_id
+  const declineEventMetadata = {
+    reason: asText(params.reason),
+    ...(params.origin ? { origin: asText(params.origin) } : {}),
+  }
   if (!canTransitionToTerminalState(currentStatus, 'declined')) {
     return errorResult('conflict', transitionConflictMessage(currentStatus, 'declined'))
   }
   if (currentStatus === 'declined') {
+    const eventResult = await ensureEstimatePublicEvent({
+      orgId,
+      versionId,
+      eventType: 'declined',
+      actorType: 'customer',
+      metadata: declineEventMetadata,
+    })
+    if (!eventResult.ok) return eventResult
+
     return okResult(loaded.snapshot)
   }
 
   const now = new Date().toISOString()
-  const orgId = asText(loaded.version.org_id)
-  const versionId = loaded.snapshot.estimate_version_id
   const updateResult = await updatePublicEstimateVersion({
     orgId,
     versionId,
@@ -428,10 +463,7 @@ export async function declinePublicEstimate(
     versionId,
     eventType: 'declined',
     actorType: 'customer',
-    metadata: {
-      reason: asText(params.reason),
-      ...(params.origin ? { origin: asText(params.origin) } : {}),
-    },
+    metadata: declineEventMetadata,
   })
   if (!eventResult.ok) return eventResult
 

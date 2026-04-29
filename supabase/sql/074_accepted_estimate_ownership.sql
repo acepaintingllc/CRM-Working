@@ -38,3 +38,7 @@ create index if not exists jobs_org_linked_estimate_idx
 create index if not exists jobs_linked_estimate_fk_idx
   on public.jobs (linked_estimate_id)
   where linked_estimate_id is not null;
+
+create unique index if not exists estimate_public_events_terminal_once_idx
+  on public.estimate_public_events (estimate_public_version_id, event_type)
+  where event_type in ('accepted', 'declined');

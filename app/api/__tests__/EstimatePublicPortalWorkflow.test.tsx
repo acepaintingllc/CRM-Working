@@ -485,6 +485,65 @@ describe('estimate public portal transitions', () => {
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
   })
 
+  it('treats duplicate terminal accepted event writes as idempotent success', async () => {
+    const estimateUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+    const jobUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+    mockWriteEstimatePublicEvent.mockResolvedValueOnce({
+      ok: false,
+      kind: 'server_error',
+      message:
+        'duplicate key value violates unique constraint "estimate_public_events_terminal_once_idx"',
+    })
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: createLoadedVersion('accepted'),
+              error: null,
+            })
+          ),
+        }
+      }
+      if (table === 'estimates') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: { id: 'estimate-1', job_id: 'job-1' },
+              error: null,
+            })
+          ),
+          update: estimateUpdateSpy,
+        }
+      }
+      if (table === 'jobs') {
+        return {
+          update: jobUpdateSpy,
+        }
+      }
+      if (table === 'estimate_public_events') {
+        return createAcceptedEventLookup(null)
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await acceptPublicEstimate({
+      token: 'token-1',
+      legalName: 'Taylor Smith',
+      acceptedTerms: true,
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        estimate_version_id: 'version-1',
+        status: 'accepted',
+      }),
+    })
+    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
+  })
+
   it('reconciles ownership without duplicating existing event for repeated accept', async () => {
     const estimateUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
     const jobUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
@@ -627,7 +686,7 @@ describe('estimate public portal transitions', () => {
     )
   })
 
-  it('returns idempotent success for repeated decline and does not duplicate events', async () => {
+  it('writes missing declined event for repeated decline', async () => {
     mockFrom.mockImplementation((table: string) => {
       if (table === 'estimate_public_versions') {
         return {
@@ -638,6 +697,49 @@ describe('estimate public portal transitions', () => {
             })
           ),
         }
+      }
+      if (table === 'estimate_public_events') {
+        return createAcceptedEventLookup(null)
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await declinePublicEstimate({
+      token: 'token-1',
+      reason: 'Still declining',
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        estimate_version_id: 'version-1',
+        status: 'declined',
+      }),
+    })
+    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
+    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'declined',
+        actorType: 'customer',
+        metadata: { reason: 'Still declining' },
+      })
+    )
+  })
+
+  it('does not duplicate existing declined event for repeated decline', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: createLoadedVersion('declined'),
+              error: null,
+            })
+          ),
+        }
+      }
+      if (table === 'estimate_public_events') {
+        return createAcceptedEventLookup({ id: 'event-1' })
       }
       throw new Error(`Unexpected table ${table}`)
     })
