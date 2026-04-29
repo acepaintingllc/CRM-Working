@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './org'
+import { applyAcceptedEstimateSideEffects } from './accepted-estimates/service'
 import { writeEstimatePublicEvent } from './customer-send/repository'
 import { errorResult, okResult, type ServiceResult } from './serviceResult'
 import { ensureAssembledCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
@@ -249,6 +250,29 @@ export async function acceptPublicEstimate(
     },
   })
   if (!updateResult.ok) return updateResult
+
+  const estimateId = asText(updateResult.data.estimate_id)
+  const estimateLookup = await supabaseAdmin
+    .from('estimates')
+    .select('id, job_id')
+    .eq('org_id', orgId)
+    .eq('id', estimateId)
+    .maybeSingle()
+  if (estimateLookup.error || !estimateLookup.data) {
+    return errorResult(
+      'server_error',
+      estimateLookup.error?.message ?? 'Accepted estimate missing'
+    )
+  }
+
+  const ownershipResult = await applyAcceptedEstimateSideEffects(supabaseAdmin, {
+    orgId,
+    jobId: asText(estimateLookup.data.job_id),
+    estimateId,
+    publicVersionId: versionId,
+    acceptedAt: now,
+  })
+  if (!ownershipResult.ok) return ownershipResult
 
   const eventResult = await writeEstimatePublicEvent({
     orgId,

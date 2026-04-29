@@ -34,6 +34,25 @@ function createMaybeSingleChain(result: unknown) {
   return chain
 }
 
+function createUpdateOnlyChain(
+  result: { error: { message?: string } | null },
+  onUpdate?: (filters: Record<string, unknown>) => void
+) {
+  const filters: Record<string, unknown> = {}
+  return {
+    eq: vi.fn((column: string, value: unknown) => {
+      filters[column] = value
+      return {
+        eq: vi.fn((nextColumn: string, nextValue: unknown) => {
+          filters[nextColumn] = nextValue
+          onUpdate?.({ ...filters })
+          return Promise.resolve(result)
+        }),
+      }
+    }),
+  }
+}
+
 function createLoadedVersion(status: string) {
   return {
     id: 'version-1',
@@ -65,16 +84,30 @@ function createLoadedVersion(status: string) {
 
 describe('estimate public portal transitions', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     mockFrom.mockReset()
     mockWriteEstimatePublicEvent.mockReset()
     mockWriteEstimatePublicEvent.mockResolvedValue({ ok: true, data: null })
   })
 
   it('accepts sent quotes and writes one accepted event', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-01T00:00:00.000Z'))
+
     const updateSpy = vi.fn(() =>
       createMaybeSingleChain({
         data: createLoadedVersion('accepted'),
         error: null,
+      })
+    )
+    const estimateUpdateSpy = vi.fn(() =>
+      createUpdateOnlyChain({ error: null }, (filters) => {
+        expect(filters).toEqual({ org_id: 'org-1', id: 'estimate-1' })
+      })
+    )
+    const jobUpdateSpy = vi.fn(() =>
+      createUpdateOnlyChain({ error: null }, (filters) => {
+        expect(filters).toEqual({ org_id: 'org-1', id: 'job-1' })
       })
     )
 
@@ -88,6 +121,22 @@ describe('estimate public portal transitions', () => {
             })
           ),
           update: updateSpy,
+        }
+      }
+      if (table === 'estimates') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: { id: 'estimate-1', job_id: 'job-1' },
+              error: null,
+            })
+          ),
+          update: estimateUpdateSpy,
+        }
+      }
+      if (table === 'jobs') {
+        return {
+          update: jobUpdateSpy,
         }
       }
       throw new Error(`Unexpected table ${table}`)
@@ -122,6 +171,15 @@ describe('estimate public portal transitions', () => {
         }),
       })
     )
+    expect(estimateUpdateSpy).toHaveBeenCalledWith({
+      accepted_at: '2026-04-01T00:00:00.000Z',
+      accepted_public_version_id: 'version-1',
+      version_state: 'live',
+    })
+    expect(jobUpdateSpy).toHaveBeenCalledWith({
+      linked_estimate_id: 'estimate-1',
+      status: 'scheduled',
+    })
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
   })
 
