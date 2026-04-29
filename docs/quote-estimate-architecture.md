@@ -63,6 +63,18 @@ All quote/estimate-collection server work follows three layers:
 - Thin handlers: authenticate → parse params → call service → return envelope.
 - No business logic inline.
 
+### Public acceptance ownership
+
+When a public quote is accepted, `lib/server/estimatePublicPortal.ts` updates the public version and delegates operational side effects to `lib/server/accepted-estimates/service.ts`.
+
+Acceptance side effects:
+- mark the canonical estimate accepted
+- set the estimate version state to `live`
+- link the accepted estimate to the job through `jobs.linked_estimate_id`
+- preserve the public version snapshot as the customer-facing accepted document
+
+Downstream work orders and invoices should consume the accepted estimate source loader instead of recomputing quote ownership.
+
 ### API routes
 
 ```
