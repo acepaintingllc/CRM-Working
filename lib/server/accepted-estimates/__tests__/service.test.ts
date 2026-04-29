@@ -361,6 +361,9 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
     estimate_public_versions: {
       data: {
         id: 'public-version-1',
+        estimate_id: 'estimate-1',
+        status: 'accepted',
+        accepted_at: '2026-04-29T10:00:00.000Z',
         snapshot_json: { document: { title: 'Quote' } },
       },
       error: null,
@@ -389,7 +392,7 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
     },
     {
       table: 'estimate_public_versions',
-      columns: 'id, snapshot_json',
+      columns: 'id, estimate_id, status, accepted_at, snapshot_json',
       filters: { org_id: 'org-1', id: 'public-version-1' },
     },
     {
@@ -485,6 +488,168 @@ test('loadAcceptedEstimateSource returns invalid_input when the linked estimate 
   })
 })
 
+test('loadAcceptedEstimateSource returns invalid_input when the linked estimate belongs to another job', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-2',
+        customer_id: 'customer-1',
+        version_name: 'Interior repaint',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-1',
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message: 'Linked estimate does not belong to job',
+  })
+})
+
+test('loadAcceptedEstimateSource returns invalid_input when the accepted public version belongs to another estimate', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Interior repaint',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-1',
+      },
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-1',
+        estimate_id: 'estimate-2',
+        status: 'accepted',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        snapshot_json: { document: { title: 'Quote' } },
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message: 'Accepted public version is invalid',
+  })
+})
+
+test('loadAcceptedEstimateSource returns invalid_input when the accepted public version is not accepted', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Interior repaint',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-1',
+      },
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-1',
+        estimate_id: 'estimate-1',
+        status: 'draft',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        snapshot_json: { document: { title: 'Quote' } },
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message: 'Accepted public version is invalid',
+  })
+})
+
+test('loadAcceptedEstimateSource returns invalid_input when the accepted public version has no accepted timestamp', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Interior repaint',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-1',
+      },
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-1',
+        estimate_id: 'estimate-1',
+        status: 'accepted',
+        accepted_at: null,
+        snapshot_json: { document: { title: 'Quote' } },
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message: 'Accepted public version is invalid',
+  })
+})
+
 test('loadAcceptedEstimateSource allows a missing rollup and defaults final_total to zero', async () => {
   const { db } = createReadDb({
     jobs: {
@@ -510,6 +675,9 @@ test('loadAcceptedEstimateSource allows a missing rollup and defaults final_tota
     estimate_public_versions: {
       data: {
         id: 'public-version-1',
+        estimate_id: 'estimate-1',
+        status: 'accepted',
+        accepted_at: '2026-04-29T10:00:00.000Z',
         snapshot_json: { document: { title: 'Quote' } },
       },
       error: null,

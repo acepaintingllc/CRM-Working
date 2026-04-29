@@ -162,6 +162,10 @@ export async function loadAcceptedEstimateSource(
     return errorResult('not_found', 'Accepted estimate not found')
   }
 
+  if (asText(estimateResult.data.job_id) !== jobId) {
+    return errorResult('invalid_input', 'Linked estimate does not belong to job')
+  }
+
   const acceptedAt = asText(estimateResult.data.accepted_at)
   const publicVersionId = asText(estimateResult.data.accepted_public_version_id)
   if (!acceptedAt || !publicVersionId) {
@@ -170,7 +174,7 @@ export async function loadAcceptedEstimateSource(
 
   const publicVersionResult = await db
     .from('estimate_public_versions')
-    .select('id, snapshot_json')
+    .select('id, estimate_id, status, accepted_at, snapshot_json')
     .eq('org_id', orgId)
     .eq('id', publicVersionId)
     .maybeSingle()
@@ -183,6 +187,14 @@ export async function loadAcceptedEstimateSource(
   }
   if (!publicVersionResult.data) {
     return errorResult('not_found', 'Accepted public version not found')
+  }
+
+  if (
+    asText(publicVersionResult.data.estimate_id) !== linkedEstimateId ||
+    asText(publicVersionResult.data.status) !== 'accepted' ||
+    !asText(publicVersionResult.data.accepted_at)
+  ) {
+    return errorResult('invalid_input', 'Accepted public version is invalid')
   }
 
   const rollupResult = await db
