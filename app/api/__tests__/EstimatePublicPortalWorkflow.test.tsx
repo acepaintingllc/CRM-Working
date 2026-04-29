@@ -21,6 +21,8 @@ vi.mock('@/lib/server/customer-send/repository', () => ({
 import {
   acceptPublicEstimate,
   declinePublicEstimate,
+  loadPublicEstimateSnapshot,
+  markPublicEstimateViewed,
 } from '@/lib/server/estimatePublicPortal'
 
 function createMaybeSingleChain(
@@ -242,6 +244,121 @@ describe('estimate public portal transitions', () => {
       'job-update',
     ])
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks viewed with org and status guards and writes one viewed event', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-02T12:00:00.000Z'))
+
+    const updateFilters: Array<[string, unknown]> = []
+    const updateStatusFilters: Array<[string, unknown[]]> = []
+    const viewedVersion = {
+      ...createLoadedVersion('viewed'),
+      viewed_at: '2026-04-02T12:00:00.000Z',
+    }
+    const updateSpy = vi.fn(() =>
+      createMaybeSingleChain(
+        {
+          data: viewedVersion,
+          error: null,
+        },
+        {
+          eq: (column, value) => {
+            updateFilters.push([column, value])
+          },
+          in: (column, values) => {
+            updateStatusFilters.push([column, values])
+          },
+        }
+      )
+    )
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          update: updateSpy,
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await markPublicEstimateViewed({
+      orgId: 'org-1',
+      versionId: 'version-1',
+      actorType: 'staff',
+      metadata: { origin: 'preview' },
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      viewed_at: '2026-04-02T12:00:00.000Z',
+      version: viewedVersion,
+    })
+    expect(updateSpy).toHaveBeenCalledWith({
+      status: 'viewed',
+      viewed_at: '2026-04-02T12:00:00.000Z',
+    })
+    expect(updateFilters).toEqual([
+      ['org_id', 'org-1'],
+      ['id', 'version-1'],
+    ])
+    expect(updateStatusFilters).toEqual([
+      ['status', ['sent', 'viewed']],
+    ])
+    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
+    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      versionId: 'version-1',
+      eventType: 'viewed',
+      actorType: 'staff',
+      metadata: { origin: 'preview' },
+    })
+  })
+
+  it('keeps the loaded snapshot when viewed update races and affects no row', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-02T12:00:00.000Z'))
+
+    const updateSpy = vi.fn(() =>
+      createMaybeSingleChain({
+        data: null,
+        error: null,
+      })
+    )
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: {
+                ...createLoadedVersion('sent'),
+                viewed_at: null,
+              },
+              error: null,
+            })
+          ),
+          update: updateSpy,
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await loadPublicEstimateSnapshot('token-1')
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        estimate_version_id: 'version-1',
+        status: 'sent',
+        viewed_at: null,
+      }),
+    })
+    expect(updateSpy).toHaveBeenCalledWith({
+      status: 'viewed',
+      viewed_at: '2026-04-02T12:00:00.000Z',
+    })
+    expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
   })
 
   it('returns conflict when status-conditional accept update affects no row', async () => {

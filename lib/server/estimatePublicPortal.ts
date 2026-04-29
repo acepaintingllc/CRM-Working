@@ -132,7 +132,7 @@ export async function loadPublicEstimateSnapshot(
     metadata: viewOptions?.metadata,
   }).catch(() => null)
 
-  if (!viewed || 'error' in viewed || !viewed.ok) {
+  if (!viewed || 'error' in viewed || !viewed.ok || !viewed.version) {
     return okResult(loaded.snapshot)
   }
 
@@ -564,10 +564,15 @@ export async function markPublicEstimateViewed(params: {
       status: 'viewed',
       viewed_at: viewedAt,
     })
+    .eq('org_id', params.orgId)
     .eq('id', params.versionId)
+    .in('status', ['sent', 'viewed'])
     .select('*')
     .maybeSingle()
   if (update.error) return { error: update.error.message } as const
+  if (!update.data) {
+    return { ok: true as const, viewed_at: null, version: null }
+  }
   await writeEstimatePublicEvent({
     orgId: params.orgId,
     versionId: params.versionId,
