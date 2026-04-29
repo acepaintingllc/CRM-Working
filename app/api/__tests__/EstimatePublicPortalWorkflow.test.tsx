@@ -120,6 +120,20 @@ function createAcceptedEventLookup(data: unknown) {
   }
 }
 
+function createEventLookupSequence(...results: unknown[]) {
+  let index = 0
+  return {
+    select: vi.fn(() => {
+      const result = results[Math.min(index, results.length - 1)]
+      index += 1
+      return createMaybeSingleChain({
+        data: result,
+        error: null,
+      })
+    }),
+  }
+}
+
 function createJobLookup(data: unknown) {
   return {
     select: vi.fn(() =>
@@ -875,6 +889,10 @@ describe('estimate public portal transitions', () => {
       message:
         'duplicate key value violates unique constraint "estimate_public_events_terminal_once_idx"',
     })
+    const eventLookup = createEventLookupSequence(null, {
+      id: 'event-1',
+      event_type: 'accepted',
+    })
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'estimate_public_versions') {
@@ -908,7 +926,7 @@ describe('estimate public portal transitions', () => {
         }
       }
       if (table === 'estimate_public_events') {
-        return createAcceptedEventLookup(null)
+        return eventLookup
       }
       throw new Error(`Unexpected table ${table}`)
     })
@@ -925,6 +943,71 @@ describe('estimate public portal transitions', () => {
         estimate_version_id: 'version-1',
         status: 'accepted',
       }),
+    })
+    expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects duplicate terminal accept when the stored terminal event is declined', async () => {
+    const estimateUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+    const jobUpdateSpy = vi.fn(() => createUpdateOnlyChain({ error: null }))
+    mockWriteEstimatePublicEvent.mockResolvedValueOnce({
+      ok: false,
+      kind: 'server_error',
+      message:
+        'duplicate key value violates unique constraint "estimate_public_events_terminal_once_idx"',
+    })
+    const eventLookup = createEventLookupSequence(null, {
+      id: 'event-1',
+      event_type: 'declined',
+    })
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: createLoadedVersion('accepted'),
+              error: null,
+            })
+          ),
+        }
+      }
+      if (table === 'estimates') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: { id: 'estimate-1', job_id: 'job-1' },
+              error: null,
+            })
+          ),
+          update: estimateUpdateSpy,
+        }
+      }
+      if (table === 'jobs') {
+        return {
+          ...createJobLookup({
+            id: 'job-1',
+            linked_estimate_id: null,
+          }),
+          update: jobUpdateSpy,
+        }
+      }
+      if (table === 'estimate_public_events') {
+        return eventLookup
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await acceptPublicEstimate({
+      token: 'token-1',
+      legalName: 'Taylor Smith',
+      acceptedTerms: true,
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'conflict',
+      message: 'Public quote already has a different terminal event',
     })
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
   })

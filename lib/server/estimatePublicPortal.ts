@@ -370,13 +370,52 @@ async function ensureEstimatePublicEvent(params: EstimatePublicEventParams) {
     isTerminalPublicEvent(params.eventType) &&
     isDuplicateTerminalPublicEventMessage(writeResult.message)
   ) {
-    return okResult({ ok: true })
+    const terminalLookup = await loadExistingTerminalPublicEvent({
+      orgId: params.orgId,
+      versionId: params.versionId,
+    })
+    if (!terminalLookup.ok) return terminalLookup
+
+    const existingEventType = asText(terminalLookup.data?.event_type)
+    if (existingEventType === params.eventType) {
+      return okResult({ ok: true })
+    }
+    if (isTerminalPublicEvent(existingEventType)) {
+      return errorResult(
+        'conflict',
+        'Public quote already has a different terminal event'
+      )
+    }
+
+    return writeResult
   }
 
   return writeResult
 }
 
-function isTerminalPublicEvent(eventType: EstimatePublicEventParams['eventType']) {
+async function loadExistingTerminalPublicEvent(params: {
+  orgId: string
+  versionId: string
+}) {
+  const existing = await supabaseAdmin
+    .from('estimate_public_events')
+    .select('id,event_type')
+    .eq('org_id', params.orgId)
+    .eq('estimate_public_version_id', params.versionId)
+    .in('event_type', ['accepted', 'declined'])
+    .maybeSingle()
+
+  if (existing.error) {
+    return errorResult(
+      'server_error',
+      existing.error.message ?? 'Unable to inspect public quote terminal event'
+    )
+  }
+
+  return okResult((existing.data as Unsafe | null) ?? null)
+}
+
+function isTerminalPublicEvent(eventType: string) {
   return eventType === 'accepted' || eventType === 'declined'
 }
 

@@ -41,13 +41,22 @@ create index if not exists jobs_linked_estimate_fk_idx
 
 with ranked_terminal_events as (
   select
-    id,
+    events.id,
     row_number() over (
-      partition by estimate_public_version_id
-      order by created_at asc, id asc
+      partition by events.estimate_public_version_id
+      order by
+        case
+          when v.status in ('accepted', 'declined')
+            and events.event_type = v.status then 0
+          else 1
+        end,
+        events.created_at asc,
+        events.id asc
     ) as rn
-  from public.estimate_public_events
-  where event_type in ('accepted', 'declined')
+  from public.estimate_public_events events
+  join public.estimate_public_versions v
+    on v.id = events.estimate_public_version_id
+  where events.event_type in ('accepted', 'declined')
 )
 delete from public.estimate_public_events events
 using ranked_terminal_events ranked
