@@ -1,8 +1,12 @@
 import type {
+  EstimateV2AccessFeeDraft,
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
   EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
   EstimateV2JobSettingsDraft,
+  EstimateV2OtherItemDraft,
+  EstimateV2OtherRollupTarget,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2RollerDraft,
@@ -28,6 +32,10 @@ export function sortByPosition<T extends { position: number }>(rows: T[]) {
 
 function toNullableDraftNumber(value: string) {
   return asNullableNumber(value)
+}
+
+function toNullableTrimmedDraftNumber(value: string) {
+  return asNullableNumber(value.trim())
 }
 
 function normalizeCrewSize(value: number | null | undefined) {
@@ -155,7 +163,10 @@ export function buildEstimateV2SavePayload(
   ceilingSegments: EstimateV2CeilingSegmentDraft[],
   trimScopes: EstimateV2TrimScopeDraft[],
   rollers: EstimateV2RollerDraft[] = [],
-  doorScopes: EstimateV2DoorScopeDraft[] = []
+  doorScopes: EstimateV2DoorScopeDraft[] = [],
+  drywallRepairs: EstimateV2DrywallRepairDraft[] = [],
+  accessFees: EstimateV2AccessFeeDraft[] = [],
+  otherItems: EstimateV2OtherItemDraft[] = []
 ): EstimateV2SavePayload {
   const resolvedFactors = jobSettingsDraft.resolvedConditionFactors ?? {
     room: 1,
@@ -444,6 +455,19 @@ export function buildEstimateV2SavePayload(
     }))
   )
 
+  const orderedDrywallRepairs = orderedRooms.flatMap((room) =>
+    sortByPosition(drywallRepairs.filter((repair) => repair.roomId === room.room_id)).map((repair, index) => ({
+      id: repair.id,
+      room_id: repair.roomId,
+      position: index,
+      surface: repair.surface,
+      repair_type: repair.repairType,
+      unit: repair.unit,
+      quantity: toNullableDraftNumber(repair.quantity) ?? 0,
+      override_total: toNullableDraftNumber(repair.overrideTotal),
+    }))
+  )
+
   const orderedRollers = sortByPosition(rollers)
     .map((roller, index) => ({
       id: roller.id,
@@ -458,6 +482,70 @@ export function buildEstimateV2SavePayload(
     }))
     .filter((roller) => roller.scope !== 'Wall' || roller.wall_color_id)
 
+  const orderedAccessFees = sortByPosition(accessFees)
+    .map((row, index) => ({
+      id: row.id,
+      room_id: toNullableText(row.roomId),
+      access_fee_id: row.accessFeeId.trim().toUpperCase(),
+      qty: toNullableTrimmedDraftNumber(row.qty) ?? 1,
+      actual_cost_override: toNullableTrimmedDraftNumber(row.actualCostOverride),
+      notes: toNullableText(row.notes),
+      position: index,
+      active: 'Y' as const,
+    }))
+    .filter((row) => row.access_fee_id)
+
+  const legacyRollupScope = (target: EstimateV2OtherRollupTarget) => {
+    if (target === 'ceilings') return 'Ceilings'
+    if (target === 'trim' || target === 'doors') return 'Trim'
+    return 'Walls'
+  }
+
+  const orderedOther = sortByPosition(otherItems)
+    .map((row, index) => {
+      const quantity = toNullableTrimmedDraftNumber(row.quantity)
+      const unitRate = toNullableTrimmedDraftNumber(row.unitRate)
+      const laborHours = toNullableTrimmedDraftNumber(row.laborHours)
+      const materialCost = toNullableTrimmedDraftNumber(row.materialCost)
+      const supplyCost = toNullableTrimmedDraftNumber(row.supplyCost)
+      const fixedAmount = toNullableTrimmedDraftNumber(row.fixedAmount)
+      const customerLabel = toNullableText(row.customerLabel)
+      const description = toNullableText(row.description)
+      return {
+        id: row.id,
+        room_id: toNullableText(row.roomId),
+        position: index,
+        active: row.include,
+        description,
+        customer_label: customerLabel,
+        pricing_mode: row.pricingMode,
+        quantity,
+        unit_rate: unitRate,
+        labor_hours: laborHours,
+        labor_rate: toNullableTrimmedDraftNumber(row.laborRate),
+        material_cost: materialCost,
+        supply_cost: supplyCost,
+        fixed_amount: fixedAmount,
+        rollup_target: row.rollupTarget,
+        customer_visibility: row.customerVisibility,
+        internal_notes: toNullableText(row.internalNotes),
+        client_description: customerLabel ?? description,
+        qty: quantity ?? 1,
+        uom: null,
+        labor_hrs_each: laborHours ?? 0,
+        materials_each:
+          row.pricingMode === 'quantity_rate'
+            ? unitRate ?? 0
+            : row.pricingMode === 'material_supply'
+              ? (materialCost ?? 0) + (supplyCost ?? 0)
+              : row.pricingMode === 'fixed'
+                ? fixedAmount ?? 0
+                : 0,
+        rollup_scope: legacyRollupScope(row.rollupTarget),
+      }
+    })
+    .filter((row) => row.description || row.customer_label)
+
   return {
     jobsettings,
     rooms: orderedRooms,
@@ -468,6 +556,9 @@ export function buildEstimateV2SavePayload(
     ceiling_scope_segments: orderedCeilingSegments,
     room_trim_scopes: orderedTrimScopes,
     room_door_scopes: orderedDoorScopes,
+    drywall_repairs: orderedDrywallRepairs,
     rollers: orderedRollers,
+    access_fees: orderedAccessFees,
+    other: orderedOther,
   }
 }

@@ -49,6 +49,7 @@ describe('customer send draft helpers', () => {
         ceilings: '',
         trim: '',
         doors: '',
+        drywall: '',
         cabinets: '',
         other: '',
       },
@@ -89,6 +90,7 @@ describe('customer send draft helpers', () => {
       ceilings: '',
       trim: 'Custom trim wording',
       doors: '',
+      drywall: '',
       cabinets: '',
       other: '',
     })
@@ -131,6 +133,7 @@ describe('customer send draft helpers', () => {
       ceilings: 'Customer-approved ceiling wording.',
       trim: '',
       doors: '',
+      drywall: '',
       cabinets: '',
       other: '',
     })

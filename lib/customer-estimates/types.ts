@@ -33,7 +33,14 @@ export type CompanyProfile = {
   logo_url: string
 }
 
-export type CustomerEstimateSectionKey = 'walls' | 'ceilings' | 'trim' | 'doors' | 'cabinets' | 'other'
+export type CustomerEstimateSectionKey =
+  | 'walls'
+  | 'ceilings'
+  | 'trim'
+  | 'doors'
+  | 'drywall'
+  | 'cabinets'
+  | 'other'
 
 export type CustomerEstimateSection = {
   key: CustomerEstimateSectionKey

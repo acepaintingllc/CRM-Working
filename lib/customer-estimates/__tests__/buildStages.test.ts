@@ -86,6 +86,18 @@ test('scope extraction classifies mixed trim rows and preserves customer-safe ot
       ],
       roomCeilingScopes: [],
       roomTrimScopes: [],
+      roomDrywallScopes: [
+        {
+          roomId: 'R002',
+          included: true,
+          repairLabel: 'Flat wall crack',
+          surface: 'Wall',
+          unit: 'LF',
+          quantity: 7,
+          price: 84,
+          notes: ['primer included'],
+        },
+      ],
       trimItems: [
         {
           roomId: 'R001',
@@ -154,10 +166,13 @@ test('scope extraction classifies mixed trim rows and preserves customer-safe ot
   assert.equal(buckets.walls.price, 400)
   assert.equal(buckets.trim.price, 150)
   assert.equal(buckets.doors.price, 125)
+  assert.equal(buckets.drywall.price, 84)
   assert.equal(buckets.cabinets.price, 375)
   assert.match(buckets.walls.texts[0] ?? '', /Kitchen/)
   assert.doesNotMatch(buckets.trim.texts[0] ?? '', /Baseboards|Crown|Chair Rail/i)
   assert.match(buckets.doors.texts[0] ?? '', /Door and Frame/)
+  assert.match(buckets.drywall.texts[0] ?? '', /drywall repairs/i)
+  assert.match(buckets.drywall.texts[0] ?? '', /Flat wall crack/i)
   assert.match(buckets.cabinets.texts[0] ?? '', /Cabinets/)
   assert.equal(buckets.other.texts[0], 'Wallpaper removal in Kitchen 2 walls')
 })

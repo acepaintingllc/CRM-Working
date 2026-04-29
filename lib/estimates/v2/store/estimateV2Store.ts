@@ -27,6 +27,8 @@ import type {
 type EstimateV2CollectionsState = Omit<
   EstimateV2EditorCollections,
   | 'rollers'
+  | 'accessFees'
+  | 'otherItems'
   | 'setRooms'
   | 'setScopes'
   | 'setSegments'
@@ -36,10 +38,17 @@ type EstimateV2CollectionsState = Omit<
   | 'setTrimScopes'
   | 'doorScopes'
   | 'setDoorScopes'
+  | 'drywallRepairs'
+  | 'setDrywallRepairs'
   | 'setRollers'
+  | 'setAccessFees'
+  | 'setOtherItems'
 > & {
   rollers?: EstimateV2EditorCollections['rollers']
+  accessFees?: EstimateV2EditorCollections['accessFees']
+  otherItems?: EstimateV2EditorCollections['otherItems']
   doorScopes?: EstimateV2EditorCollections['doorScopes']
+  drywallRepairs?: EstimateV2EditorCollections['drywallRepairs']
 }
 
 type EstimateV2MetaFields = Omit<
@@ -55,6 +64,8 @@ type EstimateV2MetaFields = Omit<
   | 'setTrimCalculations'
   | 'doorCalculations'
   | 'setDoorCalculations'
+  | 'drywallCalculations'
+  | 'setDrywallCalculations'
   | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
@@ -71,6 +82,7 @@ type EstimateV2MetaFields = Omit<
 > & {
   pricingSummary?: EstimateV2EditorMetaState['pricingSummary']
   doorCalculations?: EstimateV2EditorMetaState['doorCalculations']
+  drywallCalculations?: EstimateV2EditorMetaState['drywallCalculations']
 }
 
 export type EstimateV2EditorStoreState = {
@@ -79,6 +91,9 @@ export type EstimateV2EditorStoreState = {
 }
 
 const EMPTY_DOOR_SCOPES: NonNullable<EstimateV2CollectionsState['doorScopes']> = []
+const EMPTY_DRYWALL_REPAIRS: NonNullable<EstimateV2CollectionsState['drywallRepairs']> = []
+const EMPTY_ACCESS_FEES: NonNullable<EstimateV2CollectionsState['accessFees']> = []
+const EMPTY_OTHER_ITEMS: NonNullable<EstimateV2CollectionsState['otherItems']> = []
 
 export type EstimateV2EditorViewState = EstimateV2CollectionsState &
   Pick<
@@ -113,7 +128,10 @@ type EstimateV2CollectionSetters = Pick<
   | 'setCeilingSegments'
   | 'setTrimScopes'
   | 'setDoorScopes'
+  | 'setDrywallRepairs'
   | 'setRollers'
+  | 'setAccessFees'
+  | 'setOtherItems'
 >
 
 type EstimateV2MetaSetters = Pick<
@@ -127,6 +145,7 @@ type EstimateV2MetaSetters = Pick<
   | 'setCeilingCalculations'
   | 'setTrimCalculations'
   | 'setDoorCalculations'
+  | 'setDrywallCalculations'
   | 'setPricingSummary'
   | 'setSelectedRoomId'
   | 'setError'
@@ -163,6 +182,7 @@ function createEmptyCatalogs(): EstimateV2CatalogsPayload['catalogs'] {
     ceiling_types: [],
     trim_items: [],
     door_types: [],
+    drywall_rates: [],
     condition_modifiers: [],
   }
 }
@@ -225,7 +245,10 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       ceilingSegments: [],
       trimScopes: [],
       doorScopes: [],
+      drywallRepairs: [],
       rollers: [],
+      accessFees: [],
+      otherItems: [],
     },
     meta: {
       loading: true,
@@ -237,6 +260,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       ceilingCalculations: null,
       trimCalculations: null,
       doorCalculations: null,
+      drywallCalculations: null,
       pricingSummary: null,
       selectedRoomId: '',
       error: null,
@@ -336,11 +360,32 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
           doorScopes: resolveUpdater(state.collections.doorScopes ?? [], value),
         },
       })),
+    setDrywallRepairs: (value) =>
+      set((state) => ({
+        collections: {
+          ...state.collections,
+          drywallRepairs: resolveUpdater(state.collections.drywallRepairs ?? [], value),
+        },
+      })),
     setRollers: (value) =>
       set((state) => ({
         collections: {
           ...state.collections,
           rollers: resolveUpdater(state.collections.rollers ?? [], value),
+        },
+      })),
+    setAccessFees: (value) =>
+      set((state) => ({
+        collections: {
+          ...state.collections,
+          accessFees: resolveUpdater(state.collections.accessFees ?? [], value),
+        },
+      })),
+    setOtherItems: (value) =>
+      set((state) => ({
+        collections: {
+          ...state.collections,
+          otherItems: resolveUpdater(state.collections.otherItems ?? [], value),
         },
       })),
     setLoading: (value) =>
@@ -389,6 +434,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
         meta: {
           ...state.meta,
           doorCalculations: resolveUpdater(state.meta.doorCalculations ?? null, value),
+        },
+      })),
+    setDrywallCalculations: (value) =>
+      set((state) => ({
+        meta: {
+          ...state.meta,
+          drywallCalculations: resolveUpdater(state.meta.drywallCalculations ?? null, value),
         },
       })),
     setPricingSummary: (value) =>
@@ -526,8 +578,14 @@ function selectCollectionsWithSetters(state: EstimateV2EditorStore): EstimateV2E
     setTrimScopes: state.setTrimScopes,
     doorScopes: state.collections.doorScopes ?? EMPTY_DOOR_SCOPES,
     setDoorScopes: state.setDoorScopes,
+    drywallRepairs: state.collections.drywallRepairs ?? EMPTY_DRYWALL_REPAIRS,
+    setDrywallRepairs: state.setDrywallRepairs,
     rollers: state.collections.rollers ?? [],
     setRollers: state.setRollers,
+    accessFees: state.collections.accessFees ?? EMPTY_ACCESS_FEES,
+    setAccessFees: state.setAccessFees,
+    otherItems: state.collections.otherItems ?? EMPTY_OTHER_ITEMS,
+    setOtherItems: state.setOtherItems,
   }
 }
 
@@ -551,6 +609,8 @@ function selectMetaWithSetters(state: EstimateV2EditorStore): EstimateV2EditorMe
     setTrimCalculations: state.setTrimCalculations,
     doorCalculations: state.meta.doorCalculations ?? null,
     setDoorCalculations: state.setDoorCalculations,
+    drywallCalculations: state.meta.drywallCalculations ?? null,
+    setDrywallCalculations: state.setDrywallCalculations,
     pricingSummary: state.meta.pricingSummary ?? null,
     setPricingSummary: state.setPricingSummary,
     selectedRoomId: state.meta.selectedRoomId,

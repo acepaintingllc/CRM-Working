@@ -91,6 +91,23 @@ test('wall deductions accept decimal door and window counts in RECT and SEG inpu
   approx(seg.scopes[0].raw_area_sf, 82)
 })
 
+test('missing wall pricing assumptions are reported instead of using hardcoded fallback rates', () => {
+  const result = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeWallScope({ color_id: null })],
+    segments: [],
+  })
+
+  const missingFields = result.missing_inputs.map((input) => input.field)
+  assert.ok(missingFields.includes('labor_rate_per_hour'))
+  assert.ok(missingFields.includes('paint_prod_rate_sqft_per_hour'))
+  assert.ok(missingFields.includes('primer_prod_rate_sqft_per_hour'))
+  assert.ok(missingFields.includes('paint_coverage_sqft_per_gal_per_coat'))
+  assert.ok(missingFields.includes('primer_coverage_sqft_per_gal_per_coat'))
+  assert.ok(missingFields.includes('paint_price_per_gal'))
+  assert.ok(missingFields.includes('primer_price_per_gal'))
+})
+
 test('wall primer supply cost applies only for SPOT and FULL prime modes', () => {
   const catalogs = { supplies_rates: [{ key: 'PRIMER_WALL', scope: 'Walls', unit: 'primer per scope', value: 7 }] }
   const none = calculateWalls({ catalogs, scopes: [makeWallScope({ color_id: null })], segments: [] })

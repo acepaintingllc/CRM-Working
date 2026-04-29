@@ -111,6 +111,23 @@ test('RECT scope: area from L×W, prime_mode NONE, no modifier', () => {
   approx(result.room_totals[0].effective_total, 178.4)
 })
 
+test('missing ceiling pricing assumptions are reported instead of using hardcoded fallback rates', () => {
+  const result = calculateCeilings({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeScope()],
+    segments: [],
+  })
+
+  const missingFields = result.missing_inputs.map((input) => input.field)
+  assert.ok(missingFields.includes('labor_rate_per_hour'))
+  assert.ok(missingFields.includes('paint_prod_rate_sqft_per_hour'))
+  assert.ok(missingFields.includes('primer_prod_rate_sqft_per_hour'))
+  assert.ok(missingFields.includes('paint_coverage_sqft_per_gal_per_coat'))
+  assert.ok(missingFields.includes('primer_coverage_sqft_per_gal_per_coat'))
+  assert.ok(missingFields.includes('paint_price_per_gal'))
+  assert.ok(missingFields.includes('primer_price_per_gal'))
+})
+
 test('ceiling primer supply cost applies only for SPOT and FULL prime modes', () => {
   const catalogs = {
     supplies_rates: [{ key: 'PRIMER_CEIL', scope: 'Ceilings', unit: 'primer per scope', value: 6 }],

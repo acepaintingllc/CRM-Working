@@ -67,6 +67,19 @@ export type RoomPricingSummary = {
   finalTotal: number
 }
 
+export type AccessFeePricingAllocation = {
+  walls: number
+  ceilings: number
+  trim: number
+  unallocated: number
+  warning: string | null
+}
+
+export type EstimateAccessFeePricingInput = {
+  total: number
+  scopes: AccessFeeAllocationScope[]
+}
+
 export type WholeDollarReconciledRow<T extends { price: number }> = T
 
 export type EstimateTrimPaintInput = {
@@ -91,6 +104,8 @@ export type EstimatePricingSummary = {
   paintMaterialCost: number
   primerMaterialCost: number
   supplyCost: number
+  sharedAccessCost: number
+  accessFeeAllocation: AccessFeePricingAllocation
   prePolicyTotal: number
   postLaborPolicyTotal: number
   minimumAdjustmentAmount: number
@@ -289,7 +304,8 @@ export function buildEstimatePricingSummary(
   laborPolicy: LaborDayPolicySettings,
   minimumPolicy: JobMinimumSettings,
   trimPaint: EstimateTrimPaintInput | null = null,
-  extraSupplyCost = 0
+  extraSupplyCost = 0,
+  accessFees: EstimateAccessFeePricingInput | null = null
 ): EstimatePricingSummary {
   return buildEstimatePricingSummaryFromEngines(
     engines.map((output, index) => ({
@@ -299,7 +315,8 @@ export function buildEstimatePricingSummary(
     laborPolicy,
     minimumPolicy,
     trimPaint,
-    extraSupplyCost
+    extraSupplyCost,
+    accessFees
   )
 }
 
@@ -308,7 +325,8 @@ export function buildEstimatePricingSummaryFromEngines(
   laborPolicy: LaborDayPolicySettings,
   minimumPolicy: JobMinimumSettings,
   trimPaint: EstimateTrimPaintInput | null = null,
-  extraSupplyCost = 0
+  extraSupplyCost = 0,
+  accessFees: EstimateAccessFeePricingInput | null = null
 ): EstimatePricingSummary {
   const engines = engineInputs.map((engine) => engine.output)
   const laborRate = engines[0]?.assumptions.labor_rate_per_hour ?? DEFAULT_LABOR_RATE
@@ -374,6 +392,18 @@ export function buildEstimatePricingSummaryFromEngines(
     }
   }
   const supplyCost = round2(areaSupplyCost + perColorSupplyCost + extraSupplyCost)
+  const sharedAccessCost = round2(Math.max(0, accessFees?.total ?? 0))
+  const accessAllocationResult = allocateAccessFeesByEligibleScope({
+    accessFeeTotal: sharedAccessCost,
+    scopes: accessFees?.scopes ?? [],
+  })
+  const accessFeeAllocation: AccessFeePricingAllocation = {
+    walls: accessAllocationResult.allocations.walls,
+    ceilings: accessAllocationResult.allocations.ceilings,
+    trim: accessAllocationResult.allocations.trim,
+    unallocated: accessAllocationResult.unallocated,
+    warning: accessAllocationResult.warning,
+  }
 
   const laborResult = applyLaborDayPolicy(rawLaborHours, laborPolicy)
   const laborCost = round2(laborResult.effectiveHours * laborRate)
@@ -393,7 +423,7 @@ export function buildEstimatePricingSummaryFromEngines(
     baseTotal: round2(room.baseTotal + (trimAllocations[idx]?.allocatedMinimumAdjustment ?? 0)),
   }))
 
-  const prePolicyTotal = round2(roomBasesWithTrim.reduce((s, v) => s + v.baseTotal, 0))
+  const prePolicyTotal = round2(roomBasesWithTrim.reduce((s, v) => s + v.baseTotal, 0) + sharedAccessCost)
   const postLaborPolicyTotal = round2(prePolicyTotal + (laborResult.effectiveHours - rawLaborHours) * laborRate)
 
   const minimumResult = applyJobMinimum(postLaborPolicyTotal, minimumPolicy)
@@ -412,6 +442,8 @@ export function buildEstimatePricingSummaryFromEngines(
     paintMaterialCost,
     primerMaterialCost: round2(primerMaterialCost),
     supplyCost,
+    sharedAccessCost,
+    accessFeeAllocation,
     prePolicyTotal,
     postLaborPolicyTotal,
     minimumAdjustmentAmount: minimumResult.adjustmentAmount,
@@ -451,5 +483,9 @@ import {
   DEFAULT_LABOR_RATE,
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from './defaults.ts'
+import {
+  allocateAccessFeesByEligibleScope,
+  type AccessFeeAllocationScope,
+} from './accessFees.ts'
 import type { WallCalculationCatalogs } from './wallsTypes.ts'
 

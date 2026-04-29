@@ -18,6 +18,7 @@ import {
   SharedSegmentGrid,
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
+import { EstimateV2DrywallRepairsBlock } from './EstimateV2DrywallRepairsBlock'
 import type {
   EstimateV2CeilingGeometryMode,
   EstimateV2CeilingSegmentDraft,
@@ -582,6 +583,21 @@ export function EstimateV2CeilingsSectionBody({
         selections={ceilingsVm.conditionSelections}
         onChange={ceilingsVm.setSelectedRoomCeilingCondition ?? (() => undefined)}
         styles={styles}
+      />
+
+      <EstimateV2DrywallRepairsBlock
+        styles={styles}
+        title="Ceiling Drywall Repairs"
+        roomId={selectedRoom.roomId}
+        surface="ceiling"
+        repairs={ceilingsVm.selectedRoomCeilingDrywallRepairs}
+        rateOptions={ceilingsVm.drywallRateOptions}
+        effectiveQuantityById={ceilingsVm.drywallRepairEffectiveQuantityById}
+        effectiveTotalById={ceilingsVm.drywallRepairEffectiveTotalById}
+        subtotal={ceilingsVm.selectedCeilingDrywallSubtotal}
+        addRepair={ceilingsVm.addDrywallRepair}
+        updateRepair={ceilingsVm.updateDrywallRepair}
+        deleteRepair={ceilingsVm.deleteDrywallRepair}
       />
 
       {firstCeilingScope && (

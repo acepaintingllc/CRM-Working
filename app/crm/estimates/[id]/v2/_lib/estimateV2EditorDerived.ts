@@ -13,6 +13,7 @@ import {
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
   EstimateV2HeightFactorOption,
   EstimateV2PaintProductOption,
   EstimateV2ProductionRateOption,
@@ -59,6 +60,10 @@ export function buildTrimScopeByRoomId(scopes: EstimateV2TrimScopeDraft[]) {
 }
 
 export function buildDoorScopeByRoomId(scopes: EstimateV2DoorScopeDraft[]) {
+  return groupRowsByRoomId(scopes)
+}
+
+export function buildDrywallRepairByRoomId(scopes: EstimateV2DrywallRepairDraft[]) {
   return groupRowsByRoomId(scopes)
 }
 
@@ -124,7 +129,7 @@ export function buildCeilingScopeEffectiveTotalById(ceilingCalculations: Unsafe 
 
 export function buildTrimScopeMetricById(
   trimCalculations: Unsafe | null,
-  key: 'effective_measurement' | 'effective_units' | 'effective_total'
+  key: 'effective_measurement' | 'effective_units' | 'effective_quantity' | 'effective_total'
 ) {
   const next = new Map<string, number | null>()
   const calcScopes =
@@ -225,14 +230,10 @@ export function buildRoomComplexityFactorByRoomId(
   rooms: EstimateV2RoomDraft[],
   wallProductionRateById: Map<string, EstimateV2ProductionRateOption>
 ) {
+  void wallProductionRateById
   const next = new Map<string, string>()
   for (const room of rooms) {
-    const rate = unknownNumberOrNull(
-      wallProductionRateById.get(room.wallComplexityId)?.sqft_per_hr ??
-        wallProductionRateById.get(room.wallComplexityId)?.prep_sqft_per_hr
-    )
-    const multiplier = rate && rate > 0 ? 150 / rate : 1
-    next.set(room.roomId, toPositiveFactorString(multiplier, '1'))
+    next.set(room.roomId, '1')
   }
   return next
 }

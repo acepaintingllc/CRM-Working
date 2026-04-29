@@ -31,11 +31,22 @@ export function buildScopeText(params: {
 }
 
 export function buildCustomerEstimateSections(params: {
-  scoped: Record<CustomerEstimateSectionKey, ScopeBucket>
+  scoped: Partial<Record<CustomerEstimateSectionKey, ScopeBucket>>
   overrides?: {
     scope_text_edits?: Partial<Record<CustomerEstimateSectionKey, string>>
   }
 }): CustomerEstimateSection[] {
+  const emptyBucket: ScopeBucket = {
+    texts: [],
+    price: 0,
+    rooms: [],
+    paintProducts: [],
+    subjectLabels: [],
+    notes: [],
+    coats: [],
+    primeModes: [],
+  }
+  const bucketFor = (key: CustomerEstimateSectionKey) => params.scoped[key] ?? emptyBucket
   const sectionDefinitions: Array<{
     key: CustomerEstimateSectionKey
     label: string
@@ -44,6 +55,7 @@ export function buildCustomerEstimateSections(params: {
     { key: 'ceilings', label: 'Ceilings' },
     { key: 'trim', label: 'Trim' },
     { key: 'doors', label: 'Doors' },
+    { key: 'drywall', label: 'Drywall Repairs' },
     { key: 'cabinets', label: 'Cabinets' },
     { key: 'other', label: 'Other' },
   ]
@@ -51,12 +63,12 @@ export function buildCustomerEstimateSections(params: {
   return sectionDefinitions.map((definition) => ({
     key: definition.key,
     label: definition.label,
-    text: buildScopeText({
-      label: definition.label === 'Other' ? 'Other work' : definition.label,
-      fallbackTexts: params.scoped[definition.key].texts,
+      text: buildScopeText({
+        label: definition.label === 'Other' ? 'Other work' : definition.label,
+      fallbackTexts: bucketFor(definition.key).texts,
       overrideText: params.overrides?.scope_text_edits?.[definition.key],
     }),
-    price: params.scoped[definition.key].price > 0 ? params.scoped[definition.key].price : null,
+    price: bucketFor(definition.key).price > 0 ? bucketFor(definition.key).price : null,
   }))
 }
 
@@ -128,6 +140,7 @@ export function finalizeScopeBuckets(sectionBuckets: ScopeBuckets) {
   finalizeBucket('ceilings', 'on ceilings')
   finalizeBucket('trim', 'on trim')
   finalizeBucket('doors', 'on doors')
+  finalizeBucket('drywall', 'drywall repairs')
   finalizeBucket('cabinets', 'on cabinets')
   sectionBuckets.other = {
     ...sectionBuckets.other,

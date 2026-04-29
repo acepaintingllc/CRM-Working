@@ -18,6 +18,7 @@ export const DRYWALL_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'labor_rate', label: 'Labor', align: 'right' },
       { key: 'material_rate', label: 'Material', align: 'right' },
       { key: 'amount', label: 'Amount', align: 'right' },
+      { key: 'ceiling_multiplier', label: 'Ceiling Mult.', align: 'right' },
       { key: 'active', label: 'Status', align: 'center' },
     ],
     fields: [
@@ -30,6 +31,7 @@ export const DRYWALL_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'labor_rate', label: 'Labor', type: 'number', headers: ['LaborRate', 'LaborHours', 'LaborHrs_Each', 'Hours_Each'] },
       { key: 'material_rate', label: 'Material', type: 'number', headers: ['MaterialRate', 'Materials$_Each', 'MaterialsEach'] },
       { key: 'amount', label: 'Amount', type: 'number', headers: ['Amount', 'Value', 'Rate', 'Cost'] },
+      { key: 'ceiling_multiplier', label: 'Ceiling Multiplier', type: 'number', headers: ['CeilingMultiplier', 'CeilingMult'] },
       { key: 'notes', label: 'Notes', type: 'text', headers: ['Notes', 'Note'] },
     ],
     toRow(values, active) {
@@ -43,6 +45,7 @@ export const DRYWALL_CATEGORY_CONFIGS: CategoryConfig[] = [
         labor_rate: asText(values.labor_rate),
         material_rate: asText(values.material_rate),
         amount: asText(values.amount),
+        ceiling_multiplier: asText(values.ceiling_multiplier),
         notes: asText(values.notes),
         active,
       } satisfies UnitRateRow

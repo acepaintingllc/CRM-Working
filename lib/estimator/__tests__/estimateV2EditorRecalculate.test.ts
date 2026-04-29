@@ -183,7 +183,7 @@ test('recalculateEditorDraftFactors syncs wall, ceiling, and trim factors and st
   })
 
   assert.equal(result.wallScopes[0].heightFactor, '1.2')
-  assert.equal(result.wallScopes[0].complexityFactor, '1.5')
+  assert.equal(result.wallScopes[0].complexityFactor, '1')
   assert.equal(result.wallScopes[0].wallFlagFactor, '1.15')
   assert.equal(result.ceilingScopes[0].ceilingFlagFactor, '1.1')
   assert.equal(result.trimScopes[0].roomFlagFactor, '1.05')

@@ -62,6 +62,16 @@ export type EstimateV2CatalogOption = {
   label: string
 }
 
+export type EstimateV2AccessFeeGroup = 'ladders' | 'scaffolding' | 'specialty'
+
+export type EstimateV2AccessFeeOption = EstimateV2CatalogOption & {
+  access_group: EstimateV2AccessFeeGroup
+  fee_type: string | null
+  amount: number | null
+  unit: string | null
+  notes: string | null
+}
+
 export type EstimateV2PaintProductOption = EstimateV2CatalogOption & {
   type: string
   scopes?: string[]
@@ -117,6 +127,23 @@ export type EstimateV2DoorTypeOption = EstimateV2CatalogOption & {
   amount: number | null
 }
 
+export type EstimateV2DrywallRateOption = EstimateV2CatalogOption & {
+  unit_rate_type: string | null
+  unit: 'LF' | 'SQFT' | string | null
+  amount: number | null
+  ceiling_multiplier: number | null
+}
+
+export type EstimateV2AccessFeeDraft = {
+  id: string
+  roomId: string
+  accessFeeId: string
+  qty: string
+  actualCostOverride: string
+  notes: string
+  position: number
+}
+
 export type EstimateV2Catalogs = {
   paint_products: EstimateV2PaintProductOption[]
   color_codes: EstimateV2CatalogOption[]
@@ -127,6 +154,8 @@ export type EstimateV2Catalogs = {
   ceiling_types: EstimateV2CeilingTypeOption[]
   trim_items: EstimateV2TrimTypeOption[]
   door_types?: EstimateV2DoorTypeOption[]
+  drywall_rates?: EstimateV2DrywallRateOption[]
+  access_fees?: EstimateV2AccessFeeOption[]
   condition_modifiers?: EstimateV2LegacyConditionModifier[]
 }
 
@@ -177,6 +206,14 @@ export type EstimateV2PricingSummary = {
   paintMaterialCost: number
   primerMaterialCost: number
   supplyCost: number
+  sharedAccessCost?: number
+  accessFeeAllocation?: {
+    walls: number
+    ceilings: number
+    trim: number
+    unallocated: number
+    warning: string | null
+  }
   prePolicyTotal: number
   postLaborPolicyTotal: number
   minimumAdjustmentAmount: number
@@ -266,6 +303,7 @@ export type EstimateV2ResponseInputs = {
   ceiling_scope_segments: UnsafeRecord[]
   room_trim_scopes: UnsafeRecord[]
   room_door_scopes?: UnsafeRecord[]
+  drywall_repairs?: UnsafeRecord[]
   rollers: EstimateV2RollerInputRow[]
   prejob: UnsafeRecord[]
   trim_items: UnsafeRecord[]
@@ -282,6 +320,7 @@ export type EstimateV2GetResponse = {
   ceiling_calculations: UnsafeRecord | null
   trim_calculations: UnsafeRecord | null
   door_calculations?: UnsafeRecord | null
+  drywall_calculations?: UnsafeRecord | null
   trim_paint: EstimateV2TrimPaint | null
   pricing_summary: EstimateV2PricingSummary | null
 }
@@ -302,6 +341,10 @@ export type EstimateV2SummaryPageData = {
     room_totals?: EstimateV2RoomTotal[]
   }
   door_calculations?: {
+    scopes?: UnsafeRecord[]
+    room_totals?: EstimateV2RoomTotal[]
+  }
+  drywall_calculations?: {
     scopes?: UnsafeRecord[]
     room_totals?: EstimateV2RoomTotal[]
   }
@@ -574,6 +617,49 @@ export type EstimateV2DoorScopeDraft = {
   notes: string
 }
 
+export type EstimateV2DrywallRepairDraft = {
+  id: string
+  roomId: string
+  position: number
+  surface: 'wall' | 'ceiling'
+  repairType: string
+  unit: 'LF' | 'SQFT'
+  quantity: string
+  overrideTotal: string
+}
+
+export type EstimateV2OtherPricingMode = 'fixed' | 'quantity_rate' | 'labor' | 'material_supply'
+export type EstimateV2OtherRollupTarget =
+  | 'other'
+  | 'walls'
+  | 'ceilings'
+  | 'trim'
+  | 'doors'
+  | 'drywall'
+  | 'room_total'
+  | 'job_total'
+export type EstimateV2OtherCustomerVisibility = 'standalone' | 'rollup'
+
+export type EstimateV2OtherItemDraft = {
+  id: string
+  roomId: string
+  position: number
+  include: YN
+  description: string
+  customerLabel: string
+  pricingMode: EstimateV2OtherPricingMode
+  quantity: string
+  unitRate: string
+  laborHours: string
+  laborRate: string
+  materialCost: string
+  supplyCost: string
+  fixedAmount: string
+  rollupTarget: EstimateV2OtherRollupTarget
+  customerVisibility: EstimateV2OtherCustomerVisibility
+  internalNotes: string
+}
+
 export type EstimateV2WallSegmentDerived = {
   rawArea: number | null
   deductionArea: number
@@ -629,8 +715,20 @@ export type EstimateV2SavePayload = {
     notes: string | null
     position: number
   }>
+  access_fees: Array<{
+    id: string
+    room_id: string | null
+    access_fee_id: string
+    qty: number | null
+    actual_cost_override: number | null
+    notes: string | null
+    position: number
+    active: 'Y'
+  }>
   room_ceiling_scopes: UnsafeRecord[]
   ceiling_scope_segments: UnsafeRecord[]
   room_trim_scopes: UnsafeRecord[]
   room_door_scopes?: UnsafeRecord[]
+  drywall_repairs?: UnsafeRecord[]
+  other?: UnsafeRecord[]
 }

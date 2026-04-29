@@ -1,4 +1,6 @@
 import type {
+  EstimateV2AccessFeeDraft,
+  EstimateV2AccessFeeOption,
   EstimateV2CeilingScopeDraft,
   EstimateV2PricingSummary,
   EstimateV2RoomDraft,
@@ -14,6 +16,10 @@ import {
   countActiveConditions,
   emptyConditionSelections,
 } from './estimateV2DetailsConditions'
+import {
+  buildEstimateV2DetailsAccessFeesVm,
+  type DetailsAccessFeesVm,
+} from './estimateV2DetailsAccessFees'
 import {
   createAggregateRow,
   createWallRows,
@@ -192,6 +198,7 @@ export type EstimateV2DetailsVm = {
   hasCeilings: boolean
   hasTrim: boolean
   conditions: DetailsConditionsVm
+  accessFees: DetailsAccessFeesVm
 }
 
 export type BuildDetailsVmParams = {
@@ -209,6 +216,8 @@ export type BuildDetailsVmParams = {
   rollerOptions: DetailsRollerCoverOption[]
   rollerOptionsState?: DetailsRollerOptionsState
   rollers: EstimateV2RollerDraft[]
+  accessFees?: EstimateV2AccessFeeDraft[]
+  accessFeeCatalog?: EstimateV2AccessFeeOption[]
   conditionModifiers?: EstimateV2ConditionModifier[]
   conditionSelections?: EstimateV2ConditionSelections
 }
@@ -456,6 +465,12 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     materialPlanning,
     pricingSummary: params.pricingSummary,
   })
+  const accessFees = buildEstimateV2DetailsAccessFeesVm({
+    accessFees: params.accessFees ?? [],
+    catalog: params.accessFeeCatalog ?? [],
+    rooms: params.rooms,
+    pricingSummary: params.pricingSummary,
+  })
 
   return {
     crewSize: params.crewSize ?? 1,
@@ -464,5 +479,6 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     ...validation,
     ...totals,
     conditions,
+    accessFees,
   }
 }

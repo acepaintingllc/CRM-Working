@@ -12,6 +12,7 @@ export const CUSTOMER_SEND_SCOPE_KEYS = [
   'ceilings',
   'trim',
   'doors',
+  'drywall',
   'cabinets',
   'other',
 ] as const satisfies readonly CustomerEstimateSectionKey[]
@@ -105,6 +106,7 @@ export type EstimateCustomerSendInputs = {
   room_ceiling_scopes: Unsafe[]
   ceiling_scope_segments: Unsafe[]
   room_trim_scopes: Unsafe[]
+  drywall_repairs?: Unsafe[]
   trim_items: Unsafe[]
   other: Unsafe[]
   jobsettings: EstimateJobSettingsRow
@@ -162,6 +164,7 @@ export type EstimateCustomerSendScopeResources = {
   ceilingScopes: Unsafe[]
   ceilingScopeSegments: Unsafe[]
   trimScopes: Unsafe[]
+  drywallRepairs?: Unsafe[]
   trimItems: Unsafe[]
   other: Unsafe[]
 }
@@ -174,6 +177,7 @@ export type EstimateCustomerSendCalculatedData = {
   quoteWallScopes: Unsafe[]
   quoteCeilingScopes: Unsafe[]
   quoteTrimScopes: Unsafe[]
+  quoteDrywallScopes?: Unsafe[]
   pricingSummary: { finalTotal: number | null } | null
 }
 
@@ -188,7 +192,7 @@ export type CustomerSendDraft = {
   intro_paragraph: string
   closing_paragraph: string
   terms_text: string
-  scope_text_edits: Record<CustomerSendScopeKey, string>
+  scope_text_edits: Partial<Record<CustomerSendScopeKey, string>>
   quote_validity_days: number | null
   deposit_language: string
   card_fee_note: string

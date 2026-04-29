@@ -16,6 +16,7 @@ import {
   normalizeCeilingScope,
   normalizeCeilingSegment,
   normalizeDoorScope,
+  normalizeDrywallRepair,
   normalizeScope,
   normalizeSegment,
   normalizeTrimScope,
@@ -38,7 +39,10 @@ export type EstimateV2PreparedSaveState = {
     ceilingSegments: EstimateV2SaveCollections['ceilingSegments']
     trimScopes: EstimateV2SaveCollections['trimScopes']
     doorScopes: EstimateV2SaveCollections['doorScopes']
+    drywallRepairs: EstimateV2SaveCollections['drywallRepairs']
     rollers: EstimateV2SaveCollections['rollers']
+    accessFees: EstimateV2SaveCollections['accessFees']
+    otherItems: EstimateV2SaveCollections['otherItems']
   }
   payloadSnapshot: EstimateV2DirtySnapshot
 }
@@ -88,7 +92,10 @@ export function prepareEstimateV2SaveState(
     ceilingSegments: sanitizedCeilings.ceilingSegments,
     trimScopes: sanitizedTrim.trimScopes,
     doorScopes: currentState.collections.doorScopes ?? [],
+    drywallRepairs: currentState.collections.drywallRepairs ?? [],
     rollers: currentState.collections.rollers,
+    accessFees: currentState.collections.accessFees ?? [],
+    otherItems: currentState.collections.otherItems ?? [],
   }
 
   return {
@@ -105,7 +112,10 @@ export function prepareEstimateV2SaveState(
       ceilingSegments: collections.ceilingSegments,
       trimScopes: collections.trimScopes,
       doorScopes: collections.doorScopes ?? [],
+      drywallRepairs: collections.drywallRepairs ?? [],
       rollers: collections.rollers,
+      accessFees: collections.accessFees,
+      otherItems: collections.otherItems,
     }),
   }
 }
@@ -165,7 +175,7 @@ export function resolveEstimateV2SaveResponseState(params: {
   payload: unknown
   meta: Pick<
     EstimateV2SaveMeta,
-    'wallCalculations' | 'ceilingCalculations' | 'trimCalculations' | 'doorCalculations'
+    'wallCalculations' | 'ceilingCalculations' | 'trimCalculations' | 'doorCalculations' | 'drywallCalculations'
   >
   prepared: EstimateV2PreparedSaveState
   currentState: EstimateV2EditorStoreState
@@ -293,6 +303,21 @@ export function resolveEstimateV2SaveResponseState(params: {
     )
   }
 
+  const nextDrywallCalculations =
+    payload != null && typeof payload === 'object' && 'drywall_calculations' in payload
+      ? ((payload as { drywall_calculations?: Unsafe }).drywall_calculations ?? null)
+      : meta.drywallCalculations
+  let nextDrywallRepairs = prepared.collections.drywallRepairs ?? []
+  if (
+    trigger === 'manual' &&
+    nextDrywallCalculations &&
+    Array.isArray((nextDrywallCalculations as Unsafe).scopes)
+  ) {
+    nextDrywallRepairs = sortByPosition(
+      ((nextDrywallCalculations as Unsafe).scopes as Unsafe[]).map(normalizeDrywallRepair)
+    )
+  }
+
   return {
     collections: {
       scopes: nextScopes,
@@ -301,13 +326,17 @@ export function resolveEstimateV2SaveResponseState(params: {
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
       doorScopes: nextDoorScopes,
+      drywallRepairs: nextDrywallRepairs,
       rollers: currentState.collections.rollers,
+      accessFees: currentState.collections.accessFees ?? [],
+      otherItems: currentState.collections.otherItems ?? [],
     },
     calculations: {
       wallCalculations: nextWallCalculations,
       ceilingCalculations: nextCeilingCalculations,
       trimCalculations: nextTrimCalculations,
       doorCalculations: nextDoorCalculations,
+      drywallCalculations: nextDrywallCalculations,
       pricingSummary: nextPricingSummary,
     },
     lastSavedSnapshot: buildEstimateV2DirtySnapshot({
@@ -320,7 +349,10 @@ export function resolveEstimateV2SaveResponseState(params: {
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
       doorScopes: nextDoorScopes,
+      drywallRepairs: nextDrywallRepairs,
       rollers: currentState.collections.rollers,
+      accessFees: currentState.collections.accessFees ?? [],
+      otherItems: currentState.collections.otherItems ?? [],
     }),
   }
 }

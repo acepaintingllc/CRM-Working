@@ -3,6 +3,9 @@ import { calculateWalls } from '../../estimator/walls.ts'
 import { calculateCeilings } from '../../estimator/ceilings.ts'
 import { calculateTrim } from '../../estimator/trim.ts'
 import { calculateDoors } from '../../estimator/doors.ts'
+import { calculateDrywallRepairs } from '../../estimator/drywall.ts'
+import { calculateOtherItems } from '../../estimator/other.ts'
+import { calculateAccessFeeRows, hasCrownTrimAccessEligibility } from '../../estimator/accessFees.ts'
 import { buildEstimatePricingSummaryFromEngines, buildPerJobSupplyCost } from '../../estimator/pricingPolicies.ts'
 import {
   DEFAULT_DAY_HOURS,
@@ -22,18 +25,20 @@ import {
   loadEstimateV2RoomModesForTrimFromDb,
   resolveEstimateV2RoomModeById,
 } from '../estimateV2Catalogs.ts'
+import { applyBaseCeilingProductionRates } from './ceilingProductionRates.ts'
+import { applySelectedWallProductionRates } from './wallProductionRates.ts'
+import type { EstimateV2AccessFeeOption } from '@/types/estimator/v2'
 import type {
   V2CeilingScopeSaveRow,
   V2CeilingSegmentSaveRow,
   V2DoorScopeSaveRow,
+  V2DrywallRepairSaveRow,
   V2RoomRosterRow,
   V2TrimScopeSaveRow,
   V2WallScopeSaveRow,
   V2WallSegmentSaveRow,
 } from '../estimateV2RoutePayload.ts'
 import type { EstimateTemplateSettingsRow } from '../estimateTemplateSettings.ts'
-
-const TRAY_CEILING_WALL_CUT_IN_FACTOR = 1.15
 
 function roomConditionSelectionsById(rooms: Unsafe[]) {
   const result = new Map<string, ReturnType<typeof normalizeConditionSelections>>()
@@ -66,27 +71,6 @@ function resolveCombinedConditionFactor(params: {
   return factor === 1 ? null : factor
 }
 
-function trayCeilingRoomIds(scopes: Unsafe[]) {
-  const roomIds = new Set<string>()
-  for (const scope of scopes) {
-    const roomId = asText(scope.room_id).toUpperCase()
-    const scopeMode = asText(scope.mode).toUpperCase()
-    const mode = asText(scope.ceiling_geometry_mode).toUpperCase()
-    const include = asText(scope.include).toUpperCase()
-    if (roomId && scopeMode !== 'SEG' && mode === 'TRAY' && include !== 'N') roomIds.add(roomId)
-  }
-  return roomIds
-}
-
-function applyTrayCeilingWallCutInFactor(row: V2WallScopeSaveRow, trayRoomIds: Set<string>) {
-  const roomId = asText((row as unknown as Unsafe).room_id).toUpperCase()
-  if (!trayRoomIds.has(roomId)) return row.cut_in_top_factor
-  return Math.max(
-    asNullableNumber((row as unknown as Unsafe).cut_in_top_factor) ?? 1,
-    TRAY_CEILING_WALL_CUT_IN_FACTOR
-  )
-}
-
 export async function loadCalculatedEstimateV2Artifacts(params: {
   requestOrigin: string
   orgId: string
@@ -100,6 +84,9 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   ceilingScopeSegments: Unsafe[]
   roomTrimScopes: Unsafe[]
   roomDoorScopes?: Unsafe[]
+  drywallRepairs?: Unsafe[]
+  accessFees?: Unsafe[]
+  other?: Unsafe[]
   orgDefaults: EstimateTemplateSettingsRow | null
 }) {
   const js = params.jobsettings
@@ -139,11 +126,17 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   })
 
   const conditionSelectionsByRoomId = roomConditionSelectionsById(params.rooms)
-  const trayRoomIds = trayCeilingRoomIds(params.roomCeilingScopes)
   const wallScopeRowsForSave = params.roomWallScopes as unknown as V2WallScopeSaveRow[]
   const wallScopePaintById = new Map<string, string | null>()
   const wallScopePrimerById = new Map<string, string | null>()
-  const wallScopeRowsForCalc = wallScopeRowsForSave.map((row) => {
+  const wallScopeRowsWithProductionRates = applySelectedWallProductionRates({
+    rooms: params.rooms,
+    scopes: wallScopeRowsForSave,
+    productionRates: Array.isArray(calculationCatalogs.source.production_rates)
+      ? calculationCatalogs.source.production_rates
+      : [],
+  })
+  const wallScopeRowsForCalc = wallScopeRowsWithProductionRates.map((row) => {
     const rowId = asText(row.id)
     const paintProductId = asText((row as unknown as Unsafe).paint_product_id) || null
     const primerProductId = asText((row as unknown as Unsafe).primer_product_id) || null
@@ -158,7 +151,6 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
         scope: 'wall',
         selections: (row as unknown as Unsafe).condition_selections,
       }),
-      cut_in_top_factor: applyTrayCeilingWallCutInFactor(row, trayRoomIds),
       paint_product_id: paintProductId || wallDefaultPaintId,
       primer_product_id: primerProductId || wallDefaultPrimerId,
       paint_coats: asNullableNumberFromKeys(row as unknown as Unsafe, ['paint_coats', 'wall_coats', 'walls_topcoats']),
@@ -186,7 +178,13 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   const ceilingScopeRowsForSave = params.roomCeilingScopes as unknown as V2CeilingScopeSaveRow[]
   const ceilingScopePaintById = new Map<string, string | null>()
   const ceilingScopePrimerById = new Map<string, string | null>()
-  const ceilingScopeRowsForCalc = ceilingScopeRowsForSave.map((row) => {
+  const ceilingScopeRowsWithProductionRates = applyBaseCeilingProductionRates({
+    scopes: ceilingScopeRowsForSave,
+    productionRates: Array.isArray(calculationCatalogs.source.production_rates)
+      ? calculationCatalogs.source.production_rates
+      : [],
+  })
+  const ceilingScopeRowsForCalc = ceilingScopeRowsWithProductionRates.map((row) => {
     const rowId = asText(row.id)
     const paintProductId = asText((row as unknown as Unsafe).paint_product_id) || null
     const primerProductId = asText((row as unknown as Unsafe).primer_product_id) || null
@@ -317,12 +315,40 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
       primer_product_id: originalPrimerProductId ?? (asText((row as Unsafe).primer_product_id) || null),
     }
   })
+  const drywallRepairRowsForSave = (params.drywallRepairs ?? []) as unknown as V2DrywallRepairSaveRow[]
+  const drywallCalculations = calculateDrywallRepairs({
+    repairs: drywallRepairRowsForSave,
+    catalogs: calculationCatalogs.drywall ?? undefined,
+  })
+  const otherCalculations = calculateOtherItems({
+    rows: params.other ?? [],
+    settings: { labor_rate_per_hour: effectiveLaborRate },
+  })
+  const accessFeeCalculation = calculateAccessFeeRows({
+    drafts: (params.accessFees ?? []).map((row, index) => ({
+      id: asText(row.id) || `access-fee-${index}`,
+      roomId: asText(row.room_id).toUpperCase(),
+      accessFeeId: asText(row.access_fee_id),
+      qty: asText(row.qty),
+      actualCostOverride: asText(row.actual_cost_override),
+      notes: asText(row.notes),
+      position: asNullableNumber(row.position) ?? index,
+    })),
+    catalog: (Array.isArray(calculationCatalogs.source.access_fees)
+      ? calculationCatalogs.source.access_fees
+      : []) as EstimateV2AccessFeeOption[],
+  })
+  const wallSubtotal = wallCalculations.room_totals.reduce((sum, row) => sum + (row.effective_total ?? 0), 0)
+  const ceilingSubtotal = ceilingCalculations.room_totals.reduce((sum, row) => sum + (row.effective_total ?? 0), 0)
+  const trimSubtotal = trimCalculations.room_totals.reduce((sum, row) => sum + (row.effective_total ?? 0), 0)
   const pricingSummary = buildEstimatePricingSummaryFromEngines(
     [
       { kind: 'walls', output: wallCalculations },
       { kind: 'ceilings', output: ceilingCalculations },
       { kind: 'trim', output: trimCalculations },
       { kind: 'doors', output: doorCalculations },
+      { kind: 'drywall', output: drywallCalculations },
+      { kind: 'other', output: otherCalculations },
     ],
     {
       enabled: effectiveLaborDayEnabled !== false,
@@ -342,7 +368,25 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
         ceilingCalculations.scopes.some((scope) => scope.include === 'Y') ? 'ceilings' as const : null,
         trimCalculations.scopes.some((scope) => scope.include === 'Y') ? 'trim' as const : null,
       ].filter((scope): scope is 'walls' | 'ceilings' | 'trim' => scope != null),
-    })
+    }),
+    {
+      total: accessFeeCalculation.total,
+      scopes: [
+        { key: 'walls', eligible: wallSubtotal > 0, preAccessSubtotal: wallSubtotal },
+        { key: 'ceilings', eligible: ceilingSubtotal > 0, preAccessSubtotal: ceilingSubtotal },
+        {
+          key: 'trim',
+          eligible: hasCrownTrimAccessEligibility(
+            (params.roomTrimScopes ?? []).map((row) => ({
+              include: asText(row.include).toUpperCase() === 'N' ? 'N' : 'Y',
+              trimFamily: asText(row.trim_family || row.trimFamily),
+              trimTypeId: asText(row.trim_type_id || row.trimTypeId),
+            }))
+          ),
+          preAccessSubtotal: trimSubtotal,
+        },
+      ],
+    }
   )
 
   return {
@@ -355,6 +399,9 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
     ceilingCalculations,
     trimCalculations,
     doorCalculations,
+    drywallCalculations,
+    otherCalculations,
+    accessFeeCalculation,
     trimPaintInput,
     pricingSummary,
   }
@@ -403,8 +450,15 @@ export async function calculateWallsForSave(params: {
   const crewSize = Math.max(1, Math.floor(asNullableNumber(params.jobsettings?.crew_size) ?? 1))
   const catalogs = await params.ensureCatalogs()
   const conditionSelectionsByRoomId = roomConditionSelectionsById(params.roomRows as unknown as Unsafe[])
+  const scopesWithProductionRates = applySelectedWallProductionRates({
+    rooms: params.roomRows,
+    scopes: params.scopes,
+    productionRates: Array.isArray(catalogs.source.production_rates)
+      ? catalogs.source.production_rates
+      : [],
+  })
   const wallCalculations = calculateWalls({
-    scopes: params.scopes.map((scope) => ({
+    scopes: scopesWithProductionRates.map((scope) => ({
       ...scope,
       condition_factor: resolveCombinedConditionFactor({
         catalogs,
@@ -437,8 +491,14 @@ export async function calculateCeilingsForSave(params: {
   const crewSize = Math.max(1, Math.floor(asNullableNumber(params.jobsettings?.crew_size) ?? 1))
   const catalogs = await params.ensureCatalogs()
   const conditionSelectionsByRoomId = roomConditionSelectionsById(params.roomRows as unknown as Unsafe[])
+  const scopesWithProductionRates = applyBaseCeilingProductionRates({
+    scopes: params.scopes,
+    productionRates: Array.isArray(catalogs.source.production_rates)
+      ? catalogs.source.production_rates
+      : [],
+  })
   const ceilingCalculations = calculateCeilings({
-    scopes: params.scopes.map((scope) => ({
+    scopes: scopesWithProductionRates.map((scope) => ({
       ...scope,
       condition_factor: resolveCombinedConditionFactor({
         catalogs,
@@ -531,5 +591,16 @@ export async function calculateDoorsForSave(params: {
     })),
     settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
     catalogs: catalogs.door ?? undefined,
+  })
+}
+
+export async function calculateDrywallForSave(params: {
+  repairs: V2DrywallRepairSaveRow[]
+  ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
+}) {
+  const catalogs = await params.ensureCatalogs()
+  return calculateDrywallRepairs({
+    repairs: params.repairs,
+    catalogs: catalogs.drywall ?? undefined,
   })
 }

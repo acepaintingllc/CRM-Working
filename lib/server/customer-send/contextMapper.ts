@@ -71,6 +71,7 @@ export function buildEstimateCustomerSendContext(params: {
       room_ceiling_scopes: params.calculated.quoteCeilingScopes,
       ceiling_scope_segments: params.resources.ceilingScopeSegments,
       room_trim_scopes: params.calculated.quoteTrimScopes,
+      drywall_repairs: params.calculated.quoteDrywallScopes ?? [],
       trim_items: params.resources.trimItems,
       other: params.resources.other,
       jobsettings: params.resources.jobsettings,

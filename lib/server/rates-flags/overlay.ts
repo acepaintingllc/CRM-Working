@@ -36,6 +36,7 @@ export function buildOverlayFromRows(params: {
   const access_fees: RatesFlagsCatalogOverlay['access_fees'] = []
   const trim_items: RatesFlagsCatalogOverlay['trim_items'] = []
   const door_unit_rates: RatesFlagsCatalogOverlay['door_unit_rates'] = []
+  const drywall_unit_rates: RatesFlagsCatalogOverlay['drywall_unit_rates'] = []
   const area_supplies_rates: RatesFlagsCatalogOverlay['area_supplies_rates'] = []
 
   function normalizeConditionScopes(value: unknown): Array<'room' | 'wall' | 'ceiling' | 'trim'> {
@@ -77,6 +78,19 @@ export function buildOverlayFromRows(params: {
     return modifierType.toLowerCase() === 'binary'
       ? { active: 1 }
       : { minor: 1, moderate: 1, major: 1 }
+  }
+
+  function normalizeAccessGroup(
+    value: unknown,
+    categoryKey: TemplateConstantRowRecord['category_key']
+  ): 'ladders' | 'scaffolding' | 'specialty' {
+    const accessGroup = asText(value).toLowerCase()
+    if (accessGroup === 'ladders' || accessGroup === 'scaffolding' || accessGroup === 'specialty') {
+      return accessGroup
+    }
+    if (categoryKey === 'access_fees_scaffolding') return 'scaffolding'
+    if (categoryKey === 'access_fees_specialty') return 'specialty'
+    return 'ladders'
   }
 
   const productionRows = [
@@ -222,6 +236,7 @@ export function buildOverlayFromRows(params: {
     access_fees.push({
       id: normalizeId(values.id || row.row_id),
       label: asText(values.display_name) || row.display_name,
+      access_group: normalizeAccessGroup(values.access_group, row.category_key),
       fee_type: asText(values.fee_type) || null,
       amount: parseNumber(values.amount),
       unit: asText(values.unit) || null,
@@ -268,6 +283,23 @@ export function buildOverlayFromRows(params: {
     })
   }
 
+  for (const row of grouped.get('unit_rates_drywall') ?? []) {
+    const values = toStringRecord(row.values_json)
+    drywall_unit_rates.push({
+      id: normalizeId(values.id || row.row_id),
+      label: asText(values.display_name) || row.display_name || normalizeId(values.id || row.row_id),
+      unit_rate_type: asText(values.unit_rate_type || values.repair_type) || null,
+      unit: asText(values.unit) || null,
+      default_qty: parseNumber(values.default_qty),
+      labor_rate: parseNumber(values.labor_rate),
+      material_rate: parseNumber(values.material_rate),
+      amount: parseNumber(values.amount),
+      ceiling_multiplier: parseNumber(values.ceiling_multiplier),
+      notes: asText(values.notes) || null,
+      active: row.active,
+    })
+  }
+
   const areaSupplyRows = [
     ...(grouped.get('supply_rates_area_based') ?? []),
     ...(grouped.get('supply_rates_per_color') ?? []),
@@ -307,6 +339,7 @@ export function buildOverlayFromRows(params: {
     access_fees,
     trim_items,
     door_unit_rates,
+    drywall_unit_rates,
     area_supplies_rates,
   }
 }

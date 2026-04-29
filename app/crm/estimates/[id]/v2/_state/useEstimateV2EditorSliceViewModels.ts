@@ -42,6 +42,8 @@ export type EstimateV2EditorViewModelParams = {
   ceilingActions: ReturnType<typeof import('./useEstimateV2CeilingActions').useEstimateV2CeilingActions>
   trimActions: ReturnType<typeof import('./useEstimateV2TrimActions').useEstimateV2TrimActions>
   doorActions: ReturnType<typeof import('./useEstimateV2DoorActions').useEstimateV2DoorActions>
+  drywallActions?: ReturnType<typeof import('./useEstimateV2DrywallActions').useEstimateV2DrywallActions>
+  otherActions?: ReturnType<typeof import('./useEstimateV2OtherActions').useEstimateV2OtherActions>
   settingsActions: ReturnType<
     typeof import('./useEstimateV2SettingsActions').useEstimateV2SettingsActions
   >
@@ -235,6 +237,7 @@ function useWallsVm(
   store: EstimateV2EditorStoreApi,
   derived: EstimateV2EditorDerivedSections,
   wallActions: EstimateV2EditorViewModelParams['wallActions'],
+  drywallActions: NonNullable<EstimateV2EditorViewModelParams['drywallActions']>,
   updateRoomComplexity: (roomId: string, wallComplexityId: string) => void
 ): EstimateV2EditorWallsVm {
   const segments = useEstimateV2Store(store, (state) => state.collections.segments)
@@ -258,6 +261,17 @@ function useWallsVm(
       displayedSegmentEffectiveAreaById: derived.calculation.displayedSegmentEffectiveAreaById,
       displayedScopeEffectiveAreaById: derived.calculation.displayedScopeEffectiveAreaById,
       wallScopeEffectiveTotalById: derived.calculation.wallScopeEffectiveTotalById,
+      selectedRoomWallDrywallRepairs: derived.room.selectedRoomWallDrywallRepairs,
+      drywallRateOptions: derived.catalog.drywallRateOptions,
+      drywallRepairEffectiveQuantityById: derived.calculation.drywallRepairEffectiveQuantityById,
+      drywallRepairEffectiveTotalById: derived.calculation.drywallRepairEffectiveTotalById,
+      selectedWallDrywallSubtotal: derived.calculation.selectedWallDrywallSubtotal,
+      addDrywallRepair: drywallActions.addRepair,
+      updateDrywallRepair: (repairId, patch) => {
+        if (patch.repairType) drywallActions.updateRepairType(repairId, patch.repairType)
+        else drywallActions.updateRepair(repairId, patch)
+      },
+      deleteDrywallRepair: drywallActions.deleteRepair,
       addScope: wallActions.addScope,
       moveScope: wallActions.moveScope,
       deleteScope: wallActions.deleteScope,
@@ -281,9 +295,13 @@ function useWallsVm(
     [
       derived.calculation.displayedScopeEffectiveAreaById,
       derived.calculation.displayedSegmentEffectiveAreaById,
+      derived.calculation.drywallRepairEffectiveQuantityById,
+      derived.calculation.drywallRepairEffectiveTotalById,
+      derived.calculation.selectedWallDrywallSubtotal,
       derived.calculation.wallScopeEffectiveTotalById,
       derived.catalog.colorCodeOptions,
       derived.catalog.conditionModifiers,
+      derived.catalog.drywallRateOptions,
       derived.catalog.wallPaintOptions,
       derived.catalog.wallPrimerOptions,
       derived.catalog.wallProductionRates,
@@ -295,7 +313,9 @@ function useWallsVm(
       derived.room.selectedRoom,
       derived.room.selectedRoomGeometryMode,
       derived.room.selectedRoomScopes,
+      derived.room.selectedRoomWallDrywallRepairs,
       derived.room.wallsIncluded,
+      drywallActions,
       segments,
       updateRoomComplexity,
       wallActions,
@@ -306,7 +326,8 @@ function useWallsVm(
 function useCeilingsVm(
   store: EstimateV2EditorStoreApi,
   derived: EstimateV2EditorDerivedSections,
-  ceilingActions: EstimateV2EditorViewModelParams['ceilingActions']
+  ceilingActions: EstimateV2EditorViewModelParams['ceilingActions'],
+  drywallActions: NonNullable<EstimateV2EditorViewModelParams['drywallActions']>
 ): EstimateV2EditorCeilingsVm {
   const ceilingState = useEstimateV2Store(store, (state) => ({
     catalogs: state.meta.catalogs,
@@ -331,6 +352,17 @@ function useCeilingsVm(
       colorCodeOptions: derived.catalog.colorCodeOptions,
       selectedCeilingEffectiveSqFt: derived.calculation.selectedCeilingEffectiveSqFt,
       ceilingScopeEffectiveTotalById: derived.calculation.ceilingScopeEffectiveTotalById,
+      selectedRoomCeilingDrywallRepairs: derived.room.selectedRoomCeilingDrywallRepairs,
+      drywallRateOptions: derived.catalog.drywallRateOptions,
+      drywallRepairEffectiveQuantityById: derived.calculation.drywallRepairEffectiveQuantityById,
+      drywallRepairEffectiveTotalById: derived.calculation.drywallRepairEffectiveTotalById,
+      selectedCeilingDrywallSubtotal: derived.calculation.selectedCeilingDrywallSubtotal,
+      addDrywallRepair: drywallActions.addRepair,
+      updateDrywallRepair: (repairId, patch) => {
+        if (patch.repairType) drywallActions.updateRepairType(repairId, patch.repairType)
+        else drywallActions.updateRepair(repairId, patch)
+      },
+      deleteDrywallRepair: drywallActions.deleteRepair,
       updateScope: ceilingActions.updateScope,
       addScope: ceilingActions.addScope,
       deleteScope: ceilingActions.deleteScope,
@@ -355,11 +387,15 @@ function useCeilingsVm(
       ceilingState.catalogs,
       ceilingState.ceilingSegments,
       derived.calculation.ceilingScopeEffectiveTotalById,
+      derived.calculation.drywallRepairEffectiveQuantityById,
+      derived.calculation.drywallRepairEffectiveTotalById,
+      derived.calculation.selectedCeilingDrywallSubtotal,
       derived.calculation.selectedCeilingEffectiveSqFt,
       derived.catalog.ceilingPaintOptions,
       derived.catalog.ceilingPrimerOptions,
       derived.catalog.colorCodeOptions,
       derived.catalog.conditionModifiers,
+      derived.catalog.drywallRateOptions,
       derived.productLabels.ceilingPaintLabel,
       derived.productLabels.ceilingPrimerLabel,
       derived.productLabels.effectiveCeilingPaintLabel,
@@ -368,7 +404,9 @@ function useCeilingsVm(
       derived.room.firstCeilingScope,
       derived.room.selectedRoom,
       derived.room.selectedRoomCeilingScopes,
+      derived.room.selectedRoomCeilingDrywallRepairs,
       derived.room.selectedRoomGeometryMode,
+      drywallActions,
     ]
   )
 }
@@ -436,6 +474,13 @@ function useTrimVm(
       trimActions,
     ]
   )
+}
+
+const noopDrywallActions: NonNullable<EstimateV2EditorViewModelParams['drywallActions']> = {
+  addRepair: () => undefined,
+  updateRepair: () => undefined,
+  updateRepairType: () => undefined,
+  deleteRepair: () => undefined,
 }
 
 function useDoorsVm(
@@ -837,12 +882,13 @@ function useSummaryVm(
 export function useEstimateV2EditorSliceViewModels(
   params: EstimateV2EditorViewModelParams
 ) {
-  const { estimateId, store, derived, roomActions, wallActions, ceilingActions, trimActions, doorActions, settingsActions, save } = params
+  const { estimateId, store, derived, roomActions, wallActions, ceilingActions, trimActions, doorActions, drywallActions, settingsActions, save } = params
+  const effectiveDrywallActions = drywallActions ?? noopDrywallActions
   const pageVm = usePageVm(store)
   const headerVm = useHeaderVm(estimateId, store, derived, roomActions.addRoom)
   const roomVm = useRoomVm(store, derived, roomActions)
-  const wallsVm = useWallsVm(store, derived, wallActions, roomActions.updateRoomComplexity)
-  const ceilingsVm = useCeilingsVm(store, derived, ceilingActions)
+  const wallsVm = useWallsVm(store, derived, wallActions, effectiveDrywallActions, roomActions.updateRoomComplexity)
+  const ceilingsVm = useCeilingsVm(store, derived, ceilingActions, effectiveDrywallActions)
   const trimVm = useTrimVm(derived, trimActions)
   const doorsVm = useDoorsVm(derived, doorActions)
   const jobSettingsVm = useJobSettingsVm(store, derived, settingsActions)

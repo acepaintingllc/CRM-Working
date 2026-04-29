@@ -515,6 +515,52 @@ test('buildEstimatePricingSummary: totals reconcile from engine room bases throu
   assert.equal(roomFinalTotal, result.prePolicyTotal)
 })
 
+test('buildEstimatePricingSummary: includes job-level access fees and scope allocation', () => {
+  const wallOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    room_totals: [{ ...mockOutput.room_totals[0], effective_total: 300 }],
+  }
+  const ceilingOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    room_totals: [{ ...mockOutput.room_totals[0], room_id: 'R001', effective_total: 100 }],
+  }
+  const trimOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    room_totals: [{ ...mockOutput.room_totals[0], room_id: 'R001', effective_total: 100 }],
+  }
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'walls', output: wallOutput },
+      { kind: 'ceilings', output: ceilingOutput },
+      { kind: 'trim', output: trimOutput },
+    ],
+    POLICY_DISABLED,
+    MIN_DISABLED,
+    null,
+    0,
+    {
+      total: 500,
+      scopes: [
+        { key: 'walls', eligible: true, preAccessSubtotal: 300 },
+        { key: 'ceilings', eligible: true, preAccessSubtotal: 100 },
+        { key: 'trim', eligible: true, preAccessSubtotal: 100 },
+      ],
+    }
+  )
+
+  assert.equal(result.sharedAccessCost, 500)
+  assert.deepEqual(result.accessFeeAllocation, {
+    walls: 300,
+    ceilings: 100,
+    trim: 100,
+    unallocated: 0,
+    warning: null,
+  })
+  assert.equal(result.prePolicyTotal, 1000)
+  assert.equal(result.finalTotal, 1000)
+})
+
 test('buildPerJobSupplyCost multiplies only crew-flagged supply rows', () => {
   const catalogs = {
     supplies_rates: [

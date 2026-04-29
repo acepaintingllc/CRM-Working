@@ -134,6 +134,29 @@ const basePage = {
     estimatedMaterialCost: 100,
     hasCeilings: false,
     hasTrim: false,
+    accessFees: {
+      rows: [],
+      optionGroups: [
+        {
+          key: 'ladders',
+          label: 'Ladders',
+          options: [
+            {
+              id: 'LADDER',
+              label: 'Ladder',
+              access_group: 'ladders',
+              fee_type: 'Labor',
+              amount: 75,
+              unit: 'each',
+              notes: null,
+            },
+          ],
+        },
+      ],
+      roomOptions: [],
+      total: 0,
+      allocation: null,
+    },
     conditions: {
       available: false,
       conditions: [],
@@ -156,6 +179,9 @@ const basePage = {
     setCeilingOverride: vi.fn(),
     setTrimOverride: vi.fn(),
     setRoomCondition: vi.fn(),
+    addAccessFee: vi.fn(),
+    updateAccessFee: vi.fn(),
+    removeAccessFee: vi.fn(),
   },
 }
 
@@ -184,6 +210,8 @@ describe('EstimateV2DetailsPageContent', () => {
     expect(screen.getByText('Paint Planning')).toBeInTheDocument()
     expect(screen.queryByText('Ceiling Paint Planning')).not.toBeInTheDocument()
     expect(screen.queryByText('Trim Paint Planning')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /access fees/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add access fee/i })).toBeInTheDocument()
     expect(screen.getByText('Rollers')).toBeInTheDocument()
 
     const continueButtons = screen.getAllByRole('button', { name: /Continue to Summary/i })

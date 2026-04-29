@@ -19,6 +19,7 @@ import {
   WallsScopePanel,
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
+import { EstimateV2DrywallRepairsBlock } from './EstimateV2DrywallRepairsBlock'
 import type {
   EstimateV2RoomDraft,
   EstimateV2WallScopeDraft,
@@ -328,6 +329,21 @@ export function EstimateV2WallsSectionBody({
         selections={wallsVm.conditionSelections}
         onChange={wallsVm.setSelectedRoomWallCondition ?? (() => undefined)}
         styles={styles}
+      />
+
+      <EstimateV2DrywallRepairsBlock
+        styles={styles}
+        title="Wall Drywall Repairs"
+        roomId={selectedRoom.roomId}
+        surface="wall"
+        repairs={wallsVm.selectedRoomWallDrywallRepairs}
+        rateOptions={wallsVm.drywallRateOptions}
+        effectiveQuantityById={wallsVm.drywallRepairEffectiveQuantityById}
+        effectiveTotalById={wallsVm.drywallRepairEffectiveTotalById}
+        subtotal={wallsVm.selectedWallDrywallSubtotal}
+        addRepair={wallsVm.addDrywallRepair}
+        updateRepair={wallsVm.updateDrywallRepair}
+        deleteRepair={wallsVm.deleteDrywallRepair}
       />
 
       <Advanced styles={sharedStyles(styles)}>

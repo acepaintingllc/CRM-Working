@@ -66,24 +66,40 @@ describe('job site photos route', () => {
   })
 
   it('POST parses multipart form data and delegates upload files to service', async () => {
-    const formData = new FormData()
-    formData.set('category', 'before')
-    formData.append('photos', new File([new Uint8Array([1, 2, 3])], 'before.jpg', { type: 'image/jpeg' }))
-    formData.append('photos', new File([new Uint8Array([4, 5])], 'damage.png', { type: 'image/png' }))
-    formData.append('clientLocalId', 'local-1')
-    formData.append('clientLocalId', 'local-2')
-    formData.append('capturedAt', '2026-04-27T15:00:00.000Z')
-    formData.append('capturedAt', '2026-04-27T16:00:00.000Z')
+    const formData = {
+      get: (name: string) => (name === 'category' ? 'before' : null),
+      getAll: (name: string) => {
+        if (name === 'photos') {
+          return [
+            {
+              name: 'before.jpg',
+              type: 'image/jpeg',
+              size: 3,
+              arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+            },
+            {
+              name: 'damage.png',
+              type: 'image/png',
+              size: 2,
+              arrayBuffer: async () => new Uint8Array([4, 5]).buffer,
+            },
+          ]
+        }
+        if (name === 'clientLocalId') return ['local-1', 'local-2']
+        if (name === 'capturedAt') return ['2026-04-27T15:00:00.000Z', '2026-04-27T16:00:00.000Z']
+        return []
+      },
+    } as FormData
     mockUploadJobSitePhotos.mockResolvedValue({
       ok: true,
       data: { photos: [{ id: 'photo-1' }], failed: [], jobFolder: null, categoryFolder: null },
     })
 
     const response = await POST(
-      new Request('http://localhost/api/jobs/job-1/site-photos', {
-        method: 'POST',
-        body: formData,
-      }),
+      {
+        url: 'http://localhost/api/jobs/job-1/site-photos',
+        formData: async () => formData,
+      } as Request,
       { params: { id: 'job-1' } }
     )
 

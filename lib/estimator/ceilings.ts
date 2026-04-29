@@ -275,6 +275,64 @@ function buildRoomTotals(scopeCalcs: ScopeCalc[]): WallRoomTotal[] {
   return Array.from(totals.values()).sort((a, b) => a.room_id.localeCompare(b.room_id))
 }
 
+function pushMissingRequiredAssumption(
+  missing: MissingInput[],
+  scope: CeilingCalculationScopeRow,
+  field: string
+) {
+  if (scope.include === 'N') return
+  missing.push({
+    level: 'scope',
+    room_id: scope.room_id,
+    scope_id: ceilingScopeKey(scope),
+    segment_id: null,
+    field,
+    message: `Ceiling scope ${scope.scope_name ?? scope.position + 1}: ${field} is required`,
+  })
+}
+
+function pushMissingCeilingPricingAssumptions(params: {
+  scope: CeilingCalculationScopeRow
+  settings: CeilingCalculationInput['settings']
+  products: ReturnType<typeof productMap>
+  missing: MissingInput[]
+}) {
+  const paintProduct = params.scope.paint_product_id ? params.products.get(params.scope.paint_product_id) : undefined
+  const primerProduct = params.scope.primer_product_id ? params.products.get(params.scope.primer_product_id) : undefined
+  const required: Array<[string, unknown]> = [
+    ['labor_rate_per_hour', params.scope.labor_rate_per_hour ?? params.settings?.labor_rate_per_hour],
+    ['paint_prod_rate_sqft_per_hour', params.scope.paint_prod_rate_sqft_per_hour ?? params.settings?.paint_prod_rate_sqft_per_hour],
+    ['primer_prod_rate_sqft_per_hour', params.scope.primer_prod_rate_sqft_per_hour ?? params.settings?.primer_prod_rate_sqft_per_hour],
+    [
+      'paint_coverage_sqft_per_gal_per_coat',
+      params.scope.paint_coverage_sqft_per_gal_per_coat ??
+        paintProduct?.coverage_sqft_per_gal_per_coat ??
+        params.settings?.paint_coverage_sqft_per_gal_per_coat,
+    ],
+    [
+      'primer_coverage_sqft_per_gal_per_coat',
+      params.scope.primer_coverage_sqft_per_gal_per_coat ??
+        primerProduct?.coverage_sqft_per_gal_per_coat ??
+        params.settings?.primer_coverage_sqft_per_gal_per_coat,
+    ],
+    ['paint_coats', params.scope.paint_coats ?? params.settings?.paint_coats],
+    ['primer_coats', params.scope.primer_coats ?? params.settings?.primer_coats],
+    ['spot_prime_percent', params.scope.spot_prime_percent ?? params.settings?.spot_prime_percent],
+    [
+      'paint_price_per_gal',
+      params.scope.paint_price_per_gal ?? paintProduct?.price_per_gal ?? params.settings?.paint_price_per_gal,
+    ],
+    [
+      'primer_price_per_gal',
+      params.scope.primer_price_per_gal ?? primerProduct?.price_per_gal ?? params.settings?.primer_price_per_gal,
+    ],
+  ]
+
+  for (const [field, value] of required) {
+    if (pos(n(value)) == null) pushMissingRequiredAssumption(params.missing, params.scope, field)
+  }
+}
+
 export function calculateCeilings(input: CeilingCalculationInput): CeilingCalculationOutput {
   const settings = resolveSettings(input.settings, input.catalogs)
   const products = productMap(input.catalogs)
@@ -310,6 +368,12 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
   const scopeCalcs: ScopeCalc[] = []
 
   const normalizedScopes = input.scopes.map((scope) => {
+    pushMissingCeilingPricingAssumptions({
+      scope,
+      settings: input.settings,
+      products,
+      missing: missingInputs,
+    })
     const include: YN = normalizeInclude(scope.include)
     const scopeKey = ceilingScopeKey(scope)
     const segments = segByScope.get(scope.id ?? '') ?? []

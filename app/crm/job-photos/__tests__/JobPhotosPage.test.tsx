@@ -1,19 +1,22 @@
-﻿import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const mocks = vi.hoisted(() => ({
+  fetchJobList: vi.fn(),
+  uploadJobSitePhotos: vi.fn(),
+}))
+
+vi.mock('@/lib/jobs/client', () => ({
+  fetchJobList: () => mocks.fetchJobList(),
+  getJobPhotosFolderUrl: (folderId: string | null | undefined) =>
+    folderId ? `https://drive.google.com/drive/folders/${folderId}` : null,
+  uploadJobSitePhotos: (jobId: string, form: FormData) => mocks.uploadJobSitePhotos(jobId, form),
+}))
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}))
+
 import JobPhotosPage from '../page'
-
-const mockFetchJobList = vi.fn()
-const mockUploadJobSitePhotos = vi.fn()
-
-vi.mock('@/lib/jobs/client', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/jobs/client')>('@/lib/jobs/client')
-
-  return {
-    ...actual,
-    fetchJobList: () => mockFetchJobList(),
-    uploadJobSitePhotos: (jobId: string, form: FormData) => mockUploadJobSitePhotos(jobId, form),
-  }
-})
 
 const jobs = [
   {
@@ -109,10 +112,14 @@ async function renderLoadedPage() {
 }
 
 describe('JobPhotosPage', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   beforeEach(() => {
-    mockFetchJobList.mockReset()
-    mockUploadJobSitePhotos.mockReset()
-    mockFetchJobList.mockResolvedValue(jobs)
+    mocks.fetchJobList.mockReset()
+    mocks.uploadJobSitePhotos.mockReset()
+    mocks.fetchJobList.mockResolvedValue(jobs)
 
     vi.stubGlobal('URL', {
       ...URL,
@@ -122,11 +129,11 @@ describe('JobPhotosPage', () => {
   })
 
   it('queues files, removes mistakes, and uploads the remaining file', async () => {
-    mockUploadJobSitePhotos.mockImplementation((_jobId: string, form: FormData) => Promise.resolve(uploadResponse(form)))
+    mocks.uploadJobSitePhotos.mockImplementation((_jobId: string, form: FormData) => Promise.resolve(uploadResponse(form)))
     await renderLoadedPage()
 
     fireEvent.click(screen.getByRole('button', { name: /Kitchen repaint/i }))
-    fireEvent.change(screen.getByLabelText('Take Photos'), {
+    fireEvent.change(screen.getByLabelText('Upload Photos'), {
       target: { files: [imageFile('keep.png'), imageFile('mistake.png')] },
     })
 
@@ -138,8 +145,8 @@ describe('JobPhotosPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Upload 1 photo' }))
 
-    await waitFor(() => expect(mockUploadJobSitePhotos).toHaveBeenCalledTimes(1))
-    const [jobId, form] = mockUploadJobSitePhotos.mock.calls[0]
+    await waitFor(() => expect(mocks.uploadJobSitePhotos).toHaveBeenCalledTimes(1))
+    const [jobId, form] = mocks.uploadJobSitePhotos.mock.calls[0]
     expect(jobId).toBe('job-1')
     expect(form.getAll('photos')).toHaveLength(1)
     expect((form.getAll('photos')[0] as File).name).toBe('keep.png')
@@ -149,7 +156,7 @@ describe('JobPhotosPage', () => {
   })
 
   it('keeps failed files queued for retry after partial failure', async () => {
-    mockUploadJobSitePhotos.mockImplementation((_jobId: string, form: FormData) => {
+    mocks.uploadJobSitePhotos.mockImplementation((_jobId: string, form: FormData) => {
       const failedId = String(form.getAll('clientLocalId')[1])
       return Promise.resolve(uploadResponse(form, [failedId]))
     })
@@ -161,34 +168,30 @@ describe('JobPhotosPage', () => {
     })
     fireEvent.click(await screen.findByRole('button', { name: 'Upload 2 photos' }))
 
-    await waitFor(() => expect(mockUploadJobSitePhotos).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mocks.uploadJobSitePhotos).toHaveBeenCalledTimes(1))
     expect(screen.queryByText('success.png')).toBeNull()
     expect(await screen.findByText('retry.png')).toBeTruthy()
     expect(screen.getByText('Drive rejected this photo.')).toBeTruthy()
     expect(screen.getByText('1 photo failed to upload.')).toBeTruthy()
   })
 
-  it('blocks upload when no job is selected', async () => {
+  it('keeps upload controls unavailable until a job is selected', async () => {
     await renderLoadedPage()
 
-    fireEvent.change(screen.getByLabelText('Take Photos'), { target: { files: [imageFile('orphan.png')] } })
-    fireEvent.click(await screen.findByRole('button', { name: 'Upload 1 photo' }))
-
-    await waitFor(() => {
-      expect(screen.getAllByText('Choose a job before uploading photos.')).toHaveLength(2)
-    })
-    expect(mockUploadJobSitePhotos).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: /Upload photos for/i })).toBeNull()
+    expect(screen.queryByLabelText('Upload Photos')).toBeNull()
+    expect(mocks.uploadJobSitePhotos).not.toHaveBeenCalled()
   })
 
   it('blocks upload when no photos are queued', async () => {
     await renderLoadedPage()
 
     fireEvent.click(screen.getByRole('button', { name: /Kitchen repaint/i }))
-    const uploadSection = screen.getByRole('region', { name: 'Upload photos' })
-    const uploadButton = within(uploadSection).getByRole('button', { name: 'Upload 0 photos' }) as HTMLButtonElement
+    const dialog = screen.getByRole('dialog', { name: 'Upload photos for Kitchen repaint' })
+    const uploadButton = within(dialog).getByRole('button', { name: 'Upload 0 photos' }) as HTMLButtonElement
 
     expect(uploadButton.disabled).toBe(true)
-    expect(mockUploadJobSitePhotos).not.toHaveBeenCalled()
+    expect(mocks.uploadJobSitePhotos).not.toHaveBeenCalled()
   })
 })
 

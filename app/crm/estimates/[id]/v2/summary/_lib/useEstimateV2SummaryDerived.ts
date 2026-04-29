@@ -75,6 +75,11 @@ export function useEstimateV2SummaryDerived(params: {
     [data?.door_calculations?.scopes, data?.inputs?.room_door_scopes]
   )
 
+  const drywallScopes = useMemo(
+    () => normalizeSummaryScopeRows(data?.drywall_calculations?.scopes ?? data?.inputs?.drywall_repairs ?? []),
+    [data?.drywall_calculations?.scopes, data?.inputs?.drywall_repairs]
+  )
+
   const roomFlagCountMap = useMemo(() => buildRoomFlagCountMap(roomFlags), [roomFlags])
 
   const roomTotalMap = useMemo(() => {
@@ -88,13 +93,17 @@ export function useEstimateV2SummaryDerived(params: {
       room_id: room.room_id,
       price: room.finalTotal,
     }))
+    const roomPricingTarget =
+      pricingSummary?.finalTotal == null
+        ? null
+        : Math.max(0, pricingSummary.finalTotal - (pricingSummary.sharedAccessCost ?? 0))
     return new Map(
-      reconcileWholeDollarRows(rows, pricingSummary?.finalTotal ?? null).map((row) => [
+      reconcileWholeDollarRows(rows, roomPricingTarget).map((row) => [
         row.room_id,
         row.price,
       ] as const)
     )
-  }, [pricingSummary?.finalTotal, pricingSummary?.rooms])
+  }, [pricingSummary])
 
   const roomAreaMap = useMemo(() => {
     const next = new Map<string, number>()
@@ -115,8 +124,8 @@ export function useEstimateV2SummaryDerived(params: {
   )
 
   const roomScopeRows = useMemo(
-    () => buildRoomScopeRows({ wallScopes, ceilingScopes, trimScopes, doorScopes }),
-    [ceilingScopes, doorScopes, trimScopes, wallScopes]
+    () => buildRoomScopeRows({ wallScopes, ceilingScopes, trimScopes, doorScopes, drywallScopes }),
+    [ceilingScopes, doorScopes, drywallScopes, trimScopes, wallScopes]
   )
 
   const roomAlertsByRoom = useMemo(

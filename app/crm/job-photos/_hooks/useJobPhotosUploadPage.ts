@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 import {
   fetchJobList,
@@ -15,6 +16,7 @@ const DEFAULT_CATEGORY: JobSitePhotoCategory = 'before'
 const MAX_FILES = 20
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024
 const ACCEPTED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
+const JOB_PHOTO_STATUSES = new Set(['estimate_scheduled', 'scheduled'])
 
 export type QueuedJobPhoto = {
   id: string
@@ -48,11 +50,16 @@ function getJobSearchText(job: JobSummary) {
   return [job.title, job.customer_name, job.customer_address].filter(Boolean).join(' ').toLowerCase()
 }
 
+function isJobPhotoCandidate(job: JobSummary) {
+  return JOB_PHOTO_STATUSES.has(job.status)
+}
+
 function revokeQueuedPhoto(photo: QueuedJobPhoto) {
   URL.revokeObjectURL(photo.previewUrl)
 }
 
 export function useJobPhotosUploadPage() {
+  const searchParams = useSearchParams()
   const [jobs, setJobs] = useState<JobSummary[]>([])
   const [jobsLoading, setJobsLoading] = useState(true)
   const [jobsError, setJobsError] = useState<string | null>(null)
@@ -81,7 +88,7 @@ export function useJobPhotosUploadPage() {
       try {
         const result = await fetchJobList()
         if (!active) return
-        setJobs(result)
+        setJobs(result.filter(isJobPhotoCandidate))
       } catch (loadError) {
         if (!active) return
         setJobsError(loadError instanceof Error ? loadError.message : 'Unable to load jobs.')
@@ -95,6 +102,21 @@ export function useJobPhotosUploadPage() {
     return () => {
       active = false
     }
+  }, [])
+
+  useEffect(() => {
+    const requestedJobId = searchParams.get('job')
+    if (!requestedJobId || selectedJobId) return
+    if (jobs.some((job) => job.id === requestedJobId)) {
+      setSelectedJobId(requestedJobId)
+    }
+  }, [jobs, searchParams, selectedJobId])
+
+  const closeJobPicker = useCallback(() => {
+    setSelectedJobId('')
+    setError(null)
+    setNotice(null)
+    setFolderUrl(null)
   }, [])
 
   useEffect(() => {
@@ -170,7 +192,7 @@ export function useJobPhotosUploadPage() {
     setQueue(nextQueue)
   }, [])
 
-  const upload = useCallback(async () => {
+  const uploadQueuedPhotos = useCallback(async () => {
     if (uploadInFlightRef.current) return
 
     uploadInFlightRef.current = true
@@ -275,6 +297,54 @@ export function useJobPhotosUploadPage() {
     }
   }, [category, selectedJobId])
 
+  const addFilesAndUpload = useCallback(
+    async (files: FileList | File[]) => {
+      if (uploadInFlightRef.current) {
+        setError('Wait for the current upload to finish before adding more photos.')
+        return
+      }
+
+      const incomingFiles = Array.from(files)
+      if (incomingFiles.length === 0) return
+
+      const availableSlots = Math.max(MAX_FILES - queueRef.current.length, 0)
+      const rejectedMessages: string[] = []
+      const nextPhotos: QueuedJobPhoto[] = []
+
+      for (const file of incomingFiles) {
+        const validationError = getFileValidationError(file)
+        if (validationError) {
+          rejectedMessages.push(`${file.name}: ${validationError}`)
+          continue
+        }
+
+        if (nextPhotos.length >= availableSlots) {
+          rejectedMessages.push(`Only ${MAX_FILES} photos can be queued at once.`)
+          break
+        }
+
+        nextPhotos.push({
+          id: createQueueId(),
+          file,
+          previewUrl: URL.createObjectURL(file),
+          capturedAt: getCapturedAt(file),
+        })
+      }
+
+      setError(rejectedMessages.length > 0 ? rejectedMessages.join(' ') : null)
+      setNotice(null)
+
+      if (nextPhotos.length === 0) return
+
+      const nextQueue = [...queueRef.current, ...nextPhotos]
+      queueRef.current = nextQueue
+      setQueue(nextQueue)
+
+      await uploadQueuedPhotos()
+    },
+    [uploadQueuedPhotos]
+  )
+
   return {
     jobs,
     jobsLoading,
@@ -291,10 +361,12 @@ export function useJobPhotosUploadPage() {
     selectedJob,
     setJobQuery,
     setSelectedJobId,
+    closeJobPicker,
     setCategory,
     addFiles,
+    addFilesAndUpload,
     removeQueuedPhoto,
-    upload,
+    upload: uploadQueuedPhotos,
   }
 }
 

@@ -20,6 +20,9 @@ export function applyEstimateV2PreparedSaveCollections(
   state.setCeilingSegments(prepared.collections.ceilingSegments)
   state.setTrimScopes(prepared.collections.trimScopes)
   state.setDoorScopes(prepared.collections.doorScopes ?? [])
+  state.setDrywallRepairs(prepared.collections.drywallRepairs ?? [])
+  state.setAccessFees(prepared.collections.accessFees ?? [])
+  state.setOtherItems(prepared.collections.otherItems ?? [])
 }
 
 export function applyEstimateV2SuccessfulSaveState(
@@ -32,6 +35,7 @@ export function applyEstimateV2SuccessfulSaveState(
   state.setCeilingCalculations(responseState.calculations.ceilingCalculations)
   state.setTrimCalculations(responseState.calculations.trimCalculations)
   state.setDoorCalculations(responseState.calculations.doorCalculations ?? null)
+  state.setDrywallCalculations(responseState.calculations.drywallCalculations ?? null)
   state.setPricingSummary(responseState.calculations.pricingSummary)
   state.setEstimate((prev) => (prev ? { ...prev, updated_at: new Date().toISOString() } : prev))
   state.setLastSavedSnapshot(responseState.lastSavedSnapshot)

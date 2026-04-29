@@ -47,6 +47,8 @@ export function useEstimateV2EditorDerivedSections(params: {
     selectedRoomCeilingScopes: room.selectedRoomCeilingScopes,
     selectedRoomTrimScopes: room.selectedRoomTrimScopes,
     selectedRoomDoorScopes: room.selectedRoomDoorScopes,
+    selectedRoomWallDrywallRepairs: room.selectedRoomWallDrywallRepairs,
+    selectedRoomCeilingDrywallRepairs: room.selectedRoomCeilingDrywallRepairs,
   })
   const productLabels = useEstimateV2ProductLabels({
     meta,

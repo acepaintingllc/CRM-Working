@@ -5,6 +5,7 @@ import type {
   EstimateV2CeilingScopeMode,
   EstimateV2CeilingSegmentDraft,
   EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2TrimMeasurementMode,
@@ -19,6 +20,7 @@ import {
   createDefaultCeilingScope,
   createDefaultCeilingSegment,
   createDefaultDoorScope,
+  createDefaultDrywallRepair,
   createDefaultRoom,
   createDefaultScope,
   createDefaultSegment,
@@ -111,6 +113,7 @@ export function deleteRoomCascadeMutation(params: {
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
   doorScopes?: EstimateV2DoorScopeDraft[]
+  drywallRepairs?: EstimateV2DrywallRepairDraft[]
   roomId: string
   selectedRoomId: string
 }) {
@@ -127,6 +130,9 @@ export function deleteRoomCascadeMutation(params: {
     ceilingSegments: params.ceilingSegments.filter((segment) => segment.roomId !== params.roomId),
     trimScopes: params.trimScopes.filter((scope) => scope.roomId !== params.roomId),
     doorScopes: (params.doorScopes ?? []).filter((scope) => scope.roomId !== params.roomId),
+    drywallRepairs: (params.drywallRepairs ?? []).filter(
+      (repair) => repair.roomId !== params.roomId
+    ),
     selectedRoomId: nextSelectedRoomId,
   }
 }
@@ -153,19 +159,6 @@ export function updateWallScopeMutation(
   patch: Partial<EstimateV2WallScopeDraft>
 ) {
   return scopes.map((scope) => (scope.id === scopeId ? { ...scope, ...patch } : scope))
-}
-
-export const TRAY_CEILING_WALL_CUT_IN_FACTOR = '1.15'
-
-function hasIncludedTrayCeiling(scope: EstimateV2CeilingScopeDraft) {
-  return scope.mode !== 'SEG' && scope.include !== 'N' && scope.ceilingGeometryMode === 'TRAY'
-}
-
-function applyTrayCutInFactor(currentValue: string, hasTrayCeiling: boolean) {
-  const current = numberOrNull(currentValue) ?? 1
-  const trayFactor = numberOrNull(TRAY_CEILING_WALL_CUT_IN_FACTOR) ?? 1
-  if (hasTrayCeiling) return String(Math.max(current, trayFactor))
-  return currentValue === TRAY_CEILING_WALL_CUT_IN_FACTOR ? '1' : currentValue
 }
 
 function forceSegmentCeilingScopeFlat(scope: EstimateV2CeilingScopeDraft): EstimateV2CeilingScopeDraft {
@@ -196,13 +189,8 @@ export function syncWallCutInFromTrayCeilings(params: {
   wallScopes: EstimateV2WallScopeDraft[]
   ceilingScopes: EstimateV2CeilingScopeDraft[]
 }) {
-  const trayRoomIds = new Set(
-    params.ceilingScopes.filter(hasIncludedTrayCeiling).map((scope) => scope.roomId)
-  )
-  return params.wallScopes.map((scope) => ({
-    ...scope,
-    cutInTopFactor: applyTrayCutInFactor(scope.cutInTopFactor, trayRoomIds.has(scope.roomId)),
-  }))
+  void params.ceilingScopes
+  return params.wallScopes
 }
 
 export function addWallScopeMutation(params: {
@@ -635,6 +623,48 @@ export function toggleRoomDoorIncludeMutation(
   }
   const hasIncluded = roomScopes.some((scope) => scope.include === 'Y')
   return scopes.map((scope) => (scope.roomId === roomId ? { ...scope, include: hasIncluded ? 'N' : 'Y' } : scope))
+}
+
+export function addDrywallRepairMutation(params: {
+  repairs: EstimateV2DrywallRepairDraft[]
+  roomId: string
+  surface: EstimateV2DrywallRepairDraft['surface']
+  repairType: string
+}) {
+  const roomRepairs = sortByPosition(
+    params.repairs.filter(
+      (repair) => repair.roomId === params.roomId && repair.surface === params.surface
+    )
+  )
+  const nextRepair = createDefaultDrywallRepair(params.roomId, params.surface, params.repairType)
+  nextRepair.position = roomRepairs.length
+  return [...params.repairs, nextRepair]
+}
+
+export function updateDrywallRepairMutation(
+  repairs: EstimateV2DrywallRepairDraft[],
+  repairId: string,
+  patch: Partial<EstimateV2DrywallRepairDraft>
+) {
+  return repairs.map((repair) => (repair.id === repairId ? { ...repair, ...patch } : repair))
+}
+
+export function deleteDrywallRepairMutation(
+  repairs: EstimateV2DrywallRepairDraft[],
+  roomId: string,
+  repairId: string
+) {
+  const deleted = repairs.find((repair) => repair.id === repairId)
+  const surface = deleted?.surface
+  const remaining = repairs.filter((repair) => !(repair.roomId === roomId && repair.id === repairId))
+  if (!surface) return remaining
+  const roomSurfaceRepairs = reindexByPosition(
+    remaining.filter((repair) => repair.roomId === roomId && repair.surface === surface)
+  )
+  return [
+    ...remaining.filter((repair) => !(repair.roomId === roomId && repair.surface === surface)),
+    ...roomSurfaceRepairs,
+  ]
 }
 
 export function stripInvalidTrimHelperModeMutation(params: {

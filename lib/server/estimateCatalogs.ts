@@ -65,6 +65,7 @@ type ConditionModifier = CatalogOption & {
 }
 
 type AccessFee = CatalogOption & {
+  access_group: 'ladders' | 'scaffolding' | 'specialty'
   fee_type: string | null
   amount: number | null
   unit: string | null
@@ -98,6 +99,10 @@ type DoorType = CatalogOption & {
   notes: string | null
 }
 
+type DrywallRate = DoorType & {
+  ceiling_multiplier: number | null
+}
+
 type ProductionRate = CatalogOption & {
   scope_id: string | null
   surface_type: string | null
@@ -126,6 +131,7 @@ export type EstimateCatalogs = {
   access_fees: AccessFee[]
   trim_items: TrimItem[]
   door_types: DoorType[]
+  drywall_rates: DrywallRate[]
   trim_menu_items: TrimItem[]
   prejob_trips: CatalogOption[]
   supplies_rates: Array<{
@@ -334,7 +340,18 @@ function buildV2CatalogResultFromSources(params: {
           levels: row.levels,
           notes: row.notes,
         })),
-      access_fees: [],
+      access_fees: params.overlay.access_fees
+        .filter((row) => row.active === 'Y')
+        .map((row) => ({
+          id: row.id,
+          label: row.label || row.id,
+          active: row.active,
+          access_group: row.access_group,
+          fee_type: row.fee_type,
+          amount: row.amount,
+          unit: row.unit,
+          notes: row.notes,
+        })),
       trim_items: trimItems,
       door_types: (params.overlay.door_unit_rates ?? [])
         .filter((row) => row.active === 'Y')
@@ -348,6 +365,21 @@ function buildV2CatalogResultFromSources(params: {
           labor_rate: row.labor_rate,
           material_rate: row.material_rate,
           amount: row.amount,
+          notes: row.notes,
+        })),
+      drywall_rates: (params.overlay.drywall_unit_rates ?? [])
+        .filter((row) => row.active === 'Y')
+        .map((row) => ({
+          id: row.id.toLowerCase(),
+          label: row.label || row.id,
+          active: row.active,
+          unit_rate_type: row.unit_rate_type,
+          unit: row.unit,
+          default_qty: row.default_qty,
+          labor_rate: row.labor_rate,
+          material_rate: row.material_rate,
+          amount: row.amount,
+          ceiling_multiplier: row.ceiling_multiplier,
           notes: row.notes,
         })),
       trim_menu_items: trimItems,
