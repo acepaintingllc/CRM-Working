@@ -44,6 +44,7 @@ type JobRow = {
   scheduled_email_sent_at?: string | null
   completed_email_sent_at?: string | null
   closeout_notes?: string | null
+  linked_estimate_id?: string | null
   created_at?: string | null
   updated_at?: string | null
   [key: string]: unknown
@@ -146,7 +147,14 @@ async function ensureJobsSchema(columns: readonly string[]) {
 }
 
 async function getOptionalJobColumns() {
-  return getAvailableOptionalJobColumns()
+  const optionalColumns = await getAvailableOptionalJobColumns()
+  const linkedEstimateColumn = await assertSchema([
+    { table: 'jobs', columns: ['linked_estimate_id'] },
+  ])
+
+  return linkedEstimateColumn.ok
+    ? [...optionalColumns, 'linked_estimate_id']
+    : optionalColumns
 }
 
 async function buildSelect(columns: readonly string[]) {

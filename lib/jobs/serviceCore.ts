@@ -24,6 +24,7 @@ type JobRow = {
   scheduled_email_sent_at?: string | null
   completed_email_sent_at?: string | null
   closeout_notes?: string | null
+  linked_estimate_id?: string | null
   created_at?: string | null
   updated_at?: string | null
   [key: string]: unknown
@@ -151,7 +152,7 @@ export function buildJobSummaryRecord(params: {
     completed_email_sent_at: asString(safeRow.completed_email_sent_at),
     closeout_notes: asString(safeRow.closeout_notes),
     created_at: asString(safeRow.created_at),
-    linked_estimate_id: null,
+    linked_estimate_id: asString(safeRow.linked_estimate_id),
   }
 }
 
@@ -177,7 +178,7 @@ export function buildJobDetailRecord(params: {
     customer_email: params.customer?.email ?? null,
     customer_phone: params.customer?.phone ?? null,
     linked_estimates: params.linkedEstimates ?? [],
-    linked_estimate_id: params.linkedEstimates?.[0]?.id ?? null,
+    linked_estimate_id: summary.linked_estimate_id ?? params.linkedEstimates?.[0]?.id ?? null,
   }
 }
 

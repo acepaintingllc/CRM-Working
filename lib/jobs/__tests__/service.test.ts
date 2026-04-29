@@ -101,3 +101,39 @@ test('jobs service helpers build enriched summary and detail records', () => {
   assert.equal(detail.customer_phone, '555-1234')
   assert.equal(detail.linked_estimate_id, 'estimate-1')
 })
+
+test('jobs service helpers prefer explicit linked_estimate_id over first estimate row', () => {
+  const detail = buildJobDetailRecord({
+    row: {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      title: 'Kitchen',
+      linked_estimate_id: 'accepted-estimate',
+    },
+    optionalColumns: ['linked_estimate_id'],
+    linkedEstimates: [
+      {
+        id: 'draft-estimate',
+        status: 'draft',
+        version_name: null,
+        version_state: 'draft',
+        version_kind: null,
+        version_sort_order: 1,
+        created_at: null,
+        updated_at: null,
+      },
+      {
+        id: 'accepted-estimate',
+        status: 'ready',
+        version_name: null,
+        version_state: 'live',
+        version_kind: null,
+        version_sort_order: 2,
+        created_at: null,
+        updated_at: null,
+      },
+    ],
+  })
+
+  assert.equal(detail.linked_estimate_id, 'accepted-estimate')
+})
