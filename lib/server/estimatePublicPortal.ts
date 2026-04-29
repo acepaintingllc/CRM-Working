@@ -183,19 +183,34 @@ async function updatePublicEstimateVersion(params: {
   orgId: string
   versionId: string
   payload: Record<string, unknown>
+  allowedStatuses?: string[]
 }) {
-  const update = await supabaseAdmin
+  const updateQuery = supabaseAdmin
     .from('estimate_public_versions')
     .update(params.payload)
     .eq('org_id', params.orgId)
     .eq('id', params.versionId)
+
+  const filteredUpdate = params.allowedStatuses
+    ? updateQuery.in('status', params.allowedStatuses)
+    : updateQuery
+
+  const update = await filteredUpdate
     .select('*')
     .maybeSingle()
 
-  if (update.error || !update.data) {
+  if (update.error) {
     return errorResult(
       'server_error',
-      update.error?.message ?? 'Unable to update public quote'
+      update.error.message ?? 'Unable to update public quote'
+    )
+  }
+  if (!update.data) {
+    return errorResult(
+      params.allowedStatuses ? 'conflict' : 'server_error',
+      params.allowedStatuses
+        ? 'Quote status changed before this action completed'
+        : 'Unable to update public quote'
     )
   }
 
@@ -230,28 +245,7 @@ export async function acceptPublicEstimate(
   const now = new Date().toISOString()
   const orgId = asText(loaded.version.org_id)
   const versionId = loaded.snapshot.estimate_version_id
-  const updateResult = await updatePublicEstimateVersion({
-    orgId,
-    versionId,
-    payload: {
-      status: 'accepted',
-      accepted_at: now,
-      locked_at: now,
-      acceptance_json: {
-        legal_name: legalName,
-        signature_type: signatureType,
-        signature_value: signatureValue,
-        accepted_terms: true,
-        accepted_at: now,
-        user_agent: asText(params.userAgent),
-        ip: asText(params.ip),
-        origin: asText(params.origin),
-      },
-    },
-  })
-  if (!updateResult.ok) return updateResult
-
-  const estimateId = asText(updateResult.data.estimate_id)
+  const estimateId = asText(loaded.version.estimate_id)
   const estimateLookup = await supabaseAdmin
     .from('estimates')
     .select('id, job_id')
@@ -273,6 +267,28 @@ export async function acceptPublicEstimate(
     acceptedAt: now,
   })
   if (!ownershipResult.ok) return ownershipResult
+
+  const updateResult = await updatePublicEstimateVersion({
+    orgId,
+    versionId,
+    allowedStatuses: ['sent', 'viewed'],
+    payload: {
+      status: 'accepted',
+      accepted_at: now,
+      locked_at: now,
+      acceptance_json: {
+        legal_name: legalName,
+        signature_type: signatureType,
+        signature_value: signatureValue,
+        accepted_terms: true,
+        accepted_at: now,
+        user_agent: asText(params.userAgent),
+        ip: asText(params.ip),
+        origin: asText(params.origin),
+      },
+    },
+  })
+  if (!updateResult.ok) return updateResult
 
   const eventResult = await writeEstimatePublicEvent({
     orgId,
@@ -316,6 +332,7 @@ export async function declinePublicEstimate(
   const updateResult = await updatePublicEstimateVersion({
     orgId,
     versionId,
+    allowedStatuses: ['sent', 'viewed'],
     payload: {
       status: 'declined',
       declined_at: now,
