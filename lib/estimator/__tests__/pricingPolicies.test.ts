@@ -299,6 +299,7 @@ const mockAssumptions: WallCalculationOutput['assumptions'] = {
   primer_price_per_gal: 30,
   standard_door_deduction_sf: 21,
   standard_window_deduction_sf: 15,
+  baseboard_opening_deduction_lf: 3,
   crew_size: 1,
 }
 

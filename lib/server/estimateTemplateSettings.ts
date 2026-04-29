@@ -29,6 +29,9 @@ export type EstimateTemplateSettingsRow = {
   override_labor_rate: number
   job_minimum_enabled: boolean
   job_minimum_amount: number
+  standard_door_deduction_sf: number
+  standard_window_deduction_sf: number
+  baseboard_opening_deduction_lf: number
 }
 
 function asText(value: unknown) {
@@ -71,6 +74,9 @@ export function normalizeEstimateTemplateSettings(row: Unsafe | null | undefined
         : DEFAULT_JOB_MINIMUM_ENABLED,
     job_minimum_amount:
       asMaybeNumber(row?.job_minimum_amount) ?? DEFAULT_JOB_MINIMUM_AMOUNT,
+    standard_door_deduction_sf: asMaybeNumber(row?.standard_door_deduction_sf) ?? 21,
+    standard_window_deduction_sf: asMaybeNumber(row?.standard_window_deduction_sf) ?? 15,
+    baseboard_opening_deduction_lf: asMaybeNumber(row?.baseboard_opening_deduction_lf) ?? 3,
   }
 }
 

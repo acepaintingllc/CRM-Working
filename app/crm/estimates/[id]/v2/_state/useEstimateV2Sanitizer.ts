@@ -136,6 +136,15 @@ function buildJobSettingsDraft(
     ceilingPrimerProductId: overrides.ceilingPrimerOverride,
     trimPaintProductId: overrides.trimPaintOverride,
     trimPrimerProductId: overrides.trimPrimerOverride,
+    standardDoorDeductionSf: Number(
+      jobsettings?.standard_door_deduction_sf ?? orgDefaults?.standard_door_deduction_sf ?? 21
+    ),
+    standardWindowDeductionSf: Number(
+      jobsettings?.standard_window_deduction_sf ?? orgDefaults?.standard_window_deduction_sf ?? 15
+    ),
+    baseboardOpeningDeductionLf: Number(
+      jobsettings?.baseboard_opening_deduction_lf ?? orgDefaults?.baseboard_opening_deduction_lf ?? 3
+    ),
     conditionSelections,
     resolvedConditionFactors: resolveAllConditionFactors(
       (catalogs.condition_modifiers ?? []).map((condition) => ({

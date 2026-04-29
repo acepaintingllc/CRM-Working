@@ -12,6 +12,7 @@ import {
   mergeEstimateV2Catalogs,
   sanitizeEstimateV2EditorLoad,
 } from './useEstimateV2Sanitizer'
+import { collectEstimateV2CalculationMissingInputIssues } from './estimateV2EditorSaveOrchestration'
 
 export function buildEstimateV2EditorLoadState(params: {
   store: EstimateV2EditorStoreApi
@@ -37,6 +38,14 @@ export function buildEstimateV2EditorLoadState(params: {
       ? null
       : createEstimateV2Error(catalogsErrorMessage, { retryable: true })
 
+  const validationIssues = collectEstimateV2CalculationMissingInputIssues({
+    wallCalculations: sanitized.meta.wallCalculations,
+    ceilingCalculations: sanitized.meta.ceilingCalculations,
+    trimCalculations: sanitized.meta.trimCalculations,
+    doorCalculations: sanitized.meta.doorCalculations,
+    drywallCalculations: sanitized.meta.drywallCalculations,
+  })
+
   return {
     collections: sanitized.collections,
     meta: {
@@ -51,7 +60,7 @@ export function buildEstimateV2EditorLoadState(params: {
       pricingSummary: sanitized.meta.pricingSummary,
       selectedRoomId: sanitized.meta.selectedRoomId,
       error: catalogsError,
-      validationIssues: [] as string[],
+      validationIssues,
       lastSavedSnapshot: sanitized.meta.lastSavedSnapshot,
       autoSaveHint: sanitized.meta.autoSaveHint,
       jobSettingsDraft: sanitized.meta.jobSettingsDraft,

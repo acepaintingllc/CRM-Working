@@ -7,11 +7,11 @@ import {
   RATE_SECTIONS,
   RATE_SUBGROUPS,
   ROOM_DEFAULTS_SECTIONS,
+  type QuoteRatesTopTab,
   type QuoteRatesActions,
   type QuoteRatesFiltersVm,
   type QuoteRatesTableVm,
 } from '@/app/crm/quotes/_hooks/useQuoteRatesPage'
-import type { RatesFlagsTab } from '@/types/estimator/ratesFlags'
 import { getRatesTabLabel } from './quoteRatesPresentation'
 
 type Props = {
@@ -30,7 +30,7 @@ export function QuoteRatesCategorySection({ filtersVm, tableVm, actions }: Props
       description={tableVm.activeCategory?.description ?? 'Select a category to edit rows.'}
       actions={
         <>
-          {(['rates', 'flags', 'room_defaults'] as RatesFlagsTab[]).map((tab) => (
+          {(['rates', 'flags', 'room_defaults', 'assumptions'] as QuoteRatesTopTab[]).map((tab) => (
             <CrmButton
               key={tab}
               type="button"
@@ -84,7 +84,7 @@ export function QuoteRatesCategorySection({ filtersVm, tableVm, actions }: Props
               </CrmButton>
             ))}
           </div>
-        ) : (
+        ) : filtersVm.activeTab === 'room_defaults' ? (
           <div className="flex flex-wrap gap-2">
             {ROOM_DEFAULTS_SECTIONS.map((section) => (
               <CrmButton
@@ -96,6 +96,10 @@ export function QuoteRatesCategorySection({ filtersVm, tableVm, actions }: Props
                 {section.label}
               </CrmButton>
             ))}
+          </div>
+        ) : (
+          <div className="text-sm text-[color:var(--crm-ui-muted)]">
+            Measurement deductions and calculator assumptions.
           </div>
         )}
         <div className="text-sm text-[color:var(--crm-ui-muted)]">

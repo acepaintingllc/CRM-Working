@@ -114,7 +114,7 @@ test('RECT scope: area from L×W, prime_mode NONE, no modifier', () => {
 test('missing ceiling pricing assumptions are reported instead of using hardcoded fallback rates', () => {
   const result = calculateCeilings({
     settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
-    scopes: [makeScope()],
+    scopes: [makeScope({ prime_mode: 'FULL' })],
     segments: [],
   })
 
@@ -126,6 +126,50 @@ test('missing ceiling pricing assumptions are reported instead of using hardcode
   assert.ok(missingFields.includes('primer_coverage_sqft_per_gal_per_coat'))
   assert.ok(missingFields.includes('paint_price_per_gal'))
   assert.ok(missingFields.includes('primer_price_per_gal'))
+})
+
+test('missing ceiling pricing assumptions do not use hidden business fallback values', () => {
+  const result = calculateCeilings({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeScope({ prime_mode: 'NONE' })],
+    segments: [],
+  })
+
+  assert.equal(result.assumptions.labor_rate_per_hour, 0)
+  assert.equal(result.assumptions.paint_prod_rate_sqft_per_hour, 0)
+  assert.equal(result.assumptions.paint_coverage_sqft_per_gal_per_coat, 0)
+  assert.equal(result.assumptions.paint_coats, 0)
+  assert.equal(result.assumptions.paint_price_per_gal, 0)
+  assert.equal(result.scopes[0].raw_paint_hours, 0)
+  assert.equal(result.scopes[0].raw_paint_gallons, 0)
+  assert.equal(result.scopes[0].raw_total, 0)
+})
+
+test('ceiling primer assumptions are required only when primer is used', () => {
+  const baseSettings = {
+    labor_rate_per_hour: 50,
+    paint_prod_rate_sqft_per_hour: 100,
+    paint_coverage_sqft_per_gal_per_coat: 350,
+    paint_coats: 2,
+    paint_price_per_gal: 45,
+    area_supply_cost_per_sf: 0,
+    per_color_supply_cost: 0,
+  }
+  const none = calculateCeilings({
+    settings: baseSettings,
+    scopes: [makeScope({ prime_mode: 'NONE', primer_coats: null })],
+    segments: [],
+  })
+  assert.equal(none.missing_inputs.some((input) => input.field.includes('primer')), false)
+  assert.equal(none.missing_inputs.some((input) => input.field === 'spot_prime_percent'), false)
+
+  const full = calculateCeilings({
+    settings: baseSettings,
+    scopes: [makeScope({ prime_mode: 'FULL', primer_coats: null })],
+    segments: [],
+  })
+  assert.equal(full.missing_inputs.some((input) => input.field === 'primer_coats'), true)
+  assert.equal(full.missing_inputs.some((input) => input.field === 'spot_prime_percent'), false)
 })
 
 test('ceiling primer supply cost applies only for SPOT and FULL prime modes', () => {
@@ -312,6 +356,46 @@ test('vaulted measured inputs calculate total ceiling sqft', () => {
   approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
   approx(result.scopes[0].raw_area_sf, 300)
   approx(result.scopes[0].raw_paint_gallons, 3)
+})
+
+test('vaulted measured inputs require plane count', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_ridge_length_in: 180,
+        vaulted_slope_length_in: 120,
+        vaulted_plane_count: null,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  assert.ok(result.missing_inputs.some((input) => input.field === 'vaulted_plane_count'))
+  approx(result.scopes[0].raw_area_sf, 144)
+})
+
+test('vaulted factor helper requires configured vaulted area factor', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_area_factor: null,
+        vaulted_ridge_length_in: null,
+        vaulted_slope_length_in: null,
+        vaulted_plane_count: null,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  assert.ok(result.missing_inputs.some((input) => input.field === 'vaulted_area_factor'))
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 144)
 })
 
 test('tray ceiling uses catalog area factor instead of geometry helper sqft', () => {

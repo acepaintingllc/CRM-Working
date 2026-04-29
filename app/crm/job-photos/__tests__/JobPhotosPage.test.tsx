@@ -51,6 +51,10 @@ function imageFile(name: string, size = 12) {
   return new File([new Uint8Array(size)], name, { type: 'image/png', lastModified: Date.UTC(2026, 0, 1) })
 }
 
+function largeImageFile(name: string) {
+  return imageFile(name, 4 * 1024 * 1024 + 1)
+}
+
 function uploadResponse(form: FormData, failedIds: string[] = []) {
   const ids = form.getAll('clientLocalId').map(String)
   const files = form.getAll('photos') as File[]
@@ -114,6 +118,8 @@ async function renderLoadedPage() {
 describe('JobPhotosPage', () => {
   afterEach(() => {
     cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   beforeEach(() => {
@@ -157,8 +163,9 @@ describe('JobPhotosPage', () => {
 
   it('keeps failed files queued for retry after partial failure', async () => {
     mocks.uploadJobSitePhotos.mockImplementation((_jobId: string, form: FormData) => {
-      const failedId = String(form.getAll('clientLocalId')[1])
-      return Promise.resolve(uploadResponse(form, [failedId]))
+      const file = form.getAll('photos')[0] as File
+      const failedId = file.name === 'retry.png' ? String(form.getAll('clientLocalId')[0]) : ''
+      return Promise.resolve(uploadResponse(form, failedId ? [failedId] : []))
     })
     await renderLoadedPage()
 
@@ -168,11 +175,83 @@ describe('JobPhotosPage', () => {
     })
     fireEvent.click(await screen.findByRole('button', { name: 'Upload 2 photos' }))
 
-    await waitFor(() => expect(mocks.uploadJobSitePhotos).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mocks.uploadJobSitePhotos).toHaveBeenCalledTimes(2))
     expect(screen.queryByText('success.png')).toBeNull()
     expect(await screen.findByText('retry.png')).toBeTruthy()
     expect(screen.getByText('Drive rejected this photo.')).toBeTruthy()
     expect(screen.getByText('1 photo failed to upload.')).toBeTruthy()
+  })
+
+  it('uploads queued photos in separate requests to avoid platform payload limits', async () => {
+    mocks.uploadJobSitePhotos.mockImplementation((_jobId: string, form: FormData) => Promise.resolve(uploadResponse(form)))
+    await renderLoadedPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /Kitchen repaint/i }))
+    fireEvent.change(screen.getByLabelText('Upload Photos'), {
+      target: { files: [imageFile('first.png'), imageFile('second.png')] },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Upload 2 photos' }))
+
+    await waitFor(() => expect(mocks.uploadJobSitePhotos).toHaveBeenCalledTimes(2))
+    expect(mocks.uploadJobSitePhotos.mock.calls.map(([, form]) => (form.getAll('photos')[0] as File).name)).toEqual([
+      'first.png',
+      'second.png',
+    ])
+    expect(mocks.uploadJobSitePhotos.mock.calls.every(([, form]) => form.getAll('photos').length === 1)).toBe(true)
+    expect(await screen.findByText('2 photos uploaded successfully.')).toBeTruthy()
+  })
+
+  it('compresses photos over 4 MB before uploading them', async () => {
+    const compressedBlob = new Blob([new Uint8Array(2 * 1024 * 1024)], { type: 'image/jpeg' })
+    const drawImage = vi.fn()
+    const toBlob = vi.fn((callback: BlobCallback) => callback(compressedBlob))
+    const originalCreateElement = document.createElement.bind(document)
+    const originalImage = globalThis.Image
+
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      if (tagName === 'canvas') {
+        return {
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage }),
+          toBlob,
+        } as unknown as HTMLCanvasElement
+      }
+      return originalCreateElement(tagName)
+    })
+
+    class TestImage {
+      width = 4000
+      height = 3000
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+
+      set src(_value: string) {
+        this.onload?.()
+      }
+    }
+
+    vi.stubGlobal('Image', TestImage)
+
+    mocks.uploadJobSitePhotos.mockImplementation((_jobId: string, form: FormData) => Promise.resolve(uploadResponse(form)))
+    await renderLoadedPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /Kitchen repaint/i }))
+    fireEvent.change(screen.getByLabelText('Upload Photos'), {
+      target: { files: [largeImageFile('large.png')] },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Upload 1 photo' }))
+
+    await waitFor(() => expect(mocks.uploadJobSitePhotos).toHaveBeenCalledTimes(1))
+    const [, form] = mocks.uploadJobSitePhotos.mock.calls[0]
+    const uploadedFile = form.getAll('photos')[0] as File
+    expect(uploadedFile.name).toBe('large.jpg')
+    expect(uploadedFile.type).toBe('image/jpeg')
+    expect(uploadedFile.size).toBe(compressedBlob.size)
+    expect(drawImage).toHaveBeenCalled()
+    expect(toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/jpeg', expect.any(Number))
+
+    vi.stubGlobal('Image', originalImage)
   })
 
   it('keeps upload controls unavailable until a job is selected', async () => {

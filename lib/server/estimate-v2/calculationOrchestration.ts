@@ -117,6 +117,14 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   const effectiveJobMinimumAmount =
     asNullableNumber(js?.job_minimum_amount) ?? orgDefaults?.job_minimum_amount ?? null
   const effectiveCrewSize = Math.max(1, Math.floor(asNullableNumber(js?.crew_size) ?? 1))
+  const deductionSettings = {
+    standard_door_deduction_sf:
+      asNullableNumber(js?.standard_door_deduction_sf) ?? orgDefaults?.standard_door_deduction_sf ?? null,
+    standard_window_deduction_sf:
+      asNullableNumber(js?.standard_window_deduction_sf) ?? orgDefaults?.standard_window_deduction_sf ?? null,
+    baseboard_opening_deduction_lf:
+      asNullableNumber(js?.baseboard_opening_deduction_lf) ?? orgDefaults?.baseboard_opening_deduction_lf ?? null,
+  }
 
   const calculationCatalogs = await loadEstimateV2CalculationCatalogs({
     requestOrigin: params.requestOrigin,
@@ -161,7 +169,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   const wallCalculations = calculateWalls({
     scopes: wallScopeRowsForCalc,
     segments: params.wallSegments as unknown as V2WallSegmentSaveRow[],
-    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize },
+    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize, ...deductionSettings },
     catalogs: calculationCatalogs.wall,
   })
   const quoteWallScopes = ((wallCalculations.scopes ?? []) as Unsafe[]).map((row) => {
@@ -206,7 +214,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   const ceilingCalculations = calculateCeilings({
     scopes: ceilingScopeRowsForCalc,
     segments: params.ceilingScopeSegments as unknown as V2CeilingSegmentSaveRow[],
-    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize },
+    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize, ...deductionSettings },
     catalogs: calculationCatalogs.ceiling ?? undefined,
   })
   const quoteCeilingScopes = ((ceilingCalculations.scopes ?? []) as Unsafe[]).map((row) => {
@@ -258,7 +266,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
         mode: roomModeById.get(roomId) ?? 'RECT',
       }
     }),
-    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize },
+    settings: { labor_rate_per_hour: effectiveLaborRate, crew_size: effectiveCrewSize, ...deductionSettings },
     catalogs: calculationCatalogs.trim ?? undefined,
   })
   const quoteTrimScopes = ((trimCalculations.scopes ?? []) as Unsafe[]).map((row) => {
@@ -421,6 +429,14 @@ export async function loadEffectiveLaborRate(orgId: string, estimateId: string, 
   return asNullableNumber(existingJobsettings.data?.override_labor_rate)
 }
 
+function deductionSettingsFromJobsettings(jobsettings: Unsafe | undefined) {
+  return {
+    standard_door_deduction_sf: asNullableNumber(jobsettings?.standard_door_deduction_sf),
+    standard_window_deduction_sf: asNullableNumber(jobsettings?.standard_window_deduction_sf),
+    baseboard_opening_deduction_lf: asNullableNumber(jobsettings?.baseboard_opening_deduction_lf),
+  }
+}
+
 export function createCalculationCatalogsLoader(params: {
   requestOrigin: string
   orgId: string
@@ -469,7 +485,7 @@ export async function calculateWallsForSave(params: {
       }),
     })),
     segments: params.segments,
-    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
+    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize, ...deductionSettingsFromJobsettings(params.jobsettings) },
     catalogs: catalogs.wall,
   })
   return {
@@ -509,7 +525,7 @@ export async function calculateCeilingsForSave(params: {
       }),
     })),
     segments: params.segments,
-    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
+    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize, ...deductionSettingsFromJobsettings(params.jobsettings) },
     catalogs: catalogs.ceiling ?? undefined,
   })
   return {
@@ -561,7 +577,7 @@ export async function calculateTrimForSave(params: {
       width_in: room.width_in,
       mode: trimRoomModeById.get(room.room_id) ?? 'RECT',
     })),
-    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize },
+    settings: { labor_rate_per_hour: laborRate, crew_size: crewSize, ...deductionSettingsFromJobsettings(params.jobsettings) },
     catalogs: catalogs.trim ?? undefined,
   })
 }

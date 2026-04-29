@@ -173,7 +173,7 @@ function forceSegmentCeilingScopeFlat(scope: EstimateV2CeilingScopeDraft): Estim
     vaultedAreaFactor: '',
     vaultedRidgeLengthIn: '',
     vaultedSlopeLengthIn: '',
-    vaultedPlaneCount: '2',
+    vaultedPlaneCount: '',
     trayPerimeterIn: '',
     trayStepHeightIn: '',
     trayBandWidthIn: '',

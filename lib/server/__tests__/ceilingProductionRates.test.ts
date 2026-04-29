@@ -114,3 +114,21 @@ test('applyBaseCeilingProductionRates prefers CEIL_STD over other active ceiling
   assert.equal(scope.paint_prod_rate_sqft_per_hour, 145)
   assert.equal(scope.primer_prod_rate_sqft_per_hour, 175)
 })
+
+test('applyBaseCeilingProductionRates does not fall back to an arbitrary ceiling row', () => {
+  const [scope] = applyBaseCeilingProductionRates({
+    scopes: [makeScope()],
+    productionRates: [
+      {
+        id: 'CEIL_OTHER',
+        scope_id: 'CEILINGS',
+        sqft_per_hr: 90,
+        primer_sqft_per_hr: 95,
+        active: 'Y',
+      },
+    ],
+  })
+
+  assert.equal(scope.paint_prod_rate_sqft_per_hour, undefined)
+  assert.equal(scope.primer_prod_rate_sqft_per_hour, undefined)
+})

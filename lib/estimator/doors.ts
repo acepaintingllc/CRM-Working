@@ -90,9 +90,29 @@ export function calculateDoors(input: DoorCalculationInput): DoorCalculationOutp
       })
     }
 
-    const quantity = nonNeg(n(scope.quantity)) ?? pos(n(rate?.default_qty)) ?? 1
-    const sides = nonNeg(n(scope.sides)) ?? 2
-    const rawUnits = round4(quantity * sides)
+    const quantity = nonNeg(n(scope.quantity))
+    const sides = nonNeg(n(scope.sides))
+    if (include === 'Y' && quantity == null) {
+      missingInputs.push({
+        level: 'scope',
+        room_id: scope.room_id,
+        scope_id: scopeKey,
+        segment_id: null,
+        field: 'quantity',
+        message: `Door scope ${scope.scope_name ?? (scope.position ?? 0) + 1}: quantity is required`,
+      })
+    }
+    if (include === 'Y' && sides == null) {
+      missingInputs.push({
+        level: 'scope',
+        room_id: scope.room_id,
+        scope_id: scopeKey,
+        segment_id: null,
+        field: 'sides',
+        message: `Door scope ${scope.scope_name ?? (scope.position ?? 0) + 1}: sides is required`,
+      })
+    }
+    const rawUnits = round4((quantity ?? 0) * (sides ?? 0))
     const effectiveUnits = include === 'Y' ? rawUnits : 0
     const laborRate = nonNeg(n(scope.labor_rate)) ?? nonNeg(n(rate?.labor_rate)) ?? 0
     const materialRate =

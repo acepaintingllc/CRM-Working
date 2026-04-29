@@ -1,7 +1,8 @@
-import type { RatesFlagsTab } from '@/types/estimator/ratesFlags'
+import type { QuoteRatesTopTab } from '../_hooks/quoteRatesPageConfig'
 
-export function getRatesTabLabel(tab: RatesFlagsTab) {
+export function getRatesTabLabel(tab: QuoteRatesTopTab) {
   if (tab === 'room_defaults') return 'Room Defaults'
+  if (tab === 'assumptions') return 'Assumptions'
   if (tab === 'flags') return 'Flags'
   return 'Rates'
 }

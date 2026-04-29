@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo } from 'react'
-import type { RatesFlagsTab } from '@/types/estimator/ratesFlags'
 import {
   archiveOrReactivateQuoteRatesMutation,
   saveQuoteRatesMutation,
@@ -25,6 +24,7 @@ import {
 } from './quoteRatesPageState'
 import {
   type FlagsSectionKey,
+  type QuoteRatesTopTab,
   type RateSectionKey,
   type RoomDefaultsSectionKey,
   type StatusFilter,
@@ -34,7 +34,7 @@ import { useDenseQuoteAdminOrchestrator } from './useDenseQuoteAdminOrchestrator
 import { useQuoteRatesData } from './useQuoteRatesData'
 
 export type QuoteRatesActions = {
-  setActiveTab: (activeTab: RatesFlagsTab) => boolean | Promise<boolean>
+  setActiveTab: (activeTab: QuoteRatesTopTab) => boolean | Promise<boolean>
   setRateSection: (rateSection: RateSectionKey) => boolean | Promise<boolean>
   setRateCategory: (rateCategory: string) => boolean | Promise<boolean>
   setFlagsSection: (flagsSection: FlagsSectionKey) => boolean | Promise<boolean>

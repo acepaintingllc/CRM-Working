@@ -19,6 +19,7 @@ import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import {
   prepareEstimateV2SaveState,
   resolveEstimateV2SaveResponseState,
+  collectEstimateV2CalculationMissingInputIssues,
   validateEstimateV2PreparedSave,
 } from './estimateV2EditorSaveOrchestration'
 import {
@@ -167,6 +168,15 @@ export function useEstimateV2SaveController(params: {
         effectiveJobProductDefaults,
       })
       applyEstimateV2SuccessfulSaveState(store, responseState)
+      meta.setValidationIssues(
+        collectEstimateV2CalculationMissingInputIssues({
+          wallCalculations: responseState.calculations.wallCalculations,
+          ceilingCalculations: responseState.calculations.ceilingCalculations,
+          trimCalculations: responseState.calculations.trimCalculations,
+          doorCalculations: responseState.calculations.doorCalculations,
+          drywallCalculations: responseState.calculations.drywallCalculations,
+        })
+      )
       meta.setSaveStatus('saved')
       return true
     },

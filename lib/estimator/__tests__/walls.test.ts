@@ -91,10 +91,25 @@ test('wall deductions accept decimal door and window counts in RECT and SEG inpu
   approx(seg.scopes[0].raw_area_sf, 82)
 })
 
+test('wall opening deductions use configurable settings', () => {
+  const result = calculateWalls({
+    settings: {
+      area_supply_cost_per_sf: 0,
+      per_color_supply_cost: 0,
+      standard_door_deduction_sf: 30,
+      standard_window_deduction_sf: 12,
+    },
+    scopes: [makeWallScope({ standard_door_count: 1, standard_window_count: 2 })],
+    segments: [],
+  })
+
+  approx(result.scopes[0].raw_area_sf, 346)
+})
+
 test('missing wall pricing assumptions are reported instead of using hardcoded fallback rates', () => {
   const result = calculateWalls({
     settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
-    scopes: [makeWallScope({ color_id: null })],
+    scopes: [makeWallScope({ color_id: null, prime_mode: 'FULL' })],
     segments: [],
   })
 
@@ -108,11 +123,56 @@ test('missing wall pricing assumptions are reported instead of using hardcoded f
   assert.ok(missingFields.includes('primer_price_per_gal'))
 })
 
+test('missing wall pricing assumptions do not use hidden business fallback values', () => {
+  const result = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeWallScope({ color_id: null, prime_mode: 'NONE' })],
+    segments: [],
+  })
+
+  assert.equal(result.assumptions.labor_rate_per_hour, 0)
+  assert.equal(result.assumptions.paint_prod_rate_sqft_per_hour, 0)
+  assert.equal(result.assumptions.paint_coverage_sqft_per_gal_per_coat, 0)
+  assert.equal(result.assumptions.paint_coats, 0)
+  assert.equal(result.assumptions.paint_price_per_gal, 0)
+  assert.equal(result.scopes[0].raw_paint_hours, 0)
+  assert.equal(result.scopes[0].raw_paint_gallons, 0)
+  assert.equal(result.scopes[0].raw_total, 0)
+})
+
+test('wall primer assumptions are required only when primer is used', () => {
+  const baseSettings = {
+    labor_rate_per_hour: 50,
+    paint_prod_rate_sqft_per_hour: 100,
+    paint_coverage_sqft_per_gal_per_coat: 350,
+    paint_coats: 2,
+    paint_price_per_gal: 45,
+    area_supply_cost_per_sf: 0,
+    per_color_supply_cost: 0,
+  }
+  const none = calculateWalls({
+    settings: baseSettings,
+    scopes: [makeWallScope({ prime_mode: 'NONE', primer_coats: null })],
+    segments: [],
+  })
+  assert.equal(none.missing_inputs.some((input) => input.field.includes('primer')), false)
+  assert.equal(none.missing_inputs.some((input) => input.field === 'spot_prime_percent'), false)
+
+  const spot = calculateWalls({
+    settings: baseSettings,
+    scopes: [makeWallScope({ prime_mode: 'SPOT', primer_coats: null, spot_prime_percent: null })],
+    segments: [],
+  })
+  assert.equal(spot.missing_inputs.some((input) => input.field === 'primer_coats'), true)
+  assert.equal(spot.missing_inputs.some((input) => input.field === 'spot_prime_percent'), true)
+})
+
 test('wall primer supply cost applies only for SPOT and FULL prime modes', () => {
   const catalogs = { supplies_rates: [{ key: 'PRIMER_WALL', scope: 'Walls', unit: 'primer per scope', value: 7 }] }
-  const none = calculateWalls({ catalogs, scopes: [makeWallScope({ color_id: null })], segments: [] })
-  const spot = calculateWalls({ catalogs, scopes: [makeWallScope({ color_id: null, prime_mode: 'SPOT' })], segments: [] })
-  const full = calculateWalls({ catalogs, scopes: [makeWallScope({ color_id: null, prime_mode: 'FULL' })], segments: [] })
+  const settings = { area_supply_cost_per_sf: 0.08, per_color_supply_cost: 0 }
+  const none = calculateWalls({ catalogs, settings, scopes: [makeWallScope({ color_id: null })], segments: [] })
+  const spot = calculateWalls({ catalogs, settings, scopes: [makeWallScope({ color_id: null, prime_mode: 'SPOT' })], segments: [] })
+  const full = calculateWalls({ catalogs, settings, scopes: [makeWallScope({ color_id: null, prime_mode: 'FULL' })], segments: [] })
 
   approx(none.scopes[0].raw_supply_cost, 32)
   approx(spot.scopes[0].raw_supply_cost, 39)

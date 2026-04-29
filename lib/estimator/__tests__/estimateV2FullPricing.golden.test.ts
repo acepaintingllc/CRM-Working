@@ -430,7 +430,18 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
       { room_id: 'R002', length_in: null, width_in: null, mode: 'SEG' },
       { room_id: 'R003', length_in: 144, width_in: 120, mode: 'RECT' },
     ],
-    settings: { labor_rate_per_hour: SETTINGS.labor_rate_per_hour },
+    settings: {
+      labor_rate_per_hour: SETTINGS.labor_rate_per_hour,
+      paint_coats: 2,
+      primer_coats: 1,
+      spot_prime_percent: 30,
+      paint_coverage_sqft_per_gal_per_coat: 350,
+      primer_coverage_sqft_per_gal_per_coat: 300,
+      area_supply_cost_per_sf: 0.08,
+      per_color_supply_cost: 20,
+      paint_price_per_gal: 45,
+      primer_price_per_gal: 35,
+    },
     catalogs: {
       ...CATALOGS,
       trim_items: [
@@ -573,9 +584,9 @@ test('full estimate golden path covers mixed rooms, grouped materials, policies,
   approx(pricing.ceilingPaintMaterialCost, 54)
   approx(pricing.trimPaintMaterialCost, 85)
   approx(pricing.paintMaterialCost, 299)
-  approx(pricing.prePolicyTotal, 912.5)
-  approx(pricing.postLaborPolicyTotal, 946.46)
-  approx(pricing.minimumAdjustmentAmount, 553.54)
+  approx(pricing.prePolicyTotal, 910.69)
+  approx(pricing.postLaborPolicyTotal, 944.65)
+  approx(pricing.minimumAdjustmentAmount, 555.35)
   approx(pricing.finalTotal, 1500)
   const allIncludedScopes = [...walls.scopes, ...ceilings.scopes, ...trim.scopes, ...doors.scopes].filter(
     (scope) => scope.include === 'Y'

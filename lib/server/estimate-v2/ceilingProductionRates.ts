@@ -31,11 +31,7 @@ function isCeilingProductionRate(row: CeilingProductionRateRow) {
 
 function resolveBaseCeilingProductionRate(rows: CeilingProductionRateRow[]) {
   const ceilingRows = rows.filter((row) => isActive(row) && isCeilingProductionRate(row))
-  return (
-    ceilingRows.find((row) => normalizeId(row.id) === 'CEIL_STD') ??
-    ceilingRows[0] ??
-    null
-  )
+  return ceilingRows.find((row) => normalizeId(row.id) === 'CEIL_STD') ?? null
 }
 
 export function applyBaseCeilingProductionRates<TScope extends CeilingCalculationScopeRow>(params: {

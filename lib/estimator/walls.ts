@@ -281,31 +281,37 @@ function pushMissingWallPricingAssumptions(params: {
   const required: Array<[string, unknown]> = [
     ['labor_rate_per_hour', params.scope.labor_rate_per_hour ?? params.settings?.labor_rate_per_hour],
     ['paint_prod_rate_sqft_per_hour', params.scope.paint_prod_rate_sqft_per_hour ?? params.settings?.paint_prod_rate_sqft_per_hour],
-    ['primer_prod_rate_sqft_per_hour', params.scope.primer_prod_rate_sqft_per_hour ?? params.settings?.primer_prod_rate_sqft_per_hour],
     [
       'paint_coverage_sqft_per_gal_per_coat',
       params.scope.paint_coverage_sqft_per_gal_per_coat ??
         paintProduct?.coverage_sqft_per_gal_per_coat ??
         params.settings?.paint_coverage_sqft_per_gal_per_coat,
     ],
-    [
-      'primer_coverage_sqft_per_gal_per_coat',
-      params.scope.primer_coverage_sqft_per_gal_per_coat ??
-        primerProduct?.coverage_sqft_per_gal_per_coat ??
-        params.settings?.primer_coverage_sqft_per_gal_per_coat,
-    ],
     ['paint_coats', params.scope.paint_coats ?? params.settings?.paint_coats],
-    ['primer_coats', params.scope.primer_coats ?? params.settings?.primer_coats],
-    ['spot_prime_percent', params.scope.spot_prime_percent ?? params.settings?.spot_prime_percent],
     [
       'paint_price_per_gal',
       params.scope.paint_price_per_gal ?? paintProduct?.price_per_gal ?? params.settings?.paint_price_per_gal,
     ],
-    [
-      'primer_price_per_gal',
-      params.scope.primer_price_per_gal ?? primerProduct?.price_per_gal ?? params.settings?.primer_price_per_gal,
-    ],
   ]
+  if (params.scope.prime_mode !== 'NONE') {
+    required.push(
+      ['primer_prod_rate_sqft_per_hour', params.scope.primer_prod_rate_sqft_per_hour ?? params.settings?.primer_prod_rate_sqft_per_hour],
+      [
+        'primer_coverage_sqft_per_gal_per_coat',
+        params.scope.primer_coverage_sqft_per_gal_per_coat ??
+          primerProduct?.coverage_sqft_per_gal_per_coat ??
+          params.settings?.primer_coverage_sqft_per_gal_per_coat,
+      ],
+      ['primer_coats', params.scope.primer_coats ?? params.settings?.primer_coats],
+      [
+        'primer_price_per_gal',
+        params.scope.primer_price_per_gal ?? primerProduct?.price_per_gal ?? params.settings?.primer_price_per_gal,
+      ]
+    )
+  }
+  if (params.scope.prime_mode === 'SPOT') {
+    required.push(['spot_prime_percent', params.scope.spot_prime_percent ?? params.settings?.spot_prime_percent])
+  }
 
   for (const [field, value] of required) {
     if (pos(n(value)) == null) pushMissingRequiredAssumption(params.missing, params.scope, field)
@@ -409,10 +415,14 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
       scope.prime_mode === 'FULL' ? 1 : scope.prime_mode === 'SPOT' ? spotPrimePercent / 100 : 0
     const primerArea = include === 'Y' ? round4(effectiveArea * primerMultiplier) : 0
 
-    const rawPaintHours = include === 'Y' ? round4((effectiveArea * paintCoats / paintRate) * modifier) : 0
-    const rawPrimerHours = include === 'Y' ? round4((primerArea * primerCoats / primerRate) * modifier) : 0
-    const rawPaintGallons = include === 'Y' ? round4((effectiveArea * paintCoats) / paintCoverage) : 0
-    const rawPrimerGallons = include === 'Y' ? round4((primerArea * primerCoats) / primerCoverage) : 0
+    const rawPaintHours =
+      include === 'Y' && paintRate > 0 ? round4(((effectiveArea * paintCoats) / paintRate) * modifier) : 0
+    const rawPrimerHours =
+      include === 'Y' && primerRate > 0 ? round4(((primerArea * primerCoats) / primerRate) * modifier) : 0
+    const rawPaintGallons =
+      include === 'Y' && paintCoverage > 0 ? round4((effectiveArea * paintCoats) / paintCoverage) : 0
+    const rawPrimerGallons =
+      include === 'Y' && primerCoverage > 0 ? round4((primerArea * primerCoats) / primerCoverage) : 0
     const effectivePaintHours = include === 'Y' ? round4(nonNeg(n(scope.override_paint_hours)) ?? rawPaintHours) : 0
     const effectivePrimerHours = include === 'Y' ? round4(nonNeg(n(scope.override_primer_hours)) ?? rawPrimerHours) : 0
     const effectivePaintGallons =
