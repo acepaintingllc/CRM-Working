@@ -254,24 +254,6 @@ async function loadAcceptedEstimateRow(orgId: string, estimateId: string) {
   return okResult(estimateLookup.data as Unsafe)
 }
 
-async function applyAcceptedOwnership(params: {
-  orgId: string
-  versionId: string
-  estimateId: string
-  acceptedAt: string
-}) {
-  const estimateLookup = await loadAcceptedEstimateRow(params.orgId, params.estimateId)
-  if (!estimateLookup.ok) return estimateLookup
-
-  return applyAcceptedEstimateSideEffects(acceptedEstimateSideEffectsDb(), {
-    orgId: params.orgId,
-    jobId: asText(estimateLookup.data.job_id),
-    estimateId: params.estimateId,
-    publicVersionId: params.versionId,
-    acceptedAt: params.acceptedAt,
-  })
-}
-
 async function reconcileAcceptedRetryOwnership(params: {
   orgId: string
   versionId: string
