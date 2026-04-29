@@ -2,8 +2,22 @@ import type {
   AcceptedEstimateSource,
   AcceptEstimateOperationalInput,
 } from './types.ts'
+import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 
 type Unsafe = Record<string, unknown>
+
+type DbUpdateChain = {
+  from(table: string): {
+    update(payload: Record<string, unknown>): {
+      eq(column: string, value: unknown): {
+        eq(
+          column: string,
+          value: unknown
+        ): Promise<{ error: { message?: string } | null }>
+      }
+    }
+  }
+}
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
@@ -51,4 +65,39 @@ export function buildAcceptedEstimateSource(params: {
     final_total: asNumber(params.rollup?.final_total),
     snapshot_json: isRecord(snapshotJson) ? snapshotJson : {},
   }
+}
+
+export async function applyAcceptedEstimateSideEffects(
+  db: DbUpdateChain,
+  input: AcceptEstimateOperationalInput
+): Promise<ServiceResult<{ ok: true }>> {
+  const plan = buildAcceptedEstimateUpdatePlan(input)
+
+  const estimateUpdate = await db
+    .from('estimates')
+    .update(plan.estimateUpdate)
+    .eq('org_id', input.orgId)
+    .eq('id', input.estimateId)
+
+  if (estimateUpdate.error) {
+    return errorResult(
+      'server_error',
+      estimateUpdate.error.message ?? 'Unable to mark estimate accepted'
+    )
+  }
+
+  const jobUpdate = await db
+    .from('jobs')
+    .update(plan.jobUpdate)
+    .eq('org_id', input.orgId)
+    .eq('id', input.jobId)
+
+  if (jobUpdate.error) {
+    return errorResult(
+      'server_error',
+      jobUpdate.error.message ?? 'Unable to link accepted estimate to job'
+    )
+  }
+
+  return okResult({ ok: true })
 }
