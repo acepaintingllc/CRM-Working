@@ -169,8 +169,10 @@ function vaultedMeasuredArea(scope: EstimateV2CeilingScopeDraft, room: EstimateV
     numberOrNull(scope.lengthIn ?? '') ??
     numberOrNull(room?.lengthIn ?? '')
   const slopeLength = numberOrNull(scope.vaultedSlopeLengthIn ?? '')
-  const planeCount = Math.max(1, Math.floor(numberOrNull(scope.vaultedPlaneCount ?? '') ?? 2))
-  return ridgeLength != null && slopeLength != null ? (ridgeLength * slopeLength * planeCount) / 144 : null
+  const planeCount = numberOrNull(scope.vaultedPlaneCount ?? '')
+  return ridgeLength != null && slopeLength != null && planeCount != null && planeCount > 0
+    ? (ridgeLength * slopeLength * Math.floor(planeCount)) / 144
+    : null
 }
 
 function ceilingHelperExtraArea(
@@ -182,7 +184,8 @@ function ceilingHelperExtraArea(
   if (scope.ceilingGeometryMode === 'VAULTED') {
     if (numberOrNull(scope.areaSf) != null) return 0
     if (vaultedMeasuredArea(scope, null) != null) return 0
-    const factor = numberOrNull(scope.vaultedAreaFactor ?? '') ?? 1.2
+    const factor = numberOrNull(scope.vaultedAreaFactor ?? '')
+    if (factor == null || factor <= 0) return 0
     return Math.max(base * factor - base, 0)
   }
   if (scope.ceilingGeometryMode === 'COFFERED') {
@@ -251,7 +254,7 @@ function CeilingGeometryFields({
                 </Field>
                 <Field label="Planes" styles={sharedStyles(styles)}>
                   <input
-                    value={scope.vaultedPlaneCount ?? '2'}
+                    value={scope.vaultedPlaneCount ?? ''}
                     onChange={(e) => updateScope(scope.id, { vaultedPlaneCount: e.target.value })}
                     style={styles.input}
                     type="number"

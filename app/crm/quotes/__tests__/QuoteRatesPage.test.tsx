@@ -152,4 +152,88 @@ describe('QuoteRatesPage', () => {
       ).toBeTruthy()
     })
   })
+
+  it('edits measurement deductions from the rates assumptions tab', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(
+        createResponse({
+          data: {
+            source: 'db',
+            seeded: true,
+            template_version: 2,
+            categories: [
+              {
+                key: 'production_rates_walls',
+                tab: 'rates',
+                group: 'production_rates',
+                label: 'Wall Production',
+                table_title: 'Wall Production',
+                description: 'Wall rates',
+                columns: [{ key: 'display_name', label: 'Name' }],
+                fields: [
+                  { key: 'id', label: 'ID', type: 'text', required: true },
+                  { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+                ],
+                rows: [
+                  { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
+                ],
+              },
+            ],
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        createResponse({
+          data: {
+            standard_door_deduction_sf: 21,
+            standard_window_deduction_sf: 15,
+            baseboard_opening_deduction_lf: 3,
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        createResponse({
+          data: {
+            standard_door_deduction_sf: 22,
+            standard_window_deduction_sf: 15,
+            baseboard_opening_deduction_lf: 3,
+          },
+          notice: 'Measurement assumptions saved.',
+        })
+      )
+
+    render(<QuoteRatesPage />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Standard walls')).toHaveLength(2)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Assumptions' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Measurement Deductions')).toBeTruthy()
+    })
+
+    fireEvent.change(screen.getByLabelText('Door deduct (sf)'), {
+      target: { value: '22' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save assumptions' }))
+
+    await waitFor(() => {
+      expect(mockAuthedFetch).toHaveBeenLastCalledWith(
+        '/api/settings/quote-measurement-assumptions',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            data: {
+              standard_door_deduction_sf: 22,
+              standard_window_deduction_sf: 15,
+              baseboard_opening_deduction_lf: 3,
+            },
+          }),
+        })
+      )
+      expect(screen.getByText('Measurement assumptions saved.')).toBeTruthy()
+    })
+  })
 })

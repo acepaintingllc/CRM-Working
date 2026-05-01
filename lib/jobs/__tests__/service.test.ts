@@ -101,3 +101,114 @@ test('jobs service helpers build enriched summary and detail records', () => {
   assert.equal(detail.customer_phone, '555-1234')
   assert.equal(detail.linked_estimate_id, 'estimate-1')
 })
+
+test('jobs service helpers include accepted quote audit details', () => {
+  const detail = buildJobDetailRecord({
+    row: {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      title: 'Kitchen',
+      linked_estimate_id: 'estimate-1',
+    },
+    optionalColumns: ['linked_estimate_id'],
+    acceptedQuote: {
+      estimate_id: 'estimate-1',
+      accepted_public_version_id: 'public-version-1',
+      public_version_number: 3,
+      public_token: 'public-token-1',
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      accepted_by_legal_name: 'Jordan Customer',
+      signature_type: 'typed',
+      user_agent: 'Mozilla/5.0',
+      ip: '127.0.0.1',
+      version_name: 'Interior repaint',
+      final_total: 4250,
+    },
+  })
+
+  assert.deepEqual(detail.accepted_quote, {
+    estimate_id: 'estimate-1',
+    accepted_public_version_id: 'public-version-1',
+    public_version_number: 3,
+    public_token: 'public-token-1',
+    accepted_at: '2026-04-29T10:00:00.000Z',
+    accepted_by_legal_name: 'Jordan Customer',
+    signature_type: 'typed',
+    user_agent: 'Mozilla/5.0',
+    ip: '127.0.0.1',
+    version_name: 'Interior repaint',
+    final_total: 4250,
+  })
+})
+
+test('jobs service helpers include public quote timeline events', () => {
+  const detail = buildJobDetailRecord({
+    row: {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      title: 'Kitchen',
+    },
+    optionalColumns: [],
+    publicQuoteTimelineEvents: [
+      {
+        id: 'quote-event-1',
+        type: 'quote_viewed',
+        title: 'Quote viewed',
+        body: 'Public version #1',
+        created_at: '2026-04-22T11:00:00.000Z',
+        created_by: null,
+        link_path: '/quote/token-1',
+        link_label: 'Open quote',
+      },
+    ],
+  })
+
+  assert.deepEqual(detail.public_quote_timeline_events, [
+    {
+      id: 'quote-event-1',
+      type: 'quote_viewed',
+      title: 'Quote viewed',
+      body: 'Public version #1',
+      created_at: '2026-04-22T11:00:00.000Z',
+      created_by: null,
+      link_path: '/quote/token-1',
+      link_label: 'Open quote',
+    },
+  ])
+})
+
+test('jobs service helpers prefer explicit linked_estimate_id over first estimate row', () => {
+  const detail = buildJobDetailRecord({
+    row: {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      title: 'Kitchen',
+      linked_estimate_id: 'accepted-estimate',
+    },
+    optionalColumns: ['linked_estimate_id'],
+    linkedEstimates: [
+      {
+        id: 'draft-estimate',
+        status: 'draft',
+        version_name: null,
+        version_state: 'draft',
+        version_kind: null,
+        version_sort_order: 1,
+        created_at: null,
+        updated_at: null,
+      },
+      {
+        id: 'accepted-estimate',
+        status: 'ready',
+        version_name: null,
+        version_state: 'live',
+        version_kind: null,
+        version_sort_order: 2,
+        created_at: null,
+        updated_at: null,
+      },
+    ],
+  })
+
+  assert.equal(detail.linked_estimate_id, 'accepted-estimate')
+})

@@ -12,6 +12,8 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  Eye,
+  ExternalLink,
   Mail,
   Send,
   type LucideIcon,
@@ -21,10 +23,13 @@ const iconSizeSm = 16
 
 type TimelineItem = {
   key: string
+  iconKey?: string
   label: string
   value: string
   at: string | null
   order: number
+  href?: string | null
+  linkLabel?: string | null
 }
 
 type JobTimelineProps = {
@@ -39,6 +44,9 @@ type JobTimelineProps = {
 function timelineIconForItem(key: string): LucideIcon {
   if (key === 'estimate_date') return CalendarCheck
   if (key === 'estimate_sent_at') return Send
+  if (key === 'quote_sent' || key === 'quote_resent') return Send
+  if (key === 'quote_viewed') return Eye
+  if (key === 'quote_accepted') return CheckCircle2
   if (key === 'scheduled_range') return CalendarCheck
   if (key === 'scheduled_email_sent_at') return Mail
   if (key === 'completed_at') return CheckCircle2
@@ -51,7 +59,7 @@ function buildTimelineItems(
   formatDate: (iso: string | null | undefined) => string,
   formatRange: (start?: string | null, end?: string | null) => string
 ): TimelineItem[] {
-  return [
+  const baseItems: TimelineItem[] = [
     {
       key: 'created_at',
       label: 'Created',
@@ -101,7 +109,19 @@ function buildTimelineItems(
       at: job.completed_email_sent_at ?? null,
       order: 6,
     },
-  ].sort((a, b) => {
+  ]
+  const quoteItems: TimelineItem[] = (job.public_quote_timeline_events ?? []).map((event, index) => ({
+    key: event.id || `${event.type || 'quote-event'}-${event.created_at ?? index}-${index}`,
+    iconKey: event.type || event.id || `quote-event-${index}`,
+    label: event.title || 'Quote activity',
+    value: event.body || formatDate(event.created_at),
+    at: event.created_at ?? null,
+    order: 20 + index,
+    href: event.link_path,
+    linkLabel: event.link_label,
+  }))
+
+  return [...baseItems, ...quoteItems].sort((a, b) => {
     if (a.at && b.at) return b.at.localeCompare(a.at)
     if (a.at) return -1
     if (b.at) return 1
@@ -141,7 +161,7 @@ export default function JobTimeline({
           <div className="absolute bottom-0 left-3 top-0 w-px bg-gray-200" aria-hidden="true" />
           <div className="grid gap-2.5">
             {timelineItems.map((item) => {
-              const ItemIcon = timelineIconForItem(item.key)
+              const ItemIcon = timelineIconForItem(item.iconKey ?? item.key)
               const isSet = item.at != null
               return (
                 <div key={item.key} className="relative">
@@ -166,6 +186,17 @@ export default function JobTimeline({
                     >
                       {isSet ? item.value : 'Not set'}
                     </div>
+                    {item.href ? (
+                      <a
+                        href={item.href}
+                        target={item.href.startsWith('http') ? '_blank' : undefined}
+                        rel={item.href.startsWith('http') ? 'noreferrer' : undefined}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-extrabold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-gray-950"
+                      >
+                        <ExternalLink size={13} aria-hidden="true" />
+                        <span>{item.linkLabel ?? 'Open'}</span>
+                      </a>
+                    ) : null}
                     {item.key === 'estimate_date' && (
                       <input
                         type="datetime-local"

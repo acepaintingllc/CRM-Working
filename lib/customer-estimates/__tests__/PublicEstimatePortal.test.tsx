@@ -164,6 +164,7 @@ function createSnapshot(): EstimatePublicSnapshot {
         used_explicit_terms_text: true,
       },
     },
+    acceptance_json: null,
     sent_at: null,
     viewed_at: null,
     accepted_at: null,
@@ -207,4 +208,5 @@ describe('PublicEstimatePortal boundaries', () => {
     expect(source.includes("from '@/lib/server/")).toBe(false)
     expect(source.includes("from './view'")).toBe(true)
   })
+
 })

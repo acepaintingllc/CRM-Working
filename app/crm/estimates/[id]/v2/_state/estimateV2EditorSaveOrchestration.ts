@@ -28,6 +28,34 @@ import type { NormalizedDomain, Unsafe } from './estimateV2EditorTypes'
 
 type EstimateV2SaveCollections = EstimateV2EditorStoreState['collections']
 type EstimateV2SaveMeta = EstimateV2EditorStoreState['meta']
+type CalculationMissingInput = {
+  message?: unknown
+}
+
+function missingInputsFrom(value: unknown): CalculationMissingInput[] {
+  if (!value || typeof value !== 'object') return []
+  const missing = (value as { missing_inputs?: unknown }).missing_inputs
+  return Array.isArray(missing) ? (missing as CalculationMissingInput[]) : []
+}
+
+export function collectEstimateV2CalculationMissingInputIssues(params: {
+  wallCalculations: unknown
+  ceilingCalculations: unknown
+  trimCalculations: unknown
+  doorCalculations: unknown
+  drywallCalculations: unknown
+}) {
+  const groups: Array<[label: string, value: unknown]> = [
+    ['Walls', params.wallCalculations],
+    ['Ceilings', params.ceilingCalculations],
+    ['Trim', params.trimCalculations],
+    ['Doors', params.doorCalculations],
+    ['Drywall', params.drywallCalculations],
+  ]
+  return groups.flatMap(([label, value]) =>
+    missingInputsFrom(value).map((input) => `${label}: ${String(input.message || 'Required input is missing')}`)
+  )
+}
 
 export type EstimateV2PreparedSaveState = {
   normalizedDomains: NormalizedDomain[]

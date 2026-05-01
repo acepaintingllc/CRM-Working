@@ -2,6 +2,10 @@
 
 import { CrmEntityFormPage } from '@/app/crm/_components/CrmEntityFormPage'
 import { CrmField } from '@/app/crm/_components/CrmField'
+import {
+  emailBodyTextareaClassName,
+  emailBodyTextareaStyle,
+} from '@/app/crm/_components/emailComposerStyles'
 import { crmButtonClassName, crmInputClassName } from '@/app/crm/_components/crmStyles'
 import type {
   EmailTemplateStage,
@@ -118,7 +122,8 @@ export function EmailTemplateEditor({
               value={body}
               onChange={(event) => setBody(event.target.value)}
               placeholder="Write the email template here..."
-              className={`${inputClassName} min-h-[220px] resize-y`}
+              className={emailBodyTextareaClassName()}
+              style={emailBodyTextareaStyle}
             />
           </CrmField>
 
@@ -130,7 +135,6 @@ export function EmailTemplateEditor({
 
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-black text-[color:var(--crm-ui-text)]">
-              <span aria-hidden="true">ðŸ§©</span>
               <span>Variables</span>
             </div>
             <div className="flex flex-wrap gap-2">

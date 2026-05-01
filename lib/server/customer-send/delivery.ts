@@ -12,6 +12,7 @@ import {
 } from './document'
 import {
   markEstimatePublicVersionSent,
+  supersedeOlderPublicEstimateVersions,
   updateEstimatePublicVersionSnapshot,
   writeEstimatePublicEvent,
 } from './repository'
@@ -121,6 +122,7 @@ export async function submitCustomerSendMessage(params: {
     (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
   )
   const pdfAttachment = buildCustomerSendPdfAttachment(document)
+  let sentAt = ''
 
   if (pdfAttachment) {
     const folderId = readDriveEstimatesFolderId()
@@ -159,27 +161,12 @@ export async function submitCustomerSendMessage(params: {
     }
   }
 
-  const send = await sendGmailMessage({
-    origin: params.origin,
-    orgId: params.orgId,
-    userId: params.userId,
-    to: params.draft.to_email,
-    cc: params.draft.cc_email,
-    bcc: params.draft.bcc_email,
-    subject,
-    bodyText,
-    attachment: pdfAttachment,
-  })
-  if ('error' in send) {
-    return errorResult('invalid_input', send.error ?? params.copy.sendFailureMessage)
-  }
-
   if (params.mode === 'send') {
     if (!pendingPublicToken) {
       return errorResult('server_error', params.copy.lockFailureMessage)
     }
 
-    const sentAt = new Date().toISOString()
+    sentAt = new Date().toISOString()
     const sentVersion = await markEstimatePublicVersionSent({
       orgId: params.orgId,
       versionId: asText(publicVersion.id),
@@ -195,7 +182,35 @@ export async function submitCustomerSendMessage(params: {
       version: publicVersion,
       fallback: params.context.public_url,
     })
+  }
 
+  const send = await sendGmailMessage({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+    to: params.draft.to_email,
+    cc: params.draft.cc_email,
+    bcc: params.draft.bcc_email,
+    subject,
+    bodyText,
+    attachment: pdfAttachment,
+  })
+  if ('error' in send) {
+    if (params.mode === 'send') {
+      return okResult({
+        mode: params.mode,
+        public_url: publicUrl,
+        version: publicVersion,
+        delivery_error: send.error ?? params.copy.sendFailureMessage,
+        document: readSnapshotDocument(
+          (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
+        ),
+      })
+    }
+    return errorResult('invalid_input', send.error ?? params.copy.sendFailureMessage)
+  }
+
+  if (params.mode === 'send') {
     const eventResult = await writeEstimatePublicEvent({
       orgId: params.orgId,
       versionId: asText(publicVersion.id),
@@ -205,6 +220,23 @@ export async function submitCustomerSendMessage(params: {
       metadata: { publicUrl },
     })
     if (!eventResult.ok) return eventResult
+
+    const sentDocument = readSnapshotDocument(
+      (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
+    )
+    const estimateId =
+      asText((sentDocument?.meta as { estimate_id?: unknown } | undefined)?.estimate_id) ||
+      asText(params.context.estimate?.id)
+    if (estimateId) {
+      const supersedeResult = await supersedeOlderPublicEstimateVersions({
+        orgId: params.orgId,
+        estimateId,
+        currentVersionId: asText(publicVersion.id),
+        supersededAt: sentAt,
+        userId: params.userId,
+      })
+      if (!supersedeResult.ok) return supersedeResult
+    }
   }
 
   return okResult({

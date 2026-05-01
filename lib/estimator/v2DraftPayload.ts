@@ -189,6 +189,9 @@ export function buildEstimateV2SavePayload(
     ceiling_primer_id: toNullableText(jobSettingsDraft.ceilingPrimerProductId),
     trim_paint_id: toNullableText(jobSettingsDraft.trimPaintProductId),
     trim_primer_id: toNullableText(jobSettingsDraft.trimPrimerProductId),
+    standard_door_deduction_sf: jobSettingsDraft.standardDoorDeductionSf ?? 21,
+    standard_window_deduction_sf: jobSettingsDraft.standardWindowDeductionSf ?? 15,
+    baseboard_opening_deduction_lf: jobSettingsDraft.baseboardOpeningDeductionLf ?? 3,
     condition_selections: jobSettingsDraft.conditionSelections ?? null,
   }
 

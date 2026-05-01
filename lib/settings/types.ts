@@ -30,6 +30,12 @@ export type QuoteDefaults = {
   override_labor_rate: number
 }
 
+export type QuoteMeasurementAssumptions = {
+  standard_door_deduction_sf: number
+  standard_window_deduction_sf: number
+  baseboard_opening_deduction_lf: number
+}
+
 export type SettingsApiError = {
   error: string
 }

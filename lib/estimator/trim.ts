@@ -211,6 +211,22 @@ function splitOverrideByRatio(rawPrimary: number, rawSecondary: number, override
   }
 }
 
+function pushMissingRequiredAssumption(
+  missing: MissingInput[],
+  scope: TrimCalculationScopeRow,
+  field: string
+) {
+  if (scope.include === 'N' || scope.paint_enabled === 'N') return
+  missing.push({
+    level: 'scope',
+    room_id: scope.room_id,
+    scope_id: trimScopeKey(scope),
+    segment_id: null,
+    field,
+    message: `Trim scope ${scope.scope_name ?? scope.position + 1}: ${field} is required`,
+  })
+}
+
 export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutput {
   const settings = resolveSettings(input.settings, input.catalogs)
   const products = productMap(input.catalogs)
@@ -278,7 +294,11 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
     }
 
     const openingAdjustedMeasurement = isBaseboardLfScope(scope)
-      ? deductBaseboardOpenings(rawMeasurement, nonNeg(n(scope.baseboard_opening_count)))
+      ? deductBaseboardOpenings(
+          rawMeasurement,
+          nonNeg(n(scope.baseboard_opening_count)),
+          settings.baseboard_opening_deduction_lf
+        )
       : rawMeasurement
 
     const effectiveMeasurement =
@@ -296,6 +316,51 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
         const mappedRateId = trimTypeMap.get(scope.trim_type_id.toUpperCase())?.default_production_rate_id
         if (mappedRateId) productionRateRow = productionRates.byId.get(mappedRateId.toUpperCase())
       }
+    }
+
+    const paintProduct = scope.paint_product_id ? products.get(scope.paint_product_id) : undefined
+    const primerProduct = scope.primer_product_id ? products.get(scope.primer_product_id) : undefined
+    const required: Array<[string, unknown]> = [
+      ['labor_rate_per_hour', scope.labor_rate_per_hour ?? input.settings?.labor_rate_per_hour],
+      [
+        'paint_prod_rate_units_per_hour',
+        scope.paint_prod_rate_units_per_hour ?? productionRateRow?.units_per_hour ?? input.settings?.paint_prod_rate_sqft_per_hour,
+      ],
+      [
+        'paint_coverage_units_per_gal_per_coat',
+        scope.paint_coverage_units_per_gal_per_coat ??
+          paintProduct?.coverage_sqft_per_gal_per_coat ??
+          input.settings?.paint_coverage_sqft_per_gal_per_coat,
+      ],
+      ['paint_coats', scope.paint_coats ?? input.settings?.paint_coats],
+      ['paint_price_per_gal', scope.paint_price_per_gal ?? paintProduct?.price_per_gal ?? input.settings?.paint_price_per_gal],
+    ]
+    if (scope.prime_mode !== 'NONE') {
+      required.push(
+        [
+          'primer_prod_rate_units_per_hour',
+          scope.primer_prod_rate_units_per_hour ??
+            productionRateRow?.primer_units_per_hour ??
+            input.settings?.primer_prod_rate_sqft_per_hour,
+        ],
+        [
+          'primer_coverage_units_per_gal_per_coat',
+          scope.primer_coverage_units_per_gal_per_coat ??
+            primerProduct?.coverage_sqft_per_gal_per_coat ??
+            input.settings?.primer_coverage_sqft_per_gal_per_coat,
+        ],
+        ['primer_coats', scope.primer_coats ?? input.settings?.primer_coats],
+        [
+          'primer_price_per_gal',
+          scope.primer_price_per_gal ?? primerProduct?.price_per_gal ?? input.settings?.primer_price_per_gal,
+        ]
+      )
+    }
+    if (scope.prime_mode === 'SPOT') {
+      required.push(['spot_prime_percent', scope.spot_prime_percent ?? input.settings?.spot_prime_percent])
+    }
+    for (const [field, value] of required) {
+      if (pos(n(value)) == null) pushMissingRequiredAssumption(missingInputs, scope, field)
     }
 
     const modifier = round4(
@@ -324,8 +389,6 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       pos(n(productionRateRow?.primer_units_per_hour)) ??
       settings.primer_prod_rate_sqft_per_hour
 
-    const paintProduct = scope.paint_product_id ? products.get(scope.paint_product_id) : undefined
-    const primerProduct = scope.primer_product_id ? products.get(scope.primer_product_id) : undefined
     const paintCoverage =
       pos(n(scope.paint_coverage_units_per_gal_per_coat)) ??
       pos(n(paintProduct?.coverage_sqft_per_gal_per_coat)) ??
@@ -345,11 +408,11 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
     const primerMeasurement = include === 'Y' ? round4(effectiveMeasurement * primerMultiplier) : 0
 
     const rawPaintHours =
-      include === 'Y' && paintEnabled === 'Y'
+      include === 'Y' && paintEnabled === 'Y' && paintRate > 0
         ? round4(((effectiveMeasurement * paintCoats) / paintRate) * modifier)
         : 0
     const rawPrimerHours =
-      include === 'Y' && paintEnabled === 'Y'
+      include === 'Y' && paintEnabled === 'Y' && primerRate > 0
         ? round4(((primerMeasurement * primerCoats) / primerRate) * modifier)
         : 0
 
@@ -360,11 +423,11 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
         : { primary: rawPaintHours, secondary: rawPrimerHours }
 
     const rawPaintGallons =
-      include === 'Y' && paintEnabled === 'Y'
+      include === 'Y' && paintEnabled === 'Y' && paintCoverage > 0
         ? round4((effectiveMeasurement * paintCoats) / paintCoverage)
         : 0
     const rawPrimerGallons =
-      include === 'Y' && paintEnabled === 'Y'
+      include === 'Y' && paintEnabled === 'Y' && primerCoverage > 0
         ? round4((primerMeasurement * primerCoats) / primerCoverage)
         : 0
 

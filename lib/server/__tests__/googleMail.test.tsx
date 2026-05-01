@@ -100,6 +100,30 @@ describe('sendGmailMessage', () => {
     expect(rawMessage).toContain('Subject: Quote ready Extra')
   })
 
+  it('sends multipart alternative content when html body is provided', async () => {
+    const result = await sendGmailMessage({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      to: 'customer@example.com',
+      subject: 'Quote accepted',
+      bodyText: 'Plain fallback',
+      bodyHtml: '<p><strong>Formatted confirmation</strong></p>',
+    })
+
+    expect(result).toEqual({ messageId: 'gmail-message-1' })
+    const fetchMock = vi.mocked(fetch)
+    const [, init] = fetchMock.mock.calls[0]
+    const payload = JSON.parse(String(init?.body)) as { raw: string }
+    const rawMessage = decodeRawMessage(payload.raw)
+
+    expect(rawMessage).toContain('Content-Type: multipart/alternative;')
+    expect(rawMessage).toContain('Content-Type: text/plain; charset="UTF-8"')
+    expect(rawMessage).toContain('Plain fallback')
+    expect(rawMessage).toContain('Content-Type: text/html; charset="UTF-8"')
+    expect(rawMessage).toContain('<p><strong>Formatted confirmation</strong></p>')
+  })
+
   it('rejects malformed to, cc, and bcc recipient lists', async () => {
     const badTo = await sendGmailMessage({
       origin: 'https://example.test',

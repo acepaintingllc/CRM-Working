@@ -476,6 +476,9 @@ describe('customer service layer', () => {
           error: null,
         }
       }
+      if (state.table === 'estimates') {
+        return { data: [], error: null }
+      }
       throw new Error(`Unexpected table ${state.table}`)
     })
 
@@ -486,6 +489,98 @@ describe('customer service layer', () => {
       expect(result.data[0]?.id).toBe('job-job-1-job_scheduled-2026-04-22T09:00:00.000Z')
       expect(result.data[1]?.id).toBe('note-1')
       expect(result.data[2]?.id).toBe('job-job-1-job_created-2026-04-20T08:00:00.000Z')
+    }
+  })
+
+  it('merges public quote events into the customer timeline', async () => {
+    const db = createMockDb((state) => {
+      if (state.table === 'customers') return { data: { id: 'customer-1' }, error: null }
+      if (state.table === 'customer_timeline') return { data: [], error: null }
+      if (state.table === 'jobs') {
+        return {
+          data: [
+            {
+              id: 'job-1',
+              title: 'Kitchen repaint',
+              status: 'estimate_sent',
+              created_at: '2026-04-20T08:00:00.000Z',
+              estimate_date: null,
+              scheduled_date: null,
+              completed_at: null,
+            },
+          ],
+          error: null,
+        }
+      }
+      if (state.table === 'job_schedules') return { data: [], error: null }
+      if (state.table === 'estimates') {
+        return { data: [{ id: 'estimate-1', job_id: 'job-1' }], error: null }
+      }
+      if (state.table === 'estimate_public_versions') {
+        return {
+          data: [
+            {
+              id: 'public-version-1',
+              estimate_id: 'estimate-1',
+              version_number: 2,
+              public_token: 'token-1',
+            },
+          ],
+          error: null,
+        }
+      }
+      if (state.table === 'estimate_public_events') {
+        return {
+          data: [
+            {
+              id: 'quote-sent',
+              estimate_public_version_id: 'public-version-1',
+              event_type: 'sent',
+              actor_type: 'staff',
+              metadata: { publicUrl: 'https://example.test/quote/token-1' },
+              created_at: '2026-04-21T10:00:00.000Z',
+              created_by: 'staff-1',
+            },
+            {
+              id: 'quote-viewed',
+              estimate_public_version_id: 'public-version-1',
+              event_type: 'viewed',
+              actor_type: 'customer',
+              metadata: {},
+              created_at: '2026-04-21T11:00:00.000Z',
+              created_by: null,
+            },
+            {
+              id: 'quote-accepted',
+              estimate_public_version_id: 'public-version-1',
+              event_type: 'accepted',
+              actor_type: 'customer',
+              metadata: {},
+              created_at: '2026-04-21T12:00:00.000Z',
+              created_by: null,
+            },
+          ],
+          error: null,
+        }
+      }
+      throw new Error(`Unexpected table ${state.table}`)
+    })
+
+    const result = await listCustomerTimeline('org-1', 'customer-1', { db })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.map((event) => event.title)).toEqual([
+        'Quote accepted',
+        'Quote viewed',
+        'Quote sent',
+        'Job created',
+      ])
+      expect(result.data[0]).toMatchObject({
+        body: 'Kitchen repaint\nPublic version #2',
+        link_path: 'https://example.test/quote/token-1',
+        link_label: 'Open quote',
+      })
     }
   })
 
@@ -501,6 +596,9 @@ describe('customer service layer', () => {
       }
       if (state.table === 'job_schedules') {
         return { data: null, error: { message: 'schedule failure' } }
+      }
+      if (state.table === 'estimates') {
+        return { data: [], error: null }
       }
       throw new Error(`Unexpected table ${state.table}`)
     })

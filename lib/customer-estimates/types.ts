@@ -14,12 +14,14 @@ export type EstimatePublicSignatureType = 'typed' | 'drawn'
 
 export type EstimatePublicAcceptanceRecord = {
   legal_name: string
+  customer_email?: string
   signature_type: EstimatePublicSignatureType
   signature_value: string
   accepted_terms: true
   accepted_at: string
   user_agent: string
   ip: string
+  customer_message?: string
 }
 
 export type CompanyProfile = {
@@ -172,6 +174,7 @@ export type EstimatePublicSnapshot = {
   draft: Record<string, unknown>
   document: CustomerEstimateDocument
   snapshot_json: Record<string, unknown>
+  acceptance_json: EstimatePublicAcceptanceRecord | null
   sent_at: string | null
   viewed_at: string | null
   accepted_at: string | null

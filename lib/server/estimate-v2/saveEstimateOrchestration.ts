@@ -140,6 +140,15 @@ async function upsertEstimateJobSettings(params: {
       trim_primer_uom: has('trim_primer_uom') ? asText(row.trim_primer_uom) || null : existingRow.trim_primer_uom,
       paint_supplied_by: has('paint_supplied_by') ? asText(row.paint_supplied_by) || null : existingRow.paint_supplied_by,
       crew_size: has('crew_size') ? asNullableNumber(row.crew_size) : existingRow.crew_size,
+      standard_door_deduction_sf: has('standard_door_deduction_sf')
+        ? asNullableNumber(row.standard_door_deduction_sf)
+        : existingRow.standard_door_deduction_sf,
+      standard_window_deduction_sf: has('standard_window_deduction_sf')
+        ? asNullableNumber(row.standard_window_deduction_sf)
+        : existingRow.standard_window_deduction_sf,
+      baseboard_opening_deduction_lf: has('baseboard_opening_deduction_lf')
+        ? asNullableNumber(row.baseboard_opening_deduction_lf)
+        : existingRow.baseboard_opening_deduction_lf,
       labor_day_policy_enabled: has('labor_day_policy_enabled')
         ? typeof row.labor_day_policy_enabled === 'boolean'
           ? row.labor_day_policy_enabled

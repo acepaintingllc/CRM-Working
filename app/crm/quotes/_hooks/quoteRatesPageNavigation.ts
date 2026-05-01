@@ -42,14 +42,16 @@ export type QuoteRatesTransitionPlan =
 export function resolveActiveCategoryKey(navigation: QuoteRatesNavigationState) {
   if (navigation.activeTab === 'rates') return navigation.rateCategory
   if (navigation.activeTab === 'flags') return navigation.flagsSection
-  return navigation.roomDefaultsSection
+  if (navigation.activeTab === 'room_defaults') return navigation.roomDefaultsSection
+  return null
 }
 
 export function resolveActiveCategory(
   payload: RatesFlagsPayload,
   navigation: QuoteRatesNavigationState
 ): RatesFlagsCategory | null {
-  return categoryByKey(payload.categories, resolveActiveCategoryKey(navigation))
+  const activeCategoryKey = resolveActiveCategoryKey(navigation)
+  return activeCategoryKey ? categoryByKey(payload.categories, activeCategoryKey) : null
 }
 
 export function getFilteredRows(

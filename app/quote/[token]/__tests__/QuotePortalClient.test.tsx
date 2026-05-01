@@ -25,9 +25,19 @@ function createWorkflowSnapshot(status: EstimatePublicSnapshot['status']) {
 function createPublicSnapshot({
   status = 'sent',
   publicToken = 'public-token',
+  acceptedAt = null,
+  declinedAt = null,
+  acceptanceJson = null,
+  sentAt = null,
+  quoteValidityDays = 30,
 }: {
   status?: EstimatePublicSnapshot['status']
   publicToken?: string
+  acceptedAt?: string | null
+  declinedAt?: string | null
+  acceptanceJson?: EstimatePublicSnapshot['acceptance_json']
+  sentAt?: string | null
+  quoteValidityDays?: number
 } = {}): EstimatePublicSnapshot {
   return {
     estimate_id: 'estimate-1',
@@ -45,10 +55,10 @@ function createPublicSnapshot({
           status,
           flow_version: 'v2',
           quote_date: '2026-04-15',
-          sent_at: null,
+          sent_at: sentAt,
           viewed_at: null,
-          accepted_at: null,
-          declined_at: null,
+          accepted_at: acceptedAt,
+          declined_at: declinedAt,
           estimate_id: 'estimate-1',
           version_state: 'sent',
           public_token: publicToken,
@@ -62,10 +72,10 @@ function createPublicSnapshot({
         status,
         flow_version: 'v2',
         quote_date: '2026-04-15',
-        sent_at: null,
+        sent_at: sentAt,
         viewed_at: null,
-        accepted_at: null,
-        declined_at: null,
+        accepted_at: acceptedAt,
+        declined_at: declinedAt,
         estimate_id: 'estimate-1',
         version_state: 'sent',
         public_token: publicToken,
@@ -92,7 +102,7 @@ function createPublicSnapshot({
       },
       intro_paragraph: '',
       closing_paragraph: '',
-      quote_validity_days: 30,
+      quote_validity_days: quoteValidityDays,
       deposit_language: '',
       card_fee_note: '',
       quote_rows: [],
@@ -154,11 +164,12 @@ function createPublicSnapshot({
         used_explicit_terms_text: false,
       },
     },
-    sent_at: null,
+    sent_at: sentAt,
     viewed_at: null,
-    accepted_at: null,
-    declined_at: null,
+    accepted_at: acceptedAt,
+    declined_at: declinedAt,
     locked_at: null,
+    acceptance_json: acceptanceJson,
   }
 }
 
@@ -169,6 +180,7 @@ describe('QuotePortalClient', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     cleanup()
   })
@@ -181,6 +193,7 @@ describe('QuotePortalClient', () => {
     const legalName = screen.getByLabelText('Full legal name')
     fireEvent.change(legalName, { target: { value: 'Jordan Customer' } })
 
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
     const typedSignature = screen.getByLabelText('Typed signature')
     fireEvent.change(typedSignature, { target: { value: 'Jordan Customer' } })
 
@@ -196,13 +209,32 @@ describe('QuotePortalClient', () => {
       expect(init?.method).toBe('POST')
       expect(body).toMatchObject({
         legal_name: 'Jordan Customer',
+        customer_email: 'jordan@example.com',
         signature_type: 'typed',
         signature_value: 'Jordan Customer',
         accepted_terms: true,
       })
     })
 
-    expect(await screen.findByText('This quote has been accepted and locked.')).toBeTruthy()
+    expect(await screen.findAllByText("Quote accepted. We'll contact you to schedule.")).toHaveLength(1)
+  })
+
+  it('defaults to typed signature mode', () => {
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    expect(screen.getByRole('combobox', { name: 'Signature mode' })).toHaveValue('typed')
+    expect(screen.getByLabelText('Typed signature')).toBeTruthy()
+    expect(screen.getByText('Signature preview')).toBeTruthy()
+  })
+
+  it('shows a cursive-style preview for typed signatures', () => {
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
+    fireEvent.change(screen.getByLabelText('Typed signature'), { target: { value: 'Jordan Customer' } })
+
+    expect(screen.getByText('Signature preview')).toBeTruthy()
+    expect(screen.getByTestId('typed-signature-preview').textContent).toBe('Jordan Customer')
   })
 
   it('supports drawn signatures and submits canvas payload', async () => {
@@ -221,8 +253,9 @@ describe('QuotePortalClient', () => {
     expect(accept).toBeDisabled()
 
     fireEvent.pointerDown(signatureCanvas, { pointerId: 1, clientX: 10, clientY: 10 })
-    fireEvent.pointerMove(signatureCanvas, { pointerId: 1, clientX: 12, clientY: 12 })
-    fireEvent.pointerUp(signatureCanvas, { pointerId: 1, clientX: 12, clientY: 12 })
+    fireEvent.pointerMove(signatureCanvas, { pointerId: 1, clientX: 20, clientY: 12 })
+    fireEvent.pointerMove(signatureCanvas, { pointerId: 1, clientX: 28, clientY: 11 })
+    fireEvent.pointerUp(signatureCanvas, { pointerId: 1, clientX: 28, clientY: 11 })
 
     expect(accept).toBeEnabled()
     fireEvent.click(accept)
@@ -236,6 +269,30 @@ describe('QuotePortalClient', () => {
     })
   })
 
+  it('rejects tiny drawn marks but accepts a short intentional signature stroke', () => {
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'drawn' } })
+
+    const signatureCanvas = screen.getByTestId('quote-signature-canvas') as HTMLCanvasElement
+    signatureCanvas.toDataURL = vi.fn(() => 'data:image/png;base64,QUJDRA==')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
+
+    const accept = screen.getByRole('button', { name: 'Accept Quote' })
+    fireEvent.pointerDown(signatureCanvas, { pointerId: 1, clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(signatureCanvas, { pointerId: 1, clientX: 12, clientY: 10 })
+    fireEvent.pointerUp(signatureCanvas, { pointerId: 1, clientX: 12, clientY: 10 })
+
+    expect(accept).toBeDisabled()
+
+    fireEvent.pointerDown(signatureCanvas, { pointerId: 1, clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(signatureCanvas, { pointerId: 1, clientX: 20, clientY: 12 })
+    fireEvent.pointerMove(signatureCanvas, { pointerId: 1, clientX: 28, clientY: 11 })
+    fireEvent.pointerUp(signatureCanvas, { pointerId: 1, clientX: 28, clientY: 11 })
+
+    expect(accept).toBeEnabled()
+  })
+
   it('shows submit disabled state while accepting', async () => {
     let resolveFetch: (value: unknown) => void = () => {}
     const pending = new Promise((resolve) => {
@@ -245,57 +302,103 @@ describe('QuotePortalClient', () => {
 
     render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
 
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
+    fireEvent.change(screen.getByLabelText('Typed signature'), { target: { value: 'Jordan Customer' } })
     fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
     const acceptButton = screen.getByRole('button', { name: 'Accept Quote' })
-    const declineButton = screen.getByRole('button', { name: 'Decline' })
     fireEvent.click(acceptButton)
 
     expect(acceptButton).toBeDisabled()
-    expect(declineButton).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull()
     expect(screen.getByText('Submitting quote acceptance...')).toBeTruthy()
 
     resolveFetch(createResponse({ data: createWorkflowSnapshot('accepted') }))
 
-    expect(await screen.findByText('This quote has been accepted and locked.')).toBeTruthy()
+    expect(await screen.findAllByText("Quote accepted. We'll contact you to schedule.")).toHaveLength(1)
   })
 
-  it('submits decline reasons and locks the portal on success', async () => {
-    mockFetch.mockResolvedValue(
-      createResponse({ data: createPublicSnapshot({ status: 'declined' }) })
-    )
-
+  it('hides decline controls on the active sign page', () => {
     render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
 
-    fireEvent.change(screen.getByLabelText('Decline note'), {
-      target: { value: 'Going another direction' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+    expect(screen.queryByLabelText('Decline note')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeTruthy()
+  })
 
-    await waitFor(() => {
-      const [url, init] = mockFetch.mock.calls[0]
-      const body = JSON.parse(String(init?.body))
-      expect(url).toBe('/api/quote-public/public-token/decline')
-      expect(init?.method).toBe('POST')
-      expect(body).toEqual({
-        reason: 'Going another direction',
-      })
-    })
+  it('shows a soft expiration warning without blocking acceptance', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-29T12:00:00.000Z'))
 
-    expect(await screen.findByText('This quote has been declined and locked.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+    render(
+      <QuotePortalClient
+        snapshot={createPublicSnapshot({
+          sentAt: '2026-03-01T12:00:00.000Z',
+          quoteValidityDays: 30,
+        })}
+      />
+    )
+
+    expect(screen.getByText('This quote may be expired, contact us.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeDisabled()
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
+    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Typed signature'), { target: { value: 'Jordan Customer' } })
+    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeEnabled()
   })
 
   it('renders locked content for accepted quote', () => {
-    render(<QuotePortalClient snapshot={createPublicSnapshot({ status: 'accepted' })} />)
+    render(
+      <QuotePortalClient
+        snapshot={createPublicSnapshot({
+          status: 'accepted',
+          acceptedAt: '2026-04-15T15:30:00.000Z',
+          acceptanceJson: {
+            legal_name: 'Jordan Customer',
+            signature_type: 'typed',
+            signature_value: 'Jordan Customer',
+            accepted_terms: true,
+            accepted_at: '2026-04-15T15:30:00.000Z',
+            user_agent: '',
+            ip: '',
+          },
+        })}
+      />
+    )
 
-    expect(screen.getByText('This quote has been accepted and locked.')).toBeTruthy()
+    expect(screen.getAllByText("Quote accepted. We'll contact you to schedule.")).toHaveLength(1)
+    expect(screen.getByText('Signed by Jordan Customer')).toBeTruthy()
+    expect(screen.getByText(/Accepted Apr 15, 2026/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Print Quote' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'View quote' })).toBeNull()
+    expect(screen.queryByText('Accepted quote record')).toBeNull()
+    expect(screen.queryByText('Legal name')).toBeNull()
+    expect(screen.getByText('Jordan Customer')).toBeTruthy()
+    expect(screen.queryByText('Signature type')).toBeNull()
+    expect(screen.queryByText('Typed')).toBeNull()
+    expect(screen.queryByText('Public version')).toBeNull()
+    expect(screen.queryByText('#1')).toBeNull()
+    expect(screen.queryByText('IP address')).toBeNull()
+    expect(screen.queryByText('User agent')).toBeNull()
+    expect(screen.queryByText('Accepted quote link')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
   })
 
   it('renders locked content for declined quote', () => {
     render(<QuotePortalClient snapshot={createPublicSnapshot({ status: 'declined' })} />)
 
-    expect(screen.getByText('This quote has been declined and locked.')).toBeTruthy()
+    expect(
+      screen.getAllByText("Quote declined. We'll review your note and follow up if anything else is needed.")
+    ).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+  })
+
+  it('renders read-only content for superseded quote', () => {
+    render(<QuotePortalClient snapshot={createPublicSnapshot({ status: 'superseded' })} />)
+
+    expect(screen.getAllByText('A newer quote is available.')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
   })
 
@@ -311,11 +414,13 @@ describe('QuotePortalClient', () => {
 
     render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
 
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
+    fireEvent.change(screen.getByLabelText('Typed signature'), { target: { value: 'Jordan Customer' } })
     fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
     fireEvent.click(screen.getByRole('button', { name: 'Accept Quote' }))
 
     expect(await screen.findByText('Cannot accept a declined quote')).toBeTruthy()
-    expect(screen.queryByText('This quote has been accepted and locked.')).toBeNull()
+    expect(screen.queryByText("Quote accepted. We'll contact you to schedule.")).toBeNull()
   })
 
   it('keeps the quote portal client as a thin wrapper over the shared public portal', () => {
@@ -332,5 +437,39 @@ describe('QuotePortalClient', () => {
     ])
     expect(source.includes('buildCustomerEstimateDocument')).toBe(false)
     expect(source.includes('assembleCustomerEstimateDocument')).toBe(false)
+  })
+
+  it('does not expose internal print diagnostics on the customer signing page', () => {
+    const source = readFileSync(
+      path.resolve(process.cwd(), 'lib/customer-estimates/PublicEstimatePortal.tsx'),
+      'utf8'
+    )
+
+    expect(source).toContain('showOverflowWarnings={false}')
+    expect(source).not.toContain('<AcceptedQuoteRecord')
+  })
+
+  it('keeps the public signing portal usable on phone-sized screens', () => {
+    const portalStyles = readFileSync(
+      path.resolve(process.cwd(), 'lib/customer-estimates/PublicEstimatePortal.module.css'),
+      'utf8'
+    )
+    const documentViewSource = readFileSync(
+      path.resolve(process.cwd(), 'lib/customer-estimates/view.tsx'),
+      'utf8'
+    )
+
+    expect(portalStyles).toContain('@media (max-width: 640px)')
+    expect(portalStyles).toContain("data:image/svg+xml,%3Csvg")
+    expect(portalStyles).toContain("polyline points='20 6 9 17 4 12'")
+    expect(portalStyles).toContain('.documentWrap')
+    expect(portalStyles).toContain('overflow-x: visible')
+    expect(portalStyles).toContain('grid-template-columns: 1fr')
+    expect(portalStyles).toContain('min-height: 54px')
+    expect(documentViewSource).toContain('@media (max-width: 640px)')
+    expect(documentViewSource).toContain('padding-top: 0 !important')
+    expect(documentViewSource).toContain('position: static !important')
+    expect(documentViewSource).toContain('padding: 22px 18px !important')
+    expect(documentViewSource).toContain('font-size: 11.5px !important')
   })
 })

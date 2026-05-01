@@ -83,10 +83,10 @@ test('calculateDoors reports missing door type for included rows', () => {
   assert.equal(result.missing_inputs.some((issue) => issue.field === 'door_type_id'), true)
 })
 
-test('calculateDoors uses catalog default quantity and default two sides when scope values are blank', () => {
+test('calculateDoors requires quantity and sides instead of using hidden defaults', () => {
   const result = calculateDoors({
     scopes: [{
-      id: 'door-defaults',
+      id: 'door-missing-inputs',
       room_id: 'ROOM-1',
       include: 'Y',
       door_type_id: 'STD',
@@ -108,9 +108,11 @@ test('calculateDoors uses catalog default quantity and default two sides when sc
     },
   })
 
-  assert.equal(result.scopes[0].raw_units, 6)
-  assert.equal(result.scopes[0].effective_paint_hours, 1.2)
-  assert.equal(result.scopes[0].effective_total, 144)
+  assert.equal(result.missing_inputs.some((issue) => issue.field === 'quantity'), true)
+  assert.equal(result.missing_inputs.some((issue) => issue.field === 'sides'), true)
+  assert.equal(result.scopes[0].raw_units, 0)
+  assert.equal(result.scopes[0].effective_units, 0)
+  assert.equal(result.scopes[0].effective_total, 0)
 })
 
 test('calculateDoors supports one-sided doors without applying a hidden second side', () => {

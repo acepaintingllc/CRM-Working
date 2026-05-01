@@ -3,6 +3,7 @@ import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
 import {
   prepareEstimateV2SaveState,
+  collectEstimateV2CalculationMissingInputIssues,
   resolveEstimateV2SaveResponseState,
   validateEstimateV2PreparedSave,
 } from '../estimateV2EditorSaveOrchestration'
@@ -108,5 +109,42 @@ describe('estimateV2EditorSaveOrchestration', () => {
       fixture.wallCalculations.scopes?.length ?? 0
     )
     expect(result.lastSavedSnapshot.comparisonKey).toBeTruthy()
+  })
+
+  it('formats calculator missing inputs as editor validation issues', () => {
+    const issues = collectEstimateV2CalculationMissingInputIssues({
+      wallCalculations: {
+        missing_inputs: [
+          {
+            level: 'scope',
+            room_id: 'R001',
+            scope_id: 'wall-1',
+            segment_id: null,
+            field: 'paint_prod_rate_sqft_per_hour',
+            message: 'Scope Main: paint_prod_rate_sqft_per_hour is required',
+          },
+        ],
+      },
+      ceilingCalculations: { missing_inputs: [] },
+      trimCalculations: null,
+      doorCalculations: {
+        missing_inputs: [
+          {
+            level: 'scope',
+            room_id: 'R002',
+            scope_id: 'door-1',
+            segment_id: null,
+            field: 'quantity',
+            message: 'Door scope 1: quantity is required',
+          },
+        ],
+      },
+      drywallCalculations: undefined,
+    })
+
+    expect(issues).toEqual([
+      'Walls: Scope Main: paint_prod_rate_sqft_per_hour is required',
+      'Doors: Door scope 1: quantity is required',
+    ])
   })
 })

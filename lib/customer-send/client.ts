@@ -14,6 +14,7 @@ export type CustomerSendVersion = {
 export type CustomerSendMutationResponse = {
   public_url?: string | null
   version?: CustomerSendVersion | null
+  delivery_error?: string | null
 }
 
 export async function loadCustomerSendPage<T>(url: string) {

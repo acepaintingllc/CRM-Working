@@ -244,6 +244,9 @@ export type EstimateV2JobSettingsInput = {
   trim_paint_id?: string | null
   trim_primer_id?: string | null
   primer_id?: string | null
+  standard_door_deduction_sf?: number | null
+  standard_window_deduction_sf?: number | null
+  baseboard_opening_deduction_lf?: number | null
   condition_selections?: EstimateV2ConditionSelections | null
 }
 
@@ -366,6 +369,9 @@ export type EstimateV2JobSettingsDraft = {
   ceilingPrimerProductId: string
   trimPaintProductId: string
   trimPrimerProductId: string
+  standardDoorDeductionSf?: number
+  standardWindowDeductionSf?: number
+  baseboardOpeningDeductionLf?: number
   conditionSelections?: EstimateV2ConditionSelections
   resolvedConditionFactors?: ConditionScopeFactors
 }
@@ -687,6 +693,9 @@ export type EstimateV2SavePayload = {
     ceiling_primer_id: string | null
     trim_paint_id: string | null
     trim_primer_id: string | null
+    standard_door_deduction_sf: number
+    standard_window_deduction_sf: number
+    baseboard_opening_deduction_lf: number
     condition_selections: EstimateV2ConditionSelections | null
   }
   rooms: Array<{

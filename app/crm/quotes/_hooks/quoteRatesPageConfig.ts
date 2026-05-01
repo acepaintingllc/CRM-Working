@@ -2,9 +2,11 @@ import {
   ratesFlagsEditableCategoryRegistry,
   type RatesFlagsEditableCategoryKey,
   type RatesFlagsNavigationGroup,
+  type RatesFlagsTab,
 } from '@/types/estimator/ratesFlags'
 
 export type StatusFilter = 'active' | 'archived' | 'all'
+export type QuoteRatesTopTab = RatesFlagsTab | 'assumptions'
 export type RateSectionKey = Extract<
   RatesFlagsNavigationGroup,
   'production' | 'unit_rates' | 'access_fees' | 'supplies'

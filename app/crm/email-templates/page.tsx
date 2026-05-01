@@ -17,7 +17,6 @@ export default function EmailTemplatesPage() {
     <CrmPageShell className="max-w-[900px]">
       <CrmPageHeader
         eyebrow="Message system"
-        emoji="ðŸ“¬"
         title="Email templates"
         description="Draft templates per job stage. Variables will be filled later from the customer and job."
         badge={<CrmChip tone="accent">Settings-style editable resource</CrmChip>}

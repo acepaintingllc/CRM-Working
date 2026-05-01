@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useMemo } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { EMAIL_BODY_TEXTAREA_MIN_HEIGHT } from '@/app/crm/_components/emailComposerStyles'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import {
@@ -51,7 +52,7 @@ const inputBase: CSSProperties = {
 
 const textareaBase: CSSProperties = {
   ...inputBase,
-  minHeight: 96,
+  minHeight: EMAIL_BODY_TEXTAREA_MIN_HEIGHT,
   resize: 'vertical',
   lineHeight: 1.5,
 }

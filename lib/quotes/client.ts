@@ -13,7 +13,7 @@ import type {
   QuoteProductStatusFilter,
 } from './productsForm.ts'
 import type { CreateQuoteVersionInput } from './versionCreation.ts'
-import type { QuoteDefaults } from '../settings/types.ts'
+import type { QuoteDefaults, QuoteMeasurementAssumptions } from '../settings/types.ts'
 import type {
   RatesFlagsMutationRequestByCategory,
   RatesFlagsPayload,
@@ -154,6 +154,17 @@ export async function loadQuoteDefaults() {
 
 export async function saveQuoteDefaults(data: QuoteDefaults) {
   return saveData('/api/settings/quote-defaults', data)
+}
+
+export async function loadQuoteMeasurementAssumptions() {
+  return loadData<QuoteMeasurementAssumptions>(
+    '/api/settings/quote-measurement-assumptions',
+    { cache: 'no-store' }
+  )
+}
+
+export async function saveQuoteMeasurementAssumptions(data: QuoteMeasurementAssumptions) {
+  return saveData('/api/settings/quote-measurement-assumptions', data)
 }
 
 export async function loadRatesFlags() {

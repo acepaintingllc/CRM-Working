@@ -5,12 +5,14 @@ const {
   mockSendGmailMessage,
   mockUploadDriveFile,
   mockMarkEstimatePublicVersionSent,
+  mockSupersedeOlderPublicEstimateVersions,
   mockUpdateEstimatePublicVersionSnapshot,
   mockWriteEstimatePublicEvent,
 } = vi.hoisted(() => ({
   mockSendGmailMessage: vi.fn(),
   mockUploadDriveFile: vi.fn(),
   mockMarkEstimatePublicVersionSent: vi.fn(),
+  mockSupersedeOlderPublicEstimateVersions: vi.fn(),
   mockUpdateEstimatePublicVersionSnapshot: vi.fn(),
   mockWriteEstimatePublicEvent: vi.fn(),
 }))
@@ -33,6 +35,7 @@ vi.mock('@/lib/server/googleDrive', () => ({
 
 vi.mock('../repository', () => ({
   markEstimatePublicVersionSent: mockMarkEstimatePublicVersionSent,
+  supersedeOlderPublicEstimateVersions: mockSupersedeOlderPublicEstimateVersions,
   updateEstimatePublicVersionSnapshot: mockUpdateEstimatePublicVersionSnapshot,
   writeEstimatePublicEvent: mockWriteEstimatePublicEvent,
 }))
@@ -66,6 +69,7 @@ const baseParams = {
   },
   context: {
     estimate: {
+      id: 'estimate-1',
       version_name: 'Kitchen Quote',
     },
     job: {
@@ -159,6 +163,7 @@ describe('customer send delivery', () => {
     mockSendGmailMessage.mockReset()
     mockUploadDriveFile.mockReset()
     mockMarkEstimatePublicVersionSent.mockReset()
+    mockSupersedeOlderPublicEstimateVersions.mockReset()
     mockUpdateEstimatePublicVersionSnapshot.mockReset()
     mockWriteEstimatePublicEvent.mockReset()
     delete process.env.GOOGLE_DRIVE_ESTIMATES_FOLDER_ID
@@ -178,6 +183,10 @@ describe('customer send delivery', () => {
       },
     }))
     mockWriteEstimatePublicEvent.mockResolvedValue({ ok: true, data: null })
+    mockSupersedeOlderPublicEstimateVersions.mockResolvedValue({
+      ok: true,
+      data: { supersededIds: [] },
+    })
   })
 
   it('sends a test email without locking the public version', async () => {
@@ -223,9 +232,9 @@ describe('customer send delivery', () => {
       },
     } as never)
 
-    const sendOrder = mockSendGmailMessage.mock.invocationCallOrder[0]
     const markOrder = mockMarkEstimatePublicVersionSent.mock.invocationCallOrder[0]
-    expect(sendOrder).toBeLessThan(markOrder)
+    const sendOrder = mockSendGmailMessage.mock.invocationCallOrder[0]
+    expect(markOrder).toBeLessThan(sendOrder)
     expect(mockMarkEstimatePublicVersionSent).toHaveBeenCalledWith(
       expect.objectContaining({
         versionId: 'draft-1',
@@ -244,6 +253,14 @@ describe('customer send delivery', () => {
         },
       })
     )
+    expect(mockSupersedeOlderPublicEstimateVersions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org-1',
+        estimateId: 'estimate-1',
+        currentVersionId: 'draft-1',
+        userId: 'user-1',
+      })
+    )
     expect(mockSendGmailMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         bodyText: expect.stringContaining(publicUrl),
@@ -252,9 +269,54 @@ describe('customer send delivery', () => {
     expect(result.ok).toBe(true)
   })
 
-  it('does not lock or write sent events when live send fails', async () => {
+  it('locks the public link before live send and skips sent events when Gmail fails', async () => {
     mockSendGmailMessage.mockResolvedValue({
       error: 'Gmail not configured',
+    })
+    mockMarkEstimatePublicVersionSent.mockImplementation(async (params: { publicToken: string }) => ({
+      ok: true,
+      data: {
+        id: 'draft-1',
+        public_token: params.publicToken,
+        snapshot_json: { document: true },
+      },
+    }))
+
+    const result = await submitCustomerSendMessage({
+      ...baseParams,
+      mode: 'send',
+      version: {
+        id: 'draft-1',
+        public_token: null,
+        snapshot_json: { document: true },
+      },
+    } as never)
+
+    expect(mockMarkEstimatePublicVersionSent).toHaveBeenCalled()
+    expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        mode: 'send',
+        public_url: expect.stringMatching(/^https:\/\/example\.test\/quote\/[a-z0-9]+$/i),
+        version: expect.objectContaining({
+          id: 'draft-1',
+          public_token: expect.any(String),
+          snapshot_json: { document: true },
+        }),
+        delivery_error: 'Gmail not configured',
+        document: true,
+      }),
+    })
+    if (!result.ok) return
+    expect(result.data.public_url).toBe(`https://example.test/quote/${result.data.version.public_token}`)
+  })
+
+  it('errors before sending email when the public link cannot be activated', async () => {
+    mockMarkEstimatePublicVersionSent.mockResolvedValue({
+      ok: false,
+      kind: 'server_error',
+      message: 'Unable to lock quote',
     })
 
     const result = await submitCustomerSendMessage({
@@ -267,12 +329,13 @@ describe('customer send delivery', () => {
       },
     } as never)
 
-    expect(mockMarkEstimatePublicVersionSent).not.toHaveBeenCalled()
+    expect(mockMarkEstimatePublicVersionSent).toHaveBeenCalled()
+    expect(mockSendGmailMessage).not.toHaveBeenCalled()
     expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
     expect(result).toEqual({
       ok: false,
-      kind: 'invalid_input',
-      message: 'Gmail not configured',
+      kind: 'server_error',
+      message: 'Unable to lock quote',
     })
   })
 

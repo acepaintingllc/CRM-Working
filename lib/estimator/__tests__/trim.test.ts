@@ -81,7 +81,7 @@ test('calculateTrim computes manual rows and room totals', () => {
         color_id: 'A',
         paint_product_id: null,
         primer_product_id: null,
-        paint_enabled: 'Y',
+        paint_enabled: 'N',
         prime_mode: 'NONE',
         spot_prime_percent: null,
         production_rate_id: null,
@@ -157,6 +157,54 @@ test('calculateTrim prices trim scope paint gallons from the selected paint prod
   assert.equal(result.paint_material_groups?.[0]?.total_paint_cost, 42)
 })
 
+test('missing trim pricing assumptions are reported and do not use hidden business fallback values', () => {
+  const result = calculateTrim({
+    rooms: [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' }],
+    scopes: [makeTrimScope({ prime_mode: 'FULL' })],
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+  })
+
+  const missingFields = result.missing_inputs.map((input) => input.field)
+  assert.ok(missingFields.includes('labor_rate_per_hour'))
+  assert.ok(missingFields.includes('paint_prod_rate_units_per_hour'))
+  assert.ok(missingFields.includes('primer_prod_rate_units_per_hour'))
+  assert.ok(missingFields.includes('paint_coverage_units_per_gal_per_coat'))
+  assert.ok(missingFields.includes('primer_coverage_units_per_gal_per_coat'))
+  assert.ok(missingFields.includes('paint_price_per_gal'))
+  assert.ok(missingFields.includes('primer_price_per_gal'))
+  assert.equal(result.scopes[0].raw_paint_hours, 0)
+  assert.equal(result.scopes[0].raw_paint_gallons, 0)
+  assert.equal(result.scopes[0].raw_total, 0)
+})
+
+test('trim primer assumptions are required only when primer is used', () => {
+  const rooms = [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' as const }]
+  const baseSettings = {
+    labor_rate_per_hour: 50,
+    paint_prod_rate_sqft_per_hour: 100,
+    paint_coverage_sqft_per_gal_per_coat: 350,
+    paint_coats: 2,
+    paint_price_per_gal: 45,
+    area_supply_cost_per_sf: 0,
+    per_color_supply_cost: 0,
+  }
+  const none = calculateTrim({
+    rooms,
+    settings: baseSettings,
+    scopes: [makeTrimScope({ prime_mode: 'NONE', primer_coats: null })],
+  })
+  assert.equal(none.missing_inputs.some((input) => input.field.includes('primer')), false)
+  assert.equal(none.missing_inputs.some((input) => input.field === 'spot_prime_percent'), false)
+
+  const spot = calculateTrim({
+    rooms,
+    settings: baseSettings,
+    scopes: [makeTrimScope({ prime_mode: 'SPOT', primer_coats: null, spot_prime_percent: null })],
+  })
+  assert.equal(spot.missing_inputs.some((input) => input.field === 'primer_coats'), true)
+  assert.equal(spot.missing_inputs.some((input) => input.field === 'spot_prime_percent'), true)
+})
+
 test('baseboard LF scopes deduct standard opening counts before overrides and clamp to zero', () => {
   const rooms = [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' as const }]
   const half = calculateTrim({ rooms, scopes: [makeTrimScope({ measurement_value: 12, baseboard_opening_count: 0.5 })] })
@@ -188,14 +236,26 @@ test('baseboard LF scopes deduct standard opening counts before overrides and cl
   assert.equal(overridden.scopes[0].effective_measurement, 11)
 })
 
+test('baseboard opening deduction uses configurable settings', () => {
+  const rooms = [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' as const }]
+  const result = calculateTrim({
+    rooms,
+    settings: { baseboard_opening_deduction_lf: 4 },
+    scopes: [makeTrimScope({ measurement_value: 12, baseboard_opening_count: 2 })],
+  })
+
+  assert.equal(result.scopes[0].raw_measurement, 4)
+})
+
 test('trim primer supply cost applies only for SPOT and FULL prime modes', () => {
   const rooms = [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' as const }]
   const catalogs = {
     supplies_rates: [{ key: 'PRIMER_TRIM', scope: 'Trim', unit: 'primer per scope', value: 5 }],
   }
-  const none = calculateTrim({ rooms, catalogs, scopes: [makeTrimScope()] })
-  const spot = calculateTrim({ rooms, catalogs, scopes: [makeTrimScope({ prime_mode: 'SPOT' })] })
-  const full = calculateTrim({ rooms, catalogs, scopes: [makeTrimScope({ prime_mode: 'FULL' })] })
+  const settings = { area_supply_cost_per_sf: 0.08, per_color_supply_cost: 0 }
+  const none = calculateTrim({ rooms, catalogs, settings, scopes: [makeTrimScope()] })
+  const spot = calculateTrim({ rooms, catalogs, settings, scopes: [makeTrimScope({ prime_mode: 'SPOT' })] })
+  const full = calculateTrim({ rooms, catalogs, settings, scopes: [makeTrimScope({ prime_mode: 'FULL' })] })
 
   assert.equal(none.scopes[0].raw_supply_cost, 4.8)
   assert.equal(spot.scopes[0].raw_supply_cost, 9.8)
@@ -206,6 +266,13 @@ test('condition_factor stacks with existing trim labor modifiers', () => {
   const result = calculateTrim({
     rooms: [{ room_id: 'R001', length_in: 120, width_in: 120, mode: 'RECT' }],
     scopes: [makeTrimScope({ prep_factor: 1.1, condition_factor: 1.25 })],
+    settings: {
+      paint_prod_rate_sqft_per_hour: 150,
+      paint_coats: 2,
+      paint_coverage_sqft_per_gal_per_coat: 350,
+      labor_rate_per_hour: 60,
+      paint_price_per_gal: 45,
+    },
   })
 
   approx(result.scopes[0].raw_paint_hours, 1.1)

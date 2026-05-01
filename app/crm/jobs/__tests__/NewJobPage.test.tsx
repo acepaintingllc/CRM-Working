@@ -102,6 +102,8 @@ describe('NewJobPage', () => {
     await user.type(screen.getByPlaceholderText('ex: Exterior repaint'), 'Exterior repaint')
     await user.click(screen.getByRole('button', { name: 'Edit & send' }))
     await waitFor(() => expect(screen.getByDisplayValue('Subject')).toBeTruthy())
+    expect(screen.getByDisplayValue('Body').className).toContain('min-h-[420px]')
+    expect(screen.getByDisplayValue('Body')).toHaveStyle({ minHeight: '420px' })
     await user.click(screen.getByRole('button', { name: 'Create job & send email' }))
     expect(screen.getByText('Customer email is missing.')).toBeTruthy()
   })

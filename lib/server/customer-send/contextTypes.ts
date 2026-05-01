@@ -239,4 +239,5 @@ export type CustomerSendMutationData = {
 
 export type CustomerSendSubmissionData = CustomerSendMutationData & {
   mode: CustomerSendMode
+  delivery_error?: string | null
 }

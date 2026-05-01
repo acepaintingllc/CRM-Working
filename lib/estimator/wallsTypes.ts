@@ -140,6 +140,7 @@ export type WallCalculationSettings = {
   primer_price_per_gal?: number | null
   standard_door_deduction_sf?: number | null
   standard_window_deduction_sf?: number | null
+  baseboard_opening_deduction_lf?: number | null
 }
 
 export type MissingInput = {
@@ -261,6 +262,7 @@ export type ResolvedSettings = {
   primer_price_per_gal: number
   standard_door_deduction_sf: number
   standard_window_deduction_sf: number
+  baseboard_opening_deduction_lf: number
   crew_size: number
 }
 

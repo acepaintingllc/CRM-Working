@@ -1,5 +1,5 @@
-import { getValidAccessToken } from '@/lib/server/googleCalendar'
-import { supabaseAdmin } from '@/lib/server/org'
+import { getValidAccessToken } from './googleCalendar.ts'
+import { supabaseAdmin } from './org.ts'
 
 function base64UrlEncode(value: Buffer | string) {
   const buf = typeof value === 'string' ? Buffer.from(value) : value
@@ -78,6 +78,7 @@ export async function sendGmailMessage(params: {
   bcc?: string | null
   subject: string
   bodyText: string
+  bodyHtml?: string | null
   attachment?: { filename: string; contentType: string; data: Buffer } | null
   attachments?: Array<{ filename: string; contentType: string; data: Buffer }> | null
 }) {
@@ -104,9 +105,27 @@ export async function sendGmailMessage(params: {
   if (!toHeader) return { error: 'Recipient email is required' } as const
   if (!subjectHeader) return { error: 'Subject is required' } as const
   const boundary = `acecrm_${Date.now()}`
+  const alternativeBoundary = `${boundary}_alt`
   const normalizedAttachments = (
     Array.isArray(params.attachments) ? params.attachments : params.attachment ? [params.attachment] : []
   ).filter(Boolean)
+  const bodyHtml = typeof params.bodyHtml === 'string' && params.bodyHtml.trim() ? params.bodyHtml : ''
+
+  function appendPlainTextBody() {
+    raw += 'Content-Type: text/plain; charset="UTF-8"\r\n\r\n'
+    raw += params.bodyText
+  }
+
+  function appendAlternativeBody() {
+    raw += `Content-Type: multipart/alternative; boundary=\"${alternativeBoundary}\"\r\n\r\n`
+    raw += `--${alternativeBoundary}\r\n`
+    raw += 'Content-Type: text/plain; charset="UTF-8"\r\n\r\n'
+    raw += `${params.bodyText}\r\n\r\n`
+    raw += `--${alternativeBoundary}\r\n`
+    raw += 'Content-Type: text/html; charset="UTF-8"\r\n\r\n'
+    raw += `${bodyHtml}\r\n\r\n`
+    raw += `--${alternativeBoundary}--`
+  }
 
   let raw = ''
   if (fromHeader) raw += `From: ${fromHeader}\r\n`
@@ -119,8 +138,12 @@ export async function sendGmailMessage(params: {
   if (normalizedAttachments.length > 0) {
     raw += `Content-Type: multipart/mixed; boundary=\"${boundary}\"\r\n\r\n`
     raw += `--${boundary}\r\n`
-    raw += 'Content-Type: text/plain; charset="UTF-8"\r\n\r\n'
-    raw += `${params.bodyText}\r\n\r\n`
+    if (bodyHtml) {
+      appendAlternativeBody()
+    } else {
+      appendPlainTextBody()
+    }
+    raw += '\r\n\r\n'
     for (const attachment of normalizedAttachments) {
       const safeFileName = sanitizeHeaderValue(attachment.filename).replace(/"/g, '')
       raw += `--${boundary}\r\n`
@@ -130,9 +153,10 @@ export async function sendGmailMessage(params: {
       raw += `${attachment.data.toString('base64')}\r\n`
     }
     raw += `--${boundary}--`
+  } else if (bodyHtml) {
+    appendAlternativeBody()
   } else {
-    raw += 'Content-Type: text/plain; charset="UTF-8"\r\n\r\n'
-    raw += params.bodyText
+    appendPlainTextBody()
   }
 
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {

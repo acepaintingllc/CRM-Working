@@ -2,6 +2,7 @@ import type {
   MissingInput,
   ResolvedSettings,
   WallCalculationCatalogs,
+  WallCalculationSettings,
   WallPerColorSupplyGroup,
   WallRoomTotal,
   YN,
@@ -109,10 +110,7 @@ export type TrimProductionRateCatalogRow = {
 export type TrimCalculationInput = {
   scopes: TrimCalculationScopeRow[]
   rooms: TrimCalculationRoomInput[]
-  settings?: {
-    labor_rate_per_hour?: number | null
-    crew_size?: number | null
-  }
+  settings?: WallCalculationSettings
   catalogs?:
     | (WallCalculationCatalogs & {
         trim_items?: TrimTypeCatalogRow[] | null

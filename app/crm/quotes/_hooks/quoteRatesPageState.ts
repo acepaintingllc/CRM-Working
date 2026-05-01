@@ -13,10 +13,10 @@ import type {
   RatesFlagsEditableCategoryKey,
   RatesFlagsEditableCategory,
   RatesFlagsRow,
-  RatesFlagsTab,
 } from '@/types/estimator/ratesFlags'
 import type {
   FlagsSectionKey,
+  QuoteRatesTopTab,
   RateSectionKey,
   RoomDefaultsSectionKey,
   StatusFilter,
@@ -24,7 +24,7 @@ import type {
 import { RATE_SUBGROUPS } from './quoteRatesPageConfig'
 
 export type QuoteRatesNavigationState = {
-  activeTab: RatesFlagsTab
+  activeTab: QuoteRatesTopTab
   rateSection: RateSectionKey
   rateCategory: RatesFlagsCategoryKey
   flagsSection: FlagsSectionKey
@@ -34,7 +34,7 @@ export type QuoteRatesNavigationState = {
 }
 
 export type QuoteRatesPendingTransition =
-  | { type: 'setActiveTab'; activeTab: RatesFlagsTab }
+  | { type: 'setActiveTab'; activeTab: QuoteRatesTopTab }
   | { type: 'setRateSection'; rateSection: RateSectionKey }
   | { type: 'setRateCategory'; rateCategory: string }
   | { type: 'setFlagsSection'; flagsSection: FlagsSectionKey }
