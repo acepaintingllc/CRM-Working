@@ -19,9 +19,11 @@ export type PublicEstimateErrorResponse = {
 
 export type PublicEstimateAcceptRequest = {
   legalName: string
+  customerEmail: string
   signatureType: EstimatePublicSignatureType
   signatureValue: string
   acceptedTerms: true
+  customerMessage: string
 }
 
 export type PublicEstimateDeclineRequest = {
@@ -41,7 +43,9 @@ type ParseError = {
 type ParseResult<T> = ParseOk<T> | ParseError
 
 const maxLegalNameLength = 200
+const maxCustomerEmailLength = 320
 const maxDeclineReasonLength = 2000
+const maxCustomerMessageLength = 2000
 const maxDrawnSignatureLength = 200_000
 const typedSignatureType = 'typed'
 const drawnSignatureType = 'drawn'
@@ -52,11 +56,13 @@ export const publicEstimatePortalErrors = {
   quoteSnapshotMissing: 'Quote snapshot missing',
   legalNameRequired: 'Legal name is required',
   legalNameTooLong: 'Legal name is too long',
+  customerEmailTooLong: 'Email address is too long',
   acceptanceRequired: 'Acceptance checkbox is required',
   signatureRequired: 'Signature is required',
   signatureTypeInvalid: 'Signature type must be typed or drawn',
   typedSignatureMismatch: 'Typed signature must match the full legal name',
   drawnSignatureInvalid: 'Drawn signature is invalid',
+  customerMessageTooLong: 'Message is too long',
   declineReasonTooLong: 'Decline reason is too long',
 } as const
 
@@ -108,9 +114,18 @@ export function parsePublicEstimateAcceptRequest(input: unknown): ParseResult<Pu
   if (legalName.length > maxLegalNameLength) {
     return fail(publicEstimatePortalErrors.legalNameTooLong)
   }
+  const customerEmail = asText(record.customer_email ?? record.email)
+  if (customerEmail.length > maxCustomerEmailLength) {
+    return fail(publicEstimatePortalErrors.customerEmailTooLong)
+  }
 
   if (!parseAcceptedTerms(record)) {
     return fail(publicEstimatePortalErrors.acceptanceRequired)
+  }
+
+  const customerMessage = asText(record.customer_message ?? record.message)
+  if (customerMessage.length > maxCustomerMessageLength) {
+    return fail(publicEstimatePortalErrors.customerMessageTooLong)
   }
 
   const signatureType = parseSignatureType(record.signature_type)
@@ -126,9 +141,11 @@ export function parsePublicEstimateAcceptRequest(input: unknown): ParseResult<Pu
     }
     return ok({
       legalName,
+      customerEmail,
       signatureType,
       signatureValue,
       acceptedTerms: true,
+      customerMessage,
     })
   }
 
@@ -143,9 +160,11 @@ export function parsePublicEstimateAcceptRequest(input: unknown): ParseResult<Pu
 
   return ok({
     legalName,
+    customerEmail,
     signatureType,
     signatureValue,
     acceptedTerms: true,
+    customerMessage,
   })
 }
 
@@ -162,17 +181,21 @@ export function createPublicEstimateAcceptanceRecord(params: {
   acceptedAt: string
   ip?: string
   legalName: string
+  customerEmail?: string
   signatureType: EstimatePublicSignatureType
   signatureValue: string
+  customerMessage?: string
   userAgent?: string
 }): EstimatePublicAcceptanceRecord {
   return {
     legal_name: params.legalName,
+    ...(asText(params.customerEmail) ? { customer_email: asText(params.customerEmail) } : {}),
     signature_type: params.signatureType,
     signature_value: params.signatureValue,
     accepted_terms: true,
     accepted_at: params.acceptedAt,
     user_agent: asText(params.userAgent),
     ip: asText(params.ip),
+    ...(asText(params.customerMessage) ? { customer_message: asText(params.customerMessage) } : {}),
   }
 }

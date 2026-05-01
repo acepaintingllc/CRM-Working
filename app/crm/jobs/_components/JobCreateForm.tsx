@@ -4,6 +4,10 @@ import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
 import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmFormActions } from '@/app/crm/_components/CrmFormActions'
+import {
+  emailBodyTextareaClassName,
+  emailBodyTextareaStyle,
+} from '@/app/crm/_components/emailComposerStyles'
 import { crmInputClassName, crmSurfaceMutedClassName } from '@/app/crm/_components/crmStyles'
 import type { CustomerOption } from '@/app/crm/jobs/_hooks/useNewJobPage'
 import type { JobCreateValues } from '@/lib/jobs/forms'
@@ -231,7 +235,8 @@ export function JobCreateForm({
                       <textarea
                         value={value.composeBody}
                         onChange={(event) => updateField('composeBody', event.target.value)}
-                        className={crmInputClassName('min-h-[160px] resize-y text-sm')}
+                        className={emailBodyTextareaClassName()}
+                        style={emailBodyTextareaStyle}
                       />
                     </CrmField>
                     <CrmFormActions className="justify-end">

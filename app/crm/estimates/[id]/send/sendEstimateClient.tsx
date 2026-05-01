@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { EMAIL_BODY_TEXTAREA_MIN_HEIGHT } from '@/app/crm/_components/emailComposerStyles'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import {
   resolveEstimateRouteFamily,
@@ -53,7 +54,7 @@ const inputBase: CSSProperties = {
 
 const textareaBase: CSSProperties = {
   ...inputBase,
-  minHeight: 110,
+  minHeight: EMAIL_BODY_TEXTAREA_MIN_HEIGHT,
   resize: 'vertical',
   lineHeight: 1.5,
 }
@@ -101,6 +102,32 @@ function SectionTitle({ title, subtitle }: { title: string; subtitle?: string })
       {subtitle ? <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5 }}>{subtitle}</div> : null}
     </div>
   )
+}
+
+function customerDocumentSettingsWarning(document: {
+  assembly_meta?: {
+    missing_company_fields?: string[]
+    missing_payment_fields?: string[]
+    missing_legal_fields?: string[]
+    used_placeholder_fallbacks?: boolean
+  }
+}) {
+  const meta = document.assembly_meta
+  if (!meta?.used_placeholder_fallbacks) return ''
+
+  const missing = [
+    ...(meta.missing_company_fields ?? []),
+    ...(meta.missing_payment_fields ?? []),
+    ...(meta.missing_legal_fields ?? []),
+  ]
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+
+  if (missing.length === 0) {
+    return 'Customer document settings are using placeholder fallback copy.'
+  }
+
+  return `Customer document settings need review: ${missing.join(', ')}.`
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -301,6 +328,7 @@ export default function SendEstimateClient({
 
   if (!data || !form || !liveDocument) return null
   const templateOptions = resolveCustomerSendTemplatePresets(data.settings)
+  const settingsWarning = customerDocumentSettingsWarning(liveDocument)
 
   const toError =
     form.to_email && !isValidRecipientList(form.to_email)
@@ -432,6 +460,21 @@ export default function SendEstimateClient({
                   }}
                 >
                   {error}
+                </div>
+              ) : null}
+              {settingsWarning ? (
+                <div
+                  style={{
+                    border: '1px solid rgba(251,191,36,0.28)',
+                    background: 'rgba(251,191,36,0.1)',
+                    color: '#fde68a',
+                    borderRadius: 12,
+                    padding: '10px 12px',
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {settingsWarning}
                 </div>
               ) : null}
 

@@ -9,6 +9,10 @@ import { CrmModalHeader } from '@/app/crm/_components/CrmModalHeader'
 import { CrmModalSection } from '@/app/crm/_components/CrmModalSection'
 import { CrmModalShell } from '@/app/crm/_components/CrmModalShell'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import {
+  emailBodyTextareaClassName,
+  emailBodyTextareaStyle,
+} from '@/app/crm/_components/emailComposerStyles'
 import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import { useCloseoutForm } from '@/app/crm/jobs/_components/hooks/useCloseoutForm'
 import { Mail, Plus, Send, Trash2 } from 'lucide-react'
@@ -140,7 +144,8 @@ export default function JobCompletionCloseoutModal({
                   value={body}
                   onChange={(event) => setBody(event.target.value)}
                   placeholder="Body"
-                  className={crmInputClassName('min-h-[120px]')}
+                  className={emailBodyTextareaClassName()}
+                  style={emailBodyTextareaStyle}
                 />
               </CrmField>
               <div className="flex flex-wrap items-center gap-2">

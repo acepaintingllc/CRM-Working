@@ -58,9 +58,11 @@ function pageContentStyle(): CSSProperties {
 function PageFrame({
   children,
   label,
+  showOverflowWarnings,
 }: {
   children: ReactNode
   label: string
+  showOverflowWarnings: boolean
 }) {
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [overflowPx, setOverflowPx] = useState(0)
@@ -99,7 +101,7 @@ function PageFrame({
       <div ref={contentRef} className="customer-estimate-page-content" style={pageContentStyle()}>
         {children}
       </div>
-      {overflowPx ? (
+      {showOverflowWarnings && overflowPx ? (
         <div
           className="customer-estimate-overflow-warning"
           style={{
@@ -264,9 +266,15 @@ function TermsSection({ title, children }: { title: string; children: ReactNode 
   )
 }
 
-function TermsPage({ document }: { document: CustomerEstimateDocument }) {
+function TermsPage({
+  document,
+  showOverflowWarnings,
+}: {
+  document: CustomerEstimateDocument
+  showOverflowWarnings: boolean
+}) {
   return (
-    <PageFrame label="Terms page">
+    <PageFrame label="Terms page" showOverflowWarnings={true}>
       <div style={{ display: 'grid', gap: 18 }}>
         <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '0.06em' }}>
           {document.terms_page.title}
@@ -286,10 +294,16 @@ function TermsPage({ document }: { document: CustomerEstimateDocument }) {
   )
 }
 
-function DocumentPage({ document }: { document: CustomerEstimateDocument }) {
+function DocumentPage({
+  document,
+  showOverflowWarnings,
+}: {
+  document: CustomerEstimateDocument
+  showOverflowWarnings: boolean
+}) {
   const rows = document.pricing_block.rows
   return (
-    <PageFrame label="Quote page">
+    <PageFrame label="Quote page" showOverflowWarnings={true}>
       <Header document={document} />
       <CustomerBlock document={document} />
       <ScopeTable rows={rows} />
@@ -304,14 +318,16 @@ function DocumentPage({ document }: { document: CustomerEstimateDocument }) {
 export function CustomerEstimateDocumentView({
   document,
   showShell = true,
+  showOverflowWarnings = true,
 }: {
   document: CustomerEstimateDocument
   showShell?: boolean
+  showOverflowWarnings?: boolean
 }) {
   const pages = (
     <div style={{ display: 'grid', gap: 24 }}>
-      <DocumentPage document={document} />
-      <TermsPage document={document} />
+      <DocumentPage document={document} showOverflowWarnings={showOverflowWarnings} />
+      <TermsPage document={document} showOverflowWarnings={showOverflowWarnings} />
       <style jsx global>{`
         @media print {
           .customer-estimate-page-frame {
@@ -333,6 +349,46 @@ export function CustomerEstimateDocumentView({
           }
           .customer-estimate-overflow-warning {
             display: none !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .customer-estimate-page-frame {
+            margin-bottom: 0 !important;
+            padding-top: 0 !important;
+            position: static !important;
+          }
+          .customer-estimate-page-content {
+            position: static !important;
+            inset: auto !important;
+            padding: 22px 18px !important;
+            gap: 12px !important;
+          }
+          .customer-estimate-page-content table {
+            table-layout: auto !important;
+          }
+          .customer-estimate-page-content col:first-child {
+            width: 22% !important;
+          }
+          .customer-estimate-page-content col:nth-child(2) {
+            width: 52% !important;
+          }
+          .customer-estimate-page-content col:nth-child(3) {
+            width: 26% !important;
+          }
+          .customer-estimate-page-content th,
+          .customer-estimate-page-content td {
+            font-size: 11.5px !important;
+            line-height: 1.45 !important;
+            padding-left: 5px !important;
+            padding-right: 5px !important;
+          }
+          .customer-estimate-page-content th:first-child,
+          .customer-estimate-page-content td:first-child {
+            padding-left: 0 !important;
+          }
+          .customer-estimate-page-content th:last-child,
+          .customer-estimate-page-content td:last-child {
+            padding-right: 0 !important;
           }
         }
       `}</style>

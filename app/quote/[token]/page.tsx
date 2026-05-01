@@ -3,6 +3,13 @@ import { PublicEstimatePortalErrorState } from '@/lib/customer-estimates/PublicE
 import { loadPublicEstimateSnapshot } from '@/lib/server/estimatePublicPortal'
 import { quotePortalCopy } from './quotePortalCopy'
 
+export const metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+}
+
 export default async function PublicQuotePage({
   params,
   searchParams,

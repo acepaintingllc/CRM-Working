@@ -3,9 +3,12 @@
 import {
   BriefcaseBusiness,
   CalendarClock,
+  CheckCircle2,
   Circle,
+  Eye,
   ExternalLink,
   NotebookPen,
+  Send,
 } from 'lucide-react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
@@ -27,6 +30,15 @@ export function CustomerTimelinePanel(props: CustomerTimelinePanelProps) {
     const combined = `${event.type} ${event.title ?? ''} ${event.link_label ?? ''}`.toLowerCase()
     if (combined.includes('note')) {
       return { icon: NotebookPen, nodeClass: 'bg-white text-gray-700 border-gray-300' }
+    }
+    if (combined.includes('quote accepted')) {
+      return { icon: CheckCircle2, nodeClass: 'bg-white text-gray-700 border-gray-300' }
+    }
+    if (combined.includes('quote viewed')) {
+      return { icon: Eye, nodeClass: 'bg-white text-gray-700 border-gray-300' }
+    }
+    if (combined.includes('quote sent') || combined.includes('quote resent')) {
+      return { icon: Send, nodeClass: 'bg-white text-gray-700 border-gray-300' }
     }
     if (combined.includes('estimate') && combined.includes('sched')) {
       return { icon: CalendarClock, nodeClass: 'bg-white text-gray-700 border-gray-300' }

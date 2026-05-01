@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/server/org'
+import { supabaseAdmin } from './org.ts'
 
 type TokenRow = {
   access_token: string

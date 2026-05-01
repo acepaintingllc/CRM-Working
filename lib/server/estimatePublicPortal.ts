@@ -3,7 +3,12 @@ import { applyAcceptedEstimateSideEffects } from './accepted-estimates/service'
 import { writeEstimatePublicEvent } from './customer-send/repository'
 import { errorResult, okResult, type ServiceResult } from './serviceResult'
 import { ensureAssembledCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
+import { normalizeEstimatePublicAcceptanceRecord } from '@/lib/customer-estimates/publicAcceptance'
 import type { EstimatePublicSnapshot, Unsafe } from '@/lib/customer-estimates/types'
+import {
+  sendPublicEstimateAcceptanceNotifications,
+  sendPublicEstimateDeclineNotification,
+} from './publicEstimateNotifications'
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
@@ -30,9 +35,11 @@ type PublicEstimateTransitionStatus = EstimatePublicSnapshot['status']
 type AcceptPublicEstimateParams = {
   token: string
   legalName: string
+  customerEmail?: string
   signatureType?: string
   signatureValue?: string
   acceptedTerms: boolean
+  customerMessage?: string
   origin?: string
   userAgent?: string
   ip?: string
@@ -73,6 +80,40 @@ function acceptedEstimateSideEffectsDb() {
   return supabaseAdmin as unknown as AcceptedEstimateSideEffectsDb
 }
 
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+function logPublicNotificationResult(label: string, result: unknown) {
+  const resultRecord = asRecord(result)
+  if (!resultRecord) return
+
+  for (const [recipient, rawStatus] of Object.entries(resultRecord)) {
+    const status = asRecord(rawStatus)
+    const error = asText(status?.error)
+    const skipped = status?.skipped === true
+    const reason = asText(status?.reason) || 'unknown'
+
+    if (error) {
+      console.error(`[public-estimate-notification] ${label} ${recipient} failed`, error)
+    } else if (skipped) {
+      console.error(`[public-estimate-notification] ${label} ${recipient} skipped`, reason)
+    }
+  }
+}
+
+async function runPublicNotification(label: string, task: Promise<unknown>) {
+  const result = await task.catch((error: unknown) => {
+    console.error(
+      '[public-estimate-notification] failed',
+      error instanceof Error ? error.message : error
+    )
+    return null
+  })
+
+  logPublicNotificationResult(label, result)
+}
+
 export function buildEstimatePublicSnapshotFromVersion(
   version: Unsafe,
   origin?: string
@@ -101,6 +142,7 @@ export function buildEstimatePublicSnapshotFromVersion(
     draft: (normalizedSnapshot.draft ?? {}) as Record<string, unknown>,
     document,
     snapshot_json: normalizedSnapshot,
+    acceptance_json: normalizeEstimatePublicAcceptanceRecord(version.acceptance_json),
     sent_at: asText(version.sent_at) || null,
     viewed_at: asText(version.viewed_at) || null,
     accepted_at: asText(version.accepted_at) || null,
@@ -178,10 +220,12 @@ function transitionConflictMessage(
   if (nextStatus === 'accepted') {
     if (currentStatus === 'accepted') return 'Quote already accepted'
     if (currentStatus === 'declined') return 'Cannot accept a declined quote'
+    if (currentStatus === 'superseded') return 'A newer quote is available.'
   }
   if (nextStatus === 'declined') {
     if (currentStatus === 'declined') return 'Quote already declined'
     if (currentStatus === 'accepted') return 'Cannot decline an accepted quote'
+    if (currentStatus === 'superseded') return 'A newer quote is available.'
   }
   return `Cannot ${nextStatus} quote from ${currentStatus} status`
 }
@@ -288,9 +332,7 @@ async function reconcileAcceptedRetryOwnership(params: {
     })
     .eq('org_id', params.orgId)
     .eq('id', params.estimateId)
-    .or(
-      `accepted_public_version_id.is.null,accepted_public_version_id.eq.${params.versionId}`
-    )
+    .is('accepted_public_version_id', null)
     .select('id')
     .maybeSingle()
 
@@ -300,7 +342,30 @@ async function reconcileAcceptedRetryOwnership(params: {
       estimateUpdate.error.message ?? 'Unable to reconcile accepted estimate'
     )
   }
-  if (!estimateUpdate.data) {
+  let reconciledEstimateData = estimateUpdate.data
+  if (!reconciledEstimateData) {
+    const sameVersionEstimateUpdate = await supabaseAdmin
+      .from('estimates')
+      .update({
+        accepted_at: params.acceptedAt,
+        accepted_public_version_id: params.versionId,
+        version_state: 'live',
+      })
+      .eq('org_id', params.orgId)
+      .eq('id', params.estimateId)
+      .eq('accepted_public_version_id', params.versionId)
+      .select('id')
+      .maybeSingle()
+
+    if (sameVersionEstimateUpdate.error) {
+      return errorResult(
+        'server_error',
+        sameVersionEstimateUpdate.error.message ?? 'Unable to reconcile accepted estimate'
+      )
+    }
+    reconciledEstimateData = sameVersionEstimateUpdate.data
+  }
+  if (!reconciledEstimateData) {
     return errorResult(
       'conflict',
       'Estimate is already accepted by another public version'
@@ -453,7 +518,9 @@ function isSingleAcceptedPublicVersionMessage(message: string) {
 function buildAcceptedEventMetadata(params: AcceptPublicEstimateParams, signatureType: string) {
   return {
     legal_name: asText(params.legalName),
+    ...(asText(params.customerEmail) ? { customer_email: asText(params.customerEmail) } : {}),
     signature_type: signatureType,
+    ...(asText(params.customerMessage) ? { customer_message: asText(params.customerMessage) } : {}),
     ...(params.origin ? { origin: asText(params.origin) } : {}),
   }
 }
@@ -531,12 +598,14 @@ export async function acceptPublicEstimate(
       locked_at: now,
       acceptance_json: {
         legal_name: legalName,
+        ...(asText(params.customerEmail) ? { customer_email: asText(params.customerEmail) } : {}),
         signature_type: signatureType,
         signature_value: signatureValue,
         accepted_terms: true,
         accepted_at: now,
         user_agent: asText(params.userAgent),
         ip: asText(params.ip),
+        ...(asText(params.customerMessage) ? { customer_message: asText(params.customerMessage) } : {}),
         origin: asText(params.origin),
       },
     },
@@ -568,6 +637,19 @@ export async function acceptPublicEstimate(
   if ('error' in snapshot) {
     return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
   }
+
+  await runPublicNotification(
+    'acceptance',
+    sendPublicEstimateAcceptanceNotifications({
+      origin: params.origin,
+      orgId,
+      userId: asText(loaded.version.created_by),
+      document: snapshot.document,
+      publicToken: snapshot.public_token,
+      acceptedBy: legalName,
+      acceptedAt: now,
+    })
+  )
 
   return okResult(snapshot)
 }
@@ -628,6 +710,19 @@ export async function declinePublicEstimate(
   if ('error' in snapshot) {
     return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
   }
+
+  await runPublicNotification(
+    'decline',
+    sendPublicEstimateDeclineNotification({
+      origin: params.origin,
+      orgId,
+      userId: asText(loaded.version.created_by),
+      document: snapshot.document,
+      publicToken: snapshot.public_token,
+      declinedAt: now,
+      reason: params.reason,
+    })
+  )
 
   return okResult(snapshot)
 }

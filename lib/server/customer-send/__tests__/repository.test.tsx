@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { saveCustomerSendDraftVersion } from '../repository'
+import { saveCustomerSendDraftVersion, supersedeOlderPublicEstimateVersions } from '../repository'
 
 const { mockFrom } = vi.hoisted(() => ({
   mockFrom: vi.fn(),
@@ -28,6 +28,20 @@ function createInsertChain(result: unknown) {
     single: vi.fn().mockResolvedValue(result),
   }
   chain.select.mockReturnValue(chain)
+  return chain
+}
+
+function createSupersedeUpdateChain(result: unknown) {
+  const chain = {
+    eq: vi.fn(),
+    neq: vi.fn(),
+    in: vi.fn(),
+    select: vi.fn(),
+  }
+  chain.eq.mockReturnValue(chain)
+  chain.neq.mockReturnValue(chain)
+  chain.in.mockReturnValue(chain)
+  chain.select.mockResolvedValue(result)
   return chain
 }
 
@@ -195,5 +209,57 @@ describe('customer send repository', () => {
       })
     )
     expect(result.ok).toBe(true)
+  })
+
+  it('supersedes older sent and viewed public versions for the same estimate', async () => {
+    const updateChain = createSupersedeUpdateChain({
+      data: [
+        { id: 'old-sent' },
+        { id: 'old-viewed' },
+      ],
+      error: null,
+    })
+    const updateSpy = vi.fn(() => updateChain)
+    const eventInsertSpy = vi.fn().mockResolvedValue({ error: null })
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return { update: updateSpy }
+      }
+      if (table === 'estimate_public_events') {
+        return { insert: eventInsertSpy }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await supersedeOlderPublicEstimateVersions({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      currentVersionId: 'new-version',
+      supersededAt: '2026-04-29T10:00:00.000Z',
+      userId: 'user-1',
+    })
+
+    expect(updateSpy).toHaveBeenCalledWith({
+      status: 'superseded',
+      locked_at: '2026-04-29T10:00:00.000Z',
+    })
+    expect(updateChain.eq).toHaveBeenCalledWith('org_id', 'org-1')
+    expect(updateChain.eq).toHaveBeenCalledWith('estimate_id', 'estimate-1')
+    expect(updateChain.neq).toHaveBeenCalledWith('id', 'new-version')
+    expect(updateChain.in).toHaveBeenCalledWith('status', ['sent', 'viewed'])
+    expect(eventInsertSpy).toHaveBeenCalledTimes(2)
+    expect(eventInsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estimate_public_version_id: 'old-sent',
+        event_type: 'superseded',
+        actor_type: 'staff',
+        created_by: 'user-1',
+      })
+    )
+    expect(result).toEqual({
+      ok: true,
+      data: { supersededIds: ['old-sent', 'old-viewed'] },
+    })
   })
 })

@@ -61,7 +61,8 @@ function isCrmProtectedPath(path: string) {
 function isRateLimitedPublicTokenPath(path: string) {
   return (
     /^\/api\/estimate-public\/[^/]+\/?$/.test(path) ||
-    /^\/api\/quote-public\/[^/]+\/?$/.test(path)
+    /^\/api\/quote-public\/[^/]+\/?$/.test(path) ||
+    /^\/api\/quote-public\/[^/]+\/(?:accept|decline)\/?$/.test(path)
   )
 }
 

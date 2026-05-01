@@ -3,6 +3,7 @@ import type {
   AcceptEstimateOperationalInput,
 } from './types.ts'
 import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
+import { normalizeEstimatePublicAcceptanceRecord } from '../../customer-estimates/publicAcceptance.ts'
 
 type Unsafe = Record<string, unknown>
 
@@ -31,7 +32,12 @@ type DbUpdateChain = {
           column: string,
           value: unknown
         ): {
-          or(filters: string): {
+          eq(column: string, value: unknown): {
+            select(columns: string): {
+              maybeSingle(): DbMaybeSingleResponse
+            }
+          }
+          is(column: string, value: unknown): {
             select(columns: string): {
               maybeSingle(): DbMaybeSingleResponse
             }
@@ -78,6 +84,7 @@ export function buildAcceptedEstimateSource(params: {
   rollup?: Unsafe | null
 }): AcceptedEstimateSource {
   const snapshotJson = params.publicVersion.snapshot_json
+  const acceptance = normalizeEstimatePublicAcceptanceRecord(params.publicVersion.acceptance_json)
 
   return {
     org_id: asText(params.estimate.org_id),
@@ -85,7 +92,13 @@ export function buildAcceptedEstimateSource(params: {
     estimate_id: asText(params.estimate.id),
     customer_id: asText(params.estimate.customer_id) || null,
     accepted_public_version_id: asText(params.estimate.accepted_public_version_id),
+    public_version_number: asNumber(params.publicVersion.version_number),
+    public_token: asText(params.publicVersion.public_token) || null,
     accepted_at: asText(params.estimate.accepted_at),
+    accepted_by_legal_name: acceptance?.legal_name ?? null,
+    signature_type: acceptance?.signature_type ?? null,
+    user_agent: acceptance?.user_agent ?? null,
+    ip: acceptance?.ip ?? null,
     version_name: asText(params.estimate.version_name) || null,
     version_state: asText(params.estimate.version_state) || null,
     final_total: asNumber(params.rollup?.final_total),
@@ -99,22 +112,38 @@ export async function applyAcceptedEstimateSideEffects(
 ): Promise<ServiceResult<{ ok: true }>> {
   const plan = buildAcceptedEstimateUpdatePlan(input)
 
-  const estimateUpdate = await db
+  const unownedEstimateUpdate = await db
     .from('estimates')
     .update(plan.estimateUpdate)
     .eq('org_id', input.orgId)
     .eq('id', input.estimateId)
-    .or(
-      `accepted_public_version_id.is.null,accepted_public_version_id.eq.${input.publicVersionId}`
-    )
+    .is('accepted_public_version_id', null)
     .select('id')
     .maybeSingle()
 
-  if (estimateUpdate.error) {
+  if (unownedEstimateUpdate.error) {
     return errorResult(
       'server_error',
-      estimateUpdate.error.message ?? 'Unable to mark estimate accepted'
+      unownedEstimateUpdate.error.message ?? 'Unable to mark estimate accepted'
     )
+  }
+  let estimateUpdate = unownedEstimateUpdate
+  if (!estimateUpdate.data) {
+    estimateUpdate = await db
+      .from('estimates')
+      .update(plan.estimateUpdate)
+      .eq('org_id', input.orgId)
+      .eq('id', input.estimateId)
+      .eq('accepted_public_version_id', input.publicVersionId)
+      .select('id')
+      .maybeSingle()
+
+    if (estimateUpdate.error) {
+      return errorResult(
+        'server_error',
+        estimateUpdate.error.message ?? 'Unable to mark estimate accepted'
+      )
+    }
   }
   if (!estimateUpdate.data) {
     return errorResult(
@@ -199,7 +228,9 @@ export async function loadAcceptedEstimateSource(
 
   const publicVersionResult = await db
     .from('estimate_public_versions')
-    .select('id, estimate_id, status, accepted_at, snapshot_json')
+    .select(
+      'id, estimate_id, version_number, public_token, status, accepted_at, acceptance_json, snapshot_json'
+    )
     .eq('org_id', orgId)
     .eq('id', publicVersionId)
     .maybeSingle()

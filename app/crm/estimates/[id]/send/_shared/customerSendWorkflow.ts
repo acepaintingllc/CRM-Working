@@ -554,6 +554,14 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
           normalizeCustomerSendVersion(payload.version, mode === 'send' ? 'sent' : 'draft')
         )
       }
+      if (mode === 'send' && asText(payload.delivery_error)) {
+        setError(
+          `${labels.document} link is live, but email delivery failed: ${asText(payload.delivery_error)}`
+        )
+        setMessage('Customer link created. Copy the link or retry sending the email.')
+        setBusy(false)
+        return false
+      }
       setBusy(false)
       return true
     },

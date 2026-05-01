@@ -10,6 +10,10 @@ import { CrmModalHeader } from '@/app/crm/_components/CrmModalHeader'
 import { CrmModalSection } from '@/app/crm/_components/CrmModalSection'
 import { CrmModalShell } from '@/app/crm/_components/CrmModalShell'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
+import {
+  emailBodyTextareaClassName,
+  emailBodyTextareaStyle,
+} from '@/app/crm/_components/emailComposerStyles'
 import { crmInputClassName } from '@/app/crm/_components/crmStyles'
 import { useEmailComposer } from '@/app/crm/jobs/_components/hooks/useEmailComposer'
 import { Mail, Send } from 'lucide-react'
@@ -189,7 +193,8 @@ export default function StageEmailModal({
                 <textarea
                   value={body}
                   onChange={(event) => setBody(event.target.value)}
-                  className={crmInputClassName('min-h-[220px]')}
+                  className={emailBodyTextareaClassName()}
+                  style={emailBodyTextareaStyle}
                 />
               </CrmField>
             </div>

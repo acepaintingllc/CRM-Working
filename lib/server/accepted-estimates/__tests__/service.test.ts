@@ -33,6 +33,10 @@ function createUpdateResultChain(
       orFilter = filter
       return chain
     },
+    is(column: string, value: unknown) {
+      filters[column] = value
+      return chain
+    },
     select() {
       return chain
     },
@@ -110,6 +114,16 @@ test('buildAcceptedEstimateSource uses rollup total and public snapshot as invoi
     },
     publicVersion: {
       id: 'public-version-1',
+      version_number: 3,
+      public_token: 'public-token-1',
+      acceptance_json: {
+        legal_name: 'Jordan Customer',
+        signature_type: 'typed',
+        signature_value: 'Jordan Customer',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        user_agent: 'Mozilla/5.0',
+        ip: '127.0.0.1',
+      },
       snapshot_json: { document: { title: 'Quote' } },
     },
     rollup: {
@@ -123,7 +137,13 @@ test('buildAcceptedEstimateSource uses rollup total and public snapshot as invoi
     estimate_id: 'estimate-1',
     customer_id: 'customer-1',
     accepted_public_version_id: 'public-version-1',
+    public_version_number: 3,
+    public_token: 'public-token-1',
     accepted_at: '2026-04-29T10:00:00.000Z',
+    accepted_by_legal_name: 'Jordan Customer',
+    signature_type: 'typed',
+    user_agent: 'Mozilla/5.0',
+    ip: '127.0.0.1',
     version_name: 'Interior repaint',
     version_state: 'live',
     final_total: 4250,
@@ -270,9 +290,8 @@ test('applyAcceptedEstimateSideEffects updates estimates first, then jobs with t
     {
       table: 'estimates',
       payload: plan.estimateUpdate,
-      filters: { org_id: 'org-1', id: 'estimate-1' },
-      orFilter:
-        'accepted_public_version_id.is.null,accepted_public_version_id.eq.public-version-1',
+      filters: { org_id: 'org-1', id: 'estimate-1', accepted_public_version_id: null },
+      orFilter: null,
     },
     {
       table: 'jobs',
@@ -281,6 +300,54 @@ test('applyAcceptedEstimateSideEffects updates estimates first, then jobs with t
       orFilter: null,
     },
   ])
+})
+
+test('applyAcceptedEstimateSideEffects retries idempotently when the estimate is already owned by this public version', async () => {
+  const calls: Array<{
+    table: string
+    payload: Record<string, unknown>
+    filters: Record<string, unknown>
+    orFilter: string | null
+  }> = []
+  const estimateResults = [
+    { data: null, error: null },
+    { data: { id: 'estimates-updated' }, error: null },
+  ]
+  const db = {
+    from(table: string) {
+      return {
+        update(payload: Record<string, unknown>) {
+          const result =
+            table === 'estimates'
+              ? estimateResults.shift() ?? { data: null, error: null }
+              : { data: { id: `${table}-updated` }, error: null }
+          return createUpdateResultChain(result, (filters, orFilter) =>
+            calls.push({ table, payload, filters, orFilter })
+          )
+        },
+      }
+    },
+  }
+
+  const result = await applyAcceptedEstimateSideEffects(db, {
+    orgId: 'org-1',
+    jobId: 'job-1',
+    estimateId: 'estimate-1',
+    publicVersionId: 'public-version-1',
+    acceptedAt: '2026-04-29T10:00:00.000Z',
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(calls.map((call) => call.filters), [
+    { org_id: 'org-1', id: 'estimate-1', accepted_public_version_id: null },
+    {
+      org_id: 'org-1',
+      id: 'estimate-1',
+      accepted_public_version_id: 'public-version-1',
+    },
+    { org_id: 'org-1', id: 'job-1' },
+  ])
+  assert.deepEqual(calls.map((call) => call.orFilter), [null, null, null])
 })
 
 test('applyAcceptedEstimateSideEffects returns server_error and skips jobs when the estimate update fails', async () => {
@@ -428,8 +495,18 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
       data: {
         id: 'public-version-1',
         estimate_id: 'estimate-1',
+        version_number: 3,
+        public_token: 'public-token-1',
         status: 'accepted',
         accepted_at: '2026-04-29T10:00:00.000Z',
+        acceptance_json: {
+          legal_name: 'Jordan Customer',
+          signature_type: 'typed',
+          signature_value: 'Jordan Customer',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          user_agent: 'Mozilla/5.0',
+          ip: '127.0.0.1',
+        },
         snapshot_json: { document: { title: 'Quote' } },
       },
       error: null,
@@ -458,7 +535,8 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
     },
     {
       table: 'estimate_public_versions',
-      columns: 'id, estimate_id, status, accepted_at, snapshot_json',
+      columns:
+        'id, estimate_id, version_number, public_token, status, accepted_at, acceptance_json, snapshot_json',
       filters: { org_id: 'org-1', id: 'public-version-1' },
     },
     {
@@ -475,7 +553,13 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
       estimate_id: 'estimate-1',
       customer_id: 'customer-1',
       accepted_public_version_id: 'public-version-1',
+      public_version_number: 3,
+      public_token: 'public-token-1',
       accepted_at: '2026-04-29T10:00:00.000Z',
+      accepted_by_legal_name: 'Jordan Customer',
+      signature_type: 'typed',
+      user_agent: 'Mozilla/5.0',
+      ip: '127.0.0.1',
       version_name: 'Interior repaint',
       version_state: 'live',
       final_total: 4250,

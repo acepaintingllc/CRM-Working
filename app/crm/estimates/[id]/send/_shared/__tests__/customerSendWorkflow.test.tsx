@@ -287,6 +287,47 @@ describe('customerSendWorkflow', () => {
     })
   })
 
+  it('surfaces a live link recovery state when email delivery fails after link activation', async () => {
+    loadCustomerSendPage.mockResolvedValue(basePayload)
+    submitCustomerSend.mockResolvedValue({
+      public_url: 'https://example.test/quote/live-token',
+      version: {
+        status: 'sent',
+        sent_at: '2026-04-22T12:00:00.000Z',
+        public_token: 'live-token',
+      },
+      delivery_error: 'Gmail not configured',
+    })
+
+    const { result } = renderHook(() =>
+      useCustomerSendWorkflow({
+        estimateId: 'estimate-1',
+        catalogSource: 'v2' as const,
+        buildForm: buildCustomerSendComposerDraft,
+        buildDocument: (data) => data.document,
+        draftPayload: (form) => form,
+        loadErrorMessage: 'Unable to load quote send page',
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.form?.title).toBe('Kitchen Quote')
+    })
+
+    let submitted = true
+    await act(async () => {
+      submitted = await result.current.submit('send')
+    })
+
+    expect(submitted).toBe(false)
+    expect(result.current.publicUrl).toBe('https://example.test/quote/live-token')
+    expect(result.current.hasLiveLink).toBe(true)
+    expect(result.current.message).toBe('Customer link created. Copy the link or retry sending the email.')
+    expect(result.current.error).toBe(
+      'Quote link is live, but email delivery failed: Gmail not configured'
+    )
+  })
+
   it('supports hard reloads and clears prior status messages', async () => {
     loadCustomerSendPage
       .mockResolvedValueOnce(basePayload)

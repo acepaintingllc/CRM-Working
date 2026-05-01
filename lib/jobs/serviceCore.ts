@@ -8,6 +8,7 @@ import {
   okResult,
   type ServiceResult,
 } from '../server/serviceResult.ts'
+import type { EstimatePublicTimelineEvent } from '../customer-estimates/publicTimeline.ts'
 
 type JobRow = {
   id?: string | null
@@ -54,6 +55,20 @@ type JobScheduleRange = {
   scheduled_end_date: string | null
 }
 
+export type JobAcceptedQuoteRecord = {
+  estimate_id: string
+  accepted_public_version_id: string
+  public_version_number: number
+  public_token: string | null
+  accepted_at: string
+  accepted_by_legal_name: string | null
+  signature_type: string | null
+  user_agent: string | null
+  ip: string | null
+  version_name: string | null
+  final_total: number
+}
+
 export type JobSummaryRecord = {
   id: string
   customer_id: string | null
@@ -78,6 +93,8 @@ export type JobDetailRecord = JobSummaryRecord & {
   customer_email: string | null
   customer_phone: string | null
   linked_estimates?: LinkedEstimateRow[]
+  accepted_quote?: JobAcceptedQuoteRecord | null
+  public_quote_timeline_events?: EstimatePublicTimelineEvent[]
 }
 
 export type CreateJobInput = {
@@ -161,6 +178,8 @@ export function buildJobDetailRecord(params: {
   optionalColumns: string[]
   customer?: CustomerRow | null
   linkedEstimates?: LinkedEstimateRow[]
+  acceptedQuote?: JobAcceptedQuoteRecord | null
+  publicQuoteTimelineEvents?: EstimatePublicTimelineEvent[]
   withOptionalJobColumns?: (
     row: JobRow,
     optionalColumns: string[]
@@ -179,6 +198,8 @@ export function buildJobDetailRecord(params: {
     customer_phone: params.customer?.phone ?? null,
     linked_estimates: params.linkedEstimates ?? [],
     linked_estimate_id: summary.linked_estimate_id ?? params.linkedEstimates?.[0]?.id ?? null,
+    accepted_quote: params.acceptedQuote ?? null,
+    public_quote_timeline_events: params.publicQuoteTimelineEvents ?? [],
   }
 }
 
