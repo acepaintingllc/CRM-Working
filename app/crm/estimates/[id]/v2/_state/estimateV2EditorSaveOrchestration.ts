@@ -137,7 +137,37 @@ export function validateEstimateV2PreparedSave(params: {
     })),
   })
 
-  return [...wallIssues, ...ceilingIssues, ...trimIssues]
+  return filterNonBlockingEstimateV2ValidationIssues([...wallIssues, ...ceilingIssues, ...trimIssues])
+}
+
+const NON_BLOCKING_PAINT_ASSUMPTION_FIELDS = new Set([
+  'paint_prod_rate_sqft_per_hour',
+  'primer_prod_rate_sqft_per_hour',
+  'paint_coverage_sqft_per_gal_per_coat',
+  'primer_coverage_sqft_per_gal_per_coat',
+  'paint_prod_rate_units_per_hour',
+  'primer_prod_rate_units_per_hour',
+  'paint_coverage_units_per_gal_per_coat',
+  'primer_coverage_units_per_gal_per_coat',
+  'paint_price_per_gal',
+  'primer_price_per_gal',
+])
+
+export function filterNonBlockingEstimateV2ValidationIssues(issues: string[]) {
+  const seen = new Set<string>()
+  const filtered: string[] = []
+
+  for (const issue of issues) {
+    const requiredField = issue.match(/:\s*([a-z0-9_]+)\s+is required\s*$/i)?.[1]
+    if (requiredField && NON_BLOCKING_PAINT_ASSUMPTION_FIELDS.has(requiredField)) {
+      continue
+    }
+    if (seen.has(issue)) continue
+    seen.add(issue)
+    filtered.push(issue)
+  }
+
+  return filtered
 }
 
 function normalizeJobDefaultProductOverride(productId: string, defaultProductId: string) {

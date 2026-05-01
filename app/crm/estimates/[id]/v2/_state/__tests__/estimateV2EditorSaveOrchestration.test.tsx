@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
 import {
+  filterNonBlockingEstimateV2ValidationIssues,
   prepareEstimateV2SaveState,
   resolveEstimateV2SaveResponseState,
   validateEstimateV2PreparedSave,
@@ -106,5 +107,21 @@ describe('estimateV2EditorSaveOrchestration', () => {
       fixture.wallCalculations.scopes?.length ?? 0
     )
     expect(result.lastSavedSnapshot.comparisonKey).toBeTruthy()
+  })
+
+  it('filters non-blocking paint assumption required messages without hiding real validation issues', () => {
+    const issues = filterNonBlockingEstimateV2ValidationIssues([
+      'Walls: Scope 1: paint_prod_rate_sqft_per_hour is required',
+      'Walls: Scope 1: paint_prod_rate_sqft_per_hour is required',
+      'Walls: Scope 1: paint_coverage_sqft_per_gal_per_coat is required',
+      'Walls: Scope 1: paint_price_per_gal is required',
+      'Ceilings: Ceiling scope 1: paint_coverage_sqft_per_gal_per_coat is required',
+      'Ceilings: Ceiling scope 1: paint_price_per_gal is required',
+      'Trim: Trim scope 1: paint_coverage_units_per_gal_per_coat is required',
+      'Trim: Trim scope 1: paint_price_per_gal is required',
+      'R001: height is required for RECT wall mode',
+    ])
+
+    expect(issues).toEqual(['R001: height is required for RECT wall mode'])
   })
 })

@@ -147,8 +147,34 @@
 
 :global(.modifier-grid) {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 6px;
+  align-items: start;
+}
+
+:global(.flag-chip) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+:global(.section-card label:has(input[type='checkbox'])) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  align-self: start;
+  justify-self: stretch;
+}
+
+:global(.section-card label:has(input[type='checkbox']) span) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+:global(.section-card label:has(input[type='checkbox']) input[type='checkbox']) {
+  margin: 0;
+  justify-self: start;
 }
 
 :global(.scope-chip-row) {
@@ -285,7 +311,7 @@
   }
 
   :global(.modifier-grid) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   }
 }
 

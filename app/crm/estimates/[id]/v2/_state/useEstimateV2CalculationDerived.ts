@@ -6,12 +6,14 @@ import {
   buildLocalRoomEffectiveAreaByRoomId,
   buildLocalScopeEffectiveAreaById,
   buildLocalSegmentEffectiveAreaById,
+  buildLocalTrimScopeMetricById,
   buildTrimScopeMetricById,
   buildWallRoomEffectiveAreaByRoomId,
   buildWallScopeEffectiveAreaById,
   buildWallSegmentEffectiveAreaById,
   sumIncludedValues,
 } from '../_lib/estimateV2EditorDerived'
+import { resolveRoomModeById } from '../_lib/estimateV2EditorNormalize'
 import {
   areEstimateV2DirtySnapshotsEqual,
   buildEstimateV2DirtySnapshot,
@@ -115,6 +117,37 @@ export function useEstimateV2CalculationDerived(params: {
   const currentPayload = currentSnapshot.payload
   const hasServerCalculations = (meta.wallCalculations?.room_totals?.length ?? 0) > 0
   const useLocalPreviewCalculations = dirty || !hasServerCalculations
+  const localRoomModeById = useMemo(
+    () =>
+      resolveRoomModeById({
+        rooms: collections.rooms,
+        wallScopes: collections.scopes,
+        ceilingScopes: collections.ceilingScopes,
+      }),
+    [collections.ceilingScopes, collections.rooms, collections.scopes]
+  )
+  const localTrimScopeEffectiveMeasurementById = useMemo(
+    () =>
+      buildLocalTrimScopeMetricById({
+        trimCalculations: meta.trimCalculations,
+        trimScopes: collections.trimScopes,
+        rooms: collections.rooms,
+        roomModeById: localRoomModeById,
+        key: 'effective_measurement',
+      }),
+    [collections.rooms, collections.trimScopes, localRoomModeById, meta.trimCalculations]
+  )
+  const localTrimScopeEffectiveTotalById = useMemo(
+    () =>
+      buildLocalTrimScopeMetricById({
+        trimCalculations: meta.trimCalculations,
+        trimScopes: collections.trimScopes,
+        rooms: collections.rooms,
+        roomModeById: localRoomModeById,
+        key: 'effective_total',
+      }),
+    [collections.rooms, collections.trimScopes, localRoomModeById, meta.trimCalculations]
+  )
   const displayedSegmentEffectiveAreaById = useMemo(
     () => (useLocalPreviewCalculations ? localSegmentEffectiveAreaById : segmentEffectiveAreaById),
     [localSegmentEffectiveAreaById, segmentEffectiveAreaById, useLocalPreviewCalculations]
@@ -127,17 +160,35 @@ export function useEstimateV2CalculationDerived(params: {
     () => (useLocalPreviewCalculations ? localRoomEffectiveAreaByRoomId : roomEffectiveAreaByRoomId),
     [localRoomEffectiveAreaByRoomId, roomEffectiveAreaByRoomId, useLocalPreviewCalculations]
   )
+  const displayedTrimScopeEffectiveMeasurementById = useMemo(
+    () =>
+      useLocalPreviewCalculations
+        ? localTrimScopeEffectiveMeasurementById
+        : trimScopeEffectiveMeasurementById,
+    [
+      localTrimScopeEffectiveMeasurementById,
+      trimScopeEffectiveMeasurementById,
+      useLocalPreviewCalculations,
+    ]
+  )
+  const displayedTrimScopeEffectiveTotalById = useMemo(
+    () =>
+      useLocalPreviewCalculations
+        ? localTrimScopeEffectiveTotalById
+        : trimScopeEffectiveTotalById,
+    [localTrimScopeEffectiveTotalById, trimScopeEffectiveTotalById, useLocalPreviewCalculations]
+  )
   const selectedCeilingEffectiveSqFt = useMemo(
     () => sumIncludedValues(selectedRoomCeilingScopes, ceilingScopeEffectiveAreaById),
     [ceilingScopeEffectiveAreaById, selectedRoomCeilingScopes]
   )
   const selectedTrimSubtotal = useMemo(
-    () => sumIncludedValues(selectedRoomTrimScopes, trimScopeEffectiveTotalById),
-    [selectedRoomTrimScopes, trimScopeEffectiveTotalById]
+    () => sumIncludedValues(selectedRoomTrimScopes, displayedTrimScopeEffectiveTotalById),
+    [selectedRoomTrimScopes, displayedTrimScopeEffectiveTotalById]
   )
   const selectedTrimMeasurement = useMemo(
-    () => sumIncludedValues(selectedRoomTrimScopes, trimScopeEffectiveMeasurementById),
-    [selectedRoomTrimScopes, trimScopeEffectiveMeasurementById]
+    () => sumIncludedValues(selectedRoomTrimScopes, displayedTrimScopeEffectiveMeasurementById),
+    [selectedRoomTrimScopes, displayedTrimScopeEffectiveMeasurementById]
   )
   const totalEffectiveAreaSqFt = useMemo(
     () =>
@@ -168,8 +219,8 @@ export function useEstimateV2CalculationDerived(params: {
     displayedScopeEffectiveAreaById,
     displayedRoomEffectiveAreaByRoomId,
     selectedCeilingEffectiveSqFt,
-    trimScopeEffectiveMeasurementById,
-    trimScopeEffectiveTotalById,
+    trimScopeEffectiveMeasurementById: displayedTrimScopeEffectiveMeasurementById,
+    trimScopeEffectiveTotalById: displayedTrimScopeEffectiveTotalById,
     selectedTrimSubtotal,
     selectedTrimMeasurement,
     totalEffectiveAreaSqFt,
