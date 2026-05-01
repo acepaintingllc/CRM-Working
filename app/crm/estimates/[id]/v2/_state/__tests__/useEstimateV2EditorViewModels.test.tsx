@@ -15,6 +15,8 @@ function createViewModelParams() {
       scopes: fixture.scopes,
       segments: fixture.segments,
       roomFlags: fixture.roomFlags,
+      rollers: fixture.rollers,
+      accessFees: fixture.accessFees,
       ceilingScopes: fixture.ceilingScopes,
       ceilingSegments: fixture.ceilingSegments,
       trimScopes: fixture.trimScopes,
@@ -65,6 +67,7 @@ function createViewModelParams() {
       trimPaintOptions: paintProducts.filter((product) => product.type !== 'primer'),
       trimPrimerOptions: paintProducts.filter((product) => product.type === 'primer'),
       trimTypeOptions: fixture.catalogs.trim_items,
+      doorTypeOptions: [],
     },
     room: {
       selectedRoom,
@@ -82,6 +85,7 @@ function createViewModelParams() {
         ['R001', fixture.trimScopes.filter((scope) => scope.roomId === 'R001')],
         ['R002', fixture.trimScopes.filter((scope) => scope.roomId === 'R002')],
       ]),
+      roomDoorScopeByRoomId: new Map(),
       activeRoomFlagCount: 0,
       selectedRoomIssueCount: 1,
       selectedRoomScopes: fixture.scopes.filter((scope) => scope.roomId === 'R001'),
@@ -94,6 +98,10 @@ function createViewModelParams() {
       firstTrimScope: fixture.trimScopes[0],
       trimsIncluded: true,
       jobTrimsIncluded: true,
+      selectedRoomDoorScopes: [],
+      firstDoorScope: null,
+      doorsIncluded: false,
+      jobDoorsIncluded: false,
     },
     calculation: {
       displayedRoomEffectiveAreaByRoomId: new Map([
@@ -114,6 +122,10 @@ function createViewModelParams() {
       trimScopeEffectiveTotalById: new Map([['trim-r001-main', 210]]),
       selectedTrimSubtotal: 210,
       selectedTrimMeasurement: 44,
+      doorScopeEffectiveUnitsById: new Map(),
+      doorScopeEffectiveTotalById: new Map(),
+      selectedDoorSubtotal: null,
+      selectedDoorUnits: null,
       dirty: false,
       calculationsStale: false,
       useLocalPreviewCalculations: false,
@@ -130,6 +142,8 @@ function createViewModelParams() {
       effectiveCeilingPrimerLabel: 'Ceiling Primer',
       trimPaintLabel: 'Trim Enamel',
       trimPrimerLabel: 'Trim Primer',
+      doorPaintLabel: 'Trim Enamel',
+      doorPrimerLabel: 'Trim Primer',
       effectiveTrimPaintLabel: 'Trim Enamel',
       effectiveTrimPrimerLabel: 'Trim Primer',
       orgWallPaintLabel: 'Wall Satin',
@@ -187,6 +201,14 @@ function createViewModelParams() {
       deleteScope: vi.fn(),
       toggleRoomInclude: vi.fn(),
       updateTrimType: vi.fn(),
+    },
+    doorActions: {
+      updateScope: vi.fn(),
+      addScope: vi.fn(),
+      moveScope: vi.fn(),
+      deleteScope: vi.fn(),
+      toggleRoomInclude: vi.fn(),
+      updateDoorType: vi.fn(),
     },
     settingsActions: {
       updateJobSettings: vi.fn(),
@@ -254,5 +276,59 @@ describe('useEstimateV2EditorViewModels', () => {
     expect(result.current.summaryVm.walls).toBe(initialWallSummary)
     expect(result.current.summaryVm.trim).not.toBe(initialTrimSummary)
     expect(result.current.summaryVm.trim.secondaryValue).toBe('$245.00')
+  })
+
+  it('hides wall and trim primer summary chips unless an included scope uses primer', () => {
+    const baseParams = createViewModelParams()
+    const params = {
+      ...baseParams,
+      derived: {
+        ...baseParams.derived,
+        room: {
+          ...baseParams.derived.room,
+          selectedRoomScopes: baseParams.derived.room.selectedRoomScopes.map((scope) => ({
+            ...scope,
+            primeMode: 'NONE' as (typeof scope)['primeMode'],
+          })),
+          selectedRoomTrimScopes: baseParams.derived.room.selectedRoomTrimScopes.map((scope) => ({
+            ...scope,
+            primeMode: 'NONE' as (typeof scope)['primeMode'],
+          })),
+        },
+      },
+    }
+
+    const { result, rerender } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: params } }
+    )
+
+    expect(result.current.summaryVm.walls.showPrimer).toBe(false)
+    expect(result.current.summaryVm.walls.chips.some((chip) => chip.label.startsWith('Primer:'))).toBe(false)
+    expect(result.current.summaryVm.trim.showPrimer).toBe(false)
+    expect(result.current.summaryVm.trim.chips.some((chip) => chip.label.startsWith('Primer:'))).toBe(false)
+
+    rerender({
+      nextParams: {
+        ...params,
+        derived: {
+          ...params.derived,
+          room: {
+            ...params.derived.room,
+            selectedRoomScopes: [
+              { ...params.derived.room.selectedRoomScopes[0], primeMode: 'SPOT' },
+            ],
+            selectedRoomTrimScopes: [
+              { ...params.derived.room.selectedRoomTrimScopes[0], primeMode: 'FULL' },
+            ],
+          },
+        },
+      },
+    })
+
+    expect(result.current.summaryVm.walls.showPrimer).toBe(true)
+    expect(result.current.summaryVm.walls.chips.some((chip) => chip.label === 'Primer: Wall Primer')).toBe(true)
+    expect(result.current.summaryVm.trim.showPrimer).toBe(true)
+    expect(result.current.summaryVm.trim.chips.some((chip) => chip.label === 'Primer: Trim Primer')).toBe(true)
   })
 })

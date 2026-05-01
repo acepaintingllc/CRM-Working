@@ -24,24 +24,25 @@ function actionIcon(icon: 'calendar' | 'plus' | 'users' | 'wrench') {
 export function QuickActionsCard({ viewModel }: QuickActionsCardProps) {
   return (
     <CrmDenseSurfaceCard
+      className="crm-quick-actions-card"
       title="Quick actions"
       actions={
-        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[color:var(--crm-ui-muted)]">
+        <span className="hidden items-center gap-1.5 text-xs font-bold text-[color:var(--crm-ui-muted)] sm:inline-flex">
           <Plus size={14} aria-hidden="true" />
           Shared CRM actions
         </span>
       }
     >
-      <CrmDenseActionRow className="grid grid-cols-2 sm:flex sm:flex-wrap">
+      <CrmDenseActionRow className="!grid grid-cols-2 items-stretch sm:!flex sm:flex-wrap">
         {viewModel.items.map((item) => (
           <CrmButton
             key={item.href}
             href={item.href}
             tone={item.tone}
-            className="justify-center text-sm no-underline sm:justify-start"
+            className="!min-h-10 w-full min-w-0 justify-center overflow-hidden px-2 text-sm no-underline sm:w-auto sm:justify-start sm:px-4"
           >
             {actionIcon(item.icon)}
-            {item.label}
+            <span className="truncate">{item.label}</span>
           </CrmButton>
         ))}
       </CrmDenseActionRow>

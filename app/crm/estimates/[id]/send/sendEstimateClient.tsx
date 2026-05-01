@@ -3,16 +3,20 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { templatePresets } from '@/lib/customer-estimates/presets'
+import { EMAIL_BODY_TEXTAREA_MIN_HEIGHT } from '@/app/crm/_components/emailComposerStyles'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import {
-  estimateRouteFamily,
+  resolveEstimateRouteFamily,
   type EstimateRouteFamily,
+  type EstimateRouteFamilyKey,
 } from '../estimateRouteFamily'
 import {
   asText,
   buildCustomerSendComposerDraft,
   buildCustomerSendComposerPreview,
+  isPositiveInteger,
+  isValidRecipientList,
+  resolveCustomerSendTemplatePresets,
   type CustomerSendComposerDraft,
   useCustomerSendWorkflow,
 } from './_shared/customerSendWorkflow'
@@ -50,7 +54,7 @@ const inputBase: CSSProperties = {
 
 const textareaBase: CSSProperties = {
   ...inputBase,
-  minHeight: 110,
+  minHeight: EMAIL_BODY_TEXTAREA_MIN_HEIGHT,
   resize: 'vertical',
   lineHeight: 1.5,
 }
@@ -98,6 +102,32 @@ function SectionTitle({ title, subtitle }: { title: string; subtitle?: string })
       {subtitle ? <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5 }}>{subtitle}</div> : null}
     </div>
   )
+}
+
+function customerDocumentSettingsWarning(document: {
+  assembly_meta?: {
+    missing_company_fields?: string[]
+    missing_payment_fields?: string[]
+    missing_legal_fields?: string[]
+    used_placeholder_fallbacks?: boolean
+  }
+}) {
+  const meta = document.assembly_meta
+  if (!meta?.used_placeholder_fallbacks) return ''
+
+  const missing = [
+    ...(meta.missing_company_fields ?? []),
+    ...(meta.missing_payment_fields ?? []),
+    ...(meta.missing_legal_fields ?? []),
+  ]
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+
+  if (missing.length === 0) {
+    return 'Customer document settings are using placeholder fallback copy.'
+  }
+
+  return `Customer document settings need review: ${missing.join(', ')}.`
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -148,12 +178,15 @@ function draftPayload(form: CustomerSendComposerDraft) {
 export default function SendEstimateClient({
   estimateId,
   catalogSource,
-  routeFamily = estimateRouteFamily,
+  routeFamily,
+  routeFamilyKey = 'estimate',
 }: {
   estimateId: string
   catalogSource?: 'estimate' | 'v2'
   routeFamily?: EstimateRouteFamily
+  routeFamilyKey?: EstimateRouteFamilyKey
 }) {
+  const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
   const {
     loading,
     busy,
@@ -176,7 +209,7 @@ export default function SendEstimateClient({
   } = useCustomerSendWorkflow<CustomerSendComposerDraft>({
     estimateId,
     catalogSource,
-    routeFamily,
+    routeFamily: resolvedRouteFamily,
     buildForm: buildCustomerSendComposerDraft,
     buildDocument: buildCustomerSendComposerPreview,
     draftPayload,
@@ -184,6 +217,7 @@ export default function SendEstimateClient({
   })
 
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [testRecipient, setTestRecipient] = useState('')
 
   const setDraftField = <K extends keyof CustomerSendComposerDraft>(
     key: K,
@@ -193,15 +227,28 @@ export default function SendEstimateClient({
   }
 
   const applyTemplate = (templateKey: string) => {
-    const next = templatePresets.find((preset) => preset.key === templateKey) ?? templatePresets[0]
+    const presets = resolveCustomerSendTemplatePresets(data?.settings)
+    const next = presets.find((preset) => preset.key === templateKey) ?? presets[0]
+    if (!next) return
     setForm((prev) =>
       prev
-        ? {
-            ...prev,
-            template_key: next.key,
-            subject: next.subject,
-            body: next.body,
-          }
+        ? (() => {
+            const hasCustomMessage =
+              prev.subject.trim() !== currentTemplate.subject.trim() ||
+              prev.body.trim() !== currentTemplate.body.trim()
+            if (hasCustomMessage) {
+              const shouldReplace = window.confirm(
+                'Switching templates will replace your current subject and message edits. Continue?'
+              )
+              if (!shouldReplace) return prev
+            }
+            return {
+              ...prev,
+              template_key: next.key,
+              subject: next.subject,
+              body: next.body,
+            }
+          })()
         : prev
     )
   }
@@ -231,10 +278,6 @@ export default function SendEstimateClient({
   }
 
   const downloadPdf = () => {
-    if (publicUrl) {
-      window.open(`${publicUrl}?print=1`, '_blank', 'noopener,noreferrer')
-      return
-    }
     window.print()
   }
 
@@ -270,7 +313,7 @@ export default function SendEstimateClient({
               <div style={{ marginTop: 10, color: C.ink2 }}>{error}</div>
               <div style={{ marginTop: 16 }}>
                 <Link
-                  href={routeFamily.summaryHref(estimateId)}
+                  href={resolvedRouteFamily.summaryHref(estimateId)}
                   style={{ color: '#d7f3df', fontWeight: 800 }}
                 >
                   Return to internal review
@@ -284,6 +327,29 @@ export default function SendEstimateClient({
   }
 
   if (!data || !form || !liveDocument) return null
+  const templateOptions = resolveCustomerSendTemplatePresets(data.settings)
+  const settingsWarning = customerDocumentSettingsWarning(liveDocument)
+
+  const toError =
+    form.to_email && !isValidRecipientList(form.to_email)
+      ? 'Use valid email addresses separated by commas.'
+      : null
+  const ccError =
+    form.cc_email && !isValidRecipientList(form.cc_email)
+      ? 'Use valid email addresses separated by commas.'
+      : null
+  const bccError =
+    form.bcc_email && !isValidRecipientList(form.bcc_email)
+      ? 'Use valid email addresses separated by commas.'
+      : null
+  const validityError =
+    form.quote_validity_days && !isPositiveInteger(form.quote_validity_days)
+      ? 'Enter a whole number greater than 0.'
+      : null
+  const testRecipientError =
+    testRecipient && !isValidRecipientList(testRecipient)
+      ? 'Enter one valid internal test email.'
+      : null
 
   return (
     <div className="send-shell" style={{ minHeight: '100vh', background: C.bg, color: C.ink }}>
@@ -312,7 +378,7 @@ export default function SendEstimateClient({
               >
                 {labels.shell}
               </div>
-              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 900, letterSpacing: '-0.03em' }}>
+              <div className="send-page-title" style={{ marginTop: 4, fontSize: 24, fontWeight: 900, letterSpacing: 0 }}>
                 {labels.action}
               </div>
               <div style={{ marginTop: 4, fontSize: 13, color: C.ink2 }}>
@@ -331,7 +397,7 @@ export default function SendEstimateClient({
             >
               <StatusChip status={version?.status ?? 'draft'} />
               <Link
-                href={routeFamily.summaryHref(estimateId)}
+                href={resolvedRouteFamily.summaryHref(estimateId)}
                 style={{
                   ...secondaryButton,
                   textDecoration: 'none',
@@ -396,6 +462,21 @@ export default function SendEstimateClient({
                   {error}
                 </div>
               ) : null}
+              {settingsWarning ? (
+                <div
+                  style={{
+                    border: '1px solid rgba(251,191,36,0.28)',
+                    background: 'rgba(251,191,36,0.1)',
+                    color: '#fde68a',
+                    borderRadius: 12,
+                    padding: '10px 12px',
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {settingsWarning}
+                </div>
+              ) : null}
 
               <SectionTitle
                 title="Delivery"
@@ -404,13 +485,37 @@ export default function SendEstimateClient({
 
               <div style={{ display: 'grid', gap: 12 }}>
                 <div>
+                  <FieldLabel>Quote Name</FieldLabel>
+                  <input
+                    value={form.title}
+                    onChange={(event) => setDraftField('title', event.target.value)}
+                    style={inputBase}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Validity (days)</FieldLabel>
+                  <input
+                    value={form.quote_validity_days}
+                    onChange={(event) => setDraftField('quote_validity_days', event.target.value)}
+                    type="number"
+                    min={1}
+                    step={1}
+                    style={inputBase}
+                  />
+                  {validityError ? (
+                    <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{validityError}</div>
+                  ) : null}
+                </div>
+
+                <div>
                   <FieldLabel>Template</FieldLabel>
                   <select
                     value={form.template_key}
                     onChange={(event) => applyTemplate(event.target.value)}
                     style={inputBase}
                   >
-                    {templatePresets.map((preset) => (
+                    {templateOptions.map((preset) => (
                       <option key={preset.key} value={preset.key}>
                         {preset.label}
                       </option>
@@ -424,7 +529,9 @@ export default function SendEstimateClient({
                     value={form.to_email}
                     onChange={(event) => setDraftField('to_email', event.target.value)}
                     style={inputBase}
+                    placeholder="customer@example.com"
                   />
+                  {toError ? <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{toError}</div> : null}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -434,7 +541,11 @@ export default function SendEstimateClient({
                       value={form.cc_email}
                       onChange={(event) => setDraftField('cc_email', event.target.value)}
                       style={inputBase}
+                      placeholder="team@example.com, owner@example.com"
                     />
+                    {ccError ? (
+                      <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{ccError}</div>
+                    ) : null}
                   </div>
                   <div>
                     <FieldLabel>BCC</FieldLabel>
@@ -442,7 +553,11 @@ export default function SendEstimateClient({
                       value={form.bcc_email}
                       onChange={(event) => setDraftField('bcc_email', event.target.value)}
                       style={inputBase}
+                      placeholder="internal@example.com"
                     />
+                    {bccError ? (
+                      <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{bccError}</div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -451,24 +566,6 @@ export default function SendEstimateClient({
                   <input
                     value={form.subject}
                     onChange={(event) => setDraftField('subject', event.target.value)}
-                    style={inputBase}
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>Title</FieldLabel>
-                  <input
-                    value={form.title}
-                    onChange={(event) => setDraftField('title', event.target.value)}
-                    style={inputBase}
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>Validity (days)</FieldLabel>
-                  <input
-                    value={form.quote_validity_days}
-                    onChange={(event) => setDraftField('quote_validity_days', event.target.value)}
                     style={inputBase}
                   />
                 </div>
@@ -514,14 +611,28 @@ export default function SendEstimateClient({
               ) : null}
 
               <div style={{ display: 'grid', gap: 10, marginTop: 'auto', paddingTop: 6 }}>
+                <div>
+                  <FieldLabel>Test recipient (internal only)</FieldLabel>
+                  <input
+                    value={testRecipient}
+                    onChange={(event) => setTestRecipient(event.target.value)}
+                    style={inputBase}
+                    placeholder="you@yourcompany.com"
+                  />
+                  {testRecipientError ? (
+                    <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{testRecipientError}</div>
+                  ) : null}
+                </div>
                 <button type="button" disabled={busy} onClick={() => void persistDraft()} style={actionButton}>
                   Save Draft
                 </button>
-                <button type="button" disabled={busy} onClick={() => void submit('test')} style={secondaryButton}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void submit('test', { testRecipient })}
+                  style={secondaryButton}
+                >
                   Send Test
-                </button>
-                <button type="button" disabled={busy} onClick={() => void submit('send')} style={actionButton}>
-                  {labels.action}
                 </button>
                 <button type="button" disabled={!hasLiveLink} onClick={copyLink} style={secondaryButton}>
                   Copy Link
@@ -545,6 +656,7 @@ export default function SendEstimateClient({
             >
               <div style={{ display: 'grid', gap: 12 }}>
                 <div
+                  className="send-preview-header"
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -573,7 +685,7 @@ export default function SendEstimateClient({
                     {currentTemplate.label} template
                   </div>
                 </div>
-                <div style={{ borderRadius: 18, background: '#f2f0eb', padding: 18 }}>
+                <div className="send-print-document" style={{ borderRadius: 18, background: '#f2f0eb', padding: 18 }}>
                   <CustomerEstimateDocumentView document={liveDocument} showShell={false} />
                 </div>
               </div>
@@ -582,8 +694,78 @@ export default function SendEstimateClient({
         </div>
       </div>
 
+      <div className="send-floating-action">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void submit('send')}
+          style={{
+            ...actionButton,
+            background: 'rgba(33,57,42,0.92)',
+            color: '#f1fff5',
+            minWidth: 180,
+            padding: '13px 18px',
+            boxShadow: '0 10px 22px rgba(0,0,0,0.32)',
+          }}
+        >
+          {labels.action}
+        </button>
+      </div>
+
       <style jsx global>{`
+        .send-floating-action {
+          bottom: 24px;
+          display: flex;
+          justify-content: flex-end;
+          pointer-events: none;
+          position: fixed;
+          right: 24px;
+          z-index: 40;
+        }
+        .send-floating-action button {
+          pointer-events: auto;
+        }
+
+        @media screen and (max-width: 720px) {
+          .send-page {
+            padding: 12px 12px 88px !important;
+          }
+          .send-topbar {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+            gap: 12px !important;
+            padding: 14px !important;
+          }
+          .send-page-title {
+            font-size: 20px !important;
+            line-height: 1.15 !important;
+          }
+          .send-floating-action {
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+          }
+          .send-floating-action button {
+            width: 100%;
+          }
+        }
+
         @media print {
+          @page {
+            margin: 0;
+          }
+          html,
+          body {
+            background: #fff !important;
+            margin: 0 !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          .send-print-document,
+          .send-print-document * {
+            visibility: visible !important;
+          }
           .send-shell {
             background: #fff !important;
             color: #111 !important;
@@ -595,7 +777,8 @@ export default function SendEstimateClient({
           .send-topbar,
           .send-controls,
           .send-buttons,
-          .send-preview > div:first-child {
+          .send-floating-action,
+          .send-preview-header {
             display: none !important;
           }
           .send-preview {
@@ -605,6 +788,28 @@ export default function SendEstimateClient({
             border: none !important;
             background: #fff !important;
             padding: 0 !important;
+          }
+          .send-print-document {
+            background: #fff !important;
+            border-radius: 0 !important;
+            left: 0 !important;
+            padding: 0 !important;
+            position: absolute !important;
+            top: 0 !important;
+            width: 100% !important;
+          }
+          .send-print-document > div {
+            gap: 0 !important;
+          }
+          .send-print-document > div > div {
+            border: none !important;
+            box-shadow: none !important;
+            break-after: page;
+            page-break-after: always;
+          }
+          .send-print-document > div > div:last-child {
+            break-after: auto;
+            page-break-after: auto;
           }
           a[href]:after {
             content: '';

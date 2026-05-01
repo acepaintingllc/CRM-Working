@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import {
   buildCeilingScopeEffectiveAreaById,
+  buildCeilingScopeEffectiveTotalById,
   buildLocalRoomEffectiveAreaByRoomId,
   buildLocalScopeEffectiveAreaById,
   buildLocalSegmentEffectiveAreaById,
@@ -10,6 +11,7 @@ import {
   buildTrimScopeMetricById,
   buildWallRoomEffectiveAreaByRoomId,
   buildWallScopeEffectiveAreaById,
+  buildWallScopeEffectiveTotalById,
   buildWallSegmentEffectiveAreaById,
   sumIncludedValues,
 } from '../_lib/estimateV2EditorDerived'
@@ -22,7 +24,19 @@ import type {
   EstimateV2EditorCollections,
   EstimateV2EditorMetaState,
 } from './estimateV2EditorTypes'
-import type { EstimateV2RoomDraft } from '@/types/estimator/v2'
+import type { EstimateV2DrywallRepairDraft, EstimateV2RoomDraft } from '@/types/estimator/v2'
+
+function sumRowsById<T extends { id: string }>(rows: T[], valueById: Map<string, number | null>) {
+  let total = 0
+  let hasValues = false
+  for (const row of rows) {
+    const value = valueById.get(row.id)
+    if (value == null) continue
+    hasValues = true
+    total += value
+  }
+  return hasValues ? Math.round(total * 100) / 100 : null
+}
 
 export function useEstimateV2CalculationDerived(params: {
   collections: Pick<
@@ -31,9 +45,15 @@ export function useEstimateV2CalculationDerived(params: {
     | 'scopes'
     | 'segments'
     | 'roomFlags'
+    | 'rollers'
     | 'ceilingScopes'
     | 'ceilingSegments'
     | 'trimScopes'
+    | 'doorScopes'
+    | 'drywallRepairs'
+    | 'rollers'
+    | 'accessFees'
+    | 'otherItems'
   >
   meta: Pick<
     EstimateV2EditorMetaState,
@@ -42,17 +62,27 @@ export function useEstimateV2CalculationDerived(params: {
     | 'wallCalculations'
     | 'ceilingCalculations'
     | 'trimCalculations'
+    | 'doorCalculations'
+    | 'drywallCalculations'
+    | 'jobSettingsDraft'
   >
   selectedRoom: EstimateV2RoomDraft | null
   firstScope: { id: string } | null
   selectedRoomCeilingScopes: Array<{ id: string; include: 'Y' | 'N' }>
   selectedRoomTrimScopes: Array<{ id: string; include: 'Y' | 'N' }>
+  selectedRoomDoorScopes: Array<{ id: string; include: 'Y' | 'N' }>
+  selectedRoomWallDrywallRepairs: EstimateV2DrywallRepairDraft[]
+  selectedRoomCeilingDrywallRepairs: EstimateV2DrywallRepairDraft[]
 }) {
-  const { collections, meta, selectedRoom, firstScope, selectedRoomCeilingScopes, selectedRoomTrimScopes } =
+  const { collections, meta, selectedRoom, firstScope, selectedRoomCeilingScopes, selectedRoomTrimScopes, selectedRoomDoorScopes, selectedRoomWallDrywallRepairs, selectedRoomCeilingDrywallRepairs } =
     params
 
   const ceilingScopeEffectiveAreaById = useMemo(
     () => buildCeilingScopeEffectiveAreaById(meta.ceilingCalculations),
+    [meta.ceilingCalculations]
+  )
+  const ceilingScopeEffectiveTotalById = useMemo(
+    () => buildCeilingScopeEffectiveTotalById(meta.ceilingCalculations),
     [meta.ceilingCalculations]
   )
   const trimScopeEffectiveMeasurementById = useMemo(
@@ -63,8 +93,28 @@ export function useEstimateV2CalculationDerived(params: {
     () => buildTrimScopeMetricById(meta.trimCalculations, 'effective_total'),
     [meta.trimCalculations]
   )
+  const doorScopeEffectiveUnitsById = useMemo(
+    () => buildTrimScopeMetricById(meta.doorCalculations, 'effective_units'),
+    [meta.doorCalculations]
+  )
+  const doorScopeEffectiveTotalById = useMemo(
+    () => buildTrimScopeMetricById(meta.doorCalculations, 'effective_total'),
+    [meta.doorCalculations]
+  )
+  const drywallRepairEffectiveQuantityById = useMemo(
+    () => buildTrimScopeMetricById(meta.drywallCalculations, 'effective_quantity'),
+    [meta.drywallCalculations]
+  )
+  const drywallRepairEffectiveTotalById = useMemo(
+    () => buildTrimScopeMetricById(meta.drywallCalculations, 'effective_total'),
+    [meta.drywallCalculations]
+  )
   const scopeEffectiveAreaById = useMemo(
     () => buildWallScopeEffectiveAreaById(meta.wallCalculations),
+    [meta.wallCalculations]
+  )
+  const wallScopeEffectiveTotalById = useMemo(
+    () => buildWallScopeEffectiveTotalById(meta.wallCalculations),
     [meta.wallCalculations]
   )
   const segmentEffectiveAreaById = useMemo(
@@ -96,21 +146,33 @@ export function useEstimateV2CalculationDerived(params: {
     () =>
       buildEstimateV2DirtySnapshot({
         rooms: collections.rooms,
+        jobSettingsDraft: meta.jobSettingsDraft,
         scopes: collections.scopes,
         segments: collections.segments,
         roomFlags: collections.roomFlags,
         ceilingScopes: collections.ceilingScopes,
         ceilingSegments: collections.ceilingSegments,
         trimScopes: collections.trimScopes,
+        doorScopes: collections.doorScopes,
+        drywallRepairs: collections.drywallRepairs,
+        rollers: collections.rollers,
+        accessFees: collections.accessFees,
+        otherItems: collections.otherItems,
       }),
     [
       collections.ceilingScopes,
       collections.ceilingSegments,
+      collections.doorScopes,
+      collections.drywallRepairs,
       collections.roomFlags,
       collections.rooms,
+      collections.rollers,
+      collections.accessFees,
+      collections.otherItems,
       collections.scopes,
       collections.segments,
       collections.trimScopes,
+      meta.jobSettingsDraft,
     ]
   )
   const dirty = !meta.loading && !areEstimateV2DirtySnapshotsEqual(currentSnapshot, meta.lastSavedSnapshot)
@@ -190,6 +252,22 @@ export function useEstimateV2CalculationDerived(params: {
     () => sumIncludedValues(selectedRoomTrimScopes, displayedTrimScopeEffectiveMeasurementById),
     [selectedRoomTrimScopes, displayedTrimScopeEffectiveMeasurementById]
   )
+  const selectedDoorSubtotal = useMemo(
+    () => sumIncludedValues(selectedRoomDoorScopes, doorScopeEffectiveTotalById),
+    [doorScopeEffectiveTotalById, selectedRoomDoorScopes]
+  )
+  const selectedDoorUnits = useMemo(
+    () => sumIncludedValues(selectedRoomDoorScopes, doorScopeEffectiveUnitsById),
+    [doorScopeEffectiveUnitsById, selectedRoomDoorScopes]
+  )
+  const selectedWallDrywallSubtotal = useMemo(
+    () => sumRowsById(selectedRoomWallDrywallRepairs, drywallRepairEffectiveTotalById),
+    [drywallRepairEffectiveTotalById, selectedRoomWallDrywallRepairs]
+  )
+  const selectedCeilingDrywallSubtotal = useMemo(
+    () => sumRowsById(selectedRoomCeilingDrywallRepairs, drywallRepairEffectiveTotalById),
+    [drywallRepairEffectiveTotalById, selectedRoomCeilingDrywallRepairs]
+  )
   const totalEffectiveAreaSqFt = useMemo(
     () =>
       collections.rooms.reduce(
@@ -218,11 +296,21 @@ export function useEstimateV2CalculationDerived(params: {
     displayedSegmentEffectiveAreaById,
     displayedScopeEffectiveAreaById,
     displayedRoomEffectiveAreaByRoomId,
+    wallScopeEffectiveTotalById,
     selectedCeilingEffectiveSqFt,
+    ceilingScopeEffectiveTotalById,
     trimScopeEffectiveMeasurementById: displayedTrimScopeEffectiveMeasurementById,
     trimScopeEffectiveTotalById: displayedTrimScopeEffectiveTotalById,
+    doorScopeEffectiveUnitsById,
+    doorScopeEffectiveTotalById,
+    drywallRepairEffectiveQuantityById,
+    drywallRepairEffectiveTotalById,
     selectedTrimSubtotal,
     selectedTrimMeasurement,
+    selectedDoorSubtotal,
+    selectedDoorUnits,
+    selectedWallDrywallSubtotal,
+    selectedCeilingDrywallSubtotal,
     totalEffectiveAreaSqFt,
     selectedRoomEffectiveSqFt,
     selectedScopeEffectiveSqFt,

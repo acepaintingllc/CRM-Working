@@ -10,6 +10,7 @@ import {
   resolveRoomModeById,
 } from './estimateV2EditorNormalize.ts'
 import {
+  syncWallCutInFromTrayCeilings,
   stripInvalidTrimHelperModeMutation,
 } from './estimateV2EditorMutations.ts'
 import type {
@@ -34,16 +35,21 @@ type RecalculateDraftFactorsParams = {
 
 function synchronizeWallScopes(params: {
   scopes: EstimateV2WallScopeDraft[]
+  ceilingScopes: EstimateV2CeilingScopeDraft[]
   roomHeightFactorByRoomId: Map<string, string>
   roomComplexityFactorByRoomId: Map<string, string>
   roomWallFlagFactorByRoomId: Map<string, string>
 }) {
-  return params.scopes.map((scope) => ({
+  const nextScopes = params.scopes.map((scope) => ({
     ...scope,
     heightFactor: params.roomHeightFactorByRoomId.get(scope.roomId) ?? '1',
     complexityFactor: params.roomComplexityFactorByRoomId.get(scope.roomId) ?? '1',
     wallFlagFactor: params.roomWallFlagFactorByRoomId.get(scope.roomId) ?? '1',
   }))
+  return syncWallCutInFromTrayCeilings({
+    wallScopes: nextScopes,
+    ceilingScopes: params.ceilingScopes,
+  })
 }
 
 function synchronizeCeilingScopes(params: {
@@ -126,6 +132,7 @@ export function recalculateEditorDraftFactors(params: RecalculateDraftFactorsPar
   return {
     wallScopes: synchronizeWallScopes({
       scopes: params.wallScopes,
+      ceilingScopes: params.ceilingScopes,
       roomHeightFactorByRoomId,
       roomComplexityFactorByRoomId,
       roomWallFlagFactorByRoomId,

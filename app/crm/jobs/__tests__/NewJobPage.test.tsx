@@ -24,6 +24,25 @@ function createResponse(payload: unknown, ok = true) {
   }
 }
 
+const taylorCustomer = {
+  id: 'customer-1',
+  name: 'Taylor Jones',
+  email: 'taylor@example.com',
+  phone: '812-555-0100',
+  address: '123 Main St, Newburgh, IN 47630',
+}
+
+function createCustomerListResponse(customers: unknown[]) {
+  return createResponse({
+    data: {
+      data: customers,
+      total: customers.length,
+      page: 1,
+      pageSize: 3,
+    },
+  })
+}
+
 describe('NewJobPage', () => {
   beforeEach(() => {
     authedFetch.mockReset()
@@ -37,19 +56,7 @@ describe('NewJobPage', () => {
   it('creates a job and routes to detail by default', async () => {
     const user = userEvent.setup()
     authedFetch
-      .mockResolvedValueOnce(
-        createResponse({
-          data: [
-            {
-              id: 'customer-1',
-              name: 'Taylor Jones',
-              email: 'taylor@example.com',
-              phone: '812-555-0100',
-              address: '123 Main St, Newburgh, IN 47630',
-            },
-          ],
-        })
-      )
+      .mockResolvedValueOnce(createCustomerListResponse([taylorCustomer]))
       .mockResolvedValueOnce(
         createResponse({
           data: {
@@ -75,19 +82,7 @@ describe('NewJobPage', () => {
   it('shows standardized validation errors for missing customer, title, and email-send prerequisites', async () => {
     const user = userEvent.setup()
     authedFetch
-      .mockResolvedValueOnce(
-        createResponse({
-          data: [
-            {
-              id: 'customer-1',
-              name: 'Taylor Jones',
-              email: null,
-              phone: '812-555-0100',
-              address: '123 Main St, Newburgh, IN 47630',
-            },
-          ],
-        })
-      )
+      .mockResolvedValueOnce(createCustomerListResponse([{ ...taylorCustomer, email: null }]))
       .mockResolvedValueOnce(
         createResponse({
           data: [{ stage: 'estimate_scheduled', subject: 'Subject', body: 'Body' }],
@@ -107,6 +102,8 @@ describe('NewJobPage', () => {
     await user.type(screen.getByPlaceholderText('ex: Exterior repaint'), 'Exterior repaint')
     await user.click(screen.getByRole('button', { name: 'Edit & send' }))
     await waitFor(() => expect(screen.getByDisplayValue('Subject')).toBeTruthy())
+    expect(screen.getByDisplayValue('Body').className).toContain('min-h-[420px]')
+    expect(screen.getByDisplayValue('Body')).toHaveStyle({ minHeight: '420px' })
     await user.click(screen.getByRole('button', { name: 'Create job & send email' }))
     expect(screen.getByText('Customer email is missing.')).toBeTruthy()
   })

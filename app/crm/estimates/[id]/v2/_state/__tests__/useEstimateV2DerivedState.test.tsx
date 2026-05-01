@@ -15,6 +15,8 @@ function createDerivedStore() {
       ceilingScopes: fixture.ceilingScopes,
       ceilingSegments: fixture.ceilingSegments,
       trimScopes: fixture.trimScopes,
+      rollers: fixture.rollers,
+      accessFees: fixture.accessFees,
     },
     meta: {
       loading: false,
@@ -67,6 +69,7 @@ describe('useEstimateV2DerivedState', () => {
       'wall-r002-excluded',
     ])
     expect(result.current.currentSnapshot).toEqual(fixture.currentSnapshot)
+    expect(result.current.currentPayload.rollers).toEqual(fixture.currentSnapshot.payload.rollers)
     expect(result.current.useLocalPreviewCalculations).toBe(false)
     expect(result.current.selectedRoom?.roomId).toBe('R001')
     expect(result.current.selectedRoomEffectiveSqFt).toBe(396)
@@ -75,6 +78,43 @@ describe('useEstimateV2DerivedState', () => {
     expect(result.current.totalEffectiveAreaSqFt).toBe(476)
     expect(result.current.wallPaintLabel).toBe('Wall Satin')
     expect(result.current.trimPaintLabel).toBe('Trim Enamel')
+  })
+
+  it('derives trim type dropdown options from trim_items instead of trim production rates', () => {
+    const { store } = createDerivedStore()
+    store.getState().setCatalogs((prev) => ({
+      ...prev,
+      trim_items: [
+        {
+          id: 'BASE_STD',
+          label: 'Baseboard Standard',
+          family: 'BASEBOARD',
+          category: 'BASEBOARD',
+          unit_type: 'LF',
+          helper_allowed: true,
+          default_production_rate_id: 'TRIM_BASE_STD',
+        },
+      ],
+      production_rates: [
+        {
+          id: 'TRIM_BASE_STD',
+          label: 'Trim Base Production Rate',
+          scope_id: 'TRIM',
+          surface_type: 'BASEBOARD',
+          condition: 'STANDARD',
+          prep_sqft_per_hr: 60,
+          sqft_per_hr: 90,
+          primer_sqft_per_hr: 75,
+        },
+      ],
+    }))
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.trimProductionRates.map((rate) => rate.id)).toEqual(['TRIM_BASE_STD'])
+    expect(result.current.trimTypeOptions.map((option) => option.id)).toEqual(['BASE_STD'])
+    expect(result.current.trimTypeOptions[0].default_production_rate_id).toBe('TRIM_BASE_STD')
+    expect(result.current.trimTypeOptions[0].helper_allowed).toBe(true)
   })
 
   it('falls back safely to local preview calculations when snapshots are stale or calc payloads are malformed', () => {

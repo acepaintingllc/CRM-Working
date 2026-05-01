@@ -1,3 +1,6 @@
+import type { QuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
+import type { TemplatePreset } from '@/lib/customer-estimates/presets'
+
 export type CompanyProfileSettings = {
   business_name: string
   timezone: string
@@ -13,6 +16,8 @@ export type QuoteSendDefaults = {
   default_template_key: string
   quote_validity_days: number
   terms_text: string
+  terms_sections: QuoteTermsSections
+  template_presets: TemplatePreset[]
 }
 
 export type QuoteDefaults = {
@@ -23,6 +28,12 @@ export type QuoteDefaults = {
   trim_paint_id: string | null
   trim_primer_id: string | null
   override_labor_rate: number
+}
+
+export type QuoteMeasurementAssumptions = {
+  standard_door_deduction_sf: number
+  standard_window_deduction_sf: number
+  baseboard_opening_deduction_lf: number
 }
 
 export type SettingsApiError = {

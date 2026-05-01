@@ -16,6 +16,7 @@ export {
   RATE_SUBGROUPS,
   ROOM_DEFAULTS_SECTIONS,
   type FlagsSectionKey,
+  type QuoteRatesTopTab,
   type RateSectionKey,
   type RoomDefaultsSectionKey,
   type StatusFilter,

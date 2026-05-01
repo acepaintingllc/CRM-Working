@@ -189,6 +189,7 @@ export type QuoteHomeBootstrapReadModel = {
   jobs: QuoteHomeJobsPageReadModel
   selected_job_id: string | null
   selected_job_versions: QuoteJobVersionsPageReadModel | null
+  latest_version: QuoteHomeJobVersionItemReadModel | null
 }
 
 export type QuoteHomeSearchResponse = {

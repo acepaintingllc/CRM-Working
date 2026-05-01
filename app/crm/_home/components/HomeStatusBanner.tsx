@@ -12,7 +12,7 @@ type HomeStatusBannerWithViewModelProps = {
 }
 
 type HomeStatusBannerLegacyProps = {
-  errorsBySource: Partial<Record<'jobs' | 'customers' | 'calendarStatus' | 'calendarEvents' | 'notes', string>>
+  errorsBySource: Partial<Record<'jobs' | 'customers' | 'calendarStatus' | 'calendarEvents' | 'tasks', string>>
   hasCriticalError: boolean
   hasWarnings: boolean
   isBusy: boolean
@@ -33,7 +33,7 @@ function buildViewModelFromLegacyProps({
     customers: 'Customers',
     calendarStatus: 'Calendar status',
     calendarEvents: 'Calendar events',
-    notes: 'Notes',
+    tasks: 'Tasks',
   }
 
   const degradedSources = Object.keys(errorsBySource)

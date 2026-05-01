@@ -14,6 +14,10 @@
 - `lib/server/jobScheduleSync.ts` owns persisted schedule summary/status side effects for schedule creation, deletion, and stage-email schedule/review effects.
 - `lib/jobs/client.ts` is the canonical client boundary for jobs CRUD-style reads/writes and direct endpoint helpers.
 - `lib/jobs/actions.ts` is reserved for aggregate workflow helpers such as detail aggregation, stage email composition/send flows, and closeout aggregation.
+- `jobs.linked_estimate_id` is the canonical accepted estimate link for operational work after a quote is accepted.
+- Public quote acceptance is the normal writer of `jobs.linked_estimate_id`.
+- Job detail may fall back to linked estimate rows only for legacy data where `jobs.linked_estimate_id` is null.
+- Work orders and invoices must read accepted estimate source data through `lib/server/accepted-estimates/service.ts`, not by picking the first estimate for a job.
 - `app/crm/jobs/page.tsx`, `app/crm/jobs/new/page.tsx`, and `app/crm/jobs/[id]/page.tsx` are page composition shells. Their controller hooks under `app/crm/jobs/_hooks/**` own page-level orchestration.
 - Presentational detail UI lives in `app/crm/jobs/[id]/_components/**`.
 - Modal shells stay in `app/crm/jobs/_components`, while `useEmailComposer` and `useCloseoutForm` own their internal state and request logic.

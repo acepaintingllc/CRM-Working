@@ -75,6 +75,7 @@ const refreshedQuoteHomeBootstrap = {
     next_cursor: null,
     items: [quoteHomeJob1Versions.items[0]],
   },
+  latest_version: quoteHomeJob1Versions.items[0] ?? null,
 }
 
 const refreshedQuoteHomeJob1Versions = {
@@ -909,7 +910,7 @@ describe('useQuotesHomePage', () => {
     const { result } = renderHook(() => useQuotesHomePage())
 
     await waitFor(() => {
-      expect(result.current.loading).toBe(false)
+      expect(result.current.versionList.errorMessage).toBe('versions failed')
     })
 
     expect(result.current.feedback).toBeNull()

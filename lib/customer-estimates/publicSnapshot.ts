@@ -1,5 +1,6 @@
 import { ensureAssembledCustomerEstimateDocument } from './assemble.ts'
 import { asText } from './buildShared.ts'
+import { normalizeEstimatePublicAcceptanceRecord } from './publicAcceptance.ts'
 import type { CustomerEstimateDocument, EstimatePublicSnapshot, Unsafe } from './types.ts'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -42,6 +43,7 @@ export function buildEstimatePublicSnapshot(params: {
       document: params.document,
       draft: params.draft,
     },
+    acceptance_json: normalizeEstimatePublicAcceptanceRecord(params.version.acceptance_json),
     sent_at: asText(params.version.sent_at) || null,
     viewed_at: asText(params.version.viewed_at) || null,
     accepted_at: asText(params.version.accepted_at) || null,

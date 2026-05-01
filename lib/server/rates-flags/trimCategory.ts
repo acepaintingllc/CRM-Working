@@ -69,6 +69,8 @@ export const TRIM_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'default_qty', label: 'Default Qty', align: 'right' },
       { key: 'amount', label: 'Amount', align: 'right' },
       { key: 'active', label: 'Status', align: 'center' },
+      { key: 'trim_category', label: 'Trim Category' },
+      { key: 'measurement_class', label: 'Measurement Class' },
     ],
     fields: [
       { key: 'unit_rate_group', label: 'Unit Group', type: 'select', readOnly: true, options: ['trim'], headers: ['UnitRateGroup'], writeDefault: 'trim' },
@@ -83,6 +85,9 @@ export const TRIM_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'material_rate', label: 'Material', type: 'number', headers: ['MaterialRate', 'Materials$_Each', 'MaterialsEach'] },
       { key: 'amount', label: 'Amount', type: 'number', headers: ['Amount', 'Value', 'Rate', 'Cost', 'Price_each'] },
       { key: 'notes', label: 'Notes', type: 'text', headers: ['Notes', 'Note'] },
+      { key: 'trim_category', label: 'Trim Category', type: 'select', options: ['base', 'crown', 'casing', 'rail', 'door_window', 'panel', 'feature', 'other'], headers: ['TrimCategory', 'Trim_Category'] },
+      { key: 'measurement_class', label: 'Measurement Class', type: 'select', options: ['linear', 'opening', 'surface', 'assembly'], headers: ['MeasurementClass', 'Measurement_Class'] },
+      { key: 'picker_group', label: 'Picker Group', type: 'text', headers: ['PickerGroup', 'Picker_Group'] },
     ],
     toRow(values, active) {
       return {
@@ -99,6 +104,9 @@ export const TRIM_CATEGORY_CONFIGS: CategoryConfig[] = [
         amount: asText(values.amount),
         notes: asText(values.notes),
         active,
+        trim_category: asText(values.trim_category),
+        measurement_class: asText(values.measurement_class),
+        picker_group: asText(values.picker_group),
       } satisfies UnitRateRow
     },
   },

@@ -48,8 +48,15 @@
 }
 
 :global(.flag-chip-active) {
-  border-left: 2px solid rgba(132,204,147,0.52) !important;
-  box-shadow: inset 0 0 0 1px rgba(132,204,147,0.12) !important;
+  border-color: rgba(132,204,147,0.46) !important;
+  box-shadow: inset 0 0 0 1px rgba(132,204,147,0.18), 0 0 12px rgba(132,204,147,0.08) !important;
+}
+
+:global(.flag-chip-label) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :global(.stepper-btn:hover) {
@@ -92,37 +99,116 @@
   box-shadow: inset 0 0 0 1px rgba(132,204,147,0.3), 0 0 12px rgba(132,204,147,0.1) !important;
 }
 
+:global(.estimate-v2-header) {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+:global(.estimate-v2-footer) {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+:global(.estimate-v2-header-copy) {
+  flex: 1 1 420px;
+}
+
+:global(.estimate-v2-header-actions) {
+  flex: 1 1 360px;
+}
+
+:global(.estimate-v2-header-title),
+:global(.estimate-v2-header-subtitle),
+:global(.estimate-v2-room-title) {
+  overflow-wrap: anywhere;
+}
+
+:global(.room-header-top) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
 :global(.room-workspace) {
   display: grid;
-  grid-template-columns: minmax(0, 2.1fr) minmax(260px, 0.9fr);
+  grid-template-columns: minmax(0, 2.1fr) minmax(240px, 0.9fr);
   gap: 12px;
   align-items: start;
+  min-width: 0;
 }
 
 :global(.room-main-col) {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 :global(.room-setup-grid) {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(170px, 0.9fr) minmax(210px, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
   gap: 8px;
   align-items: end;
+  min-width: 0;
 }
 
-:global(.room-setup-actions) {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  min-height: 34px;
+:global(.room-setup-grid > *),
+:global(.geometry-primary-grid > *),
+:global(.geometry-secondary-grid > *),
+:global(.paint-setup-grid > *) {
+  min-width: 0;
+}
+
+:global(.dim-helper-text) {
+  display: block;
+  font-family: var(--v2-mono);
+  font-size: calc(8px + 4pt);
+  color: var(--v2-ink-3);
+  margin-top: 2px;
+  letter-spacing: 0.06em;
+}
+
+:global(.wall-formula-text) {
+  display: block;
+  font-family: var(--v2-mono);
+  font-size: calc(8px + 4pt);
+  color: var(--v2-ink-3);
+  margin-top: 2px;
+  letter-spacing: 0.06em;
+}
+
+:global(.room-header-delete-btn) {
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+:global(.room-header-delete-btn:hover) {
+  background: rgba(248,113,113,0.08) !important;
+  border-color: rgba(248,113,113,0.4) !important;
 }
 
 :global(.geometry-primary-grid) {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(160px, 0.9fr);
+  grid-template-columns: minmax(170px, 1.25fr) repeat(3, minmax(92px, 0.85fr)) minmax(120px, 0.9fr);
   gap: 8px;
   align-items: end;
+  min-width: 0;
+}
+
+:global(.geometry-mode-field) {
+  min-width: 0;
+}
+
+:global(.geometry-mode-buttons) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+:global(.geometry-mode-buttons button) {
+  width: 100%;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+  overflow-wrap: anywhere;
 }
 
 :global(.geometry-secondary-grid) {
@@ -139,10 +225,85 @@
   align-items: end;
 }
 
+:global(.trim-setup-grid) {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.6fr) minmax(150px, 0.8fr) minmax(190px, 1fr);
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+:global(.trim-setup-grid > *) {
+  min-width: 0;
+}
+
+:global(.drywall-repair-grid) {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.45fr) minmax(112px, 0.75fr) minmax(136px, 0.8fr);
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+:global(.drywall-repair-grid > *) {
+  min-width: 0;
+}
+
+:global(.trim-primer-mode-field) {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+:global(.trim-primer-mode-field .primer-mode-row) {
+  max-width: 220px;
+}
+
+:global(.scope-helper-bar) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+:global(.required-input-frame input),
+:global(.required-input-frame select),
+:global(.required-input-frame textarea),
+:global(.required-input-frame .trim-type-picker-trigger),
+:global(.required-input-frame .primer-mode-row button),
+:global(.required-input-frame > div) {
+  border-color: rgba(203, 213, 225, 0.42) !important;
+}
+
+:global(.optional-input-frame input),
+:global(.optional-input-frame select),
+:global(.optional-input-frame textarea),
+:global(.optional-input-frame .trim-type-picker-trigger),
+:global(.optional-input-frame > div) {
+  border-color: transparent !important;
+}
+
+:global(.optional-input-frame input:focus),
+:global(.optional-input-frame select:focus),
+:global(.optional-input-frame textarea:focus),
+:global(.optional-input-frame .trim-type-picker-trigger:focus) {
+  border-color: rgba(132,204,147,0.55) !important;
+}
+
+:global(.trim-type-picker-dropdown) {
+  scrollbar-gutter: stable;
+}
+
 :global(.primer-mode-row) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+  min-width: 0;
+}
+
+:global(.primer-mode-row button) {
+  min-width: 0;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
 }
 
 :global(.modifier-grid) {
@@ -192,6 +353,24 @@
 :global(.room-side-col) {
   max-height: calc(100vh - 88px);
   overflow: auto;
+  min-width: 0;
+}
+
+:global(.estimate-v2-sidebar) {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+:global(.estimate-v2-sidebar-collapsed) {
+  justify-items: center;
+}
+
+:global(.ace-v2-rooms-layout),
+:global(.walls-v2-shell),
+:global(.room-workspace),
+:global(.room-main-col),
+:global(main) {
+  min-width: 0;
 }
 
 :global(.summary-stack) {
@@ -293,12 +472,26 @@
 }
 
 @media (max-width: 1100px) {
+  :global(.estimate-v2-header) {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  :global(.estimate-v2-header-actions) {
+    justify-content: flex-start !important;
+    width: 100%;
+  }
+
   :global(.ace-v2-rooms-layout),
   :global(.walls-v2-shell) {
     grid-template-columns: 1fr !important;
   }
 
   :global(.room-setup-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :global(.geometry-primary-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -310,21 +503,88 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  :global(.trim-setup-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :global(.drywall-repair-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :global(.trim-primer-mode-field) {
+    grid-column: span 1;
+  }
+
+  :global(.trim-primer-mode-field .primer-mode-row) {
+    max-width: none;
+  }
+
+  :global(.scope-helper-bar) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   :global(.modifier-grid) {
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   }
 }
 
 @media (max-width: 900px) {
+  :global(.room-header-top) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.estimate-v2-header) {
+    gap: 10px !important;
+    padding: 10px 12px !important;
+  }
+
+  :global(.estimate-v2-header-title) {
+    font-size: 22px !important;
+    line-height: 1.15 !important;
+  }
+
+  :global(.estimate-v2-header-subtitle) {
+    display: none !important;
+  }
+
+  :global(.estimate-v2-header-actions) {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+  }
+
+  :global(.estimate-v2-header-actions button) {
+    width: 100%;
+    min-height: 40px;
+    font-size: 13px !important;
+  }
+
+  :global(.estimate-v2-room-title) {
+    font-size: 20px !important;
+    line-height: 1.15 !important;
+  }
+
+  :global(.summary-kpi) {
+    font-size: 26px !important;
+    letter-spacing: 0 !important;
+  }
+
   :global(.walls-room-grid),
   :global(.walls-field-grid),
   :global(.walls-segment-grid),
   :global(.room-setup-grid),
   :global(.geometry-primary-grid),
   :global(.geometry-secondary-grid),
-  :global(.paint-setup-grid),
+    :global(.paint-setup-grid),
+    :global(.trim-setup-grid),
+    :global(.drywall-repair-grid),
+  :global(.scope-helper-bar),
   :global(.modifier-grid),
   :global(.advanced-grid) {
     grid-template-columns: 1fr !important;
+  }
+
+  :global(.trim-primer-mode-field) {
+    grid-column: auto;
   }
 }

@@ -39,8 +39,8 @@ export default function JobDetailHeader({
   formatStatus,
 }: JobDetailHeaderProps) {
   return (
-    <div className="grid gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="crm-job-detail-controls grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 max-md:hidden">
         <div className="grid gap-1">
           <h2 className="m-0 text-xl font-black text-[color:var(--crm-ui-text)]">Job status</h2>
           <p className="m-0 text-sm text-[color:var(--crm-ui-muted)]">Full job overview and schedule.</p>
@@ -50,17 +50,29 @@ export default function JobDetailHeader({
         </CrmButton>
       </div>
 
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-3 max-md:hidden">
         <div className="text-3xl font-extrabold tracking-tight text-[color:var(--crm-ui-text)]">{title}</div>
         {status ? <CrmChip tone="accent">{formatStatus(status)}</CrmChip> : null}
       </div>
       {status ? (
         <>
+          <div className="hidden items-center justify-between gap-2 max-md:flex">
+            <CrmChip tone="accent">{formatStatus(status)}</CrmChip>
+            <CrmButton
+              type="button"
+              onClick={onDelete}
+              tone="danger"
+              disabled={deleting}
+              className="min-h-9 px-3 text-xs"
+            >
+              {deleting ? iconLabel(Trash2, 'Deleting...', 14) : iconLabel(Trash2, 'Delete', 14)}
+            </CrmButton>
+          </div>
           <CrmField label="Job stage">
             <select
               value={status}
               onChange={(event) => onStatusChange(event.target.value)}
-              className="ace-crm-input max-w-[280px] text-sm"
+              className="ace-crm-input max-w-[280px] text-sm max-md:max-w-none max-md:min-h-10 max-md:px-3 max-md:py-2"
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -69,7 +81,7 @@ export default function JobDetailHeader({
               ))}
             </select>
           </CrmField>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 max-md:hidden">
             <CrmButton type="button" onClick={onDelete} tone="danger" disabled={deleting}>
               {deleting ? iconLabel(Trash2, 'Deleting...') : iconLabel(Trash2, 'Delete job')}
             </CrmButton>

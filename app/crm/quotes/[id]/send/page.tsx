@@ -1,4 +1,3 @@
-import { quoteRouteFamily } from '@/app/crm/estimates/[id]/estimateRouteFamily'
 import SendEstimateClient from '@/app/crm/estimates/[id]/send/sendEstimateClient'
 
 export default async function SendQuotePage({
@@ -11,7 +10,7 @@ export default async function SendQuotePage({
     <SendEstimateClient
       estimateId={resolved.id}
       catalogSource="v2"
-      routeFamily={quoteRouteFamily}
+      routeFamilyKey="quote"
     />
   )
 }

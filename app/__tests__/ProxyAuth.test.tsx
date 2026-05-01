@@ -79,4 +79,56 @@ describe('proxy auth routing hardening', () => {
 
     expect(limitedResponse.status).toBe(429)
   })
+
+  it('rate limits repeated public accept and decline mutation requests', async () => {
+    for (let index = 0; index < 60; index += 1) {
+      const response = await proxy(
+        new NextRequest('http://localhost/api/quote-public/token-1/accept', {
+          method: 'POST',
+          headers: {
+            origin: 'http://localhost',
+            'x-forwarded-for': '203.0.113.20',
+          },
+        })
+      )
+
+      expect(response.status).toBe(200)
+    }
+
+    const limitedAcceptResponse = await proxy(
+      new NextRequest('http://localhost/api/quote-public/token-1/accept', {
+        method: 'POST',
+        headers: {
+          origin: 'http://localhost',
+          'x-forwarded-for': '203.0.113.20',
+        },
+      })
+    )
+    expect(limitedAcceptResponse.status).toBe(429)
+
+    for (let index = 0; index < 60; index += 1) {
+      const response = await proxy(
+        new NextRequest('http://localhost/api/quote-public/token-1/decline', {
+          method: 'POST',
+          headers: {
+            origin: 'http://localhost',
+            'x-forwarded-for': '203.0.113.21',
+          },
+        })
+      )
+
+      expect(response.status).toBe(200)
+    }
+
+    const limitedDeclineResponse = await proxy(
+      new NextRequest('http://localhost/api/quote-public/token-1/decline', {
+        method: 'POST',
+        headers: {
+          origin: 'http://localhost',
+          'x-forwarded-for': '203.0.113.21',
+        },
+      })
+    )
+    expect(limitedDeclineResponse.status).toBe(429)
+  })
 })

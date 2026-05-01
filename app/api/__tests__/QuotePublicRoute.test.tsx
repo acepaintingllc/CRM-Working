@@ -127,6 +127,7 @@ describe('quote public routes', () => {
         body: JSON.stringify({
           legal_name: 'Taylor Smith',
           accepted_terms: true,
+          customer_email: 'taylor@example.com',
           signature_type: 'typed',
           signature_value: 'Taylor Smith',
         }),
@@ -139,6 +140,7 @@ describe('quote public routes', () => {
     expect(mockAcceptPublicEstimate).toHaveBeenCalledWith({
       token: 'token-1',
       legalName: 'Taylor Smith',
+      customerEmail: 'taylor@example.com',
       signatureType: 'typed',
       signatureValue: 'Taylor Smith',
       acceptedTerms: true,
@@ -270,6 +272,7 @@ describe('quote public routes', () => {
     expect(mockAcceptPublicEstimate).toHaveBeenCalledWith({
       token: 'token-1',
       legalName: 'Taylor Smith',
+      customerEmail: '',
       signatureType: 'typed',
       signatureValue: 'Taylor Smith',
       acceptedTerms: true,

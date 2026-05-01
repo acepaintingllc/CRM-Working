@@ -1,22 +1,29 @@
 'use client'
 
-import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } from '@/lib/client/api'
+import { loadData, mutateData, requestApi, saveData, type ApiMutationEnvelope } from '../client/api.ts'
 import {
   normalizeQuoteHomeJobQuery,
   normalizeQuoteHomeSearchQuery,
-} from '@/lib/quotes/quoteHomeCursors'
+} from './quoteHomeCursors.ts'
+import { quoteRatesFlagsEndpoint } from './ratesFlagsClient.ts'
 import type {
   ProductFamily,
   QuoteProductPayload,
+  QuoteProductScope,
   QuoteProductStatusFilter,
-} from '@/lib/quotes/productsForm'
-import type { CreateQuoteVersionInput } from '@/lib/quotes/versionCreation'
-import type { QuoteDefaults } from '@/lib/settings/types'
+} from './productsForm.ts'
+import type { CreateQuoteVersionInput } from './versionCreation.ts'
+import type { QuoteDefaults, QuoteMeasurementAssumptions } from '../settings/types.ts'
 import type {
   RatesFlagsMutationRequestByCategory,
   RatesFlagsPayload,
   RatesFlagsEditableCategoryKey,
-} from '@/types/estimator/ratesFlags'
+} from '../../types/estimator/ratesFlags.ts'
+
+export {
+  loadEstimateV2RatesFlagsPayload,
+  type EstimateV2RatesFlagsLoadResult,
+} from './ratesFlagsClient.ts'
 
 export async function loadQuoteHomeBootstrap<T>() {
   return loadData<T>('/api/quotes/home/bootstrap', { cache: 'no-store' })
@@ -98,11 +105,13 @@ export async function deleteQuoteVersion(id: string) {
 export async function loadQuoteProducts<T>(options: {
   status: QuoteProductStatusFilter
   family?: ProductFamily | null
+  scope?: QuoteProductScope | null
   search?: string | null
 }) {
   const params = new URLSearchParams()
   params.set('status', options.status)
   if (options.family) params.set('family', options.family)
+  if (options.scope) params.set('scope', options.scope)
   if (options.search?.trim()) params.set('search', options.search.trim())
 
   return loadData<T>(`/api/quotes/products?${params.toString()}`, {
@@ -147,8 +156,19 @@ export async function saveQuoteDefaults(data: QuoteDefaults) {
   return saveData('/api/settings/quote-defaults', data)
 }
 
+export async function loadQuoteMeasurementAssumptions() {
+  return loadData<QuoteMeasurementAssumptions>(
+    '/api/settings/quote-measurement-assumptions',
+    { cache: 'no-store' }
+  )
+}
+
+export async function saveQuoteMeasurementAssumptions(data: QuoteMeasurementAssumptions) {
+  return saveData('/api/settings/quote-measurement-assumptions', data)
+}
+
 export async function loadRatesFlags() {
-  return loadData<RatesFlagsPayload>('/api/quotes/rates-flags', { cache: 'no-store' })
+  return loadData<RatesFlagsPayload>(quoteRatesFlagsEndpoint, { cache: 'no-store' })
 }
 
 export async function mutateRatesFlags<

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
+import { getApiErrorMessage, parseApiResponse } from '@/lib/client/api'
+import { createEstimateV2Error, type EstimateV2Error } from '@/lib/estimator/errors'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 
 export type SummaryPolicyDraft = {
@@ -17,9 +19,10 @@ export function useEstimateV2SummaryPolicyController(params: {
   estimateId: string
   routeFamily: EstimateRouteFamily
   refreshPricing: () => Promise<void>
+  setError: (value: EstimateV2Error | null) => void
   setPolicySaving: (value: boolean) => void
 }) {
-  const { estimateId, routeFamily, refreshPricing, setPolicySaving } = params
+  const { estimateId, routeFamily, refreshPricing, setError, setPolicySaving } = params
   const policyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const savePolicyDebounced = useCallback(
@@ -29,7 +32,7 @@ export function useEstimateV2SummaryPolicyController(params: {
         if (!estimateId) return
         setPolicySaving(true)
         try {
-          await authedFetch(routeFamily.estimateApiHref(estimateId), {
+          const response = await authedFetch(routeFamily.estimateApiHref(estimateId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -43,13 +46,33 @@ export function useEstimateV2SummaryPolicyController(params: {
               },
             }),
           })
+          const parsed = await parseApiResponse(response)
+          if (!response.ok) {
+            const message = getApiErrorMessage(response, parsed, 'Failed to save pricing policy')
+            console.error('Estimate V2 summary policy save failed', {
+              estimateId,
+              operation: 'savePolicyDebounced',
+              status: response.status,
+              message,
+            })
+            setError(createEstimateV2Error(message, { retryable: true }))
+            return
+          }
+          setError(null)
           await refreshPricing()
+        } catch (error) {
+          console.error('Estimate V2 summary policy save crashed', {
+            estimateId,
+            operation: 'savePolicyDebounced',
+            error,
+          })
+          setError(createEstimateV2Error('Failed to save pricing policy', { retryable: true }))
         } finally {
           setPolicySaving(false)
         }
       }, 800)
     },
-    [estimateId, refreshPricing, routeFamily, setPolicySaving]
+    [estimateId, refreshPricing, routeFamily, setError, setPolicySaving]
   )
 
   useEffect(

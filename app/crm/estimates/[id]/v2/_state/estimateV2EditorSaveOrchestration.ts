@@ -8,10 +8,15 @@ import { validateV2CeilingsBeforeSave } from '@/lib/estimator/v2CeilingsValidati
 import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
 import { validateV2TrimBeforeSave } from '@/lib/estimator/v2TrimValidation'
 import type { EstimateV2EditorStoreState } from '@/lib/estimates/v2/store/estimateV2Store'
-import type { EstimateV2WallCalculationsPayload } from '@/types/estimator/v2'
+import type {
+  EstimateV2PricingSummary,
+  EstimateV2WallCalculationsPayload,
+} from '@/types/estimator/v2'
 import {
   normalizeCeilingScope,
   normalizeCeilingSegment,
+  normalizeDoorScope,
+  normalizeDrywallRepair,
   normalizeScope,
   normalizeSegment,
   normalizeTrimScope,
@@ -23,6 +28,34 @@ import type { NormalizedDomain, Unsafe } from './estimateV2EditorTypes'
 
 type EstimateV2SaveCollections = EstimateV2EditorStoreState['collections']
 type EstimateV2SaveMeta = EstimateV2EditorStoreState['meta']
+type CalculationMissingInput = {
+  message?: unknown
+}
+
+function missingInputsFrom(value: unknown): CalculationMissingInput[] {
+  if (!value || typeof value !== 'object') return []
+  const missing = (value as { missing_inputs?: unknown }).missing_inputs
+  return Array.isArray(missing) ? (missing as CalculationMissingInput[]) : []
+}
+
+export function collectEstimateV2CalculationMissingInputIssues(params: {
+  wallCalculations: unknown
+  ceilingCalculations: unknown
+  trimCalculations: unknown
+  doorCalculations: unknown
+  drywallCalculations: unknown
+}) {
+  const groups: Array<[label: string, value: unknown]> = [
+    ['Walls', params.wallCalculations],
+    ['Ceilings', params.ceilingCalculations],
+    ['Trim', params.trimCalculations],
+    ['Doors', params.doorCalculations],
+    ['Drywall', params.drywallCalculations],
+  ]
+  return groups.flatMap(([label, value]) =>
+    missingInputsFrom(value).map((input) => `${label}: ${String(input.message || 'Required input is missing')}`)
+  )
+}
 
 export type EstimateV2PreparedSaveState = {
   normalizedDomains: NormalizedDomain[]
@@ -33,6 +66,11 @@ export type EstimateV2PreparedSaveState = {
     ceilingScopes: EstimateV2SaveCollections['ceilingScopes']
     ceilingSegments: EstimateV2SaveCollections['ceilingSegments']
     trimScopes: EstimateV2SaveCollections['trimScopes']
+    doorScopes: EstimateV2SaveCollections['doorScopes']
+    drywallRepairs: EstimateV2SaveCollections['drywallRepairs']
+    rollers: EstimateV2SaveCollections['rollers']
+    accessFees: EstimateV2SaveCollections['accessFees']
+    otherItems: EstimateV2SaveCollections['otherItems']
   }
   payloadSnapshot: EstimateV2DirtySnapshot
 }
@@ -81,6 +119,11 @@ export function prepareEstimateV2SaveState(
     ceilingScopes: sanitizedCeilings.ceilingScopes,
     ceilingSegments: sanitizedCeilings.ceilingSegments,
     trimScopes: sanitizedTrim.trimScopes,
+    doorScopes: currentState.collections.doorScopes ?? [],
+    drywallRepairs: currentState.collections.drywallRepairs ?? [],
+    rollers: currentState.collections.rollers,
+    accessFees: currentState.collections.accessFees ?? [],
+    otherItems: currentState.collections.otherItems ?? [],
   }
 
   return {
@@ -88,6 +131,7 @@ export function prepareEstimateV2SaveState(
     roomModeById,
     collections,
     payloadSnapshot: buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
       rooms: currentState.collections.rooms,
       scopes: collections.scopes,
       segments: collections.segments,
@@ -95,6 +139,11 @@ export function prepareEstimateV2SaveState(
       ceilingScopes: collections.ceilingScopes,
       ceilingSegments: collections.ceilingSegments,
       trimScopes: collections.trimScopes,
+      doorScopes: collections.doorScopes ?? [],
+      drywallRepairs: collections.drywallRepairs ?? [],
+      rollers: collections.rollers,
+      accessFees: collections.accessFees,
+      otherItems: collections.otherItems,
     }),
   }
 }
@@ -102,12 +151,15 @@ export function prepareEstimateV2SaveState(
 export function validateEstimateV2PreparedSave(params: {
   currentState: EstimateV2EditorStoreState
   prepared: EstimateV2PreparedSaveState
+  trigger?: 'manual' | 'auto'
 }) {
   const { currentState, prepared } = params
+  const allowIncomplete = params.trigger === 'auto'
   const wallIssues = validateV2WallsBeforeSave({
     rooms: currentState.collections.rooms,
     scopes: prepared.collections.scopes,
     segments: prepared.collections.segments,
+    allowIncomplete,
   })
   const ceilingIssues = validateV2CeilingsBeforeSave({
     rooms: currentState.collections.rooms.map((room) => ({
@@ -117,6 +169,7 @@ export function validateEstimateV2PreparedSave(params: {
     })),
     ceilingScopes: prepared.collections.ceilingScopes,
     ceilingSegments: prepared.collections.ceilingSegments,
+    allowIncomplete,
   })
   const trimIssues = validateV2TrimBeforeSave({
     rooms: currentState.collections.rooms.map((room) => ({
@@ -135,6 +188,7 @@ export function validateEstimateV2PreparedSave(params: {
       helperSource: scope.helperSource || null,
       measurementValue: scope.measurementValue,
     })),
+    allowIncomplete,
   })
 
   return filterNonBlockingEstimateV2ValidationIssues([...wallIssues, ...ceilingIssues, ...trimIssues])
@@ -179,7 +233,7 @@ export function resolveEstimateV2SaveResponseState(params: {
   payload: unknown
   meta: Pick<
     EstimateV2SaveMeta,
-    'wallCalculations' | 'ceilingCalculations' | 'trimCalculations'
+    'wallCalculations' | 'ceilingCalculations' | 'trimCalculations' | 'doorCalculations' | 'drywallCalculations'
   >
   prepared: EstimateV2PreparedSaveState
   currentState: EstimateV2EditorStoreState
@@ -286,6 +340,42 @@ export function resolveEstimateV2SaveResponseState(params: {
     )
   }
 
+  const nextPricingSummary =
+    payload != null && typeof payload === 'object' && 'pricing_summary' in payload
+      ? (((payload as { pricing_summary?: unknown }).pricing_summary ??
+          null) as EstimateV2PricingSummary | null)
+      : null
+
+  const nextDoorCalculations =
+    payload != null && typeof payload === 'object' && 'door_calculations' in payload
+      ? ((payload as { door_calculations?: Unsafe }).door_calculations ?? null)
+      : meta.doorCalculations
+  let nextDoorScopes = prepared.collections.doorScopes
+  if (
+    trigger === 'manual' &&
+    nextDoorCalculations &&
+    Array.isArray((nextDoorCalculations as Unsafe).scopes)
+  ) {
+    nextDoorScopes = sortByPosition(
+      ((nextDoorCalculations as Unsafe).scopes as Unsafe[]).map(normalizeDoorScope)
+    )
+  }
+
+  const nextDrywallCalculations =
+    payload != null && typeof payload === 'object' && 'drywall_calculations' in payload
+      ? ((payload as { drywall_calculations?: Unsafe }).drywall_calculations ?? null)
+      : meta.drywallCalculations
+  let nextDrywallRepairs = prepared.collections.drywallRepairs ?? []
+  if (
+    trigger === 'manual' &&
+    nextDrywallCalculations &&
+    Array.isArray((nextDrywallCalculations as Unsafe).scopes)
+  ) {
+    nextDrywallRepairs = sortByPosition(
+      ((nextDrywallCalculations as Unsafe).scopes as Unsafe[]).map(normalizeDrywallRepair)
+    )
+  }
+
   return {
     collections: {
       scopes: nextScopes,
@@ -293,13 +383,22 @@ export function resolveEstimateV2SaveResponseState(params: {
       ceilingScopes: nextCeilingScopes,
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
+      doorScopes: nextDoorScopes,
+      drywallRepairs: nextDrywallRepairs,
+      rollers: currentState.collections.rollers,
+      accessFees: currentState.collections.accessFees ?? [],
+      otherItems: currentState.collections.otherItems ?? [],
     },
     calculations: {
       wallCalculations: nextWallCalculations,
       ceilingCalculations: nextCeilingCalculations,
       trimCalculations: nextTrimCalculations,
+      doorCalculations: nextDoorCalculations,
+      drywallCalculations: nextDrywallCalculations,
+      pricingSummary: nextPricingSummary,
     },
     lastSavedSnapshot: buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
       rooms: currentState.collections.rooms,
       scopes: nextScopes,
       segments: nextSegments,
@@ -307,6 +406,11 @@ export function resolveEstimateV2SaveResponseState(params: {
       ceilingScopes: nextCeilingScopes,
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
+      doorScopes: nextDoorScopes,
+      drywallRepairs: nextDrywallRepairs,
+      rollers: currentState.collections.rollers,
+      accessFees: currentState.collections.accessFees ?? [],
+      otherItems: currentState.collections.otherItems ?? [],
     }),
   }
 }

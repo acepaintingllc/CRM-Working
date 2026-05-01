@@ -147,3 +147,72 @@ export async function markEstimatePublicVersionSent(params: {
 
   return okResult(result.data as EstimatePublicVersionRow)
 }
+
+export async function supersedeOlderPublicEstimateVersions(params: {
+  orgId: string
+  estimateId: string
+  currentVersionId: string
+  supersededAt: string
+  userId: string
+}): Promise<ServiceResult<{ supersededIds: string[] }>> {
+  const result = await supabaseAdmin
+    .from('estimate_public_versions')
+    .update({
+      status: 'superseded',
+      locked_at: params.supersededAt,
+    })
+    .eq('org_id', params.orgId)
+    .eq('estimate_id', params.estimateId)
+    .neq('id', params.currentVersionId)
+    .in('status', ['sent', 'viewed'])
+    .select('id')
+
+  if (result.error) {
+    return errorResult('server_error', result.error.message)
+  }
+
+  const supersededIds = ((result.data ?? []) as Array<{ id?: unknown }>)
+    .map((row) => asText(row.id))
+    .filter(Boolean)
+
+  for (const versionId of supersededIds) {
+    const eventResult = await writeEstimatePublicEvent({
+      orgId: params.orgId,
+      versionId,
+      eventType: 'superseded',
+      actorType: 'staff',
+      createdBy: params.userId,
+      metadata: {
+        superseded_by_version_id: params.currentVersionId,
+      },
+    })
+    if (!eventResult.ok) return eventResult
+  }
+
+  return okResult({ supersededIds })
+}
+
+export async function updateEstimatePublicVersionSnapshot(params: {
+  orgId: string
+  versionId: string
+  snapshot: Record<string, unknown>
+}): Promise<ServiceResult<EstimatePublicVersionRow>> {
+  const result = await supabaseAdmin
+    .from('estimate_public_versions')
+    .update({
+      snapshot_json: params.snapshot,
+    })
+    .eq('org_id', params.orgId)
+    .eq('id', params.versionId)
+    .select('*')
+    .single()
+
+  if (result.error || !result.data) {
+    return errorResult(
+      'server_error',
+      result.error?.message ?? 'Unable to save quote PDF metadata'
+    )
+  }
+
+  return okResult(result.data as EstimatePublicVersionRow)
+}

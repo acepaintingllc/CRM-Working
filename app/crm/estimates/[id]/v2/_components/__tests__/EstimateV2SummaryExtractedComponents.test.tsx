@@ -5,6 +5,7 @@ import { EstimateV2SummaryAlerts } from '../../summary/_components/EstimateV2Sum
 import { EstimateV2SummaryKPIRail } from '../../summary/_components/EstimateV2SummaryKPIRail'
 import { EstimateV2SummaryPricingTable } from '../../summary/_components/EstimateV2SummaryPricingTable'
 import { EstimateV2SummaryRoomBlock } from '../../summary/_components/EstimateV2SummaryRoomBlock'
+import { EstimateV2SummaryRail } from '../EstimateV2SummaryRail'
 
 const cardStyle = { border: '1px solid #333', padding: 8, background: '#111' }
 const pricingColors = {
@@ -30,6 +31,8 @@ describe('Estimate V2 summary extracted components', () => {
             suppliesCost: 360,
             rooms: 3,
             laborRate: 80,
+            rawLaborHours: null,
+            rawLaborDays: null,
           }}
           finalTotal={4200}
           laborShare={233}
@@ -81,8 +84,10 @@ describe('Estimate V2 summary extracted components', () => {
                 paintCost: 120,
                 suppliesCost: 40,
                 subtotal: 900,
-                hasOverride: false,
+                hasOverride: true,
+                overrideSummary: 'Override: Area: 220 sf',
                 missingProduct: false,
+                conditionSelections: {},
               },
             ],
             displayScopeSubtotalMap: new Map([['scope-1', 900]]),
@@ -92,7 +97,8 @@ describe('Estimate V2 summary extracted components', () => {
             roomPct: 0.21,
             totals: { labor: 8, paint: 120, supplies: 40 },
             flagsLabel: 'None',
-            alerts: { missingProduct: 0, overrides: 0, flags: 0 },
+            alerts: { missingProduct: 0, overrides: 1, flags: 0 },
+            conditionBadges: [],
           }}
           open
           onToggle={onToggle}
@@ -105,12 +111,74 @@ describe('Estimate V2 summary extracted components', () => {
     expect(screen.getByText('Labor Adjustment')).toBeInTheDocument()
     expect(screen.getByText('Living Room')).toBeInTheDocument()
     expect(screen.getAllByText('$900').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Override: Area: 220 sf')).toHaveAttribute(
+      'title',
+      'Override: Area: 220 sf'
+    )
 
     const toggle = screen.getByRole('button', { name: /living room room details/i })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     fireEvent.click(toggle)
     expect(onToggle).toHaveBeenCalled()
     expect(screen.getAllByText('Walls').length).toBeGreaterThan(0)
+  })
+
+  it('hides primer in the editor summary rail when a section does not use primer', () => {
+    render(
+      <EstimateV2SummaryRail
+        styles={{
+          mono: { fontFamily: 'monospace' },
+        } as never}
+        vm={{
+          roomLabel: 'R001',
+          roomName: 'Living Room',
+          roomSubtitle: 'Living Room - Ceilings',
+          includedScopeLabels: 'Ceilings',
+          scopeToggleLabels: { walls: 'Walls excluded', ceilings: 'Ceilings included', trim: 'Trim excluded' },
+          validationText: 'No open issues',
+          validationColor: '#ccc',
+          calculationStateText: 'Saved',
+          calculationStateColor: '#ccc',
+          totalEffectiveAreaText: '144 sf',
+          runningTotalLabel: 'Running total - 1 room - active scopes',
+          saveStatusText: 'Saved',
+          saveStatusColor: '#ccc',
+          walls: {
+            visible: false,
+            title: 'Walls',
+            primaryValue: '0',
+            primaryUnit: 'Sq Ft',
+            paintLabel: 'Wall Paint',
+            primerLabel: 'Wall Primer',
+            chips: [],
+          },
+          ceilings: {
+            visible: true,
+            title: 'Ceilings',
+            modeLabel: 'RECT',
+            primaryValue: '144',
+            primaryUnit: 'Sq Ft',
+            paintLabel: 'Ceiling Paint',
+            primerLabel: 'Ceiling Primer',
+            showPrimer: false,
+            chips: [],
+          },
+          trim: {
+            visible: false,
+            title: 'Trim',
+            primaryValue: '0',
+            primaryUnit: 'LF / EA / SF',
+            paintLabel: 'Trim Paint',
+            primerLabel: 'Trim Primer',
+            chips: [],
+          },
+        }}
+        onFocusSection={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('Paint: Ceiling Paint')).toBeInTheDocument()
+    expect(screen.queryByText('Primer: Ceiling Primer')).not.toBeInTheDocument()
   })
 })
 

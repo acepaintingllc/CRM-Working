@@ -16,16 +16,19 @@ export const QUOTE_PRODUCT_SCOPE_OPTIONS = [
   'Cabinetry',
   'Other',
 ] as const
+export const QUOTE_PRODUCT_SCOPE_FILTERS = ['all', ...QUOTE_PRODUCT_SCOPE_OPTIONS] as const
 
 export type ProductStatus = (typeof QUOTE_PRODUCT_STATUSES)[number]
 export type QuoteProductStatusFilter = (typeof QUOTE_PRODUCT_STATUS_FILTERS)[number]
 export type ProductFamily = (typeof QUOTE_PRODUCT_FAMILIES)[number]
 export type QuoteProductSheen = (typeof QUOTE_PRODUCT_SHEEN_OPTIONS)[number]
 export type QuoteProductScope = (typeof QUOTE_PRODUCT_SCOPE_OPTIONS)[number]
+export type QuoteProductScopeFilter = (typeof QUOTE_PRODUCT_SCOPE_FILTERS)[number]
 
 export type QuoteProductQuery = {
   status: QuoteProductStatusFilter
   family?: ProductFamily | null
+  scope?: QuoteProductScope | null
   search?: string | null
 }
 
@@ -118,6 +121,7 @@ type QuoteProductValidationResult =
     }
 
 const QUOTE_PRODUCT_SCOPE_SET = new Set<string>(QUOTE_PRODUCT_SCOPE_OPTIONS)
+const QUOTE_PRODUCT_SCOPE_FILTER_SET = new Set<string>(QUOTE_PRODUCT_SCOPE_FILTERS)
 const QUOTE_PRODUCT_FAMILY_SET = new Set<string>(QUOTE_PRODUCT_FAMILIES)
 const QUOTE_PRODUCT_SHEEN_SET = new Set<string>(QUOTE_PRODUCT_SHEEN_OPTIONS)
 const QUOTE_PRODUCT_STATUS_SET = new Set<string>(QUOTE_PRODUCT_STATUSES)
@@ -183,6 +187,20 @@ export function normalizeQuoteProductStatusFilter(
   return QUOTE_PRODUCT_STATUS_FILTER_SET.has(normalized) ? (normalized as QuoteProductStatusFilter) : fallback
 }
 
+export function isQuoteProductScope(value: string | null | undefined): value is QuoteProductScope {
+  return QUOTE_PRODUCT_SCOPE_SET.has(String(value ?? '').trim())
+}
+
+export function normalizeQuoteProductScopeFilter(
+  value: string | null | undefined,
+  fallback: QuoteProductScopeFilter = 'all'
+): QuoteProductScopeFilter {
+  const normalized = String(value ?? '').trim()
+  return QUOTE_PRODUCT_SCOPE_FILTER_SET.has(normalized)
+    ? (normalized as QuoteProductScopeFilter)
+    : fallback
+}
+
 export function isQuoteProductFamily(value: string | null | undefined): value is ProductFamily {
   return QUOTE_PRODUCT_FAMILY_SET.has(String(value ?? '').trim())
 }
@@ -201,6 +219,7 @@ export function normalizeQuoteProductSearch(value: string | null | undefined) {
 
 export function quoteProductMatchesQuery(product: QuoteProductRow, query: QuoteProductQuery) {
   if (query.family && product.family !== query.family) return false
+  if (query.scope && !(product.default_scopes ?? []).includes(query.scope)) return false
 
   if (query.status !== 'all') {
     const normalizedStatus = product.status.toLowerCase()
@@ -211,7 +230,7 @@ export function quoteProductMatchesQuery(product: QuoteProductRow, query: QuoteP
   if (!search) return true
 
   const haystack =
-    `${product.name} ${product.base ?? ''} ${product.subtype ?? ''} ${product.notes ?? ''} ${product.status}`.toLowerCase()
+    `${product.name} ${product.base ?? ''} ${product.subtype ?? ''} ${(product.default_scopes ?? []).join(' ')} ${product.notes ?? ''} ${product.status}`.toLowerCase()
   return haystack.includes(search.toLowerCase())
 }
 

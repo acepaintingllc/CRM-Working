@@ -1,5 +1,3 @@
-import type { NotesDashboardResponse } from '@/lib/notes/types'
-
 export type DashboardJob = {
   id: string
   status: string | null
@@ -7,6 +5,9 @@ export type DashboardJob = {
   customer_name: string | null
   customer_address: string | null
   estimate_total_amount: number | string | null
+  scheduled_date?: string | null
+  scheduled_end_date?: string | null
+  completed_at?: string | null
 }
 
 export type DashboardCustomer = {
@@ -26,7 +27,7 @@ export type CalendarEvent = {
   htmlLink: string | null
 }
 
-export type NotesTaskSignal = {
+export type TaskSignal = {
   id: string
   title: string
   description: string | null
@@ -35,15 +36,16 @@ export type NotesTaskSignal = {
   has_due_time: boolean
 }
 
-type NotesDashboardTaskKeys = keyof NotesDashboardResponse['tasks']
-
-export type NotesDashboardPayload = {
-  tasks: Pick<Record<NotesDashboardTaskKeys, NotesTaskSignal[]>, 'overdue' | 'due_today'>
+export type TasksDashboardPayload = {
+  tasks: {
+    overdue: TaskSignal[]
+    due_today: TaskSignal[]
+  }
 }
 
-export type NotesReminderSignal = {
+export type TaskReminderSignal = {
   kind: 'overdue' | 'due_today'
-  task: NotesTaskSignal
+  task: TaskSignal
 }
 
 export type CrmHomeMetrics = {
@@ -68,7 +70,7 @@ export type CrmHomeSearchResults = {
 export type CrmHomeSignals = {
   calendarConnected: boolean | null
   calendarTodayEvents: CalendarEvent[]
-  notesReminders: NotesReminderSignal[]
+  taskReminders: TaskReminderSignal[]
 }
 
 export type CrmHomeData = {
@@ -76,6 +78,7 @@ export type CrmHomeData = {
   customers: DashboardCustomer[]
   metrics: CrmHomeMetrics
   activityJobs: DashboardJob[]
+  currentJobs: DashboardJob[]
   signals: CrmHomeSignals
   greeting: string
   todayLabel: string
@@ -86,7 +89,7 @@ export type CrmHomeSourceErrorKey =
   | 'customers'
   | 'calendarStatus'
   | 'calendarEvents'
-  | 'notes'
+  | 'tasks'
 
 export type CrmHomeSourceStatus = 'idle' | 'loading' | 'ready' | 'error' | 'degraded'
 
@@ -159,9 +162,9 @@ export type CrmHomeSourcePatch = Partial<{
     source: CrmHomeSourceResult<CalendarEvent[]>
     data: CalendarEvent[]
   }
-  notes: {
-    source: CrmHomeSourceResult<NotesDashboardPayload | null>
-    data: NotesReminderSignal[]
+  tasks: {
+    source: CrmHomeSourceResult<TasksDashboardPayload | null>
+    data: TaskReminderSignal[]
   }
 }>
 

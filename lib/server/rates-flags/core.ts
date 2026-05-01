@@ -40,11 +40,16 @@ export async function readRatesFlagsPayload(params: {
   const categories = CATEGORY_CONFIGS.map((config) =>
     buildCategoryFromStoredRows(config, rowsByCategory.get(config.key) ?? [])
   )
+  const overlay = buildOverlayFromRows({
+    templateVersion: state.template?.version ?? 0,
+    rows: state.rows,
+  })
   return {
     source: 'db',
     seeded: true,
     template_version: state.template?.version ?? null,
     categories,
+    condition_modifier_catalog: overlay.condition_modifiers,
   }
 }
 

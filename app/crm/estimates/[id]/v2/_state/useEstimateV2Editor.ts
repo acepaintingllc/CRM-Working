@@ -13,9 +13,12 @@ import {
 import { useEstimateV2BeforeUnload } from './useEstimateV2BeforeUnload'
 import { useEstimateV2CeilingActions } from './useEstimateV2CeilingActions'
 import { useEstimateV2DefaultScopeColorSync } from './useEstimateV2DefaultScopeColorSync'
+import { useEstimateV2DoorActions } from './useEstimateV2DoorActions'
+import { useEstimateV2DrywallActions } from './useEstimateV2DrywallActions'
 import { useEstimateV2EditorDerivedSections } from './useEstimateV2EditorDerivedSections'
 import { useEstimateV2EditorLoader } from './useEstimateV2EditorLoader'
 import { useEstimateV2EditorViewModels } from './useEstimateV2EditorViewModels'
+import { useEstimateV2OtherActions } from './useEstimateV2OtherActions'
 import { useEstimateV2RoomActions } from './useEstimateV2RoomActions'
 import { useEstimateV2SaveController } from './useEstimateV2SaveController'
 import { useEstimateV2SettingsActions } from './useEstimateV2SettingsActions'
@@ -68,6 +71,15 @@ export function useEstimateV2Editor({
     roomModeById: derived.room.roomModeById,
     roomHeightFactorByRoomId: derived.room.roomHeightFactorByRoomId,
   })
+  const doorActions = useEstimateV2DoorActions({
+    store,
+    doorTypeOptions: derived.catalog.doorTypeOptions,
+  })
+  const drywallActions = useEstimateV2DrywallActions({
+    store,
+    drywallRateOptions: derived.catalog.drywallRateOptions,
+  })
+  const otherActions = useEstimateV2OtherActions({ store })
   const settingsActions = useEstimateV2SettingsActions({ estimateId, routeFamily, store })
   const saveController = useEstimateV2SaveController({
     estimateId,
@@ -86,6 +98,9 @@ export function useEstimateV2Editor({
     wallActions,
     ceilingActions,
     trimActions,
+    doorActions,
+    drywallActions,
+    otherActions,
     settingsActions,
     save: saveController.save,
   })

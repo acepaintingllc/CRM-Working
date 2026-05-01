@@ -94,6 +94,7 @@ const seededPayload = {
     next_cursor: null,
     items: [],
   },
+  latest_version: null,
 }
 
 const firstPayload = {
@@ -118,6 +119,7 @@ const firstPayload = {
     next_cursor: null,
     items: [],
   },
+  latest_version: null,
 }
 
 const secondPayload = {
@@ -142,6 +144,7 @@ const secondPayload = {
     next_cursor: 'cursor-4',
     items: [],
   },
+  latest_version: null,
 }
 
 describe('useQuotesHomeData', () => {

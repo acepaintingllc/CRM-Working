@@ -10,14 +10,77 @@ export function EstimateV2Sidebar({
   roomVm,
   jobSettingsVm,
   toDisplayNumber,
+  collapsed,
+  onCollapse,
+  onExpand,
 }: {
   styles: EstimateV2EditorPageStyles
   roomVm: EstimateV2EditorRoomVm
   jobSettingsVm: EstimateV2EditorSettingsVm
   toDisplayNumber: (value: number | null | undefined) => string
+  collapsed: boolean
+  onCollapse: () => void
+  onExpand: () => void
 }) {
+  if (collapsed) {
+    return (
+      <aside
+        className="estimate-v2-sidebar estimate-v2-sidebar-collapsed"
+        style={{
+          ...styles.panel,
+          alignSelf: 'start',
+          position: 'sticky',
+          top: 58,
+          display: 'grid',
+          gap: 8,
+          padding: 6,
+          minWidth: 0,
+        }}
+      >
+        <button
+          type="button"
+          className="v2-btn"
+          onClick={onExpand}
+          aria-label="Expand estimator room navigation"
+          title="Expand room navigation"
+          style={{
+            ...styles.button,
+            width: 34,
+            minHeight: 34,
+            padding: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          &gt;
+        </button>
+      </aside>
+    )
+  }
+
   return (
-    <aside style={{ ...styles.panel, alignSelf: 'start', position: 'sticky', top: 80, display: 'grid', gap: 14 }}>
+    <aside className="estimate-v2-sidebar" style={{ ...styles.panel, alignSelf: 'start', position: 'sticky', top: 80, display: 'grid', gap: 14, minWidth: 0 }}>
+      <button
+        type="button"
+        className="v2-btn"
+        onClick={onCollapse}
+        aria-label="Collapse estimator room navigation"
+        title="Collapse room navigation"
+        style={{
+          ...styles.button,
+          width: 34,
+          minHeight: 34,
+          padding: 0,
+          display: 'inline-flex',
+          justifySelf: 'end',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <span aria-hidden="true">&lt;</span>
+      </button>
+
       <div style={{ display: 'grid', gap: 10 }}>
         <button
           type="button"
@@ -33,7 +96,7 @@ export function EstimateV2Sidebar({
             borderColor: 'rgba(134,239,172,0.18)',
           }}
         >
-          <span style={styles.mono}>Job Defaults</span>
+          <span style={styles.mono}>Paint Defaults</span>
           <span style={{ ...styles.mono, color: 'var(--v2-green-2)' }}>
             {jobSettingsVm.jobDefaultsOpen ? 'v' : '^'}
           </span>

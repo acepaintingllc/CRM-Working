@@ -11,14 +11,18 @@ import type { LucideIcon } from "lucide-react";
 import {
   CalendarDays,
   Calculator,
+  Camera,
+  ChevronLeft,
+  ChevronRight,
   Cog,
-  FileText,
   Home,
+  ListTodo,
   Users,
   Wrench,
 } from "lucide-react";
 
 const themeStorageKey = "acecrm.theme";
+const sidebarStorageKey = "acecrm.sidebarCollapsed";
 
 function resolveStoredTheme() {
   const stored = localStorage.getItem(themeStorageKey);
@@ -30,6 +34,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const logoSrc = getBrandLogoUrl()
   const iconSize = 16;
   const isQuotePath =
@@ -43,8 +48,9 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       { href: "/crm", label: "Home", Icon: Home },
       { href: "/crm/customers", label: "Customers", Icon: Users },
       { href: "/crm/jobs", label: "Job Center", Icon: Wrench },
+      { href: "/crm/job-photos", label: "Job Photos", Icon: Camera },
       { href: "/crm/quotes", label: "Quotes", Icon: Calculator },
-      { href: "/crm/notes", label: "Notes", Icon: FileText },
+      { href: "/crm/tasks", label: "Tasks", Icon: ListTodo },
       { href: "/crm/calendar", label: "Calendar", Icon: CalendarDays },
       { href: "/crm/settings", label: "Settings", Icon: Cog },
     ],
@@ -59,6 +65,23 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
       document.documentElement.dataset.theme = previousTheme || resolveStoredTheme();
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(localStorage.getItem(sidebarStorageKey) === "true");
+    } catch {
+      setSidebarCollapsed(false);
+    }
+  }, []);
+
+  const updateSidebarCollapsed = (collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
+    try {
+      localStorage.setItem(sidebarStorageKey, String(collapsed));
+    } catch {
+      // Persistence is best-effort only; the sidebar remains interactive without storage.
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -98,9 +121,9 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
     >
       {/* ── Desktop sidebar ── */}
       <aside
-        className="hidden lg:flex"
+        className="hidden md:flex"
         style={{
-          width: 220,
+          width: sidebarCollapsed ? 64 : 220,
           flexShrink: 0,
           flexDirection: "column",
           background: "var(--crm-card)",
@@ -109,65 +132,128 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
           top: 0,
           height: "100vh",
           overflowY: "auto",
+          transition: "width 160ms ease",
         }}
       >
         {/* Brand */}
         <div
           style={{
-            padding: "18px 16px 14px",
+            padding: sidebarCollapsed ? "14px 10px" : "18px 16px 14px",
             borderBottom: "1px solid var(--crm-border)",
           }}
         >
-          <Link
-            href="/crm"
+          <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 10,
-              textDecoration: "none",
+              justifyContent: sidebarCollapsed ? "center" : "space-between",
+              gap: 8,
             }}
           >
-            {!logoError && (
-              <span
+            <Link
+              href="/crm"
+              aria-label={sidebarCollapsed ? "ACE Painting CRM home" : undefined}
+              title={sidebarCollapsed ? "ACE Painting CRM" : undefined}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: sidebarCollapsed ? "center" : "flex-start",
+                gap: 10,
+                textDecoration: "none",
+                minWidth: 0,
+              }}
+            >
+              {!logoError && (
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: "var(--crm-bg)",
+                    border: "1px solid var(--crm-border)",
+                    display: "grid",
+                    placeItems: "center",
+                    overflow: "hidden",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Image
+                    src={logoSrc}
+                    alt="ACE Painting"
+                    onError={() => setLogoError(true)}
+                    width={28}
+                    height={28}
+                    unoptimized
+                    style={{ width: 28, height: 28, objectFit: "contain" }}
+                  />
+                </span>
+              )}
+              {!sidebarCollapsed && (
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: "var(--crm-text)", lineHeight: 1.2 }}>
+                    ACE Painting
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--crm-muted)", fontWeight: 600, marginTop: 1 }}>
+                    CRM
+                  </div>
+                </div>
+              )}
+            </Link>
+            {!sidebarCollapsed && (
+              <button
+                type="button"
+                onClick={() => updateSidebarCollapsed(true)}
+                aria-label="Collapse CRM navigation"
+                title="Collapse navigation"
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background: "var(--crm-bg)",
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
                   border: "1px solid var(--crm-border)",
-                  display: "grid",
-                  placeItems: "center",
-                  overflow: "hidden",
-                  flexShrink: 0,
+                  background: "var(--crm-input)",
+                  color: "var(--crm-muted)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
                 }}
               >
-                <Image
-                  src={logoSrc}
-                  alt="ACE Painting"
-                  onError={() => setLogoError(true)}
-                  width={28}
-                  height={28}
-                  unoptimized
-                  style={{ width: 28, height: 28, objectFit: "contain" }}
-                />
-              </span>
+                <ChevronLeft size={16} aria-hidden="true" />
+              </button>
             )}
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 13, color: "var(--crm-text)", lineHeight: 1.2 }}>
-                ACE Painting
-              </div>
-              <div style={{ fontSize: 11, color: "var(--crm-muted)", fontWeight: 600, marginTop: 1 }}>
-                CRM
-              </div>
-            </div>
-          </Link>
+          </div>
         </div>
+
+        {sidebarCollapsed && (
+          <div style={{ padding: "8px 10px 0" }}>
+            <button
+              type="button"
+              onClick={() => updateSidebarCollapsed(false)}
+              aria-label="Expand CRM navigation"
+              title="Expand navigation"
+              style={{
+                width: "100%",
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--crm-border)",
+                background: "var(--crm-input)",
+                color: "var(--crm-text-soft)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+              }}
+            >
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </div>
+        )}
 
         {/* Nav items */}
         <nav
           style={{
             flex: 1,
-            padding: "10px 10px",
+            padding: sidebarCollapsed ? "10px 8px" : "10px 10px",
             display: "flex",
             flexDirection: "column",
             gap: 2,
@@ -185,11 +271,14 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-label={sidebarCollapsed ? item.label : undefined}
+                title={sidebarCollapsed ? item.label : undefined}
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 10,
-                  padding: "9px 12px",
+                  justifyContent: sidebarCollapsed ? "center" : "flex-start",
+                  gap: sidebarCollapsed ? 0 : 10,
+                  padding: sidebarCollapsed ? "10px 0" : "9px 12px",
                   borderRadius: 10,
                   textDecoration: "none",
                   fontWeight: active ? 700 : 500,
@@ -205,56 +294,58 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                 }}
               >
                 <Icon size={iconSize} aria-hidden="true" />
-                <span>{item.label}</span>
+                {!sidebarCollapsed && <span>{item.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div
-          style={{
-            padding: "14px 16px",
-            borderTop: "1px solid var(--crm-border)",
-          }}
-        >
-          <label
+        {!sidebarCollapsed && (
+          <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 12,
-              fontWeight: 700,
-              color: "var(--crm-muted)",
+              padding: "14px 16px",
+              borderTop: "1px solid var(--crm-border)",
             }}
           >
-            <span>Theme</span>
-            <span
+            <label
               style={{
-                flex: 1,
-                height: 32,
-                borderRadius: 8,
-                border: "1px solid var(--crm-border)",
-                background: "var(--crm-input)",
-                color: "var(--crm-text)",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
                 fontSize: 12,
                 fontWeight: 700,
-                padding: "0 10px",
-                display: "inline-flex",
-                alignItems: "center",
+                color: "var(--crm-muted)",
               }}
             >
-              Dark
-            </span>
-          </label>
-        </div>
+              <span>Theme</span>
+              <span
+                style={{
+                  flex: 1,
+                  height: 32,
+                  borderRadius: 8,
+                  border: "1px solid var(--crm-border)",
+                  background: "var(--crm-input)",
+                  color: "var(--crm-text)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "0 10px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                Dark
+              </span>
+            </label>
+          </div>
+        )}
       </aside>
 
       {/* ── Main content column ── */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+      <div className="crm-main-column" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
 
         {/* Mobile top bar */}
         <div
-          className="lg:hidden"
+          className="crm-mobile-topbar md:hidden"
           style={{
             position: "sticky",
             top: 0,
@@ -262,6 +353,8 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
             borderBottom: "1px solid var(--crm-border)",
             background: "var(--crm-nav-bg)",
             backdropFilter: "blur(8px)",
+            maxWidth: "100vw",
+            overflow: "hidden",
           }}
         >
           <div
@@ -330,12 +423,14 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div
+            className="crm-mobile-nav"
             style={{
               overflowX: "auto",
               display: "flex",
               gap: 6,
               padding: "0 14px 10px",
               scrollbarWidth: "none",
+              maxWidth: "100%",
             }}
           >
             {navItems.map((item) => {
@@ -376,7 +471,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Page content */}
-        <div style={{ flex: 1 }}>
+        <div className="crm-page-content" style={{ flex: 1 }}>
           <SWRConfig
             value={{
               fetcher: (url: string) => authedFetch(url).then((response) => response.json()),

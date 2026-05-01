@@ -43,6 +43,12 @@ export function EstimateV2SummaryRail({
           </button>
         ) : null}
 
+        {vm.doors?.visible ? (
+          <button type="button" className="summary-card summary-card-clickable" onClick={() => onFocusSection('doors')}>
+            <SectionCard styles={styles} section={vm.doors} />
+          </button>
+        ) : null}
+
         <div className="summary-card">
           <div style={styles.mono}>Validation</div>
           <div style={{ fontSize: 'calc(13px + 4pt)', color: vm.validationColor, marginTop: 2 }}>{vm.validationText}</div>
@@ -85,7 +91,9 @@ function SectionCard({
       <div className="summary-kpi">{section.primaryValue}</div>
       <div style={{ ...styles.mono, color: 'var(--v2-ink-3)', marginTop: 2 }}>{section.primaryUnit}</div>
       <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 8 }}>Paint: {section.paintLabel}</div>
-      <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 2 }}>Primer: {section.primerLabel}</div>
+      {section.showPrimer ?? true ? (
+        <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 2 }}>Primer: {section.primerLabel}</div>
+      ) : null}
       {section.secondaryLabel && section.secondaryValue ? (
         <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 8 }}>
           {section.secondaryLabel}: {section.secondaryValue}

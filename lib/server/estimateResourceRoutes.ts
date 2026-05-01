@@ -18,6 +18,8 @@ export type EstimateRouteContext = {
   params: { id: string } | Promise<{ id: string }>
 }
 
+const ESTIMATE_SAVE_BODY_MAX_BYTES = 2 * 1024 * 1024
+
 type EstimateDeleteCopy = {
   deletedNotice: string
 }
@@ -59,7 +61,7 @@ export async function handleEstimateRoutePut(request: Request, context: Estimate
   const estimateId = readUuidParam(params?.id, 'estimate id')
   if (!estimateId.ok) return estimateId.response
 
-  const body = await readJsonBody(request)
+  const body = await readJsonBody(request, { maxBytes: ESTIMATE_SAVE_BODY_MAX_BYTES })
   if (!body.ok) return body.response
 
   try {

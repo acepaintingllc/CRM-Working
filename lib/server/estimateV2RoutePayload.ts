@@ -13,6 +13,8 @@ import type {
   TrimMeasurementMode,
   TrimUnitType,
 } from '../estimator/trimTypes.ts'
+import type { DoorCalculationScopeRow } from '../estimator/doorTypes.ts'
+import type { DrywallRepairCalculationRow } from '../estimator/drywall.ts'
 import {
   asNullableNumber,
   asNullableNumberFromKeys,
@@ -22,6 +24,11 @@ import {
   toYN,
   type UnsafeRecord as Unsafe,
 } from '../estimator/parsing.ts'
+import {
+  normalizeConditionSelections,
+  parseConditionModifierRow,
+  type EstimateV2ConditionSelections,
+} from '../estimator/conditionModifiers.ts'
 
 function nextRoomId(used: Set<string>, startAt: number) {
   let n = Math.max(1, startAt)
@@ -51,11 +58,14 @@ export type V2RoomRosterRow = {
   id?: string
   room_id: string
   room_name: string
+  room_type_id: string | null
+  wall_complexity_id: string | null
   position: number
   notes: string | null
   length_in: number | null
   width_in: number | null
   wallheight_in: number | null
+  condition_selections: EstimateV2ConditionSelections | null
 }
 
 export type V2WallScopeSaveRow = WallCalculationScopeRow
@@ -78,11 +88,14 @@ export function buildV2RoomRosterRows(rows: Unsafe[]) {
       id: isUuid(row.id) ? asText(row.id) : undefined,
       room_id: roomId,
       room_name: roomName,
+      room_type_id: asText(row.room_type_id).toUpperCase() || null,
+      wall_complexity_id: asText(row.wall_complexity_id).toUpperCase() || null,
       position: idx,
       notes: asText(row.notes) || null,
       length_in: asNullableNumber(row.length_in),
       width_in: asNullableNumber(row.width_in),
       wallheight_in: asNullableNumber(row.wallheight_in),
+      condition_selections: normalizeConditionSelections(row.condition_selections),
     } satisfies V2RoomRosterRow
   })
 }
@@ -180,6 +193,7 @@ export function buildV2WallScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       paint_price_per_gal: asNullableNumberFromKeys(row, ['paint_price_per_gal']),
       primer_price_per_gal: asNullableNumberFromKeys(row, ['primer_price_per_gal']),
       notes: asText(row.notes) || null,
+      condition_selections: normalizeConditionSelections(row.condition_selections),
     } satisfies V2WallScopeSaveRow
   })
 
@@ -224,16 +238,6 @@ export function buildV2WallSegmentRows(rows: Unsafe[], scopeRows: V2WallScopeSav
     const heightIn = asNullableNumber(row.height_in)
     const baseIn = asNullableNumber(row.base_in)
     const manualAreaSf = asNullableNumber(row.manual_area_sf)
-    if (shapeType === 'RECTANGLE' && (widthIn == null || heightIn == null)) {
-      throw new Error(`Wall segment ${idx + 1}: rectangle segments require width and height`)
-    }
-    if (shapeType === 'TRIANGLE' && (baseIn == null || heightIn == null)) {
-      throw new Error(`Wall segment ${idx + 1}: triangle segments require base and height`)
-    }
-    if (shapeType === 'MANUAL' && manualAreaSf == null) {
-      throw new Error(`Wall segment ${idx + 1}: manual segments require area`)
-    }
-
     const nextPosition = positionByScope.get(scopeId) ?? 0
     positionByScope.set(scopeId, nextPosition + 1)
 
@@ -302,6 +306,8 @@ function toTrimHelperSource(value: unknown): TrimHelperSource | null {
 export type V2CeilingScopeSaveRow = CeilingCalculationScopeRow
 export type V2CeilingSegmentSaveRow = CeilingCalculationSegmentRow
 export type V2TrimScopeSaveRow = TrimCalculationScopeRow
+export type V2DoorScopeSaveRow = DoorCalculationScopeRow
+export type V2DrywallRepairSaveRow = DrywallRepairCalculationRow
 
 export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
   const modeByRoom = new Map<string, 'RECT' | 'SEG'>()
@@ -330,6 +336,12 @@ export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
     const nextPosition = positionByRoom.get(roomId) ?? 0
     positionByRoom.set(roomId, nextPosition + 1)
 
+        const geometryMode = asText(row.ceiling_geometry_mode).toUpperCase()
+    const ceilingGeometryMode: 'FLAT' | 'VAULTED' | 'TRAY' | 'COFFERED' | 'MANUAL' =
+      geometryMode === 'VAULTED' || geometryMode === 'TRAY' || geometryMode === 'COFFERED' || geometryMode === 'MANUAL'
+        ? geometryMode
+        : 'FLAT'
+
     return {
       id: isUuid(row.id) ? asText(row.id) : undefined,
       room_id: roomId,
@@ -343,6 +355,21 @@ export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       prime_mode: toCeilingPrimeMode(row.prime_mode),
       spot_prime_percent: asNullableNumber(row.spot_prime_percent),
       ceiling_type_id: asText(row.ceiling_type_id) || null,
+      // Geometry helper fields
+      ceiling_geometry_mode: ceilingGeometryMode,
+      vaulted_area_factor: asNullableNumber(row.vaulted_area_factor),
+      vaulted_ridge_length_in: asNullableNumber(row.vaulted_ridge_length_in),
+      vaulted_slope_length_in: asNullableNumber(row.vaulted_slope_length_in),
+      vaulted_plane_count: asNullableNumber(row.vaulted_plane_count),
+      tray_perimeter_in: asNullableNumber(row.tray_perimeter_in),
+      tray_step_height_in: asNullableNumber(row.tray_step_height_in),
+      tray_band_width_in: asNullableNumber(row.tray_band_width_in),
+      coffer_section_length_in: asNullableNumber(row.coffer_section_length_in),
+      coffer_section_width_in: asNullableNumber(row.coffer_section_width_in),
+      coffer_section_count: asNullableNumber(row.coffer_section_count),
+      coffer_face_height_in: asNullableNumber(row.coffer_face_height_in),
+      coffer_bottom_width_in: asNullableNumber(row.coffer_bottom_width_in),
+      helper_extra_area_sf: asNullableNumber(row.helper_extra_area_sf),
       length_in: asNullableNumber(row.length_in),
       width_in: asNullableNumber(row.width_in),
       area_sf: asNullableNumber(row.area_sf),
@@ -382,6 +409,7 @@ export function buildV2CeilingScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       paint_price_per_gal: asNullableNumber(row.paint_price_per_gal),
       primer_price_per_gal: asNullableNumber(row.primer_price_per_gal),
       notes: asText(row.notes) || null,
+      condition_selections: normalizeConditionSelections(row.condition_selections),
     } satisfies V2CeilingScopeSaveRow
   })
 
@@ -426,16 +454,6 @@ export function buildV2CeilingSegmentRows(rows: Unsafe[], scopeRows: V2CeilingSc
     const heightIn = asNullableNumber(row.height_in)
     const baseIn = asNullableNumber(row.base_in)
     const manualAreaSf = asNullableNumber(row.manual_area_sf)
-    if (shapeType === 'RECTANGLE' && (widthIn == null || heightIn == null)) {
-      throw new Error(`Ceiling segment ${idx + 1}: rectangle segments require width and height`)
-    }
-    if (shapeType === 'TRIANGLE' && (baseIn == null || heightIn == null)) {
-      throw new Error(`Ceiling segment ${idx + 1}: triangle segments require base and height`)
-    }
-    if (shapeType === 'MANUAL' && manualAreaSf == null) {
-      throw new Error(`Ceiling segment ${idx + 1}: manual segments require area`)
-    }
-
     const nextPosition = positionByScope.get(scopeId) ?? 0
     positionByScope.set(scopeId, nextPosition + 1)
 
@@ -485,6 +503,7 @@ export function buildV2TrimScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       helper_source: toTrimHelperSource(row.helper_source),
       measurement_value: asNullableNumber(row.measurement_value ?? row.qty),
       helper_value: asNullableNumber(row.helper_value),
+      baseboard_opening_count: asNullableNumber(row.baseboard_opening_count),
       color_id: toColorId(row.color_id) || null,
       paint_product_id: asText(row.paint_product_id) || null,
       primer_product_id: asText(row.primer_product_id) || null,
@@ -528,10 +547,12 @@ export function buildV2TrimScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       primer_coverage_units_per_gal_per_coat: asNullableNumber(row.primer_coverage_units_per_gal_per_coat ?? row.primer_coverage_sqft_per_gal_per_coat),
       area_supply_cost_per_unit: asNullableNumber(row.area_supply_cost_per_unit ?? row.area_supply_cost_per_sf),
       per_color_supply_cost: asNullableNumber(row.per_color_supply_cost),
+      primer_supply_cost: asNullableNumber(row.primer_supply_cost),
       labor_rate_per_hour: asNullableNumberFromKeys(row, ['labor_rate_per_hour', 'override_labor_rate']),
       paint_price_per_gal: asNullableNumber(row.paint_price_per_gal),
       primer_price_per_gal: asNullableNumber(row.primer_price_per_gal),
       notes: asText(row.notes) || null,
+      condition_selections: normalizeConditionSelections(row.condition_selections),
     } satisfies V2TrimScopeSaveRow
   })
 
@@ -545,6 +566,151 @@ export function buildV2TrimScopeRows(rows: Unsafe[], roomIds: Set<string>) {
   }
 }
 
+// ─── Door scope builders ─────────────────────────────────────────────────────
+
+export function buildV2DoorScopeRows(rows: Unsafe[], roomIds: Set<string>) {
+  const positionByRoom = new Map<string, number>()
+  const scopeRows = rows.map((row, idx) => {
+    const roomId = asText(row.room_id).toUpperCase()
+    if (!roomId || !roomIds.has(roomId)) {
+      throw new Error(`Door scope ${idx + 1}: room is missing or invalid`)
+    }
+    const nextPosition = positionByRoom.get(roomId) ?? 0
+    positionByRoom.set(roomId, nextPosition + 1)
+
+    return {
+      id: isUuid(row.id) ? asText(row.id) : undefined,
+      room_id: roomId,
+      position: nextPosition,
+      include: toYN(row.include, 'Y'),
+      scope_name: asText(row.scope_name) || null,
+      door_type_id: asText(row.door_type_id).toUpperCase() || null,
+      color_id: toColorId(row.color_id) || null,
+      paint_product_id: asText(row.paint_product_id) || null,
+      primer_product_id: asText(row.primer_product_id) || null,
+      prime_mode: toTrimPrimeMode(row.prime_mode),
+      quantity: asNullableNumber(row.quantity),
+      sides: asNullableNumber(row.sides),
+      paint_coats: asNullableNumber(row.paint_coats),
+      primer_coats: asNullableNumber(row.primer_coats),
+      spot_prime_percent: asNullableNumber(row.spot_prime_percent),
+      condition_factor: asNullableNumber(row.condition_factor),
+      labor_rate: asNullableNumber(row.labor_rate),
+      material_rate: asNullableNumber(row.material_rate),
+      raw_units: asNullableNumber(row.raw_units),
+      effective_units: asNullableNumber(row.effective_units),
+      raw_paint_hours: asNullableNumber(row.raw_paint_hours),
+      override_paint_hours: asNullableNumber(row.override_paint_hours),
+      effective_paint_hours: asNullableNumber(row.effective_paint_hours),
+      raw_primer_hours: asNullableNumber(row.raw_primer_hours),
+      override_primer_hours: asNullableNumber(row.override_primer_hours),
+      effective_primer_hours: asNullableNumber(row.effective_primer_hours),
+      raw_material_cost: asNullableNumber(row.raw_material_cost),
+      override_material_cost: asNullableNumber(row.override_material_cost),
+      effective_material_cost: asNullableNumber(row.effective_material_cost),
+      raw_supply_cost: asNullableNumber(row.raw_supply_cost),
+      override_supply_cost: asNullableNumber(row.override_supply_cost),
+      effective_supply_cost: asNullableNumber(row.effective_supply_cost),
+      raw_total: asNullableNumber(row.raw_total),
+      override_total: asNullableNumber(row.override_total),
+      effective_total: asNullableNumber(row.effective_total),
+      notes: asText(row.notes) || null,
+    } satisfies V2DoorScopeSaveRow
+  })
+
+  return {
+    scopeRows,
+    scopeIds: new Set(
+      scopeRows
+        .map((row) => row.id)
+        .filter((value): value is string => !!value)
+    ),
+  }
+}
+
+function toDrywallSurface(value: unknown): 'wall' | 'ceiling' {
+  return asText(value).toLowerCase() === 'ceiling' ? 'ceiling' : 'wall'
+}
+
+function toDrywallRepairType(value: unknown) {
+  const raw = asText(value).toLowerCase()
+  if (
+    raw === 'corner_tape_replacement' ||
+    raw === 'flat_wall_crack' ||
+    raw === 'stress_crack_at_seam' ||
+    raw === 'ceiling_crack' ||
+    raw === 'patch_opening_repair'
+  ) {
+    return raw
+  }
+  return ''
+}
+
+function drywallUnitForRepairType(repairType: string): 'LF' | 'SQFT' {
+  return repairType === 'patch_opening_repair' ? 'SQFT' : 'LF'
+}
+
+function isDrywallRepairValidForSurface(repairType: string, surface: 'wall' | 'ceiling') {
+  if (surface === 'ceiling') return repairType === 'ceiling_crack' || repairType === 'patch_opening_repair'
+  return (
+    repairType === 'corner_tape_replacement' ||
+    repairType === 'flat_wall_crack' ||
+    repairType === 'stress_crack_at_seam' ||
+    repairType === 'patch_opening_repair'
+  )
+}
+
+export function buildV2DrywallRepairRows(rows: Unsafe[], roomIds: Set<string>) {
+  const positionByRoomSurface = new Map<string, number>()
+  const repairRows = rows.map((row, idx) => {
+    const roomId = asText(row.room_id).toUpperCase()
+    if (!roomId || !roomIds.has(roomId)) {
+      throw new Error(`Drywall repair ${idx + 1}: room is missing or invalid`)
+    }
+    const surface = toDrywallSurface(row.surface)
+    const repairType = toDrywallRepairType(row.repair_type)
+    if (!repairType) {
+      throw new Error(`Drywall repair ${idx + 1}: repair type is required`)
+    }
+    if (!isDrywallRepairValidForSurface(repairType, surface)) {
+      throw new Error(`Drywall repair ${idx + 1}: ${repairType} is not valid for ${surface}`)
+    }
+    const quantity = asNullableNumber(row.quantity)
+    if (quantity == null || quantity < 0) {
+      throw new Error(`Drywall repair ${idx + 1}: quantity must be numeric and not negative`)
+    }
+    const positionKey = `${roomId}:${surface}`
+    const nextPosition = positionByRoomSurface.get(positionKey) ?? 0
+    positionByRoomSurface.set(positionKey, nextPosition + 1)
+    return {
+      id: isUuid(row.id) ? asText(row.id) : undefined,
+      room_id: roomId,
+      position: nextPosition,
+      surface,
+      repair_type: repairType,
+      unit: drywallUnitForRepairType(repairType),
+      quantity,
+      raw_quantity: asNullableNumber(row.raw_quantity),
+      effective_quantity: asNullableNumber(row.effective_quantity),
+      base_unit_rate: asNullableNumber(row.base_unit_rate),
+      ceiling_multiplier: asNullableNumber(row.ceiling_multiplier),
+      calculated_total: asNullableNumber(row.calculated_total),
+      override_total: asNullableNumber(row.override_total),
+      raw_total: asNullableNumber(row.raw_total),
+      effective_total: asNullableNumber(row.effective_total),
+    } satisfies V2DrywallRepairSaveRow
+  })
+
+  return {
+    repairRows,
+    repairIds: new Set(
+      repairRows
+        .map((row) => row.id)
+        .filter((value): value is string => !!value)
+    ),
+  }
+}
+
 // ─── Catalog builders ─────────────────────────────────────────────────────────
 
 export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallCalculationCatalogs | null {
@@ -552,6 +718,7 @@ export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallC
   const catalogs = raw as {
     paint_products?: Unsafe[]
     supplies_rates?: Unsafe[]
+    condition_modifiers?: Unsafe[]
   }
   return {
     paint_products: Array.isArray(catalogs.paint_products)
@@ -568,10 +735,17 @@ export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallC
     supplies_rates: Array.isArray(catalogs.supplies_rates)
       ? catalogs.supplies_rates.map((row) => ({
           key: asText((row as Unsafe).key),
+          supply_group: asText((row as Unsafe).supply_group) || null,
           scope: asText((row as Unsafe).scope) || null,
           unit: asText((row as Unsafe).unit) || null,
           value: asNullableNumber((row as Unsafe).value) ?? 0,
+          crew_multiplier: asText((row as Unsafe).crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
         }))
+      : [],
+    condition_modifiers: Array.isArray(catalogs.condition_modifiers)
+      ? catalogs.condition_modifiers
+          .map((row) => parseConditionModifierRow(row))
+          .filter((row): row is NonNullable<ReturnType<typeof parseConditionModifierRow>> => row != null)
       : [],
   }
 }
@@ -582,10 +756,11 @@ export function toCeilingCalculationCatalogs(raw: Unsafe | null | undefined) {
   const catalogs = raw as { ceiling_types?: Unsafe[] }
   return {
     ...base,
-    ceiling_types: Array.isArray(catalogs.ceiling_types)
+        ceiling_types: Array.isArray(catalogs.ceiling_types)
       ? catalogs.ceiling_types.map((row) => ({
           id: asText((row as Unsafe).id),
           labor_mult: asNullableNumber((row as Unsafe).labor_mult),
+          area_factor: asNullableNumber((row as Unsafe).area_factor),
         }))
       : [],
   }
@@ -607,6 +782,9 @@ export function toTrimCalculationCatalogs(raw: Unsafe | null | undefined) {
             (row as Unsafe).helper_allowed === true,
           default_production_rate_id:
             asText((row as Unsafe).default_production_rate_id || (row as Unsafe).production_rate_id) || null,
+          trim_category: asText((row as Unsafe).trim_category) || null,
+          measurement_class: asText((row as Unsafe).measurement_class) || null,
+          picker_group: asText((row as Unsafe).picker_group) || null,
         }))
       : [],
     production_rates: Array.isArray(catalogs.production_rates)
@@ -620,5 +798,65 @@ export function toTrimCalculationCatalogs(raw: Unsafe | null | undefined) {
           }))
           .filter((row) => row.id)
       : [],
+  }
+}
+
+export function toDoorCalculationCatalogs(raw: Unsafe | null | undefined) {
+  if (!raw || typeof raw !== 'object') return null
+  const catalogs = raw as { door_types?: Unsafe[]; unit_rates_doors?: Unsafe[]; categories?: Unsafe[] }
+  const categoryRows = Array.isArray(catalogs.categories)
+    ? ((catalogs.categories.find((entry) => asText((entry as Unsafe).key) === 'unit_rates_doors') as Unsafe | undefined)?.rows as Unsafe[] | undefined)
+    : undefined
+  const rows = Array.isArray(catalogs.door_types)
+    ? catalogs.door_types
+    : Array.isArray(catalogs.unit_rates_doors)
+      ? catalogs.unit_rates_doors
+      : Array.isArray(categoryRows)
+        ? categoryRows
+        : []
+  return {
+    door_unit_rates: rows
+      .filter((row) => (row as Unsafe).active !== false)
+      .map((row) => ({
+        id: asText((row as Unsafe).id).toUpperCase(),
+        label: asText((row as Unsafe).label || (row as Unsafe).display_name || (row as Unsafe).id),
+        unit_rate_type: asText((row as Unsafe).unit_rate_type) || null,
+        unit: asText((row as Unsafe).unit) || null,
+        default_qty: asNullableNumber((row as Unsafe).default_qty),
+        labor_rate: asNullableNumber((row as Unsafe).labor_rate),
+        material_rate: asNullableNumber((row as Unsafe).material_rate),
+        amount: asNullableNumber((row as Unsafe).amount),
+      }))
+      .filter((row) => row.id),
+  }
+}
+
+export function toDrywallCalculationCatalogs(raw: Unsafe | null | undefined) {
+  if (!raw || typeof raw !== 'object') return null
+  const catalogs = raw as { drywall_rates?: Unsafe[]; unit_rates_drywall?: Unsafe[]; categories?: Unsafe[] }
+  const categoryRows = Array.isArray(catalogs.categories)
+    ? ((catalogs.categories.find((entry) => asText((entry as Unsafe).key) === 'unit_rates_drywall') as Unsafe | undefined)?.rows as Unsafe[] | undefined)
+    : undefined
+  const rows = Array.isArray(catalogs.drywall_rates)
+    ? catalogs.drywall_rates
+    : Array.isArray(catalogs.unit_rates_drywall)
+      ? catalogs.unit_rates_drywall
+      : Array.isArray(categoryRows)
+        ? categoryRows
+        : []
+  return {
+    drywall_unit_rates: rows
+      .filter((row) => (row as Unsafe).active !== false)
+      .map((row) => ({
+        id: asText((row as Unsafe).id).toLowerCase(),
+        label: asText((row as Unsafe).label || (row as Unsafe).display_name || (row as Unsafe).id),
+        unit_rate_type: asText((row as Unsafe).unit_rate_type).toLowerCase() || null,
+        unit: asText((row as Unsafe).unit).toUpperCase() || null,
+        amount: asNullableNumber((row as Unsafe).amount),
+        labor_rate: asNullableNumber((row as Unsafe).labor_rate),
+        material_rate: asNullableNumber((row as Unsafe).material_rate),
+        ceiling_multiplier: asNullableNumber((row as Unsafe).ceiling_multiplier),
+      }))
+      .filter((row) => row.id),
   }
 }

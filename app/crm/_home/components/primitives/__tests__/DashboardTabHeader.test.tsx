@@ -36,7 +36,7 @@ describe('DashboardTabHeader', () => {
             key: 'tasks',
             label: 'Tasks',
             type: 'link',
-            href: '/crm/notes/tasks',
+            href: '/crm/tasks',
             panelId: 'activity-panel',
           },
         ]}

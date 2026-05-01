@@ -7,8 +7,8 @@ import type {
   CrmHomeSearchResults,
   DashboardCustomer,
   DashboardJob,
-  NotesDashboardPayload,
-  NotesReminderSignal,
+  TasksDashboardPayload,
+  TaskReminderSignal,
 } from './types.ts'
 
 function getPositiveAmount(value: number | string | null | undefined) {
@@ -94,7 +94,7 @@ export function buildSearchResults(
   }
 }
 
-export function sortNotesSignals(signals: NotesReminderSignal[]) {
+export function sortTaskSignals(signals: TaskReminderSignal[]) {
   return [...signals].sort((left, right) => {
     if (left.kind !== right.kind) return left.kind === 'overdue' ? -1 : 1
     const leftDue = left.task.due_at ? new Date(left.task.due_at).getTime() : Number.MAX_SAFE_INTEGER
@@ -103,13 +103,13 @@ export function sortNotesSignals(signals: NotesReminderSignal[]) {
   })
 }
 
-export function buildNotesReminders(payload: NotesDashboardPayload | null | undefined, limit = 8) {
+export function buildTaskReminders(payload: TasksDashboardPayload | null | undefined, limit = 8) {
   const overdue = (payload?.tasks?.overdue ?? []).map((task) => ({ kind: 'overdue' as const, task }))
   const dueToday = (payload?.tasks?.due_today ?? []).map((task) => ({
     kind: 'due_today' as const,
     task,
   }))
-  return sortNotesSignals([...overdue, ...dueToday]).slice(0, limit)
+  return sortTaskSignals([...overdue, ...dueToday]).slice(0, limit)
 }
 
 export function buildCalendarTodayEvents(events: CalendarEvent[], now: Date, limit = 8) {
@@ -123,19 +123,43 @@ export function buildActivityJobs(jobs: DashboardJob[], limit = 8) {
   return jobs.slice(0, limit)
 }
 
+function parseJobDate(value: string | null | undefined) {
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+export function buildCurrentJobs(jobs: DashboardJob[], now: Date, lookaheadDays = 2, limit = 4) {
+  const windowEnd = new Date(now)
+  windowEnd.setDate(windowEnd.getDate() + lookaheadDays)
+
+  return jobs
+    .filter((job) => job.status !== 'completed' && job.status !== 'lost')
+    .map((job) => ({
+      job,
+      start: parseJobDate(job.scheduled_date),
+      end: parseJobDate(job.scheduled_end_date),
+    }))
+    .filter((item): item is { job: DashboardJob; start: Date; end: Date | null } => item.start != null)
+    .filter((item) => item.start <= windowEnd || (item.end != null && item.end >= now))
+    .sort((left, right) => left.start.getTime() - right.start.getTime())
+    .slice(0, limit)
+    .map((item) => item.job)
+}
+
 export function createCrmHomeData({
   jobs,
   customers,
   calendarConnected,
   calendarTodayEvents,
-  notesReminders,
+  taskReminders,
   now = new Date(),
 }: {
   jobs: DashboardJob[]
   customers: DashboardCustomer[]
   calendarConnected: boolean | null
   calendarTodayEvents: CalendarEvent[]
-  notesReminders: NotesReminderSignal[]
+  taskReminders: TaskReminderSignal[]
   now?: Date
 }): CrmHomeData {
   return {
@@ -143,10 +167,11 @@ export function createCrmHomeData({
     customers,
     metrics: buildCrmHomeMetrics(jobs),
     activityJobs: buildActivityJobs(jobs),
+    currentJobs: buildCurrentJobs(jobs, now),
     signals: {
       calendarConnected,
       calendarTodayEvents,
-      notesReminders,
+      taskReminders,
     },
     greeting: getGreeting(now),
     todayLabel: formatTodayLabel(now),

@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   addRoomMutation,
+  applyCeilingRoomModeMutation,
   applyWallRoomModeMutation,
   deleteRoomCascadeMutation,
   moveTrimScopeMutation,
+  syncWallCutInFromTrayCeilings,
   stripInvalidTrimHelperModeMutation,
   toggleRoomFlagMutation,
   updateRoomDimensionsMutation,
@@ -170,6 +172,81 @@ test('updateRoomDimensionsMutation syncs both RECT wall and RECT ceiling geometr
   assert.equal(ceilingScope?.areaSf, '88')
 })
 
+test('syncWallCutInFromTrayCeilings leaves wall cut-in factors unchanged for tray ceilings', () => {
+  const ceilingScopes = [
+    makeCeilingScope({
+      ceilingGeometryMode: 'TRAY',
+      include: 'Y',
+    }),
+  ]
+
+  const synced = syncWallCutInFromTrayCeilings({
+    wallScopes: [
+      makeWallScope(),
+      makeWallScope({ id: 'wall-2', cutInTopFactor: '1.3' }),
+      makeWallScope({ id: 'wall-3', roomId: 'R002' }),
+    ],
+    ceilingScopes,
+  })
+
+  assert.equal(synced[0].cutInTopFactor, '1')
+  assert.equal(synced[1].cutInTopFactor, '1.3')
+  assert.equal(synced[2].cutInTopFactor, '1')
+})
+
+test('syncWallCutInFromTrayCeilings does not reset manual wall cut-in factors when tray is removed', () => {
+  const synced = syncWallCutInFromTrayCeilings({
+    wallScopes: [
+      makeWallScope({ id: 'wall-2', cutInTopFactor: '1.3' }),
+    ],
+    ceilingScopes: [makeCeilingScope({ ceilingGeometryMode: 'FLAT', include: 'Y' })],
+  })
+
+  assert.equal(synced[0].cutInTopFactor, '1.3')
+})
+
+test('syncWallCutInFromTrayCeilings ignores stale tray metadata on SEG ceilings', () => {
+  const synced = syncWallCutInFromTrayCeilings({
+    wallScopes: [makeWallScope()],
+    ceilingScopes: [
+      makeCeilingScope({
+        mode: 'SEG',
+        ceilingGeometryMode: 'TRAY',
+        include: 'Y',
+      }),
+    ],
+  })
+
+  assert.equal(synced[0].cutInTopFactor, '1')
+})
+
+test('applyCeilingRoomModeMutation forces SEG ceiling scopes to flat', () => {
+  const result = applyCeilingRoomModeMutation({
+    scopes: [
+      makeCeilingScope({
+        ceilingTypeId: 'COFFERED',
+        ceilingGeometryMode: 'COFFERED',
+        cofferSectionLengthIn: '48',
+        cofferSectionWidthIn: '36',
+        cofferSectionCount: '6',
+        cofferFaceHeightIn: '4',
+        cofferBottomWidthIn: '3',
+      }),
+    ],
+    segments: [],
+    roomId: 'R001',
+    nextMode: 'SEG',
+    defaultHeightFactor: '1',
+  })
+
+  const scope = result.scopes[0]
+  assert.equal(scope.mode, 'SEG')
+  assert.equal(scope.ceilingTypeId, 'FLAT')
+  assert.equal(scope.ceilingGeometryMode, 'FLAT')
+  assert.equal(scope.cofferSectionLengthIn, '')
+  assert.equal(scope.cofferFaceHeightIn, '')
+})
+
 test('updateRoomDimensionsMutation does not overwrite SEG ceiling scopes', () => {
   const result = updateRoomDimensionsMutation({
     rooms: [makeRoom({ id: 'room-2', roomId: 'R002', lengthIn: '96', widthIn: '120' })],
@@ -296,6 +373,7 @@ test('deleteRoomCascadeMutation removes room-owned rows and reindexes survivors'
         helperSource: '',
         measurementValue: '',
         helperValue: '',
+        baseboardOpeningCount: '',
         colorId: '',
         paintProductId: '',
         primerProductId: '',
@@ -450,6 +528,7 @@ test('moveTrimScopeMutation reorders scopes within the room', () => {
         helperSource: '',
         measurementValue: '',
         helperValue: '',
+        baseboardOpeningCount: '',
         colorId: '',
         paintProductId: '',
         primerProductId: '',
@@ -488,6 +567,7 @@ test('moveTrimScopeMutation reorders scopes within the room', () => {
         helperSource: '',
         measurementValue: '',
         helperValue: '',
+        baseboardOpeningCount: '',
         colorId: '',
         paintProductId: '',
         primerProductId: '',
@@ -542,6 +622,7 @@ test('stripInvalidTrimHelperModeMutation removes helper mode for SEG rooms', () 
         helperSource: 'ROOM_PERIMETER',
         measurementValue: '',
         helperValue: '100',
+        baseboardOpeningCount: '',
         colorId: '',
         paintProductId: '',
         primerProductId: '',

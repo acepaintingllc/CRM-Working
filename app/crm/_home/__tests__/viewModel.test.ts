@@ -12,6 +12,9 @@ function createViewModel(options?: {
     customer_name: string | null
     customer_address: string | null
     estimate_total_amount: number | string | null
+    scheduled_date?: string | null
+    scheduled_end_date?: string | null
+    completed_at?: string | null
   }>
   customers?: Array<{
     id: string
@@ -44,7 +47,7 @@ describe('buildCrmHomePageViewModel', () => {
         jobs: createCrmHomeSourceState('loading', 'missing'),
         calendarStatus: createCrmHomeSourceState('loading', 'missing'),
         calendarEvents: createCrmHomeSourceState('loading', 'missing'),
-        notes: createCrmHomeSourceState('loading', 'missing'),
+        tasks: createCrmHomeSourceState('loading', 'missing'),
       },
     })
 
@@ -66,10 +69,10 @@ describe('buildCrmHomePageViewModel', () => {
     })
     const warning = createViewModel({
       sourceOverrides: {
-        notes: createCrmHomeSourceState(
+        tasks: createCrmHomeSourceState(
           'degraded',
           'invalid',
-          'Malformed notes dashboard response.',
+          'Malformed tasks dashboard response.',
           '2026-04-21T12:00:00.000Z'
         ),
       },
@@ -79,7 +82,7 @@ describe('buildCrmHomePageViewModel', () => {
     expect(critical.statusBanner?.message).toContain('Unable to load jobs.')
     expect(critical.metrics.isUnavailable).toBe(true)
     expect(warning.statusBanner?.tone).toBe('warning')
-    expect(warning.statusBanner?.message).toContain('Notes')
+    expect(warning.statusBanner?.message).toContain('Tasks')
   })
 
   it('keeps separate calendar errors and search open state', () => {
@@ -133,22 +136,22 @@ describe('buildCrmHomePageViewModel', () => {
     ])
   })
 
-  it('treats invalid notes data as degraded instead of empty', () => {
+  it('treats invalid tasks data as degraded instead of empty', () => {
     const viewModel = createViewModel({
       sourceOverrides: {
-        notes: createCrmHomeSourceState(
+        tasks: createCrmHomeSourceState(
           'degraded',
           'invalid',
-          'Malformed notes dashboard response.',
+          'Malformed tasks dashboard response.',
           '2026-04-21T12:00:00.000Z'
         ),
       },
     })
 
-    expect(viewModel.signals.reminders.errors).toEqual(['Malformed notes dashboard response.'])
+    expect(viewModel.signals.reminders.errors).toEqual(['Malformed tasks dashboard response.'])
     expect(viewModel.signals.reminders.isEmpty).toBe(true)
     expect(viewModel.activity.items[0]?.amountLabel).toBe('$1,200')
-    expect(viewModel.activity.tasksHref).toBe('/crm/notes/tasks')
+    expect(viewModel.activity.tasksHref).toBe('/crm/tasks')
     expect(viewModel.quickActions.items.length).toBe(4)
   })
 
@@ -161,10 +164,10 @@ describe('buildCrmHomePageViewModel', () => {
           'Malformed calendar status response.',
           '2026-04-21T12:00:00.000Z'
         ),
-        notes: createCrmHomeSourceState(
+        tasks: createCrmHomeSourceState(
           'degraded',
           'invalid',
-          'Malformed notes dashboard response.',
+          'Malformed tasks dashboard response.',
           '2026-04-21T12:00:00.000Z'
         ),
       },
@@ -172,7 +175,7 @@ describe('buildCrmHomePageViewModel', () => {
 
     expect(viewModel.statusBanner?.tone).toBe('warning')
     expect(viewModel.statusBanner?.message).toContain('Calendar status')
-    expect(viewModel.statusBanner?.message).toContain('Notes')
+    expect(viewModel.statusBanner?.message).toContain('Tasks')
     expect(viewModel.metrics.isUnavailable).toBe(false)
   })
 })

@@ -15,9 +15,11 @@ import {
 } from '@/lib/estimator/v2WallsAutosave'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
+import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import {
   prepareEstimateV2SaveState,
   resolveEstimateV2SaveResponseState,
+  collectEstimateV2CalculationMissingInputIssues,
   validateEstimateV2PreparedSave,
 } from './estimateV2EditorSaveOrchestration'
 import {
@@ -65,6 +67,7 @@ export function useEstimateV2SaveController(params: {
       const issues = validateEstimateV2PreparedSave({
         currentState,
         prepared: preparedSave,
+        trigger,
       })
       if (issues.length > 0) {
         if (trigger === 'manual') {
@@ -135,6 +138,27 @@ export function useEstimateV2SaveController(params: {
         return false
       }
 
+      const latestState = store.getState()
+      const latestSnapshot = buildEstimateV2DirtySnapshot({
+        jobSettingsDraft: latestState.meta.jobSettingsDraft,
+        rooms: latestState.collections.rooms,
+        scopes: latestState.collections.scopes,
+        segments: latestState.collections.segments,
+        roomFlags: latestState.collections.roomFlags,
+        ceilingScopes: latestState.collections.ceilingScopes,
+        ceilingSegments: latestState.collections.ceilingSegments,
+        trimScopes: latestState.collections.trimScopes,
+        doorScopes: latestState.collections.doorScopes,
+        drywallRepairs: latestState.collections.drywallRepairs,
+        rollers: latestState.collections.rollers,
+        accessFees: latestState.collections.accessFees,
+        otherItems: latestState.collections.otherItems,
+      })
+      if (latestSnapshot.comparisonKey !== preparedSave.payloadSnapshot.comparisonKey) {
+        meta.setSaveStatus('idle')
+        return false
+      }
+
       const responseState = resolveEstimateV2SaveResponseState({
         trigger,
         payload,
@@ -144,6 +168,15 @@ export function useEstimateV2SaveController(params: {
         effectiveJobProductDefaults,
       })
       applyEstimateV2SuccessfulSaveState(store, responseState)
+      meta.setValidationIssues(
+        collectEstimateV2CalculationMissingInputIssues({
+          wallCalculations: responseState.calculations.wallCalculations,
+          ceilingCalculations: responseState.calculations.ceilingCalculations,
+          trimCalculations: responseState.calculations.trimCalculations,
+          doorCalculations: responseState.calculations.doorCalculations,
+          drywallCalculations: responseState.calculations.drywallCalculations,
+        })
+      )
       meta.setSaveStatus('saved')
       return true
     },

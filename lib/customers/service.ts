@@ -14,6 +14,10 @@ import {
   type NormalizedUpdateCustomerInput,
 } from '@/lib/customers/normalizers'
 import {
+  buildEstimatePublicTimelineEvents,
+  type EstimatePublicTimelineEvent,
+} from '@/lib/customer-estimates/publicTimeline'
+import {
   customerError,
   customerOk,
   type CreateCustomerInput,
@@ -45,6 +49,31 @@ type JobScheduleRow = {
   job_id: string
   start_at: string | null
   end_at: string | null
+}
+
+type EstimateRow = {
+  id: string
+  job_id: string | null
+}
+
+type EstimatePublicVersionRow = {
+  id: string
+  estimate_id: string | null
+  version_number: number | null
+  public_token: string | null
+  status?: string | null
+  accepted_at?: string | null
+  declined_at?: string | null
+}
+
+type EstimatePublicEventRow = {
+  id: string
+  estimate_public_version_id: string | null
+  event_type: string | null
+  actor_type: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string | null
+  created_by: string | null
 }
 
 type CustomerIdentityRow = {
@@ -178,6 +207,98 @@ async function ensureCustomerExists(db: CustomerDb, orgId: string, customerId: s
   }
 
   return customerOk(null)
+}
+
+async function loadPublicQuoteTimelineEventsForJobs(
+  db: CustomerDb,
+  orgId: string,
+  jobs: JobRow[]
+): Promise<CustomerServiceResult<CustomerTimelineEvent[]>> {
+  const jobIds = jobs.map((job) => job.id).filter((id): id is string => Boolean(id))
+  if (jobIds.length === 0) return customerOk([])
+
+  const jobTitleById = new Map(
+    jobs.map((job) => [job.id, job.title?.trim() || 'Job']).filter(([id]) => Boolean(id)) as Array<[string, string]>
+  )
+
+  const { data: estimateRows, error: estimateError } = await db
+    .from('estimates')
+    .select('id, job_id')
+    .eq('org_id', orgId)
+    .in('job_id', jobIds)
+
+  if (estimateError) {
+    logCustomerError('customers.timeline_estimates_failed', { orgId, jobIds, error: estimateError.message })
+    return customerError('server_error', estimateError.message)
+  }
+
+  const estimates = (estimateRows ?? []) as EstimateRow[]
+  const estimateIds = estimates.map((estimate) => estimate.id).filter(Boolean)
+  if (estimateIds.length === 0) return customerOk([])
+
+  const jobTitleByEstimateId = new Map<string, string>()
+  for (const estimate of estimates) {
+    if (estimate.id && estimate.job_id) {
+      jobTitleByEstimateId.set(estimate.id, jobTitleById.get(estimate.job_id) ?? 'Job')
+    }
+  }
+
+  const { data: publicVersionsData, error: publicVersionsError } = await db
+    .from('estimate_public_versions')
+    .select('id, estimate_id, version_number, public_token, status, accepted_at, declined_at')
+    .eq('org_id', orgId)
+    .in('estimate_id', estimateIds)
+
+  if (publicVersionsError) {
+    logCustomerError('customers.timeline_public_versions_failed', {
+      orgId,
+      jobIds,
+      error: publicVersionsError.message,
+    })
+    return customerError('server_error', publicVersionsError.message)
+  }
+
+  const publicVersions = (publicVersionsData ?? []) as EstimatePublicVersionRow[]
+  const publicVersionIds = publicVersions.map((version) => version.id).filter(Boolean)
+  if (publicVersionIds.length === 0) return customerOk([])
+
+  const { data: publicEventsData, error: publicEventsError } = await db
+    .from('estimate_public_events')
+    .select('id, estimate_public_version_id, event_type, actor_type, metadata, created_at, created_by')
+    .eq('org_id', orgId)
+    .in('estimate_public_version_id', publicVersionIds)
+
+  if (publicEventsError) {
+    logCustomerError('customers.timeline_public_events_failed', {
+      orgId,
+      jobIds,
+      error: publicEventsError.message,
+    })
+    return customerError('server_error', publicEventsError.message)
+  }
+
+  const estimateIdByPublicVersionId = new Map(
+    publicVersions.map((version) => [version.id, version.estimate_id ?? null])
+  )
+
+  return customerOk(
+    buildEstimatePublicTimelineEvents({
+      versions: publicVersions,
+      publicEvents: (publicEventsData ?? []) as EstimatePublicEventRow[],
+    }).map((event: EstimatePublicTimelineEvent) => {
+      const rawVersionId = event.id.replace(/^quote-event-/, '')
+      const eventRow = ((publicEventsData ?? []) as EstimatePublicEventRow[]).find((row) => row.id === rawVersionId)
+      const estimateId =
+        event.source_estimate_id ??
+        estimateIdByPublicVersionId.get(event.source_public_version_id ?? eventRow?.estimate_public_version_id ?? '') ??
+        null
+      const jobTitle = estimateId ? jobTitleByEstimateId.get(estimateId) : null
+      return {
+        ...event,
+        body: jobTitle ? `${jobTitle}\n${event.body}` : event.body,
+      }
+    })
+  )
 }
 
 export async function listCustomers(
@@ -447,6 +568,13 @@ export async function listCustomerTimeline(
     }
   }
 
+  const quoteEventsResult = await loadPublicQuoteTimelineEventsForJobs(
+    db,
+    orgId,
+    (jobData ?? []) as JobRow[]
+  )
+  if (!quoteEventsResult.ok) return quoteEventsResult
+
   const jobEvents: CustomerTimelineEvent[] = []
   for (const row of (jobData ?? []) as JobRow[]) {
     const jobLabel = row.title?.trim() || 'Job'
@@ -503,7 +631,9 @@ export async function listCustomerTimeline(
   )
 
   return customerOk(
-    [...noteEvents, ...jobEvents].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
+    [...noteEvents, ...jobEvents, ...quoteEventsResult.data].sort((a, b) =>
+      (b.created_at ?? '').localeCompare(a.created_at ?? '')
+    )
   )
 }
 

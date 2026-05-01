@@ -35,6 +35,17 @@ function makeScope(overrides: Partial<CeilingCalculationInput['scopes'][0]> = {}
     prime_mode: 'NONE',
     spot_prime_percent: null,
     ceiling_type_id: null,
+    ceiling_geometry_mode: 'FLAT',
+    vaulted_area_factor: null,
+    tray_perimeter_in: null,
+    tray_step_height_in: null,
+    tray_band_width_in: null,
+    coffer_section_length_in: null,
+    coffer_section_width_in: null,
+    coffer_section_count: null,
+    coffer_face_height_in: null,
+    coffer_bottom_width_in: null,
+    helper_extra_area_sf: null,
     height_factor: null,
     complexity_factor: null,
     ceiling_flag_factor: null,
@@ -98,6 +109,90 @@ test('RECT scope: area from L×W, prime_mode NONE, no modifier', () => {
   assert.equal(result.missing_inputs.length, 0)
   assert.equal(result.room_totals.length, 1)
   approx(result.room_totals[0].effective_total, 178.4)
+})
+
+test('missing ceiling pricing assumptions are reported instead of using hardcoded fallback rates', () => {
+  const result = calculateCeilings({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeScope({ prime_mode: 'FULL' })],
+    segments: [],
+  })
+
+  const missingFields = result.missing_inputs.map((input) => input.field)
+  assert.ok(missingFields.includes('labor_rate_per_hour'))
+  assert.ok(missingFields.includes('paint_prod_rate_sqft_per_hour'))
+  assert.ok(missingFields.includes('primer_prod_rate_sqft_per_hour'))
+  assert.ok(missingFields.includes('paint_coverage_sqft_per_gal_per_coat'))
+  assert.ok(missingFields.includes('primer_coverage_sqft_per_gal_per_coat'))
+  assert.ok(missingFields.includes('paint_price_per_gal'))
+  assert.ok(missingFields.includes('primer_price_per_gal'))
+})
+
+test('missing ceiling pricing assumptions do not use hidden business fallback values', () => {
+  const result = calculateCeilings({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeScope({ prime_mode: 'NONE' })],
+    segments: [],
+  })
+
+  assert.equal(result.assumptions.labor_rate_per_hour, 0)
+  assert.equal(result.assumptions.paint_prod_rate_sqft_per_hour, 0)
+  assert.equal(result.assumptions.paint_coverage_sqft_per_gal_per_coat, 0)
+  assert.equal(result.assumptions.paint_coats, 0)
+  assert.equal(result.assumptions.paint_price_per_gal, 0)
+  assert.equal(result.scopes[0].raw_paint_hours, 0)
+  assert.equal(result.scopes[0].raw_paint_gallons, 0)
+  assert.equal(result.scopes[0].raw_total, 0)
+})
+
+test('ceiling primer assumptions are required only when primer is used', () => {
+  const baseSettings = {
+    labor_rate_per_hour: 50,
+    paint_prod_rate_sqft_per_hour: 100,
+    paint_coverage_sqft_per_gal_per_coat: 350,
+    paint_coats: 2,
+    paint_price_per_gal: 45,
+    area_supply_cost_per_sf: 0,
+    per_color_supply_cost: 0,
+  }
+  const none = calculateCeilings({
+    settings: baseSettings,
+    scopes: [makeScope({ prime_mode: 'NONE', primer_coats: null })],
+    segments: [],
+  })
+  assert.equal(none.missing_inputs.some((input) => input.field.includes('primer')), false)
+  assert.equal(none.missing_inputs.some((input) => input.field === 'spot_prime_percent'), false)
+
+  const full = calculateCeilings({
+    settings: baseSettings,
+    scopes: [makeScope({ prime_mode: 'FULL', primer_coats: null })],
+    segments: [],
+  })
+  assert.equal(full.missing_inputs.some((input) => input.field === 'primer_coats'), true)
+  assert.equal(full.missing_inputs.some((input) => input.field === 'spot_prime_percent'), false)
+})
+
+test('ceiling primer supply cost applies only for SPOT and FULL prime modes', () => {
+  const catalogs = {
+    supplies_rates: [{ key: 'PRIMER_CEIL', scope: 'Ceilings', unit: 'primer per scope', value: 6 }],
+  }
+  const none = calculateCeilings({ catalogs, settings: BASE_SETTINGS, scopes: [makeScope()], segments: [] })
+  const spot = calculateCeilings({
+    catalogs,
+    settings: BASE_SETTINGS,
+    scopes: [makeScope({ prime_mode: 'SPOT' })],
+    segments: [],
+  })
+  const full = calculateCeilings({
+    catalogs,
+    settings: BASE_SETTINGS,
+    scopes: [makeScope({ prime_mode: 'FULL' })],
+    segments: [],
+  })
+
+  approx(none.scopes[0].raw_supply_cost, 14.4)
+  approx(spot.scopes[0].raw_supply_cost, 20.4)
+  approx(full.scopes[0].raw_supply_cost, 20.4)
 })
 
 test('ceiling scope preserves the raw paint label when catalog lookup misses', () => {
@@ -185,6 +280,212 @@ test('ceiling_type_id applies labor_mult from catalogs', () => {
   approx(result.scopes[0].raw_paint_hours, 4.32)
 })
 
+test('ceiling type area_factor increases area, gallons, materials, and area-based labor', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'vaulted', labor_mult: 1, area_factor: 1.25 }],
+    },
+    scopes: [makeScope({ ceiling_type_id: 'vaulted', prime_mode: 'NONE' })],
+    segments: [],
+  })
+
+  approx(result.scopes[0].raw_area_sf, 180)
+  approx(result.scopes[0].raw_paint_gallons, 1.8)
+  approx(result.scopes[0].raw_paint_hours, 3.6)
+})
+
+test('vaulted helper area uses slope factor and labor multiplier remains labor-only', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'vaulted', labor_mult: 1.5, area_factor: 1 }],
+    },
+    scopes: [
+      makeScope({
+        ceiling_type_id: 'vaulted',
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_area_factor: 1.2,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 28.8)
+  approx(result.scopes[0].raw_area_sf, 172.8)
+  approx(result.scopes[0].raw_paint_gallons, 1.728)
+  approx(result.scopes[0].raw_paint_hours, 5.184)
+})
+
+test('vaulted direct area is treated as total ceiling sqft without applying slope factor again', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'VAULTED',
+        area_sf: 220,
+        vaulted_area_factor: 1.2,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 220)
+  approx(result.scopes[0].raw_paint_gallons, 2.2)
+})
+
+test('vaulted measured inputs calculate total ceiling sqft', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_ridge_length_in: 180,
+        vaulted_slope_length_in: 120,
+        vaulted_plane_count: 2,
+        vaulted_area_factor: 1.2,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 300)
+  approx(result.scopes[0].raw_paint_gallons, 3)
+})
+
+test('vaulted measured inputs require plane count', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_ridge_length_in: 180,
+        vaulted_slope_length_in: 120,
+        vaulted_plane_count: null,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  assert.ok(result.missing_inputs.some((input) => input.field === 'vaulted_plane_count'))
+  approx(result.scopes[0].raw_area_sf, 144)
+})
+
+test('vaulted factor helper requires configured vaulted area factor', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_area_factor: null,
+        vaulted_ridge_length_in: null,
+        vaulted_slope_length_in: null,
+        vaulted_plane_count: null,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  assert.ok(result.missing_inputs.some((input) => input.field === 'vaulted_area_factor'))
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 144)
+})
+
+test('tray ceiling uses catalog area factor instead of geometry helper sqft', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'tray', labor_mult: 1, area_factor: 1.15 }],
+    },
+    scopes: [
+      makeScope({
+        ceiling_type_id: 'tray',
+        ceiling_geometry_mode: 'TRAY',
+        tray_perimeter_in: 480,
+        tray_step_height_in: 12,
+        tray_band_width_in: 18,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 165.6)
+})
+
+test('tray geometry fields do not add ceiling helper sqft', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'TRAY',
+        tray_perimeter_in: null,
+        tray_step_height_in: 12,
+        tray_band_width_in: 18,
+        length_in: 120,
+        width_in: 144,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 120)
+})
+
+test('coffered helper calculates extra drywall sqft from section size and count', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        ceiling_geometry_mode: 'COFFERED',
+        coffer_section_length_in: 48,
+        coffer_section_width_in: 36,
+        coffer_section_count: 6,
+        coffer_face_height_in: 6,
+        coffer_bottom_width_in: 4,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 70)
+  approx(result.scopes[0].raw_area_sf, 214)
+})
+
+test('override_area_sf wins over helper and area factor for effective area', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'vaulted', labor_mult: 1, area_factor: 1.25 }],
+    },
+    scopes: [
+      makeScope({
+        ceiling_type_id: 'vaulted',
+        ceiling_geometry_mode: 'VAULTED',
+        vaulted_area_factor: 1.2,
+        override_area_sf: 100,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  approx(result.scopes[0].raw_area_sf, 216)
+  approx(result.scopes[0].effective_area_sf, 100)
+  approx(result.scopes[0].raw_paint_gallons, 1)
+})
+
 test('height_factor multiplies labor', () => {
   const input: CeilingCalculationInput = {
     settings: BASE_SETTINGS,
@@ -218,15 +519,15 @@ test('all modifiers combine multiplicatively', () => {
         height_factor: 1.1,
         complexity_factor: 1.2,
         ceiling_flag_factor: 1.0,
+        condition_factor: 1.25,
         prime_mode: 'NONE',
       }),
     ],
     segments: [],
   }
   const result = calculateCeilings(input)
-  // modifier = 1.3 * 1.1 * 1.2 * 1.0 = 1.716
-  // paint hours: (144 * 2 / 100) * 1.716 = 4.942...
-  const modifier = 1.3 * 1.1 * 1.2
+  // modifier = 1.3 * 1.1 * 1.2 * 1.0 * 1.25 = 2.145
+  const modifier = 1.3 * 1.1 * 1.2 * 1.25
   approx(result.scopes[0].raw_paint_hours, (144 * 2 / 100) * modifier)
 })
 
@@ -383,6 +684,57 @@ test('SEG mode: sums included segment areas', () => {
   // total: 144 sf
   approx(result.scopes[0].effective_area_sf, 144)
   assert.equal(result.missing_inputs.length, 0)
+})
+
+test('SEG mode: prices as flat even if older saved data has a non-flat ceiling type', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    catalogs: {
+      ceiling_types: [{ id: 'coffered', labor_mult: 1.5, area_factor: 1.25 }],
+    },
+    scopes: [
+      {
+        ...makeScope({
+          mode: 'SEG',
+          prime_mode: 'NONE',
+          length_in: null,
+          width_in: null,
+          ceiling_type_id: 'coffered',
+          ceiling_geometry_mode: 'COFFERED',
+          coffer_section_length_in: 48,
+          coffer_section_width_in: 36,
+          coffer_section_count: 6,
+          coffer_face_height_in: 6,
+          coffer_bottom_width_in: 4,
+        }),
+        id: 'scope-seg-flat-only',
+      },
+    ],
+    segments: [
+      {
+        id: 'seg-flat-only',
+        ceiling_scope_id: 'scope-seg-flat-only',
+        room_id: 'R001',
+        position: 0,
+        segment_name: 'Manual segment',
+        include: 'Y',
+        shape_type: 'MANUAL',
+        quantity: 1,
+        width_in: null,
+        height_in: null,
+        base_in: null,
+        manual_area_sf: 100,
+        raw_area_sf: null,
+        override_area_sf: null,
+        effective_area_sf: null,
+        notes: null,
+      },
+    ],
+  })
+
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+  approx(result.scopes[0].raw_area_sf, 100)
+  approx(result.scopes[0].raw_paint_hours, 2)
 })
 
 test('SEG mode: excluded segment not included in area', () => {

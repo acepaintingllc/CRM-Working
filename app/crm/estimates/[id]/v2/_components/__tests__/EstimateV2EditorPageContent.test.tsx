@@ -26,6 +26,10 @@ const baseEditorState = {
   },
   headerVm: {
     estimateId: 'estimate-1',
+    resumeRecord: {
+      estimate: null,
+      job: null,
+    },
     titleText: 'Version A',
     subtitleText: 'Job - Ada - 123 Main',
     workflowText: 'Estimate V2 Editor',
@@ -44,6 +48,7 @@ const baseEditorState = {
       walls: 'Walls included',
       ceilings: 'Ceilings included',
       trim: 'Trim included',
+      doors: 'Doors included',
     },
     validationText: 'No open issues',
     validationColor: 'var(--v2-ink-2)',
@@ -97,6 +102,7 @@ const baseEditorState = {
     roomScopeByRoomId: new Map([['R001', [{ id: 'scope-1', include: 'Y' }]]]),
     roomCeilingScopeByRoomId: new Map([['R001', [{ id: 'ceiling-1', include: 'Y' }]]]),
     roomTrimScopeByRoomId: new Map([['R001', [{ id: 'trim-1', include: 'Y' }]]]),
+    roomDoorScopeByRoomId: new Map([['R001', [{ id: 'door-1', include: 'Y' }]]]),
     displayedRoomEffectiveAreaByRoomId: new Map([['R001', 220]]),
     selectedRoomEffectiveSqFt: 220,
     activeRoomFlagCount: 0,
@@ -197,8 +203,33 @@ const baseEditorState = {
     toggleRoomInclude: vi.fn(),
     updateTrimType: vi.fn(),
   },
+  doorsVm: {
+    selectedRoom: { id: 'room-1', roomId: 'R001', roomName: 'Living Room' },
+    selectedRoomDoorScopes: [{ id: 'door-1' }],
+    firstDoorScope: null,
+    doorsIncluded: true,
+    jobDoorsIncluded: true,
+    doorPaintLabel: 'Trim Paint',
+    doorPrimerLabel: 'Trim Primer',
+    effectiveDoorPaintLabel: 'Trim Paint',
+    effectiveDoorPrimerLabel: 'Trim Primer',
+    doorPaintOptions: [],
+    doorPrimerOptions: [],
+    doorTypeOptions: [],
+    doorScopeEffectiveUnitsById: new Map(),
+    doorScopeEffectiveTotalById: new Map(),
+    selectedDoorSubtotal: null,
+    selectedDoorUnits: null,
+    colorCodeOptions: [],
+    updateScope: vi.fn(),
+    addScope: vi.fn(),
+    moveScope: vi.fn(),
+    deleteScope: vi.fn(),
+    toggleRoomInclude: vi.fn(),
+    updateDoorType: vi.fn(),
+  },
   jobSettingsVm: {
-    jobSettingsDraft: { wallPaintProductId: '', wallPrimerProductId: '', ceilingPaintProductId: '', ceilingPrimerProductId: '', trimPaintProductId: '', trimPrimerProductId: '', laborDayEnabled: false, dayhours: 8, roundingIncrementHours: 4, laborRate: 65, jobMinEnabled: false, jobMinAmount: 0 },
+    jobSettingsDraft: { wallPaintProductId: '', wallPrimerProductId: '', ceilingPaintProductId: '', ceilingPrimerProductId: '', trimPaintProductId: '', trimPrimerProductId: '', laborDayEnabled: false, dayhours: 8, roundingIncrementHours: 4, laborRate: 65, jobMinEnabled: false, jobMinAmount: 0, crewSize: 1 },
     orgJobProductDefaults: { wallPaintProductId: '', wallPrimerProductId: '', ceilingPaintProductId: '', ceilingPrimerProductId: '', trimPaintProductId: '', trimPrimerProductId: '' },
     customerDraft: { customerId: '', name: '', email: '', phone: '', address: '' },
     settingsOpen: false,
@@ -251,8 +282,13 @@ vi.mock('../EstimateV2TrimSectionBody', () => ({
   EstimateV2TrimSectionBody: () => <div>Trim Body</div>,
 }))
 
+vi.mock('../EstimateV2DoorsSectionBody', () => ({
+  EstimateV2DoorsSectionBody: () => <div>Doors Body</div>,
+}))
+
 describe('EstimateV2EditorPageContent', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     mockUseEstimateV2Editor.mockReturnValue(baseEditorState)
   })
 
@@ -260,23 +296,35 @@ describe('EstimateV2EditorPageContent', () => {
     cleanup()
   })
 
-  it('renders from grouped VMs and routes header save/navigation actions', async () => {
+  it('renders from grouped VMs without duplicate header workflow actions', () => {
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
 
     expect(screen.getByText('Version A')).toBeInTheDocument()
     expect(screen.getByText('Walls Body')).toBeInTheDocument()
     expect(screen.getByText('Ceilings Body')).toBeInTheDocument()
     expect(screen.getByText('Trim Body')).toBeInTheDocument()
+    expect(screen.getByText('Doors Body')).toBeInTheDocument()
     expect(screen.getAllByText('Living Room').length).toBeGreaterThan(0)
     expect(screen.getAllByText('364 sf').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Next: Details & Overrides ->')).not.toBeInTheDocument()
+  })
 
-    fireEvent.click(screen.getAllByText('+ Add room')[0])
-    fireEvent.click(screen.getByText('Next: Summary ->'))
+  it('lets footer continue navigate even when there are no dirty changes', async () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+      },
+    })
 
-    expect(addRoom).toHaveBeenCalled()
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByText('Save & continue ->'))
+
+    expect(save).not.toHaveBeenCalled()
     await waitFor(() => {
-      expect(save).toHaveBeenCalled()
-      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/summary')
+      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/details')
     })
   })
 

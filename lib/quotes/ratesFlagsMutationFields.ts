@@ -3,7 +3,7 @@ import type { RatesFlagsEditableCategoryKey } from '../../types/estimator/ratesF
 export type RatesFlagsMutationFieldSource = {
   key: string
   label: string
-  type: 'text' | 'number' | 'select'
+  type: 'text' | 'number' | 'select' | 'checkbox_group'
   required?: boolean
   readOnly?: boolean
   options?: readonly string[]
@@ -29,6 +29,14 @@ export type RatesFlagsMutationFieldSpec =
       key: string
       label: string
       kind: 'select'
+      options: readonly string[]
+      required?: boolean
+      defaultValue?: string
+    }
+  | {
+      key: string
+      label: string
+      kind: 'checkbox_group'
       options: readonly string[]
       required?: boolean
       defaultValue?: string
@@ -91,11 +99,11 @@ function mutationSpecFromField(
     }
   }
 
-  if (field.type === 'select') {
+  if (field.type === 'select' || field.type === 'checkbox_group') {
     return {
       key: field.key,
       label: field.label,
-      kind: 'select',
+      kind: field.type,
       options: field.options ?? [],
       required: field.required,
       defaultValue,

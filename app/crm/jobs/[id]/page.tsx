@@ -1,5 +1,8 @@
 'use client'
 
+import { Camera } from 'lucide-react'
+
+import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
@@ -10,7 +13,6 @@ import { useJobDetailPage } from '@/app/crm/jobs/_hooks/useJobDetailPage'
 import JobCompletionCloseoutModal from '@/app/crm/jobs/_components/JobCompletionCloseoutModal'
 import StageEmailModal from '@/app/crm/jobs/_components/StageEmailModal'
 import JobActionRail from '@/app/crm/jobs/[id]/_components/JobActionRail'
-import JobCloseoutPanel from '@/app/crm/jobs/[id]/_components/JobCloseoutPanel'
 import JobDetailHeader from '@/app/crm/jobs/[id]/_components/JobDetailHeader'
 import JobDetailsPanel from '@/app/crm/jobs/[id]/_components/JobDetailsPanel'
 import JobTimeline from '@/app/crm/jobs/[id]/_components/JobTimeline'
@@ -29,14 +31,15 @@ export default function JobDetailPage() {
     action.tone === 'accent' ? 'primary' : action.tone === 'danger' ? 'danger' : 'secondary'
 
   return (
-    <CrmPageShell className="max-w-6xl">
+    <CrmPageShell className="crm-job-detail-shell max-w-6xl">
       <CrmPageHeader
         eyebrow="Pipeline workflow"
         emoji="🧾"
         title={controller.job?.title ?? 'Job details'}
-        description="Shared CRM job detail page with workflow actions, schedule context, and closeout data."
+        description="Full job overview and schedule."
         backHref="/crm/jobs"
         backLabel="Back to jobs"
+        className="crm-job-detail-page-header"
       />
 
       <CrmResourceState
@@ -76,14 +79,20 @@ export default function JobDetailPage() {
                       onCopy={(label, value) => void controller.copy(label, value)}
                     />
                   </CrmSectionCard>
-                  <CrmSectionCard title="Closeout">
-                    <JobCloseoutPanel
-                      job={controller.job}
-                      paintLogs={controller.paintLogs}
-                      detailActions={detailActions}
-                    />
-                  </CrmSectionCard>
                   <CrmSectionCard title="Actions" variant="compact">
+                    <CrmButton
+                      href={`/crm/job-photos?job=${controller.job.id}`}
+                      tone="secondary"
+                      className="min-h-9 px-3 text-xs"
+                    >
+                      <Camera size={14} aria-hidden="true" />
+                      <span>Job Photos</span>
+                    </CrmButton>
+                    {controller.photosFolderUrl ? (
+                      <CrmButton href={controller.photosFolderUrl} target="_blank" rel="noreferrer">
+                        Open Photos
+                      </CrmButton>
+                    ) : null}
                     <JobActionRail
                       actions={detailActions}
                       getActionTone={actionTone}

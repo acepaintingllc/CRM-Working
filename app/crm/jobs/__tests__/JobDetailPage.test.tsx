@@ -119,4 +119,120 @@ describe('JobDetailPage', () => {
     await waitFor(() => expect(screen.getByText('Job unavailable')).toBeTruthy())
     expect(screen.getByText('Failed to load job.')).toBeTruthy()
   })
+
+  it('shows accepted quote details and audit fields on the internal job detail page', async () => {
+    authedFetch
+      .mockResolvedValueOnce(
+        createResponse({
+          data: {
+            id: 'job-1',
+            customer_id: 'customer-1',
+            customer_name: 'Taylor Jones',
+            customer_address: '123 Main St, Newburgh, IN 47630',
+            customer_email: 'taylor@example.com',
+            customer_phone: '812-555-0100',
+            title: 'Exterior repaint',
+            description: 'Front and back porch',
+            status: 'scheduled',
+            estimate_date: '2026-04-23T13:00:00.000Z',
+            estimate_sent_at: null,
+            scheduled_date: null,
+            scheduled_end_date: null,
+            completed_at: null,
+            linked_estimate_id: 'estimate-1',
+            accepted_quote: {
+              estimate_id: 'estimate-1',
+              accepted_public_version_id: 'public-version-1',
+              public_version_number: 3,
+              public_token: 'public-token-1',
+              accepted_at: '2026-04-29T10:00:00.000Z',
+              accepted_by_legal_name: 'Jordan Customer',
+              signature_type: 'typed',
+              user_agent: 'Mozilla/5.0',
+              ip: '127.0.0.1',
+              version_name: 'Interior repaint',
+              final_total: 4250,
+            },
+          },
+        })
+      )
+      .mockResolvedValueOnce(createResponse({ data: { file: { id: 'drive-1', name: 'Drive estimate.pdf' } } }))
+      .mockResolvedValueOnce(createResponse({ data: [] }))
+      .mockResolvedValueOnce(createResponse({ data: [] }))
+
+    render(<JobDetailPage />, { wrapper: createSWRWrapper() })
+
+    await waitFor(() => expect(screen.getByText('Accepted Quote')).toBeTruthy())
+    expect(screen.getByText('Accepted by Jordan Customer')).toBeTruthy()
+    expect(screen.getByText(/Public version #3/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open accepted quote' })).toHaveAttribute(
+      'href',
+      '/quote/public-token-1'
+    )
+    expect(screen.getByText('Audit details')).toBeTruthy()
+    expect(screen.getByText('Signature type: typed')).toBeTruthy()
+    expect(screen.getByText('IP: 127.0.0.1')).toBeTruthy()
+    expect(screen.getByText('User agent: Mozilla/5.0')).toBeTruthy()
+    expect(screen.queryByText('Drive estimate.pdf')).toBeNull()
+  })
+
+  it('shows public quote events in the job timeline', async () => {
+    authedFetch
+      .mockResolvedValueOnce(
+        createResponse({
+          data: {
+            id: 'job-1',
+            customer_id: 'customer-1',
+            customer_name: 'Taylor Jones',
+            customer_address: '123 Main St, Newburgh, IN 47630',
+            customer_email: 'taylor@example.com',
+            customer_phone: '812-555-0100',
+            title: 'Exterior repaint',
+            description: 'Front and back porch',
+            status: 'estimate_sent',
+            estimate_date: '2026-04-23T13:00:00.000Z',
+            estimate_sent_at: null,
+            scheduled_date: null,
+            scheduled_end_date: null,
+            completed_at: null,
+            public_quote_timeline_events: [
+              {
+                id: 'quote-event-accepted',
+                type: 'quote_accepted',
+                title: 'Quote accepted',
+                body: 'Public version #2',
+                created_at: '2026-04-29T10:00:00.000Z',
+                created_by: null,
+                link_path: '/quote/public-token-1',
+                link_label: 'Open quote',
+              },
+              {
+                id: 'quote-event-viewed',
+                type: 'quote_viewed',
+                title: 'Quote viewed',
+                body: 'Public version #2',
+                created_at: '2026-04-28T10:00:00.000Z',
+                created_by: null,
+                link_path: '/quote/public-token-1',
+                link_label: 'Open quote',
+              },
+            ],
+          },
+        })
+      )
+      .mockResolvedValueOnce(createResponse({ error: 'No matching estimate in Drive folder' }))
+      .mockResolvedValueOnce(createResponse({ data: [] }))
+      .mockResolvedValueOnce(createResponse({ data: [] }))
+
+    render(<JobDetailPage />, { wrapper: createSWRWrapper() })
+
+    await waitFor(() => expect(screen.getByText('Quote accepted')).toBeTruthy())
+    expect(screen.getByText('Quote viewed')).toBeTruthy()
+    expect(screen.getAllByText('Public version #2').length).toBeGreaterThanOrEqual(2)
+    expect(
+      screen
+        .getAllByRole('link', { name: 'Open quote' })
+        .some((link) => link.getAttribute('href') === '/quote/public-token-1')
+    ).toBe(true)
+  })
 })

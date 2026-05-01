@@ -54,6 +54,20 @@ type ActivityItemVm = {
   status: string | null
 }
 
+type CurrentJobItemVm = {
+  id: string
+  href: string
+  title: string
+  customerName: string
+  scheduleLabel: string
+  status: string | null
+}
+
+type CurrentJobsCardVm = {
+  items: CurrentJobItemVm[]
+  isEmpty: boolean
+}
+
 type ActivityCardVm = {
   items: ActivityItemVm[]
   isEmpty: boolean
@@ -103,7 +117,7 @@ type ReminderSignalsPanelVm = {
 type SignalsFooterActionVm = {
   href: string
   label: string
-  icon: 'calendar' | 'notes'
+  icon: 'calendar' | 'tasks'
 }
 
 type HomeSignalsVm = {
@@ -129,6 +143,7 @@ export type CrmHomePageViewModel = {
   topBar: HomeTopBarVm
   statusBanner: HomeStatusBannerVm | null
   metrics: HomeMetricsVm
+  currentJobs: CurrentJobsCardVm
   activity: ActivityCardVm
   signals: HomeSignalsVm
   quickActions: HomeQuickActionsVm
@@ -139,7 +154,7 @@ const warningSourceLabels: Record<CrmHomeSourceErrorKey, string> = {
   customers: 'Customers',
   calendarStatus: 'Calendar status',
   calendarEvents: 'Calendar events',
-  notes: 'Notes',
+  tasks: 'Tasks',
 }
 
 function buildStatusBannerVm(params: {
@@ -191,9 +206,25 @@ function buildActivityVm(
     isUnavailable,
     emptyMessage: 'No activity yet. Create your first job to get started.',
     unavailableMessage: sources.jobs.errorMessage ?? 'Activity is unavailable right now.',
-    tasksHref: '/crm/notes/tasks',
+    tasksHref: '/crm/tasks',
     viewAllHref: data.jobs.length > items.length ? '/crm/jobs' : null,
     viewAllLabel: data.jobs.length > items.length ? `View all ${data.jobs.length} jobs` : null,
+  }
+}
+
+function buildCurrentJobsVm(data: CrmHomeData): CurrentJobsCardVm {
+  const items = data.currentJobs.map((job) => ({
+    id: job.id,
+    href: `/crm/jobs/${job.id}`,
+    title: job.title ?? 'Untitled job',
+    customerName: job.customer_name ?? 'No customer',
+    scheduleLabel: formatEventWindow(job.scheduled_date ?? null, job.scheduled_end_date ?? null),
+    status: job.status,
+  }))
+
+  return {
+    items,
+    isEmpty: items.length === 0,
   }
 }
 
@@ -204,7 +235,7 @@ function buildSignalsVm(
   const calendarErrors = [sources.calendarStatus.errorMessage, sources.calendarEvents.errorMessage].filter(
     (error): error is string => Boolean(error)
   )
-  const notesErrors = [sources.notes.errorMessage].filter((error): error is string => Boolean(error))
+  const taskErrors = [sources.tasks.errorMessage].filter((error): error is string => Boolean(error))
   const calendarStatusReady = sources.calendarStatus.availability === 'available'
 
   return {
@@ -227,14 +258,14 @@ function buildSignalsVm(
       })),
     },
     reminders: {
-      loading: sources.notes.status === 'loading',
-      isEmpty: data.signals.notesReminders.length === 0,
-      errors: notesErrors,
+      loading: sources.tasks.status === 'loading',
+      isEmpty: data.signals.taskReminders.length === 0,
+      errors: taskErrors,
       emptyMessage: 'No reminders today.',
-      count: data.signals.notesReminders.length,
-      items: data.signals.notesReminders.slice(0, 4).map((signal) => ({
+      count: data.signals.taskReminders.length,
+      items: data.signals.taskReminders.slice(0, 4).map((signal) => ({
         key: `${signal.kind}:${signal.task.id}`,
-        href: `/crm/notes/tasks?focus=${encodeURIComponent(signal.task.id)}`,
+        href: `/crm/tasks?focus=${encodeURIComponent(signal.task.id)}`,
         title: signal.task.title,
         subtitle: `${signal.kind === 'overdue' ? 'Overdue' : 'Due today'} \u2022 ${formatTaskDue(
           signal.task.due_at,
@@ -246,7 +277,7 @@ function buildSignalsVm(
     },
     footerActions: [
       { href: '/crm/calendar', label: 'Calendar', icon: 'calendar' },
-      { href: '/crm/notes', label: 'Notes', icon: 'notes' },
+      { href: '/crm/tasks', label: 'Tasks', icon: 'tasks' },
     ],
   }
 }
@@ -292,6 +323,7 @@ export function buildCrmHomePageViewModel(params: {
         !summary.isInitialLoading &&
         (sources.jobs.status === 'error' || sources.jobs.status === 'degraded'),
     },
+    currentJobs: buildCurrentJobsVm(data),
     activity: buildActivityVm(data, sources, summary),
     signals: buildSignalsVm(data, sources),
     quickActions: buildQuickActionsVm(),

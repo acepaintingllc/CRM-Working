@@ -32,6 +32,7 @@ function sortByPosition<T extends { position: number }>(rows: T[]) {
 export function validateV2TrimBeforeSave(params: {
   rooms: V2TrimValidationRoom[]
   trimScopes: V2TrimValidationScope[]
+  allowIncomplete?: boolean
 }) {
   const issues: string[] = []
   const roomIds = new Set<string>()
@@ -65,7 +66,7 @@ export function validateV2TrimBeforeSave(params: {
 
     if (scope.include !== 'Y') continue
 
-    if (!scope.trimTypeId.trim()) {
+    if (!params.allowIncomplete && !scope.trimTypeId.trim()) {
       issues.push(`${scope.roomId}: trim type is required`)
     }
 
@@ -80,6 +81,7 @@ export function validateV2TrimBeforeSave(params: {
       continue
     }
 
+    if (params.allowIncomplete) continue
     const measurement = asNullableNumber(scope.measurementValue)
     if (measurement == null || measurement <= 0) {
       issues.push(`${scope.roomId}: trim measurement must be greater than 0`)

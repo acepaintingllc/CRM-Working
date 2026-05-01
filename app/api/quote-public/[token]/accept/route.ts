@@ -25,9 +25,11 @@ export async function POST(
     await acceptPublicEstimate({
       token: token ?? '',
       legalName: parsed.value.legalName,
+      customerEmail: parsed.value.customerEmail,
       signatureType: parsed.value.signatureType,
       signatureValue: parsed.value.signatureValue,
       acceptedTerms: parsed.value.acceptedTerms,
+      ...(parsed.value.customerMessage ? { customerMessage: parsed.value.customerMessage } : {}),
       origin: new URL(request.url).origin,
       userAgent: request.headers.get('user-agent') ?? '',
       ip: request.headers.get('x-forwarded-for') ?? '',

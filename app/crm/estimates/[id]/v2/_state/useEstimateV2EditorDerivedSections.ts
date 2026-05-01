@@ -46,6 +46,9 @@ export function useEstimateV2EditorDerivedSections(params: {
     firstScope: room.firstScope,
     selectedRoomCeilingScopes: room.selectedRoomCeilingScopes,
     selectedRoomTrimScopes: room.selectedRoomTrimScopes,
+    selectedRoomDoorScopes: room.selectedRoomDoorScopes,
+    selectedRoomWallDrywallRepairs: room.selectedRoomWallDrywallRepairs,
+    selectedRoomCeilingDrywallRepairs: room.selectedRoomCeilingDrywallRepairs,
   })
   const productLabels = useEstimateV2ProductLabels({
     meta,
@@ -53,6 +56,7 @@ export function useEstimateV2EditorDerivedSections(params: {
     firstScope: room.firstScope,
     firstCeilingScope: room.firstCeilingScope,
     firstTrimScope: room.firstTrimScope,
+    firstDoorScope: room.firstDoorScope,
   })
   const save = useEstimateV2SaveDerived({
     meta,

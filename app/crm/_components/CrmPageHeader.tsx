@@ -14,6 +14,7 @@ type CrmPageHeaderProps = {
   backHref?: string
   backLabel?: string
   backAction?: ReactNode
+  className?: string
 }
 
 export function CrmPageHeader({
@@ -27,53 +28,54 @@ export function CrmPageHeader({
   backHref,
   backLabel = 'Back',
   backAction,
+  className = '',
 }: CrmPageHeaderProps) {
   return (
-    <section className="ace-crm-surface overflow-hidden px-5 py-5 md:px-6 md:py-6">
-      {backAction ? <div className="mb-4">{backAction}</div> : null}
+    <section className={`ace-crm-surface overflow-hidden px-3 py-3 sm:px-4 md:px-6 md:py-6 ${className}`.trim()}>
+      {backAction ? <div className="mb-3 md:mb-4">{backAction}</div> : null}
       {!backAction && backHref ? (
-        <div className="mb-4">
+        <div className="mb-3 md:mb-4">
           <Link
             href={backHref}
-            className={`${crmButtonClassName('secondary')} inline-flex w-fit items-center gap-1.5 no-underline`}
+            className={`${crmButtonClassName('secondary')} inline-flex min-h-9 w-fit items-center gap-1.5 rounded-xl px-3 text-xs no-underline sm:min-h-11 sm:px-4 sm:text-sm`}
           >
             <ArrowLeft size={16} aria-hidden="true" />
             <span>{backLabel}</span>
           </Link>
         </div>
       ) : null}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 md:gap-4">
         <div className="min-w-0 max-w-3xl">
           {(eyebrow || badge) && (
-            <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="mb-2 flex flex-wrap items-center gap-2 md:mb-3">
               {eyebrow ? (
-                <div className="ace-crm-mono text-[11px] font-bold text-[color:var(--crm-ui-muted)]">
+                <div className="ace-crm-mono text-[9px] font-bold text-[color:var(--crm-ui-muted)] sm:text-[11px]">
                   {eyebrow}
                 </div>
               ) : null}
               {badge}
             </div>
           )}
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2.5 md:gap-3">
             {emoji ? (
-              <div className="ace-crm-surface-muted flex h-11 w-11 shrink-0 items-center justify-center text-xl">
+              <div className="ace-crm-surface-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-base md:h-11 md:w-11 md:text-xl">
                 <span aria-hidden="true">{emoji}</span>
               </div>
             ) : null}
             <div className="min-w-0">
-              <h1 className="text-[1.9rem] font-black tracking-[-0.03em] text-[color:var(--crm-ui-text)]">
+              <h1 className="text-[1.35rem] font-black leading-tight tracking-normal text-[color:var(--crm-ui-text)] sm:text-[1.55rem] md:text-[1.9rem]">
                 {title}
               </h1>
               {description ? (
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-[color:var(--crm-ui-muted)]">
+                <p className="mt-1 hidden max-w-3xl text-sm leading-6 text-[color:var(--crm-ui-muted)] sm:block">
                   {description}
                 </p>
               ) : null}
-              {meta ? <div className="mt-3 flex flex-wrap items-center gap-2">{meta}</div> : null}
+              {meta ? <div className="mt-2 flex flex-wrap items-center gap-2 md:mt-3">{meta}</div> : null}
             </div>
           </div>
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">{actions}</div> : null}
       </div>
     </section>
   )

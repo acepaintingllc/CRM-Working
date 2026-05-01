@@ -56,11 +56,11 @@ export function CalendarSignalsPanel({
       ) : (
         <DashboardDividedList>
           {viewModel.events.map((event) => (
-            <div key={event.key} className="py-3">
-              <div className="text-sm font-semibold" style={crmTextStyle}>
+            <div key={event.key} className="min-w-0 py-3">
+              <div className="break-words text-sm font-semibold" style={crmTextStyle}>
                 {event.title}
               </div>
-              <div className="mt-0.5 text-xs" style={crmMutedTextStyle}>
+              <div className="mt-0.5 break-words text-xs leading-5" style={crmMutedTextStyle}>
                 {event.subtitle}
               </div>
               {event.href ? (
@@ -68,7 +68,7 @@ export function CalendarSignalsPanel({
                   href={event.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1 inline-flex text-xs font-semibold underline-offset-2 hover:underline"
+                  className="crm-calendar-open-link mt-1 inline-flex text-xs font-semibold underline-offset-2 hover:underline"
                   style={crmMutedTextStyle}
                 >
                   Open event

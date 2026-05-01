@@ -14,7 +14,7 @@ import {
   readCalendarStatusPayload,
   readCustomersPayload,
   readJobsPayload,
-  readNotesDashboardPayload,
+  readTasksDashboardPayload,
 } from '../home/state.ts'
 
 test('readJobsPayload returns rows for valid payloads and rejects malformed payloads', () => {
@@ -108,8 +108,8 @@ test('calendar payload readers distinguish missing and malformed status payloads
   assert.equal(events.value[0]?.id, 'event-1')
 })
 
-test('readNotesDashboardPayload returns safe defaults and reports malformed payloads', () => {
-  const valid = readNotesDashboardPayload({
+test('readTasksDashboardPayload returns safe defaults and reports malformed payloads', () => {
+  const valid = readTasksDashboardPayload({
     tasks: {
       overdue: [
         {
@@ -129,7 +129,7 @@ test('readNotesDashboardPayload returns safe defaults and reports malformed payl
   assert.equal(valid.availability, 'available')
   assert.equal(valid.value?.tasks.overdue.length, 1)
 
-  const missingBuckets = readNotesDashboardPayload({
+  const missingBuckets = readTasksDashboardPayload({
     tasks: {},
   })
   assert.equal(missingBuckets.errorMessage, null)
@@ -137,10 +137,10 @@ test('readNotesDashboardPayload returns safe defaults and reports malformed payl
   assert.deepEqual(missingBuckets.value?.tasks.overdue, [])
   assert.deepEqual(missingBuckets.value?.tasks.due_today, [])
 
-  const malformed = readNotesDashboardPayload({ nope: true })
+  const malformed = readTasksDashboardPayload({ nope: true })
   assert.equal(malformed.value, null)
   assert.equal(malformed.availability, 'invalid')
-  assert.equal(malformed.errorMessage, 'Malformed notes dashboard response.')
+  assert.equal(malformed.errorMessage, 'Malformed tasks dashboard response.')
 })
 
 test('load state helpers derive summary and warning sources from source states', () => {
@@ -150,24 +150,24 @@ test('load state helpers derive summary and warning sources from source states',
   assert.equal(initial.summary.hasCriticalError, false)
   assert.equal(initial.summary.hasWarnings, false)
 
-  const reloading = createLoadingCrmHomeLoadState(initial, ['jobs', 'notes'])
+  const reloading = createLoadingCrmHomeLoadState(initial, ['jobs', 'tasks'])
   assert.equal(reloading.summary.isInitialLoading, true)
   assert.equal(reloading.sources.jobs.status, 'loading')
-  assert.equal(reloading.sources.notes.status, 'loading')
+  assert.equal(reloading.sources.tasks.status, 'loading')
 
   const resolved = createResolvedCrmHomeLoadState({
     jobs: [],
     customers: [],
     calendarConnected: false,
     calendarTodayEvents: [],
-    notesReminders: [],
+    taskReminders: [],
     now: new Date('2026-04-21T12:00:00.000Z'),
     sources: {
       jobs: createCrmHomeSourceState('error', 'unavailable', 'Unable to load jobs.', '2026-04-21T12:00:00.000Z'),
       customers: createCrmHomeSourceState('ready', 'available', null, '2026-04-21T12:00:00.000Z'),
       calendarStatus: createCrmHomeSourceState('ready', 'available', null, '2026-04-21T12:00:00.000Z'),
       calendarEvents: createCrmHomeSourceState('ready', 'missing', null, '2026-04-21T12:00:00.000Z'),
-      notes: createCrmHomeSourceState('degraded', 'invalid', 'Malformed notes dashboard response.', '2026-04-21T12:00:00.000Z'),
+      tasks: createCrmHomeSourceState('degraded', 'invalid', 'Malformed tasks dashboard response.', '2026-04-21T12:00:00.000Z'),
     },
   })
 
@@ -175,9 +175,9 @@ test('load state helpers derive summary and warning sources from source states',
   assert.equal(resolved.summary.hasWarnings, false)
   assert.deepEqual(buildCrmHomeErrors(resolved.sources), {
     jobs: 'Unable to load jobs.',
-    notes: 'Malformed notes dashboard response.',
+    tasks: 'Malformed tasks dashboard response.',
   })
-  assert.deepEqual(getCrmHomeWarningSources(resolved.sources), ['notes'])
+  assert.deepEqual(getCrmHomeWarningSources(resolved.sources), ['tasks'])
 })
 
 test('applyCrmHomeSourcePatch merges source updates and explicit skipped calendar events state', () => {
@@ -242,7 +242,7 @@ test('deriveCrmHomeSummary treats non-critical degraded sources as warnings only
     customers: createCrmHomeSourceState('degraded', 'invalid', 'Malformed customers response.', '2026-04-21T12:00:00.000Z'),
     calendarStatus: createCrmHomeSourceState('ready', 'available', null, '2026-04-21T12:00:00.000Z'),
     calendarEvents: createCrmHomeSourceState('ready', 'missing', null, '2026-04-21T12:00:00.000Z'),
-    notes: createCrmHomeSourceState('ready', 'available', null, '2026-04-21T12:00:00.000Z'),
+    tasks: createCrmHomeSourceState('ready', 'available', null, '2026-04-21T12:00:00.000Z'),
   })
 
   assert.equal(summary.hasCriticalError, false)

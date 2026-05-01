@@ -8,23 +8,11 @@ import type {
   WallCalculationSettings,
   YN,
 } from './wallsTypes.ts'
-import { DEFAULT_LABOR_RATE } from './defaults.ts'
 
 const DEFAULTS = {
   standard_door_deduction_sf: 21,
   standard_window_deduction_sf: 15,
-  paint_prod_rate_sqft_per_hour: 150,
-  primer_prod_rate_sqft_per_hour: 180,
-  paint_coverage_sqft_per_gal_per_coat: 350,
-  primer_coverage_sqft_per_gal_per_coat: 300,
-  paint_coats: 2,
-  primer_coats: 1,
-  spot_prime_percent: 30,
-  labor_rate_per_hour: DEFAULT_LABOR_RATE,
-  area_supply_cost_per_sf: 0.08,
-  per_color_supply_cost: 20,
-  paint_price_per_gal: 45,
-  primer_price_per_gal: 35,
+  baseboard_opening_deduction_lf: 3,
 } as const
 
 export function n(v: unknown) {
@@ -67,6 +55,53 @@ function rateFromCatalog(
   return null
 }
 
+function normalizedCrewSize(value: unknown) {
+  const parsed = n(value)
+  return parsed == null ? 1 : Math.max(1, Math.floor(parsed))
+}
+
+function supplyScopeMatches(row: SupplyRateRow, scopeName: 'walls' | 'ceilings' | 'trim') {
+  const scope = normalizeKey(row.scope)
+  if (scope === 'all') return true
+  if (scopeName === 'walls') return scope === 'wall' || scope === 'walls'
+  if (scopeName === 'ceilings') return scope === 'ceiling' || scope === 'ceilings'
+  return scope === 'trim'
+}
+
+function supplyGroupMatches(row: SupplyRateRow, group: 'per_color' | 'area_based' | 'per_job') {
+  const explicit = normalizeKey(row.supply_group)
+  if (group === 'per_color') {
+    const unit = normalizeKey(row.unit)
+    return explicit === 'percolor' || (!explicit && (unit === 'color' || unit === 'percolor'))
+  }
+  if (group === 'area_based') {
+    const unit = normalizeKey(row.unit)
+    return explicit === 'areabased' || (!explicit && (unit === 'sf' || unit === 'sqft'))
+  }
+  return explicit === 'perjob'
+}
+
+function supplyMultiplier(row: SupplyRateRow, crewSize: number) {
+  return String(row.crew_multiplier ?? '').toUpperCase() === 'Y' ? crewSize : 1
+}
+
+export function supplyCostFromCatalog(params: {
+  catalogs: WallCalculationCatalogs | null | undefined
+  scopeName: 'walls' | 'ceilings' | 'trim'
+  group: 'per_color' | 'per_job'
+  crewSize: number
+}) {
+  let total = 0
+  let matched = false
+  for (const row of params.catalogs?.supplies_rates ?? []) {
+    if (!supplyGroupMatches(row, params.group)) continue
+    if (!supplyScopeMatches(row, params.scopeName)) continue
+    matched = true
+    total = round4(total + (pos(n(row.value)) ?? 0) * supplyMultiplier(row, params.crewSize))
+  }
+  return matched ? total : null
+}
+
 export function resolveSettings(
   settings: WallCalculationSettings | undefined,
   catalogs: WallCalculationCatalogs | null | undefined
@@ -78,36 +113,38 @@ export function resolveSettings(
       return (scope === 'wall' || scope === 'walls') && (unit === 'sf' || unit === 'sqft')
     }) ?? null
   const perColorFromCatalog =
-    rateFromCatalog(catalogs, (row) => {
-      const scope = normalizeKey(row.scope)
-      const unit = normalizeKey(row.unit)
-      return (scope === 'wall' || scope === 'walls') && (unit === 'color' || unit === 'percolor')
+    supplyCostFromCatalog({
+      catalogs,
+      scopeName: 'walls',
+      group: 'per_color',
+      crewSize: normalizedCrewSize(settings?.crew_size),
     }) ?? null
 
   return {
     standard_door_deduction_sf: pos(n(settings?.standard_door_deduction_sf)) ?? DEFAULTS.standard_door_deduction_sf,
     standard_window_deduction_sf:
       pos(n(settings?.standard_window_deduction_sf)) ?? DEFAULTS.standard_window_deduction_sf,
+    baseboard_opening_deduction_lf:
+      pos(n(settings?.baseboard_opening_deduction_lf)) ?? DEFAULTS.baseboard_opening_deduction_lf,
+    crew_size: normalizedCrewSize(settings?.crew_size),
     paint_prod_rate_sqft_per_hour:
-      pos(n(settings?.paint_prod_rate_sqft_per_hour)) ?? DEFAULTS.paint_prod_rate_sqft_per_hour,
+      pos(n(settings?.paint_prod_rate_sqft_per_hour)) ?? 0,
     primer_prod_rate_sqft_per_hour:
-      pos(n(settings?.primer_prod_rate_sqft_per_hour)) ?? DEFAULTS.primer_prod_rate_sqft_per_hour,
+      pos(n(settings?.primer_prod_rate_sqft_per_hour)) ?? 0,
     paint_coverage_sqft_per_gal_per_coat:
-      pos(n(settings?.paint_coverage_sqft_per_gal_per_coat)) ??
-      DEFAULTS.paint_coverage_sqft_per_gal_per_coat,
+      pos(n(settings?.paint_coverage_sqft_per_gal_per_coat)) ?? 0,
     primer_coverage_sqft_per_gal_per_coat:
-      pos(n(settings?.primer_coverage_sqft_per_gal_per_coat)) ??
-      DEFAULTS.primer_coverage_sqft_per_gal_per_coat,
-    paint_coats: pos(n(settings?.paint_coats)) ?? DEFAULTS.paint_coats,
-    primer_coats: pos(n(settings?.primer_coats)) ?? DEFAULTS.primer_coats,
-    spot_prime_percent: nonNeg(n(settings?.spot_prime_percent)) ?? DEFAULTS.spot_prime_percent,
-    labor_rate_per_hour: pos(n(settings?.labor_rate_per_hour)) ?? DEFAULTS.labor_rate_per_hour,
+      pos(n(settings?.primer_coverage_sqft_per_gal_per_coat)) ?? 0,
+    paint_coats: pos(n(settings?.paint_coats)) ?? 0,
+    primer_coats: pos(n(settings?.primer_coats)) ?? 0,
+    spot_prime_percent: nonNeg(n(settings?.spot_prime_percent)) ?? 0,
+    labor_rate_per_hour: pos(n(settings?.labor_rate_per_hour)) ?? 0,
     area_supply_cost_per_sf:
-      pos(n(settings?.area_supply_cost_per_sf)) ?? areaSupplyFromCatalog ?? DEFAULTS.area_supply_cost_per_sf,
+      pos(n(settings?.area_supply_cost_per_sf)) ?? areaSupplyFromCatalog ?? 0,
     per_color_supply_cost:
-      pos(n(settings?.per_color_supply_cost)) ?? perColorFromCatalog ?? DEFAULTS.per_color_supply_cost,
-    paint_price_per_gal: pos(n(settings?.paint_price_per_gal)) ?? DEFAULTS.paint_price_per_gal,
-    primer_price_per_gal: pos(n(settings?.primer_price_per_gal)) ?? DEFAULTS.primer_price_per_gal,
+      pos(n(settings?.per_color_supply_cost)) ?? perColorFromCatalog ?? 0,
+    paint_price_per_gal: pos(n(settings?.paint_price_per_gal)) ?? 0,
+    primer_price_per_gal: pos(n(settings?.primer_price_per_gal)) ?? 0,
   }
 }
 

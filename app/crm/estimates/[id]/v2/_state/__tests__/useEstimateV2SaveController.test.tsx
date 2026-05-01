@@ -37,6 +37,8 @@ function createSaveHarness() {
       scopes: fixture.scopes,
       segments: fixture.segments,
       roomFlags: fixture.roomFlags,
+      rollers: fixture.rollers,
+      accessFees: fixture.accessFees,
       ceilingScopes: fixture.ceilingScopes,
       ceilingSegments: fixture.ceilingSegments,
       trimScopes: fixture.trimScopes,
@@ -87,7 +89,7 @@ describe('useEstimateV2SaveController', () => {
     authedFetch.mockReset()
   })
 
-  it('blocks invalid autosaves and records debug metadata without issuing a request', async () => {
+  it('lets autosave persist partial drafts without blocking on incomplete measurement inputs', async () => {
     const harness = createSaveHarness()
     harness.store.getState().setTrimScopes((prev) =>
       prev.map((scope) =>
@@ -99,9 +101,10 @@ describe('useEstimateV2SaveController', () => {
               helperValue: '',
               measurementValue: '',
             }
-          : scope
+        : scope
       )
     )
+    authedFetch.mockResolvedValue(createResponse(true, { autosave: true }))
 
     const { result } = renderHook(() =>
       useEstimateV2SaveController({
@@ -114,11 +117,11 @@ describe('useEstimateV2SaveController', () => {
       })
     )
 
-    await expect(result.current.save('auto')).resolves.toBe(false)
+    await expect(result.current.save('auto')).resolves.toBe(true)
 
-    expect(authedFetch).not.toHaveBeenCalled()
-    expect(harness.store.getState().meta.saveStatus).toBe('blocked')
-    expect(harness.store.getState().meta.autoSaveHint).toBeTruthy()
+    expect(authedFetch).toHaveBeenCalledTimes(1)
+    expect(harness.store.getState().meta.saveStatus).toBe('saved')
+    expect(harness.store.getState().meta.autoSaveHint).toBe(null)
     expect(harness.store.getState().meta.debugMeta.lastSaveTrigger).toBe('auto')
   })
 
@@ -270,10 +273,13 @@ describe('useEstimateV2SaveController', () => {
     await expect(result.current.save('manual')).resolves.toBe(true)
 
     const expectedSavedSnapshot = buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: harness.store.getState().meta.jobSettingsDraft,
       rooms: harness.store.getState().collections.rooms,
       scopes: harness.store.getState().collections.scopes,
       segments: harness.store.getState().collections.segments,
       roomFlags: harness.store.getState().collections.roomFlags,
+      rollers: harness.store.getState().collections.rollers,
+      accessFees: harness.store.getState().collections.accessFees,
       ceilingScopes: harness.store.getState().collections.ceilingScopes,
       ceilingSegments: harness.store.getState().collections.ceilingSegments,
       trimScopes: harness.store.getState().collections.trimScopes,
@@ -285,5 +291,103 @@ describe('useEstimateV2SaveController', () => {
         expectedSavedSnapshot
       )
     ).toBe(true)
+  })
+
+  it('does not treat unchanged door scopes as newer local edits during autosave', async () => {
+    const harness = createSaveHarness()
+    harness.store.getState().setDoorScopes([
+      {
+        id: 'door-r001-main',
+        roomId: 'R001',
+        position: 0,
+        include: 'Y',
+        scopeName: 'Living Room Door',
+        doorTypeId: 'DOOR_PANEL',
+        quantity: '1',
+        sides: '2',
+        colorId: 'COLOR3',
+        paintProductId: 'P-TRIM',
+        primerProductId: 'P-TRIM-PRIMER',
+        primeMode: 'NONE',
+        spotPrimePercent: '',
+        paintCoats: '2',
+        primerCoats: '1',
+        conditionFactor: '1',
+        laborRate: '',
+        materialRate: '',
+        overridePaintHours: '',
+        overridePrimerHours: '',
+        overrideMaterialCost: '',
+        overrideSupplyCost: '',
+        overrideTotal: '',
+        notes: '',
+      },
+    ])
+    authedFetch.mockResolvedValue(createResponse(true, { autosave: true }))
+
+    const { result } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: harness.fixture.currentSnapshot,
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    await expect(result.current.save('auto')).resolves.toBe(true)
+
+    expect(harness.store.getState().meta.saveStatus).toBe('saved')
+    expect(harness.store.getState().meta.lastSavedSnapshot?.payload.room_door_scopes).toHaveLength(1)
+  })
+
+  it('does not apply an older save response over newer local ceiling edits', async () => {
+    const harness = createSaveHarness()
+    const ceilingScopeId = harness.fixture.ceilingScopes[0].id
+    harness.store.getState().setCeilingScopes((prev) =>
+      prev.map((scope) =>
+        scope.id === ceilingScopeId
+          ? { ...scope, ceilingTypeId: 'VAULT', ceilingGeometryMode: 'VAULTED' }
+          : scope
+      )
+    )
+
+    const pending = deferred<ReturnType<typeof createResponse>>()
+    authedFetch.mockReturnValue(pending.promise)
+
+    const { result } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: harness.fixture.currentSnapshot,
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    const savePromise = result.current.save('auto')
+    expect(authedFetch).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      harness.store.getState().setCeilingScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === ceilingScopeId
+            ? { ...scope, ceilingTypeId: 'FLAT', ceilingGeometryMode: 'FLAT' }
+            : scope
+        )
+      )
+    })
+
+    pending.resolve(createResponse(true, harness.fixture.summaryData))
+    await expect(savePromise).resolves.toBe(false)
+
+    const scope = harness.store
+      .getState()
+      .collections.ceilingScopes.find((entry) => entry.id === ceilingScopeId)
+    expect(scope?.ceilingTypeId).toBe('FLAT')
+    expect(scope?.ceilingGeometryMode).toBe('FLAT')
+    expect(harness.store.getState().meta.saveStatus).toBe('idle')
   })
 })

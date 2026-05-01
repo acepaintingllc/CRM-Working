@@ -4,12 +4,15 @@ import type {
   CustomerEstimateSectionKey,
   Unsafe,
 } from '@/lib/customer-estimates/types'
+import type { QuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
+import type { TemplatePreset } from '@/lib/customer-estimates/presets'
 
 export const CUSTOMER_SEND_SCOPE_KEYS = [
   'walls',
   'ceilings',
   'trim',
   'doors',
+  'drywall',
   'cabinets',
   'other',
 ] as const satisfies readonly CustomerEstimateSectionKey[]
@@ -56,6 +59,10 @@ export type EstimateTemplateSettingsRow = {
   override_labor_rate?: number | null
   job_minimum_enabled?: boolean | null
   job_minimum_amount?: number | null
+  walls_paint_id?: string | null
+  wall_paint_id?: string | null
+  ceiling_paint_id?: string | null
+  trim_paint_id?: string | null
   updated_at: string | null
 }
 
@@ -77,12 +84,16 @@ export type QuoteSendDefaults = {
   default_template_key: string
   quote_validity_days: number
   terms_text: string
+  terms_sections?: QuoteTermsSections
+  template_presets?: TemplatePreset[]
 }
 
 export type EstimateCustomerSendSettings = {
   default_template_key?: string | null
   quote_validity_days?: number | null
   terms_text?: string | null
+  terms_sections?: QuoteTermsSections | null
+  template_presets?: TemplatePreset[] | null
   updated_at?: string | null
 }
 
@@ -95,9 +106,11 @@ export type EstimateCustomerSendInputs = {
   room_ceiling_scopes: Unsafe[]
   ceiling_scope_segments: Unsafe[]
   room_trim_scopes: Unsafe[]
+  drywall_repairs?: Unsafe[]
   trim_items: Unsafe[]
   other: Unsafe[]
   jobsettings: EstimateJobSettingsRow
+  org_defaults: EstimateTemplateSettingsRow
 }
 
 export type EstimateCustomerSendContextData = {
@@ -151,6 +164,7 @@ export type EstimateCustomerSendScopeResources = {
   ceilingScopes: Unsafe[]
   ceilingScopeSegments: Unsafe[]
   trimScopes: Unsafe[]
+  drywallRepairs?: Unsafe[]
   trimItems: Unsafe[]
   other: Unsafe[]
 }
@@ -163,6 +177,7 @@ export type EstimateCustomerSendCalculatedData = {
   quoteWallScopes: Unsafe[]
   quoteCeilingScopes: Unsafe[]
   quoteTrimScopes: Unsafe[]
+  quoteDrywallScopes?: Unsafe[]
   pricingSummary: { finalTotal: number | null } | null
 }
 
@@ -177,7 +192,7 @@ export type CustomerSendDraft = {
   intro_paragraph: string
   closing_paragraph: string
   terms_text: string
-  scope_text_edits: Record<CustomerSendScopeKey, string>
+  scope_text_edits: Partial<Record<CustomerSendScopeKey, string>>
   quote_validity_days: number | null
   deposit_language: string
   card_fee_note: string
@@ -224,4 +239,5 @@ export type CustomerSendMutationData = {
 
 export type CustomerSendSubmissionData = CustomerSendMutationData & {
   mode: CustomerSendMode
+  delivery_error?: string | null
 }

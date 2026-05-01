@@ -11,6 +11,7 @@ import {
   sumNumbers,
 } from './wallsHelpers.ts'
 import { allocatePaintMaterialRollups } from './paintMaterial.ts'
+import { resolvePrimerSupplyCost } from './scopeRules.ts'
 import type {
   MissingInput,
   ResolvedSettings,
@@ -48,6 +49,7 @@ type ScopeCalc = {
   effective_primer_gallons: number | null
   primer_material_cost: number | null
   area_supply_cost: number | null
+  primer_supply_cost: number | null
   color_group_key: string | null
   color_allocated_cost: number
   raw_supply_cost: number | null
@@ -118,8 +120,8 @@ function applyScopeCosts(scope: ScopeCalc, settings: ResolvedSettings, products:
   scope.raw_total = round4(rawLaborCost + rawMaterialCost + (scope.raw_supply_cost ?? 0))
   scope.effective_total_before_override =
     round4(effectiveLaborCost + effectiveMaterialCost + (scope.effective_supply_cost ?? 0))
-  scope.effective_total =
-    round4(nonNeg(n(scope.row.override_total)) ?? scope.effective_total_before_override)
+  const overrideTotal = scope.row.include === 'Y' ? nonNeg(n(scope.row.override_total)) : null
+  scope.effective_total = round4(overrideTotal ?? scope.effective_total_before_override)
 }
 
 function buildRoomTotals(scopeCalcs: ScopeCalc[]) {
@@ -230,6 +232,7 @@ function buildScopeTraces(
       },
       supplies: {
         area_based_cost: scope.area_supply_cost,
+        primer_supply_cost: scope.primer_supply_cost,
         color_group_key: scope.color_group_key,
         color_group_total_cost: scope.color_group_key
           ? colorGroupTotalCost.get(scope.color_group_key) ?? null
@@ -251,6 +254,70 @@ function buildScopeTraces(
   return traces
 }
 
+function pushMissingRequiredAssumption(
+  missing: MissingInput[],
+  scope: WallCalculationScopeRow,
+  field: string
+) {
+  if (scope.include === 'N') return
+  missing.push({
+    level: 'scope',
+    room_id: scope.room_id,
+    scope_id: scopeKey(scope),
+    segment_id: null,
+    field,
+    message: `Scope ${scope.scope_name ?? scope.position + 1}: ${field} is required`,
+  })
+}
+
+function pushMissingWallPricingAssumptions(params: {
+  scope: WallCalculationScopeRow
+  settings: WallCalculationInput['settings']
+  products: ReturnType<typeof productMap>
+  missing: MissingInput[]
+}) {
+  const paintProduct = params.scope.paint_product_id ? params.products.get(params.scope.paint_product_id) : undefined
+  const primerProduct = params.scope.primer_product_id ? params.products.get(params.scope.primer_product_id) : undefined
+  const required: Array<[string, unknown]> = [
+    ['labor_rate_per_hour', params.scope.labor_rate_per_hour ?? params.settings?.labor_rate_per_hour],
+    ['paint_prod_rate_sqft_per_hour', params.scope.paint_prod_rate_sqft_per_hour ?? params.settings?.paint_prod_rate_sqft_per_hour],
+    [
+      'paint_coverage_sqft_per_gal_per_coat',
+      params.scope.paint_coverage_sqft_per_gal_per_coat ??
+        paintProduct?.coverage_sqft_per_gal_per_coat ??
+        params.settings?.paint_coverage_sqft_per_gal_per_coat,
+    ],
+    ['paint_coats', params.scope.paint_coats ?? params.settings?.paint_coats],
+    [
+      'paint_price_per_gal',
+      params.scope.paint_price_per_gal ?? paintProduct?.price_per_gal ?? params.settings?.paint_price_per_gal,
+    ],
+  ]
+  if (params.scope.prime_mode !== 'NONE') {
+    required.push(
+      ['primer_prod_rate_sqft_per_hour', params.scope.primer_prod_rate_sqft_per_hour ?? params.settings?.primer_prod_rate_sqft_per_hour],
+      [
+        'primer_coverage_sqft_per_gal_per_coat',
+        params.scope.primer_coverage_sqft_per_gal_per_coat ??
+          primerProduct?.coverage_sqft_per_gal_per_coat ??
+          params.settings?.primer_coverage_sqft_per_gal_per_coat,
+      ],
+      ['primer_coats', params.scope.primer_coats ?? params.settings?.primer_coats],
+      [
+        'primer_price_per_gal',
+        params.scope.primer_price_per_gal ?? primerProduct?.price_per_gal ?? params.settings?.primer_price_per_gal,
+      ]
+    )
+  }
+  if (params.scope.prime_mode === 'SPOT') {
+    required.push(['spot_prime_percent', params.scope.spot_prime_percent ?? params.settings?.spot_prime_percent])
+  }
+
+  for (const [field, value] of required) {
+    if (pos(n(value)) == null) pushMissingRequiredAssumption(params.missing, params.scope, field)
+  }
+}
+
 export function calculateWalls(input: WallCalculationInput): WallCalculationOutput {
   const settings = resolveSettings(input.settings, input.catalogs)
   const products = productMap(input.catalogs)
@@ -269,6 +336,12 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
 
   const scopeCalcs: ScopeCalc[] = []
   const normalizedScopes = input.scopes.map((scope) => {
+    pushMissingWallPricingAssumptions({
+      scope,
+      settings: input.settings,
+      products,
+      missing: missingInputs,
+    })
     const include: YN = normalizeInclude(scope.include)
     const segments = segByScope.get(scope.id ?? '') ?? []
     let geometry: number | null = null
@@ -315,7 +388,8 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
         (nonNeg(n(scope.complexity_factor)) ?? 1) *
         (nonNeg(n(scope.wall_flag_factor)) ?? 1) *
         (nonNeg(n(scope.cut_in_top_factor)) ?? 1) *
-        (nonNeg(n(scope.cut_in_bottom_factor)) ?? 1)
+        (nonNeg(n(scope.cut_in_bottom_factor)) ?? 1) *
+        (nonNeg(n(scope.condition_factor)) ?? 1)
     )
 
     const paintCoats = pos(n(scope.paint_coats)) ?? settings.paint_coats
@@ -341,10 +415,14 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
       scope.prime_mode === 'FULL' ? 1 : scope.prime_mode === 'SPOT' ? spotPrimePercent / 100 : 0
     const primerArea = include === 'Y' ? round4(effectiveArea * primerMultiplier) : 0
 
-    const rawPaintHours = include === 'Y' ? round4((effectiveArea * paintCoats / paintRate) * modifier) : 0
-    const rawPrimerHours = include === 'Y' ? round4((primerArea * primerCoats / primerRate) * modifier) : 0
-    const rawPaintGallons = include === 'Y' ? round4((effectiveArea * paintCoats) / paintCoverage) : 0
-    const rawPrimerGallons = include === 'Y' ? round4((primerArea * primerCoats) / primerCoverage) : 0
+    const rawPaintHours =
+      include === 'Y' && paintRate > 0 ? round4(((effectiveArea * paintCoats) / paintRate) * modifier) : 0
+    const rawPrimerHours =
+      include === 'Y' && primerRate > 0 ? round4(((primerArea * primerCoats) / primerRate) * modifier) : 0
+    const rawPaintGallons =
+      include === 'Y' && paintCoverage > 0 ? round4((effectiveArea * paintCoats) / paintCoverage) : 0
+    const rawPrimerGallons =
+      include === 'Y' && primerCoverage > 0 ? round4((primerArea * primerCoats) / primerCoverage) : 0
     const effectivePaintHours = include === 'Y' ? round4(nonNeg(n(scope.override_paint_hours)) ?? rawPaintHours) : 0
     const effectivePrimerHours = include === 'Y' ? round4(nonNeg(n(scope.override_primer_hours)) ?? rawPrimerHours) : 0
     const effectivePaintGallons =
@@ -354,6 +432,17 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
 
     const areaRate = pos(n(scope.area_supply_cost_per_sf)) ?? settings.area_supply_cost_per_sf
     const areaSupplyCost = include === 'Y' ? round4(effectiveArea * areaRate) : 0
+    const primerSupplyCost =
+      include === 'Y'
+        ? round4(
+            pos(n(scope.primer_supply_cost)) ??
+              resolvePrimerSupplyCost({
+                primeMode: scope.prime_mode,
+                scope: 'walls',
+                suppliesRates: input.catalogs?.supplies_rates,
+              })
+          )
+        : 0
     const colorGroupKey =
       include === 'Y' && scope.color_id ? `${scope.paint_product_id ?? 'PAINT'}::${scope.color_id}` : null
 
@@ -383,10 +472,11 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
       effective_primer_gallons: effectivePrimerGallons,
       primer_material_cost: null,
       area_supply_cost: areaSupplyCost,
+      primer_supply_cost: primerSupplyCost,
       color_group_key: colorGroupKey,
       color_allocated_cost: 0,
-      raw_supply_cost: areaSupplyCost,
-      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost),
+      raw_supply_cost: round4(areaSupplyCost + primerSupplyCost),
+      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost + primerSupplyCost),
       raw_total: 0,
       effective_total_before_override: 0,
       effective_total: 0,
@@ -442,7 +532,9 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
     for (const scope of scopes) {
       const weight = totalArea > 0 ? (scope.effective_area ?? 0) / totalArea : 1 / scopes.length
       scope.color_allocated_cost = round4(totalCost * weight)
-      scope.raw_supply_cost = round4((scope.area_supply_cost ?? 0) + scope.color_allocated_cost)
+      scope.raw_supply_cost = round4(
+        (scope.area_supply_cost ?? 0) + (scope.primer_supply_cost ?? 0) + scope.color_allocated_cost
+      )
       scope.effective_supply_cost = round4(nonNeg(n(scope.row.override_supply_cost)) ?? scope.raw_supply_cost)
       applyScopeCosts(scope, settings, products)
     }

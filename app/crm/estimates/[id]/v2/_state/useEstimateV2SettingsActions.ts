@@ -41,6 +41,9 @@ export function useEstimateV2SettingsActions(params: {
                 ceiling_primer_id: next.ceilingPrimerProductId || null,
                 trim_paint_id: next.trimPaintProductId || null,
                 trim_primer_id: next.trimPrimerProductId || null,
+                standard_door_deduction_sf: next.standardDoorDeductionSf,
+                standard_window_deduction_sf: next.standardWindowDeductionSf,
+                baseboard_opening_deduction_lf: next.baseboardOpeningDeductionLf,
                 primer_id:
                   next.wallPrimerProductId ||
                   next.ceilingPrimerProductId ||

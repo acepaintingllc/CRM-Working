@@ -7,6 +7,7 @@ export type TrimPaintProductMap = Map<string, TrimPaintProduct>
 
 export type BuildTrimPaintInputParams = {
   jobsettings: Record<string, unknown> | null
+  defaults?: Record<string, unknown> | null
   catalogs: TrimPaintProductMap | null
 }
 
@@ -39,7 +40,7 @@ export function buildTrimPaintInput(params: BuildTrimPaintInputParams): TrimPain
   const row = params.jobsettings
   if (!row) return null
 
-  const productId = asText(row.trim_paint_id) || null
+  const productId = asText(row.trim_paint_id) || asText(params.defaults?.trim_paint_id) || null
   const product = productId ? params.catalogs?.get(productId) : undefined
   const gallons = asNullableNumber(row.trim_paint_gallons)
   const quarts = asNullableNumber(row.trim_paint_quarts)

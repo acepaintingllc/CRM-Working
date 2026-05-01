@@ -13,6 +13,7 @@ type RoomFlagCatalogRow = RatesFlagsCatalogOverlay['room_flags'][number]
 type AccessFeeCatalogRow = RatesFlagsCatalogOverlay['access_fees'][number]
 type TrimItemCatalogRow = RatesFlagsCatalogOverlay['trim_items'][number]
 type AreaSupplyCatalogRow = RatesFlagsCatalogOverlay['area_supplies_rates'][number]
+type ConditionModifierCatalogRow = RatesFlagsCatalogOverlay['condition_modifiers'][number]
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
@@ -41,6 +42,7 @@ function parseSnapshotPayload(payload: unknown): RatesFlagsCatalogOverlay | null
     wall_complexity_types: pickArray<WallComplexityCatalogRow>('wall_complexity_types'),
     ceiling_types: pickArray<CeilingTypeCatalogRow>('ceiling_types'),
     room_flags: pickArray<RoomFlagCatalogRow>('room_flags'),
+    condition_modifiers: pickArray<ConditionModifierCatalogRow>('condition_modifiers'),
     access_fees: pickArray<AccessFeeCatalogRow>('access_fees'),
     trim_items: pickArray<TrimItemCatalogRow>('trim_items'),
     area_supplies_rates: pickArray<AreaSupplyCatalogRow>('area_supplies_rates'),

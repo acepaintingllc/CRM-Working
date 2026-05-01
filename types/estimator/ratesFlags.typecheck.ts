@@ -4,6 +4,7 @@ import type {
   RatesFlagsMutationRequestByCategory,
   RatesFlagsUpdateRequest,
 } from '@/types/estimator/ratesFlags'
+import type { EstimateV2AccessFeeDraft, EstimateV2AccessFeeOption } from './v2'
 
 const validCreateRequest: RatesFlagsCreateRequest<'access_fees_ladders'> = {
   category: 'access_fees_ladders',
@@ -48,6 +49,29 @@ const validArchiveRequest: RatesFlagsMutationRequestByCategory<'production_rates
 void validCreateRequest
 void validUpdateRequest
 void validArchiveRequest
+
+const accessFeeDraft: EstimateV2AccessFeeDraft = {
+  id: 'fee-row-1',
+  roomId: '',
+  accessFeeId: 'LADDER_24',
+  qty: '1',
+  actualCostOverride: '',
+  notes: '',
+  position: 0,
+}
+
+const accessFeeOption: EstimateV2AccessFeeOption = {
+  id: 'LADDER_24',
+  label: '24 ft ladder',
+  access_group: 'ladders',
+  fee_type: 'Labor',
+  amount: 75,
+  unit: 'each',
+  notes: null,
+}
+
+void accessFeeDraft
+void accessFeeOption
 
 const invalidAccessField: RatesFlagsMutationRequest = {
   category: 'access_fees_ladders',

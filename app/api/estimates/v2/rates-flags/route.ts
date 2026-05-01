@@ -1,16 +1,5 @@
-import {
-  handleRatesFlagsRouteGet,
-  handleRatesFlagsRouteMutation,
-} from '@/lib/server/ratesFlagsRoute'
+import { NextResponse } from 'next/server'
 
-export async function GET(request: Request) {
-  return handleRatesFlagsRouteGet(request)
-}
-
-export async function PUT(request: Request) {
-  return handleRatesFlagsRouteMutation(request)
-}
-
-export async function PATCH(request: Request) {
-  return handleRatesFlagsRouteMutation(request)
+export function GET(request: Request) {
+  return NextResponse.redirect(new URL('/api/quotes/rates-flags', request.url), 307)
 }

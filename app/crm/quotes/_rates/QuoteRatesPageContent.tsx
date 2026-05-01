@@ -9,6 +9,7 @@ import { useQuoteRatesPage } from '@/app/crm/quotes/_hooks/useQuoteRatesPage'
 import { QuoteRatesCategorySection } from './QuoteRatesCategorySection'
 import { QuoteRatesDiscardDialog } from './QuoteRatesDiscardDialog'
 import { QuoteRatesEditorSection } from './QuoteRatesEditorSection'
+import { QuoteMeasurementAssumptionsSection } from './QuoteMeasurementAssumptionsSection'
 import { QuoteRatesTableSection } from './QuoteRatesTableSection'
 
 export function QuoteRatesPageContent() {
@@ -58,46 +59,63 @@ export function QuoteRatesPageContent() {
       >
         <QuoteAdminPageBanner banner={controller.uiState.pageBanner} />
 
-        <CrmDetailLayout
-          main={
-            <div className="grid gap-4">
-              <QuoteRatesCategorySection
-                filtersVm={controller.filtersVm}
-                tableVm={{ activeCategory: controller.tableVm.activeCategory }}
-                actions={{
-                  setActiveTab: controller.actions.setActiveTab,
-                  setRateSection: controller.actions.setRateSection,
-                  setRateCategory: controller.actions.setRateCategory,
-                  setFlagsSection: controller.actions.setFlagsSection,
-                  setRoomDefaultsSection: controller.actions.setRoomDefaultsSection,
-                }}
-              />
-              <QuoteRatesTableSection
-                vm={controller.tableVm}
-                valueFromRow={controller.valueFromRow}
-                actions={{
-                  startCreate: controller.actions.startCreate,
-                  startDuplicate: controller.actions.startDuplicate,
-                  archiveOrReactivate: controller.actions.archiveOrReactivate,
-                  setSelectedId: controller.actions.setSelectedId,
-                }}
-              />
-            </div>
-          }
-          side={
-            <QuoteRatesEditorSection
-              vm={controller.editorVm}
-              templateVersion={controller.resource.data.template_version}
+        {controller.filtersVm.activeTab === 'assumptions' ? (
+          <div className="grid content-start gap-4">
+            <QuoteRatesCategorySection
+              filtersVm={controller.filtersVm}
+              tableVm={{ activeCategory: controller.tableVm.activeCategory }}
               actions={{
-                saveCurrent: controller.actions.saveCurrent,
-                cancelEdit: controller.actions.cancelEdit,
-                setDraftActive: controller.actions.setDraftActive,
-                updateDraftValue: controller.actions.updateDraftValue,
-                formatDraftValue: controller.actions.formatDraftValue,
+                setActiveTab: controller.actions.setActiveTab,
+                setRateSection: controller.actions.setRateSection,
+                setRateCategory: controller.actions.setRateCategory,
+                setFlagsSection: controller.actions.setFlagsSection,
+                setRoomDefaultsSection: controller.actions.setRoomDefaultsSection,
               }}
             />
-          }
-        />
+            <QuoteMeasurementAssumptionsSection />
+          </div>
+        ) : (
+          <CrmDetailLayout
+            main={
+              <div className="grid content-start gap-4">
+                <QuoteRatesCategorySection
+                  filtersVm={controller.filtersVm}
+                  tableVm={{ activeCategory: controller.tableVm.activeCategory }}
+                  actions={{
+                    setActiveTab: controller.actions.setActiveTab,
+                    setRateSection: controller.actions.setRateSection,
+                    setRateCategory: controller.actions.setRateCategory,
+                    setFlagsSection: controller.actions.setFlagsSection,
+                    setRoomDefaultsSection: controller.actions.setRoomDefaultsSection,
+                  }}
+                />
+                <QuoteRatesTableSection
+                  vm={controller.tableVm}
+                  valueFromRow={controller.valueFromRow}
+                  actions={{
+                    startCreate: controller.actions.startCreate,
+                    startDuplicate: controller.actions.startDuplicate,
+                    archiveOrReactivate: controller.actions.archiveOrReactivate,
+                    setSelectedId: controller.actions.setSelectedId,
+                  }}
+                />
+              </div>
+            }
+            side={
+              <QuoteRatesEditorSection
+                vm={controller.editorVm}
+                templateVersion={controller.resource.data.template_version}
+                actions={{
+                  saveCurrent: controller.actions.saveCurrent,
+                  cancelEdit: controller.actions.cancelEdit,
+                  setDraftActive: controller.actions.setDraftActive,
+                  updateDraftValue: controller.actions.updateDraftValue,
+                  formatDraftValue: controller.actions.formatDraftValue,
+                }}
+              />
+            }
+          />
+        )}
         <QuoteRatesDiscardDialog
           vm={controller.discardVm}
           onConfirm={() => void controller.actions.confirmDiscard()}

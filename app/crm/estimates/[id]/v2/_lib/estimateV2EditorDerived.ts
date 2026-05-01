@@ -12,6 +12,8 @@ import {
 } from './estimateV2EditorNormalize.ts'
 import type {
   EstimateV2CeilingScopeDraft,
+  EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
   EstimateV2HeightFactorOption,
   EstimateV2PaintProductOption,
   EstimateV2ProductionRateOption,
@@ -54,6 +56,14 @@ export function buildCeilingScopeByRoomId(scopes: EstimateV2CeilingScopeDraft[])
 }
 
 export function buildTrimScopeByRoomId(scopes: EstimateV2TrimScopeDraft[]) {
+  return groupRowsByRoomId(scopes)
+}
+
+export function buildDoorScopeByRoomId(scopes: EstimateV2DoorScopeDraft[]) {
+  return groupRowsByRoomId(scopes)
+}
+
+export function buildDrywallRepairByRoomId(scopes: EstimateV2DrywallRepairDraft[]) {
   return groupRowsByRoomId(scopes)
 }
 
@@ -103,9 +113,23 @@ export function buildCeilingScopeEffectiveAreaById(ceilingCalculations: Unsafe |
   return next
 }
 
+export function buildCeilingScopeEffectiveTotalById(ceilingCalculations: Unsafe | null) {
+  const next = new Map<string, number | null>()
+  const calcScopes =
+    ceilingCalculations && typeof ceilingCalculations === 'object' && Array.isArray((ceilingCalculations as Unsafe).scopes)
+      ? ((ceilingCalculations as Unsafe).scopes as Unsafe[])
+      : []
+  for (const scope of calcScopes) {
+    const scopeId = asText(scope.id)
+    if (!scopeId) continue
+    next.set(scopeId, unknownNumberOrNull(scope.effective_total))
+  }
+  return next
+}
+
 export function buildTrimScopeMetricById(
   trimCalculations: Unsafe | null,
-  key: 'effective_measurement' | 'effective_total'
+  key: 'effective_measurement' | 'effective_units' | 'effective_quantity' | 'effective_total'
 ) {
   const next = new Map<string, number | null>()
   const calcScopes =
@@ -144,7 +168,7 @@ function trimModifierProduct(scope: Pick<
   | 'stairFactor'
   | 'difficultFinishFactor'
   | 'caulkFillFactor'
->) {
+>): number {
   return [
     scope.prepFactor,
     scope.heightFactor,
@@ -154,13 +178,13 @@ function trimModifierProduct(scope: Pick<
     scope.stairFactor,
     scope.difficultFinishFactor,
     scope.caulkFillFactor,
-  ].reduce((product, value) => {
+  ].reduce<number>((product, value) => {
     const factor = numberOrNull(value)
     return product * (factor != null && factor > 0 ? factor : 1)
   }, 1)
 }
 
-function trimCalculationModifierProduct(scope: Unsafe) {
+function trimCalculationModifierProduct(scope: Unsafe): number {
   return [
     scope.prep_factor,
     scope.height_factor,
@@ -170,7 +194,7 @@ function trimCalculationModifierProduct(scope: Unsafe) {
     scope.stair_factor,
     scope.difficult_finish_factor,
     scope.caulk_fill_factor,
-  ].reduce((product, value) => {
+  ].reduce<number>((product, value) => {
     const factor = unknownNumberOrNull(value)
     return product * (factor != null && factor > 0 ? factor : 1)
   }, 1)
@@ -261,6 +285,16 @@ export function buildLocalTrimScopeMetricById(params: {
   return next
 }
 
+export function buildWallScopeEffectiveTotalById(wallCalculations: EstimateV2WallCalculationsPayload | null) {
+  const next = new Map<string, number | null>()
+  for (const scope of wallCalculations?.scopes ?? []) {
+    const scopeId = asText((scope as Unsafe).id)
+    if (!scopeId) continue
+    next.set(scopeId, unknownNumberOrNull((scope as Unsafe).effective_total))
+  }
+  return next
+}
+
 export function buildWallScopeEffectiveAreaById(wallCalculations: EstimateV2WallCalculationsPayload | null) {
   const next = new Map<string, number | null>()
   for (const trace of wallCalculations?.scope_traces ?? []) {
@@ -337,14 +371,10 @@ export function buildRoomComplexityFactorByRoomId(
   rooms: EstimateV2RoomDraft[],
   wallProductionRateById: Map<string, EstimateV2ProductionRateOption>
 ) {
+  void wallProductionRateById
   const next = new Map<string, string>()
   for (const room of rooms) {
-    const rate = unknownNumberOrNull(
-      wallProductionRateById.get(room.wallComplexityId)?.sqft_per_hr ??
-        wallProductionRateById.get(room.wallComplexityId)?.prep_sqft_per_hr
-    )
-    const multiplier = rate && rate > 0 ? 150 / rate : 1
-    next.set(room.roomId, toPositiveFactorString(multiplier, '1'))
+    next.set(room.roomId, '1')
   }
   return next
 }

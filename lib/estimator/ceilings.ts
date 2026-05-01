@@ -6,9 +6,11 @@ import {
   productMap,
   resolveSettings,
   round4,
+  supplyCostFromCatalog,
   sumNumbers,
 } from './wallsHelpers.ts'
 import { allocatePaintMaterialRollups } from './paintMaterial.ts'
+import { resolvePrimerSupplyCost } from './scopeRules.ts'
 import type {
   MissingInput,
   ResolvedSettings,
@@ -48,6 +50,7 @@ type ScopeCalc = {
   effective_primer_gallons: number | null
   primer_material_cost: number | null
   area_supply_cost: number | null
+  primer_supply_cost: number | null
   color_group_key: string | null
   color_allocated_cost: number
   raw_supply_cost: number | null
@@ -151,6 +154,56 @@ function resolveCeilingAreaSupplyRate(
   return base.area_supply_cost_per_sf
 }
 
+function resolveCeilingHelperArea(
+  scope: CeilingCalculationScopeRow,
+  baseArea: number | null,
+  missing: MissingInput[]
+) {
+  const mode = scope.ceiling_geometry_mode ?? 'FLAT'
+  const base = nonNeg(n(baseArea)) ?? 0
+  if (base <= 0) return 0
+
+  if (mode === 'VAULTED') {
+    if (pos(n(scope.area_sf)) != null) return 0
+    if (resolveVaultedMeasuredArea(scope, missing) != null) return 0
+    const factor = pos(n(scope.vaulted_area_factor))
+    if (factor == null) {
+      pushMissingRequiredAssumption(missing, scope, 'vaulted_area_factor')
+      return 0
+    }
+    return round4(Math.max(base * factor - base, 0))
+  }
+
+  if (mode === 'COFFERED') {
+    const sectionLength = nonNeg(n(scope.coffer_section_length_in)) ?? 0
+    const sectionWidth = nonNeg(n(scope.coffer_section_width_in)) ?? 0
+    const sectionCount = Math.max(0, Math.floor(nonNeg(n(scope.coffer_section_count)) ?? 0))
+    const faceHeight = nonNeg(n(scope.coffer_face_height_in)) ?? 0
+    const bottomWidth = nonNeg(n(scope.coffer_bottom_width_in)) ?? 0
+    const sectionPerimeter = 2 * (sectionLength + sectionWidth)
+    return round4(
+      sectionCount * ((sectionPerimeter * faceHeight) / 144 + (sectionPerimeter * bottomWidth) / 144)
+    )
+  }
+
+  return 0
+}
+
+function resolveVaultedMeasuredArea(scope: CeilingCalculationScopeRow, missing: MissingInput[]) {
+  if ((scope.ceiling_geometry_mode ?? 'FLAT') !== 'VAULTED') return null
+  const ridgeLength = pos(n(scope.vaulted_ridge_length_in))
+  const slopeLength = pos(n(scope.vaulted_slope_length_in))
+  const planeCountInput = pos(n(scope.vaulted_plane_count))
+  const hasMeasuredLength = ridgeLength != null || slopeLength != null
+  if (hasMeasuredLength && planeCountInput == null) {
+    pushMissingRequiredAssumption(missing, scope, 'vaulted_plane_count')
+  }
+  const planeCount = planeCountInput == null ? null : Math.max(1, Math.floor(planeCountInput))
+  if (ridgeLength == null || slopeLength == null) return null
+  if (planeCount == null) return null
+  return round4((ridgeLength * slopeLength * planeCount) / 144)
+}
+
 function applyScopeCosts(
   scope: ScopeCalc,
   settings: ResolvedSettings,
@@ -183,7 +236,8 @@ function applyScopeCosts(
   scope.effective_total_before_override = round4(
     effectiveLaborCost + effectiveMaterialCost + (scope.effective_supply_cost ?? 0)
   )
-  scope.effective_total = round4(nonNeg(n(scope.row.override_total)) ?? scope.effective_total_before_override)
+  const overrideTotal = scope.row.include === 'Y' ? nonNeg(n(scope.row.override_total)) : null
+  scope.effective_total = round4(overrideTotal ?? scope.effective_total_before_override)
 }
 
 function buildRoomTotals(scopeCalcs: ScopeCalc[]): WallRoomTotal[] {
@@ -235,15 +289,84 @@ function buildRoomTotals(scopeCalcs: ScopeCalc[]): WallRoomTotal[] {
   return Array.from(totals.values()).sort((a, b) => a.room_id.localeCompare(b.room_id))
 }
 
+function pushMissingRequiredAssumption(
+  missing: MissingInput[],
+  scope: CeilingCalculationScopeRow,
+  field: string
+) {
+  if (scope.include === 'N') return
+  missing.push({
+    level: 'scope',
+    room_id: scope.room_id,
+    scope_id: ceilingScopeKey(scope),
+    segment_id: null,
+    field,
+    message: `Ceiling scope ${scope.scope_name ?? scope.position + 1}: ${field} is required`,
+  })
+}
+
+function pushMissingCeilingPricingAssumptions(params: {
+  scope: CeilingCalculationScopeRow
+  settings: CeilingCalculationInput['settings']
+  products: ReturnType<typeof productMap>
+  missing: MissingInput[]
+}) {
+  const paintProduct = params.scope.paint_product_id ? params.products.get(params.scope.paint_product_id) : undefined
+  const primerProduct = params.scope.primer_product_id ? params.products.get(params.scope.primer_product_id) : undefined
+  const required: Array<[string, unknown]> = [
+    ['labor_rate_per_hour', params.scope.labor_rate_per_hour ?? params.settings?.labor_rate_per_hour],
+    ['paint_prod_rate_sqft_per_hour', params.scope.paint_prod_rate_sqft_per_hour ?? params.settings?.paint_prod_rate_sqft_per_hour],
+    [
+      'paint_coverage_sqft_per_gal_per_coat',
+      params.scope.paint_coverage_sqft_per_gal_per_coat ??
+        paintProduct?.coverage_sqft_per_gal_per_coat ??
+        params.settings?.paint_coverage_sqft_per_gal_per_coat,
+    ],
+    ['paint_coats', params.scope.paint_coats ?? params.settings?.paint_coats],
+    [
+      'paint_price_per_gal',
+      params.scope.paint_price_per_gal ?? paintProduct?.price_per_gal ?? params.settings?.paint_price_per_gal,
+    ],
+  ]
+  if (params.scope.prime_mode !== 'NONE') {
+    required.push(
+      ['primer_prod_rate_sqft_per_hour', params.scope.primer_prod_rate_sqft_per_hour ?? params.settings?.primer_prod_rate_sqft_per_hour],
+      [
+        'primer_coverage_sqft_per_gal_per_coat',
+        params.scope.primer_coverage_sqft_per_gal_per_coat ??
+          primerProduct?.coverage_sqft_per_gal_per_coat ??
+          params.settings?.primer_coverage_sqft_per_gal_per_coat,
+      ],
+      ['primer_coats', params.scope.primer_coats ?? params.settings?.primer_coats],
+      [
+        'primer_price_per_gal',
+        params.scope.primer_price_per_gal ?? primerProduct?.price_per_gal ?? params.settings?.primer_price_per_gal,
+      ]
+    )
+  }
+  if (params.scope.prime_mode === 'SPOT') {
+    required.push(['spot_prime_percent', params.scope.spot_prime_percent ?? params.settings?.spot_prime_percent])
+  }
+
+  for (const [field, value] of required) {
+    if (pos(n(value)) == null) pushMissingRequiredAssumption(params.missing, params.scope, field)
+  }
+}
+
 export function calculateCeilings(input: CeilingCalculationInput): CeilingCalculationOutput {
   const settings = resolveSettings(input.settings, input.catalogs)
   const products = productMap(input.catalogs)
   const missingInputs: MissingInput[] = []
 
-  // Build ceiling_type_mult lookup: ceiling_type_id → labor_mult (default 1)
-  const ceilingTypeMultMap = new Map<string, number>()
+  // Build ceiling_type lookup: ceiling_type_id → { labor_mult, area_factor }
+  const ceilingTypeInfoMap = new Map<string, { labor_mult: number; area_factor: number }>()
   for (const ct of input.catalogs?.ceiling_types ?? []) {
-    if (ct.id) ceilingTypeMultMap.set(ct.id, pos(n(ct.labor_mult)) ?? 1)
+    if (ct.id) {
+      ceilingTypeInfoMap.set(ct.id, {
+        labor_mult: pos(n(ct.labor_mult)) ?? 1,
+        area_factor: pos(n(ct.area_factor)) ?? 1,
+      })
+    }
   }
 
   // Ceiling-scoped area supply rate
@@ -265,6 +388,12 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
   const scopeCalcs: ScopeCalc[] = []
 
   const normalizedScopes = input.scopes.map((scope) => {
+    pushMissingCeilingPricingAssumptions({
+      scope,
+      settings: input.settings,
+      products,
+      missing: missingInputs,
+    })
     const include: YN = normalizeInclude(scope.include)
     const scopeKey = ceilingScopeKey(scope)
     const segments = segByScope.get(scope.id ?? '') ?? []
@@ -279,6 +408,11 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
         geometry = directArea
         rawArea = directArea
       } else {
+        const vaultedMeasuredArea = resolveVaultedMeasuredArea(scope, missingInputs)
+        if (vaultedMeasuredArea != null) {
+          geometry = vaultedMeasuredArea
+          rawArea = vaultedMeasuredArea
+        } else {
         const lengthIn = pos(n(scope.length_in))
         const widthIn = pos(n(scope.width_in))
         if (lengthIn == null || widthIn == null) {
@@ -307,6 +441,7 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
           rawArea = geometry
         }
       }
+      }
     } else {
       // SEG mode: sum included segment areas
       const includedSegments = segments.filter((seg) => seg.include === 'Y')
@@ -324,16 +459,23 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
       rawArea = sumNumbers(includedSegments.map((seg) => seg.effective_area_sf))
     }
 
+    const isSegmentScope = scope.mode === 'SEG'
+    const typeInfo =
+      !isSegmentScope && scope.ceiling_type_id ? ceilingTypeInfoMap.get(scope.ceiling_type_id) : undefined
+    const helperExtraArea = isSegmentScope ? 0 : resolveCeilingHelperArea(scope, rawArea, missingInputs)
+    const areaFactor = typeInfo?.area_factor ?? 1
+    const factoredRawArea = rawArea == null ? null : round4((rawArea + helperExtraArea) * areaFactor)
     const overrideArea = nonNeg(n(scope.override_area_sf))
-    const effectiveArea = include === 'Y' ? round4(overrideArea ?? rawArea ?? 0) : 0
+    const effectiveArea = include === 'Y' ? round4(overrideArea ?? factoredRawArea ?? 0) : 0
 
     // Modifier: ceiling_type_mult × height_factor × complexity_factor × ceiling_flag_factor
-    const ceilingTypeMult = scope.ceiling_type_id ? (ceilingTypeMultMap.get(scope.ceiling_type_id) ?? 1) : 1
+    const ceilingTypeMult = typeInfo?.labor_mult ?? 1
     const modifier = round4(
       ceilingTypeMult *
         (nonNeg(n(scope.height_factor)) ?? 1) *
         (nonNeg(n(scope.complexity_factor)) ?? 1) *
-        (nonNeg(n(scope.ceiling_flag_factor)) ?? 1)
+        (nonNeg(n(scope.ceiling_flag_factor)) ?? 1) *
+        (nonNeg(n(scope.condition_factor)) ?? 1)
     )
 
     // Paint / primer rates
@@ -362,16 +504,20 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
     const primerArea = include === 'Y' ? round4(effectiveArea * primerMultiplier) : 0
 
     // Labor hours
-    const rawPaintHours = include === 'Y' ? round4(((effectiveArea * paintCoats) / paintRate) * modifier) : 0
-    const rawPrimerHours = include === 'Y' ? round4(((primerArea * primerCoats) / primerRate) * modifier) : 0
+    const rawPaintHours =
+      include === 'Y' && paintRate > 0 ? round4(((effectiveArea * paintCoats) / paintRate) * modifier) : 0
+    const rawPrimerHours =
+      include === 'Y' && primerRate > 0 ? round4(((primerArea * primerCoats) / primerRate) * modifier) : 0
     const effectivePaintHours =
       include === 'Y' ? round4(nonNeg(n(scope.override_paint_hours)) ?? rawPaintHours) : 0
     const effectivePrimerHours =
       include === 'Y' ? round4(nonNeg(n(scope.override_primer_hours)) ?? rawPrimerHours) : 0
 
     // Gallons
-    const rawPaintGallons = include === 'Y' ? round4((effectiveArea * paintCoats) / paintCoverage) : 0
-    const rawPrimerGallons = include === 'Y' ? round4((primerArea * primerCoats) / primerCoverage) : 0
+    const rawPaintGallons =
+      include === 'Y' && paintCoverage > 0 ? round4((effectiveArea * paintCoats) / paintCoverage) : 0
+    const rawPrimerGallons =
+      include === 'Y' && primerCoverage > 0 ? round4((primerArea * primerCoats) / primerCoverage) : 0
     const effectivePaintGallons =
       include === 'Y' ? round4(nonNeg(n(scope.override_paint_gallons)) ?? rawPaintGallons) : 0
     const effectivePrimerGallons =
@@ -380,6 +526,17 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
     // Area-based supply cost (ceiling-scoped rate)
     const areaRate = pos(n(scope.area_supply_cost_per_sf)) ?? ceilingAreaSupplyRate
     const areaSupplyCost = include === 'Y' ? round4(effectiveArea * areaRate) : 0
+    const primerSupplyCost =
+      include === 'Y'
+        ? round4(
+            pos(n(scope.primer_supply_cost)) ??
+              resolvePrimerSupplyCost({
+                primeMode: scope.prime_mode,
+                scope: 'ceilings',
+                suppliesRates: input.catalogs?.supplies_rates,
+              })
+          )
+        : 0
 
     // Per-color supply group key
     const colorGroupKey =
@@ -394,7 +551,7 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
       paint_product_id: scope.paint_product_id ?? null,
       paint_product_label: paintProduct?.label ?? scope.paint_product_label ?? null,
       geometry,
-      raw_area: include === 'Y' ? rawArea : 0,
+      raw_area: include === 'Y' ? factoredRawArea : 0,
       effective_area: effectiveArea,
       raw_paint_hours: rawPaintHours,
       effective_paint_hours: effectivePaintHours,
@@ -410,10 +567,11 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
       effective_primer_gallons: effectivePrimerGallons,
       primer_material_cost: null,
       area_supply_cost: areaSupplyCost,
+      primer_supply_cost: primerSupplyCost,
       color_group_key: colorGroupKey,
       color_allocated_cost: 0,
-      raw_supply_cost: areaSupplyCost,
-      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost),
+      raw_supply_cost: round4(areaSupplyCost + primerSupplyCost),
+      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost + primerSupplyCost),
       raw_total: 0,
       effective_total_before_override: 0,
       effective_total: 0,
@@ -425,6 +583,7 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
     return {
       ...scope,
       include,
+      helper_extra_area_sf: helperExtraArea,
       raw_area_sf: calc.raw_area,
       effective_area_sf: calc.effective_area,
       raw_paint_hours: calc.raw_paint_hours,
@@ -459,14 +618,23 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
 
   const perColorGroups: WallPerColorSupplyGroup[] = Array.from(grouped.entries()).map(([groupKey, scopes]) => {
     const totalArea = sumNumbers(scopes.map((scope) => scope.effective_area))
+    const catalogPerColorCost =
+      supplyCostFromCatalog({
+        catalogs: input.catalogs,
+        scopeName: 'ceilings',
+        group: 'per_color',
+        crewSize: settings.crew_size,
+      }) ?? settings.per_color_supply_cost
     const totalCost = round4(
-      Math.max(...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? settings.per_color_supply_cost))
+      Math.max(...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? catalogPerColorCost))
     )
 
     for (const scope of scopes) {
       const weight = totalArea > 0 ? (scope.effective_area ?? 0) / totalArea : 1 / scopes.length
       scope.color_allocated_cost = round4(totalCost * weight)
-      scope.raw_supply_cost = round4((scope.area_supply_cost ?? 0) + scope.color_allocated_cost)
+      scope.raw_supply_cost = round4(
+        (scope.area_supply_cost ?? 0) + (scope.primer_supply_cost ?? 0) + scope.color_allocated_cost
+      )
       scope.effective_supply_cost = round4(nonNeg(n(scope.row.override_supply_cost)) ?? scope.raw_supply_cost)
       applyScopeCosts(scope, settings, products)
     }

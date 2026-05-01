@@ -33,8 +33,7 @@ export const estimateV2EditorPageStyles: EstimateV2EditorPageStyles = {
     color: 'var(--v2-ink)',
   },
   header: {
-    position: 'sticky',
-    top: 0,
+    position: 'static',
     zIndex: 20,
     display: 'flex',
     alignItems: 'center',
@@ -57,6 +56,7 @@ export const estimateV2EditorPageStyles: EstimateV2EditorPageStyles = {
     gridTemplateColumns: '320px minmax(0, 1fr)',
     gap: 16,
     padding: 16,
+    minWidth: 0,
   },
   panel: {
     border: '1px solid var(--v2-line)',

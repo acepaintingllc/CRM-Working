@@ -57,9 +57,9 @@ function renderMetricCard(
 ) {
   const unavailableValue = '\u2014'
   return (
-    <DashboardCardShell key={descriptor.label} className={cx('p-5', descriptor.className)}>
+    <DashboardCardShell key={descriptor.label} className={cx('p-3 sm:p-5', descriptor.className)}>
       <DashboardSectionHeader label={descriptor.label} actionHref={descriptor.href} actionLabel="View" />
-      <div className={descriptor.valueClassName ?? 'mt-3 text-3xl font-extrabold tracking-tight md:text-4xl'} style={crmTextStyle}>
+      <div className={descriptor.valueClassName ?? 'mt-2 text-2xl font-extrabold md:mt-3 md:text-4xl'} style={crmTextStyle}>
         {isLoading ? (
           <DashboardSkeletonBlock className={loadingValueClassName} />
         ) : isUnavailable ? (
@@ -68,7 +68,7 @@ function renderMetricCard(
           descriptor.value
         )}
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 border-t pt-4" style={crmBorderStyle}>
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 sm:mt-4 sm:gap-3 sm:pt-4" style={crmBorderStyle}>
         {descriptor.subRows.map((subRow) =>
           isLoading ? (
             <DashboardSkeletonRow
@@ -128,7 +128,7 @@ export function HomeMetricsGrid({ viewModel }: HomeMetricsGridProps) {
       label: 'Total Estimates',
       href: '/crm/jobs',
       value: metrics.totalEstimates,
-      valueClassName: 'mt-2 text-3xl font-extrabold',
+      valueClassName: 'mt-2 text-2xl font-extrabold sm:text-3xl',
       subRows: [
         {
           label: 'Worth',
@@ -146,7 +146,7 @@ export function HomeMetricsGrid({ viewModel }: HomeMetricsGridProps) {
       label: 'Open Estimates',
       href: '/crm/jobs',
       value: metrics.openJobsCount,
-      valueClassName: 'mt-2 text-3xl font-extrabold',
+      valueClassName: 'mt-2 text-2xl font-extrabold sm:text-3xl',
       subRows: [
         {
           label: 'Worth',
@@ -164,10 +164,10 @@ export function HomeMetricsGrid({ viewModel }: HomeMetricsGridProps) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
         {renderMetricCard(primaryMetricCards[0], isLoading, isUnavailable, 'h-10 w-32')}
 
-        <DashboardCardShell className="flex flex-col items-center justify-center gap-3 p-6">
+        <DashboardCardShell className="flex flex-col items-center justify-center gap-2 p-3 sm:gap-3 sm:p-6">
           <DashboardSectionHeader label="Win Rate" />
           {isLoading ? (
             <>
@@ -176,7 +176,7 @@ export function HomeMetricsGrid({ viewModel }: HomeMetricsGridProps) {
             </>
           ) : isUnavailable ? (
             <>
-              <div className="text-5xl font-extrabold" style={crmTextStyle}>
+              <div className="text-3xl font-extrabold sm:text-5xl" style={crmTextStyle}>
                 {'\u2014'}
               </div>
               <div className="text-xs" style={crmMutedTextStyle}>
@@ -196,14 +196,14 @@ export function HomeMetricsGrid({ viewModel }: HomeMetricsGridProps) {
         {renderMetricCard(primaryMetricCards[1], isLoading, isUnavailable, 'h-10 w-32')}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         {secondaryMetricCards.map((descriptor) =>
           renderMetricCard(descriptor, isLoading, isUnavailable, 'h-8 w-20')
         )}
 
-        <DashboardCardShell className="col-span-2 p-5 sm:col-span-1">
+        <DashboardCardShell className="col-span-2 p-3 sm:col-span-1 sm:p-5">
           <DashboardSectionHeader label="Close Rate" />
-          <div className="mt-2 text-3xl font-extrabold" style={crmTextStyle}>
+          <div className="mt-2 text-2xl font-extrabold sm:text-3xl" style={crmTextStyle}>
             {isLoading ? (
               <DashboardSkeletonBlock className="h-8 w-20" />
             ) : isUnavailable ? (

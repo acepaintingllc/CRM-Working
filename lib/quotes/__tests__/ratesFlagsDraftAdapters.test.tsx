@@ -177,6 +177,48 @@ describe('ratesFlagsDraftAdapters', () => {
     })
   })
 
+  it('round-trips crew_multiplier on supply rate drafts', () => {
+    const category = {
+      ...baseCategory,
+      key: 'supply_rates_per_color',
+      tab: 'rates',
+      group: 'supply_rates',
+      fields: [
+        { key: 'supply_group', label: 'Supply Group', type: 'select', readOnly: true, options: ['per_color'], writeDefault: 'per_color' },
+        { key: 'id', label: 'ID', type: 'text', required: true },
+        { key: 'display_name', label: 'Name', type: 'text', required: true },
+        { key: 'scope', label: 'Scope', type: 'text' },
+        { key: 'unit', label: 'Unit', type: 'text' },
+        { key: 'cost_per', label: 'Cost Per', type: 'number' },
+        { key: 'crew_multiplier', label: 'Crew Multiplier', type: 'select', options: ['Y', 'N'], writeDefault: 'N' },
+        { key: 'notes', label: 'Notes', type: 'text' },
+      ],
+    } as RatesFlagsEditableCategory<'supply_rates_per_color'>
+    const adapter = getRatesFlagsDraftAdapter(category.key)
+    const draft = adapter.rowToDraft(category, {
+      id: 'BRUSH_TRIM',
+      display_name: 'Brush',
+      supply_group: 'per_color',
+      scope: 'Trim',
+      unit: 'each',
+      cost_per: '5',
+      crew_multiplier: 'Y',
+      size_in: '',
+      price_each: '',
+      notes: '',
+      active: true,
+    })
+
+    expect(adapter.formatDraftValue(category, draft, 'crew_multiplier')).toBe('Y')
+    expect(adapter.toMutationRequest({
+      action: 'update',
+      category,
+      draft,
+      draftActive: true,
+      originalId: 'BRUSH_TRIM',
+    }).values.crew_multiplier).toBe('Y')
+  })
+
   it('keeps invalid optional numeric input in the draft until validation reports it', () => {
     const adapter = getRatesFlagsDraftAdapter(baseCategory.key)
     const empty = {
@@ -280,6 +322,51 @@ describe('ratesFlagsDraftAdapters', () => {
     ) as ScopeDefaultDraft
     expect(blankSelect.default_wall_mode).toBe('')
     expect(adapter.validateDraft(baseCategory, blankSelect)).toEqual({ ok: true })
+  })
+
+  it('normalizes and validates checkbox group fields', () => {
+    const category = {
+      ...baseCategory,
+      key: 'condition_modifiers',
+      tab: 'flags',
+      group: 'condition_modifiers',
+      fields: [
+        { key: 'id', label: 'ID', type: 'text', required: true },
+        { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+        {
+          key: 'scope',
+          label: 'Applies To',
+          type: 'checkbox_group',
+          required: true,
+          options: ['room', 'wall', 'ceiling', 'trim'],
+        },
+        { key: 'notes', label: 'Notes', type: 'text' },
+      ],
+    } as RatesFlagsEditableCategory<'condition_modifiers'>
+    const adapter = getRatesFlagsDraftAdapter(category.key)
+    const draft = adapter.updateDraftField(
+      category,
+      {
+        ...adapter.createEmptyDraft(category),
+        id: 'NEEDS_WASH',
+        display_name: 'Needs wash',
+      },
+      'scope',
+      ' wall, trim, '
+    )
+
+    expect(adapter.formatDraftValue(category, draft, 'scope')).toBe('wall,trim')
+    expect(adapter.validateDraft(category, draft)).toEqual({ ok: true })
+    expect(
+      adapter.validateDraft(category, {
+        ...draft,
+        scope: 'wall,bad',
+      })
+    ).toEqual({
+      ok: false,
+      error: 'Applies To must only include: room, wall, ceiling, trim.',
+      fieldKey: 'scope',
+    })
   })
 
   it('validates read-only literal fields when a loaded draft contains an invalid value', () => {

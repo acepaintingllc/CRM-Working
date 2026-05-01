@@ -11,7 +11,7 @@ export default function QuoteRatesPage() {
       <CrmPageHeader
         eyebrow="Quotes"
         emoji="📐"
-        title="Rates, Flags, and Room Defaults"
+        title="Rates, Flags, Room Defaults, and Assumptions"
         description="Dense admin editor for estimator configuration. This remains an intentional exception, but now uses standard CRM shells and resource states."
         backHref="/crm/quotes"
         backLabel="Back to quotes"

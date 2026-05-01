@@ -76,4 +76,31 @@ describe('EmailTemplatesPage', () => {
       expect(screen.getByText('Failed to reach API')).toBeTruthy()
     })
   })
+
+  it('keeps decorative emoji out of the editor chrome and gives the body field room to read', async () => {
+    mockAuthedFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              stage: 'estimate_scheduled',
+              subject: 'Initial',
+              body: 'Hi {{customerName}},\n\nYour estimate is scheduled for {{estimateDate}}.',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+
+    render(<EmailTemplatesPage />)
+
+    await screen.findByDisplayValue('Initial')
+    const bodyField = screen.getByPlaceholderText('Write the email template here...')
+
+    expect(screen.queryByText('\u00f0\u0178\u201c\u00ac')).toBeNull()
+    expect(screen.queryByText('\u00f0\u0178\u00a7\u00a9')).toBeNull()
+    expect(bodyField.className).toContain('min-h-[420px]')
+    expect(bodyField).toHaveStyle({ minHeight: '420px' })
+  })
 })

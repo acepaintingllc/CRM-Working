@@ -6,8 +6,10 @@ import {
   productMap,
   resolveSettings,
   round4,
+  supplyCostFromCatalog,
   sumNumbers,
 } from './wallsHelpers.ts'
+import { allocatePaintMaterialRollups } from './paintMaterial.ts'
 import type {
   MissingInput,
   ResolvedSettings,
@@ -15,6 +17,8 @@ import type {
   WallRoomTotal,
   YN,
 } from './wallsTypes.ts'
+import { deductBaseboardOpenings, resolvePrimerSupplyCost } from './scopeRules.ts'
+import { isBaseTrimType } from './trimTypeMetadata.ts'
 import type {
   TrimCalculationInput,
   TrimCalculationOutput,
@@ -27,6 +31,10 @@ type ScopeCalc = {
   scope_key: string
   scope_id: string | null
   row: TrimCalculationScopeRow
+  room_id: string
+  paint_product_id: string | null
+  paint_product_label: string | null
+  paint_price_per_gal: number | null
   raw_measurement: number | null
   effective_measurement: number | null
   raw_paint_hours: number | null
@@ -35,9 +43,14 @@ type ScopeCalc = {
   effective_primer_hours: number | null
   raw_paint_gallons: number | null
   effective_paint_gallons: number | null
+  paint_material_group_key: string | null
+  allocated_paint_gallons: number | null
+  allocated_paint_material_cost: number | null
+  raw_paint_material_cost: number | null
   raw_primer_gallons: number | null
   effective_primer_gallons: number | null
   area_supply_cost: number | null
+  primer_supply_cost: number | null
   color_group_key: string | null
   color_allocated_cost: number
   raw_supply_cost: number | null
@@ -91,30 +104,48 @@ function buildTrimTypeRateMaps(catalogs: TrimCalculationInput['catalogs']) {
   return byId
 }
 
+function isBaseboardLfScope(scope: TrimCalculationScopeRow) {
+  if (scope.unit_type !== 'LF') return false
+  return isBaseTrimType({
+    id: scope.trim_type_id,
+    label: scope.scope_name,
+    family: scope.trim_family,
+    unitType: scope.unit_type,
+  })
+}
+
 function applyScopeCosts(
   scope: ScopeCalc,
   settings: ResolvedSettings,
   products: ReturnType<typeof productMap>
 ) {
   const laborRate = pos(n(scope.row.labor_rate_per_hour)) ?? settings.labor_rate_per_hour
+  const paintProduct = scope.row.paint_product_id ? products.get(scope.row.paint_product_id) : undefined
   const primerProduct = scope.row.primer_product_id ? products.get(scope.row.primer_product_id) : undefined
+  const paintPrice =
+    pos(n(scope.row.paint_price_per_gal)) ?? pos(n(paintProduct?.price_per_gal)) ?? settings.paint_price_per_gal
   const primerPrice =
     pos(n(scope.row.primer_price_per_gal)) ??
     pos(n(primerProduct?.price_per_gal)) ??
     settings.primer_price_per_gal
+  scope.paint_price_per_gal = paintPrice
+  scope.paint_product_label = paintProduct?.label ?? scope.paint_product_label ?? null
+  scope.raw_paint_material_cost = round4((scope.raw_paint_gallons ?? 0) * paintPrice)
 
   const rawLaborCost = round4(((scope.raw_paint_hours ?? 0) + (scope.raw_primer_hours ?? 0)) * laborRate)
   const effectiveLaborCost = round4(
     ((scope.effective_paint_hours ?? 0) + (scope.effective_primer_hours ?? 0)) * laborRate
   )
-  const rawMaterialCost = round4((scope.raw_primer_gallons ?? 0) * primerPrice)
-  const effectiveMaterialCost = round4((scope.effective_primer_gallons ?? 0) * primerPrice)
+  const paintMaterialCost = scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0
+  const rawMaterialCost = round4((scope.raw_paint_material_cost ?? 0) + (scope.raw_primer_gallons ?? 0) * primerPrice)
+  const effectiveMaterialCost = round4(paintMaterialCost + (scope.effective_primer_gallons ?? 0) * primerPrice)
 
   scope.raw_total = round4(rawLaborCost + rawMaterialCost + (scope.raw_supply_cost ?? 0))
   scope.effective_total_before_override = round4(
     effectiveLaborCost + effectiveMaterialCost + (scope.effective_supply_cost ?? 0)
   )
-  scope.effective_total = round4(nonNeg(n(scope.row.override_total)) ?? scope.effective_total_before_override)
+  const overrideTotal = scope.row.include === 'Y' ? nonNeg(n(scope.row.override_total)) : null
+  scope.effective_total = round4(overrideTotal ?? scope.effective_total_before_override)
 }
 
 function buildRoomTotals(scopeCalcs: ScopeCalc[]): WallRoomTotal[] {
@@ -152,8 +183,10 @@ function buildRoomTotals(scopeCalcs: ScopeCalc[]): WallRoomTotal[] {
     room.effective_primer_hours = round4(room.effective_primer_hours + (scope.effective_primer_hours ?? 0))
     room.raw_paint_gallons = round4(room.raw_paint_gallons + (scope.raw_paint_gallons ?? 0))
     room.effective_paint_gallons = round4(room.effective_paint_gallons + (scope.effective_paint_gallons ?? 0))
-    room.raw_paint_material_cost = round4(room.raw_paint_material_cost + 0)
-    room.effective_paint_material_cost = round4(room.effective_paint_material_cost + 0)
+    room.raw_paint_material_cost = round4(room.raw_paint_material_cost + (scope.raw_paint_material_cost ?? 0))
+    room.effective_paint_material_cost = round4(
+      room.effective_paint_material_cost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
+    )
     room.raw_primer_gallons = round4(room.raw_primer_gallons + (scope.raw_primer_gallons ?? 0))
     room.effective_primer_gallons = round4(room.effective_primer_gallons + (scope.effective_primer_gallons ?? 0))
     room.raw_supply_cost = round4(room.raw_supply_cost + (scope.raw_supply_cost ?? 0))
@@ -176,6 +209,22 @@ function splitOverrideByRatio(rawPrimary: number, rawSecondary: number, override
     primary,
     secondary: round4(Math.max(overrideTotal - primary, 0)),
   }
+}
+
+function pushMissingRequiredAssumption(
+  missing: MissingInput[],
+  scope: TrimCalculationScopeRow,
+  field: string
+) {
+  if (scope.include === 'N' || scope.paint_enabled === 'N') return
+  missing.push({
+    level: 'scope',
+    room_id: scope.room_id,
+    scope_id: trimScopeKey(scope),
+    segment_id: null,
+    field,
+    message: `Trim scope ${scope.scope_name ?? scope.position + 1}: ${field} is required`,
+  })
 }
 
 export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutput {
@@ -244,8 +293,16 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       })
     }
 
+    const openingAdjustedMeasurement = isBaseboardLfScope(scope)
+      ? deductBaseboardOpenings(
+          rawMeasurement,
+          nonNeg(n(scope.baseboard_opening_count)),
+          settings.baseboard_opening_deduction_lf
+        )
+      : rawMeasurement
+
     const effectiveMeasurement =
-      include === 'Y' ? round4(nonNeg(n(scope.override_measurement)) ?? rawMeasurement ?? 0) : 0
+      include === 'Y' ? round4(nonNeg(n(scope.override_measurement)) ?? openingAdjustedMeasurement ?? 0) : 0
 
     let productionRateRow: TrimProductionRateCatalogRow | undefined
     const explicitProductionRateId = scope.production_rate_id ? scope.production_rate_id.toUpperCase() : null
@@ -261,6 +318,51 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       }
     }
 
+    const paintProduct = scope.paint_product_id ? products.get(scope.paint_product_id) : undefined
+    const primerProduct = scope.primer_product_id ? products.get(scope.primer_product_id) : undefined
+    const required: Array<[string, unknown]> = [
+      ['labor_rate_per_hour', scope.labor_rate_per_hour ?? input.settings?.labor_rate_per_hour],
+      [
+        'paint_prod_rate_units_per_hour',
+        scope.paint_prod_rate_units_per_hour ?? productionRateRow?.units_per_hour ?? input.settings?.paint_prod_rate_sqft_per_hour,
+      ],
+      [
+        'paint_coverage_units_per_gal_per_coat',
+        scope.paint_coverage_units_per_gal_per_coat ??
+          paintProduct?.coverage_sqft_per_gal_per_coat ??
+          input.settings?.paint_coverage_sqft_per_gal_per_coat,
+      ],
+      ['paint_coats', scope.paint_coats ?? input.settings?.paint_coats],
+      ['paint_price_per_gal', scope.paint_price_per_gal ?? paintProduct?.price_per_gal ?? input.settings?.paint_price_per_gal],
+    ]
+    if (scope.prime_mode !== 'NONE') {
+      required.push(
+        [
+          'primer_prod_rate_units_per_hour',
+          scope.primer_prod_rate_units_per_hour ??
+            productionRateRow?.primer_units_per_hour ??
+            input.settings?.primer_prod_rate_sqft_per_hour,
+        ],
+        [
+          'primer_coverage_units_per_gal_per_coat',
+          scope.primer_coverage_units_per_gal_per_coat ??
+            primerProduct?.coverage_sqft_per_gal_per_coat ??
+            input.settings?.primer_coverage_sqft_per_gal_per_coat,
+        ],
+        ['primer_coats', scope.primer_coats ?? input.settings?.primer_coats],
+        [
+          'primer_price_per_gal',
+          scope.primer_price_per_gal ?? primerProduct?.price_per_gal ?? input.settings?.primer_price_per_gal,
+        ]
+      )
+    }
+    if (scope.prime_mode === 'SPOT') {
+      required.push(['spot_prime_percent', scope.spot_prime_percent ?? input.settings?.spot_prime_percent])
+    }
+    for (const [field, value] of required) {
+      if (pos(n(value)) == null) pushMissingRequiredAssumption(missingInputs, scope, field)
+    }
+
     const modifier = round4(
       (nonNeg(n(scope.prep_factor)) ?? 1) *
         (nonNeg(n(scope.height_factor)) ?? 1) *
@@ -269,7 +371,8 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
         (nonNeg(n(scope.masking_factor)) ?? 1) *
         (nonNeg(n(scope.stair_factor)) ?? 1) *
         (nonNeg(n(scope.difficult_finish_factor)) ?? 1) *
-        (nonNeg(n(scope.caulk_fill_factor)) ?? 1)
+        (nonNeg(n(scope.caulk_fill_factor)) ?? 1) *
+        (nonNeg(n(scope.condition_factor)) ?? 1)
     )
 
     const paintEnabled = scope.paint_enabled === 'N' ? 'N' : 'Y'
@@ -286,8 +389,6 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       pos(n(productionRateRow?.primer_units_per_hour)) ??
       settings.primer_prod_rate_sqft_per_hour
 
-    const paintProduct = scope.paint_product_id ? products.get(scope.paint_product_id) : undefined
-    const primerProduct = scope.primer_product_id ? products.get(scope.primer_product_id) : undefined
     const paintCoverage =
       pos(n(scope.paint_coverage_units_per_gal_per_coat)) ??
       pos(n(paintProduct?.coverage_sqft_per_gal_per_coat)) ??
@@ -307,11 +408,11 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
     const primerMeasurement = include === 'Y' ? round4(effectiveMeasurement * primerMultiplier) : 0
 
     const rawPaintHours =
-      include === 'Y' && paintEnabled === 'Y'
+      include === 'Y' && paintEnabled === 'Y' && paintRate > 0
         ? round4(((effectiveMeasurement * paintCoats) / paintRate) * modifier)
         : 0
     const rawPrimerHours =
-      include === 'Y' && paintEnabled === 'Y'
+      include === 'Y' && paintEnabled === 'Y' && primerRate > 0
         ? round4(((primerMeasurement * primerCoats) / primerRate) * modifier)
         : 0
 
@@ -322,11 +423,11 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
         : { primary: rawPaintHours, secondary: rawPrimerHours }
 
     const rawPaintGallons =
-      include === 'Y' && paintEnabled === 'Y'
+      include === 'Y' && paintEnabled === 'Y' && paintCoverage > 0
         ? round4((effectiveMeasurement * paintCoats) / paintCoverage)
         : 0
     const rawPrimerGallons =
-      include === 'Y' && paintEnabled === 'Y'
+      include === 'Y' && paintEnabled === 'Y' && primerCoverage > 0
         ? round4((primerMeasurement * primerCoats) / primerCoverage)
         : 0
 
@@ -338,6 +439,17 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
 
     const areaRate = pos(n(scope.area_supply_cost_per_unit)) ?? settings.area_supply_cost_per_sf
     const areaSupplyCost = include === 'Y' ? round4(effectiveMeasurement * areaRate) : 0
+    const primerSupplyCost =
+      include === 'Y'
+        ? round4(
+            pos(n(scope.primer_supply_cost)) ??
+              resolvePrimerSupplyCost({
+                primeMode: scope.prime_mode,
+                scope: 'trim',
+                suppliesRates: input.catalogs?.supplies_rates,
+              })
+          )
+        : 0
 
     const colorGroupKey =
       include === 'Y' && scope.color_id && paintEnabled === 'Y'
@@ -347,8 +459,12 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
     const calc: ScopeCalc = {
       scope_key: scopeKey,
       scope_id: scope.id ?? null,
+      room_id: scope.room_id,
       row: { ...scope, include },
-      raw_measurement: include === 'Y' ? rawMeasurement : 0,
+      paint_product_id: scope.paint_product_id ?? null,
+      paint_product_label: null,
+      paint_price_per_gal: null,
+      raw_measurement: include === 'Y' ? openingAdjustedMeasurement : 0,
       effective_measurement: effectiveMeasurement,
       raw_paint_hours: rawPaintHours,
       effective_paint_hours: effectiveHours.primary,
@@ -356,13 +472,18 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       effective_primer_hours: effectiveHours.secondary,
       raw_paint_gallons: rawPaintGallons,
       effective_paint_gallons: effectiveGallons.primary,
+      paint_material_group_key: null,
+      allocated_paint_gallons: null,
+      allocated_paint_material_cost: null,
+      raw_paint_material_cost: null,
       raw_primer_gallons: rawPrimerGallons,
       effective_primer_gallons: effectiveGallons.secondary,
       area_supply_cost: areaSupplyCost,
+      primer_supply_cost: primerSupplyCost,
       color_group_key: colorGroupKey,
       color_allocated_cost: 0,
-      raw_supply_cost: areaSupplyCost,
-      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost),
+      raw_supply_cost: round4(areaSupplyCost + primerSupplyCost),
+      effective_supply_cost: round4(nonNeg(n(scope.override_supply_cost)) ?? areaSupplyCost + primerSupplyCost),
       raw_total: 0,
       effective_total_before_override: 0,
       effective_total: 0,
@@ -383,6 +504,11 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
       effective_primer_hours: calc.effective_primer_hours,
       raw_paint_gallons: calc.raw_paint_gallons,
       effective_paint_gallons: calc.effective_paint_gallons,
+      paint_price_per_gal: calc.paint_price_per_gal,
+      paint_material_group_key: calc.paint_material_group_key,
+      allocated_paint_gallons: calc.allocated_paint_gallons,
+      allocated_paint_material_cost: calc.allocated_paint_material_cost,
+      raw_paint_material_cost: calc.raw_paint_material_cost,
       raw_primer_gallons: calc.raw_primer_gallons,
       effective_primer_gallons: calc.effective_primer_gallons,
       raw_supply_cost: calc.raw_supply_cost,
@@ -401,14 +527,23 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
 
   const perColorGroups: WallPerColorSupplyGroup[] = Array.from(grouped.entries()).map(([groupKey, scopes]) => {
     const totalMeasurement = sumNumbers(scopes.map((scope) => scope.effective_measurement))
+    const catalogPerColorCost =
+      supplyCostFromCatalog({
+        catalogs: input.catalogs,
+        scopeName: 'trim',
+        group: 'per_color',
+        crewSize: settings.crew_size,
+      }) ?? settings.per_color_supply_cost
     const totalCost = round4(
-      Math.max(...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? settings.per_color_supply_cost))
+      Math.max(...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? catalogPerColorCost))
     )
 
     for (const scope of scopes) {
       const weight = totalMeasurement > 0 ? (scope.effective_measurement ?? 0) / totalMeasurement : 1 / scopes.length
       scope.color_allocated_cost = round4(totalCost * weight)
-      scope.raw_supply_cost = round4((scope.area_supply_cost ?? 0) + scope.color_allocated_cost)
+      scope.raw_supply_cost = round4(
+        (scope.area_supply_cost ?? 0) + (scope.primer_supply_cost ?? 0) + scope.color_allocated_cost
+      )
       scope.effective_supply_cost = round4(nonNeg(n(scope.row.override_supply_cost)) ?? scope.raw_supply_cost)
       applyScopeCosts(scope, settings, products)
     }
@@ -434,6 +569,8 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
     }
   })
 
+  const paintMaterialGroups = allocatePaintMaterialRollups(scopeCalcs)
+
   for (const scope of scopeCalcs) {
     applyScopeCosts(scope, settings, products)
   }
@@ -447,13 +584,19 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
     row.raw_total = scope.raw_total
     row.effective_total = scope.effective_total
     row.paint_product_id = scope.row.paint_product_id ?? null
-    row.paint_product_label = scope.row.paint_product_label ?? null
+    row.paint_product_label = scope.paint_product_label ?? scope.row.paint_product_label ?? null
+    row.paint_price_per_gal = scope.paint_price_per_gal
+    row.paint_material_group_key = scope.paint_material_group_key
+    row.allocated_paint_gallons = scope.allocated_paint_gallons
+    row.allocated_paint_material_cost = scope.allocated_paint_material_cost
+    row.raw_paint_material_cost = scope.raw_paint_material_cost
   }
 
   return {
     scopes: normalizedScopes,
     room_totals: buildRoomTotals(scopeCalcs),
     per_color_supply_groups: perColorGroups,
+    paint_material_groups: paintMaterialGroups,
     missing_inputs: missingInputs,
     assumptions: settings,
   }

@@ -2,10 +2,15 @@
 
 import { useEstimateV2Editor } from '../_state/useEstimateV2Editor'
 import { useEstimateV2EditorPageUiState } from '../_state/useEstimateV2EditorPageUiState'
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import {
-  estimateRouteFamily,
+  buildLastOpenedQuoteRecord,
+  writeLastOpenedQuote,
+} from '@/lib/quotes/lastOpenedQuote'
+import {
+  resolveEstimateRouteFamily,
   type EstimateRouteFamily,
+  type EstimateRouteFamilyKey,
 } from '../../estimateRouteFamily'
 import pageStyles from './EstimateV2EditorPageContent.module.css'
 import { EstimateV2EditorFooterBar } from './EstimateV2EditorFooterBar'
@@ -16,14 +21,18 @@ import { EstimateV2SettingsDrawer } from './EstimateV2SettingsDrawer'
 import { EstimateV2Sidebar } from './EstimateV2Sidebar'
 import { EstimateV2SummaryRail } from './EstimateV2SummaryRail'
 import { estimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
+import { useEstimateV2SidebarCollapse } from './useEstimateV2SidebarCollapse'
 
 export function EstimateV2EditorPageContent({
   estimateId,
-  routeFamily = estimateRouteFamily,
+  routeFamily,
+  routeFamilyKey = 'estimate',
 }: {
   estimateId?: string
   routeFamily?: EstimateRouteFamily
+  routeFamilyKey?: EstimateRouteFamilyKey
 }) {
+  const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
   const {
     pageVm,
     headerVm,
@@ -32,42 +41,59 @@ export function EstimateV2EditorPageContent({
     wallsVm,
     ceilingsVm,
     trimVm,
+    doorsVm,
     jobSettingsVm,
     saveVm,
     toDisplayNumber,
-  } = useEstimateV2Editor({ estimateId, routeFamily })
+  } = useEstimateV2Editor({ estimateId, routeFamily: resolvedRouteFamily })
 
   const confirmNavigation = useCallback(() => {
     if (!saveVm.dirty) return true
     return window.confirm('You have unsaved changes. Leave this workspace?')
   }, [saveVm.dirty])
 
+  useEffect(() => {
+    const record = buildLastOpenedQuoteRecord(headerVm.resumeRecord)
+    if (!record) return
+    writeLastOpenedQuote(window.localStorage, record)
+  }, [headerVm.resumeRecord])
+
   const selectedRoom = roomVm.selectedRoom
   const uiState = useEstimateV2EditorPageUiState({
     selectedRoomId: selectedRoom?.roomId,
     roomScopeByRoomId: roomVm.roomScopeByRoomId,
     roomCeilingScopeByRoomId: roomVm.roomCeilingScopeByRoomId,
+    roomDoorScopeByRoomId: roomVm.roomDoorScopeByRoomId ?? new Map(),
     toggleWallsInclude: wallsVm.toggleRoomInclude,
     toggleCeilingsInclude: ceilingsVm.toggleRoomInclude,
+    toggleDoorsInclude: doorsVm.toggleRoomInclude,
   })
+  const sidebarCollapse = useEstimateV2SidebarCollapse()
 
   return (
     <div className={`${pageStyles.root} ace-v2-shell`} style={estimateV2EditorPageStyles.page}>
       <EstimateV2EditorHeaderArea
         styles={estimateV2EditorPageStyles}
-        estimateId={estimateId}
-        routeFamily={routeFamily}
+        routeFamily={resolvedRouteFamily}
         headerVm={headerVm}
-        saveVm={saveVm}
         confirmNavigation={confirmNavigation}
       />
 
-      <div style={estimateV2EditorPageStyles.shell} className="ace-v2-rooms-layout walls-v2-shell">
+      <div
+        style={{
+          ...estimateV2EditorPageStyles.shell,
+          gridTemplateColumns: sidebarCollapse.collapsed ? '48px minmax(0, 1fr)' : 'minmax(240px, 320px) minmax(0, 1fr)',
+        }}
+        className="ace-v2-rooms-layout walls-v2-shell"
+      >
         <EstimateV2Sidebar
           styles={estimateV2EditorPageStyles}
           roomVm={roomVm}
           jobSettingsVm={jobSettingsVm}
           toDisplayNumber={toDisplayNumber}
+          collapsed={sidebarCollapse.collapsed}
+          onCollapse={sidebarCollapse.collapseSidebar}
+          onExpand={sidebarCollapse.expandSidebar}
         />
 
         <main style={{ display: 'grid', gap: 14, paddingBottom: 88 }}>
@@ -114,8 +140,10 @@ export function EstimateV2EditorPageContent({
                   wallsVm={wallsVm}
                   ceilingsVm={ceilingsVm}
                   trimVm={trimVm}
+                  doorsVm={doorsVm}
                   onToggleWallInclude={uiState.toggleRoomWallInclude}
                   onToggleCeilingInclude={uiState.toggleRoomCeilingInclude}
+                  onToggleDoorInclude={uiState.toggleRoomDoorInclude}
                   toDisplayNumber={toDisplayNumber}
                 />
 
@@ -126,9 +154,11 @@ export function EstimateV2EditorPageContent({
                   wallsVm={wallsVm}
                   ceilingsVm={ceilingsVm}
                   trimVm={trimVm}
+                  doorsVm={doorsVm}
                   wallsSectionRef={uiState.wallsSectionRef}
                   ceilingsSectionRef={uiState.ceilingsSectionRef}
                   trimSectionRef={uiState.trimSectionRef}
+                  doorsSectionRef={uiState.doorsSectionRef}
                   openWallsSection={uiState.openWallsSection}
                   setOpenWallsSection={uiState.setOpenWallsSection}
                   openAdvanced={uiState.openAdvanced}
@@ -139,6 +169,12 @@ export function EstimateV2EditorPageContent({
                   setOpenCeilingAdvanced={uiState.setOpenCeilingAdvanced}
                   openTrimSection={uiState.openTrimSection}
                   setOpenTrimSection={uiState.setOpenTrimSection}
+                  openTrimAdvanced={uiState.openTrimAdvanced}
+                  setOpenTrimAdvanced={uiState.setOpenTrimAdvanced}
+                  openDoorsSection={uiState.openDoorsSection}
+                  setOpenDoorsSection={uiState.setOpenDoorsSection}
+                  openDoorsAdvanced={uiState.openDoorsAdvanced}
+                  setOpenDoorsAdvanced={uiState.setOpenDoorsAdvanced}
                   toDisplayNumber={toDisplayNumber}
                 />
               </div>
@@ -155,6 +191,8 @@ export function EstimateV2EditorPageContent({
 
       <EstimateV2EditorFooterBar
         styles={estimateV2EditorPageStyles}
+        estimateId={estimateId}
+        routeFamily={resolvedRouteFamily}
         pageVm={pageVm}
         saveVm={saveVm}
         summaryVm={summaryVm}

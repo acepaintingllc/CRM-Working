@@ -2,6 +2,8 @@ import { getEstimateCatalogs } from '@/lib/server/estimateCatalogs'
 import { supabaseAdmin } from '@/lib/server/org'
 import { loadCompanyProfileSettings } from '@/lib/server/settings/companyProfileStore'
 import { loadQuoteSendDefaults } from '@/lib/server/settings/quoteSendDefaultsStore'
+import { defaultQuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
+import { templatePresets } from '@/lib/customer-estimates/presets'
 import type { CompanyProfile, Unsafe } from '@/lib/customer-estimates/types'
 import type {
   EstimateCustomerSendCoreResources,
@@ -30,6 +32,8 @@ const DEFAULT_QUOTE_SEND_DEFAULTS: QuoteSendDefaults = {
   default_template_key: 'default',
   quote_validity_days: 90,
   terms_text: '',
+  terms_sections: defaultQuoteTermsSections,
+  template_presets: templatePresets,
 }
 
 type QueryError = { error: string }
@@ -165,6 +169,7 @@ export async function loadEstimateCustomerSendScopeResources(params: {
     ceilingScopesRes,
     ceilingScopeSegmentsRes,
     trimScopesRes,
+    drywallRepairsRes,
     trimItemsRes,
     otherRes,
   ] = await Promise.all([
@@ -231,6 +236,14 @@ export async function loadEstimateCustomerSendScopeResources(params: {
       .order('room_id', { ascending: true })
       .order('position', { ascending: true }),
     supabaseAdmin
+      .from('estimate_drywall_repairs')
+      .select('*')
+      .eq('org_id', params.orgId)
+      .eq('estimate_id', params.estimateId)
+      .eq('active', true)
+      .order('room_id', { ascending: true })
+      .order('position', { ascending: true }),
+    supabaseAdmin
       .from('estimate_trim_items')
       .select('*')
       .eq('org_id', params.orgId)
@@ -266,6 +279,8 @@ export async function loadEstimateCustomerSendScopeResources(params: {
   if ('error' in ceilingScopeSegments) return ceilingScopeSegments
   const trimScopes = readCollectionQueryResult(trimScopesRes as QueryResult<Unsafe[]>)
   if ('error' in trimScopes) return trimScopes
+  const drywallRepairs = readCollectionQueryResult(drywallRepairsRes as QueryResult<Unsafe[]>)
+  if ('error' in drywallRepairs) return drywallRepairs
   const trimItems = readCollectionQueryResult(trimItemsRes as QueryResult<Unsafe[]>)
   if ('error' in trimItems) return trimItems
   const other = readCollectionQueryResult(otherRes as QueryResult<Unsafe[]>)
@@ -280,6 +295,7 @@ export async function loadEstimateCustomerSendScopeResources(params: {
     ceilingScopes,
     ceilingScopeSegments,
     trimScopes,
+    drywallRepairs,
     trimItems,
     other,
   }

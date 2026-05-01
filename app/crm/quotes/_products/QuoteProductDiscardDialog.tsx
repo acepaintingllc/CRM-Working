@@ -17,6 +17,8 @@ function getDiscardMessage(transitionType: QuoteProductDiscardVm['transitionType
       return 'Changing search can shift the selected product and replace the current draft.'
     case 'setStatusFilter':
       return 'Changing status filter can shift the selected product and replace the current draft.'
+    case 'setScopeFilter':
+      return 'Changing scope filter can shift the selected product and replace the current draft.'
     case 'startCreate':
       return 'Starting a new product will discard the current unsaved edits.'
     case 'setSelectedId':

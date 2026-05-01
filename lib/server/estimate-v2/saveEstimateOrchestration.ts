@@ -2,12 +2,16 @@ import { supabaseAdmin } from '../org.ts'
 import {
   buildV2CeilingScopeRows,
   buildV2CeilingSegmentRows,
+  buildV2DoorScopeRows,
+  buildV2DrywallRepairRows,
   buildV2RoomRosterRows,
   buildV2TrimScopeRows,
   buildV2WallScopeRows,
   buildV2WallSegmentRows,
   type V2CeilingScopeSaveRow,
   type V2CeilingSegmentSaveRow,
+  type V2DoorScopeSaveRow,
+  type V2DrywallRepairSaveRow,
   type V2RoomRosterRow,
   type V2TrimScopeSaveRow,
   type V2WallScopeSaveRow,
@@ -22,10 +26,13 @@ import {
   UUID_RE as uuid,
   type UnsafeRecord as Unsafe,
 } from '../../estimator/parsing.ts'
+import { normalizeWallRollerTargetId } from '../../estimator/rollerIdentity.ts'
 import { normalizeTrimPaintGallons } from '../trimPaint.ts'
 
 import {
   calculateCeilingsForSave,
+  calculateDoorsForSave,
+  calculateDrywallForSave,
   calculateTrimForSave,
   calculateWallsForSave,
   createCalculationCatalogsLoader,
@@ -133,6 +140,15 @@ async function upsertEstimateJobSettings(params: {
       trim_primer_uom: has('trim_primer_uom') ? asText(row.trim_primer_uom) || null : existingRow.trim_primer_uom,
       paint_supplied_by: has('paint_supplied_by') ? asText(row.paint_supplied_by) || null : existingRow.paint_supplied_by,
       crew_size: has('crew_size') ? asNullableNumber(row.crew_size) : existingRow.crew_size,
+      standard_door_deduction_sf: has('standard_door_deduction_sf')
+        ? asNullableNumber(row.standard_door_deduction_sf)
+        : existingRow.standard_door_deduction_sf,
+      standard_window_deduction_sf: has('standard_window_deduction_sf')
+        ? asNullableNumber(row.standard_window_deduction_sf)
+        : existingRow.standard_window_deduction_sf,
+      baseboard_opening_deduction_lf: has('baseboard_opening_deduction_lf')
+        ? asNullableNumber(row.baseboard_opening_deduction_lf)
+        : existingRow.baseboard_opening_deduction_lf,
       labor_day_policy_enabled: has('labor_day_policy_enabled')
         ? typeof row.labor_day_policy_enabled === 'boolean'
           ? row.labor_day_policy_enabled
@@ -171,10 +187,12 @@ export async function saveEstimateV2Inputs(params: {
     const useV2WallsSave = Array.isArray(body.room_wall_scopes) || Array.isArray(body.wall_segments)
     const useV2CeilingsSave = Array.isArray(body.room_ceiling_scopes)
     const useV2TrimSave = Array.isArray(body.room_trim_scopes)
+    const useV2DoorsSave = Array.isArray(body.room_door_scopes)
+    const useV2DrywallSave = Array.isArray(body.drywall_repairs)
+    const useV2OtherSave = Array.isArray(body.other)
+    const useAnyV2ScopeSave = useV2WallsSave || useV2CeilingsSave || useV2TrimSave || useV2DoorsSave || useV2DrywallSave || useV2OtherSave
     const useStructuredTransactionalSave =
-      !useV2WallsSave &&
-      !useV2CeilingsSave &&
-      !useV2TrimSave &&
+      !useAnyV2ScopeSave &&
       (Array.isArray(body.job_colors) || Array.isArray(body.room_flags) || Array.isArray(body.access_fees))
 
     let v2RoomRows: V2RoomRosterRow[] | null = null
@@ -186,6 +204,10 @@ export async function saveEstimateV2Inputs(params: {
     let ceilingCalculations: Awaited<ReturnType<typeof calculateCeilingsForSave>>['ceilingCalculations'] | null = null
     let v2TrimScopeRows: V2TrimScopeSaveRow[] | null = null
     let trimCalculations: Awaited<ReturnType<typeof calculateTrimForSave>> | null = null
+    let v2DoorScopeRows: V2DoorScopeSaveRow[] | null = null
+    let doorCalculations: Awaited<ReturnType<typeof calculateDoorsForSave>> | null = null
+    let v2DrywallRepairRows: V2DrywallRepairSaveRow[] | null = null
+    let drywallCalculations: Awaited<ReturnType<typeof calculateDrywallForSave>> | null = null
     const ensureCatalogs = createCalculationCatalogsLoader({
       requestOrigin: params.requestOrigin,
       orgId: params.orgId,
@@ -211,8 +233,9 @@ export async function saveEstimateV2Inputs(params: {
           orgId: params.orgId,
           userId: params.userId,
           estimateId: params.estimateId,
-          scopes: v2WallScopeRows,
-          segments: v2WallSegmentRows,
+          scopes: v2WallScopeRows ?? [],
+          roomRows: v2RoomRows,
+          segments: v2WallSegmentRows ?? [],
           jobsettings: body.jobsettings as Unsafe | undefined,
           ensureCatalogs,
         })
@@ -237,12 +260,14 @@ export async function saveEstimateV2Inputs(params: {
         const calculated = await calculateCeilingsForSave({
           orgId: params.orgId,
           estimateId: params.estimateId,
-          scopes: v2CeilingScopeRows,
-          segments: v2CeilingSegmentRows,
+          scopes: v2CeilingScopeRows ?? [],
+          roomRows: v2RoomRows,
+          segments: v2CeilingSegmentRows ?? [],
           jobsettings: body.jobsettings as Unsafe | undefined,
           ensureCatalogs,
         })
         ceilingCalculations = calculated.ceilingCalculations
+        v2CeilingScopeRows = calculated.ceilingScopeRows
         v2CeilingSegmentRows = calculated.ceilingSegmentRows
       }
     }
@@ -258,13 +283,49 @@ export async function saveEstimateV2Inputs(params: {
         trimCalculations = await calculateTrimForSave({
           orgId: params.orgId,
           estimateId: params.estimateId,
-          scopes: v2TrimScopeRows,
+          scopes: v2TrimScopeRows ?? [],
           roomRows: v2RoomRows,
           wallScopeRows: v2WallScopeRows,
           ceilingScopeRows: v2CeilingScopeRows,
           jobsettings: body.jobsettings as Unsafe | undefined,
           ensureCatalogs,
         })
+      }
+    }
+
+    if (useV2DoorsSave) {
+      if (!Array.isArray(body.rooms)) throw new Error('V2 door save requires rooms')
+      if (!v2RoomRows) v2RoomRows = buildV2RoomRosterRows(body.rooms as Unsafe[])
+      v2DoorScopeRows = buildV2DoorScopeRows(
+        body.room_door_scopes as Unsafe[],
+        new Set(v2RoomRows.map((row) => row.room_id))
+      ).scopeRows
+      if (!params.autosaveOnly) {
+        doorCalculations = await calculateDoorsForSave({
+          orgId: params.orgId,
+          estimateId: params.estimateId,
+          scopes: v2DoorScopeRows ?? [],
+          roomRows: v2RoomRows,
+          jobsettings: body.jobsettings as Unsafe | undefined,
+          ensureCatalogs,
+        })
+        v2DoorScopeRows = doorCalculations.scopes as V2DoorScopeSaveRow[]
+      }
+    }
+
+    if (useV2DrywallSave) {
+      if (!Array.isArray(body.rooms)) throw new Error('V2 drywall save requires rooms')
+      if (!v2RoomRows) v2RoomRows = buildV2RoomRosterRows(body.rooms as Unsafe[])
+      v2DrywallRepairRows = buildV2DrywallRepairRows(
+        body.drywall_repairs as Unsafe[],
+        new Set(v2RoomRows.map((row) => row.room_id))
+      ).repairRows
+      if (!params.autosaveOnly) {
+        drywallCalculations = await calculateDrywallForSave({
+          repairs: v2DrywallRepairRows ?? [],
+          ensureCatalogs,
+        })
+        v2DrywallRepairRows = drywallCalculations.scopes as V2DrywallRepairSaveRow[]
       }
     }
 
@@ -302,7 +363,7 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.rooms)) {
-      if (useV2WallsSave) {
+      if (useAnyV2ScopeSave) {
         await saveV2RoomRoster({
           orgId: params.orgId,
           estimateId: params.estimateId,
@@ -329,7 +390,7 @@ export async function saveEstimateV2Inputs(params: {
         orgId: params.orgId,
         estimateId: params.estimateId,
         rows: (v2WallScopeRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, mode: row.mode, include: row.include, scope_name: row.scope_name, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, height_in: row.height_in, perimeter_in: row.perimeter_in, standard_door_count: row.standard_door_count, standard_window_count: row.standard_window_count, height_factor: row.height_factor, complexity_factor: row.complexity_factor, wall_flag_factor: row.wall_flag_factor, cut_in_top_factor: row.cut_in_top_factor, cut_in_bottom_factor: row.cut_in_bottom_factor, paint_coats: row.paint_coats, primer_coats: row.primer_coats, spot_prime_percent: row.spot_prime_percent, raw_area_sf: row.raw_area_sf, override_area_sf: row.override_area_sf, effective_area_sf: row.effective_area_sf, raw_paint_hours: row.raw_paint_hours, override_paint_hours: row.override_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, override_primer_hours: row.override_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, override_paint_gallons: row.override_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, override_primer_gallons: row.override_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, override_supply_cost: row.override_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, override_total: row.override_total, effective_total: row.effective_total, notes: row.notes,
+          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, mode: row.mode, include: row.include, scope_name: row.scope_name, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, height_in: row.height_in, perimeter_in: row.perimeter_in, standard_door_count: row.standard_door_count, standard_window_count: row.standard_window_count, height_factor: row.height_factor, complexity_factor: row.complexity_factor, wall_flag_factor: row.wall_flag_factor, cut_in_top_factor: row.cut_in_top_factor, cut_in_bottom_factor: row.cut_in_bottom_factor, paint_coats: row.paint_coats, primer_coats: row.primer_coats, spot_prime_percent: row.spot_prime_percent, raw_area_sf: row.raw_area_sf, override_area_sf: row.override_area_sf, effective_area_sf: row.effective_area_sf, raw_paint_hours: row.raw_paint_hours, override_paint_hours: row.override_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, override_primer_hours: row.override_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, override_paint_gallons: row.override_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, override_primer_gallons: row.override_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, override_supply_cost: row.override_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, override_total: row.override_total, effective_total: row.effective_total, notes: row.notes, condition_selections: row.condition_selections ?? null,
         })),
       })
 
@@ -353,7 +414,7 @@ export async function saveEstimateV2Inputs(params: {
         orgId: params.orgId,
         estimateId: params.estimateId,
         rows: (v2CeilingScopeRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, mode: row.mode, include: row.include, scope_name: row.scope_name, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, spot_prime_percent: row.spot_prime_percent, ceiling_type_id: row.ceiling_type_id, length_in: row.length_in, width_in: row.width_in, area_sf: row.area_sf, height_factor: row.height_factor, complexity_factor: row.complexity_factor, ceiling_flag_factor: row.ceiling_flag_factor, override_area_sf: row.override_area_sf, override_paint_hours: row.override_paint_hours, override_primer_hours: row.override_primer_hours, override_paint_gallons: row.override_paint_gallons, override_primer_gallons: row.override_primer_gallons, override_supply_cost: row.override_supply_cost, override_total: row.override_total, raw_area_sf: row.raw_area_sf, effective_area_sf: row.effective_area_sf, raw_paint_hours: row.raw_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, effective_total: row.effective_total, paint_coats: row.paint_coats, primer_coats: row.primer_coats, notes: row.notes,
+          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, mode: row.mode, include: row.include, scope_name: row.scope_name, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, spot_prime_percent: row.spot_prime_percent, ceiling_type_id: row.ceiling_type_id, ceiling_geometry_mode: row.ceiling_geometry_mode, vaulted_area_factor: row.vaulted_area_factor, vaulted_ridge_length_in: row.vaulted_ridge_length_in, vaulted_slope_length_in: row.vaulted_slope_length_in, vaulted_plane_count: row.vaulted_plane_count, tray_perimeter_in: row.tray_perimeter_in, tray_step_height_in: row.tray_step_height_in, tray_band_width_in: row.tray_band_width_in, coffer_section_length_in: row.coffer_section_length_in, coffer_section_width_in: row.coffer_section_width_in, coffer_section_count: row.coffer_section_count, coffer_face_height_in: row.coffer_face_height_in, coffer_bottom_width_in: row.coffer_bottom_width_in, helper_extra_area_sf: row.helper_extra_area_sf, length_in: row.length_in, width_in: row.width_in, area_sf: row.area_sf, height_factor: row.height_factor, complexity_factor: row.complexity_factor, ceiling_flag_factor: row.ceiling_flag_factor, override_area_sf: row.override_area_sf, override_paint_hours: row.override_paint_hours, override_primer_hours: row.override_primer_hours, override_paint_gallons: row.override_paint_gallons, override_primer_gallons: row.override_primer_gallons, override_supply_cost: row.override_supply_cost, override_total: row.override_total, raw_area_sf: row.raw_area_sf, effective_area_sf: row.effective_area_sf, raw_paint_hours: row.raw_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, effective_total: row.effective_total, paint_coats: row.paint_coats, primer_coats: row.primer_coats, notes: row.notes, condition_selections: row.condition_selections ?? null,
         })),
       })
       await softReplaceRows({
@@ -372,7 +433,29 @@ export async function saveEstimateV2Inputs(params: {
         orgId: params.orgId,
         estimateId: params.estimateId,
         rows: (v2TrimScopeRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, include: row.include, scope_name: row.scope_name, trim_type_id: row.trim_type_id, trim_family: row.trim_family, unit_type: row.unit_type, measurement_mode: row.measurement_mode, helper_source: row.helper_source, measurement_value: row.measurement_value, helper_value: row.helper_value, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, paint_enabled: row.paint_enabled, prime_mode: row.prime_mode, spot_prime_percent: row.spot_prime_percent, production_rate_id: row.production_rate_id, prep_factor: row.prep_factor, height_factor: row.height_factor, profile_factor: row.profile_factor, room_flag_factor: row.room_flag_factor, masking_factor: row.masking_factor, stair_factor: row.stair_factor, difficult_finish_factor: row.difficult_finish_factor, caulk_fill_factor: row.caulk_fill_factor, override_measurement: row.override_measurement, override_hours: row.override_hours, override_gallons: row.override_gallons, override_supply_cost: row.override_supply_cost, override_total: row.override_total, override_description: row.override_description, raw_measurement: row.raw_measurement, effective_measurement: row.effective_measurement, raw_paint_hours: row.raw_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, effective_total: row.effective_total, paint_coats: row.paint_coats, primer_coats: row.primer_coats, paint_prod_rate_units_per_hour: row.paint_prod_rate_units_per_hour, primer_prod_rate_units_per_hour: row.primer_prod_rate_units_per_hour, paint_coverage_units_per_gal_per_coat: row.paint_coverage_units_per_gal_per_coat, primer_coverage_units_per_gal_per_coat: row.primer_coverage_units_per_gal_per_coat, area_supply_cost_per_unit: row.area_supply_cost_per_unit, per_color_supply_cost: row.per_color_supply_cost, labor_rate_per_hour: row.labor_rate_per_hour, paint_price_per_gal: row.paint_price_per_gal, primer_price_per_gal: row.primer_price_per_gal, notes: row.notes,
+          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, include: row.include, scope_name: row.scope_name, trim_type_id: row.trim_type_id, trim_family: row.trim_family, unit_type: row.unit_type, measurement_mode: row.measurement_mode, helper_source: row.helper_source, measurement_value: row.measurement_value, helper_value: row.helper_value, baseboard_opening_count: row.baseboard_opening_count, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, paint_enabled: row.paint_enabled, prime_mode: row.prime_mode, spot_prime_percent: row.spot_prime_percent, production_rate_id: row.production_rate_id, prep_factor: row.prep_factor, height_factor: row.height_factor, profile_factor: row.profile_factor, room_flag_factor: row.room_flag_factor, masking_factor: row.masking_factor, stair_factor: row.stair_factor, difficult_finish_factor: row.difficult_finish_factor, caulk_fill_factor: row.caulk_fill_factor, override_measurement: row.override_measurement, override_hours: row.override_hours, override_gallons: row.override_gallons, override_supply_cost: row.override_supply_cost, override_total: row.override_total, override_description: row.override_description, raw_measurement: row.raw_measurement, effective_measurement: row.effective_measurement, raw_paint_hours: row.raw_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, effective_total: row.effective_total, paint_coats: row.paint_coats, primer_coats: row.primer_coats, paint_prod_rate_units_per_hour: row.paint_prod_rate_units_per_hour, primer_prod_rate_units_per_hour: row.primer_prod_rate_units_per_hour, paint_coverage_units_per_gal_per_coat: row.paint_coverage_units_per_gal_per_coat, primer_coverage_units_per_gal_per_coat: row.primer_coverage_units_per_gal_per_coat, area_supply_cost_per_unit: row.area_supply_cost_per_unit, per_color_supply_cost: row.per_color_supply_cost, labor_rate_per_hour: row.labor_rate_per_hour, paint_price_per_gal: row.paint_price_per_gal, primer_price_per_gal: row.primer_price_per_gal, notes: row.notes, condition_selections: row.condition_selections ?? null,
+        })),
+      })
+    }
+
+    if (useV2DoorsSave) {
+      await softReplaceRows({
+        table: 'estimate_room_door_scopes',
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        rows: (v2DoorScopeRows ?? []).map((row) => ({
+          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, include: row.include, scope_name: row.scope_name, door_type_id: row.door_type_id, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, quantity: row.quantity, sides: row.sides, paint_coats: row.paint_coats, primer_coats: row.primer_coats, spot_prime_percent: row.spot_prime_percent, condition_factor: row.condition_factor, labor_rate: row.labor_rate, material_rate: row.material_rate, raw_units: row.raw_units, effective_units: row.effective_units, raw_paint_hours: row.raw_paint_hours, override_paint_hours: row.override_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, override_primer_hours: row.override_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_material_cost: row.raw_material_cost, override_material_cost: row.override_material_cost, effective_material_cost: row.effective_material_cost, raw_supply_cost: row.raw_supply_cost, override_supply_cost: row.override_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, override_total: row.override_total, effective_total: row.effective_total, notes: row.notes,
+        })),
+      })
+    }
+
+    if (useV2DrywallSave) {
+      await softReplaceRows({
+        table: 'estimate_drywall_repairs',
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        rows: (v2DrywallRepairRows ?? []).map((row) => ({
+          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, surface: row.surface, repair_type: row.repair_type, unit: row.unit, quantity: row.quantity, raw_quantity: row.raw_quantity, effective_quantity: row.effective_quantity, base_unit_rate: row.base_unit_rate, ceiling_multiplier: row.ceiling_multiplier, calculated_total: row.calculated_total, override_total: row.override_total, raw_total: row.raw_total, effective_total: row.effective_total,
         })),
       })
     }
@@ -420,15 +503,21 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.rollers)) {
+      const normalizeRollerScope = (value: unknown) => {
+        const raw = asText(value)
+        if (raw === 'Ceiling') return 'Ceiling'
+        if (raw === 'Trim') return 'Trim'
+        return 'Wall'
+      }
       await softReplaceRows({
         table: 'estimate_rollers',
         orgId: params.orgId,
         estimateId: params.estimateId,
         rows: body.rollers
           .map((row: Unsafe, idx: number) => ({
-            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, scope: asText(row.scope) === 'Ceiling' ? 'Ceiling' : 'Wall', wall_color_id: toColorId(row.wall_color_id) || null, roller_size_in: asNullableNumber(row.roller_size_in), covers_qty: asNullableNumber(row.covers_qty), notes: asText(row.notes) || null, active: toYN(row.active, 'Y'),
+            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, scope: normalizeRollerScope(row.scope), wall_color_id: normalizeWallRollerTargetId(asText(row.wall_color_id)) || null, selected_option_id: asText(row.selected_option_id) || null, roller_size_in: asNullableNumber(row.roller_size_in), covers_qty: asNullableNumber(row.covers_qty), notes: asText(row.notes) || null, active: toYN(row.active, 'Y'),
           }))
-          .filter((row) => row.scope === 'Ceiling' || !!row.wall_color_id),
+          .filter((row) => row.scope === 'Ceiling' || row.scope === 'Trim' || !!row.wall_color_id),
       })
     }
 
@@ -468,7 +557,7 @@ export async function saveEstimateV2Inputs(params: {
           .map((row: Unsafe, idx: number) => ({
             id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, room_id: asText(row.room_id).toUpperCase() || null, segment_num: asNullableNumber(row.segment_num ?? row.segment_id), access_fee_id: asText(row.access_fee_id).toUpperCase(), qty: asNullableNumber(row.qty) ?? 1, active: toYN(row.active, 'Y'), notes: asText(row.notes) || null, actual_cost_override: asNullableNumber(row.actual_cost_override),
           }))
-          .filter((row: { room_id: string | null; access_fee_id: string }) => !!(row.room_id && row.access_fee_id)),
+          .filter((row: { access_fee_id: string }) => !!row.access_fee_id),
       })
     }
 
@@ -508,32 +597,65 @@ export async function saveEstimateV2Inputs(params: {
         orgId: params.orgId,
         estimateId: params.estimateId,
         rows: body.other.map((row: Unsafe, idx: number) => {
-          const rollupScope = toOtherRollupScope(pickValue(row, ['rollup_scope', 'rollupScope', 'RollupScope']))
-          if (!rollupScope) throw new Error(`Other row ${idx + 1}: RollupScope must be Walls, Ceilings, or Trim`)
-          const clientDescription = asText(pickValue(row, ['client_description', 'clientDescription', 'ClientDescription']))
-          if (!clientDescription) throw new Error(`Other row ${idx + 1}: ClientDescription is required`)
+          const rollupTarget = asText(pickValue(row, ['rollup_target', 'rollupTarget'])).toLowerCase() || 'other'
+          const rollupScope =
+            toOtherRollupScope(pickValue(row, ['rollup_scope', 'rollupScope', 'RollupScope'])) ??
+            (rollupTarget === 'ceilings'
+              ? 'Ceilings'
+              : rollupTarget === 'trim' || rollupTarget === 'doors'
+                ? 'Trim'
+                : 'Walls')
+          const clientDescription =
+            asText(pickValue(row, ['client_description', 'clientDescription', 'ClientDescription'])) ||
+            asText(pickValue(row, ['customer_label', 'customerLabel'])) ||
+            asText(pickValue(row, ['description']))
+          if (!clientDescription) throw new Error(`Other row ${idx + 1}: description or customer label is required`)
           const qtyRaw = pickValue(row, ['qty', 'Qty'])
           const qty = qtyRaw == null || qtyRaw === '' ? 1 : asNullableNumber(qtyRaw)
           if (qty == null || qty <= 0) throw new Error(`Other row ${idx + 1}: Qty must be numeric and greater than 0`)
-          const laborHrsEach = asNullableNumber(pickValue(row, ['labor_hrs_each', 'laborHrsEach', 'LaborHrs_Each']))
+          const laborHrsEach = asNullableNumber(pickValue(row, ['labor_hrs_each', 'laborHrsEach', 'LaborHrs_Each', 'labor_hours', 'laborHours'])) ?? 0
           if (laborHrsEach == null || laborHrsEach < 0) throw new Error(`Other row ${idx + 1}: LaborHrs_Each must be numeric and >= 0`)
-          const materialsEach = asNullableNumber(pickValue(row, ['materials_each', 'materialsEach', 'Materials$_Each']))
+          const materialsEach = asNullableNumber(pickValue(row, ['materials_each', 'materialsEach', 'Materials$_Each', 'material_cost', 'materialCost', 'unit_rate', 'unitRate', 'fixed_amount', 'fixedAmount'])) ?? 0
           if (materialsEach == null || materialsEach < 0) throw new Error(`Other row ${idx + 1}: Materials$_Each must be numeric and >= 0`)
           return {
-            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, rollup_scope: rollupScope, location: asText(pickValue(row, ['location', 'Location'])) || null, client_description: clientDescription, qty, uom: asText(pickValue(row, ['uom', 'UOM'])) || null, labor_hrs_each: laborHrsEach, materials_each: materialsEach, notes: asText(pickValue(row, ['notes', 'Notes'])) || null, active: toYN(pickValue(row, ['active', 'Active?', 'Active']), 'Y'),
+            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, rollup_scope: rollupScope, location: asText(pickValue(row, ['location', 'Location', 'room_id', 'roomId'])) || null, client_description: clientDescription, qty, uom: asText(pickValue(row, ['uom', 'UOM'])) || null, labor_hrs_each: laborHrsEach, materials_each: materialsEach, notes: asText(pickValue(row, ['notes', 'Notes', 'internal_notes', 'internalNotes'])) || null, active: toYN(pickValue(row, ['active', 'Active?', 'Active']), 'Y'),
+            room_id: asText(pickValue(row, ['room_id', 'roomId'])).toUpperCase() || null,
+            description: asText(pickValue(row, ['description'])) || null,
+            customer_label: asText(pickValue(row, ['customer_label', 'customerLabel'])) || null,
+            pricing_mode: asText(pickValue(row, ['pricing_mode', 'pricingMode'])) || null,
+            quantity: asNullableNumber(pickValue(row, ['quantity'])),
+            unit_rate: asNullableNumber(pickValue(row, ['unit_rate', 'unitRate'])),
+            labor_hours: asNullableNumber(pickValue(row, ['labor_hours', 'laborHours'])),
+            labor_rate: asNullableNumber(pickValue(row, ['labor_rate', 'laborRate'])),
+            material_cost: asNullableNumber(pickValue(row, ['material_cost', 'materialCost'])),
+            supply_cost: asNullableNumber(pickValue(row, ['supply_cost', 'supplyCost'])),
+            fixed_amount: asNullableNumber(pickValue(row, ['fixed_amount', 'fixedAmount'])),
+            rollup_target: rollupTarget,
+            customer_visibility: asText(pickValue(row, ['customer_visibility', 'customerVisibility'])) || 'standalone',
+            internal_notes: asText(pickValue(row, ['internal_notes', 'internalNotes'])) || null,
           }
         }),
       })
     }
 
     if (params.autosaveOnly) return { ok: true as const, autosave: true as const }
-    if (useV2WallsSave || useV2CeilingsSave || useV2TrimSave) {
-      return {
+    if (useAnyV2ScopeSave) {
+      const result: {
+        ok: true
+        wall_calculations: typeof wallCalculations
+        ceiling_calculations: typeof ceilingCalculations
+        trim_calculations: typeof trimCalculations
+        door_calculations?: typeof doorCalculations
+        drywall_calculations?: typeof drywallCalculations
+      } = {
         ok: true as const,
         wall_calculations: wallCalculations,
         ceiling_calculations: ceilingCalculations,
         trim_calculations: trimCalculations,
       }
+      if (useV2DoorsSave) result.door_calculations = doorCalculations
+      if (useV2DrywallSave) result.drywall_calculations = drywallCalculations
+      return result
     }
     return { ok: true as const }
   } catch (error) {

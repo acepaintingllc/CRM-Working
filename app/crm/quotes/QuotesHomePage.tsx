@@ -11,7 +11,7 @@ import { QuotesHomeDeleteDialog } from './_home/QuotesHomeDeleteDialog'
 import { QuotesHomeHeader } from './_home/QuotesHomeHeader'
 import { QuotesHomeJobList } from './_home/QuotesHomeJobList'
 import { QuotesHomeRecoveryBoundary } from './_home/QuotesHomeRecoveryBoundary'
-import { QuotesHomeSelectedJobPanel } from './_home/QuotesHomeSelectedJobPanel'
+import { QuotesHomeSelectedJobResponsivePanel } from './_home/QuotesHomeSelectedJobPanel'
 import { QuotesHomeSummaryCards } from './_home/QuotesHomeSummaryCards'
 import { QuotesHomeVersionList } from './_home/QuotesHomeVersionList'
 import { QUOTES_HOME_PAGE_COPY } from './_home/quoteHomePresentation'
@@ -98,7 +98,7 @@ function QuotesHomeContent({ initialData }: Props) {
         />
 
         <section style={S.sectionStackLg}>
-          <QuotesHomeSelectedJobPanel vm={pageVm.selectedJob} />
+          <QuotesHomeSelectedJobResponsivePanel vm={pageVm.selectedJob} />
 
           <div
             style={S.jobHubDetailGrid}

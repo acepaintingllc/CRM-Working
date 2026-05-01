@@ -32,6 +32,7 @@ describe('estimateV2EditorPresentation', () => {
       walls: 'Walls included',
       ceilings: 'Ceilings excluded',
       trim: 'Trim included',
+      doors: 'Doors excluded',
     })
   })
 
@@ -93,6 +94,23 @@ describe('estimateV2EditorPresentation', () => {
       { label: 'Primer: Wall Primer' },
       { label: 'Subtotal: $180.00' },
       { label: '1 issue(s)', tone: 'warning' },
+    ])
+  })
+
+  it('omits primer summary chips when primer is inactive', () => {
+    expect(
+      buildSectionSummaryChips({
+        modeLabel: 'RECT',
+        primaryValue: '144',
+        primaryUnit: 'Sq Ft',
+        paintLabel: 'Ceiling Paint',
+        primerLabel: 'Ceiling Primer',
+        showPrimer: false,
+      })
+    ).toEqual([
+      { label: 'Mode: RECT' },
+      { label: 'Sq Ft: 144' },
+      { label: 'Paint: Ceiling Paint' },
     ])
   })
 

@@ -5,6 +5,8 @@ import {
   applyJobMinimum,
   allocateMinimumAdjustment,
   buildEstimatePricingSummary,
+  buildEstimatePricingSummaryFromEngines,
+  buildPerJobSupplyCost,
   reconcileWholeDollarRows,
   type LaborDayPolicySettings,
   type JobMinimumSettings,
@@ -185,6 +187,44 @@ test('reconcileWholeDollarRows: never drops a row below its raw whole-dollar flo
   assert.ok((reconciled.find((row) => row.id === 'walls')?.price ?? 0) >= 1205)
 })
 
+test('reconcileWholeDollarRows: preserves rounded totals across fractional boundaries', () => {
+  const cases = [
+    {
+      rows: [
+        { id: 'A', price: 10.49 },
+        { id: 'B', price: 10.49 },
+      ],
+      target: 20.98,
+    },
+    {
+      rows: [
+        { id: 'A', price: 10.5 },
+        { id: 'B', price: 10.5 },
+        { id: 'C', price: 10.5 },
+      ],
+      target: 31.5,
+    },
+    {
+      rows: [
+        { id: 'A', price: 0.01 },
+        { id: 'B', price: 999.99 },
+      ],
+      target: 1000,
+    },
+  ]
+
+  for (const c of cases) {
+    const reconciled = reconcileWholeDollarRows(c.rows, c.target)
+    assert.equal(
+      reconciled.reduce((sum, row) => sum + row.price, 0),
+      Math.round(c.target)
+    )
+    for (const row of reconciled) {
+      assert.equal(Number.isInteger(row.price), true)
+    }
+  }
+})
+
 // ─── buildEstimatePricingSummary ─────────────────────────────────────────────
 
 function makeScope(
@@ -259,6 +299,8 @@ const mockAssumptions: WallCalculationOutput['assumptions'] = {
   primer_price_per_gal: 30,
   standard_door_deduction_sf: 21,
   standard_window_deduction_sf: 15,
+  baseboard_opening_deduction_lf: 3,
+  crew_size: 1,
 }
 
 const mockOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
@@ -314,6 +356,15 @@ const mockOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_co
   ],
 }
 
+function round2(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+function assertFiniteMoney(value: number, label: string) {
+  assert.equal(Number.isFinite(value), true, `${label} should be finite`)
+  assert.ok(value >= 0, `${label} should not be negative`)
+}
+
 test('buildEstimatePricingSummary: aggregates raw labor hours across included scopes', () => {
   const result = buildEstimatePricingSummary([mockOutput], POLICY_DISABLED, MIN_DISABLED)
   assert.equal(result.rawLaborHours, 7.5) // 5h + 2.5h
@@ -339,6 +390,203 @@ test('buildEstimatePricingSummary: material costs from gallons × price', () => 
   assert.equal(result.paintMaterialCost, 150)   // (2 + 1) gal × $50
   assert.equal(result.primerMaterialCost, 22.5) // (0.5 + 0.25) gal × $30
   assert.equal(result.supplyCost, 30)           // $20 + $10
+})
+
+test('buildEstimatePricingSummary: material buckets reconcile to included scope costs', () => {
+  const outputWithSharedSupplies: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    per_color_supply_groups: [
+      {
+        group_key: 'WHITE',
+        color_id: 'WHITE',
+        paint_product_id: 'WALL-PAINT',
+        total_shared_supply_cost: 10,
+        total_effective_area_sf: 200,
+        scope_count: 2,
+        allocations: [
+          {
+            scope_key: 'R001:0',
+            scope_id: null,
+            room_id: 'R001',
+            effective_area_sf: 100,
+            weight: 100,
+            allocated_supply_cost: 7.25,
+          },
+          {
+            scope_key: 'R002:0',
+            scope_id: null,
+            room_id: 'R002',
+            effective_area_sf: 100,
+            weight: 100,
+            allocated_supply_cost: 2.75,
+          },
+        ],
+      },
+    ],
+  }
+  const result = buildEstimatePricingSummary(
+    [outputWithSharedSupplies],
+    POLICY_DISABLED,
+    MIN_DISABLED,
+    {
+      paint_product_id: 'TRIM-WHITE',
+      paint_product_label: 'Trim White',
+      gallons: 1,
+      quarts: 0,
+      normalized_gallons: 1,
+      paint_cost: 31.5,
+    },
+    6.5
+  )
+
+  const includedScopes = outputWithSharedSupplies.scopes.filter((scope) => scope.include === 'Y')
+  const expectedPaint = includedScopes.reduce(
+    (sum, scope) => sum + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0),
+    0
+  )
+  const expectedPrimer = includedScopes.reduce(
+    (sum, scope) => sum + (scope.effective_primer_gallons ?? 0) * (scope.primer_price_per_gal ?? 0),
+    0
+  )
+  const expectedSupply =
+    includedScopes.reduce((sum, scope) => sum + (scope.effective_supply_cost ?? 0), 0) +
+    10 +
+    6.5
+
+  assert.equal(result.wallPaintMaterialCost, expectedPaint)
+  assert.equal(result.paintMaterialCost, expectedPaint + result.trimPaintMaterialCost)
+  assert.equal(result.primerMaterialCost, expectedPrimer)
+  assert.equal(result.supplyCost, expectedSupply)
+})
+
+test('buildEstimatePricingSummaryFromEngines: buckets paint material by explicit engine kind, not array order', () => {
+  const wallOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    scopes: [makeScope('R001', 1, 0, 2, 0, 0)],
+    room_totals: [{ ...mockOutput.room_totals[0], effective_total: 100 }],
+  }
+  const ceilingOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    scopes: [makeScope('R002', 1, 0, 3, 0, 0)],
+    room_totals: [{ ...mockOutput.room_totals[1], room_id: 'R002', effective_total: 150 }],
+  }
+  const drywallOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    scopes: [makeScope('R003', 1, 0, 5, 0, 12)],
+    room_totals: [{ ...mockOutput.room_totals[1], room_id: 'R003', effective_total: 240 }],
+  }
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'drywall', output: drywallOutput },
+      { kind: 'ceilings', output: ceilingOutput },
+      { kind: 'walls', output: wallOutput },
+    ],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(result.wallPaintMaterialCost, 100)
+  assert.equal(result.ceilingPaintMaterialCost, 150)
+  assert.equal(result.paintMaterialCost, 250)
+  assert.equal(result.supplyCost, 12)
+  assert.equal(result.prePolicyTotal, 490)
+})
+
+test('buildEstimatePricingSummary: totals reconcile from engine room bases through policies', () => {
+  const trimPaint = {
+    paint_product_id: 'TRIM-WHITE',
+    paint_product_label: 'Trim White',
+    gallons: 1,
+    quarts: 2,
+    normalized_gallons: 1.5,
+    paint_cost: 45,
+  }
+  const result = buildEstimatePricingSummary([mockOutput], POLICY_8H_HALF_DAY, MIN_500, trimPaint)
+  const engineRoomBase = mockOutput.room_totals.reduce((sum, room) => sum + room.effective_total, 0)
+  const laborAdjustmentCost = result.laborAdjustmentHours * mockOutput.assumptions.labor_rate_per_hour
+  const roomFinalTotal = result.rooms.reduce((sum, room) => sum + room.finalTotal, 0)
+  const roomMinimumAdjustment = result.rooms.reduce((sum, room) => sum + room.allocatedMinimumAdjustment, 0)
+
+  assert.equal(result.prePolicyTotal, engineRoomBase + trimPaint.paint_cost)
+  assert.equal(result.postLaborPolicyTotal, result.prePolicyTotal + laborAdjustmentCost)
+  assert.equal(result.minimumAdjustmentAmount, 0)
+  assert.equal(result.finalTotal, result.postLaborPolicyTotal)
+  assert.equal(roomMinimumAdjustment, result.minimumAdjustmentAmount)
+  assert.equal(roomFinalTotal, result.prePolicyTotal)
+})
+
+test('buildEstimatePricingSummary: includes job-level access fees and scope allocation', () => {
+  const wallOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    room_totals: [{ ...mockOutput.room_totals[0], effective_total: 300 }],
+  }
+  const ceilingOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    room_totals: [{ ...mockOutput.room_totals[0], room_id: 'R001', effective_total: 100 }],
+  }
+  const trimOutput: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
+    ...mockOutput,
+    room_totals: [{ ...mockOutput.room_totals[0], room_id: 'R001', effective_total: 100 }],
+  }
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'walls', output: wallOutput },
+      { kind: 'ceilings', output: ceilingOutput },
+      { kind: 'trim', output: trimOutput },
+    ],
+    POLICY_DISABLED,
+    MIN_DISABLED,
+    null,
+    0,
+    {
+      total: 500,
+      scopes: [
+        { key: 'walls', eligible: true, preAccessSubtotal: 300 },
+        { key: 'ceilings', eligible: true, preAccessSubtotal: 100 },
+        { key: 'trim', eligible: true, preAccessSubtotal: 100 },
+      ],
+    }
+  )
+
+  assert.equal(result.sharedAccessCost, 500)
+  assert.deepEqual(result.accessFeeAllocation, {
+    walls: 300,
+    ceilings: 100,
+    trim: 100,
+    unallocated: 0,
+    warning: null,
+  })
+  assert.equal(result.prePolicyTotal, 1000)
+  assert.equal(result.finalTotal, 1000)
+})
+
+test('buildPerJobSupplyCost multiplies only crew-flagged supply rows', () => {
+  const catalogs = {
+    supplies_rates: [
+      {
+        key: 'BRUSH_TRIM',
+        supply_group: 'per_job',
+        scope: 'Trim',
+        unit: 'each',
+        value: 5,
+        crew_multiplier: 'Y',
+      },
+      {
+        key: 'TAPE_MASK',
+        supply_group: 'per_job',
+        scope: 'All',
+        unit: 'each',
+        value: 2,
+        crew_multiplier: 'N',
+      },
+    ],
+  }
+
+  assert.equal(buildPerJobSupplyCost({ catalogs, crewSize: 3, activeScopes: ['trim'] }), 17)
+  assert.equal(buildPerJobSupplyCost({ catalogs, crewSize: 3, activeScopes: ['walls', 'trim'] }), 17)
+  assert.equal(buildPerJobSupplyCost({ catalogs, crewSize: 1, activeScopes: ['trim'] }), 7)
 })
 
 test('buildEstimatePricingSummary: trim paint adds estimate-level paint cost and room allocation', () => {
@@ -395,6 +643,38 @@ test('buildEstimatePricingSummary: trim paint adds estimate-level paint cost and
   assert.deepEqual(result.trimPaint, trimPaint)
 })
 
+test('buildEstimatePricingSummary: calculated trim scope paint contributes to trim paint material cost', () => {
+  const trimOutput = {
+    scopes: [
+      {
+        include: 'Y' as const,
+        effective_paint_hours: 1,
+        effective_primer_hours: 0,
+        effective_paint_gallons: 1,
+        effective_primer_gallons: 0,
+        effective_supply_cost: 0,
+        raw_paint_material_cost: 42,
+        paint_price_per_gal: 42,
+      },
+    ],
+    room_totals: [{ room_id: 'R001', effective_total: 92 }],
+    per_color_supply_groups: [],
+    assumptions: { labor_rate_per_hour: 50 },
+  }
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'trim', output: trimOutput }],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(result.trimPaintMaterialCost, 42)
+  assert.equal(result.paintMaterialCost, 42)
+  assert.equal(result.prePolicyTotal, 92)
+  assert.equal(result.finalTotal, 92)
+  assert.equal(result.rooms[0]?.baseTotal, 92)
+})
+
 test('buildEstimatePricingSummary: no minimum adjustment when disabled', () => {
   const result = buildEstimatePricingSummary([mockOutput], POLICY_DISABLED, MIN_DISABLED)
   assert.equal(result.minimumAdjustmentAmount, 0)
@@ -422,4 +702,93 @@ test('buildEstimatePricingSummary: excluded scopes do not contribute to totals',
   }
   const result = buildEstimatePricingSummary([outputWithExcluded], POLICY_DISABLED, MIN_DISABLED)
   assert.equal(result.rawLaborHours, 5) // only R001
+})
+
+test('buildEstimatePricingSummary: pricing invariants hold across mixed policy cases', () => {
+  const cases = [
+    {
+      name: 'no policy',
+      engines: [mockOutput],
+      laborPolicy: POLICY_DISABLED,
+      minimumPolicy: MIN_DISABLED,
+      trimPaint: null,
+      extraSupplyCost: 0,
+    },
+    {
+      name: 'labor rounding',
+      engines: [mockOutput],
+      laborPolicy: POLICY_8H_HALF_DAY,
+      minimumPolicy: MIN_DISABLED,
+      trimPaint: null,
+      extraSupplyCost: 0,
+    },
+    {
+      name: 'minimum and trim paint',
+      engines: [mockOutput],
+      laborPolicy: POLICY_8H_HALF_DAY,
+      minimumPolicy: { enabled: true, amount: 900 },
+      trimPaint: {
+        paint_product_id: 'TRIM-WHITE',
+        paint_product_label: 'Trim White',
+        gallons: 1,
+        quarts: 1,
+        normalized_gallons: 1.25,
+        paint_cost: 37.5,
+      },
+      extraSupplyCost: 8.25,
+    },
+    {
+      name: 'excluded high-dollar rows',
+      engines: [
+        {
+          ...mockOutput,
+          scopes: [
+            ...mockOutput.scopes,
+            {
+              ...makeScope('R003', 999, 999, 999, 999, 999),
+              include: 'N' as const,
+              allocated_paint_material_cost: 999,
+              raw_paint_material_cost: 999,
+            },
+          ],
+          room_totals: mockOutput.room_totals,
+        },
+      ],
+      laborPolicy: POLICY_DISABLED,
+      minimumPolicy: MIN_DISABLED,
+      trimPaint: null,
+      extraSupplyCost: 0,
+    },
+  ]
+
+  for (const c of cases) {
+    const result = buildEstimatePricingSummary(
+      c.engines,
+      c.laborPolicy,
+      c.minimumPolicy,
+      c.trimPaint,
+      c.extraSupplyCost
+    )
+    const laborRate = c.engines[0]?.assumptions.labor_rate_per_hour ?? 0
+    const laborAdjustmentCost = round2(result.laborAdjustmentHours * laborRate)
+    const roomBaseTotal = round2(result.rooms.reduce((sum, room) => sum + room.baseTotal, 0))
+    const roomFinalTotal = round2(result.rooms.reduce((sum, room) => sum + room.finalTotal, 0))
+    const roomMinimumAdjustment = round2(
+      result.rooms.reduce((sum, room) => sum + room.allocatedMinimumAdjustment, 0)
+    )
+
+    for (const [label, value] of Object.entries(result)) {
+      if (typeof value === 'number') assertFiniteMoney(value, `${c.name}.${label}`)
+    }
+    assert.equal(
+      result.paintMaterialCost,
+      round2(result.wallPaintMaterialCost + result.ceilingPaintMaterialCost + result.trimPaintMaterialCost)
+    )
+    assert.equal(result.laborCost, round2(result.effectiveLaborHours * laborRate))
+    assert.equal(result.postLaborPolicyTotal, round2(result.prePolicyTotal + laborAdjustmentCost))
+    assert.equal(result.finalTotal, round2(result.postLaborPolicyTotal + result.minimumAdjustmentAmount))
+    assert.equal(roomBaseTotal, result.prePolicyTotal)
+    assert.equal(roomMinimumAdjustment, result.minimumAdjustmentAmount)
+    assert.equal(roomFinalTotal, round2(result.prePolicyTotal + result.minimumAdjustmentAmount))
+  }
 })

@@ -11,9 +11,10 @@ export function QuotesHomeSummaryCards({ cards }: Props) {
   return (
     <div className="ace-v2-home-stats">
       {cards.map((card) => (
-        <div key={card.label} style={S.card}>
-          <div style={S.cardLabel}>{card.label}</div>
+        <div key={card.label} className="quotes-home-summary-card" style={S.card}>
+          <div className="quotes-home-summary-card-label" style={S.cardLabel}>{card.label}</div>
           <div
+            className="quotes-home-summary-card-value"
             style={{
               ...S.statValue,
               color: card.valueColor,
@@ -22,6 +23,7 @@ export function QuotesHomeSummaryCards({ cards }: Props) {
             {card.displayValue}
           </div>
           <div
+            className="quotes-home-summary-card-subtext"
             style={{
               ...S.statSub,
               color: card.subtextColor,

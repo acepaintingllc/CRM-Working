@@ -32,9 +32,66 @@ export function buildOverlayFromRows(params: {
   const wall_complexity_types: RatesFlagsCatalogOverlay['wall_complexity_types'] = []
   const ceiling_types: RatesFlagsCatalogOverlay['ceiling_types'] = []
   const room_flags: RatesFlagsCatalogOverlay['room_flags'] = []
+  const condition_modifiers: RatesFlagsCatalogOverlay['condition_modifiers'] = []
   const access_fees: RatesFlagsCatalogOverlay['access_fees'] = []
   const trim_items: RatesFlagsCatalogOverlay['trim_items'] = []
+  const door_unit_rates: RatesFlagsCatalogOverlay['door_unit_rates'] = []
+  const drywall_unit_rates: RatesFlagsCatalogOverlay['drywall_unit_rates'] = []
   const area_supplies_rates: RatesFlagsCatalogOverlay['area_supplies_rates'] = []
+
+  function normalizeConditionScopes(value: unknown): Array<'room' | 'wall' | 'ceiling' | 'trim'> {
+    const scopes = new Set<'room' | 'wall' | 'ceiling' | 'trim'>()
+    for (const part of asText(value).split(/[,;|]/)) {
+      const scope = part.trim().toLowerCase()
+      if (scope === 'room') scopes.add('room')
+      else if (scope === 'wall' || scope === 'walls') scopes.add('wall')
+      else if (scope === 'ceiling' || scope === 'ceil' || scope === 'ceilings') scopes.add('ceiling')
+      else if (scope === 'trim') scopes.add('trim')
+    }
+    return [...scopes]
+  }
+
+  function parseConditionLevels(valuesJson: Record<string, unknown>, values: Record<string, string>) {
+    if (valuesJson.levels && typeof valuesJson.levels === 'object' && !Array.isArray(valuesJson.levels)) {
+      const levels = Object.fromEntries(
+        Object.entries(valuesJson.levels as Record<string, unknown>)
+          .map(([key, value]) => [key.toLowerCase(), parseNumber(value)] as const)
+          .filter((entry): entry is [string, number] => entry[1] != null)
+      )
+      if (Object.keys(levels).length > 0) return levels
+    }
+
+    const levels = Object.fromEntries(
+      [
+        ['active', values.active_factor],
+        ['minor', values.minor_factor],
+        ['moderate', values.moderate_factor],
+        ['major', values.major_factor],
+      ]
+        .map(([key, value]) => [key, parseNumber(value)] as const)
+        .filter((entry): entry is [string, number] => entry[1] != null)
+    )
+    return Object.keys(levels).length > 0 ? levels : null
+  }
+
+  function defaultConditionLevels(modifierType: string) {
+    return modifierType.toLowerCase() === 'binary'
+      ? { active: 1 }
+      : { minor: 1, moderate: 1, major: 1 }
+  }
+
+  function normalizeAccessGroup(
+    value: unknown,
+    categoryKey: TemplateConstantRowRecord['category_key']
+  ): 'ladders' | 'scaffolding' | 'specialty' {
+    const accessGroup = asText(value).toLowerCase()
+    if (accessGroup === 'ladders' || accessGroup === 'scaffolding' || accessGroup === 'specialty') {
+      return accessGroup
+    }
+    if (categoryKey === 'access_fees_scaffolding') return 'scaffolding'
+    if (categoryKey === 'access_fees_specialty') return 'specialty'
+    return 'ladders'
+  }
 
   const productionRows = [
     ...(grouped.get('production_rates_walls') ?? []),
@@ -111,6 +168,7 @@ export function buildOverlayFromRows(params: {
       id: normalizeId(values.id || row.row_id),
       label: asText(values.display_name) || row.display_name,
       labor_mult: parseNumber(values.primary_value),
+      area_factor: parseNumber(values.area_factor),
       surcharge_per_sqft: parseNumber(values.secondary_value),
       notes: asText(values.notes) || null,
       active: row.active,
@@ -118,16 +176,54 @@ export function buildOverlayFromRows(params: {
   }
 
   for (const row of grouped.get('condition_modifiers') ?? []) {
+    const valuesJson = (row.values_json ?? {}) as Record<string, unknown>
     const values = toStringRecord(row.values_json)
-    room_flags.push({
-      id: normalizeId(values.id || row.row_id),
-      label: asText(values.display_name) || row.display_name,
-      wall_factor: parseNumber(values.wall_factor),
-      ceil_factor: parseNumber(values.ceil_factor),
-      trim_factor: parseNumber(values.trim_factor),
-      notes: asText(values.notes) || null,
-      active: row.active,
-    })
+    const modifierType = asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity'
+    const levels = parseConditionLevels(valuesJson, values)
+    const scopes = normalizeConditionScopes(values.scope)
+    if (scopes.length > 0) {
+      const effectiveLevels = levels ?? defaultConditionLevels(modifierType)
+      for (const scope of scopes) {
+        condition_modifiers.push({
+          id: normalizeId(values.id || row.row_id),
+          label: asText(values.display_name) || row.display_name,
+          scope,
+          modifier_type: modifierType,
+          factor_field: asText(values.factor_field) || null,
+          levels: effectiveLevels,
+          notes: asText(values.notes) || null,
+          active: row.active,
+        })
+      }
+    } else if (valuesJson.levels && levels) {
+      const legacyScope = normalizeConditionScopes(valuesJson.scope)
+      for (const scope of legacyScope) {
+        condition_modifiers.push({
+          id: normalizeId(values.id || row.row_id),
+          label: asText(values.display_name) || row.display_name,
+          scope,
+          modifier_type: modifierType,
+          factor_field: asText(values.factor_field) || null,
+          levels,
+          notes: asText(values.notes) || null,
+          active: row.active,
+        })
+      }
+    }
+    if (scopes.length > 0) {
+      continue
+    }
+    if (values.wall_factor || values.ceil_factor || values.trim_factor) {
+      room_flags.push({
+        id: normalizeId(values.id || row.row_id),
+        label: asText(values.display_name) || row.display_name,
+        wall_factor: parseNumber(values.wall_factor),
+        ceil_factor: parseNumber(values.ceil_factor),
+        trim_factor: parseNumber(values.trim_factor),
+        notes: asText(values.notes) || null,
+        active: row.active,
+      })
+    }
   }
 
   const accessRows = [
@@ -140,6 +236,7 @@ export function buildOverlayFromRows(params: {
     access_fees.push({
       id: normalizeId(values.id || row.row_id),
       label: asText(values.display_name) || row.display_name,
+      access_group: normalizeAccessGroup(values.access_group, row.category_key),
       fee_type: asText(values.fee_type) || null,
       amount: parseNumber(values.amount),
       unit: asText(values.unit) || null,
@@ -164,6 +261,42 @@ export function buildOverlayFromRows(params: {
       category: asText(values.unit_rate_type) || null,
       size: asText(values.unit_rate_type) || null,
       active: row.active,
+      trim_category: asText(values.trim_category) || null,
+      measurement_class: asText(values.measurement_class) || null,
+      picker_group: asText(values.picker_group) || null,
+    })
+  }
+
+  for (const row of grouped.get('unit_rates_doors') ?? []) {
+    const values = toStringRecord(row.values_json)
+    door_unit_rates.push({
+      id: normalizeId(values.id || row.row_id),
+      label: asText(values.display_name) || row.display_name || normalizeId(values.id || row.row_id),
+      unit_rate_type: asText(values.unit_rate_type) || null,
+      unit: asText(values.unit) || null,
+      default_qty: parseNumber(values.default_qty),
+      labor_rate: parseNumber(values.labor_rate),
+      material_rate: parseNumber(values.material_rate),
+      amount: parseNumber(values.amount),
+      notes: asText(values.notes) || null,
+      active: row.active,
+    })
+  }
+
+  for (const row of grouped.get('unit_rates_drywall') ?? []) {
+    const values = toStringRecord(row.values_json)
+    drywall_unit_rates.push({
+      id: normalizeId(values.id || row.row_id),
+      label: asText(values.display_name) || row.display_name || normalizeId(values.id || row.row_id),
+      unit_rate_type: asText(values.unit_rate_type || values.repair_type) || null,
+      unit: asText(values.unit) || null,
+      default_qty: parseNumber(values.default_qty),
+      labor_rate: parseNumber(values.labor_rate),
+      material_rate: parseNumber(values.material_rate),
+      amount: parseNumber(values.amount),
+      ceiling_multiplier: parseNumber(values.ceiling_multiplier),
+      notes: asText(values.notes) || null,
+      active: row.active,
     })
   }
 
@@ -176,12 +309,19 @@ export function buildOverlayFromRows(params: {
     const values = toStringRecord(row.values_json)
     const supplyGroup = asText(values.supply_group).toLowerCase()
     const unit = asText(values.unit) || '$/sqft'
-    if (supplyGroup && supplyGroup !== 'area_based' && !isAreaBasedUnit(unit)) continue
+    const normalizedSupplyGroup =
+      supplyGroup === 'per_color' || supplyGroup === 'per_job' || supplyGroup === 'area_based'
+        ? supplyGroup
+        : isAreaBasedUnit(unit)
+          ? 'area_based'
+          : 'per_job'
     area_supplies_rates.push({
       key: normalizeId(values.id || row.row_id),
+      supply_group: normalizedSupplyGroup,
       scope: asText(values.scope) || null,
       unit,
       value: parseNumber(values.cost_per) ?? 0,
+      crew_multiplier: asText(values.crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
       notes: asText(values.notes) || null,
       active: row.active,
     })
@@ -195,8 +335,11 @@ export function buildOverlayFromRows(params: {
     wall_complexity_types,
     ceiling_types,
     room_flags,
+    condition_modifiers,
     access_fees,
     trim_items,
+    door_unit_rates,
+    drywall_unit_rates,
     area_supplies_rates,
   }
 }

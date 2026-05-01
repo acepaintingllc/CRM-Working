@@ -1,16 +1,13 @@
 'use client'
 
-import { useCallback } from 'react'
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
 import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
 import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CustomerDetailCard } from '@/app/crm/customers/_components/CustomerDetailCard'
-import { CustomerListSidebar } from '@/app/crm/customers/_components/CustomerListSidebar'
 import { CustomerTimelinePanel } from '@/app/crm/customers/_components/CustomerTimelinePanel'
 import { useEntityDetailActions } from '@/app/crm/_hooks/useEntityDetailActions'
 import { useCustomerDetail } from '@/app/crm/customers/_hooks/useCustomerDetail'
-import { useCustomerList } from '@/app/crm/customers/_hooks/useCustomerList'
 import { useCustomerTimeline } from '@/app/crm/customers/_hooks/useCustomerTimeline'
 import { useOrg } from '@/app/crm/customers/customers-orgproviders'
 
@@ -20,24 +17,6 @@ export default function CustomerDetailPage() {
   const rawId = (params as { id?: string } | null | undefined)?.id
   const id = Array.isArray(rawId) ? rawId[0] : rawId
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-
-  const query = searchParams.get('q') ?? ''
-  const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1', 10) || 1)
-
-  const updateParams = useCallback(
-    (patch: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString())
-      for (const [key, value] of Object.entries(patch)) {
-        if (!value) params.delete(key)
-        else params.set(key, value)
-      }
-      const qs = params.toString()
-      router.replace(qs ? `${pathname}?${qs}` : pathname)
-    },
-    [pathname, router, searchParams]
-  )
 
   const {
     customer,
@@ -46,21 +25,10 @@ export default function CustomerDetailPage() {
     error,
     deleteCustomer,
   } = useCustomerDetail(id)
-  const {
-    customers,
-    loading: listLoading,
-    error: listError,
-    search,
-    setSearch,
-  } = useCustomerList({
-    initialSearch: query,
-    initialPage: page,
-  })
   const { timelineEvents, timelineLoading, timelineError, noteBody, setNoteBody, noteSaving, saveNote } =
     useCustomerTimeline(id)
 
-  const listQueryString = searchParams.toString()
-  const detailPathWithQuery = `${pathname}${listQueryString ? `?${listQueryString}` : ''}`
+  const detailPathWithQuery = typeof id === 'string' && id ? `/crm/customers/${id}` : '/crm/customers'
   const detailActions = useEntityDetailActions({
     deleteMessage: 'Delete this customer? This cannot be undone.',
     deleteAction: deleteCustomer,
@@ -106,22 +74,6 @@ export default function CustomerDetailPage() {
               onAddNote={() => void saveNote()}
             />
           </>
-        }
-        side={
-          <div className="hidden md:block">
-            <CustomerListSidebar
-              activeCustomerId={id}
-              query={search}
-              onQueryChange={(value) => {
-                setSearch(value)
-                updateParams({ q: value || null, page: null })
-              }}
-              listCustomers={customers}
-              listLoading={listLoading}
-              listError={listError}
-              listQueryString={listQueryString}
-            />
-          </div>
         }
       />
     </CrmPageShell>

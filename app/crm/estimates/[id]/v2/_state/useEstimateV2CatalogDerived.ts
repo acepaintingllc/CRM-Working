@@ -8,13 +8,14 @@ import {
   buildProductionRateById,
   buildRoomFlagById,
 } from '../_lib/estimateV2EditorDerived'
-import { inferTrimUnitTypeFromText } from '../_lib/estimateV2EditorNormalize'
 import type {
   EstimateV2EditorCollections,
   EstimateV2EditorMetaState,
 } from './estimateV2EditorTypes'
 import type {
   EstimateV2CatalogOption,
+  EstimateV2DoorTypeOption,
+  EstimateV2DrywallRateOption,
   EstimateV2RoomDraft,
   EstimateV2TrimTypeOption as TrimTypeOption,
 } from '@/types/estimator/v2'
@@ -52,18 +53,45 @@ export function useEstimateV2CatalogDerived(params: {
   )
   const trimTypeOptions = useMemo<TrimTypeOption[]>(
     () =>
-      trimProductionRates.map((rate) => ({
-        id: rate.id,
-        label: rate.label || rate.id,
-        family: rate.surface_type || null,
-        category: rate.condition || rate.surface_type || null,
-        unit_type: inferTrimUnitTypeFromText(
-          `${rate.id} ${rate.label} ${rate.surface_type} ${rate.condition}`
-        ),
-        helper_allowed: false,
-        default_production_rate_id: rate.id,
+      (meta.catalogs.trim_items ?? []).map((item) => ({
+        id: item.id,
+        label: item.label || item.id,
+        family: item.family || null,
+        category: item.category || item.family || null,
+        unit_type: item.unit_type,
+        helper_allowed: !!item.helper_allowed,
+        default_production_rate_id: item.default_production_rate_id,
+        trim_category: (item as Record<string, unknown>).trim_category as TrimTypeOption['trim_category'],
+        measurement_class: (item as Record<string, unknown>).measurement_class as TrimTypeOption['measurement_class'],
+        picker_group: (item as Record<string, unknown>).picker_group as TrimTypeOption['picker_group'],
       })),
-    [trimProductionRates]
+    [meta.catalogs.trim_items]
+  )
+  const doorTypeOptions = useMemo<EstimateV2DoorTypeOption[]>(
+    () =>
+      (meta.catalogs.door_types ?? []).map((item) => ({
+        id: item.id,
+        label: item.label || item.id,
+        unit_rate_type: item.unit_rate_type ?? null,
+        unit: item.unit ?? null,
+        default_qty: item.default_qty ?? null,
+        labor_rate: item.labor_rate ?? null,
+        material_rate: item.material_rate ?? null,
+        amount: item.amount ?? null,
+      })),
+    [meta.catalogs.door_types]
+  )
+  const drywallRateOptions = useMemo<EstimateV2DrywallRateOption[]>(
+    () =>
+      (meta.catalogs.drywall_rates ?? []).map((item) => ({
+        id: item.id,
+        label: item.label || item.id,
+        unit_rate_type: item.unit_rate_type ?? null,
+        unit: item.unit ?? null,
+        amount: item.amount ?? null,
+        ceiling_multiplier: item.ceiling_multiplier ?? null,
+      })),
+    [meta.catalogs.drywall_rates]
   )
   const roomFlagById = useMemo(
     () => buildRoomFlagById(meta.catalogs.room_flags),
@@ -125,6 +153,10 @@ export function useEstimateV2CatalogDerived(params: {
           : [],
     [meta.catalogs.room_types, selectedRoom]
   )
+  const conditionModifiers = useMemo(
+    () => meta.catalogs.condition_modifiers ?? [],
+    [meta.catalogs.condition_modifiers]
+  )
 
   return {
     rooms: collections.rooms,
@@ -132,6 +164,8 @@ export function useEstimateV2CatalogDerived(params: {
     trimProductionRates,
     wallProductionRateById,
     trimTypeOptions,
+    doorTypeOptions,
+    drywallRateOptions,
     roomFlagById,
     colorCodeOptions,
     defaultColorCodeId,
@@ -146,5 +180,6 @@ export function useEstimateV2CatalogDerived(params: {
     ceilingPrimerOptions,
     trimPrimerOptions,
     roomTypeOptions,
+    conditionModifiers,
   }
 }

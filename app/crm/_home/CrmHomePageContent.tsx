@@ -5,6 +5,7 @@ import { CrmPageHeader } from '@/app/crm/_components/CrmPageHeader'
 import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { useCrmHomeData } from './useCrmHomeData'
 import { ActivityFeedCard } from './components/ActivityFeedCard'
+import { CurrentJobsCard } from './components/CurrentJobsCard'
 import { HomeMetricsGrid } from './components/HomeMetricsGrid'
 import { HomeSearchBox } from './components/HomeSearchBox'
 import { HomeStatusBanner } from './components/HomeStatusBanner'
@@ -23,12 +24,13 @@ export function CrmHomePageContent() {
   })
 
   return (
-    <CrmPageShell className="max-w-6xl gap-5">
+    <CrmPageShell className="max-w-6xl gap-3 md:gap-5">
       <CrmPageHeader
+        className="crm-home-header"
         eyebrow={viewModel.topBar.todayLabel}
         emoji="🏠"
         title={viewModel.topBar.greeting}
-        description="Shared CRM dashboard for pipeline health, activity, reminders, and quick actions."
+        description="Today at a glance: schedule, due tasks, active jobs, and quick actions."
         actions={
           <div className="w-full max-w-[320px] sm:w-[320px]">
             <HomeSearchBox
@@ -53,12 +55,27 @@ export function CrmHomePageContent() {
         onRetry={() => void reloadAll()}
       />
 
-      <HomeMetricsGrid viewModel={viewModel.metrics} />
-      <QuickActionsCard viewModel={viewModel.quickActions} />
+      <div className="crm-home-main grid min-w-0 gap-3 md:gap-5">
+        <div className="order-4 hidden md:order-1 md:block">
+          <HomeMetricsGrid viewModel={viewModel.metrics} />
+        </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ActivityFeedCard viewModel={viewModel.activity} />
-        <TodaySignalsCard viewModel={viewModel.signals} />
+        <div className="order-3 md:order-2">
+          <QuickActionsCard viewModel={viewModel.quickActions} />
+        </div>
+
+        <div className="contents md:order-3 md:grid md:min-w-0 md:grid-cols-2 md:gap-4">
+          <div className="order-4 md:order-1">
+            <ActivityFeedCard viewModel={viewModel.activity} />
+          </div>
+          <div className="order-2 md:order-2">
+            <TodaySignalsCard viewModel={viewModel.signals} />
+          </div>
+        </div>
+
+        <div className="order-1 md:order-4">
+          <CurrentJobsCard viewModel={viewModel.currentJobs} />
+        </div>
       </div>
     </CrmPageShell>
   )

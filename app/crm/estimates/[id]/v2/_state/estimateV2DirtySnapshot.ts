@@ -4,8 +4,14 @@ import { buildEstimateV2SavePayload } from '@/lib/estimator/v2DraftPayload'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
+  EstimateV2AccessFeeDraft,
+  EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
+  EstimateV2JobSettingsDraft,
+  EstimateV2OtherItemDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
   EstimateV2SavePayload,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
@@ -27,6 +33,7 @@ export function createEstimateV2DirtySnapshot(
 }
 
 export function buildEstimateV2DirtySnapshot(params: {
+  jobSettingsDraft: EstimateV2JobSettingsDraft
   rooms: EstimateV2RoomDraft[]
   scopes: EstimateV2WallScopeDraft[]
   segments: EstimateV2WallSegmentDraft[]
@@ -34,15 +41,26 @@ export function buildEstimateV2DirtySnapshot(params: {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
+  doorScopes?: EstimateV2DoorScopeDraft[]
+  drywallRepairs?: EstimateV2DrywallRepairDraft[]
+  rollers?: EstimateV2RollerDraft[]
+  accessFees?: EstimateV2AccessFeeDraft[]
+  otherItems?: EstimateV2OtherItemDraft[]
 }): EstimateV2DirtySnapshot {
   const payload = buildEstimateV2SavePayload(
+    params.jobSettingsDraft,
     params.rooms,
     params.scopes,
     params.segments,
     params.roomFlags,
     params.ceilingScopes,
     params.ceilingSegments,
-    params.trimScopes
+    params.trimScopes,
+    params.rollers ?? [],
+    params.doorScopes ?? [],
+    params.drywallRepairs ?? [],
+    params.accessFees ?? [],
+    params.otherItems ?? []
   )
 
   return createEstimateV2DirtySnapshot(payload)

@@ -83,8 +83,9 @@ export function CalendarPicker({
   toggleCalendar,
 }: CalendarPickerProps) {
   return (
-    <div className="grid gap-3">
+    <div className="calendar-picker grid gap-3">
       <CrmDenseSectionHeader
+        className="calendar-picker-header"
         title="Calendars"
         badge={
           <span className="ace-crm-chip border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface-muted)] text-[color:var(--crm-ui-muted)]">
@@ -92,13 +93,13 @@ export function CalendarPicker({
           </span>
         }
       />
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+      <div className="calendar-picker-grid" style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         {calendars.map((calendar) => {
           const active = selectedCalendarIds.includes(calendar.id)
           return (
             <label
               key={calendar.id}
-              className={`flex cursor-pointer items-center gap-2 rounded-[16px] border px-3 py-2 ${
+              className={`calendar-picker-option flex cursor-pointer items-center gap-2 rounded-[16px] border px-3 py-2 ${
                 active
                   ? 'border-[color:var(--crm-ui-accent-border)] bg-[color:var(--crm-ui-accent-soft)]'
                   : 'border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface)]'
@@ -116,7 +117,7 @@ export function CalendarPicker({
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--crm-text)' }}>
+              <span className="calendar-picker-option-name" style={{ fontSize: 13, fontWeight: 600, color: 'var(--crm-text)' }}>
                 {calendar.summary ?? calendar.id}
                 {calendar.primary ? ' (Primary)' : ''}
               </span>

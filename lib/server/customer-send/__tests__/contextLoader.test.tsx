@@ -146,6 +146,10 @@ function buildTableMap(overrides?: Record<string, unknown>) {
       data: [{ room_id: 'room-1' }],
       error: null,
     }),
+    estimate_drywall_repairs: createOrderedCollectionChain({
+      data: [{ id: 'drywall-1' }],
+      error: null,
+    }),
     estimate_trim_items: createOrderedCollectionChain({
       data: [{ id: 'trim-1' }],
       error: null,
@@ -267,11 +271,11 @@ describe('customer send context loader', () => {
           business_name: '',
           timezone: 'America/Chicago',
         }),
-        quoteDefaults: {
+        quoteDefaults: expect.objectContaining({
           default_template_key: 'default',
           quote_validity_days: 90,
           terms_text: '',
-        },
+        }),
         catalogs: null,
       })
     )
@@ -326,6 +330,7 @@ describe('customer send context loader', () => {
       ceilingScopes: [{ room_id: 'room-1' }],
       ceilingScopeSegments: [{ id: 'ceiling-scope-segment-1' }],
       trimScopes: [{ room_id: 'room-1' }],
+      drywallRepairs: [{ id: 'drywall-1' }],
       trimItems: [{ id: 'trim-1' }],
       other: [{ id: 'other-1' }],
       publicVersions: [

@@ -7,6 +7,247 @@ function approx(actual: number | null | undefined, expected: number, epsilon = 0
   assert.ok(Math.abs((actual as number) - expected) <= epsilon, `expected ${expected}, got ${actual}`)
 }
 
+function makeWallScope(overrides: Partial<WallCalculationInput['scopes'][0]> = {}): WallCalculationInput['scopes'][0] {
+  return {
+    id: 'scope-decimal',
+    room_id: 'R001',
+    position: 0,
+    mode: 'RECT',
+    include: 'Y',
+    scope_name: null,
+    color_id: 'A',
+    paint_product_id: null,
+    primer_product_id: null,
+    prime_mode: 'NONE',
+    height_in: 96,
+    perimeter_in: 600,
+    standard_door_count: 0,
+    standard_window_count: 0,
+    height_factor: 1,
+    complexity_factor: 1,
+    wall_flag_factor: 1,
+    cut_in_top_factor: 1,
+    cut_in_bottom_factor: 1,
+    raw_area_sf: null,
+    override_area_sf: null,
+    effective_area_sf: null,
+    raw_paint_hours: null,
+    override_paint_hours: null,
+    effective_paint_hours: null,
+    raw_primer_hours: null,
+    override_primer_hours: null,
+    effective_primer_hours: null,
+    raw_paint_gallons: null,
+    override_paint_gallons: null,
+    effective_paint_gallons: null,
+    raw_primer_gallons: null,
+    override_primer_gallons: null,
+    effective_primer_gallons: null,
+    raw_supply_cost: null,
+    override_supply_cost: null,
+    effective_supply_cost: null,
+    raw_total: null,
+    override_total: null,
+    effective_total: null,
+    notes: null,
+    ...overrides,
+  }
+}
+
+test('wall deductions accept decimal door and window counts in RECT and SEG inputs', () => {
+  const rect = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeWallScope({ standard_door_count: 0.5, standard_window_count: 1.5 })],
+    segments: [],
+  })
+  approx(rect.scopes[0].raw_area_sf, 367)
+
+  const seg = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeWallScope({ id: 'seg-scope', mode: 'SEG', standard_door_count: null, standard_window_count: null })],
+    segments: [
+      {
+        id: 'seg-1',
+        wall_scope_id: 'seg-scope',
+        room_id: 'R001',
+        position: 0,
+        segment_name: null,
+        include: 'Y',
+        shape_type: 'MANUAL',
+        quantity: 1,
+        width_in: null,
+        height_in: null,
+        base_in: null,
+        manual_area_sf: 100,
+        standard_door_count: 0.5,
+        standard_window_count: 0.5,
+        raw_area_sf: null,
+        override_area_sf: null,
+        effective_area_sf: null,
+        notes: null,
+      },
+    ],
+  })
+  approx(seg.scopes[0].raw_area_sf, 82)
+})
+
+test('wall opening deductions use configurable settings', () => {
+  const result = calculateWalls({
+    settings: {
+      area_supply_cost_per_sf: 0,
+      per_color_supply_cost: 0,
+      standard_door_deduction_sf: 30,
+      standard_window_deduction_sf: 12,
+    },
+    scopes: [makeWallScope({ standard_door_count: 1, standard_window_count: 2 })],
+    segments: [],
+  })
+
+  approx(result.scopes[0].raw_area_sf, 346)
+})
+
+test('missing wall pricing assumptions are reported instead of using hardcoded fallback rates', () => {
+  const result = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeWallScope({ color_id: null, prime_mode: 'FULL' })],
+    segments: [],
+  })
+
+  const missingFields = result.missing_inputs.map((input) => input.field)
+  assert.ok(missingFields.includes('labor_rate_per_hour'))
+  assert.ok(missingFields.includes('paint_prod_rate_sqft_per_hour'))
+  assert.ok(missingFields.includes('primer_prod_rate_sqft_per_hour'))
+  assert.ok(missingFields.includes('paint_coverage_sqft_per_gal_per_coat'))
+  assert.ok(missingFields.includes('primer_coverage_sqft_per_gal_per_coat'))
+  assert.ok(missingFields.includes('paint_price_per_gal'))
+  assert.ok(missingFields.includes('primer_price_per_gal'))
+})
+
+test('missing wall pricing assumptions do not use hidden business fallback values', () => {
+  const result = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, per_color_supply_cost: 0 },
+    scopes: [makeWallScope({ color_id: null, prime_mode: 'NONE' })],
+    segments: [],
+  })
+
+  assert.equal(result.assumptions.labor_rate_per_hour, 0)
+  assert.equal(result.assumptions.paint_prod_rate_sqft_per_hour, 0)
+  assert.equal(result.assumptions.paint_coverage_sqft_per_gal_per_coat, 0)
+  assert.equal(result.assumptions.paint_coats, 0)
+  assert.equal(result.assumptions.paint_price_per_gal, 0)
+  assert.equal(result.scopes[0].raw_paint_hours, 0)
+  assert.equal(result.scopes[0].raw_paint_gallons, 0)
+  assert.equal(result.scopes[0].raw_total, 0)
+})
+
+test('wall primer assumptions are required only when primer is used', () => {
+  const baseSettings = {
+    labor_rate_per_hour: 50,
+    paint_prod_rate_sqft_per_hour: 100,
+    paint_coverage_sqft_per_gal_per_coat: 350,
+    paint_coats: 2,
+    paint_price_per_gal: 45,
+    area_supply_cost_per_sf: 0,
+    per_color_supply_cost: 0,
+  }
+  const none = calculateWalls({
+    settings: baseSettings,
+    scopes: [makeWallScope({ prime_mode: 'NONE', primer_coats: null })],
+    segments: [],
+  })
+  assert.equal(none.missing_inputs.some((input) => input.field.includes('primer')), false)
+  assert.equal(none.missing_inputs.some((input) => input.field === 'spot_prime_percent'), false)
+
+  const spot = calculateWalls({
+    settings: baseSettings,
+    scopes: [makeWallScope({ prime_mode: 'SPOT', primer_coats: null, spot_prime_percent: null })],
+    segments: [],
+  })
+  assert.equal(spot.missing_inputs.some((input) => input.field === 'primer_coats'), true)
+  assert.equal(spot.missing_inputs.some((input) => input.field === 'spot_prime_percent'), true)
+})
+
+test('wall primer supply cost applies only for SPOT and FULL prime modes', () => {
+  const catalogs = { supplies_rates: [{ key: 'PRIMER_WALL', scope: 'Walls', unit: 'primer per scope', value: 7 }] }
+  const settings = { area_supply_cost_per_sf: 0.08, per_color_supply_cost: 0 }
+  const none = calculateWalls({ catalogs, settings, scopes: [makeWallScope({ color_id: null })], segments: [] })
+  const spot = calculateWalls({ catalogs, settings, scopes: [makeWallScope({ color_id: null, prime_mode: 'SPOT' })], segments: [] })
+  const full = calculateWalls({ catalogs, settings, scopes: [makeWallScope({ color_id: null, prime_mode: 'FULL' })], segments: [] })
+
+  approx(none.scopes[0].raw_supply_cost, 32)
+  approx(spot.scopes[0].raw_supply_cost, 39)
+  approx(full.scopes[0].raw_supply_cost, 39)
+  approx(spot.scope_traces[0].supplies.primer_supply_cost, 7)
+})
+
+test('per-color catalog supply costs multiply only crew-flagged rows', () => {
+  const result = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0, crew_size: 3 },
+    catalogs: {
+      supplies_rates: [
+        {
+          key: 'BRUSH_WALL',
+          supply_group: 'per_color',
+          scope: 'Walls',
+          unit: 'each',
+          value: 5,
+          crew_multiplier: 'Y',
+        },
+        {
+          key: 'TRAY_WALL',
+          supply_group: 'per_color',
+          scope: 'Walls',
+          unit: 'each',
+          value: 2,
+          crew_multiplier: 'N',
+        },
+      ],
+    },
+    scopes: [makeWallScope()],
+    segments: [],
+  })
+
+  assert.equal(result.per_color_supply_groups[0].total_shared_supply_cost, 17)
+  assert.equal(result.per_color_supply_groups[0].allocations[0].allocated_supply_cost, 17)
+})
+
+test('per-color crew multiplier defaults to one crew member', () => {
+  const result = calculateWalls({
+    settings: { area_supply_cost_per_sf: 0 },
+    catalogs: {
+      supplies_rates: [
+        {
+          key: 'BRUSH_WALL',
+          supply_group: 'per_color',
+          scope: 'Walls',
+          unit: 'each',
+          value: 5,
+          crew_multiplier: 'Y',
+        },
+      ],
+    },
+    scopes: [makeWallScope()],
+    segments: [],
+  })
+
+  assert.equal(result.per_color_supply_groups[0].total_shared_supply_cost, 5)
+})
+
+test('condition_factor stacks with existing wall labor modifiers', () => {
+  const result = calculateWalls({
+    settings: {
+      paint_prod_rate_sqft_per_hour: 100,
+      paint_coats: 2,
+      area_supply_cost_per_sf: 0,
+      per_color_supply_cost: 0,
+    },
+    scopes: [makeWallScope({ height_factor: 1.2, condition_factor: 1.25 })],
+    segments: [],
+  })
+
+  approx(result.scopes[0].raw_paint_hours, 12)
+})
+
 test('RECT scope calculates area, labor, gallons, supplies, and totals', () => {
   const input: WallCalculationInput = {
     settings: {

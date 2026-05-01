@@ -3,6 +3,8 @@
 import { useMemo } from 'react'
 import {
   buildCeilingScopeByRoomId,
+  buildDoorScopeByRoomId,
+  buildDrywallRepairByRoomId,
   buildRoomComplexityFactorByRoomId,
   buildRoomFlagFactorByRoomId,
   buildRoomHeightFactorByRoomId,
@@ -18,7 +20,7 @@ import type {
 export function useEstimateV2RoomDerived(params: {
   collections: Pick<
     EstimateV2EditorCollections,
-    'rooms' | 'scopes' | 'roomFlags' | 'ceilingScopes' | 'trimScopes'
+    'rooms' | 'scopes' | 'roomFlags' | 'ceilingScopes' | 'trimScopes' | 'doorScopes' | 'drywallRepairs'
   >
   meta: Pick<EstimateV2EditorMetaState, 'selectedRoomId' | 'validationIssues' | 'catalogs'>
   wallProductionRateById: ReturnType<
@@ -51,6 +53,14 @@ export function useEstimateV2RoomDerived(params: {
     () => buildTrimScopeByRoomId(collections.trimScopes),
     [collections.trimScopes]
   )
+  const roomDoorScopeByRoomId = useMemo(
+    () => buildDoorScopeByRoomId(collections.doorScopes),
+    [collections.doorScopes]
+  )
+  const roomDrywallRepairByRoomId = useMemo(
+    () => buildDrywallRepairByRoomId(collections.drywallRepairs),
+    [collections.drywallRepairs]
+  )
   const selectedRoomScopes = useMemo(
     () => roomScopeByRoomId.get(meta.selectedRoomId) ?? [],
     [meta.selectedRoomId, roomScopeByRoomId]
@@ -63,13 +73,32 @@ export function useEstimateV2RoomDerived(params: {
     () => roomTrimScopeByRoomId.get(meta.selectedRoomId) ?? [],
     [meta.selectedRoomId, roomTrimScopeByRoomId]
   )
+  const selectedRoomDoorScopes = useMemo(
+    () => roomDoorScopeByRoomId.get(meta.selectedRoomId) ?? [],
+    [meta.selectedRoomId, roomDoorScopeByRoomId]
+  )
+  const selectedRoomDrywallRepairs = useMemo(
+    () => roomDrywallRepairByRoomId.get(meta.selectedRoomId) ?? [],
+    [meta.selectedRoomId, roomDrywallRepairByRoomId]
+  )
+  const selectedRoomWallDrywallRepairs = useMemo(
+    () => selectedRoomDrywallRepairs.filter((repair) => repair.surface === 'wall'),
+    [selectedRoomDrywallRepairs]
+  )
+  const selectedRoomCeilingDrywallRepairs = useMemo(
+    () => selectedRoomDrywallRepairs.filter((repair) => repair.surface === 'ceiling'),
+    [selectedRoomDrywallRepairs]
+  )
   const firstScope = selectedRoomScopes[0] ?? null
   const firstCeilingScope = selectedRoomCeilingScopes[0] ?? null
   const firstTrimScope = selectedRoomTrimScopes[0] ?? null
+  const firstDoorScope = selectedRoomDoorScopes[0] ?? null
   const wallsIncluded = selectedRoomScopes.some((scope) => scope.include === 'Y')
   const ceilingsIncluded = selectedRoomCeilingScopes.some((scope) => scope.include === 'Y')
   const trimsIncluded = selectedRoomTrimScopes.some((scope) => scope.include === 'Y')
+  const doorsIncluded = selectedRoomDoorScopes.some((scope) => scope.include === 'Y')
   const jobTrimsIncluded = collections.trimScopes.some((scope) => scope.include === 'Y')
+  const jobDoorsIncluded = collections.doorScopes.some((scope) => scope.include === 'Y')
   const selectedRoomResolvedMode = selectedRoom
     ? roomModeById.get(selectedRoom.roomId) ?? 'RECT'
     : 'RECT'
@@ -135,16 +164,24 @@ export function useEstimateV2RoomDerived(params: {
     roomScopeByRoomId,
     roomCeilingScopeByRoomId,
     roomTrimScopeByRoomId,
+    roomDoorScopeByRoomId,
     selectedRoomScopes,
     selectedRoomCeilingScopes,
     selectedRoomTrimScopes,
+    selectedRoomDoorScopes,
+    selectedRoomDrywallRepairs,
+    selectedRoomWallDrywallRepairs,
+    selectedRoomCeilingDrywallRepairs,
     firstScope,
     firstCeilingScope,
     firstTrimScope,
+    firstDoorScope,
     wallsIncluded,
     ceilingsIncluded,
     trimsIncluded,
+    doorsIncluded,
     jobTrimsIncluded,
+    jobDoorsIncluded,
     selectedRoomResolvedMode,
     selectedRoomGeometryMode,
     roomComplexityFactorByRoomId,

@@ -18,7 +18,7 @@ export async function loadEstimateV2Response(params: {
     fail(message, message === 'Quote not found' ? 404 : 500)
   }
 
-  const [jobsettings, rooms, roomWallScopes, segments, wallSegments, ceilingSegments, roomCeilingScopes, ceilingScopeSegments, roomTrimScopes, rollers, prejob, trimItems, jobColors, roomFlags, accessFees, other] = await Promise.all([
+  const [jobsettings, rooms, roomWallScopes, segments, wallSegments, ceilingSegments, roomCeilingScopes, ceilingScopeSegments, roomTrimScopes, roomDoorScopes, drywallRepairs, rollers, prejob, trimItems, jobColors, roomFlags, accessFees, other] = await Promise.all([
     supabaseAdmin.from('estimate_jobsettings').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).maybeSingle(),
     supabaseAdmin.from('estimate_rooms').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).order('position', { ascending: true }),
     supabaseAdmin.from('estimate_room_wall_scopes').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('room_id', { ascending: true }).order('position', { ascending: true }),
@@ -28,6 +28,8 @@ export async function loadEstimateV2Response(params: {
     supabaseAdmin.from('estimate_room_ceiling_scopes').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('room_id', { ascending: true }).order('position', { ascending: true }),
     supabaseAdmin.from('estimate_room_ceiling_scope_segments').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('ceiling_scope_id', { ascending: true }).order('position', { ascending: true }),
     supabaseAdmin.from('estimate_room_trim_scopes').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('room_id', { ascending: true }).order('position', { ascending: true }),
+    supabaseAdmin.from('estimate_room_door_scopes').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('room_id', { ascending: true }).order('position', { ascending: true }),
+    supabaseAdmin.from('estimate_drywall_repairs').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('room_id', { ascending: true }).order('position', { ascending: true }),
     supabaseAdmin.from('estimate_rollers').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('position', { ascending: true }),
     supabaseAdmin.from('estimate_prejob').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('position', { ascending: true }),
     supabaseAdmin.from('estimate_trim_items').select('*').eq('org_id', params.orgId).eq('estimate_id', params.estimateId).eq('active', 'Y').order('sort_order', { ascending: true }),
@@ -46,6 +48,8 @@ export async function loadEstimateV2Response(params: {
   if (roomCeilingScopes.error) fail(roomCeilingScopes.error.message, 500)
   if (ceilingScopeSegments.error) fail(ceilingScopeSegments.error.message, 500)
   if (roomTrimScopes.error) fail(roomTrimScopes.error.message, 500)
+  if (roomDoorScopes.error) fail(roomDoorScopes.error.message, 500)
+  if (drywallRepairs.error) fail(drywallRepairs.error.message, 500)
   if (rollers.error) fail(rollers.error.message, 500)
   if (prejob.error) fail(prejob.error.message, 500)
   if (trimItems.error) fail(trimItems.error.message, 500)
@@ -67,7 +71,36 @@ export async function loadEstimateV2Response(params: {
     roomCeilingScopes: (roomCeilingScopes.data ?? []) as Unsafe[],
     ceilingScopeSegments: (ceilingScopeSegments.data ?? []) as Unsafe[],
     roomTrimScopes: (roomTrimScopes.data ?? []) as Unsafe[],
+    roomDoorScopes: (roomDoorScopes.data ?? []) as Unsafe[],
+    drywallRepairs: (drywallRepairs.data ?? []) as Unsafe[],
+    accessFees: (accessFees.data ?? []) as Unsafe[],
+    other: (other.data ?? []) as Unsafe[],
     orgDefaults,
+  })
+  const accessFeeRowsById = new Map(
+    calculated.accessFeeCalculation.rows.map((row) => [row.id, row])
+  )
+  const enrichedAccessFees = ((accessFees.data ?? []) as Unsafe[]).map((row) => {
+    const id = String(row.id ?? '')
+    const calculatedRow = accessFeeRowsById.get(id)
+    if (!calculatedRow) return row
+    return {
+      ...row,
+      label: calculatedRow.label,
+      access_group: calculatedRow.group,
+      catalog_amount: calculatedRow.catalogAmount,
+      calculated_total: calculatedRow.calculatedTotal,
+      effective_total: calculatedRow.total,
+      overridden: calculatedRow.overridden,
+    }
+  })
+  const otherRowsById = new Map(
+    calculated.otherCalculations.scopes.map((row) => [row.id, row])
+  )
+  const enrichedOther = ((other.data ?? []) as Unsafe[]).map((row) => {
+    const id = String(row.id ?? '')
+    const calculatedRow = otherRowsById.get(id)
+    return calculatedRow ? { ...row, ...calculatedRow } : row
   })
 
   return buildEstimateGetResponse({
@@ -84,17 +117,21 @@ export async function loadEstimateV2Response(params: {
       room_ceiling_scopes: calculated.quoteCeilingScopes,
       ceiling_scope_segments: ceilingScopeSegments.data ?? [],
       room_trim_scopes: calculated.quoteTrimScopes,
+      room_door_scopes: calculated.quoteDoorScopes,
+      drywall_repairs: drywallRepairs.data ?? [],
       rollers: rollers.data ?? [],
       prejob: prejob.data ?? [],
       trim_items: trimItems.data ?? [],
       job_colors: jobColors.data ?? [],
       room_flags: roomFlags.data ?? [],
-      access_fees: accessFees.data ?? [],
-      other: other.data ?? [],
+      access_fees: enrichedAccessFees,
+      other: enrichedOther,
     },
     wall_calculations: calculated.wallCalculations,
     ceiling_calculations: calculated.ceilingCalculations,
     trim_calculations: calculated.trimCalculations,
+    door_calculations: calculated.doorCalculations,
+    drywall_calculations: calculated.drywallCalculations,
     trim_paint: calculated.trimPaintInput,
     pricing_summary: calculated.pricingSummary,
   })

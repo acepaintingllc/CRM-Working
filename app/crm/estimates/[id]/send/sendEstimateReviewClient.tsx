@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useMemo } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { templatePresets } from '@/lib/customer-estimates/presets'
+import { EMAIL_BODY_TEXTAREA_MIN_HEIGHT } from '@/app/crm/_components/emailComposerStyles'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import {
@@ -14,6 +14,7 @@ import {
   asText,
   buildCustomerSendReviewDraft,
   buildCustomerSendReviewPreview,
+  resolveCustomerSendTemplatePresets,
   type CustomerSendReviewDraft,
   useCustomerSendWorkflow,
 } from './_shared/customerSendWorkflow'
@@ -51,7 +52,7 @@ const inputBase: CSSProperties = {
 
 const textareaBase: CSSProperties = {
   ...inputBase,
-  minHeight: 96,
+  minHeight: EMAIL_BODY_TEXTAREA_MIN_HEIGHT,
   resize: 'vertical',
   lineHeight: 1.5,
 }
@@ -272,7 +273,9 @@ export default function SendEstimateReviewClient({
   }
 
   const applyTemplate = (templateKey: string) => {
-    const next = templatePresets.find((preset) => preset.key === templateKey) ?? templatePresets[0]
+    const presets = resolveCustomerSendTemplatePresets(data?.settings)
+    const next = presets.find((preset) => preset.key === templateKey) ?? presets[0]
+    if (!next) return
     setForm((prev) =>
       prev
         ? {
@@ -295,10 +298,6 @@ export default function SendEstimateReviewClient({
   }
 
   const downloadPdf = () => {
-    if (publicUrl) {
-      window.open(`${publicUrl}?print=1`, '_blank', 'noopener,noreferrer')
-      return
-    }
     window.print()
   }
 
@@ -350,6 +349,7 @@ export default function SendEstimateReviewClient({
   }
 
   if (!data || !form || !liveDocument) return null
+  const templateOptions = resolveCustomerSendTemplatePresets(data.settings)
 
   return (
     <div className="send-shell" style={{ minHeight: '100vh', background: C.bg, color: C.ink }}>
@@ -378,7 +378,7 @@ export default function SendEstimateReviewClient({
               >
                 {labels.shell}
               </div>
-              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 900, letterSpacing: '-0.03em' }}>
+              <div className="send-page-title" style={{ marginTop: 4, fontSize: 24, fontWeight: 900, letterSpacing: 0 }}>
                 Internal Review
               </div>
               <div style={{ marginTop: 4, fontSize: 13, color: C.ink2 }}>
@@ -470,13 +470,22 @@ export default function SendEstimateReviewClient({
 
               <div style={{ display: 'grid', gap: 12 }}>
                 <div>
+                  <FieldLabel>Quote Name</FieldLabel>
+                  <input
+                    value={form.title}
+                    onChange={(event) => setDraftField('title', event.target.value)}
+                    style={inputBase}
+                  />
+                </div>
+
+                <div>
                   <FieldLabel>Template</FieldLabel>
                   <select
                     value={form.template_key}
                     onChange={(event) => applyTemplate(event.target.value)}
                     style={inputBase}
                   >
-                    {templatePresets.map((preset) => (
+                    {templateOptions.map((preset) => (
                       <option key={preset.key} value={preset.key}>
                         {preset.label}
                       </option>
@@ -529,15 +538,6 @@ export default function SendEstimateReviewClient({
                     style={textareaBase}
                   />
                 </div>
-
-                <div>
-                  <FieldLabel>Document title</FieldLabel>
-                  <input
-                    value={form.title}
-                    onChange={(event) => setDraftField('title', event.target.value)}
-                    style={inputBase}
-                  />
-                </div>
               </div>
 
               <SectionTitle
@@ -571,9 +571,6 @@ export default function SendEstimateReviewClient({
                 <button type="button" disabled={busy} onClick={() => void submit('test')} style={secondaryButton}>
                   Send Test
                 </button>
-                <button type="button" disabled={busy} onClick={() => void submit('send')} style={actionButton}>
-                  {labels.action}
-                </button>
                 <button type="button" disabled={!hasLiveLink} onClick={copyLink} style={secondaryButton}>
                   Copy Link
                 </button>
@@ -593,6 +590,7 @@ export default function SendEstimateReviewClient({
             >
               <div style={{ display: 'grid', gap: 12 }}>
                 <div
+                  className="send-preview-header"
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -621,7 +619,7 @@ export default function SendEstimateReviewClient({
                     {currentTemplate.label} template
                   </div>
                 </div>
-                <div style={{ borderRadius: 18, background: '#f2f0eb', padding: 18 }}>
+                <div className="send-print-document" style={{ borderRadius: 18, background: '#f2f0eb', padding: 18 }}>
                   <CustomerEstimateDocumentView document={liveDocument} showShell={false} />
                 </div>
               </div>
@@ -630,8 +628,78 @@ export default function SendEstimateReviewClient({
         </div>
       </div>
 
+      <div className="send-floating-action">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void submit('send')}
+          style={{
+            ...actionButton,
+            background: 'rgba(33,57,42,0.92)',
+            color: '#f1fff5',
+            minWidth: 180,
+            padding: '13px 18px',
+            boxShadow: '0 10px 22px rgba(0,0,0,0.32)',
+          }}
+        >
+          {labels.action}
+        </button>
+      </div>
+
       <style jsx global>{`
+        .send-floating-action {
+          bottom: 24px;
+          display: flex;
+          justify-content: flex-end;
+          pointer-events: none;
+          position: fixed;
+          right: 24px;
+          z-index: 40;
+        }
+        .send-floating-action button {
+          pointer-events: auto;
+        }
+
+        @media screen and (max-width: 720px) {
+          .send-page {
+            padding: 12px 12px 88px !important;
+          }
+          .send-topbar {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+            gap: 12px !important;
+            padding: 14px !important;
+          }
+          .send-page-title {
+            font-size: 20px !important;
+            line-height: 1.15 !important;
+          }
+          .send-floating-action {
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+          }
+          .send-floating-action button {
+            width: 100%;
+          }
+        }
+
         @media print {
+          @page {
+            margin: 0;
+          }
+          html,
+          body {
+            background: #fff !important;
+            margin: 0 !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          .send-print-document,
+          .send-print-document * {
+            visibility: visible !important;
+          }
           .send-shell {
             background: #fff !important;
             color: #111 !important;
@@ -643,7 +711,8 @@ export default function SendEstimateReviewClient({
           .send-topbar,
           .send-controls,
           .send-buttons,
-          .send-preview > div:first-child {
+          .send-floating-action,
+          .send-preview-header {
             display: none !important;
           }
           .send-preview {
@@ -653,6 +722,28 @@ export default function SendEstimateReviewClient({
             border: none !important;
             background: #fff !important;
             padding: 0 !important;
+          }
+          .send-print-document {
+            background: #fff !important;
+            border-radius: 0 !important;
+            left: 0 !important;
+            padding: 0 !important;
+            position: absolute !important;
+            top: 0 !important;
+            width: 100% !important;
+          }
+          .send-print-document > div {
+            gap: 0 !important;
+          }
+          .send-print-document > div > div {
+            border: none !important;
+            box-shadow: none !important;
+            break-after: page;
+            page-break-after: always;
+          }
+          .send-print-document > div > div:last-child {
+            break-after: auto;
+            page-break-after: auto;
           }
           a[href]:after {
             content: '';

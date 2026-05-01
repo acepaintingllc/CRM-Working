@@ -73,12 +73,14 @@ describe('quote home summary builders', () => {
         summary,
         jobs,
         selectedJobVersions: null,
+        latestVersion: null,
       }),
     ).toEqual({
       summary,
       jobs,
       selected_job_id: 'job-1',
       selected_job_versions: null,
+      latest_version: null,
     })
   })
 

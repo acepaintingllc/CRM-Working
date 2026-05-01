@@ -7,12 +7,15 @@ import {
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2CeilingsSection } from './EstimateV2CeilingsSection'
 import { EstimateV2CeilingsSectionBody } from './EstimateV2CeilingsSectionBody'
+import { EstimateV2DoorsSection } from './EstimateV2DoorsSection'
+import { EstimateV2DoorsSectionBody } from './EstimateV2DoorsSectionBody'
 import { EstimateV2TrimSection } from './EstimateV2TrimSection'
 import { EstimateV2TrimSectionBody } from './EstimateV2TrimSectionBody'
 import { EstimateV2WallsSection } from './EstimateV2WallsSection'
 import { EstimateV2WallsSectionBody } from './EstimateV2WallsSectionBody'
 import type {
   EstimateV2EditorCeilingsVm,
+  EstimateV2EditorDoorsVm,
   EstimateV2EditorRoomVm,
   EstimateV2EditorSummaryVm,
   EstimateV2EditorTrimVm,
@@ -27,9 +30,11 @@ export function EstimateV2EditorScopeSectionStack({
   wallsVm,
   ceilingsVm,
   trimVm,
+  doorsVm,
   wallsSectionRef,
   ceilingsSectionRef,
   trimSectionRef,
+  doorsSectionRef,
   openWallsSection,
   setOpenWallsSection,
   openAdvanced,
@@ -40,6 +45,12 @@ export function EstimateV2EditorScopeSectionStack({
   setOpenCeilingAdvanced,
   openTrimSection,
   setOpenTrimSection,
+  openTrimAdvanced,
+  setOpenTrimAdvanced,
+  openDoorsSection,
+  setOpenDoorsSection,
+  openDoorsAdvanced,
+  setOpenDoorsAdvanced,
   toDisplayNumber,
 }: {
   styles: EstimateV2EditorPageStyles
@@ -48,9 +59,11 @@ export function EstimateV2EditorScopeSectionStack({
   wallsVm: EstimateV2EditorWallsVm
   ceilingsVm: EstimateV2EditorCeilingsVm
   trimVm: EstimateV2EditorTrimVm
+  doorsVm: EstimateV2EditorDoorsVm
   wallsSectionRef: MutableRefObject<HTMLDivElement | null>
   ceilingsSectionRef: MutableRefObject<HTMLDivElement | null>
   trimSectionRef: MutableRefObject<HTMLDivElement | null>
+  doorsSectionRef: MutableRefObject<HTMLDivElement | null>
   openWallsSection: Record<string, boolean>
   setOpenWallsSection: Dispatch<SetStateAction<Record<string, boolean>>>
   openAdvanced: Record<string, boolean>
@@ -61,6 +74,12 @@ export function EstimateV2EditorScopeSectionStack({
   setOpenCeilingAdvanced: Dispatch<SetStateAction<Record<string, boolean>>>
   openTrimSection: Record<string, boolean>
   setOpenTrimSection: Dispatch<SetStateAction<Record<string, boolean>>>
+  openTrimAdvanced: Record<string, boolean>
+  setOpenTrimAdvanced: Dispatch<SetStateAction<Record<string, boolean>>>
+  openDoorsSection: Record<string, boolean>
+  setOpenDoorsSection: Dispatch<SetStateAction<Record<string, boolean>>>
+  openDoorsAdvanced: Record<string, boolean>
+  setOpenDoorsAdvanced: Dispatch<SetStateAction<Record<string, boolean>>>
   toDisplayNumber: (value: number | null | undefined) => string
 }) {
   const selectedRoom = roomVm.selectedRoom
@@ -70,6 +89,7 @@ export function EstimateV2EditorScopeSectionStack({
   const wallsRowExpanded = openWallsSection[selectedRoom.roomId] ?? true
   const ceilingsRowExpanded = openCeilingSection[selectedRoom.roomId] ?? true
   const trimsRowExpanded = openTrimSection[selectedRoom.roomId] ?? true
+  const doorsRowExpanded = openDoorsSection[selectedRoom.roomId] ?? true
 
   return (
     <ScopeAccordionList>
@@ -135,11 +155,40 @@ export function EstimateV2EditorScopeSectionStack({
           }
           summary={<ScopeSummaryChips chips={summaryVm.trim.chips} chipStyle={styles.scopePill} />}
         >
-          <EstimateV2TrimSectionBody styles={styles} trimVm={trimVm} toDisplayNumber={toDisplayNumber} />
+          <EstimateV2TrimSectionBody
+            styles={styles}
+            trimVm={trimVm}
+            openTrimAdvanced={openTrimAdvanced}
+            setOpenTrimAdvanced={setOpenTrimAdvanced}
+            toDisplayNumber={toDisplayNumber}
+          />
         </EstimateV2TrimSection>
       )}
 
-      {!wallsVm.wallsIncluded && !ceilingsVm.ceilingsIncluded && !trimVm.trimsIncluded && (
+      {doorsVm.doorsIncluded && (
+        <EstimateV2DoorsSection
+          sectionRef={doorsSectionRef}
+          styles={styles}
+          expanded={doorsRowExpanded}
+          onToggle={() =>
+            setOpenDoorsSection((prev) => ({
+              ...prev,
+              [selectedRoom.roomId]: !doorsRowExpanded,
+            }))
+          }
+          summary={<ScopeSummaryChips chips={summaryVm.doors?.chips ?? []} chipStyle={styles.scopePill} />}
+        >
+          <EstimateV2DoorsSectionBody
+            styles={styles}
+            doorsVm={doorsVm}
+            openDoorsAdvanced={openDoorsAdvanced}
+            setOpenDoorsAdvanced={setOpenDoorsAdvanced}
+            toDisplayNumber={toDisplayNumber}
+          />
+        </EstimateV2DoorsSection>
+      )}
+
+      {!wallsVm.wallsIncluded && !ceilingsVm.ceilingsIncluded && !trimVm.trimsIncluded && !doorsVm.doorsIncluded && (
         <div style={{ ...styles.panel, borderColor: 'var(--v2-line)', color: 'var(--v2-ink-3)' }}>
           Enable at least one scope in the room header to start entering scope-specific details.
         </div>

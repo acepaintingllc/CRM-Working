@@ -19,7 +19,7 @@ import type {
 export type QuoteRatesFiltersVm = {
   search: string
   statusFilter: import('./quoteRatesPageConfig').StatusFilter
-  activeTab: import('@/types/estimator/ratesFlags').RatesFlagsTab
+  activeTab: import('./quoteRatesPageConfig').QuoteRatesTopTab
   rateSection: import('./quoteRatesPageConfig').RateSectionKey
   rateCategory: import('@/types/estimator/ratesFlags').RatesFlagsCategoryKey
   flagsSection: import('./quoteRatesPageConfig').FlagsSectionKey

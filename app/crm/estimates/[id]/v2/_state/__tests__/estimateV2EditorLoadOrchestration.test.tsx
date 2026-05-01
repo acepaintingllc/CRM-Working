@@ -17,12 +17,35 @@ describe('buildEstimateV2EditorLoadState', () => {
         room_ceiling_scopes: fixture.summaryData.inputs.room_ceiling_scopes ?? [],
         segments: fixture.summaryData.inputs.segments ?? [],
         room_trim_scopes: fixture.summaryData.inputs.room_trim_scopes ?? [],
-        rollers: fixture.summaryData.inputs.rollers ?? [],
+        rollers: fixture.currentSnapshot.payload.rollers.map((roller) =>
+          roller.scope === 'Wall'
+            ? { ...roller, wall_color_id: String(roller.wall_color_id ?? '').toLowerCase() }
+            : { ...roller, wall_color_id: 'STALE-NON-WALL-TARGET' }
+        ),
+        access_fees: [
+          {
+            id: 'access-fee-2',
+            room_id: null,
+            access_fee_id: ' scaffold ',
+            qty: '3',
+            actual_cost_override: '',
+            notes: 'Exterior access',
+            position: 3,
+          },
+          {
+            id: 'access-fee-blank',
+            room_id: 'R001',
+            access_fee_id: '',
+            qty: '4',
+            actual_cost_override: '99',
+            notes: 'Ignore blank access fee id',
+            position: 1,
+          },
+        ],
         prejob: fixture.summaryData.inputs.prejob ?? [],
         trim_items: fixture.summaryData.inputs.trim_items ?? [],
         job_colors: fixture.summaryData.inputs.job_colors ?? [],
         room_flags: fixture.summaryData.inputs.room_flags ?? [],
-        access_fees: fixture.summaryData.inputs.access_fees ?? [],
         other: fixture.summaryData.inputs.other ?? [],
         org_defaults: fixture.summaryData.inputs.org_defaults ?? null,
         jobsettings: fixture.summaryData.inputs.jobsettings ?? null,
@@ -48,6 +71,37 @@ describe('buildEstimateV2EditorLoadState', () => {
 
     expect(result.collections.rooms).toHaveLength(fixture.rooms.length)
     expect(result.collections.scopes).toHaveLength(fixture.scopes.length)
+    expect(result.collections.rollers).toEqual(
+      fixture.rollers.map((roller) =>
+        roller.scope === 'Wall' ? roller : { ...roller, wallColorId: '' }
+      )
+    )
+    expect(result.meta.lastSavedSnapshot.payload.rollers).toEqual(
+      fixture.currentSnapshot.payload.rollers
+    )
+    expect(result.collections.accessFees).toEqual([
+      {
+        id: 'access-fee-2',
+        roomId: '',
+        accessFeeId: 'SCAFFOLD',
+        qty: '3',
+        actualCostOverride: '',
+        notes: 'Exterior access',
+        position: 3,
+      },
+    ])
+    expect(result.meta.lastSavedSnapshot.payload.access_fees).toEqual([
+      {
+        id: 'access-fee-2',
+        room_id: null,
+        access_fee_id: 'SCAFFOLD',
+        qty: 3,
+        actual_cost_override: null,
+        notes: 'Exterior access',
+        position: 0,
+        active: 'Y',
+      },
+    ])
     expect(result.collections.trimScopes).toHaveLength(fixture.trimScopes.length)
     expect(result.meta.estimate?.id).toBe(fixture.estimate.id)
     expect(result.meta.customerDraft.name).toBe(fixture.job.customer_name)

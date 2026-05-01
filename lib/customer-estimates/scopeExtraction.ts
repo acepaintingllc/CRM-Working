@@ -7,12 +7,15 @@ import {
 } from './buildShared.ts'
 import {
   type NormalizedJobSettings,
+  type NormalizedDoorScopeRow,
+  type NormalizedDrywallScopeRow,
   type NormalizedOtherRow,
   type NormalizedPaintCatalogRow,
   type NormalizedPaintScopeRow,
   type NormalizedRoomRow,
   type NormalizedTrimCatalogRow,
   type NormalizedTrimItemRow,
+  type NormalizedTrimScopeRow,
   jobSettingsPaintProductId,
   paintNameMap,
   resolvePaintProductLabel,
@@ -98,6 +101,16 @@ export function createScopeBuckets(): ScopeBuckets {
       primeModes: [],
     },
     doors: {
+      texts: [],
+      price: 0,
+      rooms: [],
+      paintProducts: [],
+      subjectLabels: [],
+      notes: [],
+      coats: [],
+      primeModes: [],
+    },
+    drywall: {
       texts: [],
       price: 0,
       rooms: [],
@@ -251,7 +264,7 @@ function collectTrimRows(params: {
     })
     appendScopeBucket(params.sectionBuckets, params.scope, row.price, {
       room: roomName,
-      subjectLabel: row.label,
+      subjectLabel: params.scope === 'trim' ? undefined : row.label,
       paintProduct,
       note: notes.join(', '),
       coat: row.coats,
@@ -260,19 +273,84 @@ function collectTrimRows(params: {
   }
 }
 
+function collectDoorScopeRows(params: {
+  sectionBuckets: ScopeBuckets
+  rows: NormalizedDoorScopeRow[]
+  roomLabels: Map<string, string>
+  paintLabels: Map<string, string>
+  trimPaintProductId: string | null
+}) {
+  for (const row of params.rows.filter((candidate) => candidate.included)) {
+    const roomName = params.roomLabels.get(row.roomId) ?? humanizeRoomCode(row.roomId)
+    const notes = prepFragments(row.notes)
+    const paintProduct = resolvePaintProductLabel({
+      paintProductId: row.paintProductId || params.trimPaintProductId,
+      fallbackLabel: row.paintProductLabel,
+      paintLabelsById: params.paintLabels,
+    })
+    appendScopeBucket(params.sectionBuckets, 'doors', row.price, {
+      room: roomName,
+      subjectLabel: row.doorLabel,
+      paintProduct,
+      note: notes.join(', '),
+      coat: row.coats,
+      primeMode: row.primeMode,
+    })
+  }
+}
+
+function collectDrywallScopeRows(params: {
+  sectionBuckets: ScopeBuckets
+  rows: NormalizedDrywallScopeRow[]
+  roomLabels: Map<string, string>
+}) {
+  for (const row of params.rows.filter((candidate) => candidate.included)) {
+    const roomName = params.roomLabels.get(row.roomId) ?? humanizeRoomCode(row.roomId)
+    const qtyText = row.quantity != null && row.unit ? `${row.quantity} ${row.unit}` : ''
+    appendScopeBucket(params.sectionBuckets, 'drywall', row.price, {
+      room: roomName,
+      subjectLabel: textJoin([row.surface, row.repairLabel, qtyText]),
+      note: prepFragments(row.notes).join(', '),
+    })
+  }
+}
+
 function extractTrimRows(params: {
   sectionBuckets: ScopeBuckets
+  roomTrimScopes: NormalizedTrimScopeRow[]
+  roomDoorScopes?: NormalizedDoorScopeRow[]
+  roomDrywallScopes?: NormalizedDrywallScopeRow[]
   trimItems: NormalizedTrimItemRow[]
   trimMetaById: Map<string, NormalizedTrimCatalogRow>
   roomLabels: Map<string, string>
   paintLabels: Map<string, string>
   trimPaintProductId: string | null
 }) {
-  const trimTypeRows = classifyTrimRows(params)
+  const trimTypeRows = classifyTrimRows({
+    ...params,
+    trimItems: [
+      ...params.roomTrimScopes.filter((row) => row.included),
+      ...params.trimItems,
+    ],
+  })
+  const trimCategories = new Set(['baseboard', 'crown', 'window_casing'])
+  const doorCategories = new Set(['door', 'door_casing'])
+  const cabinetCategories = new Set(['cabinet'])
   collectTrimRows({
     sectionBuckets: params.sectionBuckets,
     scope: 'trim',
-    rows: trimTypeRows.filter((row) => ['baseboard', 'crown', 'window_casing'].includes(row.category)),
+    rows: trimTypeRows.filter(
+      (row) =>
+        trimCategories.has(row.category) ||
+        (!doorCategories.has(row.category) && !cabinetCategories.has(row.category))
+    ),
+    roomLabels: params.roomLabels,
+    paintLabels: params.paintLabels,
+    trimPaintProductId: params.trimPaintProductId,
+  })
+  collectDoorScopeRows({
+    sectionBuckets: params.sectionBuckets,
+    rows: params.roomDoorScopes ?? [],
     roomLabels: params.roomLabels,
     paintLabels: params.paintLabels,
     trimPaintProductId: params.trimPaintProductId,
@@ -280,7 +358,7 @@ function extractTrimRows(params: {
   collectTrimRows({
     sectionBuckets: params.sectionBuckets,
     scope: 'doors',
-    rows: trimTypeRows.filter((row) => ['door', 'door_casing'].includes(row.category)),
+    rows: trimTypeRows.filter((row) => doorCategories.has(row.category)),
     roomLabels: params.roomLabels,
     paintLabels: params.paintLabels,
     trimPaintProductId: params.trimPaintProductId,
@@ -288,7 +366,7 @@ function extractTrimRows(params: {
   collectTrimRows({
     sectionBuckets: params.sectionBuckets,
     scope: 'cabinets',
-    rows: trimTypeRows.filter((row) => row.category === 'cabinet'),
+    rows: trimTypeRows.filter((row) => cabinetCategories.has(row.category)),
     roomLabels: params.roomLabels,
     paintLabels: params.paintLabels,
     trimPaintProductId: params.trimPaintProductId,
@@ -318,7 +396,9 @@ export function extractScopeBuckets(params: {
   rooms: NormalizedRoomRow[]
   roomWallScopes: NormalizedPaintScopeRow[]
   roomCeilingScopes: NormalizedPaintScopeRow[]
-  roomTrimScopes: { roomId: string; included: boolean }[]
+  roomTrimScopes: NormalizedTrimScopeRow[]
+  roomDoorScopes?: NormalizedDoorScopeRow[]
+  roomDrywallScopes?: NormalizedDrywallScopeRow[]
   trimItems: NormalizedTrimItemRow[]
   otherRows: NormalizedOtherRow[]
   paintCatalogRows: NormalizedPaintCatalogRow[]
@@ -344,11 +424,18 @@ export function extractScopeBuckets(params: {
   })
   extractTrimRows({
     sectionBuckets,
+    roomTrimScopes: params.roomTrimScopes,
+    roomDoorScopes: params.roomDoorScopes,
     trimItems: params.trimItems,
     trimMetaById,
     roomLabels,
     paintLabels,
     trimPaintProductId,
+  })
+  collectDrywallScopeRows({
+    sectionBuckets,
+    rows: params.roomDrywallScopes ?? [],
+    roomLabels,
   })
   extractProductRows({ sectionBuckets, otherRows: params.otherRows })
 

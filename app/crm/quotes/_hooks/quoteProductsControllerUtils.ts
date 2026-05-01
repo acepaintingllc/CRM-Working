@@ -5,12 +5,14 @@ import {
   type ProductFamily,
   type QuoteProductQuery,
   type QuoteProductRow,
+  type QuoteProductScopeFilter,
   type QuoteProductStatusFilter,
 } from '@/lib/quotes/productsForm'
 
 type QuoteProductsNavigationState = {
   activeFamily: ProductFamily
   statusFilter: QuoteProductStatusFilter
+  scopeFilter: QuoteProductScopeFilter
   search: string
   debouncedSearch: string
 }
@@ -26,6 +28,7 @@ function buildQuoteProductsMutationQuery(
   return {
     family: navigation.activeFamily,
     status: navigation.statusFilter,
+    ...(navigation.scopeFilter === 'all' ? {} : { scope: navigation.scopeFilter }),
     search: navigation.debouncedSearch || null,
   }
 }
@@ -93,6 +96,7 @@ export function buildCreatedQuoteProductResourcePatch(params: {
   const nextNavigation = {
     activeFamily: params.navigation.activeFamily,
     statusFilter: 'all' as const,
+    scopeFilter: 'all' as const,
     search: '',
     debouncedSearch: '',
   }

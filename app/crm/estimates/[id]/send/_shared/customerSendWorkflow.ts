@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
 import { assembleCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
-import { templatePresets } from '@/lib/customer-estimates/presets'
+import { templatePresets, type TemplatePreset } from '@/lib/customer-estimates/presets'
 import {
   type CustomerSendMutationResponse,
   loadCustomerSendPage,
@@ -16,6 +16,7 @@ import type {
   CustomerEstimateSectionKey,
   Unsafe,
 } from '@/lib/customer-estimates/types'
+import type { QuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
 import {
   estimateRouteFamily,
   type EstimateRouteFamily,
@@ -69,6 +70,8 @@ export type CustomerSendPageData = {
     default_template_key?: string | null
     quote_validity_days?: number | null
     terms_text?: string | null
+    terms_sections?: QuoteTermsSections | null
+    template_presets?: TemplatePreset[] | null
     updated_at?: string | null
   } | null
   draft: Record<string, unknown>
@@ -124,6 +127,28 @@ export function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
 }
 
+const EMAIL_PATTERN = /^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/
+
+export function isValidRecipientList(value: string) {
+  const trimmed = asText(value)
+  if (!trimmed) return true
+  return trimmed
+    .split(/[;,]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .every((recipient) => EMAIL_PATTERN.test(recipient))
+}
+
+function defaultInternalBcc(data: Pick<CustomerSendPageData, 'company'>) {
+  return asText(data.company.business_email)
+}
+
+export function isPositiveInteger(value: string) {
+  const normalized = asText(value)
+  if (!normalized) return false
+  return /^[1-9]\d*$/.test(normalized)
+}
+
 export function customerSendUrl(
   estimateId: string,
   catalogSource?: CustomerSendRouteCatalogSource,
@@ -138,6 +163,25 @@ export function sectionDraftText(
 ) {
   const scope = (draft?.scope_text_edits as Record<string, unknown> | null | undefined) ?? {}
   return asText(scope[key])
+}
+
+export function sectionDocumentText(
+  document: Pick<CustomerEstimateDocument, 'scopes'> | null | undefined,
+  key: CustomerEstimateSectionKey
+) {
+  return asText(document?.scopes?.find((section) => section.key === key)?.text)
+}
+
+export function editableScopeText(params: {
+  data: CustomerSendPageData
+  draft: Record<string, unknown>
+  key: CustomerEstimateSectionKey
+  keepScopeWordingDrafts: boolean
+}) {
+  const draftText = params.keepScopeWordingDrafts
+    ? sectionDraftText(params.draft, params.key)
+    : ''
+  return draftText || sectionDocumentText(params.data.document, params.key)
 }
 
 export function normalizeCustomerSendVersion(
@@ -173,37 +217,55 @@ export function deriveCustomerSendLabels(
       }
 }
 
+export function resolveCustomerSendTemplatePresets(
+  settings: CustomerSendPageData['settings'] | null | undefined
+) {
+  return Array.isArray(settings?.template_presets) && settings.template_presets.length > 0
+    ? settings.template_presets
+    : templatePresets
+}
+
 export function buildCustomerSendComposerDraft(
   data: CustomerSendPageData,
   draft: Record<string, unknown>,
   keepScopeWordingDrafts: boolean
 ): CustomerSendComposerDraft {
+  const settings = data.settings ?? {}
+  const presets = resolveCustomerSendTemplatePresets(settings)
+  const preset =
+    presets.find(
+      (item) =>
+        item.key === asText(draft.template_key) ||
+        item.key === asText(settings.default_template_key)
+    ) ?? presets[0] ?? templatePresets[0]
+
   return {
     to_email:
       asText(draft.to_email) ||
       asText(data.job.customer_email) ||
       asText(data.document.customer.email),
     cc_email: asText(draft.cc_email),
-    bcc_email: asText(draft.bcc_email),
+    bcc_email: asText(draft.bcc_email) || defaultInternalBcc(data),
     subject:
       asText(draft.subject) ||
-      `${asText(data.document.meta.title) || 'Quote'} from ${
-        asText(data.company.business_name) || 'ACE Painting'
-      }`,
+      preset.subject ||
+      `${asText(data.document.meta.title) || 'Quote'} from ${asText(data.company.business_name) || 'ACE Painting'}`,
     body:
       asText(draft.body) ||
+      preset.body ||
       `Hello ${asText(data.document.customer.name) || 'there'},\n\nYour quote is ready for review.\n\nThank you.`,
-    template_key: asText(draft.template_key) || 'default',
+    template_key: asText(draft.template_key) || preset.key,
     title: asText(draft.title) || asText(data.document.meta.title),
     quote_validity_days:
       asText(draft.quote_validity_days) || String(data.document.quote_validity_days ?? 90),
     scope_text_edits: {
-      walls: keepScopeWordingDrafts ? sectionDraftText(draft, 'walls') : '',
-      ceilings: keepScopeWordingDrafts ? sectionDraftText(draft, 'ceilings') : '',
-      trim: keepScopeWordingDrafts ? sectionDraftText(draft, 'trim') : '',
-      doors: keepScopeWordingDrafts ? sectionDraftText(draft, 'doors') : '',
-      cabinets: keepScopeWordingDrafts ? sectionDraftText(draft, 'cabinets') : '',
-      other: keepScopeWordingDrafts ? sectionDraftText(draft, 'other') : '',
+      walls: editableScopeText({ data, draft, key: 'walls', keepScopeWordingDrafts }),
+      ceilings: editableScopeText({ data, draft, key: 'ceilings', keepScopeWordingDrafts }),
+      trim: editableScopeText({ data, draft, key: 'trim', keepScopeWordingDrafts }),
+      doors: editableScopeText({ data, draft, key: 'doors', keepScopeWordingDrafts }),
+      drywall: editableScopeText({ data, draft, key: 'drywall', keepScopeWordingDrafts }),
+      cabinets: editableScopeText({ data, draft, key: 'cabinets', keepScopeWordingDrafts }),
+      other: editableScopeText({ data, draft, key: 'other', keepScopeWordingDrafts }),
     },
   }
 }
@@ -213,12 +275,13 @@ export function buildCustomerSendReviewDraft(
   draft: Record<string, unknown>
 ): CustomerSendReviewDraft {
   const settings = data.settings ?? {}
+  const presets = resolveCustomerSendTemplatePresets(settings)
   const preset =
-    templatePresets.find(
+    presets.find(
       (item) =>
         item.key === asText(draft.template_key) ||
         item.key === asText(settings.default_template_key)
-    ) ?? templatePresets[0]
+    ) ?? presets[0] ?? templatePresets[0]
 
   return {
     to_email:
@@ -226,18 +289,19 @@ export function buildCustomerSendReviewDraft(
       asText(data.job.customer_email) ||
       asText(data.document.customer.email),
     cc_email: asText(draft.cc_email),
-    bcc_email: asText(draft.bcc_email),
+    bcc_email: asText(draft.bcc_email) || defaultInternalBcc(data),
     template_key: preset.key,
     subject: asText(draft.subject) || preset.subject,
     body: asText(draft.body) || preset.body,
     title: asText(draft.title) || asText(data.document.meta.title),
     scope_text_edits: {
-      walls: sectionDraftText(draft, 'walls'),
-      ceilings: sectionDraftText(draft, 'ceilings'),
-      trim: sectionDraftText(draft, 'trim'),
-      doors: sectionDraftText(draft, 'doors'),
-      cabinets: sectionDraftText(draft, 'cabinets'),
-      other: sectionDraftText(draft, 'other'),
+      walls: editableScopeText({ data, draft, key: 'walls', keepScopeWordingDrafts: true }),
+      ceilings: editableScopeText({ data, draft, key: 'ceilings', keepScopeWordingDrafts: true }),
+      trim: editableScopeText({ data, draft, key: 'trim', keepScopeWordingDrafts: true }),
+      doors: editableScopeText({ data, draft, key: 'doors', keepScopeWordingDrafts: true }),
+      drywall: editableScopeText({ data, draft, key: 'drywall', keepScopeWordingDrafts: true }),
+      cabinets: editableScopeText({ data, draft, key: 'cabinets', keepScopeWordingDrafts: true }),
+      other: editableScopeText({ data, draft, key: 'other', keepScopeWordingDrafts: true }),
     },
   }
 }
@@ -258,6 +322,7 @@ export function buildCustomerSendComposerPreview(
       pricingSummary: data.pricing_summary
         ? { finalTotal: data.pricing_summary.finalTotal ?? null }
         : null,
+      settings: data.settings ?? undefined,
       overrides: {
         title: form.title,
         scope_text_edits: form.scope_text_edits,
@@ -376,8 +441,9 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
   }, [buildDocument, data, form, version])
 
   const currentTemplate = useMemo(() => {
-    return templatePresets.find((preset) => preset.key === form?.template_key) ?? templatePresets[0]
-  }, [form?.template_key])
+    const presets = resolveCustomerSendTemplatePresets(data?.settings)
+    return presets.find((preset) => preset.key === form?.template_key) ?? presets[0] ?? templatePresets[0]
+  }, [data?.settings, form?.template_key])
 
   const isLive = asText(version?.status) !== 'draft'
   const hasLiveLink = Boolean(publicUrl)
@@ -410,16 +476,57 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
   }, [catalogSource, draftPayload, estimateId, form, publicUrl, routeFamily])
 
   const submit = useCallback(
-    async (mode: 'test' | 'send') => {
+    async (mode: 'test' | 'send', options?: { testRecipient?: string }) => {
       if (!form) return false
-      if (mode === 'test' && !form.to_email.trim()) {
-        setError('To email is required for a test send.')
+      if (!isValidRecipientList(form.to_email)) {
+        setError('Enter a valid To email address list.')
+        return false
+      }
+      if (!isValidRecipientList(form.cc_email)) {
+        setError('Enter a valid CC email address list.')
+        return false
+      }
+      if (!isValidRecipientList(form.bcc_email)) {
+        setError('Enter a valid BCC email address list.')
+        return false
+      }
+      if (!asText(form.subject)) {
+        setError('Subject is required.')
+        return false
+      }
+      if ('quote_validity_days' in form) {
+        const days = (form as unknown as { quote_validity_days?: string }).quote_validity_days
+        if (typeof days === 'string' && !isPositiveInteger(days)) {
+          setError('Validity days must be a whole number greater than 0.')
+          return false
+        }
+      }
+      const testRecipient = asText(options?.testRecipient)
+      if (mode === 'test' && !testRecipient) {
+        setError('Test recipient email is required.')
+        return false
+      }
+      if (mode === 'test' && !isValidRecipientList(testRecipient)) {
+        setError('Enter a valid test recipient email.')
+        return false
+      }
+      if (mode === 'test' && testRecipient.toLowerCase() === form.to_email.trim().toLowerCase()) {
+        setError('Use an internal test recipient, not the customer To address.')
         return false
       }
 
       setBusy(true)
       setError(null)
       setMessage(null)
+      const submitForm =
+        mode === 'test'
+          ? ({
+              ...form,
+              to_email: testRecipient,
+              cc_email: '',
+              bcc_email: '',
+            } as TForm)
+          : form
 
       let payload: CustomerSendMutationResponse
       try {
@@ -427,7 +534,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
           customerSendUrl(estimateId, catalogSource, routeFamily),
           {
             mode,
-            draft: draftPayload(form),
+            draft: draftPayload(submitForm),
           }
         )
       } catch (submitError) {
@@ -446,6 +553,14 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
         setVersion(
           normalizeCustomerSendVersion(payload.version, mode === 'send' ? 'sent' : 'draft')
         )
+      }
+      if (mode === 'send' && asText(payload.delivery_error)) {
+        setError(
+          `${labels.document} link is live, but email delivery failed: ${asText(payload.delivery_error)}`
+        )
+        setMessage('Customer link created. Copy the link or retry sending the email.')
+        setBusy(false)
+        return false
       }
       setBusy(false)
       return true

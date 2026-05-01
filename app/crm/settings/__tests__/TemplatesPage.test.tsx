@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentPropsWithoutRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultQuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
+import { templatePresets } from '@/lib/customer-estimates/presets'
+import QuoteV2SettingsPage from '../quote-v2/page'
 import TemplatesLibraryPage from '../templates/page'
 
 const { mockAuthedFetch } = vi.hoisted(() => ({
@@ -41,7 +44,24 @@ describe('TemplatesLibraryPage', () => {
     cleanup()
   })
 
-  it('loads quote send defaults, keeps save disabled until dirty, and surfaces save errors', async () => {
+  it('renders stage template navigation only', () => {
+    render(<TemplatesLibraryPage />)
+
+    expect(screen.getByRole('heading', { name: 'Templates and Send Defaults' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Email templates/i }).getAttribute('href')).toBe('/crm/email-templates')
+  })
+})
+
+describe('QuoteV2SettingsPage', () => {
+  beforeEach(() => {
+    mockAuthedFetch.mockReset()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('loads quote v2 settings, keeps save disabled until dirty, and surfaces save errors', async () => {
     mockAuthedFetch
       .mockResolvedValueOnce(
         createResponse({
@@ -49,6 +69,8 @@ describe('TemplatesLibraryPage', () => {
             default_template_key: 'default',
             quote_validity_days: 90,
             terms_text: 'Terms',
+            terms_sections: defaultQuoteTermsSections,
+            template_presets: templatePresets,
           },
         })
       )
@@ -58,17 +80,17 @@ describe('TemplatesLibraryPage', () => {
         }, false)
       )
 
-    render(<TemplatesLibraryPage />)
+    render(<QuoteV2SettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('Terms')).toBeTruthy()
+      expect(screen.getByDisplayValue(defaultQuoteTermsSections.insurance)).toBeTruthy()
     })
 
     const saveButton = screen.getByRole('button', { name: 'Save defaults' }) as HTMLButtonElement
     expect(saveButton.disabled).toBe(true)
 
-    fireEvent.change(screen.getByDisplayValue('Terms'), {
-      target: { value: 'Updated terms' },
+    fireEvent.change(screen.getByDisplayValue(defaultQuoteTermsSections.insurance), {
+      target: { value: 'Updated insurance terms' },
     })
 
     expect(saveButton.disabled).toBe(false)
@@ -79,10 +101,10 @@ describe('TemplatesLibraryPage', () => {
     })
   })
 
-  it('shows an explicit retry state when quote send defaults fail to load', async () => {
+  it('shows an explicit retry state when quote v2 settings fail to load', async () => {
     mockAuthedFetch.mockRejectedValue(new Error('Failed to reach API'))
 
-    render(<TemplatesLibraryPage />)
+    render(<QuoteV2SettingsPage />)
 
     await waitFor(() => {
       expect(screen.getByText('Failed to reach API')).toBeTruthy()

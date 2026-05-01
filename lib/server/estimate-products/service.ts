@@ -1,6 +1,7 @@
 import {
   createEmptyQuoteProductDraft,
   isQuoteProductFamily,
+  isQuoteProductScope,
   normalizeQuoteProductSearch,
   normalizeQuoteProductStatusFilter,
   quoteProductPatchToDraft,
@@ -37,11 +38,13 @@ type EstimateProductServiceDeps = Partial<EstimateProductRepositoryDeps>
 
 function toListFilters(searchParams?: URLSearchParams | null): EstimateProductListFilters {
   const requestedFamily = searchParams?.get('family')
+  const requestedScope = searchParams?.get('scope')
 
   return {
     status: normalizeQuoteProductStatusFilter(searchParams?.get('status'), 'active'),
     family:
       requestedFamily && isQuoteProductFamily(requestedFamily) ? requestedFamily : null,
+    scope: requestedScope && isQuoteProductScope(requestedScope) ? requestedScope : null,
     search: normalizeQuoteProductSearch(searchParams?.get('search')),
   }
 }

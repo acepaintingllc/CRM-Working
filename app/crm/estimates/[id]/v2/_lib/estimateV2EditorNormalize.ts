@@ -1,12 +1,19 @@
 import { asNullableNumber, asText } from '../../../../../../lib/estimator/parsing.ts'
+import { normalizeWallRollerTargetId } from '../../../../../../lib/estimator/rollerIdentity.ts'
+import { HIDDEN_CEILING_COLOR_ID } from '../../../../../../lib/estimator/scopeRules.ts'
+import { normalizeConditionSelections } from '../../../../../../lib/estimator/conditionModifiers.ts'
 import type {
   EstimateV2CeilingPrimeMode,
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingScopeMode,
   EstimateV2CeilingSegmentDraft,
   EstimateV2CeilingSegmentShape,
+  EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
+  EstimateV2RollerDraft,
+  EstimateV2RollerScope,
   EstimateV2TrimMeasurementMode,
   EstimateV2TrimScopeDraft,
   EstimateV2TrimTypeOption,
@@ -133,6 +140,7 @@ export function createDefaultRoom(existingRooms: EstimateV2RoomDraft[]): Estimat
     wallComplexityId: '',
     notes: '',
     position: existingRooms.length,
+    conditionSelections: {},
   }
 }
 
@@ -168,6 +176,7 @@ export function createDefaultScope(roomId: string, mode: EstimateV2WallScopeMode
     overrideSupplyCost: '',
     overrideTotal: '',
     notes: '',
+    conditionSelections: {},
   }
 }
 
@@ -204,6 +213,7 @@ export function normalizeRoom(row: UnsafeRecord, index: number): EstimateV2RoomD
     wallComplexityId: asText(row.wall_complexity_id || row.wall_complexity_type_id).toUpperCase(),
     notes: asText(row.notes),
     position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
+    conditionSelections: normalizeConditionSelections(row.condition_selections),
   }
 }
 
@@ -215,6 +225,26 @@ export function normalizeRoomFlag(row: UnsafeRecord, index: number): EstimateV2R
     id: asText(row.id) || createUuid(),
     roomId,
     flagId,
+    position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
+  }
+}
+
+function normalizeRollerScope(value: unknown): EstimateV2RollerScope {
+  const raw = asText(value).toLowerCase()
+  if (raw === 'ceiling') return 'Ceiling'
+  if (raw === 'trim') return 'Trim'
+  return 'Wall'
+}
+
+export function normalizeRoller(row: UnsafeRecord, index: number): EstimateV2RollerDraft {
+  return {
+    id: asText(row.id) || createUuid(),
+    scope: normalizeRollerScope(row.scope),
+    wallColorId: normalizeWallRollerTargetId(row.wallColorId ?? row.wall_color_id),
+    selectedOptionId: asText(row.selectedOptionId ?? row.selected_option_id),
+    rollerSizeIn: toInputNumber(row.rollerSizeIn ?? row.roller_size_in),
+    coversQty: toInputNumber(row.coversQty ?? row.covers_qty),
+    notes: asText(row.notes),
     position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
   }
 }
@@ -265,6 +295,7 @@ export function normalizeScope(row: UnsafeRecord, index: number): EstimateV2Wall
     overrideSupplyCost: toInputNumber(row.override_supply_cost),
     overrideTotal: toInputNumber(row.override_total),
     notes: asText(row.notes),
+    conditionSelections: normalizeConditionSelections(row.condition_selections),
   }
 }
 
@@ -300,12 +331,25 @@ export function createDefaultCeilingScope(
     mode,
     include: 'Y',
     scopeName: '',
-    colorId: '',
+    colorId: HIDDEN_CEILING_COLOR_ID,
     paintProductId: '',
     primerProductId: '',
     primeMode: 'NONE',
     spotPrimePercent: '',
-    ceilingTypeId: '',
+    ceilingTypeId: 'FLAT',
+    ceilingGeometryMode: 'FLAT',
+    vaultedAreaFactor: '',
+    vaultedRidgeLengthIn: '',
+    vaultedSlopeLengthIn: '',
+    vaultedPlaneCount: '',
+    trayPerimeterIn: '',
+    trayStepHeightIn: '',
+    trayBandWidthIn: '',
+    cofferSectionLengthIn: '',
+    cofferSectionWidthIn: '',
+    cofferSectionCount: '',
+    cofferFaceHeightIn: '',
+    cofferBottomWidthIn: '',
     lengthIn: '',
     widthIn: '',
     areaSf: '',
@@ -322,6 +366,7 @@ export function createDefaultCeilingScope(
     overrideSupplyCost: '',
     overrideTotal: '',
     notes: '',
+    conditionSelections: {},
   }
 }
 
@@ -361,20 +406,40 @@ function parseCeilingSegmentShape(value: unknown): EstimateV2CeilingSegmentShape
   return 'RECTANGLE'
 }
 
+function parseCeilingGeometryMode(value: unknown): string {
+  const raw = asText(value).toUpperCase()
+  if (raw === 'VAULTED' || raw === 'TRAY' || raw === 'COFFERED' || raw === 'MANUAL') return raw
+  return 'FLAT'
+}
+
 export function normalizeCeilingScope(row: UnsafeRecord, index: number): EstimateV2CeilingScopeDraft {
+  const mode = asText(row.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT'
   return {
     id: asText(row.id) || createUuid(),
     roomId: asText(row.room_id).toUpperCase(),
     position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
-    mode: asText(row.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT',
+    mode,
     include: asText(row.include).toUpperCase() === 'N' ? 'N' : 'Y',
     scopeName: asText(row.scope_name),
-    colorId: asText(row.color_id).toUpperCase(),
+    colorId: asText(row.color_id).toUpperCase() || HIDDEN_CEILING_COLOR_ID,
     paintProductId: asText(row.paint_product_id),
     primerProductId: asText(row.primer_product_id),
     primeMode: parseCeilingPrimeMode(row.prime_mode),
     spotPrimePercent: toInputNumber(row.spot_prime_percent),
-    ceilingTypeId: asText(row.ceiling_type_id).toUpperCase(),
+    ceilingTypeId: mode === 'SEG' ? 'FLAT' : asText(row.ceiling_type_id).toUpperCase() || 'FLAT',
+    ceilingGeometryMode: mode === 'SEG' ? 'FLAT' : parseCeilingGeometryMode(row.ceiling_geometry_mode),
+    vaultedAreaFactor: toInputNumber(row.vaulted_area_factor),
+    vaultedRidgeLengthIn: toInputNumber(row.vaulted_ridge_length_in),
+    vaultedSlopeLengthIn: toInputNumber(row.vaulted_slope_length_in),
+    vaultedPlaneCount: toInputNumber(row.vaulted_plane_count),
+    trayPerimeterIn: toInputNumber(row.tray_perimeter_in),
+    trayStepHeightIn: toInputNumber(row.tray_step_height_in),
+    trayBandWidthIn: toInputNumber(row.tray_band_width_in),
+    cofferSectionLengthIn: toInputNumber(row.coffer_section_length_in),
+    cofferSectionWidthIn: toInputNumber(row.coffer_section_width_in),
+    cofferSectionCount: toInputNumber(row.coffer_section_count),
+    cofferFaceHeightIn: toInputNumber(row.coffer_face_height_in),
+    cofferBottomWidthIn: toInputNumber(row.coffer_bottom_width_in),
     lengthIn: toInputNumber(row.length_in),
     widthIn: toInputNumber(row.width_in),
     areaSf: toInputNumber(row.area_sf),
@@ -391,6 +456,7 @@ export function normalizeCeilingScope(row: UnsafeRecord, index: number): Estimat
     overrideSupplyCost: toInputNumber(row.override_supply_cost),
     overrideTotal: toInputNumber(row.override_total),
     notes: asText(row.notes),
+    conditionSelections: normalizeConditionSelections(row.condition_selections),
   }
 }
 
@@ -427,6 +493,7 @@ export function createDefaultTrimScope(roomId: string): EstimateV2TrimScopeDraft
     helperSource: '',
     measurementValue: '',
     helperValue: '',
+    baseboardOpeningCount: '',
     colorId: '',
     paintProductId: '',
     primerProductId: '',
@@ -451,6 +518,62 @@ export function createDefaultTrimScope(roomId: string): EstimateV2TrimScopeDraft
     overrideTotal: '',
     overrideDescription: '',
     notes: '',
+    conditionSelections: {},
+  }
+}
+
+export function createDefaultDoorScope(roomId: string): EstimateV2DoorScopeDraft {
+  return {
+    id: createUuid(),
+    roomId,
+    position: 0,
+    include: 'Y',
+    scopeName: '',
+    doorTypeId: '',
+    quantity: '',
+    sides: '',
+    colorId: '',
+    paintProductId: '',
+    primerProductId: '',
+    primeMode: 'NONE',
+    spotPrimePercent: '',
+    paintCoats: '2',
+    primerCoats: '1',
+    conditionFactor: '1',
+    laborRate: '',
+    materialRate: '',
+    overridePaintHours: '',
+    overridePrimerHours: '',
+    overrideMaterialCost: '',
+    overrideSupplyCost: '',
+    overrideTotal: '',
+    notes: '',
+  }
+}
+
+function inferDrywallUnit(repairType: string): EstimateV2DrywallRepairDraft['unit'] {
+  return repairType === 'patch_opening_repair' ? 'SQFT' : 'LF'
+}
+
+function parseDrywallSurface(value: unknown): EstimateV2DrywallRepairDraft['surface'] {
+  return asText(value).toLowerCase() === 'ceiling' ? 'ceiling' : 'wall'
+}
+
+export function createDefaultDrywallRepair(
+  roomId: string,
+  surface: EstimateV2DrywallRepairDraft['surface'],
+  repairType: string
+): EstimateV2DrywallRepairDraft {
+  const normalizedRepairType = asText(repairType).toLowerCase() || 'patch_opening_repair'
+  return {
+    id: createUuid(),
+    roomId,
+    position: 0,
+    surface,
+    repairType: normalizedRepairType,
+    unit: inferDrywallUnit(normalizedRepairType),
+    quantity: '1',
+    overrideTotal: '',
   }
 }
 
@@ -474,6 +597,7 @@ export function normalizeTrimScope(row: UnsafeRecord, index: number): EstimateV2
     helperSource: asText(row.helper_source).toUpperCase() === 'ROOM_PERIMETER' ? 'ROOM_PERIMETER' : '',
     measurementValue: toInputNumber(row.measurement_value ?? row.qty),
     helperValue: toInputNumber(row.helper_value),
+    baseboardOpeningCount: toInputNumber(row.baseboard_opening_count),
     colorId: asText(row.color_id).toUpperCase(),
     paintProductId: asText(row.paint_product_id),
     primerProductId: asText(row.primer_product_id),
@@ -498,6 +622,52 @@ export function normalizeTrimScope(row: UnsafeRecord, index: number): EstimateV2
     overrideTotal: toInputNumber(row.override_total),
     overrideDescription: asText(row.override_description),
     notes: asText(row.notes),
+    conditionSelections: normalizeConditionSelections(row.condition_selections),
+  }
+}
+
+export function normalizeDoorScope(row: UnsafeRecord, index: number): EstimateV2DoorScopeDraft {
+  const primeModeRaw = asText(row.prime_mode).toUpperCase()
+  return {
+    id: asText(row.id) || createUuid(),
+    roomId: asText(row.room_id).toUpperCase(),
+    position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
+    include: asText(row.include).toUpperCase() === 'N' ? 'N' : 'Y',
+    scopeName: asText(row.scope_name),
+    doorTypeId: asText(row.door_type_id).toUpperCase(),
+    quantity: toInputNumber(row.quantity),
+    sides: toInputNumber(row.sides),
+    colorId: asText(row.color_id).toUpperCase(),
+    paintProductId: asText(row.paint_product_id),
+    primerProductId: asText(row.primer_product_id),
+    primeMode: primeModeRaw === 'SPOT' ? 'SPOT' : primeModeRaw === 'FULL' ? 'FULL' : 'NONE',
+    spotPrimePercent: toInputNumber(row.spot_prime_percent),
+    paintCoats: toPositiveFactorString(row.paint_coats, '2'),
+    primerCoats: toPositiveFactorString(row.primer_coats, '1'),
+    conditionFactor: toPositiveFactorString(row.condition_factor, '1'),
+    laborRate: toInputNumber(row.labor_rate),
+    materialRate: toInputNumber(row.material_rate),
+    overridePaintHours: toInputNumber(row.override_paint_hours),
+    overridePrimerHours: toInputNumber(row.override_primer_hours),
+    overrideMaterialCost: toInputNumber(row.override_material_cost),
+    overrideSupplyCost: toInputNumber(row.override_supply_cost),
+    overrideTotal: toInputNumber(row.override_total),
+    notes: asText(row.notes),
+  }
+}
+
+export function normalizeDrywallRepair(row: UnsafeRecord, index: number): EstimateV2DrywallRepairDraft {
+  const repairType = asText(row.repair_type ?? row.repairType).toLowerCase()
+  const unitRaw = asText(row.unit).toUpperCase()
+  return {
+    id: asText(row.id) || createUuid(),
+    roomId: asText(row.room_id ?? row.roomId).toUpperCase(),
+    position: Number.isFinite(Number(row.position)) ? Number(row.position) : index,
+    surface: parseDrywallSurface(row.surface),
+    repairType,
+    unit: unitRaw === 'SQFT' ? 'SQFT' : inferDrywallUnit(repairType),
+    quantity: toInputNumber(row.quantity ?? row.raw_quantity) || '1',
+    overrideTotal: toInputNumber(row.override_total ?? row.overrideTotal),
   }
 }
 

@@ -43,11 +43,34 @@ export function useEstimateV2SummaryData(
   const [trimPaintGallons, setTrimPaintGallons] = useState(0)
   const [trimPaintQuarts, setTrimPaintQuarts] = useState(0)
   const [policySaving, setPolicySaving] = useState(false)
+  const estimateApiHref = useMemo(
+    () => (estimateId ? routeFamily.estimateApiHref(estimateId) : ''),
+    [estimateId, routeFamily]
+  )
+
+  const summaryLoaderState = useMemo(
+    () => ({
+      setLoading,
+      setError,
+      setData,
+      setJob,
+      setLaborDayEnabled,
+      setDayhours,
+      setRoundIncrement,
+      setLaborRate,
+      setJobMinEnabled,
+      setJobMinAmount,
+      setTrimPaintProductId,
+      setTrimPaintGallons,
+      setTrimPaintQuarts,
+    }),
+    []
+  )
 
   const refreshPricing = useCallback(async () => {
-    if (!estimateId) return
+    if (!estimateId || !estimateApiHref) return
     try {
-      const res = await authedFetch(routeFamily.estimateApiHref(estimateId), {
+      const res = await authedFetch(estimateApiHref, {
         cache: 'no-store',
       })
       const parsed = await parseApiResponse(res)
@@ -74,34 +97,22 @@ export function useEstimateV2SummaryData(
       })
       setError(createEstimateV2Error('Failed to refresh pricing', { retryable: true }))
     }
-  }, [estimateId, routeFamily])
+  }, [estimateApiHref, estimateId])
 
-  useEstimateV2SummaryLoader(estimateId, routeFamily, {
-    setLoading,
-    setError,
-    setData,
-    setJob,
-    setLaborDayEnabled,
-    setDayhours,
-    setRoundIncrement,
-    setLaborRate,
-    setJobMinEnabled,
-    setJobMinAmount,
-    setTrimPaintProductId,
-    setTrimPaintGallons,
-    setTrimPaintQuarts,
-  })
+  useEstimateV2SummaryLoader(estimateId, routeFamily, summaryLoaderState)
 
   const { savePolicyDebounced } = useEstimateV2SummaryPolicyController({
     estimateId,
     routeFamily,
     refreshPricing,
+    setError,
     setPolicySaving,
   })
   const { saveTrimPaintDebounced } = useEstimateV2TrimPaintController({
     estimateId,
     routeFamily,
     refreshPricing,
+    setError,
     setPolicySaving,
   })
 

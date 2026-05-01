@@ -56,7 +56,7 @@ function createHookValue({
     end: string | null
     htmlLink: string | null
   }>,
-  notesReminders = [] as Array<{
+  taskReminders = [] as Array<{
     kind: 'overdue' | 'due_today'
     task: {
       id: string
@@ -78,6 +78,9 @@ function createHookValue({
     customer_name: string | null
     customer_address: string | null
     estimate_total_amount: number | string | null
+    scheduled_date?: string | null
+    scheduled_end_date?: string | null
+    completed_at?: string | null
   }>
   customers?: Array<{
     id: string
@@ -95,7 +98,7 @@ function createHookValue({
     end: string | null
     htmlLink: string | null
   }>
-  notesReminders?: Array<{
+  taskReminders?: Array<{
     kind: 'overdue' | 'due_today'
     task: {
       id: string
@@ -114,7 +117,7 @@ function createHookValue({
     customers,
     calendarConnected,
     calendarTodayEvents,
-    notesReminders,
+    taskReminders,
     sourceOverrides: {
       calendarEvents: createCrmHomeSourceState(
         'ready',
@@ -200,10 +203,10 @@ describe('CrmHomePageContent', () => {
             'Unable to load customers.',
             '2026-04-21T12:00:00.000Z'
           ),
-          notes: createCrmHomeSourceState(
+          tasks: createCrmHomeSourceState(
             'degraded',
             'invalid',
-            'Malformed notes dashboard response.',
+            'Malformed tasks dashboard response.',
             '2026-04-21T12:00:00.000Z'
           ),
         },
@@ -215,7 +218,45 @@ describe('CrmHomePageContent', () => {
     const alert = screen.getByRole('alert')
     expect(alert.textContent).toContain('Some dashboard data is degraded.')
     expect(alert.textContent).toContain('Customers')
-    expect(alert.textContent).toContain('Notes')
+    expect(alert.textContent).toContain('Tasks')
+  })
+
+  it('renders current scheduled jobs as links to job details', () => {
+    mockUseCrmHomeData.mockReturnValue(
+      createHookValue({
+        jobs: [
+          {
+            id: 'job-current',
+            status: 'scheduled',
+            title: 'Exterior repaint',
+            customer_name: 'Nancy Briggs',
+            customer_address: '400 Paint Ln',
+            estimate_total_amount: 2400,
+            scheduled_date: '2026-04-22T13:00:00.000Z',
+            scheduled_end_date: '2026-04-22T21:00:00.000Z',
+          },
+          {
+            id: 'job-far-away',
+            status: 'scheduled',
+            title: 'Future repaint',
+            customer_name: 'Later Customer',
+            customer_address: '500 Paint Ln',
+            estimate_total_amount: 1400,
+            scheduled_date: '2026-04-29T13:00:00.000Z',
+          },
+        ],
+      })
+    )
+
+    render(<CrmHomePageContent />)
+
+    expect(screen.getByText('Current jobs')).toBeTruthy()
+    const currentJobLink = screen
+      .getAllByRole('link', { name: /Exterior repaint/i })
+      .find((link) => link.textContent?.includes('4/22/2026'))
+    expect(currentJobLink).toBeTruthy()
+    expect(currentJobLink?.textContent).toContain('Nancy Briggs')
+    expect(currentJobLink?.textContent).toContain('4/22/2026')
   })
 
   it('disables retry while reloading', () => {
@@ -227,7 +268,7 @@ describe('CrmHomePageContent', () => {
           'Malformed customers response.',
           '2026-04-21T12:00:00.000Z'
         ),
-        notes: createCrmHomeSourceState(
+        tasks: createCrmHomeSourceState(
           'loading',
           'available',
           null,
@@ -345,7 +386,7 @@ describe('CrmHomePageContent', () => {
     expect(screen.getByRole('tablist', { name: 'Activity feed sections' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true')
     const tasksTab = screen.getByRole('tab', { name: 'Tasks' })
-    expect(tasksTab.getAttribute('href')).toBe('/crm/notes/tasks')
+    expect(tasksTab.getAttribute('href')).toBe('/crm/tasks')
   })
 
   it('switches today signals tabs and styles overdue reminders differently', async () => {
@@ -361,7 +402,7 @@ describe('CrmHomePageContent', () => {
             htmlLink: null,
           },
         ],
-        notesReminders: [
+        taskReminders: [
           {
             kind: 'overdue',
             task: {
@@ -406,14 +447,14 @@ describe('CrmHomePageContent', () => {
     expect(dueTodayReminder.getAttribute('style')).toContain('transparent')
   })
 
-  it('renders malformed notes data as degraded instead of an empty reminders state', async () => {
+  it('renders malformed tasks data as degraded instead of an empty reminders state', async () => {
     mockUseCrmHomeData.mockReturnValue(
       createHookValue({
         sourceOverrides: {
-          notes: createCrmHomeSourceState(
+          tasks: createCrmHomeSourceState(
             'degraded',
             'invalid',
-            'Malformed notes dashboard response.',
+            'Malformed tasks dashboard response.',
             '2026-04-21T12:00:00.000Z'
           ),
         },
@@ -424,7 +465,7 @@ describe('CrmHomePageContent', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Reminders' }))
 
-    expect(screen.getByText('Malformed notes dashboard response.')).toBeTruthy()
+    expect(screen.getByText('Malformed tasks dashboard response.')).toBeTruthy()
     expect(screen.queryByText('No reminders today.')).toBeNull()
   })
 

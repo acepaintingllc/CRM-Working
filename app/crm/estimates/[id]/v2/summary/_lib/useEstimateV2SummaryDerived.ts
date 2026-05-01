@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import type { EstimateV2SummaryPageData, EstimateV2TrimPaint } from '@/types/estimator/v2'
 import {
   buildPaintSupplyRows,
+  buildPaintSupplyProductLabels,
   buildPriceBreakdownRows,
   buildPricingKpis,
   buildRoomAlertsByRoom,
@@ -14,6 +15,7 @@ import {
   calculatePaintSuppliesTotal,
   createDisplayScopePaintCostCalculator,
   createPaintProductLabelResolver,
+  hasActiveLaborRateOverride,
   hasTrimPaintSummary,
   normalizeSummaryScopeRows,
   type EstimateV2SummaryAlert,
@@ -37,6 +39,7 @@ export function useEstimateV2SummaryDerived(params: {
   jobSettingsDraft: {
     dayhours: number
     laborRate: number
+    crewSize?: number
   }
 }) {
   const { data, job, jobSettingsDraft } = params
@@ -67,6 +70,16 @@ export function useEstimateV2SummaryDerived(params: {
     [data?.trim_calculations?.scopes]
   )
 
+  const doorScopes = useMemo(
+    () => normalizeSummaryScopeRows(data?.door_calculations?.scopes ?? data?.inputs?.room_door_scopes ?? []),
+    [data?.door_calculations?.scopes, data?.inputs?.room_door_scopes]
+  )
+
+  const drywallScopes = useMemo(
+    () => normalizeSummaryScopeRows(data?.drywall_calculations?.scopes ?? data?.inputs?.drywall_repairs ?? []),
+    [data?.drywall_calculations?.scopes, data?.inputs?.drywall_repairs]
+  )
+
   const roomFlagCountMap = useMemo(() => buildRoomFlagCountMap(roomFlags), [roomFlags])
 
   const roomTotalMap = useMemo(() => {
@@ -80,13 +93,17 @@ export function useEstimateV2SummaryDerived(params: {
       room_id: room.room_id,
       price: room.finalTotal,
     }))
+    const roomPricingTarget =
+      pricingSummary?.finalTotal == null
+        ? null
+        : Math.max(0, pricingSummary.finalTotal - (pricingSummary.sharedAccessCost ?? 0))
     return new Map(
-      reconcileWholeDollarRows(rows, pricingSummary?.finalTotal ?? null).map((row) => [
+      reconcileWholeDollarRows(rows, roomPricingTarget).map((row) => [
         row.room_id,
         row.price,
       ] as const)
     )
-  }, [pricingSummary?.finalTotal, pricingSummary?.rooms])
+  }, [pricingSummary])
 
   const roomAreaMap = useMemo(() => {
     const next = new Map<string, number>()
@@ -107,8 +124,8 @@ export function useEstimateV2SummaryDerived(params: {
   )
 
   const roomScopeRows = useMemo(
-    () => buildRoomScopeRows({ wallScopes, ceilingScopes, trimScopes }),
-    [ceilingScopes, trimScopes, wallScopes]
+    () => buildRoomScopeRows({ wallScopes, ceilingScopes, trimScopes, doorScopes, drywallScopes }),
+    [ceilingScopes, doorScopes, drywallScopes, trimScopes, wallScopes]
   )
 
   const roomAlertsByRoom = useMemo(
@@ -156,16 +173,25 @@ export function useEstimateV2SummaryDerived(params: {
       buildSummaryAlerts({
         pricingSummary,
         hasJobSettings: !!data?.inputs?.jobsettings,
-        laborRateOverrideActive: data?.inputs?.jobsettings?.override_labor_rate != null,
+        laborRateOverrideActive: hasActiveLaborRateOverride(
+          data?.inputs?.jobsettings,
+          data?.inputs?.org_defaults
+        ),
         roomScopeRows,
         roomFlags,
         rooms,
       }),
-    [data?.inputs?.jobsettings, pricingSummary, roomFlags, roomScopeRows, rooms]
+    [data?.inputs?.jobsettings, data?.inputs?.org_defaults, pricingSummary, roomFlags, roomScopeRows, rooms]
   )
 
   const versionName = data?.estimate.version_name ?? 'Estimate'
   const statusLabel = data?.estimate.version_state ?? 'Draft'
+  const crewSize = Math.max(
+    1,
+    Math.floor(
+      Number(data?.inputs?.jobsettings?.crew_size ?? jobSettingsDraft.crewSize ?? 1)
+    )
+  )
   const finalTotal = pricingSummary?.finalTotal ?? null
   const laborShare =
     pricingSummary?.effectiveLaborHours && finalTotal != null
@@ -174,16 +200,38 @@ export function useEstimateV2SummaryDerived(params: {
   const priceAdjustment = pricingSummary
     ? pricingSummary.postLaborPolicyTotal - pricingSummary.prePolicyTotal
     : null
-  const paintSuppliesTotal = calculatePaintSuppliesTotal(pricingSummary)
+  const paintSuppliesTotal = calculatePaintSuppliesTotal(pricingSummary, trimPaint)
 
   const priceBreakdownRows = useMemo<EstimateV2SummaryPricingTableRow[]>(
     () => buildPriceBreakdownRows(pricingSummary),
     [pricingSummary]
   )
 
+  const paintSupplyProductLabels = useMemo(
+    () =>
+      buildPaintSupplyProductLabels({
+        jobsettings: data?.inputs?.jobsettings,
+        orgDefaults: data?.inputs?.org_defaults,
+        wallScopes,
+        ceilingScopes,
+        trimScopes,
+        trimPaint,
+        resolvePaintProductLabel,
+      }),
+    [
+      ceilingScopes,
+      data?.inputs?.jobsettings,
+      data?.inputs?.org_defaults,
+      resolvePaintProductLabel,
+      trimPaint,
+      trimScopes,
+      wallScopes,
+    ]
+  )
+
   const paintSupplyRows = useMemo<EstimateV2SummaryPricingTableRow[]>(
-    () => buildPaintSupplyRows(pricingSummary),
-    [pricingSummary]
+    () => buildPaintSupplyRows(pricingSummary, trimPaint, paintSupplyProductLabels),
+    [paintSupplyProductLabels, pricingSummary, trimPaint]
   )
 
   return {
@@ -200,6 +248,7 @@ export function useEstimateV2SummaryDerived(params: {
     summaryAlerts,
     versionName,
     statusLabel,
+    crewSize,
     finalTotal,
     laborShare,
     priceAdjustment,

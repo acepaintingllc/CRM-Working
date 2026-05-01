@@ -1,9 +1,8 @@
-import { defineConfig } from 'vitest/config'
 import { fileURLToPath } from 'node:url'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))
 
-export default defineConfig({
+const config = {
   resolve: {
     alias: {
       '@': rootDir,
@@ -13,6 +12,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./setupTests.ts'],
-    include: ['lib/server/customer-send/__tests__/**/*.test.tsx'],
+    include: ['lib/server/customer-send/__tests__/**/*.test.{ts,tsx}'],
+    pool: 'threads',
   },
-})
+}
+
+export default config

@@ -16,6 +16,7 @@ function createEditorDerivedHarness() {
       scopes: fixture.scopes,
       segments: fixture.segments,
       roomFlags: fixture.roomFlags,
+      rollers: fixture.rollers,
       ceilingScopes: fixture.ceilingScopes,
       ceilingSegments: fixture.ceilingSegments,
       trimScopes: fixture.trimScopes,
@@ -93,5 +94,49 @@ describe('Estimate V2 editor/summary parity', () => {
       { label: 'Labor Adjustment', value: '$15' },
       { label: 'Job Minimum', value: '$20' },
     ])
+  })
+
+  it('uses persisted trim paint cost in summary paint rows when pricing summary trim cost is stale', () => {
+    const { fixture } = createEditorDerivedHarness()
+    const data = {
+      ...fixture.summaryData,
+      trim_paint: {
+        paint_product_id: 'P-TRIM',
+        paint_product_label: 'Trim Paint',
+        gallons: 1,
+        quarts: 2,
+        normalized_gallons: 1.5,
+        paint_cost: 45,
+      },
+      pricing_summary: fixture.summaryData.pricing_summary
+        ? {
+            ...fixture.summaryData.pricing_summary,
+            trimPaintMaterialCost: 0,
+          }
+        : null,
+    }
+
+    const { result } = renderHook(() =>
+      useEstimateV2SummaryDerived({
+        data,
+        job: fixture.job,
+        jobSettingsDraft: {
+          dayhours: fixture.jobSettingsDraft.dayhours,
+          laborRate: fixture.jobSettingsDraft.laborRate,
+        },
+      })
+    )
+
+    expect(result.current.paintSupplyRows).toContainEqual({
+      label: 'Trim paint - Trim Paint',
+      value: '$45',
+    })
+    expect(result.current.paintSuppliesTotal).toBe(
+        (data.pricing_summary?.wallPaintMaterialCost ?? 0) +
+        (data.pricing_summary?.ceilingPaintMaterialCost ?? 0) +
+        45 +
+        (data.pricing_summary?.primerMaterialCost ?? 0) +
+        (data.pricing_summary?.supplyCost ?? 0)
+    )
   })
 })

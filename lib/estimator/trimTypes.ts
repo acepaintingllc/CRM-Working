@@ -2,10 +2,12 @@ import type {
   MissingInput,
   ResolvedSettings,
   WallCalculationCatalogs,
+  WallCalculationSettings,
   WallPerColorSupplyGroup,
   WallRoomTotal,
   YN,
 } from './wallsTypes.ts'
+import type { PaintMaterialGroup } from './paintMaterial.ts'
 
 export type TrimUnitType = 'LF' | 'EA' | 'SF'
 export type TrimMeasurementMode = 'MANUAL' | 'ROOM_HELPER'
@@ -24,6 +26,7 @@ export type TrimCalculationScopeRow = {
   helper_source: TrimHelperSource | null
   measurement_value: number | null
   helper_value: number | null
+  baseboard_opening_count?: number | null
   color_id: string | null
   paint_product_id: string | null
   primer_product_id: string | null
@@ -54,6 +57,10 @@ export type TrimCalculationScopeRow = {
   raw_paint_gallons: number | null
   effective_paint_gallons: number | null
   paint_product_label?: string | null
+  paint_material_group_key?: string | null
+  allocated_paint_gallons?: number | null
+  allocated_paint_material_cost?: number | null
+  raw_paint_material_cost?: number | null
   raw_primer_gallons: number | null
   effective_primer_gallons: number | null
   raw_supply_cost: number | null
@@ -61,6 +68,8 @@ export type TrimCalculationScopeRow = {
   raw_total: number | null
   effective_total: number | null
   notes: string | null
+  condition_factor?: number | null
+  condition_selections?: Partial<Record<string, string>> | null
   paint_coats?: number | null
   primer_coats?: number | null
   paint_prod_rate_units_per_hour?: number | null
@@ -69,6 +78,7 @@ export type TrimCalculationScopeRow = {
   primer_coverage_units_per_gal_per_coat?: number | null
   area_supply_cost_per_unit?: number | null
   per_color_supply_cost?: number | null
+  primer_supply_cost?: number | null
   labor_rate_per_hour?: number | null
   paint_price_per_gal?: number | null
   primer_price_per_gal?: number | null
@@ -100,9 +110,7 @@ export type TrimProductionRateCatalogRow = {
 export type TrimCalculationInput = {
   scopes: TrimCalculationScopeRow[]
   rooms: TrimCalculationRoomInput[]
-  settings?: {
-    labor_rate_per_hour?: number | null
-  }
+  settings?: WallCalculationSettings
   catalogs?:
     | (WallCalculationCatalogs & {
         trim_items?: TrimTypeCatalogRow[] | null
@@ -115,6 +123,7 @@ export type TrimCalculationOutput = {
   scopes: TrimCalculationScopeRow[]
   room_totals: WallRoomTotal[]
   per_color_supply_groups: WallPerColorSupplyGroup[]
+  paint_material_groups: PaintMaterialGroup[]
   missing_inputs: MissingInput[]
   assumptions: ResolvedSettings
 }

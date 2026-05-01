@@ -1,3 +1,5 @@
+import type { QuoteTermsSections } from './termsDefaults.ts'
+
 export type Unsafe = Record<string, unknown>
 
 export type EstimatePublicStatus =
@@ -12,12 +14,14 @@ export type EstimatePublicSignatureType = 'typed' | 'drawn'
 
 export type EstimatePublicAcceptanceRecord = {
   legal_name: string
+  customer_email?: string
   signature_type: EstimatePublicSignatureType
   signature_value: string
   accepted_terms: true
   accepted_at: string
   user_agent: string
   ip: string
+  customer_message?: string
 }
 
 export type CompanyProfile = {
@@ -31,7 +35,14 @@ export type CompanyProfile = {
   logo_url: string
 }
 
-export type CustomerEstimateSectionKey = 'walls' | 'ceilings' | 'trim' | 'doors' | 'cabinets' | 'other'
+export type CustomerEstimateSectionKey =
+  | 'walls'
+  | 'ceilings'
+  | 'trim'
+  | 'doors'
+  | 'drywall'
+  | 'cabinets'
+  | 'other'
 
 export type CustomerEstimateSection = {
   key: CustomerEstimateSectionKey
@@ -75,6 +86,7 @@ export type CustomerEstimateDocumentSourceMeta = {
   settings: {
     quote_validity_days: boolean
     terms_text: boolean
+    terms_sections?: boolean
   }
   overrides: {
     title: boolean
@@ -111,6 +123,7 @@ type CustomerEstimateDocumentBase = {
   scopes: CustomerEstimateSection[]
   total: number | null
   terms: string[]
+  terms_sections?: QuoteTermsSections | null
   source_meta: CustomerEstimateDocumentSourceMeta
 }
 
@@ -161,6 +174,7 @@ export type EstimatePublicSnapshot = {
   draft: Record<string, unknown>
   document: CustomerEstimateDocument
   snapshot_json: Record<string, unknown>
+  acceptance_json: EstimatePublicAcceptanceRecord | null
   sent_at: string | null
   viewed_at: string | null
   accepted_at: string | null

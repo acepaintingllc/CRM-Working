@@ -1,20 +1,33 @@
 import type { EstimateV2Error } from '@/lib/estimator/errors'
 import type { ScopeKind } from '@/lib/estimator/scopeKinds'
 import type {
+  EstimateV2ConditionLevel,
+  EstimateV2ConditionModifier,
+  EstimateV2ConditionSelections,
+} from '@/lib/estimator/conditionModifiers'
+import type {
   EstimateV2CatalogOption,
   EstimateV2CatalogsPayload,
+  EstimateV2AccessFeeDraft,
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
   EstimateV2CustomerDraft,
+  EstimateV2DoorScopeDraft,
+  EstimateV2DoorTypeOption,
+  EstimateV2DrywallRateOption,
+  EstimateV2DrywallRepairDraft,
   EstimateV2EstimateMeta,
   EstimateV2JobDefaultProducts,
   EstimateV2JobMeta,
   EstimateV2JobSettingsDraft,
+  EstimateV2OtherItemDraft,
   EstimateV2PaintProductOption,
+  EstimateV2PricingSummary,
   EstimateV2ProductionRateOption,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2RoomFlagOption,
+  EstimateV2RollerDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2TrimTypeOption,
   EstimateV2WallCalculationsPayload,
@@ -37,6 +50,11 @@ export type DirtySource =
   | 'walls'
   | 'ceilings'
   | 'trim'
+  | 'doors'
+  | 'drywall'
+  | 'access-fees'
+  | 'other'
+  | 'details-overrides'
   | 'job-settings'
   | 'customer'
   | 'save:auto'
@@ -65,6 +83,16 @@ export type EstimateV2EditorCollections = {
   setCeilingSegments: EstimateV2StateSetter<EstimateV2CeilingSegmentDraft[]>
   trimScopes: EstimateV2TrimScopeDraft[]
   setTrimScopes: EstimateV2StateSetter<EstimateV2TrimScopeDraft[]>
+  doorScopes: EstimateV2DoorScopeDraft[]
+  setDoorScopes: EstimateV2StateSetter<EstimateV2DoorScopeDraft[]>
+  drywallRepairs: EstimateV2DrywallRepairDraft[]
+  setDrywallRepairs: EstimateV2StateSetter<EstimateV2DrywallRepairDraft[]>
+  rollers: EstimateV2RollerDraft[]
+  setRollers: EstimateV2StateSetter<EstimateV2RollerDraft[]>
+  accessFees: EstimateV2AccessFeeDraft[]
+  setAccessFees: EstimateV2StateSetter<EstimateV2AccessFeeDraft[]>
+  otherItems: EstimateV2OtherItemDraft[]
+  setOtherItems: EstimateV2StateSetter<EstimateV2OtherItemDraft[]>
 }
 
 export type EstimateV2EditorMetaState = {
@@ -84,6 +112,12 @@ export type EstimateV2EditorMetaState = {
   setCeilingCalculations: EstimateV2StateSetter<Unsafe | null>
   trimCalculations: Unsafe | null
   setTrimCalculations: EstimateV2StateSetter<Unsafe | null>
+  doorCalculations: Unsafe | null
+  setDoorCalculations: EstimateV2StateSetter<Unsafe | null>
+  drywallCalculations: Unsafe | null
+  setDrywallCalculations: EstimateV2StateSetter<Unsafe | null>
+  pricingSummary: EstimateV2PricingSummary | null
+  setPricingSummary: EstimateV2StateSetter<EstimateV2PricingSummary | null>
   selectedRoomId: string
   setSelectedRoomId: EstimateV2StateSetter<string>
   error: EstimateV2Error | null
@@ -163,12 +197,14 @@ export type EstimateV2EditorRoomVm = {
   roomScopeByRoomId: Map<string, EstimateV2WallScopeDraft[]>
   roomCeilingScopeByRoomId: Map<string, EstimateV2CeilingScopeDraft[]>
   roomTrimScopeByRoomId: Map<string, EstimateV2TrimScopeDraft[]>
+  roomDoorScopeByRoomId?: Map<string, EstimateV2DoorScopeDraft[]>
   displayedRoomEffectiveAreaByRoomId: Map<string, number | null>
   selectedRoomEffectiveSqFt: number | null
   activeRoomFlagCount: number
   selectedRoomIssueCount: number
   roomFlagsEnabled: boolean
   roomFlagsCatalog: EstimateV2RoomFlagOption[]
+  conditionModifiers?: EstimateV2ConditionModifier[]
   addRoom: () => void
   deleteRoom: (roomId: string) => void
   updateRoom: (roomId: string, patch: Partial<EstimateV2RoomDraft>) => void
@@ -181,6 +217,7 @@ export type EstimateV2EditorRoomVm = {
   toggleSelectedRoomFlag: (flagId: string) => void
   updateSelectedRoomDimensions: (field: 'lengthIn' | 'widthIn' | 'heightIn', value: string) => void
   switchSelectedRoomGeometryMode: (nextMode: 'RECT' | 'SEG') => void
+  setSelectedRoomCondition?: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => void
 }
 
 export type EstimateV2EditorWallsVm = {
@@ -200,6 +237,15 @@ export type EstimateV2EditorWallsVm = {
   colorCodeOptions: EstimateV2CatalogOption[]
   displayedSegmentEffectiveAreaById: Map<string, number | null>
   displayedScopeEffectiveAreaById: Map<string, number | null>
+  wallScopeEffectiveTotalById: Map<string, number | null>
+  selectedRoomWallDrywallRepairs: EstimateV2DrywallRepairDraft[]
+  drywallRateOptions: EstimateV2DrywallRateOption[]
+  drywallRepairEffectiveQuantityById: Map<string, number | null>
+  drywallRepairEffectiveTotalById: Map<string, number | null>
+  selectedWallDrywallSubtotal: number | null
+  addDrywallRepair: (roomId: string, surface: 'wall' | 'ceiling', repairType: string) => void
+  updateDrywallRepair: (repairId: string, patch: Partial<EstimateV2DrywallRepairDraft>) => void
+  deleteDrywallRepair: (roomId: string, repairId: string) => void
   addScope: (roomId: string) => void
   moveScope: (roomId: string, scopeId: string, direction: -1 | 1) => void
   deleteScope: (roomId: string, scopeId: string) => void
@@ -210,6 +256,9 @@ export type EstimateV2EditorWallsVm = {
   updateSegment: (segmentId: string, patch: Partial<EstimateV2WallSegmentDraft>) => void
   toggleRoomInclude: (roomId: string) => void
   updateRoomComplexity: (roomId: string, wallComplexityId: string) => void
+  conditionModifiers?: EstimateV2ConditionModifier[]
+  conditionSelections: EstimateV2ConditionSelections
+  setSelectedRoomWallCondition?: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => void
 }
 
 export type EstimateV2EditorCeilingsVm = {
@@ -228,6 +277,15 @@ export type EstimateV2EditorCeilingsVm = {
   ceilingPrimerOptions: EstimateV2PaintProductOption[]
   colorCodeOptions: EstimateV2CatalogOption[]
   selectedCeilingEffectiveSqFt: number | null
+  ceilingScopeEffectiveTotalById: Map<string, number | null>
+  selectedRoomCeilingDrywallRepairs: EstimateV2DrywallRepairDraft[]
+  drywallRateOptions: EstimateV2DrywallRateOption[]
+  drywallRepairEffectiveQuantityById: Map<string, number | null>
+  drywallRepairEffectiveTotalById: Map<string, number | null>
+  selectedCeilingDrywallSubtotal: number | null
+  addDrywallRepair: (roomId: string, surface: 'wall' | 'ceiling', repairType: string) => void
+  updateDrywallRepair: (repairId: string, patch: Partial<EstimateV2DrywallRepairDraft>) => void
+  deleteDrywallRepair: (roomId: string, repairId: string) => void
   updateScope: (scopeId: string, patch: Partial<EstimateV2CeilingScopeDraft>) => void
   addScope: (roomId: string) => void
   deleteScope: (roomId: string, scopeId: string) => void
@@ -237,6 +295,9 @@ export type EstimateV2EditorCeilingsVm = {
   moveSegment: (ceilingScopeId: string, segmentId: string, direction: -1 | 1) => void
   updateSegment: (segmentId: string, patch: Partial<EstimateV2CeilingSegmentDraft>) => void
   toggleRoomInclude: (roomId: string) => void
+  conditionModifiers?: EstimateV2ConditionModifier[]
+  conditionSelections: EstimateV2ConditionSelections
+  setSelectedRoomCeilingCondition?: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => void
 }
 
 export type EstimateV2EditorTrimVm = {
@@ -264,6 +325,48 @@ export type EstimateV2EditorTrimVm = {
   deleteScope: (roomId: string, scopeId: string) => void
   toggleRoomInclude: (roomId: string) => void
   updateTrimType: (scopeId: string, trimTypeId: string) => void
+  conditionModifiers?: EstimateV2ConditionModifier[]
+  conditionSelections: EstimateV2ConditionSelections
+  setSelectedRoomTrimCondition?: (conditionId: string, level: EstimateV2ConditionLevel | 'none') => void
+}
+
+export type EstimateV2EditorDoorsVm = {
+  selectedRoom: EstimateV2RoomDraft | null
+  selectedRoomDoorScopes: EstimateV2DoorScopeDraft[]
+  firstDoorScope: EstimateV2DoorScopeDraft | null
+  doorsIncluded: boolean
+  jobDoorsIncluded: boolean
+  doorPaintLabel: string
+  doorPrimerLabel: string
+  effectiveDoorPaintLabel: string
+  effectiveDoorPrimerLabel: string
+  doorPaintOptions: EstimateV2PaintProductOption[]
+  doorPrimerOptions: EstimateV2PaintProductOption[]
+  doorTypeOptions: EstimateV2DoorTypeOption[]
+  doorScopeEffectiveUnitsById: Map<string, number | null>
+  doorScopeEffectiveTotalById: Map<string, number | null>
+  selectedDoorSubtotal: number | null
+  selectedDoorUnits: number | null
+  colorCodeOptions: EstimateV2CatalogOption[]
+  updateScope: (scopeId: string, patch: Partial<EstimateV2DoorScopeDraft>) => void
+  addScope: (roomId: string) => void
+  moveScope: (roomId: string, scopeId: string, direction: -1 | 1) => void
+  deleteScope: (roomId: string, scopeId: string) => void
+  toggleRoomInclude: (roomId: string) => void
+  updateDoorType: (scopeId: string, doorTypeId: string) => void
+}
+
+export type EstimateV2EditorOtherVm = {
+  selectedRoom: EstimateV2RoomDraft | null
+  selectedRoomItems: EstimateV2OtherItemDraft[]
+  jobLevelItems: EstimateV2OtherItemDraft[]
+  allItems: EstimateV2OtherItemDraft[]
+  selectedRoomSubtotal: number | null
+  addItem: (roomId?: string) => void
+  updateItem: (itemId: string, patch: Partial<EstimateV2OtherItemDraft>) => void
+  duplicateItem: (itemId: string) => void
+  deleteItem: (itemId: string) => void
+  moveItem: (itemId: string, direction: -1 | 1) => void
 }
 
 export type EstimateV2EditorPageVm = {
@@ -277,6 +380,10 @@ export type EstimateV2EditorPageVm = {
 
 export type EstimateV2EditorHeaderVm = {
   estimateId?: string
+  resumeRecord: {
+    estimate: EstimateV2EstimateMeta | null
+    job: EstimateV2JobMeta | null
+  }
   titleText: string
   subtitleText: string
   workflowText: string
@@ -300,6 +407,7 @@ export type EstimateV2EditorSectionSummaryVm = {
   primaryUnit: string
   paintLabel: string
   primerLabel: string
+  showPrimer?: boolean
   secondaryValue?: string
   secondaryLabel?: string
   chips: EstimateV2EditorSectionChipVm[]
@@ -314,6 +422,7 @@ export type EstimateV2EditorSummaryVm = {
     walls: string
     ceilings: string
     trim: string
+    doors?: string
   }
   validationText: string
   validationColor: string
@@ -326,4 +435,5 @@ export type EstimateV2EditorSummaryVm = {
   walls: EstimateV2EditorSectionSummaryVm
   ceilings: EstimateV2EditorSectionSummaryVm
   trim: EstimateV2EditorSectionSummaryVm
+  doors?: EstimateV2EditorSectionSummaryVm
 }

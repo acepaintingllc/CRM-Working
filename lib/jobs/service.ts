@@ -7,6 +7,12 @@ import {
   withOptionalJobColumns,
 } from '@/lib/server/jobSchema'
 import { deriveJobScheduleRange } from '@/lib/server/jobScheduleSync'
+import { loadAcceptedEstimateSource } from '@/lib/server/accepted-estimates/service'
+import type { AcceptedEstimateSource } from '@/lib/server/accepted-estimates/types'
+import {
+  buildEstimatePublicTimelineEvents,
+  type EstimatePublicTimelineEvent,
+} from '@/lib/customer-estimates/publicTimeline'
 import type { JobStatus } from '@/lib/jobs/types'
 import {
   errorResult,
@@ -18,6 +24,7 @@ import {
   buildJobDetailRecord,
   buildJobSummaryRecord,
   type CreateJobInput,
+  type JobAcceptedQuoteRecord,
   type JobDetailRecord,
   type JobSummaryRecord,
   type UpdateJobInput,
@@ -44,6 +51,7 @@ type JobRow = {
   scheduled_email_sent_at?: string | null
   completed_email_sent_at?: string | null
   closeout_notes?: string | null
+  linked_estimate_id?: string | null
   created_at?: string | null
   updated_at?: string | null
   [key: string]: unknown
@@ -72,6 +80,26 @@ type LinkedEstimateRow = {
   version_sort_order: number | null
   updated_at: string | null
   created_at: string | null
+}
+
+type EstimatePublicVersionRow = {
+  id: string
+  estimate_id: string | null
+  version_number: number | null
+  public_token: string | null
+  status?: string | null
+  accepted_at?: string | null
+  declined_at?: string | null
+}
+
+type EstimatePublicEventRow = {
+  id: string
+  estimate_public_version_id: string | null
+  event_type: string | null
+  actor_type: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string | null
+  created_by: string | null
 }
 
 type JobScheduleRange = {
@@ -146,7 +174,14 @@ async function ensureJobsSchema(columns: readonly string[]) {
 }
 
 async function getOptionalJobColumns() {
-  return getAvailableOptionalJobColumns()
+  const optionalColumns = await getAvailableOptionalJobColumns()
+  const linkedEstimateColumn = await assertSchema([
+    { table: 'jobs', columns: ['linked_estimate_id'] },
+  ])
+
+  return linkedEstimateColumn.ok
+    ? [...optionalColumns, 'linked_estimate_id']
+    : optionalColumns
 }
 
 async function buildSelect(columns: readonly string[]) {
@@ -235,6 +270,71 @@ async function loadLinkedEstimates(orgId: string, jobId: string) {
   }
 
   return okResult((data ?? []) as LinkedEstimateRow[])
+}
+
+function mapAcceptedQuoteRecord(source: AcceptedEstimateSource): JobAcceptedQuoteRecord {
+  return {
+    estimate_id: source.estimate_id,
+    accepted_public_version_id: source.accepted_public_version_id,
+    public_version_number: source.public_version_number,
+    public_token: source.public_token,
+    accepted_at: source.accepted_at,
+    accepted_by_legal_name: source.accepted_by_legal_name,
+    signature_type: source.signature_type,
+    user_agent: source.user_agent,
+    ip: source.ip,
+    version_name: source.version_name,
+    final_total: source.final_total,
+  }
+}
+
+async function loadAcceptedQuoteForJob(orgId: string, jobId: string) {
+  const source = await loadAcceptedEstimateSource(
+    supabaseAdmin as unknown as Parameters<typeof loadAcceptedEstimateSource>[0],
+    orgId,
+    jobId
+  )
+
+  return source.ok ? mapAcceptedQuoteRecord(source.data) : null
+}
+
+async function loadPublicQuoteTimelineForJob(
+  orgId: string,
+  estimateIds: string[]
+): Promise<ServiceResult<EstimatePublicTimelineEvent[]>> {
+  const uniqueEstimateIds = Array.from(new Set(estimateIds.filter(Boolean)))
+  if (uniqueEstimateIds.length === 0) return okResult([])
+
+  const { data: publicVersionsData, error: publicVersionsError } = await supabaseAdmin
+    .from('estimate_public_versions')
+    .select('id, estimate_id, version_number, public_token, status, accepted_at, declined_at')
+    .eq('org_id', orgId)
+    .in('estimate_id', uniqueEstimateIds)
+
+  if (publicVersionsError) {
+    return errorResult('server_error', publicVersionsError.message)
+  }
+
+  const publicVersions = (publicVersionsData ?? []) as EstimatePublicVersionRow[]
+  const publicVersionIds = publicVersions.map((version) => version.id).filter(Boolean)
+  if (publicVersionIds.length === 0) return okResult([])
+
+  const { data: publicEventsData, error: publicEventsError } = await supabaseAdmin
+    .from('estimate_public_events')
+    .select('id, estimate_public_version_id, event_type, actor_type, metadata, created_at, created_by')
+    .eq('org_id', orgId)
+    .in('estimate_public_version_id', publicVersionIds)
+
+  if (publicEventsError) {
+    return errorResult('server_error', publicEventsError.message)
+  }
+
+  return okResult(
+    buildEstimatePublicTimelineEvents({
+      versions: publicVersions,
+      publicEvents: (publicEventsData ?? []) as EstimatePublicEventRow[],
+    })
+  )
 }
 
 export async function listJobs(orgId: string): Promise<ServiceResult<JobSummaryRecord[]>> {
@@ -371,13 +471,20 @@ export async function getJobDetail(
     }
   }
 
-  const [customersResult, linkedEstimatesResult] = await Promise.all([
+  const [customersResult, linkedEstimatesResult, acceptedQuote] = await Promise.all([
     loadCustomersById(orgId, asString(jobRow.customer_id) ? [asString(jobRow.customer_id) as string] : []),
     loadLinkedEstimates(orgId, jobId),
+    asString(jobRow.linked_estimate_id) ? loadAcceptedQuoteForJob(orgId, jobId) : Promise.resolve(null),
   ])
 
   if (!customersResult.ok) return customersResult
   if (!linkedEstimatesResult.ok) return linkedEstimatesResult
+
+  const publicQuoteTimelineResult = await loadPublicQuoteTimelineForJob(
+    orgId,
+    linkedEstimatesResult.data.map((estimate) => estimate.id)
+  )
+  if (!publicQuoteTimelineResult.ok) return publicQuoteTimelineResult
 
   const customerId = asString(jobRow.customer_id)
   return okResult(
@@ -386,6 +493,8 @@ export async function getJobDetail(
       optionalColumns,
       customer: customerId ? customersResult.data.get(customerId) ?? null : null,
       linkedEstimates: linkedEstimatesResult.data,
+      acceptedQuote,
+      publicQuoteTimelineEvents: publicQuoteTimelineResult.data,
       withOptionalJobColumns: (sourceRow, availableColumns) =>
         ((withOptionalJobColumns(
           sourceRow as Record<string, unknown>,

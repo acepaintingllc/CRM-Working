@@ -1,8 +1,11 @@
 import { sortByPosition } from '../../../../../../lib/estimator/v2DraftPayload.ts'
+import { isBaseTrimType } from '../../../../../../lib/estimator/trimTypeMetadata.ts'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingScopeMode,
   EstimateV2CeilingSegmentDraft,
+  EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2TrimMeasurementMode,
@@ -16,6 +19,8 @@ import type {
 import {
   createDefaultCeilingScope,
   createDefaultCeilingSegment,
+  createDefaultDoorScope,
+  createDefaultDrywallRepair,
   createDefaultRoom,
   createDefaultScope,
   createDefaultSegment,
@@ -107,6 +112,8 @@ export function deleteRoomCascadeMutation(params: {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
+  doorScopes?: EstimateV2DoorScopeDraft[]
+  drywallRepairs?: EstimateV2DrywallRepairDraft[]
   roomId: string
   selectedRoomId: string
 }) {
@@ -122,6 +129,10 @@ export function deleteRoomCascadeMutation(params: {
     ceilingScopes: params.ceilingScopes.filter((scope) => scope.roomId !== params.roomId),
     ceilingSegments: params.ceilingSegments.filter((segment) => segment.roomId !== params.roomId),
     trimScopes: params.trimScopes.filter((scope) => scope.roomId !== params.roomId),
+    doorScopes: (params.doorScopes ?? []).filter((scope) => scope.roomId !== params.roomId),
+    drywallRepairs: (params.drywallRepairs ?? []).filter(
+      (repair) => repair.roomId !== params.roomId
+    ),
     selectedRoomId: nextSelectedRoomId,
   }
 }
@@ -148,6 +159,38 @@ export function updateWallScopeMutation(
   patch: Partial<EstimateV2WallScopeDraft>
 ) {
   return scopes.map((scope) => (scope.id === scopeId ? { ...scope, ...patch } : scope))
+}
+
+function forceSegmentCeilingScopeFlat(scope: EstimateV2CeilingScopeDraft): EstimateV2CeilingScopeDraft {
+  return {
+    ...scope,
+    mode: 'SEG',
+    ceilingTypeId: 'FLAT',
+    ceilingGeometryMode: 'FLAT',
+    lengthIn: '',
+    widthIn: '',
+    areaSf: '',
+    vaultedAreaFactor: '',
+    vaultedRidgeLengthIn: '',
+    vaultedSlopeLengthIn: '',
+    vaultedPlaneCount: '',
+    trayPerimeterIn: '',
+    trayStepHeightIn: '',
+    trayBandWidthIn: '',
+    cofferSectionLengthIn: '',
+    cofferSectionWidthIn: '',
+    cofferSectionCount: '',
+    cofferFaceHeightIn: '',
+    cofferBottomWidthIn: '',
+  }
+}
+
+export function syncWallCutInFromTrayCeilings(params: {
+  wallScopes: EstimateV2WallScopeDraft[]
+  ceilingScopes: EstimateV2CeilingScopeDraft[]
+}) {
+  void params.ceilingScopes
+  return params.wallScopes
 }
 
 export function addWallScopeMutation(params: {
@@ -410,7 +453,7 @@ export function toggleRoomCeilingIncludeMutation(params: {
     const nextScope = createDefaultCeilingScope(params.roomId, params.roomMode)
     nextScope.heightFactor = params.defaultHeightFactor
     nextScope.include = 'Y'
-    return [...params.scopes, nextScope]
+    return [...params.scopes, params.roomMode === 'SEG' ? forceSegmentCeilingScopeFlat(nextScope) : nextScope]
   }
   const nextInclude: 'Y' | 'N' = roomScopes.some((scope) => scope.include === 'Y') ? 'N' : 'Y'
   const scopeIds = new Set(roomScopes.map((scope) => scope.id))
@@ -430,10 +473,25 @@ export function applyCeilingRoomModeMutation(params: {
   if (roomScopes.length === 0) {
     const nextScope = createDefaultCeilingScope(params.roomId, params.nextMode)
     nextScope.heightFactor = params.defaultHeightFactor
-    return { scopes: [...params.scopes, nextScope], segments: params.segments }
+    return {
+      scopes: [
+        ...params.scopes,
+        params.nextMode === 'SEG' ? forceSegmentCeilingScopeFlat(nextScope) : nextScope,
+      ],
+      segments: params.segments,
+    }
   }
 
   if (currentMode === params.nextMode) {
+    if (params.nextMode === 'SEG') {
+      const roomScopeIds = new Set(roomScopes.map((scope) => scope.id))
+      return {
+        scopes: params.scopes.map((scope) =>
+          roomScopeIds.has(scope.id) ? forceSegmentCeilingScopeFlat(scope) : scope
+        ),
+        segments: params.segments,
+      }
+    }
     return { scopes: params.scopes, segments: params.segments }
   }
 
@@ -441,7 +499,7 @@ export function applyCeilingRoomModeMutation(params: {
     return {
       scopes: params.scopes.map((scope) =>
         scope.id === roomScopes[0].id
-          ? { ...scope, mode: 'SEG', lengthIn: '', widthIn: '', areaSf: '', position: 0 }
+          ? { ...forceSegmentCeilingScopeFlat(scope), position: 0 }
           : scope
       ),
       segments: params.segments,
@@ -512,6 +570,103 @@ export function toggleRoomTrimIncludeMutation(
   return scopes.map((scope) => (scope.roomId === roomId ? { ...scope, include: hasIncluded ? 'N' : 'Y' } : scope))
 }
 
+export function updateDoorScopeMutation(
+  scopes: EstimateV2DoorScopeDraft[],
+  scopeId: string,
+  patch: Partial<EstimateV2DoorScopeDraft>
+) {
+  return scopes.map((scope) => (scope.id === scopeId ? { ...scope, ...patch } : scope))
+}
+
+export function addDoorScopeMutation(scopes: EstimateV2DoorScopeDraft[], roomId: string) {
+  const roomScopes = sortByPosition(scopes.filter((scope) => scope.roomId === roomId))
+  const nextScope = createDefaultDoorScope(roomId)
+  nextScope.position = roomScopes.length
+  return [...scopes, nextScope]
+}
+
+export function moveDoorScopeMutation(params: {
+  scopes: EstimateV2DoorScopeDraft[]
+  roomId: string
+  scopeId: string
+  direction: -1 | 1
+}) {
+  const roomScopes = sortByPosition(params.scopes.filter((scope) => scope.roomId === params.roomId))
+  const index = roomScopes.findIndex((scope) => scope.id === params.scopeId)
+  if (index === -1) return params.scopes
+  const reordered = moveItem(roomScopes, index, index + params.direction).map((scope, position) => ({
+    ...scope,
+    position,
+  }))
+  return [...params.scopes.filter((scope) => scope.roomId !== params.roomId), ...reordered]
+}
+
+export function deleteDoorScopeMutation(
+  scopes: EstimateV2DoorScopeDraft[],
+  roomId: string,
+  scopeId: string
+) {
+  const remaining = scopes.filter((scope) => !(scope.roomId === roomId && scope.id === scopeId))
+  const roomScopes = reindexByPosition(remaining.filter((scope) => scope.roomId === roomId))
+  return [...remaining.filter((scope) => scope.roomId !== roomId), ...roomScopes]
+}
+
+export function toggleRoomDoorIncludeMutation(
+  scopes: EstimateV2DoorScopeDraft[],
+  roomId: string
+): EstimateV2DoorScopeDraft[] {
+  const roomScopes = sortByPosition(scopes.filter((scope) => scope.roomId === roomId))
+  if (roomScopes.length === 0) {
+    const nextScope = createDefaultDoorScope(roomId)
+    nextScope.include = 'Y'
+    return [...scopes, nextScope]
+  }
+  const hasIncluded = roomScopes.some((scope) => scope.include === 'Y')
+  return scopes.map((scope) => (scope.roomId === roomId ? { ...scope, include: hasIncluded ? 'N' : 'Y' } : scope))
+}
+
+export function addDrywallRepairMutation(params: {
+  repairs: EstimateV2DrywallRepairDraft[]
+  roomId: string
+  surface: EstimateV2DrywallRepairDraft['surface']
+  repairType: string
+}) {
+  const roomRepairs = sortByPosition(
+    params.repairs.filter(
+      (repair) => repair.roomId === params.roomId && repair.surface === params.surface
+    )
+  )
+  const nextRepair = createDefaultDrywallRepair(params.roomId, params.surface, params.repairType)
+  nextRepair.position = roomRepairs.length
+  return [...params.repairs, nextRepair]
+}
+
+export function updateDrywallRepairMutation(
+  repairs: EstimateV2DrywallRepairDraft[],
+  repairId: string,
+  patch: Partial<EstimateV2DrywallRepairDraft>
+) {
+  return repairs.map((repair) => (repair.id === repairId ? { ...repair, ...patch } : repair))
+}
+
+export function deleteDrywallRepairMutation(
+  repairs: EstimateV2DrywallRepairDraft[],
+  roomId: string,
+  repairId: string
+) {
+  const deleted = repairs.find((repair) => repair.id === repairId)
+  const surface = deleted?.surface
+  const remaining = repairs.filter((repair) => !(repair.roomId === roomId && repair.id === repairId))
+  if (!surface) return remaining
+  const roomSurfaceRepairs = reindexByPosition(
+    remaining.filter((repair) => repair.roomId === roomId && repair.surface === surface)
+  )
+  return [
+    ...remaining.filter((repair) => !(repair.roomId === roomId && repair.surface === surface)),
+    ...roomSurfaceRepairs,
+  ]
+}
+
 export function stripInvalidTrimHelperModeMutation(params: {
   scopes: EstimateV2TrimScopeDraft[]
   roomModeById: Map<string, 'RECT' | 'SEG'>
@@ -554,14 +709,27 @@ export function applyTrimTypeMutation(params: {
     const helperAllowed = !!trimType?.helper_allowed && roomMode === 'RECT'
     const keepHelperMode = helperAllowed && scope.measurementMode === 'ROOM_HELPER'
     const isCrown = isCrownTrimType(trimType, scope)
+    const nextUnitType = (trimType?.unit_type ?? scope.unitType ?? 'LF') as EstimateV2TrimUnitType
+    const isBaseboard =
+      nextUnitType === 'LF' &&
+      isBaseTrimType({
+        id: params.trimTypeId,
+        label: trimType?.label ?? scope.scopeName,
+        family: trimType?.family ?? scope.trimFamily,
+        category: trimType?.category,
+        trimCategory: trimType?.trim_category,
+        pickerGroup: trimType?.picker_group,
+        unitType: nextUnitType,
+      })
     return {
       ...scope,
       trimTypeId: params.trimTypeId,
       trimFamily: (trimType?.family ?? trimType?.category ?? scope.trimFamily ?? '').toUpperCase(),
-      unitType: (trimType?.unit_type ?? scope.unitType ?? 'LF') as EstimateV2TrimUnitType,
+      unitType: nextUnitType,
       productionRateId: trimType?.default_production_rate_id ?? params.trimTypeId ?? scope.productionRateId,
       measurementMode: keepHelperMode ? 'ROOM_HELPER' : 'MANUAL',
       helperSource: keepHelperMode ? 'ROOM_PERIMETER' : '',
+      baseboardOpeningCount: isBaseboard ? scope.baseboardOpeningCount : '',
       heightFactor: isCrown ? params.roomHeightFactorByRoomId.get(scope.roomId) ?? '1' : '1',
     }
   })

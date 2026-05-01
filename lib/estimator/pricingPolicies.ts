@@ -29,6 +29,13 @@ export type EngineOutput = {
   }
 }
 
+export type EstimatePricingEngineKind = 'walls' | 'ceilings' | 'trim' | 'drywall' | 'doors' | 'other'
+
+export type EstimatePricingEngineInput = {
+  kind: EstimatePricingEngineKind
+  output: EngineOutput
+}
+
 export type LaborDayPolicySettings = {
   enabled: boolean
   dayhours: number
@@ -60,6 +67,19 @@ export type RoomPricingSummary = {
   finalTotal: number
 }
 
+export type AccessFeePricingAllocation = {
+  walls: number
+  ceilings: number
+  trim: number
+  unallocated: number
+  warning: string | null
+}
+
+export type EstimateAccessFeePricingInput = {
+  total: number
+  scopes: AccessFeeAllocationScope[]
+}
+
 export type WholeDollarReconciledRow<T extends { price: number }> = T
 
 export type EstimateTrimPaintInput = {
@@ -84,6 +104,8 @@ export type EstimatePricingSummary = {
   paintMaterialCost: number
   primerMaterialCost: number
   supplyCost: number
+  sharedAccessCost: number
+  accessFeeAllocation: AccessFeePricingAllocation
   prePolicyTotal: number
   postLaborPolicyTotal: number
   minimumAdjustmentAmount: number
@@ -281,11 +303,36 @@ export function buildEstimatePricingSummary(
   engines: EngineOutput[],
   laborPolicy: LaborDayPolicySettings,
   minimumPolicy: JobMinimumSettings,
-  trimPaint: EstimateTrimPaintInput | null = null
+  trimPaint: EstimateTrimPaintInput | null = null,
+  extraSupplyCost = 0,
+  accessFees: EstimateAccessFeePricingInput | null = null
 ): EstimatePricingSummary {
+  return buildEstimatePricingSummaryFromEngines(
+    engines.map((output, index) => ({
+      kind: index === 0 ? 'walls' : index === 1 ? 'ceilings' : 'other',
+      output,
+    })),
+    laborPolicy,
+    minimumPolicy,
+    trimPaint,
+    extraSupplyCost,
+    accessFees
+  )
+}
+
+export function buildEstimatePricingSummaryFromEngines(
+  engineInputs: EstimatePricingEngineInput[],
+  laborPolicy: LaborDayPolicySettings,
+  minimumPolicy: JobMinimumSettings,
+  trimPaint: EstimateTrimPaintInput | null = null,
+  extraSupplyCost = 0,
+  accessFees: EstimateAccessFeePricingInput | null = null
+): EstimatePricingSummary {
+  const engines = engineInputs.map((engine) => engine.output)
   const laborRate = engines[0]?.assumptions.labor_rate_per_hour ?? DEFAULT_LABOR_RATE
-  const wallEngine = engines[0]
-  const ceilingEngine = engines[1]
+  const wallEngines = engineInputs.filter((engine) => engine.kind === 'walls').map((engine) => engine.output)
+  const ceilingEngines = engineInputs.filter((engine) => engine.kind === 'ceilings').map((engine) => engine.output)
+  const trimEngines = engineInputs.filter((engine) => engine.kind === 'trim').map((engine) => engine.output)
 
   // Aggregate from included scopes across all engines
   let rawLaborHours = 0
@@ -304,21 +351,36 @@ export function buildEstimatePricingSummary(
     }
   }
 
-  for (const scope of wallEngine?.scopes ?? []) {
-    if (scope.include !== 'Y') continue
-    wallPaintMaterialCost = round4(
-      wallPaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
-    )
+  for (const engine of wallEngines) {
+    for (const scope of engine.scopes) {
+      if (scope.include !== 'Y') continue
+      wallPaintMaterialCost = round4(
+        wallPaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
+      )
+    }
   }
 
-  for (const scope of ceilingEngine?.scopes ?? []) {
-    if (scope.include !== 'Y') continue
-    ceilingPaintMaterialCost = round4(
-      ceilingPaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
-    )
+  for (const engine of ceilingEngines) {
+    for (const scope of engine.scopes) {
+      if (scope.include !== 'Y') continue
+      ceilingPaintMaterialCost = round4(
+        ceilingPaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
+      )
+    }
   }
 
-  const trimPaintMaterialCost = round2(trimPaint?.paint_cost ?? 0)
+  let trimScopePaintMaterialCost = 0
+  for (const engine of trimEngines) {
+    for (const scope of engine.scopes) {
+      if (scope.include !== 'Y') continue
+      trimScopePaintMaterialCost = round4(
+        trimScopePaintMaterialCost + (scope.allocated_paint_material_cost ?? scope.raw_paint_material_cost ?? 0)
+      )
+    }
+  }
+
+  const standaloneTrimPaintMaterialCost = round2(trimPaint?.paint_cost ?? 0)
+  const trimPaintMaterialCost = round2(trimScopePaintMaterialCost + standaloneTrimPaintMaterialCost)
   const paintMaterialCost = round2(wallPaintMaterialCost + ceilingPaintMaterialCost + trimPaintMaterialCost)
   // Per-color shared supply costs; aggregate across all engines.
   let perColorSupplyCost = 0
@@ -329,7 +391,19 @@ export function buildEstimatePricingSummary(
       }
     }
   }
-  const supplyCost = round2(areaSupplyCost + perColorSupplyCost)
+  const supplyCost = round2(areaSupplyCost + perColorSupplyCost + extraSupplyCost)
+  const sharedAccessCost = round2(Math.max(0, accessFees?.total ?? 0))
+  const accessAllocationResult = allocateAccessFeesByEligibleScope({
+    accessFeeTotal: sharedAccessCost,
+    scopes: accessFees?.scopes ?? [],
+  })
+  const accessFeeAllocation: AccessFeePricingAllocation = {
+    walls: accessAllocationResult.allocations.walls,
+    ceilings: accessAllocationResult.allocations.ceilings,
+    trim: accessAllocationResult.allocations.trim,
+    unallocated: accessAllocationResult.unallocated,
+    warning: accessAllocationResult.warning,
+  }
 
   const laborResult = applyLaborDayPolicy(rawLaborHours, laborPolicy)
   const laborCost = round2(laborResult.effectiveHours * laborRate)
@@ -343,13 +417,13 @@ export function buildEstimatePricingSummary(
   }
 
   const roomBases = [...roomTotalMap.entries()].map(([room_id, baseTotal]) => ({ room_id, baseTotal }))
-  const trimAllocations = allocateMinimumAdjustment(roomBases, trimPaintMaterialCost)
+  const trimAllocations = allocateMinimumAdjustment(roomBases, standaloneTrimPaintMaterialCost)
   const roomBasesWithTrim = roomBases.map((room, idx) => ({
     room_id: room.room_id,
     baseTotal: round2(room.baseTotal + (trimAllocations[idx]?.allocatedMinimumAdjustment ?? 0)),
   }))
 
-  const prePolicyTotal = round2(roomBasesWithTrim.reduce((s, v) => s + v.baseTotal, 0))
+  const prePolicyTotal = round2(roomBasesWithTrim.reduce((s, v) => s + v.baseTotal, 0) + sharedAccessCost)
   const postLaborPolicyTotal = round2(prePolicyTotal + (laborResult.effectiveHours - rawLaborHours) * laborRate)
 
   const minimumResult = applyJobMinimum(postLaborPolicyTotal, minimumPolicy)
@@ -368,6 +442,8 @@ export function buildEstimatePricingSummary(
     paintMaterialCost,
     primerMaterialCost: round2(primerMaterialCost),
     supplyCost,
+    sharedAccessCost,
+    accessFeeAllocation,
     prePolicyTotal,
     postLaborPolicyTotal,
     minimumAdjustmentAmount: minimumResult.adjustmentAmount,
@@ -376,10 +452,40 @@ export function buildEstimatePricingSummary(
     trimPaint,
   }
 }
+
+export function buildPerJobSupplyCost(params: {
+  catalogs: WallCalculationCatalogs | null | undefined
+  crewSize: number
+  activeScopes: Array<'walls' | 'ceilings' | 'trim'>
+}) {
+  const activeScopes = new Set(params.activeScopes)
+  let total = 0
+  for (const row of params.catalogs?.supplies_rates ?? []) {
+    if (String(row.supply_group ?? '').replace(/[^a-z0-9]/gi, '').toLowerCase() !== 'perjob') {
+      continue
+    }
+    const scope = String(row.scope ?? '').replace(/[^a-z0-9]/gi, '').toLowerCase()
+    const applies =
+      scope === '' ||
+      scope === 'all' ||
+      (activeScopes.has('walls') && (scope === 'wall' || scope === 'walls')) ||
+      (activeScopes.has('ceilings') && (scope === 'ceiling' || scope === 'ceilings')) ||
+      (activeScopes.has('trim') && scope === 'trim')
+    if (!applies) continue
+    const multiplier = String(row.crew_multiplier ?? '').toUpperCase() === 'Y' ? params.crewSize : 1
+    total = round4(total + Math.max(0, row.value) * multiplier)
+  }
+  return total
+}
 import {
   DEFAULT_DAY_HOURS,
   DEFAULT_JOB_MINIMUM_AMOUNT,
   DEFAULT_LABOR_RATE,
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from './defaults.ts'
+import {
+  allocateAccessFeesByEligibleScope,
+  type AccessFeeAllocationScope,
+} from './accessFees.ts'
+import type { WallCalculationCatalogs } from './wallsTypes.ts'
 

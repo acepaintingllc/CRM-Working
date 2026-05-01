@@ -1,10 +1,10 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLoadableResource } from '@/app/crm/_hooks/useLoadableResource'
 import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
-import { loadCustomerList } from '@/lib/customers/client'
+import { loadCustomerDetail, loadCustomerList } from '@/lib/customers/client'
 import { createJob } from '@/lib/jobs/client'
 import {
   normalizeJobCreateValues,
@@ -22,6 +22,7 @@ export type CustomerOption = {
 }
 
 const emptyCustomerOptions: CustomerOption[] = []
+const customerSearchLimit = 3
 
 function getLoadErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Failed to load customers.'
@@ -38,6 +39,7 @@ export function useNewJobPage() {
   const [createdJobId, setCreatedJobId] = useState<string | null>(null)
   const [debouncedCustomerQuery, setDebouncedCustomerQuery] = useState('')
   const [selectedCustomerSnapshot, setSelectedCustomerSnapshot] = useState<CustomerOption | null>(null)
+  const consumedPreselectedCustomerIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -50,7 +52,10 @@ export function useNewJobPage() {
   const customerResource = useLoadableResource<CustomerOption[]>({
     initialData: emptyCustomerOptions,
     load: async () => {
-      const rows = await loadCustomerList({ search: debouncedCustomerQuery || undefined })
+      const rows = await loadCustomerList({
+        search: debouncedCustomerQuery || undefined,
+        pageSize: customerSearchLimit,
+      })
       const customers = Array.isArray(rows.data)
         ? rows.data
         : Array.isArray(rows)
@@ -88,13 +93,57 @@ export function useNewJobPage() {
     setValue((current) => ({ ...current, customerId: match.id, customerQuery: '' }))
   }, [customerResource.data, preselectedCustomerId, value.customerId])
 
+  useEffect(() => {
+    if (!preselectedCustomerId || value.customerId) return
+    if (consumedPreselectedCustomerIdRef.current === preselectedCustomerId) return
+
+    const customerIdToLoad = preselectedCustomerId
+    consumedPreselectedCustomerIdRef.current = customerIdToLoad
+    let cancelled = false
+
+    async function loadPreselectedCustomer() {
+      try {
+        const customer = await loadCustomerDetail(customerIdToLoad)
+        if (cancelled) return
+
+        const snapshot = {
+          id: customer.id,
+          name: customer.name ?? 'Unknown customer',
+          address: customer.address ?? null,
+          email: customer.email ?? null,
+          phone: customer.phone ?? null,
+        }
+        setSelectedCustomerSnapshot(snapshot)
+        setValue((current) =>
+          current.customerId
+            ? current
+            : { ...current, customerId: snapshot.id, customerQuery: '' }
+        )
+
+        const url = new URL(window.location.href)
+        url.searchParams.delete('customerId')
+        window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Failed to load selected customer.')
+        }
+      }
+    }
+
+    void loadPreselectedCustomer()
+
+    return () => {
+      cancelled = true
+    }
+  }, [preselectedCustomerId, value.customerId])
+
   const validationError = useMemo(() => {
     const result = validateJobCreateValues(value)
     return result.ok ? null : result.error
   }, [value])
 
   const canSave =
-    customerResource.data.length > 0 && !customerResource.loading && !saving && !validationError
+    Boolean(selectedCustomer) && !customerResource.loading && !saving && !validationError
 
   const workflow = useJobCreateWorkflow({
     value,
@@ -155,7 +204,13 @@ export function useNewJobPage() {
     value,
     setValue,
     selectedCustomer,
-    filteredCustomers: customerResource.data,
+    hasCustomerChoices: Boolean(selectedCustomer) || customerResource.data.length > 0,
+    filteredCustomers: selectedCustomer
+      ? [
+          selectedCustomer,
+          ...customerResource.data.filter((customer) => customer.id !== selectedCustomer.id),
+        ].slice(0, customerSearchLimit)
+      : customerResource.data.slice(0, customerSearchLimit),
     saving,
     error,
     notice,
