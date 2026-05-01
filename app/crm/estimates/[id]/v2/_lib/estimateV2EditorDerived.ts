@@ -144,6 +144,147 @@ export function buildTrimScopeMetricById(
   return next
 }
 
+function buildTrimCalculationScopeById(trimCalculations: Unsafe | null) {
+  const next = new Map<string, Unsafe>()
+  const calcScopes =
+    trimCalculations && typeof trimCalculations === 'object' && Array.isArray((trimCalculations as Unsafe).scopes)
+      ? ((trimCalculations as Unsafe).scopes as Unsafe[])
+      : []
+  for (const scope of calcScopes) {
+    const scopeId = asText(scope.id)
+    if (!scopeId) continue
+    next.set(scopeId, scope)
+  }
+  return next
+}
+
+function trimModifierProduct(scope: Pick<
+  EstimateV2TrimScopeDraft,
+  | 'prepFactor'
+  | 'heightFactor'
+  | 'profileFactor'
+  | 'roomFlagFactor'
+  | 'maskingFactor'
+  | 'stairFactor'
+  | 'difficultFinishFactor'
+  | 'caulkFillFactor'
+>): number {
+  return [
+    scope.prepFactor,
+    scope.heightFactor,
+    scope.profileFactor,
+    scope.roomFlagFactor,
+    scope.maskingFactor,
+    scope.stairFactor,
+    scope.difficultFinishFactor,
+    scope.caulkFillFactor,
+  ].reduce<number>((product, value) => {
+    const factor = numberOrNull(value)
+    return product * (factor != null && factor > 0 ? factor : 1)
+  }, 1)
+}
+
+function trimCalculationModifierProduct(scope: Unsafe): number {
+  return [
+    scope.prep_factor,
+    scope.height_factor,
+    scope.profile_factor,
+    scope.room_flag_factor,
+    scope.masking_factor,
+    scope.stair_factor,
+    scope.difficult_finish_factor,
+    scope.caulk_fill_factor,
+  ].reduce<number>((product, value) => {
+    const factor = unknownNumberOrNull(value)
+    return product * (factor != null && factor > 0 ? factor : 1)
+  }, 1)
+}
+
+function resolveTrimDraftMeasurement(
+  scope: EstimateV2TrimScopeDraft,
+  roomById: Map<string, EstimateV2RoomDraft>,
+  roomModeById: Map<string, 'RECT' | 'SEG'>
+) {
+  if (scope.include !== 'Y') return 0
+  const overrideMeasurement = numberOrNull(scope.overrideMeasurement)
+  if (overrideMeasurement != null && overrideMeasurement >= 0) return overrideMeasurement
+  if (scope.measurementMode === 'ROOM_HELPER') {
+    const explicitHelper = numberOrNull(scope.helperValue)
+    if (explicitHelper != null && explicitHelper >= 0) return explicitHelper
+    const room = roomById.get(scope.roomId)
+    const lengthIn = room ? numberOrNull(room.lengthIn) : null
+    const widthIn = room ? numberOrNull(room.widthIn) : null
+    if (roomModeById.get(scope.roomId) === 'RECT' && lengthIn != null && widthIn != null) {
+      return Math.round(((2 * (lengthIn + widthIn)) / 12) * 10000) / 10000
+    }
+    return 0
+  }
+  return Math.max(numberOrNull(scope.measurementValue) ?? 0, 0)
+}
+
+export function buildLocalTrimScopeMetricById(params: {
+  trimCalculations: Unsafe | null
+  trimScopes: EstimateV2TrimScopeDraft[]
+  rooms: EstimateV2RoomDraft[]
+  roomModeById: Map<string, 'RECT' | 'SEG'>
+  key: 'effective_measurement' | 'effective_total'
+}) {
+  const next = new Map<string, number | null>()
+  const calcScopeById = buildTrimCalculationScopeById(params.trimCalculations)
+  const roomById = new Map(params.rooms.map((room) => [room.roomId, room] as const))
+  const assumptions =
+    params.trimCalculations &&
+    typeof params.trimCalculations === 'object' &&
+    typeof (params.trimCalculations as Unsafe).assumptions === 'object'
+      ? ((params.trimCalculations as Unsafe).assumptions as Unsafe)
+      : null
+  const assumedLaborRate = unknownNumberOrNull(assumptions?.labor_rate_per_hour)
+
+  for (const scope of params.trimScopes) {
+    const draftMeasurement = resolveTrimDraftMeasurement(scope, roomById, params.roomModeById)
+    if (params.key === 'effective_measurement') {
+      next.set(scope.id, draftMeasurement)
+      continue
+    }
+
+    const overrideTotal = numberOrNull(scope.overrideTotal)
+    if (overrideTotal != null && overrideTotal >= 0) {
+      next.set(scope.id, overrideTotal)
+      continue
+    }
+
+    const calcScope = calcScopeById.get(scope.id)
+    const savedTotal = calcScope ? unknownNumberOrNull(calcScope.effective_total) : null
+    if (savedTotal == null) {
+      next.set(scope.id, null)
+      continue
+    }
+
+    const savedMeasurement = calcScope ? unknownNumberOrNull(calcScope.effective_measurement) : null
+    const measurementRatio =
+      savedMeasurement != null && savedMeasurement > 0
+        ? draftMeasurement / savedMeasurement
+        : draftMeasurement === 0
+          ? 0
+          : 1
+    const savedModifier = calcScope ? trimCalculationModifierProduct(calcScope) : 1
+    const draftModifier = trimModifierProduct(scope)
+    const modifierRatio = savedModifier > 0 ? draftModifier / savedModifier : 1
+    const savedPaintHours = calcScope ? unknownNumberOrNull(calcScope.effective_paint_hours) : null
+    const savedPrimerHours = calcScope ? unknownNumberOrNull(calcScope.effective_primer_hours) : null
+    const savedLaborHours = (savedPaintHours ?? 0) + (savedPrimerHours ?? 0)
+    const laborRate =
+      (calcScope ? unknownNumberOrNull(calcScope.labor_rate_per_hour) : null) ?? assumedLaborRate
+    const savedLaborCost = laborRate != null ? savedLaborHours * laborRate : savedTotal
+    const savedNonLaborCost = Math.max(savedTotal - savedLaborCost, 0)
+    next.set(
+      scope.id,
+      Math.round((savedLaborCost * measurementRatio * modifierRatio + savedNonLaborCost * measurementRatio) * 100) / 100
+    )
+  }
+  return next
+}
+
 export function buildWallScopeEffectiveTotalById(wallCalculations: EstimateV2WallCalculationsPayload | null) {
   const next = new Map<string, number | null>()
   for (const scope of wallCalculations?.scopes ?? []) {
