@@ -264,6 +264,7 @@ describe('customer send delivery', () => {
     expect(mockSendGmailMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         bodyText: expect.stringContaining(publicUrl),
+        bodyHtml: expect.stringContaining(`Customer quote link: <a href="${publicUrl}">`),
       })
     )
     expect(result.ok).toBe(true)
