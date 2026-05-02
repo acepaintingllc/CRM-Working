@@ -209,11 +209,13 @@ export function EstimateV2Sidebar({
           const roomScopes = roomVm.roomScopeByRoomId.get(room.roomId) ?? []
           const roomCeilingScopes = roomVm.roomCeilingScopeByRoomId.get(room.roomId) ?? []
           const roomTrimScopes = roomVm.roomTrimScopeByRoomId.get(room.roomId) ?? []
+          const roomDoorScopes = roomVm.roomDoorScopeByRoomId?.get(room.roomId) ?? []
           const areaSf = roomVm.displayedRoomEffectiveAreaByRoomId.get(room.roomId) ?? null
           const includedScopes = [
             roomScopes.some((scope) => scope.include === 'Y') ? 'Walls' : null,
             roomCeilingScopes.some((scope) => scope.include === 'Y') ? 'Ceilings' : null,
             roomTrimScopes.some((scope) => scope.include === 'Y') ? 'Trim' : null,
+            roomDoorScopes.some((scope) => scope.include === 'Y') ? 'Doors' : null,
           ]
             .filter(Boolean)
             .join(', ')

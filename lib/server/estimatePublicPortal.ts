@@ -230,6 +230,33 @@ function transitionConflictMessage(
   return `Cannot ${nextStatus} quote from ${currentStatus} status`
 }
 
+function parsePublicQuoteDate(value: unknown) {
+  const text = asText(value)
+  if (!text) return null
+
+  const date = new Date(text.includes('T') ? text : `${text}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function publicQuoteExpirationDate(snapshot: EstimatePublicSnapshot) {
+  const validDays = Number(snapshot.document.quote_validity_days)
+  if (!Number.isFinite(validDays) || validDays <= 0) return null
+
+  const sourceDate =
+    parsePublicQuoteDate(snapshot.sent_at) ??
+    parsePublicQuoteDate(snapshot.document.meta.sent_at)
+  if (!sourceDate) return null
+
+  const expiresAt = new Date(sourceDate)
+  expiresAt.setDate(expiresAt.getDate() + validDays)
+  return expiresAt
+}
+
+function isPublicQuoteExpired(snapshot: EstimatePublicSnapshot, now = new Date()) {
+  const expiresAt = publicQuoteExpirationDate(snapshot)
+  return expiresAt ? now.getTime() > expiresAt.getTime() : false
+}
+
 async function loadTransitionableEstimate(token: string) {
   if (!token || typeof token !== 'string') {
     return errorResult('invalid_input', 'Invalid token')
@@ -547,6 +574,12 @@ export async function acceptPublicEstimate(
   const signatureType = asText(params.signatureType) || 'typed'
   if (!canTransitionToTerminalState(currentStatus, 'accepted')) {
     return errorResult('conflict', transitionConflictMessage(currentStatus, 'accepted'))
+  }
+  if (currentStatus !== 'accepted' && isPublicQuoteExpired(loaded.snapshot)) {
+    return errorResult(
+      'conflict',
+      'This quote has expired. Please contact us for an updated quote.'
+    )
   }
   if (currentStatus === 'accepted') {
     const acceptedAt =

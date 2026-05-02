@@ -15,7 +15,6 @@ import {
   calculatePaintSuppliesTotal,
   createDisplayScopePaintCostCalculator,
   createPaintProductLabelResolver,
-  hasActiveLaborRateOverride,
   hasTrimPaintSummary,
   normalizeSummaryScopeRows,
   type EstimateV2SummaryAlert,
@@ -173,15 +172,11 @@ export function useEstimateV2SummaryDerived(params: {
       buildSummaryAlerts({
         pricingSummary,
         hasJobSettings: !!data?.inputs?.jobsettings,
-        laborRateOverrideActive: hasActiveLaborRateOverride(
-          data?.inputs?.jobsettings,
-          data?.inputs?.org_defaults
-        ),
         roomScopeRows,
         roomFlags,
         rooms,
       }),
-    [data?.inputs?.jobsettings, data?.inputs?.org_defaults, pricingSummary, roomFlags, roomScopeRows, rooms]
+    [data?.inputs?.jobsettings, pricingSummary, roomFlags, roomScopeRows, rooms]
   )
 
   const versionName = data?.estimate.version_name ?? 'Estimate'

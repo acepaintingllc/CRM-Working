@@ -79,8 +79,7 @@ describe('Estimate V2 editor/summary parity', () => {
     expect(summary.current.roomBlocks[0]?.scopes).toEqual(['Walls', 'Ceilings', 'Trim'])
     expect(summary.current.summaryAlerts.map((alert) => alert.title)).toEqual([
       'Missing product selection',
-      'Manual override detected',
-      'Warning flags active',
+      'Warning flag active',
     ])
     expect(summary.current.finalTotal).toBe(1400)
     expect(editor.current.totalEffectiveAreaSqFt).toBe(476)

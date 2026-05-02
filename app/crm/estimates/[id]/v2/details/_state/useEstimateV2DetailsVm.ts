@@ -15,6 +15,7 @@ import {
   emptyConditionSelections,
 } from '../_lib/estimateV2DetailsConditions'
 import type { RatesFlagsPayload } from '@/types/estimator/ratesFlags'
+import { buildPaintOptionsByScope } from '../../_lib/estimateV2EditorDerived'
 
 export function useEstimateV2DetailsVm(params: {
   store: EstimateV2EditorStoreApi
@@ -34,6 +35,8 @@ export function useEstimateV2DetailsVm(params: {
     estimate: current.meta.estimate,
     job: current.meta.job,
     catalogs: current.meta.catalogs,
+    jobSettingsDraft: current.meta.jobSettingsDraft,
+    orgJobProductDefaults: current.meta.orgJobProductDefaults,
     wallCalculations: current.meta.wallCalculations,
     ceilingCalculations: current.meta.ceilingCalculations,
     trimCalculations: current.meta.trimCalculations,
@@ -64,6 +67,56 @@ export function useEstimateV2DetailsVm(params: {
     [state.catalogs.paint_products]
   )
 
+  const wallPaintOptions = useMemo(
+    () => buildPaintOptionsByScope(state.catalogs.paint_products, 'Walls'),
+    [state.catalogs.paint_products]
+  )
+
+  const paintProductCoverageById = useMemo(
+    () =>
+      new Map(
+        state.catalogs.paint_products.map((product) => [
+          product.id,
+          product.coverage_sqft_per_gal_per_coat ?? null,
+        ])
+      ),
+    [state.catalogs.paint_products]
+  )
+
+  const ceilingPaintOptions = useMemo(
+    () => buildPaintOptionsByScope(state.catalogs.paint_products, 'Ceilings'),
+    [state.catalogs.paint_products]
+  )
+
+  const trimPaintOptions = useMemo(
+    () => buildPaintOptionsByScope(state.catalogs.paint_products, 'Trim'),
+    [state.catalogs.paint_products]
+  )
+
+  const effectiveJobProductDefaults = useMemo(
+    () => ({
+      wallPaintProductId:
+        state.jobSettingsDraft.wallPaintProductId ||
+        state.orgJobProductDefaults.wallPaintProductId,
+      wallPrimerProductId:
+        state.jobSettingsDraft.wallPrimerProductId ||
+        state.orgJobProductDefaults.wallPrimerProductId,
+      ceilingPaintProductId:
+        state.jobSettingsDraft.ceilingPaintProductId ||
+        state.orgJobProductDefaults.ceilingPaintProductId,
+      ceilingPrimerProductId:
+        state.jobSettingsDraft.ceilingPrimerProductId ||
+        state.orgJobProductDefaults.ceilingPrimerProductId,
+      trimPaintProductId:
+        state.jobSettingsDraft.trimPaintProductId ||
+        state.orgJobProductDefaults.trimPaintProductId,
+      trimPrimerProductId:
+        state.jobSettingsDraft.trimPrimerProductId ||
+        state.orgJobProductDefaults.trimPrimerProductId,
+    }),
+    [state.jobSettingsDraft, state.orgJobProductDefaults]
+  )
+
   const colorLabelById = useMemo(
     () => new Map(state.catalogs.color_codes.map((color) => [color.id, color.label])),
     [state.catalogs.color_codes]
@@ -87,6 +140,11 @@ export function useEstimateV2DetailsVm(params: {
         pricingSummary: state.pricingSummary,
         crewSize: state.crewSize,
         paintProductLabelById,
+        paintProductCoverageById,
+        productDefaults: effectiveJobProductDefaults,
+        wallPaintOptions,
+        ceilingPaintOptions,
+        trimPaintOptions,
         colorLabelById,
         rollerOptions: params.rollerOptionsState.options,
         rollerOptionsState: params.rollerOptionsState,
@@ -101,8 +159,11 @@ export function useEstimateV2DetailsVm(params: {
       calculationRows.trimCalculationRows,
       calculationRows.wallCalculationRows,
       colorLabelById,
+      ceilingPaintOptions,
       conditionModifiers,
+      effectiveJobProductDefaults,
       paintProductLabelById,
+      paintProductCoverageById,
       params.rollerOptionsState,
       state.rollers,
       state.accessFees,
@@ -112,8 +173,11 @@ export function useEstimateV2DetailsVm(params: {
       state.pricingSummary,
       state.crewSize,
       state.catalogs.access_fees,
+      state.catalogs.paint_products,
       state.trimScopes,
       state.wallScopes,
+      trimPaintOptions,
+      wallPaintOptions,
     ]
   )
 

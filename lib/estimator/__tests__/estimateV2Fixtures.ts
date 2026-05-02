@@ -575,6 +575,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
         return {
           ...scope,
           effective_area_sf: 396,
+          raw_paint_gallons: 2.4,
           effective_paint_hours: 5,
           effective_primer_hours: 2,
           effective_supply_cost: 50,
@@ -586,6 +587,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
         return {
           ...scope,
           effective_area_sf: 80,
+          raw_paint_gallons: 0.5,
           effective_paint_hours: 2,
           effective_primer_hours: 0,
           effective_supply_cost: 20,
@@ -597,6 +599,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       return {
         ...scope,
         effective_area_sf: 40,
+        raw_paint_gallons: 0.25,
         effective_paint_hours: 0.5,
         effective_primer_hours: 0,
         effective_supply_cost: 10,
@@ -627,6 +630,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       {
         ...payload.room_ceiling_scopes[0],
         effective_area_sf: 120,
+        raw_paint_gallons: 0.8,
         effective_paint_hours: 1.5,
         effective_primer_hours: 0.5,
         effective_supply_cost: 20,
@@ -636,6 +640,7 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       {
         ...payload.room_ceiling_scopes[1],
         effective_area_sf: 60,
+        raw_paint_gallons: 0.4,
         effective_paint_hours: 1,
         effective_primer_hours: 0,
         effective_supply_cost: 10,

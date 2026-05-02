@@ -376,6 +376,8 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
   assert.equal(payload.room_ceiling_scopes[0].helper_extra_area_sf, null)
   assert.deepEqual(payload.room_ceiling_scopes[0].condition_selections, { CEIL_TEXTURE: 'major' })
   assert.equal(payload.room_trim_scopes[0].trim_type_id, 'BASE_STD')
+  assert.equal(payload.room_trim_scopes[0].paint_product_id, 'PAINT-3')
+  assert.equal(payload.room_trim_scopes[0].primer_product_id, 'PRIMER-3')
   assert.deepEqual(payload.room_trim_scopes[0].condition_selections, { TRIM_CAULKING: 'minor' })
   assert.equal(payload.room_trim_scopes[0].baseboard_opening_count, 1.5)
   assert.equal(payload.room_trim_scopes[0].override_measurement, 10)

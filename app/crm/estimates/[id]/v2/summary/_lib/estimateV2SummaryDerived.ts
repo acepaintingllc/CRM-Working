@@ -2,7 +2,6 @@
 
 import { reconcileWholeDollarRows } from '@/lib/estimator/pricingPolicies'
 import { asMaybeNumber, asNullableNumber } from '@/lib/estimator/parsing'
-import { DEFAULT_LABOR_RATE } from '@/lib/estimator/defaults'
 import {
   SCOPE_KIND_LABELS,
   SCOPE_KIND_ORDER,
@@ -30,10 +29,18 @@ type SummaryScopeSourceRow = {
   effective_measurement?: number | null
   effective_units?: number | null
   effective_quantity?: number | null
+  raw_area_sf?: number | null
+  raw_measurement?: number | null
+  raw_units?: number | null
   raw_quantity?: number | null
+  raw_paint_hours?: number | null
   effective_paint_hours?: number | null
+  raw_primer_hours?: number | null
   effective_primer_hours?: number | null
+  raw_material_cost?: number | null
+  raw_supply_cost?: number | null
   effective_supply_cost?: number | null
+  raw_total?: number | null
   effective_total?: number | null
   override_area_sf?: number | null
   override_paint_hours?: number | null
@@ -135,19 +142,27 @@ type ScopeMappingConfig = {
   missingProduct: (scope: SummaryScopeSourceRow) => boolean
 }
 
+const OVERRIDE_EPSILON = 0.0001
+
+function hasActiveOverrideValue(value: number | null | undefined, baseline?: number | null) {
+  if (value == null) return false
+  if (baseline != null) return Math.abs(value - baseline) > OVERRIDE_EPSILON
+  return Math.abs(value) > OVERRIDE_EPSILON
+}
+
 const SCOPE_MAPPING_CONFIG: Record<ScopeKind, ScopeMappingConfig> = {
   walls: {
     fallbackLabel: 'Walls',
     quantity: (scope) => scope.effective_area_sf ?? null,
     paintCost: (scope) => scope.allocated_paint_material_cost ?? null,
     hasOverride: (scope) =>
-      scope.override_area_sf != null ||
-      scope.override_paint_hours != null ||
-      scope.override_primer_hours != null ||
-      scope.override_paint_gallons != null ||
-      scope.override_primer_gallons != null ||
-      scope.override_supply_cost != null ||
-      scope.override_total != null,
+      hasActiveOverrideValue(scope.override_area_sf, scope.raw_area_sf) ||
+      hasActiveOverrideValue(scope.override_paint_hours, scope.raw_paint_hours) ||
+      hasActiveOverrideValue(scope.override_primer_hours, scope.raw_primer_hours) ||
+      hasActiveOverrideValue(scope.override_paint_gallons, scope.raw_paint_gallons) ||
+      hasActiveOverrideValue(scope.override_primer_gallons, scope.raw_primer_gallons) ||
+      hasActiveOverrideValue(scope.override_supply_cost, scope.raw_supply_cost) ||
+      hasActiveOverrideValue(scope.override_total, scope.raw_total),
     missingProduct: (scope) => !scope.paint_product_id && !scope.paint_product_label,
   },
   ceilings: {
@@ -155,26 +170,20 @@ const SCOPE_MAPPING_CONFIG: Record<ScopeKind, ScopeMappingConfig> = {
     quantity: (scope) => scope.effective_area_sf ?? null,
     paintCost: (scope) => scope.allocated_paint_material_cost ?? null,
     hasOverride: (scope) =>
-      scope.override_area_sf != null ||
-      scope.override_paint_hours != null ||
-      scope.override_primer_hours != null ||
-      scope.override_paint_gallons != null ||
-      scope.override_primer_gallons != null ||
-      scope.override_supply_cost != null ||
-      scope.override_total != null,
+      hasActiveOverrideValue(scope.override_area_sf, scope.raw_area_sf) ||
+      hasActiveOverrideValue(scope.override_paint_hours, scope.raw_paint_hours) ||
+      hasActiveOverrideValue(scope.override_primer_hours, scope.raw_primer_hours) ||
+      hasActiveOverrideValue(scope.override_paint_gallons, scope.raw_paint_gallons) ||
+      hasActiveOverrideValue(scope.override_primer_gallons, scope.raw_primer_gallons) ||
+      hasActiveOverrideValue(scope.override_supply_cost, scope.raw_supply_cost) ||
+      hasActiveOverrideValue(scope.override_total, scope.raw_total),
     missingProduct: (scope) => !scope.paint_product_id && !scope.paint_product_label,
   },
   trim: {
     fallbackLabel: 'Trim',
     quantity: (scope) => scope.effective_measurement ?? null,
     paintCost: () => null,
-    hasOverride: (scope) =>
-      scope.override_measurement != null ||
-      scope.override_hours != null ||
-      scope.override_gallons != null ||
-      scope.override_supply_cost != null ||
-      scope.override_total != null ||
-      !!scope.override_description,
+    hasOverride: () => false,
     missingProduct: () => false,
   },
   doors: {
@@ -182,18 +191,18 @@ const SCOPE_MAPPING_CONFIG: Record<ScopeKind, ScopeMappingConfig> = {
     quantity: (scope) => scope.effective_units ?? null,
     paintCost: () => null,
     hasOverride: (scope) =>
-      scope.override_paint_hours != null ||
-      scope.override_primer_hours != null ||
-      scope.override_material_cost != null ||
-      scope.override_supply_cost != null ||
-      scope.override_total != null,
+      hasActiveOverrideValue(scope.override_paint_hours, scope.raw_paint_hours) ||
+      hasActiveOverrideValue(scope.override_primer_hours, scope.raw_primer_hours) ||
+      hasActiveOverrideValue(scope.override_material_cost, scope.raw_material_cost) ||
+      hasActiveOverrideValue(scope.override_supply_cost, scope.raw_supply_cost) ||
+      hasActiveOverrideValue(scope.override_total, scope.raw_total),
     missingProduct: () => false,
   },
   drywall: {
     fallbackLabel: 'Drywall',
     quantity: (scope) => scope.effective_quantity ?? scope.raw_quantity ?? null,
     paintCost: () => null,
-    hasOverride: (scope) => scope.override_total != null,
+    hasOverride: (scope) => hasActiveOverrideValue(scope.override_total, scope.raw_total),
     missingProduct: () => false,
   },
 }
@@ -224,45 +233,54 @@ function formatOverrideValue(value: number, unit?: string) {
   return `${formatOverrideNumber(value)}${unit ? ` ${unit}` : ''}`
 }
 
-function activeOverride(label: string, value: number | null | undefined, unit?: string) {
-  return value == null ? null : `${label}: ${formatOverrideValue(value, unit)}`
+function activeOverride(
+  label: string,
+  value: number | null | undefined,
+  unit?: string,
+  baseline?: number | null
+) {
+  return hasActiveOverrideValue(value, baseline) ? `${label}: ${formatOverrideValue(value ?? 0, unit)}` : null
 }
 
-function activeCurrencyOverride(label: string, value: number | null | undefined) {
-  return value == null ? null : `${label}: ${formatOverrideCurrency(value)}`
+function activeCurrencyOverride(
+  label: string,
+  value: number | null | undefined,
+  baseline?: number | null
+) {
+  return hasActiveOverrideValue(value, baseline) ? `${label}: ${formatOverrideCurrency(value ?? 0)}` : null
 }
 
 function buildOverrideSummary(kind: ScopeKind, scope: SummaryScopeSourceRow) {
   const entries =
     kind === 'drywall'
-      ? [activeCurrencyOverride('Total', scope.override_total)]
+      ? [activeCurrencyOverride('Total', scope.override_total, scope.raw_total)]
       : kind === 'trim'
       ? [
-          activeOverride('Measurement', scope.override_measurement, 'lf'),
-          activeOverride('Labor hours', scope.override_hours, 'h'),
-          activeOverride('Gallons', scope.override_gallons, 'gal'),
-          activeCurrencyOverride('Supply cost', scope.override_supply_cost),
-          activeCurrencyOverride('Total', scope.override_total),
+          activeOverride('Measurement', scope.override_measurement, 'lf', scope.raw_measurement),
+          activeOverride('Labor hours', scope.override_hours, 'h', scope.raw_paint_hours),
+          activeOverride('Gallons', scope.override_gallons, 'gal', scope.raw_paint_gallons),
+          activeCurrencyOverride('Supply cost', scope.override_supply_cost, scope.raw_supply_cost),
+          activeCurrencyOverride('Total', scope.override_total, scope.raw_total),
           scope.override_description?.trim()
             ? `Description: ${scope.override_description.trim()}`
             : null,
         ]
       : kind === 'doors'
         ? [
-            activeOverride('Paint hours', scope.override_paint_hours, 'h'),
-            activeOverride('Primer hours', scope.override_primer_hours, 'h'),
-            activeCurrencyOverride('Material cost', scope.override_material_cost),
-            activeCurrencyOverride('Supply cost', scope.override_supply_cost),
-            activeCurrencyOverride('Total', scope.override_total),
+            activeOverride('Paint hours', scope.override_paint_hours, 'h', scope.raw_paint_hours),
+            activeOverride('Primer hours', scope.override_primer_hours, 'h', scope.raw_primer_hours),
+            activeCurrencyOverride('Material cost', scope.override_material_cost, scope.raw_material_cost),
+            activeCurrencyOverride('Supply cost', scope.override_supply_cost, scope.raw_supply_cost),
+            activeCurrencyOverride('Total', scope.override_total, scope.raw_total),
           ]
       : [
-          activeOverride('Area', scope.override_area_sf, 'sf'),
-          activeOverride('Paint hours', scope.override_paint_hours, 'h'),
-          activeOverride('Primer hours', scope.override_primer_hours, 'h'),
-          activeOverride('Paint gallons', scope.override_paint_gallons, 'gal'),
-          activeOverride('Primer gallons', scope.override_primer_gallons, 'gal'),
-          activeCurrencyOverride('Supply cost', scope.override_supply_cost),
-          activeCurrencyOverride('Total', scope.override_total),
+          activeOverride('Area', scope.override_area_sf, 'sf', scope.raw_area_sf),
+          activeOverride('Paint hours', scope.override_paint_hours, 'h', scope.raw_paint_hours),
+          activeOverride('Primer hours', scope.override_primer_hours, 'h', scope.raw_primer_hours),
+          activeOverride('Paint gallons', scope.override_paint_gallons, 'gal', scope.raw_paint_gallons),
+          activeOverride('Primer gallons', scope.override_primer_gallons, 'gal', scope.raw_primer_gallons),
+          activeCurrencyOverride('Supply cost', scope.override_supply_cost, scope.raw_supply_cost),
+          activeCurrencyOverride('Total', scope.override_total, scope.raw_total),
         ]
 
   const activeEntries = entries.filter((entry): entry is string => entry != null)
@@ -284,10 +302,18 @@ function asSummaryScopeSourceRow(value: unknown): SummaryScopeSourceRow | null {
     effective_measurement: asMaybeNumber(value.effective_measurement),
     effective_units: asMaybeNumber(value.effective_units),
     effective_quantity: asMaybeNumber(value.effective_quantity),
+    raw_area_sf: asMaybeNumber(value.raw_area_sf),
+    raw_measurement: asMaybeNumber(value.raw_measurement),
+    raw_units: asMaybeNumber(value.raw_units),
     raw_quantity: asMaybeNumber(value.raw_quantity),
+    raw_paint_hours: asMaybeNumber(value.raw_paint_hours),
     effective_paint_hours: asMaybeNumber(value.effective_paint_hours),
+    raw_primer_hours: asMaybeNumber(value.raw_primer_hours),
     effective_primer_hours: asMaybeNumber(value.effective_primer_hours),
+    raw_material_cost: asMaybeNumber(value.raw_material_cost),
+    raw_supply_cost: asMaybeNumber(value.raw_supply_cost),
     effective_supply_cost: asMaybeNumber(value.effective_supply_cost),
+    raw_total: asMaybeNumber(value.raw_total),
     effective_total: asMaybeNumber(value.effective_total),
     override_area_sf: asNullableNumber(value.override_area_sf),
     override_paint_hours: asNullableNumber(value.override_paint_hours),
@@ -741,31 +767,26 @@ export function buildPricingKpis(params: {
   }
 }
 
-export function hasActiveLaborRateOverride(
-  jobsettings: EstimateV2JobSettingsInput | null | undefined,
-  orgDefaults: EstimateV2JobSettingsInput | null | undefined
-) {
-  const jobRate = asNullableNumber(jobsettings?.override_labor_rate)
-  if (jobRate == null) return false
-
-  const defaultRate = asNullableNumber(orgDefaults?.override_labor_rate) ?? DEFAULT_LABOR_RATE
-  return Math.abs(jobRate - defaultRate) > 0.0001
+function formatScopeAlertDetail(scope: EstimateV2SummaryScopeRowVm, roomName: string) {
+  const label = scope.label.trim()
+  const prefix = roomName.trim()
+  return prefix && label.toLowerCase().startsWith(prefix.toLowerCase())
+    ? label
+    : `${prefix || 'A room'} ${label}`
 }
 
 export function buildSummaryAlerts(params: {
   pricingSummary: EstimateV2PricingSummary | null | undefined
   hasJobSettings: boolean
-  laborRateOverrideActive: boolean
   roomScopeRows: Map<string, EstimateV2SummaryScopeRowVm[]>
   roomFlags: EstimateV2RoomFlagRow[]
   rooms: EstimateV2RoomInputRow[]
 }) {
   const alerts: EstimateV2SummaryAlert[] = []
   const flattened = [...params.roomScopeRows.values()].flat()
-  const firstMissingProduct = flattened.find((scope) => scope.missingProduct)
-  const missingProductCount = flattened.filter((scope) => scope.missingProduct).length
-  const overrideCount = flattened.filter((scope) => scope.hasOverride).length
-  const flagCount = params.roomFlags.length
+  const roomLabelById = new Map(params.rooms.map((room) => [room.room_id, roomLabel(room)]))
+  const missingProducts = flattened.filter((scope) => scope.missingProduct)
+  const overriddenScopes = flattened.filter((scope) => scope.hasOverride)
 
   if (!params.pricingSummary || !params.hasJobSettings) {
     alerts.push({
@@ -773,28 +794,35 @@ export function buildSummaryAlerts(params: {
       title: 'Missing pricing input',
       detail: 'Pricing summary not available',
     })
-  } else if (missingProductCount > 0) {
-    const roomName = params.rooms.find((room) => room.room_id === firstMissingProduct?.roomId)
+  }
+
+  for (const scope of missingProducts) {
+    const roomName = roomLabelById.get(scope.roomId) ?? 'A room'
     alerts.push({
       kind: 'error',
       title: 'Missing product selection',
-      detail: `${roomName ? roomLabel(roomName) : 'A room'} needs a paint product`,
+      detail: `${formatScopeAlertDetail(scope, roomName)} needs a paint product`,
     })
   }
 
-  if (overrideCount > 0 || params.laborRateOverrideActive) {
+  for (const scope of overriddenScopes) {
+    const roomName = roomLabelById.get(scope.roomId) ?? 'A room'
+    const overrideDetail = scope.overrideSummary?.replace(/^Override:\s*/, '').trim()
     alerts.push({
       kind: 'warn',
       title: 'Manual override detected',
-      detail: params.laborRateOverrideActive ? 'Labor rate override active' : 'Scope override active',
+      detail: [
+        `${formatScopeAlertDetail(scope, roomName)} override active`,
+        overrideDetail || null,
+      ].filter(Boolean).join(' - '),
     })
   }
 
-  if (flagCount > 0) {
+  for (const flag of params.roomFlags) {
     alerts.push({
       kind: 'warn',
-      title: 'Warning flags active',
-      detail: `${flagCount} room flag${flagCount === 1 ? '' : 's'} selected`,
+      title: 'Warning flag active',
+      detail: `${roomLabelById.get(flag.room_id) ?? 'A room'} ${flag.flag_id}`,
     })
   }
 
@@ -806,7 +834,7 @@ export function buildSummaryAlerts(params: {
     })
   }
 
-  return alerts.slice(0, 4)
+  return alerts
 }
 
 function formatWholeDollar(value: number | null | undefined) {
@@ -865,14 +893,15 @@ function buildPaintSupplyDollarRows(
       price: pricingSummary?.supplyCost ?? null,
     },
   ]
-  const rawTotal = rawRows.reduce((sum, row) => sum + (row.price ?? 0), 0)
+  const visibleRows = rawRows.filter((row) => row.id !== 'primer' || (row.price ?? 0) > 0)
+  const rawTotal = visibleRows.reduce((sum, row) => sum + (row.price ?? 0), 0)
   const reconciledRows = reconcileWholeDollarRows(
-    rawRows.map((row) => ({ id: row.id, price: row.price ?? 0 })),
+    visibleRows.map((row) => ({ id: row.id, price: row.price ?? 0 })),
     rawTotal
   )
   const reconciledPriceById = new Map(reconciledRows.map((row) => [row.id, row.price] as const))
 
-  return rawRows.map((row) => ({
+  return visibleRows.map((row) => ({
     ...row,
     displayPrice: row.price == null ? null : reconciledPriceById.get(row.id) ?? 0,
   }))

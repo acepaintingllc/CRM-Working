@@ -52,8 +52,10 @@ export function collectEstimateV2CalculationMissingInputIssues(params: {
     ['Doors', params.doorCalculations],
     ['Drywall', params.drywallCalculations],
   ]
-  return groups.flatMap(([label, value]) =>
-    missingInputsFrom(value).map((input) => `${label}: ${String(input.message || 'Required input is missing')}`)
+  return filterNonBlockingEstimateV2ValidationIssues(
+    groups.flatMap(([label, value]) =>
+      missingInputsFrom(value).map((input) => `${label}: ${String(input.message || 'Required input is missing')}`)
+    )
   )
 }
 

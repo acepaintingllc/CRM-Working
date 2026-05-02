@@ -5,12 +5,14 @@ export type EstimateV2DetailsWallCalculationRow = {
   id: string
   effectiveAreaSf: number | null
   rawPaintGallons: number | null
+  paintProductId?: string | null
 }
 
 export type EstimateV2DetailsCeilingCalculationRow = {
   id: string
   effectiveAreaSf: number | null
   rawPaintGallons: number | null
+  paintProductId?: string | null
 }
 
 export type EstimateV2DetailsTrimCalculationRow = {
@@ -46,31 +48,70 @@ function extractCalculationScopeRows<TRow>(
   return payload.scopes.filter(isUnsafeRecord).map(parseRow)
 }
 
+function extractWallCalculationRows(payload: unknown): EstimateV2DetailsWallCalculationRow[] | null {
+  if (!isUnsafeRecord(payload)) return null
+  if (!Array.isArray(payload.scopes)) return null
+  const rowsById = new Map<string, EstimateV2DetailsWallCalculationRow>()
+  for (const row of payload.scopes.filter(isUnsafeRecord).map(parseWallCalculationRow)) {
+    if (row.id) rowsById.set(row.id, row)
+  }
+  if (Array.isArray(payload.scope_traces)) {
+    for (const trace of payload.scope_traces.filter(isUnsafeRecord).map(parseWallCalculationRow)) {
+      if (!trace.id) continue
+      const existing = rowsById.get(trace.id)
+      rowsById.set(trace.id, {
+        id: trace.id,
+        effectiveAreaSf: existing?.effectiveAreaSf ?? trace.effectiveAreaSf,
+        rawPaintGallons: existing?.rawPaintGallons ?? trace.rawPaintGallons,
+        paintProductId: existing?.paintProductId ?? trace.paintProductId,
+      })
+    }
+  }
+  return Array.from(rowsById.values())
+}
+
 function parseCalculationId(row: UnsafeRecord) {
   return String(row.id ?? '')
 }
 
+function parseCalculationScopeId(row: UnsafeRecord) {
+  return String(row.id ?? row.scope_id ?? row.scopeId ?? '')
+}
+
 function parseWallCalculationRow(row: UnsafeRecord): EstimateV2DetailsWallCalculationRow {
   return {
-    id: parseCalculationId(row),
-    effectiveAreaSf: asMaybeNumber(row.effective_area_sf),
-    rawPaintGallons: asMaybeNumber(row.raw_paint_gallons),
+    id: parseCalculationScopeId(row),
+    effectiveAreaSf: asMaybeNumber(
+      row.effective_area_sf ?? row.effectiveAreaSf ?? (row.area as UnsafeRecord | undefined)?.effective_area_sf
+    ),
+    rawPaintGallons: asMaybeNumber(
+      row.raw_paint_gallons ??
+        row.rawPaintGallons ??
+        ((row.gallons as UnsafeRecord | undefined)?.paint as UnsafeRecord | undefined)?.raw
+    ),
+    paintProductId: String(
+      row.paint_product_id ??
+        row.paintProductId ??
+        ((row.paint_material as UnsafeRecord | undefined)?.paint_product_id) ??
+        ''
+    ) || null,
   }
 }
 
 function parseCeilingCalculationRow(row: UnsafeRecord): EstimateV2DetailsCeilingCalculationRow {
   return {
     id: parseCalculationId(row),
-    effectiveAreaSf: asMaybeNumber(row.effective_area_sf),
-    rawPaintGallons: asMaybeNumber(row.raw_paint_gallons),
+    effectiveAreaSf: asMaybeNumber(row.effective_area_sf ?? row.effectiveAreaSf),
+    rawPaintGallons: asMaybeNumber(row.raw_paint_gallons ?? row.rawPaintGallons),
+    paintProductId: String(row.paint_product_id ?? row.paintProductId ?? '') || null,
   }
 }
 
 function parseTrimCalculationRow(row: UnsafeRecord): EstimateV2DetailsTrimCalculationRow {
   return {
     id: parseCalculationId(row),
-    effectiveMeasurement: asMaybeNumber(row.effective_measurement),
-    rawPaintGallons: asMaybeNumber(row.raw_paint_gallons),
+    effectiveMeasurement: asMaybeNumber(row.effective_measurement ?? row.effectiveMeasurement),
+    rawPaintGallons: asMaybeNumber(row.raw_paint_gallons ?? row.rawPaintGallons),
   }
 }
 
@@ -80,10 +121,7 @@ export function extractEstimateV2DetailsCalculationRows(payloads: {
   trimCalculations: unknown
 }): EstimateV2DetailsCalculationRows {
   return {
-    wallCalculationRows: extractCalculationScopeRows(
-      payloads.wallCalculations,
-      parseWallCalculationRow
-    ),
+    wallCalculationRows: extractWallCalculationRows(payloads.wallCalculations),
     ceilingCalculationRows: extractCalculationScopeRows(
       payloads.ceilingCalculations,
       parseCeilingCalculationRow

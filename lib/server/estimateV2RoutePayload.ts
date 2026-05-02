@@ -577,6 +577,10 @@ export function buildV2DoorScopeRows(rows: Unsafe[], roomIds: Set<string>) {
     }
     const nextPosition = positionByRoom.get(roomId) ?? 0
     positionByRoom.set(roomId, nextPosition + 1)
+    const sides = asNullableNumber(row.sides)
+    if (sides != null && sides !== 1 && sides !== 2) {
+      throw new Error(`Door scope ${idx + 1}: sides must be 1 or 2`)
+    }
 
     return {
       id: isUuid(row.id) ? asText(row.id) : undefined,
@@ -590,7 +594,7 @@ export function buildV2DoorScopeRows(rows: Unsafe[], roomIds: Set<string>) {
       primer_product_id: asText(row.primer_product_id) || null,
       prime_mode: toTrimPrimeMode(row.prime_mode),
       quantity: asNullableNumber(row.quantity),
-      sides: asNullableNumber(row.sides),
+      sides,
       paint_coats: asNullableNumber(row.paint_coats),
       primer_coats: asNullableNumber(row.primer_coats),
       spot_prime_percent: asNullableNumber(row.spot_prime_percent),

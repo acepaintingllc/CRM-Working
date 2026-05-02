@@ -2,50 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { deriveEstimateCustomerSendCalculatedData } from '../contextCalculations'
 import type { EstimateCustomerSendRawResources } from '../contextTypes'
 
-const {
-  mockCalculateWalls,
-  mockCalculateCeilings,
-  mockCalculateTrim,
-  mockCalculateDrywallRepairs,
-  mockBuildEstimatePricingSummaryFromEngines,
-  mockBuildTrimPaintInput,
-  mockProductMap,
-} = vi.hoisted(() => ({
-  mockCalculateWalls: vi.fn(),
-  mockCalculateCeilings: vi.fn(),
-  mockCalculateTrim: vi.fn(),
-  mockCalculateDrywallRepairs: vi.fn(),
-  mockBuildEstimatePricingSummaryFromEngines: vi.fn(),
-  mockBuildTrimPaintInput: vi.fn(),
-  mockProductMap: vi.fn(),
+const { mockLoadCalculatedEstimateV2Artifacts } = vi.hoisted(() => ({
+  mockLoadCalculatedEstimateV2Artifacts: vi.fn(),
 }))
 
-vi.mock('@/lib/estimator/walls', () => ({
-  calculateWalls: mockCalculateWalls,
-}))
-
-vi.mock('@/lib/estimator/ceilings', () => ({
-  calculateCeilings: mockCalculateCeilings,
-}))
-
-vi.mock('@/lib/estimator/trim', () => ({
-  calculateTrim: mockCalculateTrim,
-}))
-
-vi.mock('@/lib/estimator/drywall', () => ({
-  calculateDrywallRepairs: mockCalculateDrywallRepairs,
-}))
-
-vi.mock('@/lib/estimator/pricingPolicies', () => ({
-  buildEstimatePricingSummaryFromEngines: mockBuildEstimatePricingSummaryFromEngines,
-}))
-
-vi.mock('@/lib/server/trimPaint', () => ({
-  buildTrimPaintInput: mockBuildTrimPaintInput,
-}))
-
-vi.mock('@/lib/estimator/wallsHelpers', () => ({
-  productMap: mockProductMap,
+vi.mock('@/lib/server/estimate-v2/calculationOrchestration', () => ({
+  loadCalculatedEstimateV2Artifacts: mockLoadCalculatedEstimateV2Artifacts,
 }))
 
 const baseResources: EstimateCustomerSendRawResources = {
@@ -66,13 +28,20 @@ const baseResources: EstimateCustomerSendRawResources = {
     job_minimum_enabled: true,
     job_minimum_amount: 1500,
   },
+  rollupFinalTotal: 1044,
   catalogs: { products: [] },
   rooms: [{ room_id: 'room-1', length_in: 120, width_in: 144, mode: 'RECT' }],
-  wallScopes: [{ room_id: 'room-1', mode: 'RECT' }],
+  wallScopes: [{ id: 'wall-raw', room_id: 'room-1', mode: 'RECT' }],
   wallSegments: [{ id: 'wall-segment-1' }],
-  ceilingScopes: [{ room_id: 'room-1', mode: 'SEG' }],
+  ceilingSegments: [{ id: 'ceiling-segment-1' }],
+  ceilingScopes: [{ id: 'ceiling-raw', room_id: 'room-1', mode: 'SEG' }],
   ceilingScopeSegments: [{ id: 'ceiling-scope-segment-1' }],
-  trimScopes: [{ room_id: 'room-1' }],
+  trimScopes: [{ id: 'trim-raw', room_id: 'room-1' }],
+  doorScopes: [{ id: 'door-raw', room_id: 'room-1' }],
+  drywallRepairs: [{ id: 'drywall-raw', room_id: 'room-1' }],
+  accessFees: [{ id: 'fee-1', access_fee_id: 'LADDER', qty: 2 }],
+  trimItems: [],
+  other: [{ id: 'other-1', client_description: 'Additional prep' }],
   estimate: {
     id: 'estimate-1',
     job_id: 'job-1',
@@ -117,80 +86,105 @@ const baseResources: EstimateCustomerSendRawResources = {
     terms_text: 'Standard terms',
   },
   segments: [],
-  ceilingSegments: [],
-  trimItems: [],
-  other: [],
   publicVersions: [],
 }
 
 describe('customer send context calculations', () => {
   beforeEach(() => {
-    mockCalculateWalls.mockReset()
-    mockCalculateCeilings.mockReset()
-    mockCalculateTrim.mockReset()
-    mockCalculateDrywallRepairs.mockReset()
-    mockBuildEstimatePricingSummaryFromEngines.mockReset()
-    mockBuildTrimPaintInput.mockReset()
-    mockProductMap.mockReset()
-
-    mockCalculateWalls.mockReturnValue({ scopes: [{ id: 'wall-output' }] })
-    mockCalculateCeilings.mockReturnValue({ scopes: [{ id: 'ceiling-output' }] })
-    mockCalculateTrim.mockReturnValue({ scopes: [{ id: 'trim-output' }] })
-    mockCalculateDrywallRepairs.mockReturnValue({ scopes: [{ id: 'drywall-output' }] })
-    mockBuildEstimatePricingSummaryFromEngines.mockReturnValue({ finalTotal: 3200 })
-    mockBuildTrimPaintInput.mockReturnValue({})
-    mockProductMap.mockReturnValue({})
-  })
-
-  it('prefers job-level overrides over template defaults when calculating outputs', () => {
-    const result = deriveEstimateCustomerSendCalculatedData(baseResources)
-
-    expect(mockCalculateWalls).toHaveBeenCalledWith(
-      expect.objectContaining({
-        settings: {
-          labor_rate_per_hour: 75,
-        },
-      })
-    )
-    expect(mockBuildEstimatePricingSummaryFromEngines).toHaveBeenCalledWith(
-      [
-        { kind: 'walls', output: { scopes: [{ id: 'wall-output' }] } },
-        { kind: 'ceilings', output: { scopes: [{ id: 'ceiling-output' }] } },
-        { kind: 'trim', output: { scopes: [{ id: 'trim-output' }] } },
-        { kind: 'drywall', output: { scopes: [{ id: 'drywall-output' }] } },
-      ],
-      {
-        enabled: false,
-        dayhours: 6,
-        roundingIncrementHours: 2,
-      },
-      {
-        enabled: true,
-        amount: 1500,
-      },
-      expect.anything()
-    )
-    expect(result).toEqual({
+    mockLoadCalculatedEstimateV2Artifacts.mockReset()
+    mockLoadCalculatedEstimateV2Artifacts.mockResolvedValue({
       quoteWallScopes: [{ id: 'wall-output' }],
       quoteCeilingScopes: [{ id: 'ceiling-output' }],
       quoteTrimScopes: [{ id: 'trim-output' }],
-      quoteDrywallScopes: [{ id: 'drywall-output' }],
+      quoteDoorScopes: [{ id: 'door-output' }],
+      drywallCalculations: { scopes: [{ id: 'drywall-output' }] },
+      accessFeeCalculation: {
+        rows: [
+          {
+            id: 'fee-1',
+            label: 'Tall ladder',
+            group: 'ladders',
+            catalogAmount: 75,
+            calculatedTotal: 150,
+            total: 150,
+            overridden: false,
+          },
+        ],
+      },
+      otherCalculations: {
+        scopes: [{ id: 'other-1', effective_total: 85, pricing_mode: 'fixed' }],
+      },
       pricingSummary: { finalTotal: 3200 },
     })
   })
 
-  it('degrades to null pricing summary without crashing when calculations fail', () => {
-    mockCalculateWalls.mockImplementation(() => {
-      throw new Error('boom')
+  it('uses the canonical V2 calculation pipeline for customer quote outputs', async () => {
+    const result = await deriveEstimateCustomerSendCalculatedData(baseResources, {
+      requestOrigin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
     })
 
-    const result = deriveEstimateCustomerSendCalculatedData(baseResources)
+    expect(mockLoadCalculatedEstimateV2Artifacts).toHaveBeenCalledWith({
+      requestOrigin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      jobsettings: baseResources.jobsettings,
+      rooms: baseResources.rooms,
+      roomWallScopes: baseResources.wallScopes,
+      wallSegments: baseResources.wallSegments,
+      roomCeilingScopes: baseResources.ceilingScopes,
+      ceilingScopeSegments: baseResources.ceilingScopeSegments,
+      roomTrimScopes: baseResources.trimScopes,
+      roomDoorScopes: baseResources.doorScopes,
+      drywallRepairs: baseResources.drywallRepairs,
+      accessFees: baseResources.accessFees,
+      other: baseResources.other,
+      orgDefaults: baseResources.settingsRow,
+    })
+    expect(result).toEqual({
+      quoteWallScopes: [{ id: 'wall-output' }],
+      quoteCeilingScopes: [{ id: 'ceiling-output' }],
+      quoteTrimScopes: [{ id: 'trim-output' }],
+      quoteDoorScopes: [{ id: 'door-output' }],
+      quoteDrywallScopes: [{ id: 'drywall-output' }],
+      quoteAccessFees: [
+        expect.objectContaining({
+          id: 'fee-1',
+          label: 'Tall ladder',
+          effective_total: 150,
+        }),
+      ],
+      quoteOtherRows: [
+        expect.objectContaining({
+          id: 'other-1',
+          effective_total: 85,
+        }),
+      ],
+      pricingSummary: { finalTotal: 3200 },
+    })
+  })
+
+  it('degrades to raw rows and null pricing summary without crashing when calculations fail', async () => {
+    mockLoadCalculatedEstimateV2Artifacts.mockRejectedValue(new Error('boom'))
+
+    const result = await deriveEstimateCustomerSendCalculatedData(baseResources, {
+      requestOrigin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+    })
 
     expect(result).toEqual({
       quoteWallScopes: baseResources.wallScopes,
       quoteCeilingScopes: baseResources.ceilingScopes,
       quoteTrimScopes: baseResources.trimScopes,
-      quoteDrywallScopes: [],
+      quoteDoorScopes: baseResources.doorScopes,
+      quoteDrywallScopes: baseResources.drywallRepairs,
+      quoteAccessFees: baseResources.accessFees,
+      quoteOtherRows: baseResources.other,
       pricingSummary: null,
     })
   })

@@ -1,10 +1,5 @@
-import { calculateCeilings } from '@/lib/estimator/ceilings'
-import { calculateDrywallRepairs } from '@/lib/estimator/drywall'
-import { buildEstimatePricingSummaryFromEngines } from '@/lib/estimator/pricingPolicies'
-import { calculateTrim } from '@/lib/estimator/trim'
-import { calculateWalls } from '@/lib/estimator/walls'
-import { productMap } from '@/lib/estimator/wallsHelpers'
-import { buildTrimPaintInput } from '@/lib/server/trimPaint'
+import { loadCalculatedEstimateV2Artifacts } from '@/lib/server/estimate-v2/calculationOrchestration'
+import type { EstimateTemplateSettingsRow } from '@/lib/server/estimateTemplateSettings'
 import type {
   EstimateCustomerSendCalculatedData,
   EstimateCustomerSendRawResources,
@@ -39,137 +34,100 @@ export function resolveRoomModeById(params: {
   return roomMode
 }
 
-export function deriveEstimateCustomerSendCalculatedData(
+function fallbackCalculatedData(
   resources: EstimateCustomerSendRawResources
 ): EstimateCustomerSendCalculatedData {
-  const effectiveLaborRate =
-    resources.jobsettings.override_labor_rate ?? resources.settingsRow.override_labor_rate ?? null
-  const effectiveLaborDayEnabled =
-    typeof resources.jobsettings.labor_day_policy_enabled === 'boolean'
-      ? resources.jobsettings.labor_day_policy_enabled
-      : resources.settingsRow.labor_day_policy_enabled
-  const effectiveDayhours = resources.jobsettings.dayhours ?? resources.settingsRow.dayhours ?? 8
-  const effectiveRoundingIncrement =
-    resources.jobsettings.rounding_increment_hours ??
-    resources.settingsRow.rounding_increment_hours ??
-    4
-  const effectiveJobMinimumEnabled =
-    typeof resources.jobsettings.job_minimum_enabled === 'boolean'
-      ? resources.jobsettings.job_minimum_enabled
-      : resources.settingsRow.job_minimum_enabled
-  const effectiveJobMinimumAmount =
-    resources.jobsettings.job_minimum_amount ?? resources.settingsRow.job_minimum_amount ?? 0
+  return {
+    quoteWallScopes: resources.wallScopes,
+    quoteCeilingScopes: resources.ceilingScopes,
+    quoteTrimScopes: resources.trimScopes,
+    quoteDoorScopes: resources.doorScopes,
+    quoteDrywallScopes: resources.drywallRepairs ?? [],
+    quoteAccessFees: resources.accessFees,
+    quoteOtherRows: resources.other,
+    pricingSummary: null,
+  }
+}
 
-  let quoteWallScopes = resources.wallScopes
-  let quoteCeilingScopes = resources.ceilingScopes
-  let quoteTrimScopes = resources.trimScopes
-  let quoteDrywallScopes = resources.drywallRepairs ?? []
-  let pricingSummary: EstimateCustomerSendCalculatedData['pricingSummary'] = null
+function enrichAccessFeeRows(params: {
+  rawRows: Unsafe[]
+  calculatedRows: Array<Record<string, unknown>>
+}) {
+  const calculatedById = new Map(params.calculatedRows.map((row) => [asText(row.id), row]))
+  return params.rawRows.map((row) => {
+    const id = asText(row.id)
+    const calculated = calculatedById.get(id)
+    if (!calculated) return row
+    return {
+      ...row,
+      label: calculated.label,
+      access_group: calculated.group,
+      catalog_amount: calculated.catalogAmount,
+      calculated_total: calculated.calculatedTotal,
+      effective_total: calculated.total,
+      overridden: calculated.overridden,
+    }
+  })
+}
 
+function enrichOtherRows(params: {
+  rawRows: Unsafe[]
+  calculatedRows: Array<Record<string, unknown>>
+}) {
+  const calculatedById = new Map(params.calculatedRows.map((row) => [asText(row.id), row]))
+  return params.rawRows.map((row) => {
+    const id = asText(row.id)
+    const calculated = calculatedById.get(id)
+    return calculated ? { ...row, ...calculated } : row
+  })
+}
+
+export async function deriveEstimateCustomerSendCalculatedData(
+  resources: EstimateCustomerSendRawResources,
+  params: {
+    requestOrigin: string
+    orgId: string
+    userId: string
+    estimateId: string
+  }
+): Promise<EstimateCustomerSendCalculatedData> {
   try {
-    if (resources.catalogs) {
-      const wallScopes = resources.wallScopes as Parameters<typeof calculateWalls>[0]['scopes']
-      const wallSegments =
-        resources.wallSegments as Parameters<typeof calculateWalls>[0]['segments']
-      const ceilingScopes =
-        resources.ceilingScopes as Parameters<typeof calculateCeilings>[0]['scopes']
-      const ceilingSegments =
-        resources.ceilingScopeSegments as Parameters<typeof calculateCeilings>[0]['segments']
-      const trimScopes = resources.trimScopes as Parameters<typeof calculateTrim>[0]['scopes']
-      const drywallRepairs =
-        (resources.drywallRepairs ?? []) as Parameters<typeof calculateDrywallRepairs>[0]['repairs']
-      const rooms = resources.rooms as Parameters<typeof calculateTrim>[0]['rooms']
-      const roomModeById = resolveRoomModeById({
-        rooms: rooms as Unsafe[],
-        wallScopes: wallScopes as Unsafe[],
-        ceilingScopes: ceilingScopes as Unsafe[],
-      })
+    const calculated = await loadCalculatedEstimateV2Artifacts({
+      requestOrigin: params.requestOrigin,
+      orgId: params.orgId,
+      userId: params.userId,
+      estimateId: params.estimateId,
+      jobsettings: resources.jobsettings as Unsafe,
+      rooms: resources.rooms,
+      roomWallScopes: resources.wallScopes,
+      wallSegments: resources.wallSegments,
+      roomCeilingScopes: resources.ceilingScopes,
+      ceilingScopeSegments: resources.ceilingScopeSegments,
+      roomTrimScopes: resources.trimScopes,
+      roomDoorScopes: resources.doorScopes,
+      drywallRepairs: resources.drywallRepairs ?? [],
+      accessFees: resources.accessFees,
+      other: resources.other,
+      orgDefaults: resources.settingsRow as unknown as EstimateTemplateSettingsRow,
+    })
 
-      const wallCalculations = calculateWalls({
-        scopes: wallScopes,
-        segments: wallSegments,
-        settings: {
-          labor_rate_per_hour: effectiveLaborRate,
-        },
-        catalogs: resources.catalogs as Parameters<typeof calculateWalls>[0]['catalogs'],
-      })
-      quoteWallScopes = (wallCalculations.scopes ?? []) as Unsafe[]
-
-      const ceilingCalculations = calculateCeilings({
-        scopes: ceilingScopes,
-        segments: ceilingSegments,
-        settings: {
-          labor_rate_per_hour: effectiveLaborRate,
-        },
-        catalogs: resources.catalogs as Parameters<typeof calculateCeilings>[0]['catalogs'],
-      })
-      quoteCeilingScopes = (ceilingCalculations.scopes ?? []) as Unsafe[]
-
-      const trimCalculations = calculateTrim({
-        scopes: trimScopes,
-        rooms: rooms.map((row) => {
-          const roomId = asText(row.room_id).toUpperCase()
-          return {
-            room_id: roomId,
-            length_in: row.length_in == null ? null : Number(row.length_in),
-            width_in: row.width_in == null ? null : Number(row.width_in),
-            mode: roomModeById.get(roomId) ?? 'RECT',
-          }
-        }),
-        settings: {
-          labor_rate_per_hour: effectiveLaborRate,
-        },
-        catalogs:
-          resources.catalogs as unknown as Parameters<typeof calculateTrim>[0]['catalogs'],
-      })
-      quoteTrimScopes = (trimCalculations.scopes ?? []) as Unsafe[]
-
-      const drywallCalculations = calculateDrywallRepairs({
-        repairs: drywallRepairs,
-        catalogs: {
-          drywall_unit_rates: ((resources.catalogs as Unsafe).drywall_rates ?? []) as never,
-        },
-      })
-      quoteDrywallScopes = (drywallCalculations.scopes ?? []) as Unsafe[]
-
-      const trimPaint = buildTrimPaintInput({
-        jobsettings: resources.jobsettings as Unsafe,
-        defaults: resources.settingsRow as Unsafe,
-        catalogs: productMap(
-          resources.catalogs as unknown as Parameters<typeof productMap>[0]
-        ),
-      })
-
-      const builtPricingSummary = buildEstimatePricingSummaryFromEngines(
-        [
-          { kind: 'walls', output: wallCalculations },
-          { kind: 'ceilings', output: ceilingCalculations },
-          { kind: 'trim', output: trimCalculations },
-          { kind: 'drywall', output: drywallCalculations },
-        ],
-        {
-          enabled: effectiveLaborDayEnabled !== false,
-          dayhours: effectiveDayhours,
-          roundingIncrementHours: effectiveRoundingIncrement,
-        },
-        {
-          enabled: effectiveJobMinimumEnabled === true,
-          amount: effectiveJobMinimumAmount,
-        },
-        trimPaint
-      )
-
-      pricingSummary = { finalTotal: builtPricingSummary.finalTotal ?? null }
+    return {
+      quoteWallScopes: calculated.quoteWallScopes as Unsafe[],
+      quoteCeilingScopes: calculated.quoteCeilingScopes as Unsafe[],
+      quoteTrimScopes: calculated.quoteTrimScopes as Unsafe[],
+      quoteDoorScopes: calculated.quoteDoorScopes as Unsafe[],
+      quoteDrywallScopes: (calculated.drywallCalculations.scopes ?? []) as Unsafe[],
+      quoteAccessFees: enrichAccessFeeRows({
+        rawRows: resources.accessFees,
+        calculatedRows: calculated.accessFeeCalculation.rows as Array<Record<string, unknown>>,
+      }),
+      quoteOtherRows: enrichOtherRows({
+        rawRows: resources.other,
+        calculatedRows: calculated.otherCalculations.scopes as Array<Record<string, unknown>>,
+      }),
+      pricingSummary: { finalTotal: calculated.pricingSummary.finalTotal ?? null },
     }
   } catch {
-    pricingSummary = null
-  }
-
-  return {
-    quoteWallScopes,
-    quoteCeilingScopes,
-    quoteTrimScopes,
-    quoteDrywallScopes,
-    pricingSummary,
+    return fallbackCalculatedData(resources)
   }
 }

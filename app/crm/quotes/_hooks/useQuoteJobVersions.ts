@@ -92,6 +92,7 @@ export type QuoteHomeVersionsResourceContract = {
   attemptRefresh: (
     options?: Pick<LoadOptions, 'preserveDataOnError' | 'reportError'>,
   ) => Promise<QuoteHomeVersionsLoadResult>
+  removeVersion: (estimateId: string) => void
 }
 
 function beginFreshJobVersionsRequest(
@@ -413,6 +414,10 @@ export function useQuoteJobVersions(
     return result.ok
   }, [enabled, jobId, load, state.loading, state.loadingMore])
 
+  const removeVersion = useCallback((estimateId: string) => {
+    dispatch({ type: 'removeVersion', estimateId })
+  }, [])
+
   const hasResolved = Boolean(
     enabled && jobId && state.resolvedJobIds.has(jobId),
   )
@@ -429,5 +434,6 @@ export function useQuoteJobVersions(
     loadMore,
     refresh,
     attemptRefresh,
+    removeVersion,
   } satisfies QuoteHomeVersionsResourceContract
 }

@@ -71,6 +71,8 @@ const context = {
     room_ceiling_scopes: [],
     ceiling_scope_segments: [],
     room_trim_scopes: [],
+    room_door_scopes: [],
+    access_fees: [],
     trim_items: [],
     other: [],
     jobsettings: {},

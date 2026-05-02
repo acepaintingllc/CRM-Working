@@ -79,8 +79,6 @@ export function sanitizeV2TrimDrafts<TScope extends V2TrimSanitizeScope>(params:
       }
 
       if (
-        nextScope.paintProductId ||
-        nextScope.primerProductId ||
         nextScope.overrideMeasurement ||
         nextScope.overrideHours ||
         nextScope.overrideSupplyCost ||
@@ -89,8 +87,6 @@ export function sanitizeV2TrimDrafts<TScope extends V2TrimSanitizeScope>(params:
       ) {
         nextScope = {
           ...nextScope,
-          paintProductId: '',
-          primerProductId: '',
           overrideMeasurement: '',
           overrideHours: '',
           overrideSupplyCost: '',

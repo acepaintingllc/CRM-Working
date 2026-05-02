@@ -8,11 +8,26 @@ import type { DetailsAccessFeesVm } from '../_lib/estimateV2DetailsAccessFees'
 
 const inputClassName =
   'h-10 rounded-[6px] border border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface)] px-3 text-sm font-semibold text-[color:var(--crm-ui-ink)] outline-none focus:border-[color:var(--crm-ui-accent)]'
+const requiredInputClassName =
+  'border-[color:var(--crm-ui-danger-border)] bg-[color:var(--crm-ui-danger-bg)] ring-1 ring-[color:var(--crm-ui-danger-border)]'
 const labelClassName =
   'ace-crm-mono text-[11px] font-black uppercase text-[color:var(--crm-ui-muted-2)]'
 
 function formatCurrency(value: number) {
   return `$${Math.round(value).toLocaleString('en-US')}`
+}
+
+function RequiredLabel({ children, showRequired }: { children: string; showRequired: boolean }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span className={labelClassName}>{children}</span>
+      {showRequired ? (
+        <span className="rounded border border-[color:var(--crm-ui-danger-border)] bg-[color:var(--crm-ui-danger-bg)] px-1.5 py-0.5 text-[10px] font-black uppercase text-[color:var(--crm-ui-danger-text)]">
+          Required
+        </span>
+      ) : null}
+    </span>
+  )
 }
 
 export function EstimateV2DetailsAccessFees({
@@ -58,9 +73,11 @@ export function EstimateV2DetailsAccessFees({
               className="grid gap-3 rounded-[6px] border border-[color:var(--crm-ui-border)] p-3 lg:grid-cols-[minmax(220px,1fr)_180px_100px_140px_minmax(180px,1fr)_auto]"
             >
               <label className="grid gap-1">
-                <span className={labelClassName}>Fee</span>
+                <RequiredLabel showRequired={!row.accessFeeId}>Fee</RequiredLabel>
                 <select
-                  className={inputClassName}
+                  className={`${inputClassName} ${!row.accessFeeId ? requiredInputClassName : ''}`}
+                  aria-invalid={!row.accessFeeId || undefined}
+                  aria-required
                   value={row.accessFeeId}
                   onChange={(event) => onUpdate(row.id, { accessFeeId: event.currentTarget.value })}
                 >
@@ -94,9 +111,11 @@ export function EstimateV2DetailsAccessFees({
               </label>
 
               <label className="grid gap-1">
-                <span className={labelClassName}>Qty</span>
+                <RequiredLabel showRequired={!row.qty.trim()}>Qty</RequiredLabel>
                 <input
-                  className={inputClassName}
+                  className={`${inputClassName} ${!row.qty.trim() ? requiredInputClassName : ''}`}
+                  aria-invalid={!row.qty.trim() || undefined}
+                  aria-required
                   value={row.qty}
                   inputMode="decimal"
                   onChange={(event) => onUpdate(row.id, { qty: event.currentTarget.value })}
@@ -123,18 +142,21 @@ export function EstimateV2DetailsAccessFees({
                 />
               </label>
 
-              <div className="flex items-end justify-between gap-2">
-                <div className="pb-2 text-sm font-black text-[color:var(--crm-ui-ink)]">
-                  {formatCurrency(row.effectiveTotal)}
+              <div className="grid gap-1">
+                <span className={labelClassName}>Total</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-black text-[color:var(--crm-ui-ink)]">
+                    {formatCurrency(row.effectiveTotal)}
+                  </div>
+                  <CrmButton
+                    type="button"
+                    tone="danger"
+                    onClick={() => onRemove(row.id)}
+                    aria-label={`Remove ${row.label}`}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </CrmButton>
                 </div>
-                <CrmButton
-                  type="button"
-                  tone="danger"
-                  onClick={() => onRemove(row.id)}
-                  aria-label={`Remove ${row.label}`}
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                </CrmButton>
               </div>
             </div>
           ))}

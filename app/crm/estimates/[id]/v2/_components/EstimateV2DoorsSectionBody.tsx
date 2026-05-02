@@ -183,14 +183,15 @@ export function EstimateV2DoorsSectionBody({
               </Field>
               <Field label="Sides" styles={sharedStyles(styles)}>
                 <RequiredInputFrame>
-                  <input
+                  <select
                     value={doorScope.sides}
                     onChange={(e) => updateScope(doorScope.id, { sides: e.target.value })}
                     style={styles.input}
-                    type="number"
-                    min="0"
-                    step="1"
-                  />
+                  >
+                    <option value="">Select sides</option>
+                    <option value="1">1 side</option>
+                    <option value="2">2 sides</option>
+                  </select>
                 </RequiredInputFrame>
               </Field>
               <Field label="Coats" styles={sharedStyles(styles)}>

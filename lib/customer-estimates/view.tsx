@@ -259,9 +259,9 @@ function TotalRow({ total }: { total: number | null }) {
 
 function TermsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section style={{ display: 'grid', gap: 8 }}>
-      <div style={{ fontSize: 14.5, fontWeight: 900 }}>{title}</div>
-      <div style={{ fontSize: 12.9, lineHeight: 1.72 }}>{children}</div>
+    <section style={{ display: 'grid', gap: 4 }}>
+      <div style={{ fontSize: 13.2, fontWeight: 900 }}>{title}</div>
+      <div style={{ fontSize: 12.1, lineHeight: 1.46 }}>{children}</div>
     </section>
   )
 }
@@ -274,15 +274,15 @@ function TermsPage({
   showOverflowWarnings: boolean
 }) {
   return (
-    <PageFrame label="Terms page" showOverflowWarnings={true}>
-      <div style={{ display: 'grid', gap: 18 }}>
-        <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '0.06em' }}>
+    <PageFrame label="Terms page" showOverflowWarnings={showOverflowWarnings}>
+      <div style={{ display: 'grid', gap: 10 }}>
+        <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: '0.06em' }}>
           {document.terms_page.title}
         </div>
 
         {document.terms_page.sections.map((section) => (
           <TermsSection key={section.key} title={section.title}>
-            <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ display: 'grid', gap: 3 }}>
               {section.paragraphs.map((paragraph) => (
                 <div key={paragraph}>{paragraph}</div>
               ))}
@@ -303,7 +303,7 @@ function DocumentPage({
 }) {
   const rows = document.pricing_block.rows
   return (
-    <PageFrame label="Quote page" showOverflowWarnings={true}>
+    <PageFrame label="Quote page" showOverflowWarnings={showOverflowWarnings}>
       <Header document={document} />
       <CustomerBlock document={document} />
       <ScopeTable rows={rows} />

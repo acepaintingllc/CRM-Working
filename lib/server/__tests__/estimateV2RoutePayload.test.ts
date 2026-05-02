@@ -523,6 +523,10 @@ test('buildV2DoorScopeRows maps door row fields and validates room IDs', () => {
     () => buildV2DoorScopeRows([{ room_id: 'R404' }], new Set(['R001'])),
     /room is missing or invalid/i
   )
+  assert.throws(
+    () => buildV2DoorScopeRows([{ room_id: 'R001', sides: '3' }], new Set(['R001'])),
+    /sides must be 1 or 2/i
+  )
 })
 
 test('buildV2DrywallRepairRows validates room, surface, repair type, unit, and quantity', () => {

@@ -112,6 +112,10 @@ function buildTableMap(overrides?: Record<string, unknown>) {
       data: { override_labor_rate: 75 },
       error: null,
     }),
+    estimate_version_rollups: createMaybeSingleChain({
+      data: { final_total: 1044 },
+      error: null,
+    }),
     estimate_rooms: createOrderedCollectionChain({
       data: [{ room_id: 'room-1' }],
       error: null,
@@ -146,8 +150,16 @@ function buildTableMap(overrides?: Record<string, unknown>) {
       data: [{ room_id: 'room-1' }],
       error: null,
     }),
+    estimate_room_door_scopes: createOrderedCollectionChain({
+      data: [{ room_id: 'room-1', door_type_id: 'DOOR_PANEL' }],
+      error: null,
+    }),
     estimate_drywall_repairs: createOrderedCollectionChain({
       data: [{ id: 'drywall-1' }],
+      error: null,
+    }),
+    estimate_access_fees: createOrderedCollectionChain({
+      data: [{ id: 'fee-1' }],
       error: null,
     }),
     estimate_trim_items: createOrderedCollectionChain({
@@ -322,6 +334,7 @@ describe('customer send context loader', () => {
       },
       settingsRow: { updated_at: '2026-04-01T00:00:00.000Z' },
       jobsettings: { override_labor_rate: 75 },
+      rollupFinalTotal: 1044,
       rooms: [{ room_id: 'room-1' }],
       wallScopes: [{ room_id: 'room-1' }],
       segments: [{ id: 'segment-1' }],
@@ -330,7 +343,9 @@ describe('customer send context loader', () => {
       ceilingScopes: [{ room_id: 'room-1' }],
       ceilingScopeSegments: [{ id: 'ceiling-scope-segment-1' }],
       trimScopes: [{ room_id: 'room-1' }],
+      doorScopes: [{ room_id: 'room-1', door_type_id: 'DOOR_PANEL' }],
       drywallRepairs: [{ id: 'drywall-1' }],
+      accessFees: [{ id: 'fee-1' }],
       trimItems: [{ id: 'trim-1' }],
       other: [{ id: 'other-1' }],
       publicVersions: [

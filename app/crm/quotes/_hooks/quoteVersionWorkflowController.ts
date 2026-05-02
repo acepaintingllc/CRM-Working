@@ -54,6 +54,7 @@ export function useQuoteVersionWorkflowController({
     loadMore: loadMoreVersions,
     refresh: refreshVersions,
     attemptRefresh: attemptRefreshVersions,
+    removeVersion,
   } = versions
   const hasJobContext = Boolean(jobId)
   const hasSelectedJob = Boolean(selectedJob)
@@ -87,10 +88,12 @@ export function useQuoteVersionWorkflowController({
       loadMore: loadMoreVersions,
       refresh: refreshVersions,
       attemptRefresh: attemptRefreshVersions,
+      removeVersion,
     }),
     [
       attemptRefreshVersions,
       loadMoreVersions,
+      removeVersion,
       refreshVersions,
       versionsData,
       versionsError,

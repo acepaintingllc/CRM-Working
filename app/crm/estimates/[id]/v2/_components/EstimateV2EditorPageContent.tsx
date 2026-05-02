@@ -3,6 +3,7 @@
 import { useEstimateV2Editor } from '../_state/useEstimateV2Editor'
 import { useEstimateV2EditorPageUiState } from '../_state/useEstimateV2EditorPageUiState'
 import { useCallback, useEffect } from 'react'
+import { filterNonBlockingEstimateV2ValidationIssues } from '../_state/estimateV2EditorSaveOrchestration'
 import {
   buildLastOpenedQuoteRecord,
   writeLastOpenedQuote,
@@ -69,6 +70,7 @@ export function EstimateV2EditorPageContent({
     toggleDoorsInclude: doorsVm.toggleRoomInclude,
   })
   const sidebarCollapse = useEstimateV2SidebarCollapse()
+  const validationIssues = filterNonBlockingEstimateV2ValidationIssues(pageVm.validationIssues)
 
   return (
     <div className={`${pageStyles.root} ace-v2-shell`} style={estimateV2EditorPageStyles.page}>
@@ -103,12 +105,12 @@ export function EstimateV2EditorPageContent({
             </div>
           )}
 
-          {pageVm.validationIssues.length > 0 && (
+          {validationIssues.length > 0 && (
             <div style={estimateV2EditorPageStyles.panel}>
               <div style={estimateV2EditorPageStyles.mono}>Validation</div>
               <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-                {pageVm.validationIssues.map((issue) => (
-                  <div key={issue} style={{ color: '#f9e2b7', fontSize: 'calc(14px + 4pt)' }}>
+                {validationIssues.map((issue, index) => (
+                  <div key={`${issue}:${index}`} style={{ color: '#f9e2b7', fontSize: 'calc(14px + 4pt)' }}>
                     {issue}
                   </div>
                 ))}

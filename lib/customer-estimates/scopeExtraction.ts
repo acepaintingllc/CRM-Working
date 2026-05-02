@@ -307,6 +307,21 @@ function collectDrywallScopeRows(params: {
   for (const row of params.rows.filter((candidate) => candidate.included)) {
     const roomName = params.roomLabels.get(row.roomId) ?? humanizeRoomCode(row.roomId)
     const qtyText = row.quantity != null && row.unit ? `${row.quantity} ${row.unit}` : ''
+    const isWallRepair = row.surface.toLowerCase().includes('wall')
+    if (isWallRepair) {
+      const repairNotes = prepFragments(
+        row.notes.filter((note) => note.trim().toLowerCase() !== 'primer included')
+      ).join(', ')
+      appendScopeBucket(params.sectionBuckets, 'walls', row.price, {
+        room: roomName,
+        note: textJoin([
+          `repair drywall (${row.repairLabel.toLowerCase()}${qtyText ? `, ${qtyText}` : ''})`,
+          repairNotes,
+        ]),
+      })
+      continue
+    }
+
     appendScopeBucket(params.sectionBuckets, 'drywall', row.price, {
       room: roomName,
       subjectLabel: textJoin([row.surface, row.repairLabel, qtyText]),
