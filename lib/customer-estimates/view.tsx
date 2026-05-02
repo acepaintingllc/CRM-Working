@@ -330,8 +330,13 @@ export function CustomerEstimateDocumentView({
       <TermsPage document={document} showOverflowWarnings={showOverflowWarnings} />
       <style jsx global>{`
         @media print {
+          html,
+          body {
+            overflow: visible !important;
+          }
           .customer-estimate-page-frame {
             margin-bottom: 0 !important;
+            overflow: visible !important;
             padding-top: 0 !important;
             position: static !important;
             break-after: page;
@@ -345,6 +350,7 @@ export function CustomerEstimateDocumentView({
           .customer-estimate-page-content {
             inset: auto !important;
             min-height: auto !important;
+            overflow: visible !important;
             position: static !important;
           }
           .customer-estimate-overflow-warning {
