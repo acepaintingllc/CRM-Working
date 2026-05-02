@@ -855,15 +855,27 @@
 }
 
 @media print {
+  :global(html),
+  :global(body) {
+    overflow: visible !important;
+  }
+
   .page {
     background: #fff;
     color: #111;
     padding: 0;
+    overflow: visible !important;
   }
 
   .shell {
     max-width: none;
     gap: 14px;
+    overflow: visible !important;
+  }
+
+  .documentWrap {
+    display: block;
+    overflow: visible !important;
   }
 
   .totalCard,

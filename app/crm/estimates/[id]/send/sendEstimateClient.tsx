@@ -781,6 +781,7 @@ export default function SendEstimateClient({
           body {
             background: #fff !important;
             margin: 0 !important;
+            overflow: visible !important;
           }
           body * {
             visibility: hidden !important;
@@ -816,6 +817,7 @@ export default function SendEstimateClient({
             background: #fff !important;
             border-radius: 0 !important;
             left: 0 !important;
+            overflow: visible !important;
             padding: 0 !important;
             position: absolute !important;
             top: 0 !important;

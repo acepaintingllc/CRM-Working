@@ -1796,3 +1796,6 @@
  GET /crm/quotes/f98dd393-4322-4f87-b3d2-4d80a4b10b15/summary 200 in 756ms (next.js: 42ms, proxy.ts: 672ms, application-code: 41ms)
  GET /crm/customers 200 in 485ms (next.js: 56ms, proxy.ts: 374ms, application-code: 56ms)
  GET /crm/quotes/f98dd393-4322-4f87-b3d2-4d80a4b10b15/summary 200 in 348ms (next.js: 36ms, proxy.ts: 266ms, application-code: 46ms)
+✓ Compiled in 595ms
+ GET /crm/quotes/f98dd393-4322-4f87-b3d2-4d80a4b10b15/summary 200 in 930ms (next.js: 117ms, proxy.ts: 765ms, application-code: 47ms)
+ GET /crm/customers 200 in 970ms (next.js: 20ms, proxy.ts: 921ms, application-code: 28ms)
