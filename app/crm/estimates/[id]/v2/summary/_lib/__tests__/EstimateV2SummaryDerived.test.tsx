@@ -11,7 +11,6 @@ import {
   calculatePaintSuppliesTotal,
   createDisplayScopePaintCostCalculator,
   createPaintProductLabelResolver,
-  hasActiveLaborRateOverride,
   normalizeSummaryScopeRows,
 } from '../estimateV2SummaryDerived'
 import { SCOPE_KIND_LABELS, SCOPE_KIND_ORDER } from '@/lib/estimator/scopeKinds'
@@ -109,7 +108,7 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(roomBlocks[0]?.scopes).toEqual(['Walls', 'Ceilings', 'Trim'])
     expect(roomBlocks[0]?.roomTotal).toBe(1031)
     expect(roomBlocks[0]?.displayScopeSubtotalMap.get('trim-1')).toBeTypeOf('number')
-    expect(roomBlocks[0]?.alerts).toEqual({ missingProduct: 0, overrides: 1, flags: 1 })
+    expect(roomBlocks[0]?.alerts).toEqual({ missingProduct: 0, overrides: 0, flags: 1 })
     expect(roomBlocks[0]?.scopeRows.find((scope) => scope.id === 'trim-1')?.overrideSummary).toBe(
       'Override: Labor hours: 1 h'
     )
@@ -181,6 +180,86 @@ describe('estimateV2SummaryDerived helpers', () => {
     })
   })
 
+  it('does not treat persisted zero override fields as active when they match raw values', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: normalizeSummaryScopeRows([
+        {
+          id: 'wall-1',
+          room_id: 'room-1',
+          scope_name: 'Walls',
+          effective_area_sf: 120,
+          effective_total: 400,
+          paint_product_id: 'paint-1',
+          raw_primer_hours: 0,
+          override_primer_hours: 0,
+          raw_primer_gallons: 0,
+          override_primer_gallons: 0,
+          raw_supply_cost: 0,
+          override_supply_cost: 0,
+        },
+      ]),
+      ceilingScopes: [],
+      trimScopes: [],
+    })
+    const wallRow = roomScopeRows.get('room-1')?.find((scope) => scope.id === 'wall-1')
+
+    expect(wallRow).toMatchObject({
+      hasOverride: false,
+      overrideSummary: null,
+    })
+  })
+
+  it('keeps an override-to-zero active when it changes a nonzero raw value', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: normalizeSummaryScopeRows([
+        {
+          id: 'wall-1',
+          room_id: 'room-1',
+          scope_name: 'Walls',
+          effective_area_sf: 120,
+          effective_total: 0,
+          paint_product_id: 'paint-1',
+          raw_total: 400,
+          override_total: 0,
+        },
+      ]),
+      ceilingScopes: [],
+      trimScopes: [],
+    })
+    const wallRow = roomScopeRows.get('room-1')?.find((scope) => scope.id === 'wall-1')
+
+    expect(wallRow).toMatchObject({
+      hasOverride: true,
+      overrideSummary: 'Override: Total: $0',
+    })
+  })
+
+  it('does not count trim manual values as summary overrides', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: [],
+      ceilingScopes: [],
+      trimScopes: normalizeSummaryScopeRows([
+        {
+          id: 'trim-1',
+          room_id: 'room-1',
+          scope_name: 'Trim',
+          effective_measurement: 20,
+          effective_total: 150,
+          raw_total: 100,
+          override_hours: 1,
+          override_gallons: 0.25,
+          override_total: 150,
+          override_description: 'Manual trim paint',
+        },
+      ]),
+    })
+    const trimRow = roomScopeRows.get('room-1')?.find((scope) => scope.id === 'trim-1')
+
+    expect(trimRow).toMatchObject({
+      hasOverride: false,
+    })
+  })
+
   it('generates missing-product, override, and clean summary alerts', () => {
     const missingProductRows = buildRoomScopeRows({
       wallScopes: normalizeSummaryScopeRows([
@@ -200,36 +279,36 @@ describe('estimateV2SummaryDerived helpers', () => {
       buildSummaryAlerts({
         pricingSummary,
         hasJobSettings: true,
-        laborRateOverrideActive: false,
         roomScopeRows: missingProductRows,
         roomFlags: [{ id: 'flag-1', room_id: 'room-1', flag_id: 'warn-1' }],
         rooms,
       }).map((alert) => alert.title)
     ).toEqual([
       'Missing product selection',
-      'Warning flags active',
+      'Warning flag active',
     ])
 
     const overrideRows = buildRoomScopeRows({
-      wallScopes: [],
-      ceilingScopes: [],
-      trimScopes: normalizeSummaryScopeRows([
+      wallScopes: normalizeSummaryScopeRows([
         {
-          id: 'trim-1',
+          id: 'wall-override',
           room_id: 'room-1',
-          scope_name: 'Trim',
-          effective_measurement: 20,
-          effective_total: 150,
+          scope_name: 'Walls',
+          effective_area_sf: 20,
+          effective_total: 170,
+          raw_total: 150,
           override_total: 170,
+          paint_product_id: 'paint-1',
         },
       ]),
+      ceilingScopes: [],
+      trimScopes: [],
     })
 
     expect(
       buildSummaryAlerts({
         pricingSummary,
         hasJobSettings: true,
-        laborRateOverrideActive: false,
         roomScopeRows: overrideRows,
         roomFlags: [],
         rooms,
@@ -237,19 +316,72 @@ describe('estimateV2SummaryDerived helpers', () => {
     ).toMatchObject({
       kind: 'warn',
       title: 'Manual override detected',
+      detail: 'Living Room Walls override active - Total: $170',
     })
 
     expect(
       buildSummaryAlerts({
         pricingSummary,
         hasJobSettings: true,
-        laborRateOverrideActive: false,
         roomScopeRows: new Map(),
         roomFlags: [],
         rooms,
       })
     ).toEqual([
       { kind: 'info', title: 'No active alerts', detail: 'Estimate is currently clean' },
+    ])
+  })
+
+  it('returns every active summary alert instead of collapsing to one per type', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: normalizeSummaryScopeRows([
+        {
+          id: 'wall-1',
+          room_id: 'room-1',
+          scope_name: 'Walls',
+          effective_area_sf: 100,
+          effective_total: 200,
+        },
+        {
+          id: 'wall-2',
+          room_id: 'room-1',
+          scope_name: 'Accent Walls',
+          effective_area_sf: 80,
+          effective_total: 150,
+        },
+      ]),
+      ceilingScopes: normalizeSummaryScopeRows([
+        {
+          id: 'ceiling-1',
+          room_id: 'room-1',
+          scope_name: 'Ceiling',
+          effective_area_sf: 20,
+          effective_total: 170,
+          raw_total: 150,
+          override_total: 170,
+          paint_product_id: 'paint-1',
+        },
+      ]),
+      trimScopes: [],
+    })
+
+    const alerts = buildSummaryAlerts({
+      pricingSummary,
+      hasJobSettings: true,
+      roomScopeRows,
+      roomFlags: [
+        { id: 'flag-1', room_id: 'room-1', flag_id: 'warn-1' },
+        { id: 'flag-2', room_id: 'room-1', flag_id: 'warn-2' },
+      ],
+      rooms,
+    })
+
+    expect(alerts.map((alert) => alert.title)).toEqual([
+      'Missing product selection',
+      'Missing product selection',
+      'Manual override detected',
+      'Warning flag active',
+      'Warning flag active',
     ])
   })
 
@@ -274,7 +406,6 @@ describe('estimateV2SummaryDerived helpers', () => {
     const alerts = buildSummaryAlerts({
       pricingSummary,
       hasJobSettings: true,
-      laborRateOverrideActive: false,
       roomScopeRows,
       roomFlags: [],
       rooms,
@@ -398,24 +529,6 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(rowIds).toEqual(['door-included'])
   })
 
-  it('treats a persisted default labor rate as clean unless it differs from org defaults', () => {
-    expect(
-      hasActiveLaborRateOverride(
-        { override_labor_rate: 65 },
-        { override_labor_rate: 65 }
-      )
-    ).toBe(false)
-
-    expect(
-      hasActiveLaborRateOverride(
-        { override_labor_rate: 70 },
-        { override_labor_rate: 65 }
-      )
-    ).toBe(true)
-
-    expect(hasActiveLaborRateOverride({ override_labor_rate: null }, { override_labor_rate: 65 })).toBe(false)
-  })
-
   it('builds pricing rows and reconciles their totals against the displayed summary totals', () => {
     const priceRows = buildPriceBreakdownRows(pricingSummary)
     const paintRows = buildPaintSupplyRows(pricingSummary)
@@ -464,6 +577,16 @@ describe('estimateV2SummaryDerived helpers', () => {
 
     expect(calculatePaintSuppliesTotal(fractionalSummary)).toBe(21)
     expect(visibleDollarTotal).toBe(21)
+  })
+
+  it('omits the primer row when no primer cost is present', () => {
+    const paintRows = buildPaintSupplyRows(
+      { ...pricingSummary, primerMaterialCost: 0 },
+      null,
+      { primerProductLabel: 'SW PrepRite' }
+    )
+
+    expect(paintRows.map((row) => row.label)).not.toContain('Primer - SW PrepRite')
   })
 
   it('appends selected product names to paint supply scope labels and includes total gallons', () => {

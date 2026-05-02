@@ -375,6 +375,29 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.getByText('Wall height is required')).toBeInTheDocument()
   })
 
+  it('does not render stale non-blocking paint assumption validation messages', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        validationIssues: [
+          'Walls: Scope 1: paint_prod_rate_sqft_per_hour is required',
+          'Walls: Scope 1: paint_prod_rate_sqft_per_hour is required',
+          'Walls: Scope 1: paint_coverage_sqft_per_gal_per_coat is required',
+          'R001: height is required for RECT wall mode',
+        ],
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.queryByText('Walls: Scope 1: paint_prod_rate_sqft_per_hour is required')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Walls: Scope 1: paint_coverage_sqft_per_gal_per_coat is required')
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('R001: height is required for RECT wall mode')).toBeInTheDocument()
+  })
+
   it('renders the empty-selection state when no room is selected', () => {
     mockUseEstimateV2Editor.mockReturnValue({
       ...baseEditorState,

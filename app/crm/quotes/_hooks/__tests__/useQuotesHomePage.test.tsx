@@ -786,7 +786,7 @@ describe('useQuotesHomePage', () => {
     })
   })
 
-  it('keeps delete success explicit when follow-up refresh fails without local shadow mutation', async () => {
+  it('removes a successfully deleted quote locally when the follow-up refresh fails', async () => {
     loadQuoteHomeBootstrap
       .mockResolvedValueOnce(quoteHomeBootstrap)
       .mockRejectedValueOnce(new Error('bootstrap refresh failed'))
@@ -812,7 +812,6 @@ describe('useQuotesHomePage', () => {
 
     expect(result.current.versionList.items.map((estimate) => estimate.id)).toEqual([
       'estimate-2',
-      'estimate-1',
     ])
     expect(result.current.feedback).toMatchObject({
       title: 'Quote action completed with refresh errors',

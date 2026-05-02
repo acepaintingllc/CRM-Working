@@ -20,7 +20,6 @@ import { EstimateV2DetailsMaterialOverview } from './EstimateV2DetailsMaterialOv
 import { EstimateV2DetailsMaterialTable } from './EstimateV2DetailsMaterialTable'
 import { EstimateV2DetailsRollerRows } from './EstimateV2DetailsRollerRows'
 import { EstimateV2DetailsSummaryRail } from './EstimateV2DetailsSummaryRail'
-import { EstimateV2DetailsRoomConditions } from './EstimateV2DetailsRoomConditions'
 import { EstimateV2DetailsAccessFees } from './EstimateV2DetailsAccessFees'
 import { useEstimateV2DetailsPage } from '../_state/useEstimateV2DetailsPage'
 import { DETAILS_UNSAVED_CHANGES_MESSAGE } from '../_state/useEstimateV2DetailsController'
@@ -119,8 +118,8 @@ export function EstimateV2DetailsPageContent({
         </CrmNotice>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
-        <main className="grid min-w-0 gap-4">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_270px] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <main className="grid min-w-0 max-w-full gap-4 [&>section]:min-w-0">
           <CrmSectionCard
             title="Crew Size"
             description="Multiplies per-person supply items (brushes, trays) automatically"
@@ -193,21 +192,12 @@ export function EstimateV2DetailsPageContent({
             <EstimateV2DetailsMaterialOverview materialCards={vm.materialCards} />
           </CrmSectionCard>
 
-          {vm.conditions.conditions.some((c) => c.scope === 'room') ? (
-            <CrmSectionCard title="Room Conditions" description="Conditions that apply a factor across all scopes in every room.">
-              <EstimateV2DetailsRoomConditions
-                conditions={vm.conditions.conditions}
-                selections={vm.conditions.selections}
-                onToggle={(id, level) => actions.setRoomCondition('room', id, level)}
-              />
-            </CrmSectionCard>
-          ) : null}
-
           {vm.wallRows.length > 0 ? (
             <CrmSectionCard title="Paint Planning" description={vm.materialPlanningSections.walls.description}>
               <EstimateV2DetailsMaterialTable
                 rows={vm.wallRows}
                 onOverride={(row, value) => actions.setWallOverride(row.colorId ?? row.id, value)}
+                onProductChange={(row, value) => actions.setWallProduct(row.productScopeIds, value)}
                 emptyTitle={vm.materialPlanningSections.walls.emptyTitle}
                 emptyMessage={vm.materialPlanningSections.walls.emptyMessage}
                 scope="wall"
@@ -222,6 +212,7 @@ export function EstimateV2DetailsPageContent({
               <EstimateV2DetailsMaterialTable
                 rows={[vm.ceilingRow]}
                 onOverride={(_, value) => actions.setCeilingOverride(value)}
+                onProductChange={(row, value) => actions.setCeilingProduct(row.productScopeIds, value)}
                 emptyTitle={vm.materialPlanningSections.ceilings.emptyTitle}
                 emptyMessage={vm.materialPlanningSections.ceilings.emptyMessage}
                 scope="ceiling"
@@ -236,6 +227,7 @@ export function EstimateV2DetailsPageContent({
               <EstimateV2DetailsMaterialTable
                 rows={[vm.trimRow]}
                 onOverride={(_, value) => actions.setTrimOverride(value)}
+                onProductChange={(row, value) => actions.setTrimProduct(row.productScopeIds, value)}
                 emptyTitle={vm.materialPlanningSections.trim.emptyTitle}
                 emptyMessage={vm.materialPlanningSections.trim.emptyMessage}
                 scope="trim"

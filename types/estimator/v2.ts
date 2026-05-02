@@ -75,6 +75,7 @@ export type EstimateV2AccessFeeOption = EstimateV2CatalogOption & {
 export type EstimateV2PaintProductOption = EstimateV2CatalogOption & {
   type: string
   scopes?: string[]
+  coverage_sqft_per_gal_per_coat?: number | null
 }
 
 export type EstimateV2ProductionRateOption = EstimateV2CatalogOption & {

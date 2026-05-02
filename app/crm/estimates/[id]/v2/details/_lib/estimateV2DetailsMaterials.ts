@@ -1,5 +1,6 @@
 import type {
   EstimateV2CeilingScopeDraft,
+  EstimateV2PaintProductOption,
   EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
@@ -11,6 +12,7 @@ import type {
 import {
   cleanInputNumber,
   isActive,
+  n,
   resolveOptionalGallonOverride,
   round1,
   sumNumbers,
@@ -19,6 +21,7 @@ import {
   createMaterialMissingCalculationIssues,
   createMaterialMissingProductIssues,
   createMaterialOverrideInputIssues,
+  createMaterialRequiredOverrideIssues,
 } from './estimateV2DetailsValidation'
 import {
   calculationRowsById,
@@ -99,29 +102,138 @@ function resolveWallGroupIdentity(params: {
 
 function resolveProduct(
   scopes: Array<{ paintProductId: string }>,
-  productLabelById: Map<string, string>
+  productLabelById: Map<string, string>,
+  defaultProductId: string
 ) {
-  const ids = Array.from(new Set(scopes.map((scope) => scope.paintProductId).filter(Boolean)))
-  if (ids.length > 1) return { label: 'Mixed', warning: 'Mixed product selection' }
+  const normalizedDefaultId = defaultProductId.trim()
+  const defaultLabel = normalizedDefaultId
+    ? productLabelById.get(normalizedDefaultId) ?? normalizedDefaultId
+    : 'No default product'
+  const ids = Array.from(
+    new Set(
+      scopes
+        .map((scope) => scope.paintProductId.trim())
+        .filter(Boolean)
+    )
+  )
+  if (ids.length > 1) {
+    return {
+      label: 'Mixed',
+      defaultLabel,
+      value: '__mixed__',
+      warning: 'Mixed product selection',
+    }
+  }
   const id = ids[0] ?? ''
-  if (!id) return { label: 'Default product' }
+  if (!id) {
+    return {
+      label: defaultLabel,
+      defaultLabel,
+      value: '',
+    }
+  }
   const label = productLabelById.get(id)
   return label
-    ? { label }
-    : { label: id, warning: `${id} is not in the loaded catalog` }
+    ? { label, defaultLabel, value: id }
+    : { label: id, defaultLabel, value: id, warning: `${id} is not in the loaded catalog` }
+}
+
+function round4(value: number) {
+  return Math.round(value * 10000) / 10000
+}
+
+function resolveCoverageGallons(params: {
+  area: number | null | undefined
+  coats: string
+  productId: string
+  defaultProductId?: string
+  paintProductCoverageById?: Map<string, number | null>
+}) {
+  const productId = params.productId.trim() || params.defaultProductId?.trim() || ''
+  const coverage = productId ? params.paintProductCoverageById?.get(productId) ?? null : null
+  const coats = n(params.coats || '2')
+  const area = params.area ?? null
+  if (area == null || area <= 0 || coats <= 0 || coverage == null || coverage <= 0) return null
+  return round4((area * coats) / coverage)
+}
+
+function shouldUseCoverageGallons(params: {
+  rawPaintGallons: number | null | undefined
+  area: number | null | undefined
+  calculationProductId?: string | null
+  currentProductId: string
+}) {
+  const raw = params.rawPaintGallons
+  if (raw == null) return true
+  if ((params.area ?? 0) > 0 && raw === 0) return true
+  const calculationProductId = params.calculationProductId?.trim() ?? ''
+  return !!calculationProductId && calculationProductId !== params.currentProductId.trim()
+}
+
+function resolveCalculatedGallons(params: {
+  rawPaintGallons: number | null | undefined
+  area: number | null | undefined
+  calculationProductId?: string | null
+  currentProductId: string
+  derivedGallons: number | null
+}) {
+  if (
+    shouldUseCoverageGallons({
+      rawPaintGallons: params.rawPaintGallons,
+      area: params.area,
+      calculationProductId: params.calculationProductId,
+      currentProductId: params.currentProductId,
+    })
+  ) {
+    return params.derivedGallons
+  }
+  return params.rawPaintGallons ?? null
+}
+
+function getCalculationPaintProductId(row: EstimateV2DetailsAggregateCalculationRow | undefined) {
+  return row && 'paintProductId' in row ? row.paintProductId : null
 }
 
 function summarizeWallCalculations(params: {
   scopes: EstimateV2WallScopeDraft[]
-  calcById: Map<string, { effectiveAreaSf: number | null; rawPaintGallons: number | null }>
+  calcById: Map<string, { effectiveAreaSf: number | null; rawPaintGallons: number | null; paintProductId?: string | null }>
+  defaultProductId?: string
+  paintProductCoverageById?: Map<string, number | null>
 }) {
+  const rawGallonsByScope = new Map(
+    params.scopes.map((scope) => {
+      const row = params.calcById.get(scope.id)
+      const area = row?.effectiveAreaSf ?? null
+      const currentProductId = scope.paintProductId.trim() || params.defaultProductId?.trim() || ''
+      const derivedGallons = resolveCoverageGallons({
+        area,
+        coats: scope.paintCoats,
+        productId: scope.paintProductId,
+        defaultProductId: params.defaultProductId,
+        paintProductCoverageById: params.paintProductCoverageById,
+      })
+      return [
+        scope.id,
+        resolveCalculatedGallons({
+          rawPaintGallons: row?.rawPaintGallons,
+          area,
+          calculationProductId: row?.paintProductId,
+          currentProductId,
+          derivedGallons,
+        }),
+      ] as const
+    })
+  )
   return {
     calculatedGallons: sumNumbers(
       params.scopes,
-      (scope) => params.calcById.get(scope.id)?.rawPaintGallons
+      (scope) => rawGallonsByScope.get(scope.id)
     ),
     missingCalcScopeIds: params.scopes
-      .filter((scope) => !params.calcById.has(scope.id))
+      .filter((scope) => {
+        const row = params.calcById.get(scope.id)
+        return !row || rawGallonsByScope.get(scope.id) == null
+      })
       .map((scope) => scope.id),
     sqFt: sumNumbers(params.scopes, (scope) => params.calcById.get(scope.id)?.effectiveAreaSf),
   }
@@ -130,14 +242,46 @@ function summarizeWallCalculations(params: {
 function summarizeAggregateCalculations(params: {
   scopes: Array<EstimateV2CeilingScopeDraft | EstimateV2TrimScopeDraft>
   calcById: Map<string, EstimateV2DetailsAggregateCalculationRow>
+  defaultProductId?: string
+  paintProductCoverageById?: Map<string, number | null>
 }) {
+  const rawGallonsByScope = new Map(
+    params.scopes.map((scope) => {
+      const row = params.calcById.get(scope.id)
+      const area =
+        row && 'effectiveAreaSf' in row ? row.effectiveAreaSf : null
+      const currentProductId = scope.paintProductId.trim() || params.defaultProductId?.trim() || ''
+      const derivedGallons = resolveCoverageGallons({
+        area,
+        coats: scope.paintCoats,
+        productId: scope.paintProductId,
+        defaultProductId: params.defaultProductId,
+        paintProductCoverageById: params.paintProductCoverageById,
+      })
+      return [
+        scope.id,
+        'effectiveAreaSf' in (row ?? {})
+          ? resolveCalculatedGallons({
+              rawPaintGallons: row?.rawPaintGallons,
+              area,
+              calculationProductId: getCalculationPaintProductId(row),
+              currentProductId,
+              derivedGallons,
+            })
+          : row?.rawPaintGallons ?? null,
+      ] as const
+    })
+  )
   return {
     calculatedGallons: sumNumbers(
       params.scopes,
-      (scope) => params.calcById.get(scope.id)?.rawPaintGallons
+      (scope) => rawGallonsByScope.get(scope.id)
     ),
     missingCalcScopeIds: params.scopes
-      .filter((scope) => !params.calcById.has(scope.id))
+      .filter((scope) => {
+        const row = params.calcById.get(scope.id)
+        return !row || rawGallonsByScope.get(scope.id) == null
+      })
       .map((scope) => scope.id),
     sqFt: sumNumbers(params.scopes, (scope) => {
       const row = params.calcById.get(scope.id)
@@ -164,7 +308,12 @@ export function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm
       scopes,
       colorLabelById: params.colorLabelById,
     })
-    const calculationSummary = summarizeWallCalculations({ scopes, calcById: wallCalcById })
+    const calculationSummary = summarizeWallCalculations({
+      scopes,
+      calcById: wallCalcById,
+      defaultProductId: params.productDefaults?.wallPaintProductId,
+      paintProductCoverageById: params.paintProductCoverageById,
+    })
     const groupedOverride = resolveGroupedOverride({
       label: identity.label,
       targetId: identity.id,
@@ -174,7 +323,11 @@ export function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm
     const overrideGallons = groupedOverride.overrideGallons
     const roundedGallons = Math.ceil(calculationSummary.calculatedGallons)
     const overrideState = resolveOptionalGallonOverride({ overrideGallons, roundedGallons })
-    const product = resolveProduct(scopes, params.paintProductLabelById)
+    const product = resolveProduct(
+      scopes,
+      params.paintProductLabelById,
+      params.productDefaults?.wallPaintProductId ?? ''
+    )
 
     return {
       id: identity.id,
@@ -185,6 +338,10 @@ export function createWallRows(params: BuildDetailsVmParams): DetailsScopeLineVm
       sqFt: round1(calculationSummary.sqFt),
       coats: Array.from(new Set(scopes.map((scope) => scope.paintCoats || '2'))).join(', '),
       product: product.label,
+      productDefaultLabel: product.defaultLabel,
+      productValue: product.value ?? '',
+      productScopeIds: scopes.map((scope) => scope.id),
+      productOptions: params.wallPaintOptions ?? [],
       productWarning: product.warning,
       calculationStatus:
         calculationSummary.missingCalcScopeIds.length > 0 ? 'unavailable' : 'available',
@@ -228,6 +385,9 @@ export function createAggregateRow(params: {
   calcRows: EstimateV2DetailsAggregateCalculationRow[] | null | undefined
   rooms: EstimateV2RoomDraft[]
   productLabelById: Map<string, string>
+  paintProductCoverageById?: Map<string, number | null>
+  defaultProductId?: string
+  productOptions?: EstimateV2PaintProductOption[]
   overrideField: 'overridePaintGallons' | 'overrideGallons'
 }): DetailsScopeLineVm | null {
   const scopes = params.scopes.filter((scope) => isActive(scope.include))
@@ -235,7 +395,13 @@ export function createAggregateRow(params: {
 
   const calcById = calculationRowsById(params.calcRows)
   const rooms = roomNameById(params.rooms)
-  const calculationSummary = summarizeAggregateCalculations({ scopes, calcById })
+  const calculationSummary = summarizeAggregateCalculations({
+    scopes,
+    calcById,
+    defaultProductId: params.defaultProductId,
+    paintProductCoverageById: params.paintProductCoverageById,
+  })
+  const manualInputOnly = params.overrideField === 'overrideGallons'
   const getOverrideValue = (scope: EstimateV2CeilingScopeDraft | EstimateV2TrimScopeDraft) =>
     params.overrideField === 'overridePaintGallons'
       ? (scope as EstimateV2CeilingScopeDraft).overridePaintGallons
@@ -247,9 +413,9 @@ export function createAggregateRow(params: {
     valuesByScopeId: new Map(scopes.map((scope) => [scope.id, getOverrideValue(scope)] as const)),
   })
   const overrideGallons = groupedOverride.overrideGallons
-  const roundedGallons = Math.ceil(calculationSummary.calculatedGallons)
+  const roundedGallons = manualInputOnly ? 0 : Math.ceil(calculationSummary.calculatedGallons)
   const overrideState = resolveOptionalGallonOverride({ overrideGallons, roundedGallons })
-  const product = resolveProduct(scopes, params.productLabelById)
+  const product = resolveProduct(scopes, params.productLabelById, params.defaultProductId ?? '')
 
   return {
     id: params.id,
@@ -259,14 +425,20 @@ export function createAggregateRow(params: {
     sqFt: round1(calculationSummary.sqFt),
     coats: Array.from(new Set(scopes.map((scope) => scope.paintCoats || '2'))).join(', '),
     product: product.label,
+    productDefaultLabel: product.defaultLabel,
+    productValue: product.value ?? '',
+    productScopeIds: scopes.map((scope) => scope.id),
+    productOptions: params.productOptions ?? [],
     productWarning: product.warning,
-    calculationStatus:
-      calculationSummary.missingCalcScopeIds.length > 0 ? 'unavailable' : 'available',
-    calculationMessage:
-      calculationSummary.missingCalcScopeIds.length > 0
+    calculationStatus: manualInputOnly
+      ? 'available'
+      : calculationSummary.missingCalcScopeIds.length > 0 ? 'unavailable' : 'available',
+    calculationMessage: manualInputOnly
+      ? 'Manual input'
+      : calculationSummary.missingCalcScopeIds.length > 0
         ? 'Calculation data unavailable'
         : undefined,
-    calculatedGallons: round1(calculationSummary.calculatedGallons),
+    calculatedGallons: manualInputOnly ? 0 : round1(calculationSummary.calculatedGallons),
     roundedGallons,
     overrideGallons,
     finalGallons: overrideState.finalGallons,
@@ -274,11 +446,17 @@ export function createAggregateRow(params: {
     overrideOwnerScopeId: groupedOverride.ownerScopeId,
     hasOverride: overrideState.hasOverride,
     errors: [
-      ...createMaterialMissingCalculationIssues({
-        label: params.label,
-        targetId: params.id,
-        missingScopeIds: calculationSummary.missingCalcScopeIds,
-      }),
+      ...(manualInputOnly
+        ? createMaterialRequiredOverrideIssues({
+            label: params.label,
+            targetId: params.id,
+            value: overrideGallons,
+          })
+        : createMaterialMissingCalculationIssues({
+            label: params.label,
+            targetId: params.id,
+            missingScopeIds: calculationSummary.missingCalcScopeIds,
+          })),
       ...createMaterialMissingProductIssues({
         label: params.label,
         targetId: params.id,

@@ -159,9 +159,6 @@ describe('estimateV2EditorSaveOrchestration', () => {
       drywallCalculations: undefined,
     })
 
-    expect(issues).toEqual([
-      'Walls: Scope Main: paint_prod_rate_sqft_per_hour is required',
-      'Doors: Door scope 1: quantity is required',
-    ])
+    expect(issues).toEqual(['Doors: Door scope 1: quantity is required'])
   })
 })

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EstimateV2DetailsPageContent } from '../EstimateV2DetailsPageContent'
 
@@ -65,6 +65,10 @@ const basePage = {
         sqFt: 100,
         coats: '2',
         product: 'Wall Paint',
+        productDefaultLabel: 'Wall Paint',
+        productValue: '',
+        productScopeIds: ['wall-1'],
+        productOptions: [{ id: 'P-WALL-2', label: 'Wall Paint 2', type: 'paint' }],
         calculationStatus: 'available',
         calculatedGallons: 1.2,
         roundedGallons: 2,
@@ -178,6 +182,9 @@ const basePage = {
     setWallOverride: vi.fn(),
     setCeilingOverride: vi.fn(),
     setTrimOverride: vi.fn(),
+    setWallProduct: vi.fn(),
+    setCeilingProduct: vi.fn(),
+    setTrimProduct: vi.fn(),
     setRoomCondition: vi.fn(),
     addAccessFee: vi.fn(),
     updateAccessFee: vi.fn(),
@@ -228,6 +235,39 @@ describe('EstimateV2DetailsPageContent', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Back$/i }))
 
     expect(returnToEditor).toHaveBeenCalled()
+  })
+
+  it('does not render room-level conditions on the details page', () => {
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...basePage,
+      vm: {
+        ...basePage.vm,
+        conditions: {
+          ...basePage.vm.conditions,
+          available: true,
+          conditions: [
+            {
+              id: 'ROOM_FURNISHED',
+              scope: 'room',
+              displayName: 'Room is furnished',
+              modifierType: 'binary',
+              factors: { active: 1.15 },
+            },
+          ],
+          selections: {
+            ...basePage.vm.conditions.selections,
+            room: { ROOM_FURNISHED: 'active' },
+          },
+          roomActiveCount: 1,
+          scopeFactors: { ...basePage.vm.conditions.scopeFactors, room: 1.15 },
+        },
+      },
+    })
+
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    expect(screen.queryByRole('heading', { name: 'Room Conditions' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Room is furnished')).not.toBeInTheDocument()
   })
 
   it('renders the discard dialog and wires cancel and confirm actions', () => {
@@ -401,8 +441,20 @@ describe('EstimateV2DetailsPageContent', () => {
           colorId: undefined,
           colorName: 'Trim',
           sqFt: 40,
+          calculatedGallons: 0,
+          roundedGallons: 0,
+          calculationMessage: 'Manual input',
           overrideKey: 'trim',
           overrideOwnerScopeId: 'trim-1',
+          errors: [
+            issue({
+              id: 'material:trim:overrideGallons:required',
+              section: 'material',
+              targetId: 'trim',
+              field: 'overrideGallons',
+              message: 'Trim & Baseboards gallons are required.',
+            }),
+          ],
         },
         wallRollerRows: [],
         ceilingRollerRow: null,
@@ -419,7 +471,49 @@ describe('EstimateV2DetailsPageContent', () => {
     expect(screen.queryByText('Paint Planning')).not.toBeInTheDocument()
     expect(screen.queryByText('Ceiling Paint Planning')).not.toBeInTheDocument()
     expect(screen.getByText('Trim Paint Planning')).toBeInTheDocument()
-    expect(screen.getByLabelText('Trim & Baseboards override gallons')).toBeInTheDocument()
+    const input = screen.getByLabelText('Trim & Baseboards override gallons')
+    expect(input).toBeRequired()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Manual')).toBeInTheDocument()
+    expect(screen.getByText('Trim & Baseboards gallons are required.')).toBeInTheDocument()
+  })
+
+  it('marks required access fee fields when an access fee row is incomplete', () => {
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...basePage,
+      vm: {
+        ...basePage.vm,
+        accessFees: {
+          ...basePage.vm.accessFees,
+          rows: [
+            {
+              id: 'access-1',
+              accessFeeId: '',
+              label: 'Access fee',
+              roomId: '',
+              roomLabel: 'Job level',
+              qty: '',
+              actualCostOverride: '',
+              notes: '',
+              effectiveTotal: 0,
+              overridden: false,
+            },
+          ],
+        },
+      },
+    })
+
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    const accessFeesSection = screen.getByRole('heading', { name: /Access Fees/i }).closest('section')
+    expect(accessFeesSection).not.toBeNull()
+    const section = within(accessFeesSection as HTMLElement)
+    const feeSelect = section.getByRole('combobox', { name: /Fee/i })
+    const quantity = section.getByRole('textbox', { name: /Qty/i })
+    expect(feeSelect).toBeRequired()
+    expect(feeSelect).toHaveAttribute('aria-invalid', 'true')
+    expect(quantity).toBeRequired()
+    expect(quantity).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('renders grouped override conflicts in planning and validation surfaces', () => {
@@ -508,5 +602,24 @@ describe('EstimateV2DetailsPageContent', () => {
     rerender(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
 
     expect(screen.getByLabelText('Primary override gallons')).toHaveValue('')
+  })
+
+  it('updates the material row product selection through details actions', () => {
+    const setWallProduct = vi.fn()
+    mockUseEstimateV2DetailsPage.mockReturnValue({
+      ...basePage,
+      actions: {
+        ...basePage.actions,
+        setWallProduct,
+      },
+    })
+
+    render(<EstimateV2DetailsPageContent estimateId="estimate-1" />)
+
+    fireEvent.change(screen.getByLabelText('Primary paint product'), {
+      target: { value: 'P-WALL-2' },
+    })
+
+    expect(setWallProduct).toHaveBeenCalledWith(['wall-1'], 'P-WALL-2')
   })
 })

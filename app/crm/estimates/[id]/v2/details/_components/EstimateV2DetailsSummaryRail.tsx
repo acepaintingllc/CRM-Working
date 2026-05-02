@@ -10,7 +10,7 @@ export function EstimateV2DetailsSummaryRail({
   vm: EstimateV2DetailsVm
 }) {
   return (
-    <aside className="order-first grid gap-4 md:grid-cols-2 xl:order-none xl:sticky xl:top-4 xl:grid-cols-1">
+    <aside className="order-first grid min-w-0 gap-4 md:grid-cols-2 xl:order-none xl:sticky xl:top-4 xl:z-10 xl:grid-cols-1">
       <CrmSectionCard
         title="Validation"
         description={vm.validationSummary.message}

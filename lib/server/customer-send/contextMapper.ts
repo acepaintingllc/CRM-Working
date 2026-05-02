@@ -71,14 +71,20 @@ export function buildEstimateCustomerSendContext(params: {
       room_ceiling_scopes: params.calculated.quoteCeilingScopes,
       ceiling_scope_segments: params.resources.ceilingScopeSegments,
       room_trim_scopes: params.calculated.quoteTrimScopes,
+      room_door_scopes: params.calculated.quoteDoorScopes,
       drywall_repairs: params.calculated.quoteDrywallScopes ?? [],
+      access_fees: params.calculated.quoteAccessFees,
       trim_items: params.resources.trimItems,
-      other: params.resources.other,
+      other: params.calculated.quoteOtherRows,
       jobsettings: params.resources.jobsettings,
       org_defaults: params.resources.settingsRow,
     },
     catalogs: params.resources.catalogs,
-    pricing_summary: params.calculated.pricingSummary,
+    pricing_summary:
+      params.calculated.pricingSummary ??
+      (params.resources.rollupFinalTotal == null
+        ? null
+        : { finalTotal: params.resources.rollupFinalTotal }),
     latest_public_version: previewVersion,
     latest_sent_version: latestSentVersion,
     latest_draft_version: latestDraftVersion,

@@ -2,6 +2,8 @@ import type {
   EstimateV2AccessFeeDraft,
   EstimateV2AccessFeeOption,
   EstimateV2CeilingScopeDraft,
+  EstimateV2JobDefaultProducts,
+  EstimateV2PaintProductOption,
   EstimateV2PricingSummary,
   EstimateV2RoomDraft,
   EstimateV2RollerDraft,
@@ -102,6 +104,10 @@ export type DetailsScopeLineVm = {
   sqFt: number
   coats: string
   product: string
+  productDefaultLabel: string
+  productValue: string
+  productScopeIds: string[]
+  productOptions: EstimateV2PaintProductOption[]
   productWarning?: string
   calculationStatus: 'available' | 'unavailable'
   calculationMessage?: string
@@ -212,6 +218,11 @@ export type BuildDetailsVmParams = {
   pricingSummary: EstimateV2PricingSummary | null | undefined
   crewSize?: number
   paintProductLabelById: Map<string, string>
+  paintProductCoverageById?: Map<string, number | null>
+  productDefaults?: EstimateV2JobDefaultProducts
+  wallPaintOptions?: EstimateV2PaintProductOption[]
+  ceilingPaintOptions?: EstimateV2PaintProductOption[]
+  trimPaintOptions?: EstimateV2PaintProductOption[]
   colorLabelById: Map<string, string>
   rollerOptions: DetailsRollerCoverOption[]
   rollerOptionsState?: DetailsRollerOptionsState
@@ -304,6 +315,9 @@ export function buildEstimateV2MaterialPlanningVm(
     calcRows: params.ceilingCalculations,
     rooms: params.rooms,
     productLabelById: params.paintProductLabelById,
+    paintProductCoverageById: params.paintProductCoverageById,
+    defaultProductId: params.productDefaults?.ceilingPaintProductId,
+    productOptions: params.ceilingPaintOptions,
     overrideField: 'overridePaintGallons',
   })
   const trimRow = createAggregateRow({
@@ -313,6 +327,9 @@ export function buildEstimateV2MaterialPlanningVm(
     calcRows: params.trimCalculations,
     rooms: params.rooms,
     productLabelById: params.paintProductLabelById,
+    paintProductCoverageById: params.paintProductCoverageById,
+    defaultProductId: params.productDefaults?.trimPaintProductId,
+    productOptions: params.trimPaintOptions,
     overrideField: 'overrideGallons',
   })
 

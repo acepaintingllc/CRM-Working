@@ -143,6 +143,31 @@ describe('customerSendWorkflow', () => {
     ).toBe('bookkeeper@example.com')
   })
 
+  it('replaces stale internal To drafts with the customer email', () => {
+    const composerDraft = buildCustomerSendComposerDraft(
+      basePayload as never,
+      { to_email: ' OWNER@example.com ' },
+      true
+    )
+    const reviewDraft = buildCustomerSendReviewDraft(
+      basePayload as never,
+      { to_email: 'owner@example.com' }
+    )
+
+    expect(composerDraft.to_email).toBe('customer@example.com')
+    expect(reviewDraft.to_email).toBe('customer@example.com')
+  })
+
+  it('preserves a manually entered non-internal To recipient', () => {
+    const draft = buildCustomerSendComposerDraft(
+      basePayload as never,
+      { to_email: 'billing@example.com' },
+      true
+    )
+
+    expect(draft.to_email).toBe('billing@example.com')
+  })
+
   it('derives estimate labels when the flow is not the quote alias', () => {
     expect(
       deriveCustomerSendLabels({

@@ -106,7 +106,9 @@ export type EstimateCustomerSendInputs = {
   room_ceiling_scopes: Unsafe[]
   ceiling_scope_segments: Unsafe[]
   room_trim_scopes: Unsafe[]
+  room_door_scopes: Unsafe[]
   drywall_repairs?: Unsafe[]
+  access_fees?: Unsafe[]
   trim_items: Unsafe[]
   other: Unsafe[]
   jobsettings: EstimateJobSettingsRow
@@ -153,6 +155,7 @@ export type EstimateCustomerSendCoreResources = {
   quoteDefaults: QuoteSendDefaults
   settingsRow: EstimateTemplateSettingsRow
   jobsettings: EstimateJobSettingsRow
+  rollupFinalTotal: number | null
 }
 
 export type EstimateCustomerSendScopeResources = {
@@ -164,7 +167,9 @@ export type EstimateCustomerSendScopeResources = {
   ceilingScopes: Unsafe[]
   ceilingScopeSegments: Unsafe[]
   trimScopes: Unsafe[]
+  doorScopes: Unsafe[]
   drywallRepairs?: Unsafe[]
+  accessFees: Unsafe[]
   trimItems: Unsafe[]
   other: Unsafe[]
 }
@@ -177,7 +182,10 @@ export type EstimateCustomerSendCalculatedData = {
   quoteWallScopes: Unsafe[]
   quoteCeilingScopes: Unsafe[]
   quoteTrimScopes: Unsafe[]
+  quoteDoorScopes: Unsafe[]
   quoteDrywallScopes?: Unsafe[]
+  quoteAccessFees: Unsafe[]
+  quoteOtherRows: Unsafe[]
   pricingSummary: { finalTotal: number | null } | null
 }
 

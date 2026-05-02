@@ -44,6 +44,22 @@ function applyTrackedDetailsCollectionMutation<TItem>(
   return changed
 }
 
+function updatePaintProductByScopeIds<TItem extends { id: string; paintProductId: string }>(
+  items: TItem[],
+  scopeIds: string[],
+  productId: string
+) {
+  const ids = new Set(scopeIds)
+  if (ids.size === 0) return items
+  let changed = false
+  const next = items.map((item) => {
+    if (!ids.has(item.id) || item.paintProductId === productId) return item
+    changed = true
+    return { ...item, paintProductId: productId }
+  })
+  return changed ? next : items
+}
+
 export function useEstimateV2DetailsMutations(params: {
   store: EstimateV2EditorStoreApi
   rollerOptions: DetailsRollerCoverOption[]
@@ -118,6 +134,39 @@ export function useEstimateV2DetailsMutations(params: {
     [recordDebugDirtySource, params.store, params.vm.trimRow]
   )
 
+  const setWallProduct = useCallback(
+    (scopeIds: string[], productId: string) => {
+      const changed = applyTrackedDetailsCollectionMutation(
+        params.store.getState().setScopes,
+        (prev) => updatePaintProductByScopeIds(prev, scopeIds, productId)
+      )
+      if (changed) recordDebugDirtySource()
+    },
+    [recordDebugDirtySource, params.store]
+  )
+
+  const setCeilingProduct = useCallback(
+    (scopeIds: string[], productId: string) => {
+      const changed = applyTrackedDetailsCollectionMutation(
+        params.store.getState().setCeilingScopes,
+        (prev) => updatePaintProductByScopeIds(prev, scopeIds, productId)
+      )
+      if (changed) recordDebugDirtySource()
+    },
+    [recordDebugDirtySource, params.store]
+  )
+
+  const setTrimProduct = useCallback(
+    (scopeIds: string[], productId: string) => {
+      const changed = applyTrackedDetailsCollectionMutation(
+        params.store.getState().setTrimScopes,
+        (prev) => updatePaintProductByScopeIds(prev, scopeIds, productId)
+      )
+      if (changed) recordDebugDirtySource()
+    },
+    [recordDebugDirtySource, params.store]
+  )
+
   const setCrewSize = useCallback(
     (value: number) => {
       const normalized = Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1
@@ -180,6 +229,9 @@ export function useEstimateV2DetailsMutations(params: {
     setWallOverride,
     setCeilingOverride,
     setTrimOverride,
+    setWallProduct,
+    setCeilingProduct,
+    setTrimProduct,
     setRoomCondition,
     addAccessFee,
     updateAccessFee,

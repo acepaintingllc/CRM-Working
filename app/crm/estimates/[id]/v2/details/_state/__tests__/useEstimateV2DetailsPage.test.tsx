@@ -123,22 +123,28 @@ function validationMessages(vm: ReturnType<typeof useEstimateV2DetailsPage>['vm'
 }
 
 type SavedDetailsContractPayload = {
+  jobsettings: {
+    trim_paint_id?: string | null
+  }
   room_wall_scopes: Array<{
     id: string
     room_id: string
     include: string | null
+    paint_product_id?: string | null
     override_paint_gallons: number | null
   }>
   room_ceiling_scopes: Array<{
     id: string
     room_id: string
     include: string | null
+    paint_product_id?: string | null
     override_paint_gallons: number | null
   }>
   room_trim_scopes: Array<{
     id: string
     room_id: string
     include: string | null
+    paint_product_id?: string | null
     override_gallons: number | null
   }>
   rollers: Array<{
@@ -490,6 +496,70 @@ describe('useEstimateV2DetailsPage', () => {
     expect(body.room_trim_scopes.some((scope) => scope.include === 'Y')).toBe(true)
     expect(body.rollers.some((roller) => roller.scope === 'Wall' || roller.scope === 'Ceiling')).toBe(
       false
+    )
+  })
+
+  it('persists product changes made from material planning rows', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    mocks.authedFetch.mockImplementation(async (url, init) => {
+      const method =
+        typeof init === 'object' && init != null ? (init as { method?: string }).method : undefined
+      if (url === estimateRouteFamily.estimateApiHref(fixture.estimate.id) && method === 'PUT') {
+        return createResponse({})
+      }
+      return createResponse(createRollerRatesPayload())
+    })
+    mockLoadedEstimate(fixture)
+
+    const { result } = renderHook(() =>
+      useEstimateV2DetailsPage({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.vm.rollerOptionsState.status).toBe('loaded')
+    })
+
+    const wallScopeIds = result.current.vm.wallRows[0].productScopeIds
+    const ceilingScopeIds = result.current.vm.ceilingRow?.productScopeIds ?? []
+    const trimScopeIds = result.current.vm.trimRow?.productScopeIds ?? []
+
+    act(() => {
+      result.current.actions.setWallProduct(wallScopeIds, 'P-WALL-DETAILS')
+      result.current.actions.setCeilingProduct(ceilingScopeIds, 'P-CEIL-DETAILS')
+      result.current.actions.setTrimProduct(trimScopeIds, 'P-TRIM-DETAILS')
+    })
+
+    await act(async () => {
+      await expect(result.current.actions.saveDraft()).resolves.toBe(true)
+    })
+
+    const saveRequest = findSaveRequest(fixture.estimate.id)
+    expect(saveRequest).toBeTruthy()
+    const body = JSON.parse((saveRequest?.[1] as { body: string }).body) as SavedDetailsContractPayload
+
+    expect(body.room_wall_scopes).toEqual(
+      expect.arrayContaining(
+        wallScopeIds.map((id) =>
+          expect.objectContaining({ id, paint_product_id: 'P-WALL-DETAILS' })
+        )
+      )
+    )
+    expect(body.room_ceiling_scopes).toEqual(
+      expect.arrayContaining(
+        ceilingScopeIds.map((id) =>
+          expect.objectContaining({ id, paint_product_id: 'P-CEIL-DETAILS' })
+        )
+      )
+    )
+    expect(body.room_trim_scopes).toEqual(
+      expect.arrayContaining(
+        trimScopeIds.map((id) =>
+          expect.objectContaining({ id, paint_product_id: 'P-TRIM-DETAILS' })
+        )
+      )
     )
   })
 
@@ -941,7 +1011,6 @@ describe('useEstimateV2DetailsPage', () => {
     const summaryAlerts = buildSummaryAlerts({
       pricingSummary: fixture.pricingSummary,
       hasJobSettings: true,
-      laborRateOverrideActive: false,
       roomScopeRows,
       roomFlags: fixture.summaryData.inputs.room_flags ?? [],
       rooms: fixture.summaryData.inputs.rooms ?? [],
@@ -958,7 +1027,7 @@ describe('useEstimateV2DetailsPage', () => {
       expect.arrayContaining([
         expect.objectContaining({
           title: 'Manual override detected',
-          detail: 'Scope override active',
+          detail: expect.stringMatching(/override active - .+/),
         }),
       ])
     )
@@ -1562,6 +1631,10 @@ describe('useEstimateV2DetailsPage', () => {
       expect(result.current.vm.rollerOptionsState.status).toBe('unavailable')
     })
 
+    act(() => {
+      result.current.actions.setTrimOverride('1')
+    })
+
     expect(result.current.vm.continueBlockedReason).toBe('Rates unavailable')
 
     await act(async () => {
@@ -1596,6 +1669,7 @@ describe('useEstimateV2DetailsPage', () => {
     })
 
     act(() => {
+      result.current.actions.setTrimOverride('1')
       result.current.actions.setRollerRow('wall:COLOR1', {
         coverId: 'WALL_9',
         quantity: '2',
@@ -1648,6 +1722,7 @@ describe('useEstimateV2DetailsPage', () => {
     })
 
     act(() => {
+      result.current.actions.setTrimOverride('1')
       result.current.actions.setRollerRow('wall:COLOR1', {
         coverId: 'WALL_9',
         quantity: '2',

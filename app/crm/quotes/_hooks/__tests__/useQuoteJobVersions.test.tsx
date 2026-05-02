@@ -91,6 +91,25 @@ describe('useQuoteJobVersions', () => {
     expect(result.current.hasResolved).toBe(true)
   })
 
+  it('removes a deleted version from the local page immediately', async () => {
+    loadQuoteJobVersions.mockResolvedValue(versionPayload)
+
+    const { result } = renderHook(() => useQuoteJobVersions('job-1'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2)
+    })
+
+    act(() => {
+      result.current.removeVersion('estimate-1')
+    })
+
+    expect(result.current.items.map((item) => item.estimate_id)).toEqual([
+      'estimate-2',
+    ])
+    expect(result.current.pageData.total_versions).toBe(1)
+  })
+
   it('reports a failed initial fresh load and leaves an empty page', async () => {
     loadQuoteJobVersions.mockRejectedValue(new Error('versions unavailable'))
 

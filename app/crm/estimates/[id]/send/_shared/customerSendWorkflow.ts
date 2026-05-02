@@ -60,6 +60,9 @@ export type CustomerSendPageData = {
     room_wall_scopes?: Unsafe[]
     room_ceiling_scopes?: Unsafe[]
     room_trim_scopes?: Unsafe[]
+    room_door_scopes?: Unsafe[]
+    drywall_repairs?: Unsafe[]
+    access_fees?: Unsafe[]
     trim_items?: Unsafe[]
     other?: Unsafe[]
     jobsettings?: Unsafe | null
@@ -141,6 +144,30 @@ export function isValidRecipientList(value: string) {
 
 function defaultInternalBcc(data: Pick<CustomerSendPageData, 'company'>) {
   return asText(data.company.business_email)
+}
+
+function defaultCustomerRecipient(data: Pick<CustomerSendPageData, 'job' | 'document'>) {
+  return asText(data.job.customer_email) || asText(data.document.customer.email)
+}
+
+function draftCustomerRecipient(
+  data: Pick<CustomerSendPageData, 'job' | 'document' | 'company'>,
+  draft: Record<string, unknown>
+) {
+  const draftTo = asText(draft.to_email)
+  const customerTo = defaultCustomerRecipient(data)
+  const internalBcc = defaultInternalBcc(data)
+
+  if (
+    draftTo &&
+    customerTo &&
+    internalBcc &&
+    draftTo.toLowerCase() === internalBcc.toLowerCase()
+  ) {
+    return customerTo
+  }
+
+  return draftTo || customerTo
 }
 
 export function isPositiveInteger(value: string) {
@@ -240,10 +267,7 @@ export function buildCustomerSendComposerDraft(
     ) ?? presets[0] ?? templatePresets[0]
 
   return {
-    to_email:
-      asText(draft.to_email) ||
-      asText(data.job.customer_email) ||
-      asText(data.document.customer.email),
+    to_email: draftCustomerRecipient(data, draft),
     cc_email: asText(draft.cc_email),
     bcc_email: asText(draft.bcc_email) || defaultInternalBcc(data),
     subject:
@@ -284,10 +308,7 @@ export function buildCustomerSendReviewDraft(
     ) ?? presets[0] ?? templatePresets[0]
 
   return {
-    to_email:
-      asText(draft.to_email) ||
-      asText(data.job.customer_email) ||
-      asText(data.document.customer.email),
+    to_email: draftCustomerRecipient(data, draft),
     cc_email: asText(draft.cc_email),
     bcc_email: asText(draft.bcc_email) || defaultInternalBcc(data),
     template_key: preset.key,

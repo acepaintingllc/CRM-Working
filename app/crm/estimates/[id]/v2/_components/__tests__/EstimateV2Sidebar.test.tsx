@@ -18,6 +18,20 @@ const roomVm = {
   setSelectedRoomId: vi.fn(),
 } as unknown as EstimateV2EditorRoomVm
 
+function renderSidebar(nextRoomVm: EstimateV2EditorRoomVm = roomVm) {
+  return render(
+    <EstimateV2Sidebar
+      styles={estimateV2EditorPageStyles}
+      roomVm={nextRoomVm}
+      jobSettingsVm={jobSettingsVm}
+      toDisplayNumber={(value) => String(value ?? '--')}
+      collapsed={false}
+      onCollapse={vi.fn()}
+      onExpand={vi.fn()}
+    />
+  )
+}
+
 const jobSettingsVm = {
   jobDefaultsOpen: false,
   setJobDefaultsOpen: vi.fn(),
@@ -79,5 +93,20 @@ describe('EstimateV2Sidebar', () => {
     expect(screen.queryByText('Paint Defaults')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Expand estimator room navigation' }))
     expect(onExpand).toHaveBeenCalledTimes(1)
+  })
+
+  it('includes doors in room helper text when a room has included door scopes', () => {
+    renderSidebar({
+      ...roomVm,
+      rooms: [{ id: 'room-1', roomId: 'R001', roomName: 'Bedroom', position: 0 }],
+      selectedRoomId: 'R001',
+      roomScopeByRoomId: new Map([['R001', [{ id: 'wall-1', include: 'Y' }]]]),
+      roomCeilingScopeByRoomId: new Map([['R001', [{ id: 'ceiling-1', include: 'N' }]]]),
+      roomTrimScopeByRoomId: new Map([['R001', [{ id: 'trim-1', include: 'Y' }]]]),
+      roomDoorScopeByRoomId: new Map([['R001', [{ id: 'door-1', include: 'Y' }]]]),
+      displayedRoomEffectiveAreaByRoomId: new Map([['R001', 384]]),
+    } as unknown as EstimateV2EditorRoomVm)
+
+    expect(screen.getByText('Walls, Trim, Doors')).toBeInTheDocument()
   })
 })

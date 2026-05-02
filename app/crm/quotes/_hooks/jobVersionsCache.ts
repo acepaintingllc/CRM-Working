@@ -64,6 +64,10 @@ export type JobVersionsReducerAction =
       type: 'finish'
       purpose: JobVersionsRequestPurpose
     }
+  | {
+      type: 'removeVersion'
+      estimateId: string
+    }
 
 type InitialJobVersionsStateOptions = {
   jobId: string
@@ -250,6 +254,25 @@ export function reduceJobVersionsResourceState(
         loading: action.purpose === 'fresh' ? false : state.loading,
         loadingMore: action.purpose === 'load_more' ? false : state.loadingMore,
       }
+
+    case 'removeVersion': {
+      const nextItems = state.pageData.items.filter(
+        (item) => item.estimate_id !== action.estimateId,
+      )
+
+      if (nextItems.length === state.pageData.items.length) {
+        return state
+      }
+
+      return {
+        ...state,
+        pageData: {
+          ...state.pageData,
+          total_versions: Math.max(0, state.pageData.total_versions - 1),
+          items: nextItems,
+        },
+      }
+    }
   }
 }
 

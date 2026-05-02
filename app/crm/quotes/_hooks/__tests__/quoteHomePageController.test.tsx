@@ -132,6 +132,7 @@ function buildController(
     loadMore: vi.fn(async () => true),
     refresh: vi.fn(async () => true),
     attemptRefresh: versionsAttemptRefresh,
+    removeVersion: vi.fn(),
   }
   const stateActions = {
     setSearchQuery: vi.fn(),
@@ -425,6 +426,7 @@ describe('useQuoteHomePageController', () => {
       preserveDataOnError: true,
       reportError: false,
     })
+    expect(versions.removeVersion).toHaveBeenCalledWith('estimate-1')
     expect(homeResource.attemptRefresh.mock.invocationCallOrder[0]).toBeLessThan(
       versions.attemptRefresh.mock.invocationCallOrder[0]
     )
@@ -456,6 +458,7 @@ describe('useQuoteHomePageController', () => {
       preserveDataOnError: true,
       reportError: false,
     })
+    expect(versions.removeVersion).toHaveBeenCalledWith('estimate-2')
     expect(homeResource.attemptRefresh.mock.invocationCallOrder[0]).toBeLessThan(
       versions.attemptRefresh.mock.invocationCallOrder[0]
     )

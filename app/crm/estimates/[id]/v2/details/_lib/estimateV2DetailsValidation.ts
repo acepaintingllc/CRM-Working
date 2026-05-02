@@ -62,6 +62,23 @@ export function createMaterialMissingCalculationIssues(params: {
   ]
 }
 
+export function createMaterialRequiredOverrideIssues(params: {
+  label: string
+  targetId: string
+  value: string
+}) {
+  if (params.value.trim()) return []
+  return [
+    createDetailsBlockingIssue({
+      id: `material:${params.targetId}:overrideGallons:required`,
+      section: 'material',
+      targetId: params.targetId,
+      field: 'overrideGallons',
+      message: `${params.label} gallons are required.`,
+    }),
+  ]
+}
+
 export function createMaterialMissingProductIssues(params: {
   label: string
   targetId: string
@@ -226,7 +243,7 @@ export function createMaterialCards(params: {
     {
       label: 'Trim Paint',
       finalValue: `${round1(trim)} gal`,
-      calculatedValue: `${params.trimRow?.roundedGallons ?? 0} rounded`,
+      calculatedValue: params.trimRow ? 'manual input' : '0 manual',
       overridden: !!params.trimRow?.hasOverride,
     },
     {

@@ -392,6 +392,62 @@ describe('estimate public portal transitions', () => {
     errorSpy.mockRestore()
   })
 
+  it('blocks acceptance after the public quote validity window expires', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-15T00:00:00.000Z'))
+
+    const sentVersion = createLoadedVersion('sent')
+    const sentDocument = (sentVersion.snapshot_json as Record<string, unknown>)
+      .document as Record<string, unknown>
+    const expiredVersion = {
+      ...sentVersion,
+      sent_at: '2026-04-01T00:00:00.000Z',
+      snapshot_json: {
+        document: {
+          ...sentDocument,
+          quote_validity_days: 30,
+          meta: {
+            ...((sentDocument.meta as Record<string, unknown> | null | undefined) ?? {}),
+            sent_at: '2026-04-01T00:00:00.000Z',
+          },
+        },
+      },
+    }
+    const updateSpy = vi.fn()
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: expiredVersion,
+              error: null,
+            })
+          ),
+          update: updateSpy,
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await acceptPublicEstimate({
+      token: 'token-1',
+      legalName: 'Taylor Smith',
+      acceptedTerms: true,
+      signatureType: 'typed',
+      signatureValue: 'Taylor Smith',
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'conflict',
+      message: 'This quote has expired. Please contact us for an updated quote.',
+    })
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
+    expect(mockSendPublicEstimateAcceptanceNotifications).not.toHaveBeenCalled()
+  })
+
   it('marks viewed with org and status guards and writes one viewed event', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-02T12:00:00.000Z'))

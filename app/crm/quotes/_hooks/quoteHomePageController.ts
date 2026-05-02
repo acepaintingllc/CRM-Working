@@ -47,6 +47,7 @@ type QuoteHomePageControllerVersionsResource = {
   loadMore: () => Promise<boolean>
   refresh: () => Promise<boolean>
   attemptRefresh: (options?: RefreshAttemptOptions) => Promise<RefreshAttemptResult>
+  removeVersion: (estimateId: string) => void
 }
 
 type QuoteHomeStateActions = Pick<
@@ -148,6 +149,7 @@ export function useQuoteHomePageController({
     attemptRefresh: refreshVersions,
     items: versionItems,
     loadMore: loadMoreVersions,
+    removeVersion,
     pageData,
     refresh: refreshVersionsList,
   } = resources.versions
@@ -223,6 +225,7 @@ export function useQuoteHomePageController({
       setActionWarning(null)
       await deleteQuoteVersion(estimate.estimate_id)
       completeDelete()
+      removeVersion(estimate.estimate_id)
 
       const { bootstrapRefresh, versionsRefresh } = await refreshQuoteHomeAfterDelete(
         refreshBootstrap,
@@ -257,6 +260,7 @@ export function useQuoteHomePageController({
     beginDelete,
     completeDelete,
     failDelete,
+    removeVersion,
     refreshBootstrap,
     refreshVersions,
   ])

@@ -357,7 +357,7 @@ export function EstimateV2SummaryPageContent({
                 <div className="grid gap-2">
                   {derived.summaryAlerts.map((alert) => (
                     <CrmNotice
-                      key={`${alert.kind}:${alert.title}`}
+                      key={`${alert.kind}:${alert.title}:${alert.detail}`}
                       tone={alert.kind === 'error' ? 'error' : alert.kind === 'warn' ? 'warning' : 'info'}
                       compact
                     >

@@ -1,5 +1,6 @@
 import { getEstimateCatalogs } from '@/lib/server/estimateCatalogs'
 import { supabaseAdmin } from '@/lib/server/org'
+import { isMissingSchemaErrorMessage } from '@/lib/server/schema'
 import { loadCompanyProfileSettings } from '@/lib/server/settings/companyProfileStore'
 import { loadQuoteSendDefaults } from '@/lib/server/settings/quoteSendDefaultsStore'
 import { defaultQuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
@@ -63,6 +64,11 @@ function readCollectionQueryResult<T>(result: QueryResult<T[]>) {
   return (result.data ?? []) as T[]
 }
 
+function asFiniteNumber(value: unknown) {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
 export async function loadEstimateCustomerSendEstimate(params: {
   orgId: string
   estimateId: string
@@ -94,6 +100,7 @@ export async function loadEstimateCustomerSendCoreResources(params: {
     quoteDefaultsRes,
     settingsRes,
     jobsettingsRes,
+    rollupRes,
   ] = await Promise.all([
     supabaseAdmin
       .from('jobs')
@@ -117,6 +124,12 @@ export async function loadEstimateCustomerSendCoreResources(params: {
     supabaseAdmin
       .from('estimate_jobsettings')
       .select('*')
+      .eq('org_id', params.orgId)
+      .eq('estimate_id', params.estimateId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('estimate_version_rollups')
+      .select('final_total')
       .eq('org_id', params.orgId)
       .eq('estimate_id', params.estimateId)
       .maybeSingle(),
@@ -146,6 +159,15 @@ export async function loadEstimateCustomerSendCoreResources(params: {
   )
   if ('error' in jobsettings) return jobsettings
 
+  const rollup =
+    rollupRes.error && isMissingSchemaErrorMessage(rollupRes.error.message)
+      ? {}
+      : readOptionalQueryResult(
+          rollupRes as QueryResult<{ final_total?: unknown }>,
+          {}
+        )
+  if ('error' in rollup) return rollup
+
   return {
     job,
     customer,
@@ -153,6 +175,7 @@ export async function loadEstimateCustomerSendCoreResources(params: {
     quoteDefaults: (quoteDefaultsRes ?? DEFAULT_QUOTE_SEND_DEFAULTS) as QuoteSendDefaults,
     settingsRow,
     jobsettings,
+    rollupFinalTotal: asFiniteNumber(rollup.final_total),
   }
 }
 
@@ -169,7 +192,9 @@ export async function loadEstimateCustomerSendScopeResources(params: {
     ceilingScopesRes,
     ceilingScopeSegmentsRes,
     trimScopesRes,
+    doorScopesRes,
     drywallRepairsRes,
+    accessFeesRes,
     trimItemsRes,
     otherRes,
   ] = await Promise.all([
@@ -236,12 +261,27 @@ export async function loadEstimateCustomerSendScopeResources(params: {
       .order('room_id', { ascending: true })
       .order('position', { ascending: true }),
     supabaseAdmin
+      .from('estimate_room_door_scopes')
+      .select('*')
+      .eq('org_id', params.orgId)
+      .eq('estimate_id', params.estimateId)
+      .eq('active', 'Y')
+      .order('room_id', { ascending: true })
+      .order('position', { ascending: true }),
+    supabaseAdmin
       .from('estimate_drywall_repairs')
       .select('*')
       .eq('org_id', params.orgId)
       .eq('estimate_id', params.estimateId)
-      .eq('active', true)
+      .eq('active', 'Y')
       .order('room_id', { ascending: true })
+      .order('position', { ascending: true }),
+    supabaseAdmin
+      .from('estimate_access_fees')
+      .select('*')
+      .eq('org_id', params.orgId)
+      .eq('estimate_id', params.estimateId)
+      .eq('active', 'Y')
       .order('position', { ascending: true }),
     supabaseAdmin
       .from('estimate_trim_items')
@@ -279,8 +319,12 @@ export async function loadEstimateCustomerSendScopeResources(params: {
   if ('error' in ceilingScopeSegments) return ceilingScopeSegments
   const trimScopes = readCollectionQueryResult(trimScopesRes as QueryResult<Unsafe[]>)
   if ('error' in trimScopes) return trimScopes
+  const doorScopes = readCollectionQueryResult(doorScopesRes as QueryResult<Unsafe[]>)
+  if ('error' in doorScopes) return doorScopes
   const drywallRepairs = readCollectionQueryResult(drywallRepairsRes as QueryResult<Unsafe[]>)
   if ('error' in drywallRepairs) return drywallRepairs
+  const accessFees = readCollectionQueryResult(accessFeesRes as QueryResult<Unsafe[]>)
+  if ('error' in accessFees) return accessFees
   const trimItems = readCollectionQueryResult(trimItemsRes as QueryResult<Unsafe[]>)
   if ('error' in trimItems) return trimItems
   const other = readCollectionQueryResult(otherRes as QueryResult<Unsafe[]>)
@@ -295,7 +339,9 @@ export async function loadEstimateCustomerSendScopeResources(params: {
     ceilingScopes,
     ceilingScopeSegments,
     trimScopes,
+    doorScopes,
     drywallRepairs,
+    accessFees,
     trimItems,
     other,
   }

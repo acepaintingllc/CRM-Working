@@ -53,6 +53,7 @@ const baseResources: EstimateCustomerSendRawResources = {
     updated_at: null,
   },
   jobsettings: {},
+  rollupFinalTotal: 1044,
   rooms: [{ room_id: 'room-1' }],
   wallScopes: [{ room_id: 'room-1' }],
   segments: [{ id: 'segment-1' }],
@@ -61,6 +62,8 @@ const baseResources: EstimateCustomerSendRawResources = {
   ceilingScopes: [{ room_id: 'room-1' }],
   ceilingScopeSegments: [{ id: 'ceiling-scope-segment-1' }],
   trimScopes: [{ room_id: 'room-1' }],
+  doorScopes: [{ room_id: 'room-1', door_type_id: 'DOOR_PANEL' }],
+  accessFees: [{ id: 'fee-1' }],
   trimItems: [{ id: 'trim-1' }],
   other: [{ id: 'other-1' }],
   publicVersions: [],
@@ -104,6 +107,9 @@ describe('customer send context mapper', () => {
         quoteWallScopes: [{ id: 'wall-calculated' }],
         quoteCeilingScopes: [{ id: 'ceiling-calculated' }],
         quoteTrimScopes: [{ id: 'trim-calculated' }],
+        quoteDoorScopes: [{ id: 'door-calculated' }],
+        quoteAccessFees: [{ id: 'fee-calculated' }],
+        quoteOtherRows: [{ id: 'other-calculated' }],
         pricingSummary: { finalTotal: 2500 },
       },
     })
@@ -126,10 +132,31 @@ describe('customer send context mapper', () => {
     expect(context.inputs.room_wall_scopes).toEqual([{ id: 'wall-calculated' }])
     expect(context.inputs.room_ceiling_scopes).toEqual([{ id: 'ceiling-calculated' }])
     expect(context.inputs.room_trim_scopes).toEqual([{ id: 'trim-calculated' }])
+    expect(context.inputs.room_door_scopes).toEqual([{ id: 'door-calculated' }])
+    expect(context.inputs.access_fees).toEqual([{ id: 'fee-calculated' }])
+    expect(context.inputs.other).toEqual([{ id: 'other-calculated' }])
     expect(context.pricing_summary).toEqual({ finalTotal: 2500 })
     expect(context.latest_draft_version?.id).toBe('version-2')
     expect(context.latest_sent_version?.id).toBe('version-1')
     expect(context.latest_public_version?.id).toBe('version-2')
     expect(context.public_url).toBe('https://example.test/quote/token-1')
+  })
+
+  it('falls back to the rollup final total when recalculation cannot produce pricing', () => {
+    const context = buildEstimateCustomerSendContext({
+      origin: 'https://example.test',
+      resources: baseResources,
+      calculated: {
+        quoteWallScopes: [],
+        quoteCeilingScopes: [],
+        quoteTrimScopes: [],
+        quoteDoorScopes: [],
+        quoteAccessFees: [],
+        quoteOtherRows: [],
+        pricingSummary: null,
+      },
+    })
+
+    expect(context.pricing_summary).toEqual({ finalTotal: 1044 })
   })
 })

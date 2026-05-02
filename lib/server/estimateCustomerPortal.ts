@@ -21,7 +21,12 @@ export async function loadEstimateCustomerSendContext(params: {
   const resources = await loadEstimateCustomerSendResources(params)
   if ('error' in resources) return resources
 
-  const calculated = deriveEstimateCustomerSendCalculatedData(resources)
+  const calculated = await deriveEstimateCustomerSendCalculatedData(resources, {
+    requestOrigin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+    estimateId: params.estimateId,
+  })
   return buildEstimateCustomerSendContext({
     origin: params.origin,
     resources,
