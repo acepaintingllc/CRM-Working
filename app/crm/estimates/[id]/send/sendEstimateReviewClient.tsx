@@ -642,7 +642,14 @@ export default function SendEstimateReviewClient({
             boxShadow: '0 10px 22px rgba(0,0,0,0.32)',
           }}
         >
-          {labels.action}
+          {busy ? (
+            <>
+              <span className="send-spinner" aria-hidden="true" />
+              Sending
+            </>
+          ) : (
+            labels.action
+          )}
         </button>
       </div>
 
@@ -658,6 +665,22 @@ export default function SendEstimateReviewClient({
         }
         .send-floating-action button {
           pointer-events: auto;
+        }
+        .send-spinner {
+          animation: spin 0.8s linear infinite;
+          border: 2px solid rgba(241, 255, 245, 0.34);
+          border-top-color: #f1fff5;
+          border-radius: 9999px;
+          width: 12px;
+          height: 12px;
+          margin-right: 8px;
+          display: inline-block;
+          vertical-align: middle;
+        }
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
         }
 
         @media screen and (max-width: 720px) {

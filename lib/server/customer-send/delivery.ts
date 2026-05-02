@@ -38,13 +38,45 @@ function readDriveEstimatesFolderId() {
   return typeof folderId === 'string' && folderId.trim() ? folderId.trim() : null
 }
 
+function buildLinkLine(publicUrl: string | null) {
+  if (!publicUrl) return ''
+  return `Customer quote link: ${publicUrl}`
+}
+
+function hasLiveQuoteLink(body: string, publicUrl: string | null) {
+  if (!publicUrl) return false
+  if (body.includes(publicUrl)) return true
+  return body.includes(
+    publicUrl.replace(/^https:\/\//, '').replace(/^http:\/\//, '')
+  )
+}
+
+function appendLiveQuoteLink(params: {
+  body: string
+  publicUrl: string | null
+  mode: CustomerSendMode
+}) {
+  if (params.mode !== 'send' || !params.publicUrl) return params.body
+  const linkLine = buildLinkLine(params.publicUrl)
+  if (!linkLine || hasLiveQuoteLink(params.body, params.publicUrl)) return params.body
+  if (!params.body) return linkLine
+  return `${params.body}\n\n${linkLine}`
+}
+
 function buildDefaultEmailBody(params: {
   draft: CustomerSendDraft
   context: EstimateCustomerSendContextData
   publicUrl: string | null
   mode: CustomerSendMode
 }) {
-  if (params.draft.body) return params.draft.body
+  const baseBody = params.draft.body || ''
+  const bodyText = baseBody
+    ? appendLiveQuoteLink({
+        body: baseBody,
+        mode: params.mode,
+        publicUrl: params.publicUrl,
+      })
+    : ''
 
   const customerName = asText(params.context.job.customer_name) || 'there'
   const signature =
@@ -52,6 +84,7 @@ function buildDefaultEmailBody(params: {
     `Thanks,\n${params.context.company.business_name || 'ACE Painting'}`
 
   if (params.publicUrl) {
+    if (bodyText) return bodyText
     return [
       `Hello ${customerName},`,
       '',
@@ -72,6 +105,36 @@ function buildDefaultEmailBody(params: {
     '',
     signature,
   ].join('\n')
+}
+
+function linkifyHtmlLinks(html: string, publicUrl: string | null) {
+  if (!publicUrl) return html
+  const escapedPublicUrl = escapeHtml(publicUrl)
+  const anchor = `<a href="${escapedPublicUrl}">${escapedPublicUrl}</a>`
+  if (!html.includes(escapedPublicUrl)) return html
+  return html.replaceAll(escapedPublicUrl, anchor)
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function buildDefaultEmailBodyHtml(params: {
+  draft: CustomerSendDraft
+  context: EstimateCustomerSendContextData
+  publicUrl: string | null
+  mode: CustomerSendMode
+}) {
+  const textBody = buildDefaultEmailBody(params)
+  const escaped = escapeHtml(textBody)
+  const linkedText = params.publicUrl ? linkifyHtmlLinks(escaped, params.publicUrl) : escaped
+
+  return `<div style="white-space: pre-wrap; font-family: Arial, sans-serif;">${linkedText}</div>`
 }
 
 export async function submitCustomerSendMessage(params: {
@@ -113,6 +176,12 @@ export async function submitCustomerSendMessage(params: {
   const subject =
     params.draft.subject || `${asText(params.context.estimate.version_name) || 'Quote'} ready`
   const bodyText = buildDefaultEmailBody({
+    draft: params.draft,
+    context: params.context,
+    publicUrl,
+    mode: params.mode,
+  })
+  const bodyHtml = buildDefaultEmailBodyHtml({
     draft: params.draft,
     context: params.context,
     publicUrl,
@@ -193,6 +262,7 @@ export async function submitCustomerSendMessage(params: {
     bcc: params.draft.bcc_email,
     subject,
     bodyText,
+    bodyHtml,
     attachment: pdfAttachment,
   })
   if ('error' in send) {
