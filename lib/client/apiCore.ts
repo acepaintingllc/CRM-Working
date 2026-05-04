@@ -39,7 +39,16 @@ export async function parseApiResponse<T = unknown>(
 function getPayloadError(payload: unknown) {
   if (!payload || typeof payload !== 'object') return null
   const error = (payload as ApiErrorPayload).error
-  return typeof error === 'string' && error.trim() ? error : null
+  if (typeof error === 'string' && error.trim()) return error
+  if (!error || typeof error !== 'object') return null
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  const code = (error as { code?: unknown }).code
+  if (typeof code === 'string' && code.trim()) return `Request failed (${code}).`
+
+  return null
 }
 
 export function getApiErrorMessage(
@@ -49,7 +58,7 @@ export function getApiErrorMessage(
 ) {
   return (
     getPayloadError(parsed.json) ??
-    (parsed.text.trim() ? parsed.text.trim() : null) ??
+    (parsed.json == null && parsed.text.trim() ? parsed.text.trim() : null) ??
     response.statusText ??
     fallback
   )

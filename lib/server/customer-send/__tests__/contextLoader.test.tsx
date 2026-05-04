@@ -11,11 +11,13 @@ const {
   mockLoadCompanyProfileSettings,
   mockLoadQuoteSendDefaults,
   mockGetEstimateCatalogs,
+  mockLoadEstimateTemplateSettings,
 } = vi.hoisted(() => ({
   mockFrom: vi.fn(),
   mockLoadCompanyProfileSettings: vi.fn(),
   mockLoadQuoteSendDefaults: vi.fn(),
   mockGetEstimateCatalogs: vi.fn(),
+  mockLoadEstimateTemplateSettings: vi.fn(),
 }))
 
 vi.mock('@/lib/server/org', () => ({
@@ -34,6 +36,10 @@ vi.mock('@/lib/server/settings/quoteSendDefaultsStore', () => ({
 
 vi.mock('@/lib/server/estimateCatalogs', () => ({
   getEstimateCatalogs: mockGetEstimateCatalogs,
+}))
+
+vi.mock('@/lib/server/estimateTemplateSettings', () => ({
+  loadEstimateTemplateSettings: mockLoadEstimateTemplateSettings,
 }))
 
 function createMaybeSingleChain(result: unknown) {
@@ -205,6 +211,7 @@ describe('customer send context loader', () => {
     mockLoadCompanyProfileSettings.mockReset()
     mockLoadQuoteSendDefaults.mockReset()
     mockGetEstimateCatalogs.mockReset()
+    mockLoadEstimateTemplateSettings.mockReset()
 
     mockLoadCompanyProfileSettings.mockResolvedValue({
       business_name: 'ACE Painting',
@@ -223,6 +230,9 @@ describe('customer send context loader', () => {
     })
     mockGetEstimateCatalogs.mockResolvedValue({
       catalogs: { paints: [] },
+    })
+    mockLoadEstimateTemplateSettings.mockResolvedValue({
+      updated_at: '2026-04-01T00:00:00.000Z',
     })
   })
 
@@ -353,6 +363,16 @@ describe('customer send context loader', () => {
         { id: 'version-1', version_number: 1, created_at: '2026-04-01T00:00:00.000Z' },
       ],
       catalogs: { paints: [] },
+    })
+    expect(mockLoadEstimateTemplateSettings).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+    })
+    expect(mockGetEstimateCatalogs).toHaveBeenCalledWith({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
     })
   })
 

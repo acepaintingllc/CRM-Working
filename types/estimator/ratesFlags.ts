@@ -397,8 +397,25 @@ export type RatesFlagsPayload = {
   seeded: boolean
   template_version: number | null
   schema_version?: string
+  active_setting_set?: RatesFlagsSettingSetMetadata | null
+  draft_setting_set?: RatesFlagsSettingSetMetadata | null
+  editing_setting_set?: RatesFlagsSettingSetMetadata | null
   categories: RatesFlagsCategory[]
   condition_modifier_catalog?: ConditionModifierCatalogRow[]
+}
+
+export type RatesFlagsSettingSetStatus = 'draft' | 'active' | 'retired'
+
+export type RatesFlagsSettingSetMetadata = {
+  id: string
+  version_number: number
+  status: RatesFlagsSettingSetStatus
+  source_set_id: string | null
+  created_at: string
+  updated_at: string
+  activated_at: string | null
+  retired_at: string | null
+  notes: string
 }
 
 export type RatesFlagsMutationAction = 'create' | 'update' | 'archive' | 'reactivate'

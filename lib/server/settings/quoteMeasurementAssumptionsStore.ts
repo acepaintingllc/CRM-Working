@@ -3,6 +3,14 @@ import {
   parseQuoteMeasurementAssumptions,
 } from '../../quotes/measurementAssumptionsForm.ts'
 import type { QuoteMeasurementAssumptions } from '../../settings/types.ts'
+import {
+  activateDraftSettingSet,
+  cloneActiveSettingSetAsDraft,
+  loadActiveSettingSet,
+  settingValuesToEstimateTemplateSettings,
+  updateDraftSettingValues,
+  type EstimatorSettingSetSnapshot,
+} from '../estimate-feedback/settingSets.ts'
 import { supabaseAdmin } from '../org.ts'
 
 type Unsafe = Record<string, unknown>
@@ -33,6 +41,10 @@ export type QuoteMeasurementAssumptionsStoreDeps = {
   client: {
     from(relation: string): unknown
   }
+  loadActiveSettingSet: typeof loadActiveSettingSet
+  cloneActiveSettingSetAsDraft: typeof cloneActiveSettingSetAsDraft
+  updateDraftSettingValues: typeof updateDraftSettingValues
+  activateDraftSettingSet: typeof activateDraftSettingSet
 }
 
 export class QuoteMeasurementAssumptionsValidationError extends Error {
@@ -44,6 +56,10 @@ export class QuoteMeasurementAssumptionsValidationError extends Error {
 
 const defaultDeps: QuoteMeasurementAssumptionsStoreDeps = {
   client: supabaseAdmin,
+  loadActiveSettingSet,
+  cloneActiveSettingSetAsDraft,
+  updateDraftSettingValues,
+  activateDraftSettingSet,
 }
 
 function withDeps(
@@ -62,7 +78,16 @@ export async function loadQuoteMeasurementAssumptions(
   orgId: string,
   deps: Partial<QuoteMeasurementAssumptionsStoreDeps> = {}
 ) {
-  const { client } = withDeps(deps)
+  const allDeps = withDeps(deps)
+  const active = await allDeps.loadActiveSettingSet({ orgId })
+  if (active) {
+    return normalizeQuoteMeasurementAssumptions(
+      settingValuesToEstimateTemplateSettings(active) as Unsafe
+    )
+  }
+
+  const { client } = allDeps
+  // Compatibility fallback only for orgs not yet backfilled to setting sets.
   const res = await (client.from('estimate_template_settings') as SettingsQuery)
     .select(measurementAssumptionColumns)
     .eq('org_id', orgId)
@@ -75,25 +100,94 @@ export async function loadQuoteMeasurementAssumptions(
 export async function saveQuoteMeasurementAssumptions(
   orgId: string,
   data: QuoteMeasurementAssumptions,
-  deps: Partial<QuoteMeasurementAssumptionsStoreDeps> = {}
+  userIdOrDeps: string | Partial<QuoteMeasurementAssumptionsStoreDeps> = 'system',
+  maybeDeps: Partial<QuoteMeasurementAssumptionsStoreDeps> = {}
 ) {
+  const userId = typeof userIdOrDeps === 'string' ? userIdOrDeps : 'system'
+  const deps = typeof userIdOrDeps === 'string' ? maybeDeps : userIdOrDeps
   const parsed = parseQuoteMeasurementAssumptions(data)
   if (!parsed.ok) {
     throw new QuoteMeasurementAssumptionsValidationError(parsed.error)
   }
 
-  const { client } = withDeps(deps)
+  const allDeps = withDeps(deps)
+  const { client } = allDeps
+  const draft = await allDeps.cloneActiveSettingSetAsDraft({
+    orgId,
+    userId,
+    notes: 'Measurement assumptions draft',
+  })
+  if (!draft) throw new Error('Failed to create measurement assumptions setting draft.')
+
+  const updated = await allDeps.updateDraftSettingValues({
+    orgId,
+    settingSetId: draft.set.id,
+    values: measurementAssumptionsToScalarValues(parsed.data, draft),
+  })
+  if (!updated) throw new Error('Failed to update measurement assumptions setting draft.')
+
+  const activated = await allDeps.activateDraftSettingSet({
+    orgId,
+    settingSetId: updated.set.id,
+    userId,
+    reason: 'Measurement assumptions saved',
+    source: 'measurement_assumptions_admin',
+  })
+  if (!activated) throw new Error('Failed to activate measurement assumptions setting set.')
+
+  await mirrorMeasurementAssumptionsCompatibility(client, orgId, parsed.data)
+
+  return normalizeQuoteMeasurementAssumptions(
+    settingValuesToEstimateTemplateSettings(activated) as Unsafe
+  )
+}
+
+function measurementAssumptionsToScalarValues(
+  data: QuoteMeasurementAssumptions,
+  draft: EstimatorSettingSetSnapshot
+) {
+  const keys: Array<keyof QuoteMeasurementAssumptions> = [
+    'standard_door_deduction_sf',
+    'standard_window_deduction_sf',
+    'baseboard_opening_deduction_lf',
+  ]
+
+  return keys.map((key, index) => {
+    const existing = draft.values.find(
+      (value) => value.category_key === 'scalar_defaults' && value.scalar_key === key
+    )
+    return {
+      category_key: 'scalar_defaults',
+      scalar_key: key,
+      row_id: null,
+      display_name: existing?.display_name ?? key,
+      active: true,
+      sort_order: existing?.sort_order ?? index,
+      value_json: { value: data[key] },
+    }
+  })
+}
+
+async function mirrorMeasurementAssumptionsCompatibility(
+  client: QuoteMeasurementAssumptionsStoreDeps['client'],
+  orgId: string,
+  data: QuoteMeasurementAssumptions
+) {
   const res = await (client.from('estimate_template_settings') as SettingsQuery)
     .upsert(
       {
         org_id: orgId,
-        ...parsed.data,
+        ...data,
       },
       { onConflict: 'org_id' }
     )
     .select(measurementAssumptionColumns)
     .single()
 
-  if (res.error) throw new Error(res.error.message)
-  return normalizeQuoteMeasurementAssumptions(res.data as Unsafe | null)
+  if (res.error) {
+    console.error(
+      '[quote-measurement-assumptions] compatibility mirror failed',
+      res.error.message
+    )
+  }
 }

@@ -25,7 +25,7 @@ const sharedStyles = (styles: EditorStyles) => ({
 })
 
 function formatCurrency(value: number | null | undefined) {
-  return value == null || !Number.isFinite(value) ? '--' : `$${value.toFixed(2)}`
+  return value == null || !Number.isFinite(value) ? 'Pending inputs' : `$${value.toFixed(2)}`
 }
 
 function repairOptionsForSurface(

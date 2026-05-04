@@ -3,9 +3,7 @@ import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { getValidAccessToken, resolveCalendarId } from '@/lib/server/googleCalendar'
 import { syncJobScheduleRange } from '@/lib/server/jobScheduleSync'
 import { mutationResponse } from '@/lib/server/routeResult'
-
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import { isUuid } from '@/lib/validation/uuid'
 
 export async function DELETE(
   _request: Request,
@@ -22,10 +20,10 @@ export async function DELETE(
   const jobId = (params as { id?: string } | null | undefined)?.id
   const scheduleId = (params as { scheduleId?: string } | null | undefined)?.scheduleId
 
-  if (!jobId || typeof jobId !== 'string' || !uuid.test(jobId)) {
+  if (!isUuid(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
-  if (!scheduleId || typeof scheduleId !== 'string' || !uuid.test(scheduleId)) {
+  if (!isUuid(scheduleId)) {
     return NextResponse.json({ error: 'Invalid schedule id' }, { status: 400 })
   }
 

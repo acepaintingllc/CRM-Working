@@ -34,8 +34,10 @@ const baseEditorState = {
     subtitleText: 'Job - Ada - 123 Main',
     workflowText: 'Estimate V2 Editor',
     dirtyStateText: 'Unsaved changes',
+    dirtyStateColor: '#f9e2b7',
     dirty: true,
     saving: false,
+    settingsOpen: false,
     toggleSettings: vi.fn(),
     addRoom,
   },
@@ -98,6 +100,7 @@ const baseEditorState = {
     selectedRoomResolvedMode: 'RECT',
     selectedRoomGeometryMode: 'RECT',
     roomTypeOptions: [],
+    roomTypeCatalogStatus: 'empty',
     roomFlags: [],
     roomScopeByRoomId: new Map([['R001', [{ id: 'scope-1', include: 'Y' }]]]),
     roomCeilingScopeByRoomId: new Map([['R001', [{ id: 'ceiling-1', include: 'Y' }]]]),
@@ -260,9 +263,12 @@ const baseEditorState = {
   },
   saveVm: {
     dirty: true,
-    saveStatus: 'dirty',
+    canManualSave: true,
+    saveStatus: 'idle',
     saveStatusText: 'Unsaved changes',
     saveStatusColor: '#f9e2b7',
+    blockedReason: null,
+    blockingIssues: [],
     calculationsStale: true,
     debugMeta: { dirtySource: 'walls', lastSaveTrigger: null, lastNormalizedDomains: [], usingLocalPreview: true },
     save,
@@ -309,16 +315,32 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.queryByText('Next: Details & Overrides ->')).not.toBeInTheDocument()
   })
 
+  it('exposes stable layout regions for narrow viewport responsive rules', () => {
+    const { container } = render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    const shell = container.querySelector('.ace-v2-rooms-layout')
+
+    expect(shell).toBeInTheDocument()
+    expect(shell?.querySelector('.estimate-v2-sidebar')).toBeInTheDocument()
+    expect(shell?.querySelector('.estimate-v2-workspace-main')).toBeInTheDocument()
+    expect(shell?.querySelector('.room-workspace')).toBeInTheDocument()
+    expect(shell?.querySelector('.room-side-col')).toBeInTheDocument()
+    expect(container.querySelector('.estimate-v2-footer')).toBeInTheDocument()
+  })
+
   it('lets footer continue navigate even when there are no dirty changes', async () => {
     mockUseEstimateV2Editor.mockReturnValue({
       ...baseEditorState,
       saveVm: {
         ...baseEditorState.saveVm,
         dirty: false,
+        canManualSave: false,
       },
     })
 
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
 
     fireEvent.click(screen.getByText('Save & continue ->'))
 
@@ -326,6 +348,252 @@ describe('EstimateV2EditorPageContent', () => {
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/details')
     })
+  })
+
+  it('shows a visible confirmation and keeps the route unchanged when back navigation is dirty', () => {
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
+
+    expect(push).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Leave with unsaved changes?' })).toBeInTheDocument()
+    expect(screen.getByText('Leaving now will discard changes that have not been saved.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stay on editor' }))
+
+    expect(push).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Leave with unsaved changes?' })).not.toBeInTheDocument()
+  })
+
+  it('leaves through the confirmed dirty back navigation action', () => {
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Leave quote editor and discard unsaved changes' })
+    )
+
+    expect(push).toHaveBeenCalledWith('/crm/quotes')
+    expect(screen.queryByRole('dialog', { name: 'Leave with unsaved changes?' })).not.toBeInTheDocument()
+  })
+
+  it('guards same-origin shell link navigation while dirty', () => {
+    render(
+      <>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a href="/crm/customers">Customers</a>
+        <EstimateV2EditorPageContent estimateId="estimate-1" />
+      </>
+    )
+
+    fireEvent.click(screen.getByRole('link', { name: 'Customers' }))
+
+    expect(push).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Leave with unsaved changes?' })).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Leave quote editor and discard unsaved changes' })
+    )
+
+    expect(push).toHaveBeenCalledWith('/crm/customers')
+  })
+
+  it('guards back navigation while a dirty autosave is still in flight', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        saving: true,
+      },
+      headerVm: {
+        ...baseEditorState.headerVm,
+        dirtyStateText: 'Autosaving draft...',
+        dirty: false,
+        saving: true,
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+        canManualSave: false,
+        saveStatus: 'autosaving',
+        saveStatusText: 'Autosaving draft...',
+        debugMeta: {
+          ...baseEditorState.saveVm.debugMeta,
+          lastSaveTrigger: 'auto',
+        },
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
+
+    expect(push).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Leave with unsaved changes?' })).toBeInTheDocument()
+  })
+
+  it('guards shell navigation while a dirty manual save is still in flight', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        saving: true,
+      },
+      headerVm: {
+        ...baseEditorState.headerVm,
+        dirtyStateText: 'Saving draft...',
+        dirty: false,
+        saving: true,
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+        canManualSave: false,
+        saveStatusText: 'Saving draft...',
+        debugMeta: {
+          ...baseEditorState.saveVm.debugMeta,
+          lastSaveTrigger: 'manual',
+        },
+      },
+    })
+
+    render(
+      <>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a href="/crm/jobs">Jobs</a>
+        <EstimateV2EditorPageContent estimateId="estimate-1" />
+      </>
+    )
+
+    fireEvent.click(screen.getByRole('link', { name: 'Jobs' }))
+
+    expect(push).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Leave with unsaved changes?' })).toBeInTheDocument()
+  })
+
+  it('allows clean back navigation without opening confirmation', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      headerVm: {
+        ...baseEditorState.headerVm,
+        dirtyStateText: '',
+        dirty: false,
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+        canManualSave: false,
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
+
+    expect(push).toHaveBeenCalledWith('/crm/quotes')
+    expect(screen.queryByRole('dialog', { name: 'Leave with unsaved changes?' })).not.toBeInTheDocument()
+  })
+
+  it('does not guard validation-only clean navigation', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      headerVm: {
+        ...baseEditorState.headerVm,
+        dirtyStateText: '',
+        dirty: false,
+      },
+      pageVm: {
+        ...baseEditorState.pageVm,
+        validationIssues: ['Saved catalog warning'],
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+        canManualSave: false,
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
+
+    expect(push).toHaveBeenCalledWith('/crm/quotes')
+    expect(screen.queryByRole('dialog', { name: 'Leave with unsaved changes?' })).not.toBeInTheDocument()
+  })
+
+  it('enables Save draft when valid dirty edits are ready and no save is active', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        saving: false,
+        validationIssues: [],
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: true,
+        canManualSave: true,
+        saveStatusText: 'Unsaved changes - ready to save',
+        blockedReason: null,
+        blockingIssues: [],
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('Unsaved changes - ready to save')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled()
+  })
+
+  it('uses Save draft to trigger the canonical save while dirty edits are ready', async () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        saving: false,
+        validationIssues: [],
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: true,
+        canManualSave: true,
+        saveStatusText: 'Unsaved changes - ready to save',
+        blockedReason: null,
+        blockingIssues: [],
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith()
+    })
+  })
+
+  it('keeps Save draft disabled while a save is active', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        saving: true,
+        validationIssues: [],
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: true,
+        canManualSave: true,
+        saveStatusText: 'Unsaved changes - ready to save',
+        blockedReason: null,
+        blockingIssues: [],
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('Unsaved changes - ready to save')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
   })
 
   it('exposes accessible loading and error semantics', () => {
@@ -360,6 +628,50 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.getByText('Room name is required')).toBeInTheDocument()
   })
 
+  it('renders the editor settings drawer from the canonical settings VM state', () => {
+    const setSettingsOpen = vi.fn()
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      headerVm: {
+        ...baseEditorState.headerVm,
+        settingsOpen: true,
+      },
+      jobSettingsVm: {
+        ...baseEditorState.jobSettingsVm,
+        settingsOpen: true,
+        setSettingsOpen,
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(
+      screen.getByRole('dialog', { name: 'Estimate Settings' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('Customer Info')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close estimate settings' }))
+
+    expect(setSettingsOpen).toHaveBeenCalledWith(false)
+  })
+
+  it('routes the header Settings button to the editor-level settings action', () => {
+    const toggleSettings = vi.fn()
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      headerVm: {
+        ...baseEditorState.headerVm,
+        toggleSettings,
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+    expect(toggleSettings).toHaveBeenCalledTimes(1)
+  })
+
   it('renders multiple validation issues', () => {
     mockUseEstimateV2Editor.mockReturnValue({
       ...baseEditorState,
@@ -373,6 +685,88 @@ describe('EstimateV2EditorPageContent', () => {
 
     expect(screen.getByText('Room name is required')).toBeInTheDocument()
     expect(screen.getByText('Wall height is required')).toBeInTheDocument()
+  })
+
+  it('disables save actions and surfaces the blocked reason when dirty edits are invalid', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      headerVm: {
+        ...baseEditorState.headerVm,
+        dirtyStateText:
+          'Unsaved changes - save blocked: R001: height is required for RECT wall mode',
+      },
+      pageVm: {
+        ...baseEditorState.pageVm,
+        validationIssues: ['R001: height is required for RECT wall mode'],
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        canManualSave: false,
+        saveStatus: 'blocked',
+        saveStatusText:
+          'Unsaved changes - save blocked: R001: height is required for RECT wall mode',
+        blockedReason: 'R001: height is required for RECT wall mode',
+        blockingIssues: ['R001: height is required for RECT wall mode'],
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(
+      screen.getByText(
+        'Unsaved changes - save blocked: R001: height is required for RECT wall mode'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText('R001: height is required for RECT wall mode')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save & continue ->' })).toBeDisabled()
+  })
+
+  it('keeps invalid trim and door drafts visibly blocked instead of showing a stale saved footer', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      headerVm: {
+        ...baseEditorState.headerVm,
+        dirty: true,
+        dirtyStateText: 'Unsaved changes - save blocked: R001: trim type is required',
+      },
+      pageVm: {
+        ...baseEditorState.pageVm,
+        validationIssues: [
+          'R001: trim type is required',
+          'Doors: Door scope 1: door type is required',
+        ],
+      },
+      summaryVm: {
+        ...baseEditorState.summaryVm,
+        saveStatusText: 'Unsaved changes - save blocked: R001: trim type is required',
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: true,
+        canManualSave: false,
+        saveStatus: 'blocked',
+        saveStatusText: 'Unsaved changes - save blocked: R001: trim type is required',
+        blockedReason: 'R001: trim type is required',
+        blockingIssues: [
+          'R001: trim type is required',
+          'Doors: Door scope 1: door type is required',
+        ],
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getAllByText('Unsaved changes - save blocked: R001: trim type is required').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Saved Apr 21, 2:00 PM')).not.toBeInTheDocument()
+    expect(screen.getByText('R001: trim type is required')).toBeInTheDocument()
+    expect(screen.getByText('Doors: Door scope 1: door type is required')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toHaveAttribute(
+      'title',
+      'R001: trim type is required'
+    )
+    expect(screen.getByRole('button', { name: 'Save & continue ->' })).toBeDisabled()
   })
 
   it('does not render stale non-blocking paint assumption validation messages', () => {

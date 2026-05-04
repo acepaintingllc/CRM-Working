@@ -196,6 +196,30 @@ export function validateEstimateV2PreparedSave(params: {
   return filterNonBlockingEstimateV2ValidationIssues([...wallIssues, ...ceilingIssues, ...trimIssues])
 }
 
+export function deriveEstimateV2PreparedSaveValidation(params: {
+  collections: EstimateV2EditorStoreState['collections']
+  jobSettingsDraft: EstimateV2EditorStoreState['meta']['jobSettingsDraft']
+  trigger?: 'manual' | 'auto'
+}) {
+  const currentState = {
+    collections: params.collections,
+    meta: {
+      jobSettingsDraft: params.jobSettingsDraft,
+    },
+  } as EstimateV2EditorStoreState
+  const prepared = prepareEstimateV2SaveState(currentState)
+  const issues = validateEstimateV2PreparedSave({
+    currentState,
+    prepared,
+    trigger: params.trigger,
+  })
+
+  return {
+    prepared,
+    issues,
+  }
+}
+
 const NON_BLOCKING_PAINT_ASSUMPTION_FIELDS = new Set([
   'paint_prod_rate_sqft_per_hour',
   'primer_prod_rate_sqft_per_hour',

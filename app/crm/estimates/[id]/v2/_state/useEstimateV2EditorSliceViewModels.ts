@@ -50,12 +50,14 @@ export type EstimateV2EditorViewModelParams = {
   save: ReturnType<typeof import('./useEstimateV2SaveController').useEstimateV2SaveController>['save']
 }
 
-function usePageVm(store: EstimateV2EditorStoreApi): EstimateV2EditorPageVm {
+function usePageVm(
+  store: EstimateV2EditorStoreApi,
+  derived: EstimateV2EditorDerivedSections
+): EstimateV2EditorPageVm {
   const pageState = useEstimateV2Store(store, (state) => ({
     loading: state.meta.loading,
     saving: state.meta.saving,
     error: state.meta.error,
-    validationIssues: state.meta.validationIssues,
     roomsCount: state.collections.rooms.length,
   }))
 
@@ -64,16 +66,16 @@ function usePageVm(store: EstimateV2EditorStoreApi): EstimateV2EditorPageVm {
       loading: pageState.loading,
       saving: pageState.saving,
       error: pageState.error,
-      validationIssues: pageState.validationIssues,
+      validationIssues: derived.save.visibleValidationIssues,
       emptySelectionMessage: 'Add a room or select one from the roster to start editing room inputs.',
       roomsCount: pageState.roomsCount,
     }),
     [
+      derived.save.visibleValidationIssues,
       pageState.error,
       pageState.loading,
       pageState.roomsCount,
       pageState.saving,
-      pageState.validationIssues,
     ]
   )
 }
@@ -88,6 +90,7 @@ function useHeaderVm(
     estimate: state.meta.estimate,
     job: state.meta.job,
     saving: state.meta.saving,
+    settingsOpen: state.meta.settingsOpen,
   }))
   const setSettingsOpen = useEstimateV2Store(
     store,
@@ -104,19 +107,24 @@ function useHeaderVm(
       titleText: headerState.estimate?.version_name ?? 'Estimate Version',
       subtitleText: buildHeaderSubtitle(headerState.job),
       workflowText: 'Walls-first wizard - Rooms',
-      dirtyStateText: derived.calculation.dirty ? 'unsaved - live preview' : null,
+      dirtyStateText: derived.save.saveStatusText,
+      dirtyStateColor: derived.save.saveStatusColor,
       dirty: derived.calculation.dirty,
       saving: headerState.saving,
+      settingsOpen: headerState.settingsOpen,
       toggleSettings: () => setSettingsOpen((open) => !open),
       addRoom,
     }),
     [
       addRoom,
       derived.calculation.dirty,
+      derived.save.saveStatusColor,
+      derived.save.saveStatusText,
       estimateId,
       headerState.estimate,
       headerState.job,
       headerState.saving,
+      headerState.settingsOpen,
       setSettingsOpen,
     ]
   )
@@ -131,6 +139,7 @@ function useRoomVm(
     rooms: state.collections.rooms,
     roomFlags: state.collections.roomFlags,
     selectedRoomId: state.meta.selectedRoomId,
+    catalogsError: state.meta.catalogsError,
     roomFlagsCatalog: state.meta.catalogs.room_flags,
   }))
   const setSelectedRoomId = useEstimateV2Store(store, estimateV2StoreSelectors.meta).setSelectedRoomId
@@ -153,6 +162,11 @@ function useRoomVm(
       selectedRoomResolvedMode: derived.room.selectedRoomResolvedMode,
       selectedRoomGeometryMode: derived.room.selectedRoomGeometryMode,
       roomTypeOptions: derived.catalog.roomTypeOptions,
+      roomTypeCatalogStatus: roomState.catalogsError
+        ? 'error'
+        : derived.catalog.roomTypeOptions.length > 0
+          ? 'ready'
+          : 'empty',
       roomFlags: roomState.roomFlags,
       roomScopeByRoomId: derived.room.roomScopeByRoomId,
       roomCeilingScopeByRoomId: derived.room.roomCeilingScopeByRoomId,
@@ -224,6 +238,7 @@ function useRoomVm(
       roomState.roomFlagsCatalog,
       roomState.rooms,
       roomState.selectedRoomId,
+      roomState.catalogsError,
       setSelectedRoomId,
       switchRoomGeometryMode,
       toggleFlag,
@@ -627,9 +642,12 @@ function useSaveVm(
   return useMemo(
     () => ({
       dirty: derived.calculation.dirty,
+      canManualSave: derived.save.canManualSave,
       saveStatus: saveState.saveStatus,
       saveStatusText: derived.save.saveStatusText,
       saveStatusColor: derived.save.saveStatusColor,
+      blockedReason: derived.save.blockedReason,
+      blockingIssues: derived.save.blockingIssues,
       calculationsStale: derived.calculation.calculationsStale,
       debugMeta: {
         ...saveState.debugMeta,
@@ -638,6 +656,9 @@ function useSaveVm(
       save,
     }),
     [
+      derived.save.blockedReason,
+      derived.save.blockingIssues,
+      derived.save.canManualSave,
       derived.calculation.calculationsStale,
       derived.calculation.dirty,
       derived.calculation.useLocalPreviewCalculations,
@@ -746,7 +767,7 @@ function useSummaryVm(
         showPrimer: trimUsesPrimer,
         secondaryValue:
           derived.calculation.selectedTrimSubtotal == null
-            ? '--'
+            ? 'Pending inputs'
             : `$${derived.calculation.selectedTrimSubtotal.toFixed(2)}`,
         secondaryLabel: 'Subtotal',
         chips: buildSectionSummaryChips({
@@ -758,7 +779,7 @@ function useSummaryVm(
           showPrimer: trimUsesPrimer,
           secondaryValue:
             derived.calculation.selectedTrimSubtotal == null
-              ? '--'
+              ? 'Pending inputs'
               : `$${derived.calculation.selectedTrimSubtotal.toFixed(2)}`,
           secondaryLabel: 'Subtotal',
         }),
@@ -789,7 +810,7 @@ function useSummaryVm(
         showPrimer: doorUsesPrimer,
         secondaryValue:
           derived.calculation.selectedDoorSubtotal == null
-            ? '--'
+            ? 'Pending inputs'
             : `$${derived.calculation.selectedDoorSubtotal.toFixed(2)}`,
         secondaryLabel: 'Subtotal',
         chips: buildSectionSummaryChips({
@@ -801,7 +822,7 @@ function useSummaryVm(
           showPrimer: doorUsesPrimer,
           secondaryValue:
             derived.calculation.selectedDoorSubtotal == null
-              ? '--'
+              ? 'Pending inputs'
               : `$${derived.calculation.selectedDoorSubtotal.toFixed(2)}`,
           secondaryLabel: 'Subtotal',
         }),
@@ -884,7 +905,7 @@ export function useEstimateV2EditorSliceViewModels(
 ) {
   const { estimateId, store, derived, roomActions, wallActions, ceilingActions, trimActions, doorActions, drywallActions, settingsActions, save } = params
   const effectiveDrywallActions = drywallActions ?? noopDrywallActions
-  const pageVm = usePageVm(store)
+  const pageVm = usePageVm(store, derived)
   const headerVm = useHeaderVm(estimateId, store, derived, roomActions.addRoom)
   const roomVm = useRoomVm(store, derived, roomActions)
   const wallsVm = useWallsVm(store, derived, wallActions, effectiveDrywallActions, roomActions.updateRoomComplexity)

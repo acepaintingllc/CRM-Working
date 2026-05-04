@@ -5,6 +5,7 @@ export type EstimateCollectionVersionCopy = {
 
 export type EstimateCollectionVersionRow = {
   id: string
+  org_id?: string | null
   job_id: string
   customer_id: string
   status: string | null
@@ -12,6 +13,7 @@ export type EstimateCollectionVersionRow = {
   version_state: string | null
   version_kind: string | null
   version_sort_order: number | null
+  setting_set_id_used?: string | null
   created_at: string | null
   updated_at: string | null
 }

@@ -39,7 +39,7 @@ export async function getEstimate(orgId: string, estimateId: string) {
   const res = await supabaseAdmin
     .from('estimates')
     .select(
-      'id, org_id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
+      'id, org_id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, setting_set_id_used, created_at, updated_at'
     )
     .eq('org_id', orgId)
     .eq('id', estimateId)

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { codexBrowserTestOrgError, getCodexBrowserTestOrgId } from '@/lib/server/codexBrowserTestOrg'
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization') || ''
@@ -24,10 +25,17 @@ export async function GET(req: Request) {
 
   const userId = userData.user.id
 
-  const { data: membership, error: memErr } = await supabaseAdmin
+  const testOrgId = getCodexBrowserTestOrgId()
+  let membershipQuery = supabaseAdmin
     .from('org_members')
     .select('org_id, role')
     .eq('user_id', userId)
+
+  if (testOrgId) {
+    membershipQuery = membershipQuery.eq('org_id', testOrgId)
+  }
+
+  const { data: membership, error: memErr } = await membershipQuery
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -37,6 +45,9 @@ export async function GET(req: Request) {
   }
 
   if (!membership) {
+    if (testOrgId) {
+      return NextResponse.json({ error: codexBrowserTestOrgError() }, { status: 403 })
+    }
     return NextResponse.json({ org_id: null, role: null }, { status: 200 })
   }
 

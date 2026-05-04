@@ -17,11 +17,13 @@ export function buildLastOpenedQuoteRecord(params: {
   openedAt?: string
 }): LastOpenedQuoteRecord | null {
   const estimateId = asText(params.estimate?.id)
+  const orgId = asText(params.estimate?.org_id)
   const jobId = asText(params.estimate?.job_id) ?? asText(params.job?.id)
-  if (!estimateId || !jobId) return null
+  if (!estimateId || !orgId || !jobId) return null
 
   return {
     estimate_id: estimateId,
+    org_id: orgId,
     job_id: jobId,
     customer_id: asText(params.job?.customer_id) ?? '',
     version_name: asText(params.estimate?.version_name) ?? 'Quote Version',
@@ -44,11 +46,13 @@ export function readLastOpenedQuote(storage: Pick<Storage, 'getItem'>): LastOpen
     if (!parsed || typeof parsed !== 'object') return null
     const record = parsed as Partial<LastOpenedQuoteRecord>
     const estimateId = asText(record.estimate_id)
+    const orgId = asText(record.org_id)
     const jobId = asText(record.job_id)
-    if (!estimateId || !jobId) return null
+    if (!estimateId || !orgId || !jobId) return null
 
     return {
       estimate_id: estimateId,
+      org_id: orgId,
       job_id: jobId,
       customer_id: asText(record.customer_id) ?? '',
       version_name: asText(record.version_name) ?? 'Quote Version',
@@ -80,4 +84,13 @@ export function writeLastOpenedQuote(
   record: LastOpenedQuoteRecord
 ) {
   storage.setItem(lastOpenedQuoteStorageKey, JSON.stringify(record))
+}
+
+export function resolveLastOpenedQuoteForOrg(
+  record: LastOpenedQuoteRecord | null,
+  orgId: string | null | undefined
+): LastOpenedQuoteRecord | null {
+  const normalizedOrgId = asText(orgId)
+  if (!record || !normalizedOrgId) return null
+  return record.org_id === normalizedOrgId ? record : null
 }

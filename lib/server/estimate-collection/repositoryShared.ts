@@ -1,10 +1,11 @@
-export const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import { UUID_RE } from '../../validation/uuid.ts'
+
+export const uuid = UUID_RE
 
 export const VERSION_STATES = new Set(['draft', 'live', 'archived'])
 
 export const estimateSelect =
-  'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
+  'id, org_id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, setting_set_id_used, created_at, updated_at'
 
 export function asText(value: unknown) {
   return String(value ?? '').trim()

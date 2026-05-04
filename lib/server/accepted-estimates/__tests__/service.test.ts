@@ -5,6 +5,7 @@ import {
   buildAcceptedEstimateSource,
   buildAcceptedEstimateUpdatePlan,
   loadAcceptedEstimateSource,
+  repairAcceptedEstimateSnapshotForJob,
 } from '../service.ts'
 
 type MockQueryResponse = {
@@ -68,6 +69,38 @@ function createReadDb(responses: Record<string, MockQueryResponse>) {
           calls.push({ table, columns: selectedColumns, filters: { ...filters } })
           return Promise.resolve(
             responses[table] ?? {
+              data: null,
+              error: null,
+            }
+          )
+        },
+      }
+    },
+  }
+
+  return { db, calls }
+}
+
+function createSequentialReadDb(responses: Record<string, MockQueryResponse[]>) {
+  const calls: MockQueryCall[] = []
+  const db = {
+    from(table: string) {
+      const filters: Record<string, unknown> = {}
+      let selectedColumns = ''
+
+      return {
+        select(columns: string) {
+          selectedColumns = columns
+          return this
+        },
+        eq(column: string, value: unknown) {
+          filters[column] = value
+          return this
+        },
+        maybeSingle() {
+          calls.push({ table, columns: selectedColumns, filters: { ...filters } })
+          return Promise.resolve(
+            responses[table]?.shift() ?? {
               data: null,
               error: null,
             }
@@ -146,6 +179,11 @@ test('buildAcceptedEstimateSource uses rollup total and public snapshot as invoi
     ip: '127.0.0.1',
     version_name: 'Interior repaint',
     version_state: 'live',
+    estimate_snapshot_id: null,
+    estimated_labor_hours: 0,
+    estimated_paint_gallons: 0,
+    estimated_supplies_cost: 0,
+    estimated_other_cost: 0,
     final_total: 4250,
     snapshot_json: { document: { title: 'Quote' } },
   })
@@ -511,6 +549,10 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
       },
       error: null,
     },
+    estimate_snapshot: {
+      data: null,
+      error: null,
+    },
     estimate_version_rollups: {
       data: {
         final_total: 4250,
@@ -532,6 +574,12 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
       columns:
         'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id',
       filters: { org_id: 'org-1', id: 'estimate-1' },
+    },
+    {
+      table: 'estimate_snapshot',
+      columns:
+        'id, org_id, job_id, estimate_id, customer_id, accepted_public_version_id, estimate_version_name, estimate_version_state, estimated_labor_hours, estimated_paint_gallons, estimated_supplies_cost, estimated_other_cost, estimated_total, source_payload_json',
+      filters: { org_id: 'org-1', estimate_id: 'estimate-1' },
     },
     {
       table: 'estimate_public_versions',
@@ -562,10 +610,254 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
       ip: '127.0.0.1',
       version_name: 'Interior repaint',
       version_state: 'live',
+      estimate_snapshot_id: null,
+      estimated_labor_hours: 0,
+      estimated_paint_gallons: 0,
+      estimated_supplies_cost: 0,
+      estimated_other_cost: 0,
       final_total: 4250,
       snapshot_json: { document: { title: 'Quote' } },
     },
   })
+})
+
+test('loadAcceptedEstimateSource prefers immutable snapshot totals over mutable rollups', async () => {
+  const { db, calls } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Live mutable name',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-1',
+      },
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-1',
+        estimate_id: 'estimate-1',
+        version_number: 3,
+        public_token: 'public-token-1',
+        status: 'accepted',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        acceptance_json: {
+          legal_name: 'Jordan Customer',
+          signature_type: 'typed',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+        },
+        snapshot_json: { document: { title: 'Fallback quote' } },
+      },
+      error: null,
+    },
+    estimate_snapshot: {
+      data: {
+        id: 'snapshot-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        estimate_id: 'estimate-1',
+        customer_id: 'customer-1',
+        accepted_public_version_id: 'public-version-1',
+        estimate_version_name: 'Accepted snapshot name',
+        estimate_version_state: 'live',
+        estimated_labor_hours: 42,
+        estimated_paint_gallons: 8.5,
+        estimated_supplies_cost: 125,
+        estimated_other_cost: 30,
+        estimated_total: 5100,
+        source_payload_json: {
+          customer_send_snapshot_json: { document: { title: 'Accepted snapshot' } },
+        },
+      },
+      error: null,
+    },
+    estimate_version_rollups: {
+      data: {
+        final_total: 9999,
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.final_total, 5100)
+    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
+    assert.equal(result.data.estimated_labor_hours, 42)
+    assert.equal(result.data.estimated_paint_gallons, 8.5)
+    assert.equal(result.data.estimated_supplies_cost, 125)
+    assert.equal(result.data.estimated_other_cost, 30)
+    assert.equal(result.data.version_name, 'Accepted snapshot name')
+    assert.deepEqual(result.data.snapshot_json, {
+      document: { title: 'Accepted snapshot' },
+    })
+  }
+  assert.equal(
+    calls.some((call) => call.table === 'estimate_version_rollups'),
+    false
+  )
+  assert.equal(
+    calls.some((call) => call.table === 'estimate_public_versions'),
+    false
+  )
+})
+
+test('loadAcceptedEstimateSource uses linked estimate snapshot when the public version row is missing', async () => {
+  const { db, calls } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Live mutable name',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-missing',
+      },
+      error: null,
+    },
+    estimate_public_versions: {
+      data: null,
+      error: null,
+    },
+    estimate_snapshot: {
+      data: {
+        id: 'snapshot-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        estimate_id: 'estimate-1',
+        customer_id: 'customer-1',
+        accepted_public_version_id: 'public-version-missing',
+        estimate_version_name: 'Accepted snapshot name',
+        estimate_version_state: 'live',
+        estimated_labor_hours: 42,
+        estimated_paint_gallons: 8.5,
+        estimated_supplies_cost: 125,
+        estimated_other_cost: 30,
+        estimated_total: 5100,
+        source_payload_json: {
+          customer_send_snapshot_json: { document: { title: 'Accepted snapshot' } },
+          public_version: {
+            id: 'public-version-missing',
+            version_number: 3,
+            public_token: 'public-token-1',
+            accepted_at: '2026-04-29T10:00:00.000Z',
+            acceptance_json: {
+              legal_name: 'Jordan Customer',
+              signature_type: 'typed',
+              signature_value: 'Jordan Customer',
+              accepted_at: '2026-04-29T10:00:00.000Z',
+            },
+          },
+        },
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.estimate_id, 'estimate-1')
+    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
+    assert.equal(result.data.final_total, 5100)
+    assert.equal(result.data.public_version_number, 3)
+    assert.equal(result.data.public_token, 'public-token-1')
+    assert.equal(result.data.accepted_by_legal_name, 'Jordan Customer')
+  }
+  assert.equal(
+    calls.some((call) => call.table === 'estimate_public_versions'),
+    false
+  )
+})
+
+test('loadAcceptedEstimateSource uses linked estimate snapshot when the public version row is inconsistent', async () => {
+  const { db, calls } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        version_name: 'Live mutable name',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-1',
+      },
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-1',
+        estimate_id: 'estimate-2',
+        status: 'draft',
+        accepted_at: null,
+      },
+      error: null,
+    },
+    estimate_snapshot: {
+      data: {
+        id: 'snapshot-1',
+        org_id: 'org-1',
+        job_id: 'job-1',
+        estimate_id: 'estimate-1',
+        customer_id: 'customer-1',
+        accepted_public_version_id: 'public-version-1',
+        estimate_version_name: 'Accepted snapshot name',
+        estimate_version_state: 'live',
+        estimated_labor_hours: 42,
+        estimated_paint_gallons: 8.5,
+        estimated_supplies_cost: 125,
+        estimated_other_cost: 30,
+        estimated_total: 5100,
+        source_payload_json: {
+          customer_send_snapshot_json: { document: { title: 'Accepted snapshot' } },
+        },
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.estimate_id, 'estimate-1')
+    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
+    assert.equal(result.data.final_total, 5100)
+  }
+  assert.equal(
+    calls.some((call) => call.table === 'estimate_public_versions'),
+    false
+  )
 })
 
 test('loadAcceptedEstimateSource returns not_found when the job is missing', async () => {
@@ -844,4 +1136,156 @@ test('loadAcceptedEstimateSource allows a missing rollup and defaults final_tota
   if (result.ok) {
     assert.equal(result.data.final_total, 0)
   }
+})
+
+test('repairAcceptedEstimateSnapshotForJob retries snapshot creation for an accepted quote with no snapshot', async () => {
+  const { db, calls } = createSequentialReadDb({
+    jobs: [
+      {
+        data: {
+          id: 'job-1',
+          linked_estimate_id: 'estimate-1',
+        },
+        error: null,
+      },
+      {
+        data: {
+          id: 'job-1',
+          linked_estimate_id: 'estimate-1',
+        },
+        error: null,
+      },
+    ],
+    estimates: [
+      {
+        data: {
+          id: 'estimate-1',
+          org_id: 'org-1',
+          job_id: 'job-1',
+          customer_id: 'customer-1',
+          version_name: 'Interior repaint',
+          version_state: 'live',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          accepted_public_version_id: 'public-version-1',
+        },
+        error: null,
+      },
+      {
+        data: {
+          id: 'estimate-1',
+          org_id: 'org-1',
+          job_id: 'job-1',
+          customer_id: 'customer-1',
+          version_name: 'Interior repaint',
+          version_state: 'live',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          accepted_public_version_id: 'public-version-1',
+        },
+        error: null,
+      },
+    ],
+    estimate_public_versions: [
+      {
+        data: {
+          id: 'public-version-1',
+          estimate_id: 'estimate-1',
+          version_number: 3,
+          public_token: 'public-token-1',
+          status: 'accepted',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          acceptance_json: {
+            legal_name: 'Jordan Customer',
+            signature_type: 'typed',
+          },
+          snapshot_json: { document: { title: 'Quote' } },
+        },
+        error: null,
+      },
+      {
+        data: {
+          id: 'public-version-1',
+          estimate_id: 'estimate-1',
+          version_number: 3,
+          public_token: 'public-token-1',
+          status: 'accepted',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          acceptance_json: {
+            legal_name: 'Jordan Customer',
+            signature_type: 'typed',
+          },
+          snapshot_json: { document: { title: 'Quote' } },
+        },
+        error: null,
+      },
+    ],
+    estimate_snapshot: [
+      {
+        data: null,
+        error: null,
+      },
+      {
+        data: {
+          id: 'snapshot-1',
+          org_id: 'org-1',
+          job_id: 'job-1',
+          estimate_id: 'estimate-1',
+          customer_id: 'customer-1',
+          accepted_public_version_id: 'public-version-1',
+          estimate_version_name: 'Accepted snapshot name',
+          estimate_version_state: 'live',
+          estimated_labor_hours: 42,
+          estimated_paint_gallons: 8.5,
+          estimated_supplies_cost: 125,
+          estimated_other_cost: 30,
+          estimated_total: 5100,
+          source_payload_json: {
+            customer_send_snapshot_json: { document: { title: 'Accepted snapshot' } },
+          },
+        },
+        error: null,
+      },
+    ],
+    estimate_version_rollups: [
+      {
+        data: { final_total: 4250 },
+        error: null,
+      },
+    ],
+  })
+  const ensureSnapshot = async (input: {
+    requestOrigin: string
+    orgId: string
+    userId: string
+    estimateId: string
+    publicVersionId: string
+  }) => {
+    assert.deepEqual(input, {
+      requestOrigin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      publicVersionId: 'public-version-1',
+    })
+    return {
+      ok: true as const,
+      data: { id: 'snapshot-1' },
+    }
+  }
+
+  const result = await repairAcceptedEstimateSnapshotForJob(
+    {
+      requestOrigin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      jobId: 'job-1',
+    },
+    { db, ensureSnapshot }
+  )
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
+    assert.equal(result.data.final_total, 5100)
+  }
+  assert.equal(calls.filter((call) => call.table === 'estimate_snapshot').length, 2)
 })

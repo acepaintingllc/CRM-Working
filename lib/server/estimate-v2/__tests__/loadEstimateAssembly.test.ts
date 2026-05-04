@@ -168,6 +168,10 @@ describe('loadEstimateV2Response', () => {
       other: [{ id: 'other-1' }],
       orgDefaults: null,
     })
+    expect(mocks.loadEstimateTemplateSettings).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+    })
     expect(mocks.buildEstimateGetResponse).toHaveBeenCalledWith(
       expect.objectContaining({
         estimate,

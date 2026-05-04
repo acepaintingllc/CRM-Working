@@ -17,17 +17,20 @@ import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import {
-  prepareEstimateV2SaveState,
-  resolveEstimateV2SaveResponseState,
+  buildEstimateV2EditorApiFailureDiagnostic,
+  formatEstimateV2EditorApiFailureLog,
+} from '../_lib/estimateV2EditorDiagnostics'
+import {
   collectEstimateV2CalculationMissingInputIssues,
-  validateEstimateV2PreparedSave,
+  deriveEstimateV2PreparedSaveValidation,
+  resolveEstimateV2SaveResponseState,
 } from './estimateV2EditorSaveOrchestration'
 import {
   applyEstimateV2PreparedSaveCollections,
   applyEstimateV2SuccessfulSaveState,
 } from './estimateV2EditorStoreMutations'
 
-const AUTO_SAVE_DELAY_MS = 900
+export const ESTIMATE_V2_AUTO_SAVE_DELAY_MS = 5000
 
 export function useEstimateV2SaveController(params: {
   estimateId?: string
@@ -61,29 +64,17 @@ export function useEstimateV2SaveController(params: {
         autoSaveTimerRef.current = null
       }
 
-      const preparedSave = prepareEstimateV2SaveState(currentState)
-      applyEstimateV2PreparedSaveCollections(store, preparedSave)
-
-      const issues = validateEstimateV2PreparedSave({
-        currentState,
-        prepared: preparedSave,
+      const { prepared: preparedSave, issues } = deriveEstimateV2PreparedSaveValidation({
+        collections: currentState.collections,
+        jobSettingsDraft: currentState.meta.jobSettingsDraft,
         trigger,
       })
+      applyEstimateV2PreparedSaveCollections(store, preparedSave)
       if (issues.length > 0) {
-        if (trigger === 'manual') {
-          meta.setValidationIssues(issues)
-          console.error('Estimate V2 editor save blocked by validation', {
-            estimateId,
-            operation: 'save',
-            trigger,
-            message: issues[0],
-          })
-          meta.setError(createEstimateV2Error(issues[0], { code: 'VALIDATION', retryable: false }))
-          meta.setSaveStatus('error')
-        } else {
-          meta.setSaveStatus('blocked')
-          meta.setAutoSaveHint(issues[0])
-        }
+        meta.setValidationIssues(issues)
+        meta.setAutoSaveHint(issues[0] ?? null)
+        meta.setError(null)
+        meta.setSaveStatus('blocked')
         meta.setDebugMeta((prev) => ({
           ...prev,
           dirtySource: trigger === 'auto' ? 'save:auto' : 'save:manual',
@@ -126,13 +117,21 @@ export function useEstimateV2SaveController(params: {
 
       if (!response.ok) {
         const message = getApiErrorMessage(response, parsed, 'Failed to save estimate')
-        console.error('Estimate V2 editor save failed', {
+        const diagnostic = buildEstimateV2EditorApiFailureDiagnostic({
           estimateId,
+          endpoint: routeFamily.estimateApiHref(estimateId),
+          method: 'PUT',
           operation: 'save',
           trigger,
-          status: response.status,
+          response,
+          parsed,
           message,
         })
+        console.error(
+          'Estimate V2 editor save failed',
+          formatEstimateV2EditorApiFailureLog(diagnostic),
+          diagnostic
+        )
         meta.setError(createEstimateV2Error(message, { retryable: true }))
         meta.setSaveStatus('error')
         return false
@@ -168,15 +167,20 @@ export function useEstimateV2SaveController(params: {
         effectiveJobProductDefaults,
       })
       applyEstimateV2SuccessfulSaveState(store, responseState)
-      meta.setValidationIssues(
-        collectEstimateV2CalculationMissingInputIssues({
-          wallCalculations: responseState.calculations.wallCalculations,
-          ceilingCalculations: responseState.calculations.ceilingCalculations,
-          trimCalculations: responseState.calculations.trimCalculations,
-          doorCalculations: responseState.calculations.doorCalculations,
-          drywallCalculations: responseState.calculations.drywallCalculations,
-        })
-      )
+      const calculationIssues = collectEstimateV2CalculationMissingInputIssues({
+        wallCalculations: responseState.calculations.wallCalculations,
+        ceilingCalculations: responseState.calculations.ceilingCalculations,
+        trimCalculations: responseState.calculations.trimCalculations,
+        doorCalculations: responseState.calculations.doorCalculations,
+        drywallCalculations: responseState.calculations.drywallCalculations,
+      })
+      meta.setValidationIssues(calculationIssues)
+      if (calculationIssues.length > 0) {
+        meta.setAutoSaveHint(calculationIssues[0] ?? null)
+        meta.setSaveStatus('blocked')
+        return false
+      }
+      meta.setAutoSaveHint(null)
       meta.setSaveStatus('saved')
       return true
     },
@@ -195,7 +199,7 @@ export function useEstimateV2SaveController(params: {
     if (!shouldQueueAutosave({ loading: meta.loading, saving: meta.saving, dirty })) return
     autoSaveTimerRef.current = setTimeout(() => {
       void saveRef.current('auto')
-    }, AUTO_SAVE_DELAY_MS)
+    }, ESTIMATE_V2_AUTO_SAVE_DELAY_MS)
     return () => {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current)

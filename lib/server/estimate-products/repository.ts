@@ -71,6 +71,7 @@ export type EstimateProductRecord = QuoteProductRow & {
 export type EstimateProductReference = {
   source:
     | 'quote_defaults'
+    | 'setting_sets'
     | 'estimate_defaults'
     | 'wall_scopes'
     | 'ceiling_scopes'
@@ -82,14 +83,16 @@ export type EstimateProductReference = {
 }
 
 const PRODUCT_REFERENCE_QUERIES: Array<{
-  source: Exclude<EstimateProductReference['source'], 'catalog_snapshots'>
+  source: Exclude<EstimateProductReference['source'], 'catalog_snapshots' | 'setting_sets'>
   label: string
   relation: string
   columns: string[]
 }> = [
   {
     source: 'quote_defaults',
-    label: 'quote defaults',
+    label: 'quote defaults compatibility mirror',
+    // Compatibility reference guard only; setting_sets below is the canonical
+    // versioned defaults scan for historical and active settings.
     relation: 'estimate_template_settings',
     columns: [
       'walls_paint_id',
@@ -186,6 +189,10 @@ function buildReferenceOrCondition(columns: string[], productId: string) {
   return columns.map((column) => `${column}.eq.${value}`).join(',')
 }
 
+function buildSettingValueReferenceCondition(productId: string) {
+  return `value_json.cs.${JSON.stringify({ value: productId })}`
+}
+
 function payloadContainsProductId(payload: unknown, productId: string): boolean {
   if (typeof payload === 'string') return payload === productId
   if (Array.isArray(payload)) {
@@ -276,6 +283,27 @@ export async function findEstimateProductReferences(
           label: referenceQuery.label,
         })
       }
+    }
+
+    const settingValueQuery = client.from('estimator_setting_value') as EstimateProductQuery
+    const { data: settingValues, error: settingValueError } = await (settingValueQuery
+      .select('id')
+      .eq('org_id', orgId)
+      .or(buildSettingValueReferenceCondition(productId))
+      .limit(1) as unknown as Promise<EstimateProductReferenceRowResult>)
+
+    if (settingValueError) {
+      return errorResult(
+        'server_error',
+        `Failed to check setting sets: ${settingValueError.message}`
+      )
+    }
+
+    if ((settingValues ?? []).length > 0) {
+      references.push({
+        source: 'setting_sets',
+        label: 'setting sets',
+      })
     }
 
     const snapshotQuery = client.from('v2_catalog_snapshots') as EstimateProductQuery

@@ -9,6 +9,9 @@ const emptyRatesFlags: RatesFlagsPayload = {
   source: 'db',
   seeded: false,
   template_version: null,
+  active_setting_set: null,
+  draft_setting_set: null,
+  editing_setting_set: null,
   categories: [],
 }
 

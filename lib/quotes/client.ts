@@ -180,3 +180,17 @@ export async function mutateRatesFlags<
     body: JSON.stringify(payload),
   })
 }
+
+export async function activateRatesFlagsDraft(input?: {
+  setting_set_id?: string | null
+  reason?: string
+}) {
+  return mutateData<boolean>('/api/quotes/rates-flags', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      setting_set_id: input?.setting_set_id ?? null,
+      reason: input?.reason ?? 'Rates/Flags draft activated',
+    }),
+  })
+}

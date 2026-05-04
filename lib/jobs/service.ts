@@ -11,9 +11,10 @@ import { loadAcceptedEstimateSource } from '@/lib/server/accepted-estimates/serv
 import type { AcceptedEstimateSource } from '@/lib/server/accepted-estimates/types'
 import {
   buildEstimatePublicTimelineEvents,
-  type EstimatePublicTimelineEvent,
 } from '@/lib/customer-estimates/publicTimeline'
-import type { JobStatus } from '@/lib/jobs/types'
+import type { EstimatePublicTimelineEvent } from '@/types/customer-estimates/publicTimeline'
+import type { JobActualsStatus } from '@/types/jobs/feedback'
+import type { JobStatus } from '@/types/jobs/status'
 import {
   errorResult,
   okResult,
@@ -105,6 +106,10 @@ type EstimatePublicEventRow = {
 type JobScheduleRange = {
   scheduled_date: string | null
   scheduled_end_date: string | null
+}
+
+type JobActualsStatusRow = {
+  status?: string | null
 }
 
 const listJobColumns = [
@@ -284,6 +289,11 @@ function mapAcceptedQuoteRecord(source: AcceptedEstimateSource): JobAcceptedQuot
     user_agent: source.user_agent,
     ip: source.ip,
     version_name: source.version_name,
+    estimate_snapshot_id: source.estimate_snapshot_id,
+    estimated_labor_hours: source.estimated_labor_hours,
+    estimated_paint_gallons: source.estimated_paint_gallons,
+    estimated_supplies_cost: source.estimated_supplies_cost,
+    estimated_other_cost: source.estimated_other_cost,
     final_total: source.final_total,
   }
 }
@@ -296,6 +306,33 @@ async function loadAcceptedQuoteForJob(orgId: string, jobId: string) {
   )
 
   return source.ok ? mapAcceptedQuoteRecord(source.data) : null
+}
+
+async function loadJobActualsStatus(
+  orgId: string,
+  jobId: string,
+  estimateSnapshotId: string | null | undefined
+): Promise<ServiceResult<JobActualsStatus | null>> {
+  if (!estimateSnapshotId) return okResult(null)
+
+  const { data, error } = await supabaseAdmin
+    .from('job_actuals')
+    .select('status')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .eq('estimate_snapshot_id', estimateSnapshotId)
+    .maybeSingle()
+
+  if (error) {
+    if (isMissingSchemaErrorMessage(error.message)) return okResult(null)
+    return errorResult('server_error', error.message)
+  }
+
+  const status = asString((data as JobActualsStatusRow | null)?.status)
+  if (status === 'draft' || status === 'submitted' || status === 'locked') {
+    return okResult(status)
+  }
+  return okResult(null)
 }
 
 async function loadPublicQuoteTimelineForJob(
@@ -480,11 +517,15 @@ export async function getJobDetail(
   if (!customersResult.ok) return customersResult
   if (!linkedEstimatesResult.ok) return linkedEstimatesResult
 
-  const publicQuoteTimelineResult = await loadPublicQuoteTimelineForJob(
-    orgId,
-    linkedEstimatesResult.data.map((estimate) => estimate.id)
-  )
+  const [publicQuoteTimelineResult, jobActualsStatusResult] = await Promise.all([
+    loadPublicQuoteTimelineForJob(
+      orgId,
+      linkedEstimatesResult.data.map((estimate) => estimate.id)
+    ),
+    loadJobActualsStatus(orgId, jobId, acceptedQuote?.estimate_snapshot_id),
+  ])
   if (!publicQuoteTimelineResult.ok) return publicQuoteTimelineResult
+  if (!jobActualsStatusResult.ok) return jobActualsStatusResult
 
   const customerId = asString(jobRow.customer_id)
   return okResult(
@@ -494,6 +535,7 @@ export async function getJobDetail(
       customer: customerId ? customersResult.data.get(customerId) ?? null : null,
       linkedEstimates: linkedEstimatesResult.data,
       acceptedQuote,
+      jobActualsStatus: jobActualsStatusResult.data,
       publicQuoteTimelineEvents: publicQuoteTimelineResult.data,
       withOptionalJobColumns: (sourceRow, availableColumns) =>
         ((withOptionalJobColumns(

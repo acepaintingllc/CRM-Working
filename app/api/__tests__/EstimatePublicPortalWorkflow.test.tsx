@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   mockFrom,
+  mockEnsureAcceptedEstimateOperationalSnapshot,
   mockWriteEstimatePublicEvent,
   mockSendPublicEstimateAcceptanceNotifications,
   mockSendPublicEstimateDeclineNotification,
 } = vi.hoisted(() => ({
   mockFrom: vi.fn(),
+  mockEnsureAcceptedEstimateOperationalSnapshot: vi.fn(),
   mockWriteEstimatePublicEvent: vi.fn(),
   mockSendPublicEstimateAcceptanceNotifications: vi.fn(),
   mockSendPublicEstimateDeclineNotification: vi.fn(),
@@ -21,6 +23,15 @@ vi.mock('@/lib/server/org', () => ({
 vi.mock('@/lib/server/customer-send/repository', () => ({
   writeEstimatePublicEvent: mockWriteEstimatePublicEvent,
 }))
+
+vi.mock('@/lib/server/accepted-estimates/service', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/server/accepted-estimates/service')>()
+  return {
+    ...actual,
+    ensureAcceptedEstimateOperationalSnapshot: mockEnsureAcceptedEstimateOperationalSnapshot,
+  }
+})
 
 vi.mock('@/lib/server/publicEstimateNotifications', () => ({
   sendPublicEstimateAcceptanceNotifications: mockSendPublicEstimateAcceptanceNotifications,
@@ -181,6 +192,11 @@ describe('estimate public portal transitions', () => {
   beforeEach(() => {
     vi.useRealTimers()
     mockFrom.mockReset()
+    mockEnsureAcceptedEstimateOperationalSnapshot.mockReset()
+    mockEnsureAcceptedEstimateOperationalSnapshot.mockResolvedValue({
+      ok: true,
+      data: { id: 'snapshot-1' },
+    })
     mockWriteEstimatePublicEvent.mockReset()
     mockWriteEstimatePublicEvent.mockResolvedValue({ ok: true, data: null })
     mockSendPublicEstimateAcceptanceNotifications.mockReset()
@@ -301,6 +317,13 @@ describe('estimate public portal transitions', () => {
     expect(jobUpdateSpy).toHaveBeenCalledWith({
       linked_estimate_id: 'estimate-1',
       status: 'scheduled',
+    })
+    expect(mockEnsureAcceptedEstimateOperationalSnapshot).toHaveBeenCalledWith({
+      requestOrigin: '',
+      orgId: 'org-1',
+      userId: 'staff-user-1',
+      estimateId: 'estimate-1',
+      publicVersionId: 'version-1',
     })
     expect(calls).toEqual([
       'public-version-update',
@@ -1046,6 +1069,13 @@ describe('estimate public portal transitions', () => {
         linked_estimate_id: 'estimate-1',
         status: 'scheduled',
       })
+      expect(mockEnsureAcceptedEstimateOperationalSnapshot).toHaveBeenCalledWith({
+        requestOrigin: '',
+        orgId: 'org-1',
+        userId: 'staff-user-1',
+        estimateId: 'estimate-1',
+        publicVersionId: 'version-1',
+      })
       expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
     }
   )
@@ -1123,6 +1153,13 @@ describe('estimate public portal transitions', () => {
     })
     expect(jobUpdateSpy).toHaveBeenCalledWith({
       linked_estimate_id: 'estimate-1',
+    })
+    expect(mockEnsureAcceptedEstimateOperationalSnapshot).toHaveBeenCalledWith({
+      requestOrigin: '',
+      orgId: 'org-1',
+      userId: 'staff-user-1',
+      estimateId: 'estimate-1',
+      publicVersionId: 'version-1',
     })
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
   })
@@ -1387,6 +1424,13 @@ describe('estimate public portal transitions', () => {
     })
     expect(estimateUpdateSpy).toHaveBeenCalledTimes(1)
     expect(jobUpdateSpy).toHaveBeenCalledTimes(1)
+    expect(mockEnsureAcceptedEstimateOperationalSnapshot).toHaveBeenCalledWith({
+      requestOrigin: '',
+      orgId: 'org-1',
+      userId: 'staff-user-1',
+      estimateId: 'estimate-1',
+      publicVersionId: 'version-1',
+    })
     expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
   })
 

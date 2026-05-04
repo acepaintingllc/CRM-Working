@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { useEstimateV2EditorViewModels } from '../useEstimateV2EditorViewModels'
@@ -31,6 +31,7 @@ function createViewModelParams() {
       ceilingCalculations: fixture.ceilingCalculations,
       trimCalculations: fixture.trimCalculations,
       selectedRoomId: 'R001',
+      catalogsError: null,
       error: null,
       validationIssues: ['R001: Needs paint selection'],
       lastSavedSnapshot: fixture.currentSnapshot,
@@ -154,6 +155,10 @@ function createViewModelParams() {
       orgTrimPrimerLabel: 'Trim Primer',
     },
     save: {
+      canManualSave: true,
+      blockedReason: null as string | null,
+      blockingIssues: [] as string[],
+      visibleValidationIssues: ['R001: Needs paint selection'],
       saveStatusText: 'Saved Apr 21, 2:00 PM',
       saveStatusColor: 'var(--v2-ink-3)',
     },
@@ -230,6 +235,96 @@ describe('useEstimateV2EditorViewModels', () => {
 
     expect(result.current.pageVm.emptySelectionMessage).toBe(
       'Add a room or select one from the roster to start editing room inputs.'
+    )
+  })
+
+  it('opens the shared editor settings drawer state from the header Settings action', () => {
+    const params = createViewModelParams()
+
+    const { result } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: params } }
+    )
+
+    expect(result.current.headerVm.settingsOpen).toBe(false)
+    expect(result.current.jobSettingsVm.settingsOpen).toBe(false)
+
+    act(() => {
+      result.current.headerVm.toggleSettings()
+    })
+
+    expect(result.current.headerVm.settingsOpen).toBe(true)
+    expect(result.current.jobSettingsVm.settingsOpen).toBe(true)
+  })
+
+  it('keeps save enabled for valid dirty drafts and disables it for invalid dirty drafts', () => {
+    const baseParams = createViewModelParams()
+
+    const { result, rerender } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: baseParams } }
+    )
+
+    expect(result.current.saveVm.dirty).toBe(false)
+
+    rerender({
+      nextParams: {
+        ...baseParams,
+        derived: {
+          ...baseParams.derived,
+          calculation: {
+            ...baseParams.derived.calculation,
+            dirty: true,
+          },
+          save: {
+            ...baseParams.derived.save,
+            canManualSave: true,
+            blockedReason: null,
+            blockingIssues: [],
+            visibleValidationIssues: [],
+            saveStatusText: 'Unsaved changes - ready to save',
+            saveStatusColor: '#f9e2b7',
+          },
+        },
+      },
+    })
+
+    expect(result.current.saveVm.dirty).toBe(true)
+    expect(result.current.saveVm.canManualSave).toBe(true)
+    expect(result.current.pageVm.validationIssues).toEqual([])
+
+    rerender({
+      nextParams: {
+        ...baseParams,
+        derived: {
+          ...baseParams.derived,
+          calculation: {
+            ...baseParams.derived.calculation,
+            dirty: true,
+          },
+          save: {
+            ...baseParams.derived.save,
+            canManualSave: false,
+            blockedReason: 'R001: height is required for RECT wall mode',
+            blockingIssues: ['R001: height is required for RECT wall mode'],
+            visibleValidationIssues: ['R001: height is required for RECT wall mode'],
+            saveStatusText:
+              'Unsaved changes - save blocked: R001: height is required for RECT wall mode',
+            saveStatusColor: '#f9e2b7',
+          },
+        },
+      },
+    })
+
+    expect(result.current.saveVm.canManualSave).toBe(false)
+    expect(result.current.saveVm.blockedReason).toBe(
+      'R001: height is required for RECT wall mode'
+    )
+    expect(result.current.pageVm.validationIssues).toEqual([
+      'R001: height is required for RECT wall mode',
+    ])
+    expect(result.current.headerVm.dirtyStateText).toBe(
+      'Unsaved changes - save blocked: R001: height is required for RECT wall mode'
     )
   })
 

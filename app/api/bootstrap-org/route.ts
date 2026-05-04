@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { codexBrowserTestOrgError, getCodexBrowserTestOrgId } from '@/lib/server/codexBrowserTestOrg'
 
 // This handles accidental GET requests (prevents 405 empty response)
 export function GET() {
@@ -36,13 +37,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'user_id does not match token' }, { status: 403 })
   }
 
+  const testOrgId = getCodexBrowserTestOrgId()
+
   // Check if membership already exists.
-  const { data: existing, error: existingErr } = await supabaseAdmin
+  let membershipQuery = supabaseAdmin
     .from('org_members')
     .select('org_id, role')
     .eq('user_id', user_id)
-    .limit(1)
-    .maybeSingle()
+
+  if (testOrgId) {
+    membershipQuery = membershipQuery.eq('org_id', testOrgId)
+  }
+
+  const { data: existing, error: existingErr } = await membershipQuery.limit(1).maybeSingle()
 
 
   if (existingErr) {
@@ -57,6 +64,10 @@ export async function POST(req: Request) {
       ok: true,
       membership: existing,
     })
+  }
+
+  if (testOrgId) {
+    return NextResponse.json({ error: codexBrowserTestOrgError() }, { status: 403 })
   }
 
   // Create org

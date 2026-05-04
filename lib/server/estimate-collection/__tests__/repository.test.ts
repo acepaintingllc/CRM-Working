@@ -45,6 +45,7 @@ function makeEstimateRow(
     version_state: 'draft',
     version_kind: 'standard',
     version_sort_order: 1,
+    setting_set_id_used: 'setting-set-1',
     created_at: '2026-04-20T10:00:00.000Z',
     updated_at: updatedAt,
     ...overrides,
@@ -112,6 +113,53 @@ function makeQuery(response: QueryResponse) {
     }),
     then: (resolve: (value: QueryResponse) => unknown, reject?: (reason: unknown) => unknown) =>
       Promise.resolve(response).then(resolve, reject),
+  }
+  return query
+}
+
+function makeMaybeSingleQuery(response: { data?: unknown | null; error?: { message: string } | null }) {
+  const query = {
+    select: vi.fn(() => query),
+    eq: vi.fn(() => query),
+    order: vi.fn(() => query),
+    limit: vi.fn(() => query),
+    maybeSingle: vi.fn(async () => ({
+      data: response.data ?? null,
+      error: response.error ?? null,
+    })),
+  }
+  return query
+}
+
+function makeRowsQuery(response: { data?: unknown[] | null; error?: { message: string } | null }) {
+  const query = {
+    select: vi.fn(() => query),
+    eq: vi.fn(() => query),
+    then: (resolve: (value: { data: unknown[] | null; error: { message: string } | null }) => unknown) =>
+      Promise.resolve({
+        data: response.data ?? null,
+        error: response.error ?? null,
+      }).then(resolve),
+  }
+  return query
+}
+
+function makeInsertMutation(
+  response:
+    | { data?: unknown | null; error?: { message: string } | null; withSelect: true }
+    | { error?: { message: string } | null; withSelect?: false }
+) {
+  const afterInsert = {
+    select: vi.fn(() => afterInsert),
+    single: vi.fn(async () => ({
+      data: 'data' in response ? response.data ?? null : null,
+      error: response.error ?? null,
+    })),
+    then: (resolve: (value: { error: { message: string } | null }) => unknown) =>
+      Promise.resolve({ error: response.error ?? null }).then(resolve),
+  }
+  const query = {
+    insert: vi.fn(() => afterInsert),
   }
   return query
 }
@@ -192,6 +240,7 @@ describe('estimate collection repository', () => {
           version_state: 'draft',
           version_kind: 'revision',
           version_sort_order: 2,
+          setting_set_id_used: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           created_at: '2026-04-23T16:00:00.000Z',
           updated_at: '2026-04-23T16:00:00.000Z',
         },
@@ -232,6 +281,7 @@ describe('estimate collection repository', () => {
         estimate: expect.objectContaining({
           id: 'estimate-new',
           version_sort_order: 2,
+          setting_set_id_used: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         }),
       },
     })
@@ -286,6 +336,133 @@ describe('estimate collection repository', () => {
       ok: false,
       kind: 'not_found',
       message: 'Job not found',
+    })
+  })
+
+  it('falls back to direct inserts when the rpc hits the uuid/text coalesce bug', async () => {
+    const _deps = {
+      rpc: mocks.rpc,
+      from: mocks.from,
+      hasUniqueConstraintConflict: mocks.hasUniqueConstraintConflict,
+    }
+    mocks.rpc.mockResolvedValue({
+      error: { message: 'COALESCE types uuid and text cannot be matched' },
+      data: null,
+    })
+    mocks.from.mockImplementation((relation: string) => {
+      if (relation === 'jobs') {
+        return makeMaybeSingleQuery({
+          data: {
+            id: '11111111-1111-4111-8111-111111111111',
+            customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        })
+      }
+      if (relation === 'customers') {
+        return makeMaybeSingleQuery({
+          data: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        })
+      }
+      if (relation === 'estimate_template_settings') {
+        return makeMaybeSingleQuery({
+          data: {
+            walls_paint_id: 'template-wall-paint',
+            walls_primer_id: 'template-wall-primer',
+            ceiling_paint_id: 'template-ceiling-paint',
+            ceiling_primer_id: 'template-ceiling-primer',
+            trim_paint_id: 'template-trim-paint',
+            trim_primer_id: 'template-trim-primer',
+            labor_day_policy_enabled: true,
+            dayhours: 8,
+            rounding_increment_hours: 4,
+            override_labor_rate: 40,
+            job_minimum_enabled: false,
+            job_minimum_amount: 0,
+          },
+        })
+      }
+      if (relation === 'estimator_setting_set') {
+        return makeMaybeSingleQuery({
+          data: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+        })
+      }
+      if (relation === 'estimator_setting_value') {
+        return makeRowsQuery({
+          data: [
+            {
+              scalar_key: 'walls_paint_id',
+              value_json: { value: 'setting-wall-paint' },
+            },
+            {
+              scalar_key: 'rounding_increment_hours',
+              value_json: { value: 6 },
+            },
+            {
+              scalar_key: 'override_labor_rate',
+              value_json: { value: 55 },
+            },
+          ],
+        })
+      }
+      if (relation === 'estimates') {
+        return {
+          ...makeMaybeSingleQuery({
+            data: { version_sort_order: 1 },
+          }),
+          ...makeInsertMutation({
+            withSelect: true,
+            data: {
+              id: 'estimate-fallback',
+              org_id: 'org-1',
+              job_id: '11111111-1111-4111-8111-111111111111',
+              customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              status: 'draft',
+              version_name: 'Fallback Revision',
+              version_state: 'draft',
+              version_kind: 'revision',
+              version_sort_order: 2,
+              setting_set_id_used: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              created_at: '2026-05-03T22:00:00.000Z',
+              updated_at: '2026-05-03T22:00:00.000Z',
+            },
+          }),
+        }
+      }
+      if (relation === 'estimate_jobsettings') {
+        return makeInsertMutation({ error: null })
+      }
+      if (relation === 'estimate_pricing_policies') {
+        return makeInsertMutation({ error: null })
+      }
+      throw new Error(`Unexpected relation ${relation}`)
+    })
+
+    const result = await createEstimateCollectionVersionRecord({
+      orgId: 'org-1',
+      userId: 'user-1',
+      body: {
+        job_id: '11111111-1111-4111-8111-111111111111',
+        customer_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        version_kind: 'revision',
+        version_name: 'Fallback Revision',
+      },
+      copy: {
+        createdNotice: 'Estimate version created.',
+        defaultVersionLabel: 'Estimate Version',
+      },
+      _deps,
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        id: 'estimate-fallback',
+        estimate: expect.objectContaining({
+          id: 'estimate-fallback',
+          version_sort_order: 2,
+          setting_set_id_used: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        }),
+      },
     })
   })
 

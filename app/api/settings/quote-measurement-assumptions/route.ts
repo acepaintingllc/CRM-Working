@@ -51,7 +51,8 @@ export async function PUT(request: Request) {
   try {
     const data = await saveQuoteMeasurementAssumptions(
       sessionResult.session.orgId,
-      normalized.data
+      normalized.data,
+      sessionResult.session.userId
     )
     return settingsSaved(data, 'Measurement assumptions saved.')
   } catch (error) {

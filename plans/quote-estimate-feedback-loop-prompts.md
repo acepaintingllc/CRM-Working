@@ -5,38 +5,181 @@ These prompts are written for this repository after reviewing the current quotes
 Current architecture facts to preserve:
 
 - `Estimate` is the canonical internal domain term. `Quote` is user-facing route/copy only.
-- `app/crm/quotes/[id]` is a thin alias over canonical Estimator V2 routes in `app/crm/estimates/[id]/v2`.
-- Accepted quote ownership currently flows through `lib/server/estimatePublicPortal.ts` and `lib/server/accepted-estimates/service.ts`.
+- `app/crm/quotes/[id]` remains a thin alias over canonical Estimator V2 routes in `app/crm/estimates/[id]/v2`.
+- Accepted quote ownership flows through `lib/server/estimatePublicPortal.ts` and `lib/server/accepted-estimates/service.ts`.
 - Jobs link to the accepted estimate through `jobs.linked_estimate_id`.
-- Current mutable estimator settings live in `estimate_template_settings`, `estimator_template_constants`, and `estimator_template_constant_rows`.
-- `estimate_catalog_snapshots` exists, but `lib/server/estimateCatalogs.ts` currently builds catalogs from live settings and does not use `estimateId` for historical catalog reads.
-- There is no existing `job_actuals`, `job_review`, `job_review_metric`, trend, or recommendation domain. Add this as a new shared server domain; do not place it in quote route aliases.
+- Historical estimator settings now have first-class storage in `estimator_setting_set` and `estimator_setting_value`, with `estimates.setting_set_id_used` as the canonical estimate-level setting identity.
+- `estimate_template_settings`, `estimator_template_constants`, and `estimator_template_constant_rows` remain only active-admin or migration compatibility surfaces.
+- Immutable accepted-estimate operational truth now lives in `estimate_snapshot` and `estimate_snapshot_line`; public quote versions remain customer-facing document snapshots.
+- `job_actuals`, `job_review`, `job_review_metric`, trends v1, recommendations, recommendation apply, and the insights UI exist in the working tree. Data-quality hardening and later line-level/analytics optimization work are still pending.
+
+## Prompt 0 Discovery Result - Refreshed 2026-05-03
+
+This section is the current implementation map after inspecting the required architecture docs, accepted-estimate flow, Estimator V2 load/calculation code, customer-send assembly, Rates/Flags settings code, feedback-loop services/UI, and migrations through `supabase/sql/083_trend_recommendations.sql`.
+
+### Current Status Before Prompt 16
+
+Prompts 11 through 15 are implemented in the working tree:
+
+- Trends API: `lib/server/estimate-feedback/trends.ts` and `app/api/insights/trends/route.ts`.
+- Trends and insights UI: `app/crm/insights/page.tsx`, `InsightsPageContent.tsx`, and `_hooks/*`.
+- Recommendation generation/apply: `supabase/sql/083_trend_recommendations.sql`, `lib/server/estimate-feedback/recommendations.ts`, `app/api/insights/recommendations/route.ts`, and `app/api/insights/recommendations/[id]/apply/route.ts`.
+- Client helpers: `lib/estimate-feedback/client.ts` now covers actuals, review, trends, recommendations, apply, and dismiss.
+
+Prompt 16, Data Quality Hardening, is the next implementation step.
+
+The trend source rows are locked, valid, non-excluded `job_review` records. Time filtering is SQL-level on `job_review.locked_at`. Job type, occupancy, and condition filters are v1 service-layer filters that inspect snapshot fields/text rather than normalized analytics dimensions; the occupancy and condition filters remain heuristic and should not be treated as finalized taxonomy controls.
+
+### Decisions
+
+- Active setting set ownership belongs in `lib/server/estimate-feedback/settingSets.ts`, backed by `estimator_setting_set`, `estimator_setting_value`, and `setting_change_log`. It owns active/draft/retired state, clone/update/activate behavior, historical estimate lookup, and scalar/default row mapping.
+- `estimates.setting_set_id_used` is the canonical historical setting identity for an estimate version. Migration `078_create_estimate_version_setting_set.sql` assigns the current active set at version creation; migration `077_estimator_setting_sets.sql` backfills existing estimates to the active set as a compatibility default.
+- Accepted-estimate snapshot creation belongs in accepted-estimate side effects, after ownership is established. Current code calls `ensureAcceptedEstimateOperationalSnapshot` from both first acceptance and accepted-retry reconciliation in `lib/server/estimatePublicPortal.ts`.
+- Operational downstream data should read `estimate_snapshot` first. `lib/server/accepted-estimates/service.ts` already prefers snapshots and falls back to accepted public version snapshot plus rollup only when no operational snapshot exists.
+- Actuals and review are job-level v1 domains under `lib/server/estimate-feedback`; line-level actuals are intentionally later.
+- Trends and recommendations use locked valid non-excluded `job_review` records, not mutable estimate tables or draft actuals.
+- Recommendation apply belongs in `lib/server/estimate-feedback/recommendations.ts`; it clones the active setting set, updates the targeted value, activates the clone, writes change-log context, and marks the recommendation applied or stale. It must never mutate `estimate_template_settings` or the old constants tables.
+
+### Historical Settings Status
+
+The original live-settings risk has been addressed in the current working tree:
+
+- `lib/server/estimateCatalogs.ts` no longer discards `estimateId`.
+- `getEstimateCatalogs(...)` resolves catalogs from `settingSetId`, then `estimateId` via `loadEstimateSettingSet`, then the active setting set.
+- `buildV2CatalogResultFromSources` preserves the existing catalog response shape while building overlays from `estimator_setting_value` rows.
+- `forceRefresh` is currently ignored; `adminRefreshMode: 'active'` is the explicit active-admin escape hatch and must not be used by historical estimate routes.
+
+Remaining risk:
+
+- `loadEstimateSettingSet` falls back to the active setting set when an estimate has no `setting_set_id_used`. That is acceptable only as a documented legacy fallback. Do not add new estimate paths that depend on active fallback for normal estimates.
+- `estimate_catalog_snapshots` still exists through `lib/server/estimateRatesFlagsSnapshots.ts`, but current `getEstimateCatalogs` does not use it as a fallback. Treat it as an old compatibility surface unless a future migration explicitly repurposes it.
+- Quote Defaults and Measurement Assumptions now read/write active scalar defaults through setting-set clone/update/activate. They still mirror to `estimate_template_settings` as a temporary compatibility surface, but that table is no longer the canonical write target.
+
+### Compatibility Matrix
+
+| Consumer | Current source | Category | Implementation direction |
+|---|---|---:|---|
+| `/api/estimates/[id]` and `/api/quotes/[id]` GET | `loadEstimateV2Response` plus setting-set-aware `loadEstimateTemplateSettings` and `getEstimateCatalogs` | `historical` | Keep response shape; continue resolving defaults/catalogs through `estimates.setting_set_id_used`. |
+| `/api/estimates/[id]` and `/api/quotes/[id]` PUT/autosave calculations | `createCalculationCatalogsLoader` to `loadEstimateV2CalculationCatalogs` | `historical` | Save-time calculations already flow through estimate-specific catalogs; preserve this for every new calculation path. |
+| `/api/estimates/[id]/catalogs` and `/api/quotes/[id]/catalogs` | `getEstimateCatalogs({ estimateId })` | `historical` | Return the estimate's historical catalog. Only explicit admin routes may request active catalogs. |
+| Estimator V2 editor, details, summary | canonical estimate route payloads and calculation artifacts | `historical` | No route-alias duplication; calculations use the estimate setting set. |
+| Customer-send context | `loadEstimateTemplateSettings({ estimateId })` and `getEstimateCatalogs({ estimateId })` | `historical` before accept, `snapshot` after accept | Send assembly uses the estimate setting set; accepted operations prefer `estimate_snapshot`. |
+| Public quote portal load | `estimate_public_versions.snapshot_json` | `snapshot` | Continue serving the customer document snapshot; do not recompute from current settings. |
+| Public quote acceptance | public version update, ownership side effects, operational snapshot ensure | `snapshot` | Keep snapshot ensure after accepted ownership. Document non-atomic acceptance/snapshot limitation. |
+| Accepted estimate source loader | `jobs.linked_estimate_id`, accepted public version, `estimate_snapshot` | `snapshot` with compatibility fallback | Prefer `estimate_snapshot`; keep fallback for accepted legacy data without snapshot. |
+| Quote Home rollups/version lists | persisted collection rows and `estimate_version_rollups` | `compatibility` | Reads can stay as persisted rollups; any repair/recalculation must use the estimate setting set. |
+| Rates/Flags admin page | `estimator_setting_set` draft/active values | `active` | Current canonical path is setting sets; old constants tables are test/compatibility mirrors only. |
+| Quote Defaults page | active `estimator_setting_set` scalar defaults, mirrored to `estimate_template_settings` | `active` with compatibility mirror | Keep setting-set clone/update/activate as canonical; remove old-table mirror after legacy consumers are gone. |
+| Measurement Assumptions settings | active `estimator_setting_set` scalar defaults, mirrored to `estimate_template_settings` | `active` with compatibility mirror | Same as Quote Defaults. |
+| Product reference checks | `estimate_template_settings`, estimate rows, `estimator_setting_value` | `compatibility` | Keep old scan but include setting values so active/historical references block unsafe archive/delete. |
+| Estimate creation RPC | active `estimator_setting_set` plus `estimate_template_settings` fallback | `active` | Continue writing `setting_set_id_used`; remove old-table fallback only after defaults pages write setting sets. |
+| Estimate seed route | `loadEstimateTemplateSettings` | `active` for new seed, `historical` for existing estimate | Existing estimates must use their setting set; new unbound seeds may use active defaults. |
+| Job actuals API/UI | `estimate_snapshot` and `job_actuals` | `snapshot` | Actuals must reference a snapshot belonging to the same org/job. |
+| Job review API | `estimate_snapshot`, submitted/locked `job_actuals`, `job_review_metric` | `snapshot` | Metrics recompute until review is locked; locked review is trend source. |
+| Trends v1 | locked valid non-excluded reviews | `snapshot` | Query `job_review.trend_eligible` and metrics, never live estimate settings. Time filtering is SQL-level on `job_review.locked_at`; job type, occupancy, and condition filters are currently service-layer snapshot/text filters. |
+| Recommendations generation | locked valid non-excluded reviews plus active setting-set target keys | `snapshot` | Generate from trend service outputs and store `trend_recommendation` rows; do not read mutable estimate settings as evidence. |
+| Recommendation apply | open `trend_recommendation` plus active `estimator_setting_set` values | `active` | Clone/update/activate setting sets only; old estimates and snapshots keep `setting_set_id_used`/`estimate_snapshot`. |
+| Insights UI | trends API plus open recommendation API | `snapshot` for trend evidence, `active` for apply | Components render VM output only; actions call `lib/estimate-feedback/client.ts`. |
+
+### Current Direct Old-Table Reads And Writes
+
+`estimate_template_settings`:
+
+- `lib/server/estimateTemplateSettings.ts`: compatibility fallback read only when no setting set is available or when called with the legacy string signature.
+- `lib/server/settings/quoteDefaultsStore.ts`: compatibility fallback read and best-effort mirror write only; canonical reads/writes use active setting-set scalar defaults.
+- `lib/server/settings/quoteMeasurementAssumptionsStore.ts`: compatibility fallback read and best-effort mirror write only; canonical reads/writes use active setting-set scalar defaults.
+- `lib/server/estimate-products/repository.ts`: compatibility read for product reference checks.
+- `supabase/sql/059_atomic_estimate_version_creation.sql`: old replaced function body; kept as historical migration.
+- `supabase/sql/078_create_estimate_version_setting_set.sql`: still reads `estimate_template_settings` as fallback while seeding `estimate_jobsettings` and pricing policy rows.
+- Schema/backfill migrations: `054`, `055`, `056`, `057_crm_settings_domain`, `069_estimate_deduction_settings`, `077`, and `078`.
+- Tests/mock surfaces: `lib/server/customer-send/__tests__/contextLoader.test.tsx`, `lib/server/estimate-products/__tests__/repository.test.ts`, and route/load tests that mock `loadEstimateTemplateSettings`.
+
+`estimator_template_constants`:
+
+- `lib/server/rates-flags/templateState.ts`: compatibility read/insert/update helpers (`fetchTemplateState`, `ensureTemplateState`, `bumpTemplateVersion`).
+- `lib/server/rates-flags/core.ts`: imports template compatibility helpers only through `_test`; production reads/writes now use setting sets.
+- Schema/seeding/backfill migrations: `043`, `045`, `049`, `057_estimator_template_constant_rows_trim_production_seed`, both `063` constants/trim migrations, both `065` constants/condition migrations, `067`, `072`, and `077`.
+- Historical design docs only: `docs/superpowers/**` references old constants tables but is not a runtime consumer.
+- Tests: `lib/server/__tests__/estimateRatesFlags.test.ts` and migration tests.
+
+`estimator_template_constant_rows`:
+
+- `lib/server/rates-flags/templateState.ts`: compatibility row reads through `fetchTemplateState` and `getTemplateRowById`.
+- `lib/server/estimateRatesFlagsSnapshots.ts`: reads the active setting-set overlay through `readLiveRatesFlagsCatalogOverlay` and writes old `estimate_catalog_snapshots`; despite the name, it no longer directly reads old rows.
+- Schema/seeding/backfill migrations: `043`, `044`, `045`, `049`, `057_estimator_template_constant_rows_trim_production_seed`, both `063` constants/trim migrations, `064_add_crew_multiplier_to_supply_rates`, both `065` constants/condition migrations, `067`, `072`, and `077`.
+- Historical design docs only: `docs/superpowers/**` references old constants tables but is not a runtime consumer.
+- Tests: `lib/server/__tests__/estimateRatesFlags.test.ts`, catalog/snapshot tests, and migration tests.
+
+### File-By-File Implementation Map
+
+#### DB
+
+- `supabase/sql/077_estimator_setting_sets.sql`: exists. Creates `estimator_setting_set`, `estimator_setting_value`, `setting_change_log`, adds/backfills `estimates.setting_set_id_used`, seeds active setting-set values from old tables, and adds RLS/indexes.
+- `supabase/sql/078_create_estimate_version_setting_set.sql`: exists. Replaces `create_estimate_version`, assigns active `setting_set_id_used`, and seeds jobsettings/pricing from setting-set scalar values with old-table fallback.
+- `supabase/sql/079_estimate_snapshot_tables.sql`: exists. Creates immutable `estimate_snapshot` and `estimate_snapshot_line`.
+- `supabase/sql/080_estimate_feedback_atomic_rpcs.sql`: exists. Adds `insert_estimate_snapshot_with_lines` and `activate_estimator_setting_set`.
+- `supabase/sql/081_job_actuals.sql`: exists. Adds job-level actuals scoped to immutable snapshots.
+- `supabase/sql/082_job_review.sql`: exists. Adds review and metric tables plus generated `trend_eligible`.
+- `supabase/sql/083_trend_recommendations.sql`: exists. Adds `trend_recommendation`, open recommendation uniqueness, status indexes, RLS, and the nullable `setting_change_log.recommendation_id` foreign key.
+- Next DB work: add only data-quality hardening/outlier support that is justified by Prompt 16; add trend query indexes only after observing query shape; add no analytics summary table yet.
+
+#### Server Services
+
+- `lib/server/estimate-feedback/settingSets.ts`: exists and is canonical for setting-set reads, draft clone/update, activation, change log, and old-shape adapters. Quote Defaults and Measurement Assumptions now use its scalar-default path.
+- `lib/server/estimateCatalogs.ts`: exists and is source-aware. Keep `EstimateCatalogsResult` stable; do not route estimate-specific reads through `adminRefreshMode: 'active'`.
+- `lib/server/estimateTemplateSettings.ts`: exists as a compatibility wrapper around setting-set scalar values. Keep it until calculation/customer-send callers can consume setting-set DTOs directly.
+- `lib/server/rates-flags/core.ts`: production Rates/Flags reads/mutations use setting-set active/draft flows. Keep `templateState.ts` only as compatibility/test support unless a deliberate mirror sync is added.
+- `lib/server/estimate-v2/loadEstimateAssembly.ts` and `calculationOrchestration.ts`: already pass estimate IDs into defaults/catalog loaders. Guard future calculations to use `createCalculationCatalogsLoader` or equivalent estimate-specific loaders.
+- `lib/server/customer-send/contextRepository.ts` and `contextCalculations.ts`: already load settings/catalogs by estimate ID. Preserve public version snapshot behavior.
+- `lib/server/accepted-estimates/service.ts`: already prefers `estimate_snapshot` and exposes `ensureAcceptedEstimateOperationalSnapshot`.
+- `lib/server/estimatePublicPortal.ts`: already calls snapshot ensure after accepted ownership on first accept and retry. Remaining concern is documenting or tightening atomicity if needed.
+- `lib/server/estimate-feedback/snapshots.ts`: exists. Builds immutable snapshots from canonical Estimator V2 load/calculation path and inserts through RPC.
+- `lib/server/estimate-feedback/actuals.ts`: exists. Owns actuals validation, save, submit, lock.
+- `lib/server/estimate-feedback/reviews.ts`: exists. Owns review validation, metric computation, save, lock, and trend eligibility.
+- `lib/server/estimate-feedback/trends.ts`: exists. Owns trend source selection, SQL-level `locked_at` time filtering, metric aggregation, and v1 service-layer snapshot/text filters for job type, occupancy, and condition tags.
+- `lib/server/estimate-feedback/recommendations.ts`: exists. Owns recommendation target parsing, rule-based generation, duplicate-open prevention, dismiss/apply status changes, stale apply conflict detection, setting-set clone/update/activate, and recommendation change-log context.
+
+#### API Routes
+
+- Existing estimate/quote routes keep standard envelopes and auth. Their service layer must keep resolving historical settings by estimate ID.
+- `app/api/quotes/rates-flags/route.ts` should continue exposing active/draft setting metadata and activation actions through the existing client path.
+- `app/api/settings/quote-defaults/route.ts` and `app/api/settings/quote-measurement-assumptions/route.ts` should be migrated to setting-set scalar draft/activate behavior.
+- Job actuals routes exist under `app/api/jobs/[id]/actuals/**`.
+- Job review routes exist under `app/api/jobs/[id]/review/**`.
+- `app/api/insights/trends/route.ts` exists and is the Prompt 11 trends API.
+- `app/api/insights/recommendations/route.ts` exists for listing, generating, and status updates.
+- `app/api/insights/recommendations/[id]/apply/route.ts` exists for setting-set apply. It authenticates first, parses UUID params, and returns standard envelopes.
+
+#### Types And Client Helpers
+
+- `types/estimator/ratesFlags.ts` remains the Rates/Flags category config and draft shape source.
+- `lib/estimate-feedback/client.ts` exists for job actuals, review, trends, recommendations, apply, and dismiss actions.
+- Needed: shared type files under `types/estimate-feedback/*` if trend/recommendation DTOs become broader than route-local read models.
+
+#### UI
+
+- Existing Estimator V2 and send pages need no visual redesign for setting-set reads.
+- `app/crm/jobs/[id]/actuals` exists and should stay on shared CRM UI primitives.
+- `app/crm/jobs/[id]/review` exists with route-local hook/controller/VM and shared CRM UI.
+- `app/crm/insights` exists for trends, URL-backed filters, and open recommendation cards. Treat occupancy and condition filters as optional heuristic filters, not finalized taxonomy controls.
+
+#### Tests
+
+- Existing/new test coverage includes setting-set migration/domain, catalog historical behavior, snapshot migration/service, actuals migration/service/routes/UI VM/controller, and review migration/service/routes.
+- Quote Defaults and Measurement Assumptions store tests now cover setting-set scalar writes, activation source, validation-before-mutation, and compatibility mirroring.
+- Trend tests exist for locked valid non-excluded review selection and filters; keep expanding them during Prompt 16 for outlier/data-quality hardening.
+- Recommendation tests exist for generation/apply behavior; Prompt 16 should add explicit invalid/questionable/excluded poisoning guards across trends and recommendations.
 
 Mandatory compatibility guardrail:
 
-- Settings versioning is not done when new tables exist. It is done only when every existing reader/writer of estimator settings is either routed through the new setting-set resolver or explicitly documented as a compatibility fallback.
-- The implementation must audit these current consumers before changing behavior:
-  - `/api/estimates/[id]` and `/api/quotes/[id]`
-  - `/api/estimates/[id]/catalogs` and `/api/quotes/[id]/catalogs`
-  - Estimator V2 editor, summary, and details pages
-  - customer send/review flow under `lib/server/customer-send/*`
-  - public quote acceptance under `lib/server/estimatePublicPortal.ts`
-  - accepted estimate source loader under `lib/server/accepted-estimates/service.ts`
-  - quote home rollups and version lists
-  - Rates/Flags page and mutation flow
-  - Quote Defaults and Measurement Assumptions settings stores
-  - tests that mock `estimate_template_settings`, `estimator_template_constants`, or `estimator_template_constant_rows`
-- For each consumer, decide one of:
-  - `historical`: read by `estimates.setting_set_id_used`
-  - `active`: read only the current active setting set for new estimates/admin editing
-  - `snapshot`: read from immutable `estimate_snapshot`
-  - `compatibility`: temporary fallback with a removal path
+- Settings versioning is complete only when every existing reader/writer of estimator settings is either routed through the setting-set resolver or explicitly documented as a compatibility fallback.
+- The remaining old-table writes in Quote Defaults and Measurement Assumptions are best-effort compatibility mirrors only. Do not build new behavior on top of those mirrors.
 
-Recommended canonical module family for the new loop:
+Recommended canonical module family:
 
 - Shared server domain: `lib/server/estimate-feedback/*`
 - Shared client/domain helpers: `lib/estimate-feedback/*`
-- Shared types: `types/estimate-feedback/*`
+- Shared types when needed: `types/estimate-feedback/*`
 - Job-level actual/review routes: `app/api/jobs/[id]/actuals/**` and `app/api/jobs/[id]/review/**`
 - Portfolio trends/recommendations routes: `app/api/insights/trends/**` and `app/api/insights/recommendations/**`
 - Job-level UI: `app/crm/jobs/[id]/actuals` and `app/crm/jobs/[id]/review`
@@ -521,13 +664,16 @@ Out of scope:
 - trend dashboard
 ```
 
-## Prompt 11: Trend Query Layer And API
+## Prompt 11: Trend Query Layer And API (Implemented)
 
 ```text
 Read `docs/feature-page-prompt-template.md`.
 
 Fresh-chat context:
 This builds on Prompt 9. Locked reviews and review metrics should already exist. This prompt intentionally proves the trend loop with direct DB queries before adding recommendations or analytics summary tables.
+
+Status note:
+Implemented in the working tree with `lib/server/estimate-feedback/trends.ts` and `app/api/insights/trends/route.ts`. Trend source rows are locked, valid, non-excluded `job_review` records. The route authenticates before parsing or service work, returns standard `{ data }` / `{ error }` envelopes, and accepts query aliases `start/end`, `lockedFrom/lockedTo`, `job_type`, and repeated condition tag params. Time filtering is SQL-level on `job_review.locked_at`. Job type, occupancy, and condition tag filters are v1 service-layer snapshot fields/text filters because those values are not first-class normalized analytics dimensions yet; keep that caveat visible before treating all Prompt 11 filters as SQL-backed taxonomy controls.
 
 Implement:
 Simple trend queries from locked reviews.
@@ -558,13 +704,16 @@ Out of scope:
 - scope/room actuals
 ```
 
-## Prompt 12: Trends And Insights Page
+## Prompt 12: Trends And Insights Page (Implemented)
 
 ```text
 Read `docs/feature-page-prompt-template.md` and `docs/crm-ui-system.md`.
 
 Fresh-chat context:
 This builds on Prompt 11. The trends API should already return real locked-review metrics. This prompt is the portfolio UI layer and should not introduce trend math outside the trend domain/VM helpers.
+
+Status note:
+Implemented in the working tree with `app/crm/insights/page.tsx`, `app/crm/insights/InsightsPageContent.tsx`, and `app/crm/insights/_hooks/*`. The UI treats occupancy and condition filters as optional heuristic filters from snapshot text/fields, not as finalized taxonomy controls.
 
 Implement:
 Portfolio trends and insights page.
@@ -587,13 +736,16 @@ Out of scope:
 - materialized analytics
 ```
 
-## Prompt 13: Rule-Based Recommendation Generation
+## Prompt 13: Rule-Based Recommendation Generation (Implemented)
 
 ```text
 Read `docs/feature-page-prompt-template.md`.
 
 Fresh-chat context:
 This builds on Prompts 11 and 2. Trend queries should exist, and setting values must have stable target keys from the setting-set domain. This prompt generates recommendation records only; applying them is a separate later workflow.
+
+Status note:
+Implemented in the working tree with `supabase/sql/083_trend_recommendations.sql`, `lib/server/estimate-feedback/recommendations.ts`, and `app/api/insights/recommendations/route.ts`.
 
 Implement:
 Rule-based trend recommendations.
@@ -635,13 +787,16 @@ Out of scope:
 - ML or probabilistic recommendations
 ```
 
-## Prompt 14: Apply Recommendation Workflow
+## Prompt 14: Apply Recommendation Workflow (Implemented)
 
 ```text
 Read `docs/feature-page-prompt-template.md` and `docs/quotes-architecture.md`.
 
 Fresh-chat context:
 This builds on Prompts 2, 4, and 13. Recommendations should exist, and the setting-set service must support clone/update/activate with audit logging. This prompt wires the safe apply action so future estimates change while old estimates and snapshots stay unchanged.
+
+Status note:
+Implemented in the working tree with `applyTrendRecommendation` in `lib/server/estimate-feedback/recommendations.ts` and `app/api/insights/recommendations/[id]/apply/route.ts`.
 
 Implement:
 Apply recommendation action.
@@ -669,13 +824,16 @@ Out of scope:
 - partial apply
 ```
 
-## Prompt 15: Recommendation Cards UI
+## Prompt 15: Recommendation Cards UI (Implemented)
 
 ```text
 Read `docs/feature-page-prompt-template.md` and `docs/crm-ui-system.md`.
 
 Fresh-chat context:
 This builds on Prompts 12, 13, and 14. The Trends page, recommendation generation, and apply/dismiss APIs should already exist. This prompt only adds UI/controller integration for those existing APIs.
+
+Status note:
+Implemented in the working tree by extending `app/crm/insights/_hooks/useInsightsTrendsPage.ts`, `app/crm/insights/_hooks/insightsTrendsVm.ts`, `app/crm/insights/InsightsPageContent.tsx`, and `lib/estimate-feedback/client.ts`.
 
 Implement:
 Recommendation cards on the Trends page.

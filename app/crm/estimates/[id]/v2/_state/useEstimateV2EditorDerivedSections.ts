@@ -59,6 +59,7 @@ export function useEstimateV2EditorDerivedSections(params: {
     firstDoorScope: room.firstDoorScope,
   })
   const save = useEstimateV2SaveDerived({
+    collections,
     meta,
     dirty: calculation.dirty,
   })

@@ -20,26 +20,26 @@ test('createSaveRequestTracker marks only latest request as current', () => {
   assert.equal(tracker.latest(), 2)
 })
 
-test('getSaveStatusText prioritizes saving, errors, dirty-blocked, dirty, then saved state', () => {
+test('getSaveStatusText prioritizes saving, errors, blocked, dirty, then saved state', () => {
   const fmt = (value: string | null) => value ?? '(never)'
   assert.equal(
     getSaveStatusText({
       saving: true,
       saveStatus: 'autosaving',
       dirty: true,
-      autoSaveHint: null,
+      blockedReason: null,
       error: null,
       updatedAt: null,
       formatDateTime: fmt,
     }),
-    'Autosaving...'
+    'Autosaving draft...'
   )
   assert.equal(
     getSaveStatusText({
       saving: false,
       saveStatus: 'error',
       dirty: false,
-      autoSaveHint: null,
+      blockedReason: null,
       error: 'bad save',
       updatedAt: null,
       formatDateTime: fmt,
@@ -51,31 +51,43 @@ test('getSaveStatusText prioritizes saving, errors, dirty-blocked, dirty, then s
       saving: false,
       saveStatus: 'blocked',
       dirty: true,
-      autoSaveHint: 'R001 missing height',
+      blockedReason: 'R001 missing height',
       error: null,
       updatedAt: null,
       formatDateTime: fmt,
     }),
-    'Autosave paused: R001 missing height'
+    'Unsaved changes - save blocked: R001 missing height'
+  )
+  assert.equal(
+    getSaveStatusText({
+      saving: false,
+      saveStatus: 'blocked',
+      dirty: false,
+      blockedReason: 'R001 missing height',
+      error: null,
+      updatedAt: '2026-04-18T00:00:00.000Z',
+      formatDateTime: fmt,
+    }),
+    'Unsaved changes - save blocked: R001 missing height'
   )
   assert.equal(
     getSaveStatusText({
       saving: false,
       saveStatus: 'idle',
       dirty: true,
-      autoSaveHint: null,
+      blockedReason: null,
       error: null,
       updatedAt: null,
       formatDateTime: fmt,
     }),
-    'Unsaved changes - live preview shown'
+    'Unsaved changes - ready to save'
   )
   assert.equal(
     getSaveStatusText({
       saving: false,
       saveStatus: 'saved',
       dirty: false,
-      autoSaveHint: null,
+      blockedReason: null,
       error: null,
       updatedAt: '2026-04-18T00:00:00.000Z',
       formatDateTime: fmt,

@@ -220,6 +220,72 @@ describe('useEditableResource', () => {
     expect(result.current.dirty).toBe(true)
   })
 
+  it('runs custom save actions through the shared commit and feedback lifecycle', async () => {
+    const { result } = renderHook(() =>
+      useEditableResource({
+        initialData: { value: '' },
+        load: async () => ({ value: 'loaded' }),
+        save: async (data) => ({ data }),
+      })
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.setData({ value: 'local draft' })
+    })
+
+    let saveResult: Awaited<ReturnType<typeof result.current.runSaveAction>> | null = null
+    await act(async () => {
+      saveResult = await result.current.runSaveAction(async (current) => ({
+        data: { value: current.value.trim() },
+        notice: 'Draft saved, submit failed.',
+        error: 'Submit failed.',
+      }))
+    })
+
+    expect(saveResult).toEqual({
+      ok: false,
+      data: { value: 'local draft' },
+      error: 'Submit failed.',
+    })
+    expect(result.current.data).toEqual({ value: 'local draft' })
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.notice).toBe('Draft saved, submit failed.')
+    expect(result.current.error).toBe('Submit failed.')
+  })
+
+  it('can reset editable data to the initial value after load failures', async () => {
+    let shouldFail = false
+    const { result } = renderHook(() =>
+      useEditableResource({
+        initialData: { value: 'empty' },
+        load: async () => {
+          if (shouldFail) throw new Error('Reload failed.')
+          return { value: 'loaded' }
+        },
+        save: async (data) => ({ data }),
+        resetOnLoadError: true,
+      })
+    )
+
+    await waitFor(() => expect(result.current.data).toEqual({ value: 'loaded' }))
+    shouldFail = true
+
+    let reloadResult: Awaited<ReturnType<typeof result.current.reload>> | null = null
+    await act(async () => {
+      reloadResult = await result.current.reload()
+    })
+
+    expect(reloadResult).toEqual({
+      ok: false,
+      data: null,
+      error: 'Reload failed.',
+    })
+    expect(result.current.data).toEqual({ value: 'empty' })
+    expect(result.current.dirty).toBe(false)
+  })
+
   it('keeps local edits dirty after save failures with a custom comparator', async () => {
     const { result } = renderHook(() =>
       useEditableResource({

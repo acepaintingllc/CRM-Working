@@ -24,24 +24,24 @@ export function getSaveStatusText(params: {
   saving: boolean
   saveStatus: SaveStatus
   dirty: boolean
-  autoSaveHint: string | null
+  blockedReason: string | null
   error: string | null
   updatedAt: string | null
   formatDateTime: (value: string | null) => string
 }) {
   if (params.saving) {
-    return params.saveStatus === 'autosaving' ? 'Autosaving...' : 'Saving...'
+    return params.saveStatus === 'autosaving' ? 'Autosaving draft...' : 'Saving draft...'
   }
   if (params.saveStatus === 'error') {
     return params.error ?? 'Save failed'
   }
+  if (params.saveStatus === 'blocked') {
+    return params.blockedReason
+      ? `Unsaved changes - save blocked: ${params.blockedReason}`
+      : 'Unsaved changes - save blocked: fix validation issues'
+  }
   if (params.dirty) {
-    if (params.saveStatus === 'blocked') {
-      return params.autoSaveHint
-        ? `Autosave paused: ${params.autoSaveHint}`
-        : 'Autosave paused: fix validation issues'
-    }
-    return 'Unsaved changes - live preview shown'
+    return 'Unsaved changes - ready to save'
   }
   return `Saved ${params.formatDateTime(params.updatedAt)}`
 }

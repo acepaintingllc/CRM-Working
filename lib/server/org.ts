@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { headers } from 'next/headers.js'
 import { createSupabaseServerClient } from '../supabase/server.ts'
+import { codexBrowserTestOrgError, getCodexBrowserTestOrgId } from './codexBrowserTestOrg.ts'
 
 export const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,12 +9,17 @@ export const supabaseAdmin = createClient(
 )
 
 async function getOrgIdForUser(userId: string) {
-  const { data: membership, error } = await supabaseAdmin
+  const testOrgId = getCodexBrowserTestOrgId()
+  let query = supabaseAdmin
     .from('org_members')
     .select('org_id')
     .eq('user_id', userId)
-    .limit(1)
-    .maybeSingle()
+
+  if (testOrgId) {
+    query = query.eq('org_id', testOrgId)
+  }
+
+  const { data: membership, error } = await query.limit(1).maybeSingle()
 
   if (error) throw error
   return membership?.org_id ?? null
@@ -44,7 +50,11 @@ export async function getSessionUserOrg() {
   }
 
   const orgId = await getOrgIdForUser(userId)
-  if (!orgId) return { error: 'No org membership found' } as const
+  if (!orgId) {
+    return {
+      error: getCodexBrowserTestOrgId() ? codexBrowserTestOrgError() : 'No org membership found',
+    } as const
+  }
 
   return { userId, orgId } as const
 }

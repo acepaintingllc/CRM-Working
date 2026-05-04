@@ -31,7 +31,7 @@ export function useEstimateV2CatalogDerived(params: {
   meta: Pick<EstimateV2EditorMetaState, 'catalogs'>
   selectedRoom: EstimateV2RoomDraft | null
 }) {
-  const { collections, meta, selectedRoom } = params
+  const { collections, meta } = params
 
   const wallProductionRates = useMemo(
     () =>
@@ -145,13 +145,8 @@ export function useEstimateV2CatalogDerived(params: {
     [meta.catalogs.paint_products]
   )
   const roomTypeOptions = useMemo(
-    () =>
-      meta.catalogs.room_types.length > 0
-        ? meta.catalogs.room_types
-        : selectedRoom?.roomTypeId
-          ? [{ id: selectedRoom.roomTypeId, label: selectedRoom.roomTypeId }]
-          : [],
-    [meta.catalogs.room_types, selectedRoom]
+    () => meta.catalogs.room_types,
+    [meta.catalogs.room_types]
   )
   const conditionModifiers = useMemo(
     () => meta.catalogs.condition_modifiers ?? [],

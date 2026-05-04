@@ -12,7 +12,12 @@ type Props = {
   templateVersion: number | null
   actions: Pick<
     QuoteRatesActions,
-    'saveCurrent' | 'cancelEdit' | 'setDraftActive' | 'updateDraftValue' | 'formatDraftValue'
+    | 'saveCurrent'
+    | 'cancelEdit'
+    | 'setDraftActive'
+    | 'updateDraftValue'
+    | 'formatDraftValue'
+    | 'activateDraft'
   >
 }
 
@@ -84,14 +89,25 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
     <CrmSectionCard
       title={vm.isCreating ? 'New row' : vm.selectedRow ? vm.selectedRow.display_name || vm.selectedRow.id : 'No selection'}
       description={
-        vm.activeCategory ? `${vm.activeCategory.label} | template v${templateVersion ?? 'n/a'}` : 'No active category.'
+        vm.activeCategory
+          ? `${vm.activeCategory.label} | editing v${vm.editingSettingSet?.version_number ?? templateVersion ?? 'n/a'}${vm.draftSettingSet ? ' draft' : ''}`
+          : 'No active category.'
       }
       actions={
         vm.showLegacyCategoryNotice ? null : (
           <div className="flex flex-wrap gap-2">
+            {vm.draftSettingSet ? (
+              <CrmButton
+                type="button"
+                tone="primary"
+                onClick={() => void actions.activateDraft()}
+                disabled={!vm.canActivateDraft}
+              >
+                {vm.activating ? 'Activating...' : 'Activate draft'}
+              </CrmButton>
+            ) : null}
             <CrmButton
               type="button"
-              tone="primary"
               onClick={() => void actions.saveCurrent()}
               disabled={!vm.canSave}
             >
@@ -112,6 +128,11 @@ export function QuoteRatesEditorSection({ vm, templateVersion, actions }: Props)
         </CrmNotice>
       ) : (
         <div className="grid gap-4">
+          <CrmNotice tone={vm.draftSettingSet ? 'warning' : 'info'} compact>
+            {vm.draftSettingSet
+              ? `Editing draft v${vm.draftSettingSet.version_number}. Activate it to make these rates available to future estimates.`
+              : `Editing starts by cloning active v${vm.activeSettingSet?.version_number ?? 'n/a'} into a draft when you save.`}
+          </CrmNotice>
           {vm.inlineValidation ? (
             <CrmNotice tone="info" compact>
               {vm.inlineValidation}

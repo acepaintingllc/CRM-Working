@@ -46,8 +46,9 @@ export type QuoteRatesPendingTransition =
   | { type: 'startDuplicate' }
   | { type: 'reload'; keepId?: string }
   | { type: 'archiveOrReactivate'; nextActive: boolean }
+  | { type: 'activateDraft' }
 
-export type QuoteRatesActionStatus = 'idle' | 'saving' | 'reloading' | 'archiving'
+export type QuoteRatesActionStatus = 'idle' | 'saving' | 'reloading' | 'archiving' | 'activating'
 export type QuoteRatesEditorMode = 'selection' | 'create'
 export type QuoteRatesDiscardStatus = 'idle' | 'confirming' | 'applying'
 export type QuoteRatesDraftSnapshot = ReturnType<typeof createRatesFlagsDraftSnapshot>
@@ -256,7 +257,7 @@ export function quoteRatesPageReducer(
 }
 
 export function transitionNeedsDiscardReset(intent: QuoteRatesPendingTransition) {
-  return intent.type === 'reload' || intent.type === 'archiveOrReactivate'
+  return intent.type === 'reload' || intent.type === 'archiveOrReactivate' || intent.type === 'activateDraft'
 }
 
 export type QuoteRatesDerivedState = {

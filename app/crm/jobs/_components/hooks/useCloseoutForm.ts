@@ -6,7 +6,7 @@ import {
   saveCloseout,
   sendStageEmail,
 } from '@/lib/jobs/actions'
-import { type JobDetail } from '@/lib/jobs/client'
+import type { JobDetail } from '@/types/jobs/api'
 import { applyTemplate, buildJobEmailTemplateVars } from '@/lib/jobs/emailTemplate'
 import {
   createDefaultPaintLogRow,

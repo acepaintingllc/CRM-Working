@@ -196,6 +196,7 @@ describe('estimate product repository', () => {
   it('detects product references across defaults, saved scopes, materials, and catalog snapshots', async () => {
     const emptyReferenceChain = createReferenceChain({ data: [], error: null })
     const quoteDefaultsChain = createReferenceChain({ data: [{ id: 'settings-1' }], error: null })
+    const settingSetsChain = createReferenceChain({ data: [{ id: 'setting-value-1' }], error: null })
     const wallScopesChain = createReferenceChain({ data: [{ id: 'scope-1' }], error: null })
     const snapshotsChain = createSnapshotChain({
       data: [
@@ -216,6 +217,7 @@ describe('estimate product repository', () => {
       ['estimate_room_trim_scopes', emptyReferenceChain],
       ['estimate_material_requirements', emptyReferenceChain],
       ['estimate_material_purchase_groups', emptyReferenceChain],
+      ['estimator_setting_value', settingSetsChain],
       ['v2_catalog_snapshots', snapshotsChain],
     ])
 
@@ -226,8 +228,9 @@ describe('estimate product repository', () => {
     await expect(findEstimateProductReferences('org-1', existingRow.id, { client })).resolves.toEqual({
       ok: true,
       data: [
-        { source: 'quote_defaults', label: 'quote defaults' },
+        { source: 'quote_defaults', label: 'quote defaults compatibility mirror' },
         { source: 'wall_scopes', label: 'wall scope product selections' },
+        { source: 'setting_sets', label: 'setting sets' },
         { source: 'catalog_snapshots', label: 'catalog snapshots' },
       ],
     })
@@ -244,6 +247,9 @@ describe('estimate product repository', () => {
       ].join(',')
     )
     expect(snapshotsChain.eq).toHaveBeenCalledWith('org_id', 'org-1')
+    expect(settingSetsChain.or).toHaveBeenCalledWith(
+      `value_json.cs.${JSON.stringify({ value: existingRow.id })}`
+    )
   })
 
   it('maps missing scoped rows to a stable not-found service result', async () => {

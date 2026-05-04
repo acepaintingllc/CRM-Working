@@ -5,7 +5,7 @@ import {
   toIsoFromLocalDateTimeValue,
   toLocalDateTimeInputValue,
 } from '@/lib/jobs/dateHelpers'
-import type { JobDetail } from '@/lib/jobs/client'
+import type { JobDetail } from '@/types/jobs/api'
 import {
   CalendarCheck,
   CheckCircle2,

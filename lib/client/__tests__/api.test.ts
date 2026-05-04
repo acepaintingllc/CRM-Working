@@ -35,6 +35,63 @@ test('client api helpers extract stable API error messages', () => {
   )
 })
 
+test('client api helpers extract object error messages without returning raw JSON', () => {
+  const response = new Response(
+    JSON.stringify({
+      error: {
+        message: 'Validation failed.',
+        details: { privateField: 'do not show' },
+      },
+    }),
+    { status: 400 }
+  )
+
+  assert.equal(
+    getApiErrorMessage(response, {
+      json: {
+        error: {
+          message: 'Validation failed.',
+          details: { privateField: 'do not show' },
+        },
+      },
+      text: JSON.stringify({
+        error: {
+          message: 'Validation failed.',
+          details: { privateField: 'do not show' },
+        },
+      }),
+    }),
+    'Validation failed.'
+  )
+})
+
+test('client api helpers avoid raw JSON fallback when error message is unavailable', () => {
+  const response = new Response(
+    JSON.stringify({
+      error: {
+        details: { privateField: 'do not show' },
+      },
+    }),
+    { status: 400, statusText: 'Bad Request' }
+  )
+
+  assert.equal(
+    getApiErrorMessage(response, {
+      json: {
+        error: {
+          details: { privateField: 'do not show' },
+        },
+      },
+      text: JSON.stringify({
+        error: {
+          details: { privateField: 'do not show' },
+        },
+      }),
+    }),
+    'Bad Request'
+  )
+})
+
 test('client api helpers throw normalized request errors for failed responses', async () => {
   const fetcher = async () =>
     new Response(JSON.stringify({ error: 'Bad request.' }), {

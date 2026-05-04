@@ -4,6 +4,7 @@ import {
   buildLastOpenedQuoteRecord,
   lastOpenedQuoteStorageKey,
   readLastOpenedQuote,
+  resolveLastOpenedQuoteForOrg,
   writeLastOpenedQuote,
 } from '../lastOpenedQuote.ts'
 
@@ -13,6 +14,7 @@ test('builds a last opened quote record from loaded estimate and job metadata', 
       openedAt: '2026-04-28T12:00:00.000Z',
       estimate: {
         id: 'estimate-1',
+        org_id: 'org-1',
         job_id: 'job-1',
         version_name: 'Kitchen Revision',
         version_state: 'draft',
@@ -32,6 +34,7 @@ test('builds a last opened quote record from loaded estimate and job metadata', 
     }),
     {
       estimate_id: 'estimate-1',
+      org_id: 'org-1',
       job_id: 'job-1',
       customer_id: 'customer-1',
       version_name: 'Kitchen Revision',
@@ -59,6 +62,7 @@ test('round-trips valid last opened quote records and ignores malformed storage'
     openedAt: '2026-04-28T12:00:00.000Z',
     estimate: {
       id: 'estimate-1',
+      org_id: 'org-1',
       job_id: 'job-1',
       version_name: null,
       version_state: null,
@@ -73,4 +77,29 @@ test('round-trips valid last opened quote records and ignores malformed storage'
 
   values.set(lastOpenedQuoteStorageKey, '{')
   assert.equal(readLastOpenedQuote(storage), null)
+
+  values.set(
+    lastOpenedQuoteStorageKey,
+    JSON.stringify({ estimate_id: 'estimate-1', job_id: 'job-1' })
+  )
+  assert.equal(readLastOpenedQuote(storage), null)
+})
+
+test('returns a stored last opened quote only when it matches the active org', () => {
+  const record = buildLastOpenedQuoteRecord({
+    estimate: {
+      id: 'estimate-1',
+      org_id: 'org-1',
+      job_id: 'job-1',
+      version_name: 'Kitchen Revision',
+      version_state: 'draft',
+      updated_at: null,
+    },
+    job: null,
+  })
+
+  assert.notEqual(record, null)
+  assert.deepEqual(resolveLastOpenedQuoteForOrg(record, 'org-1'), record)
+  assert.equal(resolveLastOpenedQuoteForOrg(record, 'org-2'), null)
+  assert.equal(resolveLastOpenedQuoteForOrg(record, null), null)
 })

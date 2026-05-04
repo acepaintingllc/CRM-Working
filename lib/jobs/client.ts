@@ -7,182 +7,46 @@ import {
   type ApiDataEnvelope,
   type ApiMutationEnvelope,
 } from '@/lib/client/api'
-import { mapPaintLogRow, type PaintLogRow } from '@/lib/jobs/paintLog'
 import type {
+  CalendarAddResult,
+  CreateJobPayload,
   JobCloseoutNotesPatchPayload,
   JobCompletionPatchPayload,
   JobEstimateDatePatchPayload,
   JobScheduleDatePatchPayload,
-  JobStatus,
   JobStatusPatchPayload,
-} from '@/lib/jobs/types'
-import type { EstimatePublicTimelineEvent } from '@/lib/customer-estimates/publicTimeline'
+  JobCalendarEventPayload,
+  JobDetail,
+  JobSummary,
+  ListJobSitePhotosResponse,
+  ScheduleRow,
+  UploadJobSitePhotosResponse,
+} from '@/types/jobs/api'
+import type {
+  AcceptedEstimateSnapshotRepairResult,
+  JobActualsDraftPayload,
+  JobActualsRecord,
+  JobReviewPayload,
+  JobReviewReadModel,
+} from '@/types/jobs/feedback'
+import { mapPaintLogRow, type PaintLogRow } from '@/lib/jobs/paintLog'
 
-export type JobSummary = {
-  id: string
-  customer_id: string | null
-  customer_name: string | null
-  customer_address: string | null
-  title: string
-  description: string | null
-  status: JobStatus
-  created_at?: string | null
-  estimate_date: string | null
-  estimate_sent_at: string | null
-  scheduled_date: string | null
-  scheduled_end_date?: string | null
-  scheduled_email_sent_at?: string | null
-  completed_at: string | null
-  completed_email_sent_at?: string | null
-  closeout_notes?: string | null
-  linked_estimate_id?: string | null
+function jobActualsPath(jobId: string, suffix = '') {
+  return `/api/jobs/${encodeURIComponent(jobId)}/actuals${suffix}`
 }
 
-export type JobDetail = {
-  id: string
-  customer_id: string | null
-  customer_name: string | null
-  customer_address: string | null
-  customer_email: string | null
-  customer_phone: string | null
-  title: string
-  description: string | null
-  status: JobStatus
-  estimate_date: string | null
-  estimate_sent_at: string | null
-  scheduled_date: string | null
-  scheduled_end_date: string | null
-  scheduled_email_sent_at?: string | null
-  completed_at: string | null
-  completed_email_sent_at?: string | null
-  created_at?: string | null
-  linked_estimate_id?: string | null
-  closeout_notes?: string | null
-  linked_estimates?: Array<{
-    id: string
-    status: string | null
-    version_name: string | null
-    version_state: string | null
-    version_kind: string | null
-    version_sort_order: number | null
-    updated_at: string | null
-    created_at: string | null
-  }>
-  accepted_quote?: {
-    estimate_id: string
-    accepted_public_version_id: string
-    public_version_number: number
-    public_token: string | null
-    accepted_at: string
-    accepted_by_legal_name: string | null
-    signature_type: string | null
-    user_agent: string | null
-    ip: string | null
-    version_name: string | null
-    final_total: number
-  } | null
-  public_quote_timeline_events?: EstimatePublicTimelineEvent[]
+function jobReviewPath(jobId: string, suffix = '') {
+  return `/api/jobs/${encodeURIComponent(jobId)}/review${suffix}`
 }
 
-export type EstimateDriveFile = {
-  id: string
-  name: string
-  version?: number | null
-  matchMode?: 'exact' | 'normalized' | 'manual' | string
-  webViewLink?: string | null
+function acceptedEstimateSnapshotPath(jobId: string) {
+  return `/api/jobs/${encodeURIComponent(jobId)}/accepted-estimate/snapshot`
 }
 
-export type ScheduleRow = {
-  id: string
-  start_at: string
-  end_at: string
-  notes: string | null
-  calendar_event_id: string | null
-  calendar_added_at: string | null
+function snapshotBody(estimateSnapshotId: string) {
+  return { estimate_snapshot_id: estimateSnapshotId }
 }
 
-export type JobScheduleMeta = {
-  scheduled_email_sent_at?: string | null
-}
-
-export type CreateJobPayload = {
-  customer_id: string
-  title: string
-  description: string | null
-  status: JobStatus
-  estimate_date: string | null
-  scheduled_date: string | null
-}
-
-export type JobCalendarEventPayload = {
-  summary: string
-  location?: string | null
-  description?: string | null
-  startIso: string
-  endIso: string
-}
-
-export type CalendarAddResult = {
-  scheduleId: string
-  eventId?: string | null
-  skipped?: boolean
-}
-
-export type JobSitePhotoCategory = 'before' | 'damage' | 'after'
-
-export type JobSitePhotoRecord = {
-  id: string
-  job_id: string
-  jobId: string
-  category: JobSitePhotoCategory
-  job_drive_folder_id: string | null
-  jobDriveFolderId: string | null
-  drive_file_id: string
-  driveFileId: string
-  drive_folder_id: string | null
-  driveFolderId: string | null
-  url: string | null
-  drive_url: string | null
-  driveUrl: string | null
-  caption: string | null
-  file_name: string | null
-  fileName: string | null
-  original_name: string | null
-  originalName: string | null
-  mime_type: string | null
-  mimeType: string | null
-  size_bytes: number | null
-  sizeBytes: number | null
-  captured_at: string
-  capturedAt: string
-  uploaded_at: string | null
-  uploadedAt: string | null
-  client_local_id: string | null
-  clientLocalId: string | null
-  created_at: string | null
-  createdAt: string | null
-}
-
-export type JobSitePhotoFolder = { id: string | null; webViewLink: string | null }
-
-export type ListJobSitePhotosResponse = {
-  photos: Record<JobSitePhotoCategory, JobSitePhotoRecord[]>
-  jobFolder: JobSitePhotoFolder
-  categoryFolders: Record<JobSitePhotoCategory, JobSitePhotoFolder>
-}
-
-export type UploadJobSitePhotoFailure = {
-  originalName: string
-  clientLocalId: string
-  message: string
-}
-
-export type UploadJobSitePhotosResponse = {
-  photos: JobSitePhotoRecord[]
-  jobFolder: JobSitePhotoFolder
-  categoryFolder: JobSitePhotoFolder
-  failed: UploadJobSitePhotoFailure[]
-}
 export async function fetchJobList() {
   return loadData<JobSummary[]>('/api/jobs', { cache: 'no-store' })
 }
@@ -214,6 +78,69 @@ export async function loadJobRecord(jobId: string) {
     cache: 'no-store',
   })
   return (payload.data ?? null) as JobDetail | null
+}
+
+export async function loadJobActuals(jobId: string, estimateSnapshotId: string) {
+  const search = new URLSearchParams({ estimateSnapshotId })
+  return loadData<JobActualsRecord | null>(`${jobActualsPath(jobId)}?${search}`, {
+    cache: 'no-store',
+  })
+}
+
+export async function saveDraftJobActuals(jobId: string, payload: JobActualsDraftPayload) {
+  return mutateData<JobActualsRecord>(jobActualsPath(jobId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function submitJobActuals(jobId: string, estimateSnapshotId: string) {
+  return requestApi<ApiMutationEnvelope<JobActualsRecord>>(jobActualsPath(jobId, '/submit'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(snapshotBody(estimateSnapshotId)),
+  })
+}
+
+export async function lockJobActuals(jobId: string, estimateSnapshotId: string) {
+  return requestApi<ApiMutationEnvelope<JobActualsRecord>>(jobActualsPath(jobId, '/lock'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(snapshotBody(estimateSnapshotId)),
+  })
+}
+
+export async function loadJobReview(jobId: string, estimateSnapshotId: string) {
+  const search = new URLSearchParams({ estimateSnapshotId })
+  return loadData<JobReviewReadModel>(`${jobReviewPath(jobId)}?${search}`, {
+    cache: 'no-store',
+  })
+}
+
+export async function saveJobReview(jobId: string, payload: JobReviewPayload) {
+  return mutateData<JobReviewReadModel>(jobReviewPath(jobId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function lockJobReview(jobId: string, estimateSnapshotId: string) {
+  return requestApi<ApiMutationEnvelope<JobReviewReadModel>>(jobReviewPath(jobId, '/lock'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(snapshotBody(estimateSnapshotId)),
+  })
+}
+
+export async function repairAcceptedEstimateSnapshot(jobId: string) {
+  return requestApi<ApiMutationEnvelope<AcceptedEstimateSnapshotRepairResult>>(
+    acceptedEstimateSnapshotPath(jobId),
+    {
+      method: 'POST',
+    }
+  )
 }
 
 export async function patchJobStatus(jobId: string, status: JobStatusPatchPayload['status']) {

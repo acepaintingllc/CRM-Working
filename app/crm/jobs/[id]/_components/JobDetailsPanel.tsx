@@ -2,7 +2,7 @@
 
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmDenseMetaList } from '@/app/crm/_components/CrmDenseMetaList'
-import type { EstimateDriveFile, JobDetail } from '@/lib/jobs/client'
+import type { EstimateDriveFile, JobDetail } from '@/types/jobs/api'
 import { Copy, FileCheck2, FileText, MapPin, type LucideIcon } from 'lucide-react'
 
 function iconLabel(Icon: LucideIcon, label: string, size = 16) {

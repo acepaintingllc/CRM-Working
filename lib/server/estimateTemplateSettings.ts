@@ -1,5 +1,11 @@
 import { supabaseAdmin } from '@/lib/server/org'
 import {
+  loadActiveSettingSet,
+  loadEstimateSettingSet,
+  loadSettingSetById,
+  settingValuesToEstimateTemplateSettings,
+} from '@/lib/server/estimate-feedback/settingSets'
+import {
   DEFAULT_DAY_HOURS,
   DEFAULT_ESTIMATE_TEMPLATE_KEY,
   DEFAULT_JOB_MINIMUM_AMOUNT,
@@ -80,7 +86,9 @@ export function normalizeEstimateTemplateSettings(row: Unsafe | null | undefined
   }
 }
 
-export async function loadEstimateTemplateSettings(orgId: string) {
+async function loadCompatibilityEstimateTemplateSettings(orgId: string) {
+  // Compatibility fallback only for orgs without Prompt 1 setting-set backfill.
+  // Estimate-specific callers resolve scalar defaults through setting sets first.
   const res = await supabaseAdmin
     .from('estimate_template_settings')
     .select('*')
@@ -88,4 +96,44 @@ export async function loadEstimateTemplateSettings(orgId: string) {
     .maybeSingle()
   if (res.error) throw new Error(res.error.message)
   return normalizeEstimateTemplateSettings((res.data ?? null) as Unsafe | null)
+}
+
+export async function loadEstimateTemplateSettings(
+  orgIdOrParams:
+    | string
+    | {
+        orgId: string
+        estimateId?: string | null
+        settingSetId?: string | null
+        compatibilityFallback?: boolean
+      }
+) {
+  const params =
+    typeof orgIdOrParams === 'string'
+      ? { orgId: orgIdOrParams, compatibilityFallback: true }
+      : orgIdOrParams
+
+  const snapshot = params.settingSetId
+    ? await loadSettingSetById({
+        orgId: params.orgId,
+        settingSetId: params.settingSetId,
+      })
+    : params.estimateId
+      ? await loadEstimateSettingSet({
+          orgId: params.orgId,
+          estimateId: params.estimateId,
+        })
+      : await loadActiveSettingSet({ orgId: params.orgId })
+
+  if (snapshot) return settingValuesToEstimateTemplateSettings(snapshot)
+
+  if (params.compatibilityFallback !== false) {
+    return loadCompatibilityEstimateTemplateSettings(params.orgId)
+  }
+
+  return normalizeEstimateTemplateSettings(null)
+}
+
+export const _test = {
+  loadCompatibilityEstimateTemplateSettings,
 }

@@ -16,6 +16,10 @@ import type {
   EstimateV2GetResponse as EstimateResponse,
   EstimateV2JobMeta,
 } from '@/types/estimator/v2'
+import {
+  buildEstimateV2EditorApiFailureDiagnostic,
+  formatEstimateV2EditorApiFailureLog,
+} from '../_lib/estimateV2EditorDiagnostics'
 import { applyEstimateV2EditorLoadState } from './estimateV2EditorStoreMutations'
 import { buildEstimateV2EditorLoadState } from './estimateV2EditorLoadOrchestration'
 
@@ -32,6 +36,7 @@ export function useEstimateV2EditorLoader(params: {
       try {
         storeState.setLoading(true)
         storeState.setError(null)
+        storeState.setCatalogsError(null)
         storeState.setValidationIssues([])
 
         const [estimateRes, catalogsRes] = await Promise.all([
@@ -50,12 +55,20 @@ export function useEstimateV2EditorLoader(params: {
         if (!activeRef.current) return
         if (!estimateRes.ok || !estimatePayload) {
           const message = getApiErrorMessage(estimateRes, estimateParsed, 'Failed to load estimate')
-          console.error('Estimate V2 editor load failed', {
+          const diagnostic = buildEstimateV2EditorApiFailureDiagnostic({
             estimateId,
+            endpoint: routeFamily.estimateApiHref(estimateId!),
+            method: 'GET',
             operation: 'loadEstimate',
-            status: estimateRes.status,
+            response: estimateRes,
+            parsed: estimateParsed,
             message,
           })
+          console.error(
+            'Estimate V2 editor load failed',
+            formatEstimateV2EditorApiFailureLog(diagnostic),
+            diagnostic
+          )
           storeState.setError(createEstimateV2Error(message, { retryable: true }))
           storeState.setLoading(false)
           return

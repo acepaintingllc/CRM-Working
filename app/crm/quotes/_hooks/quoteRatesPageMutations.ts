@@ -1,6 +1,6 @@
 'use client'
 
-import { mutateRatesFlags } from '@/lib/quotes/client'
+import { activateRatesFlagsDraft, mutateRatesFlags } from '@/lib/quotes/client'
 import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import type {
   RatesFlagsEditableCategory,
@@ -157,7 +157,67 @@ export async function archiveOrReactivateQuoteRatesMutation(params: {
   }
 }
 
+export async function activateQuoteRatesDraftMutation(params: {
+  resource: QuoteRatesDataResource
+  navigation: QuoteRatesNavigationState
+  selectedRowId: string
+}): Promise<MutationResult> {
+  const { resource, navigation, selectedRowId } = params
+  const draftId = resource.data.draft_setting_set?.id ?? null
+
+  try {
+    await activateRatesFlagsDraft({ setting_set_id: draftId })
+
+    const verification = await resource.attemptRefresh({
+      preserveDataOnError: true,
+      reportError: false,
+    })
+    if (!verification.ok || !verification.data) {
+      const mutationSnapshot = buildQuoteRatesMutationSnapshot(
+        resource.data,
+        navigation,
+        selectedRowId
+      )
+      return {
+        ok: true,
+        notice: `Activated draft, but refresh failed.${verification.error ? ` ${verification.error}` : ''}`,
+        tone: 'warning',
+        selectedId: mutationSnapshot.selectedId,
+        editor: mutationSnapshot.editor,
+        reconciliation: {
+          kind: 'local_fallback',
+          payload: resource.data,
+          verificationError: verification.error,
+        },
+      }
+    }
+
+    const mutationSnapshot = buildQuoteRatesMutationSnapshot(
+      verification.data,
+      navigation,
+      selectedRowId
+    )
+    return {
+      ok: true,
+      notice: 'Activated rates and flags draft.',
+      tone: 'success',
+      selectedId: mutationSnapshot.selectedId,
+      editor: mutationSnapshot.editor,
+      reconciliation: {
+        kind: 'server_verified',
+        payload: verification.data,
+        verificationError: null,
+      },
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to activate draft.',
+    }
+  }
+}
+
 export type QuoteRatesMutationRequestStatus = Extract<
   QuoteRatesActionStatus,
-  'saving' | 'archiving'
+  'saving' | 'archiving' | 'activating'
 >

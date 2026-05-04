@@ -58,7 +58,10 @@ export async function loadEstimateV2Response(params: {
   if (accessFees.error) fail(accessFees.error.message, 500)
   if (other.error) fail(other.error.message, 500)
 
-  const orgDefaults = await loadEstimateTemplateSettings(params.orgId).catch(() => null)
+  const orgDefaults = await loadEstimateTemplateSettings({
+    orgId: params.orgId,
+    estimateId: params.estimateId,
+  }).catch(() => null)
   const calculated = await loadCalculatedEstimateV2Artifacts({
     requestOrigin: params.requestOrigin,
     orgId: params.orgId,

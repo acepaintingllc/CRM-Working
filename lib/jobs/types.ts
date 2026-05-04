@@ -1,3 +1,7 @@
+import type { JobActualsStatus } from '../../types/jobs/feedback.ts'
+import type { JobStatus } from '../../types/jobs/status.ts'
+export type { JobStatus } from '../../types/jobs/status.ts'
+
 export const JOB_STATUSES = [
   'estimate_scheduled',
   'estimate_sent',
@@ -5,9 +9,7 @@ export const JOB_STATUSES = [
   'scheduled',
   'completed',
   'lost',
-] as const
-
-export type JobStatus = (typeof JOB_STATUSES)[number]
+] as const satisfies readonly JobStatus[]
 
 export const STAGE_EMAIL_STAGES = [
   'estimate_scheduled',
@@ -50,6 +52,8 @@ export type JobWorkflowActionId =
   | 'mark_lost'
   | 'open_closeout'
   | 'open_quote'
+  | 'open_job_actuals'
+  | 'open_estimate_review'
 
 type JobWorkflowActions = Record<JobWorkflowSurface, JobWorkflowActionId[]>
 
@@ -64,11 +68,16 @@ export type JobWorkflowResolvedActionKind =
   | 'patch_status'
   | 'patch_date'
   | 'open_closeout'
+  | 'message'
 
 export type JobWorkflowSubject = {
   id: string
   status: JobStatus
   linked_estimate_id?: string | null
+  accepted_quote?: {
+    estimate_snapshot_id?: string | null
+  } | null
+  job_actuals_status?: JobActualsStatus | string | null
   scheduled_date?: string | null
   scheduled_end_date?: string | null
   scheduled_email_sent_at?: string | null
@@ -84,6 +93,7 @@ type JobWorkflowActionDescriptor = {
   dateField?: 'estimate_sent_at' | 'completed_at'
   getLabel: (job: JobWorkflowSubject, surface: JobWorkflowSurface) => string
   getHref?: (job: JobWorkflowSubject) => string
+  getDisabledReason?: (job: JobWorkflowSubject, surface: JobWorkflowSurface) => string | null
   confirmMessage?: string
   isVisible?: (job: JobWorkflowSubject, surface: JobWorkflowSurface) => boolean
 }
@@ -94,6 +104,7 @@ export type JobWorkflowResolvedAction = {
   tone: 'default' | 'accent' | 'danger'
   label: string
   href?: string
+  disabledReason?: string
   stage?: StageEmailStage
   status?: JobStatus
   dateField?: 'estimate_sent_at' | 'completed_at'
@@ -180,7 +191,7 @@ export const JOB_WORKFLOW: Record<JobStatus, JobWorkflowStatusConfig> = {
     columnTitle: 'Completed',
     actions: {
       board: ['open_closeout'],
-      detail: ['open_quote', 'open_closeout'],
+      detail: ['open_quote', 'open_job_actuals', 'open_estimate_review', 'open_closeout'],
     },
   },
   lost: {
@@ -276,6 +287,34 @@ const JOB_WORKFLOW_ACTION_DESCRIPTORS: Record<JobWorkflowActionId, JobWorkflowAc
         : `/crm/quotes/create?job=${job.id}`,
     getLabel: () => 'Open quote',
   },
+  open_job_actuals: {
+    kind: 'navigate',
+    tone: 'accent',
+    getHref: (job) => `/crm/jobs/${job.id}/actuals`,
+    getLabel: () => 'Job actuals',
+    getDisabledReason: (job) => {
+      if (!job.accepted_quote) return 'Accept a quote before entering job actuals.'
+      if (!job.accepted_quote.estimate_snapshot_id) {
+        return 'Accepted quote is missing an estimate snapshot for actuals.'
+      }
+      return null
+    },
+  },
+  open_estimate_review: {
+    kind: 'navigate',
+    getHref: (job) => `/crm/jobs/${job.id}/review`,
+    getLabel: () => 'Estimate review',
+    getDisabledReason: (job) => {
+      if (!job.accepted_quote) return 'Accept a quote before reviewing the estimate.'
+      if (!job.accepted_quote.estimate_snapshot_id) {
+        return 'Accepted quote is missing an estimate snapshot for review.'
+      }
+      if (job.job_actuals_status !== 'submitted' && job.job_actuals_status !== 'locked') {
+        return 'Submit job actuals before estimate review.'
+      }
+      return null
+    },
+  },
 }
 
 export const JOB_ALLOWED_STATUS_TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
@@ -328,28 +367,13 @@ export const JOB_EMAIL_STAGE_RULES: Record<StageEmailStage, JobEmailStageRule> =
   },
 }
 
-export type JobStatusPatchPayload = {
-  status: JobStatus
-}
-
-export type JobEstimateDatePatchPayload = {
-  estimate_date: string
-  status?: Extract<JobStatus, 'estimate_scheduled'>
-}
-
-export type JobCompletionPatchPayload = {
-  completed_at: string
-}
-
-export type JobCloseoutNotesPatchPayload = {
-  closeout_notes: string | null
-}
-
-export type JobScheduleDatePatchPayload = {
-  scheduled_date: string | null
-  scheduled_end_date?: string | null
-  status?: Extract<JobStatus, 'scheduled'>
-}
+export type {
+  JobCloseoutNotesPatchPayload,
+  JobCompletionPatchPayload,
+  JobEstimateDatePatchPayload,
+  JobScheduleDatePatchPayload,
+  JobStatusPatchPayload,
+} from '../../types/jobs/api.ts'
 
 export function isJobStatus(value: string | null | undefined): value is JobStatus {
   return JOB_STATUSES.includes(value as JobStatus)
@@ -424,10 +448,11 @@ export function getJobWorkflowActions(
       }
       return {
         id,
-        kind: descriptor.kind,
+        kind: descriptor.getDisabledReason?.(job, surface) ? 'message' : descriptor.kind,
         tone: descriptor.getTone?.(job, surface) ?? descriptor.tone ?? 'default',
         label: descriptor.getLabel(job, surface),
         href: descriptor.getHref?.(job),
+        disabledReason: descriptor.getDisabledReason?.(job, surface) ?? undefined,
         stage: descriptor.stage,
         status: descriptor.status,
         dateField: descriptor.dateField,

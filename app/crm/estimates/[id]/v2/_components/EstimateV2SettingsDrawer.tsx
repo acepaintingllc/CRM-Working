@@ -18,6 +18,10 @@ export function EstimateV2SettingsDrawer({
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'rgba(0,0,0,0.45)' }} onClick={() => jobSettingsVm.setSettingsOpen(false)} />
       <div
+        id="estimate-v2-settings-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="estimate-v2-settings-drawer-title"
         style={{
           position: 'fixed',
           top: 0,
@@ -35,9 +39,10 @@ export function EstimateV2SettingsDrawer({
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 800, fontSize: 'calc(14px + 4pt)', letterSpacing: '-0.01em' }}>Estimate Settings</span>
+          <span id="estimate-v2-settings-drawer-title" style={{ fontWeight: 800, fontSize: 'calc(14px + 4pt)', letterSpacing: '-0.01em' }}>Estimate Settings</span>
           <button
             type="button"
+            aria-label="Close estimate settings"
             onClick={() => jobSettingsVm.setSettingsOpen(false)}
             style={{ background: 'transparent', border: 'none', color: 'var(--v2-ink-3)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}
           >

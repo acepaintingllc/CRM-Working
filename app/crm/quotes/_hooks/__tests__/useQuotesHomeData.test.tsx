@@ -5,6 +5,7 @@ import type {
   QuoteHomeBootstrapReadModel,
   QuoteHomeJobsPageReadModel,
 } from '@/lib/quotes/quoteHomeTypes'
+import { lastOpenedQuoteStorageKey } from '@/lib/quotes/lastOpenedQuote'
 import {
   useQuotesHomeBootstrap,
   useQuotesHomeData,
@@ -94,7 +95,22 @@ const seededPayload = {
     next_cursor: null,
     items: [],
   },
-  latest_version: null,
+  latest_version: {
+    estimate_id: 'estimate-home-1',
+    org_id: 'org-1',
+    job_id: 'job-1',
+    customer_id: 'customer-1',
+    version_name: 'Estimate Version 1',
+    version_state: 'draft',
+    version_kind: 'standard',
+    version_sort_order: 1,
+    job_title: 'Kitchen',
+    customer_name: 'Alice',
+    final_total: 500,
+    updated_at: '2026-04-21T10:00:00.000Z',
+    created_at: '2026-04-20T10:00:00.000Z',
+    is_sent_estimate: false,
+  },
 }
 
 const firstPayload = {
@@ -151,6 +167,7 @@ describe('useQuotesHomeData', () => {
   beforeEach(() => {
     loadQuoteHomeBootstrap.mockReset()
     loadQuoteHomeJobs.mockReset()
+    window.localStorage.clear()
   })
 
   it('uses seeded bootstrap data without immediately refetching', async () => {
@@ -164,6 +181,38 @@ describe('useQuotesHomeData', () => {
     expect(result.current.jobs.map((job) => job.id)).toEqual(['job-1', 'job-2'])
     expect(result.current.initialSelectedJobId).toBe('job-1')
     expect(result.current.initialSelectedJobVersions).toEqual(seededPayload.selected_job_versions)
+  })
+
+  it('ignores a stored last-opened quote from a different org', async () => {
+    window.localStorage.setItem(
+      lastOpenedQuoteStorageKey,
+      JSON.stringify({
+        estimate_id: 'estimate-other-org',
+        org_id: 'org-2',
+        job_id: 'job-other',
+        customer_id: 'customer-other',
+        version_name: 'Other Org Version',
+        version_state: 'draft',
+        version_kind: 'standard',
+        version_sort_order: 1,
+        job_title: 'Other Job',
+        customer_name: 'Other Customer',
+        final_total: null,
+        updated_at: null,
+        created_at: null,
+        is_sent_estimate: false,
+        opened_at: '2026-04-28T12:00:00.000Z',
+      })
+    )
+
+    const { result } = renderHook(() => useQuotesHomeData(seededPayload))
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await waitFor(() =>
+      expect(result.current.latestVersion?.estimate_id).toBe('estimate-home-1')
+    )
+
+    expect(result.current.latestVersion?.job_title).toBe('Kitchen')
   })
 
   it('loads initial bootstrap data when no initial data is provided', async () => {

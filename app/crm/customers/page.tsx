@@ -180,8 +180,9 @@ function CustomerDetailModal({ customerId, onClose, onDeleted }: CustomerDetailM
     error,
     deleteCustomer,
   } = useCustomerDetail(customerId)
+  const timelineCustomerId = customer?.id
   const { timelineEvents, timelineLoading, timelineError, noteBody, setNoteBody, noteSaving, saveNote } =
-    useCustomerTimeline(customerId)
+    useCustomerTimeline(timelineCustomerId)
   const detailActions = useEntityDetailActions({
     deleteMessage: 'Delete this customer? This cannot be undone.',
     deleteAction: deleteCustomer,
@@ -215,15 +216,17 @@ function CustomerDetailModal({ customerId, onClose, onDeleted }: CustomerDetailM
           }}
         />
 
-        <CustomerTimelinePanel
-          timelineEvents={timelineEvents}
-          timelineLoading={timelineLoading}
-          timelineError={timelineError}
-          noteBody={noteBody}
-          noteSaving={noteSaving}
-          setNoteBody={setNoteBody}
-          onAddNote={() => void saveNote()}
-        />
+        {customer ? (
+          <CustomerTimelinePanel
+            timelineEvents={timelineEvents}
+            timelineLoading={timelineLoading}
+            timelineError={timelineError}
+            noteBody={noteBody}
+            noteSaving={noteSaving}
+            setNoteBody={setNoteBody}
+            onAddNote={() => void saveNote()}
+          />
+        ) : null}
       </div>
     </CrmModalShell>
   )

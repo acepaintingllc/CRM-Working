@@ -19,6 +19,8 @@ export function setSupabaseAdminProvider(provider: (() => Promise<unknown>) | nu
 
 export async function fetchTemplateState(orgId: string) {
   const supabaseAdmin = await getSupabaseAdmin()
+  // Active-admin compatibility surface for the current Rates/Flags editor.
+  // Estimate-specific catalog reads resolve through estimator setting sets.
   const templateRes = await supabaseAdmin
     .from('estimator_template_constants')
     .select('id, org_id, version, seeded_at')
@@ -51,6 +53,7 @@ export async function ensureTemplateState(orgId: string) {
   if (state.template) return state
 
   const supabaseAdmin = await getSupabaseAdmin()
+  // Active-admin compatibility mirror initialization.
   const createdTemplate = await supabaseAdmin
     .from('estimator_template_constants')
     .insert({
@@ -77,6 +80,7 @@ export async function ensureTemplateState(orgId: string) {
 export async function bumpTemplateVersion(orgId: string, template: TemplateConstantsRecord) {
   const supabaseAdmin = await getSupabaseAdmin()
   const nextVersion = Math.max(1, Number(template.version || 0) + 1)
+  // Active-admin compatibility mirror version bump.
   const update = await supabaseAdmin
     .from('estimator_template_constants')
     .update({ version: nextVersion })
@@ -92,6 +96,7 @@ export async function getTemplateRowById(params: {
   rowId: string
 }) {
   const supabaseAdmin = await getSupabaseAdmin()
+  // Active-admin compatibility row lookup for current Rates/Flags mutations.
   const rowRes = await supabaseAdmin
     .from('estimator_template_constant_rows')
     .select(

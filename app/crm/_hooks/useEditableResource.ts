@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 type SaveResult<TData> = {
   data: TData
   notice?: string
+  error?: string | null
 }
 
 type UseEditableResourceParams<TData> = {
@@ -13,6 +14,17 @@ type UseEditableResourceParams<TData> = {
   save: (data: TData) => Promise<SaveResult<TData>>
   getErrorMessage?: (error: unknown) => string
   isDirty?: (current: TData, snapshot: TData) => boolean
+  resetOnLoadError?: boolean
+}
+
+type SaveActionOptions = {
+  trackSaving?: boolean
+}
+
+type SaveActionResult<TData> = {
+  ok: boolean
+  data: TData | null
+  error: string | null
 }
 
 function defaultErrorMessage(error: unknown) {
@@ -35,6 +47,7 @@ export function useEditableResource<TData>({
   save,
   getErrorMessage = defaultErrorMessage,
   isDirty = defaultIsDirty,
+  resetOnLoadError = false,
 }: UseEditableResourceParams<TData>) {
   const [data, setDataState] = useState(initialData)
   const [snapshot, setSnapshot] = useState(initialData)
@@ -47,6 +60,8 @@ export function useEditableResource<TData>({
   const loadRef = useRef(load)
   const saveRef = useRef(save)
   const getErrorMessageRef = useRef(getErrorMessage)
+  const initialDataRef = useRef(initialData)
+  const resetOnLoadErrorRef = useRef(resetOnLoadError)
 
   useEffect(() => {
     loadRef.current = load
@@ -59,6 +74,14 @@ export function useEditableResource<TData>({
   useEffect(() => {
     getErrorMessageRef.current = getErrorMessage
   }, [getErrorMessage])
+
+  useEffect(() => {
+    initialDataRef.current = initialData
+  }, [initialData])
+
+  useEffect(() => {
+    resetOnLoadErrorRef.current = resetOnLoadError
+  }, [resetOnLoadError])
 
   const setData = useCallback((next: TData | ((current: TData) => TData)) => {
     setNotice(null)
@@ -73,15 +96,26 @@ export function useEditableResource<TData>({
 
     try {
       const nextData = await loadRef.current()
-      if (requestIdRef.current !== requestId) return
+      if (requestIdRef.current !== requestId) {
+        return { ok: false, error: null, data: null as TData | null }
+      }
       setDataState(nextData)
       setSnapshot(nextData)
       setError(null)
       setNotice(null)
       setHasLoaded(true)
+      return { ok: true, error: null, data: nextData }
     } catch (loadError) {
-      if (requestIdRef.current !== requestId) return
-      setError(getErrorMessageRef.current(loadError))
+      if (requestIdRef.current !== requestId) {
+        return { ok: false, error: null, data: null as TData | null }
+      }
+      const nextError = getErrorMessageRef.current(loadError)
+      if (resetOnLoadErrorRef.current) {
+        setDataState(initialDataRef.current)
+        setSnapshot(initialDataRef.current)
+      }
+      setError(nextError)
+      return { ok: false, error: nextError, data: null as TData | null }
     } finally {
       if (requestIdRef.current === requestId) {
         setLoading(false)
@@ -96,23 +130,49 @@ export function useEditableResource<TData>({
     }
   }, [reload])
 
-  const saveChanges = useCallback(async () => {
-    if (saving) return
+  const runSaveAction = useCallback(
+    async (
+      action?: (current: TData) => Promise<SaveResult<TData>>,
+      options?: SaveActionOptions
+    ): Promise<SaveActionResult<TData>> => {
+      const trackSaving = options?.trackSaving ?? true
+      if (trackSaving && saving) {
+        return { ok: false, data: null, error: null }
+      }
 
-    setSaving(true)
-    try {
-      const result = await saveRef.current(data)
-      setDataState(result.data)
-      setSnapshot(result.data)
+      if (trackSaving) {
+        setSaving(true)
+      }
       setError(null)
-      setNotice(result.notice ?? 'Saved.')
-      setHasLoaded(true)
-    } catch (saveError) {
-      setError(getErrorMessageRef.current(saveError))
-    } finally {
-      setSaving(false)
-    }
-  }, [data, saving])
+      setNotice(null)
+      try {
+        const result = await (action ?? saveRef.current)(data)
+        const nextError = result.error ?? null
+        setDataState(result.data)
+        setSnapshot(result.data)
+        setError(nextError)
+        setNotice(result.notice ?? 'Saved.')
+        setHasLoaded(true)
+        return { ok: !nextError, data: result.data, error: nextError }
+      } catch (saveError) {
+        const nextError = getErrorMessageRef.current(saveError)
+        setError(nextError)
+        return { ok: false, data: null, error: nextError }
+      } finally {
+        if (trackSaving) {
+          setSaving(false)
+        }
+      }
+    },
+    [data, saving]
+  )
+
+  const saveChanges = useCallback(() => runSaveAction(), [runSaveAction])
+
+  const clearFeedback = useCallback(() => {
+    setError(null)
+    setNotice(null)
+  }, [])
 
   const dirty = useMemo(() => isDirty(data, snapshot), [data, isDirty, snapshot])
 
@@ -126,6 +186,10 @@ export function useEditableResource<TData>({
     dirty,
     hasLoaded,
     reload,
+    runSaveAction,
     saveChanges,
+    setError,
+    setNotice,
+    clearFeedback,
   }
 }

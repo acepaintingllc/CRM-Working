@@ -30,6 +30,7 @@ export type EstimateCustomerSendEstimateRow = {
   version_state: string | null
   version_kind: string | null
   version_sort_order: number | null
+  setting_set_id_used?: string | null
   created_at: string | null
   updated_at: string | null
 }

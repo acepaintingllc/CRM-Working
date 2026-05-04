@@ -22,10 +22,8 @@ import {
   addSchedulesToCalendar,
   deleteScheduleRow,
   fetchJobSchedules,
-  type JobDetail,
-  type JobScheduleMeta,
-  type ScheduleRow,
 } from '@/lib/jobs/client'
+import type { JobDetail, JobScheduleMeta, ScheduleRow } from '@/types/jobs/api'
 import { fetchJobDetail } from '@/lib/jobs/actions'
 import {
   addLocalDateTimeHours,

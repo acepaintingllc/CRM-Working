@@ -6,6 +6,10 @@ import {
   saveQuoteDefaults,
   type QuoteDefaultsStoreDeps,
 } from '../settings/quoteDefaultsStore.ts'
+import type {
+  EstimatorSettingSetSnapshot,
+  EstimatorSettingValueRow,
+} from '../estimate-feedback/settingSets.ts'
 
 type ProductRow = {
   id: string
@@ -37,11 +41,29 @@ test('saveQuoteDefaults saves active product IDs with matching families', async 
       walls_paint_id: 'paint-1',
       walls_primer_id: 'primer-1',
     },
+    'user-1',
     fake.deps
   )
 
   assert.equal(saved.walls_paint_id, 'paint-1')
   assert.equal(fake.upserts.length, 1)
+  assert.equal(fake.settingSetOps.clonedWith?.userId, 'user-1')
+  assert.equal(fake.settingSetOps.activatedWith?.source, 'quote_defaults_admin')
+  assert.deepEqual(
+    fake.settingSetOps.updatedValues.map((value) => [
+      value.scalar_key,
+      value.value_json,
+    ]),
+    [
+      ['walls_paint_id', { value: 'paint-1' }],
+      ['walls_primer_id', { value: 'primer-1' }],
+      ['ceiling_paint_id', { value: null }],
+      ['ceiling_primer_id', { value: null }],
+      ['trim_paint_id', { value: null }],
+      ['trim_primer_id', { value: null }],
+      ['override_labor_rate', { value: 65 }],
+    ]
+  )
 })
 
 test('saveQuoteDefaults rejects inactive, archived, missing, and wrong-family product IDs', async () => {
@@ -119,6 +141,26 @@ test('saveQuoteDefaults rejects invalid labor rates before preserving product de
 
 function createFakeSettingsClient(products: ProductRow[]) {
   const upserts: Record<string, unknown>[] = []
+  const settingSetOps = {
+    clonedWith: null as { orgId: string; userId: string; notes?: string } | null,
+    updatedValues: [] as Array<{
+      category_key: string
+      row_id?: string | null
+      scalar_key?: string | null
+      display_name?: string
+      active?: boolean
+      sort_order?: number
+      value_json: Record<string, unknown>
+    }>,
+    activatedWith: null as {
+      orgId: string
+      settingSetId: string
+      userId: string
+      reason?: string
+      source?: string
+    } | null,
+  }
+  const draft = createSettingSetSnapshot('set-draft', [])
 
   const deps: Partial<QuoteDefaultsStoreDeps> = {
     client: {
@@ -126,9 +168,74 @@ function createFakeSettingsClient(products: ProductRow[]) {
         return createQuery(relation, products, upserts)
       },
     },
+    loadActiveSettingSet: async () => createSettingSetSnapshot('set-active', []),
+    cloneActiveSettingSetAsDraft: async (params) => {
+      settingSetOps.clonedWith = params
+      return draft
+    },
+    updateDraftSettingValues: async (params) => {
+      settingSetOps.updatedValues = params.values
+      return createSettingSetSnapshot(
+        params.settingSetId,
+        params.values.map((value, index) => ({
+          id: `value-${index}`,
+          org_id: params.orgId,
+          setting_set_id: params.settingSetId,
+          category_key: value.category_key,
+          row_id: value.row_id ?? null,
+          scalar_key: value.scalar_key ?? null,
+          display_name: value.display_name ?? String(value.scalar_key ?? value.row_id),
+          active: value.active ?? true,
+          sort_order: value.sort_order ?? index,
+          value_json: value.value_json,
+        }))
+      )
+    },
+    activateDraftSettingSet: async (params) => {
+      settingSetOps.activatedWith = params
+      return createSettingSetSnapshot(
+        params.settingSetId,
+        settingSetOps.updatedValues.map((value, index) => ({
+          id: `activated-value-${index}`,
+          org_id: params.orgId,
+          setting_set_id: params.settingSetId,
+          category_key: value.category_key,
+          row_id: value.row_id ?? null,
+          scalar_key: value.scalar_key ?? null,
+          display_name: value.display_name ?? String(value.scalar_key ?? value.row_id),
+          active: value.active ?? true,
+          sort_order: value.sort_order ?? index,
+          value_json: value.value_json,
+        }))
+      )
+    },
   }
 
-  return { deps, upserts }
+  return { deps, upserts, settingSetOps }
+}
+
+function createSettingSetSnapshot(
+  settingSetId: string,
+  values: EstimatorSettingValueRow[]
+): EstimatorSettingSetSnapshot {
+  return {
+    set: {
+      id: settingSetId,
+      org_id: 'org-1',
+      version_number: settingSetId === 'set-active' ? 1 : 2,
+      status: settingSetId === 'set-active' ? 'active' : 'draft',
+      source_set_id: settingSetId === 'set-active' ? null : 'set-active',
+      created_by: null,
+      activated_by: null,
+      retired_by: null,
+      activated_at: null,
+      retired_at: null,
+      notes: '',
+      created_at: '2026-05-03T00:00:00.000Z',
+      updated_at: '2026-05-03T00:00:00.000Z',
+    },
+    values,
+  }
 }
 
 function createQuery(

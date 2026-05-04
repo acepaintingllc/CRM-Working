@@ -8,7 +8,13 @@ import {
   okResult,
   type ServiceResult,
 } from '../server/serviceResult.ts'
-import type { EstimatePublicTimelineEvent } from '../customer-estimates/publicTimeline.ts'
+import type {
+  JobAcceptedQuoteDetail,
+  JobDetail,
+  JobLinkedEstimateSummary,
+  JobSummary,
+} from '../../types/jobs/api.ts'
+import type { JobActualsStatus } from '../../types/jobs/feedback.ts'
 
 type JobRow = {
   id?: string | null
@@ -39,62 +45,19 @@ type CustomerRow = {
   phone?: string | null
 }
 
-type LinkedEstimateRow = {
-  id: string
-  status: string | null
-  version_name: string | null
-  version_state: string | null
-  version_kind: string | null
-  version_sort_order: number | null
-  updated_at: string | null
-  created_at: string | null
-}
+type LinkedEstimateRow = JobLinkedEstimateSummary
 
 type JobScheduleRange = {
   scheduled_date: string | null
   scheduled_end_date: string | null
 }
 
-export type JobAcceptedQuoteRecord = {
-  estimate_id: string
-  accepted_public_version_id: string
-  public_version_number: number
-  public_token: string | null
-  accepted_at: string
-  accepted_by_legal_name: string | null
-  signature_type: string | null
-  user_agent: string | null
-  ip: string | null
-  version_name: string | null
-  final_total: number
-}
-
-export type JobSummaryRecord = {
-  id: string
-  customer_id: string | null
-  customer_name: string | null
-  customer_address: string | null
-  title: string
-  description: string | null
-  status: JobStatus
-  created_at?: string | null
-  estimate_date: string | null
-  estimate_sent_at: string | null
-  scheduled_date: string | null
-  scheduled_end_date?: string | null
-  scheduled_email_sent_at?: string | null
-  completed_at: string | null
-  completed_email_sent_at?: string | null
-  closeout_notes?: string | null
-  linked_estimate_id?: string | null
-}
-
-export type JobDetailRecord = JobSummaryRecord & {
-  customer_email: string | null
-  customer_phone: string | null
-  linked_estimates?: LinkedEstimateRow[]
-  accepted_quote?: JobAcceptedQuoteRecord | null
-  public_quote_timeline_events?: EstimatePublicTimelineEvent[]
+export type JobAcceptedQuoteRecord = JobAcceptedQuoteDetail
+type JobSummaryRecord = JobSummary
+type JobDetailRecord = JobDetail
+export type {
+  JobDetailRecord,
+  JobSummaryRecord,
 }
 
 export type CreateJobInput = {
@@ -179,7 +142,8 @@ export function buildJobDetailRecord(params: {
   customer?: CustomerRow | null
   linkedEstimates?: LinkedEstimateRow[]
   acceptedQuote?: JobAcceptedQuoteRecord | null
-  publicQuoteTimelineEvents?: EstimatePublicTimelineEvent[]
+  jobActualsStatus?: JobActualsStatus | null
+  publicQuoteTimelineEvents?: JobDetail['public_quote_timeline_events']
   withOptionalJobColumns?: (
     row: JobRow,
     optionalColumns: string[]
@@ -196,9 +160,11 @@ export function buildJobDetailRecord(params: {
     ...summary,
     customer_email: params.customer?.email ?? null,
     customer_phone: params.customer?.phone ?? null,
+    scheduled_end_date: summary.scheduled_end_date ?? null,
     linked_estimates: params.linkedEstimates ?? [],
     linked_estimate_id: summary.linked_estimate_id ?? params.linkedEstimates?.[0]?.id ?? null,
     accepted_quote: params.acceptedQuote ?? null,
+    job_actuals_status: params.jobActualsStatus ?? null,
     public_quote_timeline_events: params.publicQuoteTimelineEvents ?? [],
   }
 }

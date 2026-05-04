@@ -7,12 +7,14 @@ import {
   fetchJobList,
   getJobPhotosFolderUrl,
   uploadJobSitePhotos,
-  type JobSitePhotoCategory,
-  type JobSitePhotoRecord,
-  type JobSummary,
-  type UploadJobSitePhotoFailure,
-  type UploadJobSitePhotosResponse,
 } from '@/lib/jobs/client'
+import type {
+  JobSitePhotoCategory,
+  JobSitePhotoRecord,
+  JobSummary,
+  UploadJobSitePhotoFailure,
+  UploadJobSitePhotosResponse,
+} from '@/types/jobs/api'
 
 const DEFAULT_CATEGORY: JobSitePhotoCategory = 'before'
 const MAX_FILES = 20

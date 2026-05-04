@@ -35,6 +35,7 @@ export type UnsafeRecord = Record<string, unknown>
 
 export type EstimateV2EstimateMeta = {
   id: string
+  org_id?: string | null
   job_id: string
   version_name: string | null
   version_state: string | null

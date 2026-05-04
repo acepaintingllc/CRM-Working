@@ -3,9 +3,8 @@ import {
   quoteHomeMaxPageLimit,
   type QuoteHomeCursorKey,
 } from './quoteHomeTypes'
+import { isUuid } from '../validation/uuid.ts'
 
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const quoteHomeCursorSeparator = '::'
 const quoteHomeNullCursorTimestamp = 'null'
 
@@ -48,7 +47,7 @@ export function decodeQuoteHomeCursor(cursor: string | null | undefined):
   }
 
   const [timestamp, id] = parts
-  if (!timestamp || !uuid.test(id)) {
+  if (!timestamp || !isUuid(id)) {
     return { ok: false, message: 'Invalid cursor.' }
   }
 

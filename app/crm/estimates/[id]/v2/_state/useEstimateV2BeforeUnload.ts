@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 
-export function useEstimateV2BeforeUnload(params: { loading: boolean; dirty: boolean }) {
-  const { loading, dirty } = params
-  const stateRef = useRef({ loading, dirty })
+export function useEstimateV2BeforeUnload(params: { loading: boolean; shouldGuard: boolean }) {
+  const { loading, shouldGuard } = params
+  const stateRef = useRef({ loading, shouldGuard })
 
   useEffect(() => {
-    stateRef.current = { loading, dirty }
-  }, [dirty, loading])
+    stateRef.current = { loading, shouldGuard }
+  }, [loading, shouldGuard])
 
   const handleBeforeUnload = useCallback((event: BeforeUnloadEvent) => {
-    if (stateRef.current.loading || !stateRef.current.dirty) return
+    if (stateRef.current.loading || !stateRef.current.shouldGuard) return
     event.preventDefault()
     event.returnValue = ''
   }, [])

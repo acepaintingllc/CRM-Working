@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { JobDetail } from '@/lib/jobs/client'
+import type { JobDetail } from '@/types/jobs/api'
 import JobTimeline from '../JobTimeline'
 
 function createJob(overrides: Partial<JobDetail> = {}): JobDetail {

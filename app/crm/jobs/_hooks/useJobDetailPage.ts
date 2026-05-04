@@ -17,9 +17,8 @@ import {
   listPaintLogs,
   patchJobDateFields,
   patchJobStatus,
-  type EstimateDriveFile,
-  type JobDetail,
 } from '@/lib/jobs/client'
+import type { EstimateDriveFile, JobDetail } from '@/types/jobs/api'
 import {
   isStageEmailStage,
   type JobStatus,

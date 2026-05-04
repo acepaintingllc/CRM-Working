@@ -101,8 +101,70 @@ export function buildAcceptedEstimateSource(params: {
     ip: acceptance?.ip ?? null,
     version_name: asText(params.estimate.version_name) || null,
     version_state: asText(params.estimate.version_state) || null,
+    estimate_snapshot_id: null,
+    estimated_labor_hours: 0,
+    estimated_paint_gallons: 0,
+    estimated_supplies_cost: 0,
+    estimated_other_cost: 0,
     final_total: asNumber(params.rollup?.final_total),
     snapshot_json: isRecord(snapshotJson) ? snapshotJson : {},
+  }
+}
+
+type RepairSnapshotDeps = {
+  db?: DbReadChain
+  ensureSnapshot?: typeof ensureAcceptedEstimateOperationalSnapshot
+}
+
+export function buildAcceptedEstimateSourceFromSnapshot(params: {
+  estimate: Unsafe
+  publicVersion?: Unsafe | null
+  snapshot: Unsafe
+}): AcceptedEstimateSource {
+  const sourcePayload = params.snapshot.source_payload_json
+  const sourcePublicVersion =
+    isRecord(sourcePayload) && isRecord(sourcePayload.public_version)
+      ? sourcePayload.public_version
+      : null
+  const publicVersion = params.publicVersion ?? sourcePublicVersion
+  const sourceSnapshot =
+    isRecord(sourcePayload) && isRecord(sourcePayload.customer_send_snapshot_json)
+      ? sourcePayload.customer_send_snapshot_json
+      : publicVersion?.snapshot_json
+  const acceptance = normalizeEstimatePublicAcceptanceRecord(publicVersion?.acceptance_json)
+
+  return {
+    org_id: asText(params.snapshot.org_id) || asText(params.estimate.org_id),
+    job_id: asText(params.snapshot.job_id) || asText(params.estimate.job_id),
+    estimate_id: asText(params.snapshot.estimate_id) || asText(params.estimate.id),
+    customer_id:
+      asText(params.snapshot.customer_id) || asText(params.estimate.customer_id) || null,
+    accepted_public_version_id:
+      asText(params.snapshot.accepted_public_version_id) ||
+      asText(params.estimate.accepted_public_version_id),
+    public_version_number: asNumber(publicVersion?.version_number),
+    public_token: asText(publicVersion?.public_token) || null,
+    accepted_at:
+      asText(publicVersion?.accepted_at) || asText(params.estimate.accepted_at),
+    accepted_by_legal_name: acceptance?.legal_name ?? null,
+    signature_type: acceptance?.signature_type ?? null,
+    user_agent: acceptance?.user_agent ?? null,
+    ip: acceptance?.ip ?? null,
+    version_name:
+      asText(params.snapshot.estimate_version_name) ||
+      asText(params.estimate.version_name) ||
+      null,
+    version_state:
+      asText(params.snapshot.estimate_version_state) ||
+      asText(params.estimate.version_state) ||
+      null,
+    estimate_snapshot_id: asText(params.snapshot.id) || null,
+    estimated_labor_hours: asNumber(params.snapshot.estimated_labor_hours),
+    estimated_paint_gallons: asNumber(params.snapshot.estimated_paint_gallons),
+    estimated_supplies_cost: asNumber(params.snapshot.estimated_supplies_cost),
+    estimated_other_cost: asNumber(params.snapshot.estimated_other_cost),
+    final_total: asNumber(params.snapshot.estimated_total),
+    snapshot_json: isRecord(sourceSnapshot) ? sourceSnapshot : {},
   }
 }
 
@@ -173,6 +235,64 @@ export async function applyAcceptedEstimateSideEffects(
   return okResult({ ok: true })
 }
 
+export async function ensureAcceptedEstimateOperationalSnapshot(input: {
+  requestOrigin: string
+  orgId: string
+  userId: string
+  estimateId: string
+  publicVersionId: string
+}) {
+  const { ensureEstimateSnapshotForAcceptedEstimate } = await import(
+    '../estimate-feedback/snapshots.ts'
+  )
+  return ensureEstimateSnapshotForAcceptedEstimate({
+    requestOrigin: input.requestOrigin,
+    orgId: input.orgId,
+    userId: input.userId,
+    estimateId: input.estimateId,
+    acceptedPublicVersionId: input.publicVersionId,
+    reason: 'accepted',
+  })
+}
+
+export async function repairAcceptedEstimateSnapshotForJob(
+  input: {
+    requestOrigin: string
+    orgId: string
+    userId: string
+    jobId: string
+  },
+  deps?: RepairSnapshotDeps
+): Promise<ServiceResult<AcceptedEstimateSource>> {
+  const db =
+    deps?.db ??
+    ((await import('../org.ts')).supabaseAdmin as unknown as DbReadChain)
+  const source = await loadAcceptedEstimateSource(db, input.orgId, input.jobId)
+  if (!source.ok) return source
+  if (source.data.estimate_snapshot_id) return source
+
+  const ensureSnapshot = deps?.ensureSnapshot ?? ensureAcceptedEstimateOperationalSnapshot
+  const repaired = await ensureSnapshot({
+    requestOrigin: input.requestOrigin,
+    orgId: input.orgId,
+    userId: input.userId,
+    estimateId: source.data.estimate_id,
+    publicVersionId: source.data.accepted_public_version_id,
+  })
+  if (!repaired.ok) return repaired
+
+  const refreshed = await loadAcceptedEstimateSource(db, input.orgId, input.jobId)
+  if (!refreshed.ok) return refreshed
+  if (!refreshed.data.estimate_snapshot_id) {
+    return errorResult(
+      'server_error',
+      'Accepted estimate snapshot repair did not create a usable snapshot.'
+    )
+  }
+
+  return refreshed
+}
+
 export async function loadAcceptedEstimateSource(
   db: DbReadChain,
   orgId: string,
@@ -224,6 +344,38 @@ export async function loadAcceptedEstimateSource(
   const publicVersionId = asText(estimateResult.data.accepted_public_version_id)
   if (!acceptedAt || !publicVersionId) {
     return errorResult('invalid_input', 'Linked estimate is not accepted')
+  }
+
+  const snapshotResult = await db
+    .from('estimate_snapshot')
+    .select(
+      'id, org_id, job_id, estimate_id, customer_id, accepted_public_version_id, estimate_version_name, estimate_version_state, estimated_labor_hours, estimated_paint_gallons, estimated_supplies_cost, estimated_other_cost, estimated_total, source_payload_json'
+    )
+    .eq('org_id', orgId)
+    .eq('estimate_id', linkedEstimateId)
+    .maybeSingle()
+
+  if (snapshotResult.error) {
+    return errorResult(
+      'server_error',
+      snapshotResult.error.message ?? 'Unable to load accepted estimate snapshot'
+    )
+  }
+
+  if (snapshotResult.data) {
+    if (
+      asText(snapshotResult.data.job_id) !== jobId ||
+      asText(snapshotResult.data.estimate_id) !== linkedEstimateId
+    ) {
+      return errorResult('invalid_input', 'Accepted estimate snapshot is invalid')
+    }
+
+    return okResult(
+      buildAcceptedEstimateSourceFromSnapshot({
+        estimate: estimateResult.data,
+        snapshot: snapshotResult.data,
+      })
+    )
   }
 
   const publicVersionResult = await db

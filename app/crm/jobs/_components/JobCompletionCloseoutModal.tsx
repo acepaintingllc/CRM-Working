@@ -1,7 +1,7 @@
 'use client'
 
 import { loadQuoteCatalogs } from '@/lib/quotes/client'
-import { type JobDetail } from '@/lib/jobs/client'
+import type { JobDetail } from '@/types/jobs/api'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmField } from '@/app/crm/_components/CrmField'
 import { CrmFormActions } from '@/app/crm/_components/CrmFormActions'

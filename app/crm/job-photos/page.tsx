@@ -12,7 +12,7 @@ import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSearchBar } from '@/app/crm/_components/CrmSearchBar'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { useJobPhotosUploadPage } from '@/app/crm/job-photos/_hooks/useJobPhotosUploadPage'
-import type { JobSitePhotoCategory, JobSummary } from '@/lib/jobs/client'
+import type { JobSitePhotoCategory, JobSummary } from '@/types/jobs/api'
 
 const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif'
 

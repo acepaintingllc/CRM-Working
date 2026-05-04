@@ -68,6 +68,8 @@ type EstimateV2MetaFields = Omit<
   | 'setDrywallCalculations'
   | 'setPricingSummary'
   | 'setSelectedRoomId'
+  | 'catalogsError'
+  | 'setCatalogsError'
   | 'setError'
   | 'setValidationIssues'
   | 'setLastSavedSnapshot'
@@ -81,6 +83,7 @@ type EstimateV2MetaFields = Omit<
   | 'setDebugMeta'
 > & {
   pricingSummary?: EstimateV2EditorMetaState['pricingSummary']
+  catalogsError?: EstimateV2EditorMetaState['catalogsError']
   doorCalculations?: EstimateV2EditorMetaState['doorCalculations']
   drywallCalculations?: EstimateV2EditorMetaState['drywallCalculations']
 }
@@ -104,6 +107,7 @@ export type EstimateV2EditorViewState = EstimateV2CollectionsState &
     | 'job'
     | 'catalogs'
     | 'selectedRoomId'
+    | 'catalogsError'
     | 'pricingSummary'
     | 'error'
     | 'validationIssues'
@@ -148,6 +152,7 @@ type EstimateV2MetaSetters = Pick<
   | 'setDrywallCalculations'
   | 'setPricingSummary'
   | 'setSelectedRoomId'
+  | 'setCatalogsError'
   | 'setError'
   | 'setValidationIssues'
   | 'setLastSavedSnapshot'
@@ -263,6 +268,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       drywallCalculations: null,
       pricingSummary: null,
       selectedRoomId: '',
+      catalogsError: null,
       error: null,
       validationIssues: [],
       lastSavedSnapshot: null,
@@ -457,6 +463,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
           selectedRoomId: resolveUpdater(state.meta.selectedRoomId, value),
         },
       })),
+    setCatalogsError: (value) =>
+      set((state) => ({
+        meta: {
+          ...state.meta,
+          catalogsError: resolveUpdater(state.meta.catalogsError ?? null, value),
+        },
+      })),
     setError: (value) =>
       set((state) => ({
         meta: { ...state.meta, error: resolveUpdater(state.meta.error, value) },
@@ -547,6 +560,7 @@ function selectViewState(state: EstimateV2EditorStore): EstimateV2EditorViewStat
     job: state.meta.job,
     catalogs: state.meta.catalogs,
     selectedRoomId: state.meta.selectedRoomId,
+    catalogsError: state.meta.catalogsError ?? null,
     error: state.meta.error,
     validationIssues: state.meta.validationIssues,
     pricingSummary: state.meta.pricingSummary ?? null,
@@ -615,6 +629,8 @@ function selectMetaWithSetters(state: EstimateV2EditorStore): EstimateV2EditorMe
     setPricingSummary: state.setPricingSummary,
     selectedRoomId: state.meta.selectedRoomId,
     setSelectedRoomId: state.setSelectedRoomId,
+    catalogsError: state.meta.catalogsError ?? null,
+    setCatalogsError: state.setCatalogsError,
     error: state.meta.error,
     setError: state.setError,
     validationIssues: state.meta.validationIssues,

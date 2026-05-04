@@ -49,6 +49,11 @@ export type QuoteRatesEditorVm = {
   isCreating: boolean
   inlineValidation: string | null
   canSave: boolean
+  activeSettingSet: import('@/types/estimator/ratesFlags').RatesFlagsSettingSetMetadata | null
+  draftSettingSet: import('@/types/estimator/ratesFlags').RatesFlagsSettingSetMetadata | null
+  editingSettingSet: import('@/types/estimator/ratesFlags').RatesFlagsSettingSetMetadata | null
+  canActivateDraft: boolean
+  activating: boolean
 }
 
 export type QuoteRatesDiscardVm = {
@@ -156,6 +161,16 @@ export function buildQuoteRatesPageVm(params: {
       isCreating,
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
+      activeSettingSet: resource.data.active_setting_set ?? null,
+      draftSettingSet: resource.data.draft_setting_set ?? null,
+      editingSettingSet: resource.data.editing_setting_set ?? null,
+      canActivateDraft:
+        Boolean(resource.data.draft_setting_set) &&
+        actionIsIdle &&
+        !resource.loading &&
+        !resource.error &&
+        !derived.isDirty,
+      activating: workflowState.actionStatus === 'activating',
     } satisfies QuoteRatesEditorVm,
     discardVm: {
       isOpen:

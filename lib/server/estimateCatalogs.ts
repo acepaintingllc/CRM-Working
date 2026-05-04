@@ -3,7 +3,14 @@ import {
   getOrCreateLiveRatesFlagsCatalogOverlay,
   readLiveRatesFlagsCatalogOverlay,
 } from '@/lib/server/rates-flags'
+import {
+  loadActiveSettingSet,
+  loadEstimateSettingSet,
+  loadSettingSetById,
+  settingValuesToTemplateRows,
+} from '@/lib/server/estimate-feedback/settingSets'
 import { inferTrimTypeMetadata } from '@/lib/estimator/trimTypeMetadata'
+import { buildOverlayFromRows } from '@/lib/server/rates-flags/overlay'
 
 type CatalogOption = {
   id: string
@@ -399,9 +406,46 @@ function buildV2CatalogResultFromSources(params: {
   }
 }
 
-async function buildV2CatalogResult(orgId: string): Promise<EstimateCatalogsResult> {
-  const overlay = await getOrCreateLiveRatesFlagsCatalogOverlay({ orgId })
-  const products = await readV2Products(orgId)
+async function resolveCatalogOverlay(params: {
+  orgId: string
+  estimateId?: string | null
+  settingSetId?: string | null
+  forceActiveAdmin?: boolean
+}): Promise<LiveRatesFlagsCatalogOverlay> {
+  if (params.forceActiveAdmin) {
+    return getOrCreateLiveRatesFlagsCatalogOverlay({ orgId: params.orgId })
+  }
+
+  const snapshot = params.settingSetId
+    ? await loadSettingSetById({
+        orgId: params.orgId,
+        settingSetId: params.settingSetId,
+      })
+    : params.estimateId
+      ? await loadEstimateSettingSet({
+          orgId: params.orgId,
+          estimateId: params.estimateId,
+        })
+      : await loadActiveSettingSet({ orgId: params.orgId })
+
+  if (snapshot) {
+    return buildOverlayFromRows({
+      templateVersion: snapshot.set.version_number,
+      rows: settingValuesToTemplateRows(snapshot),
+    })
+  }
+
+  return getOrCreateLiveRatesFlagsCatalogOverlay({ orgId: params.orgId })
+}
+
+async function buildV2CatalogResult(params: {
+  orgId: string
+  estimateId?: string | null
+  settingSetId?: string | null
+  forceActiveAdmin?: boolean
+}): Promise<EstimateCatalogsResult> {
+  const overlay = await resolveCatalogOverlay(params)
+  const products = await readV2Products(params.orgId)
   return buildV2CatalogResultFromSources({ overlay, products })
 }
 
@@ -409,16 +453,22 @@ export async function getEstimateCatalogs(params: {
   origin: string
   orgId: string
   userId: string
-  estimateId: string
+  estimateId?: string
+  settingSetId?: string
   forceRefresh?: boolean
+  adminRefreshMode?: 'active'
 }): Promise<EstimateCatalogsResult> {
   void params.origin
   void params.userId
-  void params.estimateId
-  void params.forceRefresh
-  return buildV2CatalogResult(params.orgId)
+  return buildV2CatalogResult({
+    orgId: params.orgId,
+    estimateId: params.estimateId,
+    settingSetId: params.settingSetId,
+    forceActiveAdmin: params.adminRefreshMode === 'active',
+  })
 }
 
 export const _test = {
   buildV2CatalogResultFromSources,
+  resolveCatalogOverlay,
 }
