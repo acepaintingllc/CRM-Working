@@ -13,10 +13,8 @@ import {
   mapCustomerTimelineEvent,
   type NormalizedUpdateCustomerInput,
 } from '@/lib/customers/normalizers'
-import {
-  buildEstimatePublicTimelineEvents,
-  type EstimatePublicTimelineEvent,
-} from '@/lib/customer-estimates/publicTimeline'
+import { buildEstimatePublicTimelineEvents } from '@/lib/customer-estimates/publicTimeline'
+import type { EstimatePublicTimelineEvent } from '@/types/customer-estimates/publicTimeline'
 import {
   customerError,
   customerOk,

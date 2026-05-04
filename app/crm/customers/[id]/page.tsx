@@ -25,8 +25,9 @@ export default function CustomerDetailPage() {
     error,
     deleteCustomer,
   } = useCustomerDetail(id)
+  const timelineCustomerId = customer?.id
   const { timelineEvents, timelineLoading, timelineError, noteBody, setNoteBody, noteSaving, saveNote } =
-    useCustomerTimeline(id)
+    useCustomerTimeline(timelineCustomerId)
 
   const detailPathWithQuery = typeof id === 'string' && id ? `/crm/customers/${id}` : '/crm/customers'
   const detailActions = useEntityDetailActions({
@@ -64,15 +65,17 @@ export default function CustomerDetailPage() {
               }}
             />
 
-            <CustomerTimelinePanel
-              timelineEvents={timelineEvents}
-              timelineLoading={timelineLoading}
-              timelineError={timelineError}
-              noteBody={noteBody}
-              noteSaving={noteSaving}
-              setNoteBody={setNoteBody}
-              onAddNote={() => void saveNote()}
-            />
+            {customer ? (
+              <CustomerTimelinePanel
+                timelineEvents={timelineEvents}
+                timelineLoading={timelineLoading}
+                timelineError={timelineError}
+                noteBody={noteBody}
+                noteSaving={noteSaving}
+                setNoteBody={setNoteBody}
+                onAddNote={() => void saveNote()}
+              />
+            ) : null}
           </>
         }
       />

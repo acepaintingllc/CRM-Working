@@ -8,8 +8,8 @@ import {
   fetchJobList,
   patchJobDateFields,
   patchJobStatus,
-  type JobSummary,
 } from '@/lib/jobs/client'
+import type { JobSummary } from '@/types/jobs/api'
 import {
   filterCompletedJobs,
   getVisibleJobBoardColumns,

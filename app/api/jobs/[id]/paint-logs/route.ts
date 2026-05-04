@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
-
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import { isUuid } from '@/lib/validation/uuid'
 
 type PaintLogInput = {
   where_used?: unknown
@@ -44,7 +42,7 @@ export async function GET(
 
   const params = await Promise.resolve(context.params)
   const jobId = params?.id
-  if (!jobId || !uuid.test(jobId)) {
+  if (!isUuid(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
 
@@ -78,7 +76,7 @@ export async function PUT(
 
   const params = await Promise.resolve(context.params)
   const jobId = params?.id
-  if (!jobId || !uuid.test(jobId)) {
+  if (!isUuid(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
 

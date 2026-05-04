@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import {
+  activateQuoteRatesDraftMutation,
   archiveOrReactivateQuoteRatesMutation,
   saveQuoteRatesMutation,
 } from './quoteRatesPageMutations'
@@ -48,6 +49,7 @@ export type QuoteRatesActions = {
   reload: (keepId?: string) => Promise<boolean> | boolean
   saveCurrent: () => Promise<void>
   archiveOrReactivate: (nextActive: boolean) => Promise<boolean> | boolean
+  activateDraft: () => Promise<boolean> | boolean
   startCreate: () => boolean | Promise<boolean>
   startDuplicate: () => boolean | Promise<boolean>
   cancelEdit: () => void
@@ -250,6 +252,37 @@ export function useQuoteRatesPageController() {
     return true
   }
 
+  async function activateDraft() {
+    if (stateRef.current.actionStatus !== 'idle') return false
+    if (!resource.data.draft_setting_set) return false
+
+    applyAction({ type: 'mutationChanged', status: 'activating' })
+
+    const result = await activateQuoteRatesDraftMutation({
+      resource,
+      navigation: stateRef.current.navigation,
+      selectedRowId: stateRef.current.selectedId,
+    })
+
+    if (!result.ok) {
+      applyAction({ type: 'mutationChanged', status: 'idle', error: result.error })
+      return false
+    }
+
+    applyAction({
+      type: 'editorApplied',
+      selectedId: result.selectedId,
+      editor: result.editor,
+    })
+    applyAction({
+      type: 'feedbackChanged',
+      notice: result.notice,
+      tone: result.tone,
+    })
+    applyAction({ type: 'mutationChanged', status: 'idle' })
+    return true
+  }
+
   function cancelEdit() {
     if (stateRef.current.actionStatus !== 'idle') return
 
@@ -312,6 +345,8 @@ export function useQuoteRatesPageController() {
         return performReload(plan.keepId)
       case 'archiveOrReactivate':
         return archiveOrReactivate(plan.nextActive)
+      case 'activateDraft':
+        return activateDraft()
       default:
         return false
     }
@@ -341,6 +376,7 @@ export function useQuoteRatesPageController() {
     saveCurrent,
     archiveOrReactivate: (nextActive: boolean) =>
       requestIntent({ type: 'archiveOrReactivate', nextActive }),
+    activateDraft: () => requestIntent({ type: 'activateDraft' }),
     startCreate: () => requestIntent({ type: 'startCreate' }),
     startDuplicate: () => requestIntent({ type: 'startDuplicate' }),
     cancelEdit,

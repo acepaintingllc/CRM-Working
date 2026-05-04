@@ -106,7 +106,17 @@ export function EstimateV2RoomHeader({
     room.heightIn,
   )
 
-  const roomTypeUnavailable = roomVm.roomTypeOptions.length === 0
+  const roomTypeCatalogStatus = roomVm.roomTypeCatalogStatus
+  const roomTypeUnavailable = roomTypeCatalogStatus !== 'ready'
+  const roomTypeFallbackLabel =
+    room.roomTypeId ||
+    (roomTypeCatalogStatus === 'error' ? 'Catalog unavailable' : 'No templates configured')
+  const roomTypeHelperText =
+    roomTypeCatalogStatus === 'error'
+      ? 'Room type templates could not be loaded'
+      : roomTypeCatalogStatus === 'empty'
+        ? 'No room type templates are configured for this estimate template yet'
+        : null
   const isSegmentedRoom = roomVm.selectedRoomGeometryMode === 'SEG'
 
   return (
@@ -160,7 +170,7 @@ export function EstimateV2RoomHeader({
               disabled={roomTypeUnavailable}
             >
               {roomTypeUnavailable ? (
-                <option value={room.roomTypeId || ''}>Catalog unavailable</option>
+                <option value={room.roomTypeId || ''}>{roomTypeFallbackLabel}</option>
               ) : (
                 <option value="">-- select type --</option>
               )}
@@ -170,9 +180,9 @@ export function EstimateV2RoomHeader({
                 </option>
               ))}
             </select>
-            {roomTypeUnavailable && (
+            {roomTypeHelperText && (
               <span className="dim-helper-text" style={{ ...styles.mono, color: 'var(--v2-ink-3)', fontSize: 'calc(8px + 4pt)', marginTop: 2 }}>
-                Room type templates could not be loaded
+                {roomTypeHelperText}
               </span>
             )}
           </Field>

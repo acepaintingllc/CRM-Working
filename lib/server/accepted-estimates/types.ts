@@ -13,6 +13,11 @@ export type AcceptedEstimateSource = {
   ip: string | null
   version_name: string | null
   version_state: string | null
+  estimate_snapshot_id: string | null
+  estimated_labor_hours: number
+  estimated_paint_gallons: number
+  estimated_supplies_cost: number
+  estimated_other_cost: number
   final_total: number
   snapshot_json: Record<string, unknown>
 }

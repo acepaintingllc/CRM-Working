@@ -1,7 +1,7 @@
 'use client'
 
 import type { EmailSendStatus } from '@/lib/email/types'
-import type { JobDetail } from '@/lib/jobs/client'
+import type { JobDetail } from '@/types/jobs/api'
 import { type StageEmailStage } from '@/lib/jobs/types'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmField } from '@/app/crm/_components/CrmField'

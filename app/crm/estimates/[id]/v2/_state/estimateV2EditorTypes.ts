@@ -120,6 +120,8 @@ export type EstimateV2EditorMetaState = {
   setPricingSummary: EstimateV2StateSetter<EstimateV2PricingSummary | null>
   selectedRoomId: string
   setSelectedRoomId: EstimateV2StateSetter<string>
+  catalogsError: EstimateV2Error | null
+  setCatalogsError: EstimateV2StateSetter<EstimateV2Error | null>
   error: EstimateV2Error | null
   setError: EstimateV2StateSetter<EstimateV2Error | null>
   validationIssues: string[]
@@ -177,9 +179,12 @@ export type EstimateV2EditorSettingsVm = {
 
 export type EstimateV2EditorSaveVm = {
   dirty: boolean
+  canManualSave: boolean
   saveStatus: SaveStatus
   saveStatusText: string
   saveStatusColor: string
+  blockedReason: string | null
+  blockingIssues: string[]
   calculationsStale: boolean
   debugMeta: EstimateV2EditorDebugMeta & { usingLocalPreview: boolean }
   save: (trigger?: 'manual' | 'auto') => Promise<boolean>
@@ -193,6 +198,7 @@ export type EstimateV2EditorRoomVm = {
   selectedRoomResolvedMode: 'RECT' | 'SEG'
   selectedRoomGeometryMode: 'RECT' | 'SEG'
   roomTypeOptions: EstimateV2CatalogOption[]
+  roomTypeCatalogStatus: 'ready' | 'empty' | 'error'
   roomFlags: EstimateV2RoomFlagDraft[]
   roomScopeByRoomId: Map<string, EstimateV2WallScopeDraft[]>
   roomCeilingScopeByRoomId: Map<string, EstimateV2CeilingScopeDraft[]>
@@ -388,8 +394,10 @@ export type EstimateV2EditorHeaderVm = {
   subtitleText: string
   workflowText: string
   dirtyStateText: string | null
+  dirtyStateColor: string | null
   dirty: boolean
   saving: boolean
+  settingsOpen: boolean
   toggleSettings: () => void
   addRoom: () => void
 }

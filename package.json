@@ -12,6 +12,7 @@
     "test:components": "vitest run",
     "test:customer-send": "vitest run --config vitest.customer-send.config.ts",
     "demo:quote": "node scripts/create-sample-public-quote.mjs",
+    "seed:estimator-org": "node scripts/seed-estimator-org.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run build",

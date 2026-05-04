@@ -1,4 +1,5 @@
 import { getEstimateCatalogs } from '@/lib/server/estimateCatalogs'
+import { loadEstimateTemplateSettings } from '@/lib/server/estimateTemplateSettings'
 import { supabaseAdmin } from '@/lib/server/org'
 import { isMissingSchemaErrorMessage } from '@/lib/server/schema'
 import { loadCompanyProfileSettings } from '@/lib/server/settings/companyProfileStore'
@@ -76,7 +77,7 @@ export async function loadEstimateCustomerSendEstimate(params: {
   const estimateRes = await supabaseAdmin
     .from('estimates')
     .select(
-      'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, created_at, updated_at'
+      'id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, setting_set_id_used, created_at, updated_at'
     )
     .eq('org_id', params.orgId)
     .eq('id', params.estimateId)
@@ -98,7 +99,7 @@ export async function loadEstimateCustomerSendCoreResources(params: {
     customerRes,
     companyProfileRes,
     quoteDefaultsRes,
-    settingsRes,
+    settingsRowResult,
     jobsettingsRes,
     rollupRes,
   ] = await Promise.all([
@@ -116,11 +117,20 @@ export async function loadEstimateCustomerSendCoreResources(params: {
       .maybeSingle(),
     loadCompanyProfileSettings(params.orgId).catch(() => null),
     loadQuoteSendDefaults(params.orgId).catch(() => null),
-    supabaseAdmin
-      .from('estimate_template_settings')
-      .select('*')
-      .eq('org_id', params.orgId)
-      .maybeSingle(),
+    loadEstimateTemplateSettings({
+      orgId: params.orgId,
+      estimateId: params.estimateId,
+    })
+      .then((data) => ({ data, error: null }))
+      .catch((error: unknown) => ({
+        data: null,
+        error: {
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Failed to load estimate template settings',
+        },
+      })),
     supabaseAdmin
       .from('estimate_jobsettings')
       .select('*')
@@ -148,7 +158,7 @@ export async function loadEstimateCustomerSendCoreResources(params: {
   if ('error' in customer) return customer
 
   const settingsRow = readOptionalQueryResult(
-    settingsRes as QueryResult<EstimateTemplateSettingsRow>,
+    settingsRowResult as QueryResult<EstimateTemplateSettingsRow>,
     {} as EstimateTemplateSettingsRow
   )
   if ('error' in settingsRow) return settingsRow

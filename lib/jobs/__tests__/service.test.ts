@@ -6,6 +6,7 @@ import {
   normalizeCreateJobInput,
   normalizeUpdateJobInput,
 } from '../serviceCore.ts'
+import type { JobActualsStatus } from '../../../types/jobs/feedback.ts'
 
 test('jobs service helpers normalize create input and apply the default status', () => {
   const result = normalizeCreateJobInput({
@@ -122,6 +123,11 @@ test('jobs service helpers include accepted quote audit details', () => {
       user_agent: 'Mozilla/5.0',
       ip: '127.0.0.1',
       version_name: 'Interior repaint',
+      estimate_snapshot_id: 'snapshot-1',
+      estimated_labor_hours: 32,
+      estimated_paint_gallons: 7.5,
+      estimated_supplies_cost: 180,
+      estimated_other_cost: 45,
       final_total: 4250,
     },
   })
@@ -137,8 +143,28 @@ test('jobs service helpers include accepted quote audit details', () => {
     user_agent: 'Mozilla/5.0',
     ip: '127.0.0.1',
     version_name: 'Interior repaint',
+    estimate_snapshot_id: 'snapshot-1',
+    estimated_labor_hours: 32,
+    estimated_paint_gallons: 7.5,
+    estimated_supplies_cost: 180,
+    estimated_other_cost: 45,
     final_total: 4250,
   })
+})
+
+test('jobs service helpers include shared job actuals workflow status in detail records', () => {
+  const status: JobActualsStatus = 'submitted'
+  const detail = buildJobDetailRecord({
+    row: {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      title: 'Kitchen',
+    },
+    optionalColumns: [],
+    jobActualsStatus: status,
+  })
+
+  assert.equal(detail.job_actuals_status, status)
 })
 
 test('jobs service helpers include public quote timeline events', () => {

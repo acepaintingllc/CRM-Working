@@ -1,0 +1,41 @@
+import {
+  jsonError,
+  readJsonBody,
+  requireSessionUserOrg,
+} from '@/lib/server/apiRoute'
+import {
+  type JobIdRouteContext,
+  readEstimateSnapshotIdFromBody,
+  readJobIdParam,
+} from '@/lib/server/jobFeedbackRoute'
+import { serviceResultResponse } from '@/lib/server/routeResult'
+import {
+  lockJobReview,
+  normalizeReviewSnapshotId,
+} from '@/lib/server/estimate-feedback/reviews'
+
+type RouteContext = JobIdRouteContext
+
+export async function POST(request: Request, context: RouteContext) {
+  const session = await requireSessionUserOrg()
+  if (!session.ok) return session.response
+
+  const jobId = await readJobIdParam(context)
+  if (!jobId.ok) return jobId.response
+
+  const body = await readJsonBody(request)
+  if (!body.ok) return body.response
+
+  const estimateSnapshotId = readEstimateSnapshotIdFromBody(body.value, normalizeReviewSnapshotId)
+  if (!estimateSnapshotId.ok) return jsonError(estimateSnapshotId.message, 400)
+
+  return serviceResultResponse(
+    await lockJobReview({
+      orgId: session.session.orgId,
+      jobId: jobId.value,
+      userId: session.session.userId,
+      estimateSnapshotId: estimateSnapshotId.data,
+    }),
+    (data) => ({ data, notice: 'Job review locked.' })
+  )
+}

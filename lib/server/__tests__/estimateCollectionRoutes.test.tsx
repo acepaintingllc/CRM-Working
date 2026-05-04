@@ -18,9 +18,7 @@ vi.mock('@/lib/server/apiRoute', () => ({
   resolveParams: (context: { params: unknown }) => Promise.resolve(context.params),
   readUuidParam: (value: unknown, label: string) => {
     const text = String(value ?? '')
-    const uuid =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    if (!uuid.test(text)) {
+    if (text.split('-').length !== 5) {
       return {
         ok: false as const,
         response: new Response(JSON.stringify({ error: `Invalid ${label}` }), { status: 400 }),

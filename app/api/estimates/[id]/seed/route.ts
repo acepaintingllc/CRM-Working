@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUserOrg, supabaseAdmin } from '@/lib/server/org'
 import { loadEstimateTemplateSettings } from '@/lib/server/estimateTemplateSettings'
-
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import { isUuid } from '@/lib/validation/uuid'
 
 export async function POST(
   _request: Request,
@@ -17,7 +15,7 @@ export async function POST(
 
   const params = await Promise.resolve(context.params)
   const id = (params as { id?: Unsafe } | null | undefined)?.id
-  if (!id || typeof id !== 'string' || !uuid.test(id)) {
+  if (!isUuid(id)) {
     return NextResponse.json({ error: 'Invalid estimate id' }, { status: 400 })
   }
 
@@ -32,7 +30,10 @@ export async function POST(
 
   const jobId = estimateRes.data.job_id
   const orgId = session.orgId
-  const templateDefaults = await loadEstimateTemplateSettings(orgId).catch(() => null)
+  const templateDefaults = await loadEstimateTemplateSettings({
+    orgId,
+    estimateId: id,
+  }).catch(() => null)
 
   await supabaseAdmin.from('estimate_jobsettings').upsert(
     {

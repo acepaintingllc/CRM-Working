@@ -122,6 +122,7 @@ export async function handleEstimateCatalogsRouteGet(
       userId: auth.session.userId,
       estimateId: estimateId.value,
       forceRefresh: url.searchParams.get('refresh') === '1',
+      adminRefreshMode: url.searchParams.get('adminRefresh') === 'active' ? 'active' : undefined,
     })
     return dataResponse(catalogs)
   } catch (error) {

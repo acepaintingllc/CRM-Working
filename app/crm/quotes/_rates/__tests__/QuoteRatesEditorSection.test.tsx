@@ -56,12 +56,18 @@ const actions = {
   cancelEdit: vi.fn(),
   setDraftActive: vi.fn(),
   updateDraftValue: vi.fn(),
+  activateDraft: vi.fn(),
   formatDraftValue: vi.fn((fieldKey: string) =>
     fieldKey === 'display_name' ? 'Standard walls' : 'wall-rate-1'
   ),
 } satisfies Pick<
   QuoteRatesActions,
-  'saveCurrent' | 'cancelEdit' | 'setDraftActive' | 'updateDraftValue' | 'formatDraftValue'
+  | 'saveCurrent'
+  | 'cancelEdit'
+  | 'setDraftActive'
+  | 'updateDraftValue'
+  | 'formatDraftValue'
+  | 'activateDraft'
 >
 
 function buildEditorVm(overrides: Partial<QuoteRatesEditorVm> = {}): QuoteRatesEditorVm {
@@ -78,6 +84,11 @@ function buildEditorVm(overrides: Partial<QuoteRatesEditorVm> = {}): QuoteRatesE
     isCreating: false,
     inlineValidation: null,
     canSave: true,
+    activeSettingSet: null,
+    draftSettingSet: null,
+    editingSettingSet: null,
+    canActivateDraft: false,
+    activating: false,
     ...overrides,
   }
 }

@@ -6,7 +6,7 @@ import {
   getVisibleJobBoardColumns,
   groupJobsByStatus,
 } from '../board.ts'
-import type { JobSummary } from '../client.ts'
+import type { JobSummary } from '../../../types/jobs/api.ts'
 
 const baseJob: JobSummary = {
   id: 'job-1',

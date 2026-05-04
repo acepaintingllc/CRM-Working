@@ -4,9 +4,12 @@ import { useMemo } from 'react'
 import {
   buildCeilingScopeEffectiveAreaById,
   buildCeilingScopeEffectiveTotalById,
+  buildLocalCeilingScopeEffectiveAreaById,
+  buildLocalCeilingScopeEffectiveTotalById,
   buildLocalRoomEffectiveAreaByRoomId,
   buildLocalScopeEffectiveAreaById,
   buildLocalSegmentEffectiveAreaById,
+  buildLocalWallScopeEffectiveTotalById,
   buildLocalTrimScopeMetricById,
   buildTrimScopeMetricById,
   buildWallRoomEffectiveAreaByRoomId,
@@ -142,6 +145,40 @@ export function useEstimateV2CalculationDerived(params: {
       ),
     [collections.rooms, collections.scopes, localScopeEffectiveAreaById]
   )
+  const localWallScopeEffectiveTotalById = useMemo(
+    () =>
+      buildLocalWallScopeEffectiveTotalById({
+        wallScopes: collections.scopes,
+        localScopeEffectiveAreaById,
+        savedScopeEffectiveAreaById: scopeEffectiveAreaById,
+        savedScopeEffectiveTotalById: wallScopeEffectiveTotalById,
+      }),
+    [collections.scopes, localScopeEffectiveAreaById, scopeEffectiveAreaById, wallScopeEffectiveTotalById]
+  )
+  const localCeilingScopeEffectiveAreaById = useMemo(
+    () =>
+      buildLocalCeilingScopeEffectiveAreaById({
+        ceilingScopes: collections.ceilingScopes,
+        ceilingSegments: collections.ceilingSegments,
+        rooms: collections.rooms,
+      }),
+    [collections.ceilingScopes, collections.ceilingSegments, collections.rooms]
+  )
+  const localCeilingScopeEffectiveTotalById = useMemo(
+    () =>
+      buildLocalCeilingScopeEffectiveTotalById({
+        ceilingScopes: collections.ceilingScopes,
+        localCeilingScopeEffectiveAreaById,
+        savedCeilingScopeEffectiveAreaById: ceilingScopeEffectiveAreaById,
+        savedCeilingScopeEffectiveTotalById: ceilingScopeEffectiveTotalById,
+      }),
+    [
+      ceilingScopeEffectiveAreaById,
+      ceilingScopeEffectiveTotalById,
+      collections.ceilingScopes,
+      localCeilingScopeEffectiveAreaById,
+    ]
+  )
   const currentSnapshot = useMemo(
     () =>
       buildEstimateV2DirtySnapshot({
@@ -222,6 +259,18 @@ export function useEstimateV2CalculationDerived(params: {
     () => (useLocalPreviewCalculations ? localRoomEffectiveAreaByRoomId : roomEffectiveAreaByRoomId),
     [localRoomEffectiveAreaByRoomId, roomEffectiveAreaByRoomId, useLocalPreviewCalculations]
   )
+  const displayedWallScopeEffectiveTotalById = useMemo(
+    () => (useLocalPreviewCalculations ? localWallScopeEffectiveTotalById : wallScopeEffectiveTotalById),
+    [localWallScopeEffectiveTotalById, wallScopeEffectiveTotalById, useLocalPreviewCalculations]
+  )
+  const displayedCeilingScopeEffectiveAreaById = useMemo(
+    () => (useLocalPreviewCalculations ? localCeilingScopeEffectiveAreaById : ceilingScopeEffectiveAreaById),
+    [ceilingScopeEffectiveAreaById, localCeilingScopeEffectiveAreaById, useLocalPreviewCalculations]
+  )
+  const displayedCeilingScopeEffectiveTotalById = useMemo(
+    () => (useLocalPreviewCalculations ? localCeilingScopeEffectiveTotalById : ceilingScopeEffectiveTotalById),
+    [ceilingScopeEffectiveTotalById, localCeilingScopeEffectiveTotalById, useLocalPreviewCalculations]
+  )
   const displayedTrimScopeEffectiveMeasurementById = useMemo(
     () =>
       useLocalPreviewCalculations
@@ -241,8 +290,8 @@ export function useEstimateV2CalculationDerived(params: {
     [localTrimScopeEffectiveTotalById, trimScopeEffectiveTotalById, useLocalPreviewCalculations]
   )
   const selectedCeilingEffectiveSqFt = useMemo(
-    () => sumIncludedValues(selectedRoomCeilingScopes, ceilingScopeEffectiveAreaById),
-    [ceilingScopeEffectiveAreaById, selectedRoomCeilingScopes]
+    () => sumIncludedValues(selectedRoomCeilingScopes, displayedCeilingScopeEffectiveAreaById),
+    [displayedCeilingScopeEffectiveAreaById, selectedRoomCeilingScopes]
   )
   const selectedTrimSubtotal = useMemo(
     () => sumIncludedValues(selectedRoomTrimScopes, displayedTrimScopeEffectiveTotalById),
@@ -296,9 +345,9 @@ export function useEstimateV2CalculationDerived(params: {
     displayedSegmentEffectiveAreaById,
     displayedScopeEffectiveAreaById,
     displayedRoomEffectiveAreaByRoomId,
-    wallScopeEffectiveTotalById,
+    wallScopeEffectiveTotalById: displayedWallScopeEffectiveTotalById,
     selectedCeilingEffectiveSqFt,
-    ceilingScopeEffectiveTotalById,
+    ceilingScopeEffectiveTotalById: displayedCeilingScopeEffectiveTotalById,
     trimScopeEffectiveMeasurementById: displayedTrimScopeEffectiveMeasurementById,
     trimScopeEffectiveTotalById: displayedTrimScopeEffectiveTotalById,
     doorScopeEffectiveUnitsById,

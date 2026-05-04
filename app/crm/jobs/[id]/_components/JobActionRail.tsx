@@ -6,8 +6,10 @@ import type { JobWorkflowResolvedAction } from '@/lib/jobs/types'
 import {
   CalendarCheck,
   CheckCircle2,
+  ClipboardCheck,
   FileText,
   Mail,
+  NotebookTabs,
   Send,
   XCircle,
   type LucideIcon,
@@ -41,6 +43,10 @@ function actionIcon(action: JobWorkflowResolvedAction): LucideIcon {
       return Send
     case 'open_quote':
       return FileText
+    case 'open_job_actuals':
+      return ClipboardCheck
+    case 'open_estimate_review':
+      return NotebookTabs
     case 'schedule_job':
     case 'change_scheduled_date':
       return CalendarCheck
@@ -59,6 +65,29 @@ export default function JobActionRail({ actions, getActionTone, onAction }: JobA
       <CrmDenseActionRow>
         {actions.map((action) => {
           const Icon = actionIcon(action)
+          if (action.kind === 'message') {
+            return (
+              <div key={action.id} className="grid gap-1">
+                <CrmButton
+                  type="button"
+                  tone={getActionTone(action)}
+                  className="min-h-0 px-2.5 py-1.5 text-xs opacity-70"
+                  disabled
+                  aria-describedby={`${action.id}-reason`}
+                >
+                  {iconLabel(Icon, action.label)}
+                </CrmButton>
+                {action.disabledReason ? (
+                  <p
+                    id={`${action.id}-reason`}
+                    className="max-w-56 text-[11px] leading-snug text-[color:var(--crm-ui-muted)]"
+                  >
+                    {action.disabledReason}
+                  </p>
+                ) : null}
+              </div>
+            )
+          }
           if (action.kind === 'navigate' && action.href) {
             return (
               <CrmButton

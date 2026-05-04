@@ -4,6 +4,14 @@ import {
   type QuoteDefaultsProductReference,
 } from '../../quotes/defaultsForm.ts'
 import type { QuoteDefaults } from '../../settings/types.ts'
+import {
+  activateDraftSettingSet,
+  cloneActiveSettingSetAsDraft,
+  loadActiveSettingSet,
+  settingValuesToEstimateTemplateSettings,
+  updateDraftSettingValues,
+  type EstimatorSettingSetSnapshot,
+} from '../estimate-feedback/settingSets.ts'
 import { supabaseAdmin } from '../org.ts'
 
 type Unsafe = Record<string, unknown>
@@ -40,6 +48,10 @@ export type QuoteDefaultsStoreDeps = {
   client: {
     from(relation: string): unknown
   }
+  loadActiveSettingSet: typeof loadActiveSettingSet
+  cloneActiveSettingSetAsDraft: typeof cloneActiveSettingSetAsDraft
+  updateDraftSettingValues: typeof updateDraftSettingValues
+  activateDraftSettingSet: typeof activateDraftSettingSet
 }
 
 export class QuoteDefaultsValidationError extends Error {
@@ -51,6 +63,10 @@ export class QuoteDefaultsValidationError extends Error {
 
 const defaultDeps: QuoteDefaultsStoreDeps = {
   client: supabaseAdmin,
+  loadActiveSettingSet,
+  cloneActiveSettingSetAsDraft,
+  updateDraftSettingValues,
+  activateDraftSettingSet,
 }
 
 function withDeps(overrides: Partial<QuoteDefaultsStoreDeps> = {}): QuoteDefaultsStoreDeps {
@@ -64,7 +80,14 @@ export async function loadQuoteDefaults(
   orgId: string,
   deps: Partial<QuoteDefaultsStoreDeps> = {}
 ) {
-  const { client } = withDeps(deps)
+  const allDeps = withDeps(deps)
+  const { client } = allDeps
+  const active = await allDeps.loadActiveSettingSet({ orgId })
+  if (active) {
+    return normalizeQuoteDefaults(settingValuesToEstimateTemplateSettings(active) as Unsafe)
+  }
+
+  // Compatibility fallback only for orgs not yet backfilled to setting sets.
   const res = await (client.from('estimate_template_settings') as SettingsQuery)
     .select(
       'walls_paint_id, walls_primer_id, ceiling_paint_id, ceiling_primer_id, trim_paint_id, trim_primer_id, override_labor_rate'
@@ -79,15 +102,85 @@ export async function loadQuoteDefaults(
 export async function saveQuoteDefaults(
   orgId: string,
   data: QuoteDefaults,
-  deps: Partial<QuoteDefaultsStoreDeps> = {}
+  userIdOrDeps: string | Partial<QuoteDefaultsStoreDeps> = 'system',
+  maybeDeps: Partial<QuoteDefaultsStoreDeps> = {}
 ) {
-  const { client } = withDeps(deps)
+  const userId = typeof userIdOrDeps === 'string' ? userIdOrDeps : 'system'
+  const deps = typeof userIdOrDeps === 'string' ? maybeDeps : userIdOrDeps
+  const allDeps = withDeps(deps)
+  const { client } = allDeps
   const productReferences = await loadQuoteDefaultsProductReferences(orgId, data, deps)
   const validation = validateQuoteDefaults(data, { products: productReferences })
   if (!validation.ok) {
     throw new QuoteDefaultsValidationError(validation.error)
   }
 
+  const draft = await allDeps.cloneActiveSettingSetAsDraft({
+    orgId,
+    userId,
+    notes: 'Quote defaults draft',
+  })
+  if (!draft) throw new Error('Failed to create quote defaults setting draft.')
+
+  const updated = await allDeps.updateDraftSettingValues({
+    orgId,
+    settingSetId: draft.set.id,
+    values: quoteDefaultsToScalarValues(data, draft),
+  })
+  if (!updated) throw new Error('Failed to update quote defaults setting draft.')
+
+  const activated = await allDeps.activateDraftSettingSet({
+    orgId,
+    settingSetId: updated.set.id,
+    userId,
+    reason: 'Quote defaults saved',
+    source: 'quote_defaults_admin',
+  })
+  if (!activated) throw new Error('Failed to activate quote defaults setting set.')
+
+  await mirrorQuoteDefaultsCompatibility(client, orgId, data)
+
+  const normalized = normalizeQuoteDefaults(
+    settingValuesToEstimateTemplateSettings(activated) as Unsafe
+  )
+  return normalized
+}
+
+function quoteDefaultsToScalarValues(
+  data: QuoteDefaults,
+  draft: EstimatorSettingSetSnapshot
+) {
+  const keys: Array<keyof QuoteDefaults> = [
+    'walls_paint_id',
+    'walls_primer_id',
+    'ceiling_paint_id',
+    'ceiling_primer_id',
+    'trim_paint_id',
+    'trim_primer_id',
+    'override_labor_rate',
+  ]
+
+  return keys.map((key, index) => {
+    const existing = draft.values.find(
+      (value) => value.category_key === 'scalar_defaults' && value.scalar_key === key
+    )
+    return {
+      category_key: 'scalar_defaults',
+      scalar_key: key,
+      row_id: null,
+      display_name: existing?.display_name ?? key,
+      active: true,
+      sort_order: existing?.sort_order ?? index,
+      value_json: { value: data[key] },
+    }
+  })
+}
+
+async function mirrorQuoteDefaultsCompatibility(
+  client: QuoteDefaultsStoreDeps['client'],
+  orgId: string,
+  data: QuoteDefaults
+) {
   const res = await (client.from('estimate_template_settings') as SettingsQuery)
     .upsert(
       {
@@ -101,8 +194,9 @@ export async function saveQuoteDefaults(
     )
     .single()
 
-  if (res.error) throw new Error(res.error.message)
-  return normalizeQuoteDefaults(res.data as Unsafe | null)
+  if (res.error) {
+    console.error('[quote-defaults] compatibility mirror failed', res.error.message)
+  }
 }
 
 async function loadQuoteDefaultsProductReferences(

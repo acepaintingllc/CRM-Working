@@ -37,6 +37,7 @@ export type QuoteRatesTransitionPlan =
   | { kind: 'startDuplicate' }
   | { kind: 'reload'; keepId?: string }
   | { kind: 'archiveOrReactivate'; nextActive: boolean }
+  | { kind: 'activateDraft' }
   | { kind: 'noop' }
 
 export function resolveActiveCategoryKey(navigation: QuoteRatesNavigationState) {
@@ -236,6 +237,8 @@ export function getQuoteRatesIntentChanged(
     case 'reload':
     case 'archiveOrReactivate':
       return true
+    case 'activateDraft':
+      return true
     default:
       return false
   }
@@ -273,6 +276,8 @@ export function buildQuoteRatesTransitionPlan(
       return { kind: 'reload', keepId: intent.keepId }
     case 'archiveOrReactivate':
       return { kind: 'archiveOrReactivate', nextActive: intent.nextActive }
+    case 'activateDraft':
+      return { kind: 'activateDraft' }
     default:
       return { kind: 'noop' }
   }

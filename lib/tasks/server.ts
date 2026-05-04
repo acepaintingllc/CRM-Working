@@ -1,10 +1,7 @@
 import type { TaskDueFilter, TaskRow, TaskStatus } from './types'
+import { isUuid } from '../validation/uuid.ts'
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-export function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && uuidPattern.test(value)
-}
+export { isUuid } from '../validation/uuid.ts'
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null

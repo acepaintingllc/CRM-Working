@@ -110,6 +110,10 @@
   box-sizing: border-box;
 }
 
+:global(.estimate-v2-workspace-main) {
+  min-width: 0;
+}
+
 :global(.estimate-v2-header-copy) {
   flex: 1 1 420px;
 }
@@ -487,6 +491,19 @@
     grid-template-columns: 1fr !important;
   }
 
+  :global(.estimate-v2-sidebar),
+  :global(.estimate-v2-sidebar-collapsed) {
+    position: static !important;
+    top: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    align-self: stretch !important;
+  }
+
+  :global(.estimate-v2-sidebar-collapsed) {
+    justify-items: start;
+  }
+
   :global(.room-setup-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -557,6 +574,20 @@
     width: 100%;
     min-height: 40px;
     font-size: 13px !important;
+  }
+
+  :global(.estimate-v2-footer) {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  :global(.estimate-v2-footer > div:last-child) {
+    justify-content: flex-start !important;
+    width: 100%;
+  }
+
+  :global(.estimate-v2-workspace-main) {
+    padding-bottom: 132px !important;
   }
 
   :global(.estimate-v2-room-title) {

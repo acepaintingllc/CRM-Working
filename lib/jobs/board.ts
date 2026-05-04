@@ -1,5 +1,5 @@
 import { createJobStatusBuckets, type JobStatus } from './types.ts'
-import type { JobSummary } from './client.ts'
+import type { JobSummary } from '../../types/jobs/api.ts'
 
 export type JobActivityItem = {
   label: string

@@ -14,8 +14,20 @@ import {
 import { type RatesFlagsCatalogOverlay, isAreaBasedUnit } from './shared.ts'
 import { buildOverlayFromRows } from './overlay.ts'
 import { findCategoryTablesDetailed, findTableDetailed, getHeaderIndex, parseConstantsTablesDetailed, parseSchemaVersion } from './tableParsing.ts'
-import { bumpTemplateVersion, ensureTemplateState, fetchTemplateState, getSupabaseAdmin, getTemplateRowById, setSupabaseAdminProvider } from './templateState.ts'
+import { ensureTemplateState, getTemplateRowById, setSupabaseAdminProvider } from './templateState.ts'
 import { asText, normalizeId, toYN } from './shared.ts'
+import {
+  activateDraftSettingSet,
+  cloneActiveSettingSetAsDraft,
+  loadActiveSettingSet,
+  loadLatestDraftSettingSet,
+  loadSettingSetById,
+  settingSetMetadata,
+  settingSetToTemplateRecord,
+  settingValuesToTemplateRows,
+  updateDraftSettingRowValue,
+  type EstimatorSettingSetSnapshot,
+} from '../estimate-feedback/settingSets.ts'
 
 export { parseConstantsTablesDetailed, type RatesFlagsCatalogOverlay }
 export { parseRatesFlagsMutationRequest }
@@ -27,13 +39,30 @@ export async function readRatesFlagsPayload(params: {
 }): Promise<RatesFlagsPayload> {
   void params.origin
   void params.userId
-  const state = await ensureTemplateState(params.orgId)
+  const active = await loadActiveSettingSet({ orgId: params.orgId })
+  const draft = await loadLatestDraftSettingSet({ orgId: params.orgId })
+  const editing = draft ?? active
+  if (!editing) {
+    return {
+      source: 'db',
+      seeded: false,
+      template_version: null,
+      active_setting_set: null,
+      draft_setting_set: null,
+      editing_setting_set: null,
+      categories: CATEGORY_CONFIGS.map((config) => buildCategoryFromStoredRows(config, [])),
+      condition_modifier_catalog: [],
+    }
+  }
+
+  const rows = settingValuesToTemplateRows(editing)
+  const template = settingSetToTemplateRecord(editing)
   const rowsByCategory = new Map<
     (typeof CATEGORY_CONFIGS)[number]['key'],
     Parameters<typeof buildCategoryFromStoredRows>[1]
   >()
   for (const config of CATEGORY_CONFIGS) rowsByCategory.set(config.key, [])
-  for (const row of state.rows) {
+  for (const row of rows) {
     const arr = rowsByCategory.get(row.category_key)
     if (arr) arr.push(row)
   }
@@ -41,13 +70,16 @@ export async function readRatesFlagsPayload(params: {
     buildCategoryFromStoredRows(config, rowsByCategory.get(config.key) ?? [])
   )
   const overlay = buildOverlayFromRows({
-    templateVersion: state.template?.version ?? 0,
-    rows: state.rows,
+    templateVersion: template.version,
+    rows,
   })
   return {
     source: 'db',
     seeded: true,
-    template_version: state.template?.version ?? null,
+    template_version: template.version,
+    active_setting_set: settingSetMetadata(active),
+    draft_setting_set: settingSetMetadata(draft),
+    editing_setting_set: settingSetMetadata(editing),
     categories,
     condition_modifier_catalog: overlay.condition_modifiers,
   }
@@ -68,8 +100,32 @@ export function buildRatesFlagsPayloadFromValues(
     seeded: true,
     template_version: null,
     schema_version: parseSchemaVersion(values),
+    active_setting_set: null,
+    draft_setting_set: null,
+    editing_setting_set: null,
     categories,
   }
+}
+
+async function getOrCreateRatesFlagsDraft(params: {
+  orgId: string
+  userId: string
+}): Promise<EstimatorSettingSetSnapshot> {
+  const existingDraft = await loadLatestDraftSettingSet({ orgId: params.orgId })
+  if (existingDraft) return existingDraft
+  const draft = await cloneActiveSettingSetAsDraft({
+    orgId: params.orgId,
+    userId: params.userId,
+    notes: 'Rates/Flags draft',
+  })
+  if (!draft) throw new Error('Failed to create rates and flags draft.')
+  return draft
+}
+
+function getDraftRowValueJson(values: Record<string, unknown>) {
+  const { active, ...valuesJson } = values
+  void active
+  return valuesJson
 }
 
 export async function applyRatesFlagsMutation(params: {
@@ -79,38 +135,36 @@ export async function applyRatesFlagsMutation(params: {
   request: RatesFlagsMutationRequest
 }) {
   void params.origin
-  void params.userId
-  const supabaseAdmin = await getSupabaseAdmin()
   const config = getCategoryConfig(params.request.category)
   if (!config) {
     return { ok: false as const, error: 'Unknown category.', status: 400 }
   }
-  const state = await ensureTemplateState(params.orgId)
-  const template = state.template
-  if (!template) {
-    return { ok: false as const, error: 'Template initialization failed.', status: 500 }
-  }
 
   try {
-    if (params.request.action === 'archive' || params.request.action === 'reactivate') {
-      const existing = await getTemplateRowById({
-        orgId: params.orgId,
-        templateId: template.id,
-        categoryKey: config.key,
-        rowId: params.request.rowId,
-      })
+    const draft = await getOrCreateRatesFlagsDraft({
+      orgId: params.orgId,
+      userId: params.userId,
+    })
+    const request = params.request
+    if (request.action === 'archive' || request.action === 'reactivate') {
+      const existing = draft.values.find(
+        (value) => value.category_key === config.key && value.row_id === request.rowId
+      )
       if (!existing) return { ok: false as const, error: 'Row not found.', status: 404 }
-      const update = await supabaseAdmin
-        .from('estimator_template_constant_rows')
-        .update({
-          active: params.request.action === 'archive' ? 'N' : 'Y',
-        })
-        .eq('id', existing.id)
-      if (update.error) throw new Error(update.error.message)
-      await bumpTemplateVersion(params.orgId, template)
+      await updateDraftSettingRowValue({
+        orgId: params.orgId,
+        settingSetId: draft.set.id,
+        categoryKey: config.key,
+        originalRowId: request.rowId,
+        rowId: request.rowId,
+        displayName: existing.display_name,
+        active: request.action === 'reactivate',
+        sortOrder: existing.sort_order,
+        valueJson: existing.value_json ?? {},
+      })
       return { ok: true as const }
     }
-    const mutation: RatesFlagsCreateOrUpdateMutationRequest = params.request
+    const mutation = request as RatesFlagsCreateOrUpdateMutationRequest
     const originalId = normalizeId(
       mutation.action === 'update' ? mutation.original_id : mutation.values.id
     ) || normalizeId(mutation.values.id)
@@ -124,80 +178,54 @@ export async function applyRatesFlagsMutation(params: {
       mutation.values.active,
       mutation.action === 'create' ? 'Y' : 'N'
     ) as 'Y' | 'N'
-    const { active, ...valuesJson } = mutation.values
-    void active
+    const valuesJson = getDraftRowValueJson(mutation.values)
 
     if (mutation.action === 'create') {
-      const collision = await getTemplateRowById({
-        orgId: params.orgId,
-        templateId: template.id,
-        categoryKey: config.key,
-        rowId: nextId,
-      })
+      const collision = draft.values.find(
+        (value) => value.category_key === config.key && value.row_id === nextId
+      )
       if (collision) {
         return { ok: false as const, error: `Row '${nextId}' already exists.`, status: 409 }
       }
 
-      const sortRes = await supabaseAdmin
-        .from('estimator_template_constant_rows')
-        .select('sort_order')
-        .eq('org_id', params.orgId)
-        .eq('template_id', template.id)
-        .eq('category_key', config.key)
-        .order('sort_order', { ascending: false })
-        .limit(1)
-      if (sortRes.error) throw new Error(sortRes.error.message)
-      const nextSort = (sortRes.data?.[0]?.sort_order ?? -1) + 1
-
-      const insert = await supabaseAdmin.from('estimator_template_constant_rows').insert({
-        org_id: params.orgId,
-        template_id: template.id,
-        category_key: config.key,
-        row_id: nextId,
-        display_name: nextDisplayName,
-        active: nextActive,
-        sort_order: nextSort,
-        values_json: valuesJson,
+      await updateDraftSettingRowValue({
+        orgId: params.orgId,
+        settingSetId: draft.set.id,
+        categoryKey: config.key,
+        rowId: nextId,
+        displayName: nextDisplayName,
+        active: nextActive === 'Y',
+        valueJson: valuesJson,
       })
-      if (insert.error) throw new Error(insert.error.message)
-
-      await bumpTemplateVersion(params.orgId, template)
       return { ok: true as const }
     }
 
     if (mutation.action === 'update') {
-      const existing = await getTemplateRowById({
-        orgId: params.orgId,
-        templateId: template.id,
-        categoryKey: config.key,
-        rowId: originalId,
-      })
+      const existing = draft.values.find(
+        (value) => value.category_key === config.key && value.row_id === originalId
+      )
       if (!existing) return { ok: false as const, error: 'Row not found.', status: 404 }
 
       if (nextId !== originalId) {
-        const collision = await getTemplateRowById({
-          orgId: params.orgId,
-          templateId: template.id,
-          categoryKey: config.key,
-          rowId: nextId,
-        })
+        const collision = draft.values.find(
+          (value) => value.category_key === config.key && value.row_id === nextId
+        )
         if (collision) {
           return { ok: false as const, error: `Row '${nextId}' already exists.`, status: 409 }
         }
       }
 
-      const update = await supabaseAdmin
-        .from('estimator_template_constant_rows')
-        .update({
-          row_id: nextId,
-          display_name: nextDisplayName,
-          active: nextActive,
-          values_json: valuesJson,
-        })
-        .eq('id', existing.id)
-      if (update.error) throw new Error(update.error.message)
-
-      await bumpTemplateVersion(params.orgId, template)
+      await updateDraftSettingRowValue({
+        orgId: params.orgId,
+        settingSetId: draft.set.id,
+        categoryKey: config.key,
+        originalRowId: originalId,
+        rowId: nextId,
+        displayName: nextDisplayName,
+        active: nextActive === 'Y',
+        sortOrder: existing.sort_order,
+        valueJson: valuesJson,
+      })
       return { ok: true as const }
     }
   } catch (error) {
@@ -211,21 +239,60 @@ export async function applyRatesFlagsMutation(params: {
   return { ok: false as const, error: 'Unsupported mutation action.', status: 400 }
 }
 
+export async function activateRatesFlagsDraft(params: {
+  origin: string
+  orgId: string
+  userId: string
+  settingSetId?: string | null
+  reason?: string
+}) {
+  void params.origin
+  const draft = params.settingSetId
+    ? await loadSettingSetById({
+        orgId: params.orgId,
+        settingSetId: params.settingSetId,
+      })
+    : await loadLatestDraftSettingSet({ orgId: params.orgId })
+  if (!draft) {
+    return { ok: false as const, error: 'No draft setting set to activate.', status: 404 }
+  }
+  try {
+    await activateDraftSettingSet({
+      orgId: params.orgId,
+      settingSetId: draft.set.id,
+      userId: params.userId,
+      reason: params.reason ?? 'Rates/Flags draft activated',
+      source: 'rates_flags_admin',
+    })
+    return { ok: true as const }
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : 'Failed to activate draft.',
+      status: 400,
+    }
+  }
+}
+
 export async function readLiveRatesFlagsCatalogOverlay(params: { orgId: string }) {
-  const state = await fetchTemplateState(params.orgId)
-  if (!state.template) return null
+  const active = await loadActiveSettingSet({ orgId: params.orgId })
+  if (!active) return null
+  const rows = settingValuesToTemplateRows(active)
+  const template = settingSetToTemplateRecord(active)
   return buildOverlayFromRows({
-    templateVersion: state.template.version,
-    rows: state.rows,
+    templateVersion: template.version,
+    rows,
   })
 }
 
 export async function getOrCreateLiveRatesFlagsCatalogOverlay(params: { orgId: string }) {
-  const state = await ensureTemplateState(params.orgId)
-  if (!state.template) throw new Error('Template initialization failed.')
+  const active = await loadActiveSettingSet({ orgId: params.orgId })
+  if (!active) throw new Error('No active estimator setting set found.')
+  const rows = settingValuesToTemplateRows(active)
+  const template = settingSetToTemplateRecord(active)
   return buildOverlayFromRows({
-    templateVersion: state.template.version,
-    rows: state.rows,
+    templateVersion: template.version,
+    rows,
   })
 }
 

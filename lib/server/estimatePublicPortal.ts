@@ -1,5 +1,8 @@
 import { supabaseAdmin } from './org'
-import { applyAcceptedEstimateSideEffects } from './accepted-estimates/service'
+import {
+  applyAcceptedEstimateSideEffects,
+  ensureAcceptedEstimateOperationalSnapshot,
+} from './accepted-estimates/service'
 import { writeEstimatePublicEvent } from './customer-send/repository'
 import { errorResult, okResult, type ServiceResult } from './serviceResult'
 import { ensureAssembledCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
@@ -228,6 +231,36 @@ function transitionConflictMessage(
     if (currentStatus === 'superseded') return 'A newer quote is available.'
   }
   return `Cannot ${nextStatus} quote from ${currentStatus} status`
+}
+
+async function ensureOperationalSnapshotAfterAcceptedOwnership(params: {
+  requestOrigin?: string
+  orgId: string
+  userId: string
+  estimateId: string
+  publicVersionId: string
+}) {
+  const result = await ensureAcceptedEstimateOperationalSnapshot({
+    requestOrigin: asText(params.requestOrigin),
+    orgId: params.orgId,
+    userId: params.userId,
+    estimateId: params.estimateId,
+    publicVersionId: params.publicVersionId,
+  }).catch((error: unknown) =>
+    errorResult(
+      'server_error',
+      error instanceof Error ? error.message : 'Unable to create estimate snapshot'
+    )
+  )
+
+  if (!result.ok) {
+    // Acceptance, estimate ownership, and snapshot inserts are not currently one
+    // database transaction. Once ownership has committed, retries reconcile the
+    // missing immutable snapshot instead of rolling back an accepted quote.
+    console.error('[public-estimate-acceptance] snapshot creation failed', result.message)
+  }
+
+  return result
 }
 
 function parsePublicQuoteDate(value: unknown) {
@@ -595,6 +628,14 @@ export async function acceptPublicEstimate(
     })
     if (!ownershipResult.ok) return ownershipResult
 
+    await ensureOperationalSnapshotAfterAcceptedOwnership({
+      requestOrigin: params.origin,
+      orgId,
+      userId: asText(loaded.version.created_by),
+      estimateId,
+      publicVersionId: versionId,
+    })
+
     const eventResult = await ensureEstimatePublicEvent({
       orgId,
       versionId,
@@ -656,6 +697,14 @@ export async function acceptPublicEstimate(
     }
   )
   if (!ownershipResult.ok) return ownershipResult
+
+  await ensureOperationalSnapshotAfterAcceptedOwnership({
+    requestOrigin: params.origin,
+    orgId,
+    userId: asText(loaded.version.created_by),
+    estimateId,
+    publicVersionId: versionId,
+  })
 
   const eventResult = await ensureEstimatePublicEvent({
     orgId,

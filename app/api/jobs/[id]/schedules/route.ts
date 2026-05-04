@@ -3,9 +3,7 @@ import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
 import { readJsonBody } from '@/lib/server/apiRoute'
 import { syncJobScheduleRange } from '@/lib/server/jobScheduleSync'
 import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
-
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import { isUuid } from '@/lib/validation/uuid'
 
 export async function GET(
   _request: Request,
@@ -20,7 +18,7 @@ export async function GET(
   const { orgId } = session
   const params = await Promise.resolve(context.params)
   const jobId = (params as { id?: string } | null | undefined)?.id
-  if (!jobId || typeof jobId !== 'string' || !uuid.test(jobId)) {
+  if (!isUuid(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
 
@@ -48,7 +46,7 @@ export async function POST(
   const { orgId } = session
   const params = await Promise.resolve(context.params)
   const jobId = (params as { id?: string } | null | undefined)?.id
-  if (!jobId || typeof jobId !== 'string' || !uuid.test(jobId)) {
+  if (!isUuid(jobId)) {
     return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
   }
 

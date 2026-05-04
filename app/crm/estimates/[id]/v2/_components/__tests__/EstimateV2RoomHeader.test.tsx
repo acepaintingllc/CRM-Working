@@ -28,6 +28,7 @@ function makeRoomVm(
     selectedRoomResolvedMode: 'RECT',
     selectedRoomGeometryMode: 'RECT',
     roomTypeOptions: [],
+    roomTypeCatalogStatus: 'empty',
     roomFlags: [],
     roomScopeByRoomId: new Map(),
     roomCeilingScopeByRoomId: new Map(),
@@ -265,22 +266,24 @@ describe('EstimateV2RoomHeader', () => {
     expect(screen.getByText('8 ft')).toBeInTheDocument()
   })
 
-  it('disables the room type select and shows Catalog unavailable when options are empty', () => {
+  it('disables the room type select and shows an intentional empty state when no templates are configured', () => {
     render(
       <EstimateV2RoomHeader
         styles={estimateV2EditorPageStyles}
-        roomVm={makeRoomVm({ roomTypeOptions: [] })}
+        roomVm={makeRoomVm({ roomTypeOptions: [], roomTypeCatalogStatus: 'empty' })}
         toDisplayNumber={(value) => String(value ?? '--')}
       />
     )
 
     const select = screen.getByRole('combobox')
     expect(select).toBeDisabled()
-    expect(screen.getByText('Catalog unavailable')).toBeInTheDocument()
-    expect(screen.getByText('Room type templates could not be loaded')).toBeInTheDocument()
+    expect(screen.getByText('No templates configured')).toBeInTheDocument()
+    expect(
+      screen.getByText('No room type templates are configured for this estimate template yet')
+    ).toBeInTheDocument()
   })
 
-  it('keeps a saved room type value selected when the room type catalog is unavailable', () => {
+  it('keeps a saved room type value selected when the room type catalog is empty', () => {
     const selectedRoom = {
       id: 'room-1',
       roomId: 'R001',
@@ -297,7 +300,11 @@ describe('EstimateV2RoomHeader', () => {
     render(
       <EstimateV2RoomHeader
         styles={estimateV2EditorPageStyles}
-        roomVm={makeRoomVm({ selectedRoom, roomTypeOptions: [] })}
+        roomVm={makeRoomVm({
+          selectedRoom,
+          roomTypeOptions: [],
+          roomTypeCatalogStatus: 'empty',
+        })}
         toDisplayNumber={(value) => String(value ?? '--')}
       />
     )
@@ -305,7 +312,24 @@ describe('EstimateV2RoomHeader', () => {
     const select = screen.getByRole('combobox') as HTMLSelectElement
     expect(select).toBeDisabled()
     expect(select.value).toBe('LIVING')
+    expect(
+      screen.getByText('No room type templates are configured for this estimate template yet')
+    ).toBeInTheDocument()
+  })
+
+  it('shows the load failure message only when the catalog request fails', () => {
+    render(
+      <EstimateV2RoomHeader
+        styles={estimateV2EditorPageStyles}
+        roomVm={makeRoomVm({ roomTypeOptions: [], roomTypeCatalogStatus: 'error' })}
+        toDisplayNumber={(value) => String(value ?? '--')}
+      />
+    )
+
+    const select = screen.getByRole('combobox')
+    expect(select).toBeDisabled()
     expect(screen.getByText('Catalog unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Room type templates could not be loaded')).toBeInTheDocument()
   })
 
   it('renders formula context in rectangle mode from total inches', () => {

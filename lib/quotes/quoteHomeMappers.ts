@@ -88,6 +88,7 @@ function getCustomerName(row: EstimateCollectionDecoratedRowInput): string {
 export function toQuoteListEstimate(row: EstimateCollectionDecoratedRowInput): QuoteListEstimate {
   return {
     id: asRequiredText(row.id, getEstimateId(row)),
+    org_id: asRequiredText(row.org_id, ''),
     job_id: asRequiredText(row.job_id, ''),
     customer_id: asRequiredText(row.customer_id, ''),
     status: asNullableText(row.status),
@@ -110,6 +111,7 @@ export function toQuoteHomeJobVersionItem(
 ): QuoteHomeJobVersionItemReadModel {
   return {
     estimate_id: getEstimateId(row),
+    org_id: asRequiredText(row.org_id, ''),
     job_id: asRequiredText(row.job_id, ''),
     customer_id: asRequiredText(row.customer_id, ''),
     version_name: getVersionName(row),
@@ -159,6 +161,7 @@ export function decorateEstimateCollectionRows(
     return {
       id: row.id,
       estimate_id: row.id,
+      org_id: row.org_id,
       job_id: row.job_id,
       customer_id: row.customer_id,
       status: row.status,

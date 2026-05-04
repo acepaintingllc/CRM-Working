@@ -117,4 +117,44 @@ describe('useEstimateV2EditorLoader', () => {
       TRIM_OIL_BASED: 'active',
     })
   })
+
+  it('logs sanitized diagnostics and surfaces a retryable error when estimate load fails', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    const store = createEstimateV2Store()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    authedFetch
+      .mockResolvedValueOnce(createResponse(false, { error: 'Quote not found' }, 404))
+      .mockResolvedValueOnce(createResponse(true, { data: { catalogs: fixture.catalogs } }))
+
+    try {
+      renderHook(() =>
+        useEstimateV2EditorLoader({
+          estimateId: fixture.estimate.id,
+          routeFamily: estimateRouteFamily,
+          store,
+        })
+      )
+
+      await waitFor(() => {
+        expect(store.getState().meta.loading).toBe(false)
+      })
+
+      expect(store.getState().meta.error?.message).toBe('Quote not found')
+      expect(consoleError).toHaveBeenCalledWith(
+        'Estimate V2 editor load failed',
+        expect.stringContaining('loadEstimate GET /api/estimates/'),
+        expect.objectContaining({
+          operation: 'loadEstimate',
+          method: 'GET',
+          status: 404,
+          message: 'Quote not found',
+          responseEnvelope: 'error',
+          errorShape: 'string',
+        })
+      )
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
 })

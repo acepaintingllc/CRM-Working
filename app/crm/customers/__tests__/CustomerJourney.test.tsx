@@ -208,4 +208,17 @@ describe('customer journey smoke', () => {
     expect(refresh).not.toHaveBeenCalled()
     expect(invalidateSwrKey).toHaveBeenCalledWith('/api/customers/customer-1')
   }, 15000)
+
+  it('does not render timeline controls when the customer detail is missing', async () => {
+    useParams.mockReturnValue({ id: 'missing-customer' })
+    authedFetch.mockResolvedValueOnce(createDataResponse(null))
+
+    render(<CustomerDetailPage />, { wrapper: createSWRWrapper() })
+
+    await waitFor(() => expect(screen.getByText('Customer not found.')).toBeTruthy())
+    expect(screen.queryByRole('heading', { name: 'Timeline' })).toBeNull()
+    expect(screen.queryByPlaceholderText('Add a note about this customer...')).toBeNull()
+    expect(authedFetch).toHaveBeenCalledTimes(1)
+    expect(authedFetch).toHaveBeenCalledWith('/api/customers/missing-customer', undefined)
+  })
 })

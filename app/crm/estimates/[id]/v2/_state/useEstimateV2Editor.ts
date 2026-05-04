@@ -10,6 +10,7 @@ import {
   estimateRouteFamily,
   type EstimateRouteFamily,
 } from '../../estimateRouteFamily'
+import { shouldGuardEstimateV2Navigation } from './estimateV2NavigationGuard'
 import { useEstimateV2BeforeUnload } from './useEstimateV2BeforeUnload'
 import { useEstimateV2CeilingActions } from './useEstimateV2CeilingActions'
 import { useEstimateV2DefaultScopeColorSync } from './useEstimateV2DefaultScopeColorSync'
@@ -34,19 +35,34 @@ export function useEstimateV2Editor({
 }) {
   const [store] = useState(() => createEstimateV2Store())
   const loading = useEstimateV2Store(store, estimateV2StoreSelectors.loading)
+  const navigationSaveState = useEstimateV2Store(store, (state) => ({
+    saving: state.meta.saving,
+    debugMeta: state.meta.debugMeta,
+  }))
   const effectiveJobProductDefaults = useEstimateV2Store(
     store,
     estimateV2StoreSelectors.effectiveJobProductDefaults
   )
 
   const derived = useEstimateV2EditorDerivedSections({ store })
+  const shouldGuardNavigation = shouldGuardEstimateV2Navigation({
+    loading,
+    saving: navigationSaveState.saving,
+    saveVm: {
+      dirty: derived.calculation.dirty,
+      debugMeta: {
+        ...navigationSaveState.debugMeta,
+        usingLocalPreview: derived.calculation.useLocalPreviewCalculations,
+      },
+    },
+  })
 
   useEstimateV2EditorLoader({
     estimateId,
     routeFamily,
     store,
   })
-  useEstimateV2BeforeUnload({ loading, dirty: derived.calculation.dirty })
+  useEstimateV2BeforeUnload({ loading, shouldGuard: shouldGuardNavigation })
   useEstimateV2DefaultScopeColorSync({
     store,
     defaultColorCodeId: derived.catalog.defaultColorCodeId,

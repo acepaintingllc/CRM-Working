@@ -692,10 +692,51 @@ describe('estimate collection service', () => {
       body: { job_id: 'job-1' },
       copy: { createdNotice: 'Estimate version created.', defaultVersionLabel: 'Estimate Version' },
     }
-    const result = { ok: true, data: { id: 'estimate-1', estimate: { id: 'estimate-1' } } }
+    const result = {
+      ok: true,
+      data: {
+        id: 'estimate-1',
+        estimate: {
+          id: 'estimate-1',
+          setting_set_id_used: 'setting-set-active',
+        },
+      },
+    }
     mocks.createEstimateCollectionVersionRecord.mockResolvedValue(result)
 
     await expect(createEstimateCollectionVersion(params, deps)).resolves.toEqual(result)
     expect(mocks.createEstimateCollectionVersionRecord).toHaveBeenCalledWith(params)
+  })
+
+  it('preserves the repository-created active setting set identity on new versions', async () => {
+    const params = {
+      orgId: 'org-1',
+      userId: 'user-1',
+      body: { job_id: 'job-1' },
+      copy: { createdNotice: 'Estimate version created.', defaultVersionLabel: 'Estimate Version' },
+    }
+    mocks.createEstimateCollectionVersionRecord.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'estimate-1',
+        estimate: {
+          id: 'estimate-1',
+          setting_set_id_used: 'setting-set-active',
+        },
+      },
+    })
+
+    const result = await createEstimateCollectionVersion(params, deps)
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        id: 'estimate-1',
+        estimate: {
+          id: 'estimate-1',
+          setting_set_id_used: 'setting-set-active',
+        },
+      },
+    })
   })
 })

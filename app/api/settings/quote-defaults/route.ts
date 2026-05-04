@@ -41,7 +41,11 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const data = await saveQuoteDefaults(sessionResult.session.orgId, normalized.data)
+    const data = await saveQuoteDefaults(
+      sessionResult.session.orgId,
+      normalized.data,
+      sessionResult.session.userId
+    )
     return settingsSaved(data, 'Quote defaults saved.')
   } catch (error) {
     if (error instanceof Error && error.name === 'QuoteDefaultsValidationError') {

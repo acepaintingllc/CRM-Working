@@ -34,7 +34,7 @@ export function buildEstimateV2EditorLoadState(params: {
     selectedRoomId: storeState.meta.selectedRoomId,
   })
   const catalogsError =
-    catalogsOk || catalogsPayload == null || !catalogsErrorMessage
+    catalogsOk || !catalogsErrorMessage
       ? null
       : createEstimateV2Error(catalogsErrorMessage, { retryable: true })
 
@@ -59,6 +59,7 @@ export function buildEstimateV2EditorLoadState(params: {
       drywallCalculations: sanitized.meta.drywallCalculations,
       pricingSummary: sanitized.meta.pricingSummary,
       selectedRoomId: sanitized.meta.selectedRoomId,
+      catalogsError,
       error: catalogsError,
       validationIssues,
       lastSavedSnapshot: sanitized.meta.lastSavedSnapshot,

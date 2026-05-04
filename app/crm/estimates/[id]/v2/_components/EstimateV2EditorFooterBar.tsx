@@ -25,6 +25,9 @@ export function EstimateV2EditorFooterBar({
   summaryVm: EstimateV2EditorSummaryVm
 }) {
   const router = useRouter()
+  const saveDraftDisabled = pageVm.saving || !saveVm.canManualSave
+  const saveAndContinueDisabled =
+    pageVm.saving || !estimateId || (saveVm.dirty && !saveVm.canManualSave)
 
   const saveAndContinue = () => {
     if (!estimateId) return
@@ -60,11 +63,12 @@ export function EstimateV2EditorFooterBar({
           type="button"
           className="v2-btn"
           onClick={() => void saveVm.save()}
-          disabled={pageVm.saving || !saveVm.dirty}
+          disabled={saveDraftDisabled}
+          title={saveDraftDisabled && saveVm.blockedReason ? saveVm.blockedReason : undefined}
           style={{
             ...styles.button,
-            opacity: pageVm.saving || !saveVm.dirty ? 0.5 : 1,
-            cursor: pageVm.saving || !saveVm.dirty ? 'not-allowed' : 'pointer',
+            opacity: saveDraftDisabled ? 0.5 : 1,
+            cursor: saveDraftDisabled ? 'not-allowed' : 'pointer',
           }}
         >
           Save draft
@@ -73,11 +77,14 @@ export function EstimateV2EditorFooterBar({
           type="button"
           className="v2-btn-primary"
           onClick={saveAndContinue}
-          disabled={pageVm.saving || !estimateId}
+          disabled={saveAndContinueDisabled}
+          title={
+            saveAndContinueDisabled && saveVm.blockedReason ? saveVm.blockedReason : undefined
+          }
           style={{
             ...styles.buttonPrimary,
-            opacity: pageVm.saving || !estimateId ? 0.65 : 1,
-            cursor: pageVm.saving || !estimateId ? 'not-allowed' : 'pointer',
+            opacity: saveAndContinueDisabled ? 0.65 : 1,
+            cursor: saveAndContinueDisabled ? 'not-allowed' : 'pointer',
           }}
         >
           {pageVm.saving ? 'Saving...' : 'Save & continue ->'}

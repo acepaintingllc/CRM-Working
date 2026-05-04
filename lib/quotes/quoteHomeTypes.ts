@@ -10,6 +10,7 @@ import type {
 export type EstimateCollectionDecoratedRow = {
   id: string
   estimate_id: string
+  org_id?: string | null
   job_id: string
   customer_id: string
   status: string | null
@@ -85,6 +86,7 @@ export type QuoteHomeCursorKey = {
 
 export type QuoteListEstimate = {
   id: string
+  org_id?: string | null
   job_id: string
   customer_id: string
   status: string | null
@@ -103,6 +105,7 @@ export type QuoteListEstimate = {
 
 type QuoteHomeVersionIdentity = {
   estimate_id: string
+  org_id?: string | null
   job_id: string
   version_name: string
   version_state: string

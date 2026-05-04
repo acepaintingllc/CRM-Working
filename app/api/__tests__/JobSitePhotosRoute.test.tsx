@@ -170,9 +170,22 @@ describe('job site photos route', () => {
   })
 
   it('maps service validation errors', async () => {
-    const formData = new FormData()
-    formData.set('category', 'unsupported')
-    formData.append('photos', new File([new Uint8Array([1])], 'photo.gif', { type: 'image/gif' }))
+    const formData = {
+      get: (name: string) => (name === 'category' ? 'unsupported' : null),
+      getAll: (name: string) => {
+        if (name === 'photos') {
+          return [
+            {
+              name: 'photo.gif',
+              type: 'image/gif',
+              size: 1,
+              arrayBuffer: async () => new Uint8Array([1]).buffer,
+            },
+          ]
+        }
+        return []
+      },
+    } as FormData
     mockUploadJobSitePhotos.mockResolvedValue({
       ok: false,
       kind: 'invalid_input',
@@ -180,10 +193,10 @@ describe('job site photos route', () => {
     })
 
     const response = await POST(
-      new Request('http://localhost/api/jobs/job-1/site-photos', {
-        method: 'POST',
-        body: formData,
-      }),
+      {
+        url: 'http://localhost/api/jobs/job-1/site-photos',
+        formData: async () => formData,
+      } as Request,
       { params: { id: 'job-1' } }
     )
 

@@ -14,6 +14,7 @@ import { useCrmIntentGuard } from '@/app/crm/_hooks/useCrmIntentGuard'
 import { useEstimateV2EditorDerivedSections } from '../../_state/useEstimateV2EditorDerivedSections'
 import { useEstimateV2EditorLoader } from '../../_state/useEstimateV2EditorLoader'
 import { useEstimateV2BeforeUnload } from '../../_state/useEstimateV2BeforeUnload'
+import { shouldGuardEstimateV2Navigation } from '../../_state/estimateV2NavigationGuard'
 import { useEstimateV2SaveController } from '../../_state/useEstimateV2SaveController'
 import {
   useEstimateV2DetailsController,
@@ -40,13 +41,28 @@ export function useEstimateV2DetailsPage({
     estimateV2StoreSelectors.effectiveJobProductDefaults
   )
   const { state, vm } = useEstimateV2DetailsVm({ store, rollerOptionsState, ratesFlagsPayload })
+  const navigationSaveState = useEstimateV2Store(store, (storeState) => ({
+    saving: storeState.meta.saving,
+    debugMeta: storeState.meta.debugMeta,
+  }))
   const dirty = derived.calculation.dirty
+  const shouldGuardNavigation = shouldGuardEstimateV2Navigation({
+    loading: state.loading,
+    saving: navigationSaveState.saving,
+    saveVm: {
+      dirty,
+      debugMeta: {
+        ...navigationSaveState.debugMeta,
+        usingLocalPreview: derived.calculation.useLocalPreviewCalculations,
+      },
+    },
+  })
   const intentGuard = useCrmIntentGuard<EstimateV2DetailsPendingIntent>({
-    hasUnsavedChanges: dirty,
+    hasUnsavedChanges: shouldGuardNavigation,
     getIntentType: (intent) => intent,
   })
 
-  useEstimateV2BeforeUnload({ loading: state.loading, dirty })
+  useEstimateV2BeforeUnload({ loading: state.loading, shouldGuard: shouldGuardNavigation })
 
   const { save: saveEstimateV2 } = useEstimateV2SaveController({
     estimateId,

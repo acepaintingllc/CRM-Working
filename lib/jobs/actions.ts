@@ -17,9 +17,8 @@ import { mapPaintLogRow, type PaintLogRow } from '@/lib/jobs/paintLog'
 import {
   listPaintLogs,
   loadJobRecord,
-  type EstimateDriveFile,
-  type JobDetail,
 } from '@/lib/jobs/client'
+import type { EstimateDriveFile, JobDetail } from '@/types/jobs/api'
 import type { StageEmailStage } from '@/lib/jobs/types'
 
 export type StageEmailTemplate = {

@@ -12,6 +12,7 @@ import {
 } from './estimateV2EditorNormalize.ts'
 import type {
   EstimateV2CeilingScopeDraft,
+  EstimateV2CeilingSegmentDraft,
   EstimateV2DoorScopeDraft,
   EstimateV2DrywallRepairDraft,
   EstimateV2HeightFactorOption,
@@ -295,6 +296,51 @@ export function buildWallScopeEffectiveTotalById(wallCalculations: EstimateV2Wal
   return next
 }
 
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+function scaledLocalTotal(params: {
+  include: 'Y' | 'N'
+  overrideTotal: string
+  localMeasurement: number | null | undefined
+  savedMeasurement: number | null | undefined
+  savedTotal: number | null | undefined
+}) {
+  if (params.include !== 'Y') return 0
+  const overrideTotal = numberOrNull(params.overrideTotal)
+  if (overrideTotal != null && overrideTotal >= 0) return overrideTotal
+  if (params.localMeasurement == null) return null
+  if (params.savedTotal == null) return null
+  const savedMeasurement = params.savedMeasurement
+  if (savedMeasurement != null && savedMeasurement > 0) {
+    return roundCurrency(params.savedTotal * (params.localMeasurement / savedMeasurement))
+  }
+  return params.localMeasurement === 0 ? 0 : params.savedTotal
+}
+
+export function buildLocalWallScopeEffectiveTotalById(params: {
+  wallScopes: EstimateV2WallScopeDraft[]
+  localScopeEffectiveAreaById: Map<string, number | null>
+  savedScopeEffectiveAreaById: Map<string, number | null>
+  savedScopeEffectiveTotalById: Map<string, number | null>
+}) {
+  const next = new Map<string, number | null>()
+  for (const scope of params.wallScopes) {
+    next.set(
+      scope.id,
+      scaledLocalTotal({
+        include: scope.include,
+        overrideTotal: scope.overrideTotal,
+        localMeasurement: params.localScopeEffectiveAreaById.get(scope.id),
+        savedMeasurement: params.savedScopeEffectiveAreaById.get(scope.id),
+        savedTotal: params.savedScopeEffectiveTotalById.get(scope.id),
+      })
+    )
+  }
+  return next
+}
+
 export function buildWallScopeEffectiveAreaById(wallCalculations: EstimateV2WallCalculationsPayload | null) {
   const next = new Map<string, number | null>()
   for (const trace of wallCalculations?.scope_traces ?? []) {
@@ -363,6 +409,132 @@ export function buildLocalRoomEffectiveAreaByRoomId(
       return sum + (localScopeEffectiveAreaById.get(scope.id) ?? 0)
     }, 0)
     next.set(room.roomId, total)
+  }
+  return next
+}
+
+function ceilingSegmentEffectiveArea(segment: EstimateV2CeilingSegmentDraft) {
+  if (segment.include !== 'Y') return 0
+  const quantity = numberOrNull(segment.quantity) ?? 1
+  if (quantity <= 0) return null
+  let geometry: number | null = null
+  if (segment.shapeType === 'RECTANGLE') {
+    const width = numberOrNull(segment.widthIn)
+    const height = numberOrNull(segment.heightIn)
+    geometry = width != null && height != null ? (width * height * quantity) / 144 : null
+  } else if (segment.shapeType === 'TRIANGLE') {
+    const base = numberOrNull(segment.baseIn)
+    const height = numberOrNull(segment.heightIn)
+    geometry = base != null && height != null ? ((base * height) / 2 / 144) * quantity : null
+  } else {
+    const manual = numberOrNull(segment.manualAreaSqFt)
+    geometry = manual != null ? manual * quantity : null
+  }
+  const override = numberOrNull(segment.overrideAreaSqFt)
+  return override ?? geometry
+}
+
+function vaultedMeasuredArea(scope: EstimateV2CeilingScopeDraft, room: EstimateV2RoomDraft | null) {
+  const ridgeLength =
+    numberOrNull(scope.vaultedRidgeLengthIn ?? '') ??
+    numberOrNull(scope.lengthIn ?? '') ??
+    numberOrNull(room?.lengthIn ?? '')
+  const slopeLength = numberOrNull(scope.vaultedSlopeLengthIn ?? '')
+  const planeCount = numberOrNull(scope.vaultedPlaneCount ?? '')
+  return ridgeLength != null && slopeLength != null && planeCount != null && planeCount > 0
+    ? (ridgeLength * slopeLength * Math.floor(planeCount)) / 144
+    : null
+}
+
+function ceilingBaseArea(
+  scope: EstimateV2CeilingScopeDraft,
+  room: EstimateV2RoomDraft | null,
+  segments: EstimateV2CeilingSegmentDraft[]
+) {
+  if (scope.mode === 'SEG') {
+    let total = 0
+    for (const segment of segments) {
+      const area = ceilingSegmentEffectiveArea(segment)
+      if (area == null) return null
+      total += area
+    }
+    return Math.round(total * 10000) / 10000
+  }
+  const direct = numberOrNull(scope.areaSf)
+  if (direct != null) return direct
+  if ((scope.ceilingGeometryMode || 'FLAT') === 'VAULTED') {
+    const vaultedArea = vaultedMeasuredArea(scope, room)
+    if (vaultedArea != null) return vaultedArea
+  }
+  const length = numberOrNull(scope.lengthIn) ?? numberOrNull(room?.lengthIn ?? '')
+  const width = numberOrNull(scope.widthIn) ?? numberOrNull(room?.widthIn ?? '')
+  return length != null && width != null ? (length * width) / 144 : null
+}
+
+function ceilingHelperExtraArea(scope: EstimateV2CeilingScopeDraft, baseArea: number | null) {
+  const base = baseArea ?? 0
+  if (base <= 0) return 0
+  if (scope.ceilingGeometryMode === 'VAULTED') {
+    if (numberOrNull(scope.areaSf) != null) return 0
+    if (vaultedMeasuredArea(scope, null) != null) return 0
+    const factor = numberOrNull(scope.vaultedAreaFactor ?? '')
+    return factor != null && factor > 0 ? Math.max(base * factor - base, 0) : null
+  }
+  if (scope.ceilingGeometryMode === 'COFFERED') {
+    const sectionLength = numberOrNull(scope.cofferSectionLengthIn ?? '') ?? 0
+    const sectionWidth = numberOrNull(scope.cofferSectionWidthIn ?? '') ?? 0
+    const sectionCount = Math.max(0, Math.floor(numberOrNull(scope.cofferSectionCount ?? '') ?? 0))
+    const faceHeight = numberOrNull(scope.cofferFaceHeightIn ?? '') ?? 0
+    const bottomWidth = numberOrNull(scope.cofferBottomWidthIn ?? '') ?? 0
+    const sectionPerimeter = 2 * (sectionLength + sectionWidth)
+    return sectionCount * ((sectionPerimeter * faceHeight) / 144 + (sectionPerimeter * bottomWidth) / 144)
+  }
+  return 0
+}
+
+export function buildLocalCeilingScopeEffectiveAreaById(params: {
+  ceilingScopes: EstimateV2CeilingScopeDraft[]
+  ceilingSegments: EstimateV2CeilingSegmentDraft[]
+  rooms: EstimateV2RoomDraft[]
+}) {
+  const next = new Map<string, number | null>()
+  const roomById = new Map(params.rooms.map((room) => [room.roomId, room] as const))
+  for (const scope of params.ceilingScopes) {
+    if (scope.include !== 'Y') {
+      next.set(scope.id, 0)
+      continue
+    }
+    const baseArea = ceilingBaseArea(
+      scope,
+      roomById.get(scope.roomId) ?? null,
+      sortByPosition(params.ceilingSegments.filter((segment) => segment.ceilingScopeId === scope.id))
+    )
+    const helperExtra = ceilingHelperExtraArea(scope, baseArea)
+    const override = numberOrNull(scope.overrideAreaSqFt)
+    const effective = override ?? (baseArea != null && helperExtra != null ? baseArea + helperExtra : null)
+    next.set(scope.id, effective == null ? null : Math.round(effective * 10000) / 10000)
+  }
+  return next
+}
+
+export function buildLocalCeilingScopeEffectiveTotalById(params: {
+  ceilingScopes: EstimateV2CeilingScopeDraft[]
+  localCeilingScopeEffectiveAreaById: Map<string, number | null>
+  savedCeilingScopeEffectiveAreaById: Map<string, number | null>
+  savedCeilingScopeEffectiveTotalById: Map<string, number | null>
+}) {
+  const next = new Map<string, number | null>()
+  for (const scope of params.ceilingScopes) {
+    next.set(
+      scope.id,
+      scaledLocalTotal({
+        include: scope.include,
+        overrideTotal: scope.overrideTotal,
+        localMeasurement: params.localCeilingScopeEffectiveAreaById.get(scope.id),
+        savedMeasurement: params.savedCeilingScopeEffectiveAreaById.get(scope.id),
+        savedTotal: params.savedCeilingScopeEffectiveTotalById.get(scope.id),
+      })
+    )
   }
   return next
 }
