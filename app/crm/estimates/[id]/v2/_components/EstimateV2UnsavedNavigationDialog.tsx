@@ -10,11 +10,15 @@ const labelledBy = 'estimate-v2-unsaved-navigation-title'
 
 export function EstimateV2UnsavedNavigationDialog({
   isOpen,
+  canSave,
   onStay,
+  onSave,
   onLeave,
 }: {
   isOpen: boolean
+  canSave: boolean
   onStay: () => void
+  onSave: () => void
   onLeave: () => void
 }) {
   if (!isOpen) return null
@@ -31,22 +35,25 @@ export function EstimateV2UnsavedNavigationDialog({
 
       <div className="grid gap-4 px-5 py-4">
         <CrmNotice tone="warning" compact>
-          Leaving now will discard changes that have not been saved.
+          Save your changes before leaving, discard them, or cancel navigation to keep editing.
         </CrmNotice>
       </div>
 
       <div className="border-t border-[color:var(--crm-ui-border)] px-5 py-4">
         <CrmFormActions>
           <CrmButton type="button" onClick={onStay}>
-            Stay on editor
+            Cancel
+          </CrmButton>
+          <CrmButton type="button" onClick={onSave} disabled={!canSave}>
+            Save and leave
           </CrmButton>
           <CrmButton
             type="button"
             tone="danger"
             onClick={onLeave}
-            aria-label="Leave quote editor and discard unsaved changes"
+            aria-label="Discard changes and leave quote editor"
           >
-            Leave without saving
+            Discard and leave
           </CrmButton>
         </CrmFormActions>
       </div>

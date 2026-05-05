@@ -61,6 +61,10 @@ type ScopeCalc = {
 }
 
 function calcRectArea(scope: WallCalculationScopeRow, settings: ResolvedSettings, missing: MissingInput[]) {
+  if (normalizeInclude(scope.include) === 'N') {
+    return { geometry: null as number | null, deduction: null as number | null, rawArea: null as number | null }
+  }
+
   const perimeter = pos(n(scope.perimeter_in))
   const height = pos(n(scope.height_in))
   if (perimeter == null || height == null) {
@@ -322,9 +326,16 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
   const settings = resolveSettings(input.settings, input.catalogs)
   const products = productMap(input.catalogs)
   const missingInputs: MissingInput[] = []
+  const includedScopeIds = new Set(
+    input.scopes
+      .filter((scope) => normalizeInclude(scope.include) === 'Y')
+      .map((scope) => scope.id)
+      .filter((id): id is string => Boolean(id))
+  )
 
   const normalizedSegments = input.segments.map((segment) => {
-    const calc = segmentArea(segment, settings, missingInputs)
+    const requiresInputs = segment.include === 'Y' && includedScopeIds.has(segment.wall_scope_id)
+    const calc = segmentArea(segment, settings, requiresInputs ? missingInputs : [])
     return { ...segment, raw_area_sf: calc.geometry, effective_area_sf: calc.effective }
   })
 

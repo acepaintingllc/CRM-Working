@@ -139,8 +139,12 @@ describe('Estimate V2 summary extracted components', () => {
           validationColor: '#ccc',
           calculationStateText: 'Saved',
           calculationStateColor: '#ccc',
-          totalEffectiveAreaText: '144 sf',
-          runningTotalLabel: 'Running total - 1 room - active scopes',
+          runningTotalLabel: 'Active scope totals - 1 room',
+          activeScopeTotals: [
+            { key: 'walls', label: 'Walls', value: '0 sf' },
+            { key: 'ceilings', label: 'Ceilings', value: '144 sf' },
+            { key: 'trim', label: 'Trim', value: '0' },
+          ],
           saveStatusText: 'Saved',
           saveStatusColor: '#ccc',
           walls: {
@@ -179,6 +183,9 @@ describe('Estimate V2 summary extracted components', () => {
 
     expect(screen.getByText('Paint: Ceiling Paint')).toBeInTheDocument()
     expect(screen.queryByText('Primer: Ceiling Primer')).not.toBeInTheDocument()
+    expect(screen.getByText('Active Scope Totals')).toBeInTheDocument()
+    expect(screen.getAllByText('Ceilings').length).toBeGreaterThan(0)
+    expect(screen.getByText('144 sf')).toBeInTheDocument()
   })
 })
 

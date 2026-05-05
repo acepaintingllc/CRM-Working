@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import JobDetailPage from '../page'
+import { getJobWorkflowActions } from '@/lib/jobs/types'
 
 const { useJobDetailPageMock } = vi.hoisted(() => ({
   useJobDetailPageMock: vi.fn(),
@@ -54,6 +55,15 @@ function acceptedQuote(overrides: Record<string, unknown> = {}) {
 }
 
 function createController(jobOverrides: Record<string, unknown> = {}) {
+  const job = {
+    id: 'job-1',
+    title: 'Completed repaint',
+    status: 'completed',
+    linked_estimate_id: 'estimate-1',
+    accepted_quote: acceptedQuote(),
+    ...jobOverrides,
+  } as Parameters<typeof getJobWorkflowActions>[1]
+
   return {
     id: 'job-1',
     router: { back: vi.fn(), push: vi.fn() },
@@ -62,14 +72,7 @@ function createController(jobOverrides: Record<string, unknown> = {}) {
       error: null,
       refresh: vi.fn(),
     },
-    job: {
-      id: 'job-1',
-      title: 'Completed repaint',
-      status: 'completed',
-      linked_estimate_id: 'estimate-1',
-      accepted_quote: acceptedQuote(),
-      ...jobOverrides,
-    },
+    job,
     notice: null,
     deleting: false,
     emailStage: null,
@@ -81,8 +84,10 @@ function createController(jobOverrides: Record<string, unknown> = {}) {
     paintLogs: [],
     photosFolderUrl: null,
     photosLoading: false,
+    workflowActions: getJobWorkflowActions('detail', job),
     copy: vi.fn(),
     patchJob: vi.fn(),
+    updateEstimateDate: vi.fn(),
     deleteJob: vi.fn(),
     openStageEmail: vi.fn(),
     openCloseout: vi.fn(),
@@ -140,7 +145,7 @@ describe('JobDetail workflow actuals and review actions', () => {
     )
   })
 
-  it('messages missing accepted snapshots instead of linking to actuals or review', () => {
+  it('links job actuals when an accepted quote is missing its snapshot', () => {
     useJobDetailPageMock.mockReturnValue(
       createController({
         accepted_quote: acceptedQuote({ estimate_snapshot_id: null }),
@@ -149,14 +154,32 @@ describe('JobDetail workflow actuals and review actions', () => {
 
     render(<JobDetailPage />)
 
-    expect(screen.getByRole('button', { name: 'Job actuals' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Job actuals' })).toHaveAttribute(
+      'href',
+      '/crm/jobs/job-1/actuals'
+    )
     expect(screen.getByRole('button', { name: 'Estimate review' })).toBeDisabled()
-    expect(
-      screen.getByText('Accepted quote is missing an estimate snapshot for actuals.')
-    ).toBeTruthy()
-    expect(
-      screen.getByText('Accepted quote is missing an estimate snapshot for review.')
-    ).toBeTruthy()
+    expect(screen.getByText('Submit job actuals before estimate review.')).toBeTruthy()
+  })
+
+  it('links estimate review when an accepted quote is missing its snapshot and actuals are submitted', () => {
+    useJobDetailPageMock.mockReturnValue(
+      createController({
+        accepted_quote: acceptedQuote({ estimate_snapshot_id: null }),
+        job_actuals_status: 'submitted',
+      })
+    )
+
+    render(<JobDetailPage />)
+
+    expect(screen.getByRole('link', { name: 'Job actuals' })).toHaveAttribute(
+      'href',
+      '/crm/jobs/job-1/actuals'
+    )
+    expect(screen.getByRole('link', { name: 'Estimate review' })).toHaveAttribute(
+      'href',
+      '/crm/jobs/job-1/review'
+    )
   })
 
   it('messages jobs with no accepted quote instead of linking to actuals or review', () => {

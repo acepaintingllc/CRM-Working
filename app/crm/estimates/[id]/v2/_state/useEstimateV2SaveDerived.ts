@@ -5,18 +5,10 @@ import { formatDateTime } from '../_lib/estimateV2EditorNormalize'
 import { getSaveStatusText } from '@/lib/estimator/v2WallsAutosave'
 import type { EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 import type { EstimateV2EditorCollections } from './estimateV2EditorTypes'
-import { deriveEstimateV2PreparedSaveValidation } from './estimateV2EditorSaveOrchestration'
-
-function dedupeIssues(issues: string[]) {
-  const seen = new Set<string>()
-  const deduped: string[] = []
-  for (const issue of issues) {
-    if (seen.has(issue)) continue
-    seen.add(issue)
-    deduped.push(issue)
-  }
-  return deduped
-}
+import {
+  deriveEstimateV2PreparedSaveValidation,
+  filterNonBlockingEstimateV2ValidationIssues,
+} from './estimateV2EditorSaveOrchestration'
 
 export function useEstimateV2SaveDerived(params: {
   collections: EstimateV2EditorCollections
@@ -38,7 +30,10 @@ export function useEstimateV2SaveDerived(params: {
     [collections, meta.jobSettingsDraft]
   )
   const savedBlockingIssues = useMemo(
-    () => (!dirty && meta.saveStatus === 'blocked' ? dedupeIssues(meta.validationIssues) : []),
+    () =>
+      !dirty && meta.saveStatus === 'blocked'
+        ? filterNonBlockingEstimateV2ValidationIssues(meta.validationIssues)
+        : [],
     [dirty, meta.saveStatus, meta.validationIssues]
   )
   const blockedReason = blockingIssues[0] ?? savedBlockingIssues[0] ?? meta.autoSaveHint ?? null
@@ -49,7 +44,10 @@ export function useEstimateV2SaveDerived(params: {
         ? 'idle'
         : meta.saveStatus
   const visibleValidationIssues = useMemo(
-    () => (dirty ? blockingIssues : dedupeIssues(meta.validationIssues)),
+    () =>
+      dirty
+        ? blockingIssues
+        : filterNonBlockingEstimateV2ValidationIssues(meta.validationIssues),
     [blockingIssues, dirty, meta.validationIssues]
   )
 

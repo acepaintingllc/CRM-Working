@@ -16,19 +16,10 @@ import JobActionRail from '@/app/crm/jobs/[id]/_components/JobActionRail'
 import JobDetailHeader from '@/app/crm/jobs/[id]/_components/JobDetailHeader'
 import JobDetailsPanel from '@/app/crm/jobs/[id]/_components/JobDetailsPanel'
 import JobTimeline from '@/app/crm/jobs/[id]/_components/JobTimeline'
-import {
-  JOB_STATUS_OPTIONS,
-  getJobWorkflowActions,
-  type JobWorkflowResolvedAction,
-} from '@/lib/jobs/types'
+import { JOB_STATUS_OPTIONS } from '@/lib/jobs/types'
 
 export default function JobDetailPage() {
   const controller = useJobDetailPage()
-
-  const detailActions = controller.job ? getJobWorkflowActions('detail', controller.job) : []
-
-  const actionTone = (action: JobWorkflowResolvedAction) =>
-    action.tone === 'accent' ? 'primary' : action.tone === 'danger' ? 'danger' : 'secondary'
 
   return (
     <CrmPageShell className="crm-job-detail-shell max-w-6xl">
@@ -94,8 +85,7 @@ export default function JobDetailPage() {
                       </CrmButton>
                     ) : null}
                     <JobActionRail
-                      actions={detailActions}
-                      getActionTone={actionTone}
+                      actions={controller.workflowActions}
                       onAction={(action) => void controller.runWorkflowAction(action)}
                     />
                   </CrmSectionCard>
@@ -104,12 +94,10 @@ export default function JobDetailPage() {
               side={
                 <CrmSectionCard title="Timeline" variant="rail">
                   <JobTimeline
-                    job={controller.job}
+                    items={controller.timelineItems}
                     open={controller.timelineOpen}
                     onToggle={() => controller.setTimelineOpen((prev) => !prev)}
-                    onEstimateDateChange={(iso) => void controller.patchJob({ estimate_date: iso })}
-                    formatDate={controller.formatDate}
-                    formatRange={controller.formatRange}
+                    onEstimateDateChange={(iso) => void controller.updateEstimateDate(iso)}
                   />
                 </CrmSectionCard>
               }

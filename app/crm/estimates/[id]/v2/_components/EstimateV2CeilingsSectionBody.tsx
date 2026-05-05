@@ -1,7 +1,6 @@
 'use client'
 
 import { sortByPosition } from '@/lib/estimator/v2DraftPayload'
-import { numberOrNull } from '../_lib/estimateV2EditorNormalize'
 import type { CSSProperties, Dispatch, SetStateAction } from 'react'
 import type { EstimateV2EditorCeilingsVm, EstimateV2EditorRoomVm } from '../_state/estimateV2EditorTypes'
 import {
@@ -21,10 +20,10 @@ import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import { EstimateV2DrywallRepairsBlock } from './EstimateV2DrywallRepairsBlock'
 import type {
   EstimateV2CeilingGeometryMode,
-  EstimateV2CeilingSegmentDraft,
   EstimateV2CeilingSegmentShape as CeilingSegmentShape,
 } from '@/types/estimator/v2'
-import type { EstimateV2CeilingScopeDraft, EstimateV2RoomDraft } from '@/types/estimator/v2'
+import type { EstimateV2CeilingScopeDraft } from '@/types/estimator/v2'
+import type { EstimateV2CeilingScopePreviewMetrics } from '../_lib/estimateV2EditorDerived'
 
 type EditorStyles = Record<string, CSSProperties>
 
@@ -46,15 +45,6 @@ type CeilingTypeShapeOption = {
   label: string
   ceilingTypeId: string
   ceilingGeometryMode: EstimateV2CeilingGeometryMode
-}
-
-function ceilingTypeAreaFactor(
-  catalogs: EstimateV2EditorCeilingsVm['catalogs'],
-  ceilingTypeId: string
-) {
-  if (!ceilingTypeId) return 1
-  const factor = catalogs.ceiling_types.find((opt) => opt.id === ceilingTypeId)?.area_factor
-  return typeof factor === 'number' && Number.isFinite(factor) && factor > 0 ? factor : 1
 }
 
 function inferCeilingGeometryMode(option: { id: string; label: string } | null): EstimateV2CeilingGeometryMode {
@@ -129,101 +119,22 @@ function CeilingTypeShapeField({
   )
 }
 
-function ceilingSegmentArea(segment: EstimateV2CeilingSegmentDraft) {
-  if (segment.include === 'N') return 0
-  const quantity = numberOrNull(segment.quantity) ?? 1
-  if (quantity <= 0) return 0
-  if (segment.shapeType === 'RECTANGLE') {
-    const width = numberOrNull(segment.widthIn)
-    const height = numberOrNull(segment.heightIn)
-    return width != null && height != null ? (width * height * quantity) / 144 : 0
-  }
-  if (segment.shapeType === 'TRIANGLE') {
-    const base = numberOrNull(segment.baseIn)
-    const height = numberOrNull(segment.heightIn)
-    return base != null && height != null ? ((base * height) / 2 / 144) * quantity : 0
-  }
-  return (numberOrNull(segment.manualAreaSqFt) ?? 0) * quantity
-}
-
-function ceilingBaseArea(
-  scope: EstimateV2CeilingScopeDraft,
-  room: EstimateV2RoomDraft | null,
-  segments: EstimateV2CeilingSegmentDraft[] = []
-) {
-  if (scope.mode === 'SEG') return segments.reduce((sum, segment) => sum + ceilingSegmentArea(segment), 0)
-  const direct = numberOrNull(scope.areaSf)
-  if (direct != null) return direct
-  if ((scope.ceilingGeometryMode || 'FLAT') === 'VAULTED') {
-    const vaultedArea = vaultedMeasuredArea(scope, room)
-    if (vaultedArea != null) return vaultedArea
-  }
-  const length = numberOrNull(scope.lengthIn) ?? numberOrNull(room?.lengthIn ?? '')
-  const width = numberOrNull(scope.widthIn) ?? numberOrNull(room?.widthIn ?? '')
-  return length != null && width != null ? (length * width) / 144 : null
-}
-
-function vaultedMeasuredArea(scope: EstimateV2CeilingScopeDraft, room: EstimateV2RoomDraft | null) {
-  const ridgeLength =
-    numberOrNull(scope.vaultedRidgeLengthIn ?? '') ??
-    numberOrNull(scope.lengthIn ?? '') ??
-    numberOrNull(room?.lengthIn ?? '')
-  const slopeLength = numberOrNull(scope.vaultedSlopeLengthIn ?? '')
-  const planeCount = numberOrNull(scope.vaultedPlaneCount ?? '')
-  return ridgeLength != null && slopeLength != null && planeCount != null && planeCount > 0
-    ? (ridgeLength * slopeLength * Math.floor(planeCount)) / 144
-    : null
-}
-
-function ceilingHelperExtraArea(
-  scope: EstimateV2CeilingScopeDraft,
-  baseArea: number | null
-) {
-  const base = baseArea ?? 0
-  if (base <= 0) return 0
-  if (scope.ceilingGeometryMode === 'VAULTED') {
-    if (numberOrNull(scope.areaSf) != null) return 0
-    if (vaultedMeasuredArea(scope, null) != null) return 0
-    const factor = numberOrNull(scope.vaultedAreaFactor ?? '')
-    if (factor == null || factor <= 0) return 0
-    return Math.max(base * factor - base, 0)
-  }
-  if (scope.ceilingGeometryMode === 'COFFERED') {
-    const sectionLength = numberOrNull(scope.cofferSectionLengthIn ?? '') ?? 0
-    const sectionWidth = numberOrNull(scope.cofferSectionWidthIn ?? '') ?? 0
-    const sectionCount = Math.max(0, Math.floor(numberOrNull(scope.cofferSectionCount ?? '') ?? 0))
-    const faceHeight = numberOrNull(scope.cofferFaceHeightIn ?? '') ?? 0
-    const bottomWidth = numberOrNull(scope.cofferBottomWidthIn ?? '') ?? 0
-    const sectionPerimeter = 2 * (sectionLength + sectionWidth)
-    return sectionCount * ((sectionPerimeter * faceHeight) / 144 + (sectionPerimeter * bottomWidth) / 144)
-  }
-  return 0
-}
-
 function CeilingGeometryFields({
   scope,
-  room,
-  segments = [],
-  catalogs,
   styles,
   updateScope,
   toDisplayNumber,
+  metrics,
   subtotal,
 }: {
   scope: EstimateV2CeilingScopeDraft
-  room: EstimateV2RoomDraft | null
-  segments?: EstimateV2CeilingSegmentDraft[]
-  catalogs: EstimateV2EditorCeilingsVm['catalogs']
   styles: EditorStyles
   updateScope: EstimateV2EditorCeilingsVm['updateScope']
   toDisplayNumber: (value: number | null | undefined) => string
+  metrics: EstimateV2CeilingScopePreviewMetrics | null
   subtotal?: number | null
 }) {
   const mode = scope.ceilingGeometryMode || 'FLAT'
-  const baseArea = ceilingBaseArea(scope, room, segments)
-  const helperExtra = ceilingHelperExtraArea(scope, baseArea)
-  const areaFactor = ceilingTypeAreaFactor(catalogs, scope.ceilingTypeId)
-  const finalArea = baseArea == null ? null : (baseArea + helperExtra) * areaFactor
 
   return (
     <div style={{ display: 'grid', gap: 10 }}>
@@ -239,7 +150,7 @@ function CeilingGeometryFields({
                     style={styles.input}
                     type="number"
                     min="0"
-                    placeholder={room?.lengthIn || 'room length'}
+                    placeholder="room length"
                   />
                 </Field>
                 <Field label="Slope Length (in)" styles={sharedStyles(styles)}>
@@ -283,10 +194,10 @@ function CeilingGeometryFields({
       <ScopeHelperBar
         styles={{ mono: styles.mono, computedBig: styles.computedBig }}
         metrics={[
-          { label: 'Base Sq Ft', value: toDisplayNumber(baseArea), muted: baseArea == null },
-          { label: 'Helper Extra', value: toDisplayNumber(helperExtra), muted: helperExtra <= 0 },
-          { label: 'Area Factor', value: toDisplayNumber(areaFactor) },
-          { label: 'Final Sq Ft', value: toDisplayNumber(finalArea), muted: finalArea == null },
+          { label: 'Base Sq Ft', value: toDisplayNumber(metrics?.baseAreaSqFt), muted: metrics?.baseAreaSqFt == null },
+          { label: 'Helper Extra', value: toDisplayNumber(metrics?.helperExtraAreaSqFt), muted: (metrics?.helperExtraAreaSqFt ?? 0) <= 0 },
+          { label: 'Area Factor', value: toDisplayNumber(metrics?.areaFactor) },
+          { label: 'Final Sq Ft', value: toDisplayNumber(metrics?.effectiveAreaSqFt), muted: metrics?.effectiveAreaSqFt == null },
           { label: 'Subtotal', value: formatCurrency(subtotal), muted: subtotal == null },
         ]}
       />
@@ -321,6 +232,7 @@ export function EstimateV2CeilingsSectionBody({
     ceilingPaintOptions,
     ceilingPrimerOptions,
     colorCodeOptions,
+    ceilingScopePreviewMetricsById,
     ceilingScopeEffectiveTotalById,
     updateScope,
     addScope,
@@ -351,7 +263,8 @@ export function EstimateV2CeilingsSectionBody({
 
           {selectedRoomGeometryMode === 'RECT' && firstCeilingScope && (() => {
             const ceilingGeometryMode = firstCeilingScope.ceilingGeometryMode || 'FLAT'
-            const ceilLenSf = ceilingBaseArea(firstCeilingScope, selectedRoom)
+            const previewMetrics = ceilingScopePreviewMetricsById.get(firstCeilingScope.id) ?? null
+            const previewArea = previewMetrics?.effectiveAreaSqFt ?? null
             const subtotal = ceilingScopeEffectiveTotalById.get(firstCeilingScope.id) ?? null
             return (
               <>
@@ -369,15 +282,15 @@ export function EstimateV2CeilingsSectionBody({
                       placeholder={ceilingGeometryMode === 'VAULTED' ? 'optional direct total' : 'optional - uses room LxW'}
                     />
                   </Field>
-                  <div className={ceilLenSf != null ? 'walksqft-box' : 'walksqft-box-empty'}>
+                  <div className={previewArea != null ? 'walksqft-box' : 'walksqft-box-empty'}>
                     <div style={styles.mono}>Ceiling Sq Ft</div>
                     <div
                       style={{
                         ...styles.computedBig,
-                        color: ceilLenSf != null ? 'var(--v2-green-2)' : 'var(--v2-ink-3)',
+                        color: previewArea != null ? 'var(--v2-green-2)' : 'var(--v2-ink-3)',
                       }}
                     >
-                      {toDisplayNumber(ceilLenSf)}
+                      {toDisplayNumber(previewArea)}
                     </div>
                   </div>
                 </div>
@@ -402,11 +315,10 @@ export function EstimateV2CeilingsSectionBody({
                 </div>
                 <CeilingGeometryFields
                   scope={firstCeilingScope}
-                  room={selectedRoom}
-                  catalogs={catalogs}
                   styles={styles}
                   updateScope={updateScope}
                   toDisplayNumber={toDisplayNumber}
+                  metrics={previewMetrics}
                   subtotal={subtotal}
                 />
                 <Field label="Primer Mode" styles={sharedStyles(styles)}>
@@ -449,6 +361,7 @@ export function EstimateV2CeilingsSectionBody({
                   ceilingGeometryMode: 'FLAT' as const,
                 }
                 const subtotal = ceilingScopeEffectiveTotalById.get(scope.id) ?? null
+                const previewMetrics = ceilingScopePreviewMetricsById.get(scope.id) ?? null
                 return (
                   <div
                     key={scope.id}
@@ -479,12 +392,10 @@ export function EstimateV2CeilingsSectionBody({
                     )}
                     <CeilingGeometryFields
                       scope={segmentFlatScope}
-                      room={selectedRoom}
-                      segments={scopeSegs}
-                      catalogs={catalogs}
                       styles={styles}
                       updateScope={updateScope}
                       toDisplayNumber={toDisplayNumber}
+                      metrics={previewMetrics}
                       subtotal={subtotal}
                     />
                     <Field label="Coats" styles={sharedStyles(styles)}>

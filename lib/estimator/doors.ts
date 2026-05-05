@@ -6,6 +6,7 @@ import {
   resolveSettings,
   round4,
 } from './wallsHelpers.ts'
+import { calculateDoorBillableUnits } from './calculationPrimitives.ts'
 import type { MissingInput, WallRoomTotal, YN } from './wallsTypes.ts'
 import type {
   DoorCalculationInput,
@@ -122,8 +123,11 @@ export function calculateDoors(input: DoorCalculationInput): DoorCalculationOutp
         message: `Door scope ${scope.scope_name ?? (scope.position ?? 0) + 1}: sides must be 1 or 2`,
       })
     }
-    const billableSides = sides === 1 || sides === 2 ? sides : 0
-    const rawUnits = round4((quantity ?? 0) * billableSides)
+    const rawUnits = calculateDoorBillableUnits({
+      include: 'Y',
+      quantity: scope.quantity,
+      sides: scope.sides,
+    })
     const effectiveUnits = include === 'Y' ? rawUnits : 0
     const laborRate = nonNeg(n(scope.labor_rate)) ?? nonNeg(n(rate?.labor_rate)) ?? 0
     const materialRate =

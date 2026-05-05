@@ -1,5 +1,14 @@
 import { resolveHeightFactorMultiplierFromInches } from '../../../../../../lib/estimator/heightFactors.ts'
 import {
+  calculateCeilingScopePreviewAreaBreakdown,
+  calculateCeilingScopePreviewEffectiveArea,
+  calculateDoorScopePreviewCount,
+  calculateDoorScopePreviewEffectiveUnits,
+  calculateDrywallRepairPreviewEffectiveQuantity,
+  calculatePreviewEffectiveTotal,
+  calculateTrimScopePreviewEffectiveMeasurement,
+} from '../../../../../../lib/estimator/previewCalculations.ts'
+import {
   deriveEstimateV2Scope as deriveScope,
   deriveEstimateV2Segment as deriveSegment,
   sortByPosition,
@@ -27,6 +36,14 @@ import type {
   EstimateV2WallSegmentDraft,
   UnsafeRecord as Unsafe,
 } from '../../../../../../types/estimator/v2.ts'
+
+export type EstimateV2CeilingScopePreviewMetrics = {
+  baseAreaSqFt: number | null
+  helperExtraAreaSqFt: number
+  areaFactor: number
+  finalAreaSqFt: number | null
+  effectiveAreaSqFt: number | null
+}
 
 type RoomPositioned = { roomId: string; position: number }
 
@@ -145,142 +162,115 @@ export function buildTrimScopeMetricById(
   return next
 }
 
-function buildTrimCalculationScopeById(trimCalculations: Unsafe | null) {
-  const next = new Map<string, Unsafe>()
-  const calcScopes =
-    trimCalculations && typeof trimCalculations === 'object' && Array.isArray((trimCalculations as Unsafe).scopes)
-      ? ((trimCalculations as Unsafe).scopes as Unsafe[])
-      : []
-  for (const scope of calcScopes) {
-    const scopeId = asText(scope.id)
-    if (!scopeId) continue
-    next.set(scopeId, scope)
-  }
-  return next
-}
-
-function trimModifierProduct(scope: Pick<
-  EstimateV2TrimScopeDraft,
-  | 'prepFactor'
-  | 'heightFactor'
-  | 'profileFactor'
-  | 'roomFlagFactor'
-  | 'maskingFactor'
-  | 'stairFactor'
-  | 'difficultFinishFactor'
-  | 'caulkFillFactor'
->): number {
-  return [
-    scope.prepFactor,
-    scope.heightFactor,
-    scope.profileFactor,
-    scope.roomFlagFactor,
-    scope.maskingFactor,
-    scope.stairFactor,
-    scope.difficultFinishFactor,
-    scope.caulkFillFactor,
-  ].reduce<number>((product, value) => {
-    const factor = numberOrNull(value)
-    return product * (factor != null && factor > 0 ? factor : 1)
-  }, 1)
-}
-
-function trimCalculationModifierProduct(scope: Unsafe): number {
-  return [
-    scope.prep_factor,
-    scope.height_factor,
-    scope.profile_factor,
-    scope.room_flag_factor,
-    scope.masking_factor,
-    scope.stair_factor,
-    scope.difficult_finish_factor,
-    scope.caulk_fill_factor,
-  ].reduce<number>((product, value) => {
-    const factor = unknownNumberOrNull(value)
-    return product * (factor != null && factor > 0 ? factor : 1)
-  }, 1)
-}
-
-function resolveTrimDraftMeasurement(
-  scope: EstimateV2TrimScopeDraft,
-  roomById: Map<string, EstimateV2RoomDraft>,
-  roomModeById: Map<string, 'RECT' | 'SEG'>
-) {
-  if (scope.include !== 'Y') return 0
-  const overrideMeasurement = numberOrNull(scope.overrideMeasurement)
-  if (overrideMeasurement != null && overrideMeasurement >= 0) return overrideMeasurement
-  if (scope.measurementMode === 'ROOM_HELPER') {
-    const explicitHelper = numberOrNull(scope.helperValue)
-    if (explicitHelper != null && explicitHelper >= 0) return explicitHelper
-    const room = roomById.get(scope.roomId)
-    const lengthIn = room ? numberOrNull(room.lengthIn) : null
-    const widthIn = room ? numberOrNull(room.widthIn) : null
-    if (roomModeById.get(scope.roomId) === 'RECT' && lengthIn != null && widthIn != null) {
-      return Math.round(((2 * (lengthIn + widthIn)) / 12) * 10000) / 10000
-    }
-    return 0
-  }
-  return Math.max(numberOrNull(scope.measurementValue) ?? 0, 0)
-}
-
 export function buildLocalTrimScopeMetricById(params: {
-  trimCalculations: Unsafe | null
   trimScopes: EstimateV2TrimScopeDraft[]
   rooms: EstimateV2RoomDraft[]
   roomModeById: Map<string, 'RECT' | 'SEG'>
   key: 'effective_measurement' | 'effective_total'
 }) {
   const next = new Map<string, number | null>()
-  const calcScopeById = buildTrimCalculationScopeById(params.trimCalculations)
   const roomById = new Map(params.rooms.map((room) => [room.roomId, room] as const))
-  const assumptions =
-    params.trimCalculations &&
-    typeof params.trimCalculations === 'object' &&
-    typeof (params.trimCalculations as Unsafe).assumptions === 'object'
-      ? ((params.trimCalculations as Unsafe).assumptions as Unsafe)
-      : null
-  const assumedLaborRate = unknownNumberOrNull(assumptions?.labor_rate_per_hour)
 
   for (const scope of params.trimScopes) {
-    const draftMeasurement = resolveTrimDraftMeasurement(scope, roomById, params.roomModeById)
+    const room = roomById.get(scope.roomId) ?? null
+    const draftMeasurement = calculateTrimScopePreviewEffectiveMeasurement({
+      scope: {
+        include: scope.include,
+        measurementMode: scope.measurementMode,
+        helperSource: scope.helperSource,
+        measurementValue: scope.measurementValue,
+        helperValue: scope.helperValue,
+        overrideMeasurement: scope.overrideMeasurement,
+      },
+      room: room
+        ? {
+            lengthIn: room.lengthIn,
+            widthIn: room.widthIn,
+            mode: params.roomModeById.get(scope.roomId) ?? 'SEG',
+          }
+        : null,
+    })
     if (params.key === 'effective_measurement') {
       next.set(scope.id, draftMeasurement)
       continue
     }
 
-    const overrideTotal = numberOrNull(scope.overrideTotal)
-    if (overrideTotal != null && overrideTotal >= 0) {
-      next.set(scope.id, overrideTotal)
-      continue
-    }
-
-    const calcScope = calcScopeById.get(scope.id)
-    const savedTotal = calcScope ? unknownNumberOrNull(calcScope.effective_total) : null
-    if (savedTotal == null) {
-      next.set(scope.id, null)
-      continue
-    }
-
-    const savedMeasurement = calcScope ? unknownNumberOrNull(calcScope.effective_measurement) : null
-    const measurementRatio =
-      savedMeasurement != null && savedMeasurement > 0
-        ? draftMeasurement / savedMeasurement
-        : draftMeasurement === 0
-          ? 0
-          : 1
-    const savedModifier = calcScope ? trimCalculationModifierProduct(calcScope) : 1
-    const draftModifier = trimModifierProduct(scope)
-    const modifierRatio = savedModifier > 0 ? draftModifier / savedModifier : 1
-    const savedPaintHours = calcScope ? unknownNumberOrNull(calcScope.effective_paint_hours) : null
-    const savedPrimerHours = calcScope ? unknownNumberOrNull(calcScope.effective_primer_hours) : null
-    const savedLaborHours = (savedPaintHours ?? 0) + (savedPrimerHours ?? 0)
-    const laborRate =
-      (calcScope ? unknownNumberOrNull(calcScope.labor_rate_per_hour) : null) ?? assumedLaborRate
-    const savedLaborCost = laborRate != null ? savedLaborHours * laborRate : savedTotal
-    const savedNonLaborCost = Math.max(savedTotal - savedLaborCost, 0)
     next.set(
       scope.id,
-      Math.round((savedLaborCost * measurementRatio * modifierRatio + savedNonLaborCost * measurementRatio) * 100) / 100
+      calculatePreviewEffectiveTotal({
+        include: scope.include,
+        overrideTotal: scope.overrideTotal,
+      })
+    )
+  }
+  return next
+}
+
+export function buildLocalDoorScopeEffectiveUnitsById(doorScopes: EstimateV2DoorScopeDraft[]) {
+  const next = new Map<string, number | null>()
+  for (const scope of doorScopes) {
+    next.set(
+      scope.id,
+      calculateDoorScopePreviewEffectiveUnits({
+        include: scope.include,
+        quantity: scope.quantity,
+        sides: scope.sides,
+      })
+    )
+  }
+  return next
+}
+
+export function buildLocalDoorScopeEffectiveTotalById(doorScopes: EstimateV2DoorScopeDraft[]) {
+  const next = new Map<string, number | null>()
+  for (const scope of doorScopes) {
+    next.set(
+      scope.id,
+      calculatePreviewEffectiveTotal({
+        include: scope.include,
+        overrideTotal: scope.overrideTotal,
+      })
+    )
+  }
+  return next
+}
+
+export function buildDoorScopeCountById(doorScopes: EstimateV2DoorScopeDraft[]) {
+  const next = new Map<string, number | null>()
+  for (const scope of doorScopes) {
+    next.set(
+      scope.id,
+      calculateDoorScopePreviewCount({
+        include: scope.include,
+        quantity: scope.quantity,
+      })
+    )
+  }
+  return next
+}
+
+export function buildLocalDrywallRepairEffectiveQuantityById(repairs: EstimateV2DrywallRepairDraft[]) {
+  const next = new Map<string, number | null>()
+  for (const repair of repairs) {
+    next.set(
+      repair.id,
+      calculateDrywallRepairPreviewEffectiveQuantity({
+        quantity: repair.quantity,
+      })
+    )
+  }
+  return next
+}
+
+export function buildLocalDrywallRepairEffectiveTotalById(repairs: EstimateV2DrywallRepairDraft[]) {
+  const next = new Map<string, number | null>()
+  for (const repair of repairs) {
+    next.set(
+      repair.id,
+      calculatePreviewEffectiveTotal({
+        include: 'Y',
+        overrideTotal: repair.overrideTotal,
+      })
     )
   }
   return next
@@ -296,45 +286,16 @@ export function buildWallScopeEffectiveTotalById(wallCalculations: EstimateV2Wal
   return next
 }
 
-function roundCurrency(value: number) {
-  return Math.round(value * 100) / 100
-}
-
-function scaledLocalTotal(params: {
-  include: 'Y' | 'N'
-  overrideTotal: string
-  localMeasurement: number | null | undefined
-  savedMeasurement: number | null | undefined
-  savedTotal: number | null | undefined
-}) {
-  if (params.include !== 'Y') return 0
-  const overrideTotal = numberOrNull(params.overrideTotal)
-  if (overrideTotal != null && overrideTotal >= 0) return overrideTotal
-  if (params.localMeasurement == null) return null
-  if (params.savedTotal == null) return null
-  const savedMeasurement = params.savedMeasurement
-  if (savedMeasurement != null && savedMeasurement > 0) {
-    return roundCurrency(params.savedTotal * (params.localMeasurement / savedMeasurement))
-  }
-  return params.localMeasurement === 0 ? 0 : params.savedTotal
-}
-
 export function buildLocalWallScopeEffectiveTotalById(params: {
   wallScopes: EstimateV2WallScopeDraft[]
-  localScopeEffectiveAreaById: Map<string, number | null>
-  savedScopeEffectiveAreaById: Map<string, number | null>
-  savedScopeEffectiveTotalById: Map<string, number | null>
 }) {
   const next = new Map<string, number | null>()
   for (const scope of params.wallScopes) {
     next.set(
       scope.id,
-      scaledLocalTotal({
+      calculatePreviewEffectiveTotal({
         include: scope.include,
         overrideTotal: scope.overrideTotal,
-        localMeasurement: params.localScopeEffectiveAreaById.get(scope.id),
-        savedMeasurement: params.savedScopeEffectiveAreaById.get(scope.id),
-        savedTotal: params.savedScopeEffectiveTotalById.get(scope.id),
       })
     )
   }
@@ -413,126 +374,66 @@ export function buildLocalRoomEffectiveAreaByRoomId(
   return next
 }
 
-function ceilingSegmentEffectiveArea(segment: EstimateV2CeilingSegmentDraft) {
-  if (segment.include !== 'Y') return 0
-  const quantity = numberOrNull(segment.quantity) ?? 1
-  if (quantity <= 0) return null
-  let geometry: number | null = null
-  if (segment.shapeType === 'RECTANGLE') {
-    const width = numberOrNull(segment.widthIn)
-    const height = numberOrNull(segment.heightIn)
-    geometry = width != null && height != null ? (width * height * quantity) / 144 : null
-  } else if (segment.shapeType === 'TRIANGLE') {
-    const base = numberOrNull(segment.baseIn)
-    const height = numberOrNull(segment.heightIn)
-    geometry = base != null && height != null ? ((base * height) / 2 / 144) * quantity : null
-  } else {
-    const manual = numberOrNull(segment.manualAreaSqFt)
-    geometry = manual != null ? manual * quantity : null
-  }
-  const override = numberOrNull(segment.overrideAreaSqFt)
-  return override ?? geometry
-}
-
-function vaultedMeasuredArea(scope: EstimateV2CeilingScopeDraft, room: EstimateV2RoomDraft | null) {
-  const ridgeLength =
-    numberOrNull(scope.vaultedRidgeLengthIn ?? '') ??
-    numberOrNull(scope.lengthIn ?? '') ??
-    numberOrNull(room?.lengthIn ?? '')
-  const slopeLength = numberOrNull(scope.vaultedSlopeLengthIn ?? '')
-  const planeCount = numberOrNull(scope.vaultedPlaneCount ?? '')
-  return ridgeLength != null && slopeLength != null && planeCount != null && planeCount > 0
-    ? (ridgeLength * slopeLength * Math.floor(planeCount)) / 144
-    : null
-}
-
-function ceilingBaseArea(
-  scope: EstimateV2CeilingScopeDraft,
-  room: EstimateV2RoomDraft | null,
-  segments: EstimateV2CeilingSegmentDraft[]
-) {
-  if (scope.mode === 'SEG') {
-    let total = 0
-    for (const segment of segments) {
-      const area = ceilingSegmentEffectiveArea(segment)
-      if (area == null) return null
-      total += area
-    }
-    return Math.round(total * 10000) / 10000
-  }
-  const direct = numberOrNull(scope.areaSf)
-  if (direct != null) return direct
-  if ((scope.ceilingGeometryMode || 'FLAT') === 'VAULTED') {
-    const vaultedArea = vaultedMeasuredArea(scope, room)
-    if (vaultedArea != null) return vaultedArea
-  }
-  const length = numberOrNull(scope.lengthIn) ?? numberOrNull(room?.lengthIn ?? '')
-  const width = numberOrNull(scope.widthIn) ?? numberOrNull(room?.widthIn ?? '')
-  return length != null && width != null ? (length * width) / 144 : null
-}
-
-function ceilingHelperExtraArea(scope: EstimateV2CeilingScopeDraft, baseArea: number | null) {
-  const base = baseArea ?? 0
-  if (base <= 0) return 0
-  if (scope.ceilingGeometryMode === 'VAULTED') {
-    if (numberOrNull(scope.areaSf) != null) return 0
-    if (vaultedMeasuredArea(scope, null) != null) return 0
-    const factor = numberOrNull(scope.vaultedAreaFactor ?? '')
-    return factor != null && factor > 0 ? Math.max(base * factor - base, 0) : null
-  }
-  if (scope.ceilingGeometryMode === 'COFFERED') {
-    const sectionLength = numberOrNull(scope.cofferSectionLengthIn ?? '') ?? 0
-    const sectionWidth = numberOrNull(scope.cofferSectionWidthIn ?? '') ?? 0
-    const sectionCount = Math.max(0, Math.floor(numberOrNull(scope.cofferSectionCount ?? '') ?? 0))
-    const faceHeight = numberOrNull(scope.cofferFaceHeightIn ?? '') ?? 0
-    const bottomWidth = numberOrNull(scope.cofferBottomWidthIn ?? '') ?? 0
-    const sectionPerimeter = 2 * (sectionLength + sectionWidth)
-    return sectionCount * ((sectionPerimeter * faceHeight) / 144 + (sectionPerimeter * bottomWidth) / 144)
-  }
-  return 0
-}
-
 export function buildLocalCeilingScopeEffectiveAreaById(params: {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   rooms: EstimateV2RoomDraft[]
+  ceilingTypes?: Array<{ id: string; area_factor?: number | null; areaFactor?: number | null }>
 }) {
   const next = new Map<string, number | null>()
   const roomById = new Map(params.rooms.map((room) => [room.roomId, room] as const))
   for (const scope of params.ceilingScopes) {
-    if (scope.include !== 'Y') {
-      next.set(scope.id, 0)
-      continue
-    }
-    const baseArea = ceilingBaseArea(
-      scope,
-      roomById.get(scope.roomId) ?? null,
-      sortByPosition(params.ceilingSegments.filter((segment) => segment.ceilingScopeId === scope.id))
+    const room = roomById.get(scope.roomId) ?? null
+    next.set(
+      scope.id,
+      calculateCeilingScopePreviewEffectiveArea({
+        scope,
+        room,
+        segments: sortByPosition(params.ceilingSegments.filter((segment) => segment.ceilingScopeId === scope.id)),
+        ceilingTypes: params.ceilingTypes,
+      })
     )
-    const helperExtra = ceilingHelperExtraArea(scope, baseArea)
-    const override = numberOrNull(scope.overrideAreaSqFt)
-    const effective = override ?? (baseArea != null && helperExtra != null ? baseArea + helperExtra : null)
-    next.set(scope.id, effective == null ? null : Math.round(effective * 10000) / 10000)
+  }
+  return next
+}
+
+export function buildLocalCeilingScopePreviewMetricsById(params: {
+  ceilingScopes: EstimateV2CeilingScopeDraft[]
+  ceilingSegments: EstimateV2CeilingSegmentDraft[]
+  rooms: EstimateV2RoomDraft[]
+  ceilingTypes?: Array<{ id: string; area_factor?: number | null; areaFactor?: number | null }>
+}) {
+  const next = new Map<string, EstimateV2CeilingScopePreviewMetrics>()
+  const roomById = new Map(params.rooms.map((room) => [room.roomId, room] as const))
+  for (const scope of params.ceilingScopes) {
+    const room = roomById.get(scope.roomId) ?? null
+    const breakdown = calculateCeilingScopePreviewAreaBreakdown({
+      scope,
+      room,
+      segments: sortByPosition(params.ceilingSegments.filter((segment) => segment.ceilingScopeId === scope.id)),
+      ceilingTypes: params.ceilingTypes,
+    })
+    next.set(scope.id, {
+      baseAreaSqFt: breakdown.baseArea,
+      helperExtraAreaSqFt: breakdown.helperExtraArea,
+      areaFactor: breakdown.areaFactor,
+      finalAreaSqFt: breakdown.finalArea,
+      effectiveAreaSqFt: breakdown.effectiveArea,
+    })
   }
   return next
 }
 
 export function buildLocalCeilingScopeEffectiveTotalById(params: {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
-  localCeilingScopeEffectiveAreaById: Map<string, number | null>
-  savedCeilingScopeEffectiveAreaById: Map<string, number | null>
-  savedCeilingScopeEffectiveTotalById: Map<string, number | null>
 }) {
   const next = new Map<string, number | null>()
   for (const scope of params.ceilingScopes) {
     next.set(
       scope.id,
-      scaledLocalTotal({
+      calculatePreviewEffectiveTotal({
         include: scope.include,
         overrideTotal: scope.overrideTotal,
-        localMeasurement: params.localCeilingScopeEffectiveAreaById.get(scope.id),
-        savedMeasurement: params.savedCeilingScopeEffectiveAreaById.get(scope.id),
-        savedTotal: params.savedCeilingScopeEffectiveTotalById.get(scope.id),
       })
     )
   }

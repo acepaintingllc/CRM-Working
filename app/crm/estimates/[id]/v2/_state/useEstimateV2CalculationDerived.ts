@@ -4,12 +4,14 @@ import { useMemo } from 'react'
 import {
   buildCeilingScopeEffectiveAreaById,
   buildCeilingScopeEffectiveTotalById,
+  buildDoorScopeCountById,
   buildLocalCeilingScopeEffectiveAreaById,
-  buildLocalCeilingScopeEffectiveTotalById,
+  buildLocalCeilingScopePreviewMetricsById,
+  buildLocalDoorScopeEffectiveUnitsById,
+  buildLocalDrywallRepairEffectiveQuantityById,
   buildLocalRoomEffectiveAreaByRoomId,
   buildLocalScopeEffectiveAreaById,
   buildLocalSegmentEffectiveAreaById,
-  buildLocalWallScopeEffectiveTotalById,
   buildLocalTrimScopeMetricById,
   buildTrimScopeMetricById,
   buildWallRoomEffectiveAreaByRoomId,
@@ -19,6 +21,7 @@ import {
   sumIncludedValues,
 } from '../_lib/estimateV2EditorDerived'
 import { resolveRoomModeById } from '../_lib/estimateV2EditorNormalize'
+import { calculateEstimateV2Preview } from '@/lib/estimator/v2PreviewCalculations'
 import {
   areEstimateV2DirtySnapshotsEqual,
   buildEstimateV2DirtySnapshot,
@@ -41,6 +44,78 @@ function sumRowsById<T extends { id: string }>(rows: T[], valueById: Map<string,
   return hasValues ? Math.round(total * 100) / 100 : null
 }
 
+function sumIncludedRowsById<T extends { id: string; include: 'Y' | 'N' }>(
+  rows: T[],
+  valueById: Map<string, number | null>
+) {
+  return sumRowsById(rows.filter((row) => row.include === 'Y'), valueById)
+}
+
+function sumIncludedTrimMeasurement<T extends { id: string; include: 'Y' | 'N' }>(
+  rows: T[],
+  valueById: Map<string, number | null>
+) {
+  let total = 0
+  let hasValues = false
+  for (const row of rows) {
+    if (row.include !== 'Y') continue
+    const value = valueById.get(row.id)
+    if (value == null) continue
+    hasValues = true
+    total += value
+  }
+  return hasValues ? Math.round(total * 10000) / 10000 : null
+}
+
+function summarizeTrimUnits(
+  rows: Array<{ id: string; include: 'Y' | 'N'; unitType: string }>,
+  valueById: Map<string, number | null>
+) {
+  const byUnit = new Map<string, number>()
+  let hasValues = false
+  for (const row of rows) {
+    if (row.include !== 'Y') continue
+    const value = valueById.get(row.id)
+    if (value == null) continue
+    hasValues = true
+    byUnit.set(row.unitType || 'Measure', (byUnit.get(row.unitType || 'Measure') ?? 0) + value)
+  }
+
+  return {
+    total: hasValues
+      ? Math.round(Array.from(byUnit.values()).reduce((sum, value) => sum + value, 0) * 10000) / 10000
+      : null,
+    unit:
+      byUnit.size === 1
+        ? Array.from(byUnit.keys())[0]
+        : byUnit.size > 1
+          ? 'mixed'
+          : null,
+    byUnit,
+  }
+}
+
+function hasNonNegativeNumber(value: unknown) {
+  if (value == null || value === '') return false
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0
+}
+
+function buildOverrideDrivenTotalById(params: {
+  rows: Array<Record<string, unknown>>
+  calculatedTotalById: Map<string, number | null>
+  overrideKeys: string[]
+}) {
+  const next = new Map<string, number | null>()
+  for (const row of params.rows) {
+    const id = typeof row.id === 'string' ? row.id : ''
+    if (!id) continue
+    const hasTotalDrivingOverride = params.overrideKeys.some((key) => hasNonNegativeNumber(row[key]))
+    next.set(id, hasTotalDrivingOverride ? params.calculatedTotalById.get(id) ?? null : null)
+  }
+  return next
+}
+
 export function useEstimateV2CalculationDerived(params: {
   collections: Pick<
     EstimateV2EditorCollections,
@@ -61,6 +136,7 @@ export function useEstimateV2CalculationDerived(params: {
   meta: Pick<
     EstimateV2EditorMetaState,
     | 'loading'
+    | 'estimate'
     | 'lastSavedSnapshot'
     | 'wallCalculations'
     | 'ceilingCalculations'
@@ -68,16 +144,18 @@ export function useEstimateV2CalculationDerived(params: {
     | 'doorCalculations'
     | 'drywallCalculations'
     | 'jobSettingsDraft'
+    | 'catalogs'
   >
   selectedRoom: EstimateV2RoomDraft | null
   firstScope: { id: string } | null
+  selectedRoomScopes: Array<{ id: string; include: 'Y' | 'N' }>
   selectedRoomCeilingScopes: Array<{ id: string; include: 'Y' | 'N' }>
   selectedRoomTrimScopes: Array<{ id: string; include: 'Y' | 'N' }>
   selectedRoomDoorScopes: Array<{ id: string; include: 'Y' | 'N' }>
   selectedRoomWallDrywallRepairs: EstimateV2DrywallRepairDraft[]
   selectedRoomCeilingDrywallRepairs: EstimateV2DrywallRepairDraft[]
 }) {
-  const { collections, meta, selectedRoom, firstScope, selectedRoomCeilingScopes, selectedRoomTrimScopes, selectedRoomDoorScopes, selectedRoomWallDrywallRepairs, selectedRoomCeilingDrywallRepairs } =
+  const { collections, meta, selectedRoom, firstScope, selectedRoomScopes, selectedRoomCeilingScopes, selectedRoomTrimScopes, selectedRoomDoorScopes, selectedRoomWallDrywallRepairs, selectedRoomCeilingDrywallRepairs } =
     params
 
   const ceilingScopeEffectiveAreaById = useMemo(
@@ -145,39 +223,25 @@ export function useEstimateV2CalculationDerived(params: {
       ),
     [collections.rooms, collections.scopes, localScopeEffectiveAreaById]
   )
-  const localWallScopeEffectiveTotalById = useMemo(
-    () =>
-      buildLocalWallScopeEffectiveTotalById({
-        wallScopes: collections.scopes,
-        localScopeEffectiveAreaById,
-        savedScopeEffectiveAreaById: scopeEffectiveAreaById,
-        savedScopeEffectiveTotalById: wallScopeEffectiveTotalById,
-      }),
-    [collections.scopes, localScopeEffectiveAreaById, scopeEffectiveAreaById, wallScopeEffectiveTotalById]
-  )
   const localCeilingScopeEffectiveAreaById = useMemo(
     () =>
       buildLocalCeilingScopeEffectiveAreaById({
         ceilingScopes: collections.ceilingScopes,
         ceilingSegments: collections.ceilingSegments,
         rooms: collections.rooms,
+        ceilingTypes: meta.catalogs.ceiling_types,
       }),
-    [collections.ceilingScopes, collections.ceilingSegments, collections.rooms]
+    [collections.ceilingScopes, collections.ceilingSegments, collections.rooms, meta.catalogs.ceiling_types]
   )
-  const localCeilingScopeEffectiveTotalById = useMemo(
+  const localCeilingScopePreviewMetricsById = useMemo(
     () =>
-      buildLocalCeilingScopeEffectiveTotalById({
+      buildLocalCeilingScopePreviewMetricsById({
         ceilingScopes: collections.ceilingScopes,
-        localCeilingScopeEffectiveAreaById,
-        savedCeilingScopeEffectiveAreaById: ceilingScopeEffectiveAreaById,
-        savedCeilingScopeEffectiveTotalById: ceilingScopeEffectiveTotalById,
+        ceilingSegments: collections.ceilingSegments,
+        rooms: collections.rooms,
+        ceilingTypes: meta.catalogs.ceiling_types,
       }),
-    [
-      ceilingScopeEffectiveAreaById,
-      ceilingScopeEffectiveTotalById,
-      collections.ceilingScopes,
-      localCeilingScopeEffectiveAreaById,
-    ]
+    [collections.ceilingScopes, collections.ceilingSegments, collections.rooms, meta.catalogs.ceiling_types]
   )
   const currentSnapshot = useMemo(
     () =>
@@ -212,10 +276,53 @@ export function useEstimateV2CalculationDerived(params: {
       meta.jobSettingsDraft,
     ]
   )
-  const dirty = !meta.loading && !areEstimateV2DirtySnapshotsEqual(currentSnapshot, meta.lastSavedSnapshot)
+  const dirty =
+    !meta.loading &&
+    meta.estimate != null &&
+    !areEstimateV2DirtySnapshotsEqual(currentSnapshot, meta.lastSavedSnapshot)
   const currentPayload = currentSnapshot.payload
   const hasServerCalculations = (meta.wallCalculations?.room_totals?.length ?? 0) > 0
   const useLocalPreviewCalculations = dirty || !hasServerCalculations
+  const localPreviewCalculations = useMemo(
+    () =>
+      calculateEstimateV2Preview({
+        payload: currentPayload,
+        catalogs: meta.catalogs,
+      }),
+    [currentPayload, meta.catalogs]
+  )
+  const localWallScopeEffectiveTotalById = useMemo(
+    () =>
+      buildOverrideDrivenTotalById({
+        rows: currentPayload.room_wall_scopes,
+        calculatedTotalById: buildWallScopeEffectiveTotalById(localPreviewCalculations.walls),
+        overrideKeys: [
+          'override_paint_hours',
+          'override_primer_hours',
+          'override_paint_gallons',
+          'override_primer_gallons',
+          'override_supply_cost',
+          'override_total',
+        ],
+      }),
+    [currentPayload.room_wall_scopes, localPreviewCalculations.walls]
+  )
+  const localCeilingScopeEffectiveTotalById = useMemo(
+    () =>
+      buildOverrideDrivenTotalById({
+        rows: currentPayload.room_ceiling_scopes,
+        calculatedTotalById: buildCeilingScopeEffectiveTotalById(localPreviewCalculations.ceilings),
+        overrideKeys: [
+          'override_paint_hours',
+          'override_primer_hours',
+          'override_paint_gallons',
+          'override_primer_gallons',
+          'override_supply_cost',
+          'override_total',
+        ],
+      }),
+    [currentPayload.room_ceiling_scopes, localPreviewCalculations.ceilings]
+  )
   const localRoomModeById = useMemo(
     () =>
       resolveRoomModeById({
@@ -228,24 +335,57 @@ export function useEstimateV2CalculationDerived(params: {
   const localTrimScopeEffectiveMeasurementById = useMemo(
     () =>
       buildLocalTrimScopeMetricById({
-        trimCalculations: meta.trimCalculations,
         trimScopes: collections.trimScopes,
         rooms: collections.rooms,
         roomModeById: localRoomModeById,
         key: 'effective_measurement',
       }),
-    [collections.rooms, collections.trimScopes, localRoomModeById, meta.trimCalculations]
+    [collections.rooms, collections.trimScopes, localRoomModeById]
   )
   const localTrimScopeEffectiveTotalById = useMemo(
     () =>
-      buildLocalTrimScopeMetricById({
-        trimCalculations: meta.trimCalculations,
-        trimScopes: collections.trimScopes,
-        rooms: collections.rooms,
-        roomModeById: localRoomModeById,
-        key: 'effective_total',
+      buildOverrideDrivenTotalById({
+        rows: currentPayload.room_trim_scopes,
+        calculatedTotalById: buildTrimScopeMetricById(localPreviewCalculations.trim, 'effective_total'),
+        overrideKeys: ['override_hours', 'override_gallons', 'override_supply_cost', 'override_total'],
       }),
-    [collections.rooms, collections.trimScopes, localRoomModeById, meta.trimCalculations]
+    [currentPayload.room_trim_scopes, localPreviewCalculations.trim]
+  )
+  const localDoorScopeEffectiveUnitsById = useMemo(
+    () => buildLocalDoorScopeEffectiveUnitsById(collections.doorScopes),
+    [collections.doorScopes]
+  )
+  const localDoorScopeEffectiveTotalById = useMemo(
+    () =>
+      buildOverrideDrivenTotalById({
+        rows: currentPayload.room_door_scopes ?? [],
+        calculatedTotalById: buildTrimScopeMetricById(localPreviewCalculations.doors, 'effective_total'),
+        overrideKeys: [
+          'override_paint_hours',
+          'override_primer_hours',
+          'override_material_cost',
+          'override_supply_cost',
+          'override_total',
+        ],
+      }),
+    [currentPayload.room_door_scopes, localPreviewCalculations.doors]
+  )
+  const doorScopeCountById = useMemo(
+    () => buildDoorScopeCountById(collections.doorScopes),
+    [collections.doorScopes]
+  )
+  const localDrywallRepairEffectiveQuantityById = useMemo(
+    () => buildLocalDrywallRepairEffectiveQuantityById(collections.drywallRepairs),
+    [collections.drywallRepairs]
+  )
+  const localDrywallRepairEffectiveTotalById = useMemo(
+    () =>
+      buildOverrideDrivenTotalById({
+        rows: currentPayload.drywall_repairs ?? [],
+        calculatedTotalById: buildTrimScopeMetricById(localPreviewCalculations.drywall, 'effective_total'),
+        overrideKeys: ['override_total'],
+      }),
+    [currentPayload.drywall_repairs, localPreviewCalculations.drywall]
   )
   const displayedSegmentEffectiveAreaById = useMemo(
     () => (useLocalPreviewCalculations ? localSegmentEffectiveAreaById : segmentEffectiveAreaById),
@@ -289,33 +429,77 @@ export function useEstimateV2CalculationDerived(params: {
         : trimScopeEffectiveTotalById,
     [localTrimScopeEffectiveTotalById, trimScopeEffectiveTotalById, useLocalPreviewCalculations]
   )
+  const displayedDoorScopeEffectiveUnitsById = useMemo(
+    () =>
+      useLocalPreviewCalculations
+        ? localDoorScopeEffectiveUnitsById
+        : doorScopeEffectiveUnitsById,
+    [doorScopeEffectiveUnitsById, localDoorScopeEffectiveUnitsById, useLocalPreviewCalculations]
+  )
+  const displayedDoorScopeEffectiveTotalById = useMemo(
+    () =>
+      useLocalPreviewCalculations
+        ? localDoorScopeEffectiveTotalById
+        : doorScopeEffectiveTotalById,
+    [doorScopeEffectiveTotalById, localDoorScopeEffectiveTotalById, useLocalPreviewCalculations]
+  )
+  const displayedDrywallRepairEffectiveQuantityById = useMemo(
+    () =>
+      useLocalPreviewCalculations
+        ? localDrywallRepairEffectiveQuantityById
+        : drywallRepairEffectiveQuantityById,
+    [
+      drywallRepairEffectiveQuantityById,
+      localDrywallRepairEffectiveQuantityById,
+      useLocalPreviewCalculations,
+    ]
+  )
+  const displayedDrywallRepairEffectiveTotalById = useMemo(
+    () =>
+      useLocalPreviewCalculations
+        ? localDrywallRepairEffectiveTotalById
+        : drywallRepairEffectiveTotalById,
+    [
+      drywallRepairEffectiveTotalById,
+      localDrywallRepairEffectiveTotalById,
+      useLocalPreviewCalculations,
+    ]
+  )
   const selectedCeilingEffectiveSqFt = useMemo(
     () => sumIncludedValues(selectedRoomCeilingScopes, displayedCeilingScopeEffectiveAreaById),
     [displayedCeilingScopeEffectiveAreaById, selectedRoomCeilingScopes]
+  )
+  const selectedWallSubtotal = useMemo(
+    () => sumIncludedValues(selectedRoomScopes, displayedWallScopeEffectiveTotalById),
+    [displayedWallScopeEffectiveTotalById, selectedRoomScopes]
+  )
+  const selectedCeilingSubtotal = useMemo(
+    () => sumIncludedValues(selectedRoomCeilingScopes, displayedCeilingScopeEffectiveTotalById),
+    [displayedCeilingScopeEffectiveTotalById, selectedRoomCeilingScopes]
   )
   const selectedTrimSubtotal = useMemo(
     () => sumIncludedValues(selectedRoomTrimScopes, displayedTrimScopeEffectiveTotalById),
     [selectedRoomTrimScopes, displayedTrimScopeEffectiveTotalById]
   )
   const selectedTrimMeasurement = useMemo(
-    () => sumIncludedValues(selectedRoomTrimScopes, displayedTrimScopeEffectiveMeasurementById),
+    () => sumIncludedTrimMeasurement(selectedRoomTrimScopes, displayedTrimScopeEffectiveMeasurementById),
     [selectedRoomTrimScopes, displayedTrimScopeEffectiveMeasurementById]
   )
   const selectedDoorSubtotal = useMemo(
-    () => sumIncludedValues(selectedRoomDoorScopes, doorScopeEffectiveTotalById),
-    [doorScopeEffectiveTotalById, selectedRoomDoorScopes]
+    () => sumIncludedValues(selectedRoomDoorScopes, displayedDoorScopeEffectiveTotalById),
+    [displayedDoorScopeEffectiveTotalById, selectedRoomDoorScopes]
   )
   const selectedDoorUnits = useMemo(
-    () => sumIncludedValues(selectedRoomDoorScopes, doorScopeEffectiveUnitsById),
-    [doorScopeEffectiveUnitsById, selectedRoomDoorScopes]
+    () => sumIncludedValues(selectedRoomDoorScopes, displayedDoorScopeEffectiveUnitsById),
+    [displayedDoorScopeEffectiveUnitsById, selectedRoomDoorScopes]
   )
   const selectedWallDrywallSubtotal = useMemo(
-    () => sumRowsById(selectedRoomWallDrywallRepairs, drywallRepairEffectiveTotalById),
-    [drywallRepairEffectiveTotalById, selectedRoomWallDrywallRepairs]
+    () => sumRowsById(selectedRoomWallDrywallRepairs, displayedDrywallRepairEffectiveTotalById),
+    [displayedDrywallRepairEffectiveTotalById, selectedRoomWallDrywallRepairs]
   )
   const selectedCeilingDrywallSubtotal = useMemo(
-    () => sumRowsById(selectedRoomCeilingDrywallRepairs, drywallRepairEffectiveTotalById),
-    [drywallRepairEffectiveTotalById, selectedRoomCeilingDrywallRepairs]
+    () => sumRowsById(selectedRoomCeilingDrywallRepairs, displayedDrywallRepairEffectiveTotalById),
+    [displayedDrywallRepairEffectiveTotalById, selectedRoomCeilingDrywallRepairs]
   )
   const totalEffectiveAreaSqFt = useMemo(
     () =>
@@ -324,6 +508,40 @@ export function useEstimateV2CalculationDerived(params: {
         0
       ),
     [collections.rooms, displayedRoomEffectiveAreaByRoomId]
+  )
+  const activeScopeTotals = useMemo(
+    () => {
+      const wallsSqFt = sumIncludedRowsById(collections.scopes, displayedScopeEffectiveAreaById) ?? 0
+      const ceilingsSqFt =
+        sumIncludedRowsById(collections.ceilingScopes, displayedCeilingScopeEffectiveAreaById) ?? 0
+      const trim = summarizeTrimUnits(collections.trimScopes, displayedTrimScopeEffectiveMeasurementById)
+      const doorSides =
+        sumIncludedRowsById(collections.doorScopes, displayedDoorScopeEffectiveUnitsById) ?? 0
+      const doorCount = sumIncludedRowsById(collections.doorScopes, doorScopeCountById) ?? 0
+      const doorsActive = collections.doorScopes.some((scope) => scope.include === 'Y')
+
+      return {
+        wallsSqFt,
+        ceilingsSqFt,
+        trimMeasurement: trim.total ?? 0,
+        trimUnit: trim.unit,
+        trimMeasurementByUnit: trim.byUnit,
+        doorSides,
+        doorCount,
+        doorsActive,
+      }
+    },
+    [
+      collections.ceilingScopes,
+      collections.doorScopes,
+      collections.scopes,
+      collections.trimScopes,
+      displayedCeilingScopeEffectiveAreaById,
+      displayedDoorScopeEffectiveUnitsById,
+      displayedScopeEffectiveAreaById,
+      displayedTrimScopeEffectiveMeasurementById,
+      doorScopeCountById,
+    ]
   )
   const selectedRoomEffectiveSqFt = useMemo(
     () =>
@@ -347,13 +565,16 @@ export function useEstimateV2CalculationDerived(params: {
     displayedRoomEffectiveAreaByRoomId,
     wallScopeEffectiveTotalById: displayedWallScopeEffectiveTotalById,
     selectedCeilingEffectiveSqFt,
+    ceilingScopePreviewMetricsById: localCeilingScopePreviewMetricsById,
     ceilingScopeEffectiveTotalById: displayedCeilingScopeEffectiveTotalById,
     trimScopeEffectiveMeasurementById: displayedTrimScopeEffectiveMeasurementById,
     trimScopeEffectiveTotalById: displayedTrimScopeEffectiveTotalById,
-    doorScopeEffectiveUnitsById,
-    doorScopeEffectiveTotalById,
-    drywallRepairEffectiveQuantityById,
-    drywallRepairEffectiveTotalById,
+    doorScopeEffectiveUnitsById: displayedDoorScopeEffectiveUnitsById,
+    doorScopeEffectiveTotalById: displayedDoorScopeEffectiveTotalById,
+    drywallRepairEffectiveQuantityById: displayedDrywallRepairEffectiveQuantityById,
+    drywallRepairEffectiveTotalById: displayedDrywallRepairEffectiveTotalById,
+    selectedWallSubtotal,
+    selectedCeilingSubtotal,
     selectedTrimSubtotal,
     selectedTrimMeasurement,
     selectedDoorSubtotal,
@@ -361,6 +582,7 @@ export function useEstimateV2CalculationDerived(params: {
     selectedWallDrywallSubtotal,
     selectedCeilingDrywallSubtotal,
     totalEffectiveAreaSqFt,
+    activeScopeTotals,
     selectedRoomEffectiveSqFt,
     selectedScopeEffectiveSqFt,
     calculationsStale,

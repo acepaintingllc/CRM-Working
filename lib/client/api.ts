@@ -1,8 +1,10 @@
 import { authedFetch } from '../auth/authedFetch.ts'
 import {
+  requestRawApiWith,
   requestApiWith,
   type ApiReadMetaEnvelope,
   type ApiMutationEnvelope,
+  type RawApiResponse,
 } from './apiCore.ts'
 
 export type {
@@ -11,6 +13,7 @@ export type {
   ApiReadMetaEnvelope,
   ApiMutationEnvelope,
   ParsedApiResponse,
+  RawApiResponse,
 } from './apiCore.ts'
 export { getApiErrorMessage, getApiPayloadData, parseApiResponse } from './apiCore.ts'
 export {
@@ -23,6 +26,14 @@ export async function requestApi<TResponse>(
   init?: RequestInit
 ): Promise<TResponse> {
   return requestApiWith<TResponse>(authedFetch, input, init)
+}
+
+export async function requestRawApi<TPayload = unknown>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  fallbackErrorMessage?: string
+): Promise<RawApiResponse<TPayload>> {
+  return requestRawApiWith<TPayload>(authedFetch, input, init, fallbackErrorMessage)
 }
 
 export async function loadData<T>(

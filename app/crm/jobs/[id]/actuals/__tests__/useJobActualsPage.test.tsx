@@ -179,6 +179,36 @@ describe('useJobActualsPage', () => {
     expect(result.current.notice).toBe('Accepted estimate snapshot repaired.')
   })
 
+  it('surfaces accepted quote snapshot repair failures without reloading actuals', async () => {
+    const missingSnapshotJob = {
+      ...job,
+      accepted_quote: {
+        ...job.accepted_quote!,
+        estimate_snapshot_id: null,
+      },
+    } as JobDetail
+    mocks.loadJobRecord.mockResolvedValue(missingSnapshotJob)
+    mocks.repairAcceptedEstimateSnapshot.mockRejectedValue(new Error('Repair failed.'))
+
+    const { result } = renderHook(() => useJobActualsPage())
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.vm).toBeNull()
+
+    let repaired = true
+    await act(async () => {
+      repaired = await result.current.repairSnapshot()
+    })
+
+    expect(repaired).toBe(false)
+    expect(mocks.repairAcceptedEstimateSnapshot).toHaveBeenCalledWith('job-1')
+    expect(mocks.loadJobRecord).toHaveBeenCalledTimes(1)
+    expect(mocks.loadJobActuals).not.toHaveBeenCalled()
+    expect(result.current.error).toBe('Repair failed.')
+    expect(result.current.notice).toBeNull()
+    expect(result.current.repairingSnapshot).toBe(false)
+  })
+
   it('keeps the saved draft in actuals and form state when submit fails after saving', async () => {
     const savedDraft = actuals({
       actual_labor_hours: 12,

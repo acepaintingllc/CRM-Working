@@ -5,6 +5,7 @@ import {
   type ApiMutationEnvelope,
   requestApi,
 } from '@/lib/client/api'
+import { buildEstimateFeedbackTrendsPath } from './trendFilters'
 import type {
   EstimateFeedbackTrendFilters,
   EstimateFeedbackTrendSummary,
@@ -14,33 +15,6 @@ import type {
   TrendRecommendationStatus,
   TrendRecommendationStatusUpdate,
 } from '@/types/estimate-feedback/recommendations'
-
-function trendsPath(filters?: EstimateFeedbackTrendFilters | null) {
-  const search = new URLSearchParams()
-  const from = filters?.from?.trim()
-  const to = filters?.to?.trim()
-  const jobType = filters?.jobType?.trim()
-  const occupancy = filters?.occupancy?.trim()
-
-  if (from) search.set('from', from)
-  if (to) search.set('to', to)
-  if (jobType) search.set('jobType', jobType)
-  if (occupancy) search.set('occupancy', occupancy)
-  if (filters?.maxAbsoluteVariance != null) {
-    search.set('maxAbsoluteVariance', String(filters.maxAbsoluteVariance))
-  }
-  if (filters?.maxAbsoluteTotalImpact != null) {
-    search.set('maxAbsoluteTotalImpact', String(filters.maxAbsoluteTotalImpact))
-  }
-
-  for (const tag of filters?.conditionTags ?? []) {
-    const conditionTag = tag?.trim()
-    if (conditionTag) search.append('conditionTag', conditionTag)
-  }
-
-  const query = search.toString()
-  return `/api/insights/trends${query ? `?${query}` : ''}`
-}
 
 function recommendationsPath(status?: TrendRecommendationStatus | null) {
   const search = new URLSearchParams()
@@ -56,7 +30,7 @@ function recommendationApplyPath(recommendationId: string) {
 export async function loadEstimateFeedbackTrends(
   filters?: EstimateFeedbackTrendFilters | null
 ) {
-  return loadData<EstimateFeedbackTrendSummary>(trendsPath(filters), {
+  return loadData<EstimateFeedbackTrendSummary>(buildEstimateFeedbackTrendsPath(filters), {
     cache: 'no-store',
   })
 }

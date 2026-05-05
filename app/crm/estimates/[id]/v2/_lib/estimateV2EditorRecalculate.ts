@@ -13,6 +13,11 @@ import {
   syncWallCutInFromTrayCeilings,
   stripInvalidTrimHelperModeMutation,
 } from './estimateV2EditorMutations.ts'
+import {
+  isV2TrimRoomHelperEligible,
+  resolveV2TrimRoomPerimeterLf,
+  V2_TRIM_ROOM_HELPER_SOURCE,
+} from '../../../../../../lib/estimator/v2TrimActivation.ts'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CatalogsPayload,
@@ -68,19 +73,33 @@ function synchronizeCeilingScopes(params: {
 
 function synchronizeTrimScopes(params: {
   scopes: EstimateV2TrimScopeDraft[]
+  rooms: EstimateV2RoomDraft[]
   trimTypeOptions: EstimateV2TrimTypeOption[]
   roomModeById: Map<string, 'RECT' | 'SEG'>
   roomHeightFactorByRoomId: Map<string, string>
   roomTrimFlagFactorByRoomId: Map<string, string>
 }) {
+  const roomById = new Map(params.rooms.map((room) => [room.roomId, room] as const))
   const nextScopes = params.scopes.map((scope) => {
     const typeMeta = params.trimTypeOptions.find((item) => item.id === scope.trimTypeId)
+    const roomMode = params.roomModeById.get(scope.roomId) ?? 'RECT'
+    const shouldUseRoomPerimeter =
+      scope.measurementMode === 'ROOM_HELPER' &&
+      scope.helperSource === V2_TRIM_ROOM_HELPER_SOURCE &&
+      isV2TrimRoomHelperEligible({
+        roomMode,
+        trimTypeHelperAllowed: !!typeMeta?.helper_allowed,
+      })
+    const roomPerimeter = shouldUseRoomPerimeter
+      ? resolveV2TrimRoomPerimeterLf(roomById.get(scope.roomId))
+      : ''
     return {
       ...scope,
       heightFactor: isCrownTrimType(typeMeta, scope)
         ? params.roomHeightFactorByRoomId.get(scope.roomId) ?? '1'
         : scope.heightFactor,
       roomFlagFactor: params.roomTrimFlagFactorByRoomId.get(scope.roomId) ?? '1',
+      helperValue: roomPerimeter || scope.helperValue,
     }
   })
 
@@ -145,6 +164,7 @@ export function recalculateEditorDraftFactors(params: RecalculateDraftFactorsPar
     }),
     trimScopes: synchronizeTrimScopes({
       scopes: params.trimScopes,
+      rooms: params.rooms,
       trimTypeOptions: params.trimTypeOptions,
       roomModeById,
       roomHeightFactorByRoomId,

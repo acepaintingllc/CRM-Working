@@ -6,8 +6,7 @@ import {
   useEstimateV2Store,
   type EstimateV2EditorStoreApi,
 } from '@/lib/estimates/v2/store/estimateV2Store'
-import { authedFetch } from '@/lib/auth/authedFetch'
-import { getApiErrorMessage, getApiPayloadData, parseApiResponse } from '@/lib/client/api'
+import { saveEstimateV2Inputs } from '@/lib/estimates/v2/client'
 import { createEstimateV2Error } from '@/lib/estimator/errors'
 import {
   createSaveRequestTracker,
@@ -16,6 +15,7 @@ import {
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
+import { areEstimateV2DirtySnapshotsEqual } from './estimateV2DirtySnapshot'
 import {
   buildEstimateV2EditorApiFailureDiagnostic,
   formatEstimateV2EditorApiFailureLog,
@@ -38,6 +38,8 @@ export function useEstimateV2SaveController(params: {
   store: EstimateV2EditorStoreApi
   currentSnapshot: EstimateV2DirtySnapshot
   dirty: boolean
+  commitFocusedEditorField?: () => void
+  navigateToDetails?: (href: string) => void
   effectiveJobProductDefaults: {
     wallPaintProductId: string
     wallPrimerProductId: string
@@ -47,21 +49,47 @@ export function useEstimateV2SaveController(params: {
     trimPrimerProductId: string
   }
 }) {
-  const { estimateId, routeFamily, store, currentSnapshot, dirty, effectiveJobProductDefaults } =
-    params
+  const {
+    estimateId,
+    routeFamily,
+    store,
+    currentSnapshot,
+    dirty,
+    commitFocusedEditorField,
+    navigateToDetails,
+    effectiveJobProductDefaults,
+  } = params
   const meta = useEstimateV2Store(store, estimateV2StoreSelectors.meta)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveRef = useRef<(trigger?: 'manual' | 'auto') => Promise<boolean>>(async () => false)
   const saveRequestTrackerRef = useRef(createSaveRequestTracker())
+  const lastAutosavedComparisonKeyRef = useRef<string | null>(null)
+  const queuedManualSaveRef = useRef(false)
 
   const save = useCallback(
     async (trigger: 'manual' | 'auto' = 'manual'): Promise<boolean> => {
       const currentState = store.getState()
-      if (!estimateId || currentState.meta.saving) return false
+      if (!estimateId || !currentState.meta.estimate) return false
+      if (currentState.meta.saving) {
+        if (trigger === 'manual') {
+          queuedManualSaveRef.current = true
+          if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current)
+            autoSaveTimerRef.current = null
+          }
+        }
+        return false
+      }
 
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current)
         autoSaveTimerRef.current = null
+      }
+
+      const runQueuedManualSave = async (currentResult: boolean) => {
+        if (!queuedManualSaveRef.current) return currentResult
+        queuedManualSaveRef.current = false
+        return saveRef.current('manual')
       }
 
       const { prepared: preparedSave, issues } = deriveEstimateV2PreparedSaveValidation({
@@ -101,26 +129,24 @@ export function useEstimateV2SaveController(params: {
         lastNormalizedDomains: preparedSave.normalizedDomains,
       }))
 
-      const response = await authedFetch(routeFamily.estimateApiHref(estimateId), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        ...(trigger === 'auto' ? { 'X-Estimate-Save-Mode': 'auto' } : {}),
-        body: JSON.stringify(preparedSave.payloadSnapshot.payload),
+      const saveResult = await saveEstimateV2Inputs({
+        endpoint: routeFamily.estimateApiHref(estimateId),
+        payload: preparedSave.payloadSnapshot.payload,
+        trigger,
       })
-      const parsed = await parseApiResponse(response)
-      const payload = getApiPayloadData<unknown>(parsed.json)
+      const { response, parsed, payload } = saveResult
       meta.setSaving(false)
 
       if (!saveRequestTrackerRef.current.isLatest(requestId)) {
-        return false
+        return runQueuedManualSave(false)
       }
 
       if (!response.ok) {
-        const message = getApiErrorMessage(response, parsed, 'Failed to save estimate')
+        const message = saveResult.errorMessage ?? 'Failed to save estimate'
         const diagnostic = buildEstimateV2EditorApiFailureDiagnostic({
           estimateId,
-          endpoint: routeFamily.estimateApiHref(estimateId),
-          method: 'PUT',
+          endpoint: saveResult.endpoint,
+          method: saveResult.method,
           operation: 'save',
           trigger,
           response,
@@ -134,7 +160,7 @@ export function useEstimateV2SaveController(params: {
         )
         meta.setError(createEstimateV2Error(message, { retryable: true }))
         meta.setSaveStatus('error')
-        return false
+        return runQueuedManualSave(false)
       }
 
       const latestState = store.getState()
@@ -154,8 +180,9 @@ export function useEstimateV2SaveController(params: {
         otherItems: latestState.collections.otherItems,
       })
       if (latestSnapshot.comparisonKey !== preparedSave.payloadSnapshot.comparisonKey) {
+        meta.setLastSavedSnapshot(preparedSave.payloadSnapshot)
         meta.setSaveStatus('idle')
-        return false
+        return runQueuedManualSave(false)
       }
 
       const responseState = resolveEstimateV2SaveResponseState({
@@ -166,7 +193,9 @@ export function useEstimateV2SaveController(params: {
         currentState: store.getState(),
         effectiveJobProductDefaults,
       })
-      applyEstimateV2SuccessfulSaveState(store, responseState)
+      applyEstimateV2SuccessfulSaveState(store, responseState, {
+        updateLastSavedSnapshot: trigger === 'manual',
+      })
       const calculationIssues = collectEstimateV2CalculationMissingInputIssues({
         wallCalculations: responseState.calculations.wallCalculations,
         ceilingCalculations: responseState.calculations.ceilingCalculations,
@@ -178,11 +207,17 @@ export function useEstimateV2SaveController(params: {
       if (calculationIssues.length > 0) {
         meta.setAutoSaveHint(calculationIssues[0] ?? null)
         meta.setSaveStatus('blocked')
-        return false
+        return runQueuedManualSave(false)
       }
       meta.setAutoSaveHint(null)
-      meta.setSaveStatus('saved')
-      return true
+      if (trigger === 'manual') {
+        meta.setSaveStatus('saved')
+        lastAutosavedComparisonKeyRef.current = null
+      } else {
+        lastAutosavedComparisonKeyRef.current = preparedSave.payloadSnapshot.comparisonKey
+        meta.setSaveStatus('idle')
+      }
+      return runQueuedManualSave(true)
     },
     [effectiveJobProductDefaults, estimateId, meta, routeFamily, store]
   )
@@ -191,12 +226,50 @@ export function useEstimateV2SaveController(params: {
     saveRef.current = save
   }, [save])
 
+  const saveDraft = useCallback(() => {
+    commitFocusedEditorField?.()
+    void saveRef.current('manual')
+  }, [commitFocusedEditorField])
+
+  const saveAndContinue = useCallback(() => {
+    if (!estimateId) return
+    commitFocusedEditorField?.()
+
+    const latestState = store.getState()
+    const latestSnapshot = buildEstimateV2DirtySnapshot({
+      jobSettingsDraft: latestState.meta.jobSettingsDraft,
+      rooms: latestState.collections.rooms,
+      scopes: latestState.collections.scopes,
+      segments: latestState.collections.segments,
+      roomFlags: latestState.collections.roomFlags,
+      ceilingScopes: latestState.collections.ceilingScopes,
+      ceilingSegments: latestState.collections.ceilingSegments,
+      trimScopes: latestState.collections.trimScopes,
+      doorScopes: latestState.collections.doorScopes,
+      drywallRepairs: latestState.collections.drywallRepairs,
+      rollers: latestState.collections.rollers,
+      accessFees: latestState.collections.accessFees,
+      otherItems: latestState.collections.otherItems,
+    })
+    const detailsHref = routeFamily.detailsHref(estimateId)
+    if (areEstimateV2DirtySnapshotsEqual(latestSnapshot, latestState.meta.lastSavedSnapshot)) {
+      navigateToDetails?.(detailsHref)
+      return
+    }
+
+    void saveRef.current('manual').then((ok) => {
+      if (ok) navigateToDetails?.(detailsHref)
+    })
+  }, [commitFocusedEditorField, estimateId, navigateToDetails, routeFamily, store])
+
   useEffect(() => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current)
       autoSaveTimerRef.current = null
     }
+    if (!meta.estimate) return
     if (!shouldQueueAutosave({ loading: meta.loading, saving: meta.saving, dirty })) return
+    if (lastAutosavedComparisonKeyRef.current === currentSnapshot.comparisonKey) return
     autoSaveTimerRef.current = setTimeout(() => {
       void saveRef.current('auto')
     }, ESTIMATE_V2_AUTO_SAVE_DELAY_MS)
@@ -206,7 +279,7 @@ export function useEstimateV2SaveController(params: {
         autoSaveTimerRef.current = null
       }
     }
-  }, [currentSnapshot.comparisonKey, dirty, meta.loading, meta.saving])
+  }, [currentSnapshot.comparisonKey, dirty, meta.estimate, meta.loading, meta.saving])
 
   useEffect(
     () => () => {
@@ -215,5 +288,5 @@ export function useEstimateV2SaveController(params: {
     []
   )
 
-  return { save }
+  return { save, saveDraft, saveAndContinue }
 }

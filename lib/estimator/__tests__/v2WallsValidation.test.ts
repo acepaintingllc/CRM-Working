@@ -50,7 +50,7 @@ test('validation catches mixed room scope mode and multiple RECT scopes', () => 
 
 test('validation catches orphan/duplicate IDs and SEG missing included segment', () => {
   const issues = validateV2WallsBeforeSave({
-    rooms: [makeBaseRoom()],
+    rooms: [makeBaseRoom(), { roomId: 'R002', roomName: 'Room 2', position: 1 }],
     scopes: [
       {
         ...makeRectScope(),
@@ -63,6 +63,13 @@ test('validation catches orphan/duplicate IDs and SEG missing included segment',
         id: 'scope-dup',
         mode: 'SEG',
         include: 'N',
+      },
+      {
+        ...makeRectScope(),
+        id: 'scope-empty',
+        roomId: 'R002',
+        mode: 'SEG',
+        perimeterIn: '',
       },
     ],
     segments: [
@@ -83,6 +90,18 @@ test('validation catches orphan/duplicate IDs and SEG missing included segment',
         wallScopeId: 'scope-dup',
         roomId: 'R001',
         include: 'N',
+        shapeType: 'MANUAL',
+        quantity: '1',
+        widthIn: '',
+        heightIn: '',
+        baseIn: '',
+        manualAreaSqFt: '',
+      },
+      {
+        id: 'seg-manual-missing',
+        wallScopeId: 'scope-dup',
+        roomId: 'R001',
+        include: 'Y',
         shapeType: 'MANUAL',
         quantity: '1',
         widthIn: '',
@@ -168,6 +187,87 @@ test('validation allows incomplete SEG geometry for autosave drafts', () => {
       },
     ],
     allowIncomplete: true,
+  })
+
+  assert.deepEqual(issues, [])
+})
+
+test('validation rejects malformed wall override values and accepts zero', () => {
+  const issues = validateV2WallsBeforeSave({
+    rooms: [makeBaseRoom()],
+    scopes: [
+      {
+        ...makeRectScope(),
+        overrideAreaSqFt: '0',
+        overridePaintHours: '-1',
+        overridePrimerHours: 'NaN',
+        overridePaintGallons: 'Infinity',
+        overrideSupplyCost: '12abc',
+      },
+    ],
+    segments: [
+      {
+        id: 'seg-override',
+        wallScopeId: 'scope-1',
+        roomId: 'R001',
+        include: 'N',
+        shapeType: 'MANUAL',
+        quantity: '',
+        widthIn: '',
+        heightIn: '',
+        baseIn: '',
+        manualAreaSqFt: '',
+        overrideAreaSqFt: '-0.5',
+      },
+    ],
+  })
+
+  assert.equal(issues.some((issue) => issue.includes('wall scope scope-1: area override')), false)
+  assert.ok(issues.some((issue) => issue.includes('paint hours override')))
+  assert.ok(issues.some((issue) => issue.includes('primer hours override')))
+  assert.ok(issues.some((issue) => issue.includes('paint gallons override')))
+  assert.ok(issues.some((issue) => issue.includes('supply cost override')))
+  assert.ok(issues.some((issue) => issue.includes('wall segment seg-override: area override')))
+})
+
+test('validation skips geometry and segment inputs for excluded RECT and SEG scopes', () => {
+  const issues = validateV2WallsBeforeSave({
+    rooms: [
+      makeBaseRoom(),
+      { roomId: 'R002', roomName: 'Room 2', position: 1 },
+    ],
+    scopes: [
+      {
+        ...makeRectScope(),
+        id: 'scope-rect-excluded',
+        include: 'N',
+        perimeterIn: '',
+        heightIn: '',
+      },
+      {
+        ...makeRectScope(),
+        id: 'scope-seg-excluded',
+        roomId: 'R002',
+        include: 'N',
+        mode: 'SEG',
+        perimeterIn: '',
+        heightIn: '',
+      },
+    ],
+    segments: [
+      {
+        id: 'seg-excluded',
+        wallScopeId: 'scope-seg-excluded',
+        roomId: 'R002',
+        include: 'Y',
+        shapeType: 'MANUAL',
+        quantity: '',
+        widthIn: '',
+        heightIn: '',
+        baseIn: '',
+        manualAreaSqFt: '',
+      },
+    ],
   })
 
   assert.deepEqual(issues, [])

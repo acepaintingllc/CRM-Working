@@ -11,7 +11,7 @@ import type {
   EstimateFeedbackTrendSummary,
 } from '../../../types/estimate-feedback/trends.ts'
 import type {
-  TrendRecommendationConfidence,
+  TrendRecommendationCandidate,
   TrendRecommendationRecord,
   TrendRecommendationStatus,
   TrendRecommendationStatusUpdate,
@@ -19,24 +19,22 @@ import type {
 import {
   loadActiveSettingSet,
   type EstimatorSettingSetSnapshot,
-  type EstimatorSettingValueRow,
 } from './settingSets.ts'
+import {
+  buildTrendRecommendationCandidates,
+  parseRecommendationTargetKey,
+} from './recommendationRules.ts'
+
+export {
+  buildRecommendationTargetKey,
+  buildTrendRecommendationCandidates,
+  parseRecommendationTargetKey,
+  targetKeyForSettingValue,
+  TREND_RECOMMENDATION_POLICY,
+} from './recommendationRules.ts'
 
 export type TrendRecommendationAction = 'generate' | 'update_status'
 export type TrendRecommendationRow = TrendRecommendationRecord
-
-export type TrendRecommendationTarget =
-  | {
-      kind: 'row'
-      categoryKey: string
-      rowId: string
-      fieldKey: string
-    }
-  | {
-      kind: 'scalar'
-      scalarKey: string
-      fieldKey: 'value'
-    }
 
 export type GenerateTrendRecommendationsInput = {
   filters: EstimateFeedbackTrendResolvedFilters
@@ -79,16 +77,6 @@ type DbClient = {
   rpc?(name: string, payload: Record<string, unknown>): Promise<QueryResponse<unknown>>
 }
 
-type RecommendationCandidate = {
-  target_setting_key: string
-  current_value_json: Record<string, unknown>
-  suggested_value_json: Record<string, unknown>
-  reason: string
-  evidence_json: Record<string, unknown>
-  confidence_label: TrendRecommendationConfidence
-  based_on_job_count: number
-}
-
 type RecommendationDeps = {
   db?: DbClient
   loadTrends?: (
@@ -98,13 +86,6 @@ type RecommendationDeps = {
   loadActiveSettingSet?: (params: { orgId: string }) => Promise<EstimatorSettingSetSnapshot | null>
   now?: () => Date
 }
-
-const targetTokenPattern = /^[A-Za-z0-9_.-]+$/
-const minimumRuleJobCount = 3
-const laborVarianceThresholdHours = 2
-const suppliesVarianceThresholdDollars = 25
-const stablePaintVarianceThresholdGallons = 0.25
-const adjustmentFactor = 0.1
 
 const recommendationSelect = [
   'id',
@@ -139,12 +120,6 @@ function asString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function asNumber(value: unknown): number | null {
-  if (value == null || value === '') return null
-  const next = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(next) ? next : null
-}
-
 function asUuid(value: unknown, label: string): ServiceResult<string> {
   const raw = asString(value)
   if (!isUuid(raw)) return errorResult('invalid_input', `Invalid ${label}.`)
@@ -173,233 +148,7 @@ export function evidenceHash(evidence: Record<string, unknown>) {
   return createHash('sha256').update(stableJson(evidence)).digest('hex')
 }
 
-function confidenceForCount(count: number): TrendRecommendationConfidence {
-  if (count >= 10) return 'high'
-  if (count >= 5) return 'medium'
-  return 'low'
-}
-
-function roundSettingValue(value: number) {
-  return Math.round(value * 100) / 100
-}
-
-function suggestedAdjustedValue(current: number, variance: number, inverse: boolean) {
-  const direction = variance > 0 ? 1 : -1
-  const multiplier = inverse
-    ? 1 - direction * adjustmentFactor
-    : 1 + direction * adjustmentFactor
-  return roundSettingValue(Math.max(0, current * multiplier))
-}
-
-function validTargetToken(token: string) {
-  return targetTokenPattern.test(token)
-}
-
-export function parseRecommendationTargetKey(
-  targetKey: unknown
-): ServiceResult<TrendRecommendationTarget> {
-  const raw = asString(targetKey)
-  const parts = raw.split(':')
-  if (parts.length !== 3 || parts.some((part) => !validTargetToken(part))) {
-    return errorResult('invalid_input', 'Invalid target_setting_key.')
-  }
-
-  const [categoryOrScalar, idOrScalar, fieldKey] = parts
-  if (!categoryOrScalar || !idOrScalar || !fieldKey) {
-    return errorResult('invalid_input', 'Invalid target_setting_key.')
-  }
-
-  if (categoryOrScalar === 'scalar_defaults') {
-    if (fieldKey !== 'value') {
-      return errorResult('invalid_input', 'Scalar target keys must use the value field.')
-    }
-    return okResult({ kind: 'scalar', scalarKey: idOrScalar, fieldKey })
-  }
-
-  return okResult({
-    kind: 'row',
-    categoryKey: categoryOrScalar,
-    rowId: idOrScalar,
-    fieldKey,
-  })
-}
-
-export function targetKeyForSettingValue(value: EstimatorSettingValueRow, fieldKey: string) {
-  if (value.row_id) return `${value.category_key}:${value.row_id}:${fieldKey}`
-  if (value.scalar_key) return `${value.category_key}:${value.scalar_key}:${fieldKey}`
-  return ''
-}
-
-function rowValueNumber(value: EstimatorSettingValueRow, fieldKey: string) {
-  return asNumber((value.value_json ?? {})[fieldKey])
-}
-
-function activeRowWithNumber(
-  snapshot: EstimatorSettingSetSnapshot,
-  categoryKey: string,
-  fieldKey: string
-) {
-  return snapshot.values.find(
-    (value) =>
-      value.active &&
-      value.category_key === categoryKey &&
-      value.row_id &&
-      rowValueNumber(value, fieldKey) != null
-  )
-}
-
-function scalarValue(snapshot: EstimatorSettingSetSnapshot, scalarKey: string) {
-  return snapshot.values.find(
-    (value) =>
-      value.active &&
-      value.category_key === 'scalar_defaults' &&
-      value.scalar_key === scalarKey
-  )
-}
-
-function trendEvidence(params: {
-  ruleKey: string
-  trend: EstimateFeedbackTrendSummary
-  metricKey: 'labor' | 'paint' | 'supplies'
-}) {
-  const metric = params.trend.metrics[params.metricKey]
-  return {
-    rule_key: params.ruleKey,
-    filters: params.trend.filters,
-    metric_key: params.metricKey,
-    jobs_analyzed: params.trend.jobsAnalyzed,
-    metric_count: metric.count,
-    average_variance: metric.averageVariance,
-    average_total_impact: metric.averageTotalImpact,
-  }
-}
-
-function laborRecommendation(
-  trend: EstimateFeedbackTrendSummary,
-  settingSet: EstimatorSettingSetSnapshot
-): RecommendationCandidate | null {
-  const metric = trend.metrics.labor
-  const variance = metric.averageVariance
-  if (
-    metric.count < minimumRuleJobCount ||
-    variance == null ||
-    Math.abs(variance) < laborVarianceThresholdHours
-  ) {
-    return null
-  }
-
-  const row = activeRowWithNumber(settingSet, 'production_rates_walls', 'sqft_per_hr')
-  if (!row) return null
-  const current = rowValueNumber(row, 'sqft_per_hr')
-  if (current == null) return null
-
-  const suggested = suggestedAdjustedValue(current, variance, true)
-  const direction = variance > 0 ? 'lower' : 'raise'
-  return {
-    target_setting_key: targetKeyForSettingValue(row, 'sqft_per_hr'),
-    current_value_json: { sqft_per_hr: current },
-    suggested_value_json: { sqft_per_hr: suggested },
-    reason: `Locked reviews show labor hours averaging ${roundSettingValue(
-      variance
-    )} hours from estimate; ${direction} the wall production rate by 10%.`,
-    evidence_json: trendEvidence({
-      ruleKey: 'labor_production_rate_adjustment',
-      trend,
-      metricKey: 'labor',
-    }),
-    confidence_label: confidenceForCount(metric.count),
-    based_on_job_count: metric.count,
-  }
-}
-
-function suppliesRecommendation(
-  trend: EstimateFeedbackTrendSummary,
-  settingSet: EstimatorSettingSetSnapshot
-): RecommendationCandidate | null {
-  const metric = trend.metrics.supplies
-  const variance = metric.averageVariance
-  if (
-    metric.count < minimumRuleJobCount ||
-    variance == null ||
-    Math.abs(variance) < suppliesVarianceThresholdDollars
-  ) {
-    return null
-  }
-
-  const row = activeRowWithNumber(settingSet, 'supply_rates_area_based', 'cost_per')
-  if (!row) return null
-  const current = rowValueNumber(row, 'cost_per')
-  if (current == null) return null
-
-  const suggested = suggestedAdjustedValue(current, variance, false)
-  const direction = variance > 0 ? 'raise' : 'lower'
-  return {
-    target_setting_key: targetKeyForSettingValue(row, 'cost_per'),
-    current_value_json: { cost_per: current },
-    suggested_value_json: { cost_per: suggested },
-    reason: `Locked reviews show supplies averaging $${roundSettingValue(
-      variance
-    )} from estimate; ${direction} the area-based supplies baseline by 10%.`,
-    evidence_json: trendEvidence({
-      ruleKey: 'supplies_baseline_adjustment',
-      trend,
-      metricKey: 'supplies',
-    }),
-    confidence_label: confidenceForCount(metric.count),
-    based_on_job_count: metric.count,
-  }
-}
-
-function stablePaintCoverageRecommendation(
-  trend: EstimateFeedbackTrendSummary,
-  settingSet: EstimatorSettingSetSnapshot
-): RecommendationCandidate | null {
-  const metric = trend.metrics.paint
-  const variance = metric.averageVariance
-  if (
-    metric.count < minimumRuleJobCount ||
-    variance == null ||
-    Math.abs(variance) > stablePaintVarianceThresholdGallons
-  ) {
-    return null
-  }
-
-  const row = scalarValue(settingSet, 'walls_paint_id')
-  if (!row) return null
-  const current = (row.value_json ?? {}).value ?? null
-
-  return {
-    target_setting_key: targetKeyForSettingValue(row, 'value'),
-    current_value_json: { value: current },
-    suggested_value_json: { value: current },
-    reason: `Locked reviews show paint gallons averaging ${roundSettingValue(
-      variance
-    )} gallons from estimate; keep the current wall paint coverage baseline unchanged.`,
-    evidence_json: trendEvidence({
-      ruleKey: 'stable_paint_coverage_no_change',
-      trend,
-      metricKey: 'paint',
-    }),
-    confidence_label: confidenceForCount(metric.count),
-    based_on_job_count: metric.count,
-  }
-}
-
-export function buildTrendRecommendationCandidates(params: {
-  trend: EstimateFeedbackTrendSummary
-  settingSet: EstimatorSettingSetSnapshot
-}) {
-  if (params.trend.jobsAnalyzed < minimumRuleJobCount) return []
-  return [
-    laborRecommendation(params.trend, params.settingSet),
-    suppliesRecommendation(params.trend, params.settingSet),
-    stablePaintCoverageRecommendation(params.trend, params.settingSet),
-  ]
-    .filter((candidate): candidate is RecommendationCandidate => candidate !== null)
-    .filter((candidate) => !recommendationValuesEquivalent(candidate))
-}
-
-function rowFromCandidate(orgId: string, candidate: RecommendationCandidate) {
+function rowFromCandidate(orgId: string, candidate: TrendRecommendationCandidate) {
   return {
     org_id: orgId,
     ...candidate,
@@ -415,27 +164,6 @@ function coerceRecommendationRow(row: TrendRecommendationRow): TrendRecommendati
     suggested_value_json: row.suggested_value_json ?? {},
     evidence_json: row.evidence_json ?? {},
   }
-}
-
-function valuesEquivalent(actual: unknown, expected: unknown) {
-  if (typeof actual === 'number' || typeof expected === 'number') {
-    const actualNumber = asNumber(actual)
-    const expectedNumber = asNumber(expected)
-    return actualNumber != null && expectedNumber != null && actualNumber === expectedNumber
-  }
-  return stableJson(actual) === stableJson(expected)
-}
-
-function recommendationValuesEquivalent(candidate: RecommendationCandidate) {
-  const currentKeys = Object.keys(candidate.current_value_json)
-  const suggestedKeys = Object.keys(candidate.suggested_value_json)
-  if (currentKeys.length !== suggestedKeys.length) return false
-
-  return suggestedKeys.every(
-    (key) =>
-      Object.hasOwn(candidate.current_value_json, key) &&
-      valuesEquivalent(candidate.current_value_json[key], candidate.suggested_value_json[key])
-  )
 }
 
 export function normalizeRecommendationStatus(value: unknown): ServiceResult<TrendRecommendationStatus> {
@@ -526,26 +254,6 @@ export async function listTrendRecommendations(
   return okResult((result.data ?? []).map(coerceRecommendationRow))
 }
 
-async function loadTrendRecommendationById(
-  orgId: string,
-  recommendationId: string,
-  deps?: RecommendationDeps
-): Promise<ServiceResult<TrendRecommendationRow>> {
-  const db = await getDb(deps)
-  const result = await db
-    .from('trend_recommendation')
-    .select(recommendationSelect)
-    .eq('org_id', orgId)
-    .eq('id', recommendationId)
-    .maybeSingle<TrendRecommendationRow>()
-
-  if (result.error) {
-    return errorResult('server_error', result.error.message ?? 'Unable to load recommendation.')
-  }
-  if (!result.data) return errorResult('not_found', 'Recommendation not found.')
-  return okResult(coerceRecommendationRow(result.data))
-}
-
 export async function generateTrendRecommendations(
   orgId: string,
   input: GenerateTrendRecommendationsInput,
@@ -562,7 +270,7 @@ export async function generateTrendRecommendations(
 
   const candidates = buildTrendRecommendationCandidates({
     trend: trend.data,
-    settingSet,
+    activeSettingSet: settingSet,
   })
   if (candidates.length === 0) return okResult([])
 

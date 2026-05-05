@@ -10,6 +10,12 @@ import {
   sumNumbers,
 } from './wallsHelpers.ts'
 import { allocatePaintMaterialRollups } from './paintMaterial.ts'
+import {
+  calculateCeilingHelperExtraArea,
+  calculateCeilingSegmentArea,
+  calculateVaultedMeasuredCeilingArea,
+  rectangleAreaSqFt,
+} from './calculationPrimitives.ts'
 import { resolvePrimerSupplyCost } from './scopeRules.ts'
 import type {
   MissingInput,
@@ -69,12 +75,12 @@ function ceilingScopeKey(scope: CeilingCalculationScopeRow) {
 // and has no door/window deductions.
 function ceilingSegmentArea(
   segment: CeilingCalculationSegmentRow,
-  missing: MissingInput[]
+  missing: MissingInput[],
+  requireInputs = segment.include === 'Y'
 ): { geometry: number | null; effective: number } {
   const qty = pos(n(segment.quantity)) ?? 0
-  let geometry: number | null = null
 
-  if (qty <= 0) {
+  if (requireInputs && qty <= 0) {
     missing.push({
       level: 'segment',
       room_id: segment.room_id,
@@ -88,7 +94,7 @@ function ceilingSegmentArea(
   if (segment.shape_type === 'RECTANGLE') {
     const width = pos(n(segment.width_in))
     const height = pos(n(segment.height_in))
-    if (width == null || height == null) {
+    if (requireInputs && (width == null || height == null)) {
       missing.push({
         level: 'segment',
         room_id: segment.room_id,
@@ -97,13 +103,11 @@ function ceilingSegmentArea(
         field: width == null ? 'width_in' : 'height_in',
         message: `Segment ${segment.segment_name ?? segment.position + 1}: width and height are required`,
       })
-    } else {
-      geometry = round4((width * height * qty) / 144)
     }
   } else if (segment.shape_type === 'TRIANGLE') {
     const base = pos(n(segment.base_in))
     const height = pos(n(segment.height_in))
-    if (base == null || height == null) {
+    if (requireInputs && (base == null || height == null)) {
       missing.push({
         level: 'segment',
         room_id: segment.room_id,
@@ -112,12 +116,10 @@ function ceilingSegmentArea(
         field: base == null ? 'base_in' : 'height_in',
         message: `Segment ${segment.segment_name ?? segment.position + 1}: base and height are required`,
       })
-    } else {
-      geometry = round4(((base * height) / 2 / 144) * qty)
     }
   } else {
     const manual = pos(n(segment.manual_area_sf))
-    if (manual == null) {
+    if (requireInputs && manual == null) {
       missing.push({
         level: 'segment',
         room_id: segment.room_id,
@@ -126,15 +128,19 @@ function ceilingSegmentArea(
         field: 'manual_area_sf',
         message: `Segment ${segment.segment_name ?? segment.position + 1}: manual area is required`,
       })
-    } else {
-      geometry = round4(manual * qty)
     }
   }
 
-  // No deductions for ceiling segments
-  const override = nonNeg(n(segment.override_area_sf))
-  const effective = segment.include === 'Y' ? round4(override ?? geometry ?? 0) : 0
-  return { geometry, effective }
+  return calculateCeilingSegmentArea({
+    include: segment.include,
+    shapeType: segment.shape_type,
+    quantity: segment.quantity,
+    widthIn: segment.width_in,
+    heightIn: segment.height_in,
+    baseIn: segment.base_in,
+    manualAreaSqFt: segment.manual_area_sf,
+    overrideAreaSqFt: segment.override_area_sf,
+  })
 }
 
 // Looks up ceiling area supply rate from catalogs (scope='ceiling' or 'ceilings').
@@ -162,31 +168,29 @@ function resolveCeilingHelperArea(
   const mode = scope.ceiling_geometry_mode ?? 'FLAT'
   const base = nonNeg(n(baseArea)) ?? 0
   if (base <= 0) return 0
+  const measuredVaultedArea = mode === 'VAULTED' ? resolveVaultedMeasuredArea(scope, missing) : null
 
   if (mode === 'VAULTED') {
     if (pos(n(scope.area_sf)) != null) return 0
-    if (resolveVaultedMeasuredArea(scope, missing) != null) return 0
-    const factor = pos(n(scope.vaulted_area_factor))
-    if (factor == null) {
+    if (measuredVaultedArea != null) return 0
+    if (pos(n(scope.vaulted_area_factor)) == null) {
       pushMissingRequiredAssumption(missing, scope, 'vaulted_area_factor')
-      return 0
     }
-    return round4(Math.max(base * factor - base, 0))
   }
 
-  if (mode === 'COFFERED') {
-    const sectionLength = nonNeg(n(scope.coffer_section_length_in)) ?? 0
-    const sectionWidth = nonNeg(n(scope.coffer_section_width_in)) ?? 0
-    const sectionCount = Math.max(0, Math.floor(nonNeg(n(scope.coffer_section_count)) ?? 0))
-    const faceHeight = nonNeg(n(scope.coffer_face_height_in)) ?? 0
-    const bottomWidth = nonNeg(n(scope.coffer_bottom_width_in)) ?? 0
-    const sectionPerimeter = 2 * (sectionLength + sectionWidth)
-    return round4(
-      sectionCount * ((sectionPerimeter * faceHeight) / 144 + (sectionPerimeter * bottomWidth) / 144)
-    )
-  }
-
-  return 0
+  return calculateCeilingHelperExtraArea({
+    geometryMode: mode,
+    baseArea: base,
+    directArea: scope.area_sf,
+    measuredVaultedArea,
+    vaultedAreaFactor: scope.vaulted_area_factor,
+    cofferSectionLengthIn: scope.coffer_section_length_in,
+    cofferSectionWidthIn: scope.coffer_section_width_in,
+    cofferSectionCount: scope.coffer_section_count,
+    cofferFaceHeightIn: scope.coffer_face_height_in,
+    cofferBottomWidthIn: scope.coffer_bottom_width_in,
+    missingVaultedFactorResult: 0,
+  })
 }
 
 function resolveVaultedMeasuredArea(scope: CeilingCalculationScopeRow, missing: MissingInput[]) {
@@ -201,7 +205,11 @@ function resolveVaultedMeasuredArea(scope: CeilingCalculationScopeRow, missing: 
   const planeCount = planeCountInput == null ? null : Math.max(1, Math.floor(planeCountInput))
   if (ridgeLength == null || slopeLength == null) return null
   if (planeCount == null) return null
-  return round4((ridgeLength * slopeLength * planeCount) / 144)
+  return calculateVaultedMeasuredCeilingArea({
+    ridgeLengthIn: ridgeLength,
+    slopeLengthIn: slopeLength,
+    planeCount,
+  })
 }
 
 function applyScopeCosts(
@@ -357,6 +365,12 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
   const settings = resolveSettings(input.settings, input.catalogs)
   const products = productMap(input.catalogs)
   const missingInputs: MissingInput[] = []
+  const includedScopeIds = new Set(
+    input.scopes
+      .filter((scope) => normalizeInclude(scope.include) === 'Y')
+      .map((scope) => scope.id)
+      .filter((id): id is string => Boolean(id))
+  )
 
   // Build ceiling_type lookup: ceiling_type_id → { labor_mult, area_factor }
   const ceilingTypeInfoMap = new Map<string, { labor_mult: number; area_factor: number }>()
@@ -374,7 +388,8 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
 
   // Process segments: compute area for each
   const normalizedSegments = input.segments.map((segment) => {
-    const calc = ceilingSegmentArea(segment, missingInputs)
+    const requiresInputs = segment.include === 'Y' && includedScopeIds.has(segment.ceiling_scope_id)
+    const calc = ceilingSegmentArea(segment, missingInputs, requiresInputs)
     return { ...segment, raw_area_sf: calc.geometry, effective_area_sf: calc.effective }
   })
 
@@ -404,7 +419,10 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
     if (scope.mode === 'RECT') {
       // RECT: use direct area_sf first, then fall back to L×W
       const directArea = pos(n(scope.area_sf))
-      if (directArea != null) {
+      if (include === 'N') {
+        geometry = null
+        rawArea = null
+      } else if (directArea != null) {
         geometry = directArea
         rawArea = directArea
       } else {
@@ -437,7 +455,7 @@ export function calculateCeilings(input: CeilingCalculationInput): CeilingCalcul
             })
           }
         } else {
-          geometry = round4((lengthIn * widthIn) / 144)
+          geometry = rectangleAreaSqFt(lengthIn, widthIn)
           rawArea = geometry
         }
       }

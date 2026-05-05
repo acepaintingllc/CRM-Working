@@ -46,7 +46,7 @@ describe('estimateV2EditorPresentation', () => {
     ).toBe('No scopes included')
 
     expect(buildHeaderSubtitle(null)).toBe('')
-    expect(buildRunningTotalLabel(2)).toBe('Running total - 2 rooms - active scopes')
+    expect(buildRunningTotalLabel(2)).toBe('Active scope totals - 2 rooms')
   })
 
   it('builds display state text and colors', () => {

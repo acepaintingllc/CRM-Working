@@ -44,6 +44,7 @@ export function useEstimateV2EditorDerivedSections(params: {
     meta,
     selectedRoom: room.selectedRoom,
     firstScope: room.firstScope,
+    selectedRoomScopes: room.selectedRoomScopes,
     selectedRoomCeilingScopes: room.selectedRoomCeilingScopes,
     selectedRoomTrimScopes: room.selectedRoomTrimScopes,
     selectedRoomDoorScopes: room.selectedRoomDoorScopes,

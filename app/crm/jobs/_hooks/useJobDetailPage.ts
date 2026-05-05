@@ -2,17 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { authedFetch } from '@/lib/auth/authedFetch'
 import { invalidateSwrKey } from '@/app/crm/_hooks/swrCache'
-import { useSwrResource } from '@/app/crm/_hooks/useSwrResource'
 import { useEntityDetailActions } from '@/app/crm/_hooks/useEntityDetailActions'
-import {
-  getResponseErrorMessage,
-  parseResponseBody,
-} from '@/lib/jobs/actions'
+import { useJobDetailResource } from '@/app/crm/jobs/_hooks/useJobDetailResource'
 import {
   deleteJob as deleteJobRequest,
   getJobPhotosFolderUrl,
+  loadJobEstimateFile,
   listJobSitePhotos,
   listPaintLogs,
   patchJobDateFields,
@@ -20,6 +16,7 @@ import {
 } from '@/lib/jobs/client'
 import type { EstimateDriveFile, JobDetail } from '@/types/jobs/api'
 import {
+  getJobWorkflowActions,
   isStageEmailStage,
   type JobStatus,
 } from '@/lib/jobs/types'
@@ -29,50 +26,18 @@ import type {
   StageEmailStage,
 } from '@/app/crm/jobs/_components/StageEmailModal'
 import type { JobWorkflowResolvedAction } from '@/lib/jobs/types'
+import {
+  buildJobTimelineItems,
+  formatJobTimelineDate,
+  formatJobTimelineRange,
+  jobTimelineDateTimeLocalToIso,
+} from '@/app/crm/jobs/_lib/jobTimelineVm'
 
 type JobDetailResource = {
   job: JobDetail | null
   estimateFile: EstimateDriveFile | null
   estimateFileError: string | null
   paintLogs: PaintLogRow[]
-}
-
-type EstimateFilePayload = {
-  data?:
-    | {
-        file?: EstimateDriveFile | null
-      }
-    | EstimateDriveFile
-  error?: string
-}
-
-async function loadEstimateFile(jobId: string) {
-  const response = await authedFetch(`/api/jobs/${jobId}/estimate-file`, { cache: 'no-store' })
-  const parsed = await parseResponseBody<EstimateFilePayload>(response)
-  const payload = parsed.json
-  const data = payload?.data && typeof payload.data === 'object' ? payload.data : null
-  const file =
-    ((data as { file?: EstimateDriveFile | null } | null)?.file ??
-      (payload?.data && !Array.isArray(payload.data)
-        ? (payload.data as EstimateDriveFile)
-        : null)) as EstimateDriveFile | null
-
-  if (response.ok) {
-    return {
-      estimateFile: file,
-      estimateFileError:
-        file == null ? payload?.error ?? 'No matching estimate in Drive folder' : null,
-    }
-  }
-
-  return {
-    estimateFile: null,
-    estimateFileError: getResponseErrorMessage(
-      response,
-      parsed,
-      'No matching estimate in Drive folder'
-    ),
-  }
 }
 
 export function useJobDetailPage() {
@@ -96,11 +61,8 @@ export function useJobDetailPage() {
   const secondaryRequestIdRef = useRef(0)
   const photosRequestIdRef = useRef(0)
 
-  const jobKey = typeof id === 'string' && id ? `/api/jobs/${id}` : null
+  const { key: jobKey, resource: jobResource } = useJobDetailResource(id)
   const jobsBoardKey = '/api/jobs'
-  const jobResource = useSwrResource<JobDetail | null>(jobKey, {
-    fallbackData: null,
-  })
   const job = jobResource.data ?? null
 
   const setError = useCallback(
@@ -125,7 +87,7 @@ export function useJobDetailPage() {
 
     try {
       const [estimateState, paintLogRows] = await Promise.all([
-        loadEstimateFile(id),
+        loadJobEstimateFile(id),
         listPaintLogs(id),
       ])
 
@@ -250,7 +212,7 @@ export function useJobDetailPage() {
     ]
   )
 
-  const detailActions = useEntityDetailActions({
+  const entityActions = useEntityDetailActions({
     deleteMessage: 'Delete this job? This cannot be undone.',
     deleteAction: async () => {
       if (!id || typeof id !== 'string' || deleting) return false
@@ -393,20 +355,10 @@ export function useJobDetailPage() {
     await patchJob({ status: nextStatus })
   }
 
-  const formatDate = (iso: string | null | undefined) => {
-    if (!iso) return '-'
-    try {
-      return new Date(iso).toLocaleString()
-    } catch {
-      return iso
-    }
-  }
-
-  const formatRange = (start?: string | null, end?: string | null) => {
-    if (!start && !end) return '-'
-    if (start && end) return `${formatDate(start)} - ${formatDate(end)}`
-    if (start) return `${formatDate(start)} -`
-    return `- ${formatDate(end)}`
+  const updateEstimateDate = async (estimateDateLocalValue: string) => {
+    const estimateDateIso = jobTimelineDateTimeLocalToIso(estimateDateLocalValue)
+    if (!estimateDateIso) return
+    await patchJob({ estimate_date: estimateDateIso })
   }
 
   const formatStatus = (value: string | null | undefined) => {
@@ -416,8 +368,18 @@ export function useJobDetailPage() {
   }
 
   const statusMessage = useMemo(
-    () => detailActions.statusMessage ?? notice,
-    [detailActions.statusMessage, notice]
+    () => entityActions.statusMessage ?? notice,
+    [entityActions.statusMessage, notice]
+  )
+
+  const workflowActions = useMemo(
+    () => (resource.data.job ? getJobWorkflowActions('detail', resource.data.job) : []),
+    [resource.data.job]
+  )
+
+  const timelineItems = useMemo(
+    () => (resource.data.job ? buildJobTimelineItems(resource.data.job) : []),
+    [resource.data.job]
   )
 
   const runWorkflowAction = async (action: JobWorkflowResolvedAction) => {
@@ -464,9 +426,12 @@ export function useJobDetailPage() {
     paintLogs: resource.data.paintLogs,
     photosFolderUrl,
     photosLoading,
-    copy: detailActions.copyValue,
+    timelineItems,
+    workflowActions,
+    copy: entityActions.copyValue,
     patchJob,
-    deleteJob: detailActions.confirmAndDelete,
+    updateEstimateDate,
+    deleteJob: entityActions.confirmAndDelete,
     openStageEmail,
     openCloseout,
     closeStageEmail,
@@ -476,8 +441,8 @@ export function useJobDetailPage() {
     handleStatusChange,
     markCompletedAndPrompt,
     runWorkflowAction,
-    formatDate,
-    formatRange,
+    formatDate: formatJobTimelineDate,
+    formatRange: formatJobTimelineRange,
     formatStatus,
   }
 }

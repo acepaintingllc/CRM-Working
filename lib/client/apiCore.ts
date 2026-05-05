@@ -21,6 +21,13 @@ export type ParsedApiResponse<T = unknown> = {
   text: string
 }
 
+export type RawApiResponse<TPayload = unknown> = {
+  response: Response
+  parsed: ParsedApiResponse<unknown>
+  payload: TPayload | null
+  errorMessage: string | null
+}
+
 export async function parseApiResponse<T = unknown>(
   response: Response
 ): Promise<ParsedApiResponse<T>> {
@@ -85,4 +92,21 @@ export async function requestApiWith<TResponse>(
   }
 
   return (parsed.json ?? null) as TResponse
+}
+
+export async function requestRawApiWith<TPayload = unknown>(
+  fetcher: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  fallbackErrorMessage = 'Request failed.'
+): Promise<RawApiResponse<TPayload>> {
+  const response = await fetcher(input, init)
+  const parsed = await parseApiResponse(response)
+
+  return {
+    response,
+    parsed,
+    payload: getApiPayloadData<TPayload>(parsed.json),
+    errorMessage: response.ok ? null : getApiErrorMessage(response, parsed, fallbackErrorMessage),
+  }
 }

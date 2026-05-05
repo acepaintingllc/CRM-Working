@@ -1,10 +1,19 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EstimateV2EditorPageContent } from '../EstimateV2EditorPageContent'
 
 const push = vi.fn()
 const save = vi.fn(async () => true)
+const saveDraft = vi.fn(() => {
+  void save()
+})
+const saveAndContinue = vi.fn()
 const addRoom = vi.fn()
+const requestBackNavigation = vi.fn()
+const onStay = vi.fn()
+const onSave = vi.fn()
+const onLeave = vi.fn()
 const mockUseEstimateV2Editor = vi.fn()
 
 vi.mock('../../_state/useEstimateV2Editor', () => ({
@@ -13,6 +22,28 @@ vi.mock('../../_state/useEstimateV2Editor', () => ({
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
+  usePathname: () => window.location.pathname,
+}))
+
+vi.mock('next/image', () => ({
+  default: ({
+    alt,
+  }: {
+    alt: string
+    src: string
+    width: number
+    height: number
+    unoptimized?: boolean
+    style?: React.CSSProperties
+    onError?: () => void
+  }) => <span aria-label={alt} />,
+}))
+
+vi.mock('@/lib/auth/authedFetch', () => ({
+  authedFetch: vi.fn(async () => ({
+    ok: true,
+    json: async () => ({}),
+  })),
 }))
 
 const baseEditorState = {
@@ -56,8 +87,13 @@ const baseEditorState = {
     validationColor: 'var(--v2-ink-2)',
     calculationStateText: 'Live preview (not saved)',
     calculationStateColor: '#f9e2b7',
-    totalEffectiveAreaText: '364 sf',
-    runningTotalLabel: 'Running total - 1 room - active scopes',
+    runningTotalLabel: 'Active scope totals - 1 room',
+    activeScopeTotals: [
+      { key: 'walls', label: 'Walls', value: '220 sf' },
+      { key: 'ceilings', label: 'Ceilings', value: '144 sf' },
+      { key: 'trim', label: 'Trim', value: '24 LF' },
+      { key: 'doors', label: 'Doors', value: '2 sides', detail: '1 count' },
+    ],
     saveStatusText: 'Unsaved changes',
     saveStatusColor: '#f9e2b7',
     walls: {
@@ -264,6 +300,7 @@ const baseEditorState = {
   saveVm: {
     dirty: true,
     canManualSave: true,
+    canSaveAndContinue: true,
     saveStatus: 'idle',
     saveStatusText: 'Unsaved changes',
     saveStatusColor: '#f9e2b7',
@@ -272,6 +309,20 @@ const baseEditorState = {
     calculationsStale: true,
     debugMeta: { dirtySource: 'walls', lastSaveTrigger: null, lastNormalizedDomains: [], usingLocalPreview: true },
     save,
+    saveDraft,
+    saveAndContinue,
+  },
+  navigationVm: {
+    unsavedDialogProps: {
+      isOpen: false,
+      canSave: true,
+      onStay,
+      onSave,
+      onLeave,
+    },
+  },
+  navigationActions: {
+    requestBackNavigation,
   },
   toDisplayNumber: (value: number | null | undefined) => (value == null ? '--' : String(value)),
 }
@@ -295,6 +346,20 @@ vi.mock('../EstimateV2DoorsSectionBody', () => ({
 describe('EstimateV2EditorPageContent', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+    window.history.replaceState(null, '', '/crm/quotes/estimate-1')
     mockUseEstimateV2Editor.mockReturnValue(baseEditorState)
   })
 
@@ -311,7 +376,9 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.getByText('Trim Body')).toBeInTheDocument()
     expect(screen.getByText('Doors Body')).toBeInTheDocument()
     expect(screen.getAllByText('Living Room').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('364 sf').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Walls: 220 sf|220 sf/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Ceilings: 144 sf|144 sf/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Trim: 24 LF|24 LF/).length).toBeGreaterThan(0)
     expect(screen.queryByText('Next: Details & Overrides ->')).not.toBeInTheDocument()
   })
 
@@ -328,7 +395,7 @@ describe('EstimateV2EditorPageContent', () => {
     expect(container.querySelector('.estimate-v2-footer')).toBeInTheDocument()
   })
 
-  it('lets footer continue navigate even when there are no dirty changes', async () => {
+  it('lets footer continue delegate even when there are no dirty changes', () => {
     mockUseEstimateV2Editor.mockReturnValue({
       ...baseEditorState,
       saveVm: {
@@ -345,180 +412,42 @@ describe('EstimateV2EditorPageContent', () => {
     fireEvent.click(screen.getByText('Save & continue ->'))
 
     expect(save).not.toHaveBeenCalled()
-    await waitFor(() => {
-      expect(push).toHaveBeenCalledWith('/crm/estimates/estimate-1/v2/details')
-    })
+    expect(saveAndContinue).toHaveBeenCalledTimes(1)
   })
 
-  it('shows a visible confirmation and keeps the route unchanged when back navigation is dirty', () => {
+  it('routes header back through the editor navigation actions', () => {
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
 
     fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
 
-    expect(push).not.toHaveBeenCalled()
-    expect(screen.getByRole('dialog', { name: 'Leave with unsaved changes?' })).toBeInTheDocument()
-    expect(screen.getByText('Leaving now will discard changes that have not been saved.')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Stay on editor' }))
-
-    expect(push).not.toHaveBeenCalled()
-    expect(screen.queryByRole('dialog', { name: 'Leave with unsaved changes?' })).not.toBeInTheDocument()
+    expect(requestBackNavigation).toHaveBeenCalledTimes(1)
   })
 
-  it('leaves through the confirmed dirty back navigation action', () => {
-    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
-
-    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Leave quote editor and discard unsaved changes' })
-    )
-
-    expect(push).toHaveBeenCalledWith('/crm/quotes')
-    expect(screen.queryByRole('dialog', { name: 'Leave with unsaved changes?' })).not.toBeInTheDocument()
-  })
-
-  it('guards same-origin shell link navigation while dirty', () => {
-    render(
-      <>
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a href="/crm/customers">Customers</a>
-        <EstimateV2EditorPageContent estimateId="estimate-1" />
-      </>
-    )
-
-    fireEvent.click(screen.getByRole('link', { name: 'Customers' }))
-
-    expect(push).not.toHaveBeenCalled()
-    expect(screen.getByRole('dialog', { name: 'Leave with unsaved changes?' })).toBeInTheDocument()
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Leave quote editor and discard unsaved changes' })
-    )
-
-    expect(push).toHaveBeenCalledWith('/crm/customers')
-  })
-
-  it('guards back navigation while a dirty autosave is still in flight', () => {
+  it('renders the editor navigation confirmation VM', () => {
     mockUseEstimateV2Editor.mockReturnValue({
       ...baseEditorState,
-      pageVm: {
-        ...baseEditorState.pageVm,
-        saving: true,
-      },
-      headerVm: {
-        ...baseEditorState.headerVm,
-        dirtyStateText: 'Autosaving draft...',
-        dirty: false,
-        saving: true,
-      },
-      saveVm: {
-        ...baseEditorState.saveVm,
-        dirty: false,
-        canManualSave: false,
-        saveStatus: 'autosaving',
-        saveStatusText: 'Autosaving draft...',
-        debugMeta: {
-          ...baseEditorState.saveVm.debugMeta,
-          lastSaveTrigger: 'auto',
+      navigationVm: {
+        unsavedDialogProps: {
+          isOpen: true,
+          canSave: true,
+          onStay,
+          onSave,
+          onLeave,
         },
       },
     })
 
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
-
-    expect(push).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog', { name: 'Leave with unsaved changes?' })).toBeInTheDocument()
-  })
 
-  it('guards shell navigation while a dirty manual save is still in flight', () => {
-    mockUseEstimateV2Editor.mockReturnValue({
-      ...baseEditorState,
-      pageVm: {
-        ...baseEditorState.pageVm,
-        saving: true,
-      },
-      headerVm: {
-        ...baseEditorState.headerVm,
-        dirtyStateText: 'Saving draft...',
-        dirty: false,
-        saving: true,
-      },
-      saveVm: {
-        ...baseEditorState.saveVm,
-        dirty: false,
-        canManualSave: false,
-        saveStatusText: 'Saving draft...',
-        debugMeta: {
-          ...baseEditorState.saveVm.debugMeta,
-          lastSaveTrigger: 'manual',
-        },
-      },
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes and leave quote editor' }))
 
-    render(
-      <>
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a href="/crm/jobs">Jobs</a>
-        <EstimateV2EditorPageContent estimateId="estimate-1" />
-      </>
-    )
-
-    fireEvent.click(screen.getByRole('link', { name: 'Jobs' }))
-
-    expect(push).not.toHaveBeenCalled()
-    expect(screen.getByRole('dialog', { name: 'Leave with unsaved changes?' })).toBeInTheDocument()
-  })
-
-  it('allows clean back navigation without opening confirmation', () => {
-    mockUseEstimateV2Editor.mockReturnValue({
-      ...baseEditorState,
-      headerVm: {
-        ...baseEditorState.headerVm,
-        dirtyStateText: '',
-        dirty: false,
-      },
-      saveVm: {
-        ...baseEditorState.saveVm,
-        dirty: false,
-        canManualSave: false,
-      },
-    })
-
-    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
-
-    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
-
-    expect(push).toHaveBeenCalledWith('/crm/quotes')
-    expect(screen.queryByRole('dialog', { name: 'Leave with unsaved changes?' })).not.toBeInTheDocument()
-  })
-
-  it('does not guard validation-only clean navigation', () => {
-    mockUseEstimateV2Editor.mockReturnValue({
-      ...baseEditorState,
-      headerVm: {
-        ...baseEditorState.headerVm,
-        dirtyStateText: '',
-        dirty: false,
-      },
-      pageVm: {
-        ...baseEditorState.pageVm,
-        validationIssues: ['Saved catalog warning'],
-      },
-      saveVm: {
-        ...baseEditorState.saveVm,
-        dirty: false,
-        canManualSave: false,
-      },
-    })
-
-    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
-
-    fireEvent.click(screen.getByRole('button', { name: '<- Back' }))
-
-    expect(push).toHaveBeenCalledWith('/crm/quotes')
-    expect(screen.queryByRole('dialog', { name: 'Leave with unsaved changes?' })).not.toBeInTheDocument()
+    expect(onStay).toHaveBeenCalledTimes(1)
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onLeave).toHaveBeenCalledTimes(1)
   })
 
   it('enables Save draft when valid dirty edits are ready and no save is active', () => {
@@ -572,6 +501,50 @@ describe('EstimateV2EditorPageContent', () => {
     })
   })
 
+  it('keeps the footer save action delegated while the settings drawer is focused', async () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      headerVm: {
+        ...baseEditorState.headerVm,
+        settingsOpen: true,
+      },
+      jobSettingsVm: {
+        ...baseEditorState.jobSettingsVm,
+        settingsOpen: true,
+      },
+      pageVm: {
+        ...baseEditorState.pageVm,
+        saving: false,
+        validationIssues: [],
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: true,
+        canManualSave: true,
+        saveStatusText: 'Unsaved changes - ready to save',
+        blockedReason: null,
+        blockingIssues: [],
+      },
+    })
+
+    const { container } = render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    const laborRateInput = screen.getByLabelText('Labor rate ($/hr)')
+    laborRateInput.focus()
+    expect(laborRateInput).toHaveFocus()
+
+    fireEvent.change(laborRateInput, { target: { value: '90' } })
+    const saveDraftButton = screen.getByRole('button', { name: 'Save draft' })
+    fireEvent.click(saveDraftButton)
+
+    expect(laborRateInput).toHaveFocus()
+    expect(saveDraft).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith()
+    })
+    expect(container.querySelector<HTMLElement>('.estimate-v2-footer')?.style.zIndex).toBe('60')
+  })
+
   it('keeps Save draft disabled while a save is active', () => {
     mockUseEstimateV2Editor.mockReturnValue({
       ...baseEditorState,
@@ -612,6 +585,45 @@ describe('EstimateV2EditorPageContent', () => {
       screen.getByRole('status', { name: 'Loading quote workspace' })
     ).toHaveTextContent('Loading workspace...')
     expect(screen.getByRole('alert')).toHaveTextContent('Failed to fetch estimate workspace')
+  })
+
+  it('renders a fatal load error without mounting the editor workspace controls', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        loading: false,
+        error: { message: 'Quote not found', retryable: true },
+        roomsCount: 0,
+      },
+      headerVm: {
+        ...baseEditorState.headerVm,
+        resumeRecord: {
+          estimate: null,
+          job: null,
+        },
+        dirty: false,
+        dirtyStateText: '',
+      },
+      roomVm: {
+        ...baseEditorState.roomVm,
+        rooms: [],
+        selectedRoomId: '',
+        selectedRoom: null,
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+        canManualSave: false,
+      },
+    })
+
+    const { container } = render(<EstimateV2EditorPageContent estimateId="missing-estimate" />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Quote not found')
+    expect(container.querySelector('.ace-v2-rooms-layout')).not.toBeInTheDocument()
+    expect(container.querySelector('.estimate-v2-footer')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
   })
 
   it('renders a single validation issue', () => {
@@ -702,6 +714,7 @@ describe('EstimateV2EditorPageContent', () => {
       saveVm: {
         ...baseEditorState.saveVm,
         canManualSave: false,
+        canSaveAndContinue: false,
         saveStatus: 'blocked',
         saveStatusText:
           'Unsaved changes - save blocked: R001: height is required for RECT wall mode',
@@ -745,6 +758,7 @@ describe('EstimateV2EditorPageContent', () => {
         ...baseEditorState.saveVm,
         dirty: true,
         canManualSave: false,
+        canSaveAndContinue: false,
         saveStatus: 'blocked',
         saveStatusText: 'Unsaved changes - save blocked: R001: trim type is required',
         blockedReason: 'R001: trim type is required',
@@ -769,7 +783,7 @@ describe('EstimateV2EditorPageContent', () => {
     expect(screen.getByRole('button', { name: 'Save & continue ->' })).toBeDisabled()
   })
 
-  it('does not render stale non-blocking paint assumption validation messages', () => {
+  it('renders validation issues directly from the page VM', () => {
     mockUseEstimateV2Editor.mockReturnValue({
       ...baseEditorState,
       pageVm: {
@@ -777,7 +791,6 @@ describe('EstimateV2EditorPageContent', () => {
         validationIssues: [
           'Walls: Scope 1: paint_prod_rate_sqft_per_hour is required',
           'Walls: Scope 1: paint_prod_rate_sqft_per_hour is required',
-          'Walls: Scope 1: paint_coverage_sqft_per_gal_per_coat is required',
           'R001: height is required for RECT wall mode',
         ],
       },
@@ -785,10 +798,9 @@ describe('EstimateV2EditorPageContent', () => {
 
     render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
 
-    expect(screen.queryByText('Walls: Scope 1: paint_prod_rate_sqft_per_hour is required')).not.toBeInTheDocument()
     expect(
-      screen.queryByText('Walls: Scope 1: paint_coverage_sqft_per_gal_per_coat is required')
-    ).not.toBeInTheDocument()
+      screen.getAllByText('Walls: Scope 1: paint_prod_rate_sqft_per_hour is required')
+    ).toHaveLength(2)
     expect(screen.getByText('R001: height is required for RECT wall mode')).toBeInTheDocument()
   })
 

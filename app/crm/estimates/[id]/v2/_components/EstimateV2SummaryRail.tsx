@@ -55,8 +55,24 @@ export function EstimateV2SummaryRail({
         </div>
 
         <div className="summary-card">
-          <div style={styles.mono}>Running Total</div>
-          <div style={{ fontSize: 'calc(18px + 4pt)', fontWeight: 800, marginTop: 2 }}>{vm.totalEffectiveAreaText}</div>
+          <div style={styles.mono}>Active Scope Totals</div>
+          <div style={{ ...styles.mono, color: 'var(--v2-ink-3)', marginTop: 3 }}>{vm.runningTotalLabel}</div>
+          <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+            {vm.activeScopeTotals.map((total) => (
+              <div
+                key={total.key}
+                style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}
+              >
+                <span style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)' }}>{total.label}</span>
+                <span style={{ fontSize: 'calc(14px + 4pt)', fontWeight: 800, textAlign: 'right' }}>
+                  {total.value}
+                  {total.detail ? (
+                    <span style={{ color: 'var(--v2-ink-3)', fontWeight: 600 }}> / {total.detail}</span>
+                  ) : null}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="summary-card">
@@ -94,11 +110,28 @@ function SectionCard({
       {section.showPrimer ?? true ? (
         <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 2 }}>Primer: {section.primerLabel}</div>
       ) : null}
-      {section.secondaryLabel && section.secondaryValue ? (
+      {!section.financialRows?.length && section.secondaryLabel && section.secondaryValue ? (
         <div style={{ fontSize: 'calc(13px + 4pt)', color: 'var(--v2-ink-2)', marginTop: 8 }}>
           {section.secondaryLabel}: {section.secondaryValue}
         </div>
       ) : null}
+      {section.financialRows?.map((row) => (
+        <div
+          key={row.label}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            alignItems: 'baseline',
+            fontSize: 'calc(13px + 4pt)',
+            color: 'var(--v2-ink-2)',
+            marginTop: 8,
+          }}
+        >
+          <span>{row.label}</span>
+          <span style={{ color: 'var(--v2-ink)', fontWeight: 800, textAlign: 'right' }}>{row.value}</span>
+        </div>
+      ))}
       <div style={{ ...styles.mono, color: 'var(--v2-green-2)', marginTop: 8 }}>Included</div>
     </>
   )

@@ -251,8 +251,59 @@ test('validation skips RECT/SEG required geometry checks when scope include=N', 
         areaSf: '',
       },
     ],
-    ceilingSegments: [],
+    ceilingSegments: [
+      {
+        id: 'seg-excluded',
+        ceilingScopeId: 'scope-seg-excluded',
+        roomId: 'R002',
+        include: 'Y',
+        shapeType: 'MANUAL' as const,
+        quantity: '',
+        widthIn: '',
+        heightIn: '',
+        baseIn: '',
+        manualAreaSqFt: '',
+      },
+    ],
   })
 
   assert.deepEqual(issues, [])
+})
+
+test('validation rejects malformed ceiling override values and accepts zero', () => {
+  const issues = validateV2CeilingsBeforeSave({
+    rooms: [makeBaseRoom()],
+    ceilingScopes: [
+      {
+        ...makeRectScope(),
+        overrideAreaSqFt: '0',
+        overridePaintHours: '-1',
+        overridePrimerHours: 'NaN',
+        overrideSupplyCost: 'Infinity',
+        overrideTotal: '12abc',
+      },
+    ],
+    ceilingSegments: [
+      {
+        id: 'seg-override',
+        ceilingScopeId: 'scope-1',
+        roomId: 'R001',
+        include: 'N',
+        shapeType: 'MANUAL',
+        quantity: '',
+        widthIn: '',
+        heightIn: '',
+        baseIn: '',
+        manualAreaSqFt: '',
+        overrideAreaSqFt: '-0.5',
+      },
+    ],
+  })
+
+  assert.equal(issues.some((issue) => issue.includes('ceiling scope scope-1: area override')), false)
+  assert.ok(issues.some((issue) => issue.includes('paint hours override')))
+  assert.ok(issues.some((issue) => issue.includes('primer hours override')))
+  assert.ok(issues.some((issue) => issue.includes('supply cost override')))
+  assert.ok(issues.some((issue) => issue.includes('total override')))
+  assert.ok(issues.some((issue) => issue.includes('ceiling segment seg-override: area override')))
 })

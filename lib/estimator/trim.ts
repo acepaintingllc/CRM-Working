@@ -10,6 +10,7 @@ import {
   sumNumbers,
 } from './wallsHelpers.ts'
 import { allocatePaintMaterialRollups } from './paintMaterial.ts'
+import { calculateRoomPerimeterMeasurement } from './calculationPrimitives.ts'
 import type {
   MissingInput,
   ResolvedSettings,
@@ -65,11 +66,11 @@ function trimScopeKey(scope: TrimCalculationScopeRow) {
 }
 
 function resolveRoomPerimeter(room: TrimCalculationRoomInput) {
-  if (room.mode !== 'RECT') return null
-  const length = pos(n(room.length_in))
-  const width = pos(n(room.width_in))
-  if (length == null || width == null) return null
-  return round4(2 * (length + width) / 12)
+  return calculateRoomPerimeterMeasurement({
+    roomMode: room.mode,
+    lengthIn: room.length_in,
+    widthIn: room.width_in,
+  })
 }
 
 function buildProductionRateMaps(catalogs: TrimCalculationInput['catalogs']) {
@@ -249,7 +250,10 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
 
     const manualMeasurement = nonNeg(n(scope.measurement_value))
     const helperValueFromRoom = room ? resolveRoomPerimeter(room) : null
-    const helperValue = nonNeg(n(scope.helper_value)) ?? helperValueFromRoom
+    const helperValue =
+      scope.helper_source === 'ROOM_PERIMETER'
+        ? helperValueFromRoom
+        : nonNeg(n(scope.helper_value)) ?? helperValueFromRoom
 
     let rawMeasurement: number | null = null
     if (scope.measurement_mode === 'ROOM_HELPER') {
@@ -495,7 +499,7 @@ export function calculateTrim(input: TrimCalculationInput): TrimCalculationOutpu
     return {
       ...scope,
       include,
-      helper_value: round4(helperValue ?? 0),
+      helper_value: helperValue == null ? null : round4(helperValue),
       raw_measurement: calc.raw_measurement,
       effective_measurement: calc.effective_measurement,
       raw_paint_hours: calc.raw_paint_hours,

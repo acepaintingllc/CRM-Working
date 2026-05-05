@@ -27,7 +27,8 @@ export function applyEstimateV2PreparedSaveCollections(
 
 export function applyEstimateV2SuccessfulSaveState(
   store: EstimateV2EditorStoreApi,
-  responseState: EstimateV2ResolvedSaveState
+  responseState: EstimateV2ResolvedSaveState,
+  options?: { updateLastSavedSnapshot?: boolean }
 ) {
   const state = store.getState()
   applyEstimateV2PreparedSaveCollections(store, responseState)
@@ -37,8 +38,10 @@ export function applyEstimateV2SuccessfulSaveState(
   state.setDoorCalculations(responseState.calculations.doorCalculations ?? null)
   state.setDrywallCalculations(responseState.calculations.drywallCalculations ?? null)
   state.setPricingSummary(responseState.calculations.pricingSummary)
-  state.setEstimate((prev) => (prev ? { ...prev, updated_at: new Date().toISOString() } : prev))
-  state.setLastSavedSnapshot(responseState.lastSavedSnapshot)
+  state.setEstimate(responseState.estimate)
+  if (options?.updateLastSavedSnapshot !== false) {
+    state.setLastSavedSnapshot(responseState.lastSavedSnapshot)
+  }
 }
 
 export function applyEstimateV2EditorLoadState(

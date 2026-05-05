@@ -294,9 +294,6 @@ const JOB_WORKFLOW_ACTION_DESCRIPTORS: Record<JobWorkflowActionId, JobWorkflowAc
     getLabel: () => 'Job actuals',
     getDisabledReason: (job) => {
       if (!job.accepted_quote) return 'Accept a quote before entering job actuals.'
-      if (!job.accepted_quote.estimate_snapshot_id) {
-        return 'Accepted quote is missing an estimate snapshot for actuals.'
-      }
       return null
     },
   },
@@ -306,9 +303,6 @@ const JOB_WORKFLOW_ACTION_DESCRIPTORS: Record<JobWorkflowActionId, JobWorkflowAc
     getLabel: () => 'Estimate review',
     getDisabledReason: (job) => {
       if (!job.accepted_quote) return 'Accept a quote before reviewing the estimate.'
-      if (!job.accepted_quote.estimate_snapshot_id) {
-        return 'Accepted quote is missing an estimate snapshot for review.'
-      }
       if (job.job_actuals_status !== 'submitted' && job.job_actuals_status !== 'locked') {
         return 'Submit job actuals before estimate review.'
       }

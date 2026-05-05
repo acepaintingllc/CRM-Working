@@ -68,10 +68,18 @@ export function useEstimateV2TrimActions(params: {
 
   const toggleRoomInclude = useCallback(
     (roomId: string) => {
-      store.getState().setTrimScopes((prev) => toggleRoomTrimIncludeMutation(prev, roomId))
+      const state = store.getState()
+      state.setTrimScopes((prev) =>
+        toggleRoomTrimIncludeMutation(prev, roomId, {
+          rooms: state.collections.rooms,
+          trimTypeOptions,
+          roomModeById,
+          roomHeightFactorByRoomId,
+        })
+      )
       markDirty()
     },
-    [markDirty, store]
+    [markDirty, roomHeightFactorByRoomId, roomModeById, store, trimTypeOptions]
   )
 
   const updateTrimType = useCallback(

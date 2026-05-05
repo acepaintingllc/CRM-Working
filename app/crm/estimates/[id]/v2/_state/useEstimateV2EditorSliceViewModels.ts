@@ -20,6 +20,7 @@ import {
   buildValidationState,
 } from '../_lib/estimateV2EditorPresentation'
 import type {
+  EstimateV2EditorActiveScopeTotalVm,
   EstimateV2EditorCeilingsVm,
   EstimateV2EditorDoorsVm,
   EstimateV2EditorHeaderVm,
@@ -48,6 +49,8 @@ export type EstimateV2EditorViewModelParams = {
     typeof import('./useEstimateV2SettingsActions').useEstimateV2SettingsActions
   >
   save: ReturnType<typeof import('./useEstimateV2SaveController').useEstimateV2SaveController>['save']
+  saveDraft: ReturnType<typeof import('./useEstimateV2SaveController').useEstimateV2SaveController>['saveDraft']
+  saveAndContinue: ReturnType<typeof import('./useEstimateV2SaveController').useEstimateV2SaveController>['saveAndContinue']
 }
 
 function usePageVm(
@@ -366,6 +369,7 @@ function useCeilingsVm(
       ceilingPrimerOptions: derived.catalog.ceilingPrimerOptions,
       colorCodeOptions: derived.catalog.colorCodeOptions,
       selectedCeilingEffectiveSqFt: derived.calculation.selectedCeilingEffectiveSqFt,
+      ceilingScopePreviewMetricsById: derived.calculation.ceilingScopePreviewMetricsById,
       ceilingScopeEffectiveTotalById: derived.calculation.ceilingScopeEffectiveTotalById,
       selectedRoomCeilingDrywallRepairs: derived.room.selectedRoomCeilingDrywallRepairs,
       drywallRateOptions: derived.catalog.drywallRateOptions,
@@ -402,6 +406,7 @@ function useCeilingsVm(
       ceilingState.catalogs,
       ceilingState.ceilingSegments,
       derived.calculation.ceilingScopeEffectiveTotalById,
+      derived.calculation.ceilingScopePreviewMetricsById,
       derived.calculation.drywallRepairEffectiveQuantityById,
       derived.calculation.drywallRepairEffectiveTotalById,
       derived.calculation.selectedCeilingDrywallSubtotal,
@@ -496,6 +501,59 @@ const noopDrywallActions: NonNullable<EstimateV2EditorViewModelParams['drywallAc
   updateRepair: () => undefined,
   updateRepairType: () => undefined,
   deleteRepair: () => undefined,
+}
+
+function formatActiveScopeQuantity(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(value)
+}
+
+function formatSummaryFinancialTotal(value: number | null | undefined) {
+  return value == null || !Number.isFinite(value) ? 'Pending inputs' : `$${value.toFixed(2)}`
+}
+
+function formatTrimTotal(params: {
+  trimMeasurement: number
+  trimUnit: string | null
+}) {
+  if (params.trimUnit && params.trimUnit !== 'mixed') return `${formatActiveScopeQuantity(params.trimMeasurement)} ${params.trimUnit}`
+  if (params.trimUnit === 'mixed') return `${formatActiveScopeQuantity(params.trimMeasurement)} mixed`
+  return '0'
+}
+
+function buildActiveScopeTotalRows(
+  totals: EstimateV2EditorDerivedSections['calculation']['activeScopeTotals']
+): EstimateV2EditorActiveScopeTotalVm[] {
+  const rows: EstimateV2EditorActiveScopeTotalVm[] = [
+    {
+      key: 'walls',
+      label: 'Walls',
+      value: `${formatActiveScopeQuantity(totals.wallsSqFt)} sf`,
+    },
+    {
+      key: 'ceilings',
+      label: 'Ceilings',
+      value: `${formatActiveScopeQuantity(totals.ceilingsSqFt)} sf`,
+    },
+    {
+      key: 'trim',
+      label: 'Trim',
+      value: formatTrimTotal(totals),
+    },
+  ]
+
+  if (totals.doorsActive || totals.doorSides > 0 || totals.doorCount > 0) {
+    rows.push({
+      key: 'doors',
+      label: 'Doors',
+      value: `${formatActiveScopeQuantity(totals.doorSides)} sides`,
+      detail: `${formatActiveScopeQuantity(totals.doorCount)} count`,
+    })
+  }
+
+  return rows
 }
 
 function useDoorsVm(
@@ -630,9 +688,12 @@ function useJobSettingsVm(
 }
 
 function useSaveVm(
+  estimateId: string | undefined,
   store: EstimateV2EditorStoreApi,
   derived: EstimateV2EditorDerivedSections,
-  save: EstimateV2EditorViewModelParams['save']
+  save: EstimateV2EditorViewModelParams['save'],
+  saveDraft: EstimateV2EditorViewModelParams['saveDraft'],
+  saveAndContinue: EstimateV2EditorViewModelParams['saveAndContinue']
 ): EstimateV2EditorSaveVm {
   const saveState = useEstimateV2Store(store, (state) => ({
     saveStatus: state.meta.saveStatus,
@@ -643,6 +704,8 @@ function useSaveVm(
     () => ({
       dirty: derived.calculation.dirty,
       canManualSave: derived.save.canManualSave,
+      canSaveAndContinue:
+        Boolean(estimateId) && (!derived.calculation.dirty || derived.save.canManualSave),
       saveStatus: saveState.saveStatus,
       saveStatusText: derived.save.saveStatusText,
       saveStatusColor: derived.save.saveStatusColor,
@@ -654,8 +717,11 @@ function useSaveVm(
         usingLocalPreview: derived.calculation.useLocalPreviewCalculations,
       },
       save,
+      saveDraft,
+      saveAndContinue,
     }),
     [
+      estimateId,
       derived.save.blockedReason,
       derived.save.blockingIssues,
       derived.save.canManualSave,
@@ -665,6 +731,8 @@ function useSaveVm(
       derived.save.saveStatusColor,
       derived.save.saveStatusText,
       save,
+      saveDraft,
+      saveAndContinue,
       saveState.debugMeta,
       saveState.saveStatus,
     ]
@@ -694,6 +762,20 @@ function useSummaryVm(
         paintLabel: derived.productLabels.wallPaintLabel,
         primerLabel: derived.productLabels.wallPrimerLabel,
         showPrimer: wallUsesPrimer,
+        financialRows: [
+          {
+            label: 'Effective Total',
+            value: formatSummaryFinancialTotal(derived.calculation.selectedWallSubtotal),
+          },
+          ...(derived.calculation.selectedWallDrywallSubtotal == null
+            ? []
+            : [
+                {
+                  label: 'Drywall Effective Total',
+                  value: formatSummaryFinancialTotal(derived.calculation.selectedWallDrywallSubtotal),
+                },
+              ]),
+        ],
         chips: buildSectionSummaryChips({
           modeLabel: derived.room.selectedRoomGeometryMode,
           primaryValue: toDisplayNumber(derived.calculation.selectedRoomEffectiveSqFt),
@@ -701,12 +783,16 @@ function useSummaryVm(
           paintLabel: derived.productLabels.wallPaintLabel,
           primerLabel: derived.productLabels.wallPrimerLabel,
           showPrimer: wallUsesPrimer,
+          secondaryValue: formatSummaryFinancialTotal(derived.calculation.selectedWallSubtotal),
+          secondaryLabel: 'Effective Total',
           validationIssueCount: derived.room.selectedRoomIssueCount,
         }),
       })
     },
     [
       derived.calculation.selectedRoomEffectiveSqFt,
+      derived.calculation.selectedWallDrywallSubtotal,
+      derived.calculation.selectedWallSubtotal,
       derived.productLabels.wallPaintLabel,
       derived.productLabels.wallPrimerLabel,
       derived.room.selectedRoomGeometryMode,
@@ -730,6 +816,20 @@ function useSummaryVm(
         paintLabel: derived.productLabels.ceilingPaintLabel,
         primerLabel: derived.productLabels.ceilingPrimerLabel,
         showPrimer: ceilingUsesPrimer,
+        financialRows: [
+          {
+            label: 'Effective Total',
+            value: formatSummaryFinancialTotal(derived.calculation.selectedCeilingSubtotal),
+          },
+          ...(derived.calculation.selectedCeilingDrywallSubtotal == null
+            ? []
+            : [
+                {
+                  label: 'Drywall Effective Total',
+                  value: formatSummaryFinancialTotal(derived.calculation.selectedCeilingDrywallSubtotal),
+                },
+              ]),
+        ],
         chips: buildSectionSummaryChips({
           modeLabel: derived.room.selectedRoomGeometryMode,
           primaryValue: toDisplayNumber(derived.calculation.selectedCeilingEffectiveSqFt),
@@ -737,12 +837,16 @@ function useSummaryVm(
           paintLabel: derived.productLabels.ceilingPaintLabel,
           primerLabel: derived.productLabels.ceilingPrimerLabel,
           showPrimer: ceilingUsesPrimer,
+          secondaryValue: formatSummaryFinancialTotal(derived.calculation.selectedCeilingSubtotal),
+          secondaryLabel: 'Effective Total',
           validationIssueCount: derived.room.selectedRoomIssueCount,
         }),
       })
     },
     [
       derived.calculation.selectedCeilingEffectiveSqFt,
+      derived.calculation.selectedCeilingDrywallSubtotal,
+      derived.calculation.selectedCeilingSubtotal,
       derived.productLabels.ceilingPaintLabel,
       derived.productLabels.ceilingPrimerLabel,
       derived.room.ceilingsIncluded,
@@ -765,11 +869,14 @@ function useSummaryVm(
         paintLabel: derived.productLabels.trimPaintLabel,
         primerLabel: derived.productLabels.trimPrimerLabel,
         showPrimer: trimUsesPrimer,
-        secondaryValue:
-          derived.calculation.selectedTrimSubtotal == null
-            ? 'Pending inputs'
-            : `$${derived.calculation.selectedTrimSubtotal.toFixed(2)}`,
-        secondaryLabel: 'Subtotal',
+        secondaryValue: formatSummaryFinancialTotal(derived.calculation.selectedTrimSubtotal),
+        secondaryLabel: 'Effective Total',
+        financialRows: [
+          {
+            label: 'Effective Total',
+            value: formatSummaryFinancialTotal(derived.calculation.selectedTrimSubtotal),
+          },
+        ],
         chips: buildSectionSummaryChips({
           itemCount: derived.room.selectedRoomTrimScopes.length,
           primaryValue: toDisplayNumber(derived.calculation.selectedTrimMeasurement),
@@ -777,11 +884,8 @@ function useSummaryVm(
           paintLabel: derived.productLabels.trimPaintLabel,
           primerLabel: derived.productLabels.trimPrimerLabel,
           showPrimer: trimUsesPrimer,
-          secondaryValue:
-            derived.calculation.selectedTrimSubtotal == null
-              ? 'Pending inputs'
-              : `$${derived.calculation.selectedTrimSubtotal.toFixed(2)}`,
-          secondaryLabel: 'Subtotal',
+          secondaryValue: formatSummaryFinancialTotal(derived.calculation.selectedTrimSubtotal),
+          secondaryLabel: 'Effective Total',
         }),
       })
     },
@@ -808,11 +912,14 @@ function useSummaryVm(
         paintLabel: derived.productLabels.doorPaintLabel,
         primerLabel: derived.productLabels.doorPrimerLabel,
         showPrimer: doorUsesPrimer,
-        secondaryValue:
-          derived.calculation.selectedDoorSubtotal == null
-            ? 'Pending inputs'
-            : `$${derived.calculation.selectedDoorSubtotal.toFixed(2)}`,
-        secondaryLabel: 'Subtotal',
+        secondaryValue: formatSummaryFinancialTotal(derived.calculation.selectedDoorSubtotal),
+        secondaryLabel: 'Effective Total',
+        financialRows: [
+          {
+            label: 'Effective Total',
+            value: formatSummaryFinancialTotal(derived.calculation.selectedDoorSubtotal),
+          },
+        ],
         chips: buildSectionSummaryChips({
           itemCount: derived.room.selectedRoomDoorScopes.length,
           primaryValue: toDisplayNumber(derived.calculation.selectedDoorUnits),
@@ -820,11 +927,8 @@ function useSummaryVm(
           paintLabel: derived.productLabels.doorPaintLabel,
           primerLabel: derived.productLabels.doorPrimerLabel,
           showPrimer: doorUsesPrimer,
-          secondaryValue:
-            derived.calculation.selectedDoorSubtotal == null
-              ? 'Pending inputs'
-              : `$${derived.calculation.selectedDoorSubtotal.toFixed(2)}`,
-          secondaryLabel: 'Subtotal',
+          secondaryValue: formatSummaryFinancialTotal(derived.calculation.selectedDoorSubtotal),
+          secondaryLabel: 'Effective Total',
         }),
       })
     },
@@ -871,8 +975,8 @@ function useSummaryVm(
       validationColor: validationState.color,
       calculationStateText: calculationStateVm.text,
       calculationStateColor: calculationStateVm.color,
-      totalEffectiveAreaText: `${toDisplayNumber(derived.calculation.totalEffectiveAreaSqFt)} sf`,
       runningTotalLabel: buildRunningTotalLabel(summaryState.roomsCount),
+      activeScopeTotals: buildActiveScopeTotalRows(derived.calculation.activeScopeTotals),
       saveStatusText: derived.save.saveStatusText,
       saveStatusColor: derived.save.saveStatusColor,
       walls: wallSectionSummary,
@@ -884,7 +988,7 @@ function useSummaryVm(
     ceilingSectionSummary,
     doorSectionSummary,
     derived.calculation.calculationsStale,
-    derived.calculation.totalEffectiveAreaSqFt,
+    derived.calculation.activeScopeTotals,
     derived.room.ceilingsIncluded,
     derived.room.doorsIncluded,
     derived.room.selectedRoom,
@@ -903,7 +1007,7 @@ function useSummaryVm(
 export function useEstimateV2EditorSliceViewModels(
   params: EstimateV2EditorViewModelParams
 ) {
-  const { estimateId, store, derived, roomActions, wallActions, ceilingActions, trimActions, doorActions, drywallActions, settingsActions, save } = params
+  const { estimateId, store, derived, roomActions, wallActions, ceilingActions, trimActions, doorActions, drywallActions, settingsActions, save, saveDraft, saveAndContinue } = params
   const effectiveDrywallActions = drywallActions ?? noopDrywallActions
   const pageVm = usePageVm(store, derived)
   const headerVm = useHeaderVm(estimateId, store, derived, roomActions.addRoom)
@@ -913,7 +1017,7 @@ export function useEstimateV2EditorSliceViewModels(
   const trimVm = useTrimVm(derived, trimActions)
   const doorsVm = useDoorsVm(derived, doorActions)
   const jobSettingsVm = useJobSettingsVm(store, derived, settingsActions)
-  const saveVm = useSaveVm(store, derived, save)
+  const saveVm = useSaveVm(estimateId, store, derived, save, saveDraft, saveAndContinue)
   const summaryVm = useSummaryVm(store, derived)
 
   return {

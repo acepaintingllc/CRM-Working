@@ -7,10 +7,8 @@ import { useCrmBeforeUnloadGuard } from '@/app/crm/_hooks/useCrmBeforeUnloadGuar
 import { useCrmIntentGuard } from '@/app/crm/_hooks/useCrmIntentGuard'
 import {
   loadJobActuals,
-  repairAcceptedEstimateSnapshot,
   saveDraftJobActuals,
   submitJobActuals,
-  loadJobRecord,
 } from '@/lib/jobs/client'
 import type { JobDetail } from '@/types/jobs/api'
 import type { JobActualsRecord } from '@/types/jobs/feedback'
@@ -25,6 +23,10 @@ import {
   submitJobActualsFlow,
 } from '../_lib/jobActualsController'
 import { buildJobActualsVm } from '../_lib/jobActualsVm'
+import {
+  loadAcceptedEstimateFeedbackResource,
+  useAcceptedEstimateSnapshotRepair,
+} from '../../../_hooks/useAcceptedEstimateFeedbackResource'
 
 type JobActualsPageResource = {
   job: JobDetail | null
@@ -50,32 +52,25 @@ export function useJobActualsPage() {
   const backHref = id && typeof id === 'string' ? `/crm/jobs/${id}` : '/crm/jobs'
 
   const [submitting, setSubmitting] = useState(false)
-  const [repairingSnapshot, setRepairingSnapshot] = useState(false)
 
   const resource = useEditableResource<JobActualsPageResource>({
     initialData: emptyJobActualsPageResource,
-    load: async () => {
-      if (!id || typeof id !== 'string') {
-        throw new Error('Missing job id in URL.')
-      }
-
-      const loadedJob = await loadJobRecord(id)
-      const acceptedSnapshotId = loadedJob?.accepted_quote?.estimate_snapshot_id ?? null
-      if (!acceptedSnapshotId) {
-        return {
-          job: loadedJob,
+    load: () =>
+      loadAcceptedEstimateFeedbackResource<JobActualsRecord | null, JobActualsPageResource>({
+        jobId: id,
+        missingJobIdError: 'Missing job id in URL.',
+        loadFeedback: loadJobActuals,
+        buildMissingSnapshotResource: (job) => ({
+          job,
           actuals: null,
           form: buildJobActualsFormState(null),
-        }
-      }
-
-      const loadedActuals = await loadJobActuals(id, acceptedSnapshotId)
-      return {
-        job: loadedJob,
-        actuals: loadedActuals,
-        form: buildJobActualsFormState(loadedActuals),
-      }
-    },
+        }),
+        buildLoadedResource: ({ job, feedback }) => ({
+          job,
+          actuals: feedback,
+          form: buildJobActualsFormState(feedback),
+        }),
+      }),
     save: async (current) => {
       if (!id || typeof id !== 'string') {
         throw new Error('Missing job id in URL.')
@@ -118,6 +113,11 @@ export function useJobActualsPage() {
     const result = await resource.reload()
     return result.ok
   }, [resource])
+
+  const { repairingSnapshot, repairSnapshot } = useAcceptedEstimateSnapshotRepair({
+    jobId: id,
+    resource,
+  })
 
   const setField = useCallback((field: keyof JobActualsFormState, value: string) => {
     resource.setData((current) => ({
@@ -166,27 +166,6 @@ export function useJobActualsPage() {
       setSubmitting(false)
     }
   }, [id, resource, snapshotId])
-
-  const repairSnapshot = useCallback(async () => {
-    if (!id || typeof id !== 'string') return false
-    setRepairingSnapshot(true)
-    resource.clearFeedback()
-    try {
-      const result = await repairAcceptedEstimateSnapshot(id)
-      const loaded = await load()
-      if (loaded) resource.setNotice(result.notice ?? 'Accepted estimate snapshot repaired.')
-      return loaded
-    } catch (repairError) {
-      resource.setError(
-        repairError instanceof Error
-          ? repairError.message
-          : 'Failed to repair accepted estimate snapshot.'
-      )
-      return false
-    } finally {
-      setRepairingSnapshot(false)
-    }
-  }, [id, load, resource])
 
   const vm = useMemo(() => buildJobActualsVm({ job, form }), [form, job])
   const validation = useMemo(() => validateJobActualsForm(form), [form])
