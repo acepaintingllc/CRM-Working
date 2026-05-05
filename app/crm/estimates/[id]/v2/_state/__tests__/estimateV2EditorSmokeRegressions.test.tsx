@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
+import { calculateDoors } from '@/lib/estimator/doors'
 import type { EstimateV2DoorScopeDraft } from '@/types/estimator/v2'
 import { buildEstimateV2DirtySnapshot } from '../estimateV2DirtySnapshot'
 import { shouldGuardEstimateV2Navigation } from '../estimateV2NavigationGuard'
@@ -214,5 +215,188 @@ describe('Estimate V2 editor smoke regressions', () => {
         },
       })
     ).toBe(true)
+  })
+
+  it('keeps geometry edits dirty and saveable after a blocked navigation is cancelled', () => {
+    const { store } = createSmokeRegressionStore()
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    act(() => {
+      store.getState().setRooms((prev) =>
+        prev.map((room) =>
+          room.roomId === 'R001' ? { ...room, lengthIn: '240' } : room
+        )
+      )
+      store.getState().setScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === 'wall-r001-main' ? { ...scope, perimeterIn: '768' } : scope
+        )
+      )
+      store.getState().setCeilingScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === 'ceiling-r001-main'
+            ? { ...scope, lengthIn: '240', widthIn: '144' }
+            : scope
+        )
+      )
+    })
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.sections.save.canManualSave).toBe(true)
+    expect(result.current.saveStatusText).toContain('Unsaved changes')
+    expect(result.current.selectedRoomEffectiveSqFt).toBe(576)
+    expect(result.current.selectedCeilingEffectiveSqFt).toBe(240)
+    expect(result.current.totalEffectiveAreaSqFt).toBe(656)
+
+    const blockedNavigation = shouldGuardEstimateV2Navigation({
+      saving: false,
+      saveVm: {
+        dirty: result.current.dirty,
+        debugMeta: {
+          dirtySource: store.getState().meta.debugMeta.dirtySource,
+          lastSaveTrigger: store.getState().meta.debugMeta.lastSaveTrigger,
+          lastNormalizedDomains: store.getState().meta.debugMeta.lastNormalizedDomains,
+          usingLocalPreview: result.current.useLocalPreviewCalculations,
+        },
+      },
+    })
+
+    expect(blockedNavigation).toBe(true)
+
+    // Cancelling a guarded navigation should not mutate editor collections or clean snapshots.
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.sections.save.canManualSave).toBe(true)
+    expect(result.current.saveStatusText).toContain('Unsaved changes')
+    expect(result.current.selectedRoomEffectiveSqFt).toBe(576)
+    expect(result.current.selectedCeilingEffectiveSqFt).toBe(240)
+    expect(result.current.totalEffectiveAreaSqFt).toBe(656)
+  })
+
+  it('creates a valid trim starter row when trim is activated for a room with no trim items', () => {
+    const { fixture, store } = createSmokeRegressionStore()
+    const defaultTrimType = fixture.catalogs.trim_items[0]
+    expect(defaultTrimType).toBeDefined()
+    store.getState().setTrimScopes((prev) => prev.filter((scope) => scope.roomId !== 'R001'))
+    store.getState().setLastSavedSnapshot(
+      buildEstimateV2DirtySnapshot({
+        jobSettingsDraft: fixture.jobSettingsDraft,
+        rooms: store.getState().collections.rooms,
+        scopes: store.getState().collections.scopes,
+        segments: store.getState().collections.segments,
+        roomFlags: store.getState().collections.roomFlags,
+        ceilingScopes: store.getState().collections.ceilingScopes,
+        ceilingSegments: store.getState().collections.ceilingSegments,
+        trimScopes: store.getState().collections.trimScopes,
+        doorScopes: store.getState().collections.doorScopes,
+        rollers: store.getState().collections.rollers,
+        accessFees: store.getState().collections.accessFees,
+      })
+    )
+    const derived = renderHook(() => useEstimateV2DerivedState({ store }))
+    const trimActions = renderHook(() =>
+      useEstimateV2TrimActions({
+        store,
+        trimTypeOptions: fixture.catalogs.trim_items,
+        roomModeById: derived.result.current.roomModeById,
+        roomHeightFactorByRoomId: derived.result.current.roomHeightFactorByRoomId,
+      })
+    )
+
+    expect(derived.result.current.dirty).toBe(false)
+
+    act(() => {
+      trimActions.result.current.toggleRoomInclude('R001')
+    })
+
+    const trimScope = store.getState().collections.trimScopes.find((scope) => scope.roomId === 'R001')
+    expect(trimScope).toMatchObject({
+      include: 'Y',
+      trimTypeId: defaultTrimType?.id,
+      measurementMode: 'ROOM_HELPER',
+      helperSource: 'ROOM_PERIMETER',
+    })
+    expect(derived.result.current.dirty).toBe(true)
+    expect(derived.result.current.sections.save.canManualSave).toBe(true)
+    expect(derived.result.current.sections.save.blockingIssues).toEqual([])
+    expect(derived.result.current.currentPayload.room_trim_scopes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          room_id: 'R001',
+          include: 'Y',
+          trim_type_id: defaultTrimType?.id,
+          measurement_mode: 'ROOM_HELPER',
+        }),
+      ])
+    )
+  })
+
+  it('creates a valid door starter row when doors are activated for a room with no door items', () => {
+    const { fixture, store } = createSmokeRegressionStore()
+    const doorType = {
+      id: 'DOOR_PANEL',
+      label: 'Panel door',
+      unit_rate_type: 'per_side',
+      unit: 'SIDE',
+      default_qty: 1,
+      labor_rate: 0.4,
+      material_rate: 12,
+      amount: 12,
+    }
+    store.getState().setDoorScopes([])
+    store.getState().setLastSavedSnapshot(
+      buildEstimateV2DirtySnapshot({
+        jobSettingsDraft: fixture.jobSettingsDraft,
+        rooms: store.getState().collections.rooms,
+        scopes: store.getState().collections.scopes,
+        segments: store.getState().collections.segments,
+        roomFlags: store.getState().collections.roomFlags,
+        ceilingScopes: store.getState().collections.ceilingScopes,
+        ceilingSegments: store.getState().collections.ceilingSegments,
+        trimScopes: store.getState().collections.trimScopes,
+        doorScopes: store.getState().collections.doorScopes,
+        rollers: store.getState().collections.rollers,
+        accessFees: store.getState().collections.accessFees,
+      })
+    )
+    const derived = renderHook(() => useEstimateV2DerivedState({ store }))
+    const doorActions = renderHook(() =>
+      useEstimateV2DoorActions({
+        store,
+        doorTypeOptions: [doorType],
+      })
+    )
+
+    expect(derived.result.current.dirty).toBe(false)
+
+    act(() => {
+      doorActions.result.current.toggleRoomInclude('R001')
+    })
+
+    const doorScope = (store.getState().collections.doorScopes ?? []).find(
+      (scope) => scope.roomId === 'R001'
+    )
+    expect(doorScope).toMatchObject({
+      include: 'Y',
+      doorTypeId: doorType.id,
+      quantity: '1',
+      sides: '2',
+    })
+    expect(derived.result.current.dirty).toBe(true)
+    expect(derived.result.current.sections.save.canManualSave).toBe(true)
+    const doorCalculations = calculateDoors({
+      scopes: (derived.result.current.currentPayload.room_door_scopes ?? []).map((scope) => ({
+        ...scope,
+        room_id: String(scope.room_id),
+      })),
+      settings: {
+        labor_rate_per_hour: fixture.jobSettingsDraft.laborRate,
+        crew_size: fixture.jobSettingsDraft.crewSize,
+      },
+      catalogs: {
+        door_unit_rates: [doorType],
+      },
+    })
+    expect(doorCalculations.missing_inputs).toEqual([])
   })
 })

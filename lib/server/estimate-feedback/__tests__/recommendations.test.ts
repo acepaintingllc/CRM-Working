@@ -8,13 +8,17 @@ vi.mock('@/lib/server/org', () => ({
 
 import {
   applyTrendRecommendation,
-  buildTrendRecommendationCandidates,
   generateTrendRecommendations,
   normalizeRecommendationPostInput,
-  parseRecommendationTargetKey,
   updateTrendRecommendationStatus,
   type TrendRecommendationRow,
 } from '../recommendations'
+import {
+  buildRecommendationTargetKey,
+  buildTrendRecommendationCandidates,
+  parseRecommendationTargetKey,
+  targetKeyForSettingValue,
+} from '../recommendationRules'
 import type { EstimateFeedbackTrendSummary } from '../../../../types/estimate-feedback/trends'
 import type {
   EstimatorSettingSetRow,
@@ -263,10 +267,58 @@ function recommendationRow(
 }
 
 describe('trend recommendations', () => {
-  it('builds labor and supplies recommendation candidates without no-op paint candidates', () => {
+  it('builds labor recommendation candidates from trend and active setting inputs', () => {
+    const candidates = buildTrendRecommendationCandidates({
+      trend: trend({
+        metrics: {
+          labor: { averageVariance: 3, averageTotalImpact: 3, count: 10 },
+          paint: { averageVariance: 1, averageTotalImpact: 1, count: 10 },
+          supplies: { averageVariance: 0, averageTotalImpact: 0, count: 10 },
+        },
+      }),
+      activeSettingSet: settingSet(),
+    })
+
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]?.target_setting_key).toBe(
+      'production_rates_walls:WALL_STD:sqft_per_hr'
+    )
+    expect(candidates[0]?.suggested_value_json).toEqual({ sqft_per_hr: 135 })
+    expect(candidates[0]?.evidence_json).toMatchObject({
+      rule_key: 'labor_production_rate_adjustment',
+      metric_key: 'labor',
+      metric_count: 10,
+    })
+  })
+
+  it('builds supplies recommendation candidates from trend and active setting inputs', () => {
+    const candidates = buildTrendRecommendationCandidates({
+      trend: trend({
+        metrics: {
+          labor: { averageVariance: 0, averageTotalImpact: 0, count: 10 },
+          paint: { averageVariance: 1, averageTotalImpact: 1, count: 10 },
+          supplies: { averageVariance: 45, averageTotalImpact: 45, count: 10 },
+        },
+      }),
+      activeSettingSet: settingSet(),
+    })
+
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]?.target_setting_key).toBe(
+      'supply_rates_area_based:AREA_STD:cost_per'
+    )
+    expect(candidates[0]?.suggested_value_json).toEqual({ cost_per: 0.22 })
+    expect(candidates[0]?.evidence_json).toMatchObject({
+      rule_key: 'supplies_baseline_adjustment',
+      metric_key: 'supplies',
+      metric_count: 10,
+    })
+  })
+
+  it('builds labor and supplies candidates without no-op paint candidates', () => {
     const candidates = buildTrendRecommendationCandidates({
       trend: trend(),
-      settingSet: settingSet(),
+      activeSettingSet: settingSet(),
     })
 
     expect(candidates).toHaveLength(2)
@@ -274,7 +326,6 @@ describe('trend recommendations', () => {
       'production_rates_walls:WALL_STD:sqft_per_hr',
       'supply_rates_area_based:AREA_STD:cost_per',
     ])
-    expect(candidates[0]?.suggested_value_json).toEqual({ sqft_per_hr: 135 })
     expect(candidates[1]?.suggested_value_json).toEqual({ cost_per: 0.22 })
   })
 
@@ -289,13 +340,59 @@ describe('trend recommendations', () => {
           supplies: { averageVariance: 0, averageTotalImpact: 0, count: 10 },
         },
       }),
-      settingSet: settingSet(),
+      activeSettingSet: settingSet(),
     })
 
     expect(candidates).toEqual([])
   })
 
-  it('keeps target key validation in the recommendation domain', () => {
+  it('filters candidates when current and suggested values are equal', () => {
+    const snapshot = settingSet()
+    snapshot.values[0] = {
+      ...snapshot.values[0]!,
+      value_json: { sqft_per_hr: 0 },
+    }
+
+    const candidates = buildTrendRecommendationCandidates({
+      trend: trend({
+        metrics: {
+          labor: { averageVariance: 3, averageTotalImpact: 3, count: 10 },
+          paint: { averageVariance: 1, averageTotalImpact: 1, count: 10 },
+          supplies: { averageVariance: 0, averageTotalImpact: 0, count: 10 },
+        },
+      }),
+      activeSettingSet: snapshot,
+    })
+
+    expect(candidates).toEqual([])
+  })
+
+  it('centralizes target key construction and parsing in the recommendation domain', () => {
+    const snapshot = settingSet()
+    const wallValue = snapshot.values[0]!
+    const paintValue = snapshot.values[2]!
+
+    expect(targetKeyForSettingValue(wallValue, 'sqft_per_hr')).toBe(
+      'production_rates_walls:WALL_STD:sqft_per_hr'
+    )
+    expect(targetKeyForSettingValue(paintValue, 'value')).toBe(
+      'scalar_defaults:walls_paint_id:value'
+    )
+    expect(
+      buildRecommendationTargetKey({
+        kind: 'row',
+        categoryKey: 'production_rates_walls',
+        rowId: 'WALL_STD',
+        fieldKey: 'sqft_per_hr',
+      })
+    ).toBe('production_rates_walls:WALL_STD:sqft_per_hr')
+    expect(
+      buildRecommendationTargetKey({
+        kind: 'scalar',
+        scalarKey: 'walls_paint_id',
+        fieldKey: 'value',
+      })
+    ).toBe('scalar_defaults:walls_paint_id:value')
     expect(parseRecommendationTargetKey('production_rates_walls:WALL_STD:sqft_per_hr')).toEqual({
       ok: true,
       data: {

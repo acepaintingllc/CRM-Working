@@ -37,6 +37,7 @@ import type {
 } from '@/types/estimator/v2'
 import type { SaveStatus } from '@/lib/estimator/v2WallsAutosave'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
+import type { EstimateV2CeilingScopePreviewMetrics } from '../_lib/estimateV2EditorDerived'
 
 export type Unsafe = UnsafeRecord
 
@@ -180,6 +181,7 @@ export type EstimateV2EditorSettingsVm = {
 export type EstimateV2EditorSaveVm = {
   dirty: boolean
   canManualSave: boolean
+  canSaveAndContinue: boolean
   saveStatus: SaveStatus
   saveStatusText: string
   saveStatusColor: string
@@ -188,6 +190,24 @@ export type EstimateV2EditorSaveVm = {
   calculationsStale: boolean
   debugMeta: EstimateV2EditorDebugMeta & { usingLocalPreview: boolean }
   save: (trigger?: 'manual' | 'auto') => Promise<boolean>
+  saveDraft: () => void
+  saveAndContinue: () => void
+}
+
+export type EstimateV2UnsavedNavigationDialogProps = {
+  isOpen: boolean
+  canSave: boolean
+  onStay: () => void
+  onSave: () => void
+  onLeave: () => void
+}
+
+export type EstimateV2EditorNavigationVm = {
+  unsavedDialogProps: EstimateV2UnsavedNavigationDialogProps
+}
+
+export type EstimateV2EditorNavigationActions = {
+  requestBackNavigation: () => void
 }
 
 export type EstimateV2EditorRoomVm = {
@@ -283,6 +303,7 @@ export type EstimateV2EditorCeilingsVm = {
   ceilingPrimerOptions: EstimateV2PaintProductOption[]
   colorCodeOptions: EstimateV2CatalogOption[]
   selectedCeilingEffectiveSqFt: number | null
+  ceilingScopePreviewMetricsById: Map<string, EstimateV2CeilingScopePreviewMetrics>
   ceilingScopeEffectiveTotalById: Map<string, number | null>
   selectedRoomCeilingDrywallRepairs: EstimateV2DrywallRepairDraft[]
   drywallRateOptions: EstimateV2DrywallRateOption[]
@@ -418,7 +439,18 @@ export type EstimateV2EditorSectionSummaryVm = {
   showPrimer?: boolean
   secondaryValue?: string
   secondaryLabel?: string
+  financialRows?: Array<{
+    label: string
+    value: string
+  }>
   chips: EstimateV2EditorSectionChipVm[]
+}
+
+export type EstimateV2EditorActiveScopeTotalVm = {
+  key: 'walls' | 'ceilings' | 'trim' | 'doors'
+  label: string
+  value: string
+  detail?: string
 }
 
 export type EstimateV2EditorSummaryVm = {
@@ -436,8 +468,8 @@ export type EstimateV2EditorSummaryVm = {
   validationColor: string
   calculationStateText: string
   calculationStateColor: string
-  totalEffectiveAreaText: string
   runningTotalLabel: string
+  activeScopeTotals: EstimateV2EditorActiveScopeTotalVm[]
   saveStatusText: string
   saveStatusColor: string
   walls: EstimateV2EditorSectionSummaryVm

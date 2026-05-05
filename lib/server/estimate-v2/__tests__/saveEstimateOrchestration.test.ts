@@ -73,12 +73,44 @@ vi.mock('../shared.ts', async () => {
 
 import { saveEstimateV2Inputs } from '../saveEstimateOrchestration.ts'
 
+const savedEstimate = {
+  id: 'estimate-1',
+  org_id: 'org-1',
+  job_id: 'job-1',
+  customer_id: null,
+  status: 'draft',
+  version_name: 'Draft',
+  version_state: 'Draft',
+  version_kind: null,
+  version_sort_order: null,
+  setting_set_id_used: null,
+  created_at: '2026-05-03T22:55:00.000Z',
+  updated_at: '2026-05-04T15:30:00.000Z',
+}
+
+function createSupabaseChain(result: { data?: unknown; error?: { message: string } | null }) {
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {
+    update: vi.fn(() => chain),
+    eq: vi.fn(() => chain),
+    select: vi.fn(() => chain),
+    maybeSingle: vi.fn(async () => ({
+      data: result.data ?? null,
+      error: result.error ?? null,
+    })),
+  }
+  return chain
+}
+
 describe('saveEstimateV2Inputs', () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset())
     mocks.createCalculationCatalogsLoader.mockReturnValue(vi.fn())
     mocks.isMissingStructuredEstimateSaveRpc.mockReturnValue(false)
     mocks.isRecoverableStructuredEstimateSaveRpcPkCollision.mockReturnValue(false)
+    mocks.supabaseFrom.mockImplementation((table: string) => {
+      if (table === 'estimates') return createSupabaseChain({ data: savedEstimate })
+      return createSupabaseChain({ data: null })
+    })
   })
 
   it('uses the structured transactional seam for collection-only writes and exits early', async () => {
@@ -101,7 +133,7 @@ describe('saveEstimateV2Inputs', () => {
           job_colors: [{ color_id: 'WHITE' }],
         },
       })
-    ).resolves.toEqual({ ok: true })
+    ).resolves.toEqual({ ok: true, estimate: savedEstimate })
 
     expect(mocks.saveEstimateStructuredInputsTransactional).toHaveBeenCalledWith({
       orgId: 'org-1',
@@ -154,7 +186,7 @@ describe('saveEstimateV2Inputs', () => {
           ],
         },
       })
-    ).resolves.toEqual({ ok: true })
+    ).resolves.toEqual({ ok: true, estimate: savedEstimate })
 
     expect(mocks.softReplaceRows).toHaveBeenCalledWith({
       table: 'estimate_access_fees',
@@ -310,6 +342,7 @@ describe('saveEstimateV2Inputs', () => {
       })
     ).resolves.toEqual({
       ok: true,
+      estimate: savedEstimate,
       wall_calculations: { scopes: [{ id: 'wall-scope-1', total: 200 }] },
       ceiling_calculations: null,
       trim_calculations: null,
@@ -421,6 +454,7 @@ describe('saveEstimateV2Inputs', () => {
       })
     ).resolves.toEqual({
       ok: true,
+      estimate: savedEstimate,
       wall_calculations: null,
       ceiling_calculations: { scopes: [] },
       trim_calculations: null,
@@ -478,6 +512,7 @@ describe('saveEstimateV2Inputs', () => {
       })
     ).resolves.toEqual({
       ok: true,
+      estimate: savedEstimate,
       wall_calculations: null,
       ceiling_calculations: null,
       trim_calculations: { scopes: [] },
@@ -618,6 +653,7 @@ describe('saveEstimateV2Inputs', () => {
       })
     ).resolves.toEqual({
       ok: true,
+      estimate: savedEstimate,
       wall_calculations: null,
       ceiling_calculations: null,
       trim_calculations: null,
@@ -723,7 +759,7 @@ describe('saveEstimateV2Inputs', () => {
           ],
         },
       })
-    ).resolves.toEqual({ ok: true })
+    ).resolves.toEqual({ ok: true, estimate: savedEstimate })
 
     expect(mocks.softReplaceRows).toHaveBeenCalledWith({
       table: 'estimate_rollers',

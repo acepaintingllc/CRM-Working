@@ -4,10 +4,10 @@ export type EstimateFeedbackTrendFilters = {
   from?: string | null
   to?: string | null
   jobType?: string | null
-  occupancy?: EstimateFeedbackTrendOccupancy | null
+  occupancy?: EstimateFeedbackTrendOccupancy | string | null
   conditionTags?: string[] | null
-  maxAbsoluteVariance?: number | null
-  maxAbsoluteTotalImpact?: number | null
+  maxAbsoluteVariance?: number | string | null
+  maxAbsoluteTotalImpact?: number | string | null
 }
 
 export type EstimateFeedbackTrendResolvedFilters = {

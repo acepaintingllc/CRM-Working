@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   createEstimateV2Store,
   estimateV2StoreSelectors,
@@ -22,9 +23,11 @@ import { useEstimateV2EditorViewModels } from './useEstimateV2EditorViewModels'
 import { useEstimateV2OtherActions } from './useEstimateV2OtherActions'
 import { useEstimateV2RoomActions } from './useEstimateV2RoomActions'
 import { useEstimateV2SaveController } from './useEstimateV2SaveController'
+import { useEstimateV2FocusedFieldCommit } from './useEstimateV2FocusedFieldCommit'
 import { useEstimateV2SettingsActions } from './useEstimateV2SettingsActions'
 import { useEstimateV2TrimActions } from './useEstimateV2TrimActions'
 import { useEstimateV2WallActions } from './useEstimateV2WallActions'
+import { useEstimateV2GuardedNavigation } from './useEstimateV2GuardedNavigation'
 
 export function useEstimateV2Editor({
   estimateId,
@@ -33,6 +36,7 @@ export function useEstimateV2Editor({
   estimateId?: string
   routeFamily?: EstimateRouteFamily
 }) {
+  const router = useRouter()
   const [store] = useState(() => createEstimateV2Store())
   const loading = useEstimateV2Store(store, estimateV2StoreSelectors.loading)
   const navigationSaveState = useEstimateV2Store(store, (state) => ({
@@ -67,6 +71,8 @@ export function useEstimateV2Editor({
     store,
     defaultColorCodeId: derived.catalog.defaultColorCodeId,
   })
+  const commitFocusedEditorField = useEstimateV2FocusedFieldCommit()
+  const navigateToDetails = useCallback((href: string) => router.push(href), [router])
 
   const roomActions = useEstimateV2RoomActions({
     store,
@@ -103,10 +109,12 @@ export function useEstimateV2Editor({
     store,
     currentSnapshot: derived.calculation.currentSnapshot,
     dirty: derived.calculation.dirty,
+    commitFocusedEditorField,
+    navigateToDetails,
     effectiveJobProductDefaults,
   })
 
-  return useEstimateV2EditorViewModels({
+  const editorViewModels = useEstimateV2EditorViewModels({
     estimateId,
     store,
     derived,
@@ -119,5 +127,17 @@ export function useEstimateV2Editor({
     otherActions,
     settingsActions,
     save: saveController.save,
+    saveDraft: saveController.saveDraft,
+    saveAndContinue: saveController.saveAndContinue,
   })
+  const guardedNavigation = useEstimateV2GuardedNavigation({
+    listHref: routeFamily.listHref,
+    pageVm: editorViewModels.pageVm,
+    saveVm: editorViewModels.saveVm,
+  })
+
+  return {
+    ...editorViewModels,
+    ...guardedNavigation,
+  }
 }

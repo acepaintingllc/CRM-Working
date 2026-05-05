@@ -2,6 +2,10 @@ import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useEstimateV2Editor } from '../useEstimateV2Editor'
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
+
 const editorContract = {
   pageVm: { loading: true },
   headerVm: { estimateId: 'estimate-1' },
@@ -10,8 +14,19 @@ const editorContract = {
   wallsVm: { updateScope: vi.fn() },
   ceilingsVm: { updateScope: vi.fn() },
   trimVm: { updateScope: vi.fn() },
+  doorsVm: { updateScope: vi.fn() },
   jobSettingsVm: { updateJobSettings: vi.fn() },
   saveVm: { save: vi.fn(), dirty: true },
+  navigationVm: {
+    unsavedDialogProps: {
+      isOpen: false,
+      canSave: true,
+      onStay: vi.fn(),
+      onSave: vi.fn(),
+      onLeave: vi.fn(),
+    },
+  },
+  navigationActions: { requestBackNavigation: vi.fn() },
   toDisplayNumber: vi.fn(),
 }
 
@@ -64,7 +79,18 @@ vi.mock('../useEstimateV2SettingsActions', () => ({
 }))
 
 vi.mock('../useEstimateV2SaveController', () => ({
-  useEstimateV2SaveController: () => ({ save: vi.fn(async () => true) }),
+  useEstimateV2SaveController: () => ({
+    save: vi.fn(async () => true),
+    saveDraft: vi.fn(),
+    saveAndContinue: vi.fn(),
+  }),
+}))
+
+vi.mock('../useEstimateV2GuardedNavigation', () => ({
+  useEstimateV2GuardedNavigation: () => ({
+    navigationVm: editorContract.navigationVm,
+    navigationActions: editorContract.navigationActions,
+  }),
 }))
 
 vi.mock('../useEstimateV2EditorViewModels', () => ({
@@ -84,8 +110,11 @@ describe('useEstimateV2Editor', () => {
       'wallsVm',
       'ceilingsVm',
       'trimVm',
+      'doorsVm',
       'jobSettingsVm',
       'saveVm',
+      'navigationVm',
+      'navigationActions',
       'toDisplayNumber',
     ])
   })

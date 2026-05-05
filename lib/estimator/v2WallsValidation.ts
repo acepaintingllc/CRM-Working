@@ -1,3 +1,5 @@
+import { validateV2NumericOverrideFields } from './v2OverrideValidation.ts'
+
 export type V2WallScopeMode = 'RECT' | 'SEG'
 export type V2WallSegmentShape = 'RECTANGLE' | 'TRIANGLE' | 'MANUAL'
 
@@ -15,6 +17,13 @@ export type V2WallScopeDraftLike = {
   include: 'Y' | 'N'
   perimeterIn: string
   heightIn: string
+  overrideAreaSqFt?: string
+  overridePaintHours?: string
+  overridePrimerHours?: string
+  overridePaintGallons?: string
+  overridePrimerGallons?: string
+  overrideSupplyCost?: string
+  overrideTotal?: string
 }
 
 export type V2WallSegmentDraftLike = {
@@ -28,6 +37,7 @@ export type V2WallSegmentDraftLike = {
   heightIn: string
   baseIn: string
   manualAreaSqFt: string
+  overrideAreaSqFt?: string
 }
 
 function asNullableNumber(value: unknown) {
@@ -70,6 +80,19 @@ export function validateV2WallsBeforeSave(params: {
       issues.push(`${scope.roomId}: duplicate wall scope id ${scope.id}`)
     }
     scopeIds.add(scope.id)
+    validateV2NumericOverrideFields({
+      issues,
+      scopeLabel: `${scope.roomId}: wall scope ${scope.id}`,
+      fields: [
+        { label: 'area', value: scope.overrideAreaSqFt },
+        { label: 'paint hours', value: scope.overridePaintHours },
+        { label: 'primer hours', value: scope.overridePrimerHours },
+        { label: 'paint gallons', value: scope.overridePaintGallons },
+        { label: 'primer gallons', value: scope.overridePrimerGallons },
+        { label: 'supply cost', value: scope.overrideSupplyCost },
+        { label: 'total', value: scope.overrideTotal },
+      ],
+    })
   }
 
   const segmentIds = new Set<string>()
@@ -82,6 +105,13 @@ export function validateV2WallsBeforeSave(params: {
       issues.push(`${segment.roomId}: duplicate segment id ${segment.id}`)
     }
     segmentIds.add(segment.id)
+    validateV2NumericOverrideFields({
+      issues,
+      scopeLabel: `${segment.roomId}: wall segment ${segment.id}`,
+      fields: [
+        { label: 'area', value: segment.overrideAreaSqFt },
+      ],
+    })
     if (!scopeIds.has(segment.wallScopeId)) {
       issues.push(`${segment.roomId}: segment ${segment.id} references missing scope ${segment.wallScopeId}`)
     }
@@ -115,7 +145,9 @@ export function validateV2WallsBeforeSave(params: {
         issues.push(`${room.roomId}: SEG scope requires at least one included segment`)
       }
 
+      if (scope.include !== 'Y') continue
       for (const segment of scopeSegments) {
+        if (segment.include !== 'Y') continue
         const quantity = asNullableNumber(segment.quantity)
         if (!params.allowIncomplete && (quantity == null || quantity <= 0)) {
           issues.push(`${room.roomId}: segment quantity must be greater than 0`)

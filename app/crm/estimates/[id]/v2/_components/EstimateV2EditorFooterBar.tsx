@@ -1,7 +1,5 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type {
   EstimateV2EditorPageVm,
   EstimateV2EditorSaveVm,
@@ -11,34 +9,17 @@ import type { EstimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 
 export function EstimateV2EditorFooterBar({
   styles,
-  estimateId,
-  routeFamily,
   pageVm,
   saveVm,
   summaryVm,
 }: {
   styles: EstimateV2EditorPageStyles
-  estimateId?: string
-  routeFamily: EstimateRouteFamily
   pageVm: EstimateV2EditorPageVm
   saveVm: EstimateV2EditorSaveVm
   summaryVm: EstimateV2EditorSummaryVm
 }) {
-  const router = useRouter()
   const saveDraftDisabled = pageVm.saving || !saveVm.canManualSave
-  const saveAndContinueDisabled =
-    pageVm.saving || !estimateId || (saveVm.dirty && !saveVm.canManualSave)
-
-  const saveAndContinue = () => {
-    if (!estimateId) return
-    if (!saveVm.dirty) {
-      router.push(routeFamily.detailsHref(estimateId))
-      return
-    }
-    void saveVm.save().then((ok) => {
-      if (ok) router.push(routeFamily.detailsHref(estimateId))
-    })
-  }
+  const saveAndContinueDisabled = pageVm.saving || !saveVm.canSaveAndContinue
 
   return (
     <div className="estimate-v2-footer" style={styles.footer}>
@@ -46,13 +27,17 @@ export function EstimateV2EditorFooterBar({
         <div style={styles.mono}>{summaryVm.runningTotalLabel}</div>
         <div
           style={{
-            fontSize: 'calc(24px + 4pt)',
-            fontWeight: 800,
-            letterSpacing: '-0.03em',
+            display: 'flex',
+            gap: 14,
+            flexWrap: 'wrap',
             marginTop: 4,
           }}
         >
-          {summaryVm.totalEffectiveAreaText}
+          {summaryVm.activeScopeTotals.map((total) => (
+            <span key={total.key} style={{ fontSize: 'calc(14px + 4pt)', fontWeight: 800 }}>
+              {total.label}: {total.value}
+            </span>
+          ))}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -62,7 +47,7 @@ export function EstimateV2EditorFooterBar({
         <button
           type="button"
           className="v2-btn"
-          onClick={() => void saveVm.save()}
+          onClick={saveVm.saveDraft}
           disabled={saveDraftDisabled}
           title={saveDraftDisabled && saveVm.blockedReason ? saveVm.blockedReason : undefined}
           style={{
@@ -76,7 +61,7 @@ export function EstimateV2EditorFooterBar({
         <button
           type="button"
           className="v2-btn-primary"
-          onClick={saveAndContinue}
+          onClick={saveVm.saveAndContinue}
           disabled={saveAndContinueDisabled}
           title={
             saveAndContinueDisabled && saveVm.blockedReason ? saveVm.blockedReason : undefined

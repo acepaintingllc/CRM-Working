@@ -118,7 +118,23 @@ function createViewModelParams() {
         ['wall-r001-main', 396],
         ['wall-r002-main', 80],
       ]),
+      wallScopeEffectiveTotalById: new Map([['wall-r001-main', 300]]),
+      selectedWallSubtotal: 300,
       selectedCeilingEffectiveSqFt: 120,
+      ceilingScopePreviewMetricsById: new Map([
+        [
+          'ceiling-r001-main',
+          {
+            baseAreaSqFt: 120,
+            helperExtraAreaSqFt: 0,
+            areaFactor: 1,
+            finalAreaSqFt: 120,
+            effectiveAreaSqFt: 120,
+          },
+        ],
+      ]),
+      ceilingScopeEffectiveTotalById: new Map([['ceiling-r001-main', 125]]),
+      selectedCeilingSubtotal: 125,
       trimScopeEffectiveMeasurementById: new Map([['trim-r001-main', 44]]),
       trimScopeEffectiveTotalById: new Map([['trim-r001-main', 210]]),
       selectedTrimSubtotal: 210,
@@ -127,10 +143,22 @@ function createViewModelParams() {
       doorScopeEffectiveTotalById: new Map(),
       selectedDoorSubtotal: null,
       selectedDoorUnits: null,
+      selectedWallDrywallSubtotal: null,
+      selectedCeilingDrywallSubtotal: null,
       dirty: false,
       calculationsStale: false,
       useLocalPreviewCalculations: false,
       totalEffectiveAreaSqFt: 476,
+      activeScopeTotals: {
+        wallsSqFt: 476,
+        ceilingsSqFt: 180,
+        trimMeasurement: 44,
+        trimUnit: 'LF',
+        trimMeasurementByUnit: new Map([['LF', 44]]),
+        doorSides: 0,
+        doorCount: 0,
+        doorsActive: false,
+      },
     },
     productLabels: {
       wallPaintLabel: 'Wall Satin',
@@ -221,6 +249,8 @@ function createViewModelParams() {
       flushCustomerSave: vi.fn(),
     },
     save: vi.fn(async () => true),
+    saveDraft: vi.fn(),
+    saveAndContinue: vi.fn(),
   }
 }
 
@@ -236,6 +266,10 @@ describe('useEstimateV2EditorViewModels', () => {
     expect(result.current.pageVm.emptySelectionMessage).toBe(
       'Add a room or select one from the roster to start editing room inputs.'
     )
+    expect(result.current.ceilingsVm.ceilingScopePreviewMetricsById.get('ceiling-r001-main')).toMatchObject({
+      baseAreaSqFt: 120,
+      effectiveAreaSqFt: 120,
+    })
   })
 
   it('opens the shared editor settings drawer state from the header Settings action', () => {
@@ -371,6 +405,192 @@ describe('useEstimateV2EditorViewModels', () => {
     expect(result.current.summaryVm.walls).toBe(initialWallSummary)
     expect(result.current.summaryVm.trim).not.toBe(initialTrimSummary)
     expect(result.current.summaryVm.trim.secondaryValue).toBe('$245.00')
+    expect(result.current.summaryVm.trim.secondaryLabel).toBe('Effective Total')
+  })
+
+  it('updates wall and ceiling financial totals in the summary rail from derived scope totals', () => {
+    const baseParams = createViewModelParams()
+
+    const { result, rerender } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: baseParams } }
+    )
+
+    expect(result.current.summaryVm.walls.financialRows).toContainEqual({
+      label: 'Effective Total',
+      value: '$300.00',
+    })
+    expect(result.current.summaryVm.ceilings.financialRows).toContainEqual({
+      label: 'Effective Total',
+      value: '$125.00',
+    })
+
+    rerender({
+      nextParams: {
+        ...baseParams,
+        derived: {
+          ...baseParams.derived,
+          calculation: {
+            ...baseParams.derived.calculation,
+            wallScopeEffectiveTotalById: new Map([['wall-r001-main', 640]]),
+            ceilingScopeEffectiveTotalById: new Map([['ceiling-r001-main', 275]]),
+            selectedWallSubtotal: 640,
+            selectedCeilingSubtotal: 275,
+          },
+        },
+      },
+    })
+
+    expect(result.current.summaryVm.walls.financialRows).toContainEqual({
+      label: 'Effective Total',
+      value: '$640.00',
+    })
+    expect(result.current.summaryVm.ceilings.financialRows).toContainEqual({
+      label: 'Effective Total',
+      value: '$275.00',
+    })
+  })
+
+  it('exposes trim, door, and drywall effective totals in summary rail financial rows', () => {
+    const baseParams = createViewModelParams()
+    const params = {
+      ...baseParams,
+      derived: {
+        ...baseParams.derived,
+        room: {
+          ...baseParams.derived.room,
+          selectedRoomDoorScopes: [
+            {
+              id: 'door-r001-main',
+              roomId: 'R001',
+              position: 0,
+              include: 'Y' as const,
+              scopeName: 'Door',
+              doorTypeId: 'DOOR',
+              quantity: '1',
+              sides: '2',
+              colorId: '',
+              paintProductId: '',
+              primerProductId: '',
+              primeMode: 'NONE' as const,
+              spotPrimePercent: '',
+              paintCoats: '2',
+              primerCoats: '1',
+              conditionFactor: '1',
+              laborRate: '',
+              materialRate: '',
+              overridePaintHours: '',
+              overridePrimerHours: '',
+              overrideMaterialCost: '',
+              overrideSupplyCost: '',
+              overrideTotal: '155',
+              notes: '',
+            },
+          ],
+          firstDoorScope: null,
+          doorsIncluded: true,
+          selectedRoomWallDrywallRepairs: [
+            {
+              id: 'drywall-r001-wall',
+              roomId: 'R001',
+              position: 0,
+              surface: 'wall' as const,
+              repairType: 'flat_wall_crack',
+              unit: 'LF' as const,
+              quantity: '4',
+              overrideTotal: '64',
+            },
+          ],
+          selectedRoomCeilingDrywallRepairs: [
+            {
+              id: 'drywall-r001-ceiling',
+              roomId: 'R001',
+              position: 1,
+              surface: 'ceiling' as const,
+              repairType: 'ceiling_crack',
+              unit: 'LF' as const,
+              quantity: '3',
+              overrideTotal: '90',
+            },
+          ],
+        },
+        calculation: {
+          ...baseParams.derived.calculation,
+          selectedTrimSubtotal: 245,
+          selectedDoorSubtotal: 155,
+          selectedDoorUnits: 2,
+          selectedWallDrywallSubtotal: 64,
+          selectedCeilingDrywallSubtotal: 90,
+        },
+      },
+    }
+
+    const { result } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: params } }
+    )
+
+    expect(result.current.summaryVm.trim.financialRows).toEqual([
+      { label: 'Effective Total', value: '$245.00' },
+    ])
+    expect(result.current.summaryVm.doors?.financialRows).toEqual([
+      { label: 'Effective Total', value: '$155.00' },
+    ])
+    expect(result.current.summaryVm.walls.financialRows).toContainEqual({
+      label: 'Drywall Effective Total',
+      value: '$64.00',
+    })
+    expect(result.current.summaryVm.ceilings.financialRows).toContainEqual({
+      label: 'Drywall Effective Total',
+      value: '$90.00',
+    })
+  })
+
+  it('builds separated active scope totals for the summary rail', () => {
+    const params = createViewModelParams()
+
+    const { result } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: params } }
+    )
+
+    expect(result.current.summaryVm.runningTotalLabel).toBe('Active scope totals - 2 rooms')
+    expect(result.current.summaryVm.activeScopeTotals).toEqual([
+      { key: 'walls', label: 'Walls', value: '476 sf' },
+      { key: 'ceilings', label: 'Ceilings', value: '180 sf' },
+      { key: 'trim', label: 'Trim', value: '44 LF' },
+    ])
+  })
+
+  it('shows four-decimal ROOM_PERIMETER trim totals in the summary rail', () => {
+    const baseParams = createViewModelParams()
+    const params = {
+      ...baseParams,
+      derived: {
+        ...baseParams.derived,
+        calculation: {
+          ...baseParams.derived.calculation,
+          selectedTrimMeasurement: 54.6667,
+          trimScopeEffectiveMeasurementById: new Map([['trim-r001-main', 54.6667]]),
+          activeScopeTotals: {
+            ...baseParams.derived.calculation.activeScopeTotals,
+            trimMeasurement: 54.6667,
+            trimMeasurementByUnit: new Map([['LF', 54.6667]]),
+          },
+        },
+      },
+    }
+
+    const { result } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      { initialProps: { nextParams: params } }
+    )
+
+    expect(result.current.summaryVm.activeScopeTotals).toContainEqual({
+      key: 'trim',
+      label: 'Trim',
+      value: '54.6667 LF',
+    })
   })
 
   it('hides wall and trim primer summary chips unless an included scope uses primer', () => {

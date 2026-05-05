@@ -4,6 +4,7 @@ import {
   loadData,
   mutateData,
   requestApi,
+  requestRawApi,
   type ApiDataEnvelope,
   type ApiMutationEnvelope,
 } from '@/lib/client/api'
@@ -17,6 +18,7 @@ import type {
   JobStatusPatchPayload,
   JobCalendarEventPayload,
   JobDetail,
+  EstimateDriveFile,
   JobSummary,
   ListJobSitePhotosResponse,
   ScheduleRow,
@@ -45,6 +47,17 @@ function acceptedEstimateSnapshotPath(jobId: string) {
 
 function snapshotBody(estimateSnapshotId: string) {
   return { estimate_snapshot_id: estimateSnapshotId }
+}
+
+type EstimateFileData =
+  | EstimateDriveFile
+  | {
+      file?: EstimateDriveFile | null
+    }
+
+function normalizeEstimateFile(data: EstimateFileData | null) {
+  if (!data || Array.isArray(data)) return null
+  return (data as { file?: EstimateDriveFile | null }).file ?? (data as EstimateDriveFile)
 }
 
 export async function fetchJobList() {
@@ -78,6 +91,27 @@ export async function loadJobRecord(jobId: string) {
     cache: 'no-store',
   })
   return (payload.data ?? null) as JobDetail | null
+}
+
+export async function loadJobEstimateFile(jobId: string) {
+  const result = await requestRawApi<EstimateFileData>(
+    `/api/jobs/${jobId}/estimate-file`,
+    { cache: 'no-store' },
+    'No matching estimate in Drive folder'
+  )
+
+  if (!result.response.ok) {
+    return {
+      estimateFile: null,
+      estimateFileError: result.errorMessage ?? 'No matching estimate in Drive folder',
+    }
+  }
+
+  const estimateFile = normalizeEstimateFile(result.payload)
+  return {
+    estimateFile,
+    estimateFileError: estimateFile == null ? 'No matching estimate in Drive folder' : null,
+  }
 }
 
 export async function loadJobActuals(jobId: string, estimateSnapshotId: string) {

@@ -1,29 +1,19 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { JobDetail } from '@/types/jobs/api'
+import type { JobTimelineItem } from '@/app/crm/jobs/_lib/jobTimelineVm'
 import JobTimeline from '../JobTimeline'
 
-function createJob(overrides: Partial<JobDetail> = {}): JobDetail {
-  return {
-    id: 'job-1',
-    customer_id: 'customer-1',
-    customer_name: 'Taylor Jones',
-    customer_email: 'taylor@example.com',
-    customer_phone: '812-555-0100',
-    customer_address: '123 Main St',
-    title: 'Exterior repaint',
-    description: null,
-    status: 'estimate_sent',
-    created_at: '2026-04-20T10:00:00.000Z',
-    estimate_date: null,
-    estimate_sent_at: null,
-    scheduled_date: null,
-    scheduled_end_date: null,
-    scheduled_email_sent_at: null,
-    completed_at: null,
-    completed_email_sent_at: null,
-    ...overrides,
-  } as JobDetail
+function createItems(items: JobTimelineItem[] = []): JobTimelineItem[] {
+  return [
+    {
+      key: 'created_at',
+      iconKey: 'circle',
+      label: 'Created',
+      value: '4/20/2026, 10:00:00 AM',
+      at: '2026-04-20T10:00:00.000Z',
+    },
+    ...items,
+  ]
 }
 
 describe('JobTimeline', () => {
@@ -32,40 +22,34 @@ describe('JobTimeline', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders repeated public quote event types without duplicate React keys', () => {
+  it('renders timeline items passed by the controller', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     render(
       <JobTimeline
-        job={createJob({
-          public_quote_timeline_events: [
-            {
-              id: 'quote-sent-1',
-              type: 'quote_sent',
-              title: 'Quote sent',
-              body: 'Public version #1',
-              created_at: '2026-04-29T10:00:00.000Z',
-              created_by: null,
-              link_path: '/quote/token-1',
-              link_label: 'Open quote',
-            },
-            {
-              id: 'quote-sent-2',
-              type: 'quote_sent',
-              title: 'Quote sent',
-              body: 'Public version #2',
-              created_at: '2026-04-30T10:00:00.000Z',
-              created_by: null,
-              link_path: '/quote/token-2',
-              link_label: 'Open quote',
-            },
-          ],
-        })}
+        items={createItems([
+          {
+            key: 'quote-sent-1',
+            iconKey: 'send',
+            label: 'Quote sent',
+            value: 'Public version #1',
+            at: '2026-04-29T10:00:00.000Z',
+            href: '/quote/token-1',
+            linkLabel: 'Open quote',
+          },
+          {
+            key: 'quote-sent-2',
+            iconKey: 'send',
+            label: 'Quote sent',
+            value: 'Public version #2',
+            at: '2026-04-30T10:00:00.000Z',
+            href: '/quote/token-2',
+            linkLabel: 'Open quote',
+          },
+        ])}
         open
         onToggle={vi.fn()}
         onEstimateDateChange={vi.fn()}
-        formatDate={(value) => value ?? ''}
-        formatRange={() => ''}
       />
     )
 
@@ -80,5 +64,135 @@ describe('JobTimeline', () => {
         )
       )
     ).toBe(false)
+  })
+
+  it('uses the shared CRM button for the timeline toggle and preserves toggle behavior', () => {
+    const onToggle = vi.fn()
+
+    render(
+      <JobTimeline
+        items={createItems()}
+        open={false}
+        onToggle={onToggle}
+        onEstimateDateChange={vi.fn()}
+      />
+    )
+
+    const toggle = screen.getByRole('button', { name: /Timeline\s*Show/ })
+    expect(toggle.className).toContain('ace-crm-btn')
+
+    fireEvent.click(toggle)
+
+    expect(onToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders public quote event links with the correct link attributes', () => {
+    render(
+      <JobTimeline
+        items={createItems([
+          {
+            key: 'quote-viewed-1',
+            iconKey: 'eye',
+            label: 'Quote viewed',
+            value: 'Customer opened the quote',
+            at: '2026-04-29T10:00:00.000Z',
+            href: '/quote/token-1',
+            linkLabel: 'Open customer quote',
+          },
+          {
+            key: 'quote-accepted-1',
+            iconKey: 'check',
+            label: 'Quote accepted',
+            value: 'Customer accepted online',
+            at: '2026-04-30T10:00:00.000Z',
+            href: 'https://example.com/quote/token-2',
+            linkLabel: 'Open external quote',
+          },
+        ])}
+        open
+        onToggle={vi.fn()}
+        onEstimateDateChange={vi.fn()}
+      />
+    )
+
+    const relativeLink = screen.getByRole('link', { name: 'Open customer quote' })
+    expect(relativeLink.getAttribute('href')).toBe('/quote/token-1')
+    expect(relativeLink.getAttribute('target')).toBeNull()
+
+    const externalLink = screen.getByRole('link', { name: 'Open external quote' })
+    expect(externalLink.getAttribute('href')).toBe('https://example.com/quote/token-2')
+    expect(externalLink.getAttribute('target')).toBe('_blank')
+    expect(externalLink.getAttribute('rel')).toBe('noreferrer')
+  })
+
+  it('uses a key-stable shared CRM input and reports datetime-local quote date changes', () => {
+    const onEstimateDateChange = vi.fn()
+
+    render(
+      <JobTimeline
+        items={createItems([
+          {
+            key: 'estimate_date',
+            iconKey: 'calendar',
+            label: 'Quote date',
+            value: '4/30/2026, 1:00:00 PM',
+            at: '2026-04-30T13:00:00.000Z',
+            estimateDateInputValue: '2026-04-30T13:00',
+          },
+        ])}
+        open
+        onToggle={vi.fn()}
+        onEstimateDateChange={onEstimateDateChange}
+      />
+    )
+
+    const input = screen.getByLabelText('Quote date')
+    expect(input.className).toContain('ace-crm-input')
+    expect(input).toHaveProperty('value', '2026-04-30T13:00')
+
+    fireEvent.change(input, { target: { value: '2026-05-01T09:30' } })
+
+    expect(onEstimateDateChange).toHaveBeenCalledTimes(1)
+    expect(onEstimateDateChange).toHaveBeenCalledWith('2026-05-01T09:30')
+  })
+
+  it('updates the controlled quote date input when refreshed items change', () => {
+    const { rerender } = render(
+      <JobTimeline
+        items={createItems([
+          {
+            key: 'estimate_date',
+            iconKey: 'calendar',
+            label: 'Quote date',
+            value: '4/30/2026, 1:00:00 PM',
+            at: '2026-04-30T13:00:00.000Z',
+            estimateDateInputValue: '2026-04-30T13:00',
+          },
+        ])}
+        open
+        onToggle={vi.fn()}
+        onEstimateDateChange={vi.fn()}
+      />
+    )
+
+    rerender(
+      <JobTimeline
+        items={createItems([
+          {
+            key: 'estimate_date',
+            iconKey: 'calendar',
+            label: 'Quote date',
+            value: '5/1/2026, 9:30:00 AM',
+            at: '2026-05-01T09:30:00.000Z',
+            estimateDateInputValue: '2026-05-01T09:30',
+          },
+        ])}
+        open
+        onToggle={vi.fn()}
+        onEstimateDateChange={vi.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('Quote date')).toHaveProperty('value', '2026-05-01T09:30')
   })
 })

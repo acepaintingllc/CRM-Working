@@ -104,6 +104,18 @@ function makeVm(overrides: Record<string, unknown> = {}) {
     ceilingPrimerOptions: [],
     colorCodeOptions: [{ id: 'COLOR1', label: 'Color 1' }],
     selectedCeilingEffectiveSqFt: 120,
+    ceilingScopePreviewMetricsById: new Map([
+      [
+        'ceiling-1',
+        {
+          baseAreaSqFt: 120,
+          helperExtraAreaSqFt: 0,
+          areaFactor: 1,
+          finalAreaSqFt: 120,
+          effectiveAreaSqFt: 120,
+        },
+      ],
+    ]),
     ceilingScopeEffectiveTotalById: new Map([['ceiling-1', 222.45]]),
     updateScope: vi.fn(),
     addScope: vi.fn(),
@@ -206,5 +218,45 @@ describe('EstimateV2CeilingsSectionBody', () => {
     const setupRow = screen.getAllByText('Ceiling Type')[0]?.closest('.paint-setup-grid')
     expect(setupRow).not.toBeNull()
     expect(within(setupRow as HTMLElement).getByText('Coats')).toBeInTheDocument()
+  })
+
+  it('renders ceiling preview area from the VM metrics map', () => {
+    const ceilingsVm = makeVm({
+      selectedRoomGeometryMode: 'RECT',
+      selectedRoomCeilingScopes: [{ ...flatCeilingScope, mode: 'RECT' as const }],
+      firstCeilingScope: { ...flatCeilingScope, mode: 'RECT' as const },
+      ceilingSegments: [],
+      ceilingScopePreviewMetricsById: new Map([
+        [
+          'ceiling-1',
+          {
+            baseAreaSqFt: 111,
+            helperExtraAreaSqFt: 9,
+            areaFactor: 1.25,
+            finalAreaSqFt: 150,
+            effectiveAreaSqFt: 87,
+          },
+        ],
+      ]),
+    })
+
+    const { container } = render(
+      <EstimateV2CeilingsSectionBody
+        styles={styles}
+        ceilingsVm={ceilingsVm as never}
+        openCeilingAdvanced={{}}
+        setOpenCeilingAdvanced={vi.fn()}
+        switchRoomGeometryMode={vi.fn()}
+        toDisplayNumber={(value) => (value == null ? '--' : String(value))}
+      />
+    )
+
+    const view = within(container)
+    const previewBox = view.getByText('Ceiling Sq Ft').parentElement
+    expect(previewBox).not.toBeNull()
+    expect(within(previewBox as HTMLElement).getByText('87')).toBeInTheDocument()
+    expect(view.getByText('111')).toBeInTheDocument()
+    expect(view.getByText('9')).toBeInTheDocument()
+    expect(view.getByText('1.25')).toBeInTheDocument()
   })
 })

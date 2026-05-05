@@ -51,6 +51,40 @@ import {
 } from './scopeRowPersistence.ts'
 import { fail, getEstimate, toOtherRollupScope, toWallsCalcMethod } from './shared.ts'
 
+type SavedEstimateMeta = {
+  id: string
+  org_id: string
+  job_id: string
+  customer_id: string | null
+  status: string | null
+  version_name: string | null
+  version_state: string | null
+  version_kind: string | null
+  version_sort_order: number | null
+  setting_set_id_used: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+async function touchEstimateSavedAt(params: {
+  orgId: string
+  estimateId: string
+}): Promise<SavedEstimateMeta> {
+  const savedAt = new Date().toISOString()
+  const res = await supabaseAdmin
+    .from('estimates')
+    .update({ updated_at: savedAt })
+    .eq('org_id', params.orgId)
+    .eq('id', params.estimateId)
+    .select(
+      'id, org_id, job_id, customer_id, status, version_name, version_state, version_kind, version_sort_order, setting_set_id_used, created_at, updated_at'
+    )
+    .maybeSingle()
+  if (res.error) throw new Error(res.error.message)
+  if (!res.data) fail('Quote not found', 404)
+  return res.data as SavedEstimateMeta
+}
+
 async function upsertEstimateJobSettings(params: {
   orgId: string
   estimateId: string
@@ -339,7 +373,11 @@ export async function saveEstimateV2Inputs(params: {
             jobId,
             payload: body as Record<string, unknown>,
           })
-          return { ok: true as const }
+          const savedEstimate = await touchEstimateSavedAt({
+            orgId: params.orgId,
+            estimateId: params.estimateId,
+          })
+          return { ok: true as const, estimate: savedEstimate }
         } catch (error) {
           const message =
             error instanceof Error ? error.message : 'Failed saving estimate inputs transactionally'
@@ -638,10 +676,17 @@ export async function saveEstimateV2Inputs(params: {
       })
     }
 
-    if (params.autosaveOnly) return { ok: true as const, autosave: true as const }
+    const savedEstimate = await touchEstimateSavedAt({
+      orgId: params.orgId,
+      estimateId: params.estimateId,
+    })
+    if (params.autosaveOnly) {
+      return { ok: true as const, autosave: true as const, estimate: savedEstimate }
+    }
     if (useAnyV2ScopeSave) {
       const result: {
         ok: true
+        estimate: SavedEstimateMeta
         wall_calculations: typeof wallCalculations
         ceiling_calculations: typeof ceilingCalculations
         trim_calculations: typeof trimCalculations
@@ -649,6 +694,7 @@ export async function saveEstimateV2Inputs(params: {
         drywall_calculations?: typeof drywallCalculations
       } = {
         ok: true as const,
+        estimate: savedEstimate,
         wall_calculations: wallCalculations,
         ceiling_calculations: ceilingCalculations,
         trim_calculations: trimCalculations,
@@ -657,7 +703,7 @@ export async function saveEstimateV2Inputs(params: {
       if (useV2DrywallSave) result.drywall_calculations = drywallCalculations
       return result
     }
-    return { ok: true as const }
+    return { ok: true as const, estimate: savedEstimate }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed saving estimate inputs'
     fail(message, 400)

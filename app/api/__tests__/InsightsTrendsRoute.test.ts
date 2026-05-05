@@ -81,6 +81,30 @@ describe('insights trends route', () => {
     await expect(response.json()).resolves.toEqual({ error: 'from must be a valid date.' })
   })
 
+  it('keeps canonical validation for direct invalid occupancy API calls', async () => {
+    const response = await GET(
+      new Request('http://localhost/api/insights/trends?occupancy=unknown')
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockLoadEstimateFeedbackTrends).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({
+      error: 'occupancy must be occupied or vacant.',
+    })
+  })
+
+  it('keeps canonical validation for direct invalid numeric API calls', async () => {
+    const response = await GET(
+      new Request('http://localhost/api/insights/trends?maxAbsoluteVariance=-1')
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockLoadEstimateFeedbackTrends).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({
+      error: 'maxAbsoluteVariance must be a positive number.',
+    })
+  })
+
   it('delegates valid requests with the session org and normalized filters', async () => {
     const response = await GET(
       new Request(

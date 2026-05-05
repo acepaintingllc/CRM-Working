@@ -1,3 +1,9 @@
+import {
+  isV2TrimRoomHelperEligible,
+  V2_TRIM_ROOM_HELPER_SOURCE,
+} from './v2TrimActivation.ts'
+import { validateV2NumericOverrideFields } from './v2OverrideValidation.ts'
+
 export type V2TrimRoomMode = 'RECT' | 'SEG'
 export type V2TrimMeasurementMode = 'MANUAL' | 'ROOM_HELPER'
 
@@ -17,6 +23,11 @@ export type V2TrimValidationScope = {
   measurementMode: V2TrimMeasurementMode
   helperSource: string | null
   measurementValue: string
+  overrideMeasurement?: string
+  overrideHours?: string
+  overrideGallons?: string
+  overrideSupplyCost?: string
+  overrideTotal?: string
 }
 
 function asNullableNumber(value: unknown) {
@@ -63,6 +74,17 @@ export function validateV2TrimBeforeSave(params: {
       issues.push(`${scope.roomId}: trim scope ${scope.id} references missing room`)
       continue
     }
+    validateV2NumericOverrideFields({
+      issues,
+      scopeLabel: `${scope.roomId}: trim scope ${scope.id}`,
+      fields: [
+        { label: 'measurement', value: scope.overrideMeasurement },
+        { label: 'hours', value: scope.overrideHours },
+        { label: 'gallons', value: scope.overrideGallons },
+        { label: 'supply cost', value: scope.overrideSupplyCost },
+        { label: 'total', value: scope.overrideTotal },
+      ],
+    })
 
     if (scope.include !== 'Y') continue
 
@@ -72,10 +94,10 @@ export function validateV2TrimBeforeSave(params: {
 
     if (scope.measurementMode === 'ROOM_HELPER') {
       const roomMode = roomModeById.get(scope.roomId) ?? 'RECT'
-      if (roomMode !== 'RECT') {
+      if (!isV2TrimRoomHelperEligible({ roomMode })) {
         issues.push(`${scope.roomId}: ROOM_HELPER is only allowed in RECT rooms`)
       }
-      if ((scope.helperSource ?? '').toUpperCase() !== 'ROOM_PERIMETER') {
+      if ((scope.helperSource ?? '').toUpperCase() !== V2_TRIM_ROOM_HELPER_SOURCE) {
         issues.push(`${scope.roomId}: helper source must be ROOM_PERIMETER for ROOM_HELPER`)
       }
       continue

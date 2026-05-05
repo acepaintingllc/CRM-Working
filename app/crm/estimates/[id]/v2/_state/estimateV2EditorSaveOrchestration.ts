@@ -7,19 +7,18 @@ import { sanitizeV2CeilingsDrafts } from '@/lib/estimator/v2CeilingsSanitize'
 import { validateV2CeilingsBeforeSave } from '@/lib/estimator/v2CeilingsValidation'
 import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
 import { validateV2TrimBeforeSave } from '@/lib/estimator/v2TrimValidation'
+import { validateV2DoorsBeforeSave } from '@/lib/estimator/v2DoorsValidation'
+import { validateV2DrywallBeforeSave } from '@/lib/estimator/v2DrywallValidation'
 import type { EstimateV2EditorStoreState } from '@/lib/estimates/v2/store/estimateV2Store'
 import type {
+  EstimateV2EstimateMeta,
   EstimateV2PricingSummary,
   EstimateV2WallCalculationsPayload,
 } from '@/types/estimator/v2'
 import {
-  normalizeCeilingScope,
-  normalizeCeilingSegment,
+  createUuid,
   normalizeDoorScope,
   normalizeDrywallRepair,
-  normalizeScope,
-  normalizeSegment,
-  normalizeTrimScope,
   resolveRoomModeById,
 } from '../_lib/estimateV2EditorNormalize'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
@@ -30,12 +29,90 @@ type EstimateV2SaveCollections = EstimateV2EditorStoreState['collections']
 type EstimateV2SaveMeta = EstimateV2EditorStoreState['meta']
 type CalculationMissingInput = {
   message?: unknown
+  scope_id?: unknown
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function ensureUuid(value: string, replacements: Map<string, string>) {
+  if (UUID_RE.test(value)) return value
+  const existing = replacements.get(value)
+  if (existing) return existing
+  const generated = createUuid()
+  const next = UUID_RE.test(generated)
+    ? generated
+    : `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`
+  replacements.set(value, next)
+  return next
+}
+
+function isTemporaryCeilingPersistenceId(value: string) {
+  return value.startsWith('temp-') || value.includes('-local')
+}
+
+function normalizeCeilingIdsForPersistence(params: {
+  ceilingScopes: EstimateV2SaveCollections['ceilingScopes']
+  ceilingSegments: EstimateV2SaveCollections['ceilingSegments']
+}) {
+  const replacements = new Map<string, string>()
+  let changed = false
+  const ceilingScopes = params.ceilingScopes.map((scope) => {
+    if (scope.mode !== 'SEG') return scope
+    if (!isTemporaryCeilingPersistenceId(scope.id)) return scope
+    const nextId = ensureUuid(scope.id, replacements)
+    if (nextId === scope.id) return scope
+    changed = true
+    return { ...scope, id: nextId }
+  })
+  const ceilingSegments = params.ceilingSegments.map((segment) => {
+    const nextId = replacements.has(segment.ceilingScopeId)
+      ? ensureUuid(segment.id, replacements)
+      : segment.id
+    const nextCeilingScopeId = replacements.get(segment.ceilingScopeId) ?? segment.ceilingScopeId
+    if (nextId === segment.id && nextCeilingScopeId === segment.ceilingScopeId) return segment
+    changed = true
+    return {
+      ...segment,
+      id: nextId,
+      ceilingScopeId: nextCeilingScopeId,
+    }
+  })
+
+  return {
+    ceilingScopes,
+    ceilingSegments,
+    changed,
+  }
 }
 
 function missingInputsFrom(value: unknown): CalculationMissingInput[] {
   if (!value || typeof value !== 'object') return []
   const missing = (value as { missing_inputs?: unknown }).missing_inputs
   return Array.isArray(missing) ? (missing as CalculationMissingInput[]) : []
+}
+
+function excludedCalculationScopeIdsFrom(value: unknown) {
+  const ids = new Set<string>()
+  if (!value || typeof value !== 'object') return ids
+  const scopes = (value as { scopes?: unknown }).scopes
+  if (!Array.isArray(scopes)) return ids
+
+  for (const scope of scopes) {
+    if (!scope || typeof scope !== 'object') continue
+    const row = scope as {
+      include?: unknown
+      id?: unknown
+      scope_id?: unknown
+      scope_key?: unknown
+    }
+    if (row.include !== 'N') continue
+    for (const id of [row.id, row.scope_id, row.scope_key]) {
+      if (typeof id === 'string' && id.trim()) ids.add(id)
+    }
+  }
+
+  return ids
 }
 
 export function collectEstimateV2CalculationMissingInputIssues(params: {
@@ -53,9 +130,15 @@ export function collectEstimateV2CalculationMissingInputIssues(params: {
     ['Drywall', params.drywallCalculations],
   ]
   return filterNonBlockingEstimateV2ValidationIssues(
-    groups.flatMap(([label, value]) =>
-      missingInputsFrom(value).map((input) => `${label}: ${String(input.message || 'Required input is missing')}`)
-    )
+    groups.flatMap(([label, value]) => {
+      const excludedScopeIds = excludedCalculationScopeIdsFrom(value)
+      return missingInputsFrom(value)
+        .filter((input) => {
+          const scopeId = typeof input.scope_id === 'string' ? input.scope_id : ''
+          return !scopeId || !excludedScopeIds.has(scopeId)
+        })
+        .map((input) => `${label}: ${String(input.message || 'Required input is missing')}`)
+    })
   )
 }
 
@@ -99,11 +182,18 @@ export function prepareEstimateV2SaveState(
     ceilingSegments: currentState.collections.ceilingSegments,
   })
   if (sanitizedCeilings.changed) normalizedDomains.push('ceilings')
+  const persistentCeilings = normalizeCeilingIdsForPersistence({
+    ceilingScopes: sanitizedCeilings.ceilingScopes,
+    ceilingSegments: sanitizedCeilings.ceilingSegments,
+  })
+  if (persistentCeilings.changed && !normalizedDomains.includes('ceilings')) {
+    normalizedDomains.push('ceilings')
+  }
 
   const roomModeById = resolveRoomModeById({
     rooms: currentState.collections.rooms,
     wallScopes: sanitizedWalls.scopes,
-    ceilingScopes: sanitizedCeilings.ceilingScopes,
+    ceilingScopes: persistentCeilings.ceilingScopes,
   })
   const sanitizedTrim = sanitizeV2TrimDrafts({
     rooms: currentState.collections.rooms.map((room) => ({
@@ -118,8 +208,8 @@ export function prepareEstimateV2SaveState(
   const collections = {
     scopes: sanitizedWalls.scopes,
     segments: sanitizedWalls.segments,
-    ceilingScopes: sanitizedCeilings.ceilingScopes,
-    ceilingSegments: sanitizedCeilings.ceilingSegments,
+    ceilingScopes: persistentCeilings.ceilingScopes,
+    ceilingSegments: persistentCeilings.ceilingSegments,
     trimScopes: sanitizedTrim.trimScopes,
     doorScopes: currentState.collections.doorScopes ?? [],
     drywallRepairs: currentState.collections.drywallRepairs ?? [],
@@ -189,11 +279,61 @@ export function validateEstimateV2PreparedSave(params: {
       measurementMode: scope.measurementMode,
       helperSource: scope.helperSource || null,
       measurementValue: scope.measurementValue,
+      overrideMeasurement: scope.overrideMeasurement,
+      overrideHours: scope.overrideHours,
+      overrideGallons: scope.overrideGallons,
+      overrideSupplyCost: scope.overrideSupplyCost,
+      overrideTotal: scope.overrideTotal,
+    })),
+    allowIncomplete,
+  })
+  const doorIssues = validateV2DoorsBeforeSave({
+    rooms: currentState.collections.rooms.map((room) => ({
+      roomId: room.roomId,
+      roomName: room.roomName,
+      position: room.position,
+    })),
+    doorScopes: (prepared.collections.doorScopes ?? []).map((scope) => ({
+      id: scope.id,
+      roomId: scope.roomId,
+      position: scope.position,
+      include: scope.include,
+      doorTypeId: scope.doorTypeId,
+      quantity: scope.quantity,
+      sides: scope.sides,
+      overridePaintHours: scope.overridePaintHours,
+      overridePrimerHours: scope.overridePrimerHours,
+      overrideMaterialCost: scope.overrideMaterialCost,
+      overrideSupplyCost: scope.overrideSupplyCost,
+      overrideTotal: scope.overrideTotal,
+    })),
+    allowIncomplete,
+  })
+  const drywallIssues = validateV2DrywallBeforeSave({
+    rooms: currentState.collections.rooms.map((room) => ({
+      roomId: room.roomId,
+      roomName: room.roomName,
+      position: room.position,
+    })),
+    drywallRepairs: (prepared.collections.drywallRepairs ?? []).map((repair) => ({
+      id: repair.id,
+      roomId: repair.roomId,
+      position: repair.position,
+      surface: repair.surface,
+      repairType: repair.repairType,
+      quantity: repair.quantity,
+      overrideTotal: repair.overrideTotal,
     })),
     allowIncomplete,
   })
 
-  return filterNonBlockingEstimateV2ValidationIssues([...wallIssues, ...ceilingIssues, ...trimIssues])
+  return filterNonBlockingEstimateV2ValidationIssues([
+    ...wallIssues,
+    ...ceilingIssues,
+    ...trimIssues,
+    ...doorIssues,
+    ...drywallIssues,
+  ])
 }
 
 export function deriveEstimateV2PreparedSaveValidation(params: {
@@ -254,6 +394,89 @@ function normalizeJobDefaultProductOverride(productId: string, defaultProductId:
   return !productId || productId === defaultProductId ? '' : productId
 }
 
+function normalizeWallScopeJobDefaultOverrides(
+  scopes: EstimateV2SaveCollections['scopes'],
+  effectiveJobProductDefaults: {
+    wallPaintProductId: string
+    wallPrimerProductId: string
+  }
+) {
+  return sortByPosition(
+    scopes.map((scope) => ({
+      ...scope,
+      paintProductId: normalizeJobDefaultProductOverride(
+        scope.paintProductId,
+        effectiveJobProductDefaults.wallPaintProductId
+      ),
+      primerProductId: normalizeJobDefaultProductOverride(
+        scope.primerProductId,
+        effectiveJobProductDefaults.wallPrimerProductId
+      ),
+    }))
+  )
+}
+
+function normalizeCeilingScopeJobDefaultOverrides(
+  scopes: EstimateV2SaveCollections['ceilingScopes'],
+  effectiveJobProductDefaults: {
+    ceilingPaintProductId: string
+    ceilingPrimerProductId: string
+  }
+) {
+  return sortByPosition(
+    scopes.map((scope) => ({
+      ...scope,
+      paintProductId: normalizeJobDefaultProductOverride(
+        scope.paintProductId,
+        effectiveJobProductDefaults.ceilingPaintProductId
+      ),
+      primerProductId: normalizeJobDefaultProductOverride(
+        scope.primerProductId,
+        effectiveJobProductDefaults.ceilingPrimerProductId
+      ),
+    }))
+  )
+}
+
+function normalizeTrimScopeJobDefaultOverrides(
+  scopes: EstimateV2SaveCollections['trimScopes'],
+  effectiveJobProductDefaults: {
+    trimPaintProductId: string
+    trimPrimerProductId: string
+  }
+) {
+  return sortByPosition(
+    scopes.map((scope) => ({
+      ...scope,
+      paintProductId: normalizeJobDefaultProductOverride(
+        scope.paintProductId,
+        effectiveJobProductDefaults.trimPaintProductId
+      ),
+      primerProductId: normalizeJobDefaultProductOverride(
+        scope.primerProductId,
+        effectiveJobProductDefaults.trimPrimerProductId
+      ),
+    }))
+  )
+}
+
+function resolveSavedEstimateMeta(params: {
+  payload: unknown
+  currentEstimate: EstimateV2EstimateMeta | null
+}) {
+  if (!params.payload || typeof params.payload !== 'object' || !('estimate' in params.payload)) {
+    return params.currentEstimate
+  }
+
+  const estimate = (params.payload as { estimate?: unknown }).estimate
+  if (!estimate || typeof estimate !== 'object') return params.currentEstimate
+
+  return {
+    ...(params.currentEstimate ?? {}),
+    ...(estimate as Partial<EstimateV2EstimateMeta>),
+  } as EstimateV2EstimateMeta
+}
+
 export function resolveEstimateV2SaveResponseState(params: {
   trigger: 'manual' | 'auto'
   payload: unknown
@@ -283,27 +506,11 @@ export function resolveEstimateV2SaveResponseState(params: {
   let nextScopes = prepared.collections.scopes
   let nextSegments = prepared.collections.segments
   if (trigger === 'manual') {
-    if (nextWallCalculations?.scopes) {
-      nextScopes = sortByPosition(
-        nextWallCalculations.scopes.map((scope, index) => {
-          const normalized = normalizeScope(scope, index)
-          return {
-            ...normalized,
-            paintProductId: normalizeJobDefaultProductOverride(
-              normalized.paintProductId,
-              effectiveJobProductDefaults.wallPaintProductId
-            ),
-            primerProductId: normalizeJobDefaultProductOverride(
-              normalized.primerProductId,
-              effectiveJobProductDefaults.wallPrimerProductId
-            ),
-          }
-        })
-      )
-    }
-    if (nextWallCalculations?.segments) {
-      nextSegments = sortByPosition(nextWallCalculations.segments.map(normalizeSegment))
-    }
+    nextScopes = normalizeWallScopeJobDefaultOverrides(
+      prepared.collections.scopes,
+      effectiveJobProductDefaults
+    )
+    nextSegments = sortByPosition(prepared.collections.segments)
   }
 
   const nextCeilingCalculations =
@@ -313,29 +520,11 @@ export function resolveEstimateV2SaveResponseState(params: {
   let nextCeilingScopes = prepared.collections.ceilingScopes
   let nextCeilingSegments = prepared.collections.ceilingSegments
   if (trigger === 'manual') {
-    if (nextCeilingCalculations && Array.isArray((nextCeilingCalculations as Unsafe).scopes)) {
-      nextCeilingScopes = sortByPosition(
-        ((nextCeilingCalculations as Unsafe).scopes as Unsafe[]).map((scope, index) => {
-          const normalized = normalizeCeilingScope(scope, index)
-          return {
-            ...normalized,
-            paintProductId: normalizeJobDefaultProductOverride(
-              normalized.paintProductId,
-              effectiveJobProductDefaults.ceilingPaintProductId
-            ),
-            primerProductId: normalizeJobDefaultProductOverride(
-              normalized.primerProductId,
-              effectiveJobProductDefaults.ceilingPrimerProductId
-            ),
-          }
-        })
-      )
-    }
-    if (nextCeilingCalculations && Array.isArray((nextCeilingCalculations as Unsafe).segments)) {
-      nextCeilingSegments = sortByPosition(
-        ((nextCeilingCalculations as Unsafe).segments as Unsafe[]).map(normalizeCeilingSegment)
-      )
-    }
+    nextCeilingScopes = normalizeCeilingScopeJobDefaultOverrides(
+      prepared.collections.ceilingScopes,
+      effectiveJobProductDefaults
+    )
+    nextCeilingSegments = sortByPosition(prepared.collections.ceilingSegments)
   }
 
   const nextTrimCalculations =
@@ -343,26 +532,10 @@ export function resolveEstimateV2SaveResponseState(params: {
       ? ((payload as { trim_calculations?: Unsafe }).trim_calculations ?? null)
       : meta.trimCalculations
   let nextTrimScopes = prepared.collections.trimScopes
-  if (
-    trigger === 'manual' &&
-    nextTrimCalculations &&
-    Array.isArray((nextTrimCalculations as Unsafe).scopes)
-  ) {
-    nextTrimScopes = sortByPosition(
-      ((nextTrimCalculations as Unsafe).scopes as Unsafe[]).map((scope, index) => {
-        const normalized = normalizeTrimScope(scope, index)
-        return {
-          ...normalized,
-          paintProductId: normalizeJobDefaultProductOverride(
-            normalized.paintProductId,
-            effectiveJobProductDefaults.trimPaintProductId
-          ),
-          primerProductId: normalizeJobDefaultProductOverride(
-            normalized.primerProductId,
-            effectiveJobProductDefaults.trimPrimerProductId
-          ),
-        }
-      })
+  if (trigger === 'manual') {
+    nextTrimScopes = normalizeTrimScopeJobDefaultOverrides(
+      prepared.collections.trimScopes,
+      effectiveJobProductDefaults
     )
   }
 
@@ -376,7 +549,7 @@ export function resolveEstimateV2SaveResponseState(params: {
     payload != null && typeof payload === 'object' && 'door_calculations' in payload
       ? ((payload as { door_calculations?: Unsafe }).door_calculations ?? null)
       : meta.doorCalculations
-  let nextDoorScopes = prepared.collections.doorScopes
+  let nextDoorScopes = prepared.collections.doorScopes ?? []
   if (
     trigger === 'manual' &&
     nextDoorCalculations &&
@@ -423,6 +596,10 @@ export function resolveEstimateV2SaveResponseState(params: {
       drywallCalculations: nextDrywallCalculations,
       pricingSummary: nextPricingSummary,
     },
+    estimate: resolveSavedEstimateMeta({
+      payload,
+      currentEstimate: currentState.meta.estimate,
+    }),
     lastSavedSnapshot: buildEstimateV2DirtySnapshot({
       jobSettingsDraft: currentState.meta.jobSettingsDraft,
       rooms: currentState.collections.rooms,

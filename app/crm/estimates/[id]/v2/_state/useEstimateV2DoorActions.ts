@@ -64,10 +64,12 @@ export function useEstimateV2DoorActions(params: {
 
   const toggleRoomInclude = useCallback(
     (roomId: string) => {
-      store.getState().setDoorScopes((prev) => toggleRoomDoorIncludeMutation(prev, roomId))
+      store
+        .getState()
+        .setDoorScopes((prev) => toggleRoomDoorIncludeMutation(prev, roomId, { doorTypeOptions }))
       markDirty()
     },
-    [markDirty, store]
+    [doorTypeOptions, markDirty, store]
   )
 
   const updateDoorType = useCallback(

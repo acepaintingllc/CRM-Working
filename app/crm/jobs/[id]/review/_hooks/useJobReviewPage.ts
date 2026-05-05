@@ -8,9 +8,7 @@ import { useCrmIntentGuard } from '@/app/crm/_hooks/useCrmIntentGuard'
 import {
   loadJobReview,
   lockJobReview,
-  repairAcceptedEstimateSnapshot,
   saveJobReview,
-  loadJobRecord,
 } from '@/lib/jobs/client'
 import type { JobDetail } from '@/types/jobs/api'
 import type { JobReviewReadModel } from '@/types/jobs/feedback'
@@ -21,6 +19,10 @@ import {
 } from '@/lib/estimate-feedback/forms'
 import { lockJobReviewFlow, saveJobReviewFlow } from '../_lib/jobReviewController'
 import { buildJobReviewVm } from '../_lib/jobReviewVm'
+import {
+  loadAcceptedEstimateFeedbackResource,
+  useAcceptedEstimateSnapshotRepair,
+} from '../../../_hooks/useAcceptedEstimateFeedbackResource'
 
 type JobReviewPageResource = {
   job: JobDetail | null
@@ -47,32 +49,25 @@ export function useJobReviewPage() {
 
   const [reviewing, setReviewing] = useState(false)
   const [locking, setLocking] = useState(false)
-  const [repairingSnapshot, setRepairingSnapshot] = useState(false)
 
   const resource = useEditableResource<JobReviewPageResource>({
     initialData: emptyJobReviewPageResource,
-    load: async () => {
-      if (!id || typeof id !== 'string') {
-        throw new Error('Missing job id in URL.')
-      }
-
-      const loadedJob = await loadJobRecord(id)
-      const acceptedSnapshotId = loadedJob?.accepted_quote?.estimate_snapshot_id ?? null
-      if (!acceptedSnapshotId) {
-        return {
-          job: loadedJob,
+    load: () =>
+      loadAcceptedEstimateFeedbackResource<JobReviewReadModel, JobReviewPageResource>({
+        jobId: id,
+        missingJobIdError: 'Missing job id in URL.',
+        loadFeedback: loadJobReview,
+        buildMissingSnapshotResource: (job) => ({
+          job,
           model: null,
           form: buildJobReviewFormState(null),
-        }
-      }
-
-      const loadedReview = await loadJobReview(id, acceptedSnapshotId)
-      return {
-        job: loadedJob,
-        model: loadedReview,
-        form: buildJobReviewFormState(loadedReview),
-      }
-    },
+        }),
+        buildLoadedResource: ({ job, feedback }) => ({
+          job,
+          model: feedback,
+          form: buildJobReviewFormState(feedback),
+        }),
+      }),
     save: async (current) => {
       if (!id || typeof id !== 'string') {
         throw new Error('Missing job id in URL.')
@@ -114,6 +109,11 @@ export function useJobReviewPage() {
     const result = await resource.reload()
     return result.ok
   }, [resource])
+
+  const { repairingSnapshot, repairSnapshot } = useAcceptedEstimateSnapshotRepair({
+    jobId: id,
+    resource,
+  })
 
   const setField = useCallback(<TField extends keyof JobReviewFormState>(
     field: TField,
@@ -190,27 +190,6 @@ export function useJobReviewPage() {
       setLocking(false)
     }
   }, [id, isReadOnly, resource, snapshotId])
-
-  const repairSnapshot = useCallback(async () => {
-    if (!id || typeof id !== 'string') return false
-    setRepairingSnapshot(true)
-    resource.clearFeedback()
-    try {
-      const result = await repairAcceptedEstimateSnapshot(id)
-      const loaded = await load()
-      if (loaded) resource.setNotice(result.notice ?? 'Accepted estimate snapshot repaired.')
-      return loaded
-    } catch (repairError) {
-      resource.setError(
-        repairError instanceof Error
-          ? repairError.message
-          : 'Failed to repair accepted estimate snapshot.'
-      )
-      return false
-    } finally {
-      setRepairingSnapshot(false)
-    }
-  }, [id, load, resource])
 
   const vm = useMemo(() => buildJobReviewVm({ job, model, form }), [form, job, model])
   const dirty = !loading && !isReadOnly && resource.dirty

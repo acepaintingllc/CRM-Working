@@ -3,6 +3,7 @@ import {
   nonNeg,
   round4,
 } from './wallsHelpers.ts'
+import { calculateDrywallEffectiveQuantity } from './calculationPrimitives.ts'
 import type { MissingInput, WallRoomTotal } from './wallsTypes.ts'
 import type {
   DrywallCalculationInput,
@@ -119,7 +120,7 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
     const surface = normalizeSurface(repair.surface)
     const repairType = normalizeRepairType(repair.repair_type)
     const rawQuantity = nonNeg(n(repair.quantity)) ?? 0
-    const effectiveQuantity = Math.ceil(rawQuantity)
+    const effectiveQuantity = calculateDrywallEffectiveQuantity(rawQuantity)
     const validRepairType = repairType ?? 'flat_wall_crack'
     const validForSurface = repairType ? isRepairValidForSurface(repairType, surface) : false
     const expectedUnit = repairType ? REPAIR_UNIT_BY_TYPE[repairType] : 'LF'

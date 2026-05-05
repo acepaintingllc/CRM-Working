@@ -41,7 +41,7 @@ test('sanitizeV2TrimDrafts reorders rows and strips helper mode in SEG rooms', (
   assert.equal(result.trimScopes[1].helperSource, 'ROOM_PERIMETER')
 })
 
-test('sanitizeV2TrimDrafts preserves trim products and clears hidden override state', () => {
+test('sanitizeV2TrimDrafts preserves trim products and visible override state', () => {
   const result = sanitizeV2TrimDrafts({
     rooms: [{ roomId: 'R001', mode: 'RECT', position: 0 }],
     trimScopes: [
@@ -64,10 +64,13 @@ test('sanitizeV2TrimDrafts preserves trim products and clears hidden override st
     ],
   })
 
-  assert.equal(result.changed, true)
+  assert.equal(result.changed, false)
   assert.equal(result.trimScopes[0].paintProductId, 'P-TRIM')
   assert.equal(result.trimScopes[0].primerProductId, 'PRIMER-TRIM')
-  assert.equal(result.trimScopes[0].overrideMeasurement, '')
-  assert.equal(result.trimScopes[0].overrideTotal, '')
-  assert.equal(result.trimScopes[0].overrideDescription, '')
+  assert.equal(result.trimScopes[0].overrideMeasurement, '10')
+  assert.equal(result.trimScopes[0].overrideHours, '1')
+  assert.equal(result.trimScopes[0].overrideGallons, '2')
+  assert.equal(result.trimScopes[0].overrideSupplyCost, '3')
+  assert.equal(result.trimScopes[0].overrideTotal, '4')
+  assert.equal(result.trimScopes[0].overrideDescription, 'hidden')
 })

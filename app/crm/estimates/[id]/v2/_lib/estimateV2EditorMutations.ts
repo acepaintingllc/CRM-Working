@@ -1,5 +1,11 @@
 import { sortByPosition } from '../../../../../../lib/estimator/v2DraftPayload.ts'
 import { isBaseTrimType } from '../../../../../../lib/estimator/trimTypeMetadata.ts'
+import {
+  buildV2TrimActivationDefaults,
+  isV2TrimRoomHelperEligible,
+  normalizeV2TrimHelperMode,
+  V2_TRIM_ROOM_HELPER_SOURCE,
+} from '../../../../../../lib/estimator/v2TrimActivation.ts'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingScopeMode,
@@ -8,7 +14,6 @@ import type {
   EstimateV2DrywallRepairDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
-  EstimateV2TrimMeasurementMode,
   EstimateV2TrimScopeDraft,
   EstimateV2TrimTypeOption,
   EstimateV2TrimUnitType,
@@ -556,18 +561,67 @@ export function deleteTrimScopeMutation(
   return [...remaining.filter((scope) => scope.roomId !== roomId), ...roomScopes]
 }
 
+type ToggleRoomTrimIncludeOptions = {
+  rooms?: EstimateV2RoomDraft[]
+  trimTypeOptions?: EstimateV2TrimTypeOption[]
+  roomModeById?: Map<string, 'RECT' | 'SEG'>
+  roomHeightFactorByRoomId?: Map<string, string>
+}
+
 export function toggleRoomTrimIncludeMutation(
   scopes: EstimateV2TrimScopeDraft[],
-  roomId: string
+  roomId: string,
+  options?: ToggleRoomTrimIncludeOptions
 ): EstimateV2TrimScopeDraft[] {
   const roomScopes = sortByPosition(scopes.filter((scope) => scope.roomId === roomId))
   if (roomScopes.length === 0) {
+    const defaultTrimType = options?.trimTypeOptions?.[0]
+    if (!defaultTrimType) return scopes
     const nextScope = createDefaultTrimScope(roomId)
     nextScope.include = 'Y'
-    return [...scopes, nextScope]
+    const roomMode = options?.roomModeById?.get(roomId) ?? 'RECT'
+    const typedScopes = applyTrimTypeMutation({
+      scopes: [nextScope],
+      scopeId: nextScope.id,
+      trimTypeId: defaultTrimType.id,
+      trimTypeOptions: options?.trimTypeOptions ?? [],
+      roomModeById: options?.roomModeById ?? new Map([[roomId, roomMode]]),
+      roomHeightFactorByRoomId: options?.roomHeightFactorByRoomId ?? new Map(),
+    })
+    const typedScope = typedScopes[0] ?? nextScope
+    return [
+      ...scopes,
+      {
+        ...typedScope,
+        ...buildV2TrimActivationDefaults({
+          scope: typedScope,
+          room: options?.rooms?.find((entry) => entry.roomId === roomId),
+          roomMode,
+          trimType: options?.trimTypeOptions?.find((option) => option.id === typedScope.trimTypeId),
+          fallbackTrimType: options?.trimTypeOptions?.[0],
+        }),
+      },
+    ]
   }
   const hasIncluded = roomScopes.some((scope) => scope.include === 'Y')
-  return scopes.map((scope) => (scope.roomId === roomId ? { ...scope, include: hasIncluded ? 'N' : 'Y' } : scope))
+  if (hasIncluded) {
+    return scopes.map((scope) => (scope.roomId === roomId ? { ...scope, include: 'N' } : scope))
+  }
+
+  return scopes.map((scope) => {
+    if (scope.roomId !== roomId) return scope
+    return {
+      ...scope,
+      include: 'Y',
+      ...buildV2TrimActivationDefaults({
+        scope,
+        room: options?.rooms?.find((entry) => entry.roomId === roomId),
+        roomMode: options?.roomModeById?.get(roomId) ?? 'RECT',
+        trimType: options?.trimTypeOptions?.find((option) => option.id === scope.trimTypeId),
+        fallbackTrimType: options?.trimTypeOptions?.[0],
+      }),
+    }
+  })
 }
 
 export function updateDoorScopeMutation(
@@ -613,16 +667,42 @@ export function deleteDoorScopeMutation(
 
 export function toggleRoomDoorIncludeMutation(
   scopes: EstimateV2DoorScopeDraft[],
-  roomId: string
+  roomId: string,
+  options?: {
+    doorTypeOptions?: Array<{ id: string; label: string }>
+  }
 ): EstimateV2DoorScopeDraft[] {
   const roomScopes = sortByPosition(scopes.filter((scope) => scope.roomId === roomId))
   if (roomScopes.length === 0) {
+    const defaultDoorType = options?.doorTypeOptions?.[0]
+    if (!defaultDoorType) return scopes
     const nextScope = createDefaultDoorScope(roomId)
     nextScope.include = 'Y'
+    nextScope.scopeName = defaultDoorType.label
+    nextScope.doorTypeId = defaultDoorType.id
+    nextScope.quantity = '1'
+    nextScope.sides = '2'
     return [...scopes, nextScope]
   }
   const hasIncluded = roomScopes.some((scope) => scope.include === 'Y')
-  return scopes.map((scope) => (scope.roomId === roomId ? { ...scope, include: hasIncluded ? 'N' : 'Y' } : scope))
+  if (hasIncluded) {
+    return scopes.map((scope) => (scope.roomId === roomId ? { ...scope, include: 'N' } : scope))
+  }
+
+  return scopes.map((scope) => {
+    if (scope.roomId !== roomId) return scope
+    const doorType =
+      options?.doorTypeOptions?.find((option) => option.id === scope.doorTypeId) ??
+      options?.doorTypeOptions?.[0]
+    return {
+      ...scope,
+      include: 'Y',
+      doorTypeId: scope.doorTypeId || doorType?.id || '',
+      scopeName: scope.scopeName || doorType?.label || '',
+      quantity: numberOrNull(scope.quantity) != null && Number(scope.quantity) > 0 ? scope.quantity : '1',
+      sides: scope.sides === '1' || scope.sides === '2' ? scope.sides : '2',
+    }
+  })
 }
 
 export function addDrywallRepairMutation(params: {
@@ -676,20 +756,24 @@ export function stripInvalidTrimHelperModeMutation(params: {
   const next = params.scopes.map((scope) => {
     const roomMode = params.roomModeById.get(scope.roomId) ?? 'RECT'
     const trimType = params.trimTypeOptions.find((item) => item.id === scope.trimTypeId)
-    const helperAllowedByType = !!trimType?.helper_allowed
     if (scope.measurementMode !== 'ROOM_HELPER') return scope
-    if (roomMode === 'RECT' && helperAllowedByType) {
-      if (scope.helperSource === 'ROOM_PERIMETER') return scope
-      changed = true
-      return { ...scope, helperSource: 'ROOM_PERIMETER' as const }
+    const normalized = normalizeV2TrimHelperMode({
+      measurementMode: scope.measurementMode,
+      helperSource: scope.helperSource,
+      helperValue: scope.helperValue,
+      roomMode,
+      trimTypeHelperAllowed: !!trimType?.helper_allowed,
+      emptyHelperSource: '' as const,
+    })
+    if (
+      normalized.measurementMode === scope.measurementMode &&
+      normalized.helperSource === scope.helperSource &&
+      normalized.helperValue === scope.helperValue
+    ) {
+      return scope
     }
     changed = true
-    return {
-      ...scope,
-      measurementMode: 'MANUAL' as EstimateV2TrimMeasurementMode,
-      helperSource: '' as const,
-      helperValue: '',
-    }
+    return { ...scope, ...normalized }
   })
   return changed ? next : params.scopes
 }
@@ -706,7 +790,10 @@ export function applyTrimTypeMutation(params: {
   return params.scopes.map((scope) => {
     if (scope.id !== params.scopeId) return scope
     const roomMode = params.roomModeById.get(scope.roomId) ?? 'RECT'
-    const helperAllowed = !!trimType?.helper_allowed && roomMode === 'RECT'
+    const helperAllowed = isV2TrimRoomHelperEligible({
+      roomMode,
+      trimTypeHelperAllowed: !!trimType?.helper_allowed,
+    })
     const keepHelperMode = helperAllowed && scope.measurementMode === 'ROOM_HELPER'
     const isCrown = isCrownTrimType(trimType, scope)
     const nextUnitType = (trimType?.unit_type ?? scope.unitType ?? 'LF') as EstimateV2TrimUnitType
@@ -728,7 +815,7 @@ export function applyTrimTypeMutation(params: {
       unitType: nextUnitType,
       productionRateId: trimType?.default_production_rate_id ?? params.trimTypeId ?? scope.productionRateId,
       measurementMode: keepHelperMode ? 'ROOM_HELPER' : 'MANUAL',
-      helperSource: keepHelperMode ? 'ROOM_PERIMETER' : '',
+      helperSource: keepHelperMode ? V2_TRIM_ROOM_HELPER_SOURCE : '',
       baseboardOpeningCount: isBaseboard ? scope.baseboardOpeningCount : '',
       heightFactor: isCrown ? params.roomHeightFactorByRoomId.get(scope.roomId) ?? '1' : '1',
     }

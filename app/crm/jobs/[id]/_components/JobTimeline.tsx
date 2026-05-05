@@ -1,11 +1,12 @@
 'use client'
 
+import type { JobTimelineItem, JobTimelineItemIconKey } from '@/app/crm/jobs/_lib/jobTimelineVm'
+import { CrmButton } from '@/app/crm/_components/CrmButton'
 import {
-  next8amLocalDateTimeValue,
-  toIsoFromLocalDateTimeValue,
-  toLocalDateTimeInputValue,
-} from '@/lib/jobs/dateHelpers'
-import type { JobDetail } from '@/types/jobs/api'
+  crmInputClassName,
+  crmSurfaceClassName,
+  crmSurfaceMutedClassName,
+} from '@/app/crm/_components/crmStyles'
 import {
   CalendarCheck,
   CheckCircle2,
@@ -21,167 +22,76 @@ import {
 
 const iconSizeSm = 16
 
-type TimelineItem = {
-  key: string
-  iconKey?: string
-  label: string
-  value: string
-  at: string | null
-  order: number
-  href?: string | null
-  linkLabel?: string | null
-}
-
 type JobTimelineProps = {
-  job: JobDetail
+  items: JobTimelineItem[]
   open: boolean
   onToggle: () => void
-  onEstimateDateChange: (iso: string) => void
-  formatDate: (iso: string | null | undefined) => string
-  formatRange: (start?: string | null, end?: string | null) => string
+  onEstimateDateChange: (localValue: string) => void
 }
 
-function timelineIconForItem(key: string): LucideIcon {
-  if (key === 'estimate_date') return CalendarCheck
-  if (key === 'estimate_sent_at') return Send
-  if (key === 'quote_sent' || key === 'quote_resent') return Send
-  if (key === 'quote_viewed') return Eye
-  if (key === 'quote_accepted') return CheckCircle2
-  if (key === 'scheduled_range') return CalendarCheck
-  if (key === 'scheduled_email_sent_at') return Mail
-  if (key === 'completed_at') return CheckCircle2
-  if (key === 'completed_email_sent_at') return Mail
+function timelineIconForItem(iconKey: JobTimelineItemIconKey): LucideIcon {
+  if (iconKey === 'calendar') return CalendarCheck
+  if (iconKey === 'send') return Send
+  if (iconKey === 'eye') return Eye
+  if (iconKey === 'check') return CheckCircle2
+  if (iconKey === 'mail') return Mail
   return Circle
 }
 
-function buildTimelineItems(
-  job: JobDetail,
-  formatDate: (iso: string | null | undefined) => string,
-  formatRange: (start?: string | null, end?: string | null) => string
-): TimelineItem[] {
-  const baseItems: TimelineItem[] = [
-    {
-      key: 'created_at',
-      label: 'Created',
-      value: formatDate(job.created_at),
-      at: job.created_at ?? null,
-      order: 0,
-    },
-    {
-      key: 'estimate_date',
-      label: 'Quote date',
-      value: formatDate(job.estimate_date),
-      at: job.estimate_date ?? null,
-      order: 1,
-    },
-    {
-      key: 'estimate_sent_at',
-      label: 'Quote sent',
-      value: formatDate(job.estimate_sent_at),
-      at: job.estimate_sent_at ?? null,
-      order: 2,
-    },
-    {
-      key: 'scheduled_range',
-      label: 'Scheduled job date range',
-      value: formatRange(job.scheduled_date, job.scheduled_end_date),
-      at: job.scheduled_date ?? job.scheduled_end_date ?? null,
-      order: 3,
-    },
-    {
-      key: 'scheduled_email_sent_at',
-      label: 'Confirmation email sent',
-      value: formatDate(job.scheduled_email_sent_at),
-      at: job.scheduled_email_sent_at ?? null,
-      order: 4,
-    },
-    {
-      key: 'completed_at',
-      label: 'Completed at',
-      value: formatDate(job.completed_at),
-      at: job.completed_at ?? null,
-      order: 5,
-    },
-    {
-      key: 'completed_email_sent_at',
-      label: 'Review email sent',
-      value: formatDate(job.completed_email_sent_at),
-      at: job.completed_email_sent_at ?? null,
-      order: 6,
-    },
-  ]
-  const quoteItems: TimelineItem[] = (job.public_quote_timeline_events ?? []).map((event, index) => ({
-    key: event.id || `${event.type || 'quote-event'}-${event.created_at ?? index}-${index}`,
-    iconKey: event.type || event.id || `quote-event-${index}`,
-    label: event.title || 'Quote activity',
-    value: event.body || formatDate(event.created_at),
-    at: event.created_at ?? null,
-    order: 20 + index,
-    href: event.link_path,
-    linkLabel: event.link_label,
-  }))
-
-  return [...baseItems, ...quoteItems].sort((a, b) => {
-    if (a.at && b.at) return b.at.localeCompare(a.at)
-    if (a.at) return -1
-    if (b.at) return 1
-    return a.order - b.order
-  })
-}
-
 export default function JobTimeline({
-  job,
+  items,
   open,
   onToggle,
   onEstimateDateChange,
-  formatDate,
-  formatRange,
 }: JobTimelineProps) {
-  const timelineItems = buildTimelineItems(job, formatDate, formatRange)
-
   return (
-    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-      <button
+    <div className={crmSurfaceMutedClassName('p-3')}>
+      <CrmButton
         onClick={onToggle}
-        className="flex w-full items-center justify-between rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-extrabold text-gray-900 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/70"
+        className="w-full min-h-0 px-3 py-2 text-sm"
         aria-expanded={open}
       >
-        <span className="inline-flex items-center gap-1.5">
-          {open ? (
-            <ChevronDown size={iconSizeSm} aria-hidden="true" />
-          ) : (
-            <ChevronRight size={iconSizeSm} aria-hidden="true" />
-          )}
-          <span>Timeline</span>
+        <span className="flex w-full items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-1.5">
+            {open ? (
+              <ChevronDown size={iconSizeSm} aria-hidden="true" />
+            ) : (
+              <ChevronRight size={iconSizeSm} aria-hidden="true" />
+            )}
+            <span>Timeline</span>
+          </span>
+          <span>{open ? 'Hide' : 'Show'}</span>
         </span>
-        <span>{open ? 'Hide' : 'Show'}</span>
-      </button>
+      </CrmButton>
       {open && (
         <div className="relative mt-3 pl-8">
-          <div className="absolute bottom-0 left-3 top-0 w-px bg-gray-200" aria-hidden="true" />
+          <div
+            className="absolute bottom-0 left-3 top-0 w-px bg-[color:var(--crm-ui-border)]"
+            aria-hidden="true"
+          />
           <div className="grid gap-2.5">
-            {timelineItems.map((item) => {
-              const ItemIcon = timelineIconForItem(item.iconKey ?? item.key)
+            {items.map((item) => {
+              const ItemIcon = timelineIconForItem(item.iconKey)
               const isSet = item.at != null
               return (
                 <div key={item.key} className="relative">
                   <div
                     className={`absolute left-[-23px] top-3 inline-flex h-5 w-5 items-center justify-center rounded-full border ${
                       isSet
-                        ? 'border-gray-400 bg-white text-gray-700'
-                        : 'border-gray-300 bg-white text-gray-400'
+                        ? 'border-[color:var(--crm-ui-border-strong)] bg-[color:var(--crm-ui-surface-strong)] text-[color:var(--crm-ui-text)]'
+                        : 'border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface-strong)] text-[color:var(--crm-ui-muted-2)]'
                     }`}
                     aria-hidden="true"
                   >
                     <ItemIcon size={12} />
                   </div>
-                  <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-                    <div className="text-xs font-extrabold tracking-wide text-gray-500 uppercase">
+                  <div className={crmSurfaceClassName('rounded-[var(--crm-ui-radius-sm)] p-3 shadow-none')}>
+                    <div className="ace-crm-mono text-xs font-extrabold text-[color:var(--crm-ui-muted)]">
                       {item.label}
                     </div>
                     <div
                       className={`mt-1 text-sm font-semibold ${
-                        isSet ? 'text-gray-900' : 'text-gray-400'
+                        isSet ? 'text-[color:var(--crm-ui-text)]' : 'text-[color:var(--crm-ui-muted-2)]'
                       }`}
                     >
                       {isSet ? item.value : 'Not set'}
@@ -191,7 +101,7 @@ export default function JobTimeline({
                         href={item.href}
                         target={item.href.startsWith('http') ? '_blank' : undefined}
                         rel={item.href.startsWith('http') ? 'noreferrer' : undefined}
-                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-extrabold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-gray-950"
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-extrabold text-[color:var(--crm-ui-accent-2)] underline decoration-[color:var(--crm-ui-accent-border)] underline-offset-4 hover:text-[color:var(--crm-ui-accent)]"
                       >
                         <ExternalLink size={13} aria-hidden="true" />
                         <span>{item.linkLabel ?? 'Open'}</span>
@@ -199,19 +109,15 @@ export default function JobTimeline({
                     ) : null}
                     {item.key === 'estimate_date' && (
                       <input
+                        key={`estimate-date-${item.estimateDateInputValue ?? ''}`}
+                        aria-label="Quote date"
                         type="datetime-local"
-                        defaultValue={
-                          job.estimate_date
-                            ? toLocalDateTimeInputValue(new Date(job.estimate_date))
-                            : next8amLocalDateTimeValue()
-                        }
+                        defaultValue={item.estimateDateInputValue ?? ''}
                         onChange={(event) => {
                           if (!event.target.value) return
-                          const iso = toIsoFromLocalDateTimeValue(event.target.value)
-                          if (!iso) return
-                          onEstimateDateChange(iso)
+                          onEstimateDateChange(event.target.value)
                         }}
-                        className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-900 outline-none ring-black/70 focus:ring-2"
+                        className={crmInputClassName('mt-2 min-h-0 px-2 py-1.5 text-xs')}
                       />
                     )}
                   </div>

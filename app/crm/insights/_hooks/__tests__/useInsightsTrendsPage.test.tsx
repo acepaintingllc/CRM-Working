@@ -8,8 +8,6 @@ import type {
   TrendRecommendationRecord,
 } from '@/types/estimate-feedback/recommendations'
 import {
-  buildInsightsTrendsPath,
-  parseInsightsTrendFilters,
   useInsightsTrendsPage,
 } from '../useInsightsTrendsPage'
 
@@ -146,40 +144,6 @@ describe('useInsightsTrendsPage', () => {
     searchParamsState.value = new URLSearchParams()
   })
 
-  it('parses outlier guard filters from camelCase and snake_case search params', () => {
-    expect(
-      parseInsightsTrendFilters(
-        new URLSearchParams(
-          'maxAbsoluteVariance=12.5&max_absolute_total_impact=250&condition_tags=peeling&condition_tags=trim-heavy'
-        )
-      )
-    ).toEqual({
-      from: null,
-      to: null,
-      jobType: null,
-      occupancy: null,
-      conditionTags: ['peeling', 'trim-heavy'],
-      maxAbsoluteVariance: 12.5,
-      maxAbsoluteTotalImpact: 250,
-    })
-  })
-
-  it('builds an insights path that preserves outlier guard filters', () => {
-    expect(
-      buildInsightsTrendsPath({
-        from: '2026-01-01',
-        to: '2026-01-31',
-        jobType: 'interior',
-        occupancy: 'occupied',
-        conditionTags: ['peeling', 'trim-heavy'],
-        maxAbsoluteVariance: 12.5,
-        maxAbsoluteTotalImpact: 250,
-      })
-    ).toBe(
-      '/crm/insights?from=2026-01-01&to=2026-01-31&jobType=interior&occupancy=occupied&maxAbsoluteVariance=12.5&maxAbsoluteTotalImpact=250&conditionTag=peeling&conditionTag=trim-heavy'
-    )
-  })
-
   it('loads trend data from filters parsed out of search params', async () => {
     searchParamsState.value = new URLSearchParams(
       'from=2026-01-01&to=2026-01-31&jobType=interior&occupancy=occupied&conditionTag=peeling&conditionTag=trim-heavy&max_absolute_variance=12.5&maxAbsoluteTotalImpact=250'
@@ -205,6 +169,34 @@ describe('useInsightsTrendsPage', () => {
     expect(result.current.filterInputs.maxAbsoluteVariance).toBe('12.5')
     expect(result.current.filterInputs.maxAbsoluteTotalImpact).toBe('250')
     expect(result.current.vm?.recommendations).toHaveLength(1)
+  })
+
+  it('drops unsupported occupancy and invalid positive-number filters from stale URLs', async () => {
+    searchParamsState.value = new URLSearchParams(
+      'from=2026-01-01&occupancy=unknown&maxAbsoluteVariance=-1&maxAbsoluteTotalImpact=abc'
+    )
+
+    const { result } = renderHook(() => useInsightsTrendsPage(), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.hasData).toBe(true)
+    })
+
+    expect(loadEstimateFeedbackTrends).toHaveBeenCalledWith({
+      from: '2026-01-01',
+      to: null,
+      jobType: null,
+      occupancy: null,
+      conditionTags: [],
+      maxAbsoluteVariance: null,
+      maxAbsoluteTotalImpact: null,
+    })
+    expect(useSwrResource).toHaveBeenCalledWith(
+      '/crm/insights?from=2026-01-01',
+      expect.any(Object)
+    )
+    expect(result.current.filterInputs.maxAbsoluteVariance).toBe('')
+    expect(result.current.filterInputs.maxAbsoluteTotalImpact).toBe('')
   })
 
   it('writes filter changes back to the insights URL', async () => {

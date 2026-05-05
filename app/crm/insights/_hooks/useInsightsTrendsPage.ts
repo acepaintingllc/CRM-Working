@@ -10,128 +10,24 @@ import {
   loadEstimateFeedbackTrends,
   loadTrendRecommendations,
 } from '@/lib/estimate-feedback/client'
+import {
+  buildInsightsTrendsPath,
+  parseEstimateFeedbackTrendFilters,
+  updateEstimateFeedbackTrendFilter,
+  type EstimateFeedbackTrendFilterKey,
+} from '@/lib/estimate-feedback/trendFilters'
 import type {
   EstimateFeedbackTrendFilters,
-  EstimateFeedbackTrendOccupancy,
   EstimateFeedbackTrendSummary,
 } from '@/types/estimate-feedback/trends'
 import type { TrendRecommendationRecord } from '@/types/estimate-feedback/recommendations'
 import { buildInsightsTrendsPageVm } from './insightsTrendsVm'
 
-type FilterKey = keyof EstimateFeedbackTrendFilters
+type FilterKey = EstimateFeedbackTrendFilterKey
 type RecommendationAction = 'apply' | 'dismiss'
 
 const emptyTags: string[] = []
 const openRecommendationsKey = '/api/insights/recommendations?status=open'
-
-function cleanString(value: string | null) {
-  const next = value?.trim()
-  return next || null
-}
-
-function cleanPositiveNumber(value: string | null) {
-  const next = cleanString(value)
-  if (!next) return null
-  const parsed = Number(next)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
-}
-
-function uniqueTags(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
-}
-
-export function parseInsightsTrendFilters(
-  searchParams: Pick<URLSearchParams, 'get' | 'getAll'>
-): EstimateFeedbackTrendFilters {
-  const occupancy = cleanString(searchParams.get('occupancy'))
-
-  return {
-    from:
-      cleanString(searchParams.get('from')) ??
-      cleanString(searchParams.get('start')) ??
-      cleanString(searchParams.get('lockedFrom')),
-    to:
-      cleanString(searchParams.get('to')) ??
-      cleanString(searchParams.get('end')) ??
-      cleanString(searchParams.get('lockedTo')),
-    jobType:
-      cleanString(searchParams.get('jobType')) ??
-      cleanString(searchParams.get('job_type')),
-    occupancy:
-      occupancy === 'occupied' || occupancy === 'vacant'
-        ? (occupancy as EstimateFeedbackTrendOccupancy)
-        : null,
-    conditionTags: uniqueTags([
-      ...searchParams.getAll('conditionTag'),
-      ...searchParams.getAll('conditionTags'),
-      ...searchParams.getAll('condition_tag'),
-      ...searchParams.getAll('condition_tags'),
-    ]),
-    maxAbsoluteVariance:
-      cleanPositiveNumber(searchParams.get('maxAbsoluteVariance')) ??
-      cleanPositiveNumber(searchParams.get('max_absolute_variance')),
-    maxAbsoluteTotalImpact:
-      cleanPositiveNumber(searchParams.get('maxAbsoluteTotalImpact')) ??
-      cleanPositiveNumber(searchParams.get('max_absolute_total_impact')),
-  }
-}
-
-export function buildInsightsTrendsPath(
-  filters: EstimateFeedbackTrendFilters,
-  pathname = '/crm/insights'
-) {
-  const search = new URLSearchParams()
-  if (filters.from) search.set('from', filters.from)
-  if (filters.to) search.set('to', filters.to)
-  if (filters.jobType) search.set('jobType', filters.jobType)
-  if (filters.occupancy) search.set('occupancy', filters.occupancy)
-  if (filters.maxAbsoluteVariance != null) {
-    search.set('maxAbsoluteVariance', String(filters.maxAbsoluteVariance))
-  }
-  if (filters.maxAbsoluteTotalImpact != null) {
-    search.set('maxAbsoluteTotalImpact', String(filters.maxAbsoluteTotalImpact))
-  }
-  for (const tag of filters.conditionTags ?? emptyTags) {
-    if (tag) search.append('conditionTag', tag)
-  }
-  const query = search.toString()
-  return query ? `${pathname}?${query}` : pathname
-}
-
-function nextFilters(
-  filters: EstimateFeedbackTrendFilters,
-  key: FilterKey,
-  value: string
-): EstimateFeedbackTrendFilters {
-  if (key === 'conditionTags') {
-    return {
-      ...filters,
-      conditionTags: uniqueTags(value.split(',')),
-    }
-  }
-
-  if (key === 'occupancy') {
-    return {
-      ...filters,
-      occupancy:
-        value === 'occupied' || value === 'vacant'
-          ? (value as EstimateFeedbackTrendOccupancy)
-          : null,
-    }
-  }
-
-  if (key === 'maxAbsoluteVariance' || key === 'maxAbsoluteTotalImpact') {
-    return {
-      ...filters,
-      [key]: cleanPositiveNumber(value),
-    }
-  }
-
-  return {
-    ...filters,
-    [key]: cleanString(value),
-  }
-}
 
 export function useInsightsTrendsPage() {
   const router = useRouter()
@@ -147,7 +43,7 @@ export function useInsightsTrendsPage() {
     useState<string | null>(null)
   const [generatingRecommendations, setGeneratingRecommendations] = useState(false)
   const filters = useMemo(
-    () => parseInsightsTrendFilters(searchParams),
+    () => parseEstimateFeedbackTrendFilters(searchParams),
     [searchParams]
   )
   const resourceKey = useMemo(() => buildInsightsTrendsPath(filters), [filters])
@@ -176,7 +72,7 @@ export function useInsightsTrendsPage() {
 
   const setFilter = useCallback(
     (key: FilterKey, value: string) => {
-      replaceFilters(nextFilters(filters, key, value))
+      replaceFilters(updateEstimateFeedbackTrendFilter(filters, key, value))
     },
     [filters, replaceFilters]
   )

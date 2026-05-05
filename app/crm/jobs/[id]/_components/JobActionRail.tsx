@@ -26,7 +26,6 @@ function iconLabel(Icon: LucideIcon, label: string, size = 16) {
 
 type JobActionRailProps = {
   actions: JobWorkflowResolvedAction[]
-  getActionTone: (action: JobWorkflowResolvedAction) => 'primary' | 'secondary' | 'danger'
   onAction: (action: JobWorkflowResolvedAction) => void
 }
 
@@ -59,7 +58,11 @@ function actionIcon(action: JobWorkflowResolvedAction): LucideIcon {
   }
 }
 
-export default function JobActionRail({ actions, getActionTone, onAction }: JobActionRailProps) {
+function actionTone(action: JobWorkflowResolvedAction) {
+  return action.tone === 'accent' ? 'primary' : action.tone === 'danger' ? 'danger' : 'secondary'
+}
+
+export default function JobActionRail({ actions, onAction }: JobActionRailProps) {
   return (
     <div className="mt-2 grid gap-3">
       <CrmDenseActionRow>
@@ -70,7 +73,7 @@ export default function JobActionRail({ actions, getActionTone, onAction }: JobA
               <div key={action.id} className="grid gap-1">
                 <CrmButton
                   type="button"
-                  tone={getActionTone(action)}
+                  tone={actionTone(action)}
                   className="min-h-0 px-2.5 py-1.5 text-xs opacity-70"
                   disabled
                   aria-describedby={`${action.id}-reason`}
@@ -93,7 +96,7 @@ export default function JobActionRail({ actions, getActionTone, onAction }: JobA
               <CrmButton
                 key={action.id}
                 href={action.href}
-                tone={getActionTone(action)}
+                tone={actionTone(action)}
                 className="min-h-0 px-2.5 py-1.5 text-xs no-underline"
               >
                 {iconLabel(Icon, action.label)}
@@ -106,7 +109,7 @@ export default function JobActionRail({ actions, getActionTone, onAction }: JobA
               type="button"
               key={action.id}
               onClick={() => onAction(action)}
-              tone={getActionTone(action)}
+              tone={actionTone(action)}
               className="min-h-0 px-2.5 py-1.5 text-xs"
             >
               {iconLabel(Icon, action.label)}

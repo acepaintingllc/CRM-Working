@@ -8,9 +8,15 @@ import {
   moveTrimScopeMutation,
   syncWallCutInFromTrayCeilings,
   stripInvalidTrimHelperModeMutation,
+  toggleRoomDoorIncludeMutation,
   toggleRoomFlagMutation,
+  toggleRoomTrimIncludeMutation,
   updateRoomDimensionsMutation,
 } from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorMutations.ts'
+import {
+  createDefaultDoorScope,
+  createDefaultTrimScope,
+} from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorNormalize.ts'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2RoomDraft,
@@ -604,6 +610,125 @@ test('moveTrimScopeMutation reorders scopes within the room', () => {
     ['trim-2', 0],
     ['trim-1', 1],
   ])
+})
+
+test('toggleRoomTrimIncludeMutation creates a helper-backed starter row for an empty room', () => {
+  const next = toggleRoomTrimIncludeMutation([], 'R001', {
+    rooms: [makeRoom({ lengthIn: '156', widthIn: '120' })],
+    roomModeById: new Map([['R001', 'RECT']]),
+    roomHeightFactorByRoomId: new Map([['R001', '1']]),
+    trimTypeOptions: [
+      {
+        id: 'BASE',
+        label: 'Baseboard - Standard',
+        family: 'BASEBOARD',
+        category: null,
+        unit_type: 'LF',
+        helper_allowed: true,
+        default_production_rate_id: 'BASE-RATE',
+      },
+    ],
+  })
+
+  assert.equal(next.length, 1)
+  assert.equal(next[0].include, 'Y')
+  assert.equal(next[0].trimTypeId, 'BASE')
+  assert.equal(next[0].scopeName, 'Baseboard - Standard')
+  assert.equal(next[0].productionRateId, 'BASE-RATE')
+  assert.equal(next[0].measurementMode, 'ROOM_HELPER')
+  assert.equal(next[0].helperSource, 'ROOM_PERIMETER')
+  assert.equal(next[0].helperValue, '46')
+  assert.equal(next[0].measurementValue, '')
+})
+
+test('toggleRoomTrimIncludeMutation makes an existing excluded starter row saveable', () => {
+  const starter = {
+    ...createDefaultTrimScope('R001'),
+    include: 'N' as const,
+    trimTypeId: 'BASE',
+    scopeName: 'Baseboard - Standard',
+    measurementMode: 'MANUAL' as const,
+    helperValue: '44',
+    measurementValue: '',
+  }
+
+  const next = toggleRoomTrimIncludeMutation([starter], 'R001', {
+    rooms: [makeRoom({ lengthIn: '156', widthIn: '120' })],
+    roomModeById: new Map([['R001', 'RECT']]),
+    roomHeightFactorByRoomId: new Map([['R001', '1']]),
+    trimTypeOptions: [
+      {
+        id: 'BASE',
+        label: 'Baseboard - Standard',
+        family: 'BASEBOARD',
+        category: null,
+        unit_type: 'LF',
+        helper_allowed: true,
+        default_production_rate_id: null,
+      },
+    ],
+  })
+
+  assert.equal(next[0].include, 'Y')
+  assert.equal(next[0].measurementMode, 'ROOM_HELPER')
+  assert.equal(next[0].helperSource, 'ROOM_PERIMETER')
+  assert.equal(next[0].helperValue, '46')
+})
+
+test('toggleRoomTrimIncludeMutation keeps SEG starter rows manual with fallback measurement', () => {
+  const starter = {
+    ...createDefaultTrimScope('R001'),
+    include: 'N' as const,
+    trimTypeId: 'BASE',
+    scopeName: 'Baseboard - Standard',
+    measurementMode: 'MANUAL' as const,
+    helperValue: '44',
+    measurementValue: '',
+  }
+
+  const next = toggleRoomTrimIncludeMutation([starter], 'R001', {
+    rooms: [makeRoom({ lengthIn: '156', widthIn: '120' })],
+    roomModeById: new Map([['R001', 'SEG']]),
+    roomHeightFactorByRoomId: new Map([['R001', '1']]),
+    trimTypeOptions: [
+      {
+        id: 'BASE',
+        label: 'Baseboard - Standard',
+        family: 'BASEBOARD',
+        category: null,
+        unit_type: 'LF',
+        helper_allowed: true,
+        default_production_rate_id: null,
+      },
+    ],
+  })
+
+  assert.equal(next[0].include, 'Y')
+  assert.equal(next[0].measurementMode, 'MANUAL')
+  assert.equal(next[0].helperSource, '')
+  assert.equal(next[0].helperValue, '44')
+  assert.equal(next[0].measurementValue, '44')
+})
+
+test('toggleRoomDoorIncludeMutation makes an existing excluded starter row saveable', () => {
+  const starter = {
+    ...createDefaultDoorScope('R001'),
+    include: 'N' as const,
+    doorTypeId: '',
+    scopeName: '',
+    quantity: '',
+    sides: '',
+  }
+
+  const next = toggleRoomDoorIncludeMutation([starter], 'R001', {
+    doorTypeOptions: [{ id: 'PANEL', label: 'Panel Door' }],
+  })
+
+  assert.equal(next[0].include, 'Y')
+  assert.equal(next[0].doorTypeId, 'PANEL')
+  assert.equal(next[0].scopeName, 'Panel Door')
+  assert.equal(next[0].quantity, '1')
+  assert.equal(next[0].sides, '2')
 })
 
 test('stripInvalidTrimHelperModeMutation removes helper mode for SEG rooms', () => {

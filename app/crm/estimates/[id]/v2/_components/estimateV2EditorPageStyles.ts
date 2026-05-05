@@ -176,7 +176,7 @@ export const estimateV2EditorPageStyles: EstimateV2EditorPageStyles = {
   footer: {
     position: 'sticky',
     bottom: 0,
-    zIndex: 20,
+    zIndex: 60,
     borderTop: '1px solid var(--v2-line)',
     background: 'rgba(8,8,8,0.96)',
     backdropFilter: 'blur(10px)',

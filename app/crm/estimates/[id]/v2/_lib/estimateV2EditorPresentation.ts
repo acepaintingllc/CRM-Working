@@ -127,7 +127,7 @@ export function buildRoomSubtitle(roomName: string, includedScopeLabels: string)
 }
 
 export function buildRunningTotalLabel(roomsCount: number) {
-  return `Running total - ${formatCountLabel(roomsCount, 'room')} - active scopes`
+  return `Active scope totals - ${formatCountLabel(roomsCount, 'room')}`
 }
 
 export function buildSectionSummaryChips(params: {

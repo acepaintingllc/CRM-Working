@@ -5,6 +5,29 @@ export type TrendRecommendationStatusUpdate = Exclude<
   'applied'
 >
 
+export type TrendRecommendationTarget =
+  | {
+      kind: 'row'
+      categoryKey: string
+      rowId: string
+      fieldKey: string
+    }
+  | {
+      kind: 'scalar'
+      scalarKey: string
+      fieldKey: 'value'
+    }
+
+export type TrendRecommendationCandidate = {
+  target_setting_key: string
+  current_value_json: Record<string, unknown>
+  suggested_value_json: Record<string, unknown>
+  reason: string
+  evidence_json: Record<string, unknown>
+  confidence_label: TrendRecommendationConfidence
+  based_on_job_count: number
+}
+
 export type TrendRecommendationRecord = {
   id: string
   org_id: string

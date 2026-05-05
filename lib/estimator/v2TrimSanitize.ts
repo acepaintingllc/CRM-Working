@@ -1,3 +1,5 @@
+import { normalizeV2TrimHelperMode } from './v2TrimActivation.ts'
+
 export type V2TrimRoomMode = 'RECT' | 'SEG'
 export type V2TrimMeasurementMode = 'MANUAL' | 'ROOM_HELPER'
 
@@ -58,40 +60,21 @@ export function sanitizeV2TrimDrafts<TScope extends V2TrimSanitizeScope>(params:
       }
 
       const roomMode = roomModeById.get(scope.roomId) ?? 'RECT'
-      if (roomMode !== 'RECT' && nextScope.measurementMode === 'ROOM_HELPER') {
-        nextScope = {
-          ...nextScope,
-          measurementMode: 'MANUAL',
-          helperSource: null,
-          helperValue: '',
-        }
-        changed = true
-      } else if (
-        roomMode === 'RECT' &&
-        nextScope.measurementMode === 'ROOM_HELPER' &&
-        nextScope.helperSource !== 'ROOM_PERIMETER'
-      ) {
-        nextScope = {
-          ...nextScope,
-          helperSource: 'ROOM_PERIMETER',
-        }
-        changed = true
-      }
-
+      const helperDefaults = normalizeV2TrimHelperMode({
+        measurementMode: nextScope.measurementMode,
+        helperSource: nextScope.helperSource,
+        helperValue: nextScope.helperValue,
+        roomMode,
+        emptyHelperSource: null,
+      })
       if (
-        nextScope.overrideMeasurement ||
-        nextScope.overrideHours ||
-        nextScope.overrideSupplyCost ||
-        nextScope.overrideTotal ||
-        nextScope.overrideDescription
+        helperDefaults.measurementMode !== nextScope.measurementMode ||
+        helperDefaults.helperSource !== nextScope.helperSource ||
+        helperDefaults.helperValue !== nextScope.helperValue
       ) {
         nextScope = {
           ...nextScope,
-          overrideMeasurement: '',
-          overrideHours: '',
-          overrideSupplyCost: '',
-          overrideTotal: '',
-          overrideDescription: '',
+          ...helperDefaults,
         }
         changed = true
       }
