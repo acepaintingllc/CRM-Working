@@ -1,17 +1,17 @@
-import { supabaseAdmin } from './org'
+import { supabaseAdmin } from './org.ts'
 import {
   applyAcceptedEstimateSideEffects,
   ensureAcceptedEstimateOperationalSnapshot,
-} from './accepted-estimates/service'
-import { writeEstimatePublicEvent } from './customer-send/repository'
-import { errorResult, okResult, type ServiceResult } from './serviceResult'
-import { ensureAssembledCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
-import { normalizeEstimatePublicAcceptanceRecord } from '@/lib/customer-estimates/publicAcceptance'
-import type { EstimatePublicSnapshot, Unsafe } from '@/lib/customer-estimates/types'
+} from './accepted-estimates/service.ts'
+import { writeEstimatePublicEvent } from './customer-send/repository.ts'
+import { errorResult, okResult, type ServiceResult } from './serviceResult.ts'
+import { ensureAssembledCustomerEstimateDocument } from '../customer-estimates/assemble.ts'
+import { normalizeEstimatePublicAcceptanceRecord } from '../customer-estimates/publicAcceptance.ts'
+import type { EstimatePublicSnapshot, Unsafe } from '../customer-estimates/types.ts'
 import {
   sendPublicEstimateAcceptanceNotifications,
   sendPublicEstimateDeclineNotification,
-} from './publicEstimateNotifications'
+} from './publicEstimateNotifications.ts'
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
@@ -70,12 +70,6 @@ type EstimatePublicEventParams = {
   actorType: 'customer' | 'staff' | 'system'
   metadata?: Record<string, unknown>
 }
-
-const ACCEPTED_RETRY_SCHEDULE_ELIGIBLE_JOB_STATUSES = [
-  'estimate_scheduled',
-  'estimate_sent',
-  'follow_up',
-]
 
 type AcceptedEstimateSideEffectsDb = Parameters<typeof applyAcceptedEstimateSideEffects>[0]
 
@@ -375,112 +369,19 @@ async function reconcileAcceptedRetryOwnership(params: {
 }) {
   const estimateLookup = await loadAcceptedEstimateRow(params.orgId, params.estimateId)
   if (!estimateLookup.ok) return estimateLookup
-  const acceptedPublicVersionId = asText(estimateLookup.data.accepted_public_version_id)
-  if (acceptedPublicVersionId && acceptedPublicVersionId !== params.versionId) {
-    return errorResult(
-      'conflict',
-      'Estimate is already accepted by another public version'
-    )
-  }
-
-  const estimateUpdate = await supabaseAdmin
-    .from('estimates')
-    .update({
-      accepted_at: params.acceptedAt,
-      accepted_public_version_id: params.versionId,
-      version_state: 'live',
-    })
-    .eq('org_id', params.orgId)
-    .eq('id', params.estimateId)
-    .is('accepted_public_version_id', null)
-    .select('id')
-    .maybeSingle()
-
-  if (estimateUpdate.error) {
-    return errorResult(
-      'server_error',
-      estimateUpdate.error.message ?? 'Unable to reconcile accepted estimate'
-    )
-  }
-  let reconciledEstimateData = estimateUpdate.data
-  if (!reconciledEstimateData) {
-    const sameVersionEstimateUpdate = await supabaseAdmin
-      .from('estimates')
-      .update({
-        accepted_at: params.acceptedAt,
-        accepted_public_version_id: params.versionId,
-        version_state: 'live',
-      })
-      .eq('org_id', params.orgId)
-      .eq('id', params.estimateId)
-      .eq('accepted_public_version_id', params.versionId)
-      .select('id')
-      .maybeSingle()
-
-    if (sameVersionEstimateUpdate.error) {
-      return errorResult(
-        'server_error',
-        sameVersionEstimateUpdate.error.message ?? 'Unable to reconcile accepted estimate'
-      )
-    }
-    reconciledEstimateData = sameVersionEstimateUpdate.data
-  }
-  if (!reconciledEstimateData) {
-    return errorResult(
-      'conflict',
-      'Estimate is already accepted by another public version'
-    )
-  }
 
   const jobId = asText(estimateLookup.data.job_id)
   if (!jobId) {
     return errorResult('server_error', 'Accepted estimate missing job')
   }
 
-  const jobLookup = await supabaseAdmin
-    .from('jobs')
-    .select('id, linked_estimate_id, status')
-    .eq('org_id', params.orgId)
-    .eq('id', jobId)
-    .maybeSingle()
-
-  if (jobLookup.error || !jobLookup.data) {
-    return errorResult(
-      'server_error',
-      jobLookup.error?.message ?? 'Accepted estimate job missing'
-    )
-  }
-
-  if (asText((jobLookup.data as Unsafe).linked_estimate_id) === params.estimateId) {
-    return okResult({ ok: true })
-  }
-
-  const currentJobStatus = asText((jobLookup.data as Unsafe).status)
-  const shouldRepairJobStatus =
-    ACCEPTED_RETRY_SCHEDULE_ELIGIBLE_JOB_STATUSES.includes(currentJobStatus)
-
-  const jobUpdate = await supabaseAdmin
-    .from('jobs')
-    .update({
-      linked_estimate_id: params.estimateId,
-      ...(shouldRepairJobStatus ? { status: 'scheduled' } : {}),
-    })
-    .eq('org_id', params.orgId)
-    .eq('id', jobId)
-    .select('id')
-    .maybeSingle()
-
-  if (jobUpdate.error) {
-    return errorResult(
-      'server_error',
-      jobUpdate.error.message ?? 'Unable to link accepted estimate to job'
-    )
-  }
-  if (!jobUpdate.data) {
-    return errorResult('server_error', 'Accepted estimate job missing')
-  }
-
-  return okResult({ ok: true })
+  return applyAcceptedEstimateSideEffects(acceptedEstimateSideEffectsDb(), {
+    orgId: params.orgId,
+    jobId,
+    estimateId: params.estimateId,
+    publicVersionId: params.versionId,
+    acceptedAt: params.acceptedAt,
+  })
 }
 
 async function ensureEstimatePublicEvent(params: EstimatePublicEventParams) {

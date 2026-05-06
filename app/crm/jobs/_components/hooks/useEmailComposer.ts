@@ -5,25 +5,15 @@ import {
   sendStageEmail,
 } from '@/lib/jobs/actions'
 import type { EstimateDriveFile, JobDetail } from '@/types/jobs/api'
-import { applyTemplate, buildJobEmailTemplateVars } from '@/lib/jobs/emailTemplate'
+import {
+  applyTemplate,
+  buildEstimateFileTemplateVars,
+  buildJobEmailTemplateVars,
+  formatJobTemplateDate,
+  formatJobTemplateRange,
+} from '@/lib/jobs/emailTemplate'
 import { stageEmailActionLabel, type StageEmailStage } from '@/lib/jobs/types'
-import { useEffect, useMemo, useState } from 'react'
-
-function formatDate(iso: string | null | undefined) {
-  if (!iso) return ''
-  try {
-    return new Date(iso).toLocaleString()
-  } catch {
-    return iso
-  }
-}
-
-function formatRange(start: string | null | undefined, end: string | null | undefined) {
-  if (start && end) return `${formatDate(start)} - ${formatDate(end)}`
-  if (start) return formatDate(start)
-  if (end) return formatDate(end)
-  return ''
-}
+import { useEffect, useMemo, useState, type SetStateAction } from 'react'
 
 function applyJobTemplate(
   value: string,
@@ -32,32 +22,28 @@ function applyJobTemplate(
   estimateFiles: EstimateDriveFile[],
   selectedEstimateFileIds: string[]
 ) {
-  const selectedEstimateFiles = selectedEstimateFileIds
-    .map((id) => estimateFiles.find((file) => file.id === id) ?? null)
-    .filter((file): file is EstimateDriveFile => Boolean(file))
-  const primaryEstimateFile = selectedEstimateFiles[0] ?? null
-  const estimateFileNames = selectedEstimateFiles.map((file) => file.name).join(', ')
-  const estimateFileLinks = selectedEstimateFiles
-    .map((file) => file.webViewLink ?? '')
-    .filter(Boolean)
-    .join('\n')
-
   return applyTemplate(
     value,
-    buildJobEmailTemplateVars({
-      customerName: job?.customer_name ?? '',
-      customerEmail: job?.customer_email ?? '',
-      customerPhone: job?.customer_phone ?? '',
-      customerAddress: job?.customer_address ?? '',
-      jobTitle: job?.title ?? '',
-      estimateDate: formatDate(job?.estimate_date),
-      scheduledDate: formatDate(job?.scheduled_date),
-      scheduledBlocks: scheduledBlocks || formatRange(job?.scheduled_date, job?.scheduled_end_date),
-      estimateFileName: primaryEstimateFile?.name ?? '',
-      estimateFileLink: primaryEstimateFile?.webViewLink ?? '',
-      estimateFileNames,
-      estimateFileLinks,
-    })
+    buildJobEmailTemplateVars(
+      {
+        customerName: job?.customer_name ?? '',
+        customerEmail: job?.customer_email ?? '',
+        customerPhone: job?.customer_phone ?? '',
+        customerAddress: job?.customer_address ?? '',
+        jobTitle: job?.title ?? '',
+        estimateDate: formatJobTemplateDate(job?.estimate_date),
+        scheduledDate: formatJobTemplateDate(job?.scheduled_date),
+        scheduledBlocks:
+          scheduledBlocks || formatJobTemplateRange(job?.scheduled_date, job?.scheduled_end_date),
+        ...buildEstimateFileTemplateVars({
+          estimateFiles,
+          selectedEstimateFileIds,
+        }),
+      },
+      {
+        reviewLink: process.env.NEXT_PUBLIC_REVIEW_LINK,
+      }
+    )
   )
 }
 
@@ -71,6 +57,11 @@ export function useEmailComposer({ jobId, stage, open }: UseEmailComposerArgs) {
   const [job, setJob] = useState<JobDetail | null>(null)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [templateSubject, setTemplateSubject] = useState<string | null>(null)
+  const [templateBody, setTemplateBody] = useState<string | null>(null)
+  const [scheduledBlocks, setScheduledBlocks] = useState('')
+  const [subjectDirty, setSubjectDirty] = useState(false)
+  const [bodyDirty, setBodyDirty] = useState(false)
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -95,6 +86,16 @@ export function useEmailComposer({ jobId, stage, open }: UseEmailComposerArgs) {
     return false
   }, [job, stage])
 
+  const updateSubject = (value: SetStateAction<string>) => {
+    setSubjectDirty(true)
+    setSubject(value)
+  }
+
+  const updateBody = (value: SetStateAction<string>) => {
+    setBodyDirty(true)
+    setBody(value)
+  }
+
   useEffect(() => {
     if (!open || !jobId || !stage) return
 
@@ -108,6 +109,11 @@ export function useEmailComposer({ jobId, stage, open }: UseEmailComposerArgs) {
       setJob(null)
       setSubject('')
       setBody('')
+      setTemplateSubject(null)
+      setTemplateBody(null)
+      setScheduledBlocks('')
+      setSubjectDirty(false)
+      setBodyDirty(false)
       setEstimateFiles([])
       setSelectedEstimateFileIds([])
       setShowEstimatePicker(false)
@@ -120,6 +126,9 @@ export function useEmailComposer({ jobId, stage, open }: UseEmailComposerArgs) {
           setEstimateFiles(composer.estimateFiles)
           setSelectedEstimateFileIds(composer.selectedEstimateFileIds)
           setBlockingIssues(composer.blockingIssues)
+          setTemplateSubject(composer.template?.subject ?? null)
+          setTemplateBody(composer.template?.body ?? null)
+          setScheduledBlocks(composer.scheduledBlocks)
           setSubject(
             composer.template
               ? applyJobTemplate(
@@ -161,6 +170,45 @@ export function useEmailComposer({ jobId, stage, open }: UseEmailComposerArgs) {
     }
   }, [jobId, open, stage])
 
+  useEffect(() => {
+    if (!needsEstimateAttachment) return
+    if (!job) return
+
+    if (templateSubject && !subjectDirty) {
+      setSubject(
+        applyJobTemplate(
+          templateSubject,
+          job,
+          scheduledBlocks,
+          estimateFiles,
+          selectedEstimateFileIds
+        )
+      )
+    }
+
+    if (templateBody && !bodyDirty) {
+      setBody(
+        applyJobTemplate(
+          templateBody,
+          job,
+          scheduledBlocks,
+          estimateFiles,
+          selectedEstimateFileIds
+        )
+      )
+    }
+  }, [
+    estimateFiles,
+    job,
+    needsEstimateAttachment,
+    selectedEstimateFileIds,
+    scheduledBlocks,
+    subjectDirty,
+    bodyDirty,
+    templateSubject,
+    templateBody,
+  ])
+
   const missingEstimateSelection = needsEstimateAttachment && selectedEstimateFiles.length === 0
   const canSend =
     !loading && !sending && !error && blockingIssues.length === 0 && !missingEstimateSelection
@@ -196,9 +244,9 @@ export function useEmailComposer({ jobId, stage, open }: UseEmailComposerArgs) {
   return {
     job,
     subject,
-    setSubject,
+    setSubject: updateSubject,
     body,
-    setBody,
+    setBody: updateBody,
     loading,
     sending,
     error,

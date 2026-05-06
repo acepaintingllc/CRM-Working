@@ -32,6 +32,7 @@ import {
   formatJobTimelineRange,
   jobTimelineDateTimeLocalToIso,
 } from '@/app/crm/jobs/_lib/jobTimelineVm'
+import { buildJobCloseoutReferenceVm } from '@/app/crm/jobs/[id]/_lib/jobCloseoutVm'
 
 type JobDetailResource = {
   job: JobDetail | null
@@ -315,7 +316,7 @@ export function useJobDetailPage() {
         invalidateSwrKey(jobsBoardKey),
       ])
     }
-    setNotice(result.warning ?? 'Email sent')
+    setNotice(result.notice ?? result.warning ?? 'Email sent')
   }
 
   const markCompletedAndPrompt = async () => {
@@ -382,6 +383,15 @@ export function useJobDetailPage() {
     [resource.data.job]
   )
 
+  const closeoutReferenceVm = useMemo(
+    () =>
+      buildJobCloseoutReferenceVm({
+        job: resource.data.job,
+        paintLogs: resource.data.paintLogs,
+      }),
+    [resource.data.job, resource.data.paintLogs]
+  )
+
   const runWorkflowAction = async (action: JobWorkflowResolvedAction) => {
     if (!resource.data.job) return
     if (action.confirmMessage && !window.confirm(action.confirmMessage)) return
@@ -427,6 +437,7 @@ export function useJobDetailPage() {
     photosFolderUrl,
     photosLoading,
     timelineItems,
+    closeoutReferenceVm,
     workflowActions,
     copy: entityActions.copyValue,
     patchJob,

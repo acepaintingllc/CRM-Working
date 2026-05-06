@@ -316,7 +316,6 @@ describe('estimate public portal transitions', () => {
     })
     expect(jobUpdateSpy).toHaveBeenCalledWith({
       linked_estimate_id: 'estimate-1',
-      status: 'scheduled',
     })
     expect(mockEnsureAcceptedEstimateOperationalSnapshot).toHaveBeenCalledWith({
       requestOrigin: '',
@@ -953,8 +952,8 @@ describe('estimate public portal transitions', () => {
   })
 
   it.each(['estimate_sent', 'follow_up'])(
-    'repairs accepted retry ownership and status when initial job update fails and job is %s',
-    async (jobStatus) => {
+    'repairs accepted retry ownership without scheduling when initial job update fails and job is %s',
+    async () => {
       const updateSpy = vi.fn(() =>
         createMaybeSingleChain({
           data: createLoadedVersion('accepted'),
@@ -1038,11 +1037,6 @@ describe('estimate public portal transitions', () => {
         }
         if (table === 'jobs') {
           return {
-            ...createJobLookup({
-              id: 'job-1',
-              linked_estimate_id: null,
-              status: jobStatus,
-            }),
             update: jobUpdateSpy,
           }
         }
@@ -1067,7 +1061,6 @@ describe('estimate public portal transitions', () => {
       })
       expect(jobUpdateSpy).toHaveBeenLastCalledWith({
         linked_estimate_id: 'estimate-1',
-        status: 'scheduled',
       })
       expect(mockEnsureAcceptedEstimateOperationalSnapshot).toHaveBeenCalledWith({
         requestOrigin: '',
@@ -1232,7 +1225,9 @@ describe('estimate public portal transitions', () => {
       accepted_public_version_id: 'version-1',
       version_state: 'live',
     })
-    expect(jobUpdateSpy).not.toHaveBeenCalled()
+    expect(jobUpdateSpy).toHaveBeenCalledWith({
+      linked_estimate_id: 'estimate-1',
+    })
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
   })
 

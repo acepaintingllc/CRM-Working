@@ -81,7 +81,7 @@ describe('JobDetailPage', () => {
           },
         })
       )
-      .mockResolvedValueOnce(createResponse({ error: 'No matching estimate in Drive folder' }))
+      .mockResolvedValueOnce(createResponse({ error: 'No matching quote in Drive folder' }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
       .mockResolvedValueOnce(createResponse({ data: { ok: true } }))
@@ -98,7 +98,7 @@ describe('JobDetailPage', () => {
   it('uses standardized resource states for not found and load failure', async () => {
     authedFetch
       .mockResolvedValueOnce(createResponse({ data: null }))
-      .mockResolvedValueOnce(createResponse({ error: 'No matching estimate in Drive folder' }))
+      .mockResolvedValueOnce(createResponse({ error: 'No matching quote in Drive folder' }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
 
@@ -110,7 +110,7 @@ describe('JobDetailPage', () => {
     authedFetch.mockReset()
     authedFetch
       .mockResolvedValueOnce(createResponse({ error: 'Failed to load job.' }, false))
-      .mockResolvedValueOnce(createResponse({ error: 'No matching estimate in Drive folder' }))
+      .mockResolvedValueOnce(createResponse({ error: 'No matching quote in Drive folder' }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
 
@@ -140,7 +140,7 @@ describe('JobDetailPage', () => {
             scheduled_end_date: null,
             completed_at: null,
             linked_estimate_id: 'estimate-1',
-            accepted_quote: {
+            accepted_estimate: {
               estimate_id: 'estimate-1',
               accepted_public_version_id: 'public-version-1',
               public_version_number: 3,
@@ -220,7 +220,7 @@ describe('JobDetailPage', () => {
           },
         })
       )
-      .mockResolvedValueOnce(createResponse({ error: 'No matching estimate in Drive folder' }))
+      .mockResolvedValueOnce(createResponse({ error: 'No matching quote in Drive folder' }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
       .mockResolvedValueOnce(createResponse({ data: [] }))
 
@@ -233,6 +233,47 @@ describe('JobDetailPage', () => {
       screen
         .getAllByRole('link', { name: 'Open quote' })
         .some((link) => link.getAttribute('href') === '/quote/public-token-1')
+    ).toBe(true)
+  })
+
+  it('uses estimate_navigation_id only for latest-quote navigation when no accepted estimate exists', async () => {
+    authedFetch
+      .mockResolvedValueOnce(
+        createResponse({
+          data: {
+            id: 'job-1',
+            customer_id: 'customer-1',
+            customer_name: 'Taylor Jones',
+            customer_address: '123 Main St, Newburgh, IN 47630',
+            customer_email: 'taylor@example.com',
+            customer_phone: '812-555-0100',
+            title: 'Exterior repaint',
+            description: 'Front and back porch',
+            status: 'estimate_sent',
+            estimate_date: '2026-04-23T13:00:00.000Z',
+            estimate_sent_at: null,
+            scheduled_date: null,
+            scheduled_end_date: null,
+            completed_at: null,
+            linked_estimate_id: null,
+            estimate_navigation_id: 'draft-estimate-1',
+            accepted_estimate: null,
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        createResponse({ data: { file: { id: 'drive-1', name: 'Drive estimate.pdf' } } })
+      )
+      .mockResolvedValueOnce(createResponse({ data: [] }))
+      .mockResolvedValueOnce(createResponse({ data: [] }))
+
+    render(<JobDetailPage />, { wrapper: createSWRWrapper() })
+
+    await waitFor(() => expect(screen.getByText('Latest Quote')).toBeTruthy())
+    expect(
+      screen
+        .getAllByRole('link', { name: 'Open quote' })
+        .every((link) => link.getAttribute('href') === '/crm/quotes/draft-estimate-1')
     ).toBe(true)
   })
 })

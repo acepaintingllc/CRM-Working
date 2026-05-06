@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  buildJobAcceptedEstimateRecordResult,
   buildJobDetailRecord,
   buildJobSummaryRecord,
   normalizeCreateJobInput,
@@ -84,7 +85,7 @@ test('jobs service helpers build enriched summary and detail records', () => {
       email: 'alice@example.com',
       phone: '555-1234',
     },
-    linkedEstimates: [
+    quoteNavigationEstimates: [
       {
         id: 'estimate-1',
         status: 'draft',
@@ -100,10 +101,84 @@ test('jobs service helpers build enriched summary and detail records', () => {
 
   assert.equal(detail.customer_email, 'alice@example.com')
   assert.equal(detail.customer_phone, '555-1234')
-  assert.equal(detail.linked_estimate_id, 'estimate-1')
+  assert.equal(detail.linked_estimate_id, null)
+  assert.equal(detail.estimate_navigation_id, 'estimate-1')
 })
 
-test('jobs service helpers include accepted quote audit details', () => {
+test('jobs service helpers do not populate canonical linked_estimate_id from the first estimate row', () => {
+  const detail = buildJobDetailRecord({
+    row: {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      title: 'Kitchen',
+      linked_estimate_id: null,
+    },
+    optionalColumns: ['linked_estimate_id'],
+    quoteNavigationEstimates: [
+      {
+        id: 'draft-estimate',
+        status: 'draft',
+        version_name: null,
+        version_state: 'draft',
+        version_kind: null,
+        version_sort_order: 1,
+        created_at: null,
+        updated_at: null,
+      },
+    ],
+  })
+
+  assert.equal(detail.linked_estimate_id, null)
+  assert.equal(detail.estimate_navigation_id, 'draft-estimate')
+})
+
+test('jobs service helpers keep quote navigation fallback separate from legacy accepted estimate source', () => {
+  const detail = buildJobDetailRecord({
+    row: {
+      id: 'job-1',
+      customer_id: 'customer-1',
+      title: 'Kitchen',
+      linked_estimate_id: null,
+    },
+    optionalColumns: ['linked_estimate_id'],
+    quoteNavigationEstimates: [
+      {
+        id: 'navigation-only-estimate',
+        status: 'draft',
+        version_name: null,
+        version_state: 'draft',
+        version_kind: null,
+        version_sort_order: 1,
+        created_at: null,
+        updated_at: null,
+      },
+    ],
+    acceptedEstimate: {
+      estimate_id: 'legacy-accepted-estimate',
+      accepted_public_version_id: 'public-version-1',
+      public_version_number: 2,
+      public_token: 'token-1',
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      accepted_by_legal_name: 'Jordan Customer',
+      signature_type: 'typed',
+      user_agent: 'Mozilla/5.0',
+      ip: '127.0.0.1',
+      version_name: 'Accepted legacy option',
+      estimate_snapshot_id: null,
+      estimated_labor_hours: 18,
+      estimated_paint_gallons: 5,
+      estimated_supplies_cost: 90,
+      estimated_other_cost: 15,
+      final_total: 3200,
+    },
+  })
+
+  assert.equal(detail.linked_estimate_id, null)
+  assert.equal(detail.accepted_estimate?.estimate_id, 'legacy-accepted-estimate')
+  assert.equal(detail.estimate_navigation_id, 'navigation-only-estimate')
+})
+
+test('jobs service helpers include accepted estimate audit details', () => {
   const detail = buildJobDetailRecord({
     row: {
       id: 'job-1',
@@ -112,7 +187,7 @@ test('jobs service helpers include accepted quote audit details', () => {
       linked_estimate_id: 'estimate-1',
     },
     optionalColumns: ['linked_estimate_id'],
-    acceptedQuote: {
+    acceptedEstimate: {
       estimate_id: 'estimate-1',
       accepted_public_version_id: 'public-version-1',
       public_version_number: 3,
@@ -132,7 +207,7 @@ test('jobs service helpers include accepted quote audit details', () => {
     },
   })
 
-  assert.deepEqual(detail.accepted_quote, {
+  assert.deepEqual(detail.accepted_estimate, {
     estimate_id: 'estimate-1',
     accepted_public_version_id: 'public-version-1',
     public_version_number: 3,
@@ -212,7 +287,7 @@ test('jobs service helpers prefer explicit linked_estimate_id over first estimat
       linked_estimate_id: 'accepted-estimate',
     },
     optionalColumns: ['linked_estimate_id'],
-    linkedEstimates: [
+    quoteNavigationEstimates: [
       {
         id: 'draft-estimate',
         status: 'draft',
@@ -237,4 +312,19 @@ test('jobs service helpers prefer explicit linked_estimate_id over first estimat
   })
 
   assert.equal(detail.linked_estimate_id, 'accepted-estimate')
+  assert.equal(detail.estimate_navigation_id, 'accepted-estimate')
+})
+
+test('jobs service helpers propagate accepted source errors instead of swallowing them', () => {
+  const result = buildJobAcceptedEstimateRecordResult({
+    ok: false,
+    kind: 'server_error',
+    message: 'Unable to load accepted estimate snapshot',
+  })
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'server_error',
+    message: 'Unable to load accepted estimate snapshot',
+  })
 })

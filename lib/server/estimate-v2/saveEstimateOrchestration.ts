@@ -28,6 +28,7 @@ import {
 } from '../../estimator/parsing.ts'
 import { normalizeWallRollerTargetId } from '../../estimator/rollerIdentity.ts'
 import { normalizeTrimPaintGallons } from '../trimPaint.ts'
+import { loadEstimateTemplateSettings, type EstimateTemplateSettingsRow } from '../estimateTemplateSettings.ts'
 
 import {
   calculateCeilingsForSave,
@@ -38,10 +39,21 @@ import {
   createCalculationCatalogsLoader,
 } from './calculationOrchestration.ts'
 import {
+  buildV2CeilingScopePersistenceRows,
+  buildV2CeilingScopeSegmentPersistenceRows,
+} from './ceilingScopePersistence.ts'
+import { buildV2DoorScopePersistenceRows } from './doorScopePersistence.ts'
+import { buildV2DrywallRepairPersistenceRows } from './drywallScopePersistence.ts'
+import {
   buildLegacyEstimateRoomRows,
   replaceLegacyEstimateRooms,
   saveV2RoomRoster,
 } from './roomPersistence.ts'
+import type {
+  EstimateAccessFeePersistenceRow,
+  EstimateJobSettingsPersistenceRow,
+  EstimateOtherPersistenceRow,
+} from './persistenceTypes.ts'
 import {
   isMissingStructuredEstimateSaveRpc,
   isRecoverableStructuredEstimateSaveRpcPkCollision,
@@ -50,7 +62,64 @@ import {
   softReplaceWallSegments,
 } from './scopeRowPersistence.ts'
 import { fail, getEstimate, toOtherRollupScope, toWallsCalcMethod } from './shared.ts'
+import {
+  buildV2WallScopePersistenceRows,
+  buildV2WallSegmentPersistenceRows,
+} from './wallScopePersistence.ts'
+import { buildV2TrimScopePersistenceRows } from './trimScopePersistence.ts'
 
+/*
+Risk map for the estimate save path.
+
+Write order in the fallback TypeScript path:
+1. `estimate_jobsettings` upsert.
+2. `estimate_rooms` via `saveV2RoomRoster` for V2 scope saves, or `replaceLegacyEstimateRooms`
+   for legacy room saves.
+3. `estimate_room_wall_scopes`, then wall-linked `estimate_segments`.
+4. `estimate_room_ceiling_scopes`, then `estimate_room_ceiling_scope_segments`.
+5. `estimate_room_trim_scopes`.
+6. `estimate_room_door_scopes`.
+7. `estimate_drywall_repairs`.
+8. legacy/plain `estimate_segments`.
+9. `estimate_ceiling_segments`.
+10. `estimate_rollers`.
+11. `estimate_job_colors`.
+12. `estimate_room_flags`.
+13. `estimate_access_fees`.
+14. `estimate_prejob`.
+15. `estimate_trim_items`.
+16. `estimate_other`.
+17. `estimates.updated_at` touch.
+
+Atomicity boundaries:
+- `saveEstimateStructuredInputsTransactional()` calls the `save_estimate_v2_inputs` RPC. The
+  SQL function executes inside one PostgreSQL transaction, so its covered writes either all commit
+  or all roll back together.
+- Today that RPC only covers a narrow structured subset: `estimate_jobsettings`,
+  `estimate_rooms`, legacy/plain `estimate_segments`, `estimate_job_colors`,
+  `estimate_room_flags`, and `estimate_access_fees`.
+- The `estimates.updated_at` touch happens after the RPC returns, outside that transaction. If
+  the touch fails after the RPC commits, the request can fail even though the underlying rows were
+  already saved.
+- Every fallback write below the RPC seam is non-transactional across tables. Each awaited call
+  commits independently, so a later failure leaves earlier tables permanently changed.
+
+Known partial-failure shapes:
+- `replaceLegacyEstimateRooms()` is a hard DELETE then INSERT with no transaction wrapper. If the
+  INSERT fails, the estimate is left with zero `estimate_rooms` rows while every other table keeps
+  its previous data.
+- `saveV2RoomRoster()` is also non-atomic. It can delete removed rooms, upsert kept rooms, and
+  then fail inserting new rooms, leaving a mixed room roster.
+- `softReplaceRows()` / `softReplaceWallSegments()` first mark existing rows `active = 'N'`, then
+  upsert rows with ids, then insert rows without ids. If either later step fails, the loader reads
+  an empty active set for that table, because load paths filter these tables by `active = 'Y'`.
+- If a save fails after rooms commit but before wall scopes commit, the estimate can be read back
+  as a hybrid snapshot: new `estimate_rooms`, old active wall scopes, and old wall-linked segments.
+  Because load assembly reads each table independently and does not enforce a cross-table version
+  check, orphaned scope rows can still be returned/calculated against the new room roster.
+- The same hybrid risk applies to every later table in the sequence: earlier tables can be from
+  the new save, while later tables remain from the prior save.
+*/
 type SavedEstimateMeta = {
   id: string
   org_id: string
@@ -99,7 +168,8 @@ async function upsertEstimateJobSettings(params: {
     .maybeSingle()
   if (existingJobSettingsRes.error) throw new Error(existingJobSettingsRes.error.message)
 
-  const existingRow = (existingJobSettingsRes.data ?? {}) as Unsafe
+  const existingRow = (existingJobSettingsRes.data ?? {}) as Partial<EstimateJobSettingsPersistenceRow> &
+    Unsafe
   const row = params.row
   const has = (key: string) => Object.prototype.hasOwnProperty.call(row, key)
   const trimPaintGallons = asNullableNumber(row.trim_paint_gallons)
@@ -121,14 +191,13 @@ async function upsertEstimateJobSettings(params: {
         ? legacyTrimPaintQty
         : 0
 
-  const upsert = await supabaseAdmin.from('estimate_jobsettings').upsert(
-    {
+  const jobSettingsRow = {
       org_id: params.orgId,
       estimate_id: params.estimateId,
       job_id: params.jobId,
-      walls_paint_id: has('walls_paint_id') ? asText(row.walls_paint_id) || null : existingRow.walls_paint_id,
-      ceiling_paint_id: has('ceiling_paint_id') ? asText(row.ceiling_paint_id) || null : existingRow.ceiling_paint_id,
-      trim_paint_id: has('trim_paint_id') ? asText(row.trim_paint_id) || null : existingRow.trim_paint_id,
+      walls_paint_id: has('walls_paint_id') ? asText(row.walls_paint_id) || null : existingRow.walls_paint_id ?? null,
+      ceiling_paint_id: has('ceiling_paint_id') ? asText(row.ceiling_paint_id) || null : existingRow.ceiling_paint_id ?? null,
+      trim_paint_id: has('trim_paint_id') ? asText(row.trim_paint_id) || null : existingRow.trim_paint_id ?? null,
       primer_id:
         has('primer_id') || has('walls_primer_id') || has('ceiling_primer_id') || has('trim_primer_id')
           ? asText(row.primer_id) ||
@@ -136,53 +205,53 @@ async function upsertEstimateJobSettings(params: {
             asText(row.ceiling_primer_id) ||
             asText(row.trim_primer_id) ||
             null
-          : existingRow.primer_id,
-      walls_primer_id: has('walls_primer_id') ? asText(row.walls_primer_id) || null : existingRow.walls_primer_id,
-      ceiling_primer_id: has('ceiling_primer_id') ? asText(row.ceiling_primer_id) || null : existingRow.ceiling_primer_id,
-      trim_primer_id: has('trim_primer_id') ? asText(row.trim_primer_id) || null : existingRow.trim_primer_id,
-      override_labor_rate: has('override_labor_rate') ? asNullableNumber(row.override_labor_rate) : existingRow.override_labor_rate,
-      override_markup: has('override_markup') ? asNullableNumber(row.override_markup) : existingRow.override_markup,
-      rounding_increment_hours: has('rounding_increment_hours') ? asNullableNumber(row.rounding_increment_hours) : existingRow.rounding_increment_hours,
-      dayhours: has('dayhours') ? asNullableNumber(row.dayhours) : existingRow.dayhours,
-      default_walls_prep_level: has('default_walls_prep_level') ? asText(row.default_walls_prep_level) || null : existingRow.default_walls_prep_level,
-      default_ceiling_prep_level: has('default_ceiling_prep_level') ? asText(row.default_ceiling_prep_level) || null : existingRow.default_ceiling_prep_level,
-      default_trim_prep_level: has('default_trim_prep_level') ? asText(row.default_trim_prep_level) || null : existingRow.default_trim_prep_level,
-      notes: has('notes') ? asText(row.notes) || null : existingRow.notes,
-      walls_paint_gal_override: has('walls_paint_gal_override') ? asNullableNumber(row.walls_paint_gal_override) : existingRow.walls_paint_gal_override,
-      ceiling_paint_gal_override: has('ceiling_paint_gal_override') ? asNullableNumber(row.ceiling_paint_gal_override) : existingRow.ceiling_paint_gal_override,
-      primer_gal_override: has('primer_gal_override') ? asNullableNumber(row.primer_gal_override) : existingRow.primer_gal_override,
-      extra_supplies_walls: has('extra_supplies_walls') ? asNullableNumber(row.extra_supplies_walls) : existingRow.extra_supplies_walls,
-      extra_supplies_ceilings: has('extra_supplies_ceilings') ? asNullableNumber(row.extra_supplies_ceilings) : existingRow.extra_supplies_ceilings,
-      extra_supplies_trim: has('extra_supplies_trim') ? asNullableNumber(row.extra_supplies_trim) : existingRow.extra_supplies_trim,
+          : existingRow.primer_id ?? null,
+      walls_primer_id: has('walls_primer_id') ? asText(row.walls_primer_id) || null : existingRow.walls_primer_id ?? null,
+      ceiling_primer_id: has('ceiling_primer_id') ? asText(row.ceiling_primer_id) || null : existingRow.ceiling_primer_id ?? null,
+      trim_primer_id: has('trim_primer_id') ? asText(row.trim_primer_id) || null : existingRow.trim_primer_id ?? null,
+      override_labor_rate: has('override_labor_rate') ? asNullableNumber(row.override_labor_rate) : existingRow.override_labor_rate ?? null,
+      override_markup: has('override_markup') ? asNullableNumber(row.override_markup) : existingRow.override_markup ?? null,
+      rounding_increment_hours: has('rounding_increment_hours') ? asNullableNumber(row.rounding_increment_hours) : existingRow.rounding_increment_hours ?? null,
+      dayhours: has('dayhours') ? asNullableNumber(row.dayhours) : existingRow.dayhours ?? null,
+      default_walls_prep_level: has('default_walls_prep_level') ? asText(row.default_walls_prep_level) || null : existingRow.default_walls_prep_level ?? null,
+      default_ceiling_prep_level: has('default_ceiling_prep_level') ? asText(row.default_ceiling_prep_level) || null : existingRow.default_ceiling_prep_level ?? null,
+      default_trim_prep_level: has('default_trim_prep_level') ? asText(row.default_trim_prep_level) || null : existingRow.default_trim_prep_level ?? null,
+      notes: has('notes') ? asText(row.notes) || null : existingRow.notes ?? null,
+      walls_paint_gal_override: has('walls_paint_gal_override') ? asNullableNumber(row.walls_paint_gal_override) : existingRow.walls_paint_gal_override ?? null,
+      ceiling_paint_gal_override: has('ceiling_paint_gal_override') ? asNullableNumber(row.ceiling_paint_gal_override) : existingRow.ceiling_paint_gal_override ?? null,
+      primer_gal_override: has('primer_gal_override') ? asNullableNumber(row.primer_gal_override) : existingRow.primer_gal_override ?? null,
+      extra_supplies_walls: has('extra_supplies_walls') ? asNullableNumber(row.extra_supplies_walls) : existingRow.extra_supplies_walls ?? null,
+      extra_supplies_ceilings: has('extra_supplies_ceilings') ? asNullableNumber(row.extra_supplies_ceilings) : existingRow.extra_supplies_ceilings ?? null,
+      extra_supplies_trim: has('extra_supplies_trim') ? asNullableNumber(row.extra_supplies_trim) : existingRow.extra_supplies_trim ?? null,
       trim_paint_gallons:
         has('trim_paint_gallons') || has('trim_paint_quarts') || has('trim_paint_qty') || has('trim_paint_uom')
           ? normalizedTrimPaintGallons
-          : existingRow.trim_paint_gallons,
+          : existingRow.trim_paint_gallons ?? null,
       trim_paint_quarts:
         has('trim_paint_gallons') || has('trim_paint_quarts') || has('trim_paint_qty') || has('trim_paint_uom')
           ? normalizedTrimPaintQuarts
-          : existingRow.trim_paint_quarts,
+          : existingRow.trim_paint_quarts ?? null,
       trim_paint_qty:
         has('trim_paint_gallons') || has('trim_paint_quarts') || has('trim_paint_qty') || has('trim_paint_uom')
           ? normalizedTrimPaintGallons
-          : existingRow.trim_paint_qty,
+          : existingRow.trim_paint_qty ?? null,
       trim_paint_uom:
         has('trim_paint_gallons') || has('trim_paint_quarts') || has('trim_paint_qty') || has('trim_paint_uom')
           ? normalizedTrimPaintGallons != null ? 'Gallon' : null
-          : existingRow.trim_paint_uom,
-      trim_primer_qty: has('trim_primer_qty') ? asNullableNumber(row.trim_primer_qty) : existingRow.trim_primer_qty,
-      trim_primer_uom: has('trim_primer_uom') ? asText(row.trim_primer_uom) || null : existingRow.trim_primer_uom,
-      paint_supplied_by: has('paint_supplied_by') ? asText(row.paint_supplied_by) || null : existingRow.paint_supplied_by,
-      crew_size: has('crew_size') ? asNullableNumber(row.crew_size) : existingRow.crew_size,
+          : existingRow.trim_paint_uom ?? null,
+      trim_primer_qty: has('trim_primer_qty') ? asNullableNumber(row.trim_primer_qty) : existingRow.trim_primer_qty ?? null,
+      trim_primer_uom: has('trim_primer_uom') ? asText(row.trim_primer_uom) || null : existingRow.trim_primer_uom ?? null,
+      paint_supplied_by: has('paint_supplied_by') ? asText(row.paint_supplied_by) || null : existingRow.paint_supplied_by ?? null,
+      crew_size: has('crew_size') ? asNullableNumber(row.crew_size) : existingRow.crew_size ?? null,
       standard_door_deduction_sf: has('standard_door_deduction_sf')
         ? asNullableNumber(row.standard_door_deduction_sf)
-        : existingRow.standard_door_deduction_sf,
+        : existingRow.standard_door_deduction_sf ?? null,
       standard_window_deduction_sf: has('standard_window_deduction_sf')
         ? asNullableNumber(row.standard_window_deduction_sf)
-        : existingRow.standard_window_deduction_sf,
+        : existingRow.standard_window_deduction_sf ?? null,
       baseboard_opening_deduction_lf: has('baseboard_opening_deduction_lf')
         ? asNullableNumber(row.baseboard_opening_deduction_lf)
-        : existingRow.baseboard_opening_deduction_lf,
+        : existingRow.baseboard_opening_deduction_lf ?? null,
       labor_day_policy_enabled: has('labor_day_policy_enabled')
         ? typeof row.labor_day_policy_enabled === 'boolean'
           ? row.labor_day_policy_enabled
@@ -193,10 +262,11 @@ async function upsertEstimateJobSettings(params: {
           ? row.job_minimum_enabled
           : row.job_minimum_enabled == null ? undefined : Boolean(row.job_minimum_enabled)
         : existingRow.job_minimum_enabled,
-      job_minimum_amount: has('job_minimum_amount') ? asNullableNumber(row.job_minimum_amount) : existingRow.job_minimum_amount,
-    },
-    { onConflict: 'org_id,estimate_id' }
-  )
+       job_minimum_amount: has('job_minimum_amount') ? asNullableNumber(row.job_minimum_amount) : existingRow.job_minimum_amount ?? null,
+    } satisfies EstimateJobSettingsPersistenceRow
+  const upsert = await supabaseAdmin
+    .from('estimate_jobsettings')
+    .upsert(jobSettingsRow, { onConflict: 'org_id,estimate_id' })
   if (upsert.error) throw new Error(upsert.error.message)
 }
 
@@ -248,6 +318,15 @@ export async function saveEstimateV2Inputs(params: {
       userId: params.userId,
       estimateId: params.estimateId,
     })
+    let orgDefaultsPromise: Promise<EstimateTemplateSettingsRow | null> | null = null
+    const ensureOrgDefaults = () => {
+      orgDefaultsPromise ??= loadEstimateTemplateSettings({
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        settingSetId: asText((estimate as Unsafe).setting_set_id_used) || null,
+      }).catch(() => null)
+      return orgDefaultsPromise
+    }
 
     if (useV2WallsSave) {
       if (!Array.isArray(body.rooms)) throw new Error('V2 walls save requires rooms')
@@ -271,6 +350,7 @@ export async function saveEstimateV2Inputs(params: {
           roomRows: v2RoomRows,
           segments: v2WallSegmentRows ?? [],
           jobsettings: body.jobsettings as Unsafe | undefined,
+          orgDefaults: await ensureOrgDefaults(),
           ensureCatalogs,
         })
         wallCalculations = calculated.wallCalculations
@@ -298,6 +378,7 @@ export async function saveEstimateV2Inputs(params: {
           roomRows: v2RoomRows,
           segments: v2CeilingSegmentRows ?? [],
           jobsettings: body.jobsettings as Unsafe | undefined,
+          orgDefaults: await ensureOrgDefaults(),
           ensureCatalogs,
         })
         ceilingCalculations = calculated.ceilingCalculations
@@ -322,6 +403,7 @@ export async function saveEstimateV2Inputs(params: {
           wallScopeRows: v2WallScopeRows,
           ceilingScopeRows: v2CeilingScopeRows,
           jobsettings: body.jobsettings as Unsafe | undefined,
+          orgDefaults: await ensureOrgDefaults(),
           ensureCatalogs,
         })
       }
@@ -341,6 +423,7 @@ export async function saveEstimateV2Inputs(params: {
           scopes: v2DoorScopeRows ?? [],
           roomRows: v2RoomRows,
           jobsettings: body.jobsettings as Unsafe | undefined,
+          orgDefaults: await ensureOrgDefaults(),
           ensureCatalogs,
         })
         v2DoorScopeRows = doorCalculations.scopes as V2DoorScopeSaveRow[]
@@ -423,78 +506,100 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (useV2WallsSave) {
+      const wallScopeRows = buildV2WallScopePersistenceRows(v2WallScopeRows ?? [], {
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        jobId: estimate.job_id,
+      })
       await softReplaceRows({
         table: 'estimate_room_wall_scopes',
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: (v2WallScopeRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, mode: row.mode, include: row.include, scope_name: row.scope_name, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, height_in: row.height_in, perimeter_in: row.perimeter_in, standard_door_count: row.standard_door_count, standard_window_count: row.standard_window_count, height_factor: row.height_factor, complexity_factor: row.complexity_factor, wall_flag_factor: row.wall_flag_factor, cut_in_top_factor: row.cut_in_top_factor, cut_in_bottom_factor: row.cut_in_bottom_factor, paint_coats: row.paint_coats, primer_coats: row.primer_coats, spot_prime_percent: row.spot_prime_percent, raw_area_sf: row.raw_area_sf, override_area_sf: row.override_area_sf, effective_area_sf: row.effective_area_sf, raw_paint_hours: row.raw_paint_hours, override_paint_hours: row.override_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, override_primer_hours: row.override_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, override_paint_gallons: row.override_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, override_primer_gallons: row.override_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, override_supply_cost: row.override_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, override_total: row.override_total, effective_total: row.effective_total, notes: row.notes, condition_selections: row.condition_selections ?? null,
-        })),
+        rows: wallScopeRows,
       })
 
-      const segNoByScope = new Map<string, number>()
+      const wallSegmentRows = buildV2WallSegmentPersistenceRows(v2WallSegmentRows ?? [], {
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        jobId: estimate.job_id,
+      })
       await softReplaceWallSegments({
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: (v2WallSegmentRows ?? []).map((row) => {
-          const nextSegNo = (segNoByScope.get(row.wall_scope_id) ?? 0) + 1
-          segNoByScope.set(row.wall_scope_id, nextSegNo)
-          return {
-            id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, wall_scope_id: row.wall_scope_id, room_id: row.room_id, position: row.position, seg_no: nextSegNo, segment_name: row.segment_name, include: row.include, shape_type: row.shape_type, quantity: row.quantity, width_in: row.width_in, height_in: row.height_in, base_in: row.base_in, manual_area_sf: row.manual_area_sf, standard_door_count: row.standard_door_count, standard_window_count: row.standard_window_count, raw_area_sf: row.raw_area_sf, override_area_sf: row.override_area_sf, effective_area_sf: row.effective_area_sf, notes: row.notes,
-          }
-        }),
+        rows: wallSegmentRows,
       })
     }
 
     if (useV2CeilingsSave) {
+      const ceilingScopeRows = buildV2CeilingScopePersistenceRows(v2CeilingScopeRows ?? [], {
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        jobId: estimate.job_id,
+      })
       await softReplaceRows({
         table: 'estimate_room_ceiling_scopes',
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: (v2CeilingScopeRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, mode: row.mode, include: row.include, scope_name: row.scope_name, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, spot_prime_percent: row.spot_prime_percent, ceiling_type_id: row.ceiling_type_id, ceiling_geometry_mode: row.ceiling_geometry_mode, vaulted_area_factor: row.vaulted_area_factor, vaulted_ridge_length_in: row.vaulted_ridge_length_in, vaulted_slope_length_in: row.vaulted_slope_length_in, vaulted_plane_count: row.vaulted_plane_count, tray_perimeter_in: row.tray_perimeter_in, tray_step_height_in: row.tray_step_height_in, tray_band_width_in: row.tray_band_width_in, coffer_section_length_in: row.coffer_section_length_in, coffer_section_width_in: row.coffer_section_width_in, coffer_section_count: row.coffer_section_count, coffer_face_height_in: row.coffer_face_height_in, coffer_bottom_width_in: row.coffer_bottom_width_in, helper_extra_area_sf: row.helper_extra_area_sf, length_in: row.length_in, width_in: row.width_in, area_sf: row.area_sf, height_factor: row.height_factor, complexity_factor: row.complexity_factor, ceiling_flag_factor: row.ceiling_flag_factor, override_area_sf: row.override_area_sf, override_paint_hours: row.override_paint_hours, override_primer_hours: row.override_primer_hours, override_paint_gallons: row.override_paint_gallons, override_primer_gallons: row.override_primer_gallons, override_supply_cost: row.override_supply_cost, override_total: row.override_total, raw_area_sf: row.raw_area_sf, effective_area_sf: row.effective_area_sf, raw_paint_hours: row.raw_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, effective_total: row.effective_total, paint_coats: row.paint_coats, primer_coats: row.primer_coats, notes: row.notes, condition_selections: row.condition_selections ?? null,
-        })),
+        rows: ceilingScopeRows,
       })
+      const ceilingSegmentRows = buildV2CeilingScopeSegmentPersistenceRows(
+        v2CeilingSegmentRows ?? [],
+        {
+          orgId: params.orgId,
+          estimateId: params.estimateId,
+          jobId: estimate.job_id,
+        }
+      )
       await softReplaceRows({
         table: 'estimate_room_ceiling_scope_segments',
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: (v2CeilingSegmentRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, ceiling_scope_id: row.ceiling_scope_id, room_id: row.room_id, position: row.position, segment_name: row.segment_name, include: row.include, shape_type: row.shape_type, quantity: row.quantity, width_in: row.width_in, height_in: row.height_in, base_in: row.base_in, manual_area_sf: row.manual_area_sf, raw_area_sf: row.raw_area_sf, override_area_sf: row.override_area_sf, effective_area_sf: row.effective_area_sf, notes: row.notes,
-        })),
+        rows: ceilingSegmentRows,
       })
     }
 
     if (useV2TrimSave) {
+      const trimScopeRows = buildV2TrimScopePersistenceRows(v2TrimScopeRows ?? [], {
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        jobId: estimate.job_id,
+      })
       await softReplaceRows({
         table: 'estimate_room_trim_scopes',
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: (v2TrimScopeRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, include: row.include, scope_name: row.scope_name, trim_type_id: row.trim_type_id, trim_family: row.trim_family, unit_type: row.unit_type, measurement_mode: row.measurement_mode, helper_source: row.helper_source, measurement_value: row.measurement_value, helper_value: row.helper_value, baseboard_opening_count: row.baseboard_opening_count, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, paint_enabled: row.paint_enabled, prime_mode: row.prime_mode, spot_prime_percent: row.spot_prime_percent, production_rate_id: row.production_rate_id, prep_factor: row.prep_factor, height_factor: row.height_factor, profile_factor: row.profile_factor, room_flag_factor: row.room_flag_factor, masking_factor: row.masking_factor, stair_factor: row.stair_factor, difficult_finish_factor: row.difficult_finish_factor, caulk_fill_factor: row.caulk_fill_factor, override_measurement: row.override_measurement, override_hours: row.override_hours, override_gallons: row.override_gallons, override_supply_cost: row.override_supply_cost, override_total: row.override_total, override_description: row.override_description, raw_measurement: row.raw_measurement, effective_measurement: row.effective_measurement, raw_paint_hours: row.raw_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_paint_gallons: row.raw_paint_gallons, effective_paint_gallons: row.effective_paint_gallons, raw_primer_gallons: row.raw_primer_gallons, effective_primer_gallons: row.effective_primer_gallons, raw_supply_cost: row.raw_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, effective_total: row.effective_total, paint_coats: row.paint_coats, primer_coats: row.primer_coats, paint_prod_rate_units_per_hour: row.paint_prod_rate_units_per_hour, primer_prod_rate_units_per_hour: row.primer_prod_rate_units_per_hour, paint_coverage_units_per_gal_per_coat: row.paint_coverage_units_per_gal_per_coat, primer_coverage_units_per_gal_per_coat: row.primer_coverage_units_per_gal_per_coat, area_supply_cost_per_unit: row.area_supply_cost_per_unit, per_color_supply_cost: row.per_color_supply_cost, labor_rate_per_hour: row.labor_rate_per_hour, paint_price_per_gal: row.paint_price_per_gal, primer_price_per_gal: row.primer_price_per_gal, notes: row.notes, condition_selections: row.condition_selections ?? null,
-        })),
+        rows: trimScopeRows,
       })
     }
 
     if (useV2DoorsSave) {
+      const doorScopeRows = buildV2DoorScopePersistenceRows(v2DoorScopeRows ?? [], {
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        jobId: estimate.job_id,
+      })
       await softReplaceRows({
         table: 'estimate_room_door_scopes',
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: (v2DoorScopeRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, include: row.include, scope_name: row.scope_name, door_type_id: row.door_type_id, color_id: row.color_id, paint_product_id: row.paint_product_id, primer_product_id: row.primer_product_id, prime_mode: row.prime_mode, quantity: row.quantity, sides: row.sides, paint_coats: row.paint_coats, primer_coats: row.primer_coats, spot_prime_percent: row.spot_prime_percent, condition_factor: row.condition_factor, labor_rate: row.labor_rate, material_rate: row.material_rate, raw_units: row.raw_units, effective_units: row.effective_units, raw_paint_hours: row.raw_paint_hours, override_paint_hours: row.override_paint_hours, effective_paint_hours: row.effective_paint_hours, raw_primer_hours: row.raw_primer_hours, override_primer_hours: row.override_primer_hours, effective_primer_hours: row.effective_primer_hours, raw_material_cost: row.raw_material_cost, override_material_cost: row.override_material_cost, effective_material_cost: row.effective_material_cost, raw_supply_cost: row.raw_supply_cost, override_supply_cost: row.override_supply_cost, effective_supply_cost: row.effective_supply_cost, raw_total: row.raw_total, override_total: row.override_total, effective_total: row.effective_total, notes: row.notes,
-        })),
+        rows: doorScopeRows,
       })
     }
 
     if (useV2DrywallSave) {
+      const drywallRepairRows = buildV2DrywallRepairPersistenceRows(
+        v2DrywallRepairRows ?? [],
+        {
+          orgId: params.orgId,
+          estimateId: params.estimateId,
+          jobId: estimate.job_id,
+        }
+      )
       await softReplaceRows({
         table: 'estimate_drywall_repairs',
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: (v2DrywallRepairRows ?? []).map((row) => ({
-          id: row.id, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, room_id: row.room_id, position: row.position, surface: row.surface, repair_type: row.repair_type, unit: row.unit, quantity: row.quantity, raw_quantity: row.raw_quantity, effective_quantity: row.effective_quantity, base_unit_rate: row.base_unit_rate, ceiling_multiplier: row.ceiling_multiplier, calculated_total: row.calculated_total, override_total: row.override_total, raw_total: row.raw_total, effective_total: row.effective_total,
-        })),
+        rows: drywallRepairRows,
       })
     }
 
@@ -587,15 +692,16 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.access_fees)) {
+      const accessFeeRows: EstimateAccessFeePersistenceRow[] = body.access_fees
+        .map((row: Unsafe, idx: number) => ({
+          id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, room_id: asText(row.room_id).toUpperCase() || null, segment_num: asNullableNumber(row.segment_num ?? row.segment_id), access_fee_id: asText(row.access_fee_id).toUpperCase(), qty: asNullableNumber(row.qty) ?? 1, active: toYN(row.active, 'Y'), notes: asText(row.notes) || null, actual_cost_override: asNullableNumber(row.actual_cost_override),
+        }))
+        .filter((row: { access_fee_id: string }) => !!row.access_fee_id)
       await softReplaceRows({
         table: 'estimate_access_fees',
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: body.access_fees
-          .map((row: Unsafe, idx: number) => ({
-            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, room_id: asText(row.room_id).toUpperCase() || null, segment_num: asNullableNumber(row.segment_num ?? row.segment_id), access_fee_id: asText(row.access_fee_id).toUpperCase(), qty: asNullableNumber(row.qty) ?? 1, active: toYN(row.active, 'Y'), notes: asText(row.notes) || null, actual_cost_override: asNullableNumber(row.actual_cost_override),
-          }))
-          .filter((row: { access_fee_id: string }) => !!row.access_fee_id),
+        rows: accessFeeRows,
       })
     }
 
@@ -630,49 +736,50 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.other)) {
+      const otherRows: EstimateOtherPersistenceRow[] = body.other.map((row: Unsafe, idx: number) => {
+        const rollupTarget = asText(pickValue(row, ['rollup_target', 'rollupTarget'])).toLowerCase() || 'other'
+        const rollupScope =
+          toOtherRollupScope(pickValue(row, ['rollup_scope', 'rollupScope', 'RollupScope'])) ??
+          (rollupTarget === 'ceilings'
+            ? 'Ceilings'
+            : rollupTarget === 'trim' || rollupTarget === 'doors'
+              ? 'Trim'
+              : 'Walls')
+        const clientDescription =
+          asText(pickValue(row, ['client_description', 'clientDescription', 'ClientDescription'])) ||
+          asText(pickValue(row, ['customer_label', 'customerLabel'])) ||
+          asText(pickValue(row, ['description']))
+        if (!clientDescription) throw new Error(`Other row ${idx + 1}: description or customer label is required`)
+        const qtyRaw = pickValue(row, ['qty', 'Qty'])
+        const qty = qtyRaw == null || qtyRaw === '' ? 1 : asNullableNumber(qtyRaw)
+        if (qty == null || qty <= 0) throw new Error(`Other row ${idx + 1}: Qty must be numeric and greater than 0`)
+        const laborHrsEach = asNullableNumber(pickValue(row, ['labor_hrs_each', 'laborHrsEach', 'LaborHrs_Each', 'labor_hours', 'laborHours'])) ?? 0
+        if (laborHrsEach == null || laborHrsEach < 0) throw new Error(`Other row ${idx + 1}: LaborHrs_Each must be numeric and >= 0`)
+        const materialsEach = asNullableNumber(pickValue(row, ['materials_each', 'materialsEach', 'Materials$_Each', 'material_cost', 'materialCost', 'unit_rate', 'unitRate', 'fixed_amount', 'fixedAmount'])) ?? 0
+        if (materialsEach == null || materialsEach < 0) throw new Error(`Other row ${idx + 1}: Materials$_Each must be numeric and >= 0`)
+        return {
+          id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, rollup_scope: rollupScope, location: asText(pickValue(row, ['location', 'Location', 'room_id', 'roomId'])) || null, client_description: clientDescription, qty, uom: asText(pickValue(row, ['uom', 'UOM'])) || null, labor_hrs_each: laborHrsEach, materials_each: materialsEach, notes: asText(pickValue(row, ['notes', 'Notes', 'internal_notes', 'internalNotes'])) || null, active: toYN(pickValue(row, ['active', 'Active?', 'Active']), 'Y'),
+          room_id: asText(pickValue(row, ['room_id', 'roomId'])).toUpperCase() || null,
+          description: asText(pickValue(row, ['description'])) || null,
+          customer_label: asText(pickValue(row, ['customer_label', 'customerLabel'])) || null,
+          pricing_mode: asText(pickValue(row, ['pricing_mode', 'pricingMode'])) || null,
+          quantity: asNullableNumber(pickValue(row, ['quantity'])),
+          unit_rate: asNullableNumber(pickValue(row, ['unit_rate', 'unitRate'])),
+          labor_hours: asNullableNumber(pickValue(row, ['labor_hours', 'laborHours'])),
+          labor_rate: asNullableNumber(pickValue(row, ['labor_rate', 'laborRate'])),
+          material_cost: asNullableNumber(pickValue(row, ['material_cost', 'materialCost'])),
+          supply_cost: asNullableNumber(pickValue(row, ['supply_cost', 'supplyCost'])),
+          fixed_amount: asNullableNumber(pickValue(row, ['fixed_amount', 'fixedAmount'])),
+          rollup_target: rollupTarget,
+          customer_visibility: asText(pickValue(row, ['customer_visibility', 'customerVisibility'])) || 'standalone',
+          internal_notes: asText(pickValue(row, ['internal_notes', 'internalNotes'])) || null,
+        }
+      })
       await softReplaceRows({
         table: 'estimate_other',
         orgId: params.orgId,
         estimateId: params.estimateId,
-        rows: body.other.map((row: Unsafe, idx: number) => {
-          const rollupTarget = asText(pickValue(row, ['rollup_target', 'rollupTarget'])).toLowerCase() || 'other'
-          const rollupScope =
-            toOtherRollupScope(pickValue(row, ['rollup_scope', 'rollupScope', 'RollupScope'])) ??
-            (rollupTarget === 'ceilings'
-              ? 'Ceilings'
-              : rollupTarget === 'trim' || rollupTarget === 'doors'
-                ? 'Trim'
-                : 'Walls')
-          const clientDescription =
-            asText(pickValue(row, ['client_description', 'clientDescription', 'ClientDescription'])) ||
-            asText(pickValue(row, ['customer_label', 'customerLabel'])) ||
-            asText(pickValue(row, ['description']))
-          if (!clientDescription) throw new Error(`Other row ${idx + 1}: description or customer label is required`)
-          const qtyRaw = pickValue(row, ['qty', 'Qty'])
-          const qty = qtyRaw == null || qtyRaw === '' ? 1 : asNullableNumber(qtyRaw)
-          if (qty == null || qty <= 0) throw new Error(`Other row ${idx + 1}: Qty must be numeric and greater than 0`)
-          const laborHrsEach = asNullableNumber(pickValue(row, ['labor_hrs_each', 'laborHrsEach', 'LaborHrs_Each', 'labor_hours', 'laborHours'])) ?? 0
-          if (laborHrsEach == null || laborHrsEach < 0) throw new Error(`Other row ${idx + 1}: LaborHrs_Each must be numeric and >= 0`)
-          const materialsEach = asNullableNumber(pickValue(row, ['materials_each', 'materialsEach', 'Materials$_Each', 'material_cost', 'materialCost', 'unit_rate', 'unitRate', 'fixed_amount', 'fixedAmount'])) ?? 0
-          if (materialsEach == null || materialsEach < 0) throw new Error(`Other row ${idx + 1}: Materials$_Each must be numeric and >= 0`)
-          return {
-            id: asText(row.id) || undefined, org_id: params.orgId, estimate_id: params.estimateId, job_id: estimate.job_id, position: idx, rollup_scope: rollupScope, location: asText(pickValue(row, ['location', 'Location', 'room_id', 'roomId'])) || null, client_description: clientDescription, qty, uom: asText(pickValue(row, ['uom', 'UOM'])) || null, labor_hrs_each: laborHrsEach, materials_each: materialsEach, notes: asText(pickValue(row, ['notes', 'Notes', 'internal_notes', 'internalNotes'])) || null, active: toYN(pickValue(row, ['active', 'Active?', 'Active']), 'Y'),
-            room_id: asText(pickValue(row, ['room_id', 'roomId'])).toUpperCase() || null,
-            description: asText(pickValue(row, ['description'])) || null,
-            customer_label: asText(pickValue(row, ['customer_label', 'customerLabel'])) || null,
-            pricing_mode: asText(pickValue(row, ['pricing_mode', 'pricingMode'])) || null,
-            quantity: asNullableNumber(pickValue(row, ['quantity'])),
-            unit_rate: asNullableNumber(pickValue(row, ['unit_rate', 'unitRate'])),
-            labor_hours: asNullableNumber(pickValue(row, ['labor_hours', 'laborHours'])),
-            labor_rate: asNullableNumber(pickValue(row, ['labor_rate', 'laborRate'])),
-            material_cost: asNullableNumber(pickValue(row, ['material_cost', 'materialCost'])),
-            supply_cost: asNullableNumber(pickValue(row, ['supply_cost', 'supplyCost'])),
-            fixed_amount: asNullableNumber(pickValue(row, ['fixed_amount', 'fixedAmount'])),
-            rollup_target: rollupTarget,
-            customer_visibility: asText(pickValue(row, ['customer_visibility', 'customerVisibility'])) || 'standalone',
-            internal_notes: asText(pickValue(row, ['internal_notes', 'internalNotes'])) || null,
-          }
-        }),
+        rows: otherRows,
       })
     }
 

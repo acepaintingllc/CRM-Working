@@ -470,6 +470,191 @@ describe('useEstimateV2SaveController', () => {
     }
   })
 
+  it('leaves a failed autosave draft dirty without promoting the autosave payload', async () => {
+    const harness = createSaveHarness()
+    const initialSavedSnapshot = harness.store.getState().meta.lastSavedSnapshot
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    harness.store.getState().setRooms((prev) =>
+      prev.map((room) =>
+        room.roomId === 'R001' ? { ...room, roomName: 'Failed Autosave Room' } : room
+      )
+    )
+    const dirtySnapshot = buildCurrentStoreSnapshot(harness.store)
+    saveEstimateV2InputsMock.mockResolvedValue(
+      createSaveResult(false, { error: 'Autosave failed' })
+    )
+
+    try {
+      const { result } = renderHook(() =>
+        useEstimateV2SaveController({
+          estimateId: harness.fixture.estimate.id,
+          routeFamily: estimateRouteFamily,
+          store: harness.store,
+          currentSnapshot: dirtySnapshot,
+          dirty: true,
+          effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+        })
+      )
+
+      await expect(result.current.save('auto')).resolves.toBe(false)
+
+      expect(harness.store.getState().meta.lastSavedSnapshot).toBe(initialSavedSnapshot)
+      expect(
+        areEstimateV2DirtySnapshotsEqual(
+          harness.store.getState().meta.lastSavedSnapshot,
+          dirtySnapshot
+        )
+      ).toBe(false)
+      expect(
+        areEstimateV2DirtySnapshotsEqual(
+          harness.store.getState().meta.lastSavedSnapshot,
+          buildCurrentStoreSnapshot(harness.store)
+        )
+      ).toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('sets retryable error meta when manual save fails', async () => {
+    const harness = createSaveHarness()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    saveEstimateV2InputsMock.mockResolvedValue(
+      createSaveResult(false, { error: 'Manual retryable failure' })
+    )
+
+    try {
+      const { result } = renderHook(() =>
+        useEstimateV2SaveController({
+          estimateId: harness.fixture.estimate.id,
+          routeFamily: estimateRouteFamily,
+          store: harness.store,
+          currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+          dirty: true,
+          effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+        })
+      )
+
+      await expect(result.current.save('manual')).resolves.toBe(false)
+
+      expect(harness.store.getState().meta.error).toEqual({
+        message: 'Manual retryable failure',
+        code: undefined,
+        retryable: true,
+      })
+      expect(harness.store.getState().meta.saveStatus).toBe('error')
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('exposes manual save state transitions from idle to saving to saved', async () => {
+    const harness = createSaveHarness()
+    const pendingSave = deferred<ReturnType<typeof createSaveResult>>()
+    saveEstimateV2InputsMock.mockReturnValue(pendingSave.promise)
+
+    const { result } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    expect(harness.store.getState().meta.saveStatus).toBe('idle')
+    const savePromise = result.current.save('manual')
+    expect(harness.store.getState().meta.saving).toBe(true)
+    expect(harness.store.getState().meta.saveStatus).toBe('idle')
+
+    await act(async () => {
+      pendingSave.resolve(createSaveResult(true, { data: harness.fixture.summaryData }))
+      await savePromise
+    })
+
+    expect(harness.store.getState().meta.saving).toBe(false)
+    expect(harness.store.getState().meta.saveStatus).toBe('saved')
+  })
+
+  it('exposes failed manual save state transitions from idle to saving to error', async () => {
+    const harness = createSaveHarness()
+    const pendingSave = deferred<ReturnType<typeof createSaveResult>>()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    saveEstimateV2InputsMock.mockReturnValue(pendingSave.promise)
+
+    try {
+      const { result } = renderHook(() =>
+        useEstimateV2SaveController({
+          estimateId: harness.fixture.estimate.id,
+          routeFamily: estimateRouteFamily,
+          store: harness.store,
+          currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+          dirty: true,
+          effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+        })
+      )
+
+      expect(harness.store.getState().meta.saveStatus).toBe('idle')
+      const savePromise = result.current.save('manual')
+      expect(harness.store.getState().meta.saving).toBe(true)
+      expect(harness.store.getState().meta.saveStatus).toBe('idle')
+
+      await act(async () => {
+        pendingSave.resolve(createSaveResult(false, { error: 'Manual transition failed' }))
+        await savePromise
+      })
+
+      expect(harness.store.getState().meta.saving).toBe(false)
+      expect(harness.store.getState().meta.saveStatus).toBe('error')
+      expect(harness.store.getState().meta.error?.retryable).toBe(true)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('exposes autosave state transitions from idle to autosaving to idle on success', async () => {
+    vi.useFakeTimers()
+    const harness = createSaveHarness()
+    const pendingSave = deferred<ReturnType<typeof createSaveResult>>()
+    saveEstimateV2InputsMock.mockReturnValue(pendingSave.promise)
+    harness.store.getState().setRooms((prev) =>
+      prev.map((room) =>
+        room.roomId === 'R001' ? { ...room, roomName: 'Autosave Transition Room' } : room
+      )
+    )
+
+    const { unmount } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    expect(harness.store.getState().meta.saveStatus).toBe('idle')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ESTIMATE_V2_AUTO_SAVE_DELAY_MS)
+    })
+    expect(harness.store.getState().meta.saving).toBe(true)
+    expect(harness.store.getState().meta.saveStatus).toBe('autosaving')
+
+    await act(async () => {
+      pendingSave.resolve(createSaveResult(true, { autosave: true }))
+      await Promise.resolve()
+    })
+
+    expect(harness.store.getState().meta.saving).toBe(false)
+    expect(harness.store.getState().meta.saveStatus).toBe('idle')
+
+    unmount()
+    vi.useRealTimers()
+  })
+
   it('keeps a dirty draft ready for manual Save Draft before the autosave delay elapses', () => {
     vi.useFakeTimers()
     const harness = createSaveHarness()
@@ -508,6 +693,129 @@ describe('useEstimateV2SaveController', () => {
 
     expect(saveEstimateV2InputsMock).not.toHaveBeenCalled()
     expect(harness.store.getState().meta.saving).toBe(false)
+
+    unmount()
+    vi.useRealTimers()
+  })
+
+  it('autosaves after dirty state is set and the autosave delay elapses', async () => {
+    vi.useFakeTimers()
+    const harness = createSaveHarness()
+    saveEstimateV2InputsMock.mockResolvedValue(createSaveResult(true, { autosave: true }))
+
+    const { rerender, unmount } = renderHook(
+      ({ currentSnapshot, dirty }) =>
+        useEstimateV2SaveController({
+          estimateId: harness.fixture.estimate.id,
+          routeFamily: estimateRouteFamily,
+          store: harness.store,
+          currentSnapshot,
+          dirty,
+          effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+        }),
+      {
+        initialProps: {
+          currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+          dirty: false,
+        },
+      }
+    )
+
+    act(() => {
+      harness.store.getState().setRooms((prev) =>
+        prev.map((room) =>
+          room.roomId === 'R001' ? { ...room, roomName: 'Autosave Timer Room' } : room
+        )
+      )
+    })
+    rerender({
+      currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+      dirty: true,
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ESTIMATE_V2_AUTO_SAVE_DELAY_MS)
+    })
+
+    expect(saveEstimateV2InputsMock).toHaveBeenCalledTimes(1)
+    expect(saveEstimateV2InputsMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        trigger: 'auto',
+        payload: expect.objectContaining({
+          rooms: expect.arrayContaining([
+            expect.objectContaining({
+              room_name: 'Autosave Timer Room',
+            }),
+          ]),
+        }),
+      })
+    )
+
+    unmount()
+    vi.useRealTimers()
+  })
+
+  it('does not autosave while a save is already in progress', async () => {
+    vi.useFakeTimers()
+    const harness = createSaveHarness()
+    act(() => {
+      harness.store.getState().setRooms((prev) =>
+        prev.map((room) =>
+          room.roomId === 'R001' ? { ...room, roomName: 'Saving Gate Room' } : room
+        )
+      )
+      harness.store.getState().setSaving(true)
+    })
+
+    const { unmount } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ESTIMATE_V2_AUTO_SAVE_DELAY_MS)
+    })
+
+    expect(saveEstimateV2InputsMock).not.toHaveBeenCalled()
+
+    unmount()
+    vi.useRealTimers()
+  })
+
+  it('does not autosave while the estimate is loading', async () => {
+    vi.useFakeTimers()
+    const harness = createSaveHarness()
+    act(() => {
+      harness.store.getState().setRooms((prev) =>
+        prev.map((room) =>
+          room.roomId === 'R001' ? { ...room, roomName: 'Loading Gate Room' } : room
+        )
+      )
+      harness.store.getState().setLoading(true)
+    })
+
+    const { unmount } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ESTIMATE_V2_AUTO_SAVE_DELAY_MS)
+    })
+
+    expect(saveEstimateV2InputsMock).not.toHaveBeenCalled()
 
     unmount()
     vi.useRealTimers()
@@ -1016,6 +1324,85 @@ describe('useEstimateV2SaveController', () => {
     ).toBe(true)
   })
 
+  it('queues one follow-up manual save after an in-flight autosave and includes later edits', async () => {
+    const harness = createSaveHarness()
+    const autosave = deferred<ReturnType<typeof createSaveResult>>()
+    saveEstimateV2InputsMock
+      .mockImplementationOnce(() => autosave.promise)
+      .mockResolvedValueOnce(createSaveResult(true, { data: harness.fixture.summaryData }))
+
+    const { result } = renderHook(() =>
+      useEstimateV2SaveController({
+        estimateId: harness.fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store: harness.store,
+        currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+        dirty: true,
+        effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+      })
+    )
+
+    act(() => {
+      harness.store.getState().setRooms((prev) =>
+        prev.map((room) =>
+          room.roomId === 'R001' ? { ...room, roomName: 'Autosave In Flight Room' } : room
+        )
+      )
+    })
+    const autosavePromise = result.current.save('auto')
+    expect(saveEstimateV2InputsMock).toHaveBeenCalledTimes(1)
+    expect(saveEstimateV2InputsMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        trigger: 'auto',
+        payload: expect.objectContaining({
+          rooms: expect.arrayContaining([
+            expect.objectContaining({
+              room_name: 'Autosave In Flight Room',
+            }),
+          ]),
+        }),
+      })
+    )
+
+    act(() => {
+      harness.store.getState().setRooms((prev) =>
+        prev.map((room) =>
+          room.roomId === 'R001' ? { ...room, roomName: 'Manual Follow Up Room' } : room
+        )
+      )
+    })
+
+    await expect(result.current.save('manual')).resolves.toBe(false)
+    expect(saveEstimateV2InputsMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      autosave.resolve(createSaveResult(true, { autosave: true }))
+      await autosavePromise
+    })
+
+    expect(saveEstimateV2InputsMock).toHaveBeenCalledTimes(2)
+    expect(saveEstimateV2InputsMock.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        trigger: 'manual',
+        payload: expect.objectContaining({
+          rooms: expect.arrayContaining([
+            expect.objectContaining({
+              room_name: 'Manual Follow Up Room',
+            }),
+          ]),
+        }),
+      })
+    )
+    expect(harness.store.getState().meta.saving).toBe(false)
+    expect(harness.store.getState().meta.saveStatus).toBe('saved')
+    expect(
+      areEstimateV2DirtySnapshotsEqual(
+        harness.store.getState().meta.lastSavedSnapshot,
+        buildCurrentStoreSnapshot(harness.store)
+      )
+    ).toBe(true)
+  })
+
   it('coalesces repeated manual save attempts during saving into a single follow-up save', async () => {
     const harness = createSaveHarness()
     const first = deferred<ReturnType<typeof createSaveResult>>()
@@ -1321,7 +1708,7 @@ describe('useEstimateV2SaveController', () => {
     expect(harness.store.getState().meta.lastSavedSnapshot?.payload.room_door_scopes).toHaveLength(0)
   })
 
-  it('does not apply an older save response over newer local ceiling edits', async () => {
+  it('ignores a stale autosave response when newer local ceiling edits remain dirty', async () => {
     const harness = createSaveHarness()
     const ceilingScopeId = harness.fixture.ceilingScopes[0].id
     harness.store.getState().setCeilingScopes((prev) =>
@@ -1335,17 +1722,20 @@ describe('useEstimateV2SaveController', () => {
     const pending = deferred<ReturnType<typeof createSaveResult>>()
     saveEstimateV2InputsMock.mockReturnValue(pending.promise)
 
-    const { result } = renderHook(() =>
-      useEstimateV2SaveController({
+    const { result } = renderHook(() => {
+      const derived = useEstimateV2DerivedState({ store: harness.store })
+      const controller = useEstimateV2SaveController({
         estimateId: harness.fixture.estimate.id,
         routeFamily: estimateRouteFamily,
         store: harness.store,
-        currentSnapshot: harness.fixture.currentSnapshot,
-        dirty: true,
+        currentSnapshot: derived.currentSnapshot,
+        dirty: derived.dirty,
         effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
       })
-    )
+      return { derived, save: controller.save }
+    })
 
+    expect(result.current.derived.dirty).toBe(true)
     const savePromise = result.current.save('auto')
     expect(saveEstimateV2InputsMock).toHaveBeenCalledTimes(1)
 
@@ -1358,6 +1748,7 @@ describe('useEstimateV2SaveController', () => {
         )
       )
     })
+    expect(result.current.derived.dirty).toBe(true)
 
     pending.resolve(createSaveResult(true, harness.fixture.summaryData))
     await expect(savePromise).resolves.toBe(false)
@@ -1368,5 +1759,6 @@ describe('useEstimateV2SaveController', () => {
     expect(scope?.ceilingTypeId).toBe('FLAT')
     expect(scope?.ceilingGeometryMode).toBe('FLAT')
     expect(harness.store.getState().meta.saveStatus).toBe('idle')
+    expect(result.current.derived.dirty).toBe(true)
   })
 })

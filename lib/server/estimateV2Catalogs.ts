@@ -1,13 +1,14 @@
 import { getEstimateCatalogs } from '@/lib/server/estimateCatalogs'
 import { supabaseAdmin } from '@/lib/server/org'
 import {
+  resolveEstimatorV2RoomModeById,
   toCeilingCalculationCatalogs,
   toDoorCalculationCatalogs,
   toDrywallCalculationCatalogs,
   toTrimCalculationCatalogs,
   toWallCalculationCatalogs,
-} from '@/lib/server/estimateV2RoutePayload'
-import { asText, type UnsafeRecord } from '@/lib/estimator/parsing'
+} from '@/lib/estimator/v2CalculationShared'
+import type { UnsafeRecord } from '@/lib/estimator/parsing'
 
 export async function loadEstimateV2CalculationCatalogs(params: {
   requestOrigin: string
@@ -38,23 +39,7 @@ export function resolveEstimateV2RoomModeById(params: {
   wallScopes: UnsafeRecord[]
   ceilingScopes: UnsafeRecord[]
 }) {
-  const roomMode = new Map<string, 'RECT' | 'SEG'>()
-  for (const scope of params.wallScopes) {
-    const roomId = asText(scope.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(scope.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  for (const scope of params.ceilingScopes) {
-    const roomId = asText(scope.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(scope.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  for (const room of params.rooms) {
-    const roomId = asText(room.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(room.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  return roomMode
+  return resolveEstimatorV2RoomModeById({ ...params, useRoomMode: true })
 }
 
 export async function loadEstimateV2RoomModesForTrimFromDb(params: {

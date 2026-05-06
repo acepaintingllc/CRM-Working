@@ -1,22 +1,17 @@
 'use client'
 
-import { authedFetch } from '@/lib/auth/authedFetch'
-import {
-  type ApiMutationEnvelope,
-  getApiErrorMessage,
-  loadData,
-  mutateData,
-  parseApiResponse,
-  requestApi,
-  type ParsedApiResponse,
-} from '@/lib/client/api'
 import type { EmailSendStatus } from '@/lib/email/types'
 import { loadEmailTemplates } from '@/lib/emailTemplates/api'
-import { makeIdempotencyKey } from '@/lib/jobs/idempotency'
-import { mapPaintLogRow, type PaintLogRow } from '@/lib/jobs/paintLog'
+import type { PaintLogRow } from '@/lib/jobs/paintLog'
 import {
+  loadStageEmailSchedules,
+  loadLatestJobEstimateFile,
+  loadMatchingJobEstimateFiles,
   listPaintLogs,
   loadJobRecord,
+  patchJobCloseoutNotes,
+  saveCloseoutPaintLogs,
+  sendJobStageEmail,
 } from '@/lib/jobs/client'
 import type { EstimateDriveFile, JobDetail } from '@/types/jobs/api'
 import type { StageEmailStage } from '@/lib/jobs/types'
@@ -49,6 +44,7 @@ export type StageEmailSendResult = {
   stage: StageEmailStage
   status: EmailSendStatus
   replayed: boolean
+  notice?: string | null
   warning?: string | null
 }
 
@@ -74,17 +70,6 @@ export type SaveCloseoutResult = {
   paintLogs: PaintLogRow[]
 }
 
-type EstimateFilePayload = {
-  data?:
-    | {
-        file?: EstimateDriveFile | null
-        latest?: EstimateDriveFile | null
-        files?: EstimateDriveFile[]
-      }
-    | EstimateDriveFile
-  error?: string
-}
-
 function formatDate(iso: string | null | undefined) {
   if (!iso) return ''
   try {
@@ -101,64 +86,29 @@ function formatRange(start: string | null | undefined, end: string | null | unde
   return ''
 }
 
-function getPayloadError(payload: unknown) {
-  if (!payload || typeof payload !== 'object') return null
-  const error = (payload as { error?: unknown }).error
-  return typeof error === 'string' && error.trim() ? error : null
-}
-
-export const parseResponseBody = parseApiResponse
-
-export function getResponseErrorMessage(
-  response: Response,
-  parsed: ParsedApiResponse<unknown>,
-  fallback?: string
-) {
-  return getPayloadError(parsed.json) ?? getApiErrorMessage(response, parsed, fallback)
-}
-
 export async function fetchJobDetail(jobId: string) {
-  const [job, estimateResponse, paintLogs] = await Promise.all([
+  const [job, estimateState, paintLogs] = await Promise.all([
     loadJobRecord(jobId),
-    authedFetch(`/api/jobs/${jobId}/estimate-file`, { cache: 'no-store' }),
+    loadLatestJobEstimateFile(jobId),
     listPaintLogs(jobId),
   ])
 
-  const estimatePayload = await parseResponseBody(estimateResponse)
-  const estimateFilePayload = estimatePayload.json as EstimateFilePayload | null
-  const estimateFileData =
-    estimateFilePayload?.data && typeof estimateFilePayload.data === 'object'
-      ? estimateFilePayload.data
-      : null
-
   return {
     job,
-    estimateFile: ((estimateFileData as { file?: EstimateDriveFile | null } | null)?.file ??
-      (estimateFilePayload?.data && !Array.isArray(estimateFilePayload.data)
-        ? (estimateFilePayload.data as EstimateDriveFile)
-        : null)) as EstimateDriveFile | null,
-    estimateFileError:
-      (((estimateFileData as { file?: EstimateDriveFile | null } | null)?.file ??
-        estimateFilePayload?.data) == null)
-        ? estimateFilePayload?.error ?? 'No matching estimate in Drive folder'
-        : null,
+    estimateFile: estimateState.estimateFile,
+    estimateFileError: estimateState.estimateFileError,
     paintLogs,
   }
 }
 
 export async function fetchStageEmailComposerData(jobId: string, stage: StageEmailStage) {
   const needsEstimateAttachment = stage === 'estimate_sent' || stage === 'follow_up'
-  const [templates, job, scheduledRows, estimateFileResponse] = await Promise.all([
+  const [templates, job, scheduledRows, estimateFileState] = await Promise.all([
     loadEmailTemplates().catch((error) => error),
     loadJobRecord(jobId),
-    stage === 'scheduled'
-      ? loadData<Array<{ start_at?: string | null; end_at?: string | null }>>(
-          `/api/jobs/${jobId}/schedules`,
-          { cache: 'no-store' }
-        )
-      : null,
+    stage === 'scheduled' ? loadStageEmailSchedules(jobId) : null,
     needsEstimateAttachment
-      ? authedFetch(`/api/jobs/${jobId}/estimate-file?all=1`, { cache: 'no-store' })
+      ? loadMatchingJobEstimateFiles(jobId)
       : null,
   ])
 
@@ -185,34 +135,16 @@ export async function fetchStageEmailComposerData(jobId: string, stage: StageEma
   let estimateFiles: EstimateDriveFile[] = []
   let selectedEstimateFileIds: string[] = []
   let estimateFileError: string | null = null
-  if (estimateFileResponse) {
-    const estimatePayload = await parseResponseBody(estimateFileResponse)
-    const estimateResponsePayload = estimatePayload.json as EstimateFilePayload | null
-    const estimateResponseData =
-      estimateResponsePayload?.data && typeof estimateResponsePayload.data === 'object'
-        ? estimateResponsePayload.data
-        : null
-    const files = Array.isArray((estimateResponseData as { files?: EstimateDriveFile[] } | null)?.files)
-      ? (((estimateResponseData as { files?: EstimateDriveFile[] }).files ?? []) as EstimateDriveFile[])
-      : []
-    const latest = ((estimateResponseData as { latest?: EstimateDriveFile | null } | null)?.latest ??
-      null) as EstimateDriveFile | null
-    if (files.length > 0) {
-      estimateFiles = files
-      if (latest?.id && files.some((file) => file.id === latest.id)) {
+  if (estimateFileState) {
+    estimateFiles = estimateFileState.estimateFiles
+    estimateFileError = estimateFileState.estimateFileError
+    if (estimateFiles.length > 0) {
+      const latest = estimateFileState.latestEstimateFile
+      if (latest?.id && estimateFiles.some((file) => file.id === latest.id)) {
         selectedEstimateFileIds = [latest.id]
       } else {
-        selectedEstimateFileIds = [files[0].id]
+        selectedEstimateFileIds = [estimateFiles[0].id]
       }
-    } else if (estimateFileResponse.ok && estimateResponseData && 'file' in estimateResponseData) {
-      const file = (estimateResponseData as { file?: EstimateDriveFile }).file as EstimateDriveFile
-      estimateFiles = [file]
-      selectedEstimateFileIds = [file.id]
-    } else {
-      estimateFileError =
-        typeof estimateResponsePayload?.error === 'string'
-          ? estimateResponsePayload.error
-          : 'No matching estimate file found in Drive.'
     }
   }
 
@@ -227,7 +159,7 @@ export async function fetchStageEmailComposerData(jobId: string, stage: StageEma
     blockingIssues.push('Customer email is missing for this job.')
   }
   if (needsEstimateAttachment && estimateFiles.length === 0) {
-    blockingIssues.push(estimateFileError ?? 'No matching estimate file found in Drive.')
+    blockingIssues.push(estimateFileError ?? 'No matching quote file found in Drive folder.')
   }
 
   return {
@@ -241,33 +173,20 @@ export async function fetchStageEmailComposerData(jobId: string, stage: StageEma
 }
 
 export async function sendStageEmail(jobId: string, payload: StageEmailSendPayload) {
-  const response = await mutateData<{
-    status?: EmailSendStatus
-    replayed?: boolean
-    job?: Partial<JobDetail> | null
-    warning?: string | null
-  }>(`/api/jobs/${jobId}/send-stage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      stage: payload.stage,
-      subject: payload.subject,
-      body: payload.body,
-      idempotency_key: payload.idempotencyKey ?? makeIdempotencyKey(payload.stage, jobId),
-      estimate_file_ids: payload.estimateFileIds,
-    }),
-  })
+  const response = await sendJobStageEmail(jobId, payload)
 
   return {
     stage: payload.stage,
-    status: response.data?.status ?? 'sent',
-    replayed: Boolean(response.data?.replayed),
-    job: (response.data?.job ?? null) as Partial<JobDetail> | null,
-    warning:
-      response.data?.warning ??
-      (response.data?.replayed
+    status: response?.status ?? 'sent',
+    replayed: Boolean(response?.replayed),
+    job: (response?.job ?? null) as Partial<JobDetail> | null,
+    notice:
+      response?.notice ??
+      (response?.replayed
         ? 'This send request was already processed. No duplicate email was sent.'
         : null),
+    warning:
+      response?.warning ?? null,
   } satisfies StageEmailSendResult
 }
 
@@ -292,20 +211,12 @@ export async function fetchCloseoutData(jobId: string) {
 
 export async function saveCloseout(jobId: string, payload: SaveCloseoutPayload) {
   const [paintPayload, notesPayload] = await Promise.all([
-    mutateData<PaintLogRow[]>(`/api/jobs/${jobId}/paint-logs`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: payload.rows }),
-    }),
-    requestApi<ApiMutationEnvelope<Partial<JobDetail>>>(`/api/jobs/${jobId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ closeout_notes: payload.closeout_notes }),
-    }),
+    saveCloseoutPaintLogs(jobId, { rows: payload.rows }),
+    patchJobCloseoutNotes(jobId, payload.closeout_notes),
   ])
 
   return {
-    job: (notesPayload.data ?? null) as Partial<JobDetail> | null,
-    paintLogs: (paintPayload.data ?? []).map((row) => mapPaintLogRow(row)),
+    job: (notesPayload ?? null) as Partial<JobDetail> | null,
+    paintLogs: paintPayload,
   } satisfies SaveCloseoutResult
 }

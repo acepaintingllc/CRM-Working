@@ -51,6 +51,14 @@ const basePageState = {
     varianceRows: [],
     patterns: [],
     recommendationCountLabel: '1 open',
+    recommendationGenerateLabel: 'Generate recommendations',
+    recommendationsGenerating: false,
+    applyConfirmation: {
+      isOpen: false,
+      description: 'Apply this recommendation to estimator settings.',
+      info: null,
+      confirming: false,
+    },
     recommendations: [
       {
         id: 'rec-1',
@@ -63,6 +71,9 @@ const basePageState = {
         reason: 'Locked reviews show labor hours high.',
         evidence: ['Average variance: 3'],
         basedOnJobCountLabel: '10 jobs',
+        isPending: false,
+        applyLabel: 'Apply',
+        dismissLabel: 'Dismiss',
       },
     ],
   },
@@ -83,9 +94,14 @@ describe('InsightsPageContent', () => {
   it('renders explicit apply confirmation copy before activating a setting set', () => {
     mockUseInsightsTrendsPage.mockReturnValue({
       ...basePageState,
-      recommendationActionState: {
-        ...basePageState.recommendationActionState,
-        confirmingApplyId: 'rec-1',
+      vm: {
+        ...basePageState.vm,
+        applyConfirmation: {
+          isOpen: true,
+          description: 'Apply Production Rates Walls to estimator settings.',
+          info: 'Target: production_rates_walls:WALL_STD:sqft_per_hr. Current value: sqft_per_hr: 150. Suggested value: sqft_per_hr: 135.',
+          confirming: false,
+        },
       },
     })
 
@@ -96,7 +112,7 @@ describe('InsightsPageContent', () => {
       within(dialog).getByText(/This activates a new estimator setting set immediately/i)
     ).toBeInTheDocument()
     expect(
-      within(dialog).getByText(/New estimates will use the suggested setting/i)
+      within(dialog).getByText(/New quotes will use the suggested setting/i)
     ).toBeInTheDocument()
     expect(
       within(dialog).getByText(/production_rates_walls:WALL_STD:sqft_per_hr/i)

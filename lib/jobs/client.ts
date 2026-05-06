@@ -8,6 +8,9 @@ import {
   type ApiDataEnvelope,
   type ApiMutationEnvelope,
 } from '@/lib/client/api'
+import type { EmailSendStatus } from '@/lib/email/types'
+import { buildJobEstimateFilePath } from '@/lib/jobs/routes'
+import { makeIdempotencyKey } from '@/lib/jobs/idempotency'
 import type {
   CalendarAddResult,
   CreateJobPayload,
@@ -24,6 +27,7 @@ import type {
   ScheduleRow,
   UploadJobSitePhotosResponse,
 } from '@/types/jobs/api'
+import type { StageEmailStage } from '@/lib/jobs/types'
 import type {
   AcceptedEstimateSnapshotRepairResult,
   JobActualsDraftPayload,
@@ -53,11 +57,79 @@ type EstimateFileData =
   | EstimateDriveFile
   | {
       file?: EstimateDriveFile | null
+      latest?: EstimateDriveFile | null
+      files?: EstimateDriveFile[]
     }
 
-function normalizeEstimateFile(data: EstimateFileData | null) {
+export type JobEstimateFileState = {
+  estimateFile: EstimateDriveFile | null
+  estimateFileError: string | null
+}
+
+export type JobEstimateFilesState = {
+  latestEstimateFile: EstimateDriveFile | null
+  estimateFiles: EstimateDriveFile[]
+  estimateFileError: string | null
+}
+
+function isEstimateDriveFile(value: unknown): value is EstimateDriveFile {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const candidate = value as Partial<EstimateDriveFile>
+  return typeof candidate.id === 'string' && typeof candidate.name === 'string'
+}
+
+export function normalizeLatestJobEstimateFile(data: EstimateFileData | null) {
   if (!data || Array.isArray(data)) return null
-  return (data as { file?: EstimateDriveFile | null }).file ?? (data as EstimateDriveFile)
+  if (isEstimateDriveFile(data)) return data
+
+  const payload = data as {
+    file?: EstimateDriveFile | null
+    latest?: EstimateDriveFile | null
+    files?: EstimateDriveFile[]
+  }
+  return payload.file ?? payload.latest ?? payload.files?.[0] ?? null
+}
+
+export function normalizeMatchingJobEstimateFiles(data: EstimateFileData | null) {
+  if (!data || Array.isArray(data)) {
+    return { latest: null, files: [] as EstimateDriveFile[] }
+  }
+  if (isEstimateDriveFile(data)) {
+    return { latest: data, files: [data] }
+  }
+
+  const payload = data as {
+    file?: EstimateDriveFile | null
+    latest?: EstimateDriveFile | null
+    files?: EstimateDriveFile[]
+  }
+  const files = Array.isArray(payload.files)
+    ? payload.files.filter(isEstimateDriveFile)
+    : payload.file && isEstimateDriveFile(payload.file)
+      ? [payload.file]
+      : []
+  const latest = payload.latest && isEstimateDriveFile(payload.latest)
+    ? payload.latest
+    : files[0] ?? null
+
+  return { latest, files }
+}
+
+export function resolveJobCloseoutCatalogEstimateId(
+  job:
+    | Pick<JobDetail, 'accepted_estimate' | 'linked_estimate_id'>
+    | null
+    | undefined
+) {
+  if (!job) return null
+  // Closeout catalogs are operational data from the accepted estimate only.
+  // estimate_navigation_id is intentionally excluded because it can point at a
+  // draft/latest quote that is useful for navigation but not accepted source data.
+  for (const estimateId of [job.accepted_estimate?.estimate_id, job.linked_estimate_id]) {
+    const normalized = typeof estimateId === 'string' ? estimateId.trim() : ''
+    if (normalized) return normalized
+  }
+  return null
 }
 
 export async function fetchJobList() {
@@ -93,25 +165,53 @@ export async function loadJobRecord(jobId: string) {
   return (payload.data ?? null) as JobDetail | null
 }
 
-export async function loadJobEstimateFile(jobId: string) {
+export async function loadLatestJobEstimateFile(jobId: string): Promise<JobEstimateFileState> {
   const result = await requestRawApi<EstimateFileData>(
-    `/api/jobs/${jobId}/estimate-file`,
+    buildJobEstimateFilePath(jobId),
     { cache: 'no-store' },
-    'No matching estimate in Drive folder'
+    'No matching quote PDF found in Drive folder.'
   )
 
   if (!result.response.ok) {
     return {
       estimateFile: null,
-      estimateFileError: result.errorMessage ?? 'No matching estimate in Drive folder',
+      estimateFileError: result.errorMessage ?? 'No matching quote PDF found in Drive folder.',
     }
   }
 
-  const estimateFile = normalizeEstimateFile(result.payload)
+  const estimateFile = normalizeLatestJobEstimateFile(result.payload)
   return {
     estimateFile,
-    estimateFileError: estimateFile == null ? 'No matching estimate in Drive folder' : null,
+    estimateFileError:
+      estimateFile == null ? 'No matching quote PDF found in Drive folder.' : null,
   }
+}
+
+export async function loadMatchingJobEstimateFiles(jobId: string): Promise<JobEstimateFilesState> {
+  const result = await requestRawApi<EstimateFileData>(
+    buildJobEstimateFilePath(jobId, { all: true }),
+    { cache: 'no-store' },
+    'No matching quote file found in Drive folder.'
+  )
+
+  if (!result.response.ok) {
+    return {
+      latestEstimateFile: null,
+      estimateFiles: [],
+      estimateFileError: result.errorMessage ?? 'No matching quote file found in Drive folder.',
+    }
+  }
+
+  const { latest, files } = normalizeMatchingJobEstimateFiles(result.payload)
+  return {
+    latestEstimateFile: latest,
+    estimateFiles: files,
+    estimateFileError: null,
+  }
+}
+
+export async function loadJobEstimateFile(jobId: string) {
+  return loadLatestJobEstimateFile(jobId)
 }
 
 export async function loadJobActuals(jobId: string, estimateSnapshotId: string) {
@@ -207,6 +307,19 @@ export async function fetchJobSchedules(jobId: string) {
   return loadData<ScheduleRow[]>(`/api/jobs/${jobId}/schedules`, { cache: 'no-store' })
 }
 
+export type JobScheduleMutationResult<T> = {
+  data: T | null
+  notice: string | null
+}
+
+export async function loadStageEmailSchedules(jobId: string) {
+  const schedules = await fetchJobSchedules(jobId)
+  return schedules.map((row) => ({
+    start_at: row.start_at ?? null,
+    end_at: row.end_at ?? null,
+  }))
+}
+
 export async function addScheduleRow(
   jobId: string,
   payload: { start_at: string; end_at: string; notes?: string | null }
@@ -216,11 +329,20 @@ export async function addScheduleRow(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  return result.data ?? null
+  return {
+    data: result.data ?? null,
+    notice: result.notice,
+  } satisfies JobScheduleMutationResult<ScheduleRow>
 }
 
 export async function deleteScheduleRow(jobId: string, scheduleId: string) {
-  await mutateData<boolean>(`/api/jobs/${jobId}/schedules/${scheduleId}`, { method: 'DELETE' })
+  const result = await mutateData<{ ok: true }>(`/api/jobs/${jobId}/schedules/${scheduleId}`, {
+    method: 'DELETE',
+  })
+  return {
+    data: result.data ?? null,
+    notice: result.notice,
+  } satisfies JobScheduleMutationResult<{ ok: true }>
 }
 
 export async function listPaintLogs(jobId: string) {
@@ -228,6 +350,68 @@ export async function listPaintLogs(jobId: string) {
     cache: 'no-store',
   })
   return payload.map((row) => mapPaintLogRow(row))
+}
+
+export type SendStageEmailPayload = {
+  stage: StageEmailStage
+  subject: string
+  body: string
+  estimateFileIds?: string[]
+  idempotencyKey?: string
+}
+
+export type SendStageEmailResponse = {
+  status?: EmailSendStatus
+  replayed?: boolean
+  job?: Partial<JobDetail> | null
+  notice?: string | null
+  warning?: string | null
+}
+
+export async function sendJobStageEmail(jobId: string, payload: SendStageEmailPayload) {
+  const response = await mutateData<SendStageEmailResponse>(`/api/jobs/${jobId}/send-stage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      stage: payload.stage,
+      subject: payload.subject,
+      body: payload.body,
+      idempotency_key: payload.idempotencyKey ?? makeIdempotencyKey(payload.stage, jobId),
+      estimate_file_ids: payload.estimateFileIds,
+    }),
+  })
+
+  return {
+    ...(response.data ?? null),
+    notice: response.notice,
+  } as SendStageEmailResponse | null
+}
+
+export type SaveCloseoutPaintLogsPayload = {
+  rows: Array<{
+    where_used: string
+    paint_product: string
+    sheen: string
+    color: string
+    notes: string
+  }>
+}
+
+export async function saveCloseoutPaintLogs(
+  jobId: string,
+  payload: SaveCloseoutPaintLogsPayload
+) {
+  const result = await mutateData<PaintLogRow[]>(`/api/jobs/${jobId}/paint-logs`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  return (result.data ?? []).map((row) => mapPaintLogRow(row))
+}
+
+export async function patchJobCloseoutNotes(jobId: string, closeoutNotes: string | null) {
+  return patchJobDateFields(jobId, { closeout_notes: closeoutNotes })
 }
 
 export async function createJob(payload: CreateJobPayload) {
@@ -287,5 +471,8 @@ export async function addSchedulesToCalendar(jobId: string) {
       method: 'POST',
     }
   )
-  return payload.data ?? []
+  return {
+    data: payload.data ?? [],
+    notice: payload.notice,
+  } satisfies JobScheduleMutationResult<CalendarAddResult[]>
 }

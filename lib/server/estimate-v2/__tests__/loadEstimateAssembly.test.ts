@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   buildEstimateGetResponse: vi.fn(),
@@ -59,6 +59,10 @@ function createOrderedQuery(result: unknown, orderCalls = 1) {
 }
 
 describe('loadEstimateV2Response', () => {
+  beforeEach(() => {
+    Object.values(mocks).forEach((mock) => mock.mockReset())
+  })
+
   it('assembles the extracted load service response from repository and calculation seams', async () => {
     const estimate = { id: 'estimate-1', job_id: 'job-1' }
     mocks.getEstimate.mockResolvedValue({ estimate })
@@ -218,5 +222,144 @@ describe('loadEstimateV2Response', () => {
       message: 'Quote not found',
       status: 404,
     })
+  })
+
+  it('prevents silent corruption on read: rejects hybrid partial-write state instead of assembling a valid estimate', async () => {
+    const estimate = { id: 'estimate-1', job_id: 'job-1' }
+    mocks.getEstimate.mockResolvedValue({ estimate })
+
+    const queryMap = new Map<string, ReturnType<typeof createOrderedQuery>>([
+      ['estimate_jobsettings', createOrderedQuery({ data: { labor_day_policy_enabled: true }, error: null }, 0)],
+      ['estimate_rooms', createOrderedQuery({ data: [{ room_id: 'R001' }], error: null }, 1)],
+      [
+        'estimate_room_wall_scopes',
+        createOrderedQuery(
+          {
+            data: [{ id: 'wall-scope-orphan', room_id: 'R999' }],
+            error: null,
+          },
+          2
+        ),
+      ],
+      ['estimate_ceiling_segments', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_room_ceiling_scopes', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_room_ceiling_scope_segments', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_room_trim_scopes', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_room_door_scopes', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_drywall_repairs', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_rollers', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_prejob', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_trim_items', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_job_colors', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_room_flags', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_access_fees', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_other', createOrderedQuery({ data: [], error: null }, 1)],
+    ])
+
+    let estimateSegmentsCalls = 0
+    mocks.supabaseFrom.mockImplementation((relation: string) => {
+      if (relation === 'estimate_segments') {
+        estimateSegmentsCalls += 1
+        return estimateSegmentsCalls === 1
+          ? createOrderedQuery({ data: [], error: null }, 1)
+          : createOrderedQuery({ data: [], error: null }, 2)
+      }
+
+      const query = queryMap.get(relation)
+      if (!query) {
+        throw new Error(`Unexpected relation ${relation}`)
+      }
+      return query
+    })
+
+    // This mirrors the hybrid state the save-path regression documents: a changed room roster is
+    // visible, but active wall scope rows still point at a room that no longer exists.
+    await expect(
+      loadEstimateV2Response({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+      })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('partial/corrupt estimate state'),
+      status: 409,
+    })
+
+    expect(mocks.loadCalculatedEstimateV2Artifacts).not.toHaveBeenCalled()
+    expect(mocks.buildEstimateGetResponse).not.toHaveBeenCalled()
+  })
+
+  it('rejects legacy delete-then-insert corruption when rooms are gone but active children remain', async () => {
+    const estimate = { id: 'estimate-1', job_id: 'job-1' }
+    mocks.getEstimate.mockResolvedValue({ estimate })
+
+    const queryMap = new Map<string, ReturnType<typeof createOrderedQuery>>([
+      ['estimate_jobsettings', createOrderedQuery({ data: { labor_day_policy_enabled: true }, error: null }, 0)],
+      ['estimate_rooms', createOrderedQuery({ data: [], error: null }, 1)],
+      [
+        'estimate_room_wall_scopes',
+        createOrderedQuery(
+          {
+            data: [{ id: 'wall-scope-stale', room_id: 'R001' }],
+            error: null,
+          },
+          2
+        ),
+      ],
+      ['estimate_ceiling_segments', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_room_ceiling_scopes', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_room_ceiling_scope_segments', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_room_trim_scopes', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_room_door_scopes', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_drywall_repairs', createOrderedQuery({ data: [], error: null }, 2)],
+      ['estimate_rollers', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_prejob', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_trim_items', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_job_colors', createOrderedQuery({ data: [], error: null }, 1)],
+      [
+        'estimate_room_flags',
+        createOrderedQuery(
+          {
+            data: [{ id: 'room-flag-stale', room_id: 'R001', flag_id: 'HIGH' }],
+            error: null,
+          },
+          1
+        ),
+      ],
+      ['estimate_access_fees', createOrderedQuery({ data: [], error: null }, 1)],
+      ['estimate_other', createOrderedQuery({ data: [], error: null }, 1)],
+    ])
+
+    let estimateSegmentsCalls = 0
+    mocks.supabaseFrom.mockImplementation((relation: string) => {
+      if (relation === 'estimate_segments') {
+        estimateSegmentsCalls += 1
+        return estimateSegmentsCalls === 1
+          ? createOrderedQuery({ data: [], error: null }, 1)
+          : createOrderedQuery({ data: [], error: null }, 2)
+      }
+
+      const query = queryMap.get(relation)
+      if (!query) {
+        throw new Error(`Unexpected relation ${relation}`)
+      }
+      return query
+    })
+
+    await expect(
+      loadEstimateV2Response({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+      })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('partial/corrupt estimate state'),
+      status: 409,
+    })
+
+    expect(mocks.loadCalculatedEstimateV2Artifacts).not.toHaveBeenCalled()
+    expect(mocks.buildEstimateGetResponse).not.toHaveBeenCalled()
   })
 })

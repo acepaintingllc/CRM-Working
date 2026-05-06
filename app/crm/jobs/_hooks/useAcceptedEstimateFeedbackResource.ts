@@ -25,6 +25,14 @@ type EditableFeedbackResourceBoundary<TResource> = {
   setError: (value: string | null) => void
 }
 
+function getOperationalAcceptedEstimateSnapshotId(job: JobDetail | null) {
+  // Operational feedback flows are scoped to the canonical accepted-estimate
+  // snapshot only. Navigation-only quote fallback ids must never unlock these
+  // reads or repairs.
+  const snapshotId = job?.accepted_estimate?.estimate_snapshot_id
+  return typeof snapshotId === 'string' && snapshotId.trim() ? snapshotId : null
+}
+
 export async function loadAcceptedEstimateFeedbackResource<TFeedback, TResource>({
   jobId,
   missingJobIdError,
@@ -37,7 +45,7 @@ export async function loadAcceptedEstimateFeedbackResource<TFeedback, TResource>
   }
 
   const job = await loadJobRecord(jobId)
-  const estimateSnapshotId = job?.accepted_quote?.estimate_snapshot_id ?? null
+  const estimateSnapshotId = getOperationalAcceptedEstimateSnapshotId(job)
   if (!estimateSnapshotId) {
     return buildMissingSnapshotResource(job)
   }
@@ -49,8 +57,8 @@ export async function loadAcceptedEstimateFeedbackResource<TFeedback, TResource>
 export function useAcceptedEstimateSnapshotRepair<TResource>({
   jobId,
   resource,
-  successNotice = 'Accepted estimate snapshot repaired.',
-  failureMessage = 'Failed to repair accepted estimate snapshot.',
+  successNotice = 'Accepted quote snapshot repaired.',
+  failureMessage = 'Failed to repair accepted quote snapshot.',
 }: {
   jobId: string | null | undefined
   resource: EditableFeedbackResourceBoundary<TResource>

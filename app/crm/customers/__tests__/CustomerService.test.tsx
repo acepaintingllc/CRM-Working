@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { supabaseAdmin } from '@/lib/customers/api'
+import { buildJobEstimateFileRedirectPath } from '@/lib/jobs/routes'
 const serverLogWarn = vi.fn()
 const serverLogError = vi.fn()
 
@@ -489,6 +490,43 @@ describe('customer service layer', () => {
       expect(result.data[0]?.id).toBe('job-job-1-job_scheduled-2026-04-22T09:00:00.000Z')
       expect(result.data[1]?.id).toBe('note-1')
       expect(result.data[2]?.id).toBe('job-job-1-job_created-2026-04-20T08:00:00.000Z')
+    }
+  })
+
+  it('uses the shared jobs helper for customer timeline estimate-file links', async () => {
+    const db = createMockDb((state) => {
+      if (state.table === 'customers') return { data: { id: 'customer-1' }, error: null }
+      if (state.table === 'customer_timeline') return { data: [], error: null }
+      if (state.table === 'jobs') {
+        return {
+          data: [
+            {
+              id: 'job-1',
+              title: 'Exterior repaint',
+              status: 'estimate_scheduled',
+              created_at: '2026-04-20T08:00:00.000Z',
+              estimate_date: '2026-04-21T09:00:00.000Z',
+              scheduled_date: null,
+              completed_at: null,
+            },
+          ],
+          error: null,
+        }
+      }
+      if (state.table === 'job_schedules') return { data: [], error: null }
+      if (state.table === 'estimates') return { data: [], error: null }
+      throw new Error(`Unexpected table ${state.table}`)
+    })
+
+    const result = await listCustomerTimeline('org-1', 'customer-1', { db })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      const event = result.data.find((entry) => entry.type === 'estimate_scheduled')
+      expect(event).toMatchObject({
+        link_path: buildJobEstimateFileRedirectPath('job-1'),
+        link_label: 'View estimate',
+      })
     }
   })
 

@@ -6,6 +6,34 @@ import { loadEstimateTemplateSettings } from '../estimateTemplateSettings.ts'
 import { loadCalculatedEstimateV2Artifacts } from './calculationOrchestration.ts'
 import { fail, getEstimate } from './shared.ts'
 
+function assertActiveRowsReferenceExistingRooms(params: {
+  rooms: Unsafe[]
+  childCollections: Array<{
+    table: string
+    rows: Unsafe[]
+  }>
+}) {
+  const validRoomIds = new Set(
+    params.rooms
+      .map((row) => asText(row.room_id).toUpperCase())
+      .filter((roomId) => !!roomId)
+  )
+
+  for (const collection of params.childCollections) {
+    for (const row of collection.rows) {
+      const roomId = asText(row.room_id).toUpperCase()
+      if (!roomId) continue
+      if (validRoomIds.has(roomId)) continue
+
+      const rowId = asText(row.id)
+      fail(
+        `Estimate integrity error: partial/corrupt estimate state. Active ${collection.table} row${rowId ? ` ${rowId}` : ''} references missing room_id ${roomId}.`,
+        409
+      )
+    }
+  }
+}
+
 export async function loadEstimateV2Response(params: {
   requestOrigin: string
   orgId: string
@@ -58,6 +86,30 @@ export async function loadEstimateV2Response(params: {
   if (accessFees.error) fail(accessFees.error.message, 500)
   if (other.error) fail(other.error.message, 500)
 
+  const roomRows = (rooms.data ?? []) as Unsafe[]
+  const roomWallScopeRows = (roomWallScopes.data ?? []) as Unsafe[]
+  const wallSegmentRows = (wallSegments.data ?? []) as Unsafe[]
+  const roomCeilingScopeRows = (roomCeilingScopes.data ?? []) as Unsafe[]
+  const ceilingScopeSegmentRows = (ceilingScopeSegments.data ?? []) as Unsafe[]
+  const roomTrimScopeRows = (roomTrimScopes.data ?? []) as Unsafe[]
+  const roomDoorScopeRows = (roomDoorScopes.data ?? []) as Unsafe[]
+  const drywallRepairRows = (drywallRepairs.data ?? []) as Unsafe[]
+  const roomFlagRows = (roomFlags.data ?? []) as Unsafe[]
+
+  assertActiveRowsReferenceExistingRooms({
+    rooms: roomRows,
+    childCollections: [
+      { table: 'estimate_room_wall_scopes', rows: roomWallScopeRows },
+      { table: 'estimate_segments', rows: wallSegmentRows },
+      { table: 'estimate_room_ceiling_scopes', rows: roomCeilingScopeRows },
+      { table: 'estimate_room_ceiling_scope_segments', rows: ceilingScopeSegmentRows },
+      { table: 'estimate_room_trim_scopes', rows: roomTrimScopeRows },
+      { table: 'estimate_room_door_scopes', rows: roomDoorScopeRows },
+      { table: 'estimate_drywall_repairs', rows: drywallRepairRows },
+      { table: 'estimate_room_flags', rows: roomFlagRows },
+    ],
+  })
+
   const orgDefaults = await loadEstimateTemplateSettings({
     orgId: params.orgId,
     estimateId: params.estimateId,
@@ -68,14 +120,14 @@ export async function loadEstimateV2Response(params: {
     userId: params.userId,
     estimateId: params.estimateId,
     jobsettings: (jobsettings.data as Unsafe | null) ?? null,
-    rooms: (rooms.data ?? []) as Unsafe[],
-    roomWallScopes: (roomWallScopes.data ?? []) as Unsafe[],
-    wallSegments: (wallSegments.data ?? []) as Unsafe[],
-    roomCeilingScopes: (roomCeilingScopes.data ?? []) as Unsafe[],
-    ceilingScopeSegments: (ceilingScopeSegments.data ?? []) as Unsafe[],
-    roomTrimScopes: (roomTrimScopes.data ?? []) as Unsafe[],
-    roomDoorScopes: (roomDoorScopes.data ?? []) as Unsafe[],
-    drywallRepairs: (drywallRepairs.data ?? []) as Unsafe[],
+    rooms: roomRows,
+    roomWallScopes: roomWallScopeRows,
+    wallSegments: wallSegmentRows,
+    roomCeilingScopes: roomCeilingScopeRows,
+    ceilingScopeSegments: ceilingScopeSegmentRows,
+    roomTrimScopes: roomTrimScopeRows,
+    roomDoorScopes: roomDoorScopeRows,
+    drywallRepairs: drywallRepairRows,
     accessFees: (accessFees.data ?? []) as Unsafe[],
     other: (other.data ?? []) as Unsafe[],
     orgDefaults,

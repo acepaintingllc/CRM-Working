@@ -76,7 +76,17 @@ export type EstimateV2AccessFeeOption = EstimateV2CatalogOption & {
 export type EstimateV2PaintProductOption = EstimateV2CatalogOption & {
   type: string
   scopes?: string[]
+  price_per_gal?: number | null
   coverage_sqft_per_gal_per_coat?: number | null
+}
+
+export type EstimateV2SupplyRateOption = {
+  key: string
+  supply_group?: string | null
+  scope?: string | null
+  unit?: string | null
+  value: number
+  crew_multiplier?: 'Y' | 'N' | string | null
 }
 
 export type EstimateV2ProductionRateOption = EstimateV2CatalogOption & {
@@ -150,6 +160,7 @@ export type EstimateV2Catalogs = {
   paint_products: EstimateV2PaintProductOption[]
   color_codes: EstimateV2CatalogOption[]
   production_rates: EstimateV2ProductionRateOption[]
+  supplies_rates?: EstimateV2SupplyRateOption[]
   height_factors: EstimateV2HeightFactorOption[]
   room_types: EstimateV2CatalogOption[]
   room_flags: EstimateV2RoomFlagOption[]

@@ -132,7 +132,10 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
         ? round4(effectiveQuantity * baseUnitRate * ceilingMultiplier)
         : 0
     const overrideTotal = nonNeg(n(repair.override_total))
-    const effectiveTotal = round4(overrideTotal ?? calculatedTotal)
+    const effectiveTotal =
+      effectiveQuantity > 0
+        ? round4(overrideTotal ?? calculatedTotal)
+        : 0
     const key = scopeKey(repair)
 
     if (!repairType) {

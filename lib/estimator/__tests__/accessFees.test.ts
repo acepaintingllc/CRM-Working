@@ -102,7 +102,7 @@ test('calculateAccessFeeRows ignores drafts with blank access fee ids', () => {
   assert.equal(result.total, 0)
 })
 
-test('calculateAccessFeeRows defaults invalid or too-small quantities to one', () => {
+test('calculateAccessFeeRows preserves explicit zero quantity but defaults invalid or negative quantities to one', () => {
   const result = calculateAccessFeeRows({
     drafts: [
       accessFeeDraft({ id: 'blank-qty', qty: '' }),
@@ -113,9 +113,9 @@ test('calculateAccessFeeRows defaults invalid or too-small quantities to one', (
     catalog: [ladderAccessFee],
   })
 
-  assert.deepEqual(result.rows.map((row) => row.quantity), [1, 1, 1, 1])
-  assert.deepEqual(result.rows.map((row) => row.total), [50, 50, 50, 50])
-  assert.equal(result.total, 200)
+  assert.deepEqual(result.rows.map((row) => row.quantity), [1, 0, 1, 1])
+  assert.deepEqual(result.rows.map((row) => row.total), [50, 0, 50, 50])
+  assert.equal(result.total, 150)
 })
 
 test('calculateAccessFeeRows rounds row and aggregate totals to two decimals', () => {

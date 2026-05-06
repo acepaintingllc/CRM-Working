@@ -50,6 +50,9 @@ type RecommendationCardVm = {
   evidence: string[]
   reason: string
   basedOnJobCountLabel: string
+  isPending: boolean
+  applyLabel: string
+  dismissLabel: string
 }
 
 export type InsightsTrendsPageVm = {
@@ -58,8 +61,23 @@ export type InsightsTrendsPageVm = {
   patterns: PatternVm[]
   recommendations: RecommendationCardVm[]
   recommendationCountLabel: string
+  recommendationGenerateLabel: string
+  recommendationsGenerating: boolean
+  applyConfirmation: {
+    isOpen: boolean
+    description: string
+    info: string | null
+    confirming: boolean
+  }
   jobsAnalyzedLabel: string
   hasMetrics: boolean
+}
+
+type RecommendationActionState = {
+  pendingId?: string | null
+  pendingAction?: 'apply' | 'dismiss' | null
+  generating?: boolean
+  confirmingApplyId?: string | null
 }
 
 const numberFormatter = new Intl.NumberFormat('en-US', {
@@ -171,8 +189,14 @@ function metricCount(metrics: Record<TrendMetricKey, EstimateFeedbackTrendMetric
 }
 
 function buildRecommendationCardVm(
-  recommendation: TrendRecommendationRecord
+  recommendation: TrendRecommendationRecord,
+  actionState: RecommendationActionState
 ): RecommendationCardVm {
+  const pendingAction =
+    actionState.pendingId === recommendation.id ? actionState.pendingAction ?? null : null
+  const isConfirming = actionState.confirmingApplyId === recommendation.id
+  const isPending = Boolean(pendingAction) || isConfirming
+
   return {
     id: recommendation.id,
     title: titleCase(recommendation.target_setting_key),
@@ -184,16 +208,28 @@ function buildRecommendationCardVm(
     evidence: buildEvidenceItems(recommendation),
     reason: recommendation.reason,
     basedOnJobCountLabel: `${recommendation.based_on_job_count} jobs`,
+    isPending,
+    applyLabel: pendingAction === 'apply' ? 'Applying' : 'Apply',
+    dismissLabel: pendingAction === 'dismiss' ? 'Dismissing' : 'Dismiss',
   }
 }
 
 export function buildInsightsTrendsPageVm(
   summary: EstimateFeedbackTrendSummary,
-  recommendations: TrendRecommendationRecord[] = []
+  recommendations: TrendRecommendationRecord[] = [],
+  actionState: RecommendationActionState = {}
 ): InsightsTrendsPageVm {
   const openRecommendations = recommendations.filter(
     (recommendation) => recommendation.status === 'open'
   )
+  const recommendationCards = openRecommendations.map((recommendation) =>
+    buildRecommendationCardVm(recommendation, actionState)
+  )
+  const confirmingApplyCard =
+    recommendationCards.find((card) => card.id === actionState.confirmingApplyId) ?? null
+  const confirmingApply =
+    actionState.pendingId === actionState.confirmingApplyId &&
+    actionState.pendingAction === 'apply'
   const varianceRows = (Object.keys(summary.metrics) as TrendMetricKey[]).map((key) => {
     const metric = summary.metrics[key]
     const config = metricLabels[key]
@@ -254,8 +290,20 @@ export function buildInsightsTrendsPageVm(
       totalImpact: formatCurrency(pattern.totalImpact),
       tone: toneForValue(pattern.totalImpact),
     })),
-    recommendations: openRecommendations.map(buildRecommendationCardVm),
+    recommendations: recommendationCards,
     recommendationCountLabel: `${openRecommendations.length} open`,
+    recommendationGenerateLabel: actionState.generating ? 'Generating' : 'Generate recommendations',
+    recommendationsGenerating: Boolean(actionState.generating),
+    applyConfirmation: {
+      isOpen: Boolean(confirmingApplyCard),
+      description: confirmingApplyCard
+        ? `Apply ${confirmingApplyCard.title} to estimator settings.`
+        : 'Apply this recommendation to estimator settings.',
+      info: confirmingApplyCard
+        ? `Target: ${confirmingApplyCard.targetSettingKey}. Current value: ${confirmingApplyCard.currentValue}. Suggested value: ${confirmingApplyCard.suggestedValue}.`
+        : null,
+      confirming: confirmingApply,
+    },
     jobsAnalyzedLabel: `${summary.jobsAnalyzed} jobs analyzed`,
     hasMetrics: metricCount(summary.metrics) > 0,
   }

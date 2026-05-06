@@ -67,6 +67,50 @@ describe('Job Center email composer textareas', () => {
     expect(bodyField).toHaveStyle({ minHeight: '420px' })
   })
 
+  it('renders quote-facing attachment copy in the stage email modal', () => {
+    mockUseEmailComposer.mockReturnValue({
+      job: { customer_email: 'customer@example.com' },
+      subject: 'Quote sent',
+      setSubject: vi.fn(),
+      body: 'Quote attachment email body',
+      setBody: vi.fn(),
+      loading: false,
+      sending: false,
+      error: null,
+      blockingIssues: [],
+      estimateFiles: [
+        { id: 'file-1', name: 'Quote-v2.pdf' },
+        { id: 'file-2', name: 'Quote-v1.pdf' },
+      ],
+      selectedEstimateFiles: [{ id: 'file-1', name: 'Quote-v2.pdf' }],
+      selectedEstimateFileIds: ['file-1'],
+      setSelectedEstimateFileIds: vi.fn(),
+      showEstimatePicker: false,
+      setShowEstimatePicker: vi.fn(),
+      needsEstimateAttachment: true,
+      missingEstimateSelection: false,
+      canSend: true,
+      closeLabel: 'Cancel',
+      actionLabel: 'Send quote email',
+      alreadySent: false,
+      send: vi.fn(),
+    })
+
+    render(
+      <StageEmailModal
+        jobId="job-1"
+        stage="estimate_sent"
+        open
+        onClose={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('Quote attachments ready: 1 selected')).toBeTruthy()
+    expect(screen.getByText('Quote attachments')).toBeTruthy()
+    expect(screen.getByText('Select which quote PDFs go out with this stage email.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Choose quote PDFs' })).toBeTruthy()
+  })
+
   it('gives the completion review email body editor enough room to read the message', () => {
     mockUseCloseoutForm.mockReturnValue({
       job: { title: 'Kitchen repaint', customer_email: 'customer@example.com' },

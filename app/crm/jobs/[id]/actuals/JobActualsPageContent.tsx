@@ -21,7 +21,7 @@ export function JobActualsPageContent() {
       <CrmPageHeader
         eyebrow="Job closeout"
         title="Job actuals"
-        description="Record job-level labor, paint, and cost actuals against the accepted estimate snapshot."
+        description="Record job-level labor, paint, and cost actuals against the accepted quote snapshot."
         backAction={
           <CrmButton type="button" tone="secondary" onClick={() => void controller.backToJob()}>
             <span className="inline-flex items-center gap-1.5">
@@ -44,7 +44,7 @@ export function JobActualsPageContent() {
         error={controller.error}
         hasData={Boolean(controller.job)}
         loadingTitle="Loading actuals"
-        loadingDescription="Loading accepted estimate and job actuals..."
+        loadingDescription="Loading accepted quote and job actuals..."
         errorTitle="Job actuals unavailable"
         emptyTitle="Job not found"
         emptyDescription="This job could not be found."
@@ -55,10 +55,10 @@ export function JobActualsPageContent() {
 
         {!controller.vm ? (
           <CrmEmptyState
-            title="No accepted estimate snapshot"
-            description="This job has an accepted quote, but the immutable estimate snapshot is missing. Retry snapshot creation before entering actuals."
+            title="No accepted quote snapshot"
+            description="This job has an accepted quote, but the immutable quote snapshot is missing. Retry snapshot creation before entering actuals."
             action={
-              controller.job?.accepted_quote ? (
+              controller.job?.accepted_estimate ? (
                 <CrmButton
                   tone="primary"
                   disabled={controller.repairingSnapshot}

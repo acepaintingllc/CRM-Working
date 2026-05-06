@@ -57,6 +57,78 @@ function createDerivedStore() {
 }
 
 describe('useEstimateV2DerivedState', () => {
+  it('uses server-calculated totals as the source of truth while the saved snapshot is clean', () => {
+    const { store } = createDerivedStore()
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.sections.calculation.hasServerCalculations).toBe(true)
+    expect(result.current.useLocalPreviewCalculations).toBe(false)
+    expect(result.current.selectedWallSubtotal).toBe(700)
+    expect(result.current.selectedCeilingSubtotal).toBe(180)
+    expect(result.current.selectedTrimSubtotal).toBe(210)
+    expect(result.current.wallScopeEffectiveTotalById.get('wall-r001-main')).toBe(700)
+    expect(result.current.ceilingScopeEffectiveTotalById.get('ceiling-r001-main')).toBe(180)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r001-main')).toBe(210)
+    expect(result.current.activeScopeTotals).toMatchObject({
+      wallsSqFt: 476,
+      ceilingsSqFt: 180,
+      trimMeasurement: 44,
+    })
+  })
+
+  it('switches displayed totals to local preview values once a saved scope is dirty', () => {
+    const { store } = createDerivedStore()
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.useLocalPreviewCalculations).toBe(false)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r001-main')).toBe(210)
+    expect(result.current.selectedTrimSubtotal).toBe(210)
+
+    act(() => {
+      store.getState().setTrimScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === 'trim-r001-main'
+            ? { ...scope, helperValue: '50', overrideTotal: '' }
+            : scope
+        )
+      )
+    })
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.sections.calculation.hasServerCalculations).toBe(true)
+    expect(result.current.useLocalPreviewCalculations).toBe(true)
+    expect(result.current.selectedTrimMeasurement).toBe(44)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r001-main')).toBe(125)
+    expect(result.current.selectedTrimSubtotal).toBe(125)
+  })
+
+  it('falls back to local preview totals when server wall room totals are missing', () => {
+    const { store } = createDerivedStore()
+
+    act(() => {
+      store.getState().setMeta((prev) => ({
+        ...prev,
+        wallCalculations: {
+          ...(prev.wallCalculations ?? {}),
+          room_totals: [],
+        },
+      }))
+    })
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.sections.calculation.hasServerCalculations).toBe(false)
+    expect(result.current.useLocalPreviewCalculations).toBe(true)
+    expect(result.current.selectedRoomEffectiveSqFt).toBe(396)
+    expect(result.current.selectedWallSubtotal).toBeNull()
+    expect(result.current.selectedCeilingSubtotal).toBeNull()
+    expect(result.current.selectedTrimSubtotal).toBe(210)
+    expect(result.current.activeScopeTotals.wallsSqFt).toBe(476)
+  })
+
   it('builds stable mixed-estimate derived output from the canonical fixture', () => {
     const { fixture, store } = createDerivedStore()
 
@@ -220,6 +292,73 @@ describe('useEstimateV2DerivedState', () => {
       ceilingsSqFt: 300,
       trimMeasurement: 64,
     })
+  })
+
+  it('excludes disabled scopes from subtotal rollups even when a displayed effective total exists', () => {
+    const { store } = createDerivedStore()
+
+    act(() => {
+      store.getState().setSelectedRoomId('R002')
+    })
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.useLocalPreviewCalculations).toBe(false)
+    expect(result.current.wallScopeEffectiveTotalById.get('wall-r002-main')).toBe(220)
+    expect(result.current.wallScopeEffectiveTotalById.get('wall-r002-excluded')).toBe(80)
+    expect(result.current.selectedWallSubtotal).toBe(220)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r002-excluded')).toBe(60)
+    expect(result.current.selectedTrimSubtotal).toBeNull()
+    expect(result.current.selectedTrimMeasurement).toBeNull()
+    expect(result.current.activeScopeTotals.wallsSqFt).toBe(476)
+    expect(result.current.activeScopeTotals.trimMeasurement).toBe(44)
+  })
+
+  it('uses manual overrides as the displayed effective total while preview mode is active', () => {
+    const { store } = createDerivedStore()
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    act(() => {
+      store.getState().setTrimScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === 'trim-r001-main' ? { ...scope, overrideTotal: '333' } : scope
+        )
+      )
+    })
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.useLocalPreviewCalculations).toBe(true)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r001-main')).toBe(333)
+    expect(result.current.selectedTrimSubtotal).toBe(333)
+  })
+
+  it('keeps room subtotals internally consistent with estimate-level totals', () => {
+    const { store } = createDerivedStore()
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.totalEffectiveAreaSqFt).toBe(476)
+    expect(result.current.activeScopeTotals.wallsSqFt).toBe(476)
+    expect(result.current.displayedRoomEffectiveAreaByRoomId.get('R001')).toBe(396)
+    expect(result.current.displayedRoomEffectiveAreaByRoomId.get('R002')).toBe(80)
+    expect(result.current.selectedRoomEffectiveSqFt).toBe(396)
+    expect(result.current.selectedWallSubtotal).toBe(700)
+    expect(result.current.selectedCeilingSubtotal).toBe(180)
+    expect(result.current.selectedTrimSubtotal).toBe(210)
+    expect(
+      (result.current.displayedRoomEffectiveAreaByRoomId.get('R001') ?? 0) +
+        (result.current.displayedRoomEffectiveAreaByRoomId.get('R002') ?? 0)
+    ).toBe(result.current.totalEffectiveAreaSqFt)
+
+    act(() => {
+      store.getState().setSelectedRoomId('R002')
+    })
+
+    expect(result.current.selectedRoomEffectiveSqFt).toBe(80)
+    expect(result.current.selectedWallSubtotal).toBe(220)
+    expect(result.current.selectedCeilingSubtotal).toBe(90)
+    expect(result.current.selectedTrimSubtotal).toBeNull()
+    expect(result.current.activeScopeTotals.ceilingsSqFt).toBe(180)
+    expect(result.current.activeScopeTotals.trimMeasurement).toBe(44)
   })
 
   it('keeps the active scope rail totals separated by scope and unit for dirty edits', () => {

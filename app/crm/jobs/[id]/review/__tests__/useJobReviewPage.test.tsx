@@ -29,7 +29,7 @@ vi.mock('@/lib/jobs/client', () => ({
 const job = {
   id: 'job-1',
   title: 'Interior repaint',
-  accepted_quote: {
+  accepted_estimate: {
     estimate_snapshot_id: 'snapshot-1',
     version_name: 'Accepted option',
     estimated_labor_hours: 20,
@@ -91,7 +91,7 @@ describe('useJobReviewPage', () => {
     mocks.loadJobReview.mockResolvedValue(review)
     mocks.repairAcceptedEstimateSnapshot.mockResolvedValue({
       data: { estimate_snapshot_id: 'snapshot-1' },
-      notice: 'Accepted estimate snapshot repaired.',
+      notice: 'Accepted quote snapshot repaired.',
     })
     mocks.routerPush.mockReset()
   })
@@ -187,8 +187,8 @@ describe('useJobReviewPage', () => {
   it('repairs a missing accepted quote snapshot and reloads review data', async () => {
     const missingSnapshotJob = {
       ...job,
-      accepted_quote: {
-        ...job.accepted_quote!,
+      accepted_estimate: {
+        ...job.accepted_estimate!,
         estimate_snapshot_id: null,
       },
     } as JobDetail
@@ -209,14 +209,31 @@ describe('useJobReviewPage', () => {
     expect(mocks.loadJobRecord).toHaveBeenCalledTimes(2)
     expect(mocks.loadJobReview).toHaveBeenCalledWith('job-1', 'snapshot-1')
     expect(result.current.vm?.estimateSnapshotId).toBe('snapshot-1')
-    expect(result.current.notice).toBe('Accepted estimate snapshot repaired.')
+    expect(result.current.notice).toBe('Accepted quote snapshot repaired.')
+  })
+
+  it('does not load review data from navigation-only quote fallback ids', async () => {
+    mocks.loadJobRecord.mockResolvedValue({
+      ...job,
+      linked_estimate_id: null,
+      estimate_navigation_id: 'draft-estimate',
+      accepted_estimate: null,
+    } as JobDetail)
+
+    const { result } = renderHook(() => useJobReviewPage())
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(mocks.loadJobReview).not.toHaveBeenCalled()
+    expect(result.current.vm).toBeNull()
+    expect(result.current.job?.estimate_navigation_id).toBe('draft-estimate')
   })
 
   it('surfaces accepted quote snapshot repair failures without reloading review data', async () => {
     const missingSnapshotJob = {
       ...job,
-      accepted_quote: {
-        ...job.accepted_quote!,
+      accepted_estimate: {
+        ...job.accepted_estimate!,
         estimate_snapshot_id: null,
       },
     } as JobDetail

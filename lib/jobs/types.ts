@@ -73,9 +73,19 @@ export type JobWorkflowResolvedActionKind =
 export type JobWorkflowSubject = {
   id: string
   status: JobStatus
+  /**
+   * Canonical persisted accepted-estimate link for operational workflows.
+   */
   linked_estimate_id?: string | null
-  accepted_quote?: {
+  /**
+   * Quote-route navigation contract only. This may be derived from linked
+   * estimate rows for legacy/draft navigation, but operational workflow gates
+   * must not treat it as accepted estimate ownership.
+   */
+  estimate_navigation_id?: string | null
+  accepted_estimate?: {
     estimate_snapshot_id?: string | null
+    estimate_id?: string | null
   } | null
   job_actuals_status?: JobActualsStatus | string | null
   scheduled_date?: string | null
@@ -96,6 +106,17 @@ type JobWorkflowActionDescriptor = {
   getDisabledReason?: (job: JobWorkflowSubject, surface: JobWorkflowSurface) => string | null
   confirmMessage?: string
   isVisible?: (job: JobWorkflowSubject, surface: JobWorkflowSurface) => boolean
+}
+
+function hasOperationalAcceptedEstimate(job: JobWorkflowSubject) {
+  return Boolean(job.accepted_estimate)
+}
+
+function resolveQuoteNavigationEstimateId(job: JobWorkflowSubject) {
+  if (job.estimate_navigation_id) return job.estimate_navigation_id
+  // Keep a narrow compatibility fallback for callers that have not yet been
+  // updated to pass the explicit navigation contract.
+  return job.linked_estimate_id ?? null
 }
 
 export type JobWorkflowResolvedAction = {
@@ -281,10 +302,10 @@ const JOB_WORKFLOW_ACTION_DESCRIPTORS: Record<JobWorkflowActionId, JobWorkflowAc
   },
   open_quote: {
     kind: 'navigate',
-    getHref: (job) =>
-      job.linked_estimate_id && typeof job.linked_estimate_id === 'string'
-        ? `/crm/quotes/${job.linked_estimate_id}`
-        : `/crm/quotes/create?job=${job.id}`,
+    getHref: (job) => {
+      const estimateId = resolveQuoteNavigationEstimateId(job)
+      return estimateId ? `/crm/quotes/${estimateId}` : `/crm/quotes/create?job=${job.id}`
+    },
     getLabel: () => 'Open quote',
   },
   open_job_actuals: {
@@ -293,18 +314,22 @@ const JOB_WORKFLOW_ACTION_DESCRIPTORS: Record<JobWorkflowActionId, JobWorkflowAc
     getHref: (job) => `/crm/jobs/${job.id}/actuals`,
     getLabel: () => 'Job actuals',
     getDisabledReason: (job) => {
-      if (!job.accepted_quote) return 'Accept a quote before entering job actuals.'
+      if (!hasOperationalAcceptedEstimate(job)) {
+        return 'Accept a quote before entering job actuals.'
+      }
       return null
     },
   },
   open_estimate_review: {
     kind: 'navigate',
     getHref: (job) => `/crm/jobs/${job.id}/review`,
-    getLabel: () => 'Estimate review',
+    getLabel: () => 'Quote review',
     getDisabledReason: (job) => {
-      if (!job.accepted_quote) return 'Accept a quote before reviewing the estimate.'
+      if (!hasOperationalAcceptedEstimate(job)) {
+        return 'Accept a quote before reviewing the quote.'
+      }
       if (job.job_actuals_status !== 'submitted' && job.job_actuals_status !== 'locked') {
-        return 'Submit job actuals before estimate review.'
+        return 'Submit job actuals before quote review.'
       }
       return null
     },

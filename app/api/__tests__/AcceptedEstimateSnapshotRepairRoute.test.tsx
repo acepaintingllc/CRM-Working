@@ -68,7 +68,7 @@ describe('accepted estimate snapshot repair route', () => {
     })
     await expect(response.json()).resolves.toEqual({
       data: repairedSource,
-      notice: 'Accepted estimate snapshot repaired.',
+      notice: 'Accepted quote snapshot repaired.',
     })
   })
 

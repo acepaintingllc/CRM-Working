@@ -7,6 +7,7 @@ import {
   type UnsafeRecord as Unsafe,
 } from '../../estimator/parsing.ts'
 import type { V2RoomRosterRow } from '../estimateV2RoutePayload.ts'
+import type { EstimateRoomPersistenceRow } from './persistenceTypes.ts'
 
 import { nextRoomId } from './shared.ts'
 
@@ -33,8 +34,8 @@ export async function saveV2RoomRoster(params: {
   }
 
   const keepIds = new Set<string>()
-  const withId: Record<string, unknown>[] = []
-  const withoutId: Record<string, unknown>[] = []
+  const withId: EstimateRoomPersistenceRow[] = []
+  const withoutId: EstimateRoomPersistenceRow[] = []
   for (const row of params.rows) {
     const existingMatch =
       (row.id ? existingById.get(row.id) : undefined) ?? existingByRoomId.get(row.room_id)
@@ -112,7 +113,7 @@ export function buildV2RoomPersistenceRow(row: {
   width_in: number | null
   wallheight_in: number | null
   condition_selections: unknown
-}) {
+}): EstimateRoomPersistenceRow {
   return {
     id: row.id,
     org_id: row.org_id,

@@ -7,7 +7,7 @@ type EstimateComparisonSectionProps = {
 
 export function EstimateComparisonSection({ vm }: EstimateComparisonSectionProps) {
   return (
-    <CrmSectionCard title="Estimate comparison" variant="rail">
+    <CrmSectionCard title="Quote comparison" variant="rail">
       <div className="grid gap-3">
         {vm.hasInvalidActuals ? (
           <div className="rounded-xl border border-[color:var(--crm-ui-warning-border)] bg-[color:var(--crm-ui-warning-bg)] px-3 py-2 text-xs font-semibold text-[color:var(--crm-ui-warning-text)]">
@@ -41,7 +41,7 @@ export function EstimateComparisonSection({ vm }: EstimateComparisonSectionProps
               <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
                 <div>
                   <dt className="ace-crm-mono text-[10px] text-[color:var(--crm-ui-muted)]">
-                    Estimate
+                    Quote
                   </dt>
                   <dd className="font-bold text-[color:var(--crm-ui-text)]">
                     {row.estimate}

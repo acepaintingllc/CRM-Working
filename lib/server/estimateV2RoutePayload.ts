@@ -29,6 +29,13 @@ import {
   parseConditionModifierRow,
   type EstimateV2ConditionSelections,
 } from '../estimator/conditionModifiers.ts'
+import {
+  toCeilingCalculationCatalogs as toSharedCeilingCalculationCatalogs,
+  toDoorCalculationCatalogs as toSharedDoorCalculationCatalogs,
+  toDrywallCalculationCatalogs as toSharedDrywallCalculationCatalogs,
+  toTrimCalculationCatalogs as toSharedTrimCalculationCatalogs,
+  toWallCalculationCatalogs as toSharedWallCalculationCatalogs,
+} from '../estimator/v2CalculationShared.ts'
 
 function nextRoomId(used: Set<string>, startAt: number) {
   let n = Math.max(1, startAt)
@@ -717,150 +724,22 @@ export function buildV2DrywallRepairRows(rows: Unsafe[], roomIds: Set<string>) {
 
 // ─── Catalog builders ─────────────────────────────────────────────────────────
 
-export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallCalculationCatalogs | null {
-  if (!raw || typeof raw !== 'object') return null
-  const catalogs = raw as {
-    paint_products?: Unsafe[]
-    supplies_rates?: Unsafe[]
-    condition_modifiers?: Unsafe[]
-  }
-  return {
-    paint_products: Array.isArray(catalogs.paint_products)
-      ? catalogs.paint_products.map((row) => ({
-          id: asText((row as Unsafe).id),
-          type: asText((row as Unsafe).type),
-          label: asText((row as Unsafe).label || (row as Unsafe).name || (row as Unsafe).type),
-          price_per_gal: asNullableNumber((row as Unsafe).price_per_gal),
-          coverage_sqft_per_gal_per_coat: asNullableNumber(
-            (row as Unsafe).coverage_sqft_per_gal_per_coat
-          ),
-        }))
-      : [],
-    supplies_rates: Array.isArray(catalogs.supplies_rates)
-      ? catalogs.supplies_rates.map((row) => ({
-          key: asText((row as Unsafe).key),
-          supply_group: asText((row as Unsafe).supply_group) || null,
-          scope: asText((row as Unsafe).scope) || null,
-          unit: asText((row as Unsafe).unit) || null,
-          value: asNullableNumber((row as Unsafe).value) ?? 0,
-          crew_multiplier: asText((row as Unsafe).crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
-        }))
-      : [],
-    condition_modifiers: Array.isArray(catalogs.condition_modifiers)
-      ? catalogs.condition_modifiers
-          .map((row) => parseConditionModifierRow(row))
-          .filter((row): row is NonNullable<ReturnType<typeof parseConditionModifierRow>> => row != null)
-      : [],
-  }
+export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallCalculationCatalogs {
+  return toSharedWallCalculationCatalogs(raw)
 }
 
 export function toCeilingCalculationCatalogs(raw: Unsafe | null | undefined) {
-  const base = toWallCalculationCatalogs(raw)
-  if (!raw || typeof raw !== 'object') return null
-  const catalogs = raw as { ceiling_types?: Unsafe[] }
-  return {
-    ...base,
-        ceiling_types: Array.isArray(catalogs.ceiling_types)
-      ? catalogs.ceiling_types.map((row) => ({
-          id: asText((row as Unsafe).id),
-          labor_mult: asNullableNumber((row as Unsafe).labor_mult),
-          area_factor: asNullableNumber((row as Unsafe).area_factor),
-        }))
-      : [],
-  }
+  return toSharedCeilingCalculationCatalogs(raw)
 }
 
 export function toTrimCalculationCatalogs(raw: Unsafe | null | undefined) {
-  const base = toWallCalculationCatalogs(raw)
-  if (!raw || typeof raw !== 'object') return null
-  const catalogs = raw as { trim_items?: Unsafe[]; production_rates?: Unsafe[] }
-  return {
-    ...base,
-    trim_items: Array.isArray(catalogs.trim_items)
-      ? catalogs.trim_items.map((row) => ({
-          id: asText((row as Unsafe).id),
-          family: asText((row as Unsafe).family || (row as Unsafe).category) || null,
-          default_unit_type: toTrimUnitType((row as Unsafe).unit_type || (row as Unsafe).unit),
-          helper_allowed:
-            asText((row as Unsafe).helper_allowed).toUpperCase() === 'Y' ||
-            (row as Unsafe).helper_allowed === true,
-          default_production_rate_id:
-            asText((row as Unsafe).default_production_rate_id || (row as Unsafe).production_rate_id) || null,
-          trim_category: asText((row as Unsafe).trim_category) || null,
-          measurement_class: asText((row as Unsafe).measurement_class) || null,
-          picker_group: asText((row as Unsafe).picker_group) || null,
-        }))
-      : [],
-    production_rates: Array.isArray(catalogs.production_rates)
-      ? catalogs.production_rates
-          .map((row) => ({
-            id: asText((row as Unsafe).id),
-            scope_id: asText((row as Unsafe).scope_id || (row as Unsafe).scope) || null,
-            units_per_hour: asNullableNumber((row as Unsafe).sqft_per_hr ?? (row as Unsafe).units_per_hour),
-            prep_units_per_hour: asNullableNumber((row as Unsafe).prep_sqft_per_hr ?? (row as Unsafe).prep_units_per_hour),
-            primer_units_per_hour: asNullableNumber((row as Unsafe).primer_sqft_per_hr ?? (row as Unsafe).primer_units_per_hour),
-          }))
-          .filter((row) => row.id)
-      : [],
-  }
+  return toSharedTrimCalculationCatalogs(raw)
 }
 
 export function toDoorCalculationCatalogs(raw: Unsafe | null | undefined) {
-  if (!raw || typeof raw !== 'object') return null
-  const catalogs = raw as { door_types?: Unsafe[]; unit_rates_doors?: Unsafe[]; categories?: Unsafe[] }
-  const categoryRows = Array.isArray(catalogs.categories)
-    ? ((catalogs.categories.find((entry) => asText((entry as Unsafe).key) === 'unit_rates_doors') as Unsafe | undefined)?.rows as Unsafe[] | undefined)
-    : undefined
-  const rows = Array.isArray(catalogs.door_types)
-    ? catalogs.door_types
-    : Array.isArray(catalogs.unit_rates_doors)
-      ? catalogs.unit_rates_doors
-      : Array.isArray(categoryRows)
-        ? categoryRows
-        : []
-  return {
-    door_unit_rates: rows
-      .filter((row) => (row as Unsafe).active !== false)
-      .map((row) => ({
-        id: asText((row as Unsafe).id).toUpperCase(),
-        label: asText((row as Unsafe).label || (row as Unsafe).display_name || (row as Unsafe).id),
-        unit_rate_type: asText((row as Unsafe).unit_rate_type) || null,
-        unit: asText((row as Unsafe).unit) || null,
-        default_qty: asNullableNumber((row as Unsafe).default_qty),
-        labor_rate: asNullableNumber((row as Unsafe).labor_rate),
-        material_rate: asNullableNumber((row as Unsafe).material_rate),
-        amount: asNullableNumber((row as Unsafe).amount),
-      }))
-      .filter((row) => row.id),
-  }
+  return toSharedDoorCalculationCatalogs(raw)
 }
 
 export function toDrywallCalculationCatalogs(raw: Unsafe | null | undefined) {
-  if (!raw || typeof raw !== 'object') return null
-  const catalogs = raw as { drywall_rates?: Unsafe[]; unit_rates_drywall?: Unsafe[]; categories?: Unsafe[] }
-  const categoryRows = Array.isArray(catalogs.categories)
-    ? ((catalogs.categories.find((entry) => asText((entry as Unsafe).key) === 'unit_rates_drywall') as Unsafe | undefined)?.rows as Unsafe[] | undefined)
-    : undefined
-  const rows = Array.isArray(catalogs.drywall_rates)
-    ? catalogs.drywall_rates
-    : Array.isArray(catalogs.unit_rates_drywall)
-      ? catalogs.unit_rates_drywall
-      : Array.isArray(categoryRows)
-        ? categoryRows
-        : []
-  return {
-    drywall_unit_rates: rows
-      .filter((row) => (row as Unsafe).active !== false)
-      .map((row) => ({
-        id: asText((row as Unsafe).id).toLowerCase(),
-        label: asText((row as Unsafe).label || (row as Unsafe).display_name || (row as Unsafe).id),
-        unit_rate_type: asText((row as Unsafe).unit_rate_type).toLowerCase() || null,
-        unit: asText((row as Unsafe).unit).toUpperCase() || null,
-        amount: asNullableNumber((row as Unsafe).amount),
-        labor_rate: asNullableNumber((row as Unsafe).labor_rate),
-        material_rate: asNullableNumber((row as Unsafe).material_rate),
-        ceiling_multiplier: asNullableNumber((row as Unsafe).ceiling_multiplier),
-      }))
-      .filter((row) => row.id),
-  }
+  return toSharedDrywallCalculationCatalogs(raw)
 }

@@ -142,7 +142,25 @@ export function collectEstimateV2CalculationMissingInputIssues(params: {
   )
 }
 
-export type EstimateV2PreparedSaveState = {
+export type EstimateV2SavePayloadPreparationInput = {
+  collections: {
+    rooms: EstimateV2SaveCollections['rooms']
+    scopes: EstimateV2SaveCollections['scopes']
+    segments: EstimateV2SaveCollections['segments']
+    roomFlags: EstimateV2SaveCollections['roomFlags']
+    ceilingScopes: EstimateV2SaveCollections['ceilingScopes']
+    ceilingSegments: EstimateV2SaveCollections['ceilingSegments']
+    trimScopes: EstimateV2SaveCollections['trimScopes']
+    doorScopes?: EstimateV2SaveCollections['doorScopes']
+    drywallRepairs?: EstimateV2SaveCollections['drywallRepairs']
+    rollers?: EstimateV2SaveCollections['rollers']
+    accessFees?: EstimateV2SaveCollections['accessFees']
+    otherItems?: EstimateV2SaveCollections['otherItems']
+  }
+  jobSettingsDraft: EstimateV2SaveMeta['jobSettingsDraft']
+}
+
+export type EstimateV2SavePayloadPreparationOutput = {
   normalizedDomains: NormalizedDomain[]
   roomModeById: Map<string, 'RECT' | 'SEG'>
   collections: {
@@ -160,26 +178,29 @@ export type EstimateV2PreparedSaveState = {
   payloadSnapshot: EstimateV2DirtySnapshot
 }
 
-export function prepareEstimateV2SaveState(
-  currentState: EstimateV2EditorStoreState
-): EstimateV2PreparedSaveState {
+export type EstimateV2PreparedSaveState = EstimateV2SavePayloadPreparationOutput
+
+export function prepareEstimateV2SavePayload(
+  input: EstimateV2SavePayloadPreparationInput
+): EstimateV2SavePayloadPreparationOutput {
+  const { collections: sourceCollections, jobSettingsDraft } = input
   const normalizedDomains: NormalizedDomain[] = []
   const sanitizedWalls = sanitizeV2WallsDrafts({
-    rooms: currentState.collections.rooms,
-    scopes: currentState.collections.scopes,
-    segments: currentState.collections.segments,
+    rooms: sourceCollections.rooms,
+    scopes: sourceCollections.scopes,
+    segments: sourceCollections.segments,
   })
   if (sanitizedWalls.changed) normalizedDomains.push('walls')
 
   const sanitizedCeilings = sanitizeV2CeilingsDrafts({
-    rooms: currentState.collections.rooms.map((room) => ({
+    rooms: sourceCollections.rooms.map((room) => ({
       roomId: room.roomId,
       lengthIn: room.lengthIn,
       widthIn: room.widthIn,
       position: room.position,
     })),
-    ceilingScopes: currentState.collections.ceilingScopes,
-    ceilingSegments: currentState.collections.ceilingSegments,
+    ceilingScopes: sourceCollections.ceilingScopes,
+    ceilingSegments: sourceCollections.ceilingSegments,
   })
   if (sanitizedCeilings.changed) normalizedDomains.push('ceilings')
   const persistentCeilings = normalizeCeilingIdsForPersistence({
@@ -191,17 +212,17 @@ export function prepareEstimateV2SaveState(
   }
 
   const roomModeById = resolveRoomModeById({
-    rooms: currentState.collections.rooms,
+    rooms: sourceCollections.rooms,
     wallScopes: sanitizedWalls.scopes,
     ceilingScopes: persistentCeilings.ceilingScopes,
   })
   const sanitizedTrim = sanitizeV2TrimDrafts({
-    rooms: currentState.collections.rooms.map((room) => ({
+    rooms: sourceCollections.rooms.map((room) => ({
       roomId: room.roomId,
       mode: roomModeById.get(room.roomId) ?? 'RECT',
       position: room.position,
     })),
-    trimScopes: currentState.collections.trimScopes,
+    trimScopes: sourceCollections.trimScopes,
   })
   if (sanitizedTrim.changed) normalizedDomains.push('trim')
 
@@ -211,11 +232,11 @@ export function prepareEstimateV2SaveState(
     ceilingScopes: persistentCeilings.ceilingScopes,
     ceilingSegments: persistentCeilings.ceilingSegments,
     trimScopes: sanitizedTrim.trimScopes,
-    doorScopes: currentState.collections.doorScopes ?? [],
-    drywallRepairs: currentState.collections.drywallRepairs ?? [],
-    rollers: currentState.collections.rollers,
-    accessFees: currentState.collections.accessFees ?? [],
-    otherItems: currentState.collections.otherItems ?? [],
+    doorScopes: sourceCollections.doorScopes ?? [],
+    drywallRepairs: sourceCollections.drywallRepairs ?? [],
+    rollers: sourceCollections.rollers ?? [],
+    accessFees: sourceCollections.accessFees ?? [],
+    otherItems: sourceCollections.otherItems ?? [],
   }
 
   return {
@@ -223,11 +244,11 @@ export function prepareEstimateV2SaveState(
     roomModeById,
     collections,
     payloadSnapshot: buildEstimateV2DirtySnapshot({
-      jobSettingsDraft: currentState.meta.jobSettingsDraft,
-      rooms: currentState.collections.rooms,
+      jobSettingsDraft,
+      rooms: sourceCollections.rooms,
       scopes: collections.scopes,
       segments: collections.segments,
-      roomFlags: currentState.collections.roomFlags,
+      roomFlags: sourceCollections.roomFlags,
       ceilingScopes: collections.ceilingScopes,
       ceilingSegments: collections.ceilingSegments,
       trimScopes: collections.trimScopes,
@@ -240,21 +261,30 @@ export function prepareEstimateV2SaveState(
   }
 }
 
-export function validateEstimateV2PreparedSave(params: {
+export function prepareEstimateV2SaveState(
   currentState: EstimateV2EditorStoreState
+): EstimateV2PreparedSaveState {
+  return prepareEstimateV2SavePayload({
+    collections: currentState.collections,
+    jobSettingsDraft: currentState.meta.jobSettingsDraft,
+  })
+}
+
+export function validateEstimateV2PreparedSave(params: {
+  collections: EstimateV2SavePayloadPreparationInput['collections']
   prepared: EstimateV2PreparedSaveState
   trigger?: 'manual' | 'auto'
 }) {
-  const { currentState, prepared } = params
+  const { collections, prepared } = params
   const allowIncomplete = params.trigger === 'auto'
   const wallIssues = validateV2WallsBeforeSave({
-    rooms: currentState.collections.rooms,
+    rooms: collections.rooms,
     scopes: prepared.collections.scopes,
     segments: prepared.collections.segments,
     allowIncomplete,
   })
   const ceilingIssues = validateV2CeilingsBeforeSave({
-    rooms: currentState.collections.rooms.map((room) => ({
+    rooms: collections.rooms.map((room) => ({
       roomId: room.roomId,
       roomName: room.roomName,
       position: room.position,
@@ -264,7 +294,7 @@ export function validateEstimateV2PreparedSave(params: {
     allowIncomplete,
   })
   const trimIssues = validateV2TrimBeforeSave({
-    rooms: currentState.collections.rooms.map((room) => ({
+    rooms: collections.rooms.map((room) => ({
       roomId: room.roomId,
       roomName: room.roomName,
       mode: prepared.roomModeById.get(room.roomId) ?? 'RECT',
@@ -288,7 +318,7 @@ export function validateEstimateV2PreparedSave(params: {
     allowIncomplete,
   })
   const doorIssues = validateV2DoorsBeforeSave({
-    rooms: currentState.collections.rooms.map((room) => ({
+    rooms: collections.rooms.map((room) => ({
       roomId: room.roomId,
       roomName: room.roomName,
       position: room.position,
@@ -310,7 +340,7 @@ export function validateEstimateV2PreparedSave(params: {
     allowIncomplete,
   })
   const drywallIssues = validateV2DrywallBeforeSave({
-    rooms: currentState.collections.rooms.map((room) => ({
+    rooms: collections.rooms.map((room) => ({
       roomId: room.roomId,
       roomName: room.roomName,
       position: room.position,
@@ -341,15 +371,12 @@ export function deriveEstimateV2PreparedSaveValidation(params: {
   jobSettingsDraft: EstimateV2EditorStoreState['meta']['jobSettingsDraft']
   trigger?: 'manual' | 'auto'
 }) {
-  const currentState = {
+  const prepared = prepareEstimateV2SavePayload({
     collections: params.collections,
-    meta: {
-      jobSettingsDraft: params.jobSettingsDraft,
-    },
-  } as EstimateV2EditorStoreState
-  const prepared = prepareEstimateV2SaveState(currentState)
+    jobSettingsDraft: params.jobSettingsDraft,
+  })
   const issues = validateEstimateV2PreparedSave({
-    currentState,
+    collections: params.collections,
     prepared,
     trigger: params.trigger,
   })
@@ -358,6 +385,35 @@ export function deriveEstimateV2PreparedSaveValidation(params: {
     prepared,
     issues,
   }
+}
+
+export type EstimateV2SaveSnapshotInput = EstimateV2SavePayloadPreparationInput
+
+export function buildEstimateV2SaveSnapshot(
+  input: EstimateV2SaveSnapshotInput
+): EstimateV2DirtySnapshot {
+  return buildEstimateV2DirtySnapshot({
+    jobSettingsDraft: input.jobSettingsDraft,
+    rooms: input.collections.rooms,
+    scopes: input.collections.scopes,
+    segments: input.collections.segments,
+    roomFlags: input.collections.roomFlags,
+    ceilingScopes: input.collections.ceilingScopes,
+    ceilingSegments: input.collections.ceilingSegments,
+    trimScopes: input.collections.trimScopes,
+    doorScopes: input.collections.doorScopes,
+    drywallRepairs: input.collections.drywallRepairs,
+    rollers: input.collections.rollers,
+    accessFees: input.collections.accessFees,
+    otherItems: input.collections.otherItems,
+  })
+}
+
+export function hasEstimateV2SaveStateChangedSincePrepared(params: {
+  latestSnapshot: EstimateV2DirtySnapshot
+  prepared: Pick<EstimateV2PreparedSaveState, 'payloadSnapshot'>
+}) {
+  return params.latestSnapshot.comparisonKey !== params.prepared.payloadSnapshot.comparisonKey
 }
 
 const NON_BLOCKING_PAINT_ASSUMPTION_FIELDS = new Set([
@@ -477,25 +533,76 @@ function resolveSavedEstimateMeta(params: {
   } as EstimateV2EstimateMeta
 }
 
-export function resolveEstimateV2SaveResponseState(params: {
+type EstimateV2SaveResponseCalculationsInput = Pick<
+  EstimateV2SaveMeta,
+  | 'wallCalculations'
+  | 'ceilingCalculations'
+  | 'trimCalculations'
+  | 'doorCalculations'
+  | 'drywallCalculations'
+>
+
+type EstimateV2SaveResponseCurrentInput = {
+  collections: {
+    rooms: EstimateV2SaveCollections['rooms']
+    roomFlags: EstimateV2SaveCollections['roomFlags']
+    rollers: EstimateV2SaveCollections['rollers']
+    accessFees?: EstimateV2SaveCollections['accessFees']
+    otherItems?: EstimateV2SaveCollections['otherItems']
+  }
+  meta: {
+    estimate: EstimateV2SaveMeta['estimate']
+    jobSettingsDraft: EstimateV2SaveMeta['jobSettingsDraft']
+  }
+}
+
+type EstimateV2SaveResponseEffectiveJobProductDefaults = {
+  wallPaintProductId: string
+  wallPrimerProductId: string
+  ceilingPaintProductId: string
+  ceilingPrimerProductId: string
+  trimPaintProductId: string
+  trimPrimerProductId: string
+}
+
+export type EstimateV2SaveResponseReconciliationInput = {
   trigger: 'manual' | 'auto'
   payload: unknown
-  meta: Pick<
-    EstimateV2SaveMeta,
-    'wallCalculations' | 'ceilingCalculations' | 'trimCalculations' | 'doorCalculations' | 'drywallCalculations'
-  >
+  meta: EstimateV2SaveResponseCalculationsInput
   prepared: EstimateV2PreparedSaveState
-  currentState: EstimateV2EditorStoreState
-  effectiveJobProductDefaults: {
-    wallPaintProductId: string
-    wallPrimerProductId: string
-    ceilingPaintProductId: string
-    ceilingPrimerProductId: string
-    trimPaintProductId: string
-    trimPrimerProductId: string
+  current: EstimateV2SaveResponseCurrentInput
+  effectiveJobProductDefaults: EstimateV2SaveResponseEffectiveJobProductDefaults
+}
+
+export type EstimateV2SaveResponseReconciliationOutput = {
+  collections: {
+    scopes: EstimateV2SaveCollections['scopes']
+    segments: EstimateV2SaveCollections['segments']
+    ceilingScopes: EstimateV2SaveCollections['ceilingScopes']
+    ceilingSegments: EstimateV2SaveCollections['ceilingSegments']
+    trimScopes: EstimateV2SaveCollections['trimScopes']
+    doorScopes: EstimateV2SaveCollections['doorScopes']
+    drywallRepairs: EstimateV2SaveCollections['drywallRepairs']
+    rollers: EstimateV2SaveCollections['rollers']
+    accessFees: EstimateV2SaveCollections['accessFees']
+    otherItems: EstimateV2SaveCollections['otherItems']
   }
-}) {
-  const { trigger, payload, meta, prepared, currentState, effectiveJobProductDefaults } = params
+  calculations: {
+    wallCalculations: EstimateV2WallCalculationsPayload | null
+    ceilingCalculations: Unsafe | null
+    trimCalculations: Unsafe | null
+    doorCalculations: Unsafe | null
+    drywallCalculations: Unsafe | null
+    pricingSummary: EstimateV2PricingSummary | null
+  }
+  estimate: EstimateV2EstimateMeta | null
+  lastSavedSnapshot: EstimateV2DirtySnapshot
+}
+
+export function reconcileEstimateV2SaveResponse(
+  params: EstimateV2SaveResponseReconciliationInput
+): EstimateV2SaveResponseReconciliationOutput {
+  const { trigger, payload, meta, prepared, current, effectiveJobProductDefaults } = params
 
   const nextWallCalculations =
     payload != null && typeof payload === 'object' && 'wall_calculations' in payload
@@ -548,7 +655,7 @@ export function resolveEstimateV2SaveResponseState(params: {
   const nextDoorCalculations =
     payload != null && typeof payload === 'object' && 'door_calculations' in payload
       ? ((payload as { door_calculations?: Unsafe }).door_calculations ?? null)
-      : meta.doorCalculations
+      : (meta.doorCalculations ?? null)
   let nextDoorScopes = prepared.collections.doorScopes ?? []
   if (
     trigger === 'manual' &&
@@ -563,7 +670,7 @@ export function resolveEstimateV2SaveResponseState(params: {
   const nextDrywallCalculations =
     payload != null && typeof payload === 'object' && 'drywall_calculations' in payload
       ? ((payload as { drywall_calculations?: Unsafe }).drywall_calculations ?? null)
-      : meta.drywallCalculations
+      : (meta.drywallCalculations ?? null)
   let nextDrywallRepairs = prepared.collections.drywallRepairs ?? []
   if (
     trigger === 'manual' &&
@@ -584,9 +691,9 @@ export function resolveEstimateV2SaveResponseState(params: {
       trimScopes: nextTrimScopes,
       doorScopes: nextDoorScopes,
       drywallRepairs: nextDrywallRepairs,
-      rollers: currentState.collections.rollers,
-      accessFees: currentState.collections.accessFees ?? [],
-      otherItems: currentState.collections.otherItems ?? [],
+      rollers: current.collections.rollers,
+      accessFees: current.collections.accessFees ?? [],
+      otherItems: current.collections.otherItems ?? [],
     },
     calculations: {
       wallCalculations: nextWallCalculations,
@@ -598,26 +705,65 @@ export function resolveEstimateV2SaveResponseState(params: {
     },
     estimate: resolveSavedEstimateMeta({
       payload,
-      currentEstimate: currentState.meta.estimate,
+      currentEstimate: current.meta.estimate,
     }),
     lastSavedSnapshot: buildEstimateV2DirtySnapshot({
-      jobSettingsDraft: currentState.meta.jobSettingsDraft,
-      rooms: currentState.collections.rooms,
+      jobSettingsDraft: current.meta.jobSettingsDraft,
+      rooms: current.collections.rooms,
       scopes: nextScopes,
       segments: nextSegments,
-      roomFlags: currentState.collections.roomFlags,
+      roomFlags: current.collections.roomFlags,
       ceilingScopes: nextCeilingScopes,
       ceilingSegments: nextCeilingSegments,
       trimScopes: nextTrimScopes,
       doorScopes: nextDoorScopes,
       drywallRepairs: nextDrywallRepairs,
-      rollers: currentState.collections.rollers,
-      accessFees: currentState.collections.accessFees ?? [],
-      otherItems: currentState.collections.otherItems ?? [],
+      rollers: current.collections.rollers,
+      accessFees: current.collections.accessFees ?? [],
+      otherItems: current.collections.otherItems ?? [],
     }),
   }
 }
 
-export type EstimateV2ResolvedSaveState = ReturnType<
-  typeof resolveEstimateV2SaveResponseState
->
+export function resolveEstimateV2SaveResponseState(params: {
+  trigger: 'manual' | 'auto'
+  payload: unknown
+  meta: EstimateV2SaveResponseCalculationsInput
+  prepared: EstimateV2PreparedSaveState
+  currentState: EstimateV2EditorStoreState
+  effectiveJobProductDefaults: EstimateV2SaveResponseEffectiveJobProductDefaults
+}): EstimateV2SaveResponseReconciliationOutput {
+  return reconcileEstimateV2SaveResponseFromState(params)
+}
+
+export function reconcileEstimateV2SaveResponseFromState(params: {
+  trigger: 'manual' | 'auto'
+  payload: unknown
+  meta: EstimateV2SaveResponseCalculationsInput
+  prepared: EstimateV2PreparedSaveState
+  currentState: EstimateV2EditorStoreState
+  effectiveJobProductDefaults: EstimateV2SaveResponseEffectiveJobProductDefaults
+}): EstimateV2SaveResponseReconciliationOutput {
+  return reconcileEstimateV2SaveResponse({
+    trigger: params.trigger,
+    payload: params.payload,
+    meta: params.meta,
+    prepared: params.prepared,
+    current: {
+      collections: {
+        rooms: params.currentState.collections.rooms,
+        roomFlags: params.currentState.collections.roomFlags,
+        rollers: params.currentState.collections.rollers,
+        accessFees: params.currentState.collections.accessFees,
+        otherItems: params.currentState.collections.otherItems,
+      },
+      meta: {
+        estimate: params.currentState.meta.estimate,
+        jobSettingsDraft: params.currentState.meta.jobSettingsDraft,
+      },
+    },
+    effectiveJobProductDefaults: params.effectiveJobProductDefaults,
+  })
+}
+
+export type EstimateV2ResolvedSaveState = EstimateV2SaveResponseReconciliationOutput

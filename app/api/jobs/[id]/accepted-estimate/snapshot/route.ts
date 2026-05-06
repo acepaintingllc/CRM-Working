@@ -20,6 +20,6 @@ export async function POST(request: Request, context: RouteContext) {
       userId: session.session.userId,
       jobId: jobId.value,
     }),
-    (data) => ({ data, notice: 'Accepted estimate snapshot repaired.' })
+    (data) => ({ data, notice: 'Accepted quote snapshot repaired.' })
   )
 }

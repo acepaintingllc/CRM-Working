@@ -256,6 +256,12 @@ describe('useInsightsTrendsPage', () => {
     })
 
     expect(result.current.recommendationActionState.confirmingApplyId).toBe('rec-1')
+    expect(result.current.vm?.applyConfirmation).toMatchObject({
+      isOpen: true,
+      description: 'Apply Wall Production Base Rate to estimator settings.',
+      confirming: false,
+    })
+    expect(result.current.vm?.recommendations[0].isPending).toBe(true)
     expect(applyTrendRecommendation).not.toHaveBeenCalled()
 
     act(() => {

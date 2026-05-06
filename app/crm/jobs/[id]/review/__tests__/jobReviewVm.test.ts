@@ -7,7 +7,7 @@ import type { JobDetail } from '@/types/jobs/api'
 const job = {
   id: 'job-1',
   title: 'Interior repaint',
-  accepted_quote: {
+  accepted_estimate: {
     estimate_id: 'estimate-1',
     accepted_public_version_id: 'public-version-1',
     public_version_number: 2,
@@ -289,9 +289,9 @@ describe('job review VM', () => {
     expect(vm?.trendEligibilityDetail).toBe('Unsaved form changes affect trend eligibility.')
   })
 
-  it('returns no VM until an accepted estimate snapshot is available', () => {
+  it('returns no VM until an accepted quote snapshot is available', () => {
     const vm = buildJobReviewVm({
-      job: { ...job, accepted_quote: { ...job.accepted_quote!, estimate_snapshot_id: null } },
+      job: { ...job, accepted_estimate: { ...job.accepted_estimate!, estimate_snapshot_id: null } },
       model: baseModel,
     })
 

@@ -1,147 +1,29 @@
-import { NextResponse } from 'next/server'
-import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
-import { getValidAccessToken, resolveCalendarId } from '@/lib/server/googleCalendar'
-import { mutationResponse } from '@/lib/server/routeResult'
-import { isUuid } from '@/lib/validation/uuid'
+import { readUuidParam, requireSessionUserOrg, resolveParams } from '@/lib/server/apiRoute'
+import { serviceResultResponse } from '@/lib/server/routeResult'
+import { addJobSchedulesToCalendar } from '@/lib/server/jobScheduleWorkflow'
 
-function isMissingJobsColumnError(message: string, column: string) {
-  return (
-    message.includes(`Could not find the '${column}' column of 'jobs' in the schema cache`) ||
-    message.includes(`column "${column}" of relation "jobs" does not exist`)
-  )
-}
-
-async function updateJobScheduleRangeCompat(
-  orgId: string,
-  jobId: string,
-  payload: { status: string; scheduled_date: string | null; scheduled_end_date: string | null }
-) {
-  const first = await supabaseAdmin
-    .from('jobs')
-    .update(payload)
-    .eq('org_id', orgId)
-    .eq('id', jobId)
-
-  if (!first.error) return first
-  if (!isMissingJobsColumnError(first.error.message ?? '', 'scheduled_end_date')) return first
-
-  return supabaseAdmin
-    .from('jobs')
-    .update({
-      status: payload.status,
-      scheduled_date: payload.scheduled_date,
-    })
-    .eq('org_id', orgId)
-    .eq('id', jobId)
+async function readJobId(context: { params: { id: string } | Promise<{ id: string }> }) {
+  const params = await resolveParams(context)
+  return readUuidParam((params as { id?: string } | null | undefined)?.id, 'job id')
 }
 
 export async function POST(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const session = await requireSessionUserOrg()
+  if (!session.ok) return session.response
 
-  const { orgId, userId } = session
-  const params = await Promise.resolve(context.params)
-  const jobId = (params as { id?: string } | null | undefined)?.id
-  if (!isUuid(jobId)) {
-    return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
-  }
+  const jobId = await readJobId(context)
+  if (!jobId.ok) return jobId.response
 
-  const origin = new URL(request.url).origin
-  const access = await getValidAccessToken({ origin, orgId, userId })
-  if ('error' in access) {
-    return NextResponse.json({ error: access.error }, { status: 400 })
-  }
-
-  const { data: job } = await supabaseAdmin
-    .from('jobs')
-    .select('id, title, customer_id')
-    .eq('org_id', orgId)
-    .eq('id', jobId)
-    .maybeSingle()
-
-  if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
-
-  const { data: customer } = await supabaseAdmin
-    .from('customers')
-    .select('name, address')
-    .eq('org_id', orgId)
-    .eq('id', (job as Unsafe).customer_id)
-    .maybeSingle()
-
-  const { data: schedules, error: schedErr } = await supabaseAdmin
-    .from('job_schedules')
-    .select('id, start_at, end_at, notes, calendar_event_id')
-    .eq('org_id', orgId)
-    .eq('job_id', jobId)
-    .order('start_at', { ascending: true })
-
-  if (schedErr) return NextResponse.json({ error: schedErr.message }, { status: 500 })
-  if (!schedules || schedules.length === 0) {
-    return NextResponse.json({ error: 'No scheduled blocks found.' }, { status: 400 })
-  }
-
-  const calendarId = await resolveCalendarId({
-    accessToken: access.accessToken,
-    calendarName: "Austin's work",
-  })
-
-  const results: Unsafe[] = []
-  const starts: string[] = []
-  const ends: string[] = []
-  for (const block of schedules) {
-    if (block.start_at) starts.push(block.start_at)
-    if (block.end_at) ends.push(block.end_at)
-    if (block.calendar_event_id) {
-      results.push({ scheduleId: block.id, eventId: block.calendar_event_id, skipped: true })
-      continue
-    }
-    const summary = `Job - ${customer?.name ?? 'Customer'}`
-    const description = [block.notes, customer?.address].filter(Boolean).join('\n') || undefined
-
-    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${access.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        summary,
-        description,
-        location: customer?.address ?? undefined,
-        start: { dateTime: block.start_at },
-        end: { dateTime: block.end_at },
-      }),
-    })
-
-    const json: Unsafe = await res.json().catch(() => null)
-    if (!res.ok) {
-      return NextResponse.json({ error: json?.error?.message ?? 'Failed to add calendar event' }, { status: 400 })
-    }
-
-    await supabaseAdmin
-      .from('job_schedules')
-      .update({ calendar_event_id: json?.id ?? null, calendar_added_at: new Date().toISOString() })
-      .eq('org_id', orgId)
-      .eq('job_id', jobId)
-      .eq('id', block.id)
-
-    results.push({ scheduleId: block.id, eventId: json?.id, skipped: false })
-  }
-
-  const { error: updateErr } = await updateJobScheduleRangeCompat(orgId, jobId, {
-    status: 'scheduled',
-    scheduled_date: starts.length > 0 ? starts.sort()[0] : null,
-    scheduled_end_date: ends.length > 0 ? ends.sort()[ends.length - 1] : null,
-  })
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 })
-  }
-
-  return mutationResponse(results, 'Added schedules to calendar.')
+  return serviceResultResponse(
+    await addJobSchedulesToCalendar({
+      orgId: session.session.orgId,
+      userId: session.session.userId,
+      origin: new URL(request.url).origin,
+      jobId: jobId.value,
+    }),
+    (results) => ({ data: results, notice: 'Added schedules to calendar.' })
+  )
 }

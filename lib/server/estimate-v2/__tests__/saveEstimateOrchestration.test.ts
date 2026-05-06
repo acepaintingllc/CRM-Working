@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getEstimate: vi.fn(),
   isMissingStructuredEstimateSaveRpc: vi.fn(),
   isRecoverableStructuredEstimateSaveRpcPkCollision: vi.fn(),
+  loadEstimateTemplateSettings: vi.fn(),
   replaceLegacyEstimateRooms: vi.fn(),
   saveEstimateStructuredInputsTransactional: vi.fn(),
   saveV2RoomRoster: vi.fn(),
@@ -38,6 +39,10 @@ vi.mock('../../estimateV2RoutePayload.ts', () => ({
   buildV2TrimScopeRows: mocks.buildV2TrimScopeRows,
   buildV2WallScopeRows: mocks.buildV2WallScopeRows,
   buildV2WallSegmentRows: mocks.buildV2WallSegmentRows,
+}))
+
+vi.mock('../../estimateTemplateSettings.ts', () => ({
+  loadEstimateTemplateSettings: mocks.loadEstimateTemplateSettings,
 }))
 
 vi.mock('../calculationOrchestration.ts', () => ({
@@ -105,6 +110,7 @@ describe('saveEstimateV2Inputs', () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset())
     mocks.createCalculationCatalogsLoader.mockReturnValue(vi.fn())
+    mocks.loadEstimateTemplateSettings.mockResolvedValue(null)
     mocks.isMissingStructuredEstimateSaveRpc.mockReturnValue(false)
     mocks.isRecoverableStructuredEstimateSaveRpcPkCollision.mockReturnValue(false)
     mocks.supabaseFrom.mockImplementation((table: string) => {
@@ -207,6 +213,165 @@ describe('saveEstimateV2Inputs', () => {
         }),
       ],
     })
+  })
+
+  it('documents the fallback save path non-transactional risk: rooms can persist before wall scope save fails', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: {
+        id: 'estimate-1',
+        job_id: 'job-1',
+      },
+    })
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: null,
+        wall_complexity_id: null,
+        position: 0,
+        notes: null,
+        length_in: null,
+        width_in: null,
+        wallheight_in: null,
+        condition_selections: null,
+      },
+    ])
+    mocks.buildV2WallScopeRows.mockReturnValue({
+      scopeRows: [
+        {
+          id: 'wall-scope-1',
+          room_id: 'R001',
+          position: 0,
+          mode: 'RECT',
+          include: 'Y',
+          scope_name: 'Walls',
+          color_id: 'WHITE',
+          paint_product_id: null,
+          primer_product_id: null,
+          prime_mode: 'NONE',
+          height_in: 96,
+          perimeter_in: 200,
+          standard_door_count: 1,
+          standard_window_count: 2,
+          height_factor: 1,
+          complexity_factor: 1,
+          wall_flag_factor: 1,
+          cut_in_top_factor: 1,
+          cut_in_bottom_factor: 1,
+          paint_coats: 2,
+          primer_coats: 0,
+          spot_prime_percent: 0,
+          raw_area_sf: 160,
+          override_area_sf: null,
+          effective_area_sf: 160,
+          raw_paint_hours: 2,
+          override_paint_hours: null,
+          effective_paint_hours: 2,
+          raw_primer_hours: 0,
+          override_primer_hours: null,
+          effective_primer_hours: 0,
+          raw_paint_gallons: 1,
+          override_paint_gallons: null,
+          effective_paint_gallons: 1,
+          raw_primer_gallons: 0,
+          override_primer_gallons: null,
+          effective_primer_gallons: 0,
+          raw_supply_cost: 10,
+          override_supply_cost: null,
+          effective_supply_cost: 10,
+          raw_total: 200,
+          override_total: null,
+          effective_total: 200,
+          notes: null,
+        },
+      ],
+    })
+    mocks.buildV2WallSegmentRows.mockReturnValue([
+      {
+        id: 'segment-1',
+        wall_scope_id: 'wall-scope-1',
+        room_id: 'R001',
+        position: 0,
+        segment_name: 'A',
+        include: 'Y',
+        shape_type: 'RECTANGLE',
+        quantity: 1,
+        width_in: 120,
+        height_in: 96,
+        base_in: null,
+        manual_area_sf: null,
+        raw_area_sf: 80,
+        override_area_sf: null,
+        effective_area_sf: 80,
+        notes: null,
+      },
+    ])
+    mocks.calculateWallsForSave.mockResolvedValue({
+      wallCalculations: { scopes: [{ id: 'wall-scope-1', total: 200 }] },
+      wallSegmentRows: [
+        {
+          id: 'segment-1',
+          wall_scope_id: 'wall-scope-1',
+          room_id: 'R001',
+          position: 0,
+          segment_name: 'A',
+          include: 'Y',
+          shape_type: 'RECTANGLE',
+          quantity: 1,
+          width_in: 120,
+          height_in: 96,
+          base_in: null,
+          manual_area_sf: null,
+          raw_area_sf: 80,
+          override_area_sf: null,
+          effective_area_sf: 80,
+          notes: null,
+        },
+      ],
+    })
+    mocks.saveV2RoomRoster.mockResolvedValue(undefined)
+    mocks.softReplaceRows.mockImplementation(async ({ table }: { table: string }) => {
+      // This pins the current fallback write order: room persistence commits first, then a later
+      // wall-scope failure aborts the request after earlier writes already happened.
+      if (table === 'estimate_room_wall_scopes') {
+        throw new Error('wall scopes failed')
+      }
+    })
+
+    await expect(
+      saveEstimateV2Inputs({
+        requestOrigin: 'http://localhost:3000',
+        orgId: 'org-1',
+        userId: 'user-1',
+        estimateId: 'estimate-1',
+        autosaveOnly: false,
+        body: {
+          rooms: [{ room_id: 'R001', room_name: 'Living' }],
+          room_wall_scopes: [{ id: 'wall-scope-1', room_id: 'R001' }],
+          wall_segments: [{ id: 'segment-1', wall_scope_id: 'wall-scope-1' }],
+        },
+      })
+    ).rejects.toMatchObject({
+      message: 'wall scopes failed',
+      status: 400,
+    })
+
+    expect(mocks.saveV2RoomRoster).toHaveBeenCalledBefore(mocks.softReplaceRows)
+    expect(mocks.softReplaceRows).toHaveBeenCalledWith({
+      table: 'estimate_room_wall_scopes',
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      rows: [
+        expect.objectContaining({
+          id: 'wall-scope-1',
+          org_id: 'org-1',
+          estimate_id: 'estimate-1',
+          job_id: 'job-1',
+        }),
+      ],
+    })
+    expect(mocks.softReplaceWallSegments).not.toHaveBeenCalled()
+    expect(mocks.supabaseFrom).not.toHaveBeenCalledWith('estimates')
   })
 
   it('maps extracted V2 wall seams through calculation and persistence boundaries', async () => {

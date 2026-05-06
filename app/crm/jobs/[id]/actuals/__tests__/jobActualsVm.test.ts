@@ -7,7 +7,7 @@ import type { JobActualsRecord } from '@/types/jobs/feedback'
 const job = {
   id: 'job-1',
   title: 'Interior repaint',
-  accepted_quote: {
+  accepted_estimate: {
     estimate_id: 'estimate-1',
     accepted_public_version_id: 'public-version-1',
     public_version_number: 2,
@@ -194,7 +194,7 @@ describe('job actuals VM', () => {
   it('returns no VM when the job does not expose an immutable estimate snapshot', () => {
     expect(
       buildJobActualsVm({
-        job: { ...job, accepted_quote: { ...job.accepted_quote!, estimate_snapshot_id: null } },
+        job: { ...job, accepted_estimate: { ...job.accepted_estimate!, estimate_snapshot_id: null } },
         form: buildJobActualsFormState(null),
       })
     ).toBeNull()

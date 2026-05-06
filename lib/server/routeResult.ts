@@ -10,8 +10,8 @@ export function mutationResponse<T>(data: T, notice?: string | null, init?: Resp
   return Response.json(notice ? { data, notice } : { data }, init)
 }
 
-export function serviceErrorResponse(error: ServiceError) {
-  return jsonError(error.message, serviceErrorStatus(error.kind))
+export function serviceErrorResponse(error: ServiceError, init?: ResponseInit) {
+  return jsonError(error.message, init?.status ?? serviceErrorStatus(error.kind))
 }
 
 export function serviceResultResponse<T>(

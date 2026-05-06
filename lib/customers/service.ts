@@ -14,6 +14,7 @@ import {
   type NormalizedUpdateCustomerInput,
 } from '@/lib/customers/normalizers'
 import { buildEstimatePublicTimelineEvents } from '@/lib/customer-estimates/publicTimeline'
+import { buildJobEstimateFileRedirectPath } from '@/lib/jobs/routes'
 import type { EstimatePublicTimelineEvent } from '@/types/customer-estimates/publicTimeline'
 import {
   customerError,
@@ -597,7 +598,7 @@ export async function listCustomerTimeline(
       row.estimate_date,
       'Quote scheduled',
       `${jobLabel}\nQuote date: ${fmt(row.estimate_date) ?? row.estimate_date ?? ''}`,
-      `/api/jobs/${row.id}/estimate-file?redirect=1`,
+      buildJobEstimateFileRedirectPath(row.id),
       'View estimate'
     )
     addJobEvent(

@@ -17,6 +17,9 @@ type MockQueryCall = {
   table: string
   columns: string
   filters: Record<string, unknown>
+  notFilters?: Array<{ column: string; operator: string; value: unknown }>
+  orderBy?: { column: string; ascending: boolean } | null
+  limit?: number | null
 }
 
 function createUpdateResultChain(
@@ -55,6 +58,9 @@ function createReadDb(responses: Record<string, MockQueryResponse>) {
     from(table: string) {
       const filters: Record<string, unknown> = {}
       let selectedColumns = ''
+      const notFilters: Array<{ column: string; operator: string; value: unknown }> = []
+      let orderBy: { column: string; ascending: boolean } | null = null
+      let limit: number | null = null
 
       return {
         select(columns: string) {
@@ -65,8 +71,27 @@ function createReadDb(responses: Record<string, MockQueryResponse>) {
           filters[column] = value
           return this
         },
+        not(column: string, operator: string, value: unknown) {
+          notFilters.push({ column, operator, value })
+          return this
+        },
+        order(column: string, options?: { ascending?: boolean }) {
+          orderBy = { column, ascending: options?.ascending ?? true }
+          return this
+        },
+        limit(count: number) {
+          limit = count
+          return this
+        },
         maybeSingle() {
-          calls.push({ table, columns: selectedColumns, filters: { ...filters } })
+          calls.push({
+            table,
+            columns: selectedColumns,
+            filters: { ...filters },
+            notFilters: [...notFilters],
+            orderBy,
+            limit,
+          })
           return Promise.resolve(
             responses[table] ?? {
               data: null,
@@ -87,6 +112,9 @@ function createSequentialReadDb(responses: Record<string, MockQueryResponse[]>) 
     from(table: string) {
       const filters: Record<string, unknown> = {}
       let selectedColumns = ''
+      const notFilters: Array<{ column: string; operator: string; value: unknown }> = []
+      let orderBy: { column: string; ascending: boolean } | null = null
+      let limit: number | null = null
 
       return {
         select(columns: string) {
@@ -97,8 +125,27 @@ function createSequentialReadDb(responses: Record<string, MockQueryResponse[]>) 
           filters[column] = value
           return this
         },
+        not(column: string, operator: string, value: unknown) {
+          notFilters.push({ column, operator, value })
+          return this
+        },
+        order(column: string, options?: { ascending?: boolean }) {
+          orderBy = { column, ascending: options?.ascending ?? true }
+          return this
+        },
+        limit(count: number) {
+          limit = count
+          return this
+        },
         maybeSingle() {
-          calls.push({ table, columns: selectedColumns, filters: { ...filters } })
+          calls.push({
+            table,
+            columns: selectedColumns,
+            filters: { ...filters },
+            notFilters: [...notFilters],
+            orderBy,
+            limit,
+          })
           return Promise.resolve(
             responses[table]?.shift() ?? {
               data: null,
@@ -129,7 +176,6 @@ test('buildAcceptedEstimateUpdatePlan links the accepted estimate to its job', (
   })
   assert.deepEqual(plan.jobUpdate, {
     linked_estimate_id: 'estimate-1',
-    status: 'scheduled',
   })
 })
 
@@ -293,7 +339,7 @@ test('buildAcceptedEstimateSource normalizes blank optional text fields to null'
   assert.equal(source.version_state, null)
 })
 
-test('applyAcceptedEstimateSideEffects updates estimates first, then jobs with the accepted estimate plan payloads', async () => {
+test('applyAcceptedEstimateSideEffects updates estimates first, then links the accepted estimate without scheduling the job', async () => {
   const calls: Array<{
     table: string
     payload: Record<string, unknown>
@@ -568,29 +614,44 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
       table: 'jobs',
       columns: 'id, linked_estimate_id',
       filters: { org_id: 'org-1', id: 'job-1' },
+      notFilters: [],
+      orderBy: null,
+      limit: null,
     },
     {
       table: 'estimates',
       columns:
         'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id',
       filters: { org_id: 'org-1', id: 'estimate-1' },
+      notFilters: [],
+      orderBy: null,
+      limit: null,
     },
     {
       table: 'estimate_snapshot',
       columns:
         'id, org_id, job_id, estimate_id, customer_id, accepted_public_version_id, estimate_version_name, estimate_version_state, estimated_labor_hours, estimated_paint_gallons, estimated_supplies_cost, estimated_other_cost, estimated_total, source_payload_json',
       filters: { org_id: 'org-1', estimate_id: 'estimate-1' },
+      notFilters: [],
+      orderBy: null,
+      limit: null,
     },
     {
       table: 'estimate_public_versions',
       columns:
         'id, estimate_id, version_number, public_token, status, accepted_at, acceptance_json, snapshot_json',
       filters: { org_id: 'org-1', id: 'public-version-1' },
+      notFilters: [],
+      orderBy: null,
+      limit: null,
     },
     {
       table: 'estimate_version_rollups',
       columns: 'final_total',
       filters: { org_id: 'org-1', estimate_id: 'estimate-1' },
+      notFilters: [],
+      orderBy: null,
+      limit: null,
     },
   ])
   assert.deepEqual(result, {
@@ -618,6 +679,95 @@ test('loadAcceptedEstimateSource returns accepted estimate source from job link,
       final_total: 4250,
       snapshot_json: { document: { title: 'Quote' } },
     },
+  })
+})
+
+test('loadAcceptedEstimateSource resolves legacy accepted jobs through the canonical fallback loader', async () => {
+  const { db, calls } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-legacy',
+        linked_estimate_id: null,
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'legacy-estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-legacy',
+        customer_id: 'customer-1',
+        version_name: 'Legacy accepted option',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-legacy-1',
+      },
+      error: null,
+    },
+    estimate_snapshot: {
+      data: null,
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-legacy-1',
+        estimate_id: 'legacy-estimate-1',
+        version_number: 4,
+        public_token: 'legacy-token-1',
+        status: 'accepted',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        acceptance_json: {
+          legal_name: 'Jordan Customer',
+          signature_type: 'typed',
+        },
+        snapshot_json: { document: { title: 'Legacy quote' } },
+      },
+      error: null,
+    },
+    estimate_version_rollups: {
+      data: {
+        final_total: 3900,
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-legacy')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.estimate_id, 'legacy-estimate-1')
+    assert.equal(result.data.final_total, 3900)
+    assert.equal(result.data.public_token, 'legacy-token-1')
+  }
+  assert.deepEqual(calls[0], {
+    table: 'jobs',
+    columns: 'id, linked_estimate_id',
+    filters: { org_id: 'org-1', id: 'job-legacy' },
+    notFilters: [],
+    orderBy: null,
+    limit: null,
+  })
+  assert.deepEqual(calls[1], {
+    table: 'estimates',
+    columns:
+      'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id',
+    filters: { org_id: 'org-1', job_id: 'job-legacy' },
+    notFilters: [
+      { column: 'accepted_public_version_id', operator: 'is', value: null },
+      { column: 'accepted_at', operator: 'is', value: null },
+    ],
+    orderBy: { column: 'accepted_at', ascending: false },
+    limit: 1,
+  })
+  assert.deepEqual(calls[2], {
+    table: 'estimates',
+    columns:
+      'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id',
+    filters: { org_id: 'org-1', id: 'legacy-estimate-1' },
+    notFilters: [],
+    orderBy: null,
+    limit: null,
   })
 })
 
@@ -877,7 +1027,7 @@ test('loadAcceptedEstimateSource returns not_found when the job is missing', asy
   })
 })
 
-test('loadAcceptedEstimateSource returns invalid_input when the job has no accepted estimate link', async () => {
+test('loadAcceptedEstimateSource returns invalid_input when neither the canonical link nor the legacy fallback can resolve an accepted estimate', async () => {
   const { db } = createReadDb({
     jobs: {
       data: {
@@ -894,6 +1044,52 @@ test('loadAcceptedEstimateSource returns invalid_input when the job has no accep
     ok: false,
     kind: 'invalid_input',
     message: 'Job has no accepted estimate',
+  })
+})
+
+test('loadAcceptedEstimateSource keeps legacy fallback validation strict when the resolved public version is not accepted', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-legacy',
+        linked_estimate_id: null,
+      },
+      error: null,
+    },
+    estimates: {
+      data: {
+        id: 'legacy-estimate-1',
+        org_id: 'org-1',
+        job_id: 'job-legacy',
+        customer_id: 'customer-1',
+        version_name: 'Legacy accepted option',
+        version_state: 'live',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        accepted_public_version_id: 'public-version-legacy-1',
+      },
+      error: null,
+    },
+    estimate_snapshot: {
+      data: null,
+      error: null,
+    },
+    estimate_public_versions: {
+      data: {
+        id: 'public-version-legacy-1',
+        estimate_id: 'legacy-estimate-1',
+        status: 'draft',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+      },
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-legacy')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message: 'Accepted public version is invalid',
   })
 })
 
@@ -1288,4 +1484,167 @@ test('repairAcceptedEstimateSnapshotForJob retries snapshot creation for an acce
     assert.equal(result.data.final_total, 5100)
   }
   assert.equal(calls.filter((call) => call.table === 'estimate_snapshot').length, 2)
+})
+
+test('repairAcceptedEstimateSnapshotForJob repairs legacy accepted jobs through the canonical fallback loader', async () => {
+  const { db } = createSequentialReadDb({
+    jobs: [
+      {
+        data: {
+          id: 'job-legacy',
+          linked_estimate_id: null,
+        },
+        error: null,
+      },
+      {
+        data: {
+          id: 'job-legacy',
+          linked_estimate_id: null,
+        },
+        error: null,
+      },
+    ],
+    estimates: [
+      {
+        data: {
+          id: 'legacy-estimate-1',
+          org_id: 'org-1',
+          job_id: 'job-legacy',
+          customer_id: 'customer-1',
+          version_name: 'Legacy accepted option',
+          version_state: 'live',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          accepted_public_version_id: 'public-version-legacy-1',
+        },
+        error: null,
+      },
+      {
+        data: {
+          id: 'legacy-estimate-1',
+          org_id: 'org-1',
+          job_id: 'job-legacy',
+          customer_id: 'customer-1',
+          version_name: 'Legacy accepted option',
+          version_state: 'live',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          accepted_public_version_id: 'public-version-legacy-1',
+        },
+        error: null,
+      },
+      {
+        data: {
+          id: 'legacy-estimate-1',
+          org_id: 'org-1',
+          job_id: 'job-legacy',
+          customer_id: 'customer-1',
+          version_name: 'Legacy accepted option',
+          version_state: 'live',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          accepted_public_version_id: 'public-version-legacy-1',
+        },
+        error: null,
+      },
+      {
+        data: {
+          id: 'legacy-estimate-1',
+          org_id: 'org-1',
+          job_id: 'job-legacy',
+          customer_id: 'customer-1',
+          version_name: 'Legacy accepted option',
+          version_state: 'live',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          accepted_public_version_id: 'public-version-legacy-1',
+        },
+        error: null,
+      },
+    ],
+    estimate_public_versions: [
+      {
+        data: {
+          id: 'public-version-legacy-1',
+          estimate_id: 'legacy-estimate-1',
+          version_number: 4,
+          public_token: 'legacy-token-1',
+          status: 'accepted',
+          accepted_at: '2026-04-29T10:00:00.000Z',
+          acceptance_json: {
+            legal_name: 'Jordan Customer',
+            signature_type: 'typed',
+          },
+          snapshot_json: { document: { title: 'Legacy quote' } },
+        },
+        error: null,
+      },
+    ],
+    estimate_snapshot: [
+      {
+        data: null,
+        error: null,
+      },
+      {
+        data: {
+          id: 'snapshot-legacy-1',
+          org_id: 'org-1',
+          job_id: 'job-legacy',
+          estimate_id: 'legacy-estimate-1',
+          customer_id: 'customer-1',
+          accepted_public_version_id: 'public-version-legacy-1',
+          estimate_version_name: 'Legacy accepted option',
+          estimate_version_state: 'live',
+          estimated_labor_hours: 21,
+          estimated_paint_gallons: 6,
+          estimated_supplies_cost: 100,
+          estimated_other_cost: 20,
+          estimated_total: 3900,
+          source_payload_json: {
+            customer_send_snapshot_json: { document: { title: 'Legacy accepted snapshot' } },
+          },
+        },
+        error: null,
+      },
+    ],
+    estimate_version_rollups: [
+      {
+        data: { final_total: 3900 },
+        error: null,
+      },
+    ],
+  })
+
+  const ensureSnapshot = async (input: {
+    requestOrigin: string
+    orgId: string
+    userId: string
+    estimateId: string
+    publicVersionId: string
+  }) => {
+    assert.deepEqual(input, {
+      requestOrigin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'legacy-estimate-1',
+      publicVersionId: 'public-version-legacy-1',
+    })
+    return {
+      ok: true as const,
+      data: { id: 'snapshot-legacy-1' },
+    }
+  }
+
+  const result = await repairAcceptedEstimateSnapshotForJob(
+    {
+      requestOrigin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      jobId: 'job-legacy',
+    },
+    { db, ensureSnapshot }
+  )
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.estimate_id, 'legacy-estimate-1')
+    assert.equal(result.data.estimate_snapshot_id, 'snapshot-legacy-1')
+    assert.equal(result.data.final_total, 3900)
+  }
 })

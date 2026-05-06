@@ -72,9 +72,11 @@ export function useJobReviewPage() {
       if (!id || typeof id !== 'string') {
         throw new Error('Missing job id in URL.')
       }
-      const estimateSnapshotId = current.job?.accepted_quote?.estimate_snapshot_id ?? null
+      // Quote review is operational accepted-estimate work and therefore
+      // requires the canonical accepted snapshot contract.
+      const estimateSnapshotId = current.job?.accepted_estimate?.estimate_snapshot_id ?? null
       if (!estimateSnapshotId) {
-        throw new Error('Accepted estimate snapshot is missing.')
+        throw new Error('Accepted quote snapshot is missing.')
       }
 
       const result = await saveJobReviewFlow({
@@ -99,7 +101,8 @@ export function useJobReviewPage() {
   })
 
   const { job, model, form } = resource.data
-  const snapshotId = job?.accepted_quote?.estimate_snapshot_id ?? null
+  // Navigation-only quote ids must never unlock review reads or writes.
+  const snapshotId = job?.accepted_estimate?.estimate_snapshot_id ?? null
   const isReadOnly = model?.review?.status === 'locked'
   const loading = resource.loading
   const error = resource.error

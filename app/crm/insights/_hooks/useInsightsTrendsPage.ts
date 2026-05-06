@@ -58,9 +58,21 @@ export function useInsightsTrendsPage() {
   )
   const summary = resource.data ?? null
   const recommendations = recommendationsResource.data ?? null
+  const recommendationActionState = useMemo(
+    () => ({
+      pendingId: pendingRecommendation?.id ?? null,
+      pendingAction: pendingRecommendation?.action ?? null,
+      generating: generatingRecommendations,
+      confirmingApplyId: confirmingApplyRecommendationId,
+    }),
+    [confirmingApplyRecommendationId, generatingRecommendations, pendingRecommendation]
+  )
   const vm = useMemo(
-    () => (summary && recommendations ? buildInsightsTrendsPageVm(summary, recommendations) : null),
-    [recommendations, summary]
+    () =>
+      summary && recommendations
+        ? buildInsightsTrendsPageVm(summary, recommendations, recommendationActionState)
+        : null,
+    [recommendationActionState, recommendations, summary]
   )
 
   const replaceFilters = useCallback(
@@ -192,12 +204,7 @@ export function useInsightsTrendsPage() {
       actionError,
       actionNotice,
     },
-    recommendationActionState: {
-      pendingId: pendingRecommendation?.id ?? null,
-      pendingAction: pendingRecommendation?.action ?? null,
-      generating: generatingRecommendations,
-      confirmingApplyId: confirmingApplyRecommendationId,
-    },
+    recommendationActionState,
     filterInputs: {
       conditionTags: (filters.conditionTags ?? emptyTags).join(', '),
       maxAbsoluteVariance:
