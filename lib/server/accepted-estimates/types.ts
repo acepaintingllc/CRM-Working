@@ -1,3 +1,5 @@
+import type { EstimatePublicPersistedSnapshot } from '@/lib/customer-estimates/publicSnapshot'
+
 export type AcceptedEstimateSource = {
   org_id: string
   job_id: string
@@ -21,6 +23,25 @@ export type AcceptedEstimateSource = {
   final_total: number
   snapshot_json: Record<string, unknown>
 }
+
+export type AcceptedEstimateSnapshotArtifactState =
+  | {
+      kind: 'canonical'
+      artifact: EstimatePublicPersistedSnapshot
+      accepted_public_version: Record<string, unknown>
+    }
+  | {
+      kind: 'missing'
+      message: string
+    }
+  | {
+      kind: 'legacy'
+      message: string
+    }
+  | {
+      kind: 'invalid'
+      message: string
+    }
 
 export type AcceptEstimateOperationalInput = {
   orgId: string

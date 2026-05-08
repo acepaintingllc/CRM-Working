@@ -1,93 +1,74 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
-import { findLatestEstimateFile, findMatchingEstimateFiles } from '@/lib/server/googleDrive'
+import {
+  readUuidParam,
+  requireSessionUserOrg,
+  resolveParams,
+} from '@/lib/server/apiRoute'
+import {
+  getLatestJobEstimateFile,
+  listMatchingJobEstimateFiles,
+} from '@/lib/jobs/estimateFiles'
 import { serverLog } from '@/lib/server/log'
-import { dataResponse } from '@/lib/server/routeResult'
-
-type JobRecord = { customer_id: string | null }
+import { dataResponse, serviceErrorResponse } from '@/lib/server/routeResult'
 
 export async function GET(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const session = await requireSessionUserOrg()
+  if (!session.ok) return session.response
 
-  const { orgId, userId } = session
-  const params = await Promise.resolve(context.params)
-  const id = (params as { id?: string } | null | undefined)?.id
-  if (!id || typeof id !== 'string') {
-    return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
-  }
-
-  const { data: job, error: jobErr } = await supabaseAdmin
-    .from('jobs')
-    .select('id, customer_id')
-    .eq('org_id', orgId)
-    .eq('id', id)
-    .maybeSingle()
-
-  if (jobErr) return NextResponse.json({ error: 'Unable to load job.' }, { status: 500 })
-  if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
-
-  const jobRow = job as JobRecord
-  const { data: customer } = await supabaseAdmin
-    .from('customers')
-    .select('address')
-    .eq('org_id', orgId)
-    .eq('id', jobRow.customer_id)
-    .maybeSingle()
-
-  if (!customer?.address) return NextResponse.json({ error: 'Customer address missing.' }, { status: 400 })
+  const params = await resolveParams(context)
+  const jobId = readUuidParam((params as { id?: string } | null | undefined)?.id, 'job id')
+  if (!jobId.ok) return jobId.response
 
   const origin = new URL(request.url).origin
   const url = new URL(request.url)
   const includeAll = url.searchParams.get('all') === '1'
 
   if (includeAll) {
-    const matches = await findMatchingEstimateFiles({
+    const result = await listMatchingJobEstimateFiles({
       origin,
-      orgId,
-      userId,
-      address: customer.address,
+      orgId: session.session.orgId,
+      userId: session.session.userId,
+      jobId: jobId.value,
     })
-    if ('error' in matches) {
-      serverLog.warn('[estimate-file] no-match', { jobId: id, reason: matches.error })
-      return NextResponse.json({ error: matches.error }, { status: 404 })
+    if (!result.ok) {
+      if (result.kind === 'not_found') {
+        serverLog.warn('[estimate-file] no-match', { jobId: jobId.value, reason: result.message })
+      }
+      return serviceErrorResponse(result)
     }
-    const latest = matches.files[0] ?? null
-    if (!latest) {
-      return NextResponse.json({ error: 'No matching estimate file found in Drive.' }, { status: 404 })
-    }
-    return dataResponse({ latest, files: matches.files })
+    return dataResponse(result.data)
   }
 
-  const result = await findLatestEstimateFile({
+  const result = await getLatestJobEstimateFile({
     origin,
-    orgId,
-    userId,
-    address: customer.address,
+    orgId: session.session.orgId,
+    userId: session.session.userId,
+    jobId: jobId.value,
   })
 
-  if ('error' in result) {
-    serverLog.warn('[estimate-file] no-match', { jobId: id, reason: result.error })
-    return NextResponse.json({ error: result.error }, { status: 404 })
+  if (!result.ok) {
+    if (result.kind === 'not_found') {
+      serverLog.warn('[estimate-file] no-match', { jobId: jobId.value, reason: result.message })
+    }
+    return serviceErrorResponse(result)
   }
+
   serverLog.info('[estimate-file] selected', {
-    jobId: id,
-    fileId: result.file.id,
-    fileName: result.file.name,
-    version: result.file.version ?? null,
-    matchMode: result.file.matchMode ?? null,
+    jobId: jobId.value,
+    fileId: result.data.id,
+    fileName: result.data.name,
+    version: result.data.version ?? null,
+    matchMode: result.data.matchMode ?? null,
   })
 
   const shouldRedirect = url.searchParams.get('redirect') === '1'
-  if (shouldRedirect && result.file.webViewLink) {
-    return NextResponse.redirect(result.file.webViewLink)
+  // Redirect is the route-only exception for legacy callers that need to open Drive directly.
+  if (shouldRedirect && result.data.webViewLink) {
+    return NextResponse.redirect(result.data.webViewLink)
   }
 
-  return dataResponse(result.file)
+  return dataResponse(result.data)
 }

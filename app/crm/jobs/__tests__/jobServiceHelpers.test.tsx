@@ -89,7 +89,7 @@ describe('job service helpers', () => {
         email: 'alice@example.com',
         phone: '555-1234',
       },
-      linkedEstimates: [
+      quoteNavigationEstimates: [
         {
           id: 'estimate-1',
           status: 'draft',
@@ -105,6 +105,7 @@ describe('job service helpers', () => {
 
     expect(detail.customer_email).toBe('alice@example.com')
     expect(detail.customer_phone).toBe('555-1234')
-    expect(detail.linked_estimate_id).toBe('estimate-1')
+    expect(detail.linked_estimate_id).toBeNull()
+    expect(detail.estimate_navigation_id).toBe('estimate-1')
   })
 })

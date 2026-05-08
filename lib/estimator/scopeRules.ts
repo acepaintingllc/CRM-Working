@@ -29,7 +29,8 @@ export function resolvePrimerSupplyCost(params: {
     const text = normalizeKey(`${row.key} ${row.unit}`)
     if (!text.includes('primer')) continue
     if (!scopeMatches(row.scope, params.scope)) continue
-    return pos(n(row.value)) ?? 0
+    const value = pos(n(row.value))
+    if (value != null) return value
   }
   return 0
 }

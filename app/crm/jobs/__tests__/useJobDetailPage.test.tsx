@@ -63,7 +63,7 @@ function resetClientMocks() {
   mocks.loadJobRecord.mockResolvedValue(jobDetail)
   mocks.loadJobEstimateFile.mockResolvedValue({
     estimateFile: null,
-    estimateFileError: 'No matching estimate in Drive folder',
+    estimateFileError: 'No matching quote in Drive folder',
   })
   mocks.listPaintLogs.mockResolvedValue([])
   mocks.listJobSitePhotos.mockResolvedValue({ data: [] })
@@ -105,7 +105,7 @@ describe('useJobDetailPage', () => {
     mocks.loadJobEstimateFile
       .mockResolvedValueOnce({
         estimateFile: null,
-        estimateFileError: 'No matching estimate in Drive folder',
+        estimateFileError: 'No matching quote in Drive folder',
       })
       .mockResolvedValueOnce({
         estimateFile: { id: 'file-1', name: 'Estimate.pdf', webViewLink: 'https://drive/file-1' },
@@ -136,6 +136,33 @@ describe('useJobDetailPage', () => {
     expect(mocks.listPaintLogs).toHaveBeenCalledWith('job-1')
     expect(result.current.estimateFile?.id).toBe('file-1')
     expect(result.current.paintLogs).toHaveLength(1)
+  })
+
+  it('builds closeout reference visibility from job status and saved closeout data', async () => {
+    mocks.loadJobRecord.mockResolvedValueOnce({
+      ...jobDetail,
+      status: 'completed',
+      closeout_notes: null,
+    })
+    mocks.listPaintLogs.mockResolvedValueOnce([])
+
+    const { result } = renderHook(() => useJobDetailPage(), {
+      wrapper: createSWRWrapper(),
+    })
+
+    await waitFor(() =>
+      expect(result.current.closeoutReferenceVm?.notes).toBe('No closeout notes yet.')
+    )
+    expect(result.current.closeoutReferenceVm?.paintLogs).toEqual([])
+  })
+
+  it('hides the closeout reference for active jobs without saved closeout data', async () => {
+    const { result } = renderHook(() => useJobDetailPage(), {
+      wrapper: createSWRWrapper(),
+    })
+
+    await waitFor(() => expect(result.current.job?.id).toBe('job-1'))
+    expect(result.current.closeoutReferenceVm).toBeNull()
   })
 
   it('updateEstimateDate converts local input, patches the job, and updates local detail state', async () => {

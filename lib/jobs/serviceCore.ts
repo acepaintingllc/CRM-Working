@@ -9,12 +9,13 @@ import {
   type ServiceResult,
 } from '../server/serviceResult.ts'
 import type {
-  JobAcceptedQuoteDetail,
+  JobAcceptedEstimateDetail,
   JobDetail,
   JobLinkedEstimateSummary,
   JobSummary,
 } from '../../types/jobs/api.ts'
 import type { JobActualsStatus } from '../../types/jobs/feedback.ts'
+import type { AcceptedEstimateSource } from '../server/accepted-estimates/types.ts'
 
 type JobRow = {
   id?: string | null
@@ -45,14 +46,14 @@ type CustomerRow = {
   phone?: string | null
 }
 
-type LinkedEstimateRow = JobLinkedEstimateSummary
+type QuoteNavigationEstimateRow = JobLinkedEstimateSummary
 
 type JobScheduleRange = {
   scheduled_date: string | null
   scheduled_end_date: string | null
 }
 
-export type JobAcceptedQuoteRecord = JobAcceptedQuoteDetail
+export type JobAcceptedEstimateRecord = JobAcceptedEstimateDetail
 type JobSummaryRecord = JobSummary
 type JobDetailRecord = JobDetail
 export type {
@@ -140,8 +141,8 @@ export function buildJobDetailRecord(params: {
   row: JobRow
   optionalColumns: string[]
   customer?: CustomerRow | null
-  linkedEstimates?: LinkedEstimateRow[]
-  acceptedQuote?: JobAcceptedQuoteRecord | null
+  quoteNavigationEstimates?: QuoteNavigationEstimateRow[]
+  acceptedEstimate?: JobAcceptedEstimateRecord | null
   jobActualsStatus?: JobActualsStatus | null
   publicQuoteTimelineEvents?: JobDetail['public_quote_timeline_events']
   withOptionalJobColumns?: (
@@ -156,17 +157,55 @@ export function buildJobDetailRecord(params: {
     withOptionalJobColumns: params.withOptionalJobColumns,
   })
 
+  const quoteNavigationEstimateId =
+    summary.linked_estimate_id ?? params.quoteNavigationEstimates?.[0]?.id ?? null
+
   return {
     ...summary,
     customer_email: params.customer?.email ?? null,
     customer_phone: params.customer?.phone ?? null,
     scheduled_end_date: summary.scheduled_end_date ?? null,
-    linked_estimates: params.linkedEstimates ?? [],
-    linked_estimate_id: summary.linked_estimate_id ?? params.linkedEstimates?.[0]?.id ?? null,
-    accepted_quote: params.acceptedQuote ?? null,
+    linked_estimates: params.quoteNavigationEstimates ?? [],
+    linked_estimate_id: summary.linked_estimate_id ?? null,
+    // Quote navigation is intentionally separate from operational accepted
+    // estimate ownership. linked_estimate_id remains the canonical accepted
+    // link; the linked_estimates fallback only supports opening an existing
+    // quote route.
+    estimate_navigation_id: quoteNavigationEstimateId,
+    accepted_estimate: params.acceptedEstimate ?? null,
     job_actuals_status: params.jobActualsStatus ?? null,
     public_quote_timeline_events: params.publicQuoteTimelineEvents ?? [],
   }
+}
+
+export function buildJobAcceptedEstimateRecord(
+  source: AcceptedEstimateSource
+): JobAcceptedEstimateRecord {
+  return {
+    estimate_id: source.estimate_id,
+    accepted_public_version_id: source.accepted_public_version_id,
+    public_version_number: source.public_version_number,
+    public_token: source.public_token,
+    accepted_at: source.accepted_at,
+    accepted_by_legal_name: source.accepted_by_legal_name,
+    signature_type: source.signature_type,
+    user_agent: source.user_agent,
+    ip: source.ip,
+    version_name: source.version_name,
+    estimate_snapshot_id: source.estimate_snapshot_id,
+    estimated_labor_hours: source.estimated_labor_hours,
+    estimated_paint_gallons: source.estimated_paint_gallons,
+    estimated_supplies_cost: source.estimated_supplies_cost,
+    estimated_other_cost: source.estimated_other_cost,
+    final_total: source.final_total,
+  }
+}
+
+export function buildJobAcceptedEstimateRecordResult(
+  source: ServiceResult<AcceptedEstimateSource>
+): ServiceResult<JobAcceptedEstimateRecord> {
+  if (!source.ok) return source
+  return okResult(buildJobAcceptedEstimateRecord(source.data))
 }
 
 export function normalizeCreateJobInput(

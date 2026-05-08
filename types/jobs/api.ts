@@ -13,7 +13,12 @@ export type JobLinkedEstimateSummary = {
   created_at: string | null
 }
 
-export type JobAcceptedQuoteDetail = {
+export type JobAcceptedEstimateDetail = {
+  /**
+   * Canonical accepted estimate id resolved from the operational loader.
+   * For legacy accepted jobs this can still resolve even when
+   * jobs.linked_estimate_id is null.
+   */
   estimate_id: string
   accepted_public_version_id: string
   public_version_number: number
@@ -49,6 +54,10 @@ export type JobSummary = {
   completed_at: string | null
   completed_email_sent_at?: string | null
   closeout_notes?: string | null
+  /**
+   * Canonical accepted estimate link for operational job workflows such as
+   * closeout catalogs, work orders, invoices, actuals, and review.
+   */
   linked_estimate_id?: string | null
 }
 
@@ -56,8 +65,22 @@ export type JobDetail = JobSummary & {
   customer_email: string | null
   customer_phone: string | null
   scheduled_end_date: string | null
+  /**
+   * Quote/estimate rows for timeline and quote navigation surfaces. This is not
+   * the operational accepted-estimate contract.
+   */
   linked_estimates?: JobLinkedEstimateSummary[]
-  accepted_quote?: JobAcceptedQuoteDetail | null
+  /**
+   * Navigation-only estimate id for the user-facing Quote route. This can fall
+   * back to the first linked estimate row for legacy/draft navigation, but it
+   * must never be treated as accepted-estimate ownership.
+   */
+  estimate_navigation_id?: string | null
+  /**
+   * Canonical operational accepted-estimate data. This may be populated from a
+   * legacy accepted-estimate fallback even when linked_estimate_id is null.
+   */
+  accepted_estimate?: JobAcceptedEstimateDetail | null
   job_actuals_status?: JobActualsStatus | null
   public_quote_timeline_events?: EstimatePublicTimelineEvent[]
 }

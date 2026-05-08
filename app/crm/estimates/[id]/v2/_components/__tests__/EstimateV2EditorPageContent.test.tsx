@@ -14,6 +14,10 @@ const requestBackNavigation = vi.fn()
 const onStay = vi.fn()
 const onSave = vi.fn()
 const onLeave = vi.fn()
+const onDeleteConfirm = vi.fn()
+const onDeleteCancel = vi.fn()
+const reloadCatalogs = vi.fn()
+const reloadWorkspace = vi.fn()
 const mockUseEstimateV2Editor = vi.fn()
 
 vi.mock('../../_state/useEstimateV2Editor', () => ({
@@ -51,6 +55,9 @@ const baseEditorState = {
     loading: false,
     saving: false,
     error: null,
+    catalogsError: null,
+    configurationWarning: null,
+    catalogsReloading: false,
     validationIssues: [],
     emptySelectionMessage: 'Empty',
     roomsCount: 1,
@@ -324,6 +331,24 @@ const baseEditorState = {
   navigationActions: {
     requestBackNavigation,
   },
+  reloadCatalogs,
+  reloadWorkspace,
+  destructiveConfirmVm: {
+    isOpen: false,
+    labelledBy: 'estimate-v2-destructive-confirm-title',
+    title: '',
+    description: '',
+    closeLabel: 'Close destructive confirmation',
+    warning: '',
+    info: null,
+    confirmLabel: 'Confirm',
+    confirmAriaLabel: 'Confirm destructive change',
+  },
+  destructiveConfirmActions: {
+    request: vi.fn(),
+    confirm: onDeleteConfirm,
+    cancel: onDeleteCancel,
+  },
   toDisplayNumber: (value: number | null | undefined) => (value == null ? '--' : String(value)),
 }
 
@@ -448,6 +473,33 @@ describe('EstimateV2EditorPageContent', () => {
     expect(onStay).toHaveBeenCalledTimes(1)
     expect(onSave).toHaveBeenCalledTimes(1)
     expect(onLeave).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders the shared destructive confirmation dialog from the editor VM', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      destructiveConfirmVm: {
+        isOpen: true,
+        labelledBy: 'estimate-v2-destructive-confirm-title',
+        title: 'Delete Living Room walls?',
+        description: 'This will remove wall scope Living Room walls from Living Room (R001).',
+        closeLabel: 'Close wall scope delete confirmation',
+        warning: 'Delete Living Room walls and its 2 wall segments.',
+        info: 'Wall scope totals update as soon as you confirm.',
+        confirmLabel: 'Delete Living Room walls',
+        confirmAriaLabel: 'Delete wall scope Living Room walls from room Living Room (R001)',
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByRole('dialog', { name: 'Delete Living Room walls?' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete wall scope Living Room walls from room Living Room (R001)' }))
+
+    expect(onDeleteCancel).toHaveBeenCalledTimes(1)
+    expect(onDeleteConfirm).toHaveBeenCalledTimes(1)
   })
 
   it('enables Save draft when valid dirty edits are ready and no save is active', () => {
@@ -576,6 +628,7 @@ describe('EstimateV2EditorPageContent', () => {
         ...baseEditorState.pageVm,
         loading: true,
         error: { message: 'Failed to fetch estimate workspace', retryable: true },
+        catalogsError: null,
       },
     })
 
@@ -585,6 +638,139 @@ describe('EstimateV2EditorPageContent', () => {
       screen.getByRole('status', { name: 'Loading quote workspace' })
     ).toHaveTextContent('Loading workspace...')
     expect(screen.getByRole('alert')).toHaveTextContent('Failed to fetch estimate workspace')
+  })
+
+  it('renders a nonfatal catalog warning while keeping the editor workspace available', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        catalogsError: { message: 'Products API exploded', retryable: true },
+      },
+      roomVm: {
+        ...baseEditorState.roomVm,
+        roomTypeCatalogStatus: 'error',
+      },
+    })
+
+    const { container } = render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText("Rates and products couldn't be loaded")).toBeInTheDocument()
+    expect(
+      screen.getByText('Some choices may be unavailable until you try again.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Products API exploded')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry catalogs' })).toBeInTheDocument()
+    expect(screen.getByText('Walls Body')).toBeInTheDocument()
+    expect(container.querySelector('.ace-v2-rooms-layout')).toBeInTheDocument()
+  })
+
+  it('shows the catalog retry busy label without exposing raw backend text', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        catalogsError: { message: 'Catalog lookup timed out', retryable: true },
+        catalogsReloading: true,
+      },
+      roomVm: {
+        ...baseEditorState.roomVm,
+        roomTypeCatalogStatus: 'error',
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByRole('button', { name: 'Retrying catalogs...' })).toBeDisabled()
+    expect(screen.queryByText('Catalog lookup timed out')).not.toBeInTheDocument()
+  })
+
+  it('renders a top-level missing-default warning while preserving the editor workspace', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        configurationWarning: {
+          title: 'Required paint defaults are missing',
+          detail:
+            'Missing walls default primer and trim default paint. Pricing and send readiness stay blocked until every required paint and primer default is set.',
+          fixHint:
+            'Expand the left sidebar and open Paint Defaults to set the missing defaults.',
+          missingLabels: ['walls default primer', 'trim default paint'],
+        },
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('Required paint defaults are missing')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Missing walls default primer and trim default paint. Pricing and send readiness stay blocked until every required paint and primer default is set.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Expand the left sidebar and open Paint Defaults to set the missing defaults.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText('Walls Body')).toBeInTheDocument()
+  })
+
+  it('routes catalog retry through the canonical editor loader action', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        catalogsError: { message: 'Failed to load catalogs', retryable: true },
+        catalogsReloading: false,
+      },
+      roomVm: {
+        ...baseEditorState.roomVm,
+        roomTypeCatalogStatus: 'error',
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry catalogs' }))
+
+    expect(reloadCatalogs).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders curated save failure copy while keeping save actions available for retry', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        error: { message: 'Save exploded in route handler', retryable: true },
+      },
+      headerVm: {
+        ...baseEditorState.headerVm,
+        resumeRecord: {
+          estimate: { id: 'estimate-1' },
+          job: { id: 'job-1' },
+        },
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: true,
+        canManualSave: true,
+        saveStatus: 'error',
+        saveStatusText: 'We couldn\'t save this quote. Try again.',
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent("We couldn't save your changes. Try again.")
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Save exploded in route handler')
+    expect(screen.getAllByText("We couldn't save your changes. Try again.").length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(saveDraft).toHaveBeenCalledTimes(1)
   })
 
   it('renders a fatal load error without mounting the editor workspace controls', () => {
@@ -620,10 +806,53 @@ describe('EstimateV2EditorPageContent', () => {
 
     const { container } = render(<EstimateV2EditorPageContent estimateId="missing-estimate" />)
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Quote not found')
+    expect(screen.getByText('We couldn\'t load this editor')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Try again. If this keeps happening, go back and reopen this page.'
+    )
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Quote not found')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
     expect(container.querySelector('.ace-v2-rooms-layout')).not.toBeInTheDocument()
     expect(container.querySelector('.estimate-v2-footer')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
+  })
+
+  it('routes fatal load retry through the canonical editor loader action', () => {
+    mockUseEstimateV2Editor.mockReturnValue({
+      ...baseEditorState,
+      pageVm: {
+        ...baseEditorState.pageVm,
+        loading: false,
+        error: { message: 'Quote not found', retryable: true },
+        roomsCount: 0,
+      },
+      headerVm: {
+        ...baseEditorState.headerVm,
+        resumeRecord: {
+          estimate: null,
+          job: null,
+        },
+        dirty: false,
+        dirtyStateText: '',
+      },
+      roomVm: {
+        ...baseEditorState.roomVm,
+        rooms: [],
+        selectedRoomId: '',
+        selectedRoom: null,
+      },
+      saveVm: {
+        ...baseEditorState.saveVm,
+        dirty: false,
+        canManualSave: false,
+      },
+    })
+
+    render(<EstimateV2EditorPageContent estimateId="missing-estimate" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(reloadWorkspace).toHaveBeenCalledTimes(1)
   })
 
   it('renders a single validation issue', () => {

@@ -1,13 +1,39 @@
-import { getEstimateCatalogs } from '@/lib/server/estimateCatalogs'
-import { supabaseAdmin } from '@/lib/server/org'
 import {
+  resolveEstimatorV2RoomModeById,
   toCeilingCalculationCatalogs,
   toDoorCalculationCatalogs,
   toDrywallCalculationCatalogs,
   toTrimCalculationCatalogs,
   toWallCalculationCatalogs,
-} from '@/lib/server/estimateV2RoutePayload'
-import { asText, type UnsafeRecord } from '@/lib/estimator/parsing'
+} from '../estimator/v2CalculationShared.ts'
+import { asText, type UnsafeRecord } from '../estimator/parsing.ts'
+import type {
+  EstimatorV2RoomModeRoom,
+  EstimatorV2RoomModeScope,
+} from '../estimator/v2CalculationShared.ts'
+
+function toCatalogBlob(value: unknown): UnsafeRecord {
+  return value && typeof value === 'object' ? (value as UnsafeRecord) : {}
+}
+
+function toRoomModeValue(value: unknown): EstimatorV2RoomModeRoom['mode'] {
+  const mode = asText(value).toUpperCase()
+  if (mode === 'SEG' || mode === 'RECT') return mode
+  return null
+}
+
+function toRoomModeRows(rows: unknown): EstimatorV2RoomModeRoom[] {
+  if (!Array.isArray(rows)) return []
+  return rows.flatMap((row) => {
+    const record = row && typeof row === 'object' ? (row as UnsafeRecord) : null
+    const roomId = asText(record?.room_id).toUpperCase()
+    return roomId ? [{ room_id: roomId, mode: toRoomModeValue(record?.mode) }] : []
+  })
+}
+
+function toRoomModeScopeRows(rows: unknown): EstimatorV2RoomModeScope[] {
+  return toRoomModeRows(rows)
+}
 
 export async function loadEstimateV2CalculationCatalogs(params: {
   requestOrigin: string
@@ -15,13 +41,14 @@ export async function loadEstimateV2CalculationCatalogs(params: {
   userId: string
   estimateId: string
 }) {
+  const { getEstimateCatalogs } = await import('./estimateCatalogs.ts')
   const catalogs = await getEstimateCatalogs({
     origin: params.requestOrigin,
     orgId: params.orgId,
     userId: params.userId,
     estimateId: params.estimateId,
   })
-  const source = catalogs.catalogs as unknown as UnsafeRecord
+  const source = toCatalogBlob(catalogs.catalogs)
 
   return {
     source,
@@ -34,33 +61,18 @@ export async function loadEstimateV2CalculationCatalogs(params: {
 }
 
 export function resolveEstimateV2RoomModeById(params: {
-  rooms: UnsafeRecord[]
-  wallScopes: UnsafeRecord[]
-  ceilingScopes: UnsafeRecord[]
+  rooms: EstimatorV2RoomModeRoom[]
+  wallScopes: EstimatorV2RoomModeScope[]
+  ceilingScopes: EstimatorV2RoomModeScope[]
 }) {
-  const roomMode = new Map<string, 'RECT' | 'SEG'>()
-  for (const scope of params.wallScopes) {
-    const roomId = asText(scope.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(scope.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  for (const scope of params.ceilingScopes) {
-    const roomId = asText(scope.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(scope.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  for (const room of params.rooms) {
-    const roomId = asText(room.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(room.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  return roomMode
+  return resolveEstimatorV2RoomModeById({ ...params, useRoomMode: true })
 }
 
 export async function loadEstimateV2RoomModesForTrimFromDb(params: {
   orgId: string
   estimateId: string
 }) {
+  const { supabaseAdmin } = await import('./org.ts')
   const [roomRes, wallRes, ceilingRes] = await Promise.all([
     supabaseAdmin
       .from('estimate_rooms')
@@ -85,8 +97,8 @@ export async function loadEstimateV2RoomModesForTrimFromDb(params: {
   if (ceilingRes.error) throw new Error(ceilingRes.error.message)
 
   return resolveEstimateV2RoomModeById({
-    rooms: (roomRes.data ?? []) as UnsafeRecord[],
-    wallScopes: (wallRes.data ?? []) as UnsafeRecord[],
-    ceilingScopes: (ceilingRes.data ?? []) as UnsafeRecord[],
+    rooms: toRoomModeRows(roomRes.data),
+    wallScopes: toRoomModeScopeRows(wallRes.data),
+    ceilingScopes: toRoomModeScopeRows(ceilingRes.data),
   })
 }

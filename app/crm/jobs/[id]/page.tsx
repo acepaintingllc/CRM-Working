@@ -13,6 +13,7 @@ import { useJobDetailPage } from '@/app/crm/jobs/_hooks/useJobDetailPage'
 import JobCompletionCloseoutModal from '@/app/crm/jobs/_components/JobCompletionCloseoutModal'
 import StageEmailModal from '@/app/crm/jobs/_components/StageEmailModal'
 import JobActionRail from '@/app/crm/jobs/[id]/_components/JobActionRail'
+import JobCloseoutPanel from '@/app/crm/jobs/[id]/_components/JobCloseoutPanel'
 import JobDetailHeader from '@/app/crm/jobs/[id]/_components/JobDetailHeader'
 import JobDetailsPanel from '@/app/crm/jobs/[id]/_components/JobDetailsPanel'
 import JobTimeline from '@/app/crm/jobs/[id]/_components/JobTimeline'
@@ -70,6 +71,7 @@ export default function JobDetailPage() {
                       onCopy={(label, value) => void controller.copy(label, value)}
                     />
                   </CrmSectionCard>
+                  <JobCloseoutPanel vm={controller.closeoutReferenceVm} />
                   <CrmSectionCard title="Actions" variant="compact">
                     <CrmButton
                       href={`/crm/job-photos?job=${controller.job.id}`}

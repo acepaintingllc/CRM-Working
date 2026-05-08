@@ -36,6 +36,7 @@ import type { EstimateV2EditorDerivedSections } from './useEstimateV2EditorDeriv
 
 export type EstimateV2EditorViewModelParams = {
   estimateId?: string
+  catalogsReloading?: boolean
   store: EstimateV2EditorStoreApi
   derived: EstimateV2EditorDerivedSections
   roomActions: ReturnType<typeof import('./useEstimateV2RoomActions').useEstimateV2RoomActions>
@@ -55,12 +56,14 @@ export type EstimateV2EditorViewModelParams = {
 
 function usePageVm(
   store: EstimateV2EditorStoreApi,
-  derived: EstimateV2EditorDerivedSections
+  derived: EstimateV2EditorDerivedSections,
+  catalogsReloading: boolean
 ): EstimateV2EditorPageVm {
   const pageState = useEstimateV2Store(store, (state) => ({
     loading: state.meta.loading,
     saving: state.meta.saving,
     error: state.meta.error,
+    catalogsError: state.meta.catalogsError,
     roomsCount: state.collections.rooms.length,
   }))
 
@@ -69,12 +72,18 @@ function usePageVm(
       loading: pageState.loading,
       saving: pageState.saving,
       error: pageState.error,
+      catalogsError: pageState.catalogsError ?? null,
+      configurationWarning: derived.productLabels.configurationWarning,
+      catalogsReloading,
       validationIssues: derived.save.visibleValidationIssues,
       emptySelectionMessage: 'Add a room or select one from the roster to start editing room inputs.',
       roomsCount: pageState.roomsCount,
     }),
     [
+      catalogsReloading,
+      derived.productLabels.configurationWarning,
       derived.save.visibleValidationIssues,
+      pageState.catalogsError,
       pageState.error,
       pageState.loading,
       pageState.roomsCount,
@@ -1007,9 +1016,9 @@ function useSummaryVm(
 export function useEstimateV2EditorSliceViewModels(
   params: EstimateV2EditorViewModelParams
 ) {
-  const { estimateId, store, derived, roomActions, wallActions, ceilingActions, trimActions, doorActions, drywallActions, settingsActions, save, saveDraft, saveAndContinue } = params
+  const { estimateId, catalogsReloading = false, store, derived, roomActions, wallActions, ceilingActions, trimActions, doorActions, drywallActions, settingsActions, save, saveDraft, saveAndContinue } = params
   const effectiveDrywallActions = drywallActions ?? noopDrywallActions
-  const pageVm = usePageVm(store, derived)
+  const pageVm = usePageVm(store, derived, catalogsReloading)
   const headerVm = useHeaderVm(estimateId, store, derived, roomActions.addRoom)
   const roomVm = useRoomVm(store, derived, roomActions)
   const wallsVm = useWallsVm(store, derived, wallActions, effectiveDrywallActions, roomActions.updateRoomComplexity)

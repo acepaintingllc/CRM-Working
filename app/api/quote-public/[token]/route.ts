@@ -1,6 +1,6 @@
 import { resolveParams } from '@/lib/server/apiRoute'
 import { serviceResultDataResponse } from '@/lib/server/routeResult'
-import { loadPublicEstimateSnapshot } from '@/lib/server/estimatePublicPortal'
+import { loadPublicEstimatePortalSnapshot } from '@/lib/server/estimatePublicPortal'
 
 export async function GET(
   request: Request,
@@ -9,14 +9,14 @@ export async function GET(
   const params = await resolveParams(context)
   const token = (params as { token?: string } | null | undefined)?.token
   return serviceResultDataResponse(
-    await loadPublicEstimateSnapshot(
-      token ?? '',
-      { origin: new URL(request.url).origin },
-      {
-        metadata: {
-          user_agent: request.headers.get('user-agent') ?? '',
-        },
-      }
-    )
+    await loadPublicEstimatePortalSnapshot({
+      token: token ?? '',
+      origin: new URL(request.url).origin,
+      actorType: 'customer',
+      metadata: {
+        route: 'quote-public',
+        user_agent: request.headers.get('user-agent') ?? '',
+      },
+    })
   )
 }

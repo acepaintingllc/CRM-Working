@@ -22,7 +22,7 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateProductRouteDelete: vi.fn(),
   handleRatesFlagsRouteGet: vi.fn(),
   handleRatesFlagsRouteMutation: vi.fn(),
-  loadPublicEstimateSnapshot: vi.fn(),
+  loadPublicEstimatePortalSnapshot: vi.fn(),
 }))
 
 vi.mock('@/lib/server/estimateResourceRoutes', () => ({
@@ -79,7 +79,7 @@ vi.mock('@/lib/server/ratesFlagsRoute', () => ({
 }))
 
 vi.mock('@/lib/server/estimatePublicPortal', () => ({
-  loadPublicEstimateSnapshot: routeHandlerMocks.loadPublicEstimateSnapshot,
+  loadPublicEstimatePortalSnapshot: routeHandlerMocks.loadPublicEstimatePortalSnapshot,
 }))
 
 import {
@@ -139,7 +139,7 @@ describe('estimate and quote route delegation', () => {
     routeHandlerMocks.handleEstimateProductRouteDelete.mockReset()
     routeHandlerMocks.handleRatesFlagsRouteGet.mockReset()
     routeHandlerMocks.handleRatesFlagsRouteMutation.mockReset()
-    routeHandlerMocks.loadPublicEstimateSnapshot.mockReset()
+    routeHandlerMocks.loadPublicEstimatePortalSnapshot.mockReset()
   })
 
   it('delegates quote detail and catalog routes to shared estimate resource handlers', async () => {
@@ -449,7 +449,7 @@ describe('estimate and quote route delegation', () => {
   })
 
   it('delegates estimate and quote public read routes to the shared estimate portal service', async () => {
-    routeHandlerMocks.loadPublicEstimateSnapshot.mockResolvedValue({
+    routeHandlerMocks.loadPublicEstimatePortalSnapshot.mockResolvedValue({
       ok: true,
       data: {
         estimate_version_id: 'version-1',
@@ -470,18 +470,18 @@ describe('estimate and quote route delegation', () => {
     const estimateResponse = await getEstimatePublic(estimateRequest, context)
     const quoteResponse = await getQuotePublic(quoteRequest, context)
 
-    expect(routeHandlerMocks.loadPublicEstimateSnapshot).toHaveBeenNthCalledWith(
-      1,
-      'token-1',
-      { origin: 'http://localhost' },
-      { metadata: { user_agent: 'Vitest' } }
-    )
-    expect(routeHandlerMocks.loadPublicEstimateSnapshot).toHaveBeenNthCalledWith(
-      2,
-      'token-1',
-      { origin: 'http://localhost' },
-      { metadata: { user_agent: 'Vitest' } }
-    )
+    expect(routeHandlerMocks.loadPublicEstimatePortalSnapshot).toHaveBeenNthCalledWith(1, {
+      token: 'token-1',
+      origin: 'http://localhost',
+      actorType: 'customer',
+      metadata: { route: 'estimate-public', user_agent: 'Vitest' },
+    })
+    expect(routeHandlerMocks.loadPublicEstimatePortalSnapshot).toHaveBeenNthCalledWith(2, {
+      token: 'token-1',
+      origin: 'http://localhost',
+      actorType: 'customer',
+      metadata: { route: 'quote-public', user_agent: 'Vitest' },
+    })
     await expect(estimateResponse.json()).resolves.toEqual({
       data: {
         estimate_version_id: 'version-1',

@@ -24,7 +24,7 @@ test('completed workflow links actuals when accepted quote snapshot is missing',
     id: 'job-1',
     status: 'completed',
     linked_estimate_id: 'estimate-1',
-    accepted_quote: { estimate_snapshot_id: null },
+    accepted_estimate: { estimate_snapshot_id: null },
   })
 
   const actuals = actions.find((action) => action.id === 'open_job_actuals')
@@ -34,7 +34,7 @@ test('completed workflow links actuals when accepted quote snapshot is missing',
   assert.equal(actuals?.href, '/crm/jobs/job-1/actuals')
   assert.equal(actuals?.disabledReason, undefined)
   assert.equal(review?.kind, 'message')
-  assert.equal(review?.disabledReason, 'Submit job actuals before estimate review.')
+  assert.equal(review?.disabledReason, 'Submit job actuals before quote review.')
 })
 
 test('completed workflow links review with missing snapshot after actuals are submitted', () => {
@@ -42,7 +42,7 @@ test('completed workflow links review with missing snapshot after actuals are su
     id: 'job-1',
     status: 'completed',
     linked_estimate_id: 'estimate-1',
-    accepted_quote: { estimate_snapshot_id: null },
+    accepted_estimate: { estimate_snapshot_id: null },
     job_actuals_status: 'submitted',
   })
 
@@ -53,12 +53,13 @@ test('completed workflow links review with missing snapshot after actuals are su
   assert.equal(review?.disabledReason, undefined)
 })
 
-test('completed workflow blocks actuals and review without an accepted quote', () => {
+test('completed workflow blocks actuals and review without an accepted estimate', () => {
   const actions = getJobWorkflowActions('detail', {
     id: 'job-1',
     status: 'completed',
-    linked_estimate_id: null,
-    accepted_quote: null,
+    linked_estimate_id: 'legacy-navigation-estimate',
+    estimate_navigation_id: 'legacy-navigation-estimate',
+    accepted_estimate: null,
     job_actuals_status: 'submitted',
   })
 
@@ -68,7 +69,38 @@ test('completed workflow blocks actuals and review without an accepted quote', (
   assert.equal(actuals?.kind, 'message')
   assert.equal(actuals?.disabledReason, 'Accept a quote before entering job actuals.')
   assert.equal(review?.kind, 'message')
-  assert.equal(review?.disabledReason, 'Accept a quote before reviewing the estimate.')
+  assert.equal(review?.disabledReason, 'Accept a quote before reviewing the quote.')
+})
+
+test('quote navigation can use an explicit non-canonical fallback estimate id', () => {
+  const actions = getJobWorkflowActions('detail', {
+    id: 'job-1',
+    status: 'estimate_scheduled',
+    linked_estimate_id: null,
+    estimate_navigation_id: 'draft-estimate',
+  })
+
+  const quote = actions.find((action) => action.id === 'open_quote')
+
+  assert.equal(quote?.kind, 'navigate')
+  assert.equal(quote?.href, '/crm/quotes/draft-estimate')
+})
+
+test('quote navigation uses the explicit navigation contract instead of operational accepted-estimate fields', () => {
+  const actions = getJobWorkflowActions('detail', {
+    id: 'job-1',
+    status: 'completed',
+    linked_estimate_id: 'linked-estimate',
+    estimate_navigation_id: 'draft-estimate',
+    accepted_estimate: {
+      estimate_id: 'accepted-estimate',
+      estimate_snapshot_id: 'snapshot-1',
+    },
+  })
+
+  const quote = actions.find((action) => action.id === 'open_quote')
+
+  assert.equal(quote?.href, '/crm/quotes/draft-estimate')
 })
 
 test('completed workflow blocks review until actuals are submitted or locked', () => {
@@ -76,14 +108,14 @@ test('completed workflow blocks review until actuals are submitted or locked', (
     id: 'job-1',
     status: 'completed',
     linked_estimate_id: 'estimate-1',
-    accepted_quote: { estimate_snapshot_id: 'snapshot-1' },
+    accepted_estimate: { estimate_snapshot_id: 'snapshot-1' },
     job_actuals_status: 'draft',
   })
   const lockedActions = getJobWorkflowActions('detail', {
     id: 'job-1',
     status: 'completed',
     linked_estimate_id: 'estimate-1',
-    accepted_quote: { estimate_snapshot_id: null },
+    accepted_estimate: { estimate_snapshot_id: null },
     job_actuals_status: 'locked',
   })
 
@@ -91,7 +123,7 @@ test('completed workflow blocks review until actuals are submitted or locked', (
   const lockedReview = lockedActions.find((action) => action.id === 'open_estimate_review')
 
   assert.equal(draftReview?.kind, 'message')
-  assert.equal(draftReview?.disabledReason, 'Submit job actuals before estimate review.')
+  assert.equal(draftReview?.disabledReason, 'Submit job actuals before quote review.')
   assert.equal(lockedReview?.kind, 'navigate')
   assert.equal(lockedReview?.href, '/crm/jobs/job-1/review')
 })

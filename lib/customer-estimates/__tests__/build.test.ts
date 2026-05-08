@@ -1122,6 +1122,70 @@ test('buildCustomerEstimateDocument preserves mixed-scope output parity across d
   assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), 1650)
 })
 
+test('buildCustomerEstimateDocument keeps access fees fixed while reconciling policy-adjusted totals', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-7-FIXED-ACCESS',
+      version_name: 'Policy Adjusted Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-21T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Morgan Customer',
+      customer_address: '987 Market St',
+      estimate_date: '2026-04-21',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Kitchen' }],
+      room_wall_scopes: [
+        {
+          room_id: 'R001',
+          include: 'Y',
+          effective_total: 100,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [],
+      access_fees: [
+        {
+          label: 'Ladder setup',
+          access_fee_id: 'LADDER',
+          qty: 1,
+          catalog_amount: 75,
+        },
+      ],
+      other: [],
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-WALL', display_name: 'SW Duration Home', display_id: 'WALL-1' }],
+      trim_items: [],
+    },
+    pricingSummary: {
+      finalTotal: 200,
+    },
+  })
+
+  assert.equal(document.total, 200)
+  assert.equal(document.quote_rows.length, 2)
+  assert.equal(document.quote_rows.find((row) => row.key === 'walls')?.price, 125)
+  assert.equal(document.quote_rows.find((row) => row.key === 'other')?.price, 75)
+  assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), document.total)
+})
+
 test('buildCustomerEstimateDocument keeps fractional mixed-scope rows reconciled to rounded quote total', () => {
   const document = buildCustomerEstimateDocument({
     estimate: {

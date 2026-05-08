@@ -391,6 +391,8 @@ test('buildEstimateV2SavePayload maps rooms, scopes, segments, ceilings, and tri
       id: 'drywall-1',
       room_id: 'R001',
       position: 0,
+      include: 'Y',
+      active: 'Y',
       surface: 'wall',
       repair_type: 'flat_wall_crack',
       unit: 'LF',

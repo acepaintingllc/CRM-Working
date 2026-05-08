@@ -57,6 +57,78 @@ function createDerivedStore() {
 }
 
 describe('useEstimateV2DerivedState', () => {
+  it('uses server-calculated totals as the source of truth while the saved snapshot is clean', () => {
+    const { store } = createDerivedStore()
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.sections.calculation.hasServerCalculations).toBe(true)
+    expect(result.current.useLocalPreviewCalculations).toBe(false)
+    expect(result.current.selectedWallSubtotal).toBe(700)
+    expect(result.current.selectedCeilingSubtotal).toBe(180)
+    expect(result.current.selectedTrimSubtotal).toBe(210)
+    expect(result.current.wallScopeEffectiveTotalById.get('wall-r001-main')).toBe(700)
+    expect(result.current.ceilingScopeEffectiveTotalById.get('ceiling-r001-main')).toBe(180)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r001-main')).toBe(210)
+    expect(result.current.activeScopeTotals).toMatchObject({
+      wallsSqFt: 476,
+      ceilingsSqFt: 180,
+      trimMeasurement: 44,
+    })
+  })
+
+  it('switches displayed totals to local preview values once a saved scope is dirty', () => {
+    const { store } = createDerivedStore()
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.useLocalPreviewCalculations).toBe(false)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r001-main')).toBe(210)
+    expect(result.current.selectedTrimSubtotal).toBe(210)
+
+    act(() => {
+      store.getState().setTrimScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === 'trim-r001-main'
+            ? { ...scope, helperValue: '50', overrideTotal: '' }
+            : scope
+        )
+      )
+    })
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.sections.calculation.hasServerCalculations).toBe(true)
+    expect(result.current.useLocalPreviewCalculations).toBe(true)
+    expect(result.current.selectedTrimMeasurement).toBe(44)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r001-main')).toBe(125)
+    expect(result.current.selectedTrimSubtotal).toBe(125)
+  })
+
+  it('falls back to local preview totals when server wall room totals are missing', () => {
+    const { store } = createDerivedStore()
+
+    act(() => {
+      store.getState().setMeta((prev) => ({
+        ...prev,
+        wallCalculations: {
+          ...(prev.wallCalculations ?? {}),
+          room_totals: [],
+        },
+      }))
+    })
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.sections.calculation.hasServerCalculations).toBe(false)
+    expect(result.current.useLocalPreviewCalculations).toBe(true)
+    expect(result.current.selectedRoomEffectiveSqFt).toBe(396)
+    expect(result.current.selectedWallSubtotal).toBeNull()
+    expect(result.current.selectedCeilingSubtotal).toBeNull()
+    expect(result.current.selectedTrimSubtotal).toBe(210)
+    expect(result.current.activeScopeTotals.wallsSqFt).toBe(476)
+  })
+
   it('builds stable mixed-estimate derived output from the canonical fixture', () => {
     const { fixture, store } = createDerivedStore()
 
@@ -87,7 +159,7 @@ describe('useEstimateV2DerivedState', () => {
       doorsActive: false,
     })
     expect(result.current.wallPaintLabel).toBe('Wall Satin')
-    expect(result.current.saveStatusText).toBe('Saved Apr 21, 9:00 AM')
+    expect(result.current.saveStatusText).toBe('Saved Apr 21, 2:00 PM')
     expect(result.current.trimPaintLabel).toBe('Trim Enamel')
   })
 
@@ -103,7 +175,7 @@ describe('useEstimateV2DerivedState', () => {
     const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
 
     expect(result.current.dirty).toBe(false)
-    expect(result.current.saveStatusText).toBe('Saved May 4, 10:30 AM')
+    expect(result.current.saveStatusText).toBe('Saved May 4, 3:30 PM')
   })
 
   it('filters saved validation issues for page display in the save-derived state', () => {
@@ -122,7 +194,7 @@ describe('useEstimateV2DerivedState', () => {
 
     expect(result.current.dirty).toBe(false)
     expect(result.current.sections.save.visibleValidationIssues).toEqual([
-      'R001: height is required for RECT wall mode',
+      'Living Room: height is required for RECT wall mode',
     ])
   })
 
@@ -220,6 +292,73 @@ describe('useEstimateV2DerivedState', () => {
       ceilingsSqFt: 300,
       trimMeasurement: 64,
     })
+  })
+
+  it('excludes disabled scopes from subtotal rollups even when a displayed effective total exists', () => {
+    const { store } = createDerivedStore()
+
+    act(() => {
+      store.getState().setSelectedRoomId('R002')
+    })
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.useLocalPreviewCalculations).toBe(false)
+    expect(result.current.wallScopeEffectiveTotalById.get('wall-r002-main')).toBe(220)
+    expect(result.current.wallScopeEffectiveTotalById.get('wall-r002-excluded')).toBe(80)
+    expect(result.current.selectedWallSubtotal).toBe(220)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r002-excluded')).toBe(60)
+    expect(result.current.selectedTrimSubtotal).toBeNull()
+    expect(result.current.selectedTrimMeasurement).toBeNull()
+    expect(result.current.activeScopeTotals.wallsSqFt).toBe(476)
+    expect(result.current.activeScopeTotals.trimMeasurement).toBe(44)
+  })
+
+  it('uses manual overrides as the displayed effective total while preview mode is active', () => {
+    const { store } = createDerivedStore()
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    act(() => {
+      store.getState().setTrimScopes((prev) =>
+        prev.map((scope) =>
+          scope.id === 'trim-r001-main' ? { ...scope, overrideTotal: '333' } : scope
+        )
+      )
+    })
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.useLocalPreviewCalculations).toBe(true)
+    expect(result.current.trimScopeEffectiveTotalById.get('trim-r001-main')).toBe(333)
+    expect(result.current.selectedTrimSubtotal).toBe(333)
+  })
+
+  it('keeps room subtotals internally consistent with estimate-level totals', () => {
+    const { store } = createDerivedStore()
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.totalEffectiveAreaSqFt).toBe(476)
+    expect(result.current.activeScopeTotals.wallsSqFt).toBe(476)
+    expect(result.current.displayedRoomEffectiveAreaByRoomId.get('R001')).toBe(396)
+    expect(result.current.displayedRoomEffectiveAreaByRoomId.get('R002')).toBe(80)
+    expect(result.current.selectedRoomEffectiveSqFt).toBe(396)
+    expect(result.current.selectedWallSubtotal).toBe(700)
+    expect(result.current.selectedCeilingSubtotal).toBe(180)
+    expect(result.current.selectedTrimSubtotal).toBe(210)
+    expect(
+      (result.current.displayedRoomEffectiveAreaByRoomId.get('R001') ?? 0) +
+        (result.current.displayedRoomEffectiveAreaByRoomId.get('R002') ?? 0)
+    ).toBe(result.current.totalEffectiveAreaSqFt)
+
+    act(() => {
+      store.getState().setSelectedRoomId('R002')
+    })
+
+    expect(result.current.selectedRoomEffectiveSqFt).toBe(80)
+    expect(result.current.selectedWallSubtotal).toBe(220)
+    expect(result.current.selectedCeilingSubtotal).toBe(90)
+    expect(result.current.selectedTrimSubtotal).toBeNull()
+    expect(result.current.activeScopeTotals.ceilingsSqFt).toBe(180)
+    expect(result.current.activeScopeTotals.trimMeasurement).toBe(44)
   })
 
   it('keeps the active scope rail totals separated by scope and unit for dirty edits', () => {
@@ -762,7 +901,7 @@ describe('useEstimateV2DerivedState', () => {
 
     expect(result.current.dirty).toBe(false)
     expect(result.current.saveStatusText).toBe(
-      'Unsaved changes - save blocked: R001: trim type is required'
+      'Unsaved changes - save blocked: Living Room: trim type is required'
     )
     expect(result.current.saveStatusText).not.toContain('Saved')
   })
@@ -783,6 +922,30 @@ describe('useEstimateV2DerivedState', () => {
       'Unsaved changes - save blocked: Doors: Door scope 1: door type is required'
     )
     expect(result.current.saveStatusText).not.toContain('Saved')
+  })
+
+  it('shows curated save-failed status text while keeping raw error details out of the footer copy', () => {
+    const { store } = createDerivedStore()
+
+    act(() => {
+      store.getState().setMeta((prev) => ({
+        ...prev,
+        saveStatus: 'error',
+        error: { message: 'Save exploded in route handler', retryable: true },
+      }))
+      store.getState().setRooms((prev) =>
+        prev.map((room) =>
+          room.roomId === 'R001' ? { ...room, roomName: 'Dirty retry room' } : room
+        )
+      )
+    })
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.sections.save.canManualSave).toBe(true)
+    expect(result.current.saveStatusText).toBe("We couldn't save your changes. Try again.")
+    expect(result.current.saveStatusText).not.toContain('Save exploded in route handler')
   })
 
   it('does not mark the default draft dirty after a failed estimate load', () => {

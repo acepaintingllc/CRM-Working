@@ -7,6 +7,7 @@ import { createGoogleCalendarEvent } from '@/lib/jobs/client'
 import {
   applyTemplate,
   buildJobEmailTemplateVars,
+  formatJobTemplateDate,
 } from '@/lib/jobs/emailTemplate'
 import { validateJobCreateValues, type JobCreateValues } from '@/lib/jobs/forms'
 import type { StageEmailStage } from '@/lib/jobs/types'
@@ -55,27 +56,32 @@ export function useJobCreateWorkflow(params: {
 
     const row = (templates as EmailTemplate[]).find((template) => template.stage === stage)
     const validated = validateJobCreateValues(value)
-    const vars = buildJobEmailTemplateVars({
-      customerName: selectedCustomer?.name ?? '',
-      customerEmail: selectedCustomer?.email ?? '',
-      customerPhone: selectedCustomer?.phone ?? '',
-      customerAddress: selectedCustomer?.address ?? '',
-      jobTitle: validated.ok ? validated.value.title : value.title.trim(),
-      estimateDate:
-        validated.ok && validated.value.estimateIso
-          ? new Date(validated.value.estimateIso).toLocaleString()
-          : '',
-      scheduledDate:
-        validated.ok && validated.value.scheduledIso
-          ? new Date(validated.value.scheduledIso).toLocaleString()
-          : '',
-      scheduledBlocks:
-        validated.ok && validated.value.scheduledIso
-          ? new Date(validated.value.scheduledIso).toLocaleString()
-          : '',
-      estimateFileName: '',
-      estimateFileLink: '',
-    })
+    const vars = buildJobEmailTemplateVars(
+      {
+        customerName: selectedCustomer?.name ?? '',
+        customerEmail: selectedCustomer?.email ?? '',
+        customerPhone: selectedCustomer?.phone ?? '',
+        customerAddress: selectedCustomer?.address ?? '',
+        jobTitle: validated.ok ? validated.value.title : value.title.trim(),
+        estimateDate:
+          validated.ok && validated.value.estimateIso
+            ? formatJobTemplateDate(validated.value.estimateIso)
+            : '',
+        scheduledDate:
+          validated.ok && validated.value.scheduledIso
+            ? formatJobTemplateDate(validated.value.scheduledIso)
+            : '',
+        scheduledBlocks:
+          validated.ok && validated.value.scheduledIso
+            ? formatJobTemplateDate(validated.value.scheduledIso)
+            : '',
+        estimateFileName: '',
+        estimateFileLink: '',
+      },
+      {
+        reviewLink: process.env.NEXT_PUBLIC_REVIEW_LINK,
+      }
+    )
 
     setValue((current) => ({
       ...current,

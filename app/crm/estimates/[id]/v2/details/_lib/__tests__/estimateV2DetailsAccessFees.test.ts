@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addAccessFeeDraft,
   buildEstimateV2DetailsAccessFeesVm,
+  createAccessFeeDraftId,
   removeAccessFeeDraft,
   updateAccessFeeDraft,
 } from '../estimateV2DetailsAccessFees'
@@ -88,6 +89,12 @@ describe('buildEstimateV2DetailsAccessFeesVm', () => {
 })
 
 describe('access fee draft mutations', () => {
+  it('creates ids that can be persisted as UUIDs', () => {
+    expect(createAccessFeeDraftId()).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    )
+  })
+
   it('adds, updates, and removes drafts immutably', () => {
     const added = addAccessFeeDraft([], () => 'new-id')
     expect(added).toEqual([

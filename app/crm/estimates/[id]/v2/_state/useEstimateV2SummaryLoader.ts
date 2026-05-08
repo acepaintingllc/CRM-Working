@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   getApiErrorMessage,
@@ -122,6 +122,7 @@ export function useEstimateV2SummaryLoader(
     () => (estimateId ? routeFamily.estimateApiHref(estimateId) : ''),
     [estimateId, routeFamily]
   )
+  const [reloadKey, setReloadKey] = useState(0)
 
   const loadSummary = useCallback(
     async (activeRef: { current: boolean }) => {
@@ -211,5 +212,13 @@ export function useEstimateV2SummaryLoader(
     return () => {
       activeRef.current = false
     }
-  }, [estimateApiHref, estimateId, loadSummary])
+  }, [estimateApiHref, estimateId, loadSummary, reloadKey])
+
+  const retrySummary = useCallback(() => {
+    setReloadKey((current) => current + 1)
+  }, [])
+
+  return {
+    retrySummary,
+  }
 }

@@ -1,4 +1,6 @@
-type TemplateVars = Record<string, string | null | undefined>
+export type TemplateVars = Record<string, string | null | undefined>
+
+export const DEFAULT_REVIEW_LINK = 'https://g.page/r/CXTTS4mREhqcEBM/review'
 
 export type JobEmailTemplateVarsInput = {
   customerName?: string | null
@@ -14,6 +16,17 @@ export type JobEmailTemplateVarsInput = {
   estimateFileNames?: string | null
   estimateFileLinks?: string | null
   reviewLink?: string | null
+}
+
+export type JobEmailTemplateDefaults = {
+  reviewLink?: string | null
+}
+
+export type JobEmailTemplateEstimateFile = {
+  id?: string | null
+  name?: string | null
+  filename?: string | null
+  webViewLink?: string | null
 }
 
 export function applyTemplate(template: string, vars: TemplateVars) {
@@ -43,7 +56,10 @@ export function withJobTemplateAliases(vars: TemplateVars) {
   }
 }
 
-export function buildJobEmailTemplateVars(vars: JobEmailTemplateVarsInput) {
+export function buildJobEmailTemplateVars(
+  vars: JobEmailTemplateVarsInput,
+  defaults: JobEmailTemplateDefaults = {}
+) {
   return withJobTemplateAliases({
     customerName: vars.customerName ?? '',
     customerEmail: vars.customerEmail ?? '',
@@ -57,7 +73,53 @@ export function buildJobEmailTemplateVars(vars: JobEmailTemplateVarsInput) {
     estimateFileLink: vars.estimateFileLink ?? '',
     estimateFileNames: vars.estimateFileNames ?? '',
     estimateFileLinks: vars.estimateFileLinks ?? '',
-    reviewLink:
-      vars.reviewLink ?? process.env.NEXT_PUBLIC_REVIEW_LINK ?? 'https://g.page/r/CXTTS4mREhqcEBM/review',
+    reviewLink: vars.reviewLink ?? defaults.reviewLink ?? DEFAULT_REVIEW_LINK,
   })
+}
+
+export function formatJobTemplateDate(iso: string | null | undefined) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
+
+export function formatJobTemplateRange(
+  start: string | null | undefined,
+  end: string | null | undefined
+) {
+  if (start && end) return `${formatJobTemplateDate(start)} - ${formatJobTemplateDate(end)}`
+  if (start) return formatJobTemplateDate(start)
+  if (end) return formatJobTemplateDate(end)
+  return ''
+}
+
+export function buildEstimateFileTemplateVars(args: {
+  estimateFiles?: JobEmailTemplateEstimateFile[]
+  selectedEstimateFileIds?: string[]
+}) {
+  const estimateFiles = args.estimateFiles ?? []
+  const selectedIds = args.selectedEstimateFileIds
+  const selectedEstimateFiles =
+    Array.isArray(selectedIds)
+      ? selectedIds
+          .map((id) => estimateFiles.find((file) => file.id === id) ?? null)
+          .filter((file): file is JobEmailTemplateEstimateFile => Boolean(file))
+      : estimateFiles
+  const primaryEstimateFile = selectedEstimateFiles[0] ?? null
+
+  return {
+    estimateFileName: primaryEstimateFile?.name ?? primaryEstimateFile?.filename ?? '',
+    estimateFileLink: primaryEstimateFile?.webViewLink ?? '',
+    estimateFileNames: selectedEstimateFiles
+      .map((file) => file.name ?? file.filename ?? '')
+      .filter(Boolean)
+      .join(', '),
+    estimateFileLinks: selectedEstimateFiles
+      .map((file) => file.webViewLink ?? '')
+      .filter(Boolean)
+      .join('\n'),
+  }
 }

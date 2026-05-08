@@ -26,6 +26,7 @@ export type StageEmailSentResult = {
   stage: StageEmailStage
   status: EmailSendStatus
   replayed: boolean
+  notice?: string | null
   warning?: string | null
 }
 
@@ -109,20 +110,20 @@ export default function StageEmailModal({
             compact
           >
             {selectedEstimateFiles.length > 0
-              ? `Estimate attachments ready: ${selectedEstimateFiles.length} selected`
-              : 'Estimate attachment is required before this email can be sent.'}
+              ? `Quote attachments ready: ${selectedEstimateFiles.length} selected`
+              : 'Quote attachment is required before this email can be sent.'}
           </CrmNotice>
         ) : null}
         {needsEstimateAttachment && missingEstimateSelection ? (
           <CrmNotice tone="warning" compact>
-            Select at least one estimate PDF.
+            Select at least one quote PDF.
           </CrmNotice>
         ) : null}
 
         {needsEstimateAttachment && estimateFiles.length > 0 ? (
           <CrmModalSection
-            title="Estimate attachments"
-            description="Select which estimate PDFs go out with this stage email."
+            title="Quote attachments"
+            description="Select which quote PDFs go out with this stage email."
             tone="muted"
             actions={
               <CrmButton
@@ -130,7 +131,7 @@ export default function StageEmailModal({
                 onClick={() => setShowEstimatePicker((prev) => !prev)}
                 className="min-h-0 px-2.5 py-1.5 text-xs"
               >
-                {showEstimatePicker ? 'Hide estimate picker' : 'Choose estimate PDFs'}
+                {showEstimatePicker ? 'Hide quote picker' : 'Choose quote PDFs'}
               </CrmButton>
             }
           >

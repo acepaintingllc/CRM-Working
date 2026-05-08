@@ -19,6 +19,8 @@ import type {
   EstimateV2WallSegmentDraft,
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
+  EstimateV2DoorScopeDraft,
+  EstimateV2DrywallRepairDraft,
 } from '../../../types/estimator/v2.ts'
 
 type MixedEstimateFixture = {
@@ -36,6 +38,8 @@ type MixedEstimateFixture = {
   ceilingScopes: EstimateV2CeilingScopeDraft[]
   ceilingSegments: EstimateV2CeilingSegmentDraft[]
   trimScopes: EstimateV2TrimScopeDraft[]
+  doorScopes: EstimateV2DoorScopeDraft[]
+  drywallRepairs: EstimateV2DrywallRepairDraft[]
   wallCalculations: EstimateV2WallCalculationsPayload
   ceilingCalculations: Record<string, unknown>
   trimCalculations: Record<string, unknown>
@@ -553,6 +557,9 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     },
   ]
 
+  const doorScopes: EstimateV2DoorScopeDraft[] = []
+  const drywallRepairs: EstimateV2DrywallRepairDraft[] = []
+
   const payload = buildEstimateV2SavePayload(
     jobSettingsDraft,
     rooms,
@@ -563,8 +570,8 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     ceilingSegments,
     trimScopes,
     rollers,
-    [],
-    [],
+    doorScopes,
+    drywallRepairs,
     accessFees
   )
 
@@ -725,9 +732,14 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
       rooms: payload.rooms,
       room_flags: payload.room_flags,
       room_wall_scopes: payload.room_wall_scopes,
+      wall_segments: payload.wall_segments,
       room_ceiling_scopes: payload.room_ceiling_scopes,
+      ceiling_scope_segments: payload.ceiling_scope_segments,
       room_trim_scopes: payload.room_trim_scopes,
+      room_door_scopes: payload.room_door_scopes,
+      drywall_repairs: payload.drywall_repairs,
       access_fees: payload.access_fees,
+      rollers: payload.rollers,
       paint_products: catalogs.paint_products,
       jobsettings: { override_labor_rate: null },
       org_defaults: null,
@@ -759,6 +771,8 @@ export function createMixedEstimateV2Fixture(): MixedEstimateFixture {
     ceilingScopes: clone(ceilingScopes),
     ceilingSegments: clone(ceilingSegments),
     trimScopes: clone(trimScopes),
+    doorScopes: clone(doorScopes),
+    drywallRepairs: clone(drywallRepairs),
     wallCalculations: clone(wallCalculations),
     ceilingCalculations: clone(ceilingCalculations),
     trimCalculations: clone(trimCalculations),

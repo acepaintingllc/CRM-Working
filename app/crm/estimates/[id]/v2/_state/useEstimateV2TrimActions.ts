@@ -14,14 +14,20 @@ import {
   updateTrimScopeMutation,
 } from '../_lib/estimateV2EditorMutations'
 import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2'
+import {
+  formatEstimateV2RoomLabel,
+  formatEstimateV2TrimLabel,
+  type EstimateV2DestructiveIntent,
+} from './estimateV2DestructiveConfirm'
 
 export function useEstimateV2TrimActions(params: {
   store: EstimateV2EditorStoreApi
   trimTypeOptions: EstimateV2TrimTypeOption[]
   roomModeById: Map<string, 'RECT' | 'SEG'>
   roomHeightFactorByRoomId: Map<string, string>
+  requestDestructiveConfirm: (intent: EstimateV2DestructiveIntent) => void
 }) {
-  const { store, trimTypeOptions, roomModeById, roomHeightFactorByRoomId } = params
+  const { store, trimTypeOptions, roomModeById, roomHeightFactorByRoomId, requestDestructiveConfirm } = params
 
   const markDirty = useCallback(() => {
     store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: 'trim' }))
@@ -58,12 +64,22 @@ export function useEstimateV2TrimActions(params: {
 
   const deleteScope = useCallback(
     (roomId: string, scopeId: string) => {
-      const ok = window.confirm('Delete this trim item?')
-      if (!ok) return
-      store.getState().setTrimScopes((prev) => deleteTrimScopeMutation(prev, roomId, scopeId))
-      markDirty()
+      const { collections } = store.getState()
+      const room = collections.rooms.find((entry) => entry.roomId === roomId)
+      const scope = collections.trimScopes.find((entry) => entry.id === scopeId)
+      requestDestructiveConfirm({
+        kind: 'trim-delete',
+        roomId,
+        roomLabel: formatEstimateV2RoomLabel(room?.roomName, roomId),
+        scopeId,
+        scopeLabel: formatEstimateV2TrimLabel(scope?.scopeName, scope?.trimTypeId, trimTypeOptions),
+        run: () => {
+          store.getState().setTrimScopes((prev) => deleteTrimScopeMutation(prev, roomId, scopeId))
+          markDirty()
+        },
+      })
     },
-    [markDirty, store]
+    [markDirty, requestDestructiveConfirm, store, trimTypeOptions]
   )
 
   const toggleRoomInclude = useCallback(

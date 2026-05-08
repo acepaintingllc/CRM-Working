@@ -1,3 +1,4 @@
+import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
   buildPaintSupplyRows,
@@ -13,8 +14,27 @@ import {
   createPaintProductLabelResolver,
   normalizeSummaryScopeRows,
 } from '../estimateV2SummaryDerived'
+import { useEstimateV2SummaryDerived } from '../useEstimateV2SummaryDerived'
+import {
+  manualOverridesDisabledScopesFixture,
+  multiRoomGeometryVariationFixture,
+  simpleNoOverridesFixture,
+  type EstimateV2CanonicalFixture,
+} from '@/lib/estimator/__fixtures__/canonical/index.ts'
+import { buildEstimateV2DirtySnapshot } from '@/app/crm/estimates/[id]/v2/_state/estimateV2DirtySnapshot'
 import { SCOPE_KIND_LABELS, SCOPE_KIND_ORDER } from '@/lib/estimator/scopeKinds'
 import type { EstimateV2PricingSummary, EstimateV2RoomInputRow, EstimateV2TrimPaint } from '@/types/estimator/v2'
+import {
+  buildLocalCeilingScopeEffectiveAreaById,
+  buildLocalDoorScopeEffectiveUnitsById,
+  buildLocalDrywallRepairEffectiveQuantityById,
+  buildLocalRoomEffectiveAreaByRoomId,
+  buildLocalScopeEffectiveAreaById,
+  buildLocalTrimScopeMetricById,
+} from '@/app/crm/estimates/[id]/v2/_lib/estimateV2EditorDerived'
+import { resolveRoomModeById } from '@/app/crm/estimates/[id]/v2/_lib/estimateV2EditorNormalize'
+import { accessFee, CANONICAL_IDS } from '@/lib/estimator/__fixtures__/estimateV2CanonicalFixtureTypes'
+import { reconcileWholeDollarRows } from '@/lib/estimator/pricingPolicies'
 
 const rooms: EstimateV2RoomInputRow[] = [
   { id: 'room-1', room_id: 'room-1', room_name: 'Living Room' },
@@ -45,7 +65,427 @@ function dollars(rowValue: string) {
   return Number(rowValue.replace(/[$,]/g, ''))
 }
 
+function scopeTotalMap(rows: EstimateV2CanonicalFixture['expectedTotals']['scopeTotals'][keyof EstimateV2CanonicalFixture['expectedTotals']['scopeTotals']]) {
+  return new Map(rows.map((row) => [row.scopeId, row.total] as const))
+}
+
+function roomTotalMap(rows: EstimateV2CanonicalFixture['expectedTotals']['rooms']) {
+  return new Map(rows.map((row) => [row.roomId, row.total] as const))
+}
+
+function asNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function buildCanonicalSavedSummaryData(fixture: EstimateV2CanonicalFixture) {
+  const { collections, meta } = fixture.editorState
+  const doorScopes = collections.doorScopes ?? []
+  const drywallRepairs = collections.drywallRepairs ?? []
+  const payload = currentSnapshotPayload(fixture)
+  const wallScopeAreaById = buildLocalScopeEffectiveAreaById(collections.scopes, collections.segments)
+  const wallRoomAreaById = buildLocalRoomEffectiveAreaByRoomId(
+    collections.rooms,
+    collections.scopes,
+    wallScopeAreaById
+  )
+  const ceilingAreaById = buildLocalCeilingScopeEffectiveAreaById({
+    ceilingScopes: collections.ceilingScopes,
+    ceilingSegments: collections.ceilingSegments,
+    rooms: collections.rooms,
+    ceilingTypes: meta.catalogs.ceiling_types,
+  })
+  const roomModeById = resolveRoomModeById({
+    rooms: collections.rooms,
+    wallScopes: collections.scopes,
+    ceilingScopes: collections.ceilingScopes,
+  })
+  const trimMeasurementById = buildLocalTrimScopeMetricById({
+    trimScopes: collections.trimScopes,
+    rooms: collections.rooms,
+    roomModeById,
+    key: 'effective_measurement',
+  })
+  const doorUnitsById = buildLocalDoorScopeEffectiveUnitsById(doorScopes)
+  const drywallQuantityById = buildLocalDrywallRepairEffectiveQuantityById(drywallRepairs)
+  const wallTotals = scopeTotalMap(fixture.expectedTotals.scopeTotals.walls)
+  const ceilingTotals = scopeTotalMap(fixture.expectedTotals.scopeTotals.ceilings)
+  const trimTotals = scopeTotalMap(fixture.expectedTotals.scopeTotals.trim)
+  const doorTotals = scopeTotalMap(fixture.expectedTotals.scopeTotals.doors)
+  const drywallTotals = scopeTotalMap(fixture.expectedTotals.scopeTotals.drywall)
+  const roomTotals = roomTotalMap(fixture.expectedTotals.rooms)
+  const sharedAccessCost = fixture.expectedTotals.scopeTotals.accessFees.reduce(
+    (sum, row) => sum + row.total,
+    0
+  )
+  const roomSubtotal = fixture.expectedTotals.rooms.reduce((sum, row) => sum + row.total, 0)
+
+  return {
+    wall_calculations: {
+      scopes: (collections.scopes.length > 0 ? payload.room_wall_scopes : []).map((scope) => ({
+        ...scope,
+        effective_area_sf: wallScopeAreaById.get(String(scope.id)) ?? null,
+        effective_total: wallTotals.get(String(scope.id)) ?? 0,
+        raw_total:
+          asNumber(scope.override_total) == null ? wallTotals.get(String(scope.id)) ?? 0 : 0,
+      })),
+      room_totals: collections.rooms.map((room) => ({
+        room_id: room.roomId,
+        effective_area_sf: wallRoomAreaById.get(room.roomId) ?? 0,
+      })),
+    },
+    ceiling_calculations: {
+      scopes: payload.room_ceiling_scopes.map((scope) => ({
+        ...scope,
+        effective_area_sf: ceilingAreaById.get(String(scope.id)) ?? null,
+        effective_total: ceilingTotals.get(String(scope.id)) ?? 0,
+        raw_total:
+          asNumber(scope.override_total) == null ? ceilingTotals.get(String(scope.id)) ?? 0 : 0,
+      })),
+      room_totals: collections.rooms.map((room) => ({
+        room_id: room.roomId,
+        effective_area_sf: collections.ceilingScopes
+          .filter((scope) => scope.roomId === room.roomId)
+          .reduce((sum, scope) => sum + (ceilingAreaById.get(scope.id) ?? 0), 0),
+      })),
+    },
+    trim_calculations: {
+      scopes: payload.room_trim_scopes.map((scope) => ({
+        ...scope,
+        effective_measurement: trimMeasurementById.get(String(scope.id)) ?? null,
+        effective_total: trimTotals.get(String(scope.id)) ?? 0,
+        raw_total:
+          asNumber(scope.override_total) == null ? trimTotals.get(String(scope.id)) ?? 0 : 0,
+      })),
+      room_totals: collections.rooms.map((room) => ({
+        room_id: room.roomId,
+        effective_area_sf: collections.trimScopes
+          .filter((scope) => scope.roomId === room.roomId)
+          .reduce((sum, scope) => sum + (trimMeasurementById.get(scope.id) ?? 0), 0),
+      })),
+    },
+    door_calculations: {
+      scopes: (payload.room_door_scopes ?? []).map((scope) => ({
+        ...scope,
+        effective_units: doorUnitsById.get(String(scope.id)) ?? null,
+        effective_total: doorTotals.get(String(scope.id)) ?? 0,
+        raw_total:
+          asNumber(scope.override_total) == null ? doorTotals.get(String(scope.id)) ?? 0 : 0,
+      })),
+      room_totals: collections.rooms.map((room) => ({
+        room_id: room.roomId,
+        effective_area_sf: doorScopes
+          .filter((scope) => scope.roomId === room.roomId)
+          .reduce((sum, scope) => sum + (doorUnitsById.get(scope.id) ?? 0), 0),
+      })),
+    },
+    drywall_calculations: {
+      scopes: (payload.drywall_repairs ?? []).map((scope) => ({
+        ...scope,
+        effective_quantity: drywallQuantityById.get(String(scope.id)) ?? null,
+        effective_total: drywallTotals.get(String(scope.id)) ?? 0,
+        raw_total:
+          asNumber(scope.override_total) == null ? drywallTotals.get(String(scope.id)) ?? 0 : 0,
+      })),
+      room_totals: collections.rooms.map((room) => ({
+        room_id: room.roomId,
+        effective_area_sf: drywallRepairs
+          .filter((scope) => scope.roomId === room.roomId)
+          .reduce((sum, scope) => sum + (drywallQuantityById.get(scope.id) ?? 0), 0),
+      })),
+    },
+    pricing_summary: {
+      rawLaborHours: 0,
+      rawLaborDays: 0,
+      effectiveLaborDays: 0,
+      effectiveLaborHours: 0,
+      laborCost: 0,
+      wallPaintMaterialCost: 0,
+      ceilingPaintMaterialCost: 0,
+      trimPaintMaterialCost: 0,
+      paintMaterialCost: 0,
+      primerMaterialCost: 0,
+      supplyCost: 0,
+      sharedAccessCost,
+      prePolicyTotal: roomSubtotal,
+      postLaborPolicyTotal: roomSubtotal,
+      minimumAdjustmentAmount: 0,
+      finalTotal: fixture.expectedTotals.finalTotal,
+      rooms: collections.rooms.map((room) => ({
+        room_id: room.roomId,
+        baseTotal: roomTotals.get(room.roomId) ?? 0,
+        allocatedMinimumAdjustment: 0,
+        finalTotal: roomTotals.get(room.roomId) ?? 0,
+      })),
+      trimPaint: null,
+    } satisfies EstimateV2PricingSummary,
+  }
+}
+
+function currentSnapshotPayload(fixture: EstimateV2CanonicalFixture) {
+  const { collections, meta } = fixture.editorState
+  const doorScopes = collections.doorScopes ?? []
+  const drywallRepairs = collections.drywallRepairs ?? []
+  const accessFees = collections.accessFees ?? []
+  const otherItems = collections.otherItems ?? []
+  return buildEstimateV2DirtySnapshot({
+    jobSettingsDraft: meta.jobSettingsDraft,
+    rooms: collections.rooms,
+    scopes: collections.scopes,
+    segments: collections.segments,
+    roomFlags: collections.roomFlags,
+    ceilingScopes: collections.ceilingScopes,
+    ceilingSegments: collections.ceilingSegments,
+    trimScopes: collections.trimScopes,
+    doorScopes,
+    drywallRepairs,
+    rollers: collections.rollers ?? [],
+    accessFees,
+    otherItems,
+  }).payload
+}
+
+function buildCanonicalSummaryHarness(fixture: EstimateV2CanonicalFixture) {
+  const { meta } = fixture.editorState
+  const payload = currentSnapshotPayload(fixture)
+  const saved = buildCanonicalSavedSummaryData(fixture)
+
+  return {
+    fixture,
+    saved,
+    params: {
+      data: {
+        estimate: meta.estimate!,
+        inputs: {
+          jobsettings: payload.jobsettings,
+          org_defaults: null,
+          paint_products: meta.catalogs.paint_products,
+          rooms: payload.rooms,
+          room_flags: payload.room_flags,
+          room_wall_scopes: payload.room_wall_scopes,
+          room_ceiling_scopes: payload.room_ceiling_scopes,
+          room_trim_scopes: payload.room_trim_scopes,
+          room_door_scopes: payload.room_door_scopes ?? [],
+          drywall_repairs: payload.drywall_repairs ?? [],
+          access_fees: payload.access_fees ?? [],
+          other: payload.other ?? [],
+        },
+        wall_calculations: saved.wall_calculations,
+        ceiling_calculations: saved.ceiling_calculations,
+        trim_calculations: saved.trim_calculations,
+        door_calculations: saved.door_calculations,
+        drywall_calculations: saved.drywall_calculations,
+        trim_paint: null,
+        pricing_summary: saved.pricing_summary,
+      },
+      job: meta.job,
+      jobSettingsDraft: {
+        dayhours: meta.jobSettingsDraft.dayhours,
+        laborRate: meta.jobSettingsDraft.laborRate,
+        crewSize: meta.jobSettingsDraft.crewSize,
+      },
+    },
+  }
+}
+
+function buildFixtureWithSharedAccess(
+  fixture: EstimateV2CanonicalFixture,
+  accessTotal: number
+): EstimateV2CanonicalFixture {
+  return {
+    ...fixture,
+    editorState: {
+      ...fixture.editorState,
+      collections: {
+        ...fixture.editorState.collections,
+        accessFees: [
+          ...(fixture.editorState.collections.accessFees ?? []),
+          accessFee({
+            id: 'access-shared-summary',
+            roomId: CANONICAL_IDS.rooms.livingRoom,
+            actualCostOverride: String(accessTotal),
+          }),
+        ],
+      },
+    },
+    expectedTotals: {
+      ...fixture.expectedTotals,
+      finalTotal: fixture.expectedTotals.finalTotal + accessTotal,
+      scopeTotals: {
+        ...fixture.expectedTotals.scopeTotals,
+        accessFees: [
+          ...fixture.expectedTotals.scopeTotals.accessFees,
+          {
+            scopeId: 'access-shared-summary',
+            roomId: CANONICAL_IDS.rooms.livingRoom,
+            total: accessTotal,
+          },
+        ],
+      },
+    },
+  }
+}
+
 describe('estimateV2SummaryDerived helpers', () => {
+  it('keeps canonical simple saved room block totals equal to the displayed estimate total', () => {
+    const canonical = buildCanonicalSummaryHarness(simpleNoOverridesFixture)
+
+    const { result } = renderHook(() => useEstimateV2SummaryDerived(canonical.params))
+
+    expect(result.current.finalTotal).toBe(simpleNoOverridesFixture.expectedTotals.finalTotal)
+    expect(result.current.roomBlocks).toHaveLength(1)
+    expect(result.current.roomBlocks[0]?.roomTotal).toBe(
+      Math.round(simpleNoOverridesFixture.expectedTotals.finalTotal)
+    )
+    expect(result.current.roomBlocks.reduce((sum, block) => sum + (block.roomTotal ?? 0), 0)).toBe(
+      Math.round(result.current.finalTotal ?? 0)
+    )
+  })
+
+  it('excludes disabled canonical scope rows from saved room blocks and room totals', () => {
+    const canonical = buildCanonicalSummaryHarness(manualOverridesDisabledScopesFixture)
+
+    const { result } = renderHook(() => useEstimateV2SummaryDerived(canonical.params))
+    const roomBlock = result.current.roomBlocks[0]
+
+    expect(roomBlock?.scopeRows.map((scope) => scope.id)).toEqual([
+      'wall-override-active',
+      'ceiling-override-active',
+      'trim-override-active',
+      'drywall-override-active',
+    ])
+    expect(roomBlock?.scopeRows.map((scope) => scope.kind)).toEqual([
+      'walls',
+      'ceilings',
+      'trim',
+      'drywall',
+    ])
+    expect(roomBlock?.roomTotal).toBe(manualOverridesDisabledScopesFixture.expectedTotals.rooms[0]?.total)
+    expect(roomBlock?.displayScopeSubtotalMap.has('wall-disabled')).toBe(false)
+    expect(roomBlock?.displayScopeSubtotalMap.has('door-disabled')).toBe(false)
+    expect(roomBlock?.displayScopeSubtotalMap.has('drywall-disabled-zero')).toBe(false)
+    expect(result.current.priceBreakdownRows).toContainEqual({
+      label: 'Access Fees',
+      value: '$95',
+    })
+    expect(result.current.finalTotal).toBe(manualOverridesDisabledScopesFixture.expectedTotals.finalTotal)
+  })
+
+  it('shows canonical override-driven saved subtotals and override annotations for supported scope types', () => {
+    const canonical = buildCanonicalSummaryHarness(manualOverridesDisabledScopesFixture)
+
+    const { result } = renderHook(() => useEstimateV2SummaryDerived(canonical.params))
+    const roomBlock = result.current.roomBlocks[0]
+    const wallRow = roomBlock?.scopeRows.find((scope) => scope.id === 'wall-override-active')
+    const ceilingRow = roomBlock?.scopeRows.find((scope) => scope.id === 'ceiling-override-active')
+    const trimRow = roomBlock?.scopeRows.find((scope) => scope.id === 'trim-override-active')
+    const drywallRow = roomBlock?.scopeRows.find((scope) => scope.id === 'drywall-override-active')
+
+    expect(wallRow).toMatchObject({
+      subtotal: manualOverridesDisabledScopesFixture.expectedTotals.scopeTotals.walls[0]?.total,
+      hasOverride: true,
+      overrideSummary: 'Override: Total: $450',
+    })
+    expect(ceilingRow).toMatchObject({
+      subtotal: manualOverridesDisabledScopesFixture.expectedTotals.scopeTotals.ceilings[0]?.total,
+      hasOverride: true,
+      overrideSummary: 'Override: Total: $210',
+    })
+    expect(trimRow).toMatchObject({
+      subtotal: manualOverridesDisabledScopesFixture.expectedTotals.scopeTotals.trim[0]?.total,
+      hasOverride: true,
+      overrideSummary: 'Override: Total: $125',
+    })
+    expect(drywallRow).toMatchObject({
+      subtotal: manualOverridesDisabledScopesFixture.expectedTotals.scopeTotals.drywall[0]?.total,
+      hasOverride: true,
+      overrideSummary: 'Override: Total: $80',
+    })
+  })
+
+  it('reconciles canonical override-heavy room subtotals and saved estimate totals correctly', () => {
+    const canonical = buildCanonicalSummaryHarness(manualOverridesDisabledScopesFixture)
+
+    const { result } = renderHook(() => useEstimateV2SummaryDerived(canonical.params))
+    const roomBlock = result.current.roomBlocks[0]
+    const displayedRoomSubtotal = Array.from(roomBlock?.displayScopeSubtotalMap.values() ?? []).reduce(
+      (sum, value) => sum + value,
+      0
+    )
+
+    expect(displayedRoomSubtotal).toBe(roomBlock?.roomTotal)
+    expect(roomBlock?.roomTotal).toBe(manualOverridesDisabledScopesFixture.expectedTotals.rooms[0]?.total)
+    expect((roomBlock?.roomTotal ?? 0) + (canonical.saved.pricing_summary.sharedAccessCost ?? 0)).toBe(
+      manualOverridesDisabledScopesFixture.expectedTotals.finalTotal
+    )
+    expect(result.current.summaryAlerts.map((alert) => alert.detail)).toEqual([
+      'Living Room Walls override active - Total: $450',
+      'Living Room Ceiling override active - Total: $210',
+      'Living Room Baseboards override active - Total: $125',
+      'Living Room wall - patch opening repair override active - Total: $80',
+    ])
+  })
+
+  it('reconciles multi-room displayed subtotals, whole-dollar room totals, and shared access consistently', () => {
+    const accessTotal = 75
+    const canonical = buildCanonicalSummaryHarness(
+      buildFixtureWithSharedAccess(multiRoomGeometryVariationFixture, accessTotal)
+    )
+
+    const { result } = renderHook(() => useEstimateV2SummaryDerived(canonical.params))
+    const roomIds = result.current.roomBlocks.map((block) => block.room.room_id)
+    const displayedRoomTotal = result.current.roomBlocks.reduce(
+      (sum, block) => sum + (block.roomTotal ?? 0),
+      0
+    )
+    const displayedAccessTotal = dollars(
+      result.current.priceBreakdownRows.find((row) => row.label === 'Access Fees')?.value ?? '-'
+    )
+    const bedroomBlock = result.current.roomBlocks.find(
+      (block) => block.room.room_id === CANONICAL_IDS.rooms.bedroom
+    )
+    const bedroomDisplayedSubtotal = Array.from(
+      bedroomBlock?.displayScopeSubtotalMap.values() ?? []
+    ).reduce((sum, value) => sum + value, 0)
+    const expectedDisplayedRoomTotals = reconcileWholeDollarRows(
+      canonical.saved.pricing_summary.rooms.map((room) => ({
+        room_id: room.room_id,
+        price: room.finalTotal,
+      })),
+      (canonical.saved.pricing_summary.finalTotal ?? 0) -
+        (canonical.saved.pricing_summary.sharedAccessCost ?? 0)
+    ).map((row) => row.price)
+
+    expect(roomIds).toEqual(
+      multiRoomGeometryVariationFixture.expectedTotals.rooms.map((room) => room.roomId)
+    )
+    expect(result.current.roomBlocks.map((block) => block.scopes)).toEqual([
+      ['Walls', 'Ceilings', 'Trim'],
+      ['Walls', 'Ceilings'],
+      ['Ceilings', 'Trim'],
+    ])
+    expect(result.current.roomBlocks.map((block) => block.roomTotal)).toEqual(
+      expectedDisplayedRoomTotals
+    )
+    expect(displayedRoomTotal).toBe(
+      Math.round(result.current.finalTotal ?? 0) - displayedAccessTotal
+    )
+    expect(displayedAccessTotal).toBe(accessTotal)
+    expect(displayedRoomTotal + displayedAccessTotal).toBe(
+      Math.round(result.current.finalTotal ?? 0)
+    )
+    expect(bedroomBlock?.scopeRows.map((scope) => scope.id)).toEqual([
+      'ceiling-multi-bedroom',
+      'trim-multi-bedroom',
+    ])
+    expect(bedroomBlock?.displayScopeSubtotalMap.has('wall-multi-bedroom-disabled')).toBe(false)
+    expect(bedroomDisplayedSubtotal).toBe(bedroomBlock?.roomTotal)
+  })
+
   it('builds ordered room scope rows and room blocks from mixed-scope input', () => {
     const roomScopeRows = buildRoomScopeRows({
       wallScopes: normalizeSummaryScopeRows([
@@ -108,7 +548,7 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(roomBlocks[0]?.scopes).toEqual(['Walls', 'Ceilings', 'Trim'])
     expect(roomBlocks[0]?.roomTotal).toBe(1031)
     expect(roomBlocks[0]?.displayScopeSubtotalMap.get('trim-1')).toBeTypeOf('number')
-    expect(roomBlocks[0]?.alerts).toEqual({ missingProduct: 0, overrides: 0, flags: 1 })
+    expect(roomBlocks[0]?.alerts).toEqual({ missingProduct: 0, overrides: 1, flags: 1 })
     expect(roomBlocks[0]?.scopeRows.find((scope) => scope.id === 'trim-1')?.overrideSummary).toBe(
       'Override: Labor hours: 1 h'
     )
@@ -234,7 +674,7 @@ describe('estimateV2SummaryDerived helpers', () => {
     })
   })
 
-  it('does not count trim manual values as summary overrides', () => {
+  it('counts trim total overrides in summary rows and alerts', () => {
     const roomScopeRows = buildRoomScopeRows({
       wallScopes: [],
       ceilingScopes: [],
@@ -246,17 +686,27 @@ describe('estimateV2SummaryDerived helpers', () => {
           effective_measurement: 20,
           effective_total: 150,
           raw_total: 100,
-          override_hours: 1,
-          override_gallons: 0.25,
           override_total: 150,
-          override_description: 'Manual trim paint',
         },
       ]),
     })
     const trimRow = roomScopeRows.get('room-1')?.find((scope) => scope.id === 'trim-1')
+    const alerts = buildSummaryAlerts({
+      pricingSummary,
+      hasJobSettings: true,
+      roomScopeRows,
+      roomFlags: [],
+      rooms,
+    })
 
     expect(trimRow).toMatchObject({
-      hasOverride: false,
+      hasOverride: true,
+      overrideSummary: 'Override: Total: $150',
+    })
+    expect(alerts).toContainEqual({
+      kind: 'warn',
+      title: 'Manual override detected',
+      detail: 'Living Room Trim override active - Total: $150',
     })
   })
 
@@ -383,6 +833,49 @@ describe('estimateV2SummaryDerived helpers', () => {
       'Warning flag active',
       'Warning flag active',
     ])
+  })
+
+  it('surfaces a top-level configuration warning when required paint defaults are missing', () => {
+    const { result } = renderHook(() =>
+      useEstimateV2SummaryDerived({
+        data: {
+          estimate: { version_name: 'Estimate A', version_state: 'Draft' },
+          inputs: {
+            jobsettings: {
+              walls_paint_id: 'wall-paint-1',
+              walls_primer_id: '',
+              ceiling_paint_id: '',
+              ceiling_primer_id: 'ceiling-primer-1',
+              trim_paint_id: 'trim-paint-1',
+              trim_primer_id: '',
+            },
+            org_defaults: null,
+            rooms: [],
+            room_flags: [],
+            paint_products: [],
+          },
+          pricing_summary: pricingSummary,
+        } as never,
+        job: null,
+        jobSettingsDraft: {
+          dayhours: 8,
+          laborRate: 80,
+        },
+      })
+    )
+
+    expect(result.current.configurationWarning).toEqual({
+      title: 'Required paint defaults are missing',
+      detail:
+        'Missing walls default primer, ceilings default paint, and trim default primer. Pricing and send readiness stay blocked until every required paint and primer default is set.',
+      fixHint:
+        'Return to the estimate editor and open Paint Defaults in the left sidebar to set the missing defaults.',
+      missingLabels: [
+        'walls default primer',
+        'ceilings default paint',
+        'trim default primer',
+      ],
+    })
   })
 
   it('surfaces error readiness when an included painted scope has no product selection', () => {

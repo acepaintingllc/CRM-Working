@@ -60,7 +60,7 @@ export function buildEstimateV2EditorLoadState(params: {
       pricingSummary: sanitized.meta.pricingSummary,
       selectedRoomId: sanitized.meta.selectedRoomId,
       catalogsError,
-      error: catalogsError,
+      error: null,
       validationIssues,
       lastSavedSnapshot: sanitized.meta.lastSavedSnapshot,
       autoSaveHint: sanitized.meta.autoSaveHint,

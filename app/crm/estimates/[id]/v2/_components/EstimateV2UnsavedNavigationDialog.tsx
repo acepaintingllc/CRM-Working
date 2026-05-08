@@ -11,12 +11,16 @@ const labelledBy = 'estimate-v2-unsaved-navigation-title'
 export function EstimateV2UnsavedNavigationDialog({
   isOpen,
   canSave,
+  description = 'This quote workspace has unsaved edits.',
+  noticeText = 'Save your changes before leaving, discard them, or cancel navigation to keep editing.',
   onStay,
   onSave,
   onLeave,
 }: {
   isOpen: boolean
   canSave: boolean
+  description?: string
+  noticeText?: string
   onStay: () => void
   onSave: () => void
   onLeave: () => void
@@ -27,16 +31,14 @@ export function EstimateV2UnsavedNavigationDialog({
     <CrmModalShell labelledBy={labelledBy} onClose={onStay} widthClassName="max-w-lg">
       <CrmModalHeader
         title="Leave with unsaved changes?"
-        description="This quote workspace has unsaved edits."
+        description={description}
         labelledBy={labelledBy}
         onClose={onStay}
         closeLabel="Close unsaved changes confirmation"
       />
 
       <div className="grid gap-4 px-5 py-4">
-        <CrmNotice tone="warning" compact>
-          Save your changes before leaving, discard them, or cancel navigation to keep editing.
-        </CrmNotice>
+        <CrmNotice tone="warning" compact>{noticeText}</CrmNotice>
       </div>
 
       <div className="border-t border-[color:var(--crm-ui-border)] px-5 py-4">

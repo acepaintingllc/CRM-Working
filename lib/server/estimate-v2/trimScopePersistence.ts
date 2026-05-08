@@ -1,0 +1,80 @@
+import type { V2TrimScopeSaveRow } from '../estimateV2RoutePayload.ts'
+import type { EstimateRoomTrimScopePersistenceRow } from './persistenceTypes.ts'
+
+type EstimatePersistenceContext = {
+  orgId: string
+  estimateId: string
+  jobId: string
+}
+
+export function buildV2TrimScopePersistenceRows(
+  rows: V2TrimScopeSaveRow[],
+  context: EstimatePersistenceContext
+): EstimateRoomTrimScopePersistenceRow[] {
+  return rows.map((row) => ({
+    id: row.id,
+    org_id: context.orgId,
+    estimate_id: context.estimateId,
+    job_id: context.jobId,
+    room_id: row.room_id,
+    position: row.position,
+    include: row.include,
+    scope_name: row.scope_name,
+    trim_type_id: row.trim_type_id,
+    trim_family: row.trim_family,
+    unit_type: row.unit_type,
+    measurement_mode: row.measurement_mode,
+    helper_source: row.helper_source,
+    measurement_value: row.measurement_value,
+    helper_value: row.helper_value,
+    baseboard_opening_count: row.baseboard_opening_count,
+    color_id: row.color_id,
+    paint_product_id: row.paint_product_id,
+    primer_product_id: row.primer_product_id,
+    paint_enabled: row.paint_enabled,
+    prime_mode: row.prime_mode,
+    spot_prime_percent: row.spot_prime_percent,
+    production_rate_id: row.production_rate_id,
+    prep_factor: row.prep_factor,
+    height_factor: row.height_factor,
+    profile_factor: row.profile_factor,
+    room_flag_factor: row.room_flag_factor,
+    masking_factor: row.masking_factor,
+    stair_factor: row.stair_factor,
+    difficult_finish_factor: row.difficult_finish_factor,
+    caulk_fill_factor: row.caulk_fill_factor,
+    override_measurement: row.override_measurement,
+    override_hours: row.override_hours,
+    override_gallons: row.override_gallons,
+    override_supply_cost: row.override_supply_cost,
+    override_total: row.override_total,
+    override_description: row.override_description,
+    raw_measurement: row.raw_measurement,
+    effective_measurement: row.effective_measurement,
+    raw_paint_hours: row.raw_paint_hours,
+    effective_paint_hours: row.effective_paint_hours,
+    raw_primer_hours: row.raw_primer_hours,
+    effective_primer_hours: row.effective_primer_hours,
+    raw_paint_gallons: row.raw_paint_gallons,
+    effective_paint_gallons: row.effective_paint_gallons,
+    raw_primer_gallons: row.raw_primer_gallons,
+    effective_primer_gallons: row.effective_primer_gallons,
+    raw_supply_cost: row.raw_supply_cost,
+    effective_supply_cost: row.effective_supply_cost,
+    raw_total: row.raw_total,
+    effective_total: row.effective_total,
+    paint_coats: row.paint_coats,
+    primer_coats: row.primer_coats,
+    paint_prod_rate_units_per_hour: row.paint_prod_rate_units_per_hour,
+    primer_prod_rate_units_per_hour: row.primer_prod_rate_units_per_hour,
+    paint_coverage_units_per_gal_per_coat: row.paint_coverage_units_per_gal_per_coat,
+    primer_coverage_units_per_gal_per_coat: row.primer_coverage_units_per_gal_per_coat,
+    area_supply_cost_per_unit: row.area_supply_cost_per_unit,
+    per_color_supply_cost: row.per_color_supply_cost,
+    labor_rate_per_hour: row.labor_rate_per_hour,
+    paint_price_per_gal: row.paint_price_per_gal,
+    primer_price_per_gal: row.primer_price_per_gal,
+    notes: row.notes,
+    condition_selections: row.condition_selections ?? null,
+  }))
+}

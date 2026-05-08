@@ -1,13 +1,19 @@
 'use client'
 
 import type { EmailSendStatus } from '@/lib/email/types'
+import { resolveJobCloseoutCatalogEstimateId } from '@/lib/jobs/client'
 import {
   fetchCloseoutData,
   saveCloseout,
   sendStageEmail,
 } from '@/lib/jobs/actions'
 import type { JobDetail } from '@/types/jobs/api'
-import { applyTemplate, buildJobEmailTemplateVars } from '@/lib/jobs/emailTemplate'
+import {
+  applyTemplate,
+  buildJobEmailTemplateVars,
+  formatJobTemplateDate,
+  formatJobTemplateRange,
+} from '@/lib/jobs/emailTemplate'
 import {
   createDefaultPaintLogRow,
   type PaintLogRow,
@@ -35,22 +41,6 @@ const defaultWhereUsedOptions = [
 
 const defaultSheenOptions = ['Flat', 'Matte', 'Eggshell', 'Satin', 'Semi-Gloss', 'Gloss']
 
-function formatDate(iso: string | null | undefined) {
-  if (!iso) return ''
-  try {
-    return new Date(iso).toLocaleString()
-  } catch {
-    return iso
-  }
-}
-
-function formatRange(start: string | null | undefined, end: string | null | undefined) {
-  if (start && end) return `${formatDate(start)} - ${formatDate(end)}`
-  if (start) return formatDate(start)
-  if (end) return formatDate(end)
-  return ''
-}
-
 function hasPaintRowValue(row: PaintLogRow) {
   return Boolean(
     row.where_used.trim() ||
@@ -64,7 +54,7 @@ function hasPaintRowValue(row: PaintLogRow) {
 type UseCloseoutFormArgs = {
   jobId: string | null
   open: boolean
-  loadCatalogs: (linkedEstimateId: string) => Promise<EstimateCatalogPayload | null>
+  loadCatalogs: (estimateId: string) => Promise<EstimateCatalogPayload | null>
   onSaved?: (result: { job?: Partial<JobDetail> | null; notice?: string | null }) => void
 }
 
@@ -132,18 +122,26 @@ export function useCloseoutForm({
           setTemplateMissing(true)
         }
 
-        const vars = buildJobEmailTemplateVars({
-          customerName: loadedJob.customer_name ?? '',
-          customerEmail: loadedJob.customer_email ?? '',
-          customerPhone: loadedJob.customer_phone ?? '',
-          customerAddress: loadedJob.customer_address ?? '',
-          jobTitle: loadedJob.title ?? '',
-          estimateDate: formatDate(loadedJob.estimate_date),
-          scheduledDate: formatDate(loadedJob.scheduled_date),
-          scheduledBlocks: formatRange(loadedJob.scheduled_date, loadedJob.scheduled_end_date),
-          estimateFileName: '',
-          estimateFileLink: '',
-        })
+        const vars = buildJobEmailTemplateVars(
+          {
+            customerName: loadedJob.customer_name ?? '',
+            customerEmail: loadedJob.customer_email ?? '',
+            customerPhone: loadedJob.customer_phone ?? '',
+            customerAddress: loadedJob.customer_address ?? '',
+            jobTitle: loadedJob.title ?? '',
+            estimateDate: formatJobTemplateDate(loadedJob.estimate_date),
+            scheduledDate: formatJobTemplateDate(loadedJob.scheduled_date),
+            scheduledBlocks: formatJobTemplateRange(
+              loadedJob.scheduled_date,
+              loadedJob.scheduled_end_date
+            ),
+            estimateFileName: '',
+            estimateFileLink: '',
+          },
+          {
+            reviewLink: process.env.NEXT_PUBLIC_REVIEW_LINK,
+          }
+        )
 
         setSubject(template ? applyTemplate(template.subject ?? '', vars) : '')
         setBody(template ? applyTemplate(template.body ?? '', vars) : '')
@@ -158,13 +156,12 @@ export function useCloseoutForm({
           if (row.color?.trim()) nextColorOptions.add(row.color.trim())
         }
 
-        const linkedEstimateId =
-          loadedJob.linked_estimate_id && typeof loadedJob.linked_estimate_id === 'string'
-            ? loadedJob.linked_estimate_id
-            : null
+        const catalogEstimateId = resolveJobCloseoutCatalogEstimateId(loadedJob)
 
-        if (linkedEstimateId) {
-          const catalogsPayload = await loadCatalogs(linkedEstimateId)
+        // Without an accepted estimate source, keep only options already present
+        // in saved paint logs. Quote navigation ids are not catalog source data.
+        if (catalogEstimateId) {
+          const catalogsPayload = await loadCatalogs(catalogEstimateId)
           if (catalogsPayload?.catalogs) {
             for (const product of catalogsPayload.catalogs.paint_products ?? []) {
               const label = (product?.label ?? '').trim()
@@ -240,7 +237,7 @@ export function useCloseoutForm({
         setJob((prev) => (prev ? { ...prev, ...(result.job as Partial<JobDetail>) } : prev))
         onSaved?.({
           job: result.job,
-          notice: result.warning ?? null,
+          notice: result.notice ?? result.warning ?? null,
         })
       }
 
@@ -248,12 +245,14 @@ export function useCloseoutForm({
       const replayed = Boolean(result.replayed)
       if (replayed || status === 'replayed') {
         setEmailNotice(
-          result.warning ?? 'This send request was already processed. No duplicate email was sent.'
+          result.notice ??
+            result.warning ??
+            'This send request was already processed. No duplicate email was sent.'
         )
         return
       }
 
-      setEmailNotice(result.warning ?? 'Review email sent.')
+      setEmailNotice(result.notice ?? result.warning ?? 'Review email sent.')
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : 'Failed to send review email.')
     } finally {

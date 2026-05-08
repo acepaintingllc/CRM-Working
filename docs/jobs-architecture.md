@@ -11,7 +11,8 @@
   - param/body parsing
   - `serviceResultResponse` envelope mapping
 - `lib/jobs/service.ts` owns jobs CRUD normalization, persistence, enrichment, and canonical route-contract data shaping.
-- `lib/server/jobScheduleSync.ts` owns persisted schedule summary/status side effects for schedule creation, deletion, and stage-email schedule/review effects.
+- `lib/server/jobScheduleWorkflow.ts` owns schedule CRUD workflow, Google Calendar side effects, and schedule summary/status sync for schedule routes.
+- `lib/server/jobScheduleSync.ts` owns the shared persisted schedule summary/status sync helper used by schedule workflows and stage-email schedule/review effects.
 - `lib/jobs/client.ts` is the canonical client boundary for jobs CRUD-style reads/writes and direct endpoint helpers.
 - `lib/jobs/actions.ts` is reserved for aggregate workflow helpers such as detail aggregation, stage email composition/send flows, and closeout aggregation.
 - `jobs.linked_estimate_id` is the canonical accepted estimate link for operational work after a quote is accepted.
@@ -34,4 +35,10 @@
 - `GET /api/jobs/[id]` returns `{ data: JobDetail }`
 - `PATCH /api/jobs/[id]` returns `{ data: Partial<JobDetail>, notice? }`
 - `DELETE /api/jobs/[id]` returns `{ data: { ok: true }, notice? }`
+- `GET /api/jobs/[id]/estimate-file` returns `{ data: EstimateDriveFile }` for the latest matching file
+- `GET /api/jobs/[id]/estimate-file?all=1` returns `{ data: { latest: EstimateDriveFile | null, files: EstimateDriveFile[] } }`
+- `GET /api/jobs/[id]/estimate-file?redirect=1` is the documented legacy browser-navigation exception:
+  - intended for direct navigation callers that need the browser redirected to the Drive `webViewLink`
+  - on success it returns an HTTP redirect instead of a `{ data }` envelope
+  - service/client data reads must use the normal envelope endpoints and shared jobs route helpers, not redirect navigation
 - Route handlers should not return bespoke `jobs`, `job`, or `ok` payloads for the jobs CRUD surface.

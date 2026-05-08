@@ -32,7 +32,7 @@ vi.mock('@/app/crm/jobs/[id]/_components/JobTimeline', () => ({
   default: () => <div>Job timeline</div>,
 }))
 
-function acceptedQuote(overrides: Record<string, unknown> = {}) {
+function acceptedEstimate(overrides: Record<string, unknown> = {}) {
   return {
     estimate_id: 'estimate-1',
     accepted_public_version_id: 'public-version-1',
@@ -60,7 +60,7 @@ function createController(jobOverrides: Record<string, unknown> = {}) {
     title: 'Completed repaint',
     status: 'completed',
     linked_estimate_id: 'estimate-1',
-    accepted_quote: acceptedQuote(),
+    accepted_estimate: acceptedEstimate(),
     ...jobOverrides,
   } as Parameters<typeof getJobWorkflowActions>[1]
 
@@ -122,11 +122,11 @@ describe('JobDetail workflow actuals and review actions', () => {
       'href',
       '/crm/jobs/job-1/actuals'
     )
-    expect(screen.getByRole('button', { name: 'Estimate review' })).toBeDisabled()
-    expect(screen.getByText('Submit job actuals before estimate review.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Quote review' })).toBeDisabled()
+    expect(screen.getByText('Submit job actuals before quote review.')).toBeTruthy()
   })
 
-  it('links estimate review after job actuals are submitted', () => {
+  it('links quote review after job actuals are submitted', () => {
     useJobDetailPageMock.mockReturnValue(
       createController({
         job_actuals_status: 'submitted',
@@ -139,63 +139,85 @@ describe('JobDetail workflow actuals and review actions', () => {
       'href',
       '/crm/jobs/job-1/actuals'
     )
-    expect(screen.getByRole('link', { name: 'Estimate review' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Quote review' })).toHaveAttribute(
       'href',
       '/crm/jobs/job-1/review'
     )
   })
 
-  it('links job actuals when an accepted quote is missing its snapshot', () => {
-    useJobDetailPageMock.mockReturnValue(
-      createController({
-        accepted_quote: acceptedQuote({ estimate_snapshot_id: null }),
-      })
-    )
-
-    render(<JobDetailPage />)
-
-    expect(screen.getByRole('link', { name: 'Job actuals' })).toHaveAttribute(
-      'href',
-      '/crm/jobs/job-1/actuals'
-    )
-    expect(screen.getByRole('button', { name: 'Estimate review' })).toBeDisabled()
-    expect(screen.getByText('Submit job actuals before estimate review.')).toBeTruthy()
-  })
-
-  it('links estimate review when an accepted quote is missing its snapshot and actuals are submitted', () => {
-    useJobDetailPageMock.mockReturnValue(
-      createController({
-        accepted_quote: acceptedQuote({ estimate_snapshot_id: null }),
-        job_actuals_status: 'submitted',
-      })
-    )
-
-    render(<JobDetailPage />)
-
-    expect(screen.getByRole('link', { name: 'Job actuals' })).toHaveAttribute(
-      'href',
-      '/crm/jobs/job-1/actuals'
-    )
-    expect(screen.getByRole('link', { name: 'Estimate review' })).toHaveAttribute(
-      'href',
-      '/crm/jobs/job-1/review'
-    )
-  })
-
-  it('messages jobs with no accepted quote instead of linking to actuals or review', () => {
+  it('links job actuals for legacy accepted jobs even when linked_estimate_id is null and the snapshot is missing', () => {
     useJobDetailPageMock.mockReturnValue(
       createController({
         linked_estimate_id: null,
-        accepted_quote: null,
+        accepted_estimate: acceptedEstimate({ estimate_snapshot_id: null }),
+      })
+    )
+
+    render(<JobDetailPage />)
+
+    expect(screen.getByRole('link', { name: 'Job actuals' })).toHaveAttribute(
+      'href',
+      '/crm/jobs/job-1/actuals'
+    )
+    expect(screen.getByRole('button', { name: 'Quote review' })).toBeDisabled()
+    expect(screen.getByText('Submit job actuals before quote review.')).toBeTruthy()
+  })
+
+  it('links quote review when an accepted quote is missing its snapshot and actuals are submitted', () => {
+    useJobDetailPageMock.mockReturnValue(
+      createController({
+        accepted_estimate: acceptedEstimate({ estimate_snapshot_id: null }),
+        job_actuals_status: 'submitted',
+      })
+    )
+
+    render(<JobDetailPage />)
+
+    expect(screen.getByRole('link', { name: 'Job actuals' })).toHaveAttribute(
+      'href',
+      '/crm/jobs/job-1/actuals'
+    )
+    expect(screen.getByRole('link', { name: 'Quote review' })).toHaveAttribute(
+      'href',
+      '/crm/jobs/job-1/review'
+    )
+  })
+
+  it('messages jobs with no accepted estimate instead of linking to actuals or review', () => {
+    useJobDetailPageMock.mockReturnValue(
+      createController({
+        linked_estimate_id: null,
+        accepted_estimate: null,
       })
     )
 
     render(<JobDetailPage />)
 
     expect(screen.getByRole('button', { name: 'Job actuals' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Estimate review' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Quote review' })).toBeDisabled()
     expect(screen.getByText('Accept a quote before entering job actuals.')).toBeTruthy()
-    expect(screen.getByText('Accept a quote before reviewing the estimate.')).toBeTruthy()
+    expect(screen.getByText('Accept a quote before reviewing the quote.')).toBeTruthy()
+  })
+
+  it('keeps quote navigation fallback separate from accepted estimate workflow gates', () => {
+    useJobDetailPageMock.mockReturnValue(
+      createController({
+        status: 'completed',
+        linked_estimate_id: null,
+        estimate_navigation_id: 'draft-estimate',
+        accepted_estimate: null,
+        job_actuals_status: 'submitted',
+      })
+    )
+
+    render(<JobDetailPage />)
+
+    expect(screen.getByRole('link', { name: 'Open quote' })).toHaveAttribute(
+      'href',
+      '/crm/quotes/draft-estimate'
+    )
+    expect(screen.getByRole('button', { name: 'Job actuals' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Quote review' })).toBeDisabled()
   })
 
   it('keeps existing completed job workflow actions wired through the action rail', async () => {

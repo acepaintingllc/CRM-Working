@@ -202,6 +202,7 @@ export function EstimateV2SummaryPageContent({
     job,
     loading,
     error,
+    retrySummary,
     policySaving,
     jobSettingsVm,
   } = useEstimateV2SummaryData(estimateId, resolvedRouteFamily)
@@ -268,7 +269,16 @@ export function EstimateV2SummaryPageContent({
       <CrmPageShell>
         <CrmSectionCard title="Summary unavailable">
           <div role="alert" aria-label="Quote summary failed to load">
-            <CrmNotice tone="error">{error?.message ?? 'Something went wrong'}</CrmNotice>
+            <div className="grid gap-3">
+              <CrmNotice tone="error">
+                {error?.message ?? 'We couldn’t load this quote summary.'}
+              </CrmNotice>
+              <div>
+                <CrmButton type="button" tone="primary" onClick={retrySummary}>
+                  Retry
+                </CrmButton>
+              </div>
+            </div>
           </div>
         </CrmSectionCard>
       </CrmPageShell>
@@ -322,6 +332,23 @@ export function EstimateV2SummaryPageContent({
       />
 
       <main className="grid gap-4 pb-24">
+        {derived.configurationWarning ? (
+          <CrmNotice tone="warning">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="grid gap-1">
+                <div className="font-bold">{derived.configurationWarning.title}</div>
+                <div>{derived.configurationWarning.detail}</div>
+                <div>{derived.configurationWarning.fixHint}</div>
+              </div>
+              <div>
+                <CrmButton type="button" tone="secondary" href={resolvedRouteFamily.editorHref(estimateId)}>
+                  Open estimate editor
+                </CrmButton>
+              </div>
+            </div>
+          </CrmNotice>
+        ) : null}
+
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div className="md:col-span-2 xl:col-span-2">
             <MetricCard label="Final Total" value={fmtUSD(derived.finalTotal)} accent />
@@ -499,8 +526,20 @@ export function EstimateV2SummaryPageContent({
                                   className="grid gap-2 border-b border-[color:var(--crm-ui-border)] py-2 text-sm last:border-b-0 md:grid-cols-[minmax(0,1fr)_repeat(5,minmax(90px,auto))]"
                                 >
                                   <div className="min-w-0">
-                                    <div className="font-bold text-[color:var(--crm-ui-ink)]">{scope.label}</div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <div className="font-bold text-[color:var(--crm-ui-ink)]">{scope.label}</div>
+                                      {scope.hasOverride ? (
+                                        <CrmChip tone="warning">
+                                          {scope.overrideSummary ?? 'Override active'}
+                                        </CrmChip>
+                                      ) : null}
+                                    </div>
                                     <div className="text-xs text-[color:var(--crm-ui-muted)]">{scope.kind}</div>
+                                    {scope.hasOverride && scope.overrideSummary ? (
+                                      <div className="mt-1 text-xs font-semibold text-[color:var(--crm-ui-warning-text)]">
+                                        {scope.overrideSummary}
+                                      </div>
+                                    ) : null}
                                   </div>
                                   <div className="md:text-right">{fmtNumber(scope.quantity, scope.kind === 'trim' ? 1 : 0)}</div>
                                   <div className="md:text-right">{fmtH(scope.laborHours)}</div>

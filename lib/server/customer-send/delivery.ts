@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { uploadDriveFile } from '@/lib/server/googleDrive'
 import { sendGmailMessage } from '@/lib/server/googleMail'
+import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import {
   errorResult,
   okResult,
@@ -11,27 +12,29 @@ import {
   buildCustomerSendPublicUrl,
 } from './document'
 import {
+  appendEstimatePublicVersionPdf,
   markEstimatePublicVersionSent,
   supersedeOlderPublicEstimateVersions,
-  updateEstimatePublicVersionSnapshot,
   writeEstimatePublicEvent,
 } from './repository'
-import { buildCustomerSendPdfAttachment } from './pdf'
+import {
+  buildCustomerSendPdfAttachment,
+  readCustomerSendPdfDocument,
+} from './pdf'
 import type {
+  CustomerQuoteSourceModel,
   CustomerSendCopy,
   CustomerSendDraft,
   CustomerSendMode,
-  EstimateCustomerSendContextData,
+  CustomerSendPersistedPdf,
   EstimatePublicVersionRow,
 } from './types'
+import { readCustomerSendVersionDocument } from './types'
 
-function readSnapshotDocument(snapshot: Record<string, unknown> | null | undefined) {
-  return ((snapshot?.document as Record<string, unknown> | null | undefined) ?? snapshot ?? null)
-}
-
-function readSnapshotRecord(snapshot: unknown) {
-  return snapshot && typeof snapshot === 'object' ? (snapshot as Record<string, unknown>) : {}
-}
+type CustomerSendDeliveryContext = Pick<
+  CustomerQuoteSourceModel,
+  'estimate' | 'job' | 'company' | 'public_url'
+>
 
 function readDriveEstimatesFolderId() {
   const folderId = process.env.GOOGLE_DRIVE_ESTIMATES_FOLDER_ID
@@ -65,7 +68,7 @@ function appendLiveQuoteLink(params: {
 
 function buildDefaultEmailBody(params: {
   draft: CustomerSendDraft
-  context: EstimateCustomerSendContextData
+  context: CustomerSendDeliveryContext
   publicUrl: string | null
   mode: CustomerSendMode
 }) {
@@ -126,7 +129,7 @@ function escapeHtml(value: string) {
 
 function buildDefaultEmailBodyHtml(params: {
   draft: CustomerSendDraft
-  context: EstimateCustomerSendContextData
+  context: CustomerSendDeliveryContext
   publicUrl: string | null
   mode: CustomerSendMode
 }) {
@@ -143,7 +146,7 @@ export async function submitCustomerSendMessage(params: {
   orgId: string
   userId: string
   draft: CustomerSendDraft
-  context: EstimateCustomerSendContextData
+  context: CustomerSendDeliveryContext
   version: EstimatePublicVersionRow
   copy: CustomerSendCopy
 }): Promise<
@@ -151,7 +154,7 @@ export async function submitCustomerSendMessage(params: {
     mode: CustomerSendMode
     public_url: string | null
     version: EstimatePublicVersionRow
-    document: Record<string, unknown> | null
+    document: CustomerEstimateDocument | null
   }>
 > {
   let publicVersion = params.version
@@ -162,10 +165,10 @@ export async function submitCustomerSendMessage(params: {
   }
   const previewVersion =
     params.mode === 'send'
-      ? ({
+      ? {
           ...publicVersion,
           public_token: pendingPublicToken || null,
-        } as EstimatePublicVersionRow)
+        }
       : publicVersion
   publicUrl = buildCustomerSendPublicUrl({
     origin: params.origin,
@@ -187,10 +190,9 @@ export async function submitCustomerSendMessage(params: {
     publicUrl,
     mode: params.mode,
   })
-  const document = readSnapshotDocument(
-    (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
-  )
-  const pdfAttachment = buildCustomerSendPdfAttachment(document)
+  const document = readCustomerSendVersionDocument(publicVersion)
+  const pdfDocument = readCustomerSendPdfDocument(document)
+  const pdfAttachment = pdfDocument ? buildCustomerSendPdfAttachment(pdfDocument) : null
   let sentAt = ''
 
   if (pdfAttachment) {
@@ -207,21 +209,18 @@ export async function submitCustomerSendMessage(params: {
       })
 
       if (!('error' in upload)) {
-        const snapshot = readSnapshotRecord(publicVersion.snapshot_json)
-        const updatedVersion = await updateEstimatePublicVersionSnapshot({
+        const pdf: CustomerSendPersistedPdf = {
+          drive_file_id: upload.file.id,
+          drive_file_name: upload.file.name,
+          drive_web_view_link: upload.file.webViewLink ?? null,
+          filename: pdfAttachment.filename,
+          mime_type: pdfAttachment.contentType,
+          saved_at: new Date().toISOString(),
+        }
+        const updatedVersion = await appendEstimatePublicVersionPdf({
           orgId: params.orgId,
-          versionId: asText(publicVersion.id),
-          snapshot: {
-            ...snapshot,
-            pdf: {
-              drive_file_id: upload.file.id,
-              drive_file_name: upload.file.name,
-              drive_web_view_link: upload.file.webViewLink ?? null,
-              filename: pdfAttachment.filename,
-              mime_type: pdfAttachment.contentType,
-              saved_at: new Date().toISOString(),
-            },
-          },
+          version: publicVersion,
+          pdf,
         })
         if (updatedVersion.ok) {
           publicVersion = updatedVersion.data
@@ -272,9 +271,7 @@ export async function submitCustomerSendMessage(params: {
         public_url: publicUrl,
         version: publicVersion,
         delivery_error: send.error ?? params.copy.sendFailureMessage,
-        document: readSnapshotDocument(
-          (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
-        ),
+        document: readCustomerSendVersionDocument(publicVersion),
       })
     }
     return errorResult('invalid_input', send.error ?? params.copy.sendFailureMessage)
@@ -291,12 +288,8 @@ export async function submitCustomerSendMessage(params: {
     })
     if (!eventResult.ok) return eventResult
 
-    const sentDocument = readSnapshotDocument(
-      (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
-    )
-    const estimateId =
-      asText((sentDocument?.meta as { estimate_id?: unknown } | undefined)?.estimate_id) ||
-      asText(params.context.estimate?.id)
+    const sentDocument = readCustomerSendVersionDocument(publicVersion)
+    const estimateId = asText(sentDocument?.meta.estimate_id) || asText(params.context.estimate?.id)
     if (estimateId) {
       const supersedeResult = await supersedeOlderPublicEstimateVersions({
         orgId: params.orgId,
@@ -313,8 +306,6 @@ export async function submitCustomerSendMessage(params: {
     mode: params.mode,
     public_url: publicUrl,
     version: publicVersion,
-    document: readSnapshotDocument(
-      (publicVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? null
-    ),
+    document: readCustomerSendVersionDocument(publicVersion),
   })
 }

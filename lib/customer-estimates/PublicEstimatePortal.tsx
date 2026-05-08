@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import type { EstimatePublicSnapshot } from './types'
+import { getPublicQuoteExpirationDate, isPublicQuoteExpired } from './publicQuoteExpiration'
 import { CustomerEstimateDocumentView } from './view'
 import styles from './PublicEstimatePortal.module.css'
 
@@ -11,10 +12,24 @@ export type PublicEstimatePortalCopy = {
   acceptanceTitle: string
   agreementText: string
   downloadLabel: string
+  submitAcceptanceMessage?: string
+  submitDeclineMessage?: string
   acceptedMessage?: string
   declinedMessage?: string
   unavailableTitle: string
   unavailableMessage: string
+  invalidTokenTitle?: string
+  invalidTokenMessage?: string
+  notFoundTitle?: string
+  notFoundMessage?: string
+  expiredTitle?: string
+  expiredMessage?: string
+  expiredActionMessage?: string
+  alreadyAcceptedMessage?: string
+  alreadyDeclinedMessage?: string
+  supersededMessage?: string
+  acceptedElsewhereMessage?: string
+  genericSubmitErrorMessage?: string
 }
 
 type PublicEstimatePortalProps = {
@@ -26,10 +41,12 @@ type PublicEstimatePortalProps = {
 
 type SignatureMode = 'typed' | 'drawn'
 type SubmitAction = 'accept' | 'decline' | null
+type TerminalPortalStatus = 'expired' | 'accepted' | 'declined' | 'superseded'
 type PresentationState =
   | 'missing'
   | 'active'
   | 'busy'
+  | 'locked-expired'
   | 'locked-accepted'
   | 'locked-declined'
   | 'locked-superseded'
@@ -79,33 +96,9 @@ function formatPortalTimestamp(value: string | null | undefined, timeZone?: stri
   }
 }
 
-function isQuoteSoftExpired(snapshot: EstimatePublicSnapshot) {
-  const validDays = snapshot.document.quote_validity_days
-  if (!Number.isFinite(validDays) || validDays <= 0) return false
-
-  const sentAt = asText(snapshot.sent_at) || asText(snapshot.document.meta.sent_at)
-  if (!sentAt) return false
-
-  const sentDate = new Date(sentAt)
-  if (Number.isNaN(sentDate.getTime())) return false
-
-  const expiresAt = new Date(sentDate)
-  expiresAt.setDate(expiresAt.getDate() + validDays)
-
-  return Date.now() > expiresAt.getTime()
-}
-
 function quoteExpirationLabel(snapshot: EstimatePublicSnapshot) {
-  const validDays = snapshot.document.quote_validity_days
-  if (!Number.isFinite(validDays) || validDays <= 0) return ''
-
-  const sourceDate = asText(snapshot.sent_at) || asText(snapshot.document.meta.sent_at) || asText(snapshot.document.meta.quote_date)
-  if (!sourceDate) return ''
-
-  const expiresAt = new Date(sourceDate.includes('T') ? sourceDate : `${sourceDate}T00:00:00`)
-  if (Number.isNaN(expiresAt.getTime())) return ''
-
-  expiresAt.setDate(expiresAt.getDate() + validDays)
+  const expiresAt = getPublicQuoteExpirationDate(snapshot)
+  if (!expiresAt) return ''
   return formatPortalDate(expiresAt.toISOString(), snapshot.document.company.timezone)
 }
 
@@ -120,7 +113,10 @@ function formatPortalCurrency(value: number | null | undefined) {
 
 function lockedMessage(copy: PublicEstimatePortalCopy, status: EstimatePublicSnapshot['status']) {
   if (status === 'accepted') {
-    return copy.acceptedMessage ?? `${copy.documentLabel} accepted. We'll contact you to schedule.`
+    return (
+      copy.acceptedMessage ??
+      `${copy.documentLabel} accepted. We'll contact you soon to confirm the next steps.`
+    )
   }
 
   if (status === 'declined') {
@@ -131,10 +127,133 @@ function lockedMessage(copy: PublicEstimatePortalCopy, status: EstimatePublicSna
   }
 
   if (status === 'superseded') {
-    return 'A newer quote is available.'
+    return (
+      copy.supersededMessage ??
+      `This ${copy.documentLabel.toLowerCase()} is no longer current. Please contact us for the latest version.`
+    )
   }
 
   return ''
+}
+
+function resolveLockedMessage(params: {
+  copy: PublicEstimatePortalCopy
+  status: TerminalPortalStatus | EstimatePublicSnapshot['status']
+  overrideMessage?: string | null
+}) {
+  if (asText(params.overrideMessage)) return asText(params.overrideMessage)
+  if (params.status === 'expired') {
+    return params.copy.expiredTitle ?? `This ${params.copy.documentLabel.toLowerCase()} has expired`
+  }
+  return lockedMessage(params.copy, params.status)
+}
+
+function normalizePublicPortalSubmitResult(params: {
+  action: Exclude<SubmitAction, null>
+  copy: PublicEstimatePortalCopy
+  rawError?: string | null
+}) {
+  const rawError = asText(params.rawError)
+  const normalized = rawError.toLowerCase()
+  const documentLabel = params.copy.documentLabel.toLowerCase()
+
+  if (normalized === 'invalid token') {
+    return {
+      retryable: false as const,
+      terminalStatus: 'superseded' as const,
+      message:
+        params.copy.invalidTokenMessage ??
+        `This ${documentLabel} link is incomplete or no longer valid. Please contact us for a new link.`,
+    }
+  }
+
+  if (normalized === 'quote not found') {
+    return {
+      retryable: false as const,
+      terminalStatus: 'superseded' as const,
+      message:
+        params.copy.notFoundMessage ??
+        `We could not find this ${documentLabel}. Please contact us if you need a new link.`,
+    }
+  }
+
+  if (normalized === 'this quote has expired. please contact us for an updated quote.') {
+    return {
+      retryable: false as const,
+      terminalStatus: 'expired' as const,
+      message:
+        params.copy.expiredActionMessage ??
+        `This ${documentLabel} can no longer be accepted. Please contact us for an updated quote.`,
+    }
+  }
+
+  if (
+    normalized === 'quote already accepted' ||
+    normalized === 'cannot decline an accepted quote'
+  ) {
+    return {
+      retryable: false as const,
+      terminalStatus: 'accepted' as const,
+      message:
+        params.copy.alreadyAcceptedMessage ??
+        `This ${documentLabel} has already been accepted. We'll contact you soon to confirm the next steps.`,
+    }
+  }
+
+  if (
+    normalized === 'quote already declined' ||
+    normalized === 'cannot accept a declined quote'
+  ) {
+    return {
+      retryable: false as const,
+      terminalStatus: 'declined' as const,
+      message:
+        params.copy.alreadyDeclinedMessage ??
+        `This ${documentLabel} has already been declined. Please contact us if you'd like to revisit it.`,
+    }
+  }
+
+  if (
+    normalized === 'a newer quote is available.' ||
+    normalized === 'quote status changed before this action completed'
+  ) {
+    return {
+      retryable: false as const,
+      terminalStatus: 'superseded' as const,
+      message:
+        params.copy.supersededMessage ??
+        `This ${documentLabel} is no longer current. Please contact us for the latest version.`,
+    }
+  }
+
+  if (
+    normalized === 'estimate is already accepted by another public version' ||
+    normalized === 'public quote already has a different terminal event'
+  ) {
+    return {
+      retryable: false as const,
+      terminalStatus: 'superseded' as const,
+      message:
+        params.copy.acceptedElsewhereMessage ??
+        `This ${documentLabel} is no longer available because another version has already been approved.`,
+    }
+  }
+
+  return {
+    retryable: true as const,
+    terminalStatus: null,
+    message:
+      params.copy.genericSubmitErrorMessage ??
+      `We couldn't update this ${documentLabel} right now. Please try again or contact us.`,
+  }
+}
+
+function expiredMessage(copy: PublicEstimatePortalCopy, snapshot: EstimatePublicSnapshot) {
+  const expiresLabel = quoteExpirationLabel(snapshot)
+  const defaultMessage = expiresLabel
+    ? `This quote expired on ${expiresLabel}. Please contact us for an updated quote.`
+    : 'This quote has expired. Please contact us for an updated quote.'
+  return copy.expiredMessage ?? defaultMessage
 }
 
 function usePortalPrint(printMode: boolean) {
@@ -153,6 +272,7 @@ function usePublicEstimatePortalForm(initialLegalName: string, initialEmail: str
   const [drawnSignatureReady, setDrawnSignatureReady] = useState(false)
   const [customerEmail, setCustomerEmail] = useState(initialEmail)
   const [message, setMessage] = useState('')
+  const [declineReason, setDeclineReason] = useState('')
   const [agreementChecked, setAgreementChecked] = useState(false)
 
   const signatureValue = signatureMode === 'typed' ? typedSignature : drawnSignature
@@ -175,9 +295,11 @@ function usePublicEstimatePortalForm(initialLegalName: string, initialEmail: str
     signatureValue,
     typedSignature,
     customerEmail,
+    declineReason,
     message,
     setAgreementChecked,
     setCustomerEmail,
+    setDeclineReason,
     setDrawnSignature,
     setDrawnSignatureReady,
     setLegalName,
@@ -199,6 +321,10 @@ function usePublicEstimatePortalWorkflow({
   const [snapshot, setSnapshot] = useState(initialSnapshot)
   const [submitAction, setSubmitAction] = useState<SubmitAction>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [terminalError, setTerminalError] = useState<{
+    status: TerminalPortalStatus
+    message: string
+  } | null>(null)
 
   const busy = submitAction !== null
 
@@ -207,6 +333,7 @@ function usePublicEstimatePortalWorkflow({
 
     setSubmitAction(action)
     setSubmitError(null)
+    setTerminalError(null)
 
     try {
       const response = await fetch(`${apiBasePath}/${snapshot.public_token}/${action}`, {
@@ -220,15 +347,27 @@ function usePublicEstimatePortalWorkflow({
         | null
 
       if (!response.ok) {
-        setSubmitError(
-          payload?.error ??
-            `Unable to ${action} ${copy.documentLabel.toLowerCase()}`
-        )
+        const failure = normalizePublicPortalSubmitResult({
+          action,
+          copy,
+          rawError: payload?.error ?? null,
+        })
+        if (failure.retryable) {
+          setSubmitError(failure.message)
+        } else if (failure.terminalStatus) {
+          setTerminalError({
+            status: failure.terminalStatus,
+            message: failure.message,
+          })
+        }
         return
       }
 
       if (!payload?.data) {
-        setSubmitError(`Unable to update ${copy.documentLabel.toLowerCase()} status`)
+        setSubmitError(
+          copy.genericSubmitErrorMessage ??
+            `We couldn't update this ${copy.documentLabel.toLowerCase()} right now. Please try again or contact us.`
+        )
         return
       }
 
@@ -243,6 +382,7 @@ function usePublicEstimatePortalWorkflow({
     snapshot,
     submitAction,
     submitError,
+    terminalError,
     accept: (body: Record<string, unknown>) => submit('accept', body),
     decline: (body: Record<string, unknown>) => submit('decline', body),
   }
@@ -423,8 +563,8 @@ function PublicEstimatePortalNotice({
     return (
       <div className={`${styles.notice} ${styles.noticeInfo}`}>
         {submitAction === 'decline'
-          ? `Submitting ${copy.documentLabel.toLowerCase()} decline...`
-          : `Submitting ${copy.documentLabel.toLowerCase()} acceptance...`}
+          ? (copy.submitDeclineMessage ?? `Sending your ${copy.documentLabel.toLowerCase()} decline...`)
+          : (copy.submitAcceptanceMessage ?? `Sending your ${copy.documentLabel.toLowerCase()} acceptance...`)}
       </div>
     )
   }
@@ -441,6 +581,15 @@ function PublicEstimatePortalNotice({
     return (
       <div className={`${styles.notice} ${styles.noticeWarning}`}>
         {lockedMessage(copy, 'superseded')}
+      </div>
+    )
+  }
+
+  if (presentationState === 'locked-expired') {
+    return (
+      <div className={`${styles.notice} ${styles.noticeWarning}`}>
+        {copy.expiredActionMessage ??
+          'This quote can no longer be accepted. Please contact us for an updated quote.'}
       </div>
     )
   }
@@ -489,19 +638,30 @@ export function PublicEstimatePortal({
 
   const presentationState = useMemo<PresentationState>(() => {
     if (!workflow.snapshot?.document) return 'missing'
-    if (workflow.submitError) return 'error'
     if (workflow.busy) return 'busy'
+    if (workflow.terminalError?.status === 'expired') return 'locked-expired'
+    if (workflow.terminalError?.status === 'accepted') return 'locked-accepted'
+    if (workflow.terminalError?.status === 'declined') return 'locked-declined'
+    if (workflow.terminalError?.status === 'superseded') return 'locked-superseded'
+    if (workflow.submitError) return 'error'
+    if (
+      (workflow.snapshot.status === 'sent' || workflow.snapshot.status === 'viewed') &&
+      isPublicQuoteExpired(workflow.snapshot)
+    ) {
+      return 'locked-expired'
+    }
     if (workflow.snapshot.status === 'accepted') return 'locked-accepted'
     if (workflow.snapshot.status === 'declined') return 'locked-declined'
     if (workflow.snapshot.status === 'superseded') return 'locked-superseded'
     return 'active'
-  }, [workflow.busy, workflow.snapshot, workflow.submitError])
+  }, [workflow.busy, workflow.snapshot, workflow.submitError, workflow.terminalError])
 
   if (!workflow.snapshot?.document) {
     return <PublicEstimatePortalUnavailable copy={copy} />
   }
 
   const locked =
+    presentationState === 'locked-expired' ||
     presentationState === 'locked-accepted' ||
     presentationState === 'locked-declined' ||
     presentationState === 'locked-superseded'
@@ -511,7 +671,6 @@ export function PublicEstimatePortal({
     currentSnapshot.acceptance_json?.accepted_at || currentSnapshot.accepted_at || currentSnapshot.locked_at,
     currentSnapshot.document.company.timezone
   )
-  const showSoftExpirationWarning = presentationState === 'active' && isQuoteSoftExpired(currentSnapshot)
   const expiresLabel = quoteExpirationLabel(currentSnapshot)
 
   return (
@@ -544,7 +703,9 @@ export function PublicEstimatePortal({
               <div className={styles.eyebrow}>Acceptance</div>
               <div className={styles.acceptanceTitle}>{copy.acceptanceTitle}</div>
             </div>
-            <div className={styles.statusMeta}>Status: {statusLabel(currentSnapshot.status)}</div>
+            <div className={styles.statusMeta}>
+              Status: {presentationState === 'locked-expired' ? 'Expired' : statusLabel(currentSnapshot.status)}
+            </div>
           </div>
 
           <PublicEstimatePortalNotice
@@ -557,7 +718,24 @@ export function PublicEstimatePortal({
 
           {locked ? (
             <div className={styles.lockedPanel}>
-              <div className={styles.lockedMessage}>{lockedMessage(copy, currentSnapshot.status)}</div>
+              <div className={styles.lockedMessage}>
+                {resolveLockedMessage({
+                  copy,
+                  status:
+                    workflow.terminalError?.status ??
+                    (presentationState === 'locked-expired' ? 'expired' : currentSnapshot.status),
+                  overrideMessage: workflow.terminalError?.message ?? null,
+                })}
+              </div>
+              {presentationState === 'locked-expired' ? (
+                <div className={styles.lockedMetaList}>
+                  <div>{expiredMessage(copy, currentSnapshot)}</div>
+                  <div>
+                    {copy.expiredActionMessage ??
+                      'This quote can no longer be accepted. Please contact us for an updated quote.'}
+                  </div>
+                </div>
+              ) : null}
               {currentSnapshot.status === 'accepted' ? (
                 <div className={styles.lockedMetaList}>
                   {signerName ? <div>Signed by {signerName}</div> : null}
@@ -567,12 +745,6 @@ export function PublicEstimatePortal({
             </div>
           ) : (
             <>
-              {showSoftExpirationWarning ? (
-                <div className={`${styles.notice} ${styles.noticeWarning}`}>
-                  This quote may be expired, contact us.
-                </div>
-              ) : null}
-
               <div className={styles.fieldsGrid}>
                 <label className={styles.field}>
                   <span className={styles.fieldLabel}>Full legal name</span>
@@ -674,6 +846,16 @@ export function PublicEstimatePortal({
                 />
               </label>
 
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Decline note <span className={styles.optionalText}>(optional)</span></span>
+                <textarea
+                  value={form.declineReason}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => form.setDeclineReason(event.target.value)}
+                  placeholder={`Let ${currentSnapshot.document.company.business_name || 'us'} know why you're declining...`}
+                  className={styles.textarea}
+                />
+              </label>
+
               <div className={styles.acceptanceFooter}>
                 <label className={styles.agreementRow}>
                   <input
@@ -686,6 +868,18 @@ export function PublicEstimatePortal({
                 </label>
 
                 <div className={styles.actions}>
+                  <button
+                    type="button"
+                    disabled={workflow.busy}
+                    onClick={() =>
+                      void workflow.decline({
+                        reason: form.declineReason,
+                      })
+                    }
+                    className={styles.dangerButton}
+                  >
+                    Decline {copy.documentLabel}
+                  </button>
                   <button
                     type="button"
                     disabled={workflow.busy || !form.canAccept}
@@ -703,7 +897,7 @@ export function PublicEstimatePortal({
                   >
                     Accept {copy.documentLabel}
                   </button>
-                  {!form.canAccept ? (
+                  {!form.canAccept && !workflow.busy ? (
                     <div className={styles.actionHint}>Add your signature above to continue.</div>
                   ) : null}
                 </div>
@@ -718,9 +912,11 @@ export function PublicEstimatePortal({
 
 export function PublicEstimatePortalErrorState({
   copy,
+  title,
   message,
 }: {
   copy: PublicEstimatePortalCopy
+  title?: string
   message: string
 }) {
   return (
@@ -729,7 +925,7 @@ export function PublicEstimatePortalErrorState({
         <div className={styles.card}>
           <div>
             <div className={styles.eyebrow}>{copy.shellTitle}</div>
-            <div className={styles.acceptanceTitle}>{copy.unavailableTitle}</div>
+            <div className={styles.acceptanceTitle}>{title ?? copy.unavailableTitle}</div>
           </div>
           <div className={`${styles.notice} ${styles.noticeError}`}>{message}</div>
         </div>

@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
-  mockLoadPublicEstimateSnapshot,
+  mockLoadPublicEstimatePortalSnapshot,
   mockAcceptPublicEstimate,
   mockDeclinePublicEstimate,
 } = vi.hoisted(() => ({
-  mockLoadPublicEstimateSnapshot: vi.fn(),
+  mockLoadPublicEstimatePortalSnapshot: vi.fn(),
   mockAcceptPublicEstimate: vi.fn(),
   mockDeclinePublicEstimate: vi.fn(),
 }))
 
 vi.mock('@/lib/server/estimatePublicPortal', () => ({
-  loadPublicEstimateSnapshot: mockLoadPublicEstimateSnapshot,
+  loadPublicEstimatePortalSnapshot: mockLoadPublicEstimatePortalSnapshot,
   acceptPublicEstimate: mockAcceptPublicEstimate,
   declinePublicEstimate: mockDeclinePublicEstimate,
 }))
@@ -22,13 +22,13 @@ import { GET } from '../quote-public/[token]/route'
 
 describe('quote public routes', () => {
   beforeEach(() => {
-    mockLoadPublicEstimateSnapshot.mockReset()
+    mockLoadPublicEstimatePortalSnapshot.mockReset()
     mockAcceptPublicEstimate.mockReset()
     mockDeclinePublicEstimate.mockReset()
   })
 
   it('returns 400 for invalid token input and 404 for missing public quotes', async () => {
-    mockLoadPublicEstimateSnapshot.mockResolvedValueOnce({
+    mockLoadPublicEstimatePortalSnapshot.mockResolvedValueOnce({
       ok: false,
       kind: 'invalid_input',
       message: 'Invalid token',
@@ -39,7 +39,7 @@ describe('quote public routes', () => {
     expect(invalidResponse.status).toBe(400)
     await expect(invalidResponse.json()).resolves.toEqual({ error: 'Invalid token' })
 
-    mockLoadPublicEstimateSnapshot.mockResolvedValue({
+    mockLoadPublicEstimatePortalSnapshot.mockResolvedValue({
       ok: false,
       kind: 'not_found',
       message: 'Quote not found',
@@ -50,17 +50,18 @@ describe('quote public routes', () => {
         params: { token: 'missing' },
       }
     )
-    expect(mockLoadPublicEstimateSnapshot).toHaveBeenCalledWith(
-      'missing',
-      { origin: 'http://localhost' },
-      { metadata: { user_agent: '' } }
-    )
+    expect(mockLoadPublicEstimatePortalSnapshot).toHaveBeenCalledWith({
+      token: 'missing',
+      origin: 'http://localhost',
+      actorType: 'customer',
+      metadata: { route: 'quote-public', user_agent: '' },
+    })
     expect(missingResponse.status).toBe(404)
     await expect(missingResponse.json()).resolves.toEqual({ error: 'Quote not found' })
   })
 
   it('marks the first eligible public view as viewed and returns the snapshot payload', async () => {
-    mockLoadPublicEstimateSnapshot.mockResolvedValue({
+    mockLoadPublicEstimatePortalSnapshot.mockResolvedValue({
       ok: true,
       data: {
         estimate_version_id: 'version-1',
@@ -79,11 +80,12 @@ describe('quote public routes', () => {
       }
     )
 
-    expect(mockLoadPublicEstimateSnapshot).toHaveBeenCalledWith(
-      'token-1',
-      { origin: 'http://localhost' },
-      { metadata: { user_agent: 'Vitest' } }
-    )
+    expect(mockLoadPublicEstimatePortalSnapshot).toHaveBeenCalledWith({
+      token: 'token-1',
+      origin: 'http://localhost',
+      actorType: 'customer',
+      metadata: { route: 'quote-public', user_agent: 'Vitest' },
+    })
     await expect(response.json()).resolves.toEqual({
       data: {
         estimate_version_id: 'version-1',

@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
 import {
+  buildEstimateV2SaveSnapshot,
   filterNonBlockingEstimateV2ValidationIssues,
+  hasEstimateV2SaveStateChangedSincePrepared,
+  prepareEstimateV2SavePayload,
   prepareEstimateV2SaveState,
+  reconcileEstimateV2SaveResponse,
   collectEstimateV2CalculationMissingInputIssues,
-  resolveEstimateV2SaveResponseState,
   validateEstimateV2PreparedSave,
 } from '../estimateV2EditorSaveOrchestration'
 
@@ -104,7 +107,87 @@ function makeDrywallRepair(patch = {}) {
   }
 }
 
+function buildReconciliationCurrent(
+  currentState: ReturnType<typeof createCurrentState>['currentState']
+) {
+  return {
+    collections: {
+      rooms: currentState.collections.rooms,
+      roomFlags: currentState.collections.roomFlags,
+      rollers: currentState.collections.rollers,
+      accessFees: currentState.collections.accessFees,
+      otherItems: currentState.collections.otherItems,
+    },
+    meta: {
+      estimate: currentState.meta.estimate,
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
+    },
+  }
+}
+
 describe('estimateV2EditorSaveOrchestration', () => {
+  it('prepares the save payload from plain editor collections and job settings', () => {
+    const { currentState } = createCurrentState()
+
+    const prepared = prepareEstimateV2SavePayload({
+      collections: currentState.collections,
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
+    })
+
+    expect(prepared.payloadSnapshot.payload.rooms).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          room_id: 'R001',
+        }),
+      ])
+    )
+    expect(prepared.payloadSnapshot.payload.room_wall_scopes).toHaveLength(
+      currentState.collections.scopes.length
+    )
+    expect(prepared.payloadSnapshot.payload.room_ceiling_scopes).toHaveLength(
+      currentState.collections.ceilingScopes.length
+    )
+    expect(prepared.payloadSnapshot.payload.room_trim_scopes).toHaveLength(
+      currentState.collections.trimScopes.length
+    )
+    expect(prepared.payloadSnapshot.comparisonKey).toBeTruthy()
+  })
+
+  it('builds save snapshots and compares them against prepared payload snapshots', () => {
+    const { currentState } = createCurrentState()
+    const prepared = prepareEstimateV2SavePayload({
+      collections: currentState.collections,
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
+    })
+
+    const matchingSnapshot = buildEstimateV2SaveSnapshot({
+      collections: currentState.collections,
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
+    })
+    const changedSnapshot = buildEstimateV2SaveSnapshot({
+      collections: {
+        ...currentState.collections,
+        rooms: currentState.collections.rooms.map((room) =>
+          room.roomId === 'R001' ? { ...room, roomName: 'Changed room' } : room
+        ),
+      },
+      jobSettingsDraft: currentState.meta.jobSettingsDraft,
+    })
+
+    expect(
+      hasEstimateV2SaveStateChangedSincePrepared({
+        latestSnapshot: matchingSnapshot,
+        prepared,
+      })
+    ).toBe(false)
+    expect(
+      hasEstimateV2SaveStateChangedSincePrepared({
+        latestSnapshot: changedSnapshot,
+        prepared,
+      })
+    ).toBe(true)
+  })
+
   it('prepares canonical save collections with room-mode-aware validation inputs', () => {
     const { currentState } = createCurrentState()
     currentState.setTrimScopes((prev) =>
@@ -123,7 +206,10 @@ describe('estimateV2EditorSaveOrchestration', () => {
     )
 
     const prepared = prepareEstimateV2SaveState(currentState)
-    const issues = validateEstimateV2PreparedSave({ currentState, prepared })
+    const issues = validateEstimateV2PreparedSave({
+      collections: currentState.collections,
+      prepared,
+    })
 
     expect(prepared.payloadSnapshot.payload.room_trim_scopes).toHaveLength(2)
     expect(issues).toEqual([])
@@ -175,7 +261,7 @@ describe('estimateV2EditorSaveOrchestration', () => {
       override_description: 'Manual trim override',
     })
 
-    const result = resolveEstimateV2SaveResponseState({
+    const result = reconcileEstimateV2SaveResponse({
       trigger: 'manual',
       payload: {
         ...fixture.summaryData,
@@ -192,7 +278,7 @@ describe('estimateV2EditorSaveOrchestration', () => {
       },
       meta: currentState.meta,
       prepared,
-      currentState,
+      current: buildReconciliationCurrent(currentState),
       effectiveJobProductDefaults: fixture.orgJobProductDefaults,
     })
     const savedTrimScope = result.collections.trimScopes.find(
@@ -234,14 +320,17 @@ describe('estimateV2EditorSaveOrchestration', () => {
 
     const latestState = store.getState()
     const prepared = prepareEstimateV2SaveState(latestState)
-    const issues = validateEstimateV2PreparedSave({ currentState: latestState, prepared })
+    const issues = validateEstimateV2PreparedSave({
+      collections: latestState.collections,
+      prepared,
+    })
 
     expect(issues).toEqual([
-      'R001: door type is required',
-      'R001: door quantity is required',
-      'R001: door sides must be 1 or 2',
-      'R001: drywall repair type is not valid for ceiling',
-      'R001: drywall quantity must be nonnegative',
+      'Living Room: Living Room Door: door type is required',
+      'Living Room: Living Room Door: door quantity is required',
+      'Living Room: Living Room Door: door sides must be 1 or 2',
+      'Living Room: Ceiling drywall repair 1: repair type is not valid for the ceiling',
+      'Living Room: Ceiling drywall repair 1: quantity must be nonnegative',
     ])
   })
 
@@ -252,7 +341,10 @@ describe('estimateV2EditorSaveOrchestration', () => {
 
     const latestState = store.getState()
     const prepared = prepareEstimateV2SaveState(latestState)
-    const issues = validateEstimateV2PreparedSave({ currentState: latestState, prepared })
+    const issues = validateEstimateV2PreparedSave({
+      collections: latestState.collections,
+      prepared,
+    })
 
     expect(issues).toEqual([])
     expect(prepared.payloadSnapshot.payload.room_door_scopes).toHaveLength(1)
@@ -316,7 +408,7 @@ describe('estimateV2EditorSaveOrchestration', () => {
       )
     ).toHaveLength(1)
 
-    const result = resolveEstimateV2SaveResponseState({
+    const result = reconcileEstimateV2SaveResponse({
       trigger: 'manual',
       payload: {
         ...fixture.summaryData,
@@ -330,7 +422,7 @@ describe('estimateV2EditorSaveOrchestration', () => {
       },
       meta: currentState.meta,
       prepared,
-      currentState,
+      current: buildReconciliationCurrent(currentState),
       effectiveJobProductDefaults: fixture.orgJobProductDefaults,
     })
 
@@ -349,7 +441,7 @@ describe('estimateV2EditorSaveOrchestration', () => {
     const prepared = prepareEstimateV2SaveState(currentState)
     const savedAt = '2026-05-04T15:30:00.000Z'
 
-    const result = resolveEstimateV2SaveResponseState({
+    const result = reconcileEstimateV2SaveResponse({
       trigger: 'manual',
       payload: {
         ...fixture.summaryData,
@@ -360,7 +452,7 @@ describe('estimateV2EditorSaveOrchestration', () => {
       },
       meta: currentState.meta,
       prepared,
-      currentState,
+      current: buildReconciliationCurrent(currentState),
       effectiveJobProductDefaults: fixture.orgJobProductDefaults,
     })
 
@@ -469,7 +561,7 @@ describe('estimateV2EditorSaveOrchestration', () => {
       (segment) => segment.ceilingScopeId
     )
 
-    const result = resolveEstimateV2SaveResponseState({
+    const result = reconcileEstimateV2SaveResponse({
       trigger: 'manual',
       payload: {
         ...fixture.summaryData,
@@ -510,7 +602,7 @@ describe('estimateV2EditorSaveOrchestration', () => {
       },
       meta: currentState.meta,
       prepared,
-      currentState,
+      current: buildReconciliationCurrent(currentState),
       effectiveJobProductDefaults: fixture.orgJobProductDefaults,
     })
 

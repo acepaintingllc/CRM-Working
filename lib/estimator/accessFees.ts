@@ -25,7 +25,7 @@ export type AccessFeeCalculationResult = {
   total: number
 }
 
-export type AccessFeeScopeKey = 'walls' | 'ceilings' | 'trim'
+export type AccessFeeScopeKey = 'walls' | 'ceilings' | 'trim' | 'doors' | 'drywall' | 'other'
 
 export type AccessFeeAllocationScope = {
   key: AccessFeeScopeKey
@@ -71,12 +71,13 @@ export function calculateAccessFeeRows({
     if (!accessFeeId) return []
 
     const catalogOption = catalogById.get(accessFeeId)
-    const quantity = Math.max(1, asNullableNumber(draft.qty) ?? 1)
+    const parsedQuantity = asNullableNumber(draft.qty)
+    const quantity = parsedQuantity == null ? 1 : parsedQuantity < 0 ? 1 : parsedQuantity
     const catalogAmount = asNullableNumber(catalogOption?.amount) ?? 0
     const calculatedTotal = roundCurrency(catalogAmount * quantity)
     const overrideTotal = asNullableOverrideNumber(draft.actualCostOverride)
-    const overridden = overrideTotal != null
-    const total = roundCurrency(overridden ? overrideTotal : calculatedTotal)
+    const overridden = quantity > 0 && overrideTotal != null
+    const total = quantity > 0 ? roundCurrency(overridden ? overrideTotal : calculatedTotal) : 0
 
     return [{
       id: draft.id,
@@ -123,6 +124,9 @@ export function allocateAccessFeesByEligibleScope({
     walls: 0,
     ceilings: 0,
     trim: 0,
+    doors: 0,
+    drywall: 0,
+    other: 0,
   }
 
   if (total <= 0) {

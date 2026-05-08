@@ -10,6 +10,21 @@ function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
 }
 
+const GOOGLE_DRIVE_TIMEOUT_MS = 20_000
+
+function timeoutSignal(timeoutMs: number) {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(timeoutMs)
+  }
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(), timeoutMs)
+  return controller.signal
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
 function readGoogleErrorMessage(json: unknown) {
   const obj = asRecord(json)
   const err = asRecord(obj?.error)
@@ -454,14 +469,24 @@ export async function uploadDriveFile(params: {
   url.searchParams.set('fields', 'id,name,webViewLink')
   url.searchParams.set('supportsAllDrives', 'true')
 
-  const res = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${access.accessToken}`,
-      'Content-Type': `multipart/related; boundary=${boundary}`,
-    },
-    body,
-  })
+  let res: Response
+  try {
+    res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access.accessToken}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+      },
+      body,
+      signal: timeoutSignal(GOOGLE_DRIVE_TIMEOUT_MS),
+    })
+  } catch (error) {
+    return {
+      error: isAbortError(error)
+        ? 'Timed out uploading the quote PDF to Google Drive'
+        : 'Failed to upload Drive file',
+    } as const
+  }
 
   const json: unknown = await res.json().catch(() => null)
   if (!res.ok) {

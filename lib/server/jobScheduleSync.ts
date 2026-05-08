@@ -1,16 +1,20 @@
-import { supabaseAdmin } from '@/lib/server/org'
+import { supabaseAdmin } from './org.ts'
 import {
   buildJobSelect,
   filterOptionalJobColumnPayload,
   getAvailableOptionalJobColumns,
   withOptionalJobColumns,
-} from '@/lib/server/jobSchema'
-import { JOB_EMAIL_STAGE_RULES, type StageEmailStage } from '@/lib/jobs/types'
+} from './jobSchema.ts'
+import { JOB_EMAIL_STAGE_RULES, type StageEmailStage } from '../jobs/types.ts'
+import type { JobStatus } from '../../types/jobs/status.ts'
+import { normalizeScheduleDateTime } from './jobScheduleDateTime.ts'
 
 type ScheduleRow = {
   start_at: string | null
   end_at: string | null
 }
+
+export const EMPTY_SCHEDULE_FALLBACK_STATUS: JobStatus = 'estimate_sent'
 
 function isMissingJobsColumnError(message: string, column: string) {
   return (
@@ -21,12 +25,12 @@ function isMissingJobsColumnError(message: string, column: string) {
 
 export function deriveJobScheduleRange(rows: ScheduleRow[]) {
   const starts = rows
-    .map((row) => row.start_at)
-    .filter((value): value is string => typeof value === 'string')
+    .map((row) => normalizeScheduleDateTime(row.start_at))
+    .filter((value): value is string => value !== null)
     .sort()
   const ends = rows
-    .map((row) => row.end_at)
-    .filter((value): value is string => typeof value === 'string')
+    .map((row) => normalizeScheduleDateTime(row.end_at))
+    .filter((value): value is string => value !== null)
     .sort()
 
   return {
@@ -162,7 +166,9 @@ export async function syncJobScheduleRange(
 
   const range = deriveJobScheduleRange((scheduleRows ?? []) as ScheduleRow[])
   const status =
-    range.hasSchedules ? options?.statusWhenSchedulesExist : options?.statusWhenEmpty
+    range.hasSchedules
+      ? options?.statusWhenSchedulesExist
+      : options?.statusWhenEmpty ?? EMPTY_SCHEDULE_FALLBACK_STATUS
 
   const payload: Record<string, unknown> = {
     scheduled_date: range.scheduled_date,

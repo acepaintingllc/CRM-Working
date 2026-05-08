@@ -8,7 +8,6 @@ import {
 } from '@/lib/server/jobSchema'
 import { deriveJobScheduleRange } from '@/lib/server/jobScheduleSync'
 import { loadAcceptedEstimateSource } from '@/lib/server/accepted-estimates/service'
-import type { AcceptedEstimateSource } from '@/lib/server/accepted-estimates/types'
 import {
   buildEstimatePublicTimelineEvents,
 } from '@/lib/customer-estimates/publicTimeline'
@@ -24,8 +23,9 @@ import {
 import {
   buildJobDetailRecord,
   buildJobSummaryRecord,
+  buildJobAcceptedEstimateRecordResult,
   type CreateJobInput,
-  type JobAcceptedQuoteRecord,
+  type JobAcceptedEstimateRecord,
   type JobDetailRecord,
   type JobSummaryRecord,
   type UpdateJobInput,
@@ -72,7 +72,7 @@ type JobScheduleRow = {
   end_at: string | null
 }
 
-type LinkedEstimateRow = {
+type QuoteNavigationEstimateRow = {
   id: string
   status: string | null
   version_name: string | null
@@ -110,6 +110,36 @@ type JobScheduleRange = {
 
 type JobActualsStatusRow = {
   status?: string | null
+}
+
+type PaintLogInput = {
+  where_used?: unknown
+  paint_product?: unknown
+  sheen?: unknown
+  color?: unknown
+  notes?: unknown
+}
+
+type PaintLogRecord = {
+  id?: string | null
+  sort_order?: number | null
+  where_used: string | null
+  paint_product: string | null
+  sheen: string | null
+  color: string | null
+  notes: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type ReplaceJobPaintLogsInput = {
+  rows: Array<{
+    where_used: string | null
+    paint_product: string | null
+    sheen: string | null
+    color: string | null
+    notes: string | null
+  }>
 }
 
 const listJobColumns = [
@@ -159,6 +189,69 @@ const mutableJobColumns = [
 
 function asString(value: unknown) {
   return typeof value === 'string' ? value : null
+}
+
+function asNullableText(value: unknown, maxLength = 500) {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.slice(0, maxLength)
+}
+
+function isMissingAcceptedEstimateError(error: ServiceError) {
+  return error.kind === 'invalid_input' && error.message === 'Job has no accepted estimate'
+}
+
+async function ensureJobExists(orgId: string, jobId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('jobs')
+    .select('id, status')
+    .eq('org_id', orgId)
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (error) return errorResult('server_error', error.message)
+  if (!data) return errorResult('not_found', 'Job not found')
+  return okResult(data as { id: string; status?: string | null })
+}
+
+async function listJobPaintLogRows(orgId: string, jobId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('job_paint_logs')
+    .select('id, sort_order, where_used, paint_product, sheen, color, notes, created_at, updated_at')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (error) return errorResult('server_error', error.message)
+  return okResult((data ?? []) as PaintLogRecord[])
+}
+
+export function normalizeReplaceJobPaintLogsInput(input: unknown): ServiceResult<ReplaceJobPaintLogsInput> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return errorResult('invalid_input', 'rows must be an array')
+  }
+
+  const rowsInput = Array.isArray((input as { rows?: unknown }).rows)
+    ? ((input as { rows: PaintLogInput[] }).rows)
+    : null
+  if (!rowsInput) {
+    return errorResult('invalid_input', 'rows must be an array')
+  }
+  if (rowsInput.length > 100) {
+    return errorResult('invalid_input', 'Too many rows')
+  }
+
+  return okResult({
+    rows: rowsInput.map((row) => ({
+      where_used: asNullableText(row?.where_used, 200),
+      paint_product: asNullableText(row?.paint_product, 200),
+      sheen: asNullableText(row?.sheen, 120),
+      color: asNullableText(row?.color, 200),
+      notes: asNullableText(row?.notes, 600),
+    })),
+  })
 }
 
 function createSchemaError(message: string): ServiceError {
@@ -259,7 +352,7 @@ async function loadScheduleRangeByJobId(orgId: string, jobIds: string[]) {
   return okResult(rangeByJobId)
 }
 
-async function loadLinkedEstimates(orgId: string, jobId: string) {
+async function loadQuoteNavigationEstimates(orgId: string, jobId: string) {
   const { data, error } = await supabaseAdmin
     .from('estimates')
     .select(
@@ -274,38 +367,22 @@ async function loadLinkedEstimates(orgId: string, jobId: string) {
     return errorResult('server_error', error.message)
   }
 
-  return okResult((data ?? []) as LinkedEstimateRow[])
+  return okResult((data ?? []) as QuoteNavigationEstimateRow[])
 }
 
-function mapAcceptedQuoteRecord(source: AcceptedEstimateSource): JobAcceptedQuoteRecord {
-  return {
-    estimate_id: source.estimate_id,
-    accepted_public_version_id: source.accepted_public_version_id,
-    public_version_number: source.public_version_number,
-    public_token: source.public_token,
-    accepted_at: source.accepted_at,
-    accepted_by_legal_name: source.accepted_by_legal_name,
-    signature_type: source.signature_type,
-    user_agent: source.user_agent,
-    ip: source.ip,
-    version_name: source.version_name,
-    estimate_snapshot_id: source.estimate_snapshot_id,
-    estimated_labor_hours: source.estimated_labor_hours,
-    estimated_paint_gallons: source.estimated_paint_gallons,
-    estimated_supplies_cost: source.estimated_supplies_cost,
-    estimated_other_cost: source.estimated_other_cost,
-    final_total: source.final_total,
-  }
-}
-
-async function loadAcceptedQuoteForJob(orgId: string, jobId: string) {
+async function loadOperationalAcceptedEstimateForJob(orgId: string, jobId: string) {
   const source = await loadAcceptedEstimateSource(
     supabaseAdmin as unknown as Parameters<typeof loadAcceptedEstimateSource>[0],
     orgId,
     jobId
   )
 
-  return source.ok ? mapAcceptedQuoteRecord(source.data) : null
+  if (!source.ok && isMissingAcceptedEstimateError(source)) {
+    return okResult<JobAcceptedEstimateRecord | null>(null)
+  }
+  if (!source.ok) return source
+
+  return buildJobAcceptedEstimateRecordResult(source)
 }
 
 async function loadJobActualsStatus(
@@ -508,21 +585,23 @@ export async function getJobDetail(
     }
   }
 
-  const [customersResult, linkedEstimatesResult, acceptedQuote] = await Promise.all([
+  const [customersResult, quoteNavigationEstimatesResult, acceptedEstimateResult] = await Promise.all([
     loadCustomersById(orgId, asString(jobRow.customer_id) ? [asString(jobRow.customer_id) as string] : []),
-    loadLinkedEstimates(orgId, jobId),
-    asString(jobRow.linked_estimate_id) ? loadAcceptedQuoteForJob(orgId, jobId) : Promise.resolve(null),
+    loadQuoteNavigationEstimates(orgId, jobId),
+    loadOperationalAcceptedEstimateForJob(orgId, jobId),
   ])
 
   if (!customersResult.ok) return customersResult
-  if (!linkedEstimatesResult.ok) return linkedEstimatesResult
+  if (!quoteNavigationEstimatesResult.ok) return quoteNavigationEstimatesResult
+  if (!acceptedEstimateResult.ok) return acceptedEstimateResult
+  const acceptedEstimate = acceptedEstimateResult.data
 
   const [publicQuoteTimelineResult, jobActualsStatusResult] = await Promise.all([
     loadPublicQuoteTimelineForJob(
       orgId,
-      linkedEstimatesResult.data.map((estimate) => estimate.id)
+      quoteNavigationEstimatesResult.data.map((estimate) => estimate.id)
     ),
-    loadJobActualsStatus(orgId, jobId, acceptedQuote?.estimate_snapshot_id),
+    loadJobActualsStatus(orgId, jobId, acceptedEstimate?.estimate_snapshot_id),
   ])
   if (!publicQuoteTimelineResult.ok) return publicQuoteTimelineResult
   if (!jobActualsStatusResult.ok) return jobActualsStatusResult
@@ -533,8 +612,8 @@ export async function getJobDetail(
       row: jobRow,
       optionalColumns,
       customer: customerId ? customersResult.data.get(customerId) ?? null : null,
-      linkedEstimates: linkedEstimatesResult.data,
-      acceptedQuote,
+      quoteNavigationEstimates: quoteNavigationEstimatesResult.data,
+      acceptedEstimate,
       jobActualsStatus: jobActualsStatusResult.data,
       publicQuoteTimelineEvents: publicQuoteTimelineResult.data,
       withOptionalJobColumns: (sourceRow, availableColumns) =>
@@ -592,6 +671,34 @@ export async function updateJob(
       optionalColumns
     ) as Partial<JobDetailRecord>
   )
+}
+
+export async function listJobPaintLogs(
+  orgId: string,
+  jobId: string
+): Promise<ServiceResult<PaintLogRecord[]>> {
+  const job = await ensureJobExists(orgId, jobId)
+  if (!job.ok) return job
+
+  return listJobPaintLogRows(orgId, jobId)
+}
+
+export async function replaceJobPaintLogs(
+  orgId: string,
+  jobId: string,
+  input: ReplaceJobPaintLogsInput
+): Promise<ServiceResult<PaintLogRecord[]>> {
+  const job = await ensureJobExists(orgId, jobId)
+  if (!job.ok) return job
+
+  const { error: replaceError } = await supabaseAdmin.rpc('replace_job_paint_logs', {
+    p_org_id: orgId,
+    p_job_id: jobId,
+    p_rows: input.rows,
+  })
+  if (replaceError) return errorResult('server_error', replaceError.message)
+
+  return listJobPaintLogRows(orgId, jobId)
 }
 
 export async function deleteJob(

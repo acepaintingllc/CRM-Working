@@ -50,7 +50,9 @@ function rateFromCatalog(
   check: (row: SupplyRateRow) => boolean
 ) {
   for (const row of catalogs?.supplies_rates ?? []) {
-    if (check(row)) return pos(n(row.value))
+    if (!check(row)) continue
+    const value = pos(n(row.value))
+    if (value != null) return value
   }
   return null
 }
@@ -96,8 +98,10 @@ export function supplyCostFromCatalog(params: {
   for (const row of params.catalogs?.supplies_rates ?? []) {
     if (!supplyGroupMatches(row, params.group)) continue
     if (!supplyScopeMatches(row, params.scopeName)) continue
+    const value = pos(n(row.value))
+    if (value == null) continue
     matched = true
-    total = round4(total + (pos(n(row.value)) ?? 0) * supplyMultiplier(row, params.crewSize))
+    total = round4(total + value * supplyMultiplier(row, params.crewSize))
   }
   return matched ? total : null
 }

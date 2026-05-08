@@ -16,7 +16,7 @@ import {
   type ServiceResult,
 } from '@/lib/server/serviceResult'
 import {
-  buildCustomerSendPageData,
+  loadCustomerSendPageData,
   saveCustomerSendDraftMutation,
   submitCustomerSendMutation,
 } from './customer-send/service'
@@ -34,10 +34,16 @@ async function loadCustomerSendContextResult(params: {
   orgId: string
   userId: string
   estimateId: string
+  allowPersistedArtifactPreview?: boolean
+  draftSource?: Record<string, unknown> | null
+  operation?: 'read' | 'save' | 'send' | 'test'
 }): Promise<ServiceResult<EstimateCustomerSendContextData>> {
   const contextResult = await loadEstimateCustomerSendContext(params)
   if ('error' in contextResult) {
-    return errorResult('not_found', contextResult.error ?? 'Quote not found')
+    return errorResult(
+      contextResult.error === 'Quote not found' ? 'not_found' : 'server_error',
+      contextResult.error ?? 'Quote not found'
+    )
   }
   return okResult(contextResult)
 }
@@ -59,12 +65,17 @@ export async function handleEstimateCustomerSendRouteGet(
     orgId: auth.session.orgId,
     userId: auth.session.userId,
     estimateId: estimateId.value,
+    operation: 'read',
+    allowPersistedArtifactPreview: true,
   })
   if (!contextResult.ok) return serviceResultDataResponse(contextResult)
 
   return serviceResultDataResponse(
-    buildCustomerSendPageData({
+    await loadCustomerSendPageData({
       origin,
+      orgId: auth.session.orgId,
+      userId: auth.session.userId,
+      estimateId: estimateId.value,
       context: contextResult.data,
     })
   )
@@ -90,6 +101,9 @@ export async function handleEstimateCustomerSendRoutePut(
     orgId: auth.session.orgId,
     userId: auth.session.userId,
     estimateId: estimateId.value,
+    allowPersistedArtifactPreview: true,
+    draftSource: body.value ?? {},
+    operation: 'save',
   })
   if (!contextResult.ok) return serviceResultDataResponse(contextResult)
 
@@ -139,6 +153,9 @@ export async function handleEstimateCustomerSendRoutePost(
     orgId: auth.session.orgId,
     userId: auth.session.userId,
     estimateId: estimateId.value,
+    allowPersistedArtifactPreview: true,
+    draftSource: body.value,
+    operation: String(body.value?.mode ?? '').trim().toLowerCase() === 'test' ? 'test' : 'send',
   })
   if (!contextResult.ok) return serviceResultDataResponse(contextResult)
 

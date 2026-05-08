@@ -157,4 +157,136 @@ describe('useEstimateV2EditorLoader', () => {
       consoleError.mockRestore()
     }
   })
+
+  it('retries the editor load flow and recovers after an initial fatal load failure', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    const store = createEstimateV2Store()
+    const estimatePayload = {
+      ...fixture.summaryData,
+      inputs: {
+        ...fixture.summaryData.inputs,
+        wall_segments: fixture.segments,
+        ceiling_scope_segments: fixture.ceilingSegments,
+      },
+    }
+
+    authedFetch
+      .mockResolvedValueOnce(createResponse(false, { error: 'Quote not found' }, 404))
+      .mockResolvedValueOnce(createResponse(true, { data: { catalogs: fixture.catalogs } }))
+      .mockResolvedValueOnce(createResponse(true, { data: estimatePayload }))
+      .mockResolvedValueOnce(createResponse(true, { data: { catalogs: fixture.catalogs } }))
+      .mockResolvedValueOnce(createResponse(true, { data: fixture.job }))
+
+    const { result } = renderHook(() =>
+      useEstimateV2EditorLoader({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store,
+      })
+    )
+
+    await waitFor(() => {
+      expect(store.getState().meta.loading).toBe(false)
+    })
+
+    expect(store.getState().meta.error?.message).toBe('Quote not found')
+
+    result.current.reloadWorkspace()
+
+    await waitFor(() => {
+      expect(store.getState().meta.loading).toBe(false)
+      expect(store.getState().meta.error).toBeNull()
+      expect(store.getState().meta.estimate?.id).toBe(fixture.estimate.id)
+    })
+  })
+
+  it('retries catalog loading without discarding already-loaded editor state', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    const store = createEstimateV2Store()
+    const estimatePayload = {
+      ...fixture.summaryData,
+      inputs: {
+        ...fixture.summaryData.inputs,
+        wall_segments: fixture.segments,
+        ceiling_scope_segments: fixture.ceilingSegments,
+      },
+    }
+
+    authedFetch
+      .mockResolvedValueOnce(createResponse(true, { data: estimatePayload }))
+      .mockResolvedValueOnce(createResponse(false, { error: 'Failed to load catalogs' }, 500))
+      .mockResolvedValueOnce(createResponse(true, { data: fixture.job }))
+      .mockResolvedValueOnce(createResponse(true, { data: { catalogs: fixture.catalogs } }))
+
+    const { result } = renderHook(() =>
+      useEstimateV2EditorLoader({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store,
+      })
+    )
+
+    await waitFor(() => {
+      expect(store.getState().meta.loading).toBe(false)
+    })
+
+    expect(store.getState().meta.estimate?.id).toBe(fixture.estimate.id)
+    expect(store.getState().meta.error).toBeNull()
+    expect(store.getState().meta.catalogsError?.message).toBe('Failed to load catalogs')
+
+    store.getState().setRooms((rooms) =>
+      rooms.map((room, index) =>
+        index === 0 ? { ...room, roomName: 'Edited after partial load' } : room
+      )
+    )
+
+    await result.current.reloadCatalogs()
+
+    await waitFor(() => {
+      expect(store.getState().meta.catalogsError).toBeNull()
+      expect(store.getState().meta.catalogs.paint_products).toHaveLength(
+        fixture.catalogs.paint_products.length
+      )
+    })
+
+    expect(store.getState().meta.loading).toBe(false)
+    expect(store.getState().collections.rooms[0]?.roomName).toBe('Edited after partial load')
+  })
+
+  it('keeps raw catalog failure details in state for retry and diagnostics', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+    const store = createEstimateV2Store()
+    const estimatePayload = {
+      ...fixture.summaryData,
+      inputs: {
+        ...fixture.summaryData.inputs,
+        wall_segments: fixture.segments,
+        ceiling_scope_segments: fixture.ceilingSegments,
+      },
+    }
+
+    authedFetch
+      .mockResolvedValueOnce(createResponse(true, { data: estimatePayload }))
+      .mockResolvedValueOnce(
+        createResponse(false, { error: 'Rates service unavailable for org defaults' }, 503)
+      )
+      .mockResolvedValueOnce(createResponse(true, { data: fixture.job }))
+
+    renderHook(() =>
+      useEstimateV2EditorLoader({
+        estimateId: fixture.estimate.id,
+        routeFamily: estimateRouteFamily,
+        store,
+      })
+    )
+
+    await waitFor(() => {
+      expect(store.getState().meta.loading).toBe(false)
+    })
+
+    expect(store.getState().meta.catalogsError?.message).toBe(
+      'Rates service unavailable for org defaults'
+    )
+    expect(store.getState().meta.estimate?.id).toBe(fixture.estimate.id)
+  })
 })

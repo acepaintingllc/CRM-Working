@@ -99,7 +99,7 @@ export function useEstimateV2SummaryData(
     }
   }, [estimateApiHref, estimateId])
 
-  useEstimateV2SummaryLoader(estimateId, routeFamily, summaryLoaderState)
+  const { retrySummary } = useEstimateV2SummaryLoader(estimateId, routeFamily, summaryLoaderState)
 
   const { savePolicyDebounced } = useEstimateV2SummaryPolicyController({
     estimateId,
@@ -214,6 +214,7 @@ export function useEstimateV2SummaryData(
     policySaving,
     savePolicyDebounced,
     saveTrimPaintDebounced,
+    retrySummary,
     jobSettingsVm,
     trimPaintVm,
   }

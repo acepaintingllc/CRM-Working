@@ -1,19 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { submitCustomerSendMessage } from '../delivery'
+import type {
+  CustomerSendCopy,
+  CustomerSendDraft,
+  CustomerSendMode,
+  EstimatePublicVersionRow,
+} from '../types'
 
 const {
   mockSendGmailMessage,
   mockUploadDriveFile,
+  mockAppendEstimatePublicVersionPdf,
   mockMarkEstimatePublicVersionSent,
   mockSupersedeOlderPublicEstimateVersions,
-  mockUpdateEstimatePublicVersionSnapshot,
   mockWriteEstimatePublicEvent,
 } = vi.hoisted(() => ({
   mockSendGmailMessage: vi.fn(),
   mockUploadDriveFile: vi.fn(),
+  mockAppendEstimatePublicVersionPdf: vi.fn(),
   mockMarkEstimatePublicVersionSent: vi.fn(),
   mockSupersedeOlderPublicEstimateVersions: vi.fn(),
-  mockUpdateEstimatePublicVersionSnapshot: vi.fn(),
   mockWriteEstimatePublicEvent: vi.fn(),
 }))
 
@@ -34,17 +40,16 @@ vi.mock('@/lib/server/googleDrive', () => ({
 }))
 
 vi.mock('../repository', () => ({
+  appendEstimatePublicVersionPdf: mockAppendEstimatePublicVersionPdf,
   markEstimatePublicVersionSent: mockMarkEstimatePublicVersionSent,
   supersedeOlderPublicEstimateVersions: mockSupersedeOlderPublicEstimateVersions,
-  updateEstimatePublicVersionSnapshot: mockUpdateEstimatePublicVersionSnapshot,
   writeEstimatePublicEvent: mockWriteEstimatePublicEvent,
 }))
 
-const baseParams = {
-  origin: 'https://example.test',
-  orgId: 'org-1',
-  userId: 'user-1',
-  draft: {
+type DeliveryParams = Parameters<typeof submitCustomerSendMessage>[0]
+
+function buildDraft(overrides: Partial<CustomerSendDraft> = {}): CustomerSendDraft {
+  return {
     to_email: 'customer@example.com',
     cc_email: '',
     bcc_email: '',
@@ -66,26 +71,91 @@ const baseParams = {
     quote_validity_days: 30,
     deposit_language: '',
     card_fee_note: '',
-  },
-  context: {
-    estimate: {
-      id: 'estimate-1',
-      version_name: 'Kitchen Quote',
-    },
-    job: {
-      customer_name: 'Taylor',
-    },
-    company: {
-      business_name: 'ACE Painting',
-      business_email: 'owner@example.com',
-      sender_signature: 'Thanks,\nACE Painting',
-    },
-    public_url: null,
-  },
-  copy: {
+    ...overrides,
+  }
+}
+
+function buildVersion(
+  overrides: Partial<EstimatePublicVersionRow> = {}
+): EstimatePublicVersionRow {
+  return {
+    id: 'draft-1',
+    ...overrides,
+  }
+}
+
+function buildDeliveryParams(
+  overrides: Partial<Omit<DeliveryParams, 'mode' | 'version'>> & {
+    mode?: CustomerSendMode
+    version?: EstimatePublicVersionRow
+  } = {}
+): DeliveryParams {
+  const defaultCopy: CustomerSendCopy = {
     sendNotice: 'Quote sent.',
     sendFailureMessage: 'Unable to send quote',
     lockFailureMessage: 'Unable to lock quote',
+  }
+
+  return {
+    mode: overrides.mode ?? 'test',
+    origin: 'https://example.test',
+    orgId: 'org-1',
+    userId: 'user-1',
+    draft: buildDraft(),
+    context: {
+      estimate: {
+        id: 'estimate-1',
+        job_id: 'job-1',
+        customer_id: 'customer-1',
+        status: 'draft',
+        version_name: 'Kitchen Quote',
+        version_state: 'draft',
+        version_kind: 'standard',
+        version_sort_order: 1,
+        created_at: '2026-04-01T00:00:00.000Z',
+        updated_at: '2026-04-02T00:00:00.000Z',
+      },
+      job: {
+        id: 'job-1',
+        title: 'Kitchen',
+        estimate_date: '2026-04-22',
+        customer_name: 'Taylor',
+        customer_email: 'customer@example.com',
+        customer_phone: '',
+        customer_address: '',
+      },
+      company: {
+        business_name: 'ACE Painting',
+        timezone: 'America/Chicago',
+        main_phone: '',
+        business_email: 'owner@example.com',
+        address: '',
+        website: '',
+        sender_signature: 'Thanks,\nACE Painting',
+        logo_url: '',
+      },
+      public_url: null,
+    },
+    version: buildVersion(),
+    copy: defaultCopy,
+    ...overrides,
+  }
+}
+
+const persistedDocument = {
+  meta: {
+    estimate_id: 'estimate-1',
+    version_name: 'Kitchen Quote',
+    version_state: 'draft',
+    flow_version: 'v2',
+    title: 'Kitchen Quote',
+    quote_date: '2026-04-22',
+    sent_at: null,
+    viewed_at: null,
+    accepted_at: null,
+    declined_at: null,
+    status: 'draft',
+    public_token: null,
   },
 }
 
@@ -162,9 +232,9 @@ describe('customer send delivery', () => {
   beforeEach(() => {
     mockSendGmailMessage.mockReset()
     mockUploadDriveFile.mockReset()
+    mockAppendEstimatePublicVersionPdf.mockReset()
     mockMarkEstimatePublicVersionSent.mockReset()
     mockSupersedeOlderPublicEstimateVersions.mockReset()
-    mockUpdateEstimatePublicVersionSnapshot.mockReset()
     mockWriteEstimatePublicEvent.mockReset()
     delete process.env.GOOGLE_DRIVE_ESTIMATES_FOLDER_ID
     mockSendGmailMessage.mockResolvedValue({ id: 'gmail-1' })
@@ -175,11 +245,14 @@ describe('customer send delivery', () => {
         webViewLink: 'https://drive.test/file/drive-1',
       },
     })
-    mockUpdateEstimatePublicVersionSnapshot.mockImplementation(async (params: { snapshot: Record<string, unknown> }) => ({
+    mockAppendEstimatePublicVersionPdf.mockImplementation(async (params: { version: EstimatePublicVersionRow; pdf: Record<string, unknown> }) => ({
       ok: true,
       data: {
         id: 'draft-1',
-        snapshot_json: params.snapshot,
+        snapshot_json: {
+          ...(params.version.snapshot_json as Record<string, unknown>),
+          pdf: params.pdf,
+        },
       },
     }))
     mockWriteEstimatePublicEvent.mockResolvedValue({ ok: true, data: null })
@@ -191,13 +264,12 @@ describe('customer send delivery', () => {
 
   it('sends a test email without locking the public version', async () => {
     const result = await submitCustomerSendMessage({
-      ...baseParams,
+      ...buildDeliveryParams(),
       mode: 'test',
-      version: {
-        id: 'draft-1',
-        snapshot_json: { document: true },
-      },
-    } as never)
+      version: buildVersion({
+        snapshot_json: { document: persistedDocument },
+      }),
+    })
 
     expect(mockMarkEstimatePublicVersionSent).not.toHaveBeenCalled()
     expect(mockSendGmailMessage).toHaveBeenCalledWith(
@@ -218,19 +290,18 @@ describe('customer send delivery', () => {
       data: {
         id: 'draft-1',
         public_token: params.publicToken,
-        snapshot_json: { document: true },
+        snapshot_json: { document: persistedDocument },
       },
     }))
 
     const result = await submitCustomerSendMessage({
-      ...baseParams,
+      ...buildDeliveryParams(),
       mode: 'send',
-      version: {
-        id: 'draft-1',
+      version: buildVersion({
         public_token: null,
-        snapshot_json: { document: true },
-      },
-    } as never)
+        snapshot_json: { document: persistedDocument },
+      }),
+    })
 
     const markOrder = mockMarkEstimatePublicVersionSent.mock.invocationCallOrder[0]
     const sendOrder = mockSendGmailMessage.mock.invocationCallOrder[0]
@@ -279,19 +350,18 @@ describe('customer send delivery', () => {
       data: {
         id: 'draft-1',
         public_token: params.publicToken,
-        snapshot_json: { document: true },
+        snapshot_json: { document: persistedDocument },
       },
     }))
 
     const result = await submitCustomerSendMessage({
-      ...baseParams,
+      ...buildDeliveryParams(),
       mode: 'send',
-      version: {
-        id: 'draft-1',
+      version: buildVersion({
         public_token: null,
-        snapshot_json: { document: true },
-      },
-    } as never)
+        snapshot_json: { document: persistedDocument },
+      }),
+    })
 
     expect(mockMarkEstimatePublicVersionSent).toHaveBeenCalled()
     expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
@@ -303,10 +373,10 @@ describe('customer send delivery', () => {
         version: expect.objectContaining({
           id: 'draft-1',
           public_token: expect.any(String),
-          snapshot_json: { document: true },
+          snapshot_json: { document: persistedDocument },
         }),
         delivery_error: 'Gmail not configured',
-        document: true,
+        document: persistedDocument,
       }),
     })
     if (!result.ok) return
@@ -321,14 +391,13 @@ describe('customer send delivery', () => {
     })
 
     const result = await submitCustomerSendMessage({
-      ...baseParams,
+      ...buildDeliveryParams(),
       mode: 'send',
-      version: {
-        id: 'draft-1',
+      version: buildVersion({
         public_token: null,
-        snapshot_json: { document: true },
-      },
-    } as never)
+        snapshot_json: { document: persistedDocument },
+      }),
+    })
 
     expect(mockMarkEstimatePublicVersionSent).toHaveBeenCalled()
     expect(mockSendGmailMessage).not.toHaveBeenCalled()
@@ -346,13 +415,12 @@ describe('customer send delivery', () => {
     })
 
     const result = await submitCustomerSendMessage({
-      ...baseParams,
+      ...buildDeliveryParams(),
       mode: 'test',
-      version: {
-        id: 'draft-1',
-        snapshot_json: { document: true },
-      },
-    } as never)
+      version: buildVersion({
+        snapshot_json: { document: persistedDocument },
+      }),
+    })
 
     expect(result).toEqual({
       ok: false,
@@ -363,18 +431,16 @@ describe('customer send delivery', () => {
 
   it('passes cc and bcc recipients through to Gmail send', async () => {
     await submitCustomerSendMessage({
-      ...baseParams,
+      ...buildDeliveryParams(),
       mode: 'test',
-      draft: {
-        ...baseParams.draft,
+      draft: buildDraft({
         cc_email: 'team@example.com',
         bcc_email: 'owner@example.com',
-      },
-      version: {
-        id: 'draft-1',
-        snapshot_json: { document: true },
-      },
-    } as never)
+      }),
+      version: buildVersion({
+        snapshot_json: { document: persistedDocument },
+      }),
+    })
 
     expect(mockSendGmailMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -387,13 +453,12 @@ describe('customer send delivery', () => {
 
   it('attaches the generated quote PDF to the email', async () => {
     await submitCustomerSendMessage({
-      ...baseParams,
+      ...buildDeliveryParams(),
       mode: 'test',
-      version: {
-        id: 'draft-1',
+      version: buildVersion({
         snapshot_json: { document: assembledDocument },
-      },
-    } as never)
+      }),
+    })
 
     expect(mockSendGmailMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -406,17 +471,105 @@ describe('customer send delivery', () => {
     )
   })
 
+  it('returns null and skips PDF generation when the snapshot has no document', async () => {
+    const result = await submitCustomerSendMessage({
+      ...buildDeliveryParams(),
+      mode: 'test',
+      version: buildVersion({
+        snapshot_json: {},
+      }),
+    })
+
+    expect(mockSendGmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachment: null,
+      })
+    )
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        document: null,
+      }),
+    })
+  })
+
+  it('falls back to the context estimate id when snapshot document meta is malformed', async () => {
+    mockMarkEstimatePublicVersionSent.mockImplementation(async (params: { publicToken: string }) => ({
+      ok: true,
+      data: {
+        id: 'draft-1',
+        public_token: params.publicToken,
+        snapshot_json: {
+          document: {
+            meta: {
+              title: 'Kitchen Quote',
+            },
+          },
+        },
+      },
+    }))
+
+    const result = await submitCustomerSendMessage({
+      ...buildDeliveryParams(),
+      mode: 'send',
+      version: buildVersion({
+        public_token: null,
+        snapshot_json: {
+          document: {
+            meta: {
+              title: 'Kitchen Quote',
+            },
+          },
+        },
+      }),
+    })
+
+    expect(mockSendGmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachment: null,
+      })
+    )
+    expect(mockSupersedeOlderPublicEstimateVersions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estimateId: 'estimate-1',
+      })
+    )
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        document: null,
+      }),
+    })
+  })
+
+  it('accepts legacy bare-document snapshot shapes for PDF generation', async () => {
+    await submitCustomerSendMessage({
+      ...buildDeliveryParams(),
+      mode: 'test',
+      version: buildVersion({
+        snapshot_json: assembledDocument,
+      }),
+    })
+
+    expect(mockSendGmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachment: expect.objectContaining({
+          filename: 'ACE-Painting_123-Main-St_2026-04-28_Living-Room-Quote.pdf',
+        }),
+      })
+    )
+  })
+
   it('uploads the generated quote PDF to Drive when the estimates folder is configured', async () => {
     process.env.GOOGLE_DRIVE_ESTIMATES_FOLDER_ID = 'folder-1'
 
     await submitCustomerSendMessage({
-      ...baseParams,
+      ...buildDeliveryParams(),
       mode: 'test',
-      version: {
-        id: 'draft-1',
+      version: buildVersion({
         snapshot_json: { document: assembledDocument },
-      },
-    } as never)
+      }),
+    })
 
     expect(mockUploadDriveFile).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -426,15 +579,70 @@ describe('customer send delivery', () => {
         data: expect.any(Buffer),
       })
     )
-    expect(mockUpdateEstimatePublicVersionSnapshot).toHaveBeenCalledWith(
+    expect(mockAppendEstimatePublicVersionPdf).toHaveBeenCalledWith(
       expect.objectContaining({
-        versionId: 'draft-1',
-        snapshot: expect.objectContaining({
-          pdf: expect.objectContaining({
-            drive_file_id: 'drive-1',
-            drive_file_name: 'ACE-Painting_123-Main-St_2026-04-28_Living-Room-Quote.pdf',
-            drive_web_view_link: 'https://drive.test/file/drive-1',
-          }),
+        version: expect.objectContaining({
+          id: 'draft-1',
+          snapshot_json: { document: assembledDocument },
+        }),
+        pdf: expect.objectContaining({
+          drive_file_id: 'drive-1',
+          drive_file_name: 'ACE-Painting_123-Main-St_2026-04-28_Living-Room-Quote.pdf',
+          drive_web_view_link: 'https://drive.test/file/drive-1',
+        }),
+      })
+    )
+  })
+
+  it('uses the persisted draft version document byte-for-byte for live send', async () => {
+    mockMarkEstimatePublicVersionSent.mockImplementation(async (params: { publicToken: string }) => ({
+      ok: true,
+      data: {
+        id: 'draft-1',
+        public_token: params.publicToken,
+        snapshot_json: { document: assembledDocument },
+      },
+    }))
+
+    const result = await submitCustomerSendMessage({
+      ...buildDeliveryParams(),
+      mode: 'send',
+      version: buildVersion({
+        public_token: null,
+        snapshot_json: { document: assembledDocument },
+      }),
+    })
+
+    expect(mockSendGmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachment: expect.objectContaining({
+          filename: 'ACE-Painting_123-Main-St_2026-04-28_Living-Room-Quote.pdf',
+        }),
+      })
+    )
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        document: assembledDocument,
+      }),
+    })
+  })
+
+  it('appends PDF metadata without changing the persisted document', async () => {
+    process.env.GOOGLE_DRIVE_ESTIMATES_FOLDER_ID = 'folder-1'
+
+    await submitCustomerSendMessage({
+      ...buildDeliveryParams(),
+      mode: 'test',
+      version: buildVersion({
+        snapshot_json: { document: assembledDocument },
+      }),
+    })
+
+    expect(mockAppendEstimatePublicVersionPdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: expect.objectContaining({
+          snapshot_json: { document: assembledDocument },
         }),
       })
     )

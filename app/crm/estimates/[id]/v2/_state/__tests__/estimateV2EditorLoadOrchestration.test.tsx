@@ -15,7 +15,6 @@ describe('buildEstimateV2EditorLoadState', () => {
         rooms: fixture.summaryData.inputs.rooms ?? [],
         room_wall_scopes: fixture.summaryData.inputs.room_wall_scopes ?? [],
         room_ceiling_scopes: fixture.summaryData.inputs.room_ceiling_scopes ?? [],
-        segments: fixture.summaryData.inputs.segments ?? [],
         room_trim_scopes: fixture.summaryData.inputs.room_trim_scopes ?? [],
         rollers: fixture.currentSnapshot.payload.rollers.map((roller) =>
           roller.scope === 'Wall'
@@ -49,9 +48,8 @@ describe('buildEstimateV2EditorLoadState', () => {
         other: fixture.summaryData.inputs.other ?? [],
         org_defaults: fixture.summaryData.inputs.org_defaults ?? null,
         jobsettings: fixture.summaryData.inputs.jobsettings ?? null,
-        wall_segments: fixture.segments,
-        ceiling_scope_segments: fixture.ceilingSegments,
-        ceiling_segments: fixture.summaryData.inputs.ceiling_segments ?? [],
+        wall_segments: fixture.summaryData.inputs.wall_segments ?? [],
+        ceiling_scope_segments: fixture.summaryData.inputs.ceiling_scope_segments ?? [],
       },
       wall_calculations: fixture.summaryData.wall_calculations ?? null,
       ceiling_calculations: fixture.summaryData.ceiling_calculations ?? null,
@@ -121,7 +119,6 @@ describe('buildEstimateV2EditorLoadState', () => {
         rooms: fixture.summaryData.inputs.rooms ?? [],
         room_wall_scopes: fixture.summaryData.inputs.room_wall_scopes ?? [],
         room_ceiling_scopes: fixture.summaryData.inputs.room_ceiling_scopes ?? [],
-        segments: fixture.summaryData.inputs.segments ?? [],
         room_trim_scopes: fixture.summaryData.inputs.room_trim_scopes ?? [],
         rollers: fixture.summaryData.inputs.rollers ?? [],
         access_fees: fixture.summaryData.inputs.access_fees ?? [],
@@ -132,9 +129,8 @@ describe('buildEstimateV2EditorLoadState', () => {
         other: fixture.summaryData.inputs.other ?? [],
         org_defaults: fixture.summaryData.inputs.org_defaults ?? null,
         jobsettings: fixture.summaryData.inputs.jobsettings ?? null,
-        wall_segments: fixture.segments,
-        ceiling_scope_segments: fixture.ceilingSegments,
-        ceiling_segments: fixture.summaryData.inputs.ceiling_segments ?? [],
+        wall_segments: fixture.summaryData.inputs.wall_segments ?? [],
+        ceiling_scope_segments: fixture.summaryData.inputs.ceiling_scope_segments ?? [],
         room_door_scopes: fixture.summaryData.inputs.room_door_scopes ?? [],
         drywall_repairs: fixture.summaryData.inputs.drywall_repairs ?? [],
       },
@@ -157,7 +153,7 @@ describe('buildEstimateV2EditorLoadState', () => {
     })
 
     expect(result.meta.catalogsError?.message).toBe('Failed to load catalogs')
-    expect(result.meta.error?.message).toBe('Failed to load catalogs')
+    expect(result.meta.error).toBeNull()
     expect(result.meta.catalogs.room_types).toEqual([])
   })
 })

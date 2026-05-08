@@ -161,4 +161,79 @@ describe('useEstimateV2SummaryLoader', () => {
     expect(countJobLoads()).toBe(3)
     expect(authedFetch).toHaveBeenCalledTimes(6)
   })
+
+  it('retries the summary load flow and recovers after an initial failure', async () => {
+    const fixture = createMixedEstimateV2Fixture()
+
+    authedFetch
+      .mockResolvedValueOnce(createResponse(false, { error: 'Quote summary unavailable' }, 503))
+      .mockResolvedValueOnce(createResponse(true, { data: fixture.summaryData }))
+      .mockResolvedValueOnce(createResponse(true, { data: fixture.job }))
+
+    const { result } = renderHook(
+      ({ estimateId, routeFamily }: { estimateId: string; routeFamily: EstimateRouteFamily }) => {
+        const [loading, setLoading] = useState(true)
+        const [error, setError] = useState<EstimateV2Error | null>(null)
+        const [data, setData] = useState<EstimateV2SummaryPageData | null>(null)
+        const [job, setJob] = useState<Partial<EstimateV2JobMeta> | null>(null)
+        const [, setLaborDayEnabled] = useState(false)
+        const [, setDayhours] = useState(8)
+        const [, setRoundIncrement] = useState(4)
+        const [, setLaborRate] = useState(50)
+        const [, setJobMinEnabled] = useState(false)
+        const [, setJobMinAmount] = useState(0)
+        const [, setTrimPaintProductId] = useState('')
+        const [, setTrimPaintGallons] = useState(0)
+        const [, setTrimPaintQuarts] = useState(0)
+
+        const loader = useEstimateV2SummaryLoader(estimateId, routeFamily, {
+          setLoading,
+          setError,
+          setData,
+          setJob,
+          setLaborDayEnabled,
+          setDayhours,
+          setRoundIncrement,
+          setLaborRate,
+          setJobMinEnabled,
+          setJobMinAmount,
+          setTrimPaintProductId,
+          setTrimPaintGallons,
+          setTrimPaintQuarts,
+        })
+
+        return {
+          data,
+          error,
+          job,
+          loading,
+          retrySummary: loader.retrySummary,
+        }
+      },
+      {
+        initialProps: {
+          estimateId: fixture.estimate.id,
+          routeFamily: estimateRouteFamily,
+        },
+      }
+    )
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+
+    expect(result.current.error?.message).toBe('Quote summary unavailable')
+    expect(result.current.data).toBeNull()
+
+    act(() => {
+      result.current.retrySummary()
+    })
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+      expect(result.current.error).toBeNull()
+      expect(result.current.data?.estimate.id).toBe(fixture.summaryData.estimate.id)
+      expect(result.current.job?.id).toBe(fixture.job.id)
+    })
+  })
 })

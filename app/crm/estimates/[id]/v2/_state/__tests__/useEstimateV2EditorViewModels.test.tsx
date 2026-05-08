@@ -33,7 +33,7 @@ function createViewModelParams() {
       selectedRoomId: 'R001',
       catalogsError: null,
       error: null,
-      validationIssues: ['R001: Needs paint selection'],
+      validationIssues: ['Living Room: Needs paint selection'],
       lastSavedSnapshot: fixture.currentSnapshot,
       saveStatus: 'saved',
       autoSaveHint: null,
@@ -161,6 +161,7 @@ function createViewModelParams() {
       },
     },
     productLabels: {
+      configurationWarning: null,
       wallPaintLabel: 'Wall Satin',
       wallPrimerLabel: 'Wall Primer',
       effectiveWallPaintLabel: 'Wall Satin',
@@ -186,7 +187,7 @@ function createViewModelParams() {
       canManualSave: true,
       blockedReason: null as string | null,
       blockingIssues: [] as string[],
-      visibleValidationIssues: ['R001: Needs paint selection'],
+      visibleValidationIssues: ['Living Room: Needs paint selection'],
       saveStatusText: 'Saved Apr 21, 2:00 PM',
       saveStatusColor: 'var(--v2-ink-3)',
     },
@@ -272,6 +273,36 @@ describe('useEstimateV2EditorViewModels', () => {
     })
   })
 
+  it('passes the top-level missing-default warning through the page VM', () => {
+    const params = createViewModelParams()
+    const warning = {
+      title: 'Required paint defaults are missing',
+      detail: 'Missing walls default primer.',
+      fixHint: 'Open Paint Defaults to fix the missing defaults.',
+      missingLabels: ['walls default primer'],
+    }
+
+    const { result } = renderHook(
+      ({ nextParams }) => useEstimateV2EditorViewModels(nextParams as never),
+      {
+        initialProps: {
+          nextParams: {
+            ...params,
+            derived: {
+              ...params.derived,
+              productLabels: {
+                ...params.derived.productLabels,
+                configurationWarning: warning,
+              },
+            },
+          },
+        },
+      }
+    )
+
+    expect(result.current.pageVm.configurationWarning).toEqual(warning)
+  })
+
   it('opens the shared editor settings drawer state from the header Settings action', () => {
     const params = createViewModelParams()
 
@@ -339,11 +370,11 @@ describe('useEstimateV2EditorViewModels', () => {
           save: {
             ...baseParams.derived.save,
             canManualSave: false,
-            blockedReason: 'R001: height is required for RECT wall mode',
-            blockingIssues: ['R001: height is required for RECT wall mode'],
-            visibleValidationIssues: ['R001: height is required for RECT wall mode'],
+            blockedReason: 'Living Room: height is required for RECT wall mode',
+            blockingIssues: ['Living Room: height is required for RECT wall mode'],
+            visibleValidationIssues: ['Living Room: height is required for RECT wall mode'],
             saveStatusText:
-              'Unsaved changes - save blocked: R001: height is required for RECT wall mode',
+              'Unsaved changes - save blocked: Living Room: height is required for RECT wall mode',
             saveStatusColor: '#f9e2b7',
           },
         },
@@ -352,13 +383,13 @@ describe('useEstimateV2EditorViewModels', () => {
 
     expect(result.current.saveVm.canManualSave).toBe(false)
     expect(result.current.saveVm.blockedReason).toBe(
-      'R001: height is required for RECT wall mode'
+      'Living Room: height is required for RECT wall mode'
     )
     expect(result.current.pageVm.validationIssues).toEqual([
-      'R001: height is required for RECT wall mode',
+      'Living Room: height is required for RECT wall mode',
     ])
     expect(result.current.headerVm.dirtyStateText).toBe(
-      'Unsaved changes - save blocked: R001: height is required for RECT wall mode'
+      'Unsaved changes - save blocked: Living Room: height is required for RECT wall mode'
     )
   })
 

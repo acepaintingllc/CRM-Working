@@ -1,18 +1,22 @@
 import {
   buildCustomerEstimateDocument,
+  type CustomerEstimateTypedInput,
 } from '@/lib/customer-estimates/build'
 import { assembleCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
+import {
+  deriveEstimatePublicUrl,
+  selectCurrentEstimatePublicVersionRows,
+} from '@/lib/customer-estimates/publicSnapshot'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
-import type { QuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
 import {
   errorResult,
   okResult,
   type ServiceResult,
 } from '@/lib/server/serviceResult'
 import type {
+  CustomerQuoteSourceModel,
   CustomerSendDraft,
   CustomerSendPublicMeta,
-  EstimateCustomerSendContextData,
   EstimatePublicVersionRow,
 } from './types'
 
@@ -26,11 +30,11 @@ export function buildCustomerSendPublicMeta(
 ): CustomerSendPublicMeta {
   return {
     status: asText(version?.status) || fallbackStatus,
-    sent_at: (version?.sent_at as string | null) ?? null,
-    viewed_at: (version?.viewed_at as string | null) ?? null,
-    accepted_at: (version?.accepted_at as string | null) ?? null,
-    declined_at: (version?.declined_at as string | null) ?? null,
-    public_token: (version?.public_token as string | null) ?? null,
+    sent_at: version?.sent_at ?? null,
+    viewed_at: version?.viewed_at ?? null,
+    accepted_at: version?.accepted_at ?? null,
+    declined_at: version?.declined_at ?? null,
+    public_token: version?.public_token ?? null,
   }
 }
 
@@ -39,23 +43,23 @@ export function buildCustomerSendPublicUrl(params: {
   version?: EstimatePublicVersionRow | null
   fallback?: string | null
 }) {
-  const token = asText(params.version?.public_token)
-  if (token) return `${params.origin}/quote/${token}`
+  const publicUrl = deriveEstimatePublicUrl(params.origin, asText(params.version?.public_token))
+  if (publicUrl) return publicUrl
   return params.fallback ?? null
 }
 
-export function resolveCustomerSendVersionState(context: EstimateCustomerSendContextData) {
-  const latestDraft =
-    (context.public_versions ?? []).find((row) => asText(row.status) === 'draft') ?? null
-  const latestVersion = latestDraft ?? context.latest_public_version ?? null
+export function resolveCustomerSendVersionState(context: CustomerQuoteSourceModel) {
+  const { draftVersion, latestVersion } = selectCurrentEstimatePublicVersionRows(
+    context.public_versions ?? []
+  )
   return {
-    latestDraft,
+    latestDraft: draftVersion,
     latestVersion,
   }
 }
 
 export function buildCustomerSendDocument(params: {
-  context: EstimateCustomerSendContextData
+  context: CustomerQuoteSourceModel
   draft?: Partial<CustomerSendDraft>
   publicMeta?: CustomerSendPublicMeta
 }): ServiceResult<CustomerEstimateDocument> {
@@ -72,7 +76,7 @@ export function buildCustomerSendDocument(params: {
 }
 
 export function buildCustomerDocumentFromSendContext(params: {
-  context: EstimateCustomerSendContextData
+  context: CustomerQuoteSourceModel
   overrides?: {
     title?: string
     intro_paragraph?: string
@@ -83,25 +87,19 @@ export function buildCustomerDocumentFromSendContext(params: {
   } & { scope_text_edits?: Record<string, string> }
   publicMeta?: CustomerSendPublicMeta
 }) {
-  const builtDocument = buildCustomerEstimateDocument({
-    estimate: params.context.estimate as Record<string, unknown>,
-    job: params.context.job as Record<string, unknown>,
-    customer: params.context.customer as Record<string, unknown> | null | undefined,
+  const estimateInput: CustomerEstimateTypedInput = {
+    estimate: params.context.estimate,
+    job: params.context.job,
+    customer: params.context.customer,
     company: params.context.company,
     inputs: params.context.inputs,
-    catalogs: params.context.catalogs as Record<string, unknown> | null,
-    settings: params.context.settings as
-        | {
-          default_template_key?: string | null
-          quote_validity_days?: number | null
-          terms_text?: string | null
-          terms_sections?: QuoteTermsSections | null
-        }
-      | undefined,
-    pricingSummary: params.context.pricing_summary as { finalTotal: number | null } | null,
+    catalogs: params.context.catalogs,
+    settings: params.context.settings,
+    pricingSummary: params.context.pricing_summary,
     overrides: params.overrides,
     publicMeta: params.publicMeta,
-  })
+  }
+  const builtDocument = buildCustomerEstimateDocument(estimateInput)
 
   return assembleCustomerEstimateDocument(builtDocument)
 }

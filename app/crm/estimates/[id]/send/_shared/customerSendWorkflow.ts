@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { buildCustomerEstimateDocument } from '@/lib/customer-estimates/build'
-import { assembleCustomerEstimateDocument } from '@/lib/customer-estimates/assemble'
-import { templatePresets, type TemplatePreset } from '@/lib/customer-estimates/presets'
+import { templatePresets } from '@/lib/customer-estimates/presets'
 import {
   type CustomerSendMutationResponse,
   loadCustomerSendPage,
@@ -11,12 +9,13 @@ import {
   submitCustomerSend,
 } from '@/lib/customer-send/client'
 import type {
-  CompanyProfile,
   CustomerEstimateDocument,
   CustomerEstimateSectionKey,
-  Unsafe,
 } from '@/lib/customer-estimates/types'
-import type { QuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
+import type {
+  CustomerSendPageData,
+  EstimateCustomerSendSettings,
+} from '@/lib/server/customer-send/types'
 import {
   estimateRouteFamily,
   type EstimateRouteFamily,
@@ -31,57 +30,6 @@ export type CustomerSendVersionState = {
   accepted_at: string | null
   declined_at: string | null
   public_token: string | null
-}
-
-export type CustomerSendPageData = {
-  estimate: Unsafe
-  job: {
-    customer_name?: string | null
-    customer_address?: string | null
-    customer_email?: string | null
-    customer_phone?: string | null
-    title?: string | null
-    estimate_date?: string | null
-  }
-  customer?: {
-    name?: string | null
-    company_name?: string | null
-    email?: string | null
-    phone?: string | null
-    address?: string | null
-    street?: string | null
-    city?: string | null
-    state?: string | null
-    zip?: string | null
-  } | null
-  company: CompanyProfile
-  inputs: {
-    rooms?: Unsafe[]
-    room_wall_scopes?: Unsafe[]
-    room_ceiling_scopes?: Unsafe[]
-    room_trim_scopes?: Unsafe[]
-    room_door_scopes?: Unsafe[]
-    drywall_repairs?: Unsafe[]
-    access_fees?: Unsafe[]
-    trim_items?: Unsafe[]
-    other?: Unsafe[]
-    jobsettings?: Unsafe | null
-  }
-  catalogs?: Unsafe | null
-  pricing_summary?: { finalTotal: number | null } | null
-  settings?: {
-    default_template_key?: string | null
-    quote_validity_days?: number | null
-    terms_text?: string | null
-    terms_sections?: QuoteTermsSections | null
-    template_presets?: TemplatePreset[] | null
-    updated_at?: string | null
-  } | null
-  draft: Record<string, unknown>
-  version: Record<string, unknown> | null
-  public_url: string | null
-  document: CustomerEstimateDocument
-  versions: Record<string, unknown>[]
 }
 
 export type CustomerSendLabels = {
@@ -117,14 +65,13 @@ type UseCustomerSendWorkflowOptions<TForm extends CustomerSendFormBase> = {
     draft: Record<string, unknown>,
     keepScopeWordingDrafts: boolean
   ) => TForm
-  buildDocument: (
-    data: CustomerSendPageData,
-    form: TForm,
-    version: CustomerSendVersionState | null
-  ) => CustomerEstimateDocument
   draftPayload: (form: TForm) => Record<string, unknown>
   loadErrorMessage: string
 }
+
+const CUSTOMER_SEND_LINK_LIVE_MESSAGE =
+  'Customer link is ready. Copy the link or try sending the email again.'
+const CUSTOMER_SEND_DELIVERY_FAILED_MESSAGE = 'Email delivery did not complete.'
 
 export function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
@@ -245,7 +192,7 @@ export function deriveCustomerSendLabels(
 }
 
 export function resolveCustomerSendTemplatePresets(
-  settings: CustomerSendPageData['settings'] | null | undefined
+  settings: EstimateCustomerSendSettings | null | undefined
 ) {
   return Array.isArray(settings?.template_presets) && settings.template_presets.length > 0
     ? settings.template_presets
@@ -327,71 +274,11 @@ export function buildCustomerSendReviewDraft(
   }
 }
 
-export function buildCustomerSendComposerPreview(
-  data: CustomerSendPageData,
-  form: CustomerSendComposerDraft,
-  version: CustomerSendVersionState | null
+function serializeDraftSnapshot<TForm extends CustomerSendFormBase>(
+  form: TForm,
+  draftPayload: (form: TForm) => Record<string, unknown>
 ) {
-  return assembleCustomerEstimateDocument(
-    buildCustomerEstimateDocument({
-      estimate: data.estimate,
-      job: data.job,
-      customer: data.customer ?? null,
-      company: data.company,
-      inputs: data.inputs,
-      catalogs: data.catalogs ?? null,
-      pricingSummary: data.pricing_summary
-        ? { finalTotal: data.pricing_summary.finalTotal ?? null }
-        : null,
-      settings: data.settings ?? undefined,
-      overrides: {
-        title: form.title,
-        scope_text_edits: form.scope_text_edits,
-        quote_validity_days: form.quote_validity_days,
-      },
-      publicMeta: {
-        status: version?.status ?? 'draft',
-        sent_at: version?.sent_at ?? null,
-        viewed_at: version?.viewed_at ?? null,
-        accepted_at: version?.accepted_at ?? null,
-        declined_at: version?.declined_at ?? null,
-        public_token: version?.public_token ?? null,
-      },
-    })
-  )
-}
-
-export function buildCustomerSendReviewPreview(
-  data: CustomerSendPageData,
-  form: CustomerSendReviewDraft,
-  version: CustomerSendVersionState | null
-) {
-  return assembleCustomerEstimateDocument(
-    buildCustomerEstimateDocument({
-      estimate: data.estimate,
-      job: data.job,
-      customer: data.customer ?? null,
-      company: data.company,
-      inputs: data.inputs,
-      catalogs: data.catalogs ?? null,
-      pricingSummary: data.pricing_summary
-        ? { finalTotal: data.pricing_summary.finalTotal ?? null }
-        : null,
-      settings: data.settings ?? undefined,
-      overrides: {
-        title: form.title,
-        scope_text_edits: form.scope_text_edits,
-      },
-      publicMeta: {
-        status: version?.status ?? 'draft',
-        sent_at: version?.sent_at ?? null,
-        viewed_at: version?.viewed_at ?? null,
-        accepted_at: version?.accepted_at ?? null,
-        declined_at: version?.declined_at ?? null,
-        public_token: version?.public_token ?? null,
-      },
-    })
-  )
+  return JSON.stringify(draftPayload(form))
 }
 
 export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
@@ -399,19 +286,70 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
   catalogSource,
   routeFamily = estimateRouteFamily,
   buildForm,
-  buildDocument,
   draftPayload,
   loadErrorMessage,
 }: UseCustomerSendWorkflowOptions<TForm>) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [busyAction, setBusyAction] = useState<'save' | 'send' | 'test' | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<CustomerSendPageData | null>(null)
   const [publicUrl, setPublicUrl] = useState<string | null>(null)
   const [version, setVersion] = useState<CustomerSendVersionState | null>(null)
   const [form, setForm] = useState<TForm | null>(null)
+  const [savedDraftSnapshot, setSavedDraftSnapshot] = useState<string | null>(null)
   const mountedRef = useRef(true)
+  const buildFormRef = useRef(buildForm)
+  const draftPayloadRef = useRef(draftPayload)
+
+  useEffect(() => {
+    buildFormRef.current = buildForm
+  }, [buildForm])
+
+  useEffect(() => {
+    draftPayloadRef.current = draftPayload
+  }, [draftPayload])
+
+  const applyPersistedMutation = useCallback(
+    (
+      payload: CustomerSendMutationResponse,
+      options?: {
+        persistedForm?: TForm
+      }
+    ) => {
+      const nextPublicUrl = (payload.public_url as string | null) ?? publicUrl
+      const nextVersion = payload.version ?? null
+      const nextDocument = payload.document ?? null
+      const nextReadiness = payload.readiness ?? null
+
+      setPublicUrl(nextPublicUrl)
+      if (nextVersion) {
+        setVersion(normalizeCustomerSendVersion(nextVersion))
+      }
+
+      setData((current) => {
+        if (!current) return current
+        return {
+          ...current,
+          draft: options?.persistedForm
+            ? { ...current.draft, ...draftPayloadRef.current(options.persistedForm) }
+            : current.draft,
+          version: nextVersion
+            ? { ...(current.version ?? { id: null }), ...nextVersion }
+            : current.version,
+          public_url: nextPublicUrl,
+          document: nextDocument ?? current.document,
+          readiness: nextReadiness ?? current.readiness,
+        }
+      })
+
+      if (options?.persistedForm) {
+        setSavedDraftSnapshot(serializeDraftSnapshot(options.persistedForm, draftPayloadRef.current))
+      }
+    },
+    [publicUrl]
+  )
 
   const reload = useCallback(
     async (options?: { hard?: boolean }) => {
@@ -439,11 +377,13 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
       setData(payload)
       setPublicUrl((payload.public_url as string | null) ?? null)
       setVersion(normalizeCustomerSendVersion(payload.version))
-      setForm(buildForm(payload, payload.draft ?? {}, !options?.hard))
+      const nextForm = buildFormRef.current(payload, payload.draft ?? {}, !options?.hard)
+      setForm(nextForm)
+      setSavedDraftSnapshot(serializeDraftSnapshot(nextForm, draftPayloadRef.current))
       setLoading(false)
       return true
     },
-    [buildForm, catalogSource, estimateId, loadErrorMessage, routeFamily]
+    [catalogSource, estimateId, loadErrorMessage, routeFamily]
   )
 
   useEffect(() => {
@@ -456,15 +396,20 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
 
   const labels = useMemo(() => deriveCustomerSendLabels(data), [data])
 
-  const liveDocument = useMemo(() => {
-    if (!data || !form) return null
-    return buildDocument(data, form, version)
-  }, [buildDocument, data, form, version])
+  const liveDocument = data?.document ?? null
+  const readiness = data?.readiness ?? null
 
   const currentTemplate = useMemo(() => {
     const presets = resolveCustomerSendTemplatePresets(data?.settings)
     return presets.find((preset) => preset.key === form?.template_key) ?? presets[0] ?? templatePresets[0]
   }, [data?.settings, form?.template_key])
+
+  const hasSendBlockers = (readiness?.blockers.length ?? 0) > 0
+  const hasUnsavedChanges = useMemo(() => {
+    if (!form || savedDraftSnapshot == null) return false
+    return serializeDraftSnapshot(form, draftPayload) !== savedDraftSnapshot
+  }, [draftPayload, form, savedDraftSnapshot])
+  const isSavingDraft = busyAction === 'save'
 
   const isLive = asText(version?.status) !== 'draft'
   const hasLiveLink = Boolean(publicUrl)
@@ -472,6 +417,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
   const persistDraft = useCallback(async () => {
     if (!form) return false
     setBusy(true)
+    setBusyAction('save')
     setError(null)
     setMessage(null)
 
@@ -484,17 +430,16 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save draft')
       setBusy(false)
+      setBusyAction(null)
       return false
     }
 
     setMessage('Draft saved.')
-    setPublicUrl((payload.public_url as string | null) ?? publicUrl)
-    if (payload.version) {
-      setVersion(normalizeCustomerSendVersion(payload.version))
-    }
+    applyPersistedMutation(payload, { persistedForm: form })
     setBusy(false)
+    setBusyAction(null)
     return true
-  }, [catalogSource, draftPayload, estimateId, form, publicUrl, routeFamily])
+  }, [applyPersistedMutation, catalogSource, draftPayload, estimateId, form, routeFamily])
 
   const submit = useCallback(
     async (mode: 'test' | 'send', options?: { testRecipient?: string }) => {
@@ -535,8 +480,17 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
         setError('Use an internal test recipient, not the customer To address.')
         return false
       }
+      if (mode === 'send' && hasUnsavedChanges) {
+        setError(`Save the draft to refresh the server preview before sending this ${labels.documentLower}.`)
+        return false
+      }
+      if (mode === 'send' && hasSendBlockers && readiness) {
+        setError(readiness.blockers.map((issue) => issue.message).join(' '))
+        return false
+      }
 
       setBusy(true)
+      setBusyAction(mode)
       setError(null)
       setMessage(null)
       const submitForm =
@@ -565,35 +519,48 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
             : `Unable to send ${labels.documentLower}`
         )
         setBusy(false)
+        setBusyAction(null)
         return false
       }
 
       setMessage(mode === 'test' ? 'Test message sent.' : `${labels.document} sent.`)
-      setPublicUrl((payload.public_url as string | null) ?? publicUrl)
+      applyPersistedMutation(payload, {
+        persistedForm: mode === 'send' ? submitForm : undefined,
+      })
       if (payload.version) {
         setVersion(
           normalizeCustomerSendVersion(payload.version, mode === 'send' ? 'sent' : 'draft')
         )
       }
       if (mode === 'send' && asText(payload.delivery_error)) {
-        setError(
-          `${labels.document} link is live, but email delivery failed: ${asText(payload.delivery_error)}`
-        )
-        setMessage('Customer link created. Copy the link or retry sending the email.')
+        const deliveryError = asText(payload.delivery_error)
+        console.error('Customer send delivery failed after public link creation', {
+          estimateId,
+          route: customerSendUrl(estimateId, catalogSource, routeFamily),
+          documentType: labels.documentLower,
+          deliveryError,
+        })
+        setError(`${CUSTOMER_SEND_DELIVERY_FAILED_MESSAGE} ${deliveryError}`)
+        setMessage(CUSTOMER_SEND_LINK_LIVE_MESSAGE)
         setBusy(false)
+        setBusyAction(null)
         return false
       }
       setBusy(false)
+      setBusyAction(null)
       return true
     },
     [
+      applyPersistedMutation,
       catalogSource,
       draftPayload,
       estimateId,
       form,
+      hasUnsavedChanges,
       labels.document,
       labels.documentLower,
-      publicUrl,
+      hasSendBlockers,
+      readiness,
       routeFamily,
     ]
   )
@@ -616,6 +583,10 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
     submit,
     labels,
     liveDocument,
+    readiness,
+    hasSendBlockers,
+    hasUnsavedChanges,
+    isSavingDraft,
     currentTemplate,
     isLive,
     hasLiveLink,

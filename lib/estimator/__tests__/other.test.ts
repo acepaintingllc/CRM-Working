@@ -62,6 +62,7 @@ test('calculateOtherItems prices fixed, quantity, labor, and material rows', () 
   assert.equal(result.scopes[2].effective_paint_hours, 2.5)
   assert.equal(result.scopes[2].effective_total, 200)
   assert.equal(result.scopes[3].effective_total, 75)
+  assert.equal(result.job_level_total, 75)
   assert.deepEqual(result.room_totals, [
     { room_id: 'R001', effective_total: 285 },
     { room_id: 'R002', effective_total: 200 },
@@ -102,5 +103,6 @@ test('calculateOtherItems ignores inactive rows and uses estimate labor rate fal
   assert.equal(result.scopes[0].effective_total, 0)
   assert.equal(result.scopes[1].labor_rate_per_hour, 92)
   assert.equal(result.scopes[1].effective_total, 115)
+  assert.equal(result.job_level_total, 0)
   assert.deepEqual(result.room_totals, [{ room_id: 'R001', effective_total: 115 }])
 })

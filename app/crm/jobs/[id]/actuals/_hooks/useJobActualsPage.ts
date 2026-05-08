@@ -75,9 +75,11 @@ export function useJobActualsPage() {
       if (!id || typeof id !== 'string') {
         throw new Error('Missing job id in URL.')
       }
-      const estimateSnapshotId = current.job?.accepted_quote?.estimate_snapshot_id ?? null
+      // Job actuals are operational accepted-estimate work and therefore
+      // require the canonical accepted snapshot contract.
+      const estimateSnapshotId = current.job?.accepted_estimate?.estimate_snapshot_id ?? null
       if (!estimateSnapshotId) {
-        throw new Error('Accepted estimate snapshot is missing.')
+        throw new Error('Accepted quote snapshot is missing.')
       }
 
       const result = await saveJobActualsDraftFlow({
@@ -103,7 +105,8 @@ export function useJobActualsPage() {
   })
 
   const { job, actuals, form } = resource.data
-  const snapshotId = job?.accepted_quote?.estimate_snapshot_id ?? null
+  // Navigation-only quote ids must never unlock actuals reads or writes.
+  const snapshotId = job?.accepted_estimate?.estimate_snapshot_id ?? null
   const isReadOnly = actuals?.status === 'submitted' || actuals?.status === 'locked'
   const loading = resource.loading
   const error = resource.error

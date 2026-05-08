@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { CrmConfirmDialog } from '@/app/crm/_components/CrmConfirmDialog'
 import { EMAIL_BODY_TEXTAREA_MIN_HEIGHT } from '@/app/crm/_components/emailComposerStyles'
 import { CustomerEstimateDocumentView } from '@/lib/customer-estimates/view'
 import {
@@ -13,7 +14,6 @@ import {
 import {
   asText,
   buildCustomerSendComposerDraft,
-  buildCustomerSendComposerPreview,
   isPositiveInteger,
   isValidRecipientList,
   resolveCustomerSendTemplatePresets,
@@ -76,6 +76,8 @@ const secondaryButton: CSSProperties = {
   background: '#101010',
   color: C.ink,
 }
+const SEND_PAGE_LOAD_ERROR_MESSAGE =
+  "We couldn't load this send page. Try again or return to internal review."
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
@@ -104,30 +106,173 @@ function SectionTitle({ title, subtitle }: { title: string; subtitle?: string })
   )
 }
 
-function customerDocumentSettingsWarning(document: {
-  assembly_meta?: {
-    missing_company_fields?: string[]
-    missing_payment_fields?: string[]
-    missing_legal_fields?: string[]
-    used_placeholder_fallbacks?: boolean
+function ReadinessList({
+  title,
+  items,
+  tone,
+}: {
+  title: string
+  items: string[]
+  tone: {
+    border: string
+    bg: string
+    fg: string
   }
 }) {
-  const meta = document.assembly_meta
-  if (!meta?.used_placeholder_fallbacks) return ''
+  return (
+    <div
+      style={{
+        border: `1px solid ${tone.border}`,
+        background: tone.bg,
+        color: tone.fg,
+        borderRadius: 12,
+        padding: '12px 14px',
+        display: 'grid',
+        gap: 8,
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.02em' }}>{title}</div>
+      <div style={{ display: 'grid', gap: 6 }}>
+        {items.map((item) => (
+          <div key={item} style={{ fontSize: 13, lineHeight: 1.45 }}>
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
-  const missing = [
-    ...(meta.missing_company_fields ?? []),
-    ...(meta.missing_payment_fields ?? []),
-    ...(meta.missing_legal_fields ?? []),
-  ]
-    .map((item) => String(item).trim())
-    .filter(Boolean)
+function formatServerSnapshotTimestamp(value: unknown) {
+  const text = asText(value)
+  if (!text) return null
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) return null
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(date)
+  } catch {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+  }
+}
 
-  if (missing.length === 0) {
-    return 'Customer document settings are using placeholder fallback copy.'
+function ServerStateCard({
+  documentLower,
+  savedAtLabel,
+  hasUnsavedChanges,
+  isSavingDraft,
+}: {
+  documentLower: string
+  savedAtLabel: string | null
+  hasUnsavedChanges: boolean
+  isSavingDraft: boolean
+}) {
+  const body = isSavingDraft
+    ? `Saving draft to refresh the server ${documentLower} preview and blocker state.`
+    : hasUnsavedChanges
+      ? `You have unsaved edits. Save Draft to refresh the server ${documentLower} preview and blocker state.`
+      : `This preview and total reflect the last saved ${documentLower} data from the server. Unsaved editor changes are not included.`
+
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(96,165,250,0.24)',
+        background: 'rgba(96,165,250,0.1)',
+        color: '#dbeafe',
+        borderRadius: 12,
+        padding: '12px 14px',
+        display: 'grid',
+        gap: 6,
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.02em' }}>
+        Server-Saved Preview
+      </div>
+      <div style={{ fontSize: 13, lineHeight: 1.45 }}>{body}</div>
+      {savedAtLabel ? (
+        <div style={{ fontSize: 12, color: '#bfdbfe', lineHeight: 1.45 }}>
+          Last saved server update: {savedAtLabel}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ReadinessCard({
+  blockers,
+  warnings,
+}: {
+  blockers: string[]
+  warnings: string[]
+}) {
+  if (blockers.length === 0 && warnings.length === 0) {
+    return (
+      <div
+        style={{
+          border: '1px solid rgba(133,199,155,0.24)',
+          background: 'rgba(133,199,155,0.08)',
+          color: '#cdeed5',
+          borderRadius: 12,
+          padding: '12px 14px',
+          display: 'grid',
+          gap: 6,
+        }}
+      >
+        <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.02em' }}>
+          Before Sending
+        </div>
+        <div style={{ fontSize: 13, lineHeight: 1.45 }}>
+          Ready for live send.
+        </div>
+      </div>
+    )
   }
 
-  return `Customer document settings need review: ${missing.join(', ')}.`
+  return (
+    <div
+      style={{
+        border: `1px solid ${C.borderSoft}`,
+        background: '#101010',
+        borderRadius: 12,
+        padding: '12px 14px',
+        display: 'grid',
+        gap: 10,
+      }}
+    >
+      <div style={{ display: 'grid', gap: 4 }}>
+        <div style={{ fontSize: 12, fontWeight: 900, color: C.ink, letterSpacing: '0.02em' }}>
+          Before Sending
+        </div>
+        <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.45 }}>
+          Review these items before sending the live customer email.
+        </div>
+      </div>
+      {blockers.length > 0 ? (
+        <ReadinessList
+          title="Blockers"
+          items={blockers}
+          tone={{
+            border: 'rgba(248,113,113,0.24)',
+            bg: 'rgba(248,113,113,0.08)',
+            fg: '#fecaca',
+          }}
+        />
+      ) : null}
+      {warnings.length > 0 ? (
+        <ReadinessList
+          title="Warnings"
+          items={warnings}
+          tone={{
+            border: 'rgba(251,191,36,0.28)',
+            bg: 'rgba(251,191,36,0.1)',
+            fg: '#fde68a',
+          }}
+        />
+      ) : null}
+    </div>
+  )
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -175,6 +320,10 @@ function draftPayload(form: CustomerSendComposerDraft) {
   }
 }
 
+type PendingConfirmation =
+  | { kind: 'template-replace'; templateKey: string }
+  | { kind: 'reload-latest' }
+
 export default function SendEstimateClient({
   estimateId,
   catalogSource,
@@ -203,6 +352,10 @@ export default function SendEstimateClient({
     submit,
     labels,
     liveDocument,
+    readiness,
+    hasSendBlockers,
+    hasUnsavedChanges,
+    isSavingDraft,
     currentTemplate,
     hasLiveLink,
     version,
@@ -211,13 +364,13 @@ export default function SendEstimateClient({
     catalogSource,
     routeFamily: resolvedRouteFamily,
     buildForm: buildCustomerSendComposerDraft,
-    buildDocument: buildCustomerSendComposerPreview,
     draftPayload,
     loadErrorMessage: 'Unable to load quote send page',
   })
 
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [testRecipient, setTestRecipient] = useState('')
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null)
 
   const setDraftField = <K extends keyof CustomerSendComposerDraft>(
     key: K,
@@ -226,31 +379,32 @@ export default function SendEstimateClient({
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
   }
 
-  const applyTemplate = (templateKey: string) => {
+  const applyTemplateChange = (templateKey: string) => {
     const presets = resolveCustomerSendTemplatePresets(data?.settings)
     const next = presets.find((preset) => preset.key === templateKey) ?? presets[0]
     if (!next) return
     setForm((prev) =>
       prev
-        ? (() => {
-            const hasCustomMessage =
-              prev.subject.trim() !== currentTemplate.subject.trim() ||
-              prev.body.trim() !== currentTemplate.body.trim()
-            if (hasCustomMessage) {
-              const shouldReplace = window.confirm(
-                'Switching templates will replace your current subject and message edits. Continue?'
-              )
-              if (!shouldReplace) return prev
-            }
-            return {
-              ...prev,
-              template_key: next.key,
-              subject: next.subject,
-              body: next.body,
-            }
-          })()
+        ? {
+            ...prev,
+            template_key: next.key,
+            subject: next.subject,
+            body: next.body,
+          }
         : prev
     )
+  }
+
+  const applyTemplate = (templateKey: string) => {
+    if (!form) return
+    const hasCustomMessage =
+      form.subject.trim() !== currentTemplate.subject.trim() ||
+      form.body.trim() !== currentTemplate.body.trim()
+    if (hasCustomMessage) {
+      setPendingConfirmation({ kind: 'template-replace', templateKey })
+      return
+    }
+    applyTemplateChange(templateKey)
   }
 
   const copyLink = async () => {
@@ -264,15 +418,28 @@ export default function SendEstimateClient({
 
   const hardRefresh = async () => {
     if (busy || !data || !form) return
-    const hasUnsavedChanges =
-      JSON.stringify(form) !==
-      JSON.stringify(buildCustomerSendComposerDraft(data, data.draft ?? {}, true))
     if (hasUnsavedChanges) {
-      const shouldDiscard = window.confirm(
-        `Reload the latest ${labels.documentLower} data from the server? This will discard unsaved changes on this page.`
-      )
-      if (!shouldDiscard) return
+      setPendingConfirmation({ kind: 'reload-latest' })
+      return
     }
+    await reload({ hard: true })
+    setMessage(`Reloaded latest ${labels.documentLower} data.`)
+  }
+
+  const cancelPendingConfirmation = () => {
+    setPendingConfirmation(null)
+  }
+
+  const confirmPendingConfirmation = async () => {
+    if (!pendingConfirmation) return
+    const nextConfirmation = pendingConfirmation
+    setPendingConfirmation(null)
+
+    if (nextConfirmation.kind === 'template-replace') {
+      applyTemplateChange(nextConfirmation.templateKey)
+      return
+    }
+
     await reload({ hard: true })
     setMessage(`Reloaded latest ${labels.documentLower} data.`)
   }
@@ -310,8 +477,11 @@ export default function SendEstimateClient({
           <div style={{ maxWidth: 980, margin: '0 auto' }}>
             <div style={{ ...shellCard, padding: 18 }}>
               <div style={{ fontSize: 18, fontWeight: 900 }}>{labels.action}</div>
-              <div style={{ marginTop: 10, color: C.ink2 }}>{error}</div>
-              <div style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 10, color: C.ink2 }}>{SEND_PAGE_LOAD_ERROR_MESSAGE}</div>
+              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => void reload()} style={actionButton}>
+                  Retry
+                </button>
                 <Link
                   href={resolvedRouteFamily.summaryHref(estimateId)}
                   style={{ color: '#d7f3df', fontWeight: 800 }}
@@ -328,7 +498,11 @@ export default function SendEstimateClient({
 
   if (!data || !form || !liveDocument) return null
   const templateOptions = resolveCustomerSendTemplatePresets(data.settings)
-  const settingsWarning = customerDocumentSettingsWarning(liveDocument)
+  const readinessBlockers = readiness?.blockers.map((issue) => issue.message) ?? []
+  const readinessWarnings = readiness?.warnings.map((issue) => issue.message) ?? []
+  const savedAtLabel = formatServerSnapshotTimestamp(
+    data.settings?.updated_at ?? data.version?.updated_at
+  )
 
   const toError =
     form.to_email && !isValidRecipientList(form.to_email)
@@ -350,6 +524,30 @@ export default function SendEstimateClient({
     testRecipient && !isValidRecipientList(testRecipient)
       ? 'Enter one valid internal test email.'
       : null
+  const confirmDialogTitle =
+    pendingConfirmation?.kind === 'template-replace'
+      ? 'Replace your message edits?'
+      : `Reload latest ${labels.documentLower}?`
+  const confirmDialogDescription =
+    pendingConfirmation?.kind === 'template-replace'
+      ? 'Switch to the selected template and replace the current subject and message edits.'
+      : `Reload the latest ${labels.documentLower} data from the server.`
+  const confirmDialogWarning =
+    pendingConfirmation?.kind === 'template-replace'
+      ? 'This will overwrite your current subject and message changes on this page.'
+      : 'This will discard unsaved changes on this page.'
+  const confirmDialogInfo =
+    pendingConfirmation?.kind === 'template-replace'
+      ? 'Choose Cancel to keep your current subject and message edits.'
+      : 'Choose Cancel to keep editing the current draft.'
+  const confirmDialogLabel =
+    pendingConfirmation?.kind === 'template-replace'
+      ? 'Replace with template'
+      : 'Reload latest'
+  const confirmDialogAriaLabel =
+    pendingConfirmation?.kind === 'template-replace'
+      ? 'Replace current subject and message with selected template'
+      : `Reload latest ${labels.documentLower} data and discard unsaved changes`
 
   return (
     <div className="send-shell" style={{ minHeight: '100vh', background: C.bg, color: C.ink }}>
@@ -462,21 +660,13 @@ export default function SendEstimateClient({
                   {error}
                 </div>
               ) : null}
-              {settingsWarning ? (
-                <div
-                  style={{
-                    border: '1px solid rgba(251,191,36,0.28)',
-                    background: 'rgba(251,191,36,0.1)',
-                    color: '#fde68a',
-                    borderRadius: 12,
-                    padding: '10px 12px',
-                    fontSize: 13,
-                    lineHeight: 1.45,
-                  }}
-                >
-                  {settingsWarning}
-                </div>
-              ) : null}
+              <ServerStateCard
+                documentLower={labels.documentLower}
+                savedAtLabel={savedAtLabel}
+                hasUnsavedChanges={hasUnsavedChanges}
+                isSavingDraft={isSavingDraft}
+              />
+              <ReadinessCard blockers={readinessBlockers} warnings={readinessWarnings} />
 
               <SectionTitle
                 title="Delivery"
@@ -624,7 +814,7 @@ export default function SendEstimateClient({
                   ) : null}
                 </div>
                 <button type="button" disabled={busy} onClick={() => void persistDraft()} style={actionButton}>
-                  Save Draft
+                  {isSavingDraft ? 'Saving Draft...' : 'Save Draft'}
                 </button>
                 <button
                   type="button"
@@ -697,27 +887,52 @@ export default function SendEstimateClient({
       <div className="send-floating-action">
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || hasSendBlockers || hasUnsavedChanges}
           onClick={() => void submit('send')}
           style={{
             ...actionButton,
-            background: 'rgba(33,57,42,0.92)',
-            color: '#f1fff5',
+            background: hasSendBlockers || hasUnsavedChanges ? '#262626' : 'rgba(33,57,42,0.92)',
+            border: hasSendBlockers || hasUnsavedChanges
+              ? `1px solid ${C.borderSoft}`
+              : actionButton.border,
+            color: hasSendBlockers || hasUnsavedChanges ? C.ink3 : '#f1fff5',
             minWidth: 180,
             padding: '13px 18px',
-            boxShadow: '0 10px 22px rgba(0,0,0,0.32)',
+            boxShadow: hasSendBlockers || hasUnsavedChanges ? 'none' : '0 10px 22px rgba(0,0,0,0.32)',
+            cursor: hasSendBlockers || hasUnsavedChanges ? 'not-allowed' : actionButton.cursor,
           }}
         >
           {busy ? (
             <>
               <span className="send-spinner" aria-hidden="true" />
-              Sending
+              {isSavingDraft ? 'Saving draft' : 'Sending'}
             </>
           ) : (
-            labels.action
+            hasUnsavedChanges
+              ? `Save draft to refresh preview before sending`
+              : hasSendBlockers
+                ? 'Resolve blockers before sending'
+                : labels.action
           )}
         </button>
       </div>
+
+      <CrmConfirmDialog
+        isOpen={pendingConfirmation != null}
+        labelledBy="send-estimate-confirm-title"
+        title={confirmDialogTitle}
+        description={confirmDialogDescription}
+        closeLabel="Close confirmation"
+        warning={confirmDialogWarning}
+        info={confirmDialogInfo}
+        cancelDisabled={busy}
+        confirmDisabled={busy}
+        confirmTone="danger"
+        confirmLabel={confirmDialogLabel}
+        confirmAriaLabel={confirmDialogAriaLabel}
+        onCancel={cancelPendingConfirmation}
+        onConfirm={() => void confirmPendingConfirmation()}
+      />
 
       <style jsx global>{`
         .send-floating-action {

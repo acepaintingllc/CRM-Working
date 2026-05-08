@@ -33,6 +33,7 @@ const baseDataState = {
   job: { customer_name: 'Ada Lovelace', customer_address: '123 Main St' },
   loading: false,
   error: null,
+  retrySummary: vi.fn(),
   policySaving: false,
   jobSettingsVm: {
     draft: {
@@ -68,6 +69,7 @@ const baseDerivedState = {
   },
   finalTotal: 1200,
   laborShare: 120,
+  configurationWarning: null,
   summaryAlerts: [{ kind: 'info', title: 'No active alerts', detail: 'Estimate is currently clean' }],
   priceBreakdownRows: [
     { label: 'Base Estimate / Pre-policy total', value: '$1,000' },
@@ -135,6 +137,23 @@ describe('EstimateV2SummaryPageContent', () => {
     expect(screen.getByRole('alert', { name: 'Quote summary failed to load' })).toHaveTextContent(
       'Failed to refresh pricing'
     )
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('routes summary retry through the canonical summary data hook action', () => {
+    const retrySummary = vi.fn()
+    mockUseEstimateV2SummaryData.mockReturnValue({
+      ...baseDataState,
+      error: { message: 'Summary request failed', retryable: true },
+      data: null,
+      retrySummary,
+    })
+
+    render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(retrySummary).toHaveBeenCalledTimes(1)
   })
 
   it('updates room accordion aria state when toggled', () => {
@@ -145,6 +164,45 @@ describe('EstimateV2SummaryPageContent', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('shows raw scope override details in expanded room rows', () => {
+    mockUseEstimateV2SummaryDerived.mockReturnValue({
+      ...baseDerivedState,
+      roomBlocks: [
+        {
+          ...baseDerivedState.roomBlocks[0],
+          flagsLabel: '1 override',
+          alerts: { missingProduct: 0, overrides: 1, flags: 0 },
+          scopeRows: [
+            {
+              id: 'ceiling-1',
+              roomId: 'room-1',
+              kind: 'ceilings',
+              label: 'Ceilings',
+              quantity: 196,
+              laborHours: 2.8,
+              paintCost: 22,
+              suppliesCost: 5,
+              subtotal: 250,
+              hasOverride: true,
+              overrideSummary: 'Override: Total: $250',
+              missingProduct: false,
+              conditionSelections: {},
+            },
+          ],
+          displayScopeSubtotalMap: new Map([['ceiling-1', 286]]),
+        },
+      ],
+      displayScopePaintCost: vi.fn(() => 22),
+    })
+
+    render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: /living room room details/i })[0])
+
+    expect(screen.getAllByText('Override: Total: $250').length).toBeGreaterThan(0)
+    expect(screen.getByText('$286')).toBeInTheDocument()
   })
 
   it('keeps pricing policies inside the price breakdown section', () => {
@@ -172,6 +230,33 @@ describe('EstimateV2SummaryPageContent', () => {
 
     const alert = screen.getByText('Missing product selection').closest('.border-\\[color\\:var\\(--crm-ui-danger-border\\)\\]')
     expect(alert).toBeInTheDocument()
+  })
+
+  it('renders a top-level missing-default warning with a link back to the editor', () => {
+    mockUseEstimateV2SummaryDerived.mockReturnValue({
+      ...baseDerivedState,
+      configurationWarning: {
+        title: 'Required paint defaults are missing',
+        detail:
+          'Missing walls default primer and trim default paint. Pricing and send readiness stay blocked until every required paint and primer default is set.',
+        fixHint:
+          'Return to the estimate editor and open Paint Defaults in the left sidebar to set the missing defaults.',
+        missingLabels: ['walls default primer', 'trim default paint'],
+      },
+    })
+
+    render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
+
+    expect(screen.getByText('Required paint defaults are missing')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Return to the estimate editor and open Paint Defaults in the left sidebar to set the missing defaults.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open estimate editor' })).toHaveAttribute(
+      'href',
+      '/crm/estimates/estimate-1/v2'
+    )
   })
 
   it('does not render the standalone trim paint rail section', () => {

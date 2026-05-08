@@ -1,4 +1,8 @@
 import { asText, type UnsafeRecord as Unsafe } from '../../estimator/parsing.ts'
+import {
+  readEstimatePublicPersistedSnapshotState,
+  type EstimatePublicPersistedSnapshot,
+} from '../../customer-estimates/publicVersionSnapshot.ts'
 import { supabaseAdmin } from '../org.ts'
 import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import type { EstimateV2GetResponse } from '../../../types/estimator/v2.ts'
@@ -78,12 +82,108 @@ function isRecord(value: unknown): value is Unsafe {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function hasAcceptedSnapshotPublicVersionDetails(publicVersion: Unsafe | null) {
+  if (!publicVersion) return false
+
+  return (
+    typeof publicVersion.version_number !== 'undefined' &&
+    'public_token' in publicVersion &&
+    Boolean(asText(publicVersion.accepted_at)) &&
+    'acceptance_json' in publicVersion
+  )
+}
+
 function asArray(value: unknown): Unsafe[] {
   return Array.isArray(value) ? (value.filter(isRecord) as Unsafe[]) : []
 }
 
 function jsonClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value ?? null)) as T
+}
+
+function readAcceptedCustomerArtifact(
+  publicVersion: Unsafe | null | undefined
+): ServiceResult<EstimatePublicPersistedSnapshot> {
+  const artifactState = readEstimatePublicPersistedSnapshotState(
+    publicVersion?.snapshot_json ?? null
+  )
+  if (artifactState.kind === 'canonical') {
+    return okResult(artifactState.snapshot)
+  }
+  if (artifactState.kind === 'legacy') {
+    return errorResult(
+      'invalid_input',
+      'Accepted public version customer artifact is legacy and must be migrated before snapshot creation.'
+    )
+  }
+  if (artifactState.kind === 'invalid') {
+    return errorResult(
+      'invalid_input',
+      'Accepted public version customer artifact is unreadable.'
+    )
+  }
+  return errorResult(
+    'invalid_input',
+    'Accepted public version snapshot is missing the canonical customer artifact.'
+  )
+}
+
+function readAcceptedOperationalEstimateResponse(
+  artifact: EstimatePublicPersistedSnapshot
+): EstimateV2GetResponse | null {
+  const operational = isRecord(artifact.operational_snapshot)
+    ? artifact.operational_snapshot
+    : null
+  if (!operational) return null
+  if (asText(operational.artifact_kind) !== 'customer_send_operational_snapshot') {
+    return null
+  }
+  const estimateResponse = isRecord(operational.estimate_response)
+    ? operational.estimate_response
+    : null
+  if (!estimateResponse || !isRecord(estimateResponse.estimate) || !isRecord(estimateResponse.inputs)) {
+    return null
+  }
+  return estimateResponse as unknown as EstimateV2GetResponse
+}
+
+function hasOperationalEstimateContent(estimateResponse: EstimateV2GetResponse | null) {
+  if (!estimateResponse) return false
+  const pricing = (estimateResponse.pricing_summary ?? {}) as Unsafe
+  const inputs = estimateResponse.inputs as Unsafe
+  return (
+    asArray(inputs.rooms).length > 0 ||
+    asArray(estimateResponse.wall_calculations?.scopes).length > 0 ||
+    asArray(estimateResponse.ceiling_calculations?.scopes).length > 0 ||
+    asArray(estimateResponse.trim_calculations?.scopes).length > 0 ||
+    asArray(estimateResponse.door_calculations?.scopes).length > 0 ||
+    asArray(estimateResponse.drywall_calculations?.scopes).length > 0 ||
+    asArray(inputs.other).length > 0 ||
+    asArray(inputs.access_fees).length > 0 ||
+    asNumber(pricing.effectiveLaborHours) > 0 ||
+    asNumber(pricing.rawLaborHours) > 0 ||
+    asNumber(pricing.paintMaterialCost) > 0 ||
+    asNumber(pricing.primerMaterialCost) > 0 ||
+    asNumber(pricing.supplyCost) > 0 ||
+    asNumber(pricing.sharedAccessCost) > 0
+  )
+}
+
+export function selectAcceptedOperationalEstimateResponse(params: {
+  acceptedArtifact: EstimatePublicPersistedSnapshot
+  liveEstimateResponse: EstimateV2GetResponse
+}) {
+  const acceptedEstimateResponse = readAcceptedOperationalEstimateResponse(
+    params.acceptedArtifact
+  )
+  if (!acceptedEstimateResponse) return params.liveEstimateResponse
+  if (
+    !hasOperationalEstimateContent(acceptedEstimateResponse) &&
+    hasOperationalEstimateContent(params.liveEstimateResponse)
+  ) {
+    return params.liveEstimateResponse
+  }
+  return acceptedEstimateResponse
 }
 
 function sumRows(rows: Unsafe[], key: string) {
@@ -224,14 +324,32 @@ export function buildEstimateSnapshotRows(params: {
   const customerId = asText((estimate as Unsafe).customer_id) || asText(params.job.customer_id)
   const acceptedPublicVersionId =
     asText(params.publicVersion?.id) || asText((estimate as Unsafe).accepted_public_version_id) || null
+  const acceptedCustomerArtifactResult = readAcceptedCustomerArtifact(params.publicVersion ?? null)
+  if (!acceptedCustomerArtifactResult.ok) {
+    throw new Error(acceptedCustomerArtifactResult.message)
+  }
+  const acceptedCustomerArtifact = acceptedCustomerArtifactResult.data
+  const acceptedCustomerDocument = acceptedCustomerArtifact.document
+  const acceptedCustomerTotal = asNumber(acceptedCustomerDocument.total)
+  const internalOperationalPricing = {
+    pricing_summary: pricing,
+    final_total: asNumber(pricing.finalTotal),
+  }
   const sourcePayload = {
     estimate,
     job: params.job,
-    public_version: params.publicVersion ?? null,
-    customer_send_snapshot_json: isRecord(params.publicVersion?.snapshot_json)
-      ? params.publicVersion?.snapshot_json
-      : {},
-    inputs,
+    accepted_public_version: params.publicVersion
+      ? {
+          ...params.publicVersion,
+          snapshot_json: acceptedCustomerArtifact,
+        }
+      : null,
+    customer_artifact: acceptedCustomerArtifact,
+    customer_visible_source: 'customer_artifact.document',
+    internal_operational_estimate: {
+      inputs,
+      pricing: internalOperationalPricing,
+    },
   }
   const snapshot: SnapshotRow = {
     org_id: params.orgId,
@@ -252,7 +370,7 @@ export function buildEstimateSnapshotRows(params: {
     estimated_supplies_cost: asNumber(pricing.supplyCost),
     estimated_other_cost: sumRows(other, 'effective_total'),
     estimated_access_cost: asNumber(pricing.sharedAccessCost) || sumRows(accessFees, 'effective_total'),
-    estimated_total: asNumber(pricing.finalTotal),
+    estimated_total: acceptedCustomerTotal,
     assumptions_json: jsonClone({
       jobsettings: inputs.jobsettings ?? {},
       org_defaults: inputs.org_defaults ?? {},
@@ -265,6 +383,9 @@ export function buildEstimateSnapshotRows(params: {
       door_calculations: params.estimateResponse.door_calculations ?? {},
       drywall_calculations: params.estimateResponse.drywall_calculations ?? {},
       trim_paint: params.estimateResponse.trim_paint ?? null,
+      internal_operational_pricing_summary: internalOperationalPricing,
+      customer_visible_total_source: 'source_payload_json.customer_artifact.document.total',
+      customer_visible_total: acceptedCustomerTotal,
     }),
     source_payload_json: jsonClone(sourcePayload),
     created_by: params.createdBy ?? null,
@@ -381,6 +502,98 @@ async function loadExistingSnapshot(db: DbClient, orgId: string, estimateId: str
     .maybeSingle()
 }
 
+async function loadExistingSnapshotSummaryLine(params: {
+  db: DbClient
+  snapshotId: string
+  orgId: string
+  estimateId: string
+}) {
+  return params.db
+    .from('estimate_snapshot_line')
+    .select('id')
+    .eq('snapshot_id', params.snapshotId)
+    .eq('org_id', params.orgId)
+    .eq('estimate_id', params.estimateId)
+    .eq('line_key', 'summary:job-total')
+    .maybeSingle()
+}
+
+function hasCanonicalAcceptedSnapshotPayload(snapshot: Unsafe) {
+  const sourcePayload = isRecord(snapshot.source_payload_json) ? snapshot.source_payload_json : null
+  const artifactState = readEstimatePublicPersistedSnapshotState(
+    sourcePayload?.customer_artifact ?? null
+  )
+  const publicVersion = isRecord(sourcePayload?.accepted_public_version)
+    ? (sourcePayload.accepted_public_version as Unsafe)
+    : null
+
+  return (
+    artifactState.kind === 'canonical' &&
+    hasAcceptedSnapshotPublicVersionDetails(publicVersion) &&
+    asNumber(snapshot.estimated_total) === asNumber(artifactState.snapshot.document.total)
+  )
+}
+
+async function validateExistingAcceptedSnapshot(params: {
+  db: DbClient
+  snapshot: Unsafe
+}): Promise<ServiceResult<Unsafe>> {
+  if (!hasCanonicalAcceptedSnapshotPayload(params.snapshot)) {
+    return errorResult(
+      'invalid_input',
+      'Existing accepted estimate snapshot is legacy or invalid and cannot be repaired in place because estimate snapshot rows are immutable. Run an additive snapshot replacement migration.'
+    )
+  }
+
+  const snapshotId = asText(params.snapshot.id)
+  if (!snapshotId) {
+    return errorResult(
+      'invalid_input',
+      'Existing accepted estimate snapshot is invalid and cannot be repaired in place because estimate snapshot rows are immutable. Run an additive snapshot replacement migration.'
+    )
+  }
+
+  const summaryLine = await loadExistingSnapshotSummaryLine({
+    db: params.db,
+    snapshotId,
+    orgId: asText(params.snapshot.org_id),
+    estimateId: asText(params.snapshot.estimate_id),
+  })
+  if (summaryLine.error) {
+    return errorResult(
+      'server_error',
+      summaryLine.error.message ?? 'Unable to inspect accepted estimate snapshot lines'
+    )
+  }
+  if (!summaryLine.data) {
+    return errorResult(
+      'invalid_input',
+      'Existing accepted estimate snapshot is incomplete and cannot be repaired in place because estimate snapshot rows are immutable. Run an additive snapshot replacement migration.'
+    )
+  }
+
+  return okResult(params.snapshot)
+}
+
+function validateAcceptedPublicVersionSnapshot(
+  publicVersion: Unsafe | null
+): ServiceResult<Unsafe & { snapshot_json: EstimatePublicPersistedSnapshot }> {
+  if (!publicVersion) {
+    return errorResult('not_found', 'Accepted public version not found')
+  }
+  if (asText(publicVersion.status) !== 'accepted' || !asText(publicVersion.accepted_at)) {
+    return errorResult('invalid_input', 'Accepted public version is invalid')
+  }
+
+  const acceptedCustomerArtifact = readAcceptedCustomerArtifact(publicVersion)
+  if (!acceptedCustomerArtifact.ok) return acceptedCustomerArtifact
+
+  return okResult({
+    ...publicVersion,
+    snapshot_json: acceptedCustomerArtifact.data,
+  } satisfies Unsafe)
+}
+
 export async function insertEstimateSnapshotIfMissing(
   db: DbClient,
   built: BuiltSnapshot
@@ -403,7 +616,12 @@ export async function insertEstimateSnapshotIfMissing(
           racedExisting.error.message ?? 'Unable to load existing estimate snapshot'
         )
       }
-      if (racedExisting.data) return okResult(racedExisting.data as Unsafe)
+      if (racedExisting.data) {
+        return validateExistingAcceptedSnapshot({
+          db,
+          snapshot: racedExisting.data as Unsafe,
+        })
+      }
     }
     if (isIncompleteSnapshotMessage(message)) {
       return errorResult(
@@ -414,7 +632,10 @@ export async function insertEstimateSnapshotIfMissing(
     return errorResult('server_error', message)
   }
 
-  return okResult(inserted.data as Unsafe)
+  return validateExistingAcceptedSnapshot({
+    db,
+    snapshot: inserted.data as Unsafe,
+  })
 }
 
 async function loadSnapshotJob(params: { db: DbClient; orgId: string; jobId: string }) {
@@ -435,7 +656,9 @@ async function loadSnapshotPublicVersion(params: {
   if (!id) return { data: null, error: null }
   return params.db
     .from('estimate_public_versions')
-    .select('id, estimate_id, version_number, status, accepted_at, snapshot_json')
+    .select(
+      'id, estimate_id, version_number, public_token, status, accepted_at, acceptance_json, snapshot_json'
+    )
     .eq('org_id', params.orgId)
     .eq('id', id)
     .maybeSingle()
@@ -452,7 +675,12 @@ export async function ensureEstimateSnapshotForAcceptedEstimate(
       existing.error.message ?? 'Unable to inspect estimate snapshot'
     )
   }
-  if (existing.data) return okResult(existing.data as Unsafe)
+  if (existing.data) {
+    return validateExistingAcceptedSnapshot({
+      db,
+      snapshot: existing.data as Unsafe,
+    })
+  }
 
   let estimateResponse: EstimateV2GetResponse
   try {
@@ -490,15 +718,26 @@ export async function ensureEstimateSnapshotForAcceptedEstimate(
     )
   }
 
-  return insertEstimateSnapshotIfMissing(
-    db,
-    buildEstimateSnapshotRows({
-      orgId: params.orgId,
-      estimateResponse,
-      job: jobResult.data as Unsafe,
-      publicVersion: (publicVersionResult.data as Unsafe | null) ?? null,
-      reason: params.reason ?? 'accepted',
-      createdBy: params.userId,
-    })
+  const validatedPublicVersion = validateAcceptedPublicVersionSnapshot(
+    (publicVersionResult.data as Unsafe | null) ?? null
   )
+  if (!validatedPublicVersion.ok) return validatedPublicVersion
+  if (asText(validatedPublicVersion.data.estimate_id) !== params.estimateId) {
+    return errorResult('invalid_input', 'Accepted public version is invalid')
+  }
+  const acceptedEstimateResponse = selectAcceptedOperationalEstimateResponse({
+    acceptedArtifact: validatedPublicVersion.data.snapshot_json,
+    liveEstimateResponse: estimateResponse,
+  })
+
+  const built = buildEstimateSnapshotRows({
+    orgId: params.orgId,
+    estimateResponse: acceptedEstimateResponse,
+    job: jobResult.data as Unsafe,
+    publicVersion: validatedPublicVersion.data,
+    reason: params.reason ?? 'accepted',
+    createdBy: params.userId,
+  })
+
+  return insertEstimateSnapshotIfMissing(db, built)
 }

@@ -27,6 +27,8 @@ export type DrywallRepairCalculationRow = {
   id?: string | null
   room_id: string
   position?: number | null
+  include?: 'Y' | 'N' | string | null
+  active?: 'Y' | 'N' | string | null
   surface: DrywallRepairSurface | string
   repair_type: DrywallRepairType | string
   unit: DrywallRepairUnit | string
@@ -54,7 +56,8 @@ export type DrywallRepairCalculationResult = DrywallRepairCalculationRow & {
   surface: DrywallRepairSurface
   repair_type: DrywallRepairType
   unit: DrywallRepairUnit
-  include: 'Y'
+  include: 'Y' | 'N'
+  active: 'Y' | 'N'
   raw_quantity: number
   effective_quantity: number
   base_unit_rate: number

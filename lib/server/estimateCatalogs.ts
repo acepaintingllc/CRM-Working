@@ -146,7 +146,7 @@ export type EstimateCatalogs = {
     supply_group?: 'per_color' | 'area_based' | 'per_job'
     scope: string | null
     unit: string | null
-    value: number
+    value: number | null
     crew_multiplier?: 'Y' | 'N'
     notes: string | null
   }>

@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   readUuidParam: vi.fn(),
   readJsonBody: vi.fn(),
   loadEstimateCustomerSendContext: vi.fn(),
-  buildCustomerSendPageData: vi.fn(),
+  loadCustomerSendPageData: vi.fn(),
   saveCustomerSendDraftMutation: vi.fn(),
   submitCustomerSendMutation: vi.fn(),
   checkLocalRateLimit: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock('@/lib/server/estimateCustomerPortal', () => ({
 }))
 
 vi.mock('@/lib/server/customer-send/service', () => ({
-  buildCustomerSendPageData: mocks.buildCustomerSendPageData,
+  loadCustomerSendPageData: mocks.loadCustomerSendPageData,
   saveCustomerSendDraftMutation: mocks.saveCustomerSendDraftMutation,
   submitCustomerSendMutation: mocks.submitCustomerSendMutation,
 }))
@@ -62,7 +62,7 @@ describe('estimateCustomerSendRoute', () => {
     mocks.readUuidParam.mockReset()
     mocks.readJsonBody.mockReset()
     mocks.loadEstimateCustomerSendContext.mockReset()
-    mocks.buildCustomerSendPageData.mockReset()
+    mocks.loadCustomerSendPageData.mockReset()
     mocks.saveCustomerSendDraftMutation.mockReset()
     mocks.submitCustomerSendMutation.mockReset()
     mocks.checkLocalRateLimit.mockReset()
@@ -80,7 +80,7 @@ describe('estimateCustomerSendRoute', () => {
       value: { mode: 'send', draft: { title: 'Kitchen Quote' } },
     })
     mocks.loadEstimateCustomerSendContext.mockResolvedValue(loadedContext)
-    mocks.buildCustomerSendPageData.mockReturnValue({
+    mocks.loadCustomerSendPageData.mockResolvedValue({
       ok: true,
       data: { public_url: null, document: { meta: { title: 'Kitchen Quote' } } },
     })
@@ -103,9 +103,14 @@ describe('estimateCustomerSendRoute', () => {
       orgId: 'org-1',
       userId: 'user-1',
       estimateId: 'estimate-1',
+      operation: 'read',
+      allowPersistedArtifactPreview: true,
     })
-    expect(mocks.buildCustomerSendPageData).toHaveBeenCalledWith({
+    expect(mocks.loadCustomerSendPageData).toHaveBeenCalledWith({
       origin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
       context: loadedContext,
     })
     expect(response.status).toBe(200)
@@ -125,6 +130,15 @@ describe('estimateCustomerSendRoute', () => {
     )
 
     expect(mocks.readJsonBody).toHaveBeenCalled()
+    expect(mocks.loadEstimateCustomerSendContext).toHaveBeenCalledWith({
+      origin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      allowPersistedArtifactPreview: true,
+      draftSource: { mode: 'send', draft: { title: 'Kitchen Quote' } },
+      operation: 'save',
+    })
     expect(mocks.saveCustomerSendDraftMutation).toHaveBeenCalledWith({
       origin: 'http://localhost',
       orgId: 'org-1',
@@ -168,6 +182,15 @@ describe('estimateCustomerSendRoute', () => {
       max: 5,
       windowMs: 10 * 60 * 1000,
     })
+    expect(mocks.loadEstimateCustomerSendContext).toHaveBeenCalledWith({
+      origin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      allowPersistedArtifactPreview: true,
+      draftSource: { mode: 'send', draft: { title: 'Kitchen Quote' } },
+      operation: 'send',
+    })
     expect(mocks.submitCustomerSendMutation).toHaveBeenCalledWith({
       origin: 'http://localhost',
       orgId: 'org-1',
@@ -207,6 +230,31 @@ describe('estimateCustomerSendRoute', () => {
 
     expect(response).toBe(authResponse)
     expect(mocks.loadEstimateCustomerSendContext).not.toHaveBeenCalled()
+  })
+
+  it('short-circuits PUT and POST on auth failure', async () => {
+    const authResponse = new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+    mocks.requireSessionUserOrg.mockResolvedValueOnce({
+      ok: false,
+      response: authResponse,
+    })
+
+    const putResponse = await handleEstimateCustomerSendRoutePut(request, context)
+    expect(putResponse).toBe(authResponse)
+    expect(mocks.readJsonBody).not.toHaveBeenCalled()
+
+    mocks.requireSessionUserOrg.mockResolvedValueOnce({
+      ok: false,
+      response: authResponse,
+    })
+
+    const postResponse = await handleEstimateCustomerSendRoutePost(
+      request,
+      context,
+      estimateCustomerSendCopy
+    )
+    expect(postResponse).toBe(authResponse)
+    expect(mocks.checkLocalRateLimit).not.toHaveBeenCalled()
   })
 
   it('preserves invalid estimate id responses', async () => {
@@ -249,8 +297,65 @@ describe('estimateCustomerSendRoute', () => {
     await expect(response.json()).resolves.toEqual({ error: 'Quote not found' })
   })
 
+  it('maps missing context to 404 { error } for PUT and POST', async () => {
+    mocks.loadEstimateCustomerSendContext.mockResolvedValueOnce({ error: 'Quote not found' })
+
+    const putResponse = await handleEstimateCustomerSendRoutePut(request, context)
+    expect(putResponse.status).toBe(404)
+    await expect(putResponse.json()).resolves.toEqual({ error: 'Quote not found' })
+    expect(mocks.saveCustomerSendDraftMutation).not.toHaveBeenCalled()
+
+    mocks.loadEstimateCustomerSendContext.mockResolvedValueOnce({ error: 'Quote not found' })
+
+    const postResponse = await handleEstimateCustomerSendRoutePost(
+      request,
+      context,
+      estimateCustomerSendCopy
+    )
+    expect(postResponse.status).toBe(404)
+    await expect(postResponse.json()).resolves.toEqual({ error: 'Quote not found' })
+    expect(mocks.submitCustomerSendMutation).not.toHaveBeenCalled()
+  })
+
+  it('maps calculation-context failures to 500 { error } across GET, PUT, and POST', async () => {
+    mocks.loadEstimateCustomerSendContext.mockResolvedValueOnce({
+      error: 'Unable to load canonical estimate calculations for customer send: boom',
+    })
+
+    const getResponse = await handleEstimateCustomerSendRouteGet(request, context)
+    expect(getResponse.status).toBe(500)
+    await expect(getResponse.json()).resolves.toEqual({
+      error: 'Unable to load canonical estimate calculations for customer send: boom',
+    })
+    expect(mocks.loadCustomerSendPageData).not.toHaveBeenCalled()
+
+    mocks.loadEstimateCustomerSendContext.mockResolvedValueOnce({
+      error: 'Unable to load canonical estimate calculations for customer send: boom',
+    })
+    const putResponse = await handleEstimateCustomerSendRoutePut(request, context)
+    expect(putResponse.status).toBe(500)
+    await expect(putResponse.json()).resolves.toEqual({
+      error: 'Unable to load canonical estimate calculations for customer send: boom',
+    })
+    expect(mocks.saveCustomerSendDraftMutation).not.toHaveBeenCalled()
+
+    mocks.loadEstimateCustomerSendContext.mockResolvedValueOnce({
+      error: 'Unable to load canonical estimate calculations for customer send: boom',
+    })
+    const postResponse = await handleEstimateCustomerSendRoutePost(
+      request,
+      context,
+      estimateCustomerSendCopy
+    )
+    expect(postResponse.status).toBe(500)
+    await expect(postResponse.json()).resolves.toEqual({
+      error: 'Unable to load canonical estimate calculations for customer send: boom',
+    })
+    expect(mocks.submitCustomerSendMutation).not.toHaveBeenCalled()
+  })
+
   it('maps service invalid_input and server_error results to shared error envelopes', async () => {
-    mocks.buildCustomerSendPageData.mockReturnValueOnce({
+    mocks.loadCustomerSendPageData.mockResolvedValueOnce({
       ok: false,
       kind: 'invalid_input',
       message: 'Broken draft',
@@ -276,5 +381,22 @@ describe('estimateCustomerSendRoute', () => {
     const postResponse = await handleEstimateCustomerSendRoutePost(request, context, estimateCustomerSendCopy)
     expect(postResponse.status).toBe(400)
     await expect(postResponse.json()).resolves.toEqual({ error: 'Customer email is required' })
+  })
+
+  it('maps POST server_error results to the shared mutation error envelope', async () => {
+    mocks.submitCustomerSendMutation.mockResolvedValueOnce({
+      ok: false,
+      kind: 'server_error',
+      message: 'Email subsystem offline',
+    })
+
+    const response = await handleEstimateCustomerSendRoutePost(
+      request,
+      context,
+      estimateCustomerSendCopy
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'Email subsystem offline' })
   })
 })

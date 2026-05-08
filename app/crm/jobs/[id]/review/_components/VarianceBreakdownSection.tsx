@@ -26,7 +26,7 @@ export function VarianceBreakdownSection({ metrics }: VarianceBreakdownSectionPr
             <dl className="mt-3 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
               <div>
                 <dt className="ace-crm-mono text-[10px] text-[color:var(--crm-ui-muted)]">
-                  Estimate
+                  Quote
                 </dt>
                 <dd className="font-bold text-[color:var(--crm-ui-text)]">
                   {metric.estimate}

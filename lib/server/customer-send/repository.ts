@@ -4,10 +4,19 @@ import {
   type ServiceResult,
 } from '@/lib/server/serviceResult'
 import { supabaseAdmin } from '@/lib/server/org'
+import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import { asText } from './document'
 import type {
   CustomerSendDraft,
+  CustomerSendPersistedPdf,
+  CustomerSendStoredSnapshot,
   EstimatePublicVersionRow,
+} from './types'
+import {
+  appendCustomerSendPersistedPdf,
+  buildCustomerSendPersistedSnapshot,
+  normalizeCustomerSendStoredSnapshot,
+  readCustomerSendVersionDocument,
 } from './types'
 
 type EstimatePublicEventType =
@@ -18,6 +27,30 @@ type EstimatePublicEventType =
   | 'declined'
   | 'superseded'
   | 'pdf_requested'
+
+function readEstimatePublicVersionRow(
+  value: EstimatePublicVersionRow | null | undefined
+): EstimatePublicVersionRow | null {
+  // Supabase row payloads are an untrusted DB boundary until we verify an object exists.
+  return value && typeof value === 'object' ? value : null
+}
+
+function readSupersededVersionIds(value: Array<{ id?: unknown }> | null | undefined): string[] {
+  // Supabase selected rows are an untrusted DB boundary until ids are normalized to strings.
+  return (value ?? []).map((row) => asText(row.id)).filter(Boolean)
+}
+
+function isMutableDraftVersion(version: EstimatePublicVersionRow | null | undefined) {
+  return asText(version?.status || 'draft') === 'draft'
+}
+
+function documentsMatch(
+  left: CustomerEstimateDocument | null | undefined,
+  right: CustomerEstimateDocument | null | undefined
+) {
+  if (!left || !right) return false
+  return JSON.stringify(left) === JSON.stringify(right)
+}
 
 export async function writeEstimatePublicEvent(params: {
   orgId: string
@@ -49,20 +82,22 @@ export async function saveCustomerSendDraftVersion(params: {
   customerId: string
   userId: string
   draft: CustomerSendDraft
-  document: Record<string, unknown>
+  document: CustomerEstimateDocument
+  operationalSnapshot?: Record<string, unknown>
   latestDraft: EstimatePublicVersionRow | null
   latestVersion: EstimatePublicVersionRow | null
 }): Promise<ServiceResult<EstimatePublicVersionRow>> {
+  const latestDraft = isMutableDraftVersion(params.latestDraft) ? params.latestDraft : null
   const nextVersionNumber =
-    Number(params.latestVersion?.version_number ?? 0) + (params.latestDraft ? 0 : 1)
-  const publicMeta = params.latestDraft ?? null
+    Number(params.latestVersion?.version_number ?? 0) + (latestDraft ? 0 : 1)
+  const publicMeta = latestDraft ?? null
   const resolveNullableText = (value: string) => (value === '' ? null : value)
   const payload = {
     org_id: params.orgId,
     estimate_id: params.estimateId,
     customer_id: resolveNullableText(params.customerId),
-    version_number: params.latestDraft
-      ? Number(params.latestDraft.version_number ?? 1)
+    version_number: latestDraft
+      ? Number(latestDraft.version_number ?? 1)
       : nextVersionNumber,
     status: 'draft',
     public_token: publicMeta?.public_token ?? null,
@@ -72,10 +107,11 @@ export async function saveCustomerSendDraftVersion(params: {
     subject: resolveNullableText(params.draft.subject),
     body: resolveNullableText(params.draft.body),
     template_key: resolveNullableText(params.draft.template_key),
-    snapshot_json: {
+    snapshot_json: buildCustomerSendPersistedSnapshot({
       document: params.document,
       draft: params.draft,
-    },
+      operationalSnapshot: params.operationalSnapshot,
+    }),
     draft_json: params.draft,
     acceptance_json: publicMeta?.acceptance_json ?? null,
     sent_at: publicMeta?.sent_at ?? null,
@@ -87,12 +123,12 @@ export async function saveCustomerSendDraftVersion(params: {
   }
 
   const result =
-    params.latestDraft?.id
+    latestDraft?.id
       ? await supabaseAdmin
           .from('estimate_public_versions')
           .update(payload)
           .eq('org_id', params.orgId)
-          .eq('id', asText(params.latestDraft.id))
+          .eq('id', asText(latestDraft.id))
           .select('*')
           .single()
       : await supabaseAdmin
@@ -115,7 +151,12 @@ export async function saveCustomerSendDraftVersion(params: {
   })
   if (!eventResult.ok) return eventResult
 
-  return okResult(result.data as EstimatePublicVersionRow)
+  const versionRow = readEstimatePublicVersionRow(result.data)
+  if (!versionRow) {
+    return errorResult('server_error', 'Unable to save draft')
+  }
+
+  return okResult(versionRow)
 }
 
 export async function markEstimatePublicVersionSent(params: {
@@ -145,7 +186,12 @@ export async function markEstimatePublicVersionSent(params: {
     )
   }
 
-  return okResult(result.data as EstimatePublicVersionRow)
+  const versionRow = readEstimatePublicVersionRow(result.data)
+  if (!versionRow) {
+    return errorResult('server_error', params.lockFailureMessage)
+  }
+
+  return okResult(versionRow)
 }
 
 export async function supersedeOlderPublicEstimateVersions(params: {
@@ -171,9 +217,7 @@ export async function supersedeOlderPublicEstimateVersions(params: {
     return errorResult('server_error', result.error.message)
   }
 
-  const supersededIds = ((result.data ?? []) as Array<{ id?: unknown }>)
-    .map((row) => asText(row.id))
-    .filter(Boolean)
+  const supersededIds = readSupersededVersionIds(result.data)
 
   for (const versionId of supersededIds) {
     const eventResult = await writeEstimatePublicEvent({
@@ -194,16 +238,33 @@ export async function supersedeOlderPublicEstimateVersions(params: {
 
 export async function updateEstimatePublicVersionSnapshot(params: {
   orgId: string
-  versionId: string
-  snapshot: Record<string, unknown>
+  version: EstimatePublicVersionRow
+  snapshot: CustomerSendStoredSnapshot
+  clearLegacyDraftJson?: boolean
 }): Promise<ServiceResult<EstimatePublicVersionRow>> {
+  const versionId = asText(params.version.id)
+  if (!versionId) {
+    return errorResult('server_error', 'Unable to save quote PDF metadata')
+  }
+
+  if (!isMutableDraftVersion(params.version)) {
+    const currentDocument = readCustomerSendVersionDocument(params.version)
+    if (!documentsMatch(currentDocument, params.snapshot.document)) {
+      return errorResult(
+        'invalid_input',
+        'Sent quote documents are immutable and cannot be replaced.'
+      )
+    }
+  }
+
   const result = await supabaseAdmin
     .from('estimate_public_versions')
     .update({
       snapshot_json: params.snapshot,
+      ...(params.clearLegacyDraftJson ? { draft_json: null } : {}),
     })
     .eq('org_id', params.orgId)
-    .eq('id', params.versionId)
+    .eq('id', versionId)
     .select('*')
     .single()
 
@@ -214,5 +275,55 @@ export async function updateEstimatePublicVersionSnapshot(params: {
     )
   }
 
-  return okResult(result.data as EstimatePublicVersionRow)
+  const versionRow = readEstimatePublicVersionRow(result.data)
+  if (!versionRow) {
+    return errorResult('server_error', 'Unable to save quote PDF metadata')
+  }
+
+  return okResult(versionRow)
+}
+
+export async function upgradeCustomerSendLegacyVersionSnapshot(params: {
+  orgId: string
+  version: EstimatePublicVersionRow
+  document: CustomerEstimateDocument
+  draft: CustomerSendDraft
+}): Promise<ServiceResult<EstimatePublicVersionRow>> {
+  if (!isMutableDraftVersion(params.version)) {
+    return errorResult(
+      'invalid_input',
+      'Sent quote snapshots must be migrated before public rendering.'
+    )
+  }
+
+  return updateEstimatePublicVersionSnapshot({
+    orgId: params.orgId,
+    version: params.version,
+    snapshot: buildCustomerSendPersistedSnapshot({
+      document: params.document,
+      draft: params.draft,
+    }),
+    clearLegacyDraftJson: true,
+  })
+}
+
+export async function appendEstimatePublicVersionPdf(params: {
+  orgId: string
+  version: EstimatePublicVersionRow
+  pdf: CustomerSendPersistedPdf
+}): Promise<ServiceResult<EstimatePublicVersionRow>> {
+  const normalizedSnapshot = normalizeCustomerSendStoredSnapshot(params.version.snapshot_json)
+  if (!normalizedSnapshot) {
+    return errorResult('server_error', 'Unable to save quote PDF metadata')
+  }
+
+  return updateEstimatePublicVersionSnapshot({
+    orgId: params.orgId,
+    version: params.version,
+    snapshot: appendCustomerSendPersistedPdf({
+      snapshot: params.version.snapshot_json,
+      document: normalizedSnapshot.document,
+      pdf: params.pdf,
+    }),
+  })
 }

@@ -6,15 +6,23 @@ const {
   mockWriteEstimatePublicEvent,
   mockSendPublicEstimateAcceptanceNotifications,
   mockSendPublicEstimateDeclineNotification,
+  mockBuildCustomerEstimateDocument,
 } = vi.hoisted(() => ({
   mockFrom: vi.fn(),
   mockEnsureAcceptedEstimateOperationalSnapshot: vi.fn(),
   mockWriteEstimatePublicEvent: vi.fn(),
   mockSendPublicEstimateAcceptanceNotifications: vi.fn(),
   mockSendPublicEstimateDeclineNotification: vi.fn(),
+  mockBuildCustomerEstimateDocument: vi.fn(),
 }))
 
 vi.mock('@/lib/server/org', () => ({
+  supabaseAdmin: {
+    from: mockFrom,
+  },
+}))
+
+vi.mock('@/lib/server/org.ts', () => ({
   supabaseAdmin: {
     from: mockFrom,
   },
@@ -24,7 +32,20 @@ vi.mock('@/lib/server/customer-send/repository', () => ({
   writeEstimatePublicEvent: mockWriteEstimatePublicEvent,
 }))
 
+vi.mock('@/lib/server/customer-send/repository.ts', () => ({
+  writeEstimatePublicEvent: mockWriteEstimatePublicEvent,
+}))
+
 vi.mock('@/lib/server/accepted-estimates/service', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/server/accepted-estimates/service')>()
+  return {
+    ...actual,
+    ensureAcceptedEstimateOperationalSnapshot: mockEnsureAcceptedEstimateOperationalSnapshot,
+  }
+})
+
+vi.mock('@/lib/server/accepted-estimates/service.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@/lib/server/accepted-estimates/service')>()
   return {
@@ -38,12 +59,24 @@ vi.mock('@/lib/server/publicEstimateNotifications', () => ({
   sendPublicEstimateDeclineNotification: mockSendPublicEstimateDeclineNotification,
 }))
 
+vi.mock('@/lib/server/publicEstimateNotifications.ts', () => ({
+  sendPublicEstimateAcceptanceNotifications: mockSendPublicEstimateAcceptanceNotifications,
+  sendPublicEstimateDeclineNotification: mockSendPublicEstimateDeclineNotification,
+}))
+
+vi.mock('@/lib/customer-estimates/build', () => ({
+  buildCustomerEstimateDocument: mockBuildCustomerEstimateDocument,
+}))
+
 import {
   acceptPublicEstimate,
   declinePublicEstimate,
   loadPublicEstimateSnapshot,
   markPublicEstimateViewed,
 } from '@/lib/server/estimatePublicPortal'
+import {
+  buildEstimatePublicPersistedSnapshot,
+} from '@/lib/customer-estimates/publicSnapshot'
 
 function createMaybeSingleChain(
   result: unknown,
@@ -113,6 +146,107 @@ function createUpdateOnlyChain(
 }
 
 function createLoadedVersion(status: string) {
+  const statusTimestamps = {
+    sent_at: '2026-05-01T00:00:00.000Z',
+    viewed_at: status === 'viewed' ? '2026-05-01T00:00:00.000Z' : null,
+    accepted_at: status === 'accepted' ? '2026-05-01T00:00:00.000Z' : null,
+    declined_at: status === 'declined' ? '2026-05-01T00:00:00.000Z' : null,
+  }
+
+  const document = {
+    meta: {
+      estimate_id: 'estimate-1',
+      version_state: 'draft',
+      flow_version: 'v2',
+      title: 'Kitchen Quote',
+      version_name: 'Option A',
+      quote_date: '2026-05-01',
+      sent_at: statusTimestamps.sent_at,
+      viewed_at: statusTimestamps.viewed_at,
+      accepted_at: statusTimestamps.accepted_at,
+      declined_at: statusTimestamps.declined_at,
+      status,
+      public_token: 'token-1',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '555-0100',
+      business_email: 'office@example.com',
+      address: '123 Main St',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    customer: {
+      name: 'Taylor Smith',
+      email: 'taylor@example.com',
+      address: '123 Main St',
+      phone: '555-0123',
+      street: '123 Main St',
+      city: 'Austin',
+      state: 'TX',
+      zip: '78701',
+    },
+    intro_paragraph: '',
+    closing_paragraph: '',
+    quote_validity_days: 30,
+    deposit_language: '',
+    card_fee_note: '',
+    quote_rows: [],
+    scopes: [],
+    total: 4250,
+    terms: ['Terms line'],
+    source_meta: {
+      company: {
+        business_name: true,
+        main_phone: true,
+        business_email: true,
+        address: true,
+        website: false,
+        sender_signature: false,
+        logo_url: false,
+      },
+      settings: {
+        quote_validity_days: true,
+        terms_text: true,
+      },
+      overrides: {
+        title: false,
+        intro_paragraph: false,
+        closing_paragraph: false,
+        deposit_language: false,
+        card_fee_note: false,
+      },
+    },
+    header: {
+      company_name: 'ACE Painting',
+      contact_lines: ['555-0100', 'office@example.com'],
+      logo_url: '',
+      document_label: 'QUOTE',
+      quote_date_label: '2026-05-01',
+    },
+    customer_block: {
+      lines: ['Taylor Smith', '123 Main St'],
+    },
+    pricing_block: {
+      rows: [],
+      total: 4250,
+      footer_note: 'Footer note',
+    },
+    terms_page: {
+      title: 'QUOTE TERMS',
+      sections: [],
+    },
+    assembly_meta: {
+      missing_company_fields: [],
+      missing_payment_fields: [],
+      missing_legal_fields: [],
+      used_placeholder_fallbacks: false,
+      used_explicit_terms_text: true,
+    },
+  }
+
   return {
     id: 'version-1',
     org_id: 'org-1',
@@ -121,27 +255,12 @@ function createLoadedVersion(status: string) {
     version_number: 2,
     status,
     public_token: 'token-1',
-    snapshot_json: {
-      document: {
-        meta: {
-          title: 'Kitchen Quote',
-          version_name: 'Option A',
-        },
-        company: {
-          business_name: 'ACE Painting',
-          business_email: 'office@example.com',
-        },
-        customer: {
-          name: 'Taylor Smith',
-          email: 'taylor@example.com',
-          address: '123 Main St',
-        },
-        total: 4250,
-      },
-    },
-    accepted_at: status === 'accepted' ? '2026-04-01T00:00:00.000Z' : null,
-    declined_at: status === 'declined' ? '2026-04-01T00:00:00.000Z' : null,
-    locked_at: status === 'accepted' || status === 'declined' ? '2026-04-01T00:00:00.000Z' : null,
+    snapshot_json: buildEstimatePublicPersistedSnapshot({ document }),
+    sent_at: statusTimestamps.sent_at,
+    viewed_at: statusTimestamps.viewed_at,
+    accepted_at: statusTimestamps.accepted_at,
+    declined_at: statusTimestamps.declined_at,
+    locked_at: status === 'accepted' || status === 'declined' ? '2026-05-01T00:00:00.000Z' : null,
     acceptance_json:
       status === 'accepted'
         ? {
@@ -201,6 +320,7 @@ describe('estimate public portal transitions', () => {
     mockWriteEstimatePublicEvent.mockResolvedValue({ ok: true, data: null })
     mockSendPublicEstimateAcceptanceNotifications.mockReset()
     mockSendPublicEstimateDeclineNotification.mockReset()
+    mockBuildCustomerEstimateDocument.mockReset()
     mockSendPublicEstimateAcceptanceNotifications.mockResolvedValue({
       internal: { messageId: 'internal-1' },
       customer: { messageId: 'customer-1' },
@@ -296,7 +416,7 @@ describe('estimate public portal transitions', () => {
       expect.objectContaining({
         estimate_version_id: 'version-1',
         status: 'accepted',
-        accepted_at: '2026-04-01T00:00:00.000Z',
+        accepted_at: '2026-05-01T00:00:00.000Z',
       })
     )
     expect(updateSpy).toHaveBeenCalledWith(
@@ -316,7 +436,6 @@ describe('estimate public portal transitions', () => {
     })
     expect(jobUpdateSpy).toHaveBeenCalledWith({
       linked_estimate_id: 'estimate-1',
-      status: 'scheduled',
     })
     expect(mockEnsureAcceptedEstimateOperationalSnapshot).toHaveBeenCalledWith({
       requestOrigin: '',
@@ -426,6 +545,7 @@ describe('estimate public portal transitions', () => {
       ...sentVersion,
       sent_at: '2026-04-01T00:00:00.000Z',
       snapshot_json: {
+        ...((sentVersion.snapshot_json as Record<string, unknown> | null | undefined) ?? {}),
         document: {
           ...sentDocument,
           quote_validity_days: 30,
@@ -591,6 +711,70 @@ describe('estimate public portal transitions', () => {
       viewed_at: '2026-04-02T12:00:00.000Z',
     })
     expect(mockWriteEstimatePublicEvent).not.toHaveBeenCalled()
+    expect(mockBuildCustomerEstimateDocument).not.toHaveBeenCalled()
+  })
+
+  it('loads persisted public snapshots without invoking customer document builders', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: createLoadedVersion('viewed'),
+              error: null,
+            })
+          ),
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await loadPublicEstimateSnapshot('token-1')
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        estimate_version_id: 'version-1',
+        status: 'viewed',
+      }),
+    })
+    expect(mockBuildCustomerEstimateDocument).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for legacy public snapshots instead of rendering them', async () => {
+    const canonicalVersion = createLoadedVersion('viewed')
+    const canonicalSnapshot = canonicalVersion.snapshot_json as Record<string, unknown>
+    const legacyVersion = {
+      ...canonicalVersion,
+      snapshot_json: {
+        document: canonicalSnapshot.document,
+        draft: { subject: 'Legacy public draft' },
+      },
+    }
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createMaybeSingleChain({
+              data: legacyVersion,
+              error: null,
+            })
+          ),
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await loadPublicEstimateSnapshot('token-1')
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'not_found',
+      message:
+        'Quote snapshot requires migration to the canonical customer artifact before public rendering.',
+    })
+    expect(mockBuildCustomerEstimateDocument).not.toHaveBeenCalled()
   })
 
   it('treats already-viewed rows as a no-op and skips viewed event writes', async () => {
@@ -953,8 +1137,8 @@ describe('estimate public portal transitions', () => {
   })
 
   it.each(['estimate_sent', 'follow_up'])(
-    'repairs accepted retry ownership and status when initial job update fails and job is %s',
-    async (jobStatus) => {
+    'repairs accepted retry ownership without scheduling when initial job update fails and job is %s',
+    async () => {
       const updateSpy = vi.fn(() =>
         createMaybeSingleChain({
           data: createLoadedVersion('accepted'),
@@ -1038,11 +1222,6 @@ describe('estimate public portal transitions', () => {
         }
         if (table === 'jobs') {
           return {
-            ...createJobLookup({
-              id: 'job-1',
-              linked_estimate_id: null,
-              status: jobStatus,
-            }),
             update: jobUpdateSpy,
           }
         }
@@ -1067,7 +1246,6 @@ describe('estimate public portal transitions', () => {
       })
       expect(jobUpdateSpy).toHaveBeenLastCalledWith({
         linked_estimate_id: 'estimate-1',
-        status: 'scheduled',
       })
       expect(mockEnsureAcceptedEstimateOperationalSnapshot).toHaveBeenCalledWith({
         requestOrigin: '',
@@ -1147,7 +1325,7 @@ describe('estimate public portal transitions', () => {
       }),
     })
     expect(estimateUpdateSpy).toHaveBeenCalledWith({
-      accepted_at: '2026-04-01T00:00:00.000Z',
+      accepted_at: '2026-05-01T00:00:00.000Z',
       accepted_public_version_id: 'version-1',
       version_state: 'live',
     })
@@ -1228,11 +1406,13 @@ describe('estimate public portal transitions', () => {
       }),
     })
     expect(estimateUpdateSpy).toHaveBeenCalledWith({
-      accepted_at: '2026-04-01T00:00:00.000Z',
+      accepted_at: '2026-05-01T00:00:00.000Z',
       accepted_public_version_id: 'version-1',
       version_state: 'live',
     })
-    expect(jobUpdateSpy).not.toHaveBeenCalled()
+    expect(jobUpdateSpy).toHaveBeenCalledWith({
+      linked_estimate_id: 'estimate-1',
+    })
     expect(mockWriteEstimatePublicEvent).toHaveBeenCalledTimes(1)
   })
 
@@ -1505,7 +1685,7 @@ describe('estimate public portal transitions', () => {
       expect.objectContaining({
         estimate_version_id: 'version-1',
         status: 'declined',
-        declined_at: '2026-04-01T00:00:00.000Z',
+        declined_at: '2026-05-01T00:00:00.000Z',
       })
     )
     expect(updateSpy).toHaveBeenCalledWith(

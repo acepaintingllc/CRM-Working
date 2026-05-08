@@ -1,10 +1,3 @@
-import { supabaseAdmin } from '@/lib/server/org'
-import {
-  loadActiveSettingSet,
-  loadEstimateSettingSet,
-  loadSettingSetById,
-  settingValuesToEstimateTemplateSettings,
-} from '@/lib/server/estimate-feedback/settingSets'
 import {
   DEFAULT_DAY_HOURS,
   DEFAULT_ESTIMATE_TEMPLATE_KEY,
@@ -15,7 +8,7 @@ import {
   DEFAULT_QUOTE_VALIDITY_DAYS,
   DEFAULT_ROUNDING_INCREMENT_HOURS,
   DEFAULT_TERMS_TEXT,
-} from '@/lib/estimator/defaults'
+} from '../estimator/defaults.ts'
 
 type Unsafe = Record<string, unknown>
 
@@ -89,6 +82,7 @@ export function normalizeEstimateTemplateSettings(row: Unsafe | null | undefined
 async function loadCompatibilityEstimateTemplateSettings(orgId: string) {
   // Compatibility fallback only for orgs without Prompt 1 setting-set backfill.
   // Estimate-specific callers resolve scalar defaults through setting sets first.
+  const { supabaseAdmin } = await import('./org.ts')
   const res = await supabaseAdmin
     .from('estimate_template_settings')
     .select('*')
@@ -112,6 +106,12 @@ export async function loadEstimateTemplateSettings(
     typeof orgIdOrParams === 'string'
       ? { orgId: orgIdOrParams, compatibilityFallback: true }
       : orgIdOrParams
+  const {
+    loadActiveSettingSet,
+    loadEstimateSettingSet,
+    loadSettingSetById,
+    settingValuesToEstimateTemplateSettings,
+  } = await import('./estimate-feedback/settingSets.ts')
 
   const snapshot = params.settingSetId
     ? await loadSettingSetById({

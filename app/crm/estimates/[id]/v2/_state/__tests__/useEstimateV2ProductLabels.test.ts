@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildMissingProductConfigurationWarning,
   resolveDefaultProductLabel,
   resolveScopeProductStateLabel,
 } from '../useEstimateV2ProductLabels'
@@ -28,5 +29,31 @@ describe('useEstimateV2ProductLabels helpers', () => {
         labelForId,
       })
     ).toBe('Wall Primer')
+  })
+
+  it('builds a targeted warning when required defaults are missing', () => {
+    expect(
+      buildMissingProductConfigurationWarning(
+        {
+          wallPaintProductId: 'wall-paint',
+          wallPrimerProductId: '',
+          ceilingPaintProductId: null,
+          ceilingPrimerProductId: 'ceiling-primer',
+          trimPaintProductId: '',
+          trimPrimerProductId: 'trim-primer',
+        },
+        'Open Paint Defaults to fix the missing defaults.'
+      )
+    ).toEqual({
+      title: 'Required paint defaults are missing',
+      detail:
+        'Missing walls default primer, ceilings default paint, and trim default paint. Pricing and send readiness stay blocked until every required paint and primer default is set.',
+      fixHint: 'Open Paint Defaults to fix the missing defaults.',
+      missingLabels: [
+        'walls default primer',
+        'ceilings default paint',
+        'trim default paint',
+      ],
+    })
   })
 })

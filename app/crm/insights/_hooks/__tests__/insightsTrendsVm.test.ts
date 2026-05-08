@@ -139,6 +139,36 @@ describe('insightsTrendsVm', () => {
       reason: 'Labor misses exceeded tolerance for repeated wall production reviews.',
       basedOnJobCountLabel: '4 jobs',
       evidence: ['Average Variance: 2.5', 'Total Impact: 480'],
+      isPending: false,
+      applyLabel: 'Apply',
+      dismissLabel: 'Dismiss',
+    })
+  })
+
+  it('adds recommendation action labels and apply confirmation state', () => {
+    const vm = buildInsightsTrendsPageVm(
+      buildSummary(),
+      [buildRecommendation()],
+      {
+        pendingId: 'rec-1',
+        pendingAction: 'apply',
+        generating: true,
+        confirmingApplyId: 'rec-1',
+      }
+    )
+
+    expect(vm.recommendationGenerateLabel).toBe('Generating')
+    expect(vm.recommendationsGenerating).toBe(true)
+    expect(vm.recommendations[0]).toMatchObject({
+      isPending: true,
+      applyLabel: 'Applying',
+      dismissLabel: 'Dismiss',
+    })
+    expect(vm.applyConfirmation).toEqual({
+      isOpen: true,
+      description: 'Apply Wall Production Base Rate to estimator settings.',
+      info: 'Target: wall_production.base_rate. Current value: Base Rate: 120. Suggested value: Base Rate: 135.',
+      confirming: true,
     })
   })
 })

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildCustomerDocumentFromSendContext } from '../document'
 import type { EstimateCustomerSendContextData } from '../contextTypes'
+import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
+import { readCustomerSendPdfDocument } from '../pdf'
 import { readFileSync } from 'fs'
 import path from 'path'
 
@@ -118,7 +120,26 @@ describe('customer send document builder', () => {
         trim_items: [],
         other: [],
         jobsettings: {},
-        org_defaults: { updated_at: null },
+        org_defaults: {
+          default_template_key: 'default',
+          quote_validity_days: 90,
+          terms_text: 'Terms',
+          walls_paint_id: null,
+          walls_primer_id: null,
+          ceiling_paint_id: null,
+          ceiling_primer_id: null,
+          trim_paint_id: null,
+          trim_primer_id: null,
+          labor_day_policy_enabled: true,
+          dayhours: 8,
+          rounding_increment_hours: 4,
+          override_labor_rate: 55,
+          job_minimum_enabled: false,
+          job_minimum_amount: 0,
+          standard_door_deduction_sf: 21,
+          standard_window_deduction_sf: 15,
+          baseboard_opening_deduction_lf: 3,
+        },
       },
       catalogs: { paints: [] },
       settings: {
@@ -188,5 +209,136 @@ describe('customer send document builder', () => {
     expect(source.includes("from '@/lib/customer-estimates/view'")).toBe(false)
     expect(source.includes("from '@/lib/customer-estimates/PublicEstimatePortal'")).toBe(false)
     expect(source.includes("from '@/lib/server/estimatePublicPortal'")).toBe(false)
+  })
+
+  it('accepts a valid typed customer estimate document through the PDF boundary helper', () => {
+    const document: CustomerEstimateDocument = {
+      meta: {
+        estimate_id: 'estimate-1',
+        version_name: 'Kitchen Quote',
+        version_state: 'draft',
+        flow_version: 'v2',
+        title: 'Kitchen Quote',
+        quote_date: '2026-04-22',
+        sent_at: null,
+        viewed_at: null,
+        accepted_at: null,
+        declined_at: null,
+        status: 'draft',
+        public_token: null,
+      },
+      company: {
+        business_name: 'ACE Painting',
+        timezone: 'America/Chicago',
+        main_phone: '',
+        business_email: '',
+        address: '',
+        website: '',
+        sender_signature: '',
+        logo_url: '',
+      },
+      customer: {
+        name: 'Taylor',
+        email: 'taylor@example.com',
+        phone: '',
+        address: '123 Main St',
+        street: '123 Main St',
+        city: '',
+        state: '',
+        zip: '',
+      },
+      intro_paragraph: '',
+      closing_paragraph: '',
+      quote_validity_days: 45,
+      deposit_language: '',
+      card_fee_note: '',
+      quote_rows: [
+        {
+          key: 'walls',
+          label: 'Walls',
+          description: 'Paint walls.',
+          price: 1200,
+        },
+      ],
+      scopes: [],
+      total: 1200,
+      terms: [],
+      source_meta: {
+        company: {
+          business_name: true,
+          main_phone: true,
+          business_email: true,
+          address: true,
+          website: true,
+          sender_signature: true,
+          logo_url: true,
+        },
+        settings: {
+          quote_validity_days: true,
+          terms_text: true,
+        },
+        overrides: {
+          title: false,
+          intro_paragraph: false,
+          closing_paragraph: false,
+          deposit_language: false,
+          card_fee_note: false,
+        },
+      },
+      header: {
+        company_name: 'ACE Painting',
+        contact_lines: ['Austin, TX'],
+        logo_url: '',
+        document_label: 'QUOTE',
+        quote_date_label: '4/22/26',
+      },
+      customer_block: {
+        lines: ['Taylor', '123 Main St'],
+      },
+      pricing_block: {
+        rows: [
+          {
+            key: 'walls',
+            label: 'Walls',
+            description: 'Paint walls.',
+            price: 1200,
+          },
+        ],
+        total: 1200,
+        footer_note: 'Thank you.',
+      },
+      terms_page: {
+        title: 'Terms',
+        sections: [
+          {
+            key: 'pricing',
+            title: 'Pricing',
+            paragraphs: ['Pricing is valid for 45 days.'],
+          },
+        ],
+      },
+      assembly_meta: {
+        missing_company_fields: [],
+        missing_payment_fields: [],
+        missing_legal_fields: [],
+        used_placeholder_fallbacks: false,
+        used_explicit_terms_text: false,
+      },
+    }
+
+    expect(readCustomerSendPdfDocument(document)).toBe(document)
+  })
+
+  it('rejects malformed PDF boundary input before it reaches PDF generation', () => {
+    expect(
+      readCustomerSendPdfDocument({
+        meta: {
+          title: 'Kitchen Quote',
+        },
+        pricing_block: {
+          rows: [],
+        },
+      })
+    ).toBeNull()
   })
 })

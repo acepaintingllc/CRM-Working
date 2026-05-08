@@ -16,7 +16,7 @@ export type SupplyRateRow = {
   supply_group?: string | null
   scope: string | null
   unit: string | null
-  value: number
+  value: number | null
   crew_multiplier?: 'Y' | 'N' | string | null
 }
 

@@ -21,8 +21,8 @@ export function JobReviewPageContent() {
     <CrmPageShell className="max-w-6xl">
       <CrmPageHeader
         eyebrow="Job closeout"
-        title="Estimate review"
-        description="Compare the accepted estimate snapshot with submitted actuals and classify variance quality."
+        title="Quote review"
+        description="Compare the accepted quote snapshot with submitted actuals and classify variance quality."
         backAction={
           <CrmButton type="button" tone="secondary" onClick={() => void controller.backToJob()}>
             <span className="inline-flex items-center gap-1.5">
@@ -56,9 +56,9 @@ export function JobReviewPageContent() {
         {!controller.vm ? (
           <CrmEmptyState
             title="Review unavailable"
-            description="Job review needs an accepted estimate snapshot and submitted actuals. If the accepted quote is missing its snapshot, retry snapshot creation first."
+            description="Job review needs an accepted quote snapshot and submitted actuals. If the accepted quote is missing its snapshot, retry snapshot creation first."
             action={
-              controller.job?.accepted_quote && !controller.job.accepted_quote.estimate_snapshot_id ? (
+              controller.job?.accepted_estimate && !controller.job.accepted_estimate.estimate_snapshot_id ? (
                 <CrmButton
                   tone="primary"
                   disabled={controller.repairingSnapshot}

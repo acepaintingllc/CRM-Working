@@ -1,47 +1,63 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildLegacyEstimateRoomRows } from '../estimate-v2/roomPersistence.ts'
-import {
-  isMissingStructuredEstimateSaveRpc,
-  isRecoverableStructuredEstimateSaveRpcPkCollision,
-} from '../estimate-v2/scopeRowPersistence.ts'
+import { buildV2RoomPersistenceRow } from '../estimate-v2/roomPersistence.ts'
+import { isMissingFullEstimateSaveRpc } from '../estimate-v2/scopeRowPersistence.ts'
 
-test('buildLegacyEstimateRoomRows generates unique ids and preserves trim automation flags', () => {
-  const rows = buildLegacyEstimateRoomRows({
-    orgId: 'org-1',
-    estimateId: 'estimate-1',
-    jobId: 'job-1',
-    rooms: [
-      { room_name: 'Living', room_id: 'R001', trim_include: 'Y', mode: 'RECT', baseboard_type_id: 'BASE', baseboard_auto: 'Y' },
-      { room_name: 'Kitchen', room_id: 'R001', trim_include: 'Y', mode: 'RECT', crown_type_id: 'CROWN', crown_auto: 'Y' },
-    ],
+test('buildV2RoomPersistenceRow keeps only V2 roster-owned room fields', () => {
+  const row = buildV2RoomPersistenceRow({
+    id: 'room-row-1',
+    org_id: 'org-1',
+    estimate_id: 'estimate-1',
+    job_id: 'job-1',
+    position: 1,
+    room_id: 'R001',
+    room_name: 'Living',
+    room_type_id: 'BEDROOM',
+    wall_complexity_id: 'WALL_STD',
+    notes: 'Room note',
+    length_in: 120,
+    width_in: 144,
+    wallheight_in: 96,
+    condition_selections: { ROOM_FURNISHED: 'active' },
   })
 
-  assert.equal(rows.length, 2)
-  assert.equal(rows[0].room_id, 'R001')
-  assert.equal(rows[0].baseboard_auto, 'Y')
-  assert.equal(rows[0].auto_calc_trim_perimeter, 'Y')
-  assert.equal(rows[1].room_id, 'R002')
-  assert.equal(rows[1].paint_crown, 'Y')
-  assert.equal(rows[1].auto_calc_trim_perimeter, 'Y')
+  assert.deepEqual(row, {
+    id: 'room-row-1',
+    org_id: 'org-1',
+    estimate_id: 'estimate-1',
+    job_id: 'job-1',
+    position: 1,
+    room_id: 'R001',
+    room_name: 'Living',
+    room_type_id: 'BEDROOM',
+    wall_complexity_id: 'WALL_STD',
+    notes: 'Room note',
+    length_in: 120,
+    width_in: 144,
+    wallheight_in: 96,
+    condition_selections: { ROOM_FURNISHED: 'active' },
+  })
+  assert.equal('trim_include' in row, false)
+  assert.equal('paint_crown' in row, false)
 })
 
-test('structured save rpc helpers only recover the known fallback cases', () => {
+test('full save rpc helper identifies a missing full-save function', () => {
   assert.equal(
-    isMissingStructuredEstimateSaveRpc('function public.save_estimate_v2_inputs does not exist'),
-    true
-  )
-  assert.equal(
-    isRecoverableStructuredEstimateSaveRpcPkCollision(
-      'duplicate key value violates unique constraint "estimate_room_flags_pkey"'
+    isMissingFullEstimateSaveRpc(
+      'function public.save_estimate_v2_full_persistence does not exist'
     ),
     true
   )
   assert.equal(
-    isRecoverableStructuredEstimateSaveRpcPkCollision(
-      'duplicate key value violates unique constraint "unrelated_constraint"'
+    isMissingFullEstimateSaveRpc(
+      'Could not find the function public.save_estimate_v2_full_persistence(uuid,uuid,uuid,jsonb)'
     ),
+    true
+  )
+  assert.equal(
+    isMissingFullEstimateSaveRpc('function public.save_estimate_v2_inputs does not exist'),
     false
   )
+  assert.equal(isMissingFullEstimateSaveRpc('duplicate key value violates unique constraint'), false)
 })

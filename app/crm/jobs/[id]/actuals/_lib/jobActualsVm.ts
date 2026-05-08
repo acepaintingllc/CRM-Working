@@ -65,19 +65,20 @@ export function buildJobActualsVm(params: {
   job: JobDetail | null
   form: JobActualsFormState
 }): JobActualsSnapshotVm | null {
-  const acceptedQuote = params.job?.accepted_quote ?? null
-  if (!acceptedQuote?.estimate_snapshot_id) return null
+  const acceptedEstimate = params.job?.accepted_estimate ?? null
+  // Comparison data is operational accepted-estimate snapshot data only.
+  if (!acceptedEstimate?.estimate_snapshot_id) return null
 
   const validation = validateJobActualsForm(params.form)
   const hasInvalidActuals = Object.keys(validation).length > 0
 
   return {
-    estimateSnapshotId: acceptedQuote.estimate_snapshot_id,
-    versionName: acceptedQuote.version_name ?? 'Accepted estimate',
-    acceptedAt: acceptedQuote.accepted_at
-      ? new Date(acceptedQuote.accepted_at).toLocaleString()
+    estimateSnapshotId: acceptedEstimate.estimate_snapshot_id,
+    versionName: acceptedEstimate.version_name ?? 'Accepted quote',
+    acceptedAt: acceptedEstimate.accepted_at
+      ? new Date(acceptedEstimate.accepted_at).toLocaleString()
       : '-',
-    finalTotal: formatCurrency(toNumber(acceptedQuote.final_total)),
+    finalTotal: formatCurrency(toNumber(acceptedEstimate.final_total)),
     hasInvalidActuals,
     inputFields: jobActualsNumericFields.map((field) => ({
       id: field.id,
@@ -88,7 +89,7 @@ export function buildJobActualsVm(params: {
     rows: jobActualsNumericFields.map((field) => {
       const formatter = actualsFieldFormatter(field)
       const actual = parseJobActualsNumberDraft(params.form[field.id], field.label)
-      const estimate = toNumber(acceptedQuote[field.estimateKey])
+      const estimate = toNumber(acceptedEstimate[field.estimateKey])
       return {
         id: field.id,
         label: field.label,

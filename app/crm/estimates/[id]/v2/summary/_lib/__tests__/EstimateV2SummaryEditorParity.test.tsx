@@ -79,6 +79,7 @@ describe('Estimate V2 editor/summary parity', () => {
     expect(summary.current.roomBlocks[0]?.scopes).toEqual(['Walls', 'Ceilings', 'Trim'])
     expect(summary.current.summaryAlerts.map((alert) => alert.title)).toEqual([
       'Missing product selection',
+      'Manual override detected',
       'Warning flag active',
     ])
     expect(summary.current.finalTotal).toBe(1400)
@@ -136,6 +137,43 @@ describe('Estimate V2 editor/summary parity', () => {
         45 +
         (data.pricing_summary?.primerMaterialCost ?? 0) +
         (data.pricing_summary?.supplyCost ?? 0)
+    )
+  })
+
+  it('surfaces active trim total overrides in room alerts and summary alerts', () => {
+    const { fixture } = createEditorDerivedHarness()
+    const trimScope = fixture.summaryData.trim_calculations?.scopes?.find(
+      (scope) => scope.id === 'trim-r001-main'
+    )
+    if (!trimScope) throw new Error('Missing trim override fixture scope')
+
+    expect(trimScope.override_total).toBeGreaterThan(0)
+
+    const { result } = renderHook(() =>
+      useEstimateV2SummaryDerived({
+        data: fixture.summaryData,
+        job: fixture.job,
+        jobSettingsDraft: {
+          dayhours: fixture.jobSettingsDraft.dayhours,
+          laborRate: fixture.jobSettingsDraft.laborRate,
+        },
+      })
+    )
+
+    const roomBlock = result.current.roomBlocks.find((block) => block.room.room_id === trimScope.room_id)
+    const trimOverrideAlert = result.current.summaryAlerts.find(
+      (alert) =>
+        alert.title === 'Manual override detected' &&
+        alert.detail.includes('Baseboards') &&
+        alert.detail.includes('Total: $210')
+    )
+
+    expect(roomBlock?.alerts.overrides ?? 0).toBeGreaterThan(0)
+    expect(trimOverrideAlert).toEqual(
+      expect.objectContaining({
+        kind: 'warn',
+        title: 'Manual override detected',
+      })
     )
   })
 })

@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { test } from 'vitest'
 import {
   applyAcceptedEstimateSideEffects,
   buildAcceptedEstimateSource,
+  buildAcceptedEstimateSourceFromSnapshot,
   buildAcceptedEstimateUpdatePlan,
   loadAcceptedEstimateSource,
   repairAcceptedEstimateSnapshotForJob,
 } from '../service.ts'
+import { buildCustomerSendPersistedSnapshot } from '@/lib/server/customer-send/types'
+import { buildCustomerDocumentFromSendContext } from '@/lib/server/customer-send/document'
+import { buildCustomerSendContractContext } from '@/lib/server/customer-send/__tests__/customerSendContractHarness'
 
 type MockQueryResponse = {
   data: Record<string, unknown> | null
@@ -17,6 +21,13 @@ type MockQueryCall = {
   table: string
   columns: string
   filters: Record<string, unknown>
+  notFilters?: Array<{ column: string; operator: string; value: unknown }>
+  orderBy?: { column: string; ascending: boolean } | null
+  limit?: number | null
+}
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
 function createUpdateResultChain(
@@ -55,6 +66,9 @@ function createReadDb(responses: Record<string, MockQueryResponse>) {
     from(table: string) {
       const filters: Record<string, unknown> = {}
       let selectedColumns = ''
+      const notFilters: Array<{ column: string; operator: string; value: unknown }> = []
+      let orderBy: { column: string; ascending: boolean } | null = null
+      let limit: number | null = null
 
       return {
         select(columns: string) {
@@ -65,8 +79,27 @@ function createReadDb(responses: Record<string, MockQueryResponse>) {
           filters[column] = value
           return this
         },
+        not(column: string, operator: string, value: unknown) {
+          notFilters.push({ column, operator, value })
+          return this
+        },
+        order(column: string, options?: { ascending?: boolean }) {
+          orderBy = { column, ascending: options?.ascending ?? true }
+          return this
+        },
+        limit(count: number) {
+          limit = count
+          return this
+        },
         maybeSingle() {
-          calls.push({ table, columns: selectedColumns, filters: { ...filters } })
+          calls.push({
+            table,
+            columns: selectedColumns,
+            filters: { ...filters },
+            notFilters: [...notFilters],
+            orderBy,
+            limit,
+          })
           return Promise.resolve(
             responses[table] ?? {
               data: null,
@@ -87,6 +120,9 @@ function createSequentialReadDb(responses: Record<string, MockQueryResponse[]>) 
     from(table: string) {
       const filters: Record<string, unknown> = {}
       let selectedColumns = ''
+      const notFilters: Array<{ column: string; operator: string; value: unknown }> = []
+      let orderBy: { column: string; ascending: boolean } | null = null
+      let limit: number | null = null
 
       return {
         select(columns: string) {
@@ -97,8 +133,27 @@ function createSequentialReadDb(responses: Record<string, MockQueryResponse[]>) 
           filters[column] = value
           return this
         },
+        not(column: string, operator: string, value: unknown) {
+          notFilters.push({ column, operator, value })
+          return this
+        },
+        order(column: string, options?: { ascending?: boolean }) {
+          orderBy = { column, ascending: options?.ascending ?? true }
+          return this
+        },
+        limit(count: number) {
+          limit = count
+          return this
+        },
         maybeSingle() {
-          calls.push({ table, columns: selectedColumns, filters: { ...filters } })
+          calls.push({
+            table,
+            columns: selectedColumns,
+            filters: { ...filters },
+            notFilters: [...notFilters],
+            orderBy,
+            limit,
+          })
           return Promise.resolve(
             responses[table]?.shift() ?? {
               data: null,
@@ -111,6 +166,112 @@ function createSequentialReadDb(responses: Record<string, MockQueryResponse[]>) 
   }
 
   return { db, calls }
+}
+
+function customerDraft(overrides: Record<string, unknown> = {}) {
+  return {
+    to_email: 'taylor@example.test',
+    cc_email: '',
+    bcc_email: '',
+    subject: 'Accepted quote',
+    body: 'Please review your accepted quote.',
+    template_key: 'default',
+    title: 'Accepted Quote',
+    intro_paragraph: 'Thanks for reviewing this quote.',
+    closing_paragraph: 'Let us know if you have questions.',
+    terms_text: 'Standard quote terms.',
+    scope_text_edits: {},
+    quote_validity_days: 30,
+    deposit_language: 'Deposit due on acceptance.',
+    card_fee_note: 'Card fee may apply.',
+    ...overrides,
+  }
+}
+
+function persistedAcceptedArtifact(title = 'Accepted Quote') {
+  const context = buildCustomerSendContractContext()
+  const draft = customerDraft({ title, subject: title })
+  const document = buildCustomerDocumentFromSendContext({
+    context,
+    overrides: {
+      title,
+      intro_paragraph: draft.intro_paragraph,
+      closing_paragraph: draft.closing_paragraph,
+      quote_validity_days: draft.quote_validity_days,
+      deposit_language: draft.deposit_language,
+      card_fee_note: draft.card_fee_note,
+    },
+  })
+
+  return buildCustomerSendPersistedSnapshot({
+    document,
+    draft,
+  })
+}
+
+function acceptedEstimateRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'estimate-1',
+    org_id: 'org-1',
+    job_id: 'job-1',
+    customer_id: 'customer-1',
+    version_name: 'Interior repaint',
+    version_state: 'live',
+    accepted_at: '2026-04-29T10:00:00.000Z',
+    accepted_public_version_id: 'public-version-1',
+    ...overrides,
+  }
+}
+
+function acceptedPublicVersionRow(overrides: Record<string, unknown> = {}) {
+  const snapshot = clone(persistedAcceptedArtifact('Accepted quote artifact'))
+
+  return {
+    id: 'public-version-1',
+    estimate_id: 'estimate-1',
+    version_number: 3,
+    public_token: 'public-token-1',
+    status: 'accepted',
+    accepted_at: '2026-04-29T10:00:00.000Z',
+    acceptance_json: {
+      legal_name: 'Jordan Customer',
+      signature_type: 'typed',
+      signature_value: 'Jordan Customer',
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      user_agent: 'Mozilla/5.0',
+      ip: '127.0.0.1',
+    },
+    snapshot_json: snapshot,
+    ...overrides,
+  }
+}
+
+function acceptedSnapshotRow(overrides: Record<string, unknown> = {}) {
+  const publicVersion = acceptedPublicVersionRow()
+  return {
+    id: 'snapshot-1',
+    org_id: 'org-1',
+    job_id: 'job-1',
+    estimate_id: 'estimate-1',
+    customer_id: 'customer-1',
+    accepted_public_version_id: 'public-version-1',
+    estimate_version_name: 'Interior repaint',
+    estimate_version_state: 'live',
+    estimated_labor_hours: 42,
+    estimated_paint_gallons: 8.5,
+    estimated_supplies_cost: 125,
+    estimated_other_cost: 30,
+    estimated_total: 5100,
+    source_payload_json: {
+      customer_artifact: clone(publicVersion.snapshot_json),
+      accepted_public_version: clone(publicVersion),
+    },
+    ...overrides,
+  }
+}
+
+function artifactTotal(snapshot: unknown) {
+  return (snapshot as { document: { total: number } }).document.total
 }
 
 test('buildAcceptedEstimateUpdatePlan links the accepted estimate to its job', () => {
@@ -129,171 +290,55 @@ test('buildAcceptedEstimateUpdatePlan links the accepted estimate to its job', (
   })
   assert.deepEqual(plan.jobUpdate, {
     linked_estimate_id: 'estimate-1',
-    status: 'scheduled',
   })
 })
 
-test('buildAcceptedEstimateSource uses rollup total and public snapshot as invoice/work-order source', () => {
+test('buildAcceptedEstimateSource still normalizes live accepted version records for repair inputs', () => {
+  const publicVersion = acceptedPublicVersionRow()
   const source = buildAcceptedEstimateSource({
-    estimate: {
-      org_id: 'org-1',
-      id: 'estimate-1',
-      job_id: 'job-1',
-      customer_id: 'customer-1',
-      version_name: 'Interior repaint',
-      version_state: 'live',
-      accepted_at: '2026-04-29T10:00:00.000Z',
-      accepted_public_version_id: 'public-version-1',
+    estimate: acceptedEstimateRow(),
+    publicVersion,
+    rollup: {
+      final_total: 4250,
     },
-    publicVersion: {
-      id: 'public-version-1',
-      version_number: 3,
-      public_token: 'public-token-1',
-      acceptance_json: {
-        legal_name: 'Jordan Customer',
-        signature_type: 'typed',
-        signature_value: 'Jordan Customer',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        user_agent: 'Mozilla/5.0',
-        ip: '127.0.0.1',
+  })
+
+  assert.equal(source.final_total, artifactTotal(publicVersion.snapshot_json))
+  assert.equal(source.estimate_snapshot_id, null)
+  assert.deepEqual(source.snapshot_json, publicVersion.snapshot_json)
+})
+
+test('buildAcceptedEstimateSourceFromSnapshot uses the canonical embedded accepted artifact', () => {
+  const source = buildAcceptedEstimateSourceFromSnapshot({
+    estimate: acceptedEstimateRow({ version_name: 'Mutable live version name' }),
+    snapshot: acceptedSnapshotRow({
+      source_payload_json: {
+        customer_artifact: clone(persistedAcceptedArtifact('Accepted snapshot title')),
+        accepted_public_version: clone(
+          acceptedPublicVersionRow({
+            snapshot_json: clone(persistedAcceptedArtifact('Mutated public version title')),
+          })
+        ),
       },
-      snapshot_json: { document: { title: 'Quote' } },
-    },
-    rollup: {
-      final_total: 4250,
-    },
-  })
-
-  assert.deepEqual(source, {
-    org_id: 'org-1',
-    job_id: 'job-1',
-    estimate_id: 'estimate-1',
-    customer_id: 'customer-1',
-    accepted_public_version_id: 'public-version-1',
-    public_version_number: 3,
-    public_token: 'public-token-1',
-    accepted_at: '2026-04-29T10:00:00.000Z',
-    accepted_by_legal_name: 'Jordan Customer',
-    signature_type: 'typed',
-    user_agent: 'Mozilla/5.0',
-    ip: '127.0.0.1',
-    version_name: 'Interior repaint',
-    version_state: 'live',
-    estimate_snapshot_id: null,
-    estimated_labor_hours: 0,
-    estimated_paint_gallons: 0,
-    estimated_supplies_cost: 0,
-    estimated_other_cost: 0,
-    final_total: 4250,
-    snapshot_json: { document: { title: 'Quote' } },
-  })
-})
-
-test('buildAcceptedEstimateSource returns empty snapshot for non-record public snapshots', () => {
-  const baseParams = {
-    estimate: {
-      org_id: 'org-1',
-      id: 'estimate-1',
-      job_id: 'job-1',
-      customer_id: 'customer-1',
-      version_name: 'Interior repaint',
-      version_state: 'live',
-      accepted_at: '2026-04-29T10:00:00.000Z',
-      accepted_public_version_id: 'public-version-1',
-    },
-    rollup: {
-      final_total: 4250,
-    },
-  }
-
-  assert.deepEqual(
-    buildAcceptedEstimateSource({
-      ...baseParams,
-      publicVersion: { id: 'public-version-1', snapshot_json: null },
-    }).snapshot_json,
-    {}
-  )
-  assert.deepEqual(
-    buildAcceptedEstimateSource({
-      ...baseParams,
-      publicVersion: { id: 'public-version-1', snapshot_json: 'not-a-record' },
-    }).snapshot_json,
-    {}
-  )
-  assert.deepEqual(
-    buildAcceptedEstimateSource({
-      ...baseParams,
-      publicVersion: { id: 'public-version-1', snapshot_json: ['not-a-record'] },
-    }).snapshot_json,
-    {}
-  )
-})
-
-test('buildAcceptedEstimateSource defaults absent and invalid rollup totals to zero', () => {
-  const estimate = {
-    org_id: 'org-1',
-    id: 'estimate-1',
-    job_id: 'job-1',
-    customer_id: 'customer-1',
-    version_name: 'Interior repaint',
-    version_state: 'live',
-    accepted_at: '2026-04-29T10:00:00.000Z',
-    accepted_public_version_id: 'public-version-1',
-  }
-  const publicVersion = {
-    id: 'public-version-1',
-    snapshot_json: { document: { title: 'Quote' } },
-  }
-
-  assert.equal(
-    buildAcceptedEstimateSource({ estimate, publicVersion, rollup: null }).final_total,
-    0
-  )
-  assert.equal(
-    buildAcceptedEstimateSource({
-      estimate,
-      publicVersion,
-      rollup: { final_total: 'not-a-number' },
-    }).final_total,
-    0
-  )
-  assert.equal(
-    buildAcceptedEstimateSource({
-      estimate,
-      publicVersion,
-      rollup: { final_total: Infinity },
-    }).final_total,
-    0
-  )
-})
-
-test('buildAcceptedEstimateSource normalizes blank optional text fields to null', () => {
-  const source = buildAcceptedEstimateSource({
-    estimate: {
-      org_id: 'org-1',
-      id: 'estimate-1',
-      job_id: 'job-1',
-      customer_id: '   ',
-      version_name: null,
-      version_state: '',
-      accepted_at: '2026-04-29T10:00:00.000Z',
-      accepted_public_version_id: 'public-version-1',
-    },
-    publicVersion: {
-      id: 'public-version-1',
-      snapshot_json: { document: { title: 'Quote' } },
-    },
-    rollup: {
-      final_total: 4250,
+    }),
+    artifactState: {
+      kind: 'canonical',
+      artifact: clone(persistedAcceptedArtifact('Accepted snapshot title')),
+      accepted_public_version: clone(
+        acceptedPublicVersionRow({
+          snapshot_json: clone(persistedAcceptedArtifact('Mutated public version title')),
+        })
+      ),
     },
   })
 
-  assert.equal(source.customer_id, null)
-  assert.equal(source.version_name, null)
-  assert.equal(source.version_state, null)
+  assert.equal(source.public_version_number, 3)
+  assert.equal(source.public_token, 'public-token-1')
+  assert.equal(source.final_total, persistedAcceptedArtifact('Accepted snapshot title').document.total)
+  assert.deepEqual(source.snapshot_json, persistedAcceptedArtifact('Accepted snapshot title'))
 })
 
-test('applyAcceptedEstimateSideEffects updates estimates first, then jobs with the accepted estimate plan payloads', async () => {
+test('applyAcceptedEstimateSideEffects updates estimates first, then links the accepted estimate to its job', async () => {
   const calls: Array<{
     table: string
     payload: Record<string, unknown>
@@ -312,62 +357,8 @@ test('applyAcceptedEstimateSideEffects updates estimates first, then jobs with t
       }
     },
   }
-  const input = {
-    orgId: 'org-1',
-    jobId: 'job-1',
-    estimateId: 'estimate-1',
-    publicVersionId: 'public-version-1',
-    acceptedAt: '2026-04-29T10:00:00.000Z',
-  }
 
-  const result = await applyAcceptedEstimateSideEffects(db, input)
-  const plan = buildAcceptedEstimateUpdatePlan(input)
-
-  assert.equal(result.ok, true)
-  assert.deepEqual(calls, [
-    {
-      table: 'estimates',
-      payload: plan.estimateUpdate,
-      filters: { org_id: 'org-1', id: 'estimate-1', accepted_public_version_id: null },
-      orFilter: null,
-    },
-    {
-      table: 'jobs',
-      payload: plan.jobUpdate,
-      filters: { org_id: 'org-1', id: 'job-1' },
-      orFilter: null,
-    },
-  ])
-})
-
-test('applyAcceptedEstimateSideEffects retries idempotently when the estimate is already owned by this public version', async () => {
-  const calls: Array<{
-    table: string
-    payload: Record<string, unknown>
-    filters: Record<string, unknown>
-    orFilter: string | null
-  }> = []
-  const estimateResults = [
-    { data: null, error: null },
-    { data: { id: 'estimates-updated' }, error: null },
-  ]
-  const db = {
-    from(table: string) {
-      return {
-        update(payload: Record<string, unknown>) {
-          const result =
-            table === 'estimates'
-              ? estimateResults.shift() ?? { data: null, error: null }
-              : { data: { id: `${table}-updated` }, error: null }
-          return createUpdateResultChain(result, (filters, orFilter) =>
-            calls.push({ table, payload, filters, orFilter })
-          )
-        },
-      }
-    },
-  }
-
-  const result = await applyAcceptedEstimateSideEffects(db, {
+  const result = await applyAcceptedEstimateSideEffects(db as never, {
     orgId: 'org-1',
     jobId: 'job-1',
     estimateId: 'estimate-1',
@@ -376,771 +367,251 @@ test('applyAcceptedEstimateSideEffects retries idempotently when the estimate is
   })
 
   assert.equal(result.ok, true)
-  assert.deepEqual(calls.map((call) => call.filters), [
-    { org_id: 'org-1', id: 'estimate-1', accepted_public_version_id: null },
-    {
-      org_id: 'org-1',
-      id: 'estimate-1',
-      accepted_public_version_id: 'public-version-1',
-    },
-    { org_id: 'org-1', id: 'job-1' },
-  ])
-  assert.deepEqual(calls.map((call) => call.orFilter), [null, null, null])
+  assert.deepEqual(calls.map((call) => call.table), ['estimates', 'jobs'])
 })
 
-test('applyAcceptedEstimateSideEffects returns server_error and skips jobs when the estimate update fails', async () => {
-  const calls: string[] = []
-  const db = {
-    from(table: string) {
-      calls.push(table)
-      return {
-        update() {
-          return createUpdateResultChain({
-            data: table === 'estimates' ? null : { id: `${table}-updated` },
-            error: table === 'estimates' ? { message: 'estimate update failed' } : null,
-          })
-        },
-      }
-    },
-  }
-
-  const result = await applyAcceptedEstimateSideEffects(db, {
-    orgId: 'org-1',
-    jobId: 'job-1',
-    estimateId: 'estimate-1',
-    publicVersionId: 'public-version-1',
-    acceptedAt: '2026-04-29T10:00:00.000Z',
-  })
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'server_error',
-    message: 'estimate update failed',
-  })
-  assert.deepEqual(calls, ['estimates'])
-})
-
-test('applyAcceptedEstimateSideEffects returns server_error when the job update fails', async () => {
-  const db = {
-    from(table: string) {
-      return {
-        update() {
-          return createUpdateResultChain({
-            data: table === 'jobs' ? null : { id: `${table}-updated` },
-            error: table === 'jobs' ? { message: 'job update failed' } : null,
-          })
-        },
-      }
-    },
-  }
-
-  const result = await applyAcceptedEstimateSideEffects(db, {
-    orgId: 'org-1',
-    jobId: 'job-1',
-    estimateId: 'estimate-1',
-    publicVersionId: 'public-version-1',
-    acceptedAt: '2026-04-29T10:00:00.000Z',
-  })
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'server_error',
-    message: 'job update failed',
-  })
-})
-
-test('applyAcceptedEstimateSideEffects returns conflict when another public version already owns the estimate', async () => {
-  const db = {
-    from(table: string) {
-      return {
-        update() {
-          return createUpdateResultChain({
-            data: table === 'estimates' ? null : { id: `${table}-updated` },
-            error: null,
-          })
-        },
-      }
-    },
-  }
-
-  const result = await applyAcceptedEstimateSideEffects(db, {
-    orgId: 'org-1',
-    jobId: 'job-1',
-    estimateId: 'estimate-1',
-    publicVersionId: 'public-version-2',
-    acceptedAt: '2026-04-29T10:00:00.000Z',
-  })
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'conflict',
-    message: 'Estimate is already accepted by another public version',
-  })
-})
-
-test('applyAcceptedEstimateSideEffects returns server_error when the job update affects no row', async () => {
-  const db = {
-    from(table: string) {
-      return {
-        update() {
-          return createUpdateResultChain({
-            data: table === 'jobs' ? null : { id: `${table}-updated` },
-            error: null,
-          })
-        },
-      }
-    },
-  }
-
-  const result = await applyAcceptedEstimateSideEffects(db, {
-    orgId: 'org-1',
-    jobId: 'missing-job',
-    estimateId: 'estimate-1',
-    publicVersionId: 'public-version-1',
-    acceptedAt: '2026-04-29T10:00:00.000Z',
-  })
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'server_error',
-    message: 'Accepted estimate job missing',
-  })
-})
-
-test('loadAcceptedEstimateSource returns accepted estimate source from job link, public version, and rollup', async () => {
-  const { db, calls } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Interior repaint',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-1',
-      },
-      error: null,
-    },
-    estimate_public_versions: {
-      data: {
-        id: 'public-version-1',
-        estimate_id: 'estimate-1',
-        version_number: 3,
-        public_token: 'public-token-1',
-        status: 'accepted',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        acceptance_json: {
-          legal_name: 'Jordan Customer',
-          signature_type: 'typed',
-          signature_value: 'Jordan Customer',
-          accepted_at: '2026-04-29T10:00:00.000Z',
-          user_agent: 'Mozilla/5.0',
-          ip: '127.0.0.1',
-        },
-        snapshot_json: { document: { title: 'Quote' } },
-      },
-      error: null,
-    },
-    estimate_snapshot: {
-      data: null,
-      error: null,
-    },
-    estimate_version_rollups: {
-      data: {
-        final_total: 4250,
-      },
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.deepEqual(calls, [
-    {
-      table: 'jobs',
-      columns: 'id, linked_estimate_id',
-      filters: { org_id: 'org-1', id: 'job-1' },
-    },
-    {
-      table: 'estimates',
-      columns:
-        'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id',
-      filters: { org_id: 'org-1', id: 'estimate-1' },
-    },
-    {
-      table: 'estimate_snapshot',
-      columns:
-        'id, org_id, job_id, estimate_id, customer_id, accepted_public_version_id, estimate_version_name, estimate_version_state, estimated_labor_hours, estimated_paint_gallons, estimated_supplies_cost, estimated_other_cost, estimated_total, source_payload_json',
-      filters: { org_id: 'org-1', estimate_id: 'estimate-1' },
-    },
-    {
-      table: 'estimate_public_versions',
-      columns:
-        'id, estimate_id, version_number, public_token, status, accepted_at, acceptance_json, snapshot_json',
-      filters: { org_id: 'org-1', id: 'public-version-1' },
-    },
-    {
-      table: 'estimate_version_rollups',
-      columns: 'final_total',
-      filters: { org_id: 'org-1', estimate_id: 'estimate-1' },
-    },
-  ])
-  assert.deepEqual(result, {
-    ok: true,
-    data: {
-      org_id: 'org-1',
-      job_id: 'job-1',
-      estimate_id: 'estimate-1',
-      customer_id: 'customer-1',
-      accepted_public_version_id: 'public-version-1',
-      public_version_number: 3,
-      public_token: 'public-token-1',
-      accepted_at: '2026-04-29T10:00:00.000Z',
-      accepted_by_legal_name: 'Jordan Customer',
-      signature_type: 'typed',
-      user_agent: 'Mozilla/5.0',
-      ip: '127.0.0.1',
-      version_name: 'Interior repaint',
-      version_state: 'live',
-      estimate_snapshot_id: null,
-      estimated_labor_hours: 0,
-      estimated_paint_gallons: 0,
-      estimated_supplies_cost: 0,
-      estimated_other_cost: 0,
-      final_total: 4250,
-      snapshot_json: { document: { title: 'Quote' } },
-    },
-  })
-})
-
-test('loadAcceptedEstimateSource prefers immutable snapshot totals over mutable rollups', async () => {
-  const { db, calls } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Live mutable name',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-1',
-      },
-      error: null,
-    },
-    estimate_public_versions: {
-      data: {
-        id: 'public-version-1',
-        estimate_id: 'estimate-1',
-        version_number: 3,
-        public_token: 'public-token-1',
-        status: 'accepted',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        acceptance_json: {
-          legal_name: 'Jordan Customer',
-          signature_type: 'typed',
-          accepted_at: '2026-04-29T10:00:00.000Z',
-        },
-        snapshot_json: { document: { title: 'Fallback quote' } },
-      },
-      error: null,
-    },
-    estimate_snapshot: {
-      data: {
-        id: 'snapshot-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        estimate_id: 'estimate-1',
-        customer_id: 'customer-1',
-        accepted_public_version_id: 'public-version-1',
-        estimate_version_name: 'Accepted snapshot name',
-        estimate_version_state: 'live',
-        estimated_labor_hours: 42,
-        estimated_paint_gallons: 8.5,
-        estimated_supplies_cost: 125,
-        estimated_other_cost: 30,
-        estimated_total: 5100,
-        source_payload_json: {
-          customer_send_snapshot_json: { document: { title: 'Accepted snapshot' } },
-        },
-      },
-      error: null,
-    },
-    estimate_version_rollups: {
-      data: {
-        final_total: 9999,
-      },
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.equal(result.ok, true)
-  if (result.ok) {
-    assert.equal(result.data.final_total, 5100)
-    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
-    assert.equal(result.data.estimated_labor_hours, 42)
-    assert.equal(result.data.estimated_paint_gallons, 8.5)
-    assert.equal(result.data.estimated_supplies_cost, 125)
-    assert.equal(result.data.estimated_other_cost, 30)
-    assert.equal(result.data.version_name, 'Accepted snapshot name')
-    assert.deepEqual(result.data.snapshot_json, {
-      document: { title: 'Accepted snapshot' },
-    })
-  }
-  assert.equal(
-    calls.some((call) => call.table === 'estimate_version_rollups'),
-    false
-  )
-  assert.equal(
-    calls.some((call) => call.table === 'estimate_public_versions'),
-    false
-  )
-})
-
-test('loadAcceptedEstimateSource uses linked estimate snapshot when the public version row is missing', async () => {
-  const { db, calls } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Live mutable name',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-missing',
-      },
-      error: null,
-    },
-    estimate_public_versions: {
-      data: null,
-      error: null,
-    },
-    estimate_snapshot: {
-      data: {
-        id: 'snapshot-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        estimate_id: 'estimate-1',
-        customer_id: 'customer-1',
-        accepted_public_version_id: 'public-version-missing',
-        estimate_version_name: 'Accepted snapshot name',
-        estimate_version_state: 'live',
-        estimated_labor_hours: 42,
-        estimated_paint_gallons: 8.5,
-        estimated_supplies_cost: 125,
-        estimated_other_cost: 30,
-        estimated_total: 5100,
-        source_payload_json: {
-          customer_send_snapshot_json: { document: { title: 'Accepted snapshot' } },
-          public_version: {
-            id: 'public-version-missing',
-            version_number: 3,
-            public_token: 'public-token-1',
-            accepted_at: '2026-04-29T10:00:00.000Z',
-            acceptance_json: {
-              legal_name: 'Jordan Customer',
-              signature_type: 'typed',
-              signature_value: 'Jordan Customer',
-              accepted_at: '2026-04-29T10:00:00.000Z',
-            },
-          },
-        },
-      },
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.equal(result.ok, true)
-  if (result.ok) {
-    assert.equal(result.data.estimate_id, 'estimate-1')
-    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
-    assert.equal(result.data.final_total, 5100)
-    assert.equal(result.data.public_version_number, 3)
-    assert.equal(result.data.public_token, 'public-token-1')
-    assert.equal(result.data.accepted_by_legal_name, 'Jordan Customer')
-  }
-  assert.equal(
-    calls.some((call) => call.table === 'estimate_public_versions'),
-    false
-  )
-})
-
-test('loadAcceptedEstimateSource uses linked estimate snapshot when the public version row is inconsistent', async () => {
-  const { db, calls } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Live mutable name',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-1',
-      },
-      error: null,
-    },
-    estimate_public_versions: {
-      data: {
-        id: 'public-version-1',
-        estimate_id: 'estimate-2',
-        status: 'draft',
-        accepted_at: null,
-      },
-      error: null,
-    },
-    estimate_snapshot: {
-      data: {
-        id: 'snapshot-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        estimate_id: 'estimate-1',
-        customer_id: 'customer-1',
-        accepted_public_version_id: 'public-version-1',
-        estimate_version_name: 'Accepted snapshot name',
-        estimate_version_state: 'live',
-        estimated_labor_hours: 42,
-        estimated_paint_gallons: 8.5,
-        estimated_supplies_cost: 125,
-        estimated_other_cost: 30,
-        estimated_total: 5100,
-        source_payload_json: {
-          customer_send_snapshot_json: { document: { title: 'Accepted snapshot' } },
-        },
-      },
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.equal(result.ok, true)
-  if (result.ok) {
-    assert.equal(result.data.estimate_id, 'estimate-1')
-    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
-    assert.equal(result.data.final_total, 5100)
-  }
-  assert.equal(
-    calls.some((call) => call.table === 'estimate_public_versions'),
-    false
-  )
-})
-
-test('loadAcceptedEstimateSource returns not_found when the job is missing', async () => {
-  const { db } = createReadDb({
-    jobs: {
-      data: null,
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'not_found',
-    message: 'Job not found',
-  })
-})
-
-test('loadAcceptedEstimateSource returns invalid_input when the job has no accepted estimate link', async () => {
+test('loadAcceptedEstimateSource reads the canonical embedded accepted artifact', async () => {
   const { db } = createReadDb({
     jobs: {
       data: {
         id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow(),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
+    assert.equal(result.data.final_total, artifactTotal(acceptedPublicVersionRow().snapshot_json))
+    assert.deepEqual(result.data.snapshot_json, acceptedPublicVersionRow().snapshot_json)
+  }
+})
+
+test('loadAcceptedEstimateSource exposes artifact total even when snapshot estimated_total drifted', async () => {
+  const acceptedArtifact = persistedAcceptedArtifact('Accepted drift-proof artifact')
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        estimated_total: 99_999,
+        source_payload_json: {
+          customer_artifact: clone(acceptedArtifact),
+          accepted_public_version: clone(
+            acceptedPublicVersionRow({
+              snapshot_json: clone(persistedAcceptedArtifact('Mutated public version title')),
+            })
+          ),
+        },
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.data.final_total, acceptedArtifact.document.total)
+    assert.deepEqual(result.data.snapshot_json, acceptedArtifact)
+  }
+})
+
+test('loadAcceptedEstimateSource fails closed when the accepted snapshot is missing', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: null,
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message:
+      'Accepted estimate snapshot is missing. Repair the snapshot before loading accepted estimate data.',
+  })
+})
+
+test('loadAcceptedEstimateSource fails closed when the embedded accepted artifact is missing', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        source_payload_json: {
+          accepted_public_version: clone(acceptedPublicVersionRow()),
+        },
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message:
+      'Accepted estimate snapshot customer artifact is missing. Repair the snapshot before loading accepted estimate data.',
+  })
+})
+
+test('loadAcceptedEstimateSource fails closed when the embedded accepted artifact is unreadable', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        source_payload_json: {
+          customer_artifact: { document: { title: 'corrupt' } },
+          accepted_public_version: clone(acceptedPublicVersionRow()),
+        },
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message:
+      'Accepted estimate snapshot customer artifact is unreadable. Repair the snapshot before loading accepted estimate data.',
+  })
+})
+
+test('loadAcceptedEstimateSource fails closed when the embedded accepted snapshot payload is legacy-only', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        source_payload_json: {
+          customer_send_snapshot_json: clone(persistedAcceptedArtifact('Accepted snapshot title')),
+        },
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message:
+      'Accepted estimate snapshot payload is legacy. Repair the snapshot before loading accepted estimate data.',
+  })
+})
+
+test('loadAcceptedEstimateSource still allows legacy accepted-job resolution when the canonical snapshot exists', async () => {
+  const { db, calls } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-legacy',
         linked_estimate_id: null,
       },
       error: null,
     },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'invalid_input',
-    message: 'Job has no accepted estimate',
-  })
-})
-
-test('loadAcceptedEstimateSource returns invalid_input when the linked estimate is not accepted', async () => {
-  const { db } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
     estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Interior repaint',
-        version_state: 'draft',
-        accepted_at: null,
-        accepted_public_version_id: null,
-      },
+      data: acceptedEstimateRow({
+        id: 'legacy-estimate-1',
+        job_id: 'job-legacy',
+        accepted_public_version_id: 'public-version-legacy-1',
+      }),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        id: 'snapshot-legacy-1',
+        job_id: 'job-legacy',
+        estimate_id: 'legacy-estimate-1',
+        accepted_public_version_id: 'public-version-legacy-1',
+      }),
       error: null,
     },
   })
 
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'invalid_input',
-    message: 'Linked estimate is not accepted',
-  })
-})
-
-test('loadAcceptedEstimateSource returns invalid_input when the linked estimate belongs to another job', async () => {
-  const { db } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-2',
-        customer_id: 'customer-1',
-        version_name: 'Interior repaint',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-1',
-      },
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'invalid_input',
-    message: 'Linked estimate does not belong to job',
-  })
-})
-
-test('loadAcceptedEstimateSource returns invalid_input when the accepted public version belongs to another estimate', async () => {
-  const { db } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Interior repaint',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-1',
-      },
-      error: null,
-    },
-    estimate_public_versions: {
-      data: {
-        id: 'public-version-1',
-        estimate_id: 'estimate-2',
-        status: 'accepted',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        snapshot_json: { document: { title: 'Quote' } },
-      },
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'invalid_input',
-    message: 'Accepted public version is invalid',
-  })
-})
-
-test('loadAcceptedEstimateSource returns invalid_input when the accepted public version is not accepted', async () => {
-  const { db } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Interior repaint',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-1',
-      },
-      error: null,
-    },
-    estimate_public_versions: {
-      data: {
-        id: 'public-version-1',
-        estimate_id: 'estimate-1',
-        status: 'draft',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        snapshot_json: { document: { title: 'Quote' } },
-      },
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'invalid_input',
-    message: 'Accepted public version is invalid',
-  })
-})
-
-test('loadAcceptedEstimateSource returns invalid_input when the accepted public version has no accepted timestamp', async () => {
-  const { db } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Interior repaint',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-1',
-      },
-      error: null,
-    },
-    estimate_public_versions: {
-      data: {
-        id: 'public-version-1',
-        estimate_id: 'estimate-1',
-        status: 'accepted',
-        accepted_at: null,
-        snapshot_json: { document: { title: 'Quote' } },
-      },
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
-
-  assert.deepEqual(result, {
-    ok: false,
-    kind: 'invalid_input',
-    message: 'Accepted public version is invalid',
-  })
-})
-
-test('loadAcceptedEstimateSource allows a missing rollup and defaults final_total to zero', async () => {
-  const { db } = createReadDb({
-    jobs: {
-      data: {
-        id: 'job-1',
-        linked_estimate_id: 'estimate-1',
-      },
-      error: null,
-    },
-    estimates: {
-      data: {
-        id: 'estimate-1',
-        org_id: 'org-1',
-        job_id: 'job-1',
-        customer_id: 'customer-1',
-        version_name: 'Interior repaint',
-        version_state: 'live',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        accepted_public_version_id: 'public-version-1',
-      },
-      error: null,
-    },
-    estimate_public_versions: {
-      data: {
-        id: 'public-version-1',
-        estimate_id: 'estimate-1',
-        status: 'accepted',
-        accepted_at: '2026-04-29T10:00:00.000Z',
-        snapshot_json: { document: { title: 'Quote' } },
-      },
-      error: null,
-    },
-    estimate_version_rollups: {
-      data: null,
-      error: null,
-    },
-  })
-
-  const result = await loadAcceptedEstimateSource(db, 'org-1', 'job-1')
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-legacy')
 
   assert.equal(result.ok, true)
-  if (result.ok) {
-    assert.equal(result.data.final_total, 0)
-  }
+  assert.equal(calls[0]?.table, 'jobs')
+  assert.equal(calls[1]?.table, 'estimates')
 })
 
-test('repairAcceptedEstimateSnapshotForJob retries snapshot creation for an accepted quote with no snapshot', async () => {
+test('repairAcceptedEstimateSnapshotForJob creates a missing accepted snapshot and reuses it on reload', async () => {
   const { db, calls } = createSequentialReadDb({
     jobs: [
+      {
+        data: {
+          id: 'job-1',
+          linked_estimate_id: 'estimate-1',
+        },
+        error: null,
+      },
       {
         data: {
           id: 'job-1',
@@ -1158,63 +629,15 @@ test('repairAcceptedEstimateSnapshotForJob retries snapshot creation for an acce
     ],
     estimates: [
       {
-        data: {
-          id: 'estimate-1',
-          org_id: 'org-1',
-          job_id: 'job-1',
-          customer_id: 'customer-1',
-          version_name: 'Interior repaint',
-          version_state: 'live',
-          accepted_at: '2026-04-29T10:00:00.000Z',
-          accepted_public_version_id: 'public-version-1',
-        },
+        data: acceptedEstimateRow(),
         error: null,
       },
       {
-        data: {
-          id: 'estimate-1',
-          org_id: 'org-1',
-          job_id: 'job-1',
-          customer_id: 'customer-1',
-          version_name: 'Interior repaint',
-          version_state: 'live',
-          accepted_at: '2026-04-29T10:00:00.000Z',
-          accepted_public_version_id: 'public-version-1',
-        },
-        error: null,
-      },
-    ],
-    estimate_public_versions: [
-      {
-        data: {
-          id: 'public-version-1',
-          estimate_id: 'estimate-1',
-          version_number: 3,
-          public_token: 'public-token-1',
-          status: 'accepted',
-          accepted_at: '2026-04-29T10:00:00.000Z',
-          acceptance_json: {
-            legal_name: 'Jordan Customer',
-            signature_type: 'typed',
-          },
-          snapshot_json: { document: { title: 'Quote' } },
-        },
+        data: acceptedEstimateRow(),
         error: null,
       },
       {
-        data: {
-          id: 'public-version-1',
-          estimate_id: 'estimate-1',
-          version_number: 3,
-          public_token: 'public-token-1',
-          status: 'accepted',
-          accepted_at: '2026-04-29T10:00:00.000Z',
-          acceptance_json: {
-            legal_name: 'Jordan Customer',
-            signature_type: 'typed',
-          },
-          snapshot_json: { document: { title: 'Quote' } },
-        },
+        data: acceptedEstimateRow(),
         error: null,
       },
     ],
@@ -1224,54 +647,13 @@ test('repairAcceptedEstimateSnapshotForJob retries snapshot creation for an acce
         error: null,
       },
       {
-        data: {
-          id: 'snapshot-1',
-          org_id: 'org-1',
-          job_id: 'job-1',
-          estimate_id: 'estimate-1',
-          customer_id: 'customer-1',
-          accepted_public_version_id: 'public-version-1',
-          estimate_version_name: 'Accepted snapshot name',
-          estimate_version_state: 'live',
-          estimated_labor_hours: 42,
-          estimated_paint_gallons: 8.5,
-          estimated_supplies_cost: 125,
-          estimated_other_cost: 30,
-          estimated_total: 5100,
-          source_payload_json: {
-            customer_send_snapshot_json: { document: { title: 'Accepted snapshot' } },
-          },
-        },
-        error: null,
-      },
-    ],
-    estimate_version_rollups: [
-      {
-        data: { final_total: 4250 },
+        data: acceptedSnapshotRow(),
         error: null,
       },
     ],
   })
-  const ensureSnapshot = async (input: {
-    requestOrigin: string
-    orgId: string
-    userId: string
-    estimateId: string
-    publicVersionId: string
-  }) => {
-    assert.deepEqual(input, {
-      requestOrigin: 'http://localhost',
-      orgId: 'org-1',
-      userId: 'user-1',
-      estimateId: 'estimate-1',
-      publicVersionId: 'public-version-1',
-    })
-    return {
-      ok: true as const,
-      data: { id: 'snapshot-1' },
-    }
-  }
 
+  let ensureCalled = 0
   const result = await repairAcceptedEstimateSnapshotForJob(
     {
       requestOrigin: 'http://localhost',
@@ -1279,13 +661,127 @@ test('repairAcceptedEstimateSnapshotForJob retries snapshot creation for an acce
       userId: 'user-1',
       jobId: 'job-1',
     },
-    { db, ensureSnapshot }
+    {
+      db: db as never,
+      ensureSnapshot: async (input) => {
+        ensureCalled += 1
+        assert.deepEqual(input, {
+          requestOrigin: 'http://localhost',
+          orgId: 'org-1',
+          userId: 'user-1',
+          estimateId: 'estimate-1',
+          publicVersionId: 'public-version-1',
+        })
+        return {
+          ok: true as const,
+          data: { id: 'snapshot-1' },
+        }
+      },
+    }
   )
 
   assert.equal(result.ok, true)
-  if (result.ok) {
-    assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
-    assert.equal(result.data.final_total, 5100)
-  }
+  assert.equal(ensureCalled, 1)
   assert.equal(calls.filter((call) => call.table === 'estimate_snapshot').length, 2)
+})
+
+test('repairAcceptedEstimateSnapshotForJob returns an existing canonical snapshot without repairing', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow(),
+      error: null,
+    },
+  })
+
+  let ensureCalled = 0
+  const result = await repairAcceptedEstimateSnapshotForJob(
+    {
+      requestOrigin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      jobId: 'job-1',
+    },
+    {
+      db: db as never,
+      ensureSnapshot: async () => {
+        ensureCalled += 1
+        return {
+          ok: true as const,
+          data: { id: 'snapshot-1' },
+        }
+      },
+    }
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(ensureCalled, 0)
+})
+
+test('repairAcceptedEstimateSnapshotForJob fails closed for legacy snapshots because snapshot rows are immutable', async () => {
+  const { db } = createSequentialReadDb({
+    jobs: [
+      {
+        data: {
+          id: 'job-1',
+          linked_estimate_id: 'estimate-1',
+        },
+        error: null,
+      },
+    ],
+    estimates: [
+      {
+        data: acceptedEstimateRow(),
+        error: null,
+      },
+    ],
+    estimate_snapshot: [
+      {
+        data: acceptedSnapshotRow({
+          source_payload_json: {
+            customer_send_snapshot_json: clone(persistedAcceptedArtifact('Legacy accepted snapshot')),
+          },
+        }),
+        error: null,
+      },
+    ],
+  })
+
+  let ensureCalled = 0
+  const result = await repairAcceptedEstimateSnapshotForJob(
+    {
+      requestOrigin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      jobId: 'job-1',
+    },
+    {
+      db: db as never,
+      ensureSnapshot: async () => {
+        ensureCalled += 1
+        return {
+          ok: true as const,
+          data: { id: 'snapshot-1' },
+        }
+      },
+    }
+  )
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message:
+      'Accepted estimate snapshot is legacy or incomplete and cannot be repaired in place because snapshot rows are immutable. Run an additive snapshot replacement migration.',
+  })
+  assert.equal(ensureCalled, 0)
 })

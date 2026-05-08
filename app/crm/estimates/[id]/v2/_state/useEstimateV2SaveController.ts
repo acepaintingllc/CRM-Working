@@ -14,16 +14,17 @@ import {
 } from '@/lib/estimator/v2WallsAutosave'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
-import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import { areEstimateV2DirtySnapshotsEqual } from './estimateV2DirtySnapshot'
 import {
   buildEstimateV2EditorApiFailureDiagnostic,
   formatEstimateV2EditorApiFailureLog,
 } from '../_lib/estimateV2EditorDiagnostics'
 import {
+  buildEstimateV2SaveSnapshot,
   collectEstimateV2CalculationMissingInputIssues,
   deriveEstimateV2PreparedSaveValidation,
-  resolveEstimateV2SaveResponseState,
+  hasEstimateV2SaveStateChangedSincePrepared,
+  reconcileEstimateV2SaveResponseFromState,
 } from './estimateV2EditorSaveOrchestration'
 import {
   applyEstimateV2PreparedSaveCollections,
@@ -164,33 +165,27 @@ export function useEstimateV2SaveController(params: {
       }
 
       const latestState = store.getState()
-      const latestSnapshot = buildEstimateV2DirtySnapshot({
+      const latestSnapshot = buildEstimateV2SaveSnapshot({
+        collections: latestState.collections,
         jobSettingsDraft: latestState.meta.jobSettingsDraft,
-        rooms: latestState.collections.rooms,
-        scopes: latestState.collections.scopes,
-        segments: latestState.collections.segments,
-        roomFlags: latestState.collections.roomFlags,
-        ceilingScopes: latestState.collections.ceilingScopes,
-        ceilingSegments: latestState.collections.ceilingSegments,
-        trimScopes: latestState.collections.trimScopes,
-        doorScopes: latestState.collections.doorScopes,
-        drywallRepairs: latestState.collections.drywallRepairs,
-        rollers: latestState.collections.rollers,
-        accessFees: latestState.collections.accessFees,
-        otherItems: latestState.collections.otherItems,
       })
-      if (latestSnapshot.comparisonKey !== preparedSave.payloadSnapshot.comparisonKey) {
+      if (
+        hasEstimateV2SaveStateChangedSincePrepared({
+          latestSnapshot,
+          prepared: preparedSave,
+        })
+      ) {
         meta.setLastSavedSnapshot(preparedSave.payloadSnapshot)
         meta.setSaveStatus('idle')
         return runQueuedManualSave(false)
       }
 
-      const responseState = resolveEstimateV2SaveResponseState({
+      const responseState = reconcileEstimateV2SaveResponseFromState({
         trigger,
         payload,
         meta,
         prepared: preparedSave,
-        currentState: store.getState(),
+        currentState: latestState,
         effectiveJobProductDefaults,
       })
       applyEstimateV2SuccessfulSaveState(store, responseState, {
@@ -236,20 +231,9 @@ export function useEstimateV2SaveController(params: {
     commitFocusedEditorField?.()
 
     const latestState = store.getState()
-    const latestSnapshot = buildEstimateV2DirtySnapshot({
+    const latestSnapshot = buildEstimateV2SaveSnapshot({
+      collections: latestState.collections,
       jobSettingsDraft: latestState.meta.jobSettingsDraft,
-      rooms: latestState.collections.rooms,
-      scopes: latestState.collections.scopes,
-      segments: latestState.collections.segments,
-      roomFlags: latestState.collections.roomFlags,
-      ceilingScopes: latestState.collections.ceilingScopes,
-      ceilingSegments: latestState.collections.ceilingSegments,
-      trimScopes: latestState.collections.trimScopes,
-      doorScopes: latestState.collections.doorScopes,
-      drywallRepairs: latestState.collections.drywallRepairs,
-      rollers: latestState.collections.rollers,
-      accessFees: latestState.collections.accessFees,
-      otherItems: latestState.collections.otherItems,
     })
     const detailsHref = routeFamily.detailsHref(estimateId)
     if (areEstimateV2DirtySnapshotsEqual(latestSnapshot, latestState.meta.lastSavedSnapshot)) {

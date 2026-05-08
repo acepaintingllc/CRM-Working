@@ -216,7 +216,7 @@ describe('QuotePortalClient', () => {
       })
     })
 
-    expect(await screen.findAllByText("Quote accepted. We'll contact you to schedule.")).toHaveLength(1)
+    expect(await screen.findAllByText("Quote accepted. We'll contact you soon to confirm the next steps.")).toHaveLength(1)
   })
 
   it('defaults to typed signature mode', () => {
@@ -309,23 +309,75 @@ describe('QuotePortalClient', () => {
     fireEvent.click(acceptButton)
 
     expect(acceptButton).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull()
-    expect(screen.getByText('Submitting quote acceptance...')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Decline Quote' })).toBeDisabled()
+    expect(screen.getByText('Sending your acceptance...')).toBeTruthy()
 
     resolveFetch(createResponse({ data: createWorkflowSnapshot('accepted') }))
 
-    expect(await screen.findAllByText("Quote accepted. We'll contact you to schedule.")).toHaveLength(1)
+    expect(await screen.findAllByText("Quote accepted. We'll contact you soon to confirm the next steps.")).toHaveLength(1)
   })
 
-  it('hides decline controls on the active sign page', () => {
+  it('renders decline controls on the active sign page', () => {
     render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
 
-    expect(screen.queryByLabelText('Decline note')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull()
+    expect(screen.getByLabelText('Decline note (optional)')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Decline Quote' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeTruthy()
   })
 
-  it('shows a soft expiration warning without blocking acceptance', () => {
+  it('submits the existing public decline endpoint with an optional note', async () => {
+    mockFetch.mockResolvedValue(createResponse({ data: createWorkflowSnapshot('declined') }))
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByLabelText('Decline note (optional)'), {
+      target: { value: 'Timing no longer works for us.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Decline Quote' }))
+
+    await waitFor(() => {
+      const [url, init] = mockFetch.mock.calls[0]
+      const body = JSON.parse(String(init?.body))
+      expect(url).toBe('/api/quote-public/public-token/decline')
+      expect(init?.method).toBe('POST')
+      expect(body).toMatchObject({
+        reason: 'Timing no longer works for us.',
+      })
+    })
+
+    expect(
+      await screen.findAllByText("Quote declined. We'll review your note and follow up if anything else is needed.")
+    ).toHaveLength(2)
+  })
+
+  it('shows submit disabled state while declining', async () => {
+    let resolveFetch: (value: unknown) => void = () => {}
+    const pending = new Promise((resolve) => {
+      resolveFetch = resolve
+    })
+    mockFetch.mockReturnValue(pending as Promise<never>)
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByLabelText('Decline note (optional)'), {
+      target: { value: 'We are postponing this work.' },
+    })
+    const declineButton = screen.getByRole('button', { name: 'Decline Quote' })
+    const acceptButton = screen.getByRole('button', { name: 'Accept Quote' })
+    fireEvent.click(declineButton)
+
+    expect(declineButton).toBeDisabled()
+    expect(acceptButton).toBeDisabled()
+    expect(screen.getByText('Sending your decline...')).toBeTruthy()
+
+    resolveFetch(createResponse({ data: createWorkflowSnapshot('declined') }))
+
+    expect(
+      await screen.findAllByText("Quote declined. We'll review your note and follow up if anything else is needed.")
+    ).toHaveLength(2)
+  })
+
+  it('renders an explicit locked expired state before the customer can accept', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-29T12:00:00.000Z'))
 
@@ -338,15 +390,21 @@ describe('QuotePortalClient', () => {
       />
     )
 
-    expect(screen.getByText('This quote may be expired, contact us.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeDisabled()
-
-    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
-    fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
-    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText('Typed signature'), { target: { value: 'Jordan Customer' } })
-    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeEnabled()
+    expect(screen.getByText('This quote has expired')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'This quote has expired. Please contact us for an updated quote.'
+      )
+    ).toBeTruthy()
+    expect(
+      screen.getAllByText(
+        'This quote can no longer be accepted. Please contact us for an updated quote.'
+      ).length
+    ).toBeGreaterThan(0)
+    expect(screen.getByText('Status: Expired')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+    expect(screen.queryByLabelText('Full legal name')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Print Quote' })).toBeTruthy()
   })
 
   it('renders locked content for accepted quote', () => {
@@ -368,7 +426,7 @@ describe('QuotePortalClient', () => {
       />
     )
 
-    expect(screen.getAllByText("Quote accepted. We'll contact you to schedule.")).toHaveLength(1)
+    expect(screen.getAllByText("Quote accepted. We'll contact you soon to confirm the next steps.")).toHaveLength(1)
     expect(screen.getByText('Signed by Jordan Customer')).toBeTruthy()
     expect(screen.getByText(/Accepted Apr 15, 2026/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Print Quote' })).toBeTruthy()
@@ -393,13 +451,15 @@ describe('QuotePortalClient', () => {
       screen.getAllByText("Quote declined. We'll review your note and follow up if anything else is needed.")
     ).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Decline Quote' })).toBeNull()
   })
 
   it('renders read-only content for superseded quote', () => {
     render(<QuotePortalClient snapshot={createPublicSnapshot({ status: 'superseded' })} />)
 
-    expect(screen.getAllByText('A newer quote is available.')).toHaveLength(2)
+    expect(screen.getAllByText('This quote is no longer current. Please contact us for the latest version.')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Decline Quote' })).toBeNull()
   })
 
   it('renders assembled placeholder policy copy from the document contract', () => {
@@ -409,7 +469,7 @@ describe('QuotePortalClient', () => {
     expect(screen.getByText('[Card fee note missing]')).toBeTruthy()
   })
 
-  it('renders submit errors without mutating the locked state', async () => {
+  it('normalizes declined-quote conflicts into customer-facing copy', async () => {
     mockFetch.mockResolvedValue(createResponse({ error: 'Cannot accept a declined quote' }, false))
 
     render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
@@ -419,8 +479,104 @@ describe('QuotePortalClient', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
     fireEvent.click(screen.getByRole('button', { name: 'Accept Quote' }))
 
-    expect(await screen.findByText('Cannot accept a declined quote')).toBeTruthy()
-    expect(screen.queryByText("Quote accepted. We'll contact you to schedule.")).toBeNull()
+    expect(
+      await screen.findByText("This quote has already been declined. Please contact us if you'd like to revisit it.")
+    ).toBeTruthy()
+    expect(screen.queryByText("Quote accepted. We'll contact you soon to confirm the next steps.")).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Decline Quote' })).toBeNull()
+  })
+
+  it('normalizes accepted-by-another-version conflicts into customer-facing copy', async () => {
+    mockFetch.mockResolvedValue(
+      createResponse({ error: 'Estimate is already accepted by another public version' }, false)
+    )
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
+    fireEvent.change(screen.getByLabelText('Typed signature'), { target: { value: 'Jordan Customer' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Quote' }))
+
+    expect(
+      await screen.findByText(
+        'This quote is no longer available because another version has already been approved.'
+      )
+    ).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+  })
+
+  it('normalizes accepted-quote conflicts into customer-facing copy', async () => {
+    mockFetch.mockResolvedValue(createResponse({ error: 'Cannot decline an accepted quote' }, false))
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Decline Quote' }))
+
+    expect(
+      await screen.findByText("This quote has already been accepted. We'll contact you soon to confirm the next steps.")
+    ).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Decline Quote' })).toBeNull()
+  })
+
+  it('normalizes superseded conflicts into customer-facing copy', async () => {
+    mockFetch.mockResolvedValue(createResponse({ error: 'A newer quote is available.' }, false))
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
+    fireEvent.change(screen.getByLabelText('Typed signature'), { target: { value: 'Jordan Customer' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Quote' }))
+
+    expect(
+      await screen.findAllByText('This quote is no longer current. Please contact us for the latest version.')
+    ).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Accept Quote' })).toBeNull()
+  })
+
+  it('keeps form data intact and allows immediate retry for transient accept failures', async () => {
+    mockFetch.mockResolvedValue(createResponse({ error: 'Unexpected database timeout' }, false))
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature mode' }), { target: { value: 'typed' } })
+    fireEvent.change(screen.getByLabelText('Full legal name'), { target: { value: 'Jordan Customer' } })
+    fireEvent.change(screen.getByLabelText('Typed signature'), { target: { value: 'Jordan Customer' } })
+    fireEvent.change(screen.getByLabelText('Message (optional)'), {
+      target: { value: 'Please use the side gate.' },
+    })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I agree to the scope, pricing, and terms shown above.' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Quote' }))
+
+    expect(
+      await screen.findByText("We couldn't update this quote right now. Please try again or contact us.")
+    ).toBeTruthy()
+    expect(screen.getByLabelText('Full legal name')).toHaveValue('Jordan Customer')
+    expect(screen.getByLabelText('Typed signature')).toHaveValue('Jordan Customer')
+    expect(screen.getByLabelText('Message (optional)')).toHaveValue('Please use the side gate.')
+    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Decline Quote' })).toBeEnabled()
+    expect(screen.queryByText("Quote declined. We'll review your note and follow up if anything else is needed.")).toBeNull()
+  })
+
+  it('keeps decline form data intact and allows immediate retry for transient decline failures', async () => {
+    mockFetch.mockResolvedValue(createResponse({ error: 'Unexpected database timeout' }, false))
+
+    render(<QuotePortalClient snapshot={createPublicSnapshot()} />)
+
+    fireEvent.change(screen.getByLabelText('Decline note (optional)'), {
+      target: { value: 'We need to postpone this project.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Decline Quote' }))
+
+    expect(
+      await screen.findByText("We couldn't update this quote right now. Please try again or contact us.")
+    ).toBeTruthy()
+    expect(screen.getByLabelText('Decline note (optional)')).toHaveValue('We need to postpone this project.')
+    expect(screen.getByRole('button', { name: 'Decline Quote' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Accept Quote' })).toBeTruthy()
   })
 
   it('keeps the quote portal client as a thin wrapper over the shared public portal', () => {

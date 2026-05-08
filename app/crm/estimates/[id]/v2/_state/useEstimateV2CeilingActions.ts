@@ -17,12 +17,18 @@ import {
   updateCeilingScopeMutation,
   updateCeilingSegmentMutation,
 } from '../_lib/estimateV2EditorMutations'
+import {
+  formatEstimateV2RoomLabel,
+  formatEstimateV2ScopeLabel,
+  type EstimateV2DestructiveIntent,
+} from './estimateV2DestructiveConfirm'
 
 export function useEstimateV2CeilingActions(params: {
   store: EstimateV2EditorStoreApi
   roomModeById: Map<string, 'RECT' | 'SEG'>
+  requestDestructiveConfirm: (intent: EstimateV2DestructiveIntent) => void
 }) {
-  const { store, roomModeById } = params
+  const { store, roomModeById, requestDestructiveConfirm } = params
 
   const markDirty = useCallback(() => {
     store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: 'ceilings' }))
@@ -64,23 +70,38 @@ export function useEstimateV2CeilingActions(params: {
 
   const deleteScope = useCallback(
     (roomId: string, scopeId: string) => {
-      const ok = window.confirm('Delete this ceiling scope and all of its segments?')
-      if (!ok) return
-      const { collections, setCeilingScopes, setCeilingSegments } = store.getState()
-      const next = deleteCeilingScopeMutation({
-        scopes: collections.ceilingScopes,
-        segments: collections.ceilingSegments,
+      const { collections } = store.getState()
+      const room = collections.rooms.find((entry) => entry.roomId === roomId)
+      const scope = collections.ceilingScopes.find((entry) => entry.id === scopeId)
+      const segmentCount = collections.ceilingSegments.filter(
+        (segment) => segment.ceilingScopeId === scopeId
+      ).length
+      requestDestructiveConfirm({
+        kind: 'ceiling-scope-delete',
         roomId,
+        roomLabel: formatEstimateV2RoomLabel(room?.roomName, roomId),
         scopeId,
+        scopeLabel: formatEstimateV2ScopeLabel(scope?.scopeName, 'Ceiling scope'),
+        segmentCount,
+        run: () => {
+          const { collections: currentCollections, setCeilingScopes, setCeilingSegments } =
+            store.getState()
+          const next = deleteCeilingScopeMutation({
+            scopes: currentCollections.ceilingScopes,
+            segments: currentCollections.ceilingSegments,
+            roomId,
+            scopeId,
+          })
+          setCeilingScopes(next.scopes)
+          setCeilingSegments(next.segments)
+          store.getState().setScopes((prev) =>
+            syncWallCutInFromTrayCeilings({ wallScopes: prev, ceilingScopes: next.scopes })
+          )
+          markDirty()
+        },
       })
-      setCeilingScopes(next.scopes)
-      setCeilingSegments(next.segments)
-      store.getState().setScopes((prev) =>
-        syncWallCutInFromTrayCeilings({ wallScopes: prev, ceilingScopes: next.scopes })
-      )
-      markDirty()
     },
-    [markDirty, store]
+    [markDirty, requestDestructiveConfirm, store]
   )
 
   const moveScope = useCallback(

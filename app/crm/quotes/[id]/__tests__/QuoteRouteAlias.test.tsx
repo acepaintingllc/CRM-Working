@@ -6,6 +6,9 @@ import QuoteWorkspacePage from '../page'
 import QuoteDetailsPage from '../details/page'
 import SendQuotePage from '../send/page'
 import QuoteSummaryPage from '../summary/page'
+import QuoteV2WorkspacePage from '../v2/page'
+import QuoteV2DetailsPage from '../v2/details/page'
+import QuoteV2SummaryPage from '../v2/summary/page'
 
 vi.mock('@/app/crm/estimates/[id]/v2/_components/EstimateV2ErrorBoundary', () => ({
   EstimateV2ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -14,36 +17,42 @@ vi.mock('@/app/crm/estimates/[id]/v2/_components/EstimateV2ErrorBoundary', () =>
 vi.mock('@/app/crm/estimates/[id]/v2/_components/EstimateV2EditorPageContent', () => ({
   EstimateV2EditorPageContent: ({
     estimateId,
+    routeFamily,
     routeFamilyKey,
   }: {
     estimateId?: string
-    routeFamilyKey?: 'estimate' | 'quote'
+    routeFamily?: { editorHref: (estimateId: string) => string }
+    routeFamilyKey?: 'estimate' | 'quote' | 'quote-v2'
   }) => (
-    <div>editor:{estimateId}:{routeFamilyKey}</div>
+    <div>editor:{estimateId}:{routeFamilyKey ?? routeFamily?.editorHref(estimateId ?? '')}</div>
   ),
 }))
 
 vi.mock('@/app/crm/estimates/[id]/v2/summary/_components/EstimateV2SummaryPageContent', () => ({
   EstimateV2SummaryPageContent: ({
     estimateId,
+    routeFamily,
     routeFamilyKey,
   }: {
     estimateId: string
-    routeFamilyKey?: 'estimate' | 'quote'
+    routeFamily?: { summaryHref: (estimateId: string) => string }
+    routeFamilyKey?: 'estimate' | 'quote' | 'quote-v2'
   }) => (
-    <div>summary:{estimateId}:{routeFamilyKey}</div>
+    <div>summary:{estimateId}:{routeFamilyKey ?? routeFamily?.summaryHref(estimateId)}</div>
   ),
 }))
 
 vi.mock('@/app/crm/estimates/[id]/v2/details/_components/EstimateV2DetailsPageContent', () => ({
   EstimateV2DetailsPageContent: ({
     estimateId,
+    routeFamily,
     routeFamilyKey,
   }: {
     estimateId: string
-    routeFamilyKey?: 'estimate' | 'quote'
+    routeFamily?: { detailsHref: (estimateId: string) => string }
+    routeFamilyKey?: 'estimate' | 'quote' | 'quote-v2'
   }) => (
-    <div>details:{estimateId}:{routeFamilyKey}</div>
+    <div>details:{estimateId}:{routeFamilyKey ?? routeFamily?.detailsHref(estimateId)}</div>
   ),
 }))
 
@@ -97,6 +106,25 @@ describe('quote route aliases', () => {
     ).toEqual([
       '@/app/crm/estimates/[id]/send/sendEstimateClient',
     ])
+
+    expect(
+      getImportSpecifiers(readSource('app/crm/quotes/[id]/v2/page.tsx'))
+    ).toEqual([
+      '@/app/crm/estimates/[id]/v2/_components/EstimateV2EditorPageContent',
+      '@/app/crm/estimates/[id]/v2/_components/EstimateV2ErrorBoundary',
+    ])
+
+    expect(
+      getImportSpecifiers(readSource('app/crm/quotes/[id]/v2/summary/page.tsx'))
+    ).toEqual([
+      '@/app/crm/estimates/[id]/v2/summary/_components/EstimateV2SummaryPageContent',
+    ])
+
+    expect(
+      getImportSpecifiers(readSource('app/crm/quotes/[id]/v2/details/page.tsx'))
+    ).toEqual([
+      '@/app/crm/estimates/[id]/v2/details/_components/EstimateV2DetailsPageContent',
+    ])
   })
 
   it('keeps the quote details route free of route-local implementation imports', () => {
@@ -128,5 +156,20 @@ describe('quote route aliases', () => {
   it('mounts the canonical estimate send content with quote aliases', async () => {
     render(await SendQuotePage({ params: { id: 'estimate-1' } }))
     expect(screen.getByText('send:estimate-1:quote')).toBeTruthy()
+  })
+
+  it('mounts the canonical estimate v2 workspace content at the explicit quote v2 path', async () => {
+    render(await QuoteV2WorkspacePage({ params: { id: 'estimate-1' } }))
+    expect(screen.getByText('editor:estimate-1:quote-v2')).toBeTruthy()
+  })
+
+  it('mounts the canonical estimate v2 summary content at the explicit quote v2 path', async () => {
+    render(await QuoteV2SummaryPage({ params: { id: 'estimate-1' } }))
+    expect(screen.getByText('summary:estimate-1:quote-v2')).toBeTruthy()
+  })
+
+  it('mounts the canonical estimate v2 details content at the explicit quote v2 path', async () => {
+    render(await QuoteV2DetailsPage({ params: { id: 'estimate-1' } }))
+    expect(screen.getByText('details:estimate-1:quote-v2')).toBeTruthy()
   })
 })

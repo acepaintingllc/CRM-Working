@@ -44,7 +44,7 @@ test('getSaveStatusText prioritizes saving, errors, blocked, dirty, then saved s
       updatedAt: null,
       formatDateTime: fmt,
     }),
-    'bad save'
+    "We couldn't save your changes. Try again."
   )
   assert.equal(
     getSaveStatusText({

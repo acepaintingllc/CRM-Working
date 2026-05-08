@@ -4,6 +4,60 @@ import { useCallback, useMemo } from 'react'
 import { asText } from '@/lib/estimator/parsing'
 import type { EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 
+export type EstimateV2MissingProductConfigurationWarning = {
+  title: string
+  detail: string
+  fixHint: string
+  missingLabels: string[]
+}
+
+type RequiredDefaultProductIds = {
+  wallPaintProductId?: string | null
+  wallPrimerProductId?: string | null
+  ceilingPaintProductId?: string | null
+  ceilingPrimerProductId?: string | null
+  trimPaintProductId?: string | null
+  trimPrimerProductId?: string | null
+}
+
+const REQUIRED_DEFAULT_PRODUCT_FIELDS = [
+  { key: 'wallPaintProductId', label: 'walls default paint' },
+  { key: 'wallPrimerProductId', label: 'walls default primer' },
+  { key: 'ceilingPaintProductId', label: 'ceilings default paint' },
+  { key: 'ceilingPrimerProductId', label: 'ceilings default primer' },
+  { key: 'trimPaintProductId', label: 'trim default paint' },
+  { key: 'trimPrimerProductId', label: 'trim default primer' },
+] as const satisfies ReadonlyArray<{
+  key: keyof RequiredDefaultProductIds
+  label: string
+}>
+
+function formatMissingLabels(labels: string[]) {
+  if (labels.length <= 1) return labels[0] ?? ''
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`
+  return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`
+}
+
+export function buildMissingProductConfigurationWarning(
+  defaults: RequiredDefaultProductIds,
+  fixHint: string
+): EstimateV2MissingProductConfigurationWarning | null {
+  const missingLabels = REQUIRED_DEFAULT_PRODUCT_FIELDS.filter(
+    ({ key }) => !asText(defaults[key] ?? '')
+  ).map(({ label }) => label)
+
+  if (missingLabels.length === 0) return null
+
+  const missingSummary = formatMissingLabels(missingLabels)
+
+  return {
+    title: 'Required paint defaults are missing',
+    detail: `Missing ${missingSummary}. Pricing and send readiness stay blocked until every required paint and primer default is set.`,
+    fixHint,
+    missingLabels,
+  }
+}
+
 export function resolveDefaultProductLabel(
   productId: string,
   labelForId: (value: string) => string,
@@ -64,6 +118,14 @@ export function useEstimateV2ProductLabels(params: {
         meta.orgJobProductDefaults.trimPrimerProductId,
     }),
     [meta.jobSettingsDraft, meta.orgJobProductDefaults]
+  )
+  const configurationWarning = useMemo(
+    () =>
+      buildMissingProductConfigurationWarning(
+        effectiveJobProductDefaults,
+        'Expand the left sidebar and open Paint Defaults to set the missing defaults.'
+      ),
+    [effectiveJobProductDefaults]
   )
 
   const orgWallPaintLabel = resolveDefaultProductLabel(
@@ -184,6 +246,7 @@ export function useEstimateV2ProductLabels(params: {
     : effectiveTrimPrimerLabel
 
   return {
+    configurationWarning,
     effectiveJobProductDefaults,
     orgWallPaintLabel,
     orgWallPrimerLabel,

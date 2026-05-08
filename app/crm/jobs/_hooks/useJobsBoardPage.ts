@@ -144,7 +144,7 @@ export function useJobsBoardPage(deps: JobsBoardDeps = {}) {
       const patch = result.job as Partial<JobSummary>
       setJobs((prev) => prev.map((job) => (job.id === emailJobId ? { ...job, ...patch } : job)))
     }
-    setNotice(result.warning ?? 'Email sent')
+    setNotice(result.notice ?? result.warning ?? 'Email sent')
   }
 
   const openCloseout = (jobId: string) => {

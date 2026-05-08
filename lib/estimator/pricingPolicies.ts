@@ -13,11 +13,15 @@ export type EngineOutput = {
     raw_paint_material_cost?: number | null
     paint_price_per_gal?: number | null
     primer_price_per_gal?: number | null
+    raw_total?: number | null
+    override_total?: number | string | null
+    effective_total?: number | null
   }>
   room_totals: Array<{
     room_id: string
     effective_total: number
   }>
+  job_level_total?: number
   per_color_supply_groups: Array<{
     allocations: Array<{ allocated_supply_cost: number }>
   }>
@@ -71,6 +75,9 @@ export type AccessFeePricingAllocation = {
   walls: number
   ceilings: number
   trim: number
+  doors: number
+  drywall: number
+  other: number
   unallocated: number
   warning: string | null
 }
@@ -105,6 +112,7 @@ export type EstimatePricingSummary = {
   primerMaterialCost: number
   supplyCost: number
   sharedAccessCost: number
+  access_fee_total: number
   accessFeeAllocation: AccessFeePricingAllocation
   prePolicyTotal: number
   postLaborPolicyTotal: number
@@ -333,8 +341,11 @@ export function buildEstimatePricingSummaryFromEngines(
   const wallEngines = engineInputs.filter((engine) => engine.kind === 'walls').map((engine) => engine.output)
   const ceilingEngines = engineInputs.filter((engine) => engine.kind === 'ceilings').map((engine) => engine.output)
   const trimEngines = engineInputs.filter((engine) => engine.kind === 'trim').map((engine) => engine.output)
+  const paintSupplyEngines = [...wallEngines, ...ceilingEngines, ...trimEngines]
 
-  // Aggregate from included scopes across all engines
+  // Scope total overrides are already reflected in engine room totals.
+  // Labor-day rounding remains an estimate-level policy based on effective
+  // scope hours, even when a scope total has been manually overridden.
   let rawLaborHours = 0
   let wallPaintMaterialCost = 0
   let ceilingPaintMaterialCost = 0
@@ -345,6 +356,12 @@ export function buildEstimatePricingSummaryFromEngines(
     for (const scope of engine.scopes) {
       if (scope.include !== 'Y') continue
       rawLaborHours = round4(rawLaborHours + (scope.effective_paint_hours ?? 0) + (scope.effective_primer_hours ?? 0))
+    }
+  }
+
+  for (const engine of paintSupplyEngines) {
+    for (const scope of engine.scopes) {
+      if (scope.include !== 'Y') continue
       const primerPrice = scope.primer_price_per_gal ?? 0
       primerMaterialCost = round4(primerMaterialCost + (scope.effective_primer_gallons ?? 0) * primerPrice)
       areaSupplyCost = round4(areaSupplyCost + (scope.effective_supply_cost ?? 0))
@@ -382,9 +399,9 @@ export function buildEstimatePricingSummaryFromEngines(
   const standaloneTrimPaintMaterialCost = round2(trimPaint?.paint_cost ?? 0)
   const trimPaintMaterialCost = round2(trimScopePaintMaterialCost + standaloneTrimPaintMaterialCost)
   const paintMaterialCost = round2(wallPaintMaterialCost + ceilingPaintMaterialCost + trimPaintMaterialCost)
-  // Per-color shared supply costs; aggregate across all engines.
+  // Paint/supply breakdown rows are owned by wall, ceiling, and trim paint engines.
   let perColorSupplyCost = 0
-  for (const engine of engines) {
+  for (const engine of paintSupplyEngines) {
     for (const group of engine.per_color_supply_groups) {
       for (const alloc of group.allocations) {
         perColorSupplyCost = round4(perColorSupplyCost + alloc.allocated_supply_cost)
@@ -401,6 +418,9 @@ export function buildEstimatePricingSummaryFromEngines(
     walls: accessAllocationResult.allocations.walls,
     ceilings: accessAllocationResult.allocations.ceilings,
     trim: accessAllocationResult.allocations.trim,
+    doors: accessAllocationResult.allocations.doors,
+    drywall: accessAllocationResult.allocations.drywall,
+    other: accessAllocationResult.allocations.other,
     unallocated: accessAllocationResult.unallocated,
     warning: accessAllocationResult.warning,
   }
@@ -422,8 +442,16 @@ export function buildEstimatePricingSummaryFromEngines(
     room_id: room.room_id,
     baseTotal: round2(room.baseTotal + (trimAllocations[idx]?.allocatedMinimumAdjustment ?? 0)),
   }))
+  const jobLevelTotal = round2(
+    engineInputs.reduce((sum, engine) => {
+      if (engine.kind !== 'other') return sum
+      return sum + Math.max(0, engine.output.job_level_total ?? 0)
+    }, 0)
+  )
 
-  const prePolicyTotal = round2(roomBasesWithTrim.reduce((s, v) => s + v.baseTotal, 0) + sharedAccessCost)
+  const prePolicyTotal = round2(
+    roomBasesWithTrim.reduce((s, v) => s + v.baseTotal, 0) + jobLevelTotal + sharedAccessCost
+  )
   const postLaborPolicyTotal = round2(prePolicyTotal + (laborResult.effectiveHours - rawLaborHours) * laborRate)
 
   const minimumResult = applyJobMinimum(postLaborPolicyTotal, minimumPolicy)
@@ -443,6 +471,7 @@ export function buildEstimatePricingSummaryFromEngines(
     primerMaterialCost: round2(primerMaterialCost),
     supplyCost,
     sharedAccessCost,
+    access_fee_total: sharedAccessCost,
     accessFeeAllocation,
     prePolicyTotal,
     postLaborPolicyTotal,
@@ -473,7 +502,9 @@ export function buildPerJobSupplyCost(params: {
       (activeScopes.has('trim') && scope === 'trim')
     if (!applies) continue
     const multiplier = String(row.crew_multiplier ?? '').toUpperCase() === 'Y' ? params.crewSize : 1
-    total = round4(total + Math.max(0, row.value) * multiplier)
+    const value = row.value == null ? null : Math.max(0, row.value)
+    if (value == null) continue
+    total = round4(total + value * multiplier)
   }
   return total
 }

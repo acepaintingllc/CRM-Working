@@ -37,17 +37,9 @@ export function InsightsPageContent() {
     dismissRecommendation,
     generateRecommendations,
     feedback,
-    recommendationActionState,
     refresh,
     vm,
   } = useInsightsTrendsPage()
-  const confirmingApplyCard =
-    vm?.recommendations.find(
-      (card) => card.id === recommendationActionState.confirmingApplyId
-    ) ?? null
-  const confirmingApply =
-    recommendationActionState.pendingId === recommendationActionState.confirmingApplyId &&
-    recommendationActionState.pendingAction === 'apply'
 
   return (
     <CrmPageShell className="max-w-[1600px]">
@@ -72,27 +64,22 @@ export function InsightsPageContent() {
       ) : null}
 
       <CrmConfirmDialog
-        isOpen={Boolean(confirmingApplyCard)}
+        isOpen={Boolean(vm?.applyConfirmation.isOpen)}
         labelledBy="insights-apply-recommendation-title"
         title="Apply recommendation?"
         description={
-          confirmingApplyCard
-            ? `Apply ${confirmingApplyCard.title} to estimator settings.`
-            : 'Apply this recommendation to estimator settings.'
+          vm?.applyConfirmation.description ??
+          'Apply this recommendation to estimator settings.'
         }
         closeLabel="Close apply confirmation"
-        warning="This activates a new estimator setting set immediately. New estimates will use the suggested setting after confirmation."
-        info={
-          confirmingApplyCard
-            ? `Target: ${confirmingApplyCard.targetSettingKey}. Current value: ${confirmingApplyCard.currentValue}. Suggested value: ${confirmingApplyCard.suggestedValue}.`
-            : null
-        }
+        warning="This activates a new estimator setting set immediately. New quotes will use the suggested setting after confirmation."
+        info={vm?.applyConfirmation.info ?? null}
         cancelLabel="Keep open"
         confirmLabel="Activate setting set"
         confirmingLabel="Activating"
-        confirming={confirmingApply}
-        confirmDisabled={confirmingApply}
-        cancelDisabled={confirmingApply}
+        confirming={Boolean(vm?.applyConfirmation.confirming)}
+        confirmDisabled={Boolean(vm?.applyConfirmation.confirming)}
+        cancelDisabled={Boolean(vm?.applyConfirmation.confirming)}
         confirmTone="primary"
         onCancel={cancelApplyRecommendation}
         onConfirm={() => void confirmApplyRecommendation()}
@@ -304,31 +291,18 @@ export function InsightsPageContent() {
                   type="button"
                   onClick={() => void generateRecommendations()}
                   tone="primary"
-                  disabled={recommendationActionState.generating}
+                  disabled={vm.recommendationsGenerating}
                 >
                   <span className="inline-flex items-center gap-1.5">
                     <Sparkles size={15} aria-hidden="true" />
-                    <span>
-                      {recommendationActionState.generating
-                        ? 'Generating'
-                        : 'Generate recommendations'}
-                    </span>
+                    <span>{vm.recommendationGenerateLabel}</span>
                   </span>
                 </CrmButton>
               }
             >
               {vm.recommendations.length > 0 ? (
                 <div className="grid gap-3 xl:grid-cols-3">
-                  {vm.recommendations.map((card) => {
-                    const pendingAction =
-                      recommendationActionState.pendingId === card.id
-                        ? recommendationActionState.pendingAction
-                        : null
-                    const isConfirming =
-                      recommendationActionState.confirmingApplyId === card.id
-                    const isPending = Boolean(pendingAction) || isConfirming
-
-                    return (
+                  {vm.recommendations.map((card) => (
                       <div
                         key={card.id}
                         className="grid gap-4 rounded-lg border border-[color:var(--crm-ui-border)] bg-[color:var(--crm-ui-surface-muted)] px-4 py-4"
@@ -384,33 +358,28 @@ export function InsightsPageContent() {
                           <CrmButton
                             type="button"
                             tone="secondary"
-                            disabled={isPending}
+                            disabled={card.isPending}
                             onClick={() => void dismissRecommendation(card.id)}
                           >
                             <span className="inline-flex items-center gap-1.5">
                               <X size={15} aria-hidden="true" />
-                              <span>
-                                {pendingAction === 'dismiss' ? 'Dismissing' : 'Dismiss'}
-                              </span>
+                              <span>{card.dismissLabel}</span>
                             </span>
                           </CrmButton>
                           <CrmButton
                             type="button"
                             tone="primary"
-                            disabled={isPending}
+                            disabled={card.isPending}
                             onClick={() => void applyRecommendation(card.id)}
                           >
                             <span className="inline-flex items-center gap-1.5">
                               <Check size={15} aria-hidden="true" />
-                              <span>
-                                {pendingAction === 'apply' ? 'Applying' : 'Apply'}
-                              </span>
+                              <span>{card.applyLabel}</span>
                             </span>
                           </CrmButton>
                         </div>
                       </div>
-                    )
-                  })}
+                    ))}
                 </div>
               ) : (
                 <CrmEmptyState
@@ -421,15 +390,11 @@ export function InsightsPageContent() {
                       type="button"
                       onClick={() => void generateRecommendations()}
                       tone="primary"
-                      disabled={recommendationActionState.generating}
+                      disabled={vm.recommendationsGenerating}
                     >
                       <span className="inline-flex items-center gap-1.5">
                         <Sparkles size={15} aria-hidden="true" />
-                        <span>
-                          {recommendationActionState.generating
-                            ? 'Generating'
-                            : 'Generate recommendations'}
-                        </span>
+                        <span>{vm.recommendationGenerateLabel}</span>
                       </span>
                     </CrmButton>
                   }

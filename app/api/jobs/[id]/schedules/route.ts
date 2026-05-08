@@ -1,93 +1,55 @@
-import { NextResponse } from 'next/server'
-import { supabaseAdmin, getSessionUserOrg } from '@/lib/server/org'
-import { readJsonBody } from '@/lib/server/apiRoute'
-import { syncJobScheduleRange } from '@/lib/server/jobScheduleSync'
-import { dataResponse, mutationResponse } from '@/lib/server/routeResult'
-import { isUuid } from '@/lib/validation/uuid'
+import {
+  readJsonBody,
+  readUuidParam,
+  requireSessionUserOrg,
+  resolveParams,
+} from '@/lib/server/apiRoute'
+import { serviceErrorResponse, serviceResultResponse } from '@/lib/server/routeResult'
+import {
+  createJobSchedule,
+  listJobSchedules,
+  normalizeCreateJobScheduleInput,
+} from '@/lib/server/jobScheduleWorkflow'
+
+async function readJobId(context: { params: { id: string } | Promise<{ id: string }> }) {
+  const params = await resolveParams(context)
+  return readUuidParam((params as { id?: string } | null | undefined)?.id, 'job id')
+}
 
 export async function GET(
   _request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const session = await requireSessionUserOrg()
+  if (!session.ok) return session.response
 
-  const { orgId } = session
-  const params = await Promise.resolve(context.params)
-  const jobId = (params as { id?: string } | null | undefined)?.id
-  if (!isUuid(jobId)) {
-    return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
-  }
+  const jobId = await readJobId(context)
+  if (!jobId.ok) return jobId.response
 
-  const { data, error } = await supabaseAdmin
-    .from('job_schedules')
-    .select('id, start_at, end_at, notes, calendar_event_id, calendar_added_at')
-    .eq('org_id', orgId)
-    .eq('job_id', jobId)
-    .order('start_at', { ascending: false })
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return dataResponse(data ?? [])
+  return serviceResultResponse(
+    await listJobSchedules(session.session.orgId, jobId.value),
+    (schedules) => ({ data: schedules })
+  )
 }
 
 export async function POST(
   request: Request,
   context: { params: { id: string } | Promise<{ id: string }> }
 ) {
-  const session = await getSessionUserOrg()
-  if ('error' in session) {
-    const status = session.error === 'Not authenticated' ? 401 : 403
-    return NextResponse.json({ error: session.error }, { status })
-  }
+  const session = await requireSessionUserOrg()
+  if (!session.ok) return session.response
 
-  const { orgId } = session
-  const params = await Promise.resolve(context.params)
-  const jobId = (params as { id?: string } | null | undefined)?.id
-  if (!isUuid(jobId)) {
-    return NextResponse.json({ error: 'Invalid job id' }, { status: 400 })
-  }
+  const jobId = await readJobId(context)
+  if (!jobId.ok) return jobId.response
 
   const parsed = await readJsonBody<Record<string, unknown>>(request, { maxBytes: 64 * 1024 })
   if (!parsed.ok) return parsed.response
-  const body = parsed.value
-  const startAt = typeof body.start_at === 'string' ? body.start_at : ''
-  const endAt = typeof body.end_at === 'string' ? body.end_at : ''
-  if (!startAt || !endAt) {
-    return NextResponse.json({ error: 'Missing start_at or end_at' }, { status: 400 })
-  }
 
-  const { data: jobRow, error: jobErr } = await supabaseAdmin
-    .from('jobs')
-    .select('id, org_id')
-    .eq('org_id', orgId)
-    .eq('id', jobId)
-    .maybeSingle()
+  const input = normalizeCreateJobScheduleInput(parsed.value)
+  if (!input.ok) return serviceErrorResponse(input)
 
-  if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 })
-  if (!jobRow) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
-
-  const { data, error } = await supabaseAdmin
-    .from('job_schedules')
-    .insert({
-      org_id: orgId,
-      job_id: jobId,
-      start_at: startAt,
-      end_at: endAt,
-      notes: typeof body.notes === 'string' ? body.notes : null,
-    })
-    .select('id, start_at, end_at, notes, calendar_event_id, calendar_added_at')
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  const { error: updateErr } = await syncJobScheduleRange(orgId, jobId, {
-    statusWhenSchedulesExist: 'scheduled',
-  })
-
-  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
-
-  return mutationResponse(data, 'Schedule added.')
+  return serviceResultResponse(
+    await createJobSchedule(session.session.orgId, jobId.value, input.data),
+    (schedule) => ({ data: schedule, notice: 'Schedule added.' })
+  )
 }

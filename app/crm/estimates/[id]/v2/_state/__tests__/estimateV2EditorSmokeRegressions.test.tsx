@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
 import { calculateDoors } from '@/lib/estimator/doors'
@@ -109,17 +109,20 @@ function createSmokeRegressionStore() {
 
 function createToggleHarness() {
   const { fixture, store } = createSmokeRegressionStore()
+  const requestDestructiveConfirm = vi.fn()
   const derived = renderHook(() => useEstimateV2DerivedState({ store }))
   const wallActions = renderHook(() =>
     useEstimateV2WallActions({
       store,
       roomModeById: derived.result.current.roomModeById,
+      requestDestructiveConfirm,
     })
   )
   const ceilingActions = renderHook(() =>
     useEstimateV2CeilingActions({
       store,
       roomModeById: derived.result.current.roomModeById,
+      requestDestructiveConfirm,
     })
   )
   const trimActions = renderHook(() =>
@@ -128,12 +131,14 @@ function createToggleHarness() {
       trimTypeOptions: fixture.catalogs.trim_items,
       roomModeById: derived.result.current.roomModeById,
       roomHeightFactorByRoomId: derived.result.current.roomHeightFactorByRoomId,
+      requestDestructiveConfirm,
     })
   )
   const doorActions = renderHook(() =>
     useEstimateV2DoorActions({
       store,
       doorTypeOptions: fixture.catalogs.door_types ?? [],
+      requestDestructiveConfirm,
     })
   )
 
@@ -294,12 +299,14 @@ describe('Estimate V2 editor smoke regressions', () => {
       })
     )
     const derived = renderHook(() => useEstimateV2DerivedState({ store }))
+    const requestDestructiveConfirm = vi.fn()
     const trimActions = renderHook(() =>
       useEstimateV2TrimActions({
         store,
         trimTypeOptions: fixture.catalogs.trim_items,
         roomModeById: derived.result.current.roomModeById,
         roomHeightFactorByRoomId: derived.result.current.roomHeightFactorByRoomId,
+        requestDestructiveConfirm,
       })
     )
 
@@ -360,10 +367,12 @@ describe('Estimate V2 editor smoke regressions', () => {
       })
     )
     const derived = renderHook(() => useEstimateV2DerivedState({ store }))
+    const requestDestructiveConfirm = vi.fn()
     const doorActions = renderHook(() =>
       useEstimateV2DoorActions({
         store,
         doorTypeOptions: [doorType],
+        requestDestructiveConfirm,
       })
     )
 

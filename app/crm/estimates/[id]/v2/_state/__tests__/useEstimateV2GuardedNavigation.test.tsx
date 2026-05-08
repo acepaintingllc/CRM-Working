@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { estimateRouteFamily } from '../../../estimateRouteFamily'
 import type { EstimateV2EditorSaveVm } from '../estimateV2EditorTypes'
 import { useEstimateV2GuardedNavigation } from '../useEstimateV2GuardedNavigation'
 
@@ -165,6 +166,37 @@ describe('useEstimateV2GuardedNavigation', () => {
       expect(save).toHaveBeenCalledWith()
       expect(push).toHaveBeenCalledWith('/crm/jobs')
     })
+  })
+
+  it('uses send-specific warning copy when a dirty navigation targets the send route', async () => {
+    const clickHandlers: EventListener[] = []
+    const originalAddEventListener = document.addEventListener.bind(document)
+    const addEventListenerSpy = vi
+      .spyOn(document, 'addEventListener')
+      .mockImplementation((type, listener, options) => {
+        if (type === 'click' && typeof listener === 'function') {
+          clickHandlers.push(listener as EventListener)
+        }
+        return originalAddEventListener(type, listener, options)
+      })
+    const { result } = renderGuardedNavigation()
+    await act(async () => undefined)
+    const link = document.createElement('a')
+    link.href = estimateRouteFamily.sendHref('estimate-1')
+    link.textContent = 'Send'
+    document.body.appendChild(link)
+
+    act(() => {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+      Object.defineProperty(event, 'target', { value: link })
+      clickHandlers.forEach((handler) => handler(event))
+    })
+    addEventListenerSpy.mockRestore()
+
+    expect(result.current.navigationVm.unsavedDialogProps.isOpen).toBe(true)
+    expect(result.current.navigationVm.unsavedDialogProps.noticeText).toBe(
+      'The send page uses the last saved server total. Your unsaved editor changes will not be included unless you save first.'
+    )
   })
 
   it('cancels a guarded dirty navigation without routing', () => {

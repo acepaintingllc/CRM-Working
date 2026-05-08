@@ -66,6 +66,8 @@ export function formatDateTime(value: string | null | undefined) {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC',
   })
 }
 
@@ -102,6 +104,8 @@ export function resolveRoomModeById(params: {
   wallScopes: EstimateV2WallScopeDraft[]
   ceilingScopes: EstimateV2CeilingScopeDraft[]
 }) {
+  // Editor state derives local room helper modes from draft scope rows; server calculation
+  // paths use the canonical estimator room-mode helper during preparation.
   const roomMode = new Map<string, 'RECT' | 'SEG'>()
   for (const scope of params.wallScopes) {
     if (roomMode.has(scope.roomId)) continue

@@ -98,7 +98,7 @@ function signed(value: number, formatter: (value: number) => string) {
 }
 
 function formatPercent(value: number | null) {
-  if (value === null) return 'No estimate baseline'
+  if (value === null) return 'No quote baseline'
   return signed(value, (next) => `${formatNumber(next)}%`)
 }
 
@@ -160,8 +160,9 @@ export function buildJobReviewVm(params: {
   model: JobReviewReadModel | null
   form?: JobReviewFormState
 }): JobReviewVm | null {
-  const acceptedQuote = params.job?.accepted_quote ?? null
-  if (!acceptedQuote?.estimate_snapshot_id || !params.model) return null
+  const acceptedEstimate = params.job?.accepted_estimate ?? null
+  // Review metrics are operational accepted-estimate snapshot data only.
+  if (!acceptedEstimate?.estimate_snapshot_id || !params.model) return null
 
   const review = params.model.review
   const status = review?.status ?? 'draft'
@@ -201,10 +202,10 @@ export function buildJobReviewVm(params: {
   const outsideTolerance = metrics.filter((metric) => metric.tone === 'warning').length
 
   return {
-    estimateSnapshotId: acceptedQuote.estimate_snapshot_id,
-    versionName: acceptedQuote.version_name ?? 'Accepted estimate',
-    acceptedAt: formatDateTime(acceptedQuote.accepted_at) ?? '-',
-    finalTotal: formatCurrency(toNumber(acceptedQuote.final_total)),
+    estimateSnapshotId: acceptedEstimate.estimate_snapshot_id,
+    versionName: acceptedEstimate.version_name ?? 'Accepted quote',
+    acceptedAt: formatDateTime(acceptedEstimate.accepted_at) ?? '-',
+    finalTotal: formatCurrency(toNumber(acceptedEstimate.final_total)),
     statusLabel: statusLabel(status),
     statusTone: statusTone(status),
     isLocked: status === 'locked',
@@ -243,7 +244,7 @@ export function buildJobReviewVm(params: {
       {
         id: 'quote-total',
         label: 'Quote total',
-        value: formatCurrency(toNumber(acceptedQuote.final_total)),
+        value: formatCurrency(toNumber(acceptedEstimate.final_total)),
         detail: 'Accepted snapshot',
       },
       {
