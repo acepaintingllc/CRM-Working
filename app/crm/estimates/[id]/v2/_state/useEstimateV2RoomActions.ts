@@ -110,7 +110,6 @@ export function useEstimateV2RoomActions(params: {
         (repair) => repair.roomId === roomId
       )
       const room = collections.rooms.find((entry) => entry.roomId === roomId)
-      const label = room?.roomName || roomId
       const hasData =
         roomScopes.length > 0 ||
         roomSegments.length > 0 ||
