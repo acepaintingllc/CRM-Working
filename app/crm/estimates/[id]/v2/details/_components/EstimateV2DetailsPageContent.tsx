@@ -10,9 +10,9 @@ import { CrmPageShell } from '@/app/crm/_components/CrmPageShell'
 import { CrmSectionCard } from '@/app/crm/_components/CrmSectionCard'
 import { CrmConfirmDialog } from '@/app/crm/_components/CrmConfirmDialog'
 import {
-  estimateRouteFamily,
-  quoteRouteFamily,
+  resolveEstimateRouteFamily,
   type EstimateRouteFamily,
+  type EstimateRouteFamilyKey,
 } from '../../../estimateRouteFamily'
 import { EstimateV2WorkflowFooterBar } from '../../_components/EstimateV2WorkflowFooterBar'
 import { EstimateV2DetailsActiveOverrides } from './EstimateV2DetailsActiveOverrides'
@@ -47,11 +47,10 @@ export function EstimateV2DetailsPageContent({
   routeFamily,
 }: {
   estimateId: string
-  routeFamilyKey?: 'estimate' | 'quote'
+  routeFamilyKey?: EstimateRouteFamilyKey
   routeFamily?: EstimateRouteFamily
 }) {
-  const resolvedRouteFamily =
-    routeFamily ?? (routeFamilyKey === 'quote' ? quoteRouteFamily : estimateRouteFamily)
+  const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
   const page = useEstimateV2DetailsPage({ estimateId, routeFamily: resolvedRouteFamily })
   const { vm, actions } = page
   const saveError = page.error && page.estimate ? page.error.message : null

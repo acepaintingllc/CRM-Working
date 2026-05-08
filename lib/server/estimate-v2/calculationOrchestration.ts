@@ -199,6 +199,8 @@ export async function calculateEstimateV2ArtifactsForSave(params: {
   trimScopeRows: V2TrimScopeSaveRow[]
   doorScopeRows: V2DoorScopeSaveRow[]
   drywallRepairRows: V2DrywallRepairSaveRow[]
+  accessFeeRows?: EstimateV2AccessFeeCalculationInputRow[]
+  otherRows?: OtherCalculationRow[]
   jobsettings: EstimateV2CalculationJobSettingsInput | undefined
   orgDefaults: EstimateTemplateSettingsRow | null
   ensureCatalogs: ReturnType<typeof createCalculationCatalogsLoader>
@@ -229,8 +231,8 @@ export async function calculateEstimateV2ArtifactsForSave(params: {
     roomTrimScopes: params.trimScopeRows,
     roomDoorScopes: params.doorScopeRows,
     drywallRepairs: params.drywallRepairRows,
-    accessFees: [],
-    other: [],
+    accessFees: params.accessFeeRows ?? [],
+    other: params.otherRows ?? [],
     orgDefaults: params.orgDefaults,
     roomModeById,
   })

@@ -43,8 +43,16 @@ const ACCESS_GROUP_LABELS = {
 } satisfies Record<EstimateV2AccessFeeOption['access_group'], string>
 
 export function createAccessFeeDraftId() {
-  const randomId = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
-  return `access-fee-${randomId}`
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+
+  const randomHex = () =>
+    Math.floor((1 + Math.random()) * 0x10000)
+      .toString(16)
+      .slice(1)
+
+  return `${randomHex()}${randomHex()}-${randomHex()}-4${randomHex().slice(1)}-${(
+    8 + Math.floor(Math.random() * 4)
+  ).toString(16)}${randomHex().slice(1)}-${randomHex()}${randomHex()}${randomHex()}`
 }
 
 export function addAccessFeeDraft(

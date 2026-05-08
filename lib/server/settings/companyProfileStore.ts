@@ -1,8 +1,8 @@
 import {
   normalizeCompanyProfileSettings,
-} from '@/lib/settings/companyProfile'
-import type { CompanyProfileSettings } from '@/lib/settings/types'
-import { supabaseAdmin } from '@/lib/server/org'
+} from '../../settings/companyProfile.ts'
+import type { CompanyProfileSettings } from '../../settings/types.ts'
+import { supabaseAdmin } from '../org.ts'
 
 type Unsafe = Record<string, unknown>
 

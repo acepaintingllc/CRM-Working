@@ -83,6 +83,7 @@ export async function saveCustomerSendDraftVersion(params: {
   userId: string
   draft: CustomerSendDraft
   document: CustomerEstimateDocument
+  operationalSnapshot?: Record<string, unknown>
   latestDraft: EstimatePublicVersionRow | null
   latestVersion: EstimatePublicVersionRow | null
 }): Promise<ServiceResult<EstimatePublicVersionRow>> {
@@ -109,8 +110,9 @@ export async function saveCustomerSendDraftVersion(params: {
     snapshot_json: buildCustomerSendPersistedSnapshot({
       document: params.document,
       draft: params.draft,
+      operationalSnapshot: params.operationalSnapshot,
     }),
-    draft_json: null,
+    draft_json: params.draft,
     acceptance_json: publicMeta?.acceptance_json ?? null,
     sent_at: publicMeta?.sent_at ?? null,
     viewed_at: publicMeta?.viewed_at ?? null,

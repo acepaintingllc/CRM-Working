@@ -223,7 +223,9 @@ describe('customer send repository', () => {
       expect.objectContaining({
         version_number: 2,
         public_token: 'existing-token',
-        draft_json: null,
+        draft_json: expect.objectContaining({
+          to_email: 'customer@example.com',
+        }),
         snapshot_json: expect.objectContaining({
           artifact_kind: 'customer_estimate_artifact',
           artifact_version: 1,
@@ -305,7 +307,9 @@ describe('customer send repository', () => {
     expect(insertSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         version_number: 4,
-        draft_json: null,
+        draft_json: expect.objectContaining({
+          to_email: 'customer@example.com',
+        }),
         snapshot_json: expect.objectContaining({
           artifact_kind: 'customer_estimate_artifact',
           artifact_version: 1,

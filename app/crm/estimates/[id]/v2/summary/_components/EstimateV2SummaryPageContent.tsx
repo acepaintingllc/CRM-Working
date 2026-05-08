@@ -526,8 +526,20 @@ export function EstimateV2SummaryPageContent({
                                   className="grid gap-2 border-b border-[color:var(--crm-ui-border)] py-2 text-sm last:border-b-0 md:grid-cols-[minmax(0,1fr)_repeat(5,minmax(90px,auto))]"
                                 >
                                   <div className="min-w-0">
-                                    <div className="font-bold text-[color:var(--crm-ui-ink)]">{scope.label}</div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <div className="font-bold text-[color:var(--crm-ui-ink)]">{scope.label}</div>
+                                      {scope.hasOverride ? (
+                                        <CrmChip tone="warning">
+                                          {scope.overrideSummary ?? 'Override active'}
+                                        </CrmChip>
+                                      ) : null}
+                                    </div>
                                     <div className="text-xs text-[color:var(--crm-ui-muted)]">{scope.kind}</div>
+                                    {scope.hasOverride && scope.overrideSummary ? (
+                                      <div className="mt-1 text-xs font-semibold text-[color:var(--crm-ui-warning-text)]">
+                                        {scope.overrideSummary}
+                                      </div>
+                                    ) : null}
                                   </div>
                                   <div className="md:text-right">{fmtNumber(scope.quantity, scope.kind === 'trim' ? 1 : 0)}</div>
                                   <div className="md:text-right">{fmtH(scope.laborHours)}</div>

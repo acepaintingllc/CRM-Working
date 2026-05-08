@@ -237,7 +237,7 @@ describe('saveEstimateV2Inputs', () => {
     expect(JSON.stringify(payload)).not.toContain('legacy_replace')
   })
 
-  it('uses the full-save RPC for job-level access fees', async () => {
+  it('returns pricing summary totals for a saved job-level access fee', async () => {
     mocks.getEstimate.mockResolvedValue({
       estimate: {
         id: 'estimate-1',
@@ -261,7 +261,7 @@ describe('saveEstimateV2Inputs', () => {
       door_calculations: null,
       drywall_calculations: null,
       trim_paint: null,
-      pricing_summary: { finalTotal: 125 },
+      pricing_summary: { finalTotal: 125, sharedAccessCost: 125 },
     })
     mocks.saveEstimateFullPersistenceTransactional.mockResolvedValue(undefined)
 
@@ -308,7 +308,7 @@ describe('saveEstimateV2Inputs', () => {
       door_calculations: null,
       drywall_calculations: null,
       trim_paint: null,
-      pricing_summary: { finalTotal: 125 },
+      pricing_summary: { finalTotal: 125, sharedAccessCost: 125 },
     })
 
     expect(mocks.saveEstimateFullPersistenceTransactional).toHaveBeenCalledWith({
@@ -318,7 +318,6 @@ describe('saveEstimateV2Inputs', () => {
       payload: expect.objectContaining({
         access_fees: [
           expect.objectContaining({
-            id: 'access-fee-1',
             org_id: 'org-1',
             estimate_id: 'estimate-1',
             job_id: '11111111-1111-4111-8111-111111111111',
@@ -332,6 +331,27 @@ describe('saveEstimateV2Inputs', () => {
         ],
       }),
     })
+    expect(mocks.calculateEstimateV2ArtifactsForSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomRows: [],
+        wallScopeRows: [],
+        wallSegmentRows: [],
+        ceilingScopeRows: [],
+        ceilingSegmentRows: [],
+        trimScopeRows: [],
+        doorScopeRows: [],
+        drywallRepairRows: [],
+        accessFeeRows: [
+          expect.objectContaining({
+            id: expect.stringMatching(/^access-fee-/),
+            access_fee_id: 'LADDER-TALL',
+            qty: 1,
+            actual_cost_override: 125,
+          }),
+        ],
+        otherRows: [],
+      })
+    )
     expect(mocks.loadEstimateV2Response).toHaveBeenCalledWith({
       requestOrigin: 'http://localhost:3000',
       orgId: 'org-1',
@@ -413,6 +433,30 @@ describe('saveEstimateV2Inputs', () => {
         ],
       }),
     })
+    expect(mocks.calculateEstimateV2ArtifactsForSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomRows: [],
+        wallScopeRows: [],
+        wallSegmentRows: [],
+        ceilingScopeRows: [],
+        ceilingSegmentRows: [],
+        trimScopeRows: [],
+        doorScopeRows: [],
+        drywallRepairRows: [],
+        accessFeeRows: [],
+        otherRows: [
+          expect.objectContaining({
+            id: 'other-1',
+            org_id: 'org-1',
+            estimate_id: 'estimate-1',
+            job_id: '11111111-1111-4111-8111-111111111111',
+            client_description: 'Cabinet touch-up',
+            qty: 3,
+            materials_each: 75,
+          }),
+        ],
+      })
+    )
     expect(mocks.loadEstimateV2Response).toHaveBeenCalledWith({
       requestOrigin: 'http://localhost:3000',
       orgId: 'org-1',
@@ -1041,6 +1085,160 @@ describe('saveEstimateV2Inputs', () => {
         effective_total: 512,
       }),
     ])
+  })
+
+  it('passes access fee and other rows into canonical calculation for scope saves', async () => {
+    mocks.getEstimate.mockResolvedValue({
+      estimate: { id: 'estimate-1', job_id: '11111111-1111-4111-8111-111111111111' },
+    })
+    mocks.buildV2RoomRosterRows.mockReturnValue([
+      {
+        room_id: 'R001',
+        room_name: 'Living',
+        room_type_id: null,
+        wall_complexity_id: null,
+        position: 0,
+        notes: null,
+        length_in: 120,
+        width_in: 144,
+        wallheight_in: 96,
+        condition_selections: null,
+      },
+    ])
+    mocks.buildV2WallScopeRows.mockReturnValue({
+      scopeRows: [
+        {
+          id: 'wall-scope-1',
+          room_id: 'R001',
+          position: 0,
+          mode: 'RECT',
+          include: 'Y',
+          scope_name: 'Walls',
+          paint_product_id: null,
+          primer_product_id: null,
+          raw_total: null,
+          effective_total: null,
+          notes: null,
+        },
+      ],
+    })
+    mocks.buildV2WallSegmentRows.mockReturnValue([])
+    mocks.calculateEstimateV2ArtifactsForSave.mockResolvedValue(buildCanonicalSaveArtifacts({
+      wallCalculations: { scopes: [{ id: 'wall-scope-1', effective_total: 512 }], segments: [] },
+      quoteWallScopes: [
+        {
+          id: 'wall-scope-1',
+          room_id: 'R001',
+          position: 0,
+          mode: 'RECT',
+          include: 'Y',
+          scope_name: 'Walls',
+          paint_product_id: null,
+          primer_product_id: null,
+          raw_total: 512,
+          effective_total: 512,
+          notes: null,
+        },
+      ],
+    }))
+    mocks.saveEstimateFullPersistenceTransactional.mockResolvedValue(undefined)
+
+    await saveEstimateV2Inputs({
+      requestOrigin: 'http://localhost:3000',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      autosaveOnly: false,
+      body: {
+        rooms: [{ room_id: 'R001', room_name: 'Living' }],
+        room_wall_scopes: [{ id: 'wall-scope-1', room_id: 'R001' }],
+        wall_segments: [],
+        access_fees: [
+          {
+            id: 'access-fee-1',
+            room_id: 'r001',
+            access_fee_id: ' ladder-tall ',
+            qty: '2',
+            actual_cost_override: '',
+            notes: 'Tall foyer',
+          },
+        ],
+        other: [
+          {
+            id: 'other-1',
+            room_id: 'r001',
+            client_description: 'Extra masking',
+            qty: '3',
+            materials_each: '25',
+          },
+        ],
+      },
+    })
+
+    expect(mocks.calculateEstimateV2ArtifactsForSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomRows: [
+          expect.objectContaining({
+            room_id: 'R001',
+            room_name: 'Living',
+          }),
+        ],
+        wallScopeRows: [
+          expect.objectContaining({
+            id: 'wall-scope-1',
+            room_id: 'R001',
+          }),
+        ],
+        accessFeeRows: [
+          expect.objectContaining({
+            room_id: 'R001',
+            access_fee_id: 'LADDER-TALL',
+            qty: 2,
+            notes: 'Tall foyer',
+          }),
+        ],
+        otherRows: [
+          expect.objectContaining({
+            id: 'other-1',
+            org_id: 'org-1',
+            estimate_id: 'estimate-1',
+            job_id: '11111111-1111-4111-8111-111111111111',
+            room_id: 'R001',
+            client_description: 'Extra masking',
+            qty: 3,
+            materials_each: 25,
+          }),
+        ],
+      })
+    )
+
+    expect(mocks.saveEstimateFullPersistenceTransactional).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      jobId: '11111111-1111-4111-8111-111111111111',
+      payload: expect.objectContaining({
+        access_fees: [
+          expect.objectContaining({
+            access_fee_id: 'LADDER-TALL',
+            qty: 2,
+          }),
+        ],
+        other: [
+          expect.objectContaining({
+            id: 'other-1',
+            client_description: 'Extra masking',
+            qty: 3,
+            materials_each: 25,
+          }),
+        ],
+      }),
+    })
+    expect(mocks.loadEstimateV2Response).toHaveBeenCalledWith({
+      requestOrigin: 'http://localhost:3000',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+    })
   })
 
   it('uses the full-save RPC for ceiling-only scope saves', async () => {

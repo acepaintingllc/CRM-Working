@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   deriveEstimateCustomerSendCalculatedData: vi.fn(),
   mapCustomerQuoteSourceModel: vi.fn(),
   buildPersistedArtifactCustomerSendContext: vi.fn(),
+  loadCompanyProfileSettings: vi.fn(),
 }))
 
 vi.mock('../contextLoader', () => ({
@@ -26,6 +27,10 @@ vi.mock('../contextCalculations', () => ({
 vi.mock('../contextMapper', () => ({
   mapCustomerQuoteSourceModel: mocks.mapCustomerQuoteSourceModel,
   buildPersistedArtifactCustomerSendContext: mocks.buildPersistedArtifactCustomerSendContext,
+}))
+
+vi.mock('@/lib/server/settings/companyProfileStore', () => ({
+  loadCompanyProfileSettings: mocks.loadCompanyProfileSettings,
 }))
 
 import { loadEstimateCustomerSendContext } from '../../estimateCustomerPortal'
@@ -263,6 +268,7 @@ describe('estimate customer portal persisted artifact preview context', () => {
     mocks.deriveEstimateCustomerSendCalculatedData.mockReset()
     mocks.mapCustomerQuoteSourceModel.mockReset()
     mocks.buildPersistedArtifactCustomerSendContext.mockReset()
+    mocks.loadCompanyProfileSettings.mockReset()
 
     mocks.mapCustomerQuoteSourceModel.mockImplementation(
       (params: { calculated: { pricingSummary: unknown } }) => ({
@@ -275,6 +281,7 @@ describe('estimate customer portal persisted artifact preview context', () => {
     mocks.loadEstimateCustomerSendVersionResources.mockResolvedValue({
       publicVersions: [],
     })
+    mocks.loadCompanyProfileSettings.mockResolvedValue(assembledDocument.company)
     mocks.buildPersistedArtifactCustomerSendContext.mockReturnValue({
       estimate: { id: 'estimate-1' },
       public_versions: [buildCanonicalVersion()],
@@ -315,6 +322,59 @@ describe('estimate customer portal persisted artifact preview context', () => {
         document: assembledDocument,
       }),
     })
+  })
+
+  it('requires full live context when the company profile changed after preview generation', async () => {
+    const staleDocument = {
+      ...assembledDocument,
+      company: {
+        ...assembledDocument.company,
+        business_name: '',
+        main_phone: '',
+        business_email: '',
+      },
+    }
+    const staleVersion = {
+      ...buildCanonicalVersion(),
+      snapshot_json: buildCustomerSendPersistedSnapshot({
+        document: staleDocument,
+        draft: canonicalDraft,
+      }),
+    }
+    mocks.loadEstimateCustomerSendVersionResources.mockResolvedValue({
+      publicVersions: [staleVersion],
+    })
+    mocks.loadEstimateCustomerSendResources.mockResolvedValue(
+      buildResources({
+        publicVersions: [staleVersion],
+      })
+    )
+    mocks.deriveEstimateCustomerSendCalculatedData.mockResolvedValue({
+      ok: true,
+      data: {
+        quoteWallScopes: [],
+        quoteCeilingScopes: [],
+        quoteTrimScopes: [],
+        quoteDoorScopes: [],
+        quoteDrywallScopes: [],
+        quoteAccessFees: [],
+        quoteOtherRows: [],
+        pricingSummary: { finalTotal: 1200 },
+      },
+    })
+
+    await loadEstimateCustomerSendContext({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      allowPersistedArtifactPreview: true,
+      operation: 'read',
+    })
+
+    expect(mocks.buildPersistedArtifactCustomerSendContext).not.toHaveBeenCalled()
+    expect(mocks.loadEstimateCustomerSendResources).toHaveBeenCalled()
+    expect(mocks.deriveEstimateCustomerSendCalculatedData).toHaveBeenCalled()
   })
 
   it('uses artifact-only context for delivery-only save changes', async () => {

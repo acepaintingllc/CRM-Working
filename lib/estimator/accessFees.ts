@@ -25,7 +25,7 @@ export type AccessFeeCalculationResult = {
   total: number
 }
 
-export type AccessFeeScopeKey = 'walls' | 'ceilings' | 'trim'
+export type AccessFeeScopeKey = 'walls' | 'ceilings' | 'trim' | 'doors' | 'drywall' | 'other'
 
 export type AccessFeeAllocationScope = {
   key: AccessFeeScopeKey
@@ -124,6 +124,9 @@ export function allocateAccessFeesByEligibleScope({
     walls: 0,
     ceilings: 0,
     trim: 0,
+    doors: 0,
+    drywall: 0,
+    other: 0,
   }
 
   if (total <= 0) {

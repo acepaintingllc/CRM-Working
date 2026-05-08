@@ -72,6 +72,7 @@ export type OtherCalculationScopeResult = OtherCalculationRow & {
 export type OtherCalculationOutput = {
   scopes: OtherCalculationScopeResult[]
   room_totals: Array<{ room_id: string; effective_total: number }>
+  job_level_total: number
   per_color_supply_groups: Array<{ allocations: Array<{ allocated_supply_cost: number }> }>
   assumptions: { labor_rate_per_hour: number }
 }
@@ -191,6 +192,7 @@ export function calculateOtherItems(params: {
 }): OtherCalculationOutput {
   const defaultLaborRate = Math.max(0, params.settings?.labor_rate_per_hour ?? 0)
   const roomTotals = new Map<string, number>()
+  let jobLevelTotal = 0
   const scopes = params.rows.map((row, index): OtherCalculationScopeResult => {
     const include = normalizeInclude(row.active)
     const pricingMode = normalizePricingMode(row.pricing_mode)
@@ -203,6 +205,8 @@ export function calculateOtherItems(params: {
 
     if (include === 'Y' && roomId) {
       roomTotals.set(roomId, round4((roomTotals.get(roomId) ?? 0) + effectiveTotal))
+    } else if (include === 'Y') {
+      jobLevelTotal = round4(jobLevelTotal + effectiveTotal)
     }
 
     return {
@@ -242,6 +246,7 @@ export function calculateOtherItems(params: {
     room_totals: [...roomTotals.entries()]
       .map(([room_id, effective_total]) => ({ room_id, effective_total }))
       .sort((a, b) => a.room_id.localeCompare(b.room_id)),
+    job_level_total: round4(jobLevelTotal),
     per_color_supply_groups: [],
     assumptions: { labor_rate_per_hour: defaultLaborRate },
   }

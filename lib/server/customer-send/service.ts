@@ -7,6 +7,7 @@ import {
   validateCustomerSendReadiness,
   type CustomerSendReadinessResult,
 } from '@/lib/customer-send/readiness'
+import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import {
   didCustomerSendArtifactInputsChange,
   mergeCustomerSendDraftInput,
@@ -28,6 +29,8 @@ import {
 } from './repository'
 import type {
   CustomerQuoteSourceModel,
+  CustomerSendDraft,
+  CustomerSendScopeKey,
   CustomerSendCopy,
   CustomerSendMutationData,
   CustomerSendPageData,
@@ -45,6 +48,229 @@ type ResolvedCustomerSendPreview = {
   draft: CustomerSendPageData['draft']
   readiness: CustomerSendReadinessResult
   version: EstimatePublicVersionRow | null
+}
+
+const CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND = 'customer_send_operational_snapshot'
+const CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION = 1
+
+function readOperationalSnapshotEstimateUpdatedAt(snapshot: Record<string, unknown> | null | undefined) {
+  const operational = snapshot?.operational_snapshot
+  if (!operational || typeof operational !== 'object' || Array.isArray(operational)) return ''
+  return asText((operational as Record<string, unknown>).source_estimate_updated_at)
+}
+
+function readOperationalSnapshot(
+  snapshot: Record<string, unknown> | null | undefined
+): Record<string, unknown> | undefined {
+  const operational = snapshot?.operational_snapshot
+  return operational && typeof operational === 'object' && !Array.isArray(operational)
+    ? (operational as Record<string, unknown>)
+    : undefined
+}
+
+function asNumber(value: unknown) {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+function rowsOf(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+    : []
+}
+
+function sumRows(rows: Record<string, unknown>[], key: string) {
+  return rows.reduce((sum, row) => sum + asNumber(row[key]), 0)
+}
+
+function paintMaterialCost(rows: Record<string, unknown>[]) {
+  return rows.reduce(
+    (sum, row) =>
+      sum +
+      asNumber(row.allocated_paint_material_cost ?? row.raw_paint_material_cost) +
+      asNumber(row.effective_primer_gallons) * asNumber(row.primer_price_per_gal),
+    0
+  )
+}
+
+function countOperationalSnapshotRooms(snapshot: Record<string, unknown>) {
+  const response = snapshot.estimate_response
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return 0
+  const inputs = (response as Record<string, unknown>).inputs
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) return 0
+  return rowsOf((inputs as Record<string, unknown>).rooms).length
+}
+
+function countOperationalSnapshotScopes(snapshot: Record<string, unknown>) {
+  const response = snapshot.estimate_response
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return 0
+  const estimateResponse = response as Record<string, unknown>
+  return (
+    rowsOf((estimateResponse.wall_calculations as Record<string, unknown> | undefined)?.scopes).length +
+    rowsOf((estimateResponse.ceiling_calculations as Record<string, unknown> | undefined)?.scopes).length +
+    rowsOf((estimateResponse.trim_calculations as Record<string, unknown> | undefined)?.scopes).length +
+    rowsOf((estimateResponse.door_calculations as Record<string, unknown> | undefined)?.scopes).length +
+    rowsOf((estimateResponse.drywall_calculations as Record<string, unknown> | undefined)?.scopes).length
+  )
+}
+
+function readOperationalSnapshotPricing(snapshot: Record<string, unknown>) {
+  const response = snapshot.estimate_response
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return {}
+  const pricing = (response as Record<string, unknown>).pricing_summary
+  return pricing && typeof pricing === 'object' && !Array.isArray(pricing)
+    ? (pricing as Record<string, unknown>)
+    : {}
+}
+
+function countContextPersistedOperationalRows(context: CustomerQuoteSourceModel) {
+  const inputs = context.inputs
+  return (
+    rowsOf(inputs.rooms).length +
+    rowsOf(inputs.room_wall_scopes).length +
+    rowsOf(inputs.room_ceiling_scopes).length +
+    rowsOf(inputs.room_trim_scopes).length +
+    rowsOf(inputs.room_door_scopes).length +
+    rowsOf(inputs.drywall_repairs).length +
+    rowsOf(inputs.other).length +
+    rowsOf(inputs.access_fees).length
+  )
+}
+
+function validateCustomerSendOperationalSnapshot(params: {
+  context: CustomerQuoteSourceModel
+  document: CustomerEstimateDocument
+  operationalSnapshot: Record<string, unknown>
+}): ServiceResult<Record<string, unknown>> {
+  const total = asNumber(params.document.total ?? params.context.pricing_summary?.finalTotal)
+  if (total <= 0) return okResult(params.operationalSnapshot)
+
+  const pricing = readOperationalSnapshotPricing(params.operationalSnapshot)
+  const hasOperationalValue =
+    asNumber(pricing.effectiveLaborHours) > 0 ||
+    asNumber(pricing.rawLaborHours) > 0 ||
+    asNumber(pricing.paintMaterialCost) > 0 ||
+    asNumber(pricing.primerMaterialCost) > 0 ||
+    asNumber(pricing.supplyCost) > 0 ||
+    asNumber(pricing.sharedAccessCost) > 0
+
+  if (
+    hasOperationalValue ||
+    countOperationalSnapshotRooms(params.operationalSnapshot) > 0 ||
+    countOperationalSnapshotScopes(params.operationalSnapshot) > 0
+  ) {
+    return okResult(params.operationalSnapshot)
+  }
+
+  if (countContextPersistedOperationalRows(params.context) > 0) {
+    return errorResult(
+      'invalid_input',
+      'Cannot generate public quote version because the operational estimate snapshot is empty while saved estimate rooms or scopes exist. Save or reload the quote and try again.'
+    )
+  }
+
+  return okResult(params.operationalSnapshot)
+}
+
+function hasCustomerSendOperationalSourceDrift(params: {
+  context: CustomerQuoteSourceModel
+  snapshot: Record<string, unknown> | null | undefined
+}) {
+  const persistedUpdatedAt = readOperationalSnapshotEstimateUpdatedAt(params.snapshot)
+  const currentUpdatedAt = asText(params.context.estimate.updated_at)
+  if (!currentUpdatedAt) return false
+  return !persistedUpdatedAt || persistedUpdatedAt !== currentUpdatedAt
+}
+
+async function buildCustomerSendOperationalSnapshot(params: {
+  origin: string
+  orgId: string
+  userId: string
+  estimateId: string
+  context: CustomerQuoteSourceModel
+}): Promise<ServiceResult<Record<string, unknown>>> {
+  const inputs = params.context.inputs
+  const wallRows = rowsOf(inputs.room_wall_scopes)
+  const ceilingRows = rowsOf(inputs.room_ceiling_scopes)
+  const trimRows = rowsOf(inputs.room_trim_scopes)
+  const doorRows = rowsOf(inputs.room_door_scopes)
+  const drywallRows = rowsOf(inputs.drywall_repairs)
+  const otherRows = rowsOf(inputs.other)
+  const accessRows = rowsOf(inputs.access_fees)
+  const paintRows = [...wallRows, ...ceilingRows, ...trimRows, ...doorRows]
+  const allScopeRows = [...paintRows, ...drywallRows, ...otherRows]
+  const laborHours =
+    sumRows(allScopeRows, 'effective_paint_hours') +
+    sumRows(allScopeRows, 'effective_primer_hours')
+  const supplyCost = sumRows(allScopeRows, 'effective_supply_cost')
+
+  return okResult({
+    artifact_kind: CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND,
+    artifact_version: CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION,
+    source_estimate_updated_at: asText(params.context.estimate.updated_at),
+    estimate_response: {
+      estimate: params.context.estimate,
+      inputs,
+      wall_calculations: { scopes: wallRows },
+      ceiling_calculations: { scopes: ceilingRows },
+      trim_calculations: { scopes: trimRows },
+      door_calculations: { scopes: doorRows },
+      drywall_calculations: { scopes: drywallRows },
+      pricing_summary: {
+        ...(params.context.pricing_summary ?? {}),
+        finalTotal: asNumber(params.context.pricing_summary?.finalTotal),
+        effectiveLaborHours: laborHours,
+        rawLaborHours: laborHours,
+        supplyCost,
+        paintMaterialCost: paintMaterialCost(paintRows),
+        primerMaterialCost: 0,
+        sharedAccessCost: sumRows(accessRows, 'effective_total'),
+      },
+    },
+  })
+}
+
+async function saveCustomerSendDraftVersionForCurrentContext(params: {
+  origin: string
+  orgId: string
+  estimateId: string
+  customerId: string
+  userId: string
+  draft: CustomerSendDraft
+  document: CustomerEstimateDocument
+  latestDraft: EstimatePublicVersionRow | null
+  latestVersion: EstimatePublicVersionRow | null
+  context: CustomerQuoteSourceModel
+  existingOperationalSnapshot?: Record<string, unknown>
+}) {
+  const operationalSnapshot = params.existingOperationalSnapshot
+    ? okResult(params.existingOperationalSnapshot)
+    : await buildCustomerSendOperationalSnapshot({
+        origin: params.origin,
+        orgId: params.orgId,
+        userId: params.userId,
+        estimateId: params.estimateId,
+        context: params.context,
+      })
+  if (!operationalSnapshot.ok) return operationalSnapshot
+  const validatedOperationalSnapshot = validateCustomerSendOperationalSnapshot({
+    context: params.context,
+    document: params.document,
+    operationalSnapshot: operationalSnapshot.data,
+  })
+  if (!validatedOperationalSnapshot.ok) return validatedOperationalSnapshot
+
+  return saveCustomerSendDraftVersion({
+    orgId: params.orgId,
+    estimateId: params.estimateId,
+    customerId: params.customerId,
+    userId: params.userId,
+    draft: params.draft,
+    document: params.document,
+    operationalSnapshot: validatedOperationalSnapshot.data,
+    latestDraft: params.latestDraft,
+    latestVersion: params.latestVersion,
+  })
 }
 
 function readArtifactGenerationBlockedReason(
@@ -74,6 +300,23 @@ function buildCustomerSendReadiness(params: {
     pricingSummary: params.context.pricing_summary ?? null,
     document: params.document,
   })
+}
+
+function hasCustomerSendDocumentContextDrift(params: {
+  context: CustomerQuoteSourceModel
+  document: CustomerSendPageData['document']
+}) {
+  const currentCompany = params.context.company
+  const documentCompany = params.document.company
+  const companyFields: Array<keyof typeof currentCompany> = [
+    'business_name',
+    'main_phone',
+    'business_email',
+  ]
+
+  return companyFields.some(
+    (field) => !asText(documentCompany[field]) && !!asText(currentCompany[field])
+  )
 }
 
 function buildResolvedCustomerSendPageData(params: {
@@ -230,6 +473,7 @@ async function resolveCustomerSendDraftState(params: {
 }
 
 async function ensureCustomerSendPreviewVersion(params: {
+  origin: string
   orgId: string
   userId: string
   estimateId: string
@@ -240,10 +484,63 @@ async function ensureCustomerSendPreviewVersion(params: {
   if (latestDraft) {
     const artifactState = readCustomerSendVersionArtifactState(latestDraft)
     if (artifactState.kind === 'canonical') {
-      return buildPersistedPreviewResponse({
+      const persistedPreview = buildPersistedPreviewResponse({
         context: params.context,
         version: latestDraft,
         artifactState,
+      })
+      if (!persistedPreview.ok) return persistedPreview
+      const hasOperationalDrift = hasCustomerSendOperationalSourceDrift({
+        context: params.context,
+        snapshot: artifactState.snapshot,
+      })
+      if (
+        !hasOperationalDrift &&
+        (asText(latestDraft.public_token) ||
+          !hasCustomerSendDocumentContextDrift({
+          context: params.context,
+          document: persistedPreview.data.document,
+        }))
+      ) {
+        return persistedPreview
+      }
+
+      const normalizedDraft = normalizeCustomerSendDraftScopeText({
+        context: params.context,
+        draft: persistedPreview.data.draft,
+      })
+      if (!normalizedDraft.ok) return normalizedDraft
+
+      const document = buildCustomerSendDocument({
+        context: params.context,
+        draft: normalizedDraft.data,
+        publicMeta: buildCustomerSendPublicMeta(latestDraft, 'draft'),
+      })
+      if (!document.ok) return document
+
+      const savedVersion = await saveCustomerSendDraftVersionForCurrentContext({
+        origin: params.origin,
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        customerId: asText(params.context.estimate.customer_id),
+        userId: params.userId,
+        draft: normalizedDraft.data,
+        document: document.data,
+        latestDraft,
+        latestVersion: versionState.latestVersion,
+        context: params.context,
+      })
+      if (!savedVersion.ok) return savedVersion
+
+      const savedArtifact = readCustomerSendVersionArtifactState(savedVersion.data)
+      if (savedArtifact.kind !== 'canonical') {
+        return readPersistedArtifactFailure(savedArtifact)
+      }
+
+      return buildPersistedPreviewResponse({
+        context: params.context,
+        version: savedVersion.data,
+        artifactState: savedArtifact,
       })
     }
   }
@@ -254,7 +551,13 @@ async function ensureCustomerSendPreviewVersion(params: {
     versionState,
   })
   if (!draftState.ok) return draftState
-  if (draftState.data.persistedPreview) {
+  if (
+    draftState.data.persistedPreview &&
+    !hasCustomerSendOperationalSourceDrift({
+      context: params.context,
+      snapshot: draftState.data.latestDraft?.snapshot_json,
+    })
+  ) {
     return okResult(draftState.data.persistedPreview)
   }
   const blockedReason = readArtifactGenerationBlockedReason(params.context)
@@ -269,7 +572,8 @@ async function ensureCustomerSendPreviewVersion(params: {
   })
   if (!document.ok) return document
 
-  const savedVersion = await saveCustomerSendDraftVersion({
+  const savedVersion = await saveCustomerSendDraftVersionForCurrentContext({
+    origin: params.origin,
     orgId: params.orgId,
     estimateId: params.estimateId,
     customerId: asText(params.context.estimate.customer_id),
@@ -278,6 +582,7 @@ async function ensureCustomerSendPreviewVersion(params: {
     document: document.data,
     latestDraft: draftState.data.latestDraft,
     latestVersion: draftState.data.latestVersion,
+    context: params.context,
   })
   if (!savedVersion.ok) return savedVersion
 
@@ -294,6 +599,7 @@ async function ensureCustomerSendPreviewVersion(params: {
 }
 
 async function persistCustomerSendDraftVersion(params: {
+  origin: string
   orgId: string
   userId: string
   estimateId: string
@@ -315,13 +621,18 @@ async function persistCustomerSendDraftVersion(params: {
     })
 
     const shouldReusePersistedDocument =
+      !hasCustomerSendOperationalSourceDrift({
+        context: params.context,
+        snapshot: previewState.data.latestDraft?.snapshot_json,
+      }) &&
       !didCustomerSendArtifactInputsChange({
         currentDraft: persistedPreview.draft,
         nextDraft: mergedDraft,
       })
 
     if (shouldReusePersistedDocument) {
-      const version = await saveCustomerSendDraftVersion({
+      const version = await saveCustomerSendDraftVersionForCurrentContext({
+        origin: params.origin,
         orgId: params.orgId,
         estimateId: params.estimateId,
         customerId: asText(params.context.estimate.customer_id),
@@ -330,6 +641,10 @@ async function persistCustomerSendDraftVersion(params: {
         document: persistedPreview.document,
         latestDraft: previewState.data.latestDraft,
         latestVersion: previewState.data.latestVersion,
+        context: params.context,
+        existingOperationalSnapshot: readOperationalSnapshot(
+          previewState.data.latestDraft?.snapshot_json
+        ),
       })
       if (!version.ok) return version
 
@@ -374,6 +689,10 @@ async function persistCustomerSendDraftVersion(params: {
   const persistedPreview = draftState.data.persistedPreview
   const document =
     persistedPreview &&
+    !hasCustomerSendOperationalSourceDrift({
+      context: params.context,
+      snapshot: draftState.data.latestDraft?.snapshot_json,
+    }) &&
     !didCustomerSendArtifactInputsChange({
       currentDraft: persistedPreview.draft,
       nextDraft: normalizedDraft.data,
@@ -386,7 +705,8 @@ async function persistCustomerSendDraftVersion(params: {
         })
   if (!document.ok) return document
 
-  const version = await saveCustomerSendDraftVersion({
+  const version = await saveCustomerSendDraftVersionForCurrentContext({
+    origin: params.origin,
     orgId: params.orgId,
     estimateId: params.estimateId,
     customerId: asText(params.context.estimate.customer_id),
@@ -395,6 +715,19 @@ async function persistCustomerSendDraftVersion(params: {
     document: document.data,
     latestDraft: draftState.data.latestDraft,
     latestVersion: draftState.data.latestVersion,
+    context: params.context,
+    existingOperationalSnapshot:
+      persistedPreview &&
+      !hasCustomerSendOperationalSourceDrift({
+        context: params.context,
+        snapshot: draftState.data.latestDraft?.snapshot_json,
+      }) &&
+      !didCustomerSendArtifactInputsChange({
+        currentDraft: persistedPreview.draft,
+        nextDraft: normalizedDraft.data,
+      })
+        ? readOperationalSnapshot(draftState.data.latestDraft?.snapshot_json)
+        : undefined,
   })
   if (!version.ok) return version
 
@@ -420,7 +753,58 @@ function draftsMatch(left: CustomerSendPageData['draft'], right: CustomerSendPag
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+function normalizeScopeTextForComparison(value: string) {
+  return asText(value)
+    .toLowerCase()
+    .replace(/\bwith\b/g, 'using')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([.,;:!?])/g, '$1')
+    .trim()
+}
+
+function stripGeneratedProductClause(value: string) {
+  return value
+    .replace(/,\s*using\s+[^.,;!?]+(?=\s*(?:,\s*with\b|[.,;!?]?$))/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([.,;:!?])/g, '$1')
+    .trim()
+}
+
+function matchesPersistedGeneratedScopeText(value: string, documentText: string) {
+  const normalizedValue = normalizeScopeTextForComparison(value)
+  const normalizedDocument = normalizeScopeTextForComparison(documentText)
+
+  return (
+    normalizedValue === normalizedDocument ||
+    normalizedValue === stripGeneratedProductClause(normalizedDocument)
+  )
+}
+
+function normalizeCustomerSendDraftScopeTextFromDocument(params: {
+  draft: CustomerSendDraft
+  document: CustomerSendPageData['document']
+}) {
+  const persistedTextByKey = new Map<CustomerSendScopeKey, string>(
+    params.document.scopes.map((section) => [section.key, section.text])
+  )
+  const scopeTextEdits = { ...params.draft.scope_text_edits }
+
+  for (const [key, value] of Object.entries(scopeTextEdits) as Array<[CustomerSendScopeKey, string]>) {
+    const text = asText(value)
+    const persistedText = asText(persistedTextByKey.get(key))
+    if (text && persistedText && matchesPersistedGeneratedScopeText(text, persistedText)) {
+      scopeTextEdits[key] = ''
+    }
+  }
+
+  return {
+    ...params.draft,
+    scope_text_edits: scopeTextEdits,
+  }
+}
+
 async function resolveCustomerSendSendVersion(params: {
+  origin: string
   orgId: string
   userId: string
   estimateId: string
@@ -440,16 +824,31 @@ async function resolveCustomerSendSendVersion(params: {
       'Save draft before sending. Customer-visible preview artifact is missing.'
     )
   }
+  if (
+    hasCustomerSendOperationalSourceDrift({
+      context: params.context,
+      snapshot: previewState.data.latestDraft.snapshot_json,
+    })
+  ) {
+    return errorResult(
+      'invalid_input',
+      'Save draft before sending. Current quote data differs from the persisted preview artifact.'
+    )
+  }
 
   const mergedDraft = mergeCustomerSendDraftInput({
     baseDraft: persistedPreview.draft,
     body: params.draftSource,
   })
+  const normalizedDraft = normalizeCustomerSendDraftScopeTextFromDocument({
+    draft: mergedDraft,
+    document: persistedPreview.document,
+  })
 
   if (
     didCustomerSendArtifactInputsChange({
       currentDraft: persistedPreview.draft,
-      nextDraft: mergedDraft,
+      nextDraft: normalizedDraft,
     })
   ) {
     return errorResult(
@@ -458,7 +857,7 @@ async function resolveCustomerSendSendVersion(params: {
     )
   }
 
-  if (draftsMatch(persistedPreview.draft, mergedDraft)) {
+  if (draftsMatch(persistedPreview.draft, normalizedDraft)) {
     return okResult({
       document: persistedPreview.document,
       draft: persistedPreview.draft,
@@ -467,15 +866,20 @@ async function resolveCustomerSendSendVersion(params: {
     })
   }
 
-  const version = await saveCustomerSendDraftVersion({
+  const version = await saveCustomerSendDraftVersionForCurrentContext({
+    origin: params.origin,
     orgId: params.orgId,
     estimateId: params.estimateId,
     customerId: asText(params.context.estimate.customer_id),
     userId: params.userId,
-    draft: mergedDraft,
+    draft: normalizedDraft,
     document: persistedPreview.document,
     latestDraft: previewState.data.latestDraft,
     latestVersion: previewState.data.latestVersion,
+    context: params.context,
+    existingOperationalSnapshot: readOperationalSnapshot(
+      previewState.data.latestDraft?.snapshot_json
+    ),
   })
   if (!version.ok) return version
 
@@ -523,6 +927,7 @@ export async function saveCustomerSendDraftMutation(params: {
   context: CustomerQuoteSourceModel
 }): Promise<ServiceResult<CustomerSendMutationData>> {
   const persisted = await persistCustomerSendDraftVersion({
+    origin: params.origin,
     orgId: params.orgId,
     userId: params.userId,
     estimateId: params.estimateId,
@@ -556,6 +961,7 @@ export async function submitCustomerSendMutation(params: {
   const persisted =
     mode === 'send'
       ? await resolveCustomerSendSendVersion({
+          origin: params.origin,
           orgId: params.orgId,
           userId: params.userId,
           estimateId: params.estimateId,
@@ -563,6 +969,7 @@ export async function submitCustomerSendMutation(params: {
           draftSource: params.body ?? {},
         })
       : await persistCustomerSendDraftVersion({
+          origin: params.origin,
           orgId: params.orgId,
           userId: params.userId,
           estimateId: params.estimateId,

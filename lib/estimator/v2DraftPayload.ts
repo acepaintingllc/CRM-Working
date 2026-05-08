@@ -498,16 +498,21 @@ export function buildEstimateV2SavePayload(
   )
 
   const orderedDrywallRepairs = orderedRooms.flatMap((room) =>
-    sortByPosition(drywallRepairs.filter((repair) => repair.roomId === room.room_id)).map((repair, index) => ({
-      id: repair.id,
-      room_id: repair.roomId,
-      position: index,
-      surface: repair.surface,
-      repair_type: repair.repairType,
-      unit: repair.unit,
-      quantity: toNullableDraftNumber(repair.quantity) ?? 0,
-      override_total: toNullableDraftNumber(repair.overrideTotal),
-    }))
+    sortByPosition(drywallRepairs.filter((repair) => repair.roomId === room.room_id)).map((repair, index) => {
+      const active = repair.active ?? repair.include ?? 'Y'
+      return {
+        id: repair.id,
+        room_id: repair.roomId,
+        position: index,
+        include: active,
+        active,
+        surface: repair.surface,
+        repair_type: repair.repairType,
+        unit: repair.unit,
+        quantity: toNullableDraftNumber(repair.quantity) ?? 0,
+        override_total: toNullableDraftNumber(repair.overrideTotal),
+      }
+    })
   )
 
   const orderedRollers = sortByPosition(rollers)

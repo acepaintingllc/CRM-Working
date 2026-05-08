@@ -136,6 +136,10 @@ function readPersistedDraft(value: unknown): CustomerSendDraft | undefined {
   return isCustomerSendDraft(value) ? value : undefined
 }
 
+function readOptionalRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined
+}
+
 export function readCustomerSendPersistedDraftInput(
   value: unknown
 ): Record<string, unknown> {
@@ -164,22 +168,30 @@ export function readCustomerSendStoredSnapshot(
     document: snapshotData.document,
     ...(draft ? { draft } : {}),
     ...(pdf ? { pdf } : {}),
+    ...(readOptionalRecord(snapshotData.operational_snapshot)
+      ? { operational_snapshot: snapshotData.operational_snapshot }
+      : {}),
   }
 }
 
 export function buildCustomerSendPersistedSnapshot(params: {
   document: CustomerEstimateDocument
   draft: CustomerSendDraft
+  operationalSnapshot?: Record<string, unknown>
 }): CustomerSendPersistedSnapshot {
   const snapshot = buildEstimatePublicPersistedSnapshot({
     document: params.document,
     draft: params.draft,
+    operationalSnapshot: params.operationalSnapshot,
   })
   return {
     artifact_kind: snapshot.artifact_kind,
     artifact_version: snapshot.artifact_version,
     document: snapshot.document,
     draft: params.draft,
+    ...(readOptionalRecord(snapshot.operational_snapshot)
+      ? { operational_snapshot: snapshot.operational_snapshot }
+      : {}),
   }
 }
 
@@ -200,6 +212,9 @@ export function appendCustomerSendPersistedPdf(params: {
     artifact_version: snapshot.artifact_version,
     document: snapshot.document,
     ...(Object.keys(currentDraft).length > 0 ? { draft: currentDraft } : {}),
+    ...(readOptionalRecord(snapshot.operational_snapshot)
+      ? { operational_snapshot: snapshot.operational_snapshot }
+      : {}),
     pdf: params.pdf,
   }
 }
@@ -288,6 +303,9 @@ export function normalizeCustomerSendStoredSnapshot(
     document: normalized.document,
     ...(draft ? { draft } : {}),
     ...(pdf ? { pdf } : {}),
+    ...(readOptionalRecord(normalized.operational_snapshot)
+      ? { operational_snapshot: normalized.operational_snapshot }
+      : {}),
   }
 }
 

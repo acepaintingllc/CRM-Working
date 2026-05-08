@@ -745,6 +745,53 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
     expect(result.pricingSummary.finalTotal).toBeGreaterThanOrEqual(1000)
   })
 
+  it('keeps inactive drywall repairs zeroed through canonical artifact calculation', () => {
+    const baseline = calculateEstimateV2ArtifactsFromPayload({
+      payload,
+      calculationCatalogs: catalogs,
+      orgDefaults,
+    })
+    const payloadWithInactiveDrywall = structuredClone(payload) as EstimateV2SavePayload
+    payloadWithInactiveDrywall.drywall_repairs = [
+      ...(payloadWithInactiveDrywall.drywall_repairs ?? []),
+      {
+        id: '66666666-6666-4666-8666-666666666666',
+        room_id: 'R001',
+        position: 1,
+        active: 'N',
+        surface: 'wall',
+        repair_type: 'flat_wall_crack',
+        unit: 'LF',
+        quantity: 99,
+        override_total: 999,
+      },
+    ]
+
+    const result = calculateEstimateV2ArtifactsFromPayload({
+      payload: payloadWithInactiveDrywall,
+      calculationCatalogs: catalogs,
+      orgDefaults,
+    })
+
+    const inactiveRepair = result.drywallCalculations.scopes.find((scope) => scope.id === '66666666-6666-4666-8666-666666666666')
+    expect(inactiveRepair).toEqual(
+      expect.objectContaining({
+        include: 'N',
+        active: 'N',
+        raw_total: 0,
+        effective_total: 0,
+      })
+    )
+    expect(result.drywallCalculations.room_totals).toEqual([
+      expect.objectContaining({
+        room_id: 'R001',
+        scope_count: 1,
+        effective_total: 56,
+      }),
+    ])
+    expect(result.pricingSummary.finalTotal).toBe(baseline.pricingSummary.finalTotal)
+  })
+
   it('keeps save calculation artifacts aligned with canonical artifact defaults', async () => {
     const payloadWithOrgDefaults = structuredClone(payload) as EstimateV2SavePayload
     const jobsettings = payloadWithOrgDefaults.jobsettings as unknown as Record<string, unknown>
@@ -789,6 +836,19 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
       trimScopeRows: payloadWithOrgDefaults.room_trim_scopes as never,
       doorScopeRows: payloadWithOrgDefaults.room_door_scopes as never,
       drywallRepairRows: payloadWithOrgDefaults.drywall_repairs as never,
+      accessFeeRows: [
+        {
+          id: 'fee-1',
+          room_id: null,
+          access_fee_id: 'LADDER-TALL',
+          qty: 2,
+          actual_cost_override: null,
+          notes: null,
+          position: 0,
+          active: 'Y',
+        },
+      ],
+      otherRows: payloadWithOrgDefaults.other as never,
       jobsettings: payloadWithOrgDefaults.jobsettings as never,
       orgDefaults,
       ensureCatalogs,
@@ -867,6 +927,77 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
     )
     expect(saveArtifacts.doorCalculations.scopes[0].effective_total).toBeCloseTo(
       canonical.doorCalculations.scopes[0].effective_total ?? 0,
+      2
+    )
+    expect(saveArtifacts.accessFeeCalculation.total).toBe(canonical.accessFeeCalculation.total)
+    expect(saveArtifacts.otherCalculations.scopes).toEqual(
+      canonical.otherCalculations.scopes.map((scope) =>
+        expect.objectContaining({
+          id: scope.id,
+          raw_total: scope.raw_total,
+          effective_total: scope.effective_total,
+        })
+      )
+    )
+    expect(saveArtifacts.pricingSummary.sharedAccessCost).toBe(canonical.pricingSummary.sharedAccessCost)
+    expect(saveArtifacts.pricingSummary.prePolicyTotal).toBeCloseTo(
+      canonical.pricingSummary.prePolicyTotal,
+      2
+    )
+    expect(saveArtifacts.pricingSummary.postLaborPolicyTotal).toBeCloseTo(
+      canonical.pricingSummary.postLaborPolicyTotal,
+      2
+    )
+    expect(saveArtifacts.pricingSummary.finalTotal).toBeCloseTo(
+      canonical.pricingSummary.finalTotal,
+      2
+    )
+  })
+
+  it('treats omitted save access fee and other rows as empty arrays', async () => {
+    const payloadWithoutAccessOrOther = {
+      ...structuredClone(payload),
+      access_fees: [],
+      other: [],
+    } as EstimateV2SavePayload
+
+    const canonical = calculateEstimateV2ArtifactsFromPayload({
+      payload: payloadWithoutAccessOrOther,
+      calculationCatalogs: catalogs,
+      orgDefaults,
+    })
+    const ensureCatalogs = vi.fn(async () => catalogs)
+
+    const saveArtifacts = await calculateEstimateV2ArtifactsForSave({
+      orgId: 'org-1',
+      estimateId: 'estimate-1',
+      roomRows: payloadWithoutAccessOrOther.rooms as never,
+      wallScopeRows: payloadWithoutAccessOrOther.room_wall_scopes as never,
+      wallSegmentRows: payloadWithoutAccessOrOther.wall_segments as never,
+      ceilingScopeRows: payloadWithoutAccessOrOther.room_ceiling_scopes as never,
+      ceilingSegmentRows: payloadWithoutAccessOrOther.ceiling_scope_segments as never,
+      trimScopeRows: payloadWithoutAccessOrOther.room_trim_scopes as never,
+      doorScopeRows: payloadWithoutAccessOrOther.room_door_scopes as never,
+      drywallRepairRows: payloadWithoutAccessOrOther.drywall_repairs as never,
+      jobsettings: payloadWithoutAccessOrOther.jobsettings as never,
+      orgDefaults,
+      ensureCatalogs,
+    })
+
+    expect(saveArtifacts.accessFeeCalculation.total).toBe(0)
+    expect(saveArtifacts.accessFeeCalculation.rows).toEqual([])
+    expect(saveArtifacts.otherCalculations.scopes).toEqual([])
+    expect(saveArtifacts.pricingSummary.sharedAccessCost).toBe(0)
+    expect(saveArtifacts.pricingSummary.prePolicyTotal).toBeCloseTo(
+      canonical.pricingSummary.prePolicyTotal,
+      2
+    )
+    expect(saveArtifacts.pricingSummary.postLaborPolicyTotal).toBeCloseTo(
+      canonical.pricingSummary.postLaborPolicyTotal,
+      2
+    )
+    expect(saveArtifacts.pricingSummary.finalTotal).toBeCloseTo(
+      canonical.pricingSummary.finalTotal,
       2
     )
   })

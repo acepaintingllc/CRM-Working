@@ -183,7 +183,13 @@ const SCOPE_MAPPING_CONFIG: Record<ScopeKind, ScopeMappingConfig> = {
     fallbackLabel: 'Trim',
     quantity: (scope) => scope.effective_measurement ?? null,
     paintCost: () => null,
-    hasOverride: () => false,
+    hasOverride: (scope) =>
+      hasActiveOverrideValue(scope.override_measurement, scope.raw_measurement) ||
+      hasActiveOverrideValue(scope.override_hours, scope.raw_paint_hours) ||
+      hasActiveOverrideValue(scope.override_gallons, scope.raw_paint_gallons) ||
+      hasActiveOverrideValue(scope.override_supply_cost, scope.raw_supply_cost) ||
+      hasActiveOverrideValue(scope.override_total, scope.raw_total) ||
+      !!scope.override_description?.trim(),
     missingProduct: () => false,
   },
   doors: {

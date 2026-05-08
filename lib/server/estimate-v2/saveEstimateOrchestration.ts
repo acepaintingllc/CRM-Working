@@ -45,7 +45,9 @@ import {
 } from './roomPersistence.ts'
 import { buildEstimateRoomFlagPersistenceRows } from './roomFlagPersistence.ts'
 import type {
+  EstimateAccessFeePersistenceRow,
   EstimateJobSettingsPersistenceRow,
+  EstimateOtherPersistenceRow,
 } from './persistenceTypes.ts'
 import {
   type EstimateFullPersistencePayload,
@@ -195,6 +197,8 @@ export async function saveEstimateV2Inputs(params: {
     let v2TrimScopeRows: V2TrimScopeSaveRow[] | null = null
     let v2DoorScopeRows: V2DoorScopeSaveRow[] | null = null
     let v2DrywallRepairRows: V2DrywallRepairSaveRow[] | null = null
+    let accessFeeRows: EstimateAccessFeePersistenceRow[] | null = null
+    let otherRows: EstimateOtherPersistenceRow[] | null = null
     let jobSettingsRow: EstimateJobSettingsPersistenceRow | null = null
     const ensureCatalogs = createCalculationCatalogsLoader({
       requestOrigin: params.requestOrigin,
@@ -267,12 +271,30 @@ export async function saveEstimateV2Inputs(params: {
       ).repairRows
     }
 
-    if (!params.autosaveOnly && hasScopeCalculationPayload) {
-      if (!v2RoomRows) throw new Error('V2 scope save requires rooms')
+    if (Array.isArray(body.access_fees)) {
+      accessFeeRows = buildEstimateAccessFeePersistenceRows({
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        jobId,
+        rows: body.access_fees as Unsafe[],
+      })
+    }
+
+    if (Array.isArray(body.other)) {
+      otherRows = buildEstimateOtherPersistenceRows({
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        jobId,
+        rows: body.other as Unsafe[],
+      })
+    }
+
+    if (!params.autosaveOnly && hasCalculationPayload) {
+      if (hasScopeCalculationPayload && !v2RoomRows) throw new Error('V2 scope save requires rooms')
       const calculated = await calculateEstimateV2ArtifactsForSave({
         orgId: params.orgId,
         estimateId: params.estimateId,
-        roomRows: v2RoomRows,
+        roomRows: v2RoomRows ?? [],
         wallScopeRows: v2WallScopeRows ?? [],
         wallSegmentRows: v2WallSegmentRows ?? [],
         ceilingScopeRows: v2CeilingScopeRows ?? [],
@@ -280,6 +302,17 @@ export async function saveEstimateV2Inputs(params: {
         trimScopeRows: v2TrimScopeRows ?? [],
         doorScopeRows: v2DoorScopeRows ?? [],
         drywallRepairRows: v2DrywallRepairRows ?? [],
+        accessFeeRows: (accessFeeRows ?? []).map((row, index) => ({
+          id: row.id ?? `access-fee-${index}`,
+          room_id: row.room_id,
+          access_fee_id: row.access_fee_id,
+          qty: row.qty,
+          actual_cost_override: row.actual_cost_override,
+          notes: row.notes,
+          position: row.position,
+          active: row.active,
+        })),
+        otherRows: otherRows ?? [],
         jobsettings: body.jobsettings as Unsafe | undefined,
         orgDefaults: await ensureOrgDefaults(),
         ensureCatalogs,
@@ -432,12 +465,7 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.access_fees)) {
-      fullPersistencePayload.access_fees = buildEstimateAccessFeePersistenceRows({
-        orgId: params.orgId,
-        estimateId: params.estimateId,
-        jobId,
-        rows: body.access_fees as Unsafe[],
-      })
+      fullPersistencePayload.access_fees = accessFeeRows ?? []
     }
 
     if (Array.isArray(body.prejob)) {
@@ -459,12 +487,7 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.other)) {
-      fullPersistencePayload.other = buildEstimateOtherPersistenceRows({
-        orgId: params.orgId,
-        estimateId: params.estimateId,
-        jobId,
-        rows: body.other as Unsafe[],
-      })
+      fullPersistencePayload.other = otherRows ?? []
     }
 
     if (Object.keys(fullPersistencePayload).length === 0) {

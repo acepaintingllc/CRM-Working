@@ -18,6 +18,7 @@ export function buildV2DrywallRepairPersistenceRows(
     job_id: context.jobId,
     room_id: row.room_id,
     position: row.position,
+    active: row.active ?? row.include ?? 'Y',
     surface: row.surface,
     repair_type: row.repair_type,
     unit: row.unit,

@@ -1,6 +1,7 @@
 import {
   asNullableNumber,
   asText,
+  isUuid,
   toYN,
   type UnsafeRecord as Unsafe,
 } from '../../estimator/parsing.ts'
@@ -14,7 +15,7 @@ export function buildEstimateAccessFeePersistenceRows(params: {
 }): EstimateAccessFeePersistenceRow[] {
   return params.rows
     .map((row, idx) => ({
-      id: asText(row.id) || undefined,
+      id: isUuid(row.id) ? asText(row.id) : undefined,
       org_id: params.orgId,
       estimate_id: params.estimateId,
       job_id: params.jobId,

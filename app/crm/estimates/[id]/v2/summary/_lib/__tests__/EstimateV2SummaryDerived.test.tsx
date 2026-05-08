@@ -397,7 +397,7 @@ describe('estimateV2SummaryDerived helpers', () => {
     })
     expect(trimRow).toMatchObject({
       subtotal: manualOverridesDisabledScopesFixture.expectedTotals.scopeTotals.trim[0]?.total,
-      hasOverride: false,
+      hasOverride: true,
       overrideSummary: 'Override: Total: $125',
     })
     expect(drywallRow).toMatchObject({
@@ -425,6 +425,7 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(result.current.summaryAlerts.map((alert) => alert.detail)).toEqual([
       'Living Room Walls override active - Total: $450',
       'Living Room Ceiling override active - Total: $210',
+      'Living Room Baseboards override active - Total: $125',
       'Living Room wall - patch opening repair override active - Total: $80',
     ])
   })
@@ -547,7 +548,7 @@ describe('estimateV2SummaryDerived helpers', () => {
     expect(roomBlocks[0]?.scopes).toEqual(['Walls', 'Ceilings', 'Trim'])
     expect(roomBlocks[0]?.roomTotal).toBe(1031)
     expect(roomBlocks[0]?.displayScopeSubtotalMap.get('trim-1')).toBeTypeOf('number')
-    expect(roomBlocks[0]?.alerts).toEqual({ missingProduct: 0, overrides: 0, flags: 1 })
+    expect(roomBlocks[0]?.alerts).toEqual({ missingProduct: 0, overrides: 1, flags: 1 })
     expect(roomBlocks[0]?.scopeRows.find((scope) => scope.id === 'trim-1')?.overrideSummary).toBe(
       'Override: Labor hours: 1 h'
     )
@@ -673,7 +674,7 @@ describe('estimateV2SummaryDerived helpers', () => {
     })
   })
 
-  it('does not count trim manual values as summary overrides', () => {
+  it('counts trim total overrides in summary rows and alerts', () => {
     const roomScopeRows = buildRoomScopeRows({
       wallScopes: [],
       ceilingScopes: [],
@@ -685,17 +686,27 @@ describe('estimateV2SummaryDerived helpers', () => {
           effective_measurement: 20,
           effective_total: 150,
           raw_total: 100,
-          override_hours: 1,
-          override_gallons: 0.25,
           override_total: 150,
-          override_description: 'Manual trim paint',
         },
       ]),
     })
     const trimRow = roomScopeRows.get('room-1')?.find((scope) => scope.id === 'trim-1')
+    const alerts = buildSummaryAlerts({
+      pricingSummary,
+      hasJobSettings: true,
+      roomScopeRows,
+      roomFlags: [],
+      rooms,
+    })
 
     expect(trimRow).toMatchObject({
-      hasOverride: false,
+      hasOverride: true,
+      overrideSummary: 'Override: Total: $150',
+    })
+    expect(alerts).toContainEqual({
+      kind: 'warn',
+      title: 'Manual override detected',
+      detail: 'Living Room Trim override active - Total: $150',
     })
   })
 

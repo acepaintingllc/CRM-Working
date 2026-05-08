@@ -229,10 +229,14 @@ export type EstimateV2PricingSummary = {
   primerMaterialCost: number
   supplyCost: number
   sharedAccessCost?: number
+  access_fee_total?: number
   accessFeeAllocation?: {
     walls: number
     ceilings: number
     trim: number
+    doors: number
+    drywall: number
+    other: number
     unallocated: number
     warning: string | null
   }
@@ -647,6 +651,8 @@ export type EstimateV2DrywallRepairDraft = {
   id: string
   roomId: string
   position: number
+  include?: YN
+  active?: YN
   surface: 'wall' | 'ceiling'
   repairType: string
   unit: 'LF' | 'SQFT'

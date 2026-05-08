@@ -301,7 +301,11 @@ describe('customer-send persisted artifact reader parity', () => {
       })
     )
     expect(publicSnapshot.data.document).toEqual(sendResult.data.document)
-    expect(publicSnapshot.data.snapshot_json).toEqual(sentVersion.snapshot_json)
+    expect(sentVersion.snapshot_json?.operational_snapshot).toEqual(
+      expect.objectContaining({
+        artifact_kind: 'customer_send_operational_snapshot',
+      })
+    )
     expect(acceptedSource.data.snapshot_json).toEqual(sentVersion.snapshot_json)
   })
 

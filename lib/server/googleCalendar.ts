@@ -29,6 +29,17 @@ type GoogleOAuthTokenResponse = {
   items?: unknown
 }
 
+const GOOGLE_TOKEN_TIMEOUT_MS = 20_000
+
+function timeoutSignal(timeoutMs: number) {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(timeoutMs)
+  }
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(), timeoutMs)
+  return controller.signal
+}
+
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
 }
@@ -184,6 +195,7 @@ export async function refreshAccessToken(params: {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),
+    signal: timeoutSignal(GOOGLE_TOKEN_TIMEOUT_MS),
   })
   const json: GoogleOAuthTokenResponse = await res.json().catch(() => ({}))
   if (!res.ok) {

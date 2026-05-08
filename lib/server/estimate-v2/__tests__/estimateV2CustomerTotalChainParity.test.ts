@@ -87,6 +87,10 @@ vi.mock('../shared.ts', async () => {
   }
 })
 
+import {
+  calculateEstimateV2ArtifactsForSave,
+  type EstimateV2CalculationCatalogBundle,
+} from '../calculationOrchestration.ts'
 import { loadEstimateV2Response } from '../loadEstimateAssembly.ts'
 
 type DbLikeRow = Record<string, unknown>
@@ -352,6 +356,15 @@ function buildDriftGuardPayload(fixture: (typeof ESTIMATE_CHAIN_PARITY_SCENARIOS
       description: 'Drift guard add-on',
       client_description: 'Drift guard add-on',
     },
+    {
+      id: 'other-drift-guard-job-level',
+      room_id: null,
+      active: 'Y',
+      pricing_mode: 'fixed',
+      fixed_amount: 80,
+      description: 'Job-level drift guard add-on',
+      client_description: 'Job-level drift guard add-on',
+    },
   ]
 
   return payload
@@ -455,8 +468,7 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
       const fixtureExpectedTotal = artifacts.fixture.expectedTotals.finalTotal
       const assertionErrors: Error[] = []
 
-      // saveEstimateV2Inputs does not currently pass pricing_summary forward, so the save hop
-      // is asserted against the calculated artifact used to build the persisted V2 rows.
+      // The save hop is represented by the canonical artifact used to build persisted V2 rows.
       recordCustomerTotalAssertion(assertionErrors, {
         scenario,
         hop: 'save',
@@ -520,7 +532,7 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
     })
   }
 
-  it('guards customer-visible calculation parity across save, load, preview, and customer-send', async () => {
+  it('guards customer-visible calculation parity across save calculation, load, preview, and customer-send', async () => {
     Object.values(mocks).forEach((mock) => mock.mockReset())
     const fixture = ESTIMATE_CHAIN_PARITY_SCENARIOS['full-room-quote']
     const payload = buildDriftGuardPayload(fixture)
@@ -538,6 +550,25 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
       payload,
       catalogs,
       orgDefaults: DRIFT_GUARD_ORG_DEFAULTS,
+    })
+    const saveArtifacts = await calculateEstimateV2ArtifactsForSave({
+      orgId: String(rows.estimates.org_id),
+      estimateId: String(rows.estimates.id),
+      roomRows: payload.rooms as never,
+      wallScopeRows: payload.room_wall_scopes as never,
+      wallSegmentRows: payload.wall_segments as never,
+      ceilingScopeRows: payload.room_ceiling_scopes as never,
+      ceilingSegmentRows: payload.ceiling_scope_segments as never,
+      trimScopeRows: payload.room_trim_scopes as never,
+      doorScopeRows: payload.room_door_scopes as never,
+      drywallRepairRows: payload.drywall_repairs as never,
+      accessFeeRows: payload.access_fees as never,
+      otherRows: payload.other as never,
+      jobsettings: payload.jobsettings as never,
+      orgDefaults: DRIFT_GUARD_ORG_DEFAULTS,
+      ensureCatalogs: vi.fn(
+        async () => artifacts.calculationArtifacts.calculationCatalogs as EstimateV2CalculationCatalogBundle
+      ),
     })
 
     const supabase = createLoadSupabaseStub(rows)
@@ -573,6 +604,7 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
 
     for (const [hop, expected, actual] of [
       ['canonical', expectedTotal, expectedTotal],
+      ['save-calculation-artifact', expectedTotal, saveArtifacts.pricingSummary.finalTotal],
       ['save-rollup', expectedTotal, asComparableNumber(rows.estimate_version_rollups.final_total)],
       ['preview', expectedTotal, preview.pricingSummary.finalTotal],
       ['load', expectedTotal, loaded.pricing_summary?.finalTotal],
@@ -594,6 +626,14 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
     expect(artifacts.calculationArtifacts.drywallCalculations.scopes.length).toBeGreaterThan(0)
     expect(artifacts.calculationArtifacts.accessFeeCalculation.rows.length).toBeGreaterThan(0)
     expect(artifacts.calculationArtifacts.otherCalculations.scopes.length).toBeGreaterThan(0)
+    expect(saveArtifacts.accessFeeCalculation.total).toBeCloseTo(
+      artifacts.calculationArtifacts.accessFeeCalculation.total,
+      2
+    )
+    expect(saveArtifacts.pricingSummary.sharedAccessCost).toBeCloseTo(
+      artifacts.calculationArtifacts.pricingSummary.sharedAccessCost,
+      2
+    )
 
     expectRowsMatchFields({
       label: 'wall engine canonical/preview',
@@ -662,9 +702,21 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
       fields: ['effective_total', 'pricing_mode'],
     })
     expectRowsMatchFields({
+      label: 'other canonical/save-calculation',
+      expectedRows: artifacts.calculationArtifacts.otherCalculations.scopes,
+      actualRows: saveArtifacts.otherCalculations.scopes,
+      fields: ['effective_total', 'pricing_mode'],
+    })
+    expectRowsMatchFields({
       label: 'access canonical/preview',
       expectedRows: accessFeeComparableRows(artifacts.calculationArtifacts.accessFeeCalculation.rows),
       actualRows: accessFeeComparableRows(preview.accessFees.rows),
+      fields: ['label', 'access_group', 'catalog_amount', 'calculated_total', 'effective_total', 'overridden'],
+    })
+    expectRowsMatchFields({
+      label: 'access canonical/save-calculation',
+      expectedRows: accessFeeComparableRows(artifacts.calculationArtifacts.accessFeeCalculation.rows),
+      actualRows: accessFeeComparableRows(saveArtifacts.accessFeeCalculation.rows),
       fields: ['label', 'access_group', 'catalog_amount', 'calculated_total', 'effective_total', 'overridden'],
     })
 
@@ -772,6 +824,89 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
 
     if (assertionErrors.length > 0) {
       throw new AggregateError(assertionErrors, 'Estimate V2 drift guard total parity failed')
+    }
+  })
+
+  it('keeps all-scope customer-visible totals stable across canonical, save, load, and customer-send paths', async () => {
+    Object.values(mocks).forEach((mock) => mock.mockReset())
+    const artifacts = buildEstimateChainParityArtifacts('full-room-quote')
+    const rows = buildEstimateChainParityDbRows(artifacts)
+    const expectedTotal = artifacts.calculationArtifacts.pricingSummary.finalTotal
+    const assertionErrors: Error[] = []
+
+    const saveArtifacts = await calculateEstimateV2ArtifactsForSave({
+      orgId: String(rows.estimates.org_id),
+      estimateId: String(rows.estimates.id),
+      roomRows: artifacts.payload.rooms as never,
+      wallScopeRows: artifacts.payload.room_wall_scopes as never,
+      wallSegmentRows: artifacts.payload.wall_segments as never,
+      ceilingScopeRows: artifacts.payload.room_ceiling_scopes as never,
+      ceilingSegmentRows: artifacts.payload.ceiling_scope_segments as never,
+      trimScopeRows: artifacts.payload.room_trim_scopes as never,
+      doorScopeRows: artifacts.payload.room_door_scopes as never,
+      drywallRepairRows: artifacts.payload.drywall_repairs as never,
+      accessFeeRows: artifacts.payload.access_fees as never,
+      otherRows: artifacts.payload.other as never,
+      jobsettings: artifacts.payload.jobsettings as never,
+      orgDefaults: null,
+      ensureCatalogs: vi.fn(
+        async () => artifacts.calculationArtifacts.calculationCatalogs as EstimateV2CalculationCatalogBundle
+      ),
+    })
+
+    const saveResponse = { pricing_summary: saveArtifacts.pricingSummary }
+
+    const supabase = createLoadSupabaseStub(rows)
+    mocks.supabaseFrom.mockImplementation(supabase.from)
+    mocks.getEstimate.mockResolvedValue({ estimate: rows.estimates })
+    mocks.loadEstimateTemplateSettings.mockResolvedValue(null)
+    mocks.loadEstimateV2CalculationCatalogs.mockResolvedValue(
+      artifacts.calculationArtifacts.calculationCatalogs
+    )
+    mocks.loadEstimateV2RoomModesForTrimFromDb.mockResolvedValue(new Map())
+
+    const loadResponse = (await loadEstimateV2Response({
+      requestOrigin: 'http://localhost:3000',
+      orgId: String(rows.estimates.org_id),
+      userId: 'user-all-scope-total-stability',
+      estimateId: String(rows.estimates.id),
+    })) as EstimateV2GetResponse
+
+    const resources = buildCustomerSendResources({
+      rows,
+      catalogs: artifacts.fixture.editorState.meta.catalogs,
+    })
+    const customerSendCalculated = await deriveEstimateCustomerSendCalculatedData(resources, {
+      requestOrigin: 'http://localhost:3000',
+      orgId: String(rows.estimates.org_id),
+      userId: 'user-all-scope-total-stability',
+      estimateId: String(rows.estimates.id),
+    })
+    if (!customerSendCalculated.ok) throw new Error(customerSendCalculated.message)
+    const customerSendContext = mapCustomerQuoteSourceModel({
+      origin: 'http://localhost:3000',
+      resources,
+      calculated: customerSendCalculated.data,
+    })
+
+    for (const [hop, actual] of [
+      ['canonical calculation', artifacts.calculationArtifacts.pricingSummary.finalTotal],
+      ['save response', saveResponse.pricing_summary.finalTotal],
+      ['load response', loadResponse.pricing_summary?.finalTotal],
+      ['customer-send', customerSendContext.pricing_summary?.finalTotal],
+    ] as const) {
+      recordCustomerTotalAssertion(assertionErrors, {
+        scenario: 'full-room-quote all-scope total stability',
+        hop,
+        expected: expectedTotal,
+        actual,
+      })
+    }
+
+    supabase.assertAllExpectedTablesUsed()
+
+    if (assertionErrors.length > 0) {
+      throw new AggregateError(assertionErrors, 'All-scope customer-visible total stability failed')
     }
   })
 })

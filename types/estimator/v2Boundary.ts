@@ -463,10 +463,13 @@ export function normalizeEstimateV2DoorScopeRow(row: UnsafeRecord, index: number
 }
 
 export function normalizeEstimateV2DrywallRepairRow(row: UnsafeRecord, index: number): EstimateV2DrywallRepairSaveRow {
+  const active = toYN(row.active ?? row.include, 'Y')
   return {
     id: asText(row.id) || undefined,
     room_id: asText(row.room_id).toUpperCase(),
     position: asNullableNumber(row.position) ?? index,
+    include: active,
+    active,
     surface: toDrywallSurface(row.surface),
     repair_type: asText(row.repair_type),
     unit: toDrywallUnit(row.unit),

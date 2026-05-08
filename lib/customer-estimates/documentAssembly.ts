@@ -93,15 +93,30 @@ export function assembleCustomerEstimateBuild(params: {
     overrides: normalized.overrides,
   }).filter((section) => section.price != null && section.text.trim())
   const customer = buildCustomerProfile({ customer: normalized.customer, job })
-  const quoteRows: CustomerEstimateQuoteRow[] = reconcileWholeDollarRows(
-    sections.map((section) => ({
-      key: section.key,
-      label: section.label,
-      description: section.text.trim(),
-      price: section.price ?? 0,
-    })),
-    total ?? null
-  )
+  const fixedPriceSections = sections.filter((section) => section.key === 'other')
+  const adjustableSections = sections.filter((section) => section.key !== 'other')
+  const fixedPriceTotal = round2(fixedPriceSections.reduce((sum, section) => sum + (section.price ?? 0), 0))
+  const adjustableTarget = total == null ? null : Math.max(0, round2(total - fixedPriceTotal))
+  const quoteRows: CustomerEstimateQuoteRow[] = [
+    ...reconcileWholeDollarRows(
+      adjustableSections.map((section) => ({
+        key: section.key,
+        label: section.label,
+        description: section.text.trim(),
+        price: section.price ?? 0,
+      })),
+      adjustableTarget
+    ),
+    ...reconcileWholeDollarRows(
+      fixedPriceSections.map((section) => ({
+        key: section.key,
+        label: section.label,
+        description: section.text.trim(),
+        price: section.price ?? 0,
+      })),
+      fixedPriceTotal
+    ),
+  ]
   const computedTotal = Math.round(total ?? round2(quoteRows.reduce((sum, section) => sum + section.price, 0)))
 
   return {

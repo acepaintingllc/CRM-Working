@@ -1,5 +1,6 @@
 import { getValidAccessToken } from './googleCalendar.ts'
 import { supabaseAdmin } from './org.ts'
+import { loadCompanyProfileSettings } from './settings/companyProfileStore.ts'
 
 function base64UrlEncode(value: Buffer | string) {
   const buf = typeof value === 'string' ? Buffer.from(value) : value
@@ -12,6 +13,10 @@ function base64UrlEncode(value: Buffer | string) {
 
 function asRecord(value: unknown) {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+function asText(value: unknown) {
+  return value == null ? '' : String(value).trim()
 }
 
 function pickOrgText(row: Record<string, unknown>, candidates: string[]) {
@@ -27,6 +32,20 @@ function sanitizeHeaderValue(value: string) {
 }
 
 const EMAIL_PATTERN = /^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/
+const GOOGLE_MAIL_TIMEOUT_MS = 20_000
+
+function timeoutSignal(timeoutMs: number) {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(timeoutMs)
+  }
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(), timeoutMs)
+  return controller.signal
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError'
+}
 
 function normalizeRecipientList(value: string) {
   const cleaned = sanitizeHeaderValue(value)
@@ -57,15 +76,16 @@ function formatMailboxHeader(name: string | null, email: string | null) {
 async function getOrgSenderProfile(orgId: string) {
   const { data, error } = await supabaseAdmin
     .from('orgs')
-    .select('*')
+    .select('name, business_email')
     .eq('id', orgId)
     .maybeSingle()
   if (error) throw error
 
   const row = (data ?? {}) as Record<string, unknown>
+  const companyProfile = await loadCompanyProfileSettings(orgId).catch(() => null)
   return {
-    fromName: pickOrgText(row, ['name', 'business_name', 'company_name']) ?? 'ACE Painting',
-    fromEmail: pickOrgText(row, ['business_email', 'email', 'company_email', 'from_email']),
+    fromName: asText(companyProfile?.business_name) || pickOrgText(row, ['name']) || 'ACE Painting',
+    fromEmail: asText(companyProfile?.business_email) || pickOrgText(row, ['business_email']),
   }
 }
 
@@ -159,14 +179,24 @@ export async function sendGmailMessage(params: {
     appendPlainTextBody()
   }
 
-  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${access.accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ raw: base64UrlEncode(raw) }),
-  })
+  let res: Response
+  try {
+    res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw: base64UrlEncode(raw) }),
+      signal: timeoutSignal(GOOGLE_MAIL_TIMEOUT_MS),
+    })
+  } catch (error) {
+    return {
+      error: isAbortError(error)
+        ? 'Timed out sending email through Gmail. The customer link is ready; copy the link or try sending again.'
+        : 'Failed to send email',
+    } as const
+  }
 
   const json: unknown = await res.json().catch(() => null)
   if (!res.ok) {

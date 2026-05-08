@@ -9,6 +9,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'service-role-key'
 const {
   buildEstimateSnapshotRows,
   insertEstimateSnapshotIfMissing,
+  selectAcceptedOperationalEstimateResponse,
 } = await import('../estimate-feedback/snapshots.ts')
 
 function acceptedCustomerArtifact(title = 'Accepted Quote') {
@@ -123,6 +124,18 @@ function acceptedCustomerArtifact(title = 'Accepted Quote') {
   }
 
   return buildEstimatePublicPersistedSnapshot({ document, draft })
+}
+
+function acceptedCustomerArtifactWithOperationalSnapshot(
+  operationalSnapshot: Record<string, unknown>,
+  title = 'Accepted Quote'
+) {
+  const artifact = acceptedCustomerArtifact(title)
+  return buildEstimatePublicPersistedSnapshot({
+    document: artifact.document,
+    draft: artifact.draft,
+    operationalSnapshot,
+  })
 }
 
 function estimateResponse(overrides: Partial<EstimateV2GetResponse> = {}) {
@@ -559,6 +572,38 @@ describe('estimate operational snapshots', () => {
       built.snapshot.source_payload_json.customer_visible_source,
       'customer_artifact.document'
     )
+  })
+
+  it('falls back to live operational rows when the accepted public artifact has an empty operational snapshot', () => {
+    const liveResponse = estimateResponse()
+    const acceptedArtifact = acceptedCustomerArtifactWithOperationalSnapshot({
+      artifact_kind: 'customer_send_operational_snapshot',
+      artifact_version: 1,
+      source_estimate_updated_at: null,
+      estimate_response: {
+        estimate: liveResponse.estimate,
+        inputs: { rooms: [] },
+        wall_calculations: { scopes: [] },
+        ceiling_calculations: { scopes: [] },
+        trim_calculations: { scopes: [] },
+        pricing_summary: {
+          finalTotal: acceptedCustomerArtifact().document.total,
+          effectiveLaborHours: 0,
+          rawLaborHours: 0,
+          paintMaterialCost: 0,
+          supplyCost: 0,
+        },
+      },
+    })
+
+    const selected = selectAcceptedOperationalEstimateResponse({
+      acceptedArtifact,
+      liveEstimateResponse: liveResponse,
+    })
+
+    assert.equal(selected, liveResponse)
+    assert.equal(selected.wall_calculations?.scopes?.length, 1)
+    assert.equal(selected.pricing_summary?.effectiveLaborHours, 16)
   })
 
   it('fails closed for missing or legacy accepted customer artifacts', () => {

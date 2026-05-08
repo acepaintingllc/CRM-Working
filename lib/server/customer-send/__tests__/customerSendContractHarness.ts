@@ -69,16 +69,61 @@ export function buildCustomerSendContractContext(
     },
     inputs: {
       rooms: [],
-      room_wall_scopes: [],
+      room_wall_scopes: [
+        {
+          id: 'wall-scope-1',
+          room_id: 'room-1',
+          scope_name: 'Kitchen walls',
+          effective_paint_hours: 6,
+          effective_primer_hours: 1,
+          effective_paint_gallons: 2,
+          effective_primer_gallons: 0.5,
+          allocated_paint_material_cost: 180,
+          effective_supply_cost: 35,
+          effective_total: 1200,
+        },
+      ],
       segments: [],
       wall_segments: [],
       ceiling_segments: [],
-      room_ceiling_scopes: [],
+      room_ceiling_scopes: [
+        {
+          id: 'ceiling-scope-1',
+          room_id: 'room-1',
+          scope_name: 'Kitchen ceiling',
+          effective_paint_hours: 2,
+          effective_primer_hours: 0,
+          effective_paint_gallons: 1,
+          effective_primer_gallons: 0,
+          allocated_paint_material_cost: 90,
+          effective_supply_cost: 15,
+          effective_total: 600,
+        },
+      ],
       ceiling_scope_segments: [],
-      room_trim_scopes: [],
+      room_trim_scopes: [
+        {
+          id: 'trim-scope-1',
+          room_id: 'room-1',
+          scope_name: 'Kitchen trim',
+          effective_paint_hours: 1.5,
+          effective_primer_hours: 0.25,
+          effective_paint_gallons: 0.5,
+          effective_primer_gallons: 0.1,
+          allocated_paint_material_cost: 45,
+          effective_supply_cost: 10,
+          effective_total: 400,
+        },
+      ],
       room_door_scopes: [],
       drywall_repairs: [],
-      access_fees: [],
+      access_fees: [
+        {
+          id: 'access-1',
+          label: 'Setup',
+          effective_total: 80,
+        },
+      ],
       trim_items: [],
       other: [],
       jobsettings: {},
@@ -151,6 +196,7 @@ export function createPublicVersionStore(
       userId: string
       draft: CustomerSendDraft
       document: CustomerEstimateDocument
+      operationalSnapshot?: Record<string, unknown>
       latestDraft: EstimatePublicVersionRow | null
       latestVersion: EstimatePublicVersionRow | null
     }) {
@@ -175,6 +221,9 @@ export function createPublicVersionStore(
         snapshot_json: buildCustomerSendPersistedSnapshot({
           document: clone(params.document),
           draft: clone(params.draft),
+          operationalSnapshot: params.operationalSnapshot
+            ? clone(params.operationalSnapshot)
+            : undefined,
         }),
         created_by: params.userId,
         sent_at: latestDraft?.sent_at ?? null,

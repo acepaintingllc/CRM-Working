@@ -92,6 +92,69 @@ test('calculateDrywallRepairs lets override total replace calculated total', () 
   assert.equal(result.scopes[0].effective_total, 200)
 })
 
+test('calculateDrywallRepairs zeros inactive repairs and excludes them from room totals', () => {
+  const result = calculateDrywallRepairs({
+    repairs: [
+      {
+        id: 'active-repair',
+        room_id: 'R001',
+        surface: 'wall',
+        repair_type: 'flat_wall_crack',
+        unit: 'LF',
+        quantity: 2.2,
+      },
+      {
+        id: 'inactive-repair',
+        room_id: 'R001',
+        active: 'N',
+        surface: 'wall',
+        repair_type: 'flat_wall_crack',
+        unit: 'LF',
+        quantity: 99,
+        override_total: 500,
+      },
+    ],
+    catalogs: { drywall_unit_rates: rates },
+  })
+
+  assert.equal(result.scopes[0].include, 'Y')
+  assert.equal(result.scopes[0].effective_total, 36)
+  assert.equal(result.scopes[1].include, 'N')
+  assert.equal(result.scopes[1].active, 'N')
+  assert.equal(result.scopes[1].raw_quantity, 0)
+  assert.equal(result.scopes[1].effective_quantity, 0)
+  assert.equal(result.scopes[1].calculated_total, 0)
+  assert.equal(result.scopes[1].override_total, null)
+  assert.equal(result.scopes[1].raw_total, 0)
+  assert.equal(result.scopes[1].effective_total, 0)
+  assert.equal(result.room_totals.length, 1)
+  assert.equal(result.room_totals[0].scope_count, 1)
+  assert.equal(result.room_totals[0].effective_total, 36)
+})
+
+test('calculateDrywallRepairs accepts include N as inactive and emits no room total', () => {
+  const result = calculateDrywallRepairs({
+    repairs: [
+      {
+        id: 'excluded-repair',
+        room_id: 'R001',
+        include: 'N',
+        surface: 'ceiling',
+        repair_type: 'ceiling_crack',
+        unit: 'LF',
+        quantity: 5,
+      },
+    ],
+    catalogs: { drywall_unit_rates: rates },
+  })
+
+  assert.equal(result.scopes[0].include, 'N')
+  assert.equal(result.scopes[0].raw_total, 0)
+  assert.equal(result.scopes[0].effective_total, 0)
+  assert.deepEqual(result.room_totals, [])
+  assert.deepEqual(result.missing_inputs, [])
+})
+
 test('calculateDrywallRepairs reports invalid surface/type combinations and missing rates', () => {
   const result = calculateDrywallRepairs({
     repairs: [

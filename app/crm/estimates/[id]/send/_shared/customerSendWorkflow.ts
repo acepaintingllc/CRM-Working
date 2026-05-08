@@ -533,13 +533,14 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
         )
       }
       if (mode === 'send' && asText(payload.delivery_error)) {
+        const deliveryError = asText(payload.delivery_error)
         console.error('Customer send delivery failed after public link creation', {
           estimateId,
           route: customerSendUrl(estimateId, catalogSource, routeFamily),
           documentType: labels.documentLower,
-          deliveryError: asText(payload.delivery_error),
+          deliveryError,
         })
-        setError(CUSTOMER_SEND_DELIVERY_FAILED_MESSAGE)
+        setError(`${CUSTOMER_SEND_DELIVERY_FAILED_MESSAGE} ${deliveryError}`)
         setMessage(CUSTOMER_SEND_LINK_LIVE_MESSAGE)
         setBusy(false)
         setBusyAction(null)

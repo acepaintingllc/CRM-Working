@@ -78,6 +78,10 @@ function normalizeRepairType(value: unknown): DrywallRepairType | null {
   return null
 }
 
+function normalizeInclude(value: unknown): 'Y' | 'N' {
+  return String(value ?? '').trim().toUpperCase() === 'N' ? 'N' : 'Y'
+}
+
 function buildRateMap(rates: DrywallUnitRateCatalogRow[] | undefined) {
   const byType = new Map<string, DrywallUnitRateCatalogRow>()
   for (const rate of rates ?? []) {
@@ -102,6 +106,7 @@ function scopeKey(row: DrywallRepairCalculationRow) {
 function buildRoomTotals(scopes: DrywallRepairCalculationResult[]) {
   const totals = new Map<string, WallRoomTotal>()
   for (const scope of scopes) {
+    if (scope.include !== 'Y') continue
     const total = totals.get(scope.room_id) ?? emptyRoomTotal(scope.room_id)
     total.scope_count += 1
     total.included_scope_count += 1
@@ -117,9 +122,10 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
   const missingInputs: MissingInput[] = []
 
   const scopes = input.repairs.map((repair): DrywallRepairCalculationResult => {
+    const include = normalizeInclude(repair.include ?? repair.active)
     const surface = normalizeSurface(repair.surface)
     const repairType = normalizeRepairType(repair.repair_type)
-    const rawQuantity = nonNeg(n(repair.quantity)) ?? 0
+    const rawQuantity = include === 'Y' ? nonNeg(n(repair.quantity)) ?? 0 : 0
     const effectiveQuantity = calculateDrywallEffectiveQuantity(rawQuantity)
     const validRepairType = repairType ?? 'flat_wall_crack'
     const validForSurface = repairType ? isRepairValidForSurface(repairType, surface) : false
@@ -131,14 +137,14 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
       repairType && validForSurface && rate
         ? round4(effectiveQuantity * baseUnitRate * ceilingMultiplier)
         : 0
-    const overrideTotal = nonNeg(n(repair.override_total))
+    const overrideTotal = include === 'Y' ? nonNeg(n(repair.override_total)) : null
     const effectiveTotal =
       effectiveQuantity > 0
         ? round4(overrideTotal ?? calculatedTotal)
         : 0
     const key = scopeKey(repair)
 
-    if (!repairType) {
+    if (include === 'Y' && !repairType) {
       missingInputs.push({
         level: 'scope',
         room_id: repair.room_id,
@@ -147,7 +153,7 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
         field: 'repair_type',
         message: `Drywall repair ${key}: repair type is required`,
       })
-    } else if (!validForSurface) {
+    } else if (include === 'Y' && !validForSurface) {
       missingInputs.push({
         level: 'scope',
         room_id: repair.room_id,
@@ -158,7 +164,7 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
       })
     }
 
-    if (repairType && validForSurface && !rate) {
+    if (include === 'Y' && repairType && validForSurface && !rate) {
       missingInputs.push({
         level: 'scope',
         room_id: repair.room_id,
@@ -174,7 +180,8 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
       surface,
       repair_type: validRepairType,
       unit: expectedUnit,
-      include: 'Y',
+      include,
+      active: include,
       raw_quantity: rawQuantity,
       effective_quantity: effectiveQuantity,
       base_unit_rate: baseUnitRate,

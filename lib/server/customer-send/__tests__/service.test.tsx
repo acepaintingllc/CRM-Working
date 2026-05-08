@@ -261,9 +261,9 @@ function buildContext(overrides: Partial<CustomerQuoteSourceModel> = {}): Custom
     company: {
       business_name: 'ACE Painting',
       timezone: 'America/Chicago',
-      main_phone: '',
-      business_email: '',
-      address: '',
+      main_phone: '555-1212',
+      business_email: 'hello@example.com',
+      address: '123 Main',
       website: '',
       sender_signature: '',
       logo_url: '',
@@ -434,6 +434,60 @@ describe('customer send canonical artifact contract', () => {
     expect(mocks.buildCustomerSendDocument).not.toHaveBeenCalled()
     expect(mocks.saveCustomerSendDraftVersion).not.toHaveBeenCalled()
     expect(mocks.normalizeCustomerSendDraftScopeText).not.toHaveBeenCalled()
+  })
+
+  it('rebuilds a canonical persisted preview when company profile fields changed', async () => {
+    const staleDocument = {
+      ...assembledDocument,
+      company: {
+        ...assembledDocument.company,
+        business_name: '',
+        main_phone: '',
+        business_email: '',
+      },
+    }
+    const staleVersion = buildCanonicalVersion({
+      public_token: null,
+      snapshot_json: buildCustomerSendPersistedSnapshot({
+        document: staleDocument,
+        draft: canonicalDraft,
+      }),
+    })
+    mocks.resolveCustomerSendVersionState.mockReturnValueOnce({
+      latestDraft: staleVersion,
+      latestVersion: staleVersion,
+    })
+
+    const result = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: buildContext({
+        public_versions: [staleVersion],
+        latest_public_version: staleVersion,
+        latest_draft_version: staleVersion,
+      }),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(mocks.normalizeCustomerSendDraftScopeText).toHaveBeenCalled()
+    expect(mocks.buildCustomerSendDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          company: expect.objectContaining({
+            business_name: 'ACE Painting',
+            main_phone: '555-1212',
+            business_email: 'hello@example.com',
+          }),
+        }),
+      })
+    )
+    expect(mocks.saveCustomerSendDraftVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        document: assembledDocument,
+      })
+    )
   })
 
   it('returns a canonical persisted preview even when live artifact generation is blocked', async () => {
@@ -618,5 +672,69 @@ describe('customer send canonical artifact contract', () => {
         }),
       })
     )
+  })
+
+  it('normalizes generated scope wording before comparing a live send to the persisted artifact', async () => {
+    mocks.didCustomerSendArtifactInputsChange.mockReturnValueOnce(false)
+    const scopeDocument = {
+      ...assembledDocument,
+      scopes: [
+        {
+          key: 'walls' as const,
+          label: 'Walls',
+          text: 'Prep and paint 2 coats on walls in Kitchen, using SW Duration Home',
+          price: 1200,
+        },
+      ],
+    }
+    const scopedVersion = buildCanonicalVersion({
+      snapshot_json: buildCustomerSendPersistedSnapshot({
+        document: scopeDocument,
+        draft: canonicalDraft,
+      }),
+    })
+    mocks.resolveCustomerSendVersionState.mockReturnValueOnce({
+      latestDraft: scopedVersion,
+      latestVersion: scopedVersion,
+    })
+
+    const result = await submitCustomerSendMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        mode: 'send',
+        draft: {
+          ...canonicalDraft,
+          scope_text_edits: {
+            ...canonicalDraft.scope_text_edits,
+            walls: 'Prep and paint 2 coats on walls in Kitchen, using SW Duration Home',
+          },
+        },
+      },
+      context: buildContext({
+        public_versions: [scopedVersion],
+        latest_public_version: scopedVersion,
+        latest_draft_version: scopedVersion,
+      }),
+      copy: {
+        sendNotice: 'Quote sent.',
+        sendFailureMessage: 'Unable to send quote',
+        lockFailureMessage: 'Unable to lock quote',
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(mocks.normalizeCustomerSendDraftScopeText).not.toHaveBeenCalled()
+    expect(mocks.didCustomerSendArtifactInputsChange).toHaveBeenCalledWith({
+      currentDraft: expect.objectContaining({
+        scope_text_edits: expect.objectContaining({ walls: '' }),
+      }),
+      nextDraft: expect.objectContaining({
+        scope_text_edits: expect.objectContaining({ walls: '' }),
+      }),
+    })
+    expect(mocks.submitCustomerSendMessage).toHaveBeenCalled()
   })
 })

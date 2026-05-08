@@ -128,6 +128,64 @@ function readAcceptedCustomerArtifact(
   )
 }
 
+function readAcceptedOperationalEstimateResponse(
+  artifact: EstimatePublicPersistedSnapshot
+): EstimateV2GetResponse | null {
+  const operational = isRecord(artifact.operational_snapshot)
+    ? artifact.operational_snapshot
+    : null
+  if (!operational) return null
+  if (asText(operational.artifact_kind) !== 'customer_send_operational_snapshot') {
+    return null
+  }
+  const estimateResponse = isRecord(operational.estimate_response)
+    ? operational.estimate_response
+    : null
+  if (!estimateResponse || !isRecord(estimateResponse.estimate) || !isRecord(estimateResponse.inputs)) {
+    return null
+  }
+  return estimateResponse as unknown as EstimateV2GetResponse
+}
+
+function hasOperationalEstimateContent(estimateResponse: EstimateV2GetResponse | null) {
+  if (!estimateResponse) return false
+  const pricing = (estimateResponse.pricing_summary ?? {}) as Unsafe
+  const inputs = estimateResponse.inputs as Unsafe
+  return (
+    asArray(inputs.rooms).length > 0 ||
+    asArray(estimateResponse.wall_calculations?.scopes).length > 0 ||
+    asArray(estimateResponse.ceiling_calculations?.scopes).length > 0 ||
+    asArray(estimateResponse.trim_calculations?.scopes).length > 0 ||
+    asArray(estimateResponse.door_calculations?.scopes).length > 0 ||
+    asArray(estimateResponse.drywall_calculations?.scopes).length > 0 ||
+    asArray(inputs.other).length > 0 ||
+    asArray(inputs.access_fees).length > 0 ||
+    asNumber(pricing.effectiveLaborHours) > 0 ||
+    asNumber(pricing.rawLaborHours) > 0 ||
+    asNumber(pricing.paintMaterialCost) > 0 ||
+    asNumber(pricing.primerMaterialCost) > 0 ||
+    asNumber(pricing.supplyCost) > 0 ||
+    asNumber(pricing.sharedAccessCost) > 0
+  )
+}
+
+export function selectAcceptedOperationalEstimateResponse(params: {
+  acceptedArtifact: EstimatePublicPersistedSnapshot
+  liveEstimateResponse: EstimateV2GetResponse
+}) {
+  const acceptedEstimateResponse = readAcceptedOperationalEstimateResponse(
+    params.acceptedArtifact
+  )
+  if (!acceptedEstimateResponse) return params.liveEstimateResponse
+  if (
+    !hasOperationalEstimateContent(acceptedEstimateResponse) &&
+    hasOperationalEstimateContent(params.liveEstimateResponse)
+  ) {
+    return params.liveEstimateResponse
+  }
+  return acceptedEstimateResponse
+}
+
 function sumRows(rows: Unsafe[], key: string) {
   return rows.reduce((sum, row) => sum + asNumber(row[key]), 0)
 }
@@ -667,10 +725,14 @@ export async function ensureEstimateSnapshotForAcceptedEstimate(
   if (asText(validatedPublicVersion.data.estimate_id) !== params.estimateId) {
     return errorResult('invalid_input', 'Accepted public version is invalid')
   }
+  const acceptedEstimateResponse = selectAcceptedOperationalEstimateResponse({
+    acceptedArtifact: validatedPublicVersion.data.snapshot_json,
+    liveEstimateResponse: estimateResponse,
+  })
 
   const built = buildEstimateSnapshotRows({
     orgId: params.orgId,
-    estimateResponse,
+    estimateResponse: acceptedEstimateResponse,
     job: jobResult.data as Unsafe,
     publicVersion: validatedPublicVersion.data,
     reason: params.reason ?? 'accepted',

@@ -634,8 +634,7 @@ describe('customerSendWorkflow', () => {
       expect(result.current.message).toBe(
         'Customer link is ready. Copy the link or try sending the email again.'
       )
-      expect(result.current.error).toBe('Email delivery did not complete.')
-      expect(result.current.error).not.toContain('Gmail not configured')
+      expect(result.current.error).toBe('Email delivery did not complete. Gmail not configured')
       expect(consoleError).toHaveBeenCalledWith(
         'Customer send delivery failed after public link creation',
         expect.objectContaining({

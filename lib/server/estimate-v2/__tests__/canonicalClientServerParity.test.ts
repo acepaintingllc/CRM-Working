@@ -10,6 +10,7 @@ import {
   toWallCalculationCatalogs,
 } from '@/lib/server/estimateV2RoutePayload'
 import {
+  calculateEstimateV2ArtifactsForSave,
   calculateEstimateV2ArtifactsFromPayload,
   type EstimateV2CalculationCatalogBundle,
 } from '@/lib/server/estimate-v2/calculationOrchestration'
@@ -501,6 +502,43 @@ describe('Estimator V2 canonical client/server parity', () => {
       2
     )
     expect(client.pricingSummary.finalTotal).toBeCloseTo(server.pricingSummary.finalTotal, 2)
+  })
+
+  it('includes access fee totals in the manual save pricing summary response', async () => {
+    const fixture = CANONICAL_FIXTURES.find((item) => item.scenarioName === 'All scope types')
+    if (!fixture) throw new Error('Missing all-scope-types canonical fixture')
+    const payload = buildPayload(fixture)
+    const calculationCatalogs = toServerCatalogBundle(fixture.editorState.meta.catalogs)
+    const canonicalArtifacts = calculateEstimateV2ArtifactsFromPayload({
+      payload,
+      calculationCatalogs,
+      orgDefaults: null,
+    })
+    const expectedFeeTotal = canonicalArtifacts.accessFeeCalculation.total
+
+    expect(payload.access_fees.length).toBe(1)
+    expect(expectedFeeTotal).toBeGreaterThan(0)
+
+    const saveArtifacts = await calculateEstimateV2ArtifactsForSave({
+      orgId: 'org-canonical',
+      estimateId: 'estimate-canonical',
+      roomRows: payload.rooms,
+      wallScopeRows: payload.room_wall_scopes,
+      wallSegmentRows: payload.wall_segments,
+      ceilingScopeRows: payload.room_ceiling_scopes,
+      ceilingSegmentRows: payload.ceiling_scope_segments,
+      trimScopeRows: payload.room_trim_scopes,
+      doorScopeRows: payload.room_door_scopes ?? [],
+      drywallRepairRows: payload.drywall_repairs ?? [],
+      accessFeeRows: payload.access_fees,
+      otherRows: payload.other ?? [],
+      jobsettings: payload.jobsettings,
+      orgDefaults: null,
+      ensureCatalogs: vi.fn(async () => calculationCatalogs),
+    })
+    const response = { pricing_summary: saveArtifacts.pricingSummary }
+
+    expect(response.pricing_summary.access_fee_total).toBeCloseTo(expectedFeeTotal, 2)
   })
 
   it('matches server condition-factor preparation from room and scope selections', () => {

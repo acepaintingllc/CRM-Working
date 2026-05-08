@@ -485,6 +485,19 @@ export function buildEstimatorV2PricingSummary(params: {
   const wallSubtotal = params.wallRoomTotals.reduce((sum, row) => sum + (row.effective_total ?? 0), 0)
   const ceilingSubtotal = params.ceilingRoomTotals.reduce((sum, row) => sum + (row.effective_total ?? 0), 0)
   const trimSubtotal = params.trimRoomTotals.reduce((sum, row) => sum + (row.effective_total ?? 0), 0)
+  const subtotalForKind = (kind: 'doors' | 'drywall' | 'other') =>
+    params.engines
+      .filter((engine) => engine.kind === kind)
+      .reduce(
+        (sum, engine) =>
+          sum +
+          engine.output.room_totals.reduce((roomSum, row) => roomSum + row.effective_total, 0) +
+          (kind === 'other' ? Math.max(0, engine.output.job_level_total ?? 0) : 0),
+        0
+      )
+  const doorSubtotal = subtotalForKind('doors')
+  const drywallSubtotal = subtotalForKind('drywall')
+  const otherSubtotal = subtotalForKind('other')
   const crewSize = resolveEstimatorV2CrewSize(params.settings)
 
   return buildEstimatePricingSummaryFromEngines(
@@ -524,6 +537,9 @@ export function buildEstimatorV2PricingSummary(params: {
           ),
           preAccessSubtotal: trimSubtotal,
         },
+        { key: 'doors', eligible: doorSubtotal > 0, preAccessSubtotal: doorSubtotal },
+        { key: 'drywall', eligible: drywallSubtotal > 0, preAccessSubtotal: drywallSubtotal },
+        { key: 'other', eligible: otherSubtotal > 0, preAccessSubtotal: otherSubtotal },
       ],
     }
   )

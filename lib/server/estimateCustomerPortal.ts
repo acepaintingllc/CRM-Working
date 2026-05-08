@@ -8,6 +8,7 @@ import {
   loadEstimateCustomerSendEstimate,
   loadEstimateCustomerSendVersionResources,
 } from '@/lib/server/customer-send/contextRepository'
+import { loadCompanyProfileSettings } from '@/lib/server/settings/companyProfileStore'
 import {
   buildPersistedArtifactCustomerSendContext,
   mapCustomerQuoteSourceModel,
@@ -29,6 +30,10 @@ import type {
   EstimatePublicVersionRow,
 } from '@/lib/server/customer-send/types'
 import { selectCurrentEstimatePublicVersionRows } from '@/lib/customer-estimates/publicSnapshot'
+
+function asText(value: unknown) {
+  return value == null ? '' : String(value).trim()
+}
 
 export async function loadEstimateCustomerSendContext(params: {
   origin: string
@@ -91,6 +96,16 @@ async function loadPersistedArtifactOnlyCustomerSendContext(params: {
   )
   const artifactState = readCustomerSendVersionArtifactState(latestVersion)
   if (artifactState.kind !== 'canonical' || !latestVersion) return null
+
+  const companyProfile = await loadCompanyProfileSettings(params.orgId).catch(() => null)
+  if (companyProfile && !asText(latestVersion.public_token)) {
+    const artifactCompany = artifactState.document.company
+    const companyChanged = (['business_name', 'main_phone', 'business_email'] as const).some(
+      (field) => !asText(artifactCompany[field]) && !!asText(companyProfile[field])
+    )
+
+    if (companyChanged) return null
+  }
 
   if (
     operationRequiresLiveCustomerSendContext({

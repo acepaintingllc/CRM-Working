@@ -2,6 +2,15 @@
 -- Accepts already-normalized persistence rows from TypeScript and commits the
 -- complete save atomically, including the final estimates.updated_at touch.
 
+alter table public.estimate_jobsettings
+  add column if not exists trim_paint_gallons numeric,
+  add column if not exists trim_paint_quarts numeric,
+  add column if not exists trim_paint_qty numeric,
+  add column if not exists trim_paint_uom text;
+
+alter table public.estimate_access_fees
+  alter column room_id drop not null;
+
 create or replace function public.save_estimate_v2_full_persistence(
   p_org_id uuid,
   p_estimate_id uuid,
@@ -1104,12 +1113,12 @@ begin
       coalesce(row.id, gen_random_uuid()), p_org_id, p_estimate_id, p_job_id, row.room_id, row.position,
       row.surface, row.repair_type, row.unit, row.quantity, row.raw_quantity, row.effective_quantity,
       row.base_unit_rate, row.ceiling_multiplier, row.calculated_total, row.override_total,
-      row.raw_total, row.effective_total, 'Y'
+      row.raw_total, row.effective_total, coalesce(row.active, 'Y')
     from jsonb_to_recordset(p_payload->'drywall_repairs') as row(
       id uuid, room_id text, position int, surface text, repair_type text, unit text,
       quantity numeric, raw_quantity numeric, effective_quantity numeric, base_unit_rate numeric,
       ceiling_multiplier numeric, calculated_total numeric, override_total numeric,
-      raw_total numeric, effective_total numeric
+      raw_total numeric, effective_total numeric, active text
     )
     on conflict (id)
     do update set
@@ -1130,7 +1139,7 @@ begin
       override_total = excluded.override_total,
       raw_total = excluded.raw_total,
       effective_total = excluded.effective_total,
-      active = 'Y',
+      active = excluded.active,
       updated_at = now();
   end if;
 
@@ -1241,10 +1250,10 @@ begin
       active, notes, actual_cost_override
     )
     select
-      coalesce(row.id, gen_random_uuid()), p_org_id, p_estimate_id, p_job_id, row.position,
-      row.room_id, row.segment_num, row.access_fee_id, row.qty, coalesce(row.active, 'Y'),
-      row.notes, row.actual_cost_override
-    from jsonb_to_recordset(p_payload->'access_fees') as row(
+      coalesce(access_fee_row.id, gen_random_uuid()), p_org_id, p_estimate_id, p_job_id, access_fee_row.position,
+      access_fee_row.room_id, access_fee_row.segment_num, access_fee_row.access_fee_id, access_fee_row.qty, coalesce(access_fee_row.active, 'Y'),
+      access_fee_row.notes, access_fee_row.actual_cost_override
+    from jsonb_to_recordset(p_payload->'access_fees') as access_fee_row(
       id uuid, position int, room_id text, segment_num numeric, access_fee_id text, qty numeric,
       active text, notes text, actual_cost_override numeric
     )

@@ -166,6 +166,45 @@ describe('EstimateV2SummaryPageContent', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('shows raw scope override details in expanded room rows', () => {
+    mockUseEstimateV2SummaryDerived.mockReturnValue({
+      ...baseDerivedState,
+      roomBlocks: [
+        {
+          ...baseDerivedState.roomBlocks[0],
+          flagsLabel: '1 override',
+          alerts: { missingProduct: 0, overrides: 1, flags: 0 },
+          scopeRows: [
+            {
+              id: 'ceiling-1',
+              roomId: 'room-1',
+              kind: 'ceilings',
+              label: 'Ceilings',
+              quantity: 196,
+              laborHours: 2.8,
+              paintCost: 22,
+              suppliesCost: 5,
+              subtotal: 250,
+              hasOverride: true,
+              overrideSummary: 'Override: Total: $250',
+              missingProduct: false,
+              conditionSelections: {},
+            },
+          ],
+          displayScopeSubtotalMap: new Map([['ceiling-1', 286]]),
+        },
+      ],
+      displayScopePaintCost: vi.fn(() => 22),
+    })
+
+    render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: /living room room details/i })[0])
+
+    expect(screen.getAllByText('Override: Total: $250').length).toBeGreaterThan(0)
+    expect(screen.getByText('$286')).toBeInTheDocument()
+  })
+
   it('keeps pricing policies inside the price breakdown section', () => {
     render(<EstimateV2SummaryPageContent estimateId="estimate-1" />)
 

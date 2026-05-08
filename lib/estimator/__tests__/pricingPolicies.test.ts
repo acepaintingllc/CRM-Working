@@ -8,9 +8,12 @@ import {
   buildEstimatePricingSummaryFromEngines,
   buildPerJobSupplyCost,
   reconcileWholeDollarRows,
+  type EstimatePricingEngineInput,
+  type EstimatePricingEngineKind,
   type LaborDayPolicySettings,
   type JobMinimumSettings,
 } from '../pricingPolicies.ts'
+import { calculateOtherItems } from '../other.ts'
 import type { WallCalculationOutput } from '../wallsTypes.ts'
 
 const POLICY_8H_HALF_DAY: LaborDayPolicySettings = {
@@ -489,7 +492,7 @@ test('buildEstimatePricingSummaryFromEngines: buckets paint material by explicit
   assert.equal(result.wallPaintMaterialCost, 100)
   assert.equal(result.ceilingPaintMaterialCost, 150)
   assert.equal(result.paintMaterialCost, 250)
-  assert.equal(result.supplyCost, 12)
+  assert.equal(result.supplyCost, 0)
   assert.equal(result.prePolicyTotal, 490)
 })
 
@@ -514,6 +517,91 @@ test('buildEstimatePricingSummary: totals reconcile from engine room bases throu
   assert.equal(result.finalTotal, result.postLaborPolicyTotal)
   assert.equal(roomMinimumAdjustment, result.minimumAdjustmentAmount)
   assert.equal(roomFinalTotal, result.prePolicyTotal)
+})
+
+function makeOverriddenScopeTotalEngine(
+  kind: EstimatePricingEngineKind,
+  roomId: string,
+  overrideTotal: number,
+  paintHours: number,
+  primerHours: number
+): EstimatePricingEngineInput {
+  return {
+    kind,
+    output: {
+      scopes: [
+        {
+          include: 'Y',
+          effective_paint_hours: paintHours,
+          effective_primer_hours: primerHours,
+          effective_paint_gallons: 0,
+          effective_primer_gallons: 0,
+          effective_supply_cost: 0,
+          raw_total: overrideTotal + 100,
+          override_total: overrideTotal,
+          effective_total: overrideTotal,
+        },
+      ],
+      room_totals: [{ room_id: roomId, effective_total: overrideTotal }],
+      per_color_supply_groups: [],
+      assumptions: { labor_rate_per_hour: 50 },
+    },
+  }
+}
+
+test('buildEstimatePricingSummaryFromEngines: scope total overrides replace pre-policy subtotals while labor rounding still uses effective hours', () => {
+  const engines: EstimatePricingEngineInput[] = [
+    makeOverriddenScopeTotalEngine('walls', 'R001', 100, 2, 0),
+    makeOverriddenScopeTotalEngine('ceilings', 'R002', 200, 1, 0),
+    makeOverriddenScopeTotalEngine('trim', 'R003', 300, 0.5, 0),
+    makeOverriddenScopeTotalEngine('doors', 'R004', 400, 0.5, 0),
+    makeOverriddenScopeTotalEngine('drywall', 'R005', 500, 0, 0),
+  ]
+
+  const pricing = buildEstimatePricingSummaryFromEngines(
+    engines,
+    POLICY_8H_HALF_DAY,
+    MIN_DISABLED
+  )
+
+  assert.equal(pricing.prePolicyTotal, 1500)
+  assert.equal(pricing.rawLaborHours, 4)
+  assert.equal(pricing.effectiveLaborHours, 8)
+  assert.equal(pricing.laborAdjustmentHours, 4)
+  assert.equal(pricing.postLaborPolicyTotal, 1700)
+  assert.equal(pricing.finalTotal, 1700)
+})
+
+test('buildEstimatePricingSummaryFromEngines: changing effective hours changes labor adjustment when scope totals are overridden', () => {
+  const baseEngines: EstimatePricingEngineInput[] = [
+    makeOverriddenScopeTotalEngine('walls', 'R001', 100, 2, 0),
+    makeOverriddenScopeTotalEngine('ceilings', 'R002', 200, 1, 0),
+    makeOverriddenScopeTotalEngine('trim', 'R003', 300, 0.5, 0),
+    makeOverriddenScopeTotalEngine('doors', 'R004', 400, 0.5, 0),
+    makeOverriddenScopeTotalEngine('drywall', 'R005', 500, 0, 0),
+  ]
+  const changedHourEngines: EstimatePricingEngineInput[] = [
+    makeOverriddenScopeTotalEngine('walls', 'R001', 100, 4.25, 0),
+    ...baseEngines.slice(1),
+  ]
+
+  const basePricing = buildEstimatePricingSummaryFromEngines(
+    baseEngines,
+    POLICY_8H_HALF_DAY,
+    MIN_DISABLED
+  )
+  const changedHourPricing = buildEstimatePricingSummaryFromEngines(
+    changedHourEngines,
+    POLICY_8H_HALF_DAY,
+    MIN_DISABLED
+  )
+
+  assert.equal(basePricing.prePolicyTotal, changedHourPricing.prePolicyTotal)
+  assert.equal(basePricing.laborAdjustmentHours, 4)
+  assert.equal(changedHourPricing.rawLaborHours, 6.25)
+  assert.equal(changedHourPricing.laborAdjustmentHours, 1.75)
+  assert.equal(changedHourPricing.postLaborPolicyTotal, 1587.5)
+  assert.equal(changedHourPricing.finalTotal, 1587.5)
 })
 
 test('buildEstimatePricingSummary: includes job-level access fees and scope allocation', () => {
@@ -555,11 +643,43 @@ test('buildEstimatePricingSummary: includes job-level access fees and scope allo
     walls: 300,
     ceilings: 100,
     trim: 100,
+    doors: 0,
+    drywall: 0,
+    other: 0,
     unallocated: 0,
     warning: null,
   })
   assert.equal(result.prePolicyTotal, 1000)
   assert.equal(result.finalTotal, 1000)
+})
+
+test('buildEstimatePricingSummaryFromEngines: access fee allocation metadata does not change final totals', () => {
+  const doorEngine = makeOverriddenScopeTotalEngine('doors', 'R001', 500, 0, 0)
+  const unallocated = buildEstimatePricingSummaryFromEngines(
+    [doorEngine],
+    POLICY_DISABLED,
+    MIN_DISABLED,
+    null,
+    0,
+    { total: 100, scopes: [] }
+  )
+  const allocated = buildEstimatePricingSummaryFromEngines(
+    [doorEngine],
+    POLICY_DISABLED,
+    MIN_DISABLED,
+    null,
+    0,
+    {
+      total: 100,
+      scopes: [{ key: 'doors', eligible: true, preAccessSubtotal: 500 }],
+    }
+  )
+
+  assert.equal(unallocated.finalTotal, 600)
+  assert.equal(allocated.finalTotal, 600)
+  assert.equal(unallocated.accessFeeAllocation.unallocated, 100)
+  assert.equal(allocated.accessFeeAllocation.doors, 100)
+  assert.equal(allocated.accessFeeAllocation.unallocated, 0)
 })
 
 test('buildPerJobSupplyCost multiplies only crew-flagged supply rows', () => {
@@ -698,6 +818,239 @@ test('buildEstimatePricingSummary: calculated trim scope paint contributes to tr
   assert.equal(result.prePolicyTotal, 92)
   assert.equal(result.finalTotal, 92)
   assert.equal(result.rooms[0]?.baseTotal, 92)
+})
+
+test('buildEstimatePricingSummaryFromEngines: wall paint material appears once in final total and paint breakdown', () => {
+  const wallOutput = {
+    scopes: [
+      {
+        include: 'Y' as const,
+        effective_paint_hours: 1,
+        effective_primer_hours: 0,
+        effective_paint_gallons: 2,
+        effective_primer_gallons: 0,
+        effective_supply_cost: 0,
+        raw_paint_material_cost: 100,
+        allocated_paint_material_cost: 100,
+        paint_price_per_gal: 50,
+        primer_price_per_gal: 30,
+      },
+    ],
+    room_totals: [{ room_id: 'R001', effective_total: 180 }],
+    per_color_supply_groups: [],
+    assumptions: { labor_rate_per_hour: 80 },
+  }
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'walls', output: wallOutput }],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(result.wallPaintMaterialCost, 100)
+  assert.equal(result.paintMaterialCost, 100)
+  assert.equal(result.prePolicyTotal, 180)
+  assert.equal(result.finalTotal, 180)
+})
+
+test('buildEstimatePricingSummaryFromEngines: door material stays embedded in door totals, not paint material rows', () => {
+  const doorOutput = {
+    scopes: [
+      {
+        include: 'Y' as const,
+        effective_paint_hours: 0,
+        effective_primer_hours: 0,
+        effective_paint_gallons: 0,
+        effective_primer_gallons: 0,
+        effective_material_cost: 90,
+        effective_supply_cost: 12,
+        raw_total: 140,
+        effective_total: 140,
+      },
+    ],
+    room_totals: [{ room_id: 'R001', effective_total: 140 }],
+    per_color_supply_groups: [],
+    assumptions: { labor_rate_per_hour: 80 },
+  }
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'doors', output: doorOutput }],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(result.paintMaterialCost, 0)
+  assert.equal(result.primerMaterialCost, 0)
+  assert.equal(result.supplyCost, 0)
+  assert.equal(result.prePolicyTotal, 140)
+  assert.equal(result.finalTotal, 140)
+})
+
+test('buildEstimatePricingSummaryFromEngines: drywall unit-rate totals stay out of paint material rows', () => {
+  const drywallOutput = {
+    scopes: [
+      {
+        include: 'Y' as const,
+        effective_paint_hours: 0,
+        effective_primer_hours: 0,
+        effective_paint_gallons: 0,
+        effective_primer_gallons: 0,
+        effective_supply_cost: 18,
+        raw_total: 225,
+        effective_total: 225,
+      },
+    ],
+    room_totals: [{ room_id: 'R001', effective_total: 225 }],
+    per_color_supply_groups: [],
+    assumptions: { labor_rate_per_hour: 80 },
+  }
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'drywall', output: drywallOutput }],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(result.paintMaterialCost, 0)
+  assert.equal(result.primerMaterialCost, 0)
+  assert.equal(result.supplyCost, 0)
+  assert.equal(result.prePolicyTotal, 225)
+  assert.equal(result.finalTotal, 225)
+})
+
+test('buildEstimatePricingSummaryFromEngines: other material and supply items affect final total exactly once', () => {
+  const otherOutput = calculateOtherItems({
+    rows: [
+      {
+        id: 'other-material-supply',
+        active: 'Y',
+        room_id: 'R001',
+        pricing_mode: 'material_supply',
+        material_cost: 70,
+        supply_cost: 30,
+      },
+    ],
+    settings: { labor_rate_per_hour: 80 },
+  })
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'other', output: otherOutput }],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(otherOutput.room_totals[0]?.effective_total, 100)
+  assert.equal(result.paintMaterialCost, 0)
+  assert.equal(result.supplyCost, 0)
+  assert.equal(result.prePolicyTotal, 100)
+  assert.equal(result.finalTotal, 100)
+})
+
+test('buildEstimatePricingSummaryFromEngines: includes active no-room fixed other items in estimate totals', () => {
+  const otherOutput = calculateOtherItems({
+    rows: [
+      {
+        id: 'job-other-fixed',
+        active: 'Y',
+        room_id: null,
+        pricing_mode: 'fixed',
+        fixed_amount: 125,
+      },
+    ],
+    settings: { labor_rate_per_hour: 80 },
+  })
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'other', output: otherOutput }],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(result.prePolicyTotal, 125)
+  assert.equal(result.postLaborPolicyTotal, 125)
+  assert.equal(result.finalTotal, 125)
+  assert.deepEqual(result.rooms, [])
+})
+
+test('buildEstimatePricingSummaryFromEngines: room-level other items still contribute once through room totals', () => {
+  const otherOutput = calculateOtherItems({
+    rows: [
+      {
+        id: 'room-other-fixed',
+        active: 'Y',
+        room_id: 'R001',
+        pricing_mode: 'fixed',
+        fixed_amount: 200,
+      },
+    ],
+    settings: { labor_rate_per_hour: 80 },
+  })
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'other', output: otherOutput }],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(otherOutput.job_level_total, 0)
+  assert.equal(result.prePolicyTotal, 200)
+  assert.equal(result.finalTotal, 200)
+  assert.equal(result.rooms.length, 1)
+  assert.equal(result.rooms[0].room_id, 'R001')
+  assert.equal(result.rooms[0].baseTotal, 200)
+})
+
+test('buildEstimatePricingSummaryFromEngines: inactive no-room other items contribute zero', () => {
+  const otherOutput = calculateOtherItems({
+    rows: [
+      {
+        id: 'inactive-job-other',
+        active: 'N',
+        room_id: null,
+        pricing_mode: 'fixed',
+        fixed_amount: 999,
+      },
+    ],
+    settings: { labor_rate_per_hour: 80 },
+  })
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'other', output: otherOutput }],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(otherOutput.job_level_total, 0)
+  assert.equal(result.prePolicyTotal, 0)
+  assert.equal(result.postLaborPolicyTotal, 0)
+  assert.equal(result.finalTotal, 0)
+})
+
+test('buildEstimatePricingSummaryFromEngines: no-room labor other items contribute total and labor hours', () => {
+  const otherOutput = calculateOtherItems({
+    rows: [
+      {
+        id: 'job-other-labor',
+        active: 'Y',
+        room_id: null,
+        pricing_mode: 'labor',
+        labor_hours: 2,
+        labor_rate: 80,
+      },
+    ],
+    settings: { labor_rate_per_hour: 80 },
+  })
+
+  const result = buildEstimatePricingSummaryFromEngines(
+    [{ kind: 'other', output: otherOutput }],
+    POLICY_8H_HALF_DAY,
+    MIN_DISABLED
+  )
+
+  assert.equal(result.rawLaborHours, 2)
+  assert.equal(result.prePolicyTotal, 160)
+  assert.equal(result.postLaborPolicyTotal, 640)
+  assert.equal(result.finalTotal, 640)
 })
 
 test('buildEstimatePricingSummary: no minimum adjustment when disabled', () => {

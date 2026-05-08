@@ -14,6 +14,7 @@ export type EstimatePublicPersistedSnapshot = {
   document: CustomerEstimateDocument
   draft?: Record<string, unknown>
   pdf?: Record<string, unknown>
+  operational_snapshot?: Record<string, unknown>
 }
 
 export type EstimatePublicPersistedSnapshotState =
@@ -136,6 +137,7 @@ function readPersistedSnapshotParts(snapshot: unknown): {
   documentRecord: UnknownRecord | null
   draft?: Record<string, unknown>
   pdf?: Record<string, unknown>
+  operationalSnapshot?: Record<string, unknown>
 } | null {
   const record = isRecord(snapshot) ? snapshot : null
   if (isCanonicalEstimatePublicPersistedSnapshotRecord(record)) {
@@ -148,6 +150,7 @@ function readPersistedSnapshotParts(snapshot: unknown): {
       documentRecord,
       draft: readOptionalRecord(record.draft),
       pdf: readOptionalRecord(record.pdf),
+      operationalSnapshot: readOptionalRecord(record.operational_snapshot),
     }
   }
 
@@ -161,6 +164,7 @@ function readPersistedSnapshotParts(snapshot: unknown): {
       documentRecord,
       draft: readOptionalRecord(record?.draft),
       pdf: readOptionalRecord(record?.pdf),
+      operationalSnapshot: readOptionalRecord(record?.operational_snapshot),
     }
   }
 
@@ -169,6 +173,7 @@ function readPersistedSnapshotParts(snapshot: unknown): {
     documentRecord,
     draft: readOptionalRecord(record?.draft),
     pdf: readOptionalRecord(record?.pdf),
+    operationalSnapshot: readOptionalRecord(record?.operational_snapshot),
   }
 }
 
@@ -262,6 +267,7 @@ export function normalizeEstimatePublicPersistedSnapshot(
     document,
     draft: parts.draft,
     pdf: parts.pdf,
+    operationalSnapshot: parts.operationalSnapshot,
   })
 }
 
@@ -296,6 +302,7 @@ export function readEstimatePublicPersistedSnapshotState(
     document,
     draft: parts.draft,
     pdf: parts.pdf,
+    operationalSnapshot: parts.operationalSnapshot,
   })
 
   if (parts.source === 'canonical') {
@@ -316,6 +323,7 @@ export function buildEstimatePublicPersistedSnapshot(params: {
   document: CustomerEstimateDocument
   draft?: Record<string, unknown>
   pdf?: Record<string, unknown>
+  operationalSnapshot?: Record<string, unknown>
 }): EstimatePublicPersistedSnapshot {
   return {
     artifact_kind: ESTIMATE_PUBLIC_PERSISTED_SNAPSHOT_KIND,
@@ -323,6 +331,9 @@ export function buildEstimatePublicPersistedSnapshot(params: {
     document: params.document,
     ...(readOptionalRecord(params.draft) ? { draft: params.draft } : {}),
     ...(readOptionalRecord(params.pdf) ? { pdf: params.pdf } : {}),
+    ...(readOptionalRecord(params.operationalSnapshot)
+      ? { operational_snapshot: params.operationalSnapshot }
+      : {}),
   }
 }
 
@@ -336,6 +347,7 @@ export function appendEstimatePublicPersistedPdf(params: {
     document: params.document,
     draft: current?.draft,
     pdf: params.pdf,
+    operationalSnapshot: current?.operational_snapshot,
   })
 }
 
@@ -377,6 +389,7 @@ export function buildEstimatePublicSnapshot(params: {
   document: CustomerEstimateDocument
   draft?: Record<string, unknown>
   pdf?: Record<string, unknown>
+  operationalSnapshot?: Record<string, unknown>
   publicUrl: string | null
 }): EstimatePublicSnapshot {
   return {
@@ -392,6 +405,7 @@ export function buildEstimatePublicSnapshot(params: {
       document: params.document,
       draft: params.draft,
       pdf: params.pdf,
+      operationalSnapshot: params.operationalSnapshot,
     }),
     acceptance_json: normalizeEstimatePublicAcceptanceRecord(params.version.acceptance_json),
     sent_at: asText(params.version.sent_at) || null,
@@ -419,6 +433,7 @@ export function buildEstimatePublicSnapshotFromVersion(params: {
     document,
     draft: snapshot.draft,
     pdf: snapshot.pdf,
+    operationalSnapshot: snapshot.operational_snapshot,
     publicUrl: deriveEstimatePublicUrl(
       params.origin,
       asText(params.version.public_token) || null

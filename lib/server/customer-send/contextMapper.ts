@@ -44,6 +44,11 @@ function asNullableNumber(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null
 }
 
+function optionalNumberField(key: string, value: unknown) {
+  const numeric = asNullableNumber(value)
+  return numeric == null ? {} : { [key]: numeric }
+}
+
 function asNullableBoolean(value: unknown): boolean | null {
   if (typeof value === 'boolean') return value
   if (value == null || value === '') return null
@@ -129,6 +134,14 @@ export function normalizePaintScopeRow(row: CustomerQuotePaintScopeRow): Custome
     wall_coats: asNullableNumber(row.wall_coats),
     ceiling_coats: asNullableNumber(row.ceiling_coats),
     prime_mode: asNullableText(row.prime_mode),
+    ...optionalNumberField('effective_paint_hours', row.effective_paint_hours),
+    ...optionalNumberField('effective_primer_hours', row.effective_primer_hours),
+    ...optionalNumberField('effective_paint_gallons', row.effective_paint_gallons),
+    ...optionalNumberField('effective_primer_gallons', row.effective_primer_gallons),
+    ...optionalNumberField('effective_supply_cost', row.effective_supply_cost),
+    ...optionalNumberField('allocated_paint_material_cost', row.allocated_paint_material_cost),
+    ...optionalNumberField('raw_paint_material_cost', row.raw_paint_material_cost),
+    ...optionalNumberField('primer_price_per_gal', row.primer_price_per_gal),
     effective_total: asNullableNumber(row.effective_total),
     final_total: asNullableNumber(row.final_total),
     raw_total: asNullableNumber(row.raw_total),
@@ -155,6 +168,14 @@ export function normalizeTrimScopeRow(row: CustomerQuoteTrimScopeRow): CustomerQ
     paint_coats: asNullableNumber(row.paint_coats),
     coats: asNullableNumber(row.coats),
     prime_mode: asNullableText(row.prime_mode),
+    ...optionalNumberField('effective_paint_hours', row.effective_paint_hours),
+    ...optionalNumberField('effective_primer_hours', row.effective_primer_hours),
+    ...optionalNumberField('effective_paint_gallons', row.effective_paint_gallons),
+    ...optionalNumberField('effective_primer_gallons', row.effective_primer_gallons),
+    ...optionalNumberField('effective_supply_cost', row.effective_supply_cost),
+    ...optionalNumberField('allocated_paint_material_cost', row.allocated_paint_material_cost),
+    ...optionalNumberField('raw_paint_material_cost', row.raw_paint_material_cost),
+    ...optionalNumberField('primer_price_per_gal', row.primer_price_per_gal),
     effective_total: asNullableNumber(row.effective_total),
     final_total: asNullableNumber(row.final_total),
     raw_total: asNullableNumber(row.raw_total),
@@ -176,6 +197,14 @@ export function normalizeDoorScopeRow(row: CustomerQuoteDoorScopeRow): CustomerQ
     paint_coats: asNullableNumber(row.paint_coats),
     coats: asNullableNumber(row.coats),
     prime_mode: asNullableText(row.prime_mode),
+    ...optionalNumberField('effective_paint_hours', row.effective_paint_hours),
+    ...optionalNumberField('effective_primer_hours', row.effective_primer_hours),
+    ...optionalNumberField('effective_paint_gallons', row.effective_paint_gallons),
+    ...optionalNumberField('effective_primer_gallons', row.effective_primer_gallons),
+    ...optionalNumberField('effective_supply_cost', row.effective_supply_cost),
+    ...optionalNumberField('allocated_paint_material_cost', row.allocated_paint_material_cost),
+    ...optionalNumberField('raw_paint_material_cost', row.raw_paint_material_cost),
+    ...optionalNumberField('primer_price_per_gal', row.primer_price_per_gal),
     effective_total: asNullableNumber(row.effective_total),
     final_total: asNullableNumber(row.final_total),
     raw_total: asNullableNumber(row.raw_total),

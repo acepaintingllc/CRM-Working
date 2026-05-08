@@ -119,6 +119,7 @@ import {
   saveCustomerSendDraftMutation,
   submitCustomerSendMutation,
 } from '../service'
+import { buildCustomerDocumentFromSendContext } from '../document'
 import {
   attachPersistedVersionToContext,
   buildCustomerSendContractContext,
@@ -137,6 +138,19 @@ function sendCopy() {
 
 function countEvents(type: string) {
   return state.store?.events.filter((event) => event.type === type).length ?? 0
+}
+
+function readOperationalSnapshotForTest(snapshot: unknown) {
+  return snapshot as
+    | {
+        artifact_kind?: unknown
+        estimate_response?: {
+          wall_calculations?: {
+            scopes?: unknown[]
+          }
+        }
+      }
+    | undefined
 }
 
 describe('customer-send canonical artifact parity', () => {
@@ -163,6 +177,17 @@ describe('customer-send canonical artifact parity', () => {
     expect(persistedVersion).toBeTruthy()
     if (!persistedVersion) throw new Error('preview version missing')
     const artifactA = persistedVersion.snapshot_json
+    const operationalSnapshotA = readOperationalSnapshotForTest(
+      artifactA?.operational_snapshot
+    )
+    expect(operationalSnapshotA).toEqual(
+      expect.objectContaining({
+        artifact_kind: 'customer_send_operational_snapshot',
+      })
+    )
+    expect(
+      operationalSnapshotA?.estimate_response?.wall_calculations?.scopes
+    ).toHaveLength(1)
     expect(artifactA).toEqual(
       expect.objectContaining({
         artifact_kind: 'customer_estimate_artifact',
@@ -212,6 +237,9 @@ describe('customer-send canonical artifact parity', () => {
     expect(saveResult.ok).toBe(true)
     if (!saveResult.ok) throw new Error(saveResult.message)
     expect(saveResult.data.document).toEqual(artifactADocument)
+    expect(state.store?.version?.snapshot_json?.operational_snapshot).toEqual(
+      operationalSnapshotA
+    )
     expect(
       JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)
     ).toBe(artifactADocumentJson)
@@ -245,6 +273,9 @@ describe('customer-send canonical artifact parity', () => {
 
     expect(sendResult.ok).toBe(true)
     if (!sendResult.ok) throw new Error(sendResult.message)
+    expect(state.store?.version?.snapshot_json?.operational_snapshot).toEqual(
+      operationalSnapshotA
+    )
     expect(
       JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)
     ).toBe(artifactADocumentJson)
@@ -265,7 +296,7 @@ describe('customer-send canonical artifact parity', () => {
     expect(sendResult.data.document).toEqual(preview1.data.document)
     expect(publicSnapshot.data.document).toEqual(preview1.data.document)
     expect(publicSnapshot.data.document).toEqual(artifactADocument)
-    expect(publicSnapshot.data.snapshot_json).toEqual(sentVersion.snapshot_json)
+    expect(sentVersion.snapshot_json?.operational_snapshot).toEqual(operationalSnapshotA)
   })
 
   it('keeps customer-visible output stable after mutable estimate/default/catalog drift', async () => {
@@ -448,6 +479,10 @@ describe('customer-send canonical artifact parity', () => {
     const persistedVersion = state.store?.version
     expect(persistedVersion).toBeTruthy()
     if (!persistedVersion) throw new Error('preview version missing')
+    const operationalSnapshot = readOperationalSnapshotForTest(
+      persistedVersion.snapshot_json?.operational_snapshot
+    )
+    expect(operationalSnapshot?.estimate_response?.wall_calculations?.scopes).toHaveLength(1)
 
     const artifactDocumentJson = JSON.stringify(persistedVersion.snapshot_json?.document ?? null)
     const blockedContext = attachPersistedVersionToContext(
@@ -503,6 +538,9 @@ describe('customer-send canonical artifact parity', () => {
 
     expect(sendResult.ok).toBe(true)
     if (!sendResult.ok) throw new Error(sendResult.message)
+    expect(state.store?.version?.snapshot_json?.operational_snapshot).toEqual(
+      operationalSnapshot
+    )
     expect(JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)).toBe(
       artifactDocumentJson
     )
@@ -539,6 +577,83 @@ describe('customer-send canonical artifact parity', () => {
       message: 'Customer send preview snapshot is unreadable',
     })
     expect(JSON.stringify(state.store?.version ?? null)).toBe(JSON.stringify(corruptVersion))
+    expect(countEvents('draft_saved')).toBe(0)
+  })
+
+  it('rejects a nonzero customer artifact when the reused operational snapshot is empty against saved scopes', async () => {
+    const context = buildCustomerSendContractContext()
+    const badVersion = {
+      id: 'draft-1',
+      status: 'draft',
+      version_number: 2,
+      public_token: null,
+      draft_json: null,
+      snapshot_json: buildCustomerSendPersistedSnapshot({
+        document: buildCustomerDocumentFromSendContext({
+          context,
+          overrides: {
+            title: 'Kitchen Quote',
+            quote_validity_days: 30,
+          },
+        }),
+        draft: {
+          to_email: 'taylor@example.test',
+          cc_email: '',
+          bcc_email: '',
+          subject: 'Quote ready',
+          body: '',
+          template_key: 'default',
+          title: 'Kitchen Quote',
+          intro_paragraph: '',
+          closing_paragraph: '',
+          terms_text: 'Standard quote terms.',
+          scope_text_edits: {},
+          quote_validity_days: 30,
+          deposit_language: '',
+          card_fee_note: '',
+        },
+        operationalSnapshot: {
+          artifact_kind: 'customer_send_operational_snapshot',
+          artifact_version: 1,
+          source_estimate_updated_at: context.estimate.updated_at,
+          estimate_response: {
+            estimate: context.estimate,
+            inputs: { rooms: [] },
+            wall_calculations: { scopes: [] },
+            ceiling_calculations: { scopes: [] },
+            trim_calculations: { scopes: [] },
+            pricing_summary: {
+              finalTotal: 4250,
+              effectiveLaborHours: 0,
+              rawLaborHours: 0,
+              paintMaterialCost: 0,
+              supplyCost: 0,
+            },
+          },
+        },
+      }),
+    }
+    state.store = createPublicVersionStore(badVersion as never)
+
+    const result = await saveCustomerSendDraftMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        draft: {
+          subject: 'Delivery subject only',
+        },
+      },
+      context: attachPersistedVersionToContext(context, badVersion as never),
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'invalid_input',
+      message:
+        'Cannot generate public quote version because the operational estimate snapshot is empty while saved estimate rooms or scopes exist. Save or reload the quote and try again.',
+    })
     expect(countEvents('draft_saved')).toBe(0)
   })
 
