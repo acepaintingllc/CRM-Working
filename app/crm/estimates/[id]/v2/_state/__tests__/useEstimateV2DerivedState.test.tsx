@@ -159,7 +159,7 @@ describe('useEstimateV2DerivedState', () => {
       doorsActive: false,
     })
     expect(result.current.wallPaintLabel).toBe('Wall Satin')
-    expect(result.current.saveStatusText).toBe('Saved Apr 21, 9:00 AM')
+    expect(result.current.saveStatusText).toBe('Saved Apr 21, 2:00 PM')
     expect(result.current.trimPaintLabel).toBe('Trim Enamel')
   })
 
@@ -175,7 +175,7 @@ describe('useEstimateV2DerivedState', () => {
     const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
 
     expect(result.current.dirty).toBe(false)
-    expect(result.current.saveStatusText).toBe('Saved May 4, 10:30 AM')
+    expect(result.current.saveStatusText).toBe('Saved May 4, 3:30 PM')
   })
 
   it('filters saved validation issues for page display in the save-derived state', () => {
