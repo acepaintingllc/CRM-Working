@@ -17,6 +17,10 @@ export type EstimateV2CanonicalFixture = {
   scenarioDescription: string
   editorState: EstimateV2EditorStoreState
   expectedTotals: EstimateV2CanonicalExpectedTotals
+  metadata?: EstimateV2CanonicalFixtureMetadata
+  comparisonNotes?: string[]
+  knownDifferenceNotes?: string[]
+  expectedMismatches?: EstimateV2CanonicalExpectedMismatch[]
 }
 
 export type EstimateV2CanonicalExpectedTotals = {
@@ -32,6 +36,34 @@ export type EstimateV2CanonicalExpectedTotals = {
   }
 }
 
+export type EstimateV2CanonicalScopeFamily =
+  | 'walls'
+  | 'ceilings'
+  | 'trim'
+  | 'doors'
+  | 'drywall'
+  | 'accessFees'
+
+export type EstimateV2HistoricalMismatchCategory =
+  | 'expected_rounding_difference'
+  | 'known_old_system_bug'
+  | 'intended_behavior_change'
+  | 'actual_defect'
+
+export type EstimateV2HistoricalScenarioSourceType =
+  | 'manually_crafted'
+  | 'imported_historical'
+
+export type EstimateV2CanonicalFixtureMetadata = {
+  sourceType: EstimateV2HistoricalScenarioSourceType
+  expectedTotalSource: 'hand_verified'
+}
+
+export type EstimateV2HistoricalScenarioAdapter = {
+  sourceType: 'imported_historical'
+  toCanonicalFixture: () => EstimateV2CanonicalFixture
+}
+
 export type EstimateV2CanonicalRoomTotal = {
   roomId: string
   total: number
@@ -41,6 +73,15 @@ export type EstimateV2CanonicalScopeTotal = {
   scopeId: string
   roomId: string
   total: number
+}
+
+export type EstimateV2CanonicalExpectedMismatch = {
+  metric: 'final_total' | 'room_total' | 'scope_total'
+  category: EstimateV2HistoricalMismatchCategory
+  note: string
+  roomId?: string
+  family?: EstimateV2CanonicalScopeFamily
+  scopeId?: string
 }
 
 export const CANONICAL_IDS = {

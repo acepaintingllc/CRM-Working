@@ -1,300 +1,615 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  buildEstimateChainParityArtifacts,
-  buildEstimateChainParityDbRows,
-  createEstimateChainParitySupabaseStub,
-  ESTIMATE_CHAIN_PARITY_SCENARIOS,
-  expectSameCustomerTotal,
-  type EstimateChainParityDbRows,
-} from '../../estimate-v2/__tests__/estimateChainParityHelpers'
-import type { ServiceResult } from '@/lib/server/serviceResult'
+import { buildCustomerSendPersistedSnapshot } from '../types'
 
-const mocks = vi.hoisted(() => ({
-  supabaseFrom: vi.fn(),
-  loadCompanyProfileSettings: vi.fn(),
-  loadQuoteSendDefaults: vi.fn(),
-  getEstimateCatalogs: vi.fn(),
-  loadEstimateTemplateSettings: vi.fn(),
-  loadCalculatedEstimateV2Artifacts: vi.fn(),
+process.env.NEXT_PUBLIC_SUPABASE_URL ??= 'https://example.supabase.co'
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'service-role-key'
+
+const state = vi.hoisted(() => ({
+  store: null as ReturnType<
+    typeof import('./customerSendContractHarness')['createPublicVersionStore']
+  > | null,
 }))
 
-vi.mock('@/lib/server/org', () => ({
-  supabaseAdmin: {
-    from: mocks.supabaseFrom,
-  },
+vi.mock('../repository', () => ({
+  saveCustomerSendDraftVersion: vi.fn(async (params) => {
+    if (!state.store) throw new Error('store not initialized')
+    return { ok: true as const, data: state.store.persistDraft(params) }
+  }),
+  upgradeCustomerSendLegacyVersionSnapshot: vi.fn(async (params) => {
+    if (!state.store) throw new Error('store not initialized')
+    const upgraded = {
+      ...params.version,
+      draft_json: null,
+      snapshot_json: buildCustomerSendPersistedSnapshot({
+        document: params.document,
+        draft: params.draft,
+      }),
+    }
+    state.store.setVersion(upgraded)
+    return { ok: true as const, data: upgraded }
+  }),
+  writeEstimatePublicEvent: vi.fn(async () => ({ ok: true as const, data: null })),
 }))
 
-vi.mock('@/lib/server/settings/companyProfileStore', () => ({
-  loadCompanyProfileSettings: mocks.loadCompanyProfileSettings,
+vi.mock('../delivery', () => ({
+  submitCustomerSendMessage: vi.fn(async (params) => {
+    if (!state.store) throw new Error('store not initialized')
+    const sentVersion = state.store.markSent({
+      version: params.version,
+      publicToken: params.version.public_token ?? 'persisted-token',
+      sentAt: '2026-05-07T18:00:00.000Z',
+    })
+    return {
+      ok: true as const,
+      data: {
+        mode: params.mode,
+        public_url: `https://example.test/quote/${sentVersion.public_token}`,
+        version: sentVersion,
+        document: sentVersion.snapshot_json?.document ?? null,
+      },
+    }
+  }),
 }))
 
-vi.mock('@/lib/server/settings/quoteSendDefaultsStore', () => ({
-  loadQuoteSendDefaults: mocks.loadQuoteSendDefaults,
-}))
-
-vi.mock('@/lib/server/estimateCatalogs', () => ({
-  getEstimateCatalogs: mocks.getEstimateCatalogs,
-}))
-
-vi.mock('@/lib/server/estimateTemplateSettings', () => ({
-  loadEstimateTemplateSettings: mocks.loadEstimateTemplateSettings,
-}))
-
-vi.mock('@/lib/server/estimate-v2/calculationOrchestration', async (importOriginal) => {
+vi.mock('../../accepted-estimates/service.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@/lib/server/estimate-v2/calculationOrchestration')>()
+    await importOriginal<typeof import('../../accepted-estimates/service.ts')>()
   return {
     ...actual,
-    loadCalculatedEstimateV2Artifacts: mocks.loadCalculatedEstimateV2Artifacts,
+    applyAcceptedEstimateSideEffects: vi.fn(),
+    ensureAcceptedEstimateOperationalSnapshot: vi.fn(),
   }
 })
 
-import { buildEstimatePublicSnapshotFromVersion } from '@/lib/customer-estimates/publicSnapshot'
-import { buildCustomerSendPageData } from '../service'
-import { deriveEstimateCustomerSendCalculatedData } from '../contextCalculations'
-import { buildEstimateCustomerSendContext } from '../contextMapper'
-import { loadEstimateCustomerSendResources } from '../contextLoader'
-import type {
-  CustomerSendPageData,
-  EstimateCustomerSendRawResources,
-} from '../types'
+vi.mock('../../publicEstimateNotifications.ts', () => ({
+  sendPublicEstimateAcceptanceNotifications: vi.fn(),
+  sendPublicEstimateDeclineNotification: vi.fn(),
+}))
 
-function assertOk<T>(
-  result: ServiceResult<T>,
-  label: string
-): asserts result is { ok: true; data: T } {
-  if (!result.ok) {
-    throw new Error(`${label}: ${result.message}`)
-  }
-}
-
-function assertResources(
-  resources: EstimateCustomerSendRawResources | { error: string }
-): asserts resources is EstimateCustomerSendRawResources {
-  if ('error' in resources) {
-    throw new Error(resources.error)
-  }
-}
-
-function roundedCustomerTotal(value: number | null | undefined) {
-  return Math.round(value ?? 0)
-}
-
-function savedLoadTotal(rows: EstimateChainParityDbRows) {
-  const total = rows.estimate_version_rollups.final_total
-  return typeof total === 'number' && Number.isFinite(total) ? total : null
-}
-
-function setupSendResourceMocks(rows: EstimateChainParityDbRows) {
-  const supabase = createEstimateChainParitySupabaseStub(rows)
-  const from = supabase.from as unknown as (table: string) => unknown
-  mocks.supabaseFrom.mockImplementation((table: string) => from(table))
-  mocks.loadCompanyProfileSettings.mockResolvedValue({
-    business_name: 'ACE Painting',
-    timezone: 'America/Chicago',
-    main_phone: '555-0100',
-    business_email: 'office@example.test',
-    address: '10 Paint Way',
-    website: '',
-    sender_signature: '',
-    logo_url: '',
-  })
-  mocks.loadQuoteSendDefaults.mockResolvedValue({
-    default_template_key: 'default',
-    quote_validity_days: 30,
-    terms_text: 'Standard quote terms.',
-  })
-  mocks.getEstimateCatalogs.mockResolvedValue({
-    catalogs: rows.estimate_public_versions[0]?.snapshot ?? null,
-  })
-  mocks.loadEstimateTemplateSettings.mockResolvedValue({
-    updated_at: '2026-05-05T12:00:00.000Z',
-  })
-  return supabase
-}
-
-async function buildSendPageFromSavedRows(params: {
-  scenario: keyof typeof ESTIMATE_CHAIN_PARITY_SCENARIOS
-}) {
-  const artifacts = buildEstimateChainParityArtifacts(params.scenario)
-  const rows = buildEstimateChainParityDbRows(artifacts)
-  const supabase = setupSendResourceMocks(rows)
-  mocks.loadCalculatedEstimateV2Artifacts.mockResolvedValue({
-    quoteWallScopes: artifacts.calculationArtifacts.quoteWallScopes,
-    quoteCeilingScopes: artifacts.calculationArtifacts.quoteCeilingScopes,
-    quoteTrimScopes: artifacts.calculationArtifacts.quoteTrimScopes,
-    quoteDoorScopes: artifacts.calculationArtifacts.quoteDoorScopes,
-    drywallCalculations: artifacts.calculationArtifacts.drywallCalculations,
-    accessFeeCalculation: artifacts.calculationArtifacts.accessFeeCalculation,
-    otherCalculations: artifacts.calculationArtifacts.otherCalculations,
-    pricingSummary: artifacts.calculationArtifacts.pricingSummary,
-  })
-
-  const resources = await loadEstimateCustomerSendResources({
-    origin: 'https://example.test',
-    orgId: String(rows.estimates.org_id),
-    userId: 'user-send-chain',
-    estimateId: String(rows.estimates.id),
-  })
-  assertResources(resources)
-
-  const calculated = await deriveEstimateCustomerSendCalculatedData(resources, {
-    requestOrigin: 'https://example.test',
-    orgId: String(rows.estimates.org_id),
-    userId: 'user-send-chain',
-    estimateId: String(rows.estimates.id),
-  })
-  const context = buildEstimateCustomerSendContext({
-    origin: 'https://example.test',
-    resources,
-    calculated,
-  })
-  const pageResult = buildCustomerSendPageData({
-    origin: 'https://example.test',
-    context,
-  })
-  assertOk<CustomerSendPageData>(pageResult, 'send page data')
-
-  return {
-    artifacts,
-    rows,
-    supabase,
-    resources,
-    calculated,
-    context,
-    pageData: pageResult.data,
-  }
-}
-
-describe('estimate customer-send public snapshot total parity', () => {
-  beforeEach(() => {
-    for (const mock of [
-      mocks.supabaseFrom,
-      mocks.loadCompanyProfileSettings,
-      mocks.loadQuoteSendDefaults,
-      mocks.getEstimateCatalogs,
-      mocks.loadEstimateTemplateSettings,
-      mocks.loadCalculatedEstimateV2Artifacts,
-    ]) {
-      mock.mockReset()
-    }
-  })
-
-  for (const scenario of Object.keys(ESTIMATE_CHAIN_PARITY_SCENARIOS) as Array<
-    keyof typeof ESTIMATE_CHAIN_PARITY_SCENARIOS
-  >) {
-    it(`keeps send context and public snapshot totals frozen for ${scenario}`, async () => {
-      const { rows, supabase, context, pageData } = await buildSendPageFromSavedRows({
-        scenario,
-      })
-      const expected = savedLoadTotal(rows)
-      const roundedExpected = roundedCustomerTotal(expected)
-
-      expectSameCustomerTotal({
-        scenario,
-        hop: 'send-context',
-        expected,
-        actual: context.pricing_summary?.finalTotal,
-      })
-      expect(pageData.document.total, `scenario=${scenario} hop=send-document`).toBe(
-        roundedExpected
-      )
-
-      supabase.assertAllExpectedTablesUsed()
-      mocks.supabaseFrom.mockClear()
-      mocks.loadCalculatedEstimateV2Artifacts.mockClear()
-
-      const publicVersion = {
-        ...rows.estimate_public_versions[0],
-        id: `${rows.estimates.id}-public-snapshot`,
-        estimate_id: rows.estimates.id,
-        version_number: 2,
-        status: 'sent',
-        public_token: `${scenario}-token`,
-        snapshot_json: {
-          document: pageData.document,
-          draft: pageData.draft,
-        },
+vi.mock('../../org.ts', () => ({
+  supabaseAdmin: {
+    from: vi.fn((table: string) => {
+      if (table !== 'estimate_public_versions') {
+        throw new Error(`Unexpected table ${table}`)
       }
-      const publicSnapshot = buildEstimatePublicSnapshotFromVersion({
-        version: publicVersion,
-        origin: 'https://example.test',
-      })
 
-      if ('error' in publicSnapshot) throw new Error(publicSnapshot.error)
-      expect(publicSnapshot.document.total).toBe(pageData.document.total)
-      expect(mocks.loadCalculatedEstimateV2Artifacts).not.toHaveBeenCalled()
-      expect(mocks.supabaseFrom).not.toHaveBeenCalled()
-    })
+      const selectFilters: Record<string, unknown> = {}
+      const selectChain = {
+        eq: vi.fn((column: string, value: unknown) => {
+          selectFilters[column] = value
+          return selectChain
+        }),
+        maybeSingle: vi.fn(async () => ({
+          data:
+            selectFilters.public_token && state.store
+              ? state.store.getByToken(String(selectFilters.public_token))
+              : state.store?.version ?? null,
+          error: null,
+        })),
+      }
+
+      const updateFilters: Record<string, unknown> = {}
+      const updateChain = {
+        eq: vi.fn((column: string, value: unknown) => {
+          updateFilters[column] = value
+          return updateChain
+        }),
+        in: vi.fn(() => updateChain),
+        is: vi.fn(() => updateChain),
+        select: vi.fn(() => updateChain),
+        maybeSingle: vi.fn(async () => ({
+          data:
+            updateFilters.id && state.store
+              ? state.store.markViewed('2026-05-07T18:05:00.000Z')
+              : null,
+          error: null,
+        })),
+      }
+
+      return {
+        select: vi.fn(() => selectChain),
+        update: vi.fn(() => updateChain),
+      }
+    }),
+  },
+}))
+
+import {
+  loadCustomerSendPageData,
+  saveCustomerSendDraftMutation,
+  submitCustomerSendMutation,
+} from '../service'
+import {
+  attachPersistedVersionToContext,
+  buildCustomerSendContractContext,
+  createPublicVersionStore,
+} from './customerSendContractHarness'
+
+const { loadPublicEstimatePortalSnapshot } = await import('../../estimatePublicPortal')
+
+function sendCopy() {
+  return {
+    sendNotice: 'Quote sent.',
+    sendFailureMessage: 'Unable to send quote',
+    lockFailureMessage: 'Unable to lock quote',
   }
+}
 
-  it('does not let dirty unsaved editor state leak into send context', async () => {
-    const scenario = 'full-room-quote'
-    const artifacts = buildEstimateChainParityArtifacts(scenario)
-    const rows = buildEstimateChainParityDbRows(artifacts)
-    const savedTotal = savedLoadTotal(rows) ?? 0
-    const dirtyTotal = roundedCustomerTotal(savedTotal) + 777
-    const dirtyEditorPayload = {
-      ...artifacts.payload,
-      jobsettings: {
-        ...artifacts.payload.jobsettings,
-        job_minimum_enabled: true,
-        job_minimum_amount: dirtyTotal,
+function countEvents(type: string) {
+  return state.store?.events.filter((event) => event.type === type).length ?? 0
+}
+
+describe('customer-send canonical artifact parity', () => {
+  beforeEach(() => {
+    state.store = createPublicVersionStore()
+  })
+
+  it('persists one preview artifact, then reuses it unchanged across preview, send, and public render', async () => {
+    const initialContext = buildCustomerSendContractContext()
+
+    const preview1 = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: initialContext,
+    })
+
+    expect(preview1.ok).toBe(true)
+    if (!preview1.ok) throw new Error(preview1.message)
+    expect(countEvents('draft_saved')).toBe(1)
+
+    const persistedVersion = state.store?.version
+    expect(persistedVersion).toBeTruthy()
+    if (!persistedVersion) throw new Error('preview version missing')
+    const artifactA = persistedVersion.snapshot_json
+    expect(artifactA).toEqual(
+      expect.objectContaining({
+        artifact_kind: 'customer_estimate_artifact',
+        artifact_version: 1,
+        document: preview1.data.document,
+      })
+    )
+    expect(preview1.data.version).toBeTruthy()
+    if (!preview1.data.version) throw new Error('preview response version missing')
+    expect(preview1.data.version.snapshot_json).toEqual(artifactA)
+    const artifactADocument = artifactA?.document ?? null
+    const artifactADocumentJson = JSON.stringify(artifactADocument)
+
+    const preview2 = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: attachPersistedVersionToContext(initialContext, persistedVersion),
+    })
+
+    expect(preview2.ok).toBe(true)
+    if (!preview2.ok) throw new Error(preview2.message)
+    expect(countEvents('draft_saved')).toBe(1)
+    expect(
+      JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)
+    ).toBe(artifactADocumentJson)
+    expect(preview2.data.version).toBeTruthy()
+    if (!preview2.data.version) throw new Error('second preview response version missing')
+    expect(preview2.data.version.snapshot_json).toEqual(artifactA)
+    expect(preview2.data.document).toEqual(preview1.data.document)
+
+    const saveResult = await saveCustomerSendDraftMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        draft: {
+          subject: 'Saved subject copy only',
+          body: 'Saved email body copy only',
+        },
+      },
+      context: attachPersistedVersionToContext(initialContext, persistedVersion),
+    })
+
+    expect(saveResult.ok).toBe(true)
+    if (!saveResult.ok) throw new Error(saveResult.message)
+    expect(saveResult.data.document).toEqual(artifactADocument)
+    expect(
+      JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)
+    ).toBe(artifactADocumentJson)
+    expect(state.store?.version?.snapshot_json).toEqual(
+      expect.objectContaining({
+        artifact_kind: 'customer_estimate_artifact',
+        artifact_version: 1,
+      })
+    )
+
+    const savedCopyVersion = state.store?.version
+    expect(savedCopyVersion).toBeTruthy()
+    if (!savedCopyVersion) throw new Error('saved copy version missing')
+
+    const sendResult = await submitCustomerSendMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        mode: 'send',
+        draft: {
+          to_email: 'taylor@example.test',
+          subject: 'Updated subject only',
+          body: 'Updated email body only',
+        },
+      },
+      context: attachPersistedVersionToContext(initialContext, savedCopyVersion),
+      copy: sendCopy(),
+    })
+
+    expect(sendResult.ok).toBe(true)
+    if (!sendResult.ok) throw new Error(sendResult.message)
+    expect(
+      JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)
+    ).toBe(artifactADocumentJson)
+
+    const sentVersion = state.store?.version
+    expect(sentVersion).toBeTruthy()
+    if (!sentVersion) throw new Error('sent version missing')
+
+    const publicSnapshot = await loadPublicEstimatePortalSnapshot({
+      token: String(sentVersion.public_token),
+      origin: 'https://example.test',
+      actorType: 'customer',
+      metadata: { route: 'public-quote' },
+    })
+
+    expect(publicSnapshot.ok).toBe(true)
+    if (!publicSnapshot.ok) throw new Error(publicSnapshot.message)
+    expect(sendResult.data.document).toEqual(preview1.data.document)
+    expect(publicSnapshot.data.document).toEqual(preview1.data.document)
+    expect(publicSnapshot.data.document).toEqual(artifactADocument)
+    expect(publicSnapshot.data.snapshot_json).toEqual(sentVersion.snapshot_json)
+  })
+
+  it('keeps customer-visible output stable after mutable estimate/default/catalog drift', async () => {
+    const initialContext = buildCustomerSendContractContext()
+
+    const preview = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: initialContext,
+    })
+
+    expect(preview.ok).toBe(true)
+    if (!preview.ok) throw new Error(preview.message)
+    const persistedVersion = state.store?.version
+    expect(persistedVersion).toBeTruthy()
+    if (!persistedVersion) throw new Error('preview version missing')
+
+    const driftedContext = attachPersistedVersionToContext(
+      {
+        ...buildCustomerSendContractContext({
+          company: {
+            ...initialContext.company,
+            business_name: 'Drifted Company Name',
+            business_email: 'changed@example.test',
+          },
+          settings: {
+            ...initialContext.settings,
+            terms_text: 'Drifted terms text',
+            quote_validity_days: 7,
+          },
+          pricing_summary: {
+            finalTotal: 999999,
+          },
+          estimate: {
+            ...initialContext.estimate,
+            version_name: 'Drifted Estimate Name',
+          },
+        }),
+      },
+      persistedVersion
+    )
+
+    const previewAfterDrift = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: driftedContext,
+    })
+
+    expect(previewAfterDrift.ok).toBe(true)
+    if (!previewAfterDrift.ok) throw new Error(previewAfterDrift.message)
+    expect(previewAfterDrift.data.document).toEqual(preview.data.document)
+
+    const saveResult = await saveCustomerSendDraftMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        draft: {
+          subject: 'Subject drift only',
+          body: 'Body drift only',
+        },
+      },
+      context: driftedContext,
+    })
+
+    expect(saveResult.ok).toBe(true)
+    if (!saveResult.ok) throw new Error(saveResult.message)
+    expect(saveResult.data.document).toEqual(preview.data.document)
+
+    const sentResult = await submitCustomerSendMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        mode: 'send',
+        draft: {
+          to_email: 'taylor@example.test',
+          subject: 'Subject drift only',
+          body: 'Body drift only',
+        },
+      },
+      context: driftedContext,
+      copy: sendCopy(),
+    })
+
+    expect(sentResult.ok).toBe(true)
+    if (!sentResult.ok) throw new Error(sentResult.message)
+
+    const sentVersion = state.store?.version
+    expect(sentVersion).toBeTruthy()
+    if (!sentVersion) throw new Error('sent version missing')
+
+    const publicSnapshot = await loadPublicEstimatePortalSnapshot({
+      token: String(sentVersion.public_token),
+      origin: 'https://example.test',
+      actorType: 'customer',
+      metadata: { route: 'public-quote' },
+    })
+
+    expect(publicSnapshot.ok).toBe(true)
+    if (!publicSnapshot.ok) throw new Error(publicSnapshot.message)
+    expect(sentResult.data.document).toEqual(preview.data.document)
+    expect(publicSnapshot.data.document).toEqual(preview.data.document)
+    expect(publicSnapshot.data.document.total).toBe(4250)
+    expect(publicSnapshot.data.document.meta.title).toBe('Kitchen Quote')
+  })
+
+  it('rejects direct send document edits and does not replace the persisted preview artifact', async () => {
+    const initialContext = buildCustomerSendContractContext()
+
+    const preview = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: initialContext,
+    })
+
+    expect(preview.ok).toBe(true)
+    if (!preview.ok) throw new Error(preview.message)
+    const persistedVersion = state.store?.version
+    expect(persistedVersion).toBeTruthy()
+    if (!persistedVersion) throw new Error('preview version missing')
+
+    const artifactDocumentJson = JSON.stringify(persistedVersion.snapshot_json?.document ?? null)
+    const draftSavedCount = countEvents('draft_saved')
+
+    const result = await submitCustomerSendMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        mode: 'send',
+        draft: {
+          to_email: 'taylor@example.test',
+          title: 'Changed title from direct POST',
+          quote_validity_days: 7,
+          scope_text_edits: {
+            walls: 'Changed wall scope wording from direct POST.',
+          },
+        },
+      },
+      context: attachPersistedVersionToContext(initialContext, persistedVersion),
+      copy: sendCopy(),
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'invalid_input',
+      message:
+        'Save draft before sending. Document-impacting send fields differ from the persisted preview artifact.',
+    })
+    expect(countEvents('draft_saved')).toBe(draftSavedCount)
+    expect(countEvents('sent')).toBe(0)
+    expect(JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)).toBe(
+      artifactDocumentJson
+    )
+  })
+
+  it('saves and sends delivery-only changes without live recalculation when a preview artifact exists', async () => {
+    const initialContext = buildCustomerSendContractContext()
+
+    const preview = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: initialContext,
+    })
+
+    expect(preview.ok).toBe(true)
+    if (!preview.ok) throw new Error(preview.message)
+    const persistedVersion = state.store?.version
+    expect(persistedVersion).toBeTruthy()
+    if (!persistedVersion) throw new Error('preview version missing')
+
+    const artifactDocumentJson = JSON.stringify(persistedVersion.snapshot_json?.document ?? null)
+    const blockedContext = attachPersistedVersionToContext(
+      {
+        ...initialContext,
+        artifact_generation_blocked_reason:
+          'Unable to load canonical estimate calculations for customer send: live recalculation failed',
+      },
+      persistedVersion
+    )
+
+    const saveResult = await saveCustomerSendDraftMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        draft: {
+          subject: 'Delivery subject only',
+          body: 'Delivery body only',
+        },
+      },
+      context: blockedContext,
+    })
+
+    expect(saveResult.ok).toBe(true)
+    if (!saveResult.ok) throw new Error(saveResult.message)
+    expect(JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)).toBe(
+      artifactDocumentJson
+    )
+
+    const savedVersion = state.store?.version
+    expect(savedVersion).toBeTruthy()
+    if (!savedVersion) throw new Error('saved version missing')
+
+    const sendResult = await submitCustomerSendMutation({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      body: {
+        mode: 'send',
+        draft: {
+          to_email: 'taylor@example.test',
+          cc_email: 'office@example.test',
+          subject: 'Send subject only',
+          body: 'Send body only',
+        },
+      },
+      context: attachPersistedVersionToContext(blockedContext, savedVersion),
+      copy: sendCopy(),
+    })
+
+    expect(sendResult.ok).toBe(true)
+    if (!sendResult.ok) throw new Error(sendResult.message)
+    expect(JSON.stringify(state.store?.version?.snapshot_json?.document ?? null)).toBe(
+      artifactDocumentJson
+    )
+    expect(sendResult.data.document).toEqual(preview.data.document)
+  })
+
+  it('fails closed when a persisted preview artifact is corrupt and does not replace it', async () => {
+    const corruptVersion = {
+      id: 'draft-1',
+      status: 'draft',
+      version_number: 2,
+      public_token: 'live-token',
+      draft_json: {
+        to_email: 'customer@example.com',
+      },
+      snapshot_json: {},
+    }
+    state.store = createPublicVersionStore(corruptVersion as never)
+
+    const result = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: attachPersistedVersionToContext(
+        buildCustomerSendContractContext(),
+        corruptVersion as never
+      ),
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'server_error',
+      message: 'Customer send preview snapshot is unreadable',
+    })
+    expect(JSON.stringify(state.store?.version ?? null)).toBe(JSON.stringify(corruptVersion))
+    expect(countEvents('draft_saved')).toBe(0)
+  })
+
+  it('upgrades a legacy snapshot once and then reuses the canonical artifact without regenerating on read', async () => {
+    const context = buildCustomerSendContractContext()
+    const legacyVersion = {
+      id: 'draft-1',
+      status: 'draft',
+      version_number: 2,
+      public_token: 'legacy-token',
+      draft_json: {
+        to_email: 'taylor@example.test',
+        cc_email: '',
+        bcc_email: '',
+        subject: 'Legacy subject',
+        body: '',
+        template_key: 'default',
+        title: 'Kitchen Quote',
+        intro_paragraph: '',
+        closing_paragraph: '',
+        terms_text: 'Standard quote terms.',
+        scope_text_edits: {},
+        quote_validity_days: 30,
+        deposit_language: 'Deposit due on acceptance.',
+        card_fee_note: 'Card fee may apply.',
+      },
+      snapshot_json: {
+        meta: {
+          estimate_id: 'estimate-1',
+          version_name: 'Kitchen Quote',
+          version_state: 'draft',
+          flow_version: 'v2',
+          title: 'Kitchen Quote',
+          quote_date: '2026-05-01',
+          sent_at: null,
+          viewed_at: null,
+          accepted_at: null,
+          declined_at: null,
+          status: 'draft',
+          public_token: null,
+        },
       },
     }
-    expect(dirtyEditorPayload.jobsettings.job_minimum_amount).toBe(dirtyTotal)
+    state.store = createPublicVersionStore(legacyVersion as never)
 
-    const supabase = setupSendResourceMocks(rows)
-    mocks.loadCalculatedEstimateV2Artifacts.mockResolvedValue({
-      quoteWallScopes: artifacts.calculationArtifacts.quoteWallScopes,
-      quoteCeilingScopes: artifacts.calculationArtifacts.quoteCeilingScopes,
-      quoteTrimScopes: artifacts.calculationArtifacts.quoteTrimScopes,
-      quoteDoorScopes: artifacts.calculationArtifacts.quoteDoorScopes,
-      drywallCalculations: artifacts.calculationArtifacts.drywallCalculations,
-      accessFeeCalculation: artifacts.calculationArtifacts.accessFeeCalculation,
-      otherCalculations: artifacts.calculationArtifacts.otherCalculations,
-      pricingSummary: artifacts.calculationArtifacts.pricingSummary,
-    })
-
-    const resources = await loadEstimateCustomerSendResources({
+    const preview1 = await loadCustomerSendPageData({
       origin: 'https://example.test',
-      orgId: String(rows.estimates.org_id),
-      userId: 'user-send-chain',
-      estimateId: String(rows.estimates.id),
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: attachPersistedVersionToContext(context, legacyVersion as never),
     })
-    assertResources(resources)
-    expect(resources.jobsettings).toEqual(rows.estimate_jobsettings)
-    expect(resources.jobsettings.job_minimum_amount).not.toBe(dirtyTotal)
 
-    const calculated = await deriveEstimateCustomerSendCalculatedData(resources, {
-      requestOrigin: 'https://example.test',
-      orgId: String(rows.estimates.org_id),
-      userId: 'user-send-chain',
-      estimateId: String(rows.estimates.id),
-    })
-    const context = buildEstimateCustomerSendContext({
+    expect(preview1.ok).toBe(true)
+    if (!preview1.ok) throw new Error(preview1.message)
+    const upgradedVersion = state.store?.version
+    expect(upgradedVersion?.snapshot_json).toHaveProperty('document')
+    expect(upgradedVersion?.snapshot_json).toHaveProperty('draft')
+    expect(upgradedVersion?.draft_json).toBeNull()
+
+    const preview2 = await loadCustomerSendPageData({
       origin: 'https://example.test',
-      resources,
-      calculated,
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context: attachPersistedVersionToContext(context, upgradedVersion ?? null),
     })
-    const pageResult = buildCustomerSendPageData({
-      origin: 'https://example.test',
-      context,
-    })
-    assertOk<CustomerSendPageData>(pageResult, 'send page data')
 
-    try {
-      expect(context.pricing_summary?.finalTotal).toBeCloseTo(savedTotal, 2)
-      expect(pageResult.data.document.total).toBe(roundedCustomerTotal(savedTotal))
-      expect(context.pricing_summary?.finalTotal).not.toBe(dirtyTotal)
-      expect(pageResult.data.document.total).not.toBe(dirtyTotal)
-    } catch (error) {
-      throw new Error(
-        `scenario=full-room-quote hop=send-context dirty-editor-leak expected=${savedTotal} actual=${dirtyTotal}`,
-        { cause: error }
-      )
-    }
-
-    supabase.assertAllExpectedTablesUsed()
+    expect(preview2.ok).toBe(true)
+    if (!preview2.ok) throw new Error(preview2.message)
+    expect(preview2.data.document).toEqual(preview1.data.document)
+    expect(countEvents('draft_saved')).toBe(0)
   })
 })

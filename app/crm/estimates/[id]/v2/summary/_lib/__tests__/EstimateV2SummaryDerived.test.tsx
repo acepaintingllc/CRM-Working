@@ -824,6 +824,49 @@ describe('estimateV2SummaryDerived helpers', () => {
     ])
   })
 
+  it('surfaces a top-level configuration warning when required paint defaults are missing', () => {
+    const { result } = renderHook(() =>
+      useEstimateV2SummaryDerived({
+        data: {
+          estimate: { version_name: 'Estimate A', version_state: 'Draft' },
+          inputs: {
+            jobsettings: {
+              walls_paint_id: 'wall-paint-1',
+              walls_primer_id: '',
+              ceiling_paint_id: '',
+              ceiling_primer_id: 'ceiling-primer-1',
+              trim_paint_id: 'trim-paint-1',
+              trim_primer_id: '',
+            },
+            org_defaults: null,
+            rooms: [],
+            room_flags: [],
+            paint_products: [],
+          },
+          pricing_summary: pricingSummary,
+        } as never,
+        job: null,
+        jobSettingsDraft: {
+          dayhours: 8,
+          laborRate: 80,
+        },
+      })
+    )
+
+    expect(result.current.configurationWarning).toEqual({
+      title: 'Required paint defaults are missing',
+      detail:
+        'Missing walls default primer, ceilings default paint, and trim default primer. Pricing and send readiness stay blocked until every required paint and primer default is set.',
+      fixHint:
+        'Return to the estimate editor and open Paint Defaults in the left sidebar to set the missing defaults.',
+      missingLabels: [
+        'walls default primer',
+        'ceilings default paint',
+        'trim default primer',
+      ],
+    })
+  })
+
   it('surfaces error readiness when an included painted scope has no product selection', () => {
     const roomScopeRows = buildRoomScopeRows({
       wallScopes: normalizeSummaryScopeRows([

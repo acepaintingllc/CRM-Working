@@ -38,6 +38,8 @@ import type {
 import type { SaveStatus } from '@/lib/estimator/v2WallsAutosave'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import type { EstimateV2CeilingScopePreviewMetrics } from '../_lib/estimateV2EditorDerived'
+import type { EstimateV2DestructiveConfirmVm } from './estimateV2DestructiveConfirm'
+import type { EstimateV2MissingProductConfigurationWarning } from './useEstimateV2ProductLabels'
 
 export type Unsafe = UnsafeRecord
 
@@ -197,6 +199,8 @@ export type EstimateV2EditorSaveVm = {
 export type EstimateV2UnsavedNavigationDialogProps = {
   isOpen: boolean
   canSave: boolean
+  description?: string
+  noticeText?: string
   onStay: () => void
   onSave: () => void
   onLeave: () => void
@@ -209,6 +213,14 @@ export type EstimateV2EditorNavigationVm = {
 export type EstimateV2EditorNavigationActions = {
   requestBackNavigation: () => void
 }
+
+export type EstimateV2EditorDestructiveConfirmActions = {
+  request: (intent: import('./estimateV2DestructiveConfirm').EstimateV2DestructiveIntent) => void
+  confirm: () => boolean
+  cancel: () => void
+}
+
+export type EstimateV2EditorDestructiveConfirmVm = EstimateV2DestructiveConfirmVm
 
 export type EstimateV2EditorRoomVm = {
   rooms: EstimateV2RoomDraft[]
@@ -400,6 +412,9 @@ export type EstimateV2EditorPageVm = {
   loading: boolean
   saving: boolean
   error: EstimateV2Error | null
+  catalogsError: EstimateV2Error | null
+  configurationWarning: EstimateV2MissingProductConfigurationWarning | null
+  catalogsReloading: boolean
   validationIssues: string[]
   emptySelectionMessage: string
   roomsCount: number

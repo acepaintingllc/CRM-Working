@@ -1,9 +1,18 @@
 import type {
+  AcceptedEstimateSnapshotArtifactState,
   AcceptedEstimateSource,
   AcceptEstimateOperationalInput,
 } from './types.ts'
-import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
+import {
+  errorResult,
+  okResult,
+  type ServiceError,
+  type ServiceResult,
+} from '../serviceResult.ts'
 import { normalizeEstimatePublicAcceptanceRecord } from '../../customer-estimates/publicAcceptance.ts'
+import {
+  readEstimatePublicPersistedSnapshotState,
+} from '../../customer-estimates/publicVersionSnapshot.ts'
 
 type Unsafe = Record<string, unknown>
 
@@ -71,6 +80,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function asNullableRecord(value: unknown) {
+  return isRecord(value) ? value : null
+}
+
 type AcceptedEstimateResolutionSource = 'job_link' | 'legacy_job_estimate_fallback'
 
 type OperationalAcceptedEstimateResolution = {
@@ -82,8 +95,123 @@ const acceptedEstimateColumns =
   'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id'
 const acceptedEstimateSnapshotColumns =
   'id, org_id, job_id, estimate_id, customer_id, accepted_public_version_id, estimate_version_name, estimate_version_state, estimated_labor_hours, estimated_paint_gallons, estimated_supplies_cost, estimated_other_cost, estimated_total, source_payload_json'
-const acceptedPublicVersionColumns =
-  'id, estimate_id, version_number, public_token, status, accepted_at, acceptance_json, snapshot_json'
+
+function readAcceptedSnapshotPayload(snapshot: Unsafe) {
+  return asNullableRecord(snapshot.source_payload_json)
+}
+
+function readAcceptedSnapshotEmbeddedAcceptedPublicVersion(snapshot: Unsafe) {
+  return asNullableRecord(readAcceptedSnapshotPayload(snapshot)?.accepted_public_version)
+}
+
+function readAcceptedSnapshotEmbeddedCustomerArtifact(snapshot: Unsafe) {
+  return asNullableRecord(readAcceptedSnapshotPayload(snapshot)?.customer_artifact)
+}
+
+function readAcceptedSnapshotLegacyEmbeddedPublicVersion(snapshot: Unsafe) {
+  return asNullableRecord(readAcceptedSnapshotPayload(snapshot)?.public_version)
+}
+
+function readAcceptedSnapshotLegacyEmbeddedCustomerArtifact(snapshot: Unsafe) {
+  return asNullableRecord(readAcceptedSnapshotPayload(snapshot)?.customer_send_snapshot_json)
+}
+
+function hasAcceptedSnapshotPublicVersionDetails(publicVersion: Record<string, unknown> | null) {
+  if (!publicVersion) return false
+
+  return (
+    typeof publicVersion.version_number !== 'undefined' &&
+    'public_token' in publicVersion &&
+    Boolean(asText(publicVersion.accepted_at)) &&
+    'acceptance_json' in publicVersion
+  )
+}
+
+function readAcceptedEstimateSnapshotArtifactState(
+  snapshot: Unsafe
+): AcceptedEstimateSnapshotArtifactState {
+  const legacyArtifact = readAcceptedSnapshotLegacyEmbeddedCustomerArtifact(snapshot)
+  const legacyPublicVersion = readAcceptedSnapshotLegacyEmbeddedPublicVersion(snapshot)
+  if (legacyArtifact || legacyPublicVersion) {
+    return {
+      kind: 'legacy',
+      message:
+        'Accepted estimate snapshot payload is legacy. Repair the snapshot before loading accepted estimate data.',
+    }
+  }
+
+  const artifactState = readEstimatePublicPersistedSnapshotState(
+    readAcceptedSnapshotPayload(snapshot)?.customer_artifact ?? null
+  )
+  if (artifactState.kind === 'missing') {
+    return {
+      kind: 'missing',
+      message:
+        'Accepted estimate snapshot customer artifact is missing. Repair the snapshot before loading accepted estimate data.',
+    }
+  }
+  if (artifactState.kind === 'invalid') {
+    return {
+      kind: 'invalid',
+      message:
+        'Accepted estimate snapshot customer artifact is unreadable. Repair the snapshot before loading accepted estimate data.',
+    }
+  }
+  if (artifactState.kind === 'legacy') {
+    return {
+      kind: 'legacy',
+      message:
+        'Accepted estimate snapshot customer artifact is legacy. Repair the snapshot before loading accepted estimate data.',
+    }
+  }
+
+  const acceptedPublicVersion = readAcceptedSnapshotEmbeddedAcceptedPublicVersion(snapshot)
+  if (!hasAcceptedSnapshotPublicVersionDetails(acceptedPublicVersion)) {
+    return {
+      kind: 'legacy',
+      message:
+        'Accepted estimate snapshot payload is incomplete. Repair the snapshot before loading accepted estimate data.',
+    }
+  }
+
+  return {
+    kind: 'canonical',
+    artifact: artifactState.snapshot,
+    accepted_public_version: acceptedPublicVersion as Record<string, unknown>,
+  }
+}
+
+function buildAcceptedEstimateSnapshotReadFailure(
+  artifactState: Exclude<AcceptedEstimateSnapshotArtifactState, { kind: 'canonical' }>
+) {
+  return errorResult('invalid_input', artifactState.message)
+}
+
+function buildAcceptedEstimateSnapshotRepairFailure(
+  artifactState: Exclude<AcceptedEstimateSnapshotArtifactState, { kind: 'canonical' }>
+) {
+  const repairProblem =
+    artifactState.kind === 'missing'
+      ? 'missing its customer artifact'
+      : artifactState.kind === 'invalid'
+        ? 'unreadable'
+        : 'legacy or incomplete'
+
+  return errorResult(
+    'invalid_input',
+    `Accepted estimate snapshot is ${repairProblem} and cannot be repaired in place because snapshot rows are immutable. Run an additive snapshot replacement migration.`
+  )
+}
+
+function readAcceptedCustomerVisibleTotal(
+  artifactState: Extract<AcceptedEstimateSnapshotArtifactState, { kind: 'canonical' }>
+) {
+  return asNumber(artifactState.artifact.document?.total)
+}
+
+function forwardServiceError<T>(result: ServiceError): ServiceResult<T> {
+  return result
+}
 
 async function loadJobLinkedAcceptedEstimateResolution(
   db: DbReadChain,
@@ -192,8 +320,18 @@ export function buildAcceptedEstimateSource(params: {
   publicVersion: Unsafe
   rollup?: Unsafe | null
 }): AcceptedEstimateSource {
-  const snapshotJson = params.publicVersion.snapshot_json
+  const snapshotState = readEstimatePublicPersistedSnapshotState(
+    params.publicVersion.snapshot_json
+  )
   const acceptance = normalizeEstimatePublicAcceptanceRecord(params.publicVersion.acceptance_json)
+  const snapshotJson =
+    snapshotState.kind === 'canonical' || snapshotState.kind === 'legacy'
+      ? snapshotState.snapshot
+      : null
+  const customerVisibleTotal =
+    snapshotState.kind === 'canonical'
+      ? asNumber(snapshotState.snapshot.document?.total)
+      : asNumber(params.rollup?.final_total)
 
   return {
     org_id: asText(params.estimate.org_id),
@@ -215,8 +353,8 @@ export function buildAcceptedEstimateSource(params: {
     estimated_paint_gallons: 0,
     estimated_supplies_cost: 0,
     estimated_other_cost: 0,
-    final_total: asNumber(params.rollup?.final_total),
-    snapshot_json: isRecord(snapshotJson) ? snapshotJson : {},
+    final_total: customerVisibleTotal,
+    snapshot_json: snapshotJson ?? {},
   }
 }
 
@@ -225,21 +363,19 @@ type RepairSnapshotDeps = {
   ensureSnapshot?: typeof ensureAcceptedEstimateOperationalSnapshot
 }
 
+type AcceptedEstimateOperationalRecord = {
+  estimate: Unsafe
+  publicVersionId: string
+  operationalEstimateId: string
+  resolutionSource: AcceptedEstimateResolutionSource
+}
+
 export function buildAcceptedEstimateSourceFromSnapshot(params: {
   estimate: Unsafe
-  publicVersion?: Unsafe | null
   snapshot: Unsafe
+  artifactState: Extract<AcceptedEstimateSnapshotArtifactState, { kind: 'canonical' }>
 }): AcceptedEstimateSource {
-  const sourcePayload = params.snapshot.source_payload_json
-  const sourcePublicVersion =
-    isRecord(sourcePayload) && isRecord(sourcePayload.public_version)
-      ? sourcePayload.public_version
-      : null
-  const publicVersion = params.publicVersion ?? sourcePublicVersion
-  const sourceSnapshot =
-    isRecord(sourcePayload) && isRecord(sourcePayload.customer_send_snapshot_json)
-      ? sourcePayload.customer_send_snapshot_json
-      : publicVersion?.snapshot_json
+  const publicVersion = params.artifactState.accepted_public_version
   const acceptance = normalizeEstimatePublicAcceptanceRecord(publicVersion?.acceptance_json)
 
   return {
@@ -272,8 +408,8 @@ export function buildAcceptedEstimateSourceFromSnapshot(params: {
     estimated_paint_gallons: asNumber(params.snapshot.estimated_paint_gallons),
     estimated_supplies_cost: asNumber(params.snapshot.estimated_supplies_cost),
     estimated_other_cost: asNumber(params.snapshot.estimated_other_cost),
-    final_total: asNumber(params.snapshot.estimated_total),
-    snapshot_json: isRecord(sourceSnapshot) ? sourceSnapshot : {},
+    final_total: readAcceptedCustomerVisibleTotal(params.artifactState),
+    snapshot_json: params.artifactState.artifact as Record<string, unknown>,
   }
 }
 
@@ -344,75 +480,17 @@ export async function applyAcceptedEstimateSideEffects(
   return okResult({ ok: true })
 }
 
-export async function ensureAcceptedEstimateOperationalSnapshot(input: {
-  requestOrigin: string
-  orgId: string
-  userId: string
-  estimateId: string
-  publicVersionId: string
-}) {
-  const { ensureEstimateSnapshotForAcceptedEstimate } = await import(
-    '../estimate-feedback/snapshots.ts'
-  )
-  return ensureEstimateSnapshotForAcceptedEstimate({
-    requestOrigin: input.requestOrigin,
-    orgId: input.orgId,
-    userId: input.userId,
-    estimateId: input.estimateId,
-    acceptedPublicVersionId: input.publicVersionId,
-    reason: 'accepted',
-  })
-}
-
-export async function repairAcceptedEstimateSnapshotForJob(
-  input: {
-    requestOrigin: string
-    orgId: string
-    userId: string
-    jobId: string
-  },
-  deps?: RepairSnapshotDeps
-): Promise<ServiceResult<AcceptedEstimateSource>> {
-  const db =
-    deps?.db ??
-    ((await import('../org.ts')).supabaseAdmin as unknown as DbReadChain)
-  const source = await loadAcceptedEstimateSource(db, input.orgId, input.jobId)
-  if (!source.ok) return source
-  if (source.data.estimate_snapshot_id) return source
-
-  const ensureSnapshot = deps?.ensureSnapshot ?? ensureAcceptedEstimateOperationalSnapshot
-  const repaired = await ensureSnapshot({
-    requestOrigin: input.requestOrigin,
-    orgId: input.orgId,
-    userId: input.userId,
-    estimateId: source.data.estimate_id,
-    publicVersionId: source.data.accepted_public_version_id,
-  })
-  if (!repaired.ok) return repaired
-
-  const refreshed = await loadAcceptedEstimateSource(db, input.orgId, input.jobId)
-  if (!refreshed.ok) return refreshed
-  if (!refreshed.data.estimate_snapshot_id) {
-    return errorResult(
-      'server_error',
-      'Accepted estimate snapshot repair did not create a usable snapshot.'
-    )
-  }
-
-  return refreshed
-}
-
-export async function loadAcceptedEstimateSource(
+async function loadAcceptedEstimateOperationalRecord(
   db: DbReadChain,
   orgId: string,
   jobId: string
-): Promise<ServiceResult<AcceptedEstimateSource>> {
+): Promise<ServiceResult<AcceptedEstimateOperationalRecord>> {
   const acceptedEstimateResolution = await resolveOperationalAcceptedEstimateForJob(
     db,
     orgId,
     jobId
   )
-  if (!acceptedEstimateResolution.ok) return acceptedEstimateResolution
+  if (!acceptedEstimateResolution.ok) return forwardServiceError(acceptedEstimateResolution)
   const operationalEstimateId = acceptedEstimateResolution.data.operationalEstimateId
 
   const estimateResult = await db
@@ -452,12 +530,154 @@ export async function loadAcceptedEstimateSource(
     )
   }
 
-  const snapshotResult = await db
+  return okResult({
+    estimate: estimateResult.data,
+    publicVersionId,
+    operationalEstimateId,
+    resolutionSource: acceptedEstimateResolution.data.resolutionSource,
+  })
+}
+
+async function loadAcceptedEstimateSnapshotRow(
+  db: DbReadChain,
+  orgId: string,
+  operationalEstimateId: string
+) {
+  return db
     .from('estimate_snapshot')
     .select(acceptedEstimateSnapshotColumns)
     .eq('org_id', orgId)
     .eq('estimate_id', operationalEstimateId)
     .maybeSingle()
+}
+
+function hasAcceptedEstimateSnapshotOwnership(params: {
+  snapshot: Unsafe
+  jobId: string
+  operationalEstimateId: string
+}) {
+  return (
+    asText(params.snapshot.job_id) === params.jobId &&
+    asText(params.snapshot.estimate_id) === params.operationalEstimateId
+  )
+}
+
+export async function ensureAcceptedEstimateOperationalSnapshot(input: {
+  requestOrigin: string
+  orgId: string
+  userId: string
+  estimateId: string
+  publicVersionId: string
+}) {
+  const { ensureEstimateSnapshotForAcceptedEstimate } = await import(
+    '../estimate-feedback/snapshots.ts'
+  )
+  return ensureEstimateSnapshotForAcceptedEstimate({
+    requestOrigin: input.requestOrigin,
+    orgId: input.orgId,
+    userId: input.userId,
+    estimateId: input.estimateId,
+    acceptedPublicVersionId: input.publicVersionId,
+    reason: 'accepted',
+  })
+}
+
+export async function repairAcceptedEstimateSnapshotForJob(
+  input: {
+    requestOrigin: string
+    orgId: string
+    userId: string
+    jobId: string
+  },
+  deps?: RepairSnapshotDeps
+): Promise<ServiceResult<AcceptedEstimateSource>> {
+  const db =
+    deps?.db ??
+    ((await import('../org.ts')).supabaseAdmin as unknown as DbReadChain)
+  const operationalRecord = await loadAcceptedEstimateOperationalRecord(
+    db,
+    input.orgId,
+    input.jobId
+  )
+  if (!operationalRecord.ok) return forwardServiceError(operationalRecord)
+
+  const existingSnapshot = await loadAcceptedEstimateSnapshotRow(
+    db,
+    input.orgId,
+    operationalRecord.data.operationalEstimateId
+  )
+  if (existingSnapshot.error) {
+    return errorResult(
+      'server_error',
+      existingSnapshot.error.message ?? 'Unable to load accepted estimate snapshot'
+    )
+  }
+  if (
+    existingSnapshot.data &&
+    !hasAcceptedEstimateSnapshotOwnership({
+      snapshot: existingSnapshot.data as Unsafe,
+      jobId: input.jobId,
+      operationalEstimateId: operationalRecord.data.operationalEstimateId,
+    })
+  ) {
+    return errorResult('invalid_input', 'Accepted estimate snapshot is invalid')
+  }
+  if (existingSnapshot.data) {
+    const artifactState = readAcceptedEstimateSnapshotArtifactState(
+      existingSnapshot.data as Unsafe
+    )
+    if (artifactState.kind === 'canonical') {
+      return okResult(
+        buildAcceptedEstimateSourceFromSnapshot({
+          estimate: operationalRecord.data.estimate,
+          snapshot: existingSnapshot.data,
+          artifactState,
+        })
+      )
+    }
+
+    return buildAcceptedEstimateSnapshotRepairFailure(artifactState)
+  }
+
+  const ensureSnapshot = deps?.ensureSnapshot ?? ensureAcceptedEstimateOperationalSnapshot
+  const repaired = await ensureSnapshot({
+    requestOrigin: input.requestOrigin,
+    orgId: input.orgId,
+    userId: input.userId,
+    estimateId: operationalRecord.data.operationalEstimateId,
+    publicVersionId: operationalRecord.data.publicVersionId,
+  })
+  if (!repaired.ok) return forwardServiceError(repaired)
+
+  const refreshed = await loadAcceptedEstimateSource(db, input.orgId, input.jobId)
+  if (!refreshed.ok) return refreshed
+  if (!refreshed.data.estimate_snapshot_id) {
+    return errorResult(
+      'server_error',
+      'Accepted estimate snapshot repair did not create a usable snapshot.'
+    )
+  }
+
+  return refreshed
+}
+
+export async function loadAcceptedEstimateSource(
+  db: DbReadChain,
+  orgId: string,
+  jobId: string
+): Promise<ServiceResult<AcceptedEstimateSource>> {
+  const operationalRecord = await loadAcceptedEstimateOperationalRecord(
+    db,
+    orgId,
+    jobId
+  )
+  if (!operationalRecord.ok) return forwardServiceError(operationalRecord)
+
+  const snapshotResult = await loadAcceptedEstimateSnapshotRow(
+    db,
+    orgId,
+    operationalRecord.data.operationalEstimateId
+  )
 
   if (snapshotResult.error) {
     return errorResult(
@@ -465,67 +685,32 @@ export async function loadAcceptedEstimateSource(
       snapshotResult.error.message ?? 'Unable to load accepted estimate snapshot'
     )
   }
-
-  if (snapshotResult.data) {
-    if (
-      asText(snapshotResult.data.job_id) !== jobId ||
-      asText(snapshotResult.data.estimate_id) !== operationalEstimateId
-    ) {
-      return errorResult('invalid_input', 'Accepted estimate snapshot is invalid')
-    }
-
-    return okResult(
-      buildAcceptedEstimateSourceFromSnapshot({
-        estimate: estimateResult.data,
-        snapshot: snapshotResult.data,
-      })
-    )
-  }
-
-  const publicVersionResult = await db
-    .from('estimate_public_versions')
-    .select(acceptedPublicVersionColumns)
-    .eq('org_id', orgId)
-    .eq('id', publicVersionId)
-    .maybeSingle()
-
-  if (publicVersionResult.error) {
+  if (!snapshotResult.data) {
     return errorResult(
-      'server_error',
-      publicVersionResult.error.message ?? 'Unable to load accepted public version'
+      'invalid_input',
+      'Accepted estimate snapshot is missing. Repair the snapshot before loading accepted estimate data.'
     )
   }
-  if (!publicVersionResult.data) {
-    return errorResult('not_found', 'Accepted public version not found')
-  }
-
   if (
-    asText(publicVersionResult.data.estimate_id) !== operationalEstimateId ||
-    asText(publicVersionResult.data.status) !== 'accepted' ||
-    !asText(publicVersionResult.data.accepted_at)
+    !hasAcceptedEstimateSnapshotOwnership({
+      snapshot: snapshotResult.data as Unsafe,
+      jobId,
+      operationalEstimateId: operationalRecord.data.operationalEstimateId,
+    })
   ) {
-    return errorResult('invalid_input', 'Accepted public version is invalid')
+    return errorResult('invalid_input', 'Accepted estimate snapshot is invalid')
   }
 
-  const rollupResult = await db
-    .from('estimate_version_rollups')
-    .select('final_total')
-    .eq('org_id', orgId)
-    .eq('estimate_id', operationalEstimateId)
-    .maybeSingle()
-
-  if (rollupResult.error) {
-    return errorResult(
-      'server_error',
-      rollupResult.error.message ?? 'Unable to load accepted estimate rollup'
-    )
+  const artifactState = readAcceptedEstimateSnapshotArtifactState(snapshotResult.data as Unsafe)
+  if (artifactState.kind !== 'canonical') {
+    return buildAcceptedEstimateSnapshotReadFailure(artifactState)
   }
 
   return okResult(
-    buildAcceptedEstimateSource({
-      estimate: estimateResult.data,
-      publicVersion: publicVersionResult.data,
-      rollup: rollupResult.data,
+    buildAcceptedEstimateSourceFromSnapshot({
+      estimate: operationalRecord.data.estimate,
+      snapshot: snapshotResult.data,
+      artifactState,
     })
   )
 }

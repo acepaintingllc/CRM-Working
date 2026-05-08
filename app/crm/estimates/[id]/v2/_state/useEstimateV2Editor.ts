@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   createEstimateV2Store,
@@ -28,6 +28,10 @@ import { useEstimateV2SettingsActions } from './useEstimateV2SettingsActions'
 import { useEstimateV2TrimActions } from './useEstimateV2TrimActions'
 import { useEstimateV2WallActions } from './useEstimateV2WallActions'
 import { useEstimateV2GuardedNavigation } from './useEstimateV2GuardedNavigation'
+import {
+  buildEstimateV2DestructiveConfirmVm,
+  type EstimateV2DestructiveIntent,
+} from './estimateV2DestructiveConfirm'
 
 export function useEstimateV2Editor({
   estimateId,
@@ -47,6 +51,7 @@ export function useEstimateV2Editor({
     store,
     estimateV2StoreSelectors.effectiveJobProductDefaults
   )
+  const [pendingIntent, setPendingIntent] = useState<EstimateV2DestructiveIntent | null>(null)
 
   const derived = useEstimateV2EditorDerivedSections({ store })
   const shouldGuardNavigation = shouldGuardEstimateV2Navigation({
@@ -61,7 +66,7 @@ export function useEstimateV2Editor({
     },
   })
 
-  useEstimateV2EditorLoader({
+  const { catalogsReloading, reloadCatalogs, reloadWorkspace } = useEstimateV2EditorLoader({
     estimateId,
     routeFamily,
     store,
@@ -73,33 +78,56 @@ export function useEstimateV2Editor({
   })
   const commitFocusedEditorField = useEstimateV2FocusedFieldCommit()
   const navigateToDetails = useCallback((href: string) => router.push(href), [router])
+  const requestDestructiveConfirm = useCallback((intent: EstimateV2DestructiveIntent) => {
+    setPendingIntent(intent)
+  }, [])
+  const cancelDestructiveConfirm = useCallback(() => {
+    setPendingIntent(null)
+  }, [])
+  const confirmDestructiveConfirm = useCallback(() => {
+    if (!pendingIntent) return false
+    const intent = pendingIntent
+    setPendingIntent(null)
+    intent.run()
+    return true
+  }, [pendingIntent])
+  const destructiveConfirmVm = useMemo(
+    () => buildEstimateV2DestructiveConfirmVm(pendingIntent),
+    [pendingIntent]
+  )
 
   const roomActions = useEstimateV2RoomActions({
     store,
     roomModeById: derived.room.roomModeById,
     trimTypeOptions: derived.catalog.trimTypeOptions,
+    requestDestructiveConfirm,
   })
   const wallActions = useEstimateV2WallActions({
     store,
     roomModeById: derived.room.roomModeById,
+    requestDestructiveConfirm,
   })
   const ceilingActions = useEstimateV2CeilingActions({
     store,
     roomModeById: derived.room.roomModeById,
+    requestDestructiveConfirm,
   })
   const trimActions = useEstimateV2TrimActions({
     store,
     trimTypeOptions: derived.catalog.trimTypeOptions,
     roomModeById: derived.room.roomModeById,
     roomHeightFactorByRoomId: derived.room.roomHeightFactorByRoomId,
+    requestDestructiveConfirm,
   })
   const doorActions = useEstimateV2DoorActions({
     store,
     doorTypeOptions: derived.catalog.doorTypeOptions,
+    requestDestructiveConfirm,
   })
   const drywallActions = useEstimateV2DrywallActions({
     store,
     drywallRateOptions: derived.catalog.drywallRateOptions,
+    requestDestructiveConfirm,
   })
   const otherActions = useEstimateV2OtherActions({ store })
   const settingsActions = useEstimateV2SettingsActions({ estimateId, routeFamily, store })
@@ -116,6 +144,7 @@ export function useEstimateV2Editor({
 
   const editorViewModels = useEstimateV2EditorViewModels({
     estimateId,
+    catalogsReloading,
     store,
     derived,
     roomActions,
@@ -139,5 +168,13 @@ export function useEstimateV2Editor({
   return {
     ...editorViewModels,
     ...guardedNavigation,
+    reloadCatalogs,
+    reloadWorkspace,
+    destructiveConfirmVm,
+    destructiveConfirmActions: {
+      request: requestDestructiveConfirm,
+      confirm: confirmDestructiveConfirm,
+      cancel: cancelDestructiveConfirm,
+    },
   }
 }

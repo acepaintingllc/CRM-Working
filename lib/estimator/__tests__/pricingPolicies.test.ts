@@ -589,6 +589,31 @@ test('buildPerJobSupplyCost multiplies only crew-flagged supply rows', () => {
   assert.equal(buildPerJobSupplyCost({ catalogs, crewSize: 1, activeScopes: ['trim'] }), 7)
 })
 
+test('buildPerJobSupplyCost skips per-job supply rows with missing values', () => {
+  const catalogs = {
+    supplies_rates: [
+      {
+        key: 'MISSING_PER_JOB',
+        supply_group: 'per_job',
+        scope: 'All',
+        unit: 'each',
+        value: null,
+        crew_multiplier: 'Y',
+      },
+      {
+        key: 'VALID_PER_JOB',
+        supply_group: 'per_job',
+        scope: 'All',
+        unit: 'each',
+        value: 4,
+        crew_multiplier: 'Y',
+      },
+    ],
+  }
+
+  assert.equal(buildPerJobSupplyCost({ catalogs, crewSize: 2, activeScopes: ['walls'] }), 8)
+})
+
 test('buildEstimatePricingSummary: trim paint adds estimate-level paint cost and room allocation', () => {
   const output: Pick<WallCalculationOutput, 'scopes' | 'room_totals' | 'per_color_supply_groups' | 'assumptions'> = {
     scopes: [

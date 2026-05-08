@@ -22,6 +22,7 @@ import { normalizeRollerApplicatorQuantity } from './rollerQuantities.ts'
 import { normalizeWallRollerTargetId } from './rollerIdentity.ts'
 import { HIDDEN_CEILING_COLOR_ID } from './scopeRules.ts'
 import type { EstimateV2ConditionSelections } from './conditionModifiers.ts'
+import type { CeilingGeometryMode } from './ceilingTypes.ts'
 
 const STANDARD_DOOR_DEDUCTION_SF = 21
 const STANDARD_WINDOW_DEDUCTION_SF = 15
@@ -53,6 +54,12 @@ function toPersistedConditionSelections(
 ) {
   const entries = Object.entries(selections ?? {}).filter(([, value]) => !!value)
   return entries.length > 0 ? Object.fromEntries(entries) : null
+}
+
+function toCeilingGeometryMode(value: string | undefined): CeilingGeometryMode {
+  const raw = value?.trim().toUpperCase()
+  if (raw === 'VAULTED' || raw === 'TRAY' || raw === 'COFFERED' || raw === 'MANUAL') return raw
+  return 'FLAT'
 }
 
 function mergePersistedConditionSelections(
@@ -168,6 +175,8 @@ export function buildEstimateV2SavePayload(
   accessFees: EstimateV2AccessFeeDraft[] = [],
   otherItems: EstimateV2OtherItemDraft[] = []
 ): EstimateV2SavePayload {
+  // Client save payloads persist the editor's current condition snapshot; server calculation
+  // entry points still recompute canonical factors from selections and catalogs before engines run.
   const resolvedFactors = jobSettingsDraft.resolvedConditionFactors ?? {
     room: 1,
     wall: 1,
@@ -285,7 +294,7 @@ export function buildEstimateV2SavePayload(
           segment_name: segment.segmentName.trim() || null,
           include: segment.include,
           shape_type: segment.shapeType,
-          quantity: toNullableDraftNumber(segment.quantity),
+          quantity: toNullableDraftNumber(segment.quantity) ?? 1,
           width_in: segment.shapeType === 'RECTANGLE' ? toNullableDraftNumber(segment.widthIn) : null,
           height_in: segment.shapeType !== 'MANUAL' ? toNullableDraftNumber(segment.heightIn) : null,
           base_in: segment.shapeType === 'TRIANGLE' ? toNullableDraftNumber(segment.baseIn) : null,
@@ -318,7 +327,7 @@ export function buildEstimateV2SavePayload(
       prime_mode: scope.primeMode,
       spot_prime_percent: toNullableDraftNumber(scope.spotPrimePercent),
       ceiling_type_id: scope.ceilingTypeId.trim() || null,
-      ceiling_geometry_mode: scope.ceilingGeometryMode?.trim() || 'FLAT',
+      ceiling_geometry_mode: toCeilingGeometryMode(scope.ceilingGeometryMode),
       vaulted_area_factor: toNullableDraftNumber(scope.vaultedAreaFactor ?? ''),
       vaulted_ridge_length_in: toNullableDraftNumber(scope.vaultedRidgeLengthIn ?? ''),
       vaulted_slope_length_in: toNullableDraftNumber(scope.vaultedSlopeLengthIn ?? ''),
@@ -347,6 +356,20 @@ export function buildEstimateV2SavePayload(
       override_primer_gallons: toNullableDraftNumber(scope.overridePrimerGallons),
       override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
       override_total: toNullableDraftNumber(scope.overrideTotal),
+      raw_area_sf: null,
+      effective_area_sf: null,
+      raw_paint_hours: null,
+      effective_paint_hours: null,
+      raw_primer_hours: null,
+      effective_primer_hours: null,
+      raw_paint_gallons: null,
+      effective_paint_gallons: null,
+      raw_primer_gallons: null,
+      effective_primer_gallons: null,
+      raw_supply_cost: null,
+      effective_supply_cost: null,
+      raw_total: null,
+      effective_total: null,
       notes: scope.notes.trim() || null,
       condition_selections: mergePersistedConditionSelections(
         jobSettingsDraft.conditionSelections?.ceiling,
@@ -370,12 +393,14 @@ export function buildEstimateV2SavePayload(
       segment_name: seg.segmentName.trim() || null,
       include: seg.include,
       shape_type: seg.shapeType,
-      quantity: toNullableDraftNumber(seg.quantity),
+      quantity: toNullableDraftNumber(seg.quantity) ?? 1,
       width_in: seg.shapeType === 'RECTANGLE' ? toNullableDraftNumber(seg.widthIn) : null,
       height_in: seg.shapeType !== 'MANUAL' ? toNullableDraftNumber(seg.heightIn) : null,
       base_in: seg.shapeType === 'TRIANGLE' ? toNullableDraftNumber(seg.baseIn) : null,
       manual_area_sf: seg.shapeType === 'MANUAL' ? toNullableDraftNumber(seg.manualAreaSqFt) : null,
+      raw_area_sf: null,
       override_area_sf: toNullableDraftNumber(seg.overrideAreaSqFt),
+      effective_area_sf: null,
       notes: seg.notes.trim() || null,
     }))
   )
@@ -391,7 +416,7 @@ export function buildEstimateV2SavePayload(
       trim_family: scope.trimFamily.trim() || null,
       unit_type: scope.unitType,
       measurement_mode: scope.measurementMode,
-      helper_source: scope.measurementMode === 'ROOM_HELPER' ? 'ROOM_PERIMETER' : null,
+      helper_source: scope.measurementMode === 'ROOM_HELPER' ? ('ROOM_PERIMETER' as const) : null,
       measurement_value: scope.measurementMode === 'MANUAL' ? toNullableDraftNumber(scope.measurementValue) : null,
       helper_value: scope.measurementMode === 'ROOM_HELPER' ? toNullableDraftNumber(scope.helperValue) : null,
       baseboard_opening_count: toNullableDraftNumber(scope.baseboardOpeningCount),
@@ -418,6 +443,20 @@ export function buildEstimateV2SavePayload(
       override_supply_cost: toNullableDraftNumber(scope.overrideSupplyCost),
       override_total: toNullableDraftNumber(scope.overrideTotal),
       override_description: toNullableText(scope.overrideDescription),
+      raw_measurement: null,
+      effective_measurement: null,
+      raw_paint_hours: null,
+      effective_paint_hours: null,
+      raw_primer_hours: null,
+      effective_primer_hours: null,
+      raw_paint_gallons: null,
+      effective_paint_gallons: null,
+      raw_primer_gallons: null,
+      effective_primer_gallons: null,
+      raw_supply_cost: null,
+      effective_supply_cost: null,
+      raw_total: null,
+      effective_total: null,
       notes: scope.notes.trim() || null,
       condition_selections: mergePersistedConditionSelections(
         jobSettingsDraft.conditionSelections?.trim,

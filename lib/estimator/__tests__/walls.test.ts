@@ -140,6 +140,100 @@ test('missing wall pricing assumptions do not use hidden business fallback value
   assert.equal(result.scopes[0].raw_total, 0)
 })
 
+test('null labor rate uses explicit scope fallback before reporting missing input', () => {
+  const result = calculateWalls({
+    settings: {
+      labor_rate_per_hour: null,
+      paint_prod_rate_sqft_per_hour: 100,
+      paint_coverage_sqft_per_gal_per_coat: 200,
+      paint_coats: 1,
+      paint_price_per_gal: 10,
+      area_supply_cost_per_sf: 0,
+      per_color_supply_cost: 0,
+    },
+    scopes: [makeWallScope({ color_id: null, labor_rate_per_hour: 42 })],
+    segments: [],
+  })
+
+  assert.equal(result.missing_inputs.some((input) => input.field === 'labor_rate_per_hour'), false)
+  assert.equal(result.assumptions.labor_rate_per_hour, 0)
+  approx(result.scopes[0].raw_paint_hours, 4)
+  approx(result.scopes[0].raw_total, 188)
+})
+
+test('null labor rate without fallback records missing input and avoids hidden labor cost', () => {
+  const result = calculateWalls({
+    settings: {
+      labor_rate_per_hour: null,
+      paint_prod_rate_sqft_per_hour: 100,
+      paint_coverage_sqft_per_gal_per_coat: 200,
+      paint_coats: 1,
+      paint_price_per_gal: 10,
+      area_supply_cost_per_sf: 0,
+      per_color_supply_cost: 0,
+    },
+    scopes: [makeWallScope({ color_id: null })],
+    segments: [],
+  })
+
+  assert.equal(result.missing_inputs.some((input) => input.field === 'labor_rate_per_hour'), true)
+  assert.equal(result.assumptions.labor_rate_per_hour, 0)
+  assert.equal(result.scopes[0].raw_paint_hours, 4)
+  approx(result.scopes[0].raw_total, 20)
+})
+
+test('null catalog supply rate is excluded from per-color supply allocation', () => {
+  const result = calculateWalls({
+    settings: {
+      labor_rate_per_hour: 1,
+      paint_prod_rate_sqft_per_hour: 100,
+      paint_coverage_sqft_per_gal_per_coat: 200,
+      paint_coats: 1,
+      paint_price_per_gal: 0,
+      area_supply_cost_per_sf: 0,
+    },
+    catalogs: {
+      supplies_rates: [
+        {
+          key: 'MISSING_BRUSH_WALL',
+          supply_group: 'per_color',
+          scope: 'Walls',
+          unit: 'each',
+          value: null,
+          crew_multiplier: 'Y',
+        },
+      ],
+    },
+    scopes: [makeWallScope()],
+    segments: [],
+  })
+
+  assert.equal(result.per_color_supply_groups.length, 0)
+  assert.equal(result.scopes[0].raw_supply_cost, 0)
+  assert.equal(result.scopes[0].effective_supply_cost, 0)
+})
+
+test('null production rate records missing input and avoids arithmetic on null', () => {
+  const result = calculateWalls({
+    settings: {
+      labor_rate_per_hour: 50,
+      paint_prod_rate_sqft_per_hour: null,
+      paint_coverage_sqft_per_gal_per_coat: 200,
+      paint_coats: 1,
+      paint_price_per_gal: 10,
+      area_supply_cost_per_sf: 0,
+      per_color_supply_cost: 0,
+    },
+    scopes: [makeWallScope({ color_id: null })],
+    segments: [],
+  })
+
+  assert.equal(result.missing_inputs.some((input) => input.field === 'paint_prod_rate_sqft_per_hour'), true)
+  assert.equal(result.assumptions.paint_prod_rate_sqft_per_hour, 0)
+  assert.equal(result.scopes[0].raw_paint_hours, 0)
+  approx(result.scopes[0].raw_total, 20)
+})
+
 test('wall primer assumptions are required only when primer is used', () => {
   const baseSettings = {
     labor_rate_per_hour: 50,

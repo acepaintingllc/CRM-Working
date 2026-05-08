@@ -51,3 +51,9 @@ export const quoteRouteFamily: EstimateRouteFamily = {
 export function resolveEstimateRouteFamily(key: EstimateRouteFamilyKey = 'estimate') {
   return key === 'quote' ? quoteRouteFamily : estimateRouteFamily
 }
+
+const estimateRouteFamilySendHrefPattern = /^\/crm\/(?:estimates|quotes)\/[^/]+\/send(?:[?#].*)?$/
+
+export function isEstimateRouteFamilySendHref(href: string) {
+  return estimateRouteFamilySendHrefPattern.test(href)
+}

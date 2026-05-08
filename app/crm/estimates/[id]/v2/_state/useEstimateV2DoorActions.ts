@@ -12,12 +12,18 @@ import {
   updateDoorScopeMutation,
 } from '../_lib/estimateV2EditorMutations'
 import type { EstimateV2DoorScopeDraft, EstimateV2DoorTypeOption } from '@/types/estimator/v2'
+import {
+  formatEstimateV2DoorLabel,
+  formatEstimateV2RoomLabel,
+  type EstimateV2DestructiveIntent,
+} from './estimateV2DestructiveConfirm'
 
 export function useEstimateV2DoorActions(params: {
   store: EstimateV2EditorStoreApi
   doorTypeOptions: EstimateV2DoorTypeOption[]
+  requestDestructiveConfirm: (intent: EstimateV2DestructiveIntent) => void
 }) {
-  const { store, doorTypeOptions } = params
+  const { store, doorTypeOptions, requestDestructiveConfirm } = params
 
   const markDirty = useCallback(() => {
     store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: 'doors' }))
@@ -54,12 +60,22 @@ export function useEstimateV2DoorActions(params: {
 
   const deleteScope = useCallback(
     (roomId: string, scopeId: string) => {
-      const ok = window.confirm('Delete this door item?')
-      if (!ok) return
-      store.getState().setDoorScopes((prev) => deleteDoorScopeMutation(prev, roomId, scopeId))
-      markDirty()
+      const { collections } = store.getState()
+      const room = collections.rooms.find((entry) => entry.roomId === roomId)
+      const scope = (collections.doorScopes ?? []).find((entry) => entry.id === scopeId)
+      requestDestructiveConfirm({
+        kind: 'door-delete',
+        roomId,
+        roomLabel: formatEstimateV2RoomLabel(room?.roomName, roomId),
+        scopeId,
+        scopeLabel: formatEstimateV2DoorLabel(scope?.scopeName, scope?.doorTypeId, doorTypeOptions),
+        run: () => {
+          store.getState().setDoorScopes((prev) => deleteDoorScopeMutation(prev, roomId, scopeId))
+          markDirty()
+        },
+      })
     },
-    [markDirty, store]
+    [doorTypeOptions, markDirty, requestDestructiveConfirm, store]
   )
 
   const toggleRoomInclude = useCallback(

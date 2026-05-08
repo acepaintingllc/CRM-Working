@@ -17,13 +17,18 @@ import {
 import { recalculateEditorDraftFactors } from '../_lib/estimateV2EditorRecalculate'
 import type { DirtySource } from './estimateV2EditorTypes'
 import type { EstimateV2TrimTypeOption, EstimateV2WallScopeMode } from '@/types/estimator/v2'
+import {
+  formatEstimateV2RoomLabel,
+  type EstimateV2DestructiveIntent,
+} from './estimateV2DestructiveConfirm'
 
 export function useEstimateV2RoomActions(params: {
   store: EstimateV2EditorStoreApi
   roomModeById: Map<string, 'RECT' | 'SEG'>
   trimTypeOptions: EstimateV2TrimTypeOption[]
+  requestDestructiveConfirm: (intent: EstimateV2DestructiveIntent) => void
 }) {
-  const { store, roomModeById, trimTypeOptions } = params
+  const { store, roomModeById, trimTypeOptions, requestDestructiveConfirm } = params
 
   const applySynchronizedDrafts = useCallback(
     (
@@ -94,17 +99,7 @@ export function useEstimateV2RoomActions(params: {
 
   const deleteRoom = useCallback(
     (roomId: string) => {
-      const {
-        collections,
-        meta,
-        setRooms,
-        setSegments,
-        setRoomFlags,
-        setCeilingSegments,
-        setDoorScopes,
-        setDrywallRepairs,
-        setSelectedRoomId,
-      } = store.getState()
+      const { collections } = store.getState()
       const roomScopes = collections.scopes.filter((scope) => scope.roomId === roomId)
       const roomSegments = collections.segments.filter((segment) => segment.roomId === roomId)
       const roomCeilScopes = collections.ceilingScopes.filter((scope) => scope.roomId === roomId)
@@ -124,41 +119,55 @@ export function useEstimateV2RoomActions(params: {
         roomTrimRows.length > 0 ||
         roomDoorRows.length > 0
         || roomDrywallRows.length > 0
-      const ok = window.confirm(
-        hasData ? `Delete ${label} and all scope rows/segments in it?` : `Delete ${label}?`
-      )
-      if (!ok) return
-
-      const next = deleteRoomCascadeMutation({
-        rooms: collections.rooms,
-        scopes: collections.scopes,
-        segments: collections.segments,
-        roomFlags: collections.roomFlags,
-        ceilingScopes: collections.ceilingScopes,
-        ceilingSegments: collections.ceilingSegments,
-        trimScopes: collections.trimScopes,
-        doorScopes: collections.doorScopes ?? [],
-        drywallRepairs: collections.drywallRepairs ?? [],
+      requestDestructiveConfirm({
+        kind: 'room-delete',
         roomId,
-        selectedRoomId: meta.selectedRoomId,
+        roomLabel: formatEstimateV2RoomLabel(room?.roomName, roomId),
+        hasNestedData: hasData,
+        run: () => {
+          const {
+            collections: currentCollections,
+            meta,
+            setRooms,
+            setSegments,
+            setRoomFlags,
+            setCeilingSegments,
+            setDoorScopes,
+            setDrywallRepairs,
+            setSelectedRoomId,
+          } = store.getState()
+          const next = deleteRoomCascadeMutation({
+            rooms: currentCollections.rooms,
+            scopes: currentCollections.scopes,
+            segments: currentCollections.segments,
+            roomFlags: currentCollections.roomFlags,
+            ceilingScopes: currentCollections.ceilingScopes,
+            ceilingSegments: currentCollections.ceilingSegments,
+            trimScopes: currentCollections.trimScopes,
+            doorScopes: currentCollections.doorScopes ?? [],
+            drywallRepairs: currentCollections.drywallRepairs ?? [],
+            roomId,
+            selectedRoomId: meta.selectedRoomId,
+          })
+          setRooms(next.rooms)
+          setSegments(next.segments)
+          setRoomFlags(next.roomFlags)
+          setCeilingSegments(next.ceilingSegments)
+          setDoorScopes(next.doorScopes)
+          setDrywallRepairs(next.drywallRepairs)
+          setSelectedRoomId(next.selectedRoomId)
+          applySynchronizedDrafts(
+            next.rooms,
+            next.scopes,
+            next.ceilingScopes,
+            next.trimScopes,
+            next.roomFlags
+          )
+          markDirty('room')
+        },
       })
-      setRooms(next.rooms)
-      setSegments(next.segments)
-      setRoomFlags(next.roomFlags)
-      setCeilingSegments(next.ceilingSegments)
-      setDoorScopes(next.doorScopes)
-      setDrywallRepairs(next.drywallRepairs)
-      setSelectedRoomId(next.selectedRoomId)
-      applySynchronizedDrafts(
-        next.rooms,
-        next.scopes,
-        next.ceilingScopes,
-        next.trimScopes,
-        next.roomFlags
-      )
-      markDirty('room')
     },
-    [applySynchronizedDrafts, markDirty, store]
+    [applySynchronizedDrafts, markDirty, requestDestructiveConfirm, store]
   )
 
   const toggleFlag = useCallback(
@@ -198,18 +207,49 @@ export function useEstimateV2RoomActions(params: {
 
   const switchRoomGeometryMode = useCallback(
     (roomId: string, nextMode: EstimateV2WallScopeMode) => {
-      const { collections, setSegments, setCeilingSegments } = store.getState()
+      const { collections } = store.getState()
       const currentMode = roomModeById.get(roomId) ?? 'RECT'
-      if (
-        currentMode === 'SEG' &&
-        nextMode === 'RECT' &&
-        !window.confirm(
-          'Switching this room back to RECT will reset all SEG wall and ceiling scopes/segments in the room. Continue?'
-        )
-      ) {
+      const room = collections.rooms.find((entry) => entry.roomId === roomId)
+      if (currentMode === 'SEG' && nextMode === 'RECT') {
+        requestDestructiveConfirm({
+          kind: 'room-geometry-reset',
+          roomId,
+          roomLabel: formatEstimateV2RoomLabel(room?.roomName, roomId),
+          nextMode,
+          run: () => {
+            const { collections: currentCollections, setSegments, setCeilingSegments } =
+              store.getState()
+            const nextWalls = applyWallRoomModeMutation({
+              scopes: currentCollections.scopes,
+              segments: currentCollections.segments,
+              roomId,
+              nextMode,
+              defaultHeightFactor: '1',
+            })
+            const nextCeilings = applyCeilingRoomModeMutation({
+              scopes: currentCollections.ceilingScopes,
+              segments: currentCollections.ceilingSegments,
+              roomId,
+              nextMode,
+              defaultHeightFactor: '1',
+            })
+
+            setSegments(nextWalls.segments)
+            setCeilingSegments(nextCeilings.segments)
+            applySynchronizedDrafts(
+              currentCollections.rooms,
+              nextWalls.scopes,
+              nextCeilings.scopes,
+              currentCollections.trimScopes,
+              currentCollections.roomFlags
+            )
+            markDirty('room')
+          },
+        })
         return
       }
 
+      const { setSegments, setCeilingSegments } = store.getState()
       const nextWalls = applyWallRoomModeMutation({
         scopes: collections.scopes,
         segments: collections.segments,
@@ -236,7 +276,7 @@ export function useEstimateV2RoomActions(params: {
       )
       markDirty('room')
     },
-    [applySynchronizedDrafts, markDirty, roomModeById, store]
+    [applySynchronizedDrafts, markDirty, requestDestructiveConfirm, roomModeById, store]
   )
 
   return {

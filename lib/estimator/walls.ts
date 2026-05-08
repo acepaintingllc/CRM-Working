@@ -531,13 +531,14 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
   }
 
   const colorGroupTotalCost = new Map<string, number>()
-  const perColorGroups = Array.from(grouped.entries()).map(([groupKey, scopes]) => {
+  const perColorGroups = Array.from(grouped.entries()).flatMap(([groupKey, scopes]) => {
     const totalArea = sumNumbers(scopes.map((scope) => scope.effective_area))
-    const totalCost = round4(
-      Math.max(
-        ...scopes.map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? settings.per_color_supply_cost)
-      )
-    )
+    const candidateCosts = scopes
+      .map((scope) => pos(n(scope.row.per_color_supply_cost)) ?? pos(n(settings.per_color_supply_cost)))
+      .filter((value): value is number => value != null)
+    if (candidateCosts.length === 0) return []
+
+    const totalCost = round4(Math.max(...candidateCosts))
     colorGroupTotalCost.set(groupKey, totalCost)
 
     for (const scope of scopes) {
@@ -550,7 +551,7 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
       applyScopeCosts(scope, settings, products)
     }
 
-    return {
+    return [{
       group_key: groupKey,
       color_id: groupKey.split('::')[1] ?? null,
       paint_product_id: groupKey.split('::')[0] ?? null,
@@ -565,7 +566,7 @@ export function calculateWalls(input: WallCalculationInput): WallCalculationOutp
         weight: totalArea > 0 ? round4((scope.effective_area ?? 0) / totalArea) : round4(1 / scopes.length),
         allocated_supply_cost: scope.color_allocated_cost,
       })),
-    }
+    }]
   })
 
   const paintMaterialGroups = allocatePaintMaterialRollups(scopeCalcs)

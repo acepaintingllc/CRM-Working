@@ -194,7 +194,7 @@ describe('useEstimateV2DerivedState', () => {
 
     expect(result.current.dirty).toBe(false)
     expect(result.current.sections.save.visibleValidationIssues).toEqual([
-      'R001: height is required for RECT wall mode',
+      'Living Room: height is required for RECT wall mode',
     ])
   })
 
@@ -901,7 +901,7 @@ describe('useEstimateV2DerivedState', () => {
 
     expect(result.current.dirty).toBe(false)
     expect(result.current.saveStatusText).toBe(
-      'Unsaved changes - save blocked: R001: trim type is required'
+      'Unsaved changes - save blocked: Living Room: trim type is required'
     )
     expect(result.current.saveStatusText).not.toContain('Saved')
   })
@@ -922,6 +922,30 @@ describe('useEstimateV2DerivedState', () => {
       'Unsaved changes - save blocked: Doors: Door scope 1: door type is required'
     )
     expect(result.current.saveStatusText).not.toContain('Saved')
+  })
+
+  it('shows curated save-failed status text while keeping raw error details out of the footer copy', () => {
+    const { store } = createDerivedStore()
+
+    act(() => {
+      store.getState().setMeta((prev) => ({
+        ...prev,
+        saveStatus: 'error',
+        error: { message: 'Save exploded in route handler', retryable: true },
+      }))
+      store.getState().setRooms((prev) =>
+        prev.map((room) =>
+          room.roomId === 'R001' ? { ...room, roomName: 'Dirty retry room' } : room
+        )
+      )
+    })
+
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store }))
+
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.sections.save.canManualSave).toBe(true)
+    expect(result.current.saveStatusText).toBe("We couldn't save your changes. Try again.")
+    expect(result.current.saveStatusText).not.toContain('Save exploded in route handler')
   })
 
   it('does not mark the default draft dirty after a failed estimate load', () => {

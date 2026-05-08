@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildEstimateChainParityArtifacts,
+  buildEstimateChainParityPayload,
   buildEstimateChainParityDbRows,
   ESTIMATE_CHAIN_PARITY_SCENARIOS,
   expectSameCustomerTotal,
@@ -8,7 +9,13 @@ import {
   type EstimateChainParityDbRows,
 } from './estimateChainParityHelpers'
 import { buildPricingKpis } from '@/app/crm/estimates/[id]/v2/summary/_lib/estimateV2SummaryDerived'
-import type { EstimateV2GetResponse } from '@/types/estimator/v2'
+import { calculateEstimateV2Preview } from '@/lib/estimator/v2PreviewCalculations'
+import { buildCustomerDocumentFromSendContext } from '@/lib/server/customer-send/document'
+import { deriveEstimateCustomerSendCalculatedData } from '@/lib/server/customer-send/contextCalculations'
+import { mapCustomerQuoteSourceModel } from '@/lib/server/customer-send/contextMapper'
+import type { EstimateCustomerSendRawResources } from '@/lib/server/customer-send/contextTypes'
+import type { EstimateV2Catalogs, EstimateV2GetResponse, EstimateV2SavePayload } from '@/types/estimator/v2'
+import type { EstimateTemplateSettingsRow } from '../../estimateTemplateSettings'
 
 const mocks = vi.hoisted(() => ({
   getEstimate: vi.fn(),
@@ -39,6 +46,39 @@ vi.mock('../../estimateV2Catalogs.ts', async () => {
   }
 })
 
+function estimateV2CatalogsAliasMock() {
+  return {
+    loadEstimateV2CalculationCatalogs: mocks.loadEstimateV2CalculationCatalogs,
+    loadEstimateV2RoomModesForTrimFromDb: mocks.loadEstimateV2RoomModesForTrimFromDb,
+    resolveEstimateV2RoomModeById: (params: {
+      rooms: Array<Record<string, unknown>>
+      wallScopes: Array<Record<string, unknown>>
+      ceilingScopes: Array<Record<string, unknown>>
+    }) => {
+      const roomMode = new Map<string, 'RECT' | 'SEG'>()
+      for (const scope of params.wallScopes) {
+        const roomId = String(scope.room_id ?? '').toUpperCase()
+        if (!roomId || roomMode.has(roomId)) continue
+        roomMode.set(roomId, String(scope.mode ?? '').toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
+      }
+      for (const scope of params.ceilingScopes) {
+        const roomId = String(scope.room_id ?? '').toUpperCase()
+        if (!roomId || roomMode.has(roomId)) continue
+        roomMode.set(roomId, String(scope.mode ?? '').toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
+      }
+      for (const room of params.rooms) {
+        const roomId = String(room.room_id ?? '').toUpperCase()
+        if (!roomId || roomMode.has(roomId)) continue
+        roomMode.set(roomId, String(room.mode ?? '').toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
+      }
+      return roomMode
+    },
+  }
+}
+
+vi.mock('@/lib/server/estimateV2Catalogs', () => estimateV2CatalogsAliasMock())
+vi.mock('@/lib/server/estimateV2Catalogs.ts', () => estimateV2CatalogsAliasMock())
+
 vi.mock('../shared.ts', async () => {
   const actual = await vi.importActual<typeof import('../shared.ts')>('../shared.ts')
   return {
@@ -47,7 +87,7 @@ vi.mock('../shared.ts', async () => {
   }
 })
 
-import { loadEstimateV2Response } from '../loadEstimateAssembly'
+import { loadEstimateV2Response } from '../loadEstimateAssembly.ts'
 
 type DbLikeRow = Record<string, unknown>
 type QueryError = { message: string }
@@ -57,7 +97,6 @@ type LoadTable =
   | 'estimate_rooms'
   | 'estimate_room_wall_scopes'
   | 'estimate_segments'
-  | 'estimate_ceiling_segments'
   | 'estimate_room_ceiling_scopes'
   | 'estimate_room_ceiling_scope_segments'
   | 'estimate_room_trim_scopes'
@@ -116,11 +155,7 @@ function createLoadSupabaseStub(rows: EstimateChainParityDbRows) {
     estimate_jobsettings: [queryResult(rows.estimate_jobsettings)],
     estimate_rooms: [queryResult(rows.estimate_rooms)],
     estimate_room_wall_scopes: [queryResult(rows.estimate_room_wall_scopes)],
-    estimate_segments: [
-      queryResult(rows.estimate_segments.legacyRoomSegments),
-      queryResult(rows.estimate_segments.wallSegments),
-    ],
-    estimate_ceiling_segments: [queryResult(rows.estimate_ceiling_segments)],
+    estimate_segments: [queryResult(rows.estimate_segments.wallSegments)],
     estimate_room_ceiling_scopes: [queryResult(rows.estimate_room_ceiling_scopes)],
     estimate_room_ceiling_scope_segments: [queryResult(rows.estimate_room_ceiling_scope_segments)],
     estimate_room_trim_scopes: [queryResult(rows.estimate_room_trim_scopes)],
@@ -173,6 +208,240 @@ function recordCustomerTotalAssertion(
   } catch (error) {
     errors.push(error instanceof Error ? error : new Error(String(error)))
   }
+}
+
+type ComparableRow = Record<string, unknown>
+
+const DRIFT_GUARD_ORG_DEFAULTS: EstimateTemplateSettingsRow = {
+  default_template_key: 'drift-guard-default',
+  quote_validity_days: 30,
+  terms_text: 'Standard quote terms.',
+  walls_paint_id: 'prod-wall-satin',
+  walls_primer_id: 'prod-wall-primer',
+  ceiling_paint_id: 'prod-ceiling-flat',
+  ceiling_primer_id: 'prod-ceiling-primer',
+  trim_paint_id: 'prod-trim-enamel',
+  trim_primer_id: 'prod-trim-primer',
+  labor_day_policy_enabled: true,
+  dayhours: 7,
+  rounding_increment_hours: 2,
+  override_labor_rate: 73,
+  job_minimum_enabled: true,
+  job_minimum_amount: 1500,
+  standard_door_deduction_sf: 32,
+  standard_window_deduction_sf: 18,
+  baseboard_opening_deduction_lf: 5,
+}
+
+function asText(value: unknown) {
+  return value == null ? '' : String(value).trim()
+}
+
+function asComparableNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function rowById(rows: ComparableRow[]) {
+  return new Map(rows.map((row) => [asText(row.id), row]))
+}
+
+function asComparableRows(rows: unknown): ComparableRow[] {
+  return Array.isArray(rows) ? (rows as ComparableRow[]) : []
+}
+
+function expectRowsMatchFields(params: {
+  label: string
+  expectedRows: ComparableRow[]
+  actualRows: ComparableRow[]
+  fields: string[]
+}) {
+  const expected = rowById(params.expectedRows)
+  const actual = rowById(params.actualRows)
+  expect([...actual.keys()].sort(), `${params.label}: row ids`).toEqual([...expected.keys()].sort())
+
+  for (const [id, expectedRow] of expected) {
+    const actualRow = actual.get(id)
+    expect(actualRow, `${params.label}:${id}: row`).toBeTruthy()
+    if (!actualRow) continue
+
+    for (const field of params.fields) {
+      const expectedValue = expectedRow[field]
+      const actualValue = actualRow[field]
+      if (typeof expectedValue === 'number' || typeof actualValue === 'number') {
+        expect(asComparableNumber(actualValue), `${params.label}:${id}:${field}`).toBeCloseTo(
+          asComparableNumber(expectedValue) ?? 0,
+          2
+        )
+      } else if (field === 'production_rate_id') {
+        expect(asText(actualValue).toLowerCase(), `${params.label}:${id}:${field}`).toEqual(
+          asText(expectedValue).toLowerCase()
+        )
+      } else {
+        expect(actualValue ?? null, `${params.label}:${id}:${field}`).toEqual(expectedValue ?? null)
+      }
+    }
+  }
+}
+
+function accessFeeComparableRows(rows: Array<Record<string, unknown>>) {
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    access_group: row.access_group ?? row.group,
+    catalog_amount: row.catalog_amount ?? row.catalogAmount,
+    calculated_total: row.calculated_total ?? row.calculatedTotal,
+    effective_total: row.effective_total ?? row.total,
+    overridden: row.overridden,
+  }))
+}
+
+function buildDriftGuardPayload(fixture: (typeof ESTIMATE_CHAIN_PARITY_SCENARIOS)['full-room-quote']): EstimateV2SavePayload {
+  const payload = structuredClone(buildEstimateChainParityPayload(fixture)) as EstimateV2SavePayload
+
+  payload.jobsettings = {
+    ...payload.jobsettings,
+    walls_paint_id: null,
+    walls_primer_id: '',
+    ceiling_paint_id: null,
+    ceiling_primer_id: '',
+    trim_paint_id: null,
+    trim_primer_id: '',
+    labor_day_policy_enabled: null,
+    dayhours: null,
+    rounding_increment_hours: null,
+    override_labor_rate: null,
+    job_minimum_enabled: null,
+    job_minimum_amount: null,
+    standard_door_deduction_sf: null,
+    standard_window_deduction_sf: null,
+    baseboard_opening_deduction_lf: null,
+    trim_paint_gallons: 1,
+  }
+
+  if (payload.rooms[0]) {
+    payload.rooms[0].condition_selections = { ROOM_OCCUPIED: 'active' }
+  }
+  if (payload.room_wall_scopes[0]) {
+    payload.room_wall_scopes[0].paint_product_id = ''
+    payload.room_wall_scopes[0].primer_product_id = null
+    payload.room_wall_scopes[0].condition_selections = { WALL_DAMAGE: 'moderate' }
+  }
+  if (payload.room_ceiling_scopes[0]) {
+    payload.room_ceiling_scopes[0].paint_product_id = null
+    payload.room_ceiling_scopes[0].primer_product_id = ''
+    payload.room_ceiling_scopes[0].condition_selections = { CEILING_STAIN: 'active' }
+  }
+  if (payload.room_trim_scopes[0]) {
+    payload.room_trim_scopes[0].paint_product_id = ''
+    payload.room_trim_scopes[0].primer_product_id = null
+    payload.room_trim_scopes[0].condition_selections = { TRIM_DETAIL: 'major' }
+  }
+  if (payload.room_door_scopes?.[0]) {
+    payload.room_door_scopes[0].paint_product_id = null
+    payload.room_door_scopes[0].primer_product_id = ''
+  }
+
+  payload.other = [
+    ...(payload.other ?? []),
+    {
+      id: 'other-drift-guard-1',
+      room_id: payload.rooms[0]?.room_id ?? 'R001',
+      active: 'Y',
+      pricing_mode: 'fixed',
+      fixed_amount: 125,
+      description: 'Drift guard add-on',
+      client_description: 'Drift guard add-on',
+    },
+  ]
+
+  return payload
+}
+
+function buildDriftGuardCatalogs(catalogs: EstimateV2Catalogs): EstimateV2Catalogs {
+  return {
+    ...catalogs,
+    paint_products: catalogs.paint_products.map((row) =>
+      row.id === DRIFT_GUARD_ORG_DEFAULTS.trim_paint_id ? { ...row, price_per_gal: 80 } : row
+    ) as EstimateV2Catalogs['paint_products'],
+    condition_modifiers: [
+      {
+        id: 'ROOM_OCCUPIED',
+        label: 'Occupied',
+        scope: 'room',
+        modifier_type: 'binary',
+        levels: { active: 1.1 },
+        active: 'Y',
+      },
+      {
+        id: 'WALL_DAMAGE',
+        label: 'Wall damage',
+        scope: 'wall',
+        modifier_type: 'severity',
+        levels: { moderate: 1.2 },
+        active: 'Y',
+      },
+      {
+        id: 'CEILING_STAIN',
+        label: 'Ceiling stain',
+        scope: 'ceiling',
+        modifier_type: 'binary',
+        levels: { active: 1.05 },
+        active: 'Y',
+      },
+      {
+        id: 'TRIM_DETAIL',
+        label: 'Trim detail',
+        scope: 'trim',
+        modifier_type: 'severity',
+        levels: { major: 1.15 },
+        active: 'Y',
+      },
+    ],
+  } as EstimateV2Catalogs
+}
+
+function buildCustomerSendResources(params: {
+  rows: EstimateChainParityDbRows
+  catalogs: EstimateV2Catalogs
+}): EstimateCustomerSendRawResources {
+  return {
+    estimate: params.rows.estimates as EstimateCustomerSendRawResources['estimate'],
+    job: params.rows.jobs as EstimateCustomerSendRawResources['job'],
+    customer: params.rows.customers as EstimateCustomerSendRawResources['customer'],
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '555-0100',
+      business_email: 'office@example.test',
+      address: '123 Paint St',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    quoteDefaults: {
+      default_template_key: DRIFT_GUARD_ORG_DEFAULTS.default_template_key,
+      quote_validity_days: DRIFT_GUARD_ORG_DEFAULTS.quote_validity_days,
+      terms_text: DRIFT_GUARD_ORG_DEFAULTS.terms_text,
+    },
+    settingsRow: DRIFT_GUARD_ORG_DEFAULTS,
+    jobsettings: params.rows.estimate_jobsettings,
+    rollupFinalTotal: asComparableNumber(params.rows.estimate_version_rollups.final_total),
+    catalogs: params.catalogs as EstimateCustomerSendRawResources['catalogs'],
+    rooms: params.rows.estimate_rooms,
+    wallScopes: params.rows.estimate_room_wall_scopes,
+    segments: [],
+    wallSegments: params.rows.estimate_segments.wallSegments,
+    ceilingSegments: [],
+    ceilingScopes: params.rows.estimate_room_ceiling_scopes,
+    ceilingScopeSegments: params.rows.estimate_room_ceiling_scope_segments,
+    trimScopes: params.rows.estimate_room_trim_scopes,
+    doorScopes: params.rows.estimate_room_door_scopes,
+    drywallRepairs: params.rows.estimate_drywall_repairs,
+    accessFees: params.rows.estimate_access_fees,
+    trimItems: params.rows.estimate_trim_items,
+    other: params.rows.estimate_other,
+    publicVersions: params.rows.estimate_public_versions,
+  } as unknown as EstimateCustomerSendRawResources
 }
 
 describe('Estimator V2 customer total save/load/summary chain parity', () => {
@@ -250,4 +519,259 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
       }
     })
   }
+
+  it('guards customer-visible calculation parity across save, load, preview, and customer-send', async () => {
+    Object.values(mocks).forEach((mock) => mock.mockReset())
+    const fixture = ESTIMATE_CHAIN_PARITY_SCENARIOS['full-room-quote']
+    const payload = buildDriftGuardPayload(fixture)
+    const catalogs = buildDriftGuardCatalogs(fixture.editorState.meta.catalogs)
+    const artifacts = buildEstimateChainParityArtifacts('full-room-quote', {
+      payload,
+      catalogs,
+      orgDefaults: DRIFT_GUARD_ORG_DEFAULTS,
+    })
+    const rows = buildEstimateChainParityDbRows(artifacts)
+    const expectedTotal = artifacts.calculationArtifacts.pricingSummary.finalTotal
+    const assertionErrors: Error[] = []
+
+    const preview = calculateEstimateV2Preview({
+      payload,
+      catalogs,
+      orgDefaults: DRIFT_GUARD_ORG_DEFAULTS,
+    })
+
+    const supabase = createLoadSupabaseStub(rows)
+    mocks.supabaseFrom.mockImplementation(supabase.from)
+    mocks.getEstimate.mockResolvedValue({ estimate: rows.estimates })
+    mocks.loadEstimateTemplateSettings.mockResolvedValue(DRIFT_GUARD_ORG_DEFAULTS)
+    mocks.loadEstimateV2CalculationCatalogs.mockResolvedValue(
+      artifacts.calculationArtifacts.calculationCatalogs
+    )
+    mocks.loadEstimateV2RoomModesForTrimFromDb.mockResolvedValue(new Map())
+    const loaded = (await loadEstimateV2Response({
+      requestOrigin: 'http://localhost:3000',
+      orgId: String(rows.estimates.org_id),
+      userId: 'user-drift-guard',
+      estimateId: String(rows.estimates.id),
+    })) as EstimateV2GetResponse
+
+    const resources = buildCustomerSendResources({ rows, catalogs })
+    const customerSendCalculated = await deriveEstimateCustomerSendCalculatedData(resources, {
+      requestOrigin: 'http://localhost:3000',
+      orgId: String(rows.estimates.org_id),
+      userId: 'user-drift-guard',
+      estimateId: String(rows.estimates.id),
+    })
+    if (!customerSendCalculated.ok) throw new Error(customerSendCalculated.message)
+    expect(customerSendCalculated.ok).toBe(true)
+    const customerContext = mapCustomerQuoteSourceModel({
+      origin: 'http://localhost:3000',
+      resources,
+      calculated: customerSendCalculated.data,
+    })
+    const customerDocument = buildCustomerDocumentFromSendContext({ context: customerContext })
+
+    for (const [hop, expected, actual] of [
+      ['canonical', expectedTotal, expectedTotal],
+      ['save-rollup', expectedTotal, asComparableNumber(rows.estimate_version_rollups.final_total)],
+      ['preview', expectedTotal, preview.pricingSummary.finalTotal],
+      ['load', expectedTotal, loaded.pricing_summary?.finalTotal],
+      ['customer-send-context', expectedTotal, customerContext.pricing_summary?.finalTotal],
+      ['customer-document', Math.round(expectedTotal), customerDocument.total],
+    ] as const) {
+      recordCustomerTotalAssertion(assertionErrors, {
+        scenario: 'full-room-quote drift guard',
+        hop,
+        expected,
+        actual,
+      })
+    }
+
+    expect(artifacts.calculationArtifacts.wallCalculations.scopes.length).toBeGreaterThan(0)
+    expect(artifacts.calculationArtifacts.ceilingCalculations.scopes.length).toBeGreaterThan(0)
+    expect(artifacts.calculationArtifacts.trimCalculations.scopes.length).toBeGreaterThan(0)
+    expect(artifacts.calculationArtifacts.doorCalculations.scopes.length).toBeGreaterThan(0)
+    expect(artifacts.calculationArtifacts.drywallCalculations.scopes.length).toBeGreaterThan(0)
+    expect(artifacts.calculationArtifacts.accessFeeCalculation.rows.length).toBeGreaterThan(0)
+    expect(artifacts.calculationArtifacts.otherCalculations.scopes.length).toBeGreaterThan(0)
+
+    expectRowsMatchFields({
+      label: 'wall engine canonical/preview',
+      expectedRows: artifacts.calculationArtifacts.wallCalculations.scopes,
+      actualRows: preview.walls.scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_id', 'paint_product_label', 'paint_prod_rate_sqft_per_hour', 'condition_factor'],
+    })
+    expectRowsMatchFields({
+      label: 'wall engine canonical/load',
+      expectedRows: artifacts.calculationArtifacts.wallCalculations.scopes,
+      actualRows: asComparableRows(loaded.wall_calculations?.scopes),
+      fields: ['effective_total', 'raw_total', 'paint_product_id', 'paint_product_label', 'paint_prod_rate_sqft_per_hour', 'condition_factor'],
+    })
+    expectRowsMatchFields({
+      label: 'ceiling engine canonical/preview',
+      expectedRows: artifacts.calculationArtifacts.ceilingCalculations.scopes,
+      actualRows: preview.ceilings.scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_id', 'paint_product_label', 'paint_prod_rate_sqft_per_hour', 'condition_factor'],
+    })
+    expectRowsMatchFields({
+      label: 'ceiling engine canonical/load',
+      expectedRows: artifacts.calculationArtifacts.ceilingCalculations.scopes,
+      actualRows: asComparableRows(loaded.ceiling_calculations?.scopes),
+      fields: ['effective_total', 'raw_total', 'paint_product_id', 'paint_product_label', 'paint_prod_rate_sqft_per_hour', 'condition_factor'],
+    })
+    expectRowsMatchFields({
+      label: 'trim engine canonical/preview',
+      expectedRows: artifacts.calculationArtifacts.trimCalculations.scopes,
+      actualRows: preview.trim.scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_id', 'paint_product_label', 'production_rate_id', 'condition_factor'],
+    })
+    expectRowsMatchFields({
+      label: 'trim engine canonical/load',
+      expectedRows: artifacts.calculationArtifacts.trimCalculations.scopes,
+      actualRows: asComparableRows(loaded.trim_calculations?.scopes),
+      fields: ['effective_total', 'raw_total', 'paint_product_id', 'paint_product_label', 'production_rate_id', 'condition_factor'],
+    })
+    expectRowsMatchFields({
+      label: 'door engine canonical/preview',
+      expectedRows: artifacts.calculationArtifacts.doorCalculations.scopes,
+      actualRows: preview.doors.scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_id', 'paint_product_label', 'condition_factor'],
+    })
+    expectRowsMatchFields({
+      label: 'door engine canonical/load',
+      expectedRows: artifacts.calculationArtifacts.doorCalculations.scopes,
+      actualRows: asComparableRows(loaded.door_calculations?.scopes),
+      fields: ['effective_total', 'raw_total', 'paint_product_id', 'paint_product_label', 'condition_factor'],
+    })
+    expectRowsMatchFields({
+      label: 'drywall engine canonical/preview',
+      expectedRows: artifacts.calculationArtifacts.drywallCalculations.scopes,
+      actualRows: preview.drywall.scopes,
+      fields: ['effective_total', 'calculated_total', 'effective_quantity'],
+    })
+    expectRowsMatchFields({
+      label: 'drywall engine canonical/load',
+      expectedRows: artifacts.calculationArtifacts.drywallCalculations.scopes,
+      actualRows: asComparableRows(loaded.drywall_calculations?.scopes),
+      fields: ['effective_total', 'calculated_total', 'effective_quantity'],
+    })
+    expectRowsMatchFields({
+      label: 'other canonical/preview',
+      expectedRows: artifacts.calculationArtifacts.otherCalculations.scopes,
+      actualRows: preview.other.scopes,
+      fields: ['effective_total', 'pricing_mode'],
+    })
+    expectRowsMatchFields({
+      label: 'access canonical/preview',
+      expectedRows: accessFeeComparableRows(artifacts.calculationArtifacts.accessFeeCalculation.rows),
+      actualRows: accessFeeComparableRows(preview.accessFees.rows),
+      fields: ['label', 'access_group', 'catalog_amount', 'calculated_total', 'effective_total', 'overridden'],
+    })
+
+    expectRowsMatchFields({
+      label: 'wall save/load/customer',
+      expectedRows: rows.estimate_room_wall_scopes,
+      actualRows: loaded.inputs.room_wall_scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_label', 'paint_product_id'],
+    })
+    expectRowsMatchFields({
+      label: 'wall save/customer-send',
+      expectedRows: loaded.inputs.room_wall_scopes,
+      actualRows: customerContext.inputs.room_wall_scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_label', 'paint_product_id'],
+    })
+    expectRowsMatchFields({
+      label: 'ceiling save/load/customer',
+      expectedRows: rows.estimate_room_ceiling_scopes,
+      actualRows: loaded.inputs.room_ceiling_scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_label', 'paint_product_id'],
+    })
+    expectRowsMatchFields({
+      label: 'ceiling save/customer-send',
+      expectedRows: loaded.inputs.room_ceiling_scopes,
+      actualRows: customerContext.inputs.room_ceiling_scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_label', 'paint_product_id'],
+    })
+    expectRowsMatchFields({
+      label: 'trim save/load/customer',
+      expectedRows: rows.estimate_room_trim_scopes,
+      actualRows: loaded.inputs.room_trim_scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_label', 'paint_product_id'],
+    })
+    expectRowsMatchFields({
+      label: 'trim save/customer-send',
+      expectedRows: loaded.inputs.room_trim_scopes,
+      actualRows: customerContext.inputs.room_trim_scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_label', 'paint_product_id'],
+    })
+    expectRowsMatchFields({
+      label: 'door save/load/customer',
+      expectedRows: rows.estimate_room_door_scopes,
+      actualRows: asComparableRows(loaded.inputs.room_door_scopes),
+      fields: ['effective_total', 'raw_total', 'paint_product_label', 'paint_product_id'],
+    })
+    expectRowsMatchFields({
+      label: 'door save/customer-send',
+      expectedRows: asComparableRows(loaded.inputs.room_door_scopes),
+      actualRows: customerContext.inputs.room_door_scopes,
+      fields: ['effective_total', 'raw_total', 'paint_product_label', 'paint_product_id'],
+    })
+    expectRowsMatchFields({
+      label: 'drywall save/load/customer',
+      expectedRows: rows.estimate_drywall_repairs,
+      actualRows: asComparableRows(loaded.inputs.drywall_repairs),
+      fields: ['effective_total', 'calculated_total', 'effective_quantity'],
+    })
+    expectRowsMatchFields({
+      label: 'drywall save/customer-send',
+      expectedRows: asComparableRows(loaded.inputs.drywall_repairs),
+      actualRows: asComparableRows(customerContext.inputs.drywall_repairs),
+      fields: ['effective_total', 'calculated_total', 'effective_quantity'],
+    })
+    expectRowsMatchFields({
+      label: 'access save/load/customer',
+      expectedRows: accessFeeComparableRows(rows.estimate_access_fees),
+      actualRows: accessFeeComparableRows(loaded.inputs.access_fees),
+      fields: ['label', 'access_group', 'catalog_amount', 'calculated_total', 'effective_total'],
+    })
+    expectRowsMatchFields({
+      label: 'access save/customer-send',
+      expectedRows: accessFeeComparableRows(loaded.inputs.access_fees),
+      actualRows: accessFeeComparableRows(customerContext.inputs.access_fees),
+      fields: ['label', 'access_group', 'catalog_amount', 'calculated_total', 'effective_total', 'overridden'],
+    })
+    expectRowsMatchFields({
+      label: 'other save/load/customer',
+      expectedRows: rows.estimate_other,
+      actualRows: loaded.inputs.other,
+      fields: ['effective_total', 'pricing_mode'],
+    })
+    expectRowsMatchFields({
+      label: 'other save/customer-send',
+      expectedRows: loaded.inputs.other,
+      actualRows: customerContext.inputs.other,
+      fields: ['effective_total', 'pricing_mode'],
+    })
+
+    expect(artifacts.calculationArtifacts.wallCalculations.scopes[0]?.paint_product_id).toBe(
+      DRIFT_GUARD_ORG_DEFAULTS.walls_paint_id
+    )
+    expect(artifacts.calculationArtifacts.ceilingCalculations.scopes[0]?.paint_product_id).toBe(
+      DRIFT_GUARD_ORG_DEFAULTS.ceiling_paint_id
+    )
+    expect(artifacts.calculationArtifacts.trimCalculations.scopes[0]?.paint_product_id).toBe(
+      DRIFT_GUARD_ORG_DEFAULTS.trim_paint_id
+    )
+    expect(artifacts.calculationArtifacts.wallCalculations.scopes[0]?.condition_factor).toBeCloseTo(1.32, 4)
+    expect(artifacts.calculationArtifacts.ceilingCalculations.scopes[0]?.condition_factor).toBeCloseTo(1.155, 4)
+    expect(artifacts.calculationArtifacts.trimCalculations.scopes[0]?.condition_factor).toBeCloseTo(1.265, 4)
+    expect(artifacts.calculationArtifacts.doorCalculations.scopes[0]?.condition_factor).toBeCloseTo(1.1, 4)
+    expect(artifacts.calculationArtifacts.wallCalculations.scopes[0]?.paint_prod_rate_sqft_per_hour).toBeGreaterThan(0)
+    expect(artifacts.calculationArtifacts.trimCalculations.scopes[0]?.production_rate_id).toBeTruthy()
+    supabase.assertAllExpectedTablesUsed()
+
+    if (assertionErrors.length > 0) {
+      throw new AggregateError(assertionErrors, 'Estimate V2 drift guard total parity failed')
+    }
+  })
 })

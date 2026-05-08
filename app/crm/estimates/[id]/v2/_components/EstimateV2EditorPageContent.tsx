@@ -3,6 +3,7 @@
 import { useEstimateV2Editor } from '../_state/useEstimateV2Editor'
 import { useEstimateV2EditorPageUiState } from '../_state/useEstimateV2EditorPageUiState'
 import { useEffect } from 'react'
+import { CrmConfirmDialog } from '@/app/crm/_components/CrmConfirmDialog'
 import {
   buildLastOpenedQuoteRecord,
   writeLastOpenedQuote,
@@ -23,6 +24,14 @@ import { EstimateV2SummaryRail } from './EstimateV2SummaryRail'
 import { EstimateV2UnsavedNavigationDialog } from './EstimateV2UnsavedNavigationDialog'
 import { estimateV2EditorPageStyles } from './estimateV2EditorPageStyles'
 import { useEstimateV2SidebarCollapse } from './useEstimateV2SidebarCollapse'
+import { ESTIMATE_V2_SAVE_FAILURE_MESSAGE } from '@/lib/estimator/v2WallsAutosave'
+
+const FATAL_EDITOR_LOAD_TITLE = "We couldn't load this editor"
+const FATAL_EDITOR_LOAD_MESSAGE =
+  'Try again. If this keeps happening, go back and reopen this page.'
+const CATALOGS_LOAD_WARNING_TITLE = "Rates and products couldn't be loaded"
+const CATALOGS_LOAD_WARNING_MESSAGE =
+  'Some choices may be unavailable until you try again.'
 
 export function EstimateV2EditorPageContent({
   estimateId,
@@ -47,6 +56,10 @@ export function EstimateV2EditorPageContent({
     saveVm,
     navigationVm,
     navigationActions,
+    reloadCatalogs,
+    reloadWorkspace,
+    destructiveConfirmVm,
+    destructiveConfirmActions,
     toDisplayNumber,
   } = useEstimateV2Editor({ estimateId, routeFamily: resolvedRouteFamily })
 
@@ -71,6 +84,10 @@ export function EstimateV2EditorPageContent({
     pageVm.error && !pageVm.loading && !headerVm.resumeRecord.estimate
       ? pageVm.error.message
       : null
+  const visiblePageErrorMessage =
+    pageVm.error && saveVm.saveStatus === 'error'
+      ? ESTIMATE_V2_SAVE_FAILURE_MESSAGE
+      : pageVm.error?.message ?? null
 
   if (fatalLoadErrorMessage) {
     return (
@@ -91,7 +108,33 @@ export function EstimateV2EditorPageContent({
               color: '#fecaca',
             }}
           >
-            {fatalLoadErrorMessage}
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 'calc(18px + 4pt)', fontWeight: 600 }}>
+                  {FATAL_EDITOR_LOAD_TITLE}
+                </div>
+                <p style={{ margin: '6px 0 0', color: '#fee2e2' }}>
+                  {FATAL_EDITOR_LOAD_MESSAGE}
+                </p>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={reloadWorkspace}
+                  style={{
+                    borderRadius: 10,
+                    border: '1px solid rgba(254,202,202,0.45)',
+                    background: '#fee2e2',
+                    color: '#7f1d1d',
+                    fontWeight: 600,
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
           </div>
         </main>
       </div>
@@ -124,9 +167,76 @@ export function EstimateV2EditorPageContent({
         />
 
         <main className="estimate-v2-workspace-main" style={{ display: 'grid', gap: 14, paddingBottom: 88 }}>
-          {pageVm.error && (
+          {pageVm.catalogsError && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                ...estimateV2EditorPageStyles.panel,
+                borderColor: 'rgba(250,204,21,0.28)',
+                background: 'rgba(120,53,15,0.16)',
+                color: '#fde68a',
+              }}
+            >
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 'calc(16px + 4pt)', fontWeight: 600 }}>
+                    {CATALOGS_LOAD_WARNING_TITLE}
+                  </div>
+                  <p style={{ margin: '6px 0 0', color: '#fef3c7' }}>
+                    {CATALOGS_LOAD_WARNING_MESSAGE}
+                  </p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => void reloadCatalogs()}
+                    disabled={pageVm.catalogsReloading}
+                    style={{
+                      borderRadius: 10,
+                      border: '1px solid rgba(250,204,21,0.38)',
+                      background: pageVm.catalogsReloading ? 'rgba(250,204,21,0.18)' : '#fef3c7',
+                      color: '#78350f',
+                      fontWeight: 600,
+                      padding: '10px 16px',
+                      cursor: pageVm.catalogsReloading ? 'default' : 'pointer',
+                    }}
+                  >
+                    {pageVm.catalogsReloading ? 'Retrying catalogs...' : 'Retry catalogs'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {pageVm.configurationWarning && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                ...estimateV2EditorPageStyles.panel,
+                borderColor: 'rgba(251,191,36,0.28)',
+                background: 'rgba(113,63,18,0.2)',
+                color: '#fde68a',
+              }}
+            >
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 'calc(16px + 4pt)', fontWeight: 600 }}>
+                    {pageVm.configurationWarning.title}
+                  </div>
+                  <p style={{ margin: '6px 0 0', color: '#fef3c7' }}>
+                    {pageVm.configurationWarning.detail}
+                  </p>
+                </div>
+                <div style={{ color: '#fde68a' }}>{pageVm.configurationWarning.fixHint}</div>
+              </div>
+            </div>
+          )}
+
+          {visiblePageErrorMessage && (
             <div role="alert" aria-live="assertive" style={{ ...estimateV2EditorPageStyles.panel, borderColor: 'rgba(248,113,113,0.28)', background: 'rgba(127,29,29,0.18)', color: '#fecaca' }}>
-              {pageVm.error.message}
+              {visiblePageErrorMessage}
             </div>
           )}
 
@@ -225,6 +335,19 @@ export function EstimateV2EditorPageContent({
 
       <EstimateV2SettingsDrawer styles={estimateV2EditorPageStyles} jobSettingsVm={jobSettingsVm} />
 
+      <CrmConfirmDialog
+        isOpen={destructiveConfirmVm.isOpen}
+        labelledBy={destructiveConfirmVm.labelledBy}
+        title={destructiveConfirmVm.title}
+        description={destructiveConfirmVm.description}
+        closeLabel={destructiveConfirmVm.closeLabel}
+        warning={destructiveConfirmVm.warning}
+        info={destructiveConfirmVm.info}
+        confirmLabel={destructiveConfirmVm.confirmLabel}
+        confirmAriaLabel={destructiveConfirmVm.confirmAriaLabel}
+        onConfirm={() => void destructiveConfirmActions.confirm()}
+        onCancel={destructiveConfirmActions.cancel}
+      />
       <EstimateV2UnsavedNavigationDialog {...navigationVm.unsavedDialogProps} />
     </div>
   )

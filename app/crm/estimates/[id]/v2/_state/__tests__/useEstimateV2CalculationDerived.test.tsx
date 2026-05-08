@@ -430,7 +430,9 @@ describe('useEstimateV2CalculationDerived', () => {
 
   it('accepts the legacy wrapper meta shape without org job product defaults', () => {
     const { params } = buildHookParams()
-    const { orgJobProductDefaults: _omitted, ...legacyMeta } = params.meta
+    const legacyMeta = Object.fromEntries(
+      Object.entries(params.meta).filter(([key]) => key !== 'orgJobProductDefaults')
+    ) as typeof params.meta
     const cleanSnapshot = buildEstimateV2DirtySnapshot({
       jobSettingsDraft: params.meta.jobSettingsDraft,
       rooms: params.collections.rooms,

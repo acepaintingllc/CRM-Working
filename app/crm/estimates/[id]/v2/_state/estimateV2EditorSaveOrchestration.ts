@@ -21,6 +21,7 @@ import {
   normalizeDrywallRepair,
   resolveRoomModeById,
 } from '../_lib/estimateV2EditorNormalize'
+import { formatEstimateV2ScopeLabel } from './estimateV2DestructiveConfirm'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import { buildEstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import type { NormalizedDomain, Unsafe } from './estimateV2EditorTypes'
@@ -113,6 +114,245 @@ function excludedCalculationScopeIdsFrom(value: unknown) {
   }
 
   return ids
+}
+
+function sortRowsByPosition<T extends { position: number }>(rows: T[]) {
+  return [...rows].sort((a, b) => a.position - b.position)
+}
+
+function buildReadableRoomLabel(room: { roomName: string; position: number }, roomId: string) {
+  const trimmedName = room.roomName.trim()
+  return trimmedName || `Room ${room.position + 1}` || roomId
+}
+
+function buildIndexedFallback(label: string, position: number) {
+  return `${label} ${position + 1}`
+}
+
+function normalizeIssueText(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function asNullableNumber(value: unknown) {
+  if (value == null || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+type EstimateV2ValidationCollections = EstimateV2SavePayloadPreparationInput['collections']
+
+function resolveTrimScopeLabel(
+  scope: NonNullable<EstimateV2ValidationCollections['trimScopes']>[number]
+) {
+  return formatEstimateV2ScopeLabel(scope.scopeName, buildIndexedFallback('Trim item', scope.position))
+}
+
+function resolveDoorScopeLabel(
+  scope: NonNullable<EstimateV2ValidationCollections['doorScopes']>[number]
+) {
+  return formatEstimateV2ScopeLabel(scope.scopeName, buildIndexedFallback('Door scope', scope.position))
+}
+
+function resolveWallScopeLabel(
+  scope: NonNullable<EstimateV2ValidationCollections['scopes']>[number]
+) {
+  return formatEstimateV2ScopeLabel(scope.scopeName, buildIndexedFallback('Wall scope', scope.position))
+}
+
+function resolveCeilingScopeLabel(
+  scope: NonNullable<EstimateV2ValidationCollections['ceilingScopes']>[number]
+) {
+  return formatEstimateV2ScopeLabel(
+    scope.scopeName,
+    buildIndexedFallback('Ceiling scope', scope.position)
+  )
+}
+
+function resolveDrywallRepairLabel(
+  repair: NonNullable<EstimateV2ValidationCollections['drywallRepairs']>[number]
+) {
+  const surfaceLabel = repair.surface === 'ceiling' ? 'Ceiling drywall repair' : 'Wall drywall repair'
+  return buildIndexedFallback(surfaceLabel, repair.position)
+}
+
+function findSingleMatchingScopeLabel<T>(
+  rows: T[],
+  predicate: (row: T) => boolean,
+  getLabel: (row: T) => string,
+  fallbackLabel: string
+) {
+  const matches = rows.filter(predicate)
+  return matches.length === 1 ? getLabel(matches[0]) : fallbackLabel
+}
+
+function formatIssueBody(
+  message: string,
+  roomId: string,
+  collections: EstimateV2ValidationCollections
+) {
+  const trimScopes = sortRowsByPosition(
+    (collections.trimScopes ?? []).filter((scope) => scope.roomId === roomId)
+  )
+  const doorScopes = sortRowsByPosition(
+    (collections.doorScopes ?? []).filter((scope) => scope.roomId === roomId)
+  )
+  const wallScopes = sortRowsByPosition(
+    (collections.scopes ?? []).filter((scope) => scope.roomId === roomId)
+  )
+  const ceilingScopes = sortRowsByPosition(
+    (collections.ceilingScopes ?? []).filter((scope) => scope.roomId === roomId)
+  )
+  const drywallRepairs = sortRowsByPosition(
+    (collections.drywallRepairs ?? []).filter((repair) => repair.roomId === roomId)
+  )
+
+  const formatted = message
+    .replace(/\btrim scope ([^:]+)\b/gi, (_, scopeId: string) => {
+      const scope = trimScopes.find((entry) => entry.id === scopeId)
+      return scope ? resolveTrimScopeLabel(scope) : 'Trim item'
+    })
+    .replace(/\bdoor scope ([^:]+)\b/gi, (_, scopeId: string) => {
+      const scope = doorScopes.find((entry) => entry.id === scopeId)
+      return scope ? resolveDoorScopeLabel(scope) : 'Door scope'
+    })
+    .replace(/\bwall scope ([^:]+)\b/gi, (_, scopeId: string) => {
+      const scope = wallScopes.find((entry) => entry.id === scopeId)
+      return scope ? resolveWallScopeLabel(scope) : 'Wall scope'
+    })
+    .replace(/\bceiling scope ([^:]+)\b/gi, (_, scopeId: string) => {
+      const scope = ceilingScopes.find((entry) => entry.id === scopeId)
+      return scope ? resolveCeilingScopeLabel(scope) : 'Ceiling scope'
+    })
+    .replace(/\bdrywall repair (?!type\b|id\b)([^:]+)\b/gi, (_, repairId: string) => {
+      const repair = drywallRepairs.find((entry) => entry.id === repairId)
+      return repair ? resolveDrywallRepairLabel(repair) : 'Drywall repair'
+    })
+
+  const normalized = normalizeIssueText(formatted)
+
+  if (normalized === 'door type is required') {
+    const label = findSingleMatchingScopeLabel(
+      doorScopes,
+      (scope) => scope.include === 'Y' && !scope.doorTypeId.trim(),
+      resolveDoorScopeLabel,
+      'Door scope'
+    )
+    return `${label}: door type is required`
+  }
+  if (normalized === 'door quantity is required') {
+    const label = findSingleMatchingScopeLabel(
+      doorScopes,
+      (scope) => scope.include === 'Y' && asNullableNumber(scope.quantity) == null,
+      resolveDoorScopeLabel,
+      'Door scope'
+    )
+    return `${label}: door quantity is required`
+  }
+  if (normalized === 'door quantity must be nonnegative') {
+    const label = findSingleMatchingScopeLabel(
+      doorScopes,
+      (scope) => {
+        const quantity = asNullableNumber(scope.quantity)
+        return scope.include === 'Y' && quantity != null && quantity < 0
+      },
+      resolveDoorScopeLabel,
+      'Door scope'
+    )
+    return `${label}: door quantity must be nonnegative`
+  }
+  if (normalized === 'door sides is required') {
+    const label = findSingleMatchingScopeLabel(
+      doorScopes,
+      (scope) => scope.include === 'Y' && asNullableNumber(scope.sides) == null,
+      resolveDoorScopeLabel,
+      'Door scope'
+    )
+    return `${label}: door sides are required`
+  }
+  if (normalized === 'door sides must be 1 or 2') {
+    const label = findSingleMatchingScopeLabel(
+      doorScopes,
+      (scope) => {
+        const sides = asNullableNumber(scope.sides)
+        return scope.include === 'Y' && sides != null && sides !== 1 && sides !== 2
+      },
+      resolveDoorScopeLabel,
+      'Door scope'
+    )
+    return `${label}: door sides must be 1 or 2`
+  }
+  if (normalized === 'drywall repair type is required') {
+    const label = findSingleMatchingScopeLabel(
+      drywallRepairs,
+      (repair) => !repair.repairType.trim(),
+      resolveDrywallRepairLabel,
+      'Drywall repair'
+    )
+    return `${label}: repair type is required`
+  }
+  if (normalized === 'drywall quantity is required') {
+    const label = findSingleMatchingScopeLabel(
+      drywallRepairs,
+      (repair) => asNullableNumber(repair.quantity) == null,
+      resolveDrywallRepairLabel,
+      'Drywall repair'
+    )
+    return `${label}: quantity is required`
+  }
+  if (normalized === 'drywall quantity must be nonnegative') {
+    const label = findSingleMatchingScopeLabel(
+      drywallRepairs,
+      (repair) => {
+        const quantity = asNullableNumber(repair.quantity)
+        return quantity != null && quantity < 0
+      },
+      resolveDrywallRepairLabel,
+      'Drywall repair'
+    )
+    return `${label}: quantity must be nonnegative`
+  }
+  if (normalized === 'drywall repair type is not valid for ceiling') {
+    const label = findSingleMatchingScopeLabel(
+      drywallRepairs,
+      (repair) => repair.surface === 'ceiling',
+      resolveDrywallRepairLabel,
+      'Ceiling drywall repair'
+    )
+    return `${label}: repair type is not valid for the ceiling`
+  }
+  if (normalized === 'drywall repair type is not valid for wall') {
+    const label = findSingleMatchingScopeLabel(
+      drywallRepairs,
+      (repair) => repair.surface === 'wall',
+      resolveDrywallRepairLabel,
+      'Wall drywall repair'
+    )
+    return `${label}: repair type is not valid for the wall`
+  }
+
+  return formatted
+}
+
+export function formatEstimateV2ValidationIssues(params: {
+  issues: string[]
+  collections: EstimateV2ValidationCollections
+}) {
+  const roomById = new Map(
+    params.collections.rooms.map((room) => [room.roomId, room] as const)
+  )
+
+  return params.issues.map((issue) => {
+    const roomMatch = issue.match(/^([^:]+):\s*(.+)$/)
+    if (!roomMatch) return issue
+
+    const [, roomId, message] = roomMatch
+    const room = roomById.get(roomId)
+    if (!room) return issue
+
+    const roomLabel = buildReadableRoomLabel(room, roomId)
+    const formattedBody = formatIssueBody(message, roomId, params.collections)
+    return `${roomLabel}: ${formattedBody}`
+  })
 }
 
 export function collectEstimateV2CalculationMissingInputIssues(params: {
@@ -357,13 +597,18 @@ export function validateEstimateV2PreparedSave(params: {
     allowIncomplete,
   })
 
-  return filterNonBlockingEstimateV2ValidationIssues([
+  const rawIssues = filterNonBlockingEstimateV2ValidationIssues([
     ...wallIssues,
     ...ceilingIssues,
     ...trimIssues,
     ...doorIssues,
     ...drywallIssues,
   ])
+
+  return formatEstimateV2ValidationIssues({
+    issues: rawIssues,
+    collections,
+  })
 }
 
 export function deriveEstimateV2PreparedSaveValidation(params: {

@@ -548,6 +548,39 @@ describe('useEstimateV2SaveController', () => {
     }
   })
 
+  it('allows a second manual save retry after a failed save and clears the error on success', async () => {
+    const harness = createSaveHarness()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    saveEstimateV2InputsMock
+      .mockResolvedValueOnce(createSaveResult(false, { error: 'Server save blew up' }))
+      .mockResolvedValueOnce(createSaveResult(true, { data: harness.fixture.summaryData }))
+
+    try {
+      const { result } = renderHook(() =>
+        useEstimateV2SaveController({
+          estimateId: harness.fixture.estimate.id,
+          routeFamily: estimateRouteFamily,
+          store: harness.store,
+          currentSnapshot: buildCurrentStoreSnapshot(harness.store),
+          dirty: true,
+          effectiveJobProductDefaults: harness.effectiveJobProductDefaults,
+        })
+      )
+
+      await expect(result.current.save('manual')).resolves.toBe(false)
+      expect(harness.store.getState().meta.error?.message).toBe('Server save blew up')
+      expect(harness.store.getState().meta.saveStatus).toBe('error')
+
+      await expect(result.current.save('manual')).resolves.toBe(true)
+
+      expect(saveEstimateV2InputsMock).toHaveBeenCalledTimes(2)
+      expect(harness.store.getState().meta.error).toBeNull()
+      expect(harness.store.getState().meta.saveStatus).toBe('saved')
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   it('exposes manual save state transitions from idle to saving to saved', async () => {
     const harness = createSaveHarness()
     const pendingSave = deferred<ReturnType<typeof createSaveResult>>()
@@ -1079,7 +1112,7 @@ describe('useEstimateV2SaveController', () => {
     expect(saveEstimateV2InputsMock).not.toHaveBeenCalled()
     expect(harness.store.getState().meta.saveStatus).toBe('blocked')
     expect(harness.store.getState().meta.validationIssues).toEqual([
-      'R001: trim scope trim-r001-main: total override must be blank or a nonnegative finite number',
+      'Living Room: Baseboards: total override must be blank or a nonnegative finite number',
     ])
     expect(
       harness.store.getState().collections.trimScopes.find((scope) => scope.id === 'trim-r001-main')
@@ -1114,9 +1147,9 @@ describe('useEstimateV2SaveController', () => {
     expect(harness.store.getState().meta.saveStatus).toBe('blocked')
     expect(harness.store.getState().meta.autoSaveHint).toContain('door type is required')
     expect(harness.store.getState().meta.validationIssues).toEqual([
-      'R001: door type is required',
-      'R001: door quantity is required',
-      'R001: door sides must be 1 or 2',
+      'Living Room: Living Room Door: door type is required',
+      'Living Room: Living Room Door: door quantity is required',
+      'Living Room: Living Room Door: door sides must be 1 or 2',
     ])
   })
 
@@ -1146,8 +1179,8 @@ describe('useEstimateV2SaveController', () => {
     expect(saveEstimateV2InputsMock).not.toHaveBeenCalled()
     expect(harness.store.getState().meta.saveStatus).toBe('blocked')
     expect(harness.store.getState().meta.validationIssues).toEqual([
-      'R001: drywall repair type is not valid for ceiling',
-      'R001: drywall quantity must be nonnegative',
+      'Living Room: Ceiling drywall repair 1: repair type is not valid for the ceiling',
+      'Living Room: Ceiling drywall repair 1: quantity must be nonnegative',
     ])
   })
 

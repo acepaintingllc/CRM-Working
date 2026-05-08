@@ -17,6 +17,7 @@ import {
   calculateEstimateV2ArtifactsFromPayload,
   type EstimateV2CalculationCatalogBundle,
 } from '../calculationOrchestration'
+import type { EstimateTemplateSettingsRow } from '../../estimateTemplateSettings'
 import type { EstimateV2Catalogs, EstimateV2PricingSummary, EstimateV2SavePayload } from '@/types/estimator/v2'
 
 export const ESTIMATE_CHAIN_PARITY_SCENARIOS = {
@@ -55,10 +56,8 @@ export type EstimateChainParityDbRows = {
   estimate_rooms: DbLikeRow[]
   estimate_room_wall_scopes: DbLikeRow[]
   estimate_segments: {
-    legacyRoomSegments: DbLikeRow[]
     wallSegments: DbLikeRow[]
   }
-  estimate_ceiling_segments: DbLikeRow[]
   estimate_room_ceiling_scopes: DbLikeRow[]
   estimate_room_ceiling_scope_segments: DbLikeRow[]
   estimate_room_trim_scopes: DbLikeRow[]
@@ -140,14 +139,19 @@ export function buildEstimateChainParityPayload(fixture: EstimateV2CanonicalFixt
 }
 
 export function buildEstimateChainParityArtifacts(
-  scenario: EstimateChainParityScenario
+  scenario: EstimateChainParityScenario,
+  overrides: {
+    payload?: EstimateV2SavePayload
+    catalogs?: EstimateV2Catalogs
+    orgDefaults?: EstimateTemplateSettingsRow | null
+  } = {}
 ): EstimateChainParityFixtureArtifacts {
   const fixture = ESTIMATE_CHAIN_PARITY_SCENARIOS[scenario]
-  const payload = buildEstimateChainParityPayload(fixture)
+  const payload = overrides.payload ?? buildEstimateChainParityPayload(fixture)
   const calculationArtifacts = calculateEstimateV2ArtifactsFromPayload({
     payload,
-    calculationCatalogs: toServerCatalogBundle(fixture.editorState.meta.catalogs),
-    orgDefaults: null,
+    calculationCatalogs: toServerCatalogBundle(overrides.catalogs ?? fixture.editorState.meta.catalogs),
+    orgDefaults: overrides.orgDefaults ?? null,
   })
 
   return {
@@ -336,10 +340,8 @@ export function buildEstimateChainParityDbRows(
     estimate_rooms: withRowsMeta(artifacts.payload.rooms, meta),
     estimate_room_wall_scopes: withRowsMeta(artifacts.calculationArtifacts.quoteWallScopes, meta),
     estimate_segments: {
-      legacyRoomSegments: [],
       wallSegments: withRowsMeta(artifacts.calculationArtifacts.wallCalculations.segments, meta),
     },
-    estimate_ceiling_segments: [],
     estimate_room_ceiling_scopes: withRowsMeta(artifacts.calculationArtifacts.quoteCeilingScopes, meta),
     estimate_room_ceiling_scope_segments: withRowsMeta(
       artifacts.calculationArtifacts.ceilingCalculations.segments,
@@ -430,9 +432,7 @@ export function buildEstimateChainParityTablePlan(rows: EstimateChainParityDbRow
   pushTablePlan(plan, 'estimate_version_rollups', queryResult(rows.estimate_version_rollups))
   pushTablePlan(plan, 'estimate_rooms', queryResult(rows.estimate_rooms))
   pushTablePlan(plan, 'estimate_room_wall_scopes', queryResult(rows.estimate_room_wall_scopes))
-  pushTablePlan(plan, 'estimate_segments', queryResult(rows.estimate_segments.legacyRoomSegments))
   pushTablePlan(plan, 'estimate_segments', queryResult(rows.estimate_segments.wallSegments))
-  pushTablePlan(plan, 'estimate_ceiling_segments', queryResult(rows.estimate_ceiling_segments))
   pushTablePlan(plan, 'estimate_room_ceiling_scopes', queryResult(rows.estimate_room_ceiling_scopes))
   pushTablePlan(
     plan,

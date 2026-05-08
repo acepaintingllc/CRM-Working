@@ -3,6 +3,15 @@ import type {
   EstimateV2ConditionModifier as EstimateV2LegacyConditionModifier,
   EstimateV2ConditionSelections as EstimateV2LegacyConditionSelections,
 } from '@/lib/estimator/conditionModifiers'
+import type {
+  EstimateV2CeilingScopeSaveRow,
+  EstimateV2CeilingSegmentSaveRow,
+  EstimateV2DoorScopeSaveRow,
+  EstimateV2DrywallRepairSaveRow,
+  EstimateV2TrimScopeSaveRow,
+  EstimateV2WallScopeSaveRow,
+  EstimateV2WallSegmentSaveRow,
+} from '@/types/estimator/v2Boundary'
 
 // Condition modifier types — room & scope conditions on the details page
 
@@ -85,7 +94,7 @@ export type EstimateV2SupplyRateOption = {
   supply_group?: string | null
   scope?: string | null
   unit?: string | null
-  value: number
+  value: number | null
   crew_multiplier?: 'Y' | 'N' | string | null
 }
 
@@ -311,15 +320,13 @@ export type EstimateV2ResponseInputs = {
   org_defaults: EstimateV2JobSettingsInput | null
   paint_products: EstimateV2PaintProductRow[]
   rooms: EstimateV2RoomInputRow[]
-  room_wall_scopes: UnsafeRecord[]
-  segments: UnsafeRecord[]
-  wall_segments: UnsafeRecord[]
-  ceiling_segments: UnsafeRecord[]
-  room_ceiling_scopes: UnsafeRecord[]
-  ceiling_scope_segments: UnsafeRecord[]
-  room_trim_scopes: UnsafeRecord[]
-  room_door_scopes?: UnsafeRecord[]
-  drywall_repairs?: UnsafeRecord[]
+  room_wall_scopes: EstimateV2WallScopeSaveRow[]
+  wall_segments: EstimateV2WallSegmentSaveRow[]
+  room_ceiling_scopes: EstimateV2CeilingScopeSaveRow[]
+  ceiling_scope_segments: EstimateV2CeilingSegmentSaveRow[]
+  room_trim_scopes: EstimateV2TrimScopeSaveRow[]
+  room_door_scopes?: EstimateV2DoorScopeSaveRow[]
+  drywall_repairs?: EstimateV2DrywallRepairSaveRow[]
   rollers: EstimateV2RollerInputRow[]
   prejob: UnsafeRecord[]
   trim_items: UnsafeRecord[]
@@ -693,22 +700,29 @@ export type EstimateV2WallScopeDerived = {
 
 export type EstimateV2SavePayload = {
   jobsettings: {
-    labor_day_policy_enabled: boolean
-    dayhours: number
-    rounding_increment_hours: number
-    override_labor_rate: number
-    job_minimum_enabled: boolean
-    job_minimum_amount: number
-    crew_size: number
+    labor_day_policy_enabled: boolean | null
+    dayhours: number | null
+    rounding_increment_hours: number | null
+    override_labor_rate: number | null
+    job_minimum_enabled: boolean | null
+    job_minimum_amount: number | null
+    crew_size: number | null
     walls_paint_id: string | null
     walls_primer_id: string | null
     ceiling_paint_id: string | null
     ceiling_primer_id: string | null
     trim_paint_id: string | null
     trim_primer_id: string | null
-    standard_door_deduction_sf: number
-    standard_window_deduction_sf: number
-    baseboard_opening_deduction_lf: number
+    trim_paint_gallons?: number | null
+    trim_paint_quarts?: number | null
+    trim_paint_qty?: number | null
+    trim_paint_uom?: string | null
+    trim_primer_qty?: number | null
+    trim_primer_uom?: string | null
+    paint_supplied_by?: string | null
+    standard_door_deduction_sf: number | null
+    standard_window_deduction_sf: number | null
+    baseboard_opening_deduction_lf: number | null
     condition_selections: EstimateV2ConditionSelections | null
   }
   rooms: Array<{
@@ -724,8 +738,8 @@ export type EstimateV2SavePayload = {
     wallheight_in: number | null
     condition_selections: EstimateV2LegacyConditionSelections | null
   }>
-  room_wall_scopes: UnsafeRecord[]
-  wall_segments: UnsafeRecord[]
+  room_wall_scopes: EstimateV2WallScopeSaveRow[]
+  wall_segments: EstimateV2WallSegmentSaveRow[]
   room_flags: EstimateV2RoomFlagRow[]
   rollers: Array<{
     id: string
@@ -747,10 +761,10 @@ export type EstimateV2SavePayload = {
     position: number
     active: 'Y'
   }>
-  room_ceiling_scopes: UnsafeRecord[]
-  ceiling_scope_segments: UnsafeRecord[]
-  room_trim_scopes: UnsafeRecord[]
-  room_door_scopes?: UnsafeRecord[]
-  drywall_repairs?: UnsafeRecord[]
+  room_ceiling_scopes: EstimateV2CeilingScopeSaveRow[]
+  ceiling_scope_segments: EstimateV2CeilingSegmentSaveRow[]
+  room_trim_scopes: EstimateV2TrimScopeSaveRow[]
+  room_door_scopes?: EstimateV2DoorScopeSaveRow[]
+  drywall_repairs?: EstimateV2DrywallRepairSaveRow[]
   other?: UnsafeRecord[]
 }

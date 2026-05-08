@@ -326,11 +326,11 @@ describe('estimateV2EditorSaveOrchestration', () => {
     })
 
     expect(issues).toEqual([
-      'R001: door type is required',
-      'R001: door quantity is required',
-      'R001: door sides must be 1 or 2',
-      'R001: drywall repair type is not valid for ceiling',
-      'R001: drywall quantity must be nonnegative',
+      'Living Room: Living Room Door: door type is required',
+      'Living Room: Living Room Door: door quantity is required',
+      'Living Room: Living Room Door: door sides must be 1 or 2',
+      'Living Room: Ceiling drywall repair 1: repair type is not valid for the ceiling',
+      'Living Room: Ceiling drywall repair 1: quantity must be nonnegative',
     ])
   })
 

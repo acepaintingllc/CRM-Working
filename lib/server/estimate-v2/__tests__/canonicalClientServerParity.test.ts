@@ -29,6 +29,7 @@ type ScopeRow = {
   room_id?: unknown
   effective_total?: unknown
   total?: unknown
+  condition_factor?: unknown
 }
 
 type RoomTotalRow = {
@@ -415,6 +416,30 @@ describe('Estimator V2 canonical client/server parity', () => {
     expect(payload.jobsettings.ceiling_paint_id).toBeNull()
     expect(payload.jobsettings.trim_paint_id).toBeNull()
     expect(payload.room_wall_scopes[0].paint_product_id).toBe('')
+    expect(server.wallCalculations.scopes[0].paint_product_id).toBe(
+      ORG_DEFAULTS_ONLY_FIXTURE_DEFAULTS.walls_paint_id
+    )
+    expect(client.walls.scopes[0].paint_product_id).toBe(server.wallCalculations.scopes[0].paint_product_id)
+    expect(server.ceilingCalculations.scopes[0].paint_product_id).toBe(
+      ORG_DEFAULTS_ONLY_FIXTURE_DEFAULTS.ceiling_paint_id
+    )
+    expect(client.ceilings.scopes[0].paint_product_id).toBe(server.ceilingCalculations.scopes[0].paint_product_id)
+    expect(server.trimCalculations.scopes[0].paint_product_id).toBe(
+      ORG_DEFAULTS_ONLY_FIXTURE_DEFAULTS.trim_paint_id
+    )
+    expect(client.trim.scopes[0].paint_product_id).toBe(server.trimCalculations.scopes[0].paint_product_id)
+    expect(server.doorCalculations.scopes[0]?.paint_product_id).toBe(
+      ORG_DEFAULTS_ONLY_FIXTURE_DEFAULTS.trim_paint_id
+    )
+    expect(client.doors.scopes[0]?.paint_product_id).toBe(server.doorCalculations.scopes[0]?.paint_product_id)
+    expect(server.quoteWallScopes[0].paint_product_id).toBeNull()
+    expect(server.quoteWallScopes[0].primer_product_id).toBeNull()
+    expect(server.quoteCeilingScopes[0].paint_product_id).toBeNull()
+    expect(server.quoteCeilingScopes[0].primer_product_id).toBeNull()
+    expect(server.quoteTrimScopes[0].paint_product_id).toBeNull()
+    expect(server.quoteTrimScopes[0].primer_product_id).toBeNull()
+    expect(server.quoteDoorScopes[0]?.paint_product_id).toBeNull()
+    expect(server.quoteDoorScopes[0]?.primer_product_id).toBeNull()
     expect(client.trimPaint?.paint_product_id).toBe(ORG_DEFAULTS_ONLY_FIXTURE_DEFAULTS.trim_paint_id)
     expect(server.trimPaintInput?.paint_product_id).toBe(ORG_DEFAULTS_ONLY_FIXTURE_DEFAULTS.trim_paint_id)
     expect(client.pricingSummary.finalTotal).toBeCloseTo(server.pricingSummary.finalTotal, 2)
@@ -434,5 +459,133 @@ describe('Estimator V2 canonical client/server parity', () => {
     })
 
     expect(client.pricingSummary.finalTotal).toBeCloseTo(server.pricingSummary.finalTotal, 2)
+  })
+
+  it('matches server artifacts for production rates, access fees, other items, doors, drywall, and pricing summary', () => {
+    const fixture = CANONICAL_FIXTURES.find((item) => item.scenarioName === 'All scope types')
+    if (!fixture) throw new Error('Missing all-scope-types canonical fixture')
+    const payload = buildPayload(fixture)
+    payload.other = [
+      {
+        id: 'other-preview-parity-1',
+        room_id: payload.rooms[0]?.room_id ?? 'R001',
+        active: 'Y',
+        pricing_mode: 'fixed',
+        fixed_amount: 125,
+        description: 'Preview parity add-on',
+      },
+    ]
+
+    const { client, server } = compareParity({
+      scenario: `${fixture.scenarioName} artifact coverage`,
+      payload,
+      catalogs: fixture.editorState.meta.catalogs,
+    })
+
+    expect(client.walls.scopes[0]?.paint_prod_rate_sqft_per_hour).toBeCloseTo(
+      server.wallCalculations.scopes[0]?.paint_prod_rate_sqft_per_hour ?? 0,
+      4
+    )
+    expect(client.ceilings.scopes[0]?.paint_prod_rate_sqft_per_hour).toBeCloseTo(
+      server.ceilingCalculations.scopes[0]?.paint_prod_rate_sqft_per_hour ?? 0,
+      4
+    )
+    expect(client.doors.scopes.length).toBeGreaterThan(0)
+    expect(client.drywall.scopes.length).toBeGreaterThan(0)
+    expect(client.other.scopes.length).toBeGreaterThan(0)
+    expect(client.accessFees.rows.length).toBeGreaterThan(0)
+    expect(client.accessFees.total).toBeCloseTo(server.accessFeeCalculation.total, 2)
+    expect(client.pricingSummary.postLaborPolicyTotal).toBeCloseTo(server.pricingSummary.postLaborPolicyTotal, 2)
+    expect(client.pricingSummary.minimumAdjustmentAmount).toBeCloseTo(
+      server.pricingSummary.minimumAdjustmentAmount,
+      2
+    )
+    expect(client.pricingSummary.finalTotal).toBeCloseTo(server.pricingSummary.finalTotal, 2)
+  })
+
+  it('matches server condition-factor preparation from room and scope selections', () => {
+    const fixture = CANONICAL_FIXTURES.find((item) => item.scenarioName === 'All scope types')
+    if (!fixture) throw new Error('Missing all-scope-types canonical fixture')
+    const payload = structuredClone(buildPayload(fixture)) as EstimateV2SavePayload
+    const roomId = payload.rooms[0]?.room_id
+    if (!roomId) throw new Error('Missing room for condition-factor parity fixture')
+
+    payload.rooms[0].condition_selections = { ROOM_OCCUPIED: 'active' }
+    if (payload.room_wall_scopes[0]) {
+      payload.room_wall_scopes[0].condition_selections = { WALL_DAMAGE: 'moderate' }
+    }
+    if (payload.room_ceiling_scopes[0]) {
+      payload.room_ceiling_scopes[0].condition_selections = { CEILING_STAIN: 'active' }
+    }
+    if (payload.room_trim_scopes[0]) {
+      payload.room_trim_scopes[0].condition_selections = { TRIM_DETAIL: 'major' }
+    }
+
+    const catalogs = {
+      ...fixture.editorState.meta.catalogs,
+      condition_modifiers: [
+        {
+          id: 'ROOM_OCCUPIED',
+          label: 'Occupied',
+          scope: 'room',
+          modifier_type: 'binary',
+          levels: { active: 1.1 },
+          active: 'Y',
+        },
+        {
+          id: 'WALL_DAMAGE',
+          label: 'Wall damage',
+          scope: 'wall',
+          modifier_type: 'severity',
+          levels: { moderate: 1.2 },
+          active: 'Y',
+        },
+        {
+          id: 'CEILING_STAIN',
+          label: 'Ceiling stain',
+          scope: 'ceiling',
+          modifier_type: 'binary',
+          levels: { active: 1.05 },
+          active: 'Y',
+        },
+        {
+          id: 'TRIM_DETAIL',
+          label: 'Trim detail',
+          scope: 'trim',
+          modifier_type: 'severity',
+          levels: { major: 1.15 },
+          active: 'Y',
+        },
+      ],
+    } as EstimateV2Catalogs
+
+    const { client, server } = compareParity({
+      scenario: `${fixture.scenarioName} with condition modifiers`,
+      payload,
+      catalogs,
+    })
+    const conditionFactor = (value: unknown) =>
+      typeof value === 'number' && Number.isFinite(value) ? value : Number(value ?? 0)
+
+    expect(conditionFactor(client.walls.scopes[0]?.condition_factor)).toBeCloseTo(
+      conditionFactor(server.wallCalculations.scopes[0]?.condition_factor),
+      4
+    )
+    expect(conditionFactor(client.walls.scopes[0]?.condition_factor)).toBeCloseTo(1.32, 4)
+    expect(conditionFactor(client.ceilings.scopes[0]?.condition_factor)).toBeCloseTo(
+      conditionFactor(server.ceilingCalculations.scopes[0]?.condition_factor),
+      4
+    )
+    expect(conditionFactor(client.ceilings.scopes[0]?.condition_factor)).toBeCloseTo(1.155, 4)
+    expect(conditionFactor(client.trim.scopes[0]?.condition_factor)).toBeCloseTo(
+      conditionFactor(server.trimCalculations.scopes[0]?.condition_factor),
+      4
+    )
+    expect(conditionFactor(client.trim.scopes[0]?.condition_factor)).toBeCloseTo(1.265, 4)
+    expect(conditionFactor(client.doors.scopes[0]?.condition_factor)).toBeCloseTo(
+      conditionFactor(server.doorCalculations.scopes[0]?.condition_factor),
+      4
+    )
+    expect(conditionFactor(client.doors.scopes[0]?.condition_factor)).toBeCloseTo(1.1, 4)
   })
 })

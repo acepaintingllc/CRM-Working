@@ -56,12 +56,12 @@ export type EstimateJobSettingsPersistenceRow = EstimatePersistenceIdentity & {
 
 export type EstimateRoomPersistenceRow = EstimatePersistenceIdentity &
   Omit<V2RoomRosterRow, 'id'> & {
-    mode?: 'RECT'
-    walls_include?: 'N'
-    ceiling_include?: 'N'
-    trim_include?: 'N'
-    doors_include?: 'N'
-    drywall_include?: 'N'
+    mode?: 'RECT' | 'SEG'
+    walls_include?: 'Y' | 'N'
+    ceiling_include?: 'Y' | 'N'
+    trim_include?: 'Y' | 'N'
+    doors_include?: 'Y' | 'N'
+    drywall_include?: 'Y' | 'N'
   }
 
 export type EstimateRoomWallScopePersistenceRow = EstimatePersistenceIdentity &
@@ -86,6 +86,33 @@ export type EstimateRoomDoorScopePersistenceRow = EstimatePersistenceIdentity &
 
 export type EstimateDrywallRepairPersistenceRow = EstimatePersistenceIdentity &
   V2DrywallRepairSaveRow
+
+export type EstimateRollerPersistenceRow = EstimatePersistenceIdentity & {
+  position: number
+  scope: 'Wall' | 'Ceiling' | 'Trim'
+  wall_color_id: string | null
+  selected_option_id: string | null
+  roller_size_in: number | null
+  covers_qty: number | null
+  notes: string | null
+  active: 'Y' | 'N'
+}
+
+export type EstimateJobColorPersistenceRow = EstimatePersistenceIdentity & {
+  position: number
+  color_id: string
+  color_name: string | null
+  roller_cover_id: string | null
+  roller_cover_qty: number | null
+  active: 'Y' | 'N'
+}
+
+export type EstimateRoomFlagPersistenceRow = EstimatePersistenceIdentity & {
+  position: number
+  room_id: string | null
+  flag_id: string
+  active: 'Y' | 'N'
+}
 
 export type EstimateAccessFeePersistenceRow = EstimatePersistenceIdentity & {
   position: number
@@ -123,4 +150,38 @@ export type EstimateOtherPersistenceRow = EstimatePersistenceIdentity & {
   rollup_target: string
   customer_visibility: string
   internal_notes: string | null
+}
+
+export type EstimatePrejobPersistenceRow = EstimatePersistenceIdentity & {
+  position: number
+  category: string | null
+  trip_name: string | null
+  trip_num: number | null
+  rollup_scope: string | null
+  man_trip_name: string | null
+  man_qty: number | null
+  man_hours_each: number | null
+  task: string | null
+  qty: number | null
+  hours_each: number | null
+  laborrate: number | null
+  markup: number | null
+  extra_supplies: number | null
+  notes: string | null
+  active: 'Y' | 'N'
+}
+
+export type EstimateTrimItemPersistenceRow = EstimatePersistenceIdentity & {
+  room_id: string | null
+  trim_menu_id: string
+  qty: number | null
+  coats: number | null
+  auto_calc: 'Y' | 'N'
+  primer_mode: string | null
+  spot_prime_pct: number | null
+  prep_level_override: string | null
+  door_sides: number | null
+  notes: string | null
+  active: 'Y' | 'N'
+  sort_order: number
 }

@@ -229,7 +229,7 @@ describe('customer send context loader', () => {
       terms_text: 'Standard terms',
     })
     mockGetEstimateCatalogs.mockResolvedValue({
-      catalogs: { paints: [] },
+      catalogs: { paint_products: [] },
     })
     mockLoadEstimateTemplateSettings.mockResolvedValue({
       updated_at: '2026-04-01T00:00:00.000Z',
@@ -362,7 +362,7 @@ describe('customer send context loader', () => {
         { id: 'version-2', version_number: 2, created_at: '2026-04-02T00:00:00.000Z' },
         { id: 'version-1', version_number: 1, created_at: '2026-04-01T00:00:00.000Z' },
       ],
-      catalogs: { paints: [] },
+      catalogs: { paint_products: [], trim_items: [], door_types: [] },
     })
     expect(mockLoadEstimateTemplateSettings).toHaveBeenCalledWith({
       orgId: 'org-1',
@@ -374,6 +374,35 @@ describe('customer send context loader', () => {
       userId: 'user-1',
       estimateId: 'estimate-1',
     })
+  })
+
+  it('returns only the typed raw catalog payload shape from catalog reads', async () => {
+    installTableMap(buildTableMap())
+    mockGetEstimateCatalogs.mockResolvedValue({
+      catalogs: {
+        paint_products: [{ id: 'paint-1' }],
+        trim_items: [{ id: 'trim-1' }],
+        door_types: [{ id: 'door-1' }],
+        room_types: [{ id: 'room-type-1' }],
+      },
+    })
+
+    const result = await loadEstimateCustomerSendResources({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+    })
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        catalogs: {
+          paint_products: [{ id: 'paint-1' }],
+          trim_items: [{ id: 'trim-1' }],
+          door_types: [{ id: 'door-1' }],
+        },
+      })
+    )
   })
 
   it('keeps public version ordering descending by version number and creation date', async () => {

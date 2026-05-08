@@ -5,8 +5,12 @@ import {
 } from './accepted-estimates/service.ts'
 import { writeEstimatePublicEvent } from './customer-send/repository.ts'
 import { errorResult, okResult, type ServiceResult } from './serviceResult.ts'
-import { ensureAssembledCustomerEstimateDocument } from '../customer-estimates/assemble.ts'
-import { normalizeEstimatePublicAcceptanceRecord } from '../customer-estimates/publicAcceptance.ts'
+import { isPublicQuoteExpired } from '../customer-estimates/publicQuoteExpiration.ts'
+import {
+  buildEstimatePublicSnapshot,
+  deriveEstimatePublicUrl,
+  readCanonicalEstimatePublicPersistedSnapshot,
+} from '../customer-estimates/publicSnapshot.ts'
 import type { EstimatePublicSnapshot, Unsafe } from '../customer-estimates/types.ts'
 import {
   sendPublicEstimateAcceptanceNotifications,
@@ -15,6 +19,27 @@ import {
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
+}
+
+function readCanonicalPersistedPublicSnapshot(params: {
+  version: Unsafe
+  origin?: string
+}): EstimatePublicSnapshot | { error: string } {
+  const persistedSnapshot = readCanonicalEstimatePublicPersistedSnapshot(
+    params.version.snapshot_json
+  )
+  if (!persistedSnapshot.ok) return { error: persistedSnapshot.message }
+
+  return buildEstimatePublicSnapshot({
+    version: params.version,
+    document: persistedSnapshot.snapshot.document,
+    draft: persistedSnapshot.snapshot.draft,
+    pdf: persistedSnapshot.snapshot.pdf,
+    publicUrl: deriveEstimatePublicUrl(
+      params.origin,
+      asText(params.version.public_token) || null
+    ),
+  })
 }
 
 export async function loadPublicEstimateByToken(token: string, origin?: string) {
@@ -27,7 +52,7 @@ export async function loadPublicEstimateByToken(token: string, origin?: string) 
   if (!versionRes.data) return { error: 'Quote not found' } as const
 
   const version = versionRes.data as Unsafe
-  const payload = buildEstimatePublicSnapshotFromVersion(version, origin)
+  const payload = readCanonicalPersistedPublicSnapshot({ version, origin })
   if ('error' in payload) return payload
   return { version: version as Unsafe, snapshot: payload } as const
 }
@@ -59,6 +84,13 @@ type PublicEstimateSnapshotOptions = {
 }
 
 type PublicEstimateViewOptions = {
+  actorType?: 'customer' | 'staff' | 'system'
+  metadata?: Record<string, unknown>
+}
+
+type LoadPublicEstimatePortalSnapshotParams = {
+  token: string
+  origin?: string
   actorType?: 'customer' | 'staff' | 'system'
   metadata?: Record<string, unknown>
 }
@@ -111,43 +143,6 @@ async function runPublicNotification(label: string, task: Promise<unknown>) {
   logPublicNotificationResult(label, result)
 }
 
-export function buildEstimatePublicSnapshotFromVersion(
-  version: Unsafe,
-  origin?: string
-) {
-  const token = asText(version.public_token)
-  const snapshot = (version.snapshot_json ?? {}) as Record<string, unknown>
-  const rawDocument = ((snapshot.document ?? snapshot) ?? null) as
-    | EstimatePublicSnapshot['document']
-    | Record<string, unknown>
-    | null
-  const document = rawDocument ? ensureAssembledCustomerEstimateDocument(rawDocument) : null
-  if (!document) return { error: 'Quote snapshot missing' } as const
-
-  const normalizedSnapshot: Record<string, unknown> = {
-    ...snapshot,
-    document,
-  }
-
-  return {
-    estimate_id: asText(version.estimate_id),
-    estimate_version_id: asText(version.id),
-    version_number: Number(version.version_number ?? 0),
-    status: (asText(version.status) || 'draft') as EstimatePublicSnapshot['status'],
-    public_token: token || null,
-    public_url: origin && token ? `${origin}/quote/${token}` : null,
-    draft: (normalizedSnapshot.draft ?? {}) as Record<string, unknown>,
-    document,
-    snapshot_json: normalizedSnapshot,
-    acceptance_json: normalizeEstimatePublicAcceptanceRecord(version.acceptance_json),
-    sent_at: asText(version.sent_at) || null,
-    viewed_at: asText(version.viewed_at) || null,
-    accepted_at: asText(version.accepted_at) || null,
-    declined_at: asText(version.declined_at) || null,
-    locked_at: asText(version.locked_at) || null,
-  } satisfies EstimatePublicSnapshot
-}
-
 function shouldMarkViewed(snapshot: EstimatePublicSnapshot) {
   return (snapshot.status === 'sent' || snapshot.status === 'viewed') && !snapshot.viewed_at
 }
@@ -157,11 +152,23 @@ export async function loadPublicEstimateSnapshot(
   snapshotOptions?: PublicEstimateSnapshotOptions,
   viewOptions?: PublicEstimateViewOptions
 ): Promise<ServiceResult<EstimatePublicSnapshot>> {
+  return loadPublicEstimatePortalSnapshot({
+    token,
+    origin: snapshotOptions?.origin,
+    actorType: viewOptions?.actorType,
+    metadata: viewOptions?.metadata,
+  })
+}
+
+export async function loadPublicEstimatePortalSnapshot(
+  params: LoadPublicEstimatePortalSnapshotParams
+): Promise<ServiceResult<EstimatePublicSnapshot>> {
+  const token = asText(params.token)
   if (!token || typeof token !== 'string') {
     return errorResult('invalid_input', 'Invalid token')
   }
 
-  const loaded = await loadPublicEstimateByToken(token, snapshotOptions?.origin)
+  const loaded = await loadPublicEstimateByToken(token, params.origin)
   if (!isLoadedEstimate(loaded)) {
     return errorResult('not_found', asText(loaded.error) || 'Quote not found')
   }
@@ -173,8 +180,8 @@ export async function loadPublicEstimateSnapshot(
   const viewed = await markPublicEstimateViewed({
     versionId: loaded.snapshot.estimate_version_id,
     orgId: asText(loaded.version.org_id),
-    actorType: viewOptions?.actorType,
-    metadata: viewOptions?.metadata,
+    actorType: params.actorType,
+    metadata: params.metadata,
   }).catch(() => null)
 
   if (!viewed || 'error' in viewed || !viewed.ok || !viewed.version) {
@@ -255,33 +262,6 @@ async function ensureOperationalSnapshotAfterAcceptedOwnership(params: {
   }
 
   return result
-}
-
-function parsePublicQuoteDate(value: unknown) {
-  const text = asText(value)
-  if (!text) return null
-
-  const date = new Date(text.includes('T') ? text : `${text}T00:00:00`)
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
-function publicQuoteExpirationDate(snapshot: EstimatePublicSnapshot) {
-  const validDays = Number(snapshot.document.quote_validity_days)
-  if (!Number.isFinite(validDays) || validDays <= 0) return null
-
-  const sourceDate =
-    parsePublicQuoteDate(snapshot.sent_at) ??
-    parsePublicQuoteDate(snapshot.document.meta.sent_at)
-  if (!sourceDate) return null
-
-  const expiresAt = new Date(sourceDate)
-  expiresAt.setDate(expiresAt.getDate() + validDays)
-  return expiresAt
-}
-
-function isPublicQuoteExpired(snapshot: EstimatePublicSnapshot, now = new Date()) {
-  const expiresAt = publicQuoteExpirationDate(snapshot)
-  return expiresAt ? now.getTime() > expiresAt.getTime() : false
 }
 
 async function loadTransitionableEstimate(token: string) {
@@ -616,7 +596,7 @@ export async function acceptPublicEstimate(
   })
   if (!eventResult.ok) return eventResult
 
-  const snapshot = buildEstimatePublicSnapshotFromVersion(updateResult.data)
+  const snapshot = readCanonicalPersistedPublicSnapshot({ version: updateResult.data })
   if ('error' in snapshot) {
     return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
   }
@@ -689,7 +669,7 @@ export async function declinePublicEstimate(
   })
   if (!eventResult.ok) return eventResult
 
-  const snapshot = buildEstimatePublicSnapshotFromVersion(updateResult.data)
+  const snapshot = readCanonicalPersistedPublicSnapshot({ version: updateResult.data })
   if ('error' in snapshot) {
     return errorResult('server_error', asText(snapshot.error) || 'Quote snapshot missing')
   }

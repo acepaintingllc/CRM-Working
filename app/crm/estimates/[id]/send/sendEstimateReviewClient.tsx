@@ -13,7 +13,6 @@ import {
 import {
   asText,
   buildCustomerSendReviewDraft,
-  buildCustomerSendReviewPreview,
   resolveCustomerSendTemplatePresets,
   type CustomerSendReviewDraft,
   useCustomerSendWorkflow,
@@ -260,7 +259,6 @@ export default function SendEstimateReviewClient({
     estimateId,
     routeFamily,
     buildForm: (data, draft) => buildCustomerSendReviewDraft(data, draft),
-    buildDocument: buildCustomerSendReviewPreview,
     draftPayload,
     loadErrorMessage: 'Unable to load quote send page',
   })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { authedFetch } from '@/lib/auth/authedFetch'
 import {
   getApiErrorMessage,
@@ -22,6 +22,7 @@ import {
 } from '../_lib/estimateV2EditorDiagnostics'
 import { applyEstimateV2EditorLoadState } from './estimateV2EditorStoreMutations'
 import { buildEstimateV2EditorLoadState } from './estimateV2EditorLoadOrchestration'
+import { mergeEstimateV2Catalogs } from './useEstimateV2Sanitizer'
 
 export function useEstimateV2EditorLoader(params: {
   estimateId?: string
@@ -29,9 +30,37 @@ export function useEstimateV2EditorLoader(params: {
   store: EstimateV2EditorStoreApi
 }) {
   const { estimateId, routeFamily, store } = params
+  const [reloadKey, setReloadKey] = useState(0)
+  const [catalogsReloading, setCatalogsReloading] = useState(false)
+
+  const loadCatalogs = useCallback(async (activeEstimateId: string) => {
+    const catalogsRes = await authedFetch(
+      routeFamily.catalogsApiHref(activeEstimateId, { catalogSource: 'v2' }),
+      {
+        cache: 'no-store',
+      }
+    )
+    const catalogsParsed = await parseApiResponse(catalogsRes)
+    const catalogsPayload = getApiPayloadData<CatalogsPayload>(catalogsParsed.json)
+    const catalogsErrorMessage =
+      catalogsRes.ok
+        ? null
+        : (catalogsPayload as { error?: string } | null)?.error ??
+          getApiErrorMessage(catalogsRes, catalogsParsed, 'Failed to load catalogs')
+
+    return {
+      catalogsRes,
+      catalogsPayload,
+      catalogsOk: catalogsRes.ok,
+      catalogsErrorMessage,
+    }
+  }, [routeFamily])
 
   const loadWorkspace = useCallback(
     async (activeRef: { current: boolean }) => {
+      const activeEstimateId = estimateId
+      if (!activeEstimateId) return
+
       const storeState = store.getState()
       try {
         storeState.setLoading(true)
@@ -39,25 +68,20 @@ export function useEstimateV2EditorLoader(params: {
         storeState.setCatalogsError(null)
         storeState.setValidationIssues([])
 
-        const [estimateRes, catalogsRes] = await Promise.all([
-          authedFetch(routeFamily.estimateApiHref(estimateId!), { cache: 'no-store' }),
-          authedFetch(routeFamily.catalogsApiHref(estimateId!, { catalogSource: 'v2' }), {
-            cache: 'no-store',
-          }),
+        const [estimateRes, catalogsResult] = await Promise.all([
+          authedFetch(routeFamily.estimateApiHref(activeEstimateId), { cache: 'no-store' }),
+          loadCatalogs(activeEstimateId),
         ])
-        const [estimateParsed, catalogsParsed] = await Promise.all([
-          parseApiResponse(estimateRes),
-          parseApiResponse(catalogsRes),
-        ])
+        const estimateParsed = await parseApiResponse(estimateRes)
         const estimatePayload = getApiPayloadData<EstimateResponse>(estimateParsed.json)
-        const catalogsPayload = getApiPayloadData<CatalogsPayload>(catalogsParsed.json)
+        const { catalogsPayload, catalogsOk, catalogsErrorMessage } = catalogsResult
 
         if (!activeRef.current) return
         if (!estimateRes.ok || !estimatePayload) {
           const message = getApiErrorMessage(estimateRes, estimateParsed, 'Failed to load estimate')
           const diagnostic = buildEstimateV2EditorApiFailureDiagnostic({
-            estimateId,
-            endpoint: routeFamily.estimateApiHref(estimateId!),
+            estimateId: activeEstimateId,
+            endpoint: routeFamily.estimateApiHref(activeEstimateId),
             method: 'GET',
             operation: 'loadEstimate',
             response: estimateRes,
@@ -74,12 +98,6 @@ export function useEstimateV2EditorLoader(params: {
           return
         }
 
-        const catalogsErrorMessage =
-          catalogsRes.ok || catalogsPayload == null
-            ? null
-            : (catalogsPayload as { error?: string }).error ??
-              getApiErrorMessage(catalogsRes, catalogsParsed, 'Failed to load catalogs')
-
         const jobRes = await authedFetch(`/api/jobs/${estimatePayload.estimate.job_id}`, {
           cache: 'no-store',
         })
@@ -92,8 +110,8 @@ export function useEstimateV2EditorLoader(params: {
         const nextLoadState = buildEstimateV2EditorLoadState({
           store,
           estimatePayload,
-          catalogsPayload: catalogsRes.ok ? catalogsPayload : null,
-          catalogsOk: catalogsRes.ok,
+          catalogsPayload: catalogsOk ? catalogsPayload : null,
+          catalogsOk,
           catalogsErrorMessage,
           job,
         })
@@ -101,7 +119,7 @@ export function useEstimateV2EditorLoader(params: {
       } catch (error) {
         if (!activeRef.current) return
         console.error('Estimate V2 editor load crashed', {
-          estimateId,
+          estimateId: activeEstimateId,
           operation: 'loadWorkspace',
           error,
         })
@@ -111,8 +129,54 @@ export function useEstimateV2EditorLoader(params: {
         store.getState().setLoading(false)
       }
     },
-    [estimateId, routeFamily, store]
+    [estimateId, loadCatalogs, routeFamily, store]
   )
+
+  const reloadWorkspace = useCallback(() => {
+    setReloadKey((current) => current + 1)
+  }, [])
+
+  const reloadCatalogs = useCallback(async () => {
+    const activeEstimateId = estimateId
+    if (!activeEstimateId) return false
+    setCatalogsReloading(true)
+
+    try {
+      const { catalogsPayload, catalogsOk, catalogsErrorMessage } =
+        await loadCatalogs(activeEstimateId)
+      const storeState = store.getState()
+
+      if (catalogsOk) {
+        storeState.setCatalogs((currentCatalogs) =>
+          mergeEstimateV2Catalogs({
+            currentCatalogs,
+            catalogsPayload,
+          })
+        )
+        storeState.setCatalogsError(null)
+        return true
+      }
+
+      storeState.setCatalogsError(
+        createEstimateV2Error(catalogsErrorMessage ?? 'Failed to load catalogs', {
+          retryable: true,
+        })
+      )
+      return false
+    } catch (error) {
+      console.error('Estimate V2 catalogs reload crashed', {
+        estimateId: activeEstimateId,
+        operation: 'reloadCatalogs',
+        error,
+      })
+      store.getState().setCatalogsError(
+        createEstimateV2Error('Failed to reload rates and products', { retryable: true })
+      )
+      return false
+    } finally {
+      setCatalogsReloading(false)
+    }
+  }, [estimateId, loadCatalogs, store])
 
   useEffect(() => {
     if (!estimateId) return
@@ -121,5 +185,11 @@ export function useEstimateV2EditorLoader(params: {
     return () => {
       activeRef.current = false
     }
-  }, [estimateId, loadWorkspace])
+  }, [estimateId, loadWorkspace, reloadKey])
+
+  return {
+    catalogsReloading,
+    reloadCatalogs,
+    reloadWorkspace,
+  }
 }

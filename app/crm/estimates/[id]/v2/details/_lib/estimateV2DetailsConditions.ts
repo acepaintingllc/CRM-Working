@@ -31,6 +31,8 @@ export function resolveConditionFactor(
   scope: EstimateV2ConditionModifier['scope'],
   selections: Record<string, ConditionLevel>
 ): number {
+  // Details UI resolves the draft condition preview for save payload shaping; server
+  // calculations recompute canonical condition factors in estimator preparation.
   return conditions
     .filter((c) => c.scope === scope)
     .reduce((acc, condition) => {

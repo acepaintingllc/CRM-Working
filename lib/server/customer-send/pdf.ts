@@ -21,10 +21,6 @@ type PdfCursor = {
   y: number
 }
 
-function asRecord(value: unknown) {
-  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
-}
-
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
 }
@@ -132,50 +128,75 @@ function addSectionHeading(
   addFlowText(cursor, pages, text, { size, font: 'bold', gapAfter: options.gapAfter ?? 2 })
 }
 
-function isCustomerEstimateDocument(value: unknown): value is CustomerEstimateDocument {
-  const document = asRecord(value)
-  return !!(
-    document &&
-    asRecord(document.header) &&
-    asRecord(document.customer_block) &&
-    asRecord(document.pricing_block) &&
-    asRecord(document.terms_page)
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object'
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+}
+
+function isQuoteRow(value: unknown): value is CustomerEstimateQuoteRow {
+  return (
+    isRecord(value) &&
+    typeof value.key === 'string' &&
+    typeof value.label === 'string' &&
+    typeof value.description === 'string' &&
+    typeof value.price === 'number' &&
+    Number.isFinite(value.price)
   )
 }
 
-function normalizeQuoteRows(value: unknown): CustomerEstimateQuoteRow[] {
-  return Array.isArray(value)
-    ? value
-        .map((row) => {
-          const record = asRecord(row)
-          if (!record) return null
-          return {
-            key: asText(record.key) as CustomerEstimateQuoteRow['key'],
-            label: asText(record.label),
-            description: asText(record.description),
-            price: asNumber(record.price) ?? 0,
-          }
-        })
-        .filter((row): row is CustomerEstimateQuoteRow => !!row && !!row.label)
-    : []
+function isTermsSection(value: unknown): value is CustomerEstimateTermsSection {
+  return (
+    isRecord(value) &&
+    typeof value.key === 'string' &&
+    typeof value.title === 'string' &&
+    isStringArray(value.paragraphs)
+  )
 }
 
-function normalizeTermsSections(value: unknown): CustomerEstimateTermsSection[] {
-  return Array.isArray(value)
-    ? value
-        .map((section) => {
-          const record = asRecord(section)
-          if (!record) return null
-          return {
-            key: asText(record.key),
-            title: asText(record.title),
-            paragraphs: Array.isArray(record.paragraphs)
-              ? record.paragraphs.map((paragraph) => asText(paragraph)).filter(Boolean)
-              : [],
-          }
-        })
-        .filter((section): section is CustomerEstimateTermsSection => !!section && !!section.title)
-    : []
+export function readCustomerSendPdfDocument(value: unknown): CustomerEstimateDocument | null {
+  if (!isRecord(value)) return null
+  if (!isRecord(value.meta) || typeof value.meta.estimate_id !== 'string') return null
+  if (!isRecord(value.company) || typeof value.company.business_name !== 'string') return null
+  if (!isRecord(value.customer) || typeof value.customer.address !== 'string') return null
+  if (!isRecord(value.header) || !isStringArray(value.header.contact_lines)) return null
+  if (
+    !isRecord(value.customer_block) ||
+    !isStringArray(value.customer_block.lines) ||
+    !isRecord(value.pricing_block) ||
+    !Array.isArray(value.pricing_block.rows) ||
+    !value.pricing_block.rows.every(isQuoteRow) ||
+    !isRecord(value.terms_page) ||
+    !Array.isArray(value.terms_page.sections) ||
+    !value.terms_page.sections.every(isTermsSection)
+  ) {
+    return null
+  }
+
+  return value as CustomerEstimateDocument
+}
+
+function normalizeQuoteRows(rows: CustomerEstimateQuoteRow[]): CustomerEstimateQuoteRow[] {
+  return rows
+    .map((row) => ({
+      key: row.key,
+      label: asText(row.label),
+      description: asText(row.description),
+      price: asNumber(row.price) ?? 0,
+    }))
+    .filter((row) => !!row.label)
+}
+
+function normalizeTermsSections(sections: CustomerEstimateTermsSection[]): CustomerEstimateTermsSection[] {
+  return sections
+    .map((section) => ({
+      key: asText(section.key),
+      title: asText(section.title),
+      paragraphs: section.paragraphs.map((paragraph) => asText(paragraph)).filter(Boolean),
+    }))
+    .filter((section) => !!section.title)
 }
 
 function addQuotePage(cursor: PdfCursor, pages: PdfPage[], document: CustomerEstimateDocument) {
@@ -365,9 +386,7 @@ function buildCustomerSendPdfFilename(document: CustomerEstimateDocument) {
   return `${(parts.length ? parts : ['Quote']).join('_')}.pdf`
 }
 
-export function buildCustomerSendPdfAttachment(documentValue: unknown) {
-  if (!isCustomerEstimateDocument(documentValue)) return null
-
+export function buildCustomerSendPdfAttachment(document: CustomerEstimateDocument) {
   const pages: PdfPage[] = []
   const firstPage = createPage(pages)
   const cursor: PdfCursor = {
@@ -375,11 +394,11 @@ export function buildCustomerSendPdfAttachment(documentValue: unknown) {
     y: PAGE_HEIGHT - MARGIN,
   }
 
-  addQuotePage(cursor, pages, documentValue)
-  addTermsPage(cursor, pages, documentValue)
+  addQuotePage(cursor, pages, document)
+  addTermsPage(cursor, pages, document)
 
   return {
-    filename: buildCustomerSendPdfFilename(documentValue),
+    filename: buildCustomerSendPdfFilename(document),
     contentType: 'application/pdf',
     data: buildPdfBuffer(pages),
   }

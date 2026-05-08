@@ -11,6 +11,10 @@ import type { CeilingCalculationScopeRow } from './ceilingTypes.ts'
 import type { TrimUnitType } from './trimTypes.ts'
 import type { WallCalculationCatalogs, WallCalculationScopeRow } from './wallsTypes.ts'
 import type { EstimateV2AccessFeeOption, EstimateV2JobSettingsInput } from '@/types/estimator/v2'
+import type {
+  EstimateV2AccessFeeCalculationInputRow,
+  EstimateV2CalculationJobSettingsInput,
+} from '@/types/estimator/v2Boundary'
 
 export type EstimatorV2ProductionRateRow = {
   id?: unknown
@@ -88,7 +92,7 @@ function toTrimUnitType(value: unknown): TrimUnitType {
 }
 
 export function resolveEstimatorV2EffectiveJobSettings(params: {
-  jobsettings: Unsafe | null | undefined
+  jobsettings: EstimateV2CalculationJobSettingsInput | Unsafe | null | undefined
   orgDefaults?: EstimateV2JobSettingsInput | Unsafe | null
 }): EstimatorV2EffectiveJobSettings {
   const jobsettings = params.jobsettings ?? {}
@@ -225,10 +229,20 @@ export function applyBaseCeilingProductionRates<TScope extends CeilingCalculatio
   }))
 }
 
+export type EstimatorV2RoomModeRoom = {
+  room_id: string
+  mode?: 'RECT' | 'SEG' | string | null
+}
+
+export type EstimatorV2RoomModeScope = {
+  room_id: string
+  mode?: 'RECT' | 'SEG' | string | null
+}
+
 export function resolveEstimatorV2RoomModeById(params: {
-  rooms: Unsafe[]
-  wallScopes: Unsafe[]
-  ceilingScopes: Unsafe[]
+  rooms: EstimatorV2RoomModeRoom[]
+  wallScopes: EstimatorV2RoomModeScope[]
+  ceilingScopes: EstimatorV2RoomModeScope[]
   useRoomMode?: boolean
 }) {
   const roomMode = new Map<string, 'RECT' | 'SEG'>()
@@ -268,7 +282,7 @@ export function toWallCalculationCatalogs(raw: Unsafe | null | undefined): WallC
       supply_group: asText((row as Unsafe).supply_group) || null,
       scope: asText((row as Unsafe).scope) || null,
       unit: asText((row as Unsafe).unit) || null,
-      value: asNullableNumber((row as Unsafe).value) ?? 0,
+      value: asNullableNumber((row as Unsafe).value),
       crew_multiplier: asText((row as Unsafe).crew_multiplier).toUpperCase() === 'Y' ? 'Y' : 'N',
     })),
     condition_modifiers: conditionModifiers
@@ -395,7 +409,7 @@ export function normalizeTrimPaintGallons(gallons: unknown, quarts: unknown) {
 }
 
 export function buildTrimPaintInput(params: {
-  jobsettings: Unsafe | null | undefined
+  jobsettings: EstimateV2CalculationJobSettingsInput | null | undefined
   productId: string | null | undefined
   product: TrimPaintProduct | null | undefined
 }): TrimPaintInput | null {
@@ -426,7 +440,7 @@ export function buildTrimPaintInput(params: {
   }
 }
 
-export function buildAccessFeeDrafts(rows: Unsafe[] | null | undefined) {
+export function buildAccessFeeDrafts(rows: EstimateV2AccessFeeCalculationInputRow[] | null | undefined) {
   return (rows ?? []).map((row, index) => ({
     id: asText(row.id) || `access-fee-${index}`,
     roomId: asText(row.room_id).toUpperCase(),
@@ -439,7 +453,7 @@ export function buildAccessFeeDrafts(rows: Unsafe[] | null | undefined) {
 }
 
 export function calculateEstimatorV2AccessFees(params: {
-  rows: Unsafe[] | null | undefined
+  rows: EstimateV2AccessFeeCalculationInputRow[] | null | undefined
   catalog: EstimateV2AccessFeeOption[]
 }) {
   return calculateAccessFeeRows({
@@ -459,7 +473,13 @@ export function buildEstimatorV2PricingSummary(params: {
   wallScopes: Array<{ include?: unknown }>
   ceilingScopes: Array<{ include?: unknown }>
   trimScopes: Array<{ include?: unknown }>
-  sourceTrimScopes: Unsafe[]
+  sourceTrimScopes: Array<{
+    include?: unknown
+    trim_family?: unknown
+    trimFamily?: unknown
+    trim_type_id?: unknown
+    trimTypeId?: unknown
+  }>
   trimPaintInput: TrimPaintInput | null
 }) {
   const wallSubtotal = params.wallRoomTotals.reduce((sum, row) => sum + (row.effective_total ?? 0), 0)

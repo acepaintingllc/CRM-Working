@@ -6,8 +6,18 @@ import { loadCompanyProfileSettings } from '@/lib/server/settings/companyProfile
 import { loadQuoteSendDefaults } from '@/lib/server/settings/quoteSendDefaultsStore'
 import { defaultQuoteTermsSections } from '@/lib/customer-estimates/termsDefaults'
 import { templatePresets } from '@/lib/customer-estimates/presets'
-import type { CompanyProfile, Unsafe } from '@/lib/customer-estimates/types'
+import type { CompanyProfile } from '@/lib/customer-estimates/types'
 import type {
+  CustomerQuoteAccessFeeRow,
+  CustomerQuoteRawCatalogPayload,
+  CustomerQuoteDoorScopeRow,
+  CustomerQuoteDrywallScopeRow,
+  CustomerQuoteOtherRow,
+  CustomerQuotePaintScopeRow,
+  CustomerQuoteRoomRow,
+  CustomerQuoteSegmentRow,
+  CustomerQuoteTrimItemRow,
+  CustomerQuoteTrimScopeRow,
   EstimateCustomerSendCoreResources,
   EstimateCustomerSendCustomerRow,
   EstimateCustomerSendEstimateRow,
@@ -15,6 +25,7 @@ import type {
   EstimateCustomerSendScopeResources,
   EstimateCustomerSendVersionResources,
   EstimateJobSettingsRow,
+  EstimatePublicVersionRow,
   EstimateTemplateSettingsRow,
   QuoteSendDefaults,
 } from './contextTypes'
@@ -68,6 +79,18 @@ function readCollectionQueryResult<T>(result: QueryResult<T[]>) {
 function asFiniteNumber(value: unknown) {
   const numeric = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(numeric) ? numeric : null
+}
+
+function toRawCatalogPayload(
+  catalogs: Awaited<ReturnType<typeof getEstimateCatalogs>>['catalogs'] | null | undefined
+): CustomerQuoteRawCatalogPayload | null {
+  if (!catalogs) return null
+
+  return {
+    paint_products: catalogs.paint_products ?? [],
+    trim_items: catalogs.trim_items ?? [],
+    door_types: catalogs.door_types ?? [],
+  }
 }
 
 export async function loadEstimateCustomerSendEstimate(params: {
@@ -309,35 +332,53 @@ export async function loadEstimateCustomerSendScopeResources(params: {
       .order('position', { ascending: true }),
   ])
 
-  const rooms = readCollectionQueryResult(roomsRes as QueryResult<Unsafe[]>)
+  const rooms = readCollectionQueryResult(roomsRes as QueryResult<CustomerQuoteRoomRow[]>)
   if ('error' in rooms) return rooms
-  const wallScopes = readCollectionQueryResult(wallScopesRes as QueryResult<Unsafe[]>)
+  const wallScopes = readCollectionQueryResult(
+    wallScopesRes as QueryResult<CustomerQuotePaintScopeRow[]>
+  )
   if ('error' in wallScopes) return wallScopes
-  const segments = readCollectionQueryResult(segmentsRes as QueryResult<Unsafe[]>)
+  const segments = readCollectionQueryResult(
+    segmentsRes as QueryResult<CustomerQuoteSegmentRow[]>
+  )
   if ('error' in segments) return segments
-  const wallSegments = readCollectionQueryResult(wallSegmentsRes as QueryResult<Unsafe[]>)
+  const wallSegments = readCollectionQueryResult(
+    wallSegmentsRes as QueryResult<CustomerQuoteSegmentRow[]>
+  )
   if ('error' in wallSegments) return wallSegments
   const ceilingSegments = readCollectionQueryResult(
-    ceilingSegmentsRes as QueryResult<Unsafe[]>
+    ceilingSegmentsRes as QueryResult<CustomerQuoteSegmentRow[]>
   )
   if ('error' in ceilingSegments) return ceilingSegments
-  const ceilingScopes = readCollectionQueryResult(ceilingScopesRes as QueryResult<Unsafe[]>)
+  const ceilingScopes = readCollectionQueryResult(
+    ceilingScopesRes as QueryResult<CustomerQuotePaintScopeRow[]>
+  )
   if ('error' in ceilingScopes) return ceilingScopes
   const ceilingScopeSegments = readCollectionQueryResult(
-    ceilingScopeSegmentsRes as QueryResult<Unsafe[]>
+    ceilingScopeSegmentsRes as QueryResult<CustomerQuoteSegmentRow[]>
   )
   if ('error' in ceilingScopeSegments) return ceilingScopeSegments
-  const trimScopes = readCollectionQueryResult(trimScopesRes as QueryResult<Unsafe[]>)
+  const trimScopes = readCollectionQueryResult(
+    trimScopesRes as QueryResult<CustomerQuoteTrimScopeRow[]>
+  )
   if ('error' in trimScopes) return trimScopes
-  const doorScopes = readCollectionQueryResult(doorScopesRes as QueryResult<Unsafe[]>)
+  const doorScopes = readCollectionQueryResult(
+    doorScopesRes as QueryResult<CustomerQuoteDoorScopeRow[]>
+  )
   if ('error' in doorScopes) return doorScopes
-  const drywallRepairs = readCollectionQueryResult(drywallRepairsRes as QueryResult<Unsafe[]>)
+  const drywallRepairs = readCollectionQueryResult(
+    drywallRepairsRes as QueryResult<CustomerQuoteDrywallScopeRow[]>
+  )
   if ('error' in drywallRepairs) return drywallRepairs
-  const accessFees = readCollectionQueryResult(accessFeesRes as QueryResult<Unsafe[]>)
+  const accessFees = readCollectionQueryResult(
+    accessFeesRes as QueryResult<CustomerQuoteAccessFeeRow[]>
+  )
   if ('error' in accessFees) return accessFees
-  const trimItems = readCollectionQueryResult(trimItemsRes as QueryResult<Unsafe[]>)
+  const trimItems = readCollectionQueryResult(
+    trimItemsRes as QueryResult<CustomerQuoteTrimItemRow[]>
+  )
   if ('error' in trimItems) return trimItems
-  const other = readCollectionQueryResult(otherRes as QueryResult<Unsafe[]>)
+  const other = readCollectionQueryResult(otherRes as QueryResult<CustomerQuoteOtherRow[]>)
   if ('error' in other) return other
 
   return {
@@ -369,7 +410,9 @@ export async function loadEstimateCustomerSendVersionResources(params: {
     .order('version_number', { ascending: false })
     .order('created_at', { ascending: false })
 
-  const publicVersions = readCollectionQueryResult(versionsRes as QueryResult<Unsafe[]>)
+  const publicVersions = readCollectionQueryResult(
+    versionsRes as QueryResult<EstimatePublicVersionRow[]>
+  )
   if ('error' in publicVersions) return publicVersions
 
   return {
@@ -391,6 +434,6 @@ export async function loadEstimateCustomerSendCatalogResources(params: {
   }).catch(() => null)
 
   return {
-    catalogs: (catalogs?.catalogs as Unsafe | null) ?? null,
+    catalogs: toRawCatalogPayload(catalogs?.catalogs),
   }
 }

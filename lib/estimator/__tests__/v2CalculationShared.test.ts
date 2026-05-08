@@ -64,6 +64,106 @@ test('production rate helpers apply catalog defaults without replacing explicit 
   assert.equal(ceilingScope.primer_prod_rate_sqft_per_hour, 120)
 })
 
+test('applySelectedWallProductionRates uses selected room wall complexity rates', () => {
+  const [scope] = applySelectedWallProductionRates({
+    rooms: [{ room_id: 'R001', wall_complexity_id: 'WALL_REPAINT_LIGHT' }],
+    scopes: [{ id: 'wall-1', room_id: 'r001' } as WallCalculationScopeRow],
+    productionRates: [
+      {
+        id: 'WALL_REPAINT_LIGHT',
+        scope_id: 'WALLS',
+        sqft_per_hr: 160,
+        primer_sqft_per_hr: 180,
+      },
+    ],
+  })
+
+  assert.equal(scope.paint_prod_rate_sqft_per_hour, 160)
+  assert.equal(scope.primer_prod_rate_sqft_per_hour, 180)
+})
+
+test('applySelectedWallProductionRates keeps explicit wall scope production overrides', () => {
+  const [scope] = applySelectedWallProductionRates({
+    rooms: [{ room_id: 'R001', wall_complexity_id: 'WALL_REPAINT_LIGHT' }],
+    scopes: [
+      {
+        id: 'wall-1',
+        room_id: 'r001',
+        paint_prod_rate_sqft_per_hour: 140,
+        primer_prod_rate_sqft_per_hour: 155,
+      } as WallCalculationScopeRow,
+    ],
+    productionRates: [
+      {
+        id: 'WALL_REPAINT_LIGHT',
+        scope_id: 'WALLS',
+        sqft_per_hr: 160,
+        primer_sqft_per_hr: 180,
+      },
+    ],
+  })
+
+  assert.equal(scope.paint_prod_rate_sqft_per_hour, 140)
+  assert.equal(scope.primer_prod_rate_sqft_per_hour, 155)
+})
+
+test('applyBaseCeilingProductionRates uses the base ceiling production row', () => {
+  const [scope] = applyBaseCeilingProductionRates({
+    scopes: [{ id: 'ceil-1', room_id: 'R001' } as CeilingCalculationScopeRow],
+    productionRates: [
+      {
+        id: 'CEIL_STD',
+        scope_id: 'CEILINGS',
+        sqft_per_hr: 145,
+        primer_sqft_per_hr: 175,
+        active: 'Y',
+      },
+    ],
+  })
+
+  assert.equal(scope.paint_prod_rate_sqft_per_hour, 145)
+  assert.equal(scope.primer_prod_rate_sqft_per_hour, 175)
+})
+
+test('applyBaseCeilingProductionRates prefers CEIL_STD and does not use arbitrary ceiling rows', () => {
+  const [preferredScope] = applyBaseCeilingProductionRates({
+    scopes: [{ id: 'ceil-1', room_id: 'R001' } as CeilingCalculationScopeRow],
+    productionRates: [
+      {
+        id: 'CEIL_OTHER',
+        scope_id: 'CEILINGS',
+        sqft_per_hr: 90,
+        primer_sqft_per_hr: 95,
+        active: 'Y',
+      },
+      {
+        id: 'CEIL_STD',
+        scope_id: 'CEILINGS',
+        sqft_per_hr: 145,
+        primer_sqft_per_hr: 175,
+        active: 'Y',
+      },
+    ],
+  })
+  const [missingBaseScope] = applyBaseCeilingProductionRates({
+    scopes: [{ id: 'ceil-1', room_id: 'R001' } as CeilingCalculationScopeRow],
+    productionRates: [
+      {
+        id: 'CEIL_OTHER',
+        scope_id: 'CEILINGS',
+        sqft_per_hr: 90,
+        primer_sqft_per_hr: 95,
+        active: 'Y',
+      },
+    ],
+  })
+
+  assert.equal(preferredScope.paint_prod_rate_sqft_per_hour, 145)
+  assert.equal(preferredScope.primer_prod_rate_sqft_per_hour, 175)
+  assert.equal(missingBaseScope.paint_prod_rate_sqft_per_hour, undefined)
+  assert.equal(missingBaseScope.primer_prod_rate_sqft_per_hour, undefined)
+})
+
 test('catalog mappers normalize calculation catalogs from route/catalog source rows', () => {
   const raw = {
     paint_products: [{ id: 'paint-1', name: 'Wall Paint', price_per_gal: '45', coverage_sqft_per_gal_per_coat: '350' }],
@@ -100,7 +200,7 @@ test('room mode, trim paint, and access draft helpers normalize shared calculati
     product: { label: 'Trim Paint', price_per_gal: 80 },
   })
   const [accessDraft] = buildAccessFeeDrafts([
-    { room_id: 'r001', access_fee_id: 'ladder', qty: 2, actual_cost_override: '', position: null },
+    { id: 'access-1', room_id: 'r001', access_fee_id: 'ladder', qty: 2, actual_cost_override: null, notes: null, position: 0 },
   ])
 
   assert.equal(modes.get('R001'), 'SEG')
@@ -114,7 +214,7 @@ test('room mode, trim paint, and access draft helpers normalize shared calculati
     paint_cost: 60,
   })
   assert.deepEqual(accessDraft, {
-    id: 'access-fee-0',
+    id: 'access-1',
     roomId: 'R001',
     accessFeeId: 'ladder',
     qty: '2',

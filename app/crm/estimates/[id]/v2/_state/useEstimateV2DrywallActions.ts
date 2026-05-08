@@ -8,6 +8,11 @@ import {
   deleteDrywallRepairMutation,
   updateDrywallRepairMutation,
 } from '../_lib/estimateV2EditorMutations'
+import {
+  formatEstimateV2DrywallLabel,
+  formatEstimateV2RoomLabel,
+  type EstimateV2DestructiveIntent,
+} from './estimateV2DestructiveConfirm'
 
 function inferDrywallUnit(repairType: string): EstimateV2DrywallRepairDraft['unit'] {
   return repairType === 'patch_opening_repair' ? 'SQFT' : 'LF'
@@ -16,8 +21,9 @@ function inferDrywallUnit(repairType: string): EstimateV2DrywallRepairDraft['uni
 export function useEstimateV2DrywallActions(params: {
   store: EstimateV2EditorStoreApi
   drywallRateOptions: EstimateV2DrywallRateOption[]
+  requestDestructiveConfirm: (intent: EstimateV2DestructiveIntent) => void
 }) {
-  const { store, drywallRateOptions } = params
+  const { store, drywallRateOptions, requestDestructiveConfirm } = params
 
   const markDirty = useCallback(() => {
     store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: 'drywall' }))
@@ -59,12 +65,25 @@ export function useEstimateV2DrywallActions(params: {
 
   const deleteRepair = useCallback(
     (roomId: string, repairId: string) => {
-      const ok = window.confirm('Delete this drywall repair?')
-      if (!ok) return
-      store.getState().setDrywallRepairs((prev) => deleteDrywallRepairMutation(prev, roomId, repairId))
-      markDirty()
+      const { collections } = store.getState()
+      const room = collections.rooms.find((entry) => entry.roomId === roomId)
+      const repair = (collections.drywallRepairs ?? []).find((entry) => entry.id === repairId)
+      requestDestructiveConfirm({
+        kind: 'drywall-delete',
+        roomId,
+        roomLabel: formatEstimateV2RoomLabel(room?.roomName, roomId),
+        repairId,
+        surfaceLabel: repair?.surface === 'ceiling' ? 'Ceiling' : 'Wall',
+        repairLabel: formatEstimateV2DrywallLabel(repair?.repairType, drywallRateOptions),
+        run: () => {
+          store
+            .getState()
+            .setDrywallRepairs((prev) => deleteDrywallRepairMutation(prev, roomId, repairId))
+          markDirty()
+        },
+      })
     },
-    [markDirty, store]
+    [drywallRateOptions, markDirty, requestDestructiveConfirm, store]
   )
 
   return {

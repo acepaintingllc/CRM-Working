@@ -202,6 +202,7 @@ export function EstimateV2SummaryPageContent({
     job,
     loading,
     error,
+    retrySummary,
     policySaving,
     jobSettingsVm,
   } = useEstimateV2SummaryData(estimateId, resolvedRouteFamily)
@@ -268,7 +269,16 @@ export function EstimateV2SummaryPageContent({
       <CrmPageShell>
         <CrmSectionCard title="Summary unavailable">
           <div role="alert" aria-label="Quote summary failed to load">
-            <CrmNotice tone="error">{error?.message ?? 'Something went wrong'}</CrmNotice>
+            <div className="grid gap-3">
+              <CrmNotice tone="error">
+                {error?.message ?? 'We couldn’t load this quote summary.'}
+              </CrmNotice>
+              <div>
+                <CrmButton type="button" tone="primary" onClick={retrySummary}>
+                  Retry
+                </CrmButton>
+              </div>
+            </div>
           </div>
         </CrmSectionCard>
       </CrmPageShell>
@@ -322,6 +332,23 @@ export function EstimateV2SummaryPageContent({
       />
 
       <main className="grid gap-4 pb-24">
+        {derived.configurationWarning ? (
+          <CrmNotice tone="warning">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="grid gap-1">
+                <div className="font-bold">{derived.configurationWarning.title}</div>
+                <div>{derived.configurationWarning.detail}</div>
+                <div>{derived.configurationWarning.fixHint}</div>
+              </div>
+              <div>
+                <CrmButton type="button" tone="secondary" href={resolvedRouteFamily.editorHref(estimateId)}>
+                  Open estimate editor
+                </CrmButton>
+              </div>
+            </div>
+          </CrmNotice>
+        ) : null}
+
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div className="md:col-span-2 xl:col-span-2">
             <MetricCard label="Final Total" value={fmtUSD(derived.finalTotal)} accent />

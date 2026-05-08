@@ -1,6 +1,8 @@
 'use client'
 
 import { loadData, mutateData, type ApiMutationEnvelope } from '@/lib/client/api'
+import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
+import type { CustomerSendReadinessResult } from '@/lib/customer-send/readiness'
 
 export type CustomerSendVersion = {
   status?: string | null
@@ -9,11 +11,15 @@ export type CustomerSendVersion = {
   accepted_at?: string | null
   declined_at?: string | null
   public_token?: string | null
+  updated_at?: string | null
+  [key: string]: unknown
 }
 
 export type CustomerSendMutationResponse = {
   public_url?: string | null
   version?: CustomerSendVersion | null
+  document?: CustomerEstimateDocument | null
+  readiness?: CustomerSendReadinessResult | null
   delivery_error?: string | null
 }
 

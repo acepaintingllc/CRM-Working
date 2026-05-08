@@ -8,6 +8,7 @@ import type { EstimateV2EditorCollections } from './estimateV2EditorTypes'
 import {
   deriveEstimateV2PreparedSaveValidation,
   filterNonBlockingEstimateV2ValidationIssues,
+  formatEstimateV2ValidationIssues,
 } from './estimateV2EditorSaveOrchestration'
 
 export function useEstimateV2SaveDerived(params: {
@@ -32,9 +33,12 @@ export function useEstimateV2SaveDerived(params: {
   const savedBlockingIssues = useMemo(
     () =>
       !dirty && meta.saveStatus === 'blocked'
-        ? filterNonBlockingEstimateV2ValidationIssues(meta.validationIssues)
+        ? formatEstimateV2ValidationIssues({
+            issues: filterNonBlockingEstimateV2ValidationIssues(meta.validationIssues),
+            collections,
+          })
         : [],
-    [dirty, meta.saveStatus, meta.validationIssues]
+    [collections, dirty, meta.saveStatus, meta.validationIssues]
   )
   const blockedReason = blockingIssues[0] ?? savedBlockingIssues[0] ?? meta.autoSaveHint ?? null
   const effectiveSaveStatus =
@@ -47,8 +51,11 @@ export function useEstimateV2SaveDerived(params: {
     () =>
       dirty
         ? blockingIssues
-        : filterNonBlockingEstimateV2ValidationIssues(meta.validationIssues),
-    [blockingIssues, dirty, meta.validationIssues]
+        : formatEstimateV2ValidationIssues({
+            issues: filterNonBlockingEstimateV2ValidationIssues(meta.validationIssues),
+            collections,
+          }),
+    [blockingIssues, collections, dirty, meta.validationIssues]
   )
 
   const saveStatusText = useMemo(
@@ -58,7 +65,7 @@ export function useEstimateV2SaveDerived(params: {
         saveStatus: effectiveSaveStatus,
         dirty,
         blockedReason,
-        error: meta.error?.message ?? null,
+        error: null,
         updatedAt: meta.estimate?.updated_at ?? null,
         formatDateTime,
       }),
@@ -66,7 +73,6 @@ export function useEstimateV2SaveDerived(params: {
       blockedReason,
       dirty,
       effectiveSaveStatus,
-      meta.error?.message,
       meta.estimate?.updated_at,
       meta.saving,
     ]

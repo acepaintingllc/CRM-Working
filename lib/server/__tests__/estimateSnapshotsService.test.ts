@@ -1,10 +1,129 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import {
+import type { EstimateV2GetResponse } from '../../../types/estimator/v2.ts'
+import { buildEstimatePublicPersistedSnapshot } from '../../customer-estimates/publicVersionSnapshot.ts'
+
+process.env.NEXT_PUBLIC_SUPABASE_URL ??= 'https://example.supabase.co'
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'service-role-key'
+
+const {
   buildEstimateSnapshotRows,
   insertEstimateSnapshotIfMissing,
-} from '../estimate-feedback/snapshots.ts'
-import type { EstimateV2GetResponse } from '../../../types/estimator/v2.ts'
+} = await import('../estimate-feedback/snapshots.ts')
+
+function acceptedCustomerArtifact(title = 'Accepted Quote') {
+  const draft = {
+    to_email: 'taylor@example.test',
+    cc_email: '',
+    bcc_email: '',
+    subject: title,
+    body: 'Please review your quote.',
+    template_key: 'default',
+    title,
+    intro_paragraph: 'Thanks for reviewing this quote.',
+    closing_paragraph: 'Let us know if you have questions.',
+    terms_text: 'Standard quote terms.',
+    scope_text_edits: {},
+    quote_validity_days: 30,
+    deposit_language: 'Deposit due on acceptance.',
+    card_fee_note: 'Card fee may apply.',
+  }
+  const document = {
+    meta: {
+      estimate_id: 'estimate-1',
+      version_name: title,
+      version_state: 'live',
+      flow_version: 'v2',
+      title,
+      quote_date: '2026-04-29',
+      sent_at: '2026-04-29T09:00:00.000Z',
+      viewed_at: null,
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      declined_at: null,
+      status: 'accepted',
+      public_token: 'public-token-1',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '555-0100',
+      business_email: 'office@example.test',
+      address: '123 Main St',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    customer: {
+      name: 'Taylor Smith',
+      email: 'taylor@example.test',
+      phone: '555-0123',
+      address: '123 Main St',
+      street: '123 Main St',
+      city: 'Austin',
+      state: 'TX',
+      zip: '78701',
+    },
+    intro_paragraph: draft.intro_paragraph,
+    closing_paragraph: draft.closing_paragraph,
+    quote_validity_days: draft.quote_validity_days,
+    deposit_language: draft.deposit_language,
+    card_fee_note: draft.card_fee_note,
+    quote_rows: [],
+    scopes: [],
+    total: 1250,
+    terms: ['Standard quote terms.'],
+    source_meta: {
+      company: {
+        business_name: true,
+        main_phone: true,
+        business_email: true,
+        address: true,
+        website: false,
+        sender_signature: false,
+        logo_url: false,
+      },
+      settings: {
+        quote_validity_days: true,
+        terms_text: true,
+      },
+      overrides: {
+        title: true,
+        intro_paragraph: true,
+        closing_paragraph: true,
+        deposit_language: true,
+        card_fee_note: true,
+      },
+    },
+    header: {
+      company_name: 'ACE Painting',
+      contact_lines: ['555-0100', 'office@example.test'],
+      logo_url: '',
+      document_label: 'QUOTE',
+      quote_date_label: '2026-04-29',
+    },
+    customer_block: {
+      lines: ['Taylor Smith', '123 Main St'],
+    },
+    pricing_block: {
+      rows: [],
+      total: 1250,
+      footer_note: '',
+    },
+    terms_page: {
+      title: 'QUOTE TERMS',
+      sections: [],
+    },
+    assembly_meta: {
+      missing_company_fields: [],
+      missing_payment_fields: [],
+      missing_legal_fields: [],
+      used_placeholder_fallbacks: false,
+      used_explicit_terms_text: true,
+    },
+  }
+
+  return buildEstimatePublicPersistedSnapshot({ document, draft })
+}
 
 function estimateResponse(overrides: Partial<EstimateV2GetResponse> = {}) {
   return {
@@ -89,6 +208,7 @@ function estimateResponse(overrides: Partial<EstimateV2GetResponse> = {}) {
 }
 
 function buildRows(response = estimateResponse()) {
+  const snapshot = acceptedCustomerArtifact()
   return buildEstimateSnapshotRows({
     orgId: 'org-1',
     estimateResponse: response,
@@ -96,8 +216,14 @@ function buildRows(response = estimateResponse()) {
     publicVersion: {
       id: 'public-version-1',
       version_number: 2,
+      public_token: 'public-token-1',
       status: 'accepted',
-      snapshot_json: { document: { total: 1_250, title: 'Accepted Quote' } },
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      acceptance_json: {
+        legal_name: 'Taylor Smith',
+        signature_type: 'typed',
+      },
+      snapshot_json: snapshot,
     },
     createdBy: 'user-1',
   })
@@ -119,6 +245,7 @@ function createSnapshotDb(options: {
   existing?: Record<string, unknown> | null
   duplicateOnInsert?: boolean
   rpcError?: string | null
+  summaryLineExists?: boolean
 }) {
   const rpcPayloads: unknown[] = []
   let lookupCount = 0
@@ -166,11 +293,39 @@ function createSnapshotDb(options: {
                   return {
                     data:
                       lookupCount >= 1 && options.duplicateOnInsert
-                        ? { id: 'snapshot-raced', estimate_id: 'estimate-1' }
+                        ? {
+                            ...(
+                              rpcPayloads.at(-1) as {
+                                p_snapshot: Record<string, unknown>
+                              }
+                            ).p_snapshot,
+                            id: 'snapshot-raced',
+                          }
                         : options.existing ?? null,
                     error: null,
                   }
                 }),
+              })),
+            })),
+          })),
+        }
+      }
+      if (table === 'estimate_snapshot_line') {
+        return {
+          select: createFn(() => ({
+            eq: createFn(() => ({
+              eq: createFn(() => ({
+                eq: createFn(() => ({
+                  eq: createFn(() => ({
+                    maybeSingle: createFn(async () => ({
+                      data:
+                        options.summaryLineExists === false
+                          ? null
+                          : { id: 'snapshot-line-summary' },
+                      error: null,
+                    })),
+                  })),
+                })),
               })),
             })),
           })),
@@ -185,8 +340,9 @@ function createSnapshotDb(options: {
 }
 
 describe('estimate operational snapshots', () => {
-  it('builds accepted snapshot totals from canonical Estimator V2 calculated output', () => {
+  it('builds accepted customer-visible snapshot totals from the canonical accepted artifact', () => {
     const built = buildRows()
+    const artifactTotal = acceptedCustomerArtifact().document.total
 
     assert.deepEqual(
       {
@@ -221,11 +377,24 @@ describe('estimate operational snapshots', () => {
         estimated_supplies_cost: 35,
         estimated_other_cost: 200,
         estimated_access_cost: 125,
-        estimated_total: 1_250,
+        estimated_total: artifactTotal,
       }
     )
-    assert.deepEqual(built.snapshot.source_payload_json.customer_send_snapshot_json, {
-      document: { total: 1_250, title: 'Accepted Quote' },
+    assert.deepEqual(
+      built.snapshot.source_payload_json.customer_artifact,
+      acceptedCustomerArtifact()
+    )
+    assert.deepEqual(built.snapshot.source_payload_json.accepted_public_version, {
+      id: 'public-version-1',
+      version_number: 2,
+      public_token: 'public-token-1',
+      status: 'accepted',
+      accepted_at: '2026-04-29T10:00:00.000Z',
+      acceptance_json: {
+        legal_name: 'Taylor Smith',
+        signature_type: 'typed',
+      },
+      snapshot_json: acceptedCustomerArtifact(),
     })
     assert.deepEqual(
       built.lines.map((line) => line.line_key),
@@ -234,15 +403,20 @@ describe('estimate operational snapshots', () => {
   })
 
   it('returns an existing snapshot through the atomic RPC without mutating immutable rows', async () => {
+    const existing = {
+      ...buildRows().snapshot,
+      id: 'snapshot-existing',
+      estimate_id: 'estimate-1',
+    }
     const { db, rpcPayloads } = createSnapshotDb({
-      existing: { id: 'snapshot-existing', estimate_id: 'estimate-1' },
+      existing,
     })
 
     const result = await insertEstimateSnapshotIfMissing(db as never, buildRows())
 
     assert.deepEqual(result, {
       ok: true,
-      data: { id: 'snapshot-existing', estimate_id: 'estimate-1' },
+      data: existing,
     })
     assert.equal(rpcPayloads.length, 1)
   })
@@ -263,7 +437,7 @@ describe('estimate operational snapshots', () => {
       payload.p_lines.some(
         (line) =>
           line.line_key === 'summary:job-total' &&
-          line.estimated_total === 1_250
+          line.estimated_total === acceptedCustomerArtifact().document.total
       )
     )
   })
@@ -278,7 +452,10 @@ describe('estimate operational snapshots', () => {
 
     assert.deepEqual(result, {
       ok: true,
-      data: { id: 'snapshot-raced', estimate_id: 'estimate-1' },
+      data: {
+        ...buildRows().snapshot,
+        id: 'snapshot-raced',
+      },
     })
     assert.equal(rpcPayloads.length, 1)
   })
@@ -298,6 +475,25 @@ describe('estimate operational snapshots', () => {
     })
   })
 
+  it('rejects canonical-looking existing snapshots when required snapshot lines are missing', async () => {
+    const { db } = createSnapshotDb({
+      existing: {
+        ...buildRows().snapshot,
+        id: 'snapshot-existing',
+      },
+      summaryLineExists: false,
+    })
+
+    const result = await insertEstimateSnapshotIfMissing(db as never, buildRows())
+
+    assert.deepEqual(result, {
+      ok: false,
+      kind: 'invalid_input',
+      message:
+        'Existing accepted estimate snapshot is incomplete and cannot be repaired in place because estimate snapshot rows are immutable. Run an additive snapshot replacement migration.',
+    })
+  })
+
   it('keeps snapshot data unchanged after live estimate values mutate', () => {
     const response = estimateResponse()
     const built = buildRows(response)
@@ -305,7 +501,7 @@ describe('estimate operational snapshots', () => {
     ;(response.pricing_summary as Record<string, unknown>).finalTotal = 9_999
     ;(response.wall_calculations?.scopes?.[0] as Record<string, unknown>).effective_total = 9_999
 
-    assert.equal(built.snapshot.estimated_total, 1_250)
+    assert.equal(built.snapshot.estimated_total, acceptedCustomerArtifact().document.total)
     assert.equal(
       built.lines.find((line) => line.line_key === 'walls:wall-1')?.estimated_total,
       600
@@ -317,6 +513,91 @@ describe('estimate operational snapshots', () => {
         }
       ).scopes[0].effective_total,
       600
+    )
+  })
+
+  it('keeps customer-visible total from the accepted artifact when live calculation has drifted', () => {
+    const acceptedArtifact = acceptedCustomerArtifact('Accepted artifact total')
+    const built = buildEstimateSnapshotRows({
+      orgId: 'org-1',
+      estimateResponse: estimateResponse({
+        pricing_summary: {
+          effectiveLaborHours: 99,
+          paintMaterialCost: 900,
+          primerMaterialCost: 100,
+          supplyCost: 350,
+          sharedAccessCost: 1250,
+          finalTotal: 99_999,
+        },
+      } as Partial<EstimateV2GetResponse>),
+      job: { id: 'job-1', customer_id: 'customer-1', linked_estimate_id: 'estimate-1' },
+      publicVersion: {
+        id: 'public-version-1',
+        version_number: 2,
+        public_token: 'public-token-1',
+        status: 'accepted',
+        accepted_at: '2026-04-29T10:00:00.000Z',
+        acceptance_json: {
+          legal_name: 'Taylor Smith',
+          signature_type: 'typed',
+        },
+        snapshot_json: acceptedArtifact,
+      },
+      createdBy: 'user-1',
+    })
+
+    assert.equal(built.snapshot.estimated_total, acceptedArtifact.document.total)
+    assert.equal(
+      (
+        built.snapshot.totals_json as {
+          internal_operational_pricing_summary: { final_total: number }
+        }
+      ).internal_operational_pricing_summary.final_total,
+      99_999
+    )
+    assert.equal(
+      built.snapshot.source_payload_json.customer_visible_source,
+      'customer_artifact.document'
+    )
+  })
+
+  it('fails closed for missing or legacy accepted customer artifacts', () => {
+    assert.throws(
+      () =>
+        buildEstimateSnapshotRows({
+          orgId: 'org-1',
+          estimateResponse: estimateResponse(),
+          job: { id: 'job-1', customer_id: 'customer-1' },
+          publicVersion: {
+            id: 'public-version-1',
+            version_number: 2,
+            public_token: 'public-token-1',
+            status: 'accepted',
+            accepted_at: '2026-04-29T10:00:00.000Z',
+            acceptance_json: {},
+            snapshot_json: null,
+          },
+        }),
+      /missing the canonical customer artifact/
+    )
+
+    assert.throws(
+      () =>
+        buildEstimateSnapshotRows({
+          orgId: 'org-1',
+          estimateResponse: estimateResponse(),
+          job: { id: 'job-1', customer_id: 'customer-1' },
+          publicVersion: {
+            id: 'public-version-1',
+            version_number: 2,
+            public_token: 'public-token-1',
+            status: 'accepted',
+            accepted_at: '2026-04-29T10:00:00.000Z',
+            acceptance_json: {},
+            snapshot_json: acceptedCustomerArtifact().document,
+          },
+        }),
+      /legacy and must be migrated/
     )
   })
 

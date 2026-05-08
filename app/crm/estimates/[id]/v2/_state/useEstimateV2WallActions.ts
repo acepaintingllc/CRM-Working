@@ -15,12 +15,18 @@ import {
   toggleRoomWallIncludeMutation,
   updateWallScopeMutation,
 } from '../_lib/estimateV2EditorMutations'
+import {
+  formatEstimateV2RoomLabel,
+  formatEstimateV2ScopeLabel,
+  type EstimateV2DestructiveIntent,
+} from './estimateV2DestructiveConfirm'
 
 export function useEstimateV2WallActions(params: {
   store: EstimateV2EditorStoreApi
   roomModeById: Map<string, 'RECT' | 'SEG'>
+  requestDestructiveConfirm: (intent: EstimateV2DestructiveIntent) => void
 }) {
-  const { store, roomModeById } = params
+  const { store, roomModeById, requestDestructiveConfirm } = params
 
   const markDirty = useCallback(() => {
     store.getState().setDebugMeta((prev) => ({ ...prev, dirtySource: 'walls' }))
@@ -76,20 +82,32 @@ export function useEstimateV2WallActions(params: {
 
   const deleteScope = useCallback(
     (roomId: string, scopeId: string) => {
-      const ok = window.confirm('Delete this wall scope and all of its segments?')
-      if (!ok) return
-      const { collections, setScopes, setSegments } = store.getState()
-      const next = deleteWallScopeMutation({
-        scopes: collections.scopes,
-        segments: collections.segments,
+      const { collections } = store.getState()
+      const room = collections.rooms.find((entry) => entry.roomId === roomId)
+      const scope = collections.scopes.find((entry) => entry.id === scopeId)
+      const segmentCount = collections.segments.filter((segment) => segment.wallScopeId === scopeId).length
+      requestDestructiveConfirm({
+        kind: 'wall-scope-delete',
         roomId,
+        roomLabel: formatEstimateV2RoomLabel(room?.roomName, roomId),
         scopeId,
+        scopeLabel: formatEstimateV2ScopeLabel(scope?.scopeName, 'Wall scope'),
+        segmentCount,
+        run: () => {
+          const { collections: currentCollections, setScopes, setSegments } = store.getState()
+          const next = deleteWallScopeMutation({
+            scopes: currentCollections.scopes,
+            segments: currentCollections.segments,
+            roomId,
+            scopeId,
+          })
+          setScopes(next.scopes)
+          setSegments(next.segments)
+          markDirty()
+        },
       })
-      setScopes(next.scopes)
-      setSegments(next.segments)
-      markDirty()
     },
-    [markDirty, store]
+    [markDirty, requestDestructiveConfirm, store]
   )
 
   const addSegment = useCallback(

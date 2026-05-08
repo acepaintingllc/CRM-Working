@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { CANONICAL_FIXTURES } from '../__fixtures__/canonical/index.ts'
 
-test('canonical Estimator V2 fixtures expose exactly five typed editor-state scenarios', () => {
-  assert.equal(CANONICAL_FIXTURES.length, 5)
+test('canonical Estimator V2 fixtures expose exactly eight typed editor-state scenarios', () => {
+  assert.equal(CANONICAL_FIXTURES.length, 8)
 
   const names = CANONICAL_FIXTURES.map((fixture) => fixture.scenarioName)
   assert.deepEqual(names, [
@@ -12,6 +12,9 @@ test('canonical Estimator V2 fixtures expose exactly five typed editor-state sce
     'All major policy flags',
     'Manual overrides + disabled scopes',
     'Multi-room with geometry variation',
+    'Simple hallway repaint',
+    'Full master bedroom',
+    'Exterior trim',
   ])
 
   for (const fixture of CANONICAL_FIXTURES) {

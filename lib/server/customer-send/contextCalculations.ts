@@ -1,85 +1,35 @@
 import { loadCalculatedEstimateV2Artifacts } from '@/lib/server/estimate-v2/calculationOrchestration'
-import type { EstimateTemplateSettingsRow } from '@/lib/server/estimateTemplateSettings'
+import {
+  enrichEstimateV2AccessFeeRows,
+  enrichEstimateV2OtherRows,
+} from '@/lib/server/estimate-v2/calculatedRowEnrichment'
+import {
+  errorResult,
+  okResult,
+  type ServiceResult,
+} from '@/lib/server/serviceResult'
+import {
+  normalizeDoorScopeRow as normalizeCustomerSendCalculatedDoorScopeRow,
+  normalizeDrywallScopeRow as normalizeCustomerSendCalculatedDrywallScopeRow,
+  normalizePaintScopeRow as normalizeCustomerSendCalculatedPaintScopeRow,
+  normalizeTrimScopeRow as normalizeCustomerSendCalculatedTrimScopeRow,
+} from './contextMapper'
 import type {
+  CustomerQuoteAccessFeeRow,
+  CustomerQuoteDoorScopeRow,
+  CustomerQuoteDrywallScopeRow,
+  EstimateJobSettingsRow,
+  CustomerQuoteOtherRow,
   EstimateCustomerSendCalculatedData,
   EstimateCustomerSendRawResources,
 } from './contextTypes'
-import type { Unsafe } from '@/lib/customer-estimates/types'
 
 export function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
 }
 
-export function resolveRoomModeById(params: {
-  rooms: Unsafe[]
-  wallScopes: Unsafe[]
-  ceilingScopes: Unsafe[]
-}) {
-  const roomMode = new Map<string, 'RECT' | 'SEG'>()
-  for (const scope of params.wallScopes) {
-    const roomId = asText(scope.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(scope.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  for (const scope of params.ceilingScopes) {
-    const roomId = asText(scope.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(scope.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  for (const room of params.rooms) {
-    const roomId = asText(room.room_id).toUpperCase()
-    if (!roomId || roomMode.has(roomId)) continue
-    roomMode.set(roomId, asText(room.mode).toUpperCase() === 'SEG' ? 'SEG' : 'RECT')
-  }
-  return roomMode
-}
-
-function fallbackCalculatedData(
-  resources: EstimateCustomerSendRawResources
-): EstimateCustomerSendCalculatedData {
-  return {
-    quoteWallScopes: resources.wallScopes,
-    quoteCeilingScopes: resources.ceilingScopes,
-    quoteTrimScopes: resources.trimScopes,
-    quoteDoorScopes: resources.doorScopes,
-    quoteDrywallScopes: resources.drywallRepairs ?? [],
-    quoteAccessFees: resources.accessFees,
-    quoteOtherRows: resources.other,
-    pricingSummary: null,
-  }
-}
-
-function enrichAccessFeeRows(params: {
-  rawRows: Unsafe[]
-  calculatedRows: Array<Record<string, unknown>>
-}) {
-  const calculatedById = new Map(params.calculatedRows.map((row) => [asText(row.id), row]))
-  return params.rawRows.map((row) => {
-    const id = asText(row.id)
-    const calculated = calculatedById.get(id)
-    if (!calculated) return row
-    return {
-      ...row,
-      label: calculated.label,
-      access_group: calculated.group,
-      catalog_amount: calculated.catalogAmount,
-      calculated_total: calculated.calculatedTotal,
-      effective_total: calculated.total,
-      overridden: calculated.overridden,
-    }
-  })
-}
-
-function enrichOtherRows(params: {
-  rawRows: Unsafe[]
-  calculatedRows: Array<Record<string, unknown>>
-}) {
-  const calculatedById = new Map(params.calculatedRows.map((row) => [asText(row.id), row]))
-  return params.rawRows.map((row) => {
-    const id = asText(row.id)
-    const calculated = calculatedById.get(id)
-    return calculated ? { ...row, ...calculated } : row
-  })
+function asCalculationInputRecord(value: EstimateJobSettingsRow): Record<string, unknown> {
+  return { ...value }
 }
 
 export async function deriveEstimateCustomerSendCalculatedData(
@@ -90,14 +40,14 @@ export async function deriveEstimateCustomerSendCalculatedData(
     userId: string
     estimateId: string
   }
-): Promise<EstimateCustomerSendCalculatedData> {
+): Promise<ServiceResult<EstimateCustomerSendCalculatedData>> {
   try {
     const calculated = await loadCalculatedEstimateV2Artifacts({
       requestOrigin: params.requestOrigin,
       orgId: params.orgId,
       userId: params.userId,
       estimateId: params.estimateId,
-      jobsettings: resources.jobsettings as Unsafe,
+      jobsettings: asCalculationInputRecord(resources.jobsettings),
       rooms: resources.rooms,
       roomWallScopes: resources.wallScopes,
       wallSegments: resources.wallSegments,
@@ -108,26 +58,41 @@ export async function deriveEstimateCustomerSendCalculatedData(
       drywallRepairs: resources.drywallRepairs ?? [],
       accessFees: resources.accessFees,
       other: resources.other,
-      orgDefaults: resources.settingsRow as unknown as EstimateTemplateSettingsRow,
+      orgDefaults: resources.settingsRow,
     })
 
-    return {
-      quoteWallScopes: calculated.quoteWallScopes as Unsafe[],
-      quoteCeilingScopes: calculated.quoteCeilingScopes as Unsafe[],
-      quoteTrimScopes: calculated.quoteTrimScopes as Unsafe[],
-      quoteDoorScopes: calculated.quoteDoorScopes as Unsafe[],
-      quoteDrywallScopes: (calculated.drywallCalculations.scopes ?? []) as Unsafe[],
-      quoteAccessFees: enrichAccessFeeRows({
+    return okResult({
+      quoteWallScopes: calculated.quoteWallScopes.map((row) =>
+        normalizeCustomerSendCalculatedPaintScopeRow(row)
+      ),
+      quoteCeilingScopes: calculated.quoteCeilingScopes.map((row) =>
+        normalizeCustomerSendCalculatedPaintScopeRow(row)
+      ),
+      quoteTrimScopes: calculated.quoteTrimScopes.map((row) =>
+        normalizeCustomerSendCalculatedTrimScopeRow(row)
+      ),
+      quoteDoorScopes: calculated.quoteDoorScopes.map((row) =>
+        normalizeCustomerSendCalculatedDoorScopeRow(row as unknown as CustomerQuoteDoorScopeRow)
+      ),
+      quoteDrywallScopes: (calculated.drywallCalculations.scopes ?? []).map((row) =>
+        normalizeCustomerSendCalculatedDrywallScopeRow(row as unknown as CustomerQuoteDrywallScopeRow)
+      ),
+      quoteAccessFees: enrichEstimateV2AccessFeeRows({
         rawRows: resources.accessFees,
         calculatedRows: calculated.accessFeeCalculation.rows as Array<Record<string, unknown>>,
-      }),
-      quoteOtherRows: enrichOtherRows({
+      }) as CustomerQuoteAccessFeeRow[],
+      quoteOtherRows: enrichEstimateV2OtherRows({
         rawRows: resources.other,
         calculatedRows: calculated.otherCalculations.scopes as Array<Record<string, unknown>>,
-      }),
+      }) as CustomerQuoteOtherRow[],
       pricingSummary: { finalTotal: calculated.pricingSummary.finalTotal ?? null },
-    }
-  } catch {
-    return fallbackCalculatedData(resources)
+    })
+  } catch (error) {
+    return errorResult(
+      'server_error',
+      error instanceof Error && asText(error.message)
+        ? `Unable to load canonical estimate calculations for customer send: ${asText(error.message)}`
+        : 'Unable to load canonical estimate calculations for customer send.'
+    )
   }
 }

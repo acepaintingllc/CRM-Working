@@ -473,7 +473,9 @@ export function buildPerJobSupplyCost(params: {
       (activeScopes.has('trim') && scope === 'trim')
     if (!applies) continue
     const multiplier = String(row.crew_multiplier ?? '').toUpperCase() === 'Y' ? params.crewSize : 1
-    total = round4(total + Math.max(0, row.value) * multiplier)
+    const value = row.value == null ? null : Math.max(0, row.value)
+    if (value == null) continue
+    total = round4(total + value * multiplier)
   }
   return total
 }

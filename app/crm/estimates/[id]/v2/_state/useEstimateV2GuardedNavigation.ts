@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isEstimateRouteFamilySendHref } from '../../estimateRouteFamily'
 import type {
   EstimateV2EditorNavigationActions,
   EstimateV2EditorNavigationVm,
@@ -9,6 +10,12 @@ import type {
   EstimateV2EditorSaveVm,
 } from './estimateV2EditorTypes'
 import { shouldGuardEstimateV2Navigation } from './estimateV2NavigationGuard'
+
+const defaultUnsavedDescription = 'This quote workspace has unsaved edits.'
+const defaultUnsavedNoticeText =
+  'Save your changes before leaving, discard them, or cancel navigation to keep editing.'
+const sendUnsavedNoticeText =
+  'The send page uses the last saved server total. Your unsaved editor changes will not be included unless you save first.'
 
 export function useEstimateV2GuardedNavigation({
   listHref,
@@ -120,11 +127,16 @@ export function useEstimateV2GuardedNavigation({
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
+  const isPendingSendNavigation =
+    pendingNavigationHref != null && isEstimateRouteFamilySendHref(pendingNavigationHref)
+
   return {
     navigationVm: {
       unsavedDialogProps: {
         isOpen: Boolean(pendingNavigationHref) && shouldGuardNavigation,
         canSave: !pageVm.saving && saveVm.canManualSave,
+        description: defaultUnsavedDescription,
+        noticeText: isPendingSendNavigation ? sendUnsavedNoticeText : defaultUnsavedNoticeText,
         onStay: cancelNavigation,
         onSave: saveAndLeave,
         onLeave: discardAndLeave,

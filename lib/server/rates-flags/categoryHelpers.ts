@@ -147,12 +147,16 @@ export function buildMutationPlan<TKey extends RatesFlagsEditableCategoryKey>(
     }
   }
 
-  const rowNumber =
-    action === 'create'
-      ? table.rows.length > 0
+  let rowNumber: number
+  if (action === 'create') {
+    rowNumber =
+      table.rows.length > 0
         ? table.rows[table.rows.length - 1].rowNumber + 1
         : table.headerRow + 1
-      : existing!.rowNumber
+  } else {
+    if (!existing) return { ok: false, error: 'Row not found.', status: 404 }
+    rowNumber = existing.rowNumber
+  }
 
   const updates: {
     range: string

@@ -55,5 +55,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Estimating confidence gate
+        run: npm run test:estimating-confidence
+
       - name: Build
         run: npm run build

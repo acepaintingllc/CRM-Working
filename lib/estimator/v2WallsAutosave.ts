@@ -1,4 +1,5 @@
 export type SaveStatus = 'idle' | 'autosaving' | 'saved' | 'error' | 'blocked'
+export const ESTIMATE_V2_SAVE_FAILURE_MESSAGE = "We couldn't save your changes. Try again."
 
 export function shouldQueueAutosave(params: { loading: boolean; saving: boolean; dirty: boolean }) {
   return !params.loading && !params.saving && params.dirty
@@ -33,7 +34,7 @@ export function getSaveStatusText(params: {
     return params.saveStatus === 'autosaving' ? 'Autosaving draft...' : 'Saving draft...'
   }
   if (params.saveStatus === 'error') {
-    return params.error ?? 'Save failed'
+    return ESTIMATE_V2_SAVE_FAILURE_MESSAGE
   }
   if (params.saveStatus === 'blocked') {
     return params.blockedReason

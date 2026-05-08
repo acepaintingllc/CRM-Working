@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EstimateV2SavePayload } from '@/types/estimator/v2'
+import { applyEffectiveProductDefaults } from '@/lib/estimator/v2CalculationPreparation'
 import type { EstimateTemplateSettingsRow } from '../../estimateTemplateSettings.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -41,14 +42,178 @@ vi.mock('../../estimateV2Catalogs.ts', () => ({
 }))
 
 import {
-  calculateCeilingsForSave,
-  calculateDoorsForSave,
+  calculateEstimateV2ArtifactsForSave,
   calculateEstimateV2ArtifactsFromPayload,
-  calculateTrimForSave,
-  calculateWallsForSave,
   loadCalculatedEstimateV2Artifacts,
   type EstimateV2CalculationCatalogBundle,
 } from '../calculationOrchestration.ts'
+
+type SavePayloadWallScope = EstimateV2SavePayload['room_wall_scopes'][number]
+type SavePayloadCeilingScope = EstimateV2SavePayload['room_ceiling_scopes'][number]
+type SavePayloadTrimScope = EstimateV2SavePayload['room_trim_scopes'][number]
+type SavePayloadDoorScope = NonNullable<EstimateV2SavePayload['room_door_scopes']>[number]
+
+function normalizeWrapperParityValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeWrapperParityValue)
+  }
+  if (!value || typeof value !== 'object') return value
+
+  const normalized: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry == null) continue
+    if (key === 'ceiling_geometry_mode' && entry === 'FLAT') continue
+    normalized[key] = normalizeWrapperParityValue(entry)
+  }
+  return normalized
+}
+
+const schemaDriftSentinels = {
+  // These intentionally compile only while save/load payload rows stay aligned with canonical engine rows.
+  wallRequiresCanonicalRowFields: {
+    room_id: 'R001',
+    position: 0,
+    mode: 'RECT',
+    include: 'Y',
+    scope_name: null,
+    color_id: null,
+    paint_product_id: null,
+    primer_product_id: null,
+    prime_mode: 'NONE',
+    height_in: null,
+    perimeter_in: null,
+    standard_door_count: null,
+    standard_window_count: null,
+    height_factor: null,
+    complexity_factor: null,
+    wall_flag_factor: null,
+    cut_in_top_factor: null,
+    cut_in_bottom_factor: null,
+    raw_area_sf: null,
+    override_area_sf: null,
+    effective_area_sf: null,
+    raw_paint_hours: null,
+    override_paint_hours: null,
+    effective_paint_hours: null,
+    raw_primer_hours: null,
+    override_primer_hours: null,
+    effective_primer_hours: null,
+    raw_paint_gallons: null,
+    override_paint_gallons: null,
+    effective_paint_gallons: null,
+    raw_primer_gallons: null,
+    override_primer_gallons: null,
+    effective_primer_gallons: null,
+    raw_supply_cost: null,
+    override_supply_cost: null,
+    effective_supply_cost: null,
+    raw_total: null,
+    override_total: null,
+    effective_total: null,
+    notes: null,
+  } satisfies SavePayloadWallScope,
+  ceilingRequiresCanonicalRowFields: {
+    room_id: 'R001',
+    position: 0,
+    mode: 'RECT',
+    include: 'Y',
+    scope_name: null,
+    area_sf: null,
+    length_in: null,
+    width_in: null,
+    color_id: null,
+    paint_product_id: null,
+    primer_product_id: null,
+    prime_mode: 'NONE',
+    spot_prime_percent: null,
+    ceiling_type_id: null,
+    height_factor: null,
+    complexity_factor: null,
+    ceiling_flag_factor: null,
+    override_area_sf: null,
+    override_paint_hours: null,
+    override_primer_hours: null,
+    override_paint_gallons: null,
+    override_primer_gallons: null,
+    override_supply_cost: null,
+    override_total: null,
+    raw_area_sf: null,
+    effective_area_sf: null,
+    raw_paint_hours: null,
+    effective_paint_hours: null,
+    raw_primer_hours: null,
+    effective_primer_hours: null,
+    raw_paint_gallons: null,
+    effective_paint_gallons: null,
+    raw_primer_gallons: null,
+    effective_primer_gallons: null,
+    raw_supply_cost: null,
+    effective_supply_cost: null,
+    raw_total: null,
+    effective_total: null,
+    notes: null,
+  } satisfies SavePayloadCeilingScope,
+  trimRequiresCanonicalRowFields: {
+    room_id: 'R001',
+    position: 0,
+    include: 'Y',
+    scope_name: null,
+    trim_type_id: null,
+    trim_family: null,
+    unit_type: 'LF',
+    measurement_mode: 'MANUAL',
+    helper_source: null,
+    measurement_value: null,
+    helper_value: null,
+    color_id: null,
+    paint_product_id: null,
+    primer_product_id: null,
+    paint_enabled: 'Y',
+    prime_mode: 'NONE',
+    spot_prime_percent: null,
+    production_rate_id: null,
+    prep_factor: null,
+    height_factor: null,
+    profile_factor: null,
+    room_flag_factor: null,
+    masking_factor: null,
+    stair_factor: null,
+    difficult_finish_factor: null,
+    caulk_fill_factor: null,
+    override_measurement: null,
+    override_hours: null,
+    override_gallons: null,
+    override_supply_cost: null,
+    override_total: null,
+    override_description: null,
+    raw_measurement: null,
+    effective_measurement: null,
+    raw_paint_hours: null,
+    effective_paint_hours: null,
+    raw_primer_hours: null,
+    effective_primer_hours: null,
+    raw_paint_gallons: null,
+    effective_paint_gallons: null,
+    raw_primer_gallons: null,
+    effective_primer_gallons: null,
+    raw_supply_cost: null,
+    effective_supply_cost: null,
+    raw_total: null,
+    effective_total: null,
+    notes: null,
+  } satisfies SavePayloadTrimScope,
+  doorRequiresCanonicalRowFields: {
+    room_id: 'R001',
+    paint_product_id: null,
+    primer_product_id: null,
+  } satisfies SavePayloadDoorScope,
+}
+
+void schemaDriftSentinels
+
+// @ts-expect-error EstimateV2SavePayload wall scopes must expose canonical wall engine fields.
+const schemaDriftMissingWallField: SavePayloadWallScope = { room_id: 'R001' }
+void schemaDriftMissingWallField
 
 const orgDefaults: EstimateTemplateSettingsRow = {
   default_template_key: 'standard',
@@ -286,7 +451,8 @@ const payload: EstimateV2SavePayload = {
   ],
   room_wall_scopes: [
     {
-      id: 'wall-1',
+      ...schemaDriftSentinels.wallRequiresCanonicalRowFields,
+      id: '11111111-1111-4111-8111-111111111111',
       room_id: 'R001',
       position: 0,
       mode: 'RECT',
@@ -320,7 +486,8 @@ const payload: EstimateV2SavePayload = {
   ],
   room_ceiling_scopes: [
     {
-      id: 'ceiling-1',
+      ...schemaDriftSentinels.ceilingRequiresCanonicalRowFields,
+      id: '22222222-2222-4222-8222-222222222222',
       room_id: 'R001',
       position: 0,
       mode: 'RECT',
@@ -338,7 +505,8 @@ const payload: EstimateV2SavePayload = {
   ceiling_scope_segments: [],
   room_trim_scopes: [
     {
-      id: 'trim-1',
+      ...schemaDriftSentinels.trimRequiresCanonicalRowFields,
+      id: '33333333-3333-4333-8333-333333333333',
       room_id: 'R001',
       position: 0,
       include: 'Y',
@@ -357,7 +525,7 @@ const payload: EstimateV2SavePayload = {
   ],
   room_door_scopes: [
     {
-      id: 'door-1',
+      id: '44444444-4444-4444-8444-444444444444',
       room_id: 'R001',
       position: 0,
       include: 'Y',
@@ -372,7 +540,7 @@ const payload: EstimateV2SavePayload = {
   ],
   drywall_repairs: [
     {
-      id: 'drywall-1',
+      id: '55555555-5555-4555-8555-555555555555',
       room_id: 'R001',
       position: 0,
       surface: 'wall',
@@ -397,6 +565,47 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
   beforeEach(() => {
     mocks.loadEstimateV2CalculationCatalogs.mockReset()
     mocks.loadEstimateV2CalculationCatalogs.mockResolvedValue(catalogs)
+  })
+
+  it('applies effective product defaults for calculation rows and restores persisted product IDs', () => {
+    const productDefaults = applyEffectiveProductDefaults({
+      rows: [
+        { id: 'uses-defaults', paint_product_id: null, primer_product_id: '' },
+        { id: 'keeps-explicit', paint_product_id: 'CUSTOM-PAINT', primer_product_id: 'CUSTOM-PRIMER' },
+      ],
+      defaultPaintProductId: 'DEFAULT-PAINT',
+      defaultPrimerProductId: 'DEFAULT-PRIMER',
+    })
+
+    expect(productDefaults.rows).toEqual([
+      { id: 'uses-defaults', paint_product_id: 'DEFAULT-PAINT', primer_product_id: 'DEFAULT-PRIMER' },
+      { id: 'keeps-explicit', paint_product_id: 'CUSTOM-PAINT', primer_product_id: 'CUSTOM-PRIMER' },
+    ])
+
+    expect(
+      productDefaults.restorePersistedProductIds([
+        {
+          id: 'uses-defaults',
+          paint_product_id: 'DEFAULT-PAINT',
+          primer_product_id: 'DEFAULT-PRIMER',
+          effective_total: 12,
+        },
+        {
+          id: 'keeps-explicit',
+          paint_product_id: 'CUSTOM-PAINT',
+          primer_product_id: 'CUSTOM-PRIMER',
+          effective_total: 24,
+        },
+      ])
+    ).toEqual([
+      { id: 'uses-defaults', paint_product_id: null, primer_product_id: null, effective_total: 12 },
+      {
+        id: 'keeps-explicit',
+        paint_product_id: 'CUSTOM-PAINT',
+        primer_product_id: 'CUSTOM-PRIMER',
+        effective_total: 24,
+      },
+    ])
   })
 
   it('matches the DB/catalog-loading wrapper when catalogs are supplied as fixtures', async () => {
@@ -424,7 +633,9 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
       orgDefaults,
     })
 
-    expect(wrapped).toEqual(pure)
+    expect(normalizeWrapperParityValue(wrapped)).toEqual(
+      normalizeWrapperParityValue(pure)
+    )
     expect(mocks.loadEstimateV2CalculationCatalogs).toHaveBeenCalledWith({
       requestOrigin: 'http://localhost:3000',
       orgId: 'org-1',
@@ -434,8 +645,13 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
   })
 
   it('runs the full parity path for defaults, production rates, conditions, trim modes, and pricing rollup', () => {
+    const payloadWithDoorCondition = structuredClone(payload) as EstimateV2SavePayload
+    if (payloadWithDoorCondition.room_door_scopes?.[0]) {
+      payloadWithDoorCondition.room_door_scopes[0].condition_factor = 1.25
+    }
+
     const result = calculateEstimateV2ArtifactsFromPayload({
-      payload,
+      payload: payloadWithDoorCondition,
       calculationCatalogs: catalogs,
       orgDefaults,
     })
@@ -451,8 +667,8 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
     )
     expect(result.quoteWallScopes[0]).toEqual(
       expect.objectContaining({
-        paint_product_id: 'WALL-DEFAULT',
-        primer_product_id: 'PRIMER-DEFAULT',
+        paint_product_id: null,
+        primer_product_id: null,
       })
     )
     expect(result.ceilingCalculations.scopes[0]).toEqual(
@@ -464,6 +680,12 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
       })
     )
     expect(result.ceilingCalculations.scopes[0].condition_factor).toBeCloseTo(1.155)
+    expect(result.quoteCeilingScopes[0]).toEqual(
+      expect.objectContaining({
+        paint_product_id: null,
+        primer_product_id: null,
+      })
+    )
     expect(result.trimCalculations.scopes[0]).toEqual(
       expect.objectContaining({
         paint_product_id: 'TRIM-DEFAULT',
@@ -472,6 +694,26 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
       })
     )
     expect(result.trimCalculations.scopes[0].condition_factor).toBeCloseTo(1.265)
+    expect(result.quoteTrimScopes[0]).toEqual(
+      expect.objectContaining({
+        paint_product_id: null,
+        primer_product_id: null,
+      })
+    )
+    expect(result.doorCalculations.scopes[0]).toEqual(
+      expect.objectContaining({
+        paint_product_id: 'TRIM-DEFAULT',
+        primer_product_id: 'PRIMER-DEFAULT',
+        condition_factor: 1.25,
+        effective_total: expect.any(Number),
+      })
+    )
+    expect(result.quoteDoorScopes[0]).toEqual(
+      expect.objectContaining({
+        paint_product_id: null,
+        primer_product_id: null,
+      })
+    )
     expect(result.doorCalculations.scopes[0].effective_total).toBeGreaterThan(0)
     expect(result.drywallCalculations.scopes[0]).toEqual(
       expect.objectContaining({
@@ -503,7 +745,7 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
     expect(result.pricingSummary.finalTotal).toBeGreaterThanOrEqual(1000)
   })
 
-  it('keeps save helper scope calculations aligned with canonical artifact defaults', async () => {
+  it('keeps save calculation artifacts aligned with canonical artifact defaults', async () => {
     const payloadWithOrgDefaults = structuredClone(payload) as EstimateV2SavePayload
     const jobsettings = payloadWithOrgDefaults.jobsettings as unknown as Record<string, unknown>
     jobsettings.walls_paint_id = null
@@ -526,6 +768,7 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
     if (payloadWithOrgDefaults.room_door_scopes?.[0]) {
       payloadWithOrgDefaults.room_door_scopes[0].paint_product_id = null
       payloadWithOrgDefaults.room_door_scopes[0].primer_product_id = null
+      payloadWithOrgDefaults.room_door_scopes[0].condition_factor = 1.25
     }
 
     const canonical = calculateEstimateV2ArtifactsFromPayload({
@@ -535,86 +778,94 @@ describe('Estimator V2 calculation orchestration pure adapter', () => {
     })
     const ensureCatalogs = vi.fn(async () => catalogs)
 
-    const savedWalls = await calculateWallsForSave({
-      requestOrigin: 'http://localhost:3000',
-      orgId: 'org-1',
-      userId: 'user-1',
-      estimateId: 'estimate-1',
-      scopes: payloadWithOrgDefaults.room_wall_scopes as never,
-      roomRows: payloadWithOrgDefaults.rooms as never,
-      segments: payloadWithOrgDefaults.wall_segments as never,
-      jobsettings: payloadWithOrgDefaults.jobsettings as never,
-      orgDefaults,
-      ensureCatalogs,
-    })
-    const savedCeilings = await calculateCeilingsForSave({
+    const saveArtifacts = await calculateEstimateV2ArtifactsForSave({
       orgId: 'org-1',
       estimateId: 'estimate-1',
-      scopes: payloadWithOrgDefaults.room_ceiling_scopes as never,
-      roomRows: payloadWithOrgDefaults.rooms as never,
-      segments: payloadWithOrgDefaults.ceiling_scope_segments as never,
-      jobsettings: payloadWithOrgDefaults.jobsettings as never,
-      orgDefaults,
-      ensureCatalogs,
-    })
-    const savedTrim = await calculateTrimForSave({
-      orgId: 'org-1',
-      estimateId: 'estimate-1',
-      scopes: payloadWithOrgDefaults.room_trim_scopes as never,
       roomRows: payloadWithOrgDefaults.rooms as never,
       wallScopeRows: payloadWithOrgDefaults.room_wall_scopes as never,
+      wallSegmentRows: payloadWithOrgDefaults.wall_segments as never,
       ceilingScopeRows: payloadWithOrgDefaults.room_ceiling_scopes as never,
-      jobsettings: payloadWithOrgDefaults.jobsettings as never,
-      orgDefaults,
-      ensureCatalogs,
-    })
-    const savedDoors = await calculateDoorsForSave({
-      orgId: 'org-1',
-      estimateId: 'estimate-1',
-      scopes: payloadWithOrgDefaults.room_door_scopes as never,
-      roomRows: payloadWithOrgDefaults.rooms as never,
+      ceilingSegmentRows: payloadWithOrgDefaults.ceiling_scope_segments as never,
+      trimScopeRows: payloadWithOrgDefaults.room_trim_scopes as never,
+      doorScopeRows: payloadWithOrgDefaults.room_door_scopes as never,
+      drywallRepairRows: payloadWithOrgDefaults.drywall_repairs as never,
       jobsettings: payloadWithOrgDefaults.jobsettings as never,
       orgDefaults,
       ensureCatalogs,
     })
 
-    expect(savedWalls.wallCalculations.scopes[0]).toEqual(
+    expect(saveArtifacts.wallCalculations.scopes[0]).toEqual(
       expect.objectContaining({
         paint_product_id: 'WALL-DEFAULT',
         primer_product_id: 'PRIMER-DEFAULT',
+        paint_prod_rate_sqft_per_hour: 80,
+        primer_prod_rate_sqft_per_hour: 120,
+        condition_factor: 1.32,
       })
     )
-    expect(savedCeilings.ceilingCalculations.scopes[0]).toEqual(
+    expect(saveArtifacts.wallCalculations.assumptions.labor_rate_per_hour).toBe(orgDefaults.override_labor_rate)
+    expect(saveArtifacts.quoteWallScopes[0]).toEqual(
+      expect.objectContaining({
+        paint_product_id: 'WALL-DEFAULT',
+        primer_product_id: null,
+        raw_area_sf: canonical.quoteWallScopes[0].raw_area_sf,
+        effective_total: canonical.quoteWallScopes[0].effective_total,
+      })
+    )
+    expect(saveArtifacts.ceilingCalculations.scopes[0]).toEqual(
       expect.objectContaining({
         paint_product_id: 'CEILING-DEFAULT',
         primer_product_id: 'PRIMER-DEFAULT',
+        paint_prod_rate_sqft_per_hour: 100,
+        primer_prod_rate_sqft_per_hour: 130,
       })
     )
-    expect(savedTrim.scopes[0]).toEqual(
+    expect(saveArtifacts.ceilingCalculations.scopes[0].condition_factor).toBeCloseTo(1.155)
+    expect(saveArtifacts.quoteCeilingScopes[0]).toEqual(
+      expect.objectContaining({
+        paint_product_id: null,
+        primer_product_id: null,
+        raw_area_sf: canonical.quoteCeilingScopes[0].raw_area_sf,
+        effective_total: canonical.quoteCeilingScopes[0].effective_total,
+      })
+    )
+    expect(saveArtifacts.trimCalculations.scopes[0]).toEqual(
       expect.objectContaining({
         paint_product_id: 'TRIM-DEFAULT',
         primer_product_id: 'PRIMER-DEFAULT',
+        raw_measurement: 54,
       })
     )
-    expect(savedDoors.scopes[0]).toEqual(
+    expect(saveArtifacts.trimCalculations.scopes[0].condition_factor).toBeCloseTo(1.265)
+    expect(saveArtifacts.quoteTrimScopes[0]).toEqual(
       expect.objectContaining({
-        paint_product_id: 'TRIM-DEFAULT',
-        primer_product_id: 'PRIMER-DEFAULT',
+        paint_product_id: null,
+        primer_product_id: null,
+        raw_measurement: canonical.quoteTrimScopes[0].raw_measurement,
+        effective_total: canonical.quoteTrimScopes[0].effective_total,
       })
     )
-    expect(savedWalls.wallCalculations.scopes[0].effective_total).toBeCloseTo(
+    expect(saveArtifacts.quoteDoorScopes[0]).toEqual(
+      expect.objectContaining({
+        paint_product_id: null,
+        primer_product_id: null,
+        effective_total: canonical.quoteDoorScopes[0]?.effective_total,
+      })
+    )
+    expect(saveArtifacts.quoteDoorScopes[0].condition_factor).toBeCloseTo(1.25)
+    expect(saveArtifacts.wallCalculations.scopes[0].effective_total).toBeCloseTo(
       canonical.wallCalculations.scopes[0].effective_total ?? 0,
       2
     )
-    expect(savedCeilings.ceilingCalculations.scopes[0].effective_total).toBeCloseTo(
+    expect(saveArtifacts.ceilingCalculations.scopes[0].effective_total).toBeCloseTo(
       canonical.ceilingCalculations.scopes[0].effective_total ?? 0,
       2
     )
-    expect(savedTrim.scopes[0].effective_total).toBeCloseTo(
+    expect(saveArtifacts.trimCalculations.scopes[0].effective_total).toBeCloseTo(
       canonical.trimCalculations.scopes[0].effective_total ?? 0,
       2
     )
-    expect(savedDoors.scopes[0].effective_total).toBeCloseTo(
+    expect(saveArtifacts.doorCalculations.scopes[0].effective_total).toBeCloseTo(
       canonical.doorCalculations.scopes[0].effective_total ?? 0,
       2
     )

@@ -23,6 +23,7 @@ import {
   type EstimateV2SummaryRoomBlockVm,
 } from './estimateV2SummaryDerived'
 import { reconcileWholeDollarRows } from '@/lib/estimator/pricingPolicies'
+import { buildMissingProductConfigurationWarning } from '../../_state/useEstimateV2ProductLabels'
 
 export type {
   EstimateV2SummaryAlert,
@@ -224,6 +225,44 @@ export function useEstimateV2SummaryDerived(params: {
     ]
   )
 
+  const configurationWarning = useMemo(
+    () =>
+      buildMissingProductConfigurationWarning(
+        {
+          wallPaintProductId:
+            data?.inputs?.jobsettings?.walls_paint_id ??
+            data?.inputs?.jobsettings?.wall_paint_id ??
+            data?.inputs?.org_defaults?.walls_paint_id ??
+            data?.inputs?.org_defaults?.wall_paint_id ??
+            null,
+          wallPrimerProductId:
+            data?.inputs?.jobsettings?.walls_primer_id ??
+            data?.inputs?.jobsettings?.wall_primer_id ??
+            data?.inputs?.org_defaults?.walls_primer_id ??
+            data?.inputs?.org_defaults?.wall_primer_id ??
+            null,
+          ceilingPaintProductId:
+            data?.inputs?.jobsettings?.ceiling_paint_id ??
+            data?.inputs?.org_defaults?.ceiling_paint_id ??
+            null,
+          ceilingPrimerProductId:
+            data?.inputs?.jobsettings?.ceiling_primer_id ??
+            data?.inputs?.org_defaults?.ceiling_primer_id ??
+            null,
+          trimPaintProductId:
+            data?.inputs?.jobsettings?.trim_paint_id ??
+            data?.inputs?.org_defaults?.trim_paint_id ??
+            null,
+          trimPrimerProductId:
+            data?.inputs?.jobsettings?.trim_primer_id ??
+            data?.inputs?.org_defaults?.trim_primer_id ??
+            null,
+        },
+        'Return to the estimate editor and open Paint Defaults in the left sidebar to set the missing defaults.'
+      ),
+    [data?.inputs?.jobsettings, data?.inputs?.org_defaults]
+  )
+
   const paintSupplyRows = useMemo<EstimateV2SummaryPricingTableRow[]>(
     () => buildPaintSupplyRows(pricingSummary, trimPaint, paintSupplyProductLabels),
     [paintSupplyProductLabels, pricingSummary, trimPaint]
@@ -247,6 +286,7 @@ export function useEstimateV2SummaryDerived(params: {
     finalTotal,
     laborShare,
     priceAdjustment,
+    configurationWarning,
     paintSuppliesTotal,
     priceBreakdownRows,
     paintSupplyRows,

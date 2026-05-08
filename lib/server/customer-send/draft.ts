@@ -21,13 +21,53 @@ function asMaybeNumber(value: unknown): number | null {
 }
 
 function buildEmptyScopeTextEdits(): Record<CustomerSendScopeKey, string> {
-  return CUSTOMER_SEND_SCOPE_KEYS.reduce(
-    (acc, key) => {
-      acc[key] = ''
-      return acc
+  return {
+    walls: '',
+    ceilings: '',
+    trim: '',
+    doors: '',
+    drywall: '',
+    cabinets: '',
+    other: '',
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object'
+}
+
+function readDraftPayload(body: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  // Request body JSON is untrusted until we verify it is an object.
+  if (isRecord(body?.draft)) return body.draft
+  return isRecord(body) ? body : {}
+}
+
+function readScopeTextEditsPayload(draft: Record<string, unknown>): Record<string, unknown> {
+  // Nested request JSON is untrusted until we verify it is an object.
+  return isRecord(draft.scope_text_edits) ? draft.scope_text_edits : {}
+}
+
+function buildDraftInputRecord(draft: CustomerSendDraft | null | undefined): Record<string, unknown> {
+  if (!draft) return {}
+  return {
+    to_email: draft.to_email,
+    cc_email: draft.cc_email,
+    bcc_email: draft.bcc_email,
+    subject: draft.subject,
+    body: draft.body,
+    template_key: draft.template_key,
+    title: draft.title,
+    intro_paragraph: draft.intro_paragraph,
+    closing_paragraph: draft.closing_paragraph,
+    terms_text: draft.terms_text,
+    scope_text_edits: {
+      ...buildEmptyScopeTextEdits(),
+      ...draft.scope_text_edits,
     },
-    {} as Record<CustomerSendScopeKey, string>
-  )
+    quote_validity_days: draft.quote_validity_days,
+    deposit_language: draft.deposit_language,
+    card_fee_note: draft.card_fee_note,
+  }
 }
 
 function normalizeScopeTextForComparison(value: string): string {
@@ -60,9 +100,8 @@ function matchesGeneratedScopeText(value: string, baseText: string) {
 export function sanitizeCustomerSendDraft(
   body: Record<string, unknown> | null | undefined
 ): CustomerSendDraft {
-  const draft = (body?.draft as Record<string, unknown> | null | undefined) ?? body ?? {}
-  const scopeTextEditsRaw =
-    (draft.scope_text_edits as Record<string, unknown> | null | undefined) ?? {}
+  const draft = readDraftPayload(body)
+  const scopeTextEditsRaw = readScopeTextEditsPayload(draft)
   const scopeTextEdits = buildEmptyScopeTextEdits()
 
   for (const key of CUSTOMER_SEND_SCOPE_KEYS) {
@@ -87,6 +126,24 @@ export function sanitizeCustomerSendDraft(
   } satisfies CustomerSendDraft
 }
 
+export function mergeCustomerSendDraftInput(params: {
+  baseDraft: CustomerSendDraft | null | undefined
+  body: Record<string, unknown> | null | undefined
+}): CustomerSendDraft {
+  const baseDraft = buildDraftInputRecord(params.baseDraft)
+  const incomingDraft = readDraftPayload(params.body)
+  const mergedScopeTextEdits = {
+    ...readScopeTextEditsPayload(baseDraft),
+    ...readScopeTextEditsPayload(incomingDraft),
+  }
+
+  return sanitizeCustomerSendDraft({
+    ...baseDraft,
+    ...incomingDraft,
+    scope_text_edits: mergedScopeTextEdits,
+  })
+}
+
 export function normalizeCustomerSendDraftScopeText(params: {
   context: EstimateCustomerSendContextData
   draft: CustomerSendDraft
@@ -97,8 +154,8 @@ export function normalizeCustomerSendDraftScopeText(params: {
   })
   if (!baseline.ok) return baseline
 
-  const baselineByKey = new Map(
-    baseline.data.scopes.map((section) => [section.key, section.text] as const)
+  const baselineByKey = new Map<CustomerSendScopeKey, string>(
+    baseline.data.scopes.map((section) => [section.key, section.text])
   )
   const normalizedScopeTextEdits = buildEmptyScopeTextEdits()
 
@@ -129,4 +186,36 @@ export function normalizeCustomerSendDraftScopeText(params: {
 
 export function normalizeCustomerSendMode(value: unknown): 'test' | 'send' {
   return asText(value).toLowerCase() === 'test' ? 'test' : 'send'
+}
+
+function normalizeComparableScopeText(value: string | null | undefined) {
+  return asText(value)
+}
+
+export function didCustomerSendArtifactInputsChange(params: {
+  currentDraft: CustomerSendDraft | null | undefined
+  nextDraft: CustomerSendDraft
+}): boolean {
+  const current = params.currentDraft
+  if (!current) return true
+
+  if (asText(current.title) !== asText(params.nextDraft.title)) return true
+  if (asText(current.intro_paragraph) !== asText(params.nextDraft.intro_paragraph)) return true
+  if (asText(current.closing_paragraph) !== asText(params.nextDraft.closing_paragraph)) return true
+  if ((current.quote_validity_days ?? null) !== (params.nextDraft.quote_validity_days ?? null)) {
+    return true
+  }
+  if (asText(current.deposit_language) !== asText(params.nextDraft.deposit_language)) return true
+  if (asText(current.card_fee_note) !== asText(params.nextDraft.card_fee_note)) return true
+
+  for (const key of CUSTOMER_SEND_SCOPE_KEYS) {
+    if (
+      normalizeComparableScopeText(current.scope_text_edits[key]) !==
+      normalizeComparableScopeText(params.nextDraft.scope_text_edits[key])
+    ) {
+      return true
+    }
+  }
+
+  return false
 }
