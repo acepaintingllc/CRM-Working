@@ -94,8 +94,8 @@ describe('JobsPage', () => {
 
     expect(screen.getByText('Jobs')).toBeTruthy()
     expect(screen.getByText('Board updated.')).toBeTruthy()
-    expect(screen.getByPlaceholderText('Search completed...')).toBeTruthy()
+    expect(screen.getAllByPlaceholderText('Search completed...').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Completed').length).toBeGreaterThan(0)
-    expect(screen.getByText('Paint house')).toBeTruthy()
+    expect(screen.getAllByText('Paint house').length).toBeGreaterThan(0)
   })
 })

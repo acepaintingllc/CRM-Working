@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { JobActualsDraftPayload, JobActualsRecord } from '@/types/jobs/feedback'
+import type { JobActualsRecord } from '@/types/jobs/feedback'
 import type { JobDetail } from '@/types/jobs/api'
 import { useJobActualsPage } from '../_hooks/useJobActualsPage'
 
@@ -236,7 +236,7 @@ describe('useJobActualsPage', () => {
       updated_at: '2026-05-01T10:00:00.000Z',
     })
     mocks.saveDraftJobActuals.mockImplementation(
-      async (_jobId: string, _payload: JobActualsDraftPayload) => ({
+      async () => ({
         data: savedDraft,
         notice: 'Draft saved.',
       })

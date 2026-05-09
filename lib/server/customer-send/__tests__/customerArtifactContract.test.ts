@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import type { EstimateV2GetResponse } from '@/types/estimator/v2'
 import { buildEstimatePublicSnapshotFromVersion } from '@/lib/customer-estimates/publicSnapshot'
-import { appendCustomerSendPersistedPdf, buildCustomerSendPersistedSnapshot } from '../types'
+import { appendCustomerSendPersistedPdf } from '../types'
 
 process.env.NEXT_PUBLIC_SUPABASE_URL ??= 'https://example.supabase.co'
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'service-role-key'

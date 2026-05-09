@@ -104,10 +104,6 @@ function readAcceptedSnapshotEmbeddedAcceptedPublicVersion(snapshot: Unsafe) {
   return asNullableRecord(readAcceptedSnapshotPayload(snapshot)?.accepted_public_version)
 }
 
-function readAcceptedSnapshotEmbeddedCustomerArtifact(snapshot: Unsafe) {
-  return asNullableRecord(readAcceptedSnapshotPayload(snapshot)?.customer_artifact)
-}
-
 function readAcceptedSnapshotLegacyEmbeddedPublicVersion(snapshot: Unsafe) {
   return asNullableRecord(readAcceptedSnapshotPayload(snapshot)?.public_version)
 }

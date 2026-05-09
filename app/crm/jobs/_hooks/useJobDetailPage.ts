@@ -57,8 +57,6 @@ export function useJobDetailPage() {
   const [estimateFileError, setEstimateFileError] = useState<string | null>(null)
   const [paintLogs, setPaintLogs] = useState<PaintLogRow[]>([])
   const [photosFolderUrl, setPhotosFolderUrl] = useState<string | null>(null)
-  const [photosLoading, setPhotosLoading] = useState(false)
-  const [secondaryLoading, setSecondaryLoading] = useState(false)
   const secondaryRequestIdRef = useRef(0)
   const photosRequestIdRef = useRef(0)
 
@@ -79,12 +77,10 @@ export function useJobDetailPage() {
       setEstimateFile(null)
       setEstimateFileError(null)
       setPaintLogs([])
-      setSecondaryLoading(false)
       return false
     }
 
     const requestId = ++secondaryRequestIdRef.current
-    setSecondaryLoading(true)
 
     try {
       const [estimateState, paintLogRows] = await Promise.all([
@@ -104,10 +100,6 @@ export function useJobDetailPage() {
       setEstimateFileError('Failed to load job support data.')
       setPaintLogs([])
       return false
-    } finally {
-      if (secondaryRequestIdRef.current === requestId) {
-        setSecondaryLoading(false)
-      }
     }
   }, [id])
 
@@ -119,12 +111,10 @@ export function useJobDetailPage() {
     if (!id || typeof id !== 'string') {
       photosRequestIdRef.current += 1
       setPhotosFolderUrl(null)
-      setPhotosLoading(false)
       return true
     }
 
     const requestId = ++photosRequestIdRef.current
-    setPhotosLoading(true)
 
     try {
       const result = await listJobSitePhotos(id)
@@ -137,10 +127,6 @@ export function useJobDetailPage() {
       if (photosRequestIdRef.current !== requestId) return false
       setPhotosFolderUrl(null)
       return true
-    } finally {
-      if (photosRequestIdRef.current === requestId) {
-        setPhotosLoading(false)
-      }
     }
   }, [id])
 
@@ -149,12 +135,12 @@ export function useJobDetailPage() {
   }, [loadPhotosData])
 
   const refreshResource = useCallback(async () => {
-    const [jobOk, secondaryOk] = await Promise.all([
+    const [jobOk, secondaryOk, photosOk] = await Promise.all([
       jobResource.refresh(),
       loadSecondaryData(),
       loadPhotosData(),
     ])
-    return jobOk && secondaryOk
+    return jobOk && secondaryOk && photosOk
   }, [jobResource, loadSecondaryData, loadPhotosData])
 
   const resource: {
@@ -172,8 +158,7 @@ export function useJobDetailPage() {
         estimateFileError,
         paintLogs,
       },
-      loading:
-        (jobKey ? jobResource.loading : false) || secondaryLoading,
+      loading: jobKey ? jobResource.loading : false,
       error:
         resourceError ??
         jobResource.error ??
@@ -208,7 +193,6 @@ export function useJobDetailPage() {
       paintLogs,
       refreshResource,
       resourceError,
-      secondaryLoading,
       setError,
     ]
   )
@@ -435,7 +419,7 @@ export function useJobDetailPage() {
     estimateFileError: resource.data.estimateFileError,
     paintLogs: resource.data.paintLogs,
     photosFolderUrl,
-    photosLoading,
+    photosLoading: false,
     timelineItems,
     closeoutReferenceVm,
     workflowActions,

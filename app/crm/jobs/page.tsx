@@ -50,6 +50,16 @@ function iconLabel(Icon: LucideIcon, label: string, size = iconSizeSm) {
   )
 }
 
+function responsiveIconLabel(Icon: LucideIcon, mobileLabel: string, desktopLabel: string, size = iconSizeSm) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Icon size={size} aria-hidden="true" />
+      <span className="sm:hidden">{mobileLabel}</span>
+      <span className="hidden sm:inline">{desktopLabel}</span>
+    </span>
+  )
+}
+
 export default function JobsPage() {
   const router = useRouter()
   const {
@@ -97,6 +107,9 @@ export default function JobsPage() {
     return null
   }
 
+  const formatJobStatus = (status: string | null | undefined) =>
+    JOB_STATUS_OPTIONS.find((option) => option.value === status)?.title ?? 'Unknown'
+
   const stop =
     (fn: () => void) =>
     (event: MouseEvent<HTMLButtonElement>) => {
@@ -111,6 +124,7 @@ export default function JobsPage() {
   const boardColumns = compactActions
     ? visibleColumns.filter((column) => column.key !== 'follow_up')
     : visibleColumns
+  const mobileColumns = visibleColumns.filter((column) => column.key !== 'follow_up')
 
   const actionIcon = (action: JobWorkflowResolvedAction) => {
     switch (action.id) {
@@ -191,6 +205,96 @@ export default function JobsPage() {
     return actions.map((action) => renderBoardAction(job, action))
   }
 
+  const renderMobileJobCard = (
+    job: (typeof grouped)[keyof typeof grouped][number],
+    stageTitle: string
+  ) => {
+    const primaryDate =
+      job.status === 'scheduled'
+        ? formatRange(job.scheduled_date, job.scheduled_end_date)
+        : formatDate(job.estimate_date) ?? formatDate(job.scheduled_date) ?? formatDate(job.completed_at)
+    const activity = deriveJobActivitySummary(job).slice(0, 2)
+
+    return (
+      <article
+        key={`${stageTitle}-${job.id}`}
+        className="ace-crm-surface grid gap-3 border border-[color:var(--crm-ui-border)] p-3"
+      >
+        <button
+          type="button"
+          onClick={() => router.push(`/crm/jobs/${job.id}`)}
+          className="grid min-w-0 gap-2 text-left"
+        >
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2
+                className="text-base font-black leading-tight text-[color:var(--crm-ui-text)]"
+                style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
+              >
+                {job.title}
+              </h2>
+              <p className="mt-1 truncate text-sm font-semibold text-[color:var(--crm-ui-muted)]">
+                {job.customer_name ? job.customer_name : `Customer: ${job.customer_id}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="ace-crm-surface-muted rounded-xl border border-[color:var(--crm-ui-border)] p-2">
+              <div className="ace-crm-mono text-[9px] font-black text-[color:var(--crm-ui-muted)]">
+                Date
+              </div>
+              <div className="mt-1 font-bold leading-5 text-[color:var(--crm-ui-text)]">
+                {primaryDate ?? '-'}
+              </div>
+            </div>
+            <div className="ace-crm-surface-muted rounded-xl border border-[color:var(--crm-ui-border)] p-2">
+              <div className="ace-crm-mono text-[9px] font-black text-[color:var(--crm-ui-muted)]">
+                Status
+              </div>
+              <div className="mt-1 font-bold leading-5 text-[color:var(--crm-ui-text)]">
+                {formatJobStatus(job.status)}
+              </div>
+            </div>
+          </div>
+
+          {job.description ? (
+            <p
+              className="text-xs leading-5 text-[color:var(--crm-ui-muted)]"
+              style={{
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
+            >
+              {job.description}
+            </p>
+          ) : null}
+
+          {activity.length > 0 ? (
+            <div className="grid gap-1 border-t border-dashed border-[color:var(--crm-ui-border)] pt-2 text-[11px] text-[color:var(--crm-ui-muted)]">
+              {activity.map((item, index) => (
+                <div key={`${job.id}-mobile-activity-${index}`} className="truncate">
+                  {item.label}: {formatDate(item.at)}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </button>
+
+        <CrmDenseActionRow data-testid={`mobile-job-card-actions-${job.id}`}>
+          {renderBoardActions(job)}
+        </CrmDenseActionRow>
+      </article>
+    )
+  }
+
   return (
     <CrmPageShell className="max-w-[2000px]">
       <CrmPageHeader
@@ -209,8 +313,9 @@ export default function JobsPage() {
               tone={showEmptyStages ? 'primary' : 'secondary'}
               className={headerActionClassName}
             >
-              {iconLabel(
+              {responsiveIconLabel(
                 ChevronDown,
+                showEmptyStages ? 'Hide stages' : 'Stages',
                 showEmptyStages ? 'Hide empty stages' : 'Show empty stages',
                 iconSizeSm
               )}
@@ -222,7 +327,12 @@ export default function JobsPage() {
               tone={showCompleted ? 'primary' : 'secondary'}
               className={headerActionClassName}
             >
-              {iconLabel(CheckCircle2, showCompleted ? 'Hide completed' : 'Show completed', iconSizeSm)}
+              {responsiveIconLabel(
+                CheckCircle2,
+                showCompleted ? 'Hide done' : 'Done',
+                showCompleted ? 'Hide completed' : 'Show completed',
+                iconSizeSm
+              )}
             </CrmButton>
             <CrmButton
               type="button"
@@ -231,7 +341,12 @@ export default function JobsPage() {
               tone={showLost ? 'primary' : 'secondary'}
               className={headerActionClassName}
             >
-              {iconLabel(XCircle, showLost ? 'Hide lost' : 'Show lost', iconSizeSm)}
+              {responsiveIconLabel(
+                XCircle,
+                showLost ? 'Hide lost' : 'Lost',
+                showLost ? 'Hide lost' : 'Show lost',
+                iconSizeSm
+              )}
             </CrmButton>
             <CrmButton
               type="button"
@@ -262,7 +377,58 @@ export default function JobsPage() {
           <p className="text-sm text-[color:var(--crm-ui-muted)]">Refreshing the pipeline board.</p>
         </CrmSectionCard>
       ) : (
-        <div className={`pb-2 ${compactActions ? 'overflow-x-auto' : ''}`}>
+        <>
+        <div className="min-w-0 max-w-full pb-2 md:hidden">
+          <div className="max-w-full overflow-x-auto pb-2">
+            <div
+              className="grid min-w-max gap-3"
+              style={{
+                gridTemplateColumns: `repeat(${Math.max(1, mobileColumns.length)}, minmax(300px, 82vw))`,
+              }}
+            >
+              {mobileColumns.map((column) => {
+                const jobs = column.key === 'completed' ? filteredCompleted : grouped[column.key]
+                return (
+                  <CrmSectionCard
+                    key={column.key}
+                    title={column.title}
+                    actions={<CrmChip>{jobs.length}</CrmChip>}
+                    className="bg-[color:var(--crm-ui-surface)]/95 p-2.5 backdrop-blur"
+                  >
+                    {column.key === 'completed' ? (
+                      <div className="mb-3 grid gap-2">
+                        <CrmSearchBar
+                          value={completedQuery}
+                          onChange={setCompletedQuery}
+                          placeholder="Search completed..."
+                        />
+                      </div>
+                    ) : null}
+
+                    {jobs.length === 0 ? (
+                      <CrmEmptyState
+                        className="shadow-none"
+                        emoji="📭"
+                        title="No jobs in this stage"
+                        description={
+                          column.key === 'estimate_scheduled'
+                            ? 'New jobs will appear here after creation.'
+                            : 'Jobs move here automatically as status changes.'
+                        }
+                      />
+                    ) : (
+                      <div className="grid gap-3">
+                        {jobs.map((job) => renderMobileJobCard(job, column.title))}
+                      </div>
+                    )}
+                  </CrmSectionCard>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className={`hidden pb-2 md:block ${compactActions ? 'md:overflow-x-auto' : ''}`}>
           <div
             className={`grid gap-3 ${compactActions ? 'min-w-max' : ''}`}
             style={{
@@ -376,6 +542,7 @@ export default function JobsPage() {
             ))}
           </div>
         </div>
+        </>
       )}
       <StageEmailModal
         jobId={emailJobId}

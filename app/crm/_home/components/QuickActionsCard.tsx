@@ -1,4 +1,4 @@
-import { CalendarCheck, Plus, Users, Wrench } from 'lucide-react'
+import { Calculator, ListTodo, Plus, Users, Wrench } from 'lucide-react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmDenseActionRow } from '@/app/crm/_components/CrmDenseActionRow'
 import { CrmDenseSurfaceCard } from '@/app/crm/_components/CrmDenseSurfaceCard'
@@ -8,16 +8,16 @@ type QuickActionsCardProps = {
     items: Array<{
       href: string
       label: string
-      icon: 'calendar' | 'plus' | 'users' | 'wrench'
+      icon: 'calculator' | 'tasks' | 'users' | 'wrench'
       tone: 'primary' | 'secondary'
     }>
   }
 }
 
-function actionIcon(icon: 'calendar' | 'plus' | 'users' | 'wrench') {
-  if (icon === 'calendar') return <CalendarCheck size={13} aria-hidden="true" />
+function actionIcon(icon: 'calculator' | 'tasks' | 'users' | 'wrench') {
+  if (icon === 'calculator') return <Calculator size={13} aria-hidden="true" />
+  if (icon === 'tasks') return <ListTodo size={13} aria-hidden="true" />
   if (icon === 'wrench') return <Wrench size={13} aria-hidden="true" />
-  if (icon === 'plus') return <Plus size={13} aria-hidden="true" />
   return <Users size={13} aria-hidden="true" />
 }
 
@@ -33,7 +33,7 @@ export function QuickActionsCard({ viewModel }: QuickActionsCardProps) {
         </span>
       }
     >
-      <CrmDenseActionRow className="!grid grid-cols-2 items-stretch sm:!flex sm:flex-wrap">
+      <CrmDenseActionRow className="!grid grid-cols-2 items-stretch sm:grid-cols-3 lg:!flex lg:flex-wrap">
         {viewModel.items.map((item) => (
           <CrmButton
             key={item.href}

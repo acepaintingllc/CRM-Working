@@ -152,7 +152,12 @@ describe('buildCrmHomePageViewModel', () => {
     expect(viewModel.signals.reminders.isEmpty).toBe(true)
     expect(viewModel.activity.items[0]?.amountLabel).toBe('$1,200')
     expect(viewModel.activity.tasksHref).toBe('/crm/tasks')
-    expect(viewModel.quickActions.items.length).toBe(4)
+    expect(viewModel.quickActions.items.map((item) => item.label)).toEqual([
+      'Customer',
+      'New job',
+      'New quote',
+      'New task',
+    ])
   })
 
   it('treats mixed non-critical source failures as a warning banner only', () => {

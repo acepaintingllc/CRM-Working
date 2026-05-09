@@ -74,4 +74,27 @@ describe('CrmLayout sidebar', () => {
     expect(screen.getAllByText('Job Center').length).toBeGreaterThan(0)
     expect(window.localStorage.getItem('acecrm.sidebarCollapsed')).toBe('false')
   })
+
+  it('renders the CRM navigation in the app-wide order', async () => {
+    const { container } = render(
+      <CrmLayout>
+        <main>CRM content</main>
+      </CrmLayout>
+    )
+
+    await waitFor(() => expect(screen.getByText('CRM content')).toBeInTheDocument())
+
+    const labels = Array.from(container.querySelectorAll('aside nav a')).map((link) => link.textContent)
+
+    expect(labels).toEqual([
+      'Home',
+      'Tasks',
+      'Job Center',
+      'Job Photos',
+      'Quotes',
+      'Calendar',
+      'Customers',
+      'Settings',
+    ])
+  })
 })
