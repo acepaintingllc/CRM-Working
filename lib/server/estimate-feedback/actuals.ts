@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../org.ts'
 import { isUuid } from '../routeUtils.ts'
 import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
-import type { JobActualsRecord, JobActualsStatus } from '../../../types/jobs/feedback.ts'
+import type { JobActualsRecord } from '../../../types/jobs/feedback.ts'
 
 export type JobActualsRow = JobActualsRecord
 

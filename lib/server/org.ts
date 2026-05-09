@@ -14,12 +14,14 @@ async function getOrgIdForUser(userId: string) {
     .from('org_members')
     .select('org_id')
     .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1)
 
   if (testOrgId) {
     query = query.eq('org_id', testOrgId)
   }
 
-  const { data: membership, error } = await query.limit(1).maybeSingle()
+  const { data: membership, error } = await query.maybeSingle()
 
   if (error) throw error
   return membership?.org_id ?? null

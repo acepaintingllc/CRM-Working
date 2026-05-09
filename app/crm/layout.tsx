@@ -46,13 +46,31 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
   const navItems = useMemo(
     () => [
       { href: "/crm", label: "Home", Icon: Home },
-      { href: "/crm/customers", label: "Customers", Icon: Users },
+      { href: "/crm/tasks", label: "Tasks", Icon: ListTodo },
       { href: "/crm/jobs", label: "Job Center", Icon: Wrench },
       { href: "/crm/job-photos", label: "Job Photos", Icon: Camera },
       { href: "/crm/quotes", label: "Quotes", Icon: Calculator },
-      { href: "/crm/tasks", label: "Tasks", Icon: ListTodo },
       { href: "/crm/calendar", label: "Calendar", Icon: CalendarDays },
+      { href: "/crm/customers", label: "Customers", Icon: Users },
       { href: "/crm/settings", label: "Settings", Icon: Cog },
+    ],
+    []
+  );
+  const mobilePrimaryNavItems = useMemo(
+    () => [
+      { href: "/crm", label: "Home", Icon: Home },
+      { href: "/crm/jobs", label: "Jobs", Icon: Wrench },
+      { href: "/crm/job-photos", label: "Photos", Icon: Camera },
+      { href: "/crm/tasks", label: "Tasks", Icon: ListTodo },
+    ],
+    []
+  );
+  const mobileActionItems = useMemo(
+    () => [
+      { href: "/crm/quotes", label: "Quotes", ariaLabel: "Quotes", Icon: Calculator },
+      { href: "/crm/customers", label: "Customers", ariaLabel: "Customers", Icon: Users },
+      { href: "/crm/calendar", label: "Calendar", ariaLabel: "Calendar", Icon: CalendarDays },
+      { href: "/crm/settings", label: "Settings", ariaLabel: "Settings", Icon: Cog },
     ],
     []
   );
@@ -105,7 +123,7 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [pathname]);
+  }, []);
 
   if (!ready) return null;
 
@@ -422,18 +440,18 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
               Dark
             </div>
           </div>
-          <div
+          <nav
+            aria-label="Mobile primary navigation"
             className="crm-mobile-nav"
             style={{
-              overflowX: "auto",
-              display: "flex",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
               gap: 6,
-              padding: "0 14px 10px",
-              scrollbarWidth: "none",
+              padding: "0 14px 8px",
               maxWidth: "100%",
             }}
           >
-            {navItems.map((item) => {
+            {mobilePrimaryNavItems.map((item) => {
               const active =
                 item.href === "/crm"
                   ? pathname === item.href
@@ -446,11 +464,12 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   style={{
-                    padding: "7px 12px",
+                    minHeight: 42,
+                    padding: "7px 4px",
                     borderRadius: 10,
                     textDecoration: "none",
                     fontWeight: 700,
-                    fontSize: 13,
+                    fontSize: 11,
                     color: active ? "var(--crm-accent-text)" : "var(--crm-text-soft)",
                     background: active
                       ? "linear-gradient(135deg, var(--crm-accent) 0%, var(--crm-accent-strong) 100%)"
@@ -458,16 +477,61 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
                     border: active ? "1px solid var(--crm-accent)" : "1px solid var(--crm-border)",
                     display: "inline-flex",
                     alignItems: "center",
+                    justifyContent: "center",
                     gap: 6,
-                    flexShrink: 0,
+                    minWidth: 0,
                   }}
                 >
                   <Icon size={14} aria-hidden="true" />
-                  <span>{item.label}</span>
+                  <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}
-          </div>
+          </nav>
+          <nav
+            aria-label="Mobile quick actions"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gap: 6,
+              padding: "0 14px 10px",
+              maxWidth: "100%",
+            }}
+          >
+            {mobileActionItems.map((item) => {
+              const Icon = item.Icon as LucideIcon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-label={item.ariaLabel}
+                  style={{
+                    minHeight: 36,
+                    padding: "6px 4px",
+                    borderRadius: 10,
+                    textDecoration: "none",
+                    fontWeight: 800,
+                    fontSize: 11,
+                    color: "var(--crm-text)",
+                    background: "var(--crm-input)",
+                    border: "1px solid var(--crm-border)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 5,
+                    minWidth: 0,
+                  }}
+                >
+                  <Icon size={13} aria-hidden="true" />
+                  <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
 
         {/* Page content */}

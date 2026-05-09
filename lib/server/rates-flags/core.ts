@@ -14,7 +14,7 @@ import {
 import { type RatesFlagsCatalogOverlay, isAreaBasedUnit } from './shared.ts'
 import { buildOverlayFromRows } from './overlay.ts'
 import { findCategoryTablesDetailed, findTableDetailed, getHeaderIndex, parseConstantsTablesDetailed, parseSchemaVersion } from './tableParsing.ts'
-import { ensureTemplateState, getTemplateRowById, setSupabaseAdminProvider } from './templateState.ts'
+import { ensureTemplateState, setSupabaseAdminProvider } from './templateState.ts'
 import { asText, normalizeId, toYN } from './shared.ts'
 import {
   activateDraftSettingSet,

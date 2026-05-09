@@ -131,7 +131,7 @@ type HomeSignalsVm = {
 type QuickActionVm = {
   href: string
   label: string
-  icon: 'calendar' | 'plus' | 'users' | 'wrench'
+  icon: 'calculator' | 'tasks' | 'users' | 'wrench'
   tone: 'primary' | 'secondary'
 }
 
@@ -285,10 +285,10 @@ function buildSignalsVm(
 function buildQuickActionsVm(): HomeQuickActionsVm {
   return {
     items: [
-      { href: '/crm/customers/new', label: 'New customer', icon: 'users', tone: 'primary' },
+      { href: '/crm/customers/new', label: 'Customer', icon: 'users', tone: 'primary' },
       { href: '/crm/jobs/new', label: 'New job', icon: 'wrench', tone: 'primary' },
-      { href: '/crm/calendar', label: 'Calendar', icon: 'calendar', tone: 'secondary' },
-      { href: '/crm/customers', label: 'Customers', icon: 'users', tone: 'secondary' },
+      { href: '/crm/quotes/create', label: 'New quote', icon: 'calculator', tone: 'primary' },
+      { href: '/crm/tasks', label: 'New task', icon: 'tasks', tone: 'secondary' },
     ],
   }
 }

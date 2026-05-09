@@ -234,9 +234,14 @@ function CameraCapturePanel({
 
       {pendingPhotos.length > 0 ? (
         <div className="grid gap-2 sm:grid-cols-4">
-          {pendingPhotos.map((photo, index) => (
-            <article key={photo.id} className="ace-crm-surface-muted overflow-hidden border p-2">
-              <img src={photo.previewUrl} alt={`Captured photo ${index + 1}`} className="aspect-square w-full rounded-xl object-cover" />
+              {pendingPhotos.map((photo, index) => (
+              <article key={photo.id} className="ace-crm-surface-muted overflow-hidden border p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.previewUrl}
+                  alt={`Captured photo ${index + 1}`}
+                  className="aspect-square w-full rounded-xl object-cover"
+                />
               <CrmButton
                 type="button"
                 tone="danger"
@@ -407,6 +412,7 @@ export default function JobPhotosPage() {
                     {controller.queue.map((photo) => (
                       <article key={photo.id} className="ace-crm-surface-muted overflow-hidden border p-3">
                         <div className="aspect-[4/3] overflow-hidden rounded-2xl bg-[color:var(--crm-ui-surface)]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={photo.previewUrl} alt="" className="h-full w-full object-cover" />
                         </div>
                         <div className="mt-3 flex items-start justify-between gap-3">

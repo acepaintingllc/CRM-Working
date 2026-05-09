@@ -98,6 +98,18 @@ describe('useJobDetailPage', () => {
     expect(mocks.loadJobRecord).toHaveBeenCalledWith('job-1')
   })
 
+  it('does not block the job detail view on secondary support data', async () => {
+    mocks.loadJobEstimateFile.mockReturnValue(new Promise(() => {}))
+    mocks.listPaintLogs.mockReturnValue(new Promise(() => {}))
+
+    const { result } = renderHook(() => useJobDetailPage(), {
+      wrapper: createSWRWrapper(),
+    })
+
+    await waitFor(() => expect(result.current.job?.id).toBe('job-1'))
+    await waitFor(() => expect(result.current.resource.loading).toBe(false))
+  })
+
   it('refresh reloads the primary job plus secondary support data', async () => {
     mocks.loadJobRecord
       .mockResolvedValueOnce(jobDetail)

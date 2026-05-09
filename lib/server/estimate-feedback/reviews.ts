@@ -3,7 +3,6 @@ import { isUuid } from '../routeUtils.ts'
 import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import type {
   JobActualsStatus,
-  JobReviewDataQualityStatus,
   JobReviewMetricKey,
   JobReviewMetricRecord,
   JobReviewMetricUnit,

@@ -103,7 +103,9 @@ function isCanonicalEstimatePublicPersistedSnapshotRecord(
 function toPersistedDocumentRecord(value: unknown): UnknownRecord | null {
   const record = isRecord(value) ? value : null
   if (!record) return null
-  const { draft: _draft, pdf: _pdf, ...documentRecord } = record
+  const documentRecord = { ...record }
+  delete documentRecord.draft
+  delete documentRecord.pdf
   return documentRecord
 }
 

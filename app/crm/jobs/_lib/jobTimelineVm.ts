@@ -142,5 +142,5 @@ export function buildJobTimelineItems(job: JobDetail): JobTimelineItem[] {
       if (b.at) return 1
       return a.order - b.order
     })
-    .map(({ order: _order, ...item }) => item)
+    .map((item) => item)
 }

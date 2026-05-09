@@ -173,7 +173,6 @@ export function useEstimateV2DetailsVm(params: {
       state.pricingSummary,
       state.crewSize,
       state.catalogs.access_fees,
-      state.catalogs.paint_products,
       state.trimScopes,
       state.wallScopes,
       trimPaintOptions,

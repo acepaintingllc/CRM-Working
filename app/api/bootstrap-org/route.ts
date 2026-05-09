@@ -44,12 +44,14 @@ export async function POST(req: Request) {
     .from('org_members')
     .select('org_id, role')
     .eq('user_id', user_id)
+    .order('created_at', { ascending: true })
+    .limit(1)
 
   if (testOrgId) {
     membershipQuery = membershipQuery.eq('org_id', testOrgId)
   }
 
-  const { data: existing, error: existingErr } = await membershipQuery.limit(1).maybeSingle()
+  const { data: existing, error: existingErr } = await membershipQuery.maybeSingle()
 
 
   if (existingErr) {
