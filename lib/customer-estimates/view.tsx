@@ -4,7 +4,11 @@ import Image from 'next/image'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { getBrandLogoUrl } from '@/lib/brand/logo'
-import type { CustomerEstimateDocument, CustomerEstimateQuoteRow } from './types'
+import type {
+  CustomerEstimateDocument,
+  CustomerEstimateQuoteRow,
+  CustomerEstimateTermsPage,
+} from './types'
 
 const C = {
   page: '#ffffff',
@@ -267,20 +271,20 @@ function TermsSection({ title, children }: { title: string; children: ReactNode 
 }
 
 function TermsPage({
-  document,
+  page,
   showOverflowWarnings,
 }: {
-  document: CustomerEstimateDocument
+  page: CustomerEstimateTermsPage
   showOverflowWarnings: boolean
 }) {
   return (
-    <PageFrame label="Terms page" showOverflowWarnings={showOverflowWarnings}>
+    <PageFrame label={page.title} showOverflowWarnings={showOverflowWarnings}>
       <div style={{ display: 'grid', gap: 10 }}>
         <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: '0.06em' }}>
-          {document.terms_page.title}
+          {page.title}
         </div>
 
-        {document.terms_page.sections.map((section) => (
+        {page.sections.map((section) => (
           <TermsSection key={section.key} title={section.title}>
             <div style={{ display: 'grid', gap: 3 }}>
               {section.paragraphs.map((paragraph) => (
@@ -324,10 +328,17 @@ export function CustomerEstimateDocumentView({
   showShell?: boolean
   showOverflowWarnings?: boolean
 }) {
+  const termsPages = document.terms_pages?.length ? document.terms_pages : [document.terms_page]
   const pages = (
     <div style={{ display: 'grid', gap: 24 }}>
       <DocumentPage document={document} showOverflowWarnings={showOverflowWarnings} />
-      <TermsPage document={document} showOverflowWarnings={showOverflowWarnings} />
+      {termsPages.map((page, index) => (
+        <TermsPage
+          key={`${page.title}:${index}`}
+          page={page}
+          showOverflowWarnings={showOverflowWarnings}
+        />
+      ))}
       <style jsx global>{`
         @media print {
           html,

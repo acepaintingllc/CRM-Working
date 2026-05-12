@@ -11,6 +11,7 @@ import { QuoteRatesDiscardDialog } from './QuoteRatesDiscardDialog'
 import { QuoteRatesEditorSection } from './QuoteRatesEditorSection'
 import { QuoteMeasurementAssumptionsSection } from './QuoteMeasurementAssumptionsSection'
 import { QuoteRatesTableSection } from './QuoteRatesTableSection'
+import { QuoteRatesUnsavedNavigationDialog } from './QuoteRatesUnsavedNavigationDialog'
 
 export function QuoteRatesPageContent() {
   const controller = useQuoteRatesPage()
@@ -43,6 +44,21 @@ export function QuoteRatesPageContent() {
               onClick={() => void controller.actions.reload(controller.tableVm.selectedId || undefined)}
             >
               Refresh
+            </CrmButton>
+            <CrmButton
+              type="button"
+              disabled={controller.editorVm.pendingChangesCount === 0 || controller.editorVm.busy}
+              onClick={() => void controller.actions.discardBatch()}
+            >
+              Discard
+            </CrmButton>
+            <CrmButton
+              type="button"
+              tone="primary"
+              disabled={!controller.uiState.canSave}
+              onClick={() => void controller.actions.saveBatch()}
+            >
+              {controller.editorVm.saving ? 'Saving...' : 'Save changes'}
             </CrmButton>
           </>
         }
@@ -106,12 +122,10 @@ export function QuoteRatesPageContent() {
                 vm={controller.editorVm}
                 templateVersion={controller.resource.data.template_version}
                 actions={{
-                  saveCurrent: controller.actions.saveCurrent,
                   cancelEdit: controller.actions.cancelEdit,
                   setDraftActive: controller.actions.setDraftActive,
                   updateDraftValue: controller.actions.updateDraftValue,
                   formatDraftValue: controller.actions.formatDraftValue,
-                  activateDraft: controller.actions.activateDraft,
                 }}
               />
             }
@@ -120,6 +134,12 @@ export function QuoteRatesPageContent() {
         <QuoteRatesDiscardDialog
           vm={controller.discardVm}
           onConfirm={() => void controller.actions.confirmDiscard()}
+          onCancel={controller.actions.cancelDiscard}
+        />
+        <QuoteRatesUnsavedNavigationDialog
+          vm={controller.leavePageVm}
+          onSave={() => void controller.actions.saveAndLeave()}
+          onDiscard={() => void controller.actions.discardAndLeave()}
           onCancel={controller.actions.cancelDiscard}
         />
       </CrmResourceState>

@@ -84,7 +84,7 @@ GET  /api/quotes/home/jobs/[jobId]/versions           — versions for a job
 GET  /api/quotes/home/jobs/[jobId]/create-context     — job context for quote creation
 GET  /api/quotes/home/search                          — search jobs/versions/customers
 GET/POST/PATCH /api/quotes/products                   — products CRUD
-GET/PATCH /api/quotes/rates-flags                     — rates and flags mutations
+GET/PUT /api/quotes/rates-flags                       — active rates/flags read and batch publish
 ```
 
 ### create-context endpoint

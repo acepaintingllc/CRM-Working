@@ -11,6 +11,10 @@ vi.mock('@/lib/auth/authedFetch', () => ({
   authedFetch: mockAuthedFetch,
 }))
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
+
 vi.mock('next/link', () => ({
   default: ({
     href,
@@ -148,9 +152,54 @@ describe('QuoteRatesPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Discard unsaved changes?')).toBeTruthy()
       expect(
-        screen.getByText('Switching to another row will discard unsaved edits in the current draft.')
+        screen.getByText('Switching to another row will discard unsaved edits in the current row.')
       ).toBeTruthy()
     })
+  })
+
+  it('removes draft activation language from the rates workspace', async () => {
+    mockAuthedFetch.mockResolvedValueOnce(
+      createResponse({
+        data: {
+          source: 'db',
+          seeded: true,
+          template_version: 2,
+          draft_setting_set: { id: 'draft-set', version_number: 3 },
+          categories: [
+            {
+              key: 'production_rates_walls',
+              tab: 'rates',
+              group: 'production_rates',
+              label: 'Wall Production',
+              table_title: 'Wall Production',
+              description: 'Wall rates',
+              columns: [{ key: 'display_name', label: 'Name' }],
+              fields: [
+                { key: 'id', label: 'ID', type: 'text', required: true },
+                { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+              ],
+              rows: [
+                { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
+              ],
+            },
+          ],
+        },
+      })
+    )
+
+    render(<QuoteRatesPage />)
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Unsaved global changes apply to draft quotes after saving. Sent and accepted quotes keep their saved pricing.'
+        )
+      ).toBeTruthy()
+    })
+
+    expect(screen.queryByRole('button', { name: /activate draft/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/editing draft/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/activate it/i)).not.toBeInTheDocument()
   })
 
   it('edits measurement deductions from the rates assumptions tab', async () => {

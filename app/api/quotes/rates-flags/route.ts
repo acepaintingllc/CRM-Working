@@ -1,7 +1,6 @@
 import {
-  handleRatesFlagsRouteActivate,
+  handleRatesFlagsRouteBatchPublish,
   handleRatesFlagsRouteGet,
-  handleRatesFlagsRouteMutation,
 } from '@/lib/server/ratesFlagsRoute'
 
 export async function GET(request: Request) {
@@ -9,13 +8,5 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  return handleRatesFlagsRouteMutation(request)
-}
-
-export async function PATCH(request: Request) {
-  return handleRatesFlagsRouteMutation(request)
-}
-
-export async function POST(request: Request) {
-  return handleRatesFlagsRouteActivate(request)
+  return handleRatesFlagsRouteBatchPublish(request)
 }

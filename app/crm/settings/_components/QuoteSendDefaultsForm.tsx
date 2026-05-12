@@ -53,26 +53,6 @@ export function QuoteSendDefaultsForm(props: QuoteSendDefaultsFormProps) {
       },
     })
   }
-  const patchIncludedPreparation = (
-    patch: Partial<QuoteTermsSections['included_preparation']>
-  ) => {
-    patchTerms({
-      included_preparation: {
-        ...props.value.terms_sections.included_preparation,
-        ...patch,
-      },
-    })
-  }
-  const patchPricingPayment = (
-    patch: Partial<QuoteTermsSections['pricing_payment']>
-  ) => {
-    patchTerms({
-      pricing_payment: {
-        ...props.value.terms_sections.pricing_payment,
-        ...patch,
-      },
-    })
-  }
   const patchTemplatePreset = (key: string, patch: Partial<TemplatePreset>) => {
     props.onChange({
       template_presets: props.value.template_presets.map((preset) =>
@@ -167,84 +147,20 @@ export function QuoteSendDefaultsForm(props: QuoteSendDefaultsFormProps) {
 
       <CrmSectionCard
         title="Customer Terms Sections"
-        description="Each box maps to one formatted section on the customer quote terms page."
+        description="These boxes become the two customer-facing pages after the quote page."
       >
         <div className="grid gap-3">
-          <div className="grid gap-3 md:grid-cols-3">
-            <TermsTextarea
-              label="Preparation - Walls"
-              value={props.value.terms_sections.included_preparation.walls}
-              onChange={(value) => patchIncludedPreparation({ walls: value })}
-            />
-            <TermsTextarea
-              label="Preparation - Ceilings"
-              value={props.value.terms_sections.included_preparation.ceilings}
-              onChange={(value) => patchIncludedPreparation({ ceilings: value })}
-            />
-            <TermsTextarea
-              label="Preparation - Trim"
-              value={props.value.terms_sections.included_preparation.trim}
-              onChange={(value) => patchIncludedPreparation({ trim: value })}
-            />
-          </div>
-
           <TermsTextarea
-            label="Customer Responsibilities"
-            value={props.value.terms_sections.customer_responsibilities}
-            rows={4}
-            onChange={(value) => patchTerms({ customer_responsibilities: value })}
+            label="Our Process & What to Expect"
+            value={props.value.terms_sections.our_process}
+            rows={10}
+            onChange={(value) => patchTerms({ our_process: value })}
           />
           <TermsTextarea
-            label="Exclusions"
-            value={props.value.terms_sections.exclusions}
-            rows={4}
-            onChange={(value) => patchTerms({ exclusions: value })}
-          />
-          <TermsTextarea
-            label="Changes to Scope"
-            value={props.value.terms_sections.scope_changes}
-            rows={3}
-            onChange={(value) => patchTerms({ scope_changes: value })}
-          />
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <TermsTextarea
-              label="Payment Instructions"
-              value={props.value.terms_sections.pricing_payment.payment_instructions}
-              rows={2}
-              onChange={(value) => patchPricingPayment({ payment_instructions: value })}
-            />
-            <TermsTextarea
-              label="Deposit Terms"
-              value={props.value.terms_sections.pricing_payment.deposit_terms}
-              rows={2}
-              onChange={(value) => patchPricingPayment({ deposit_terms: value })}
-            />
-            <TermsTextarea
-              label="Balance Due"
-              value={props.value.terms_sections.pricing_payment.balance_due}
-              rows={2}
-              onChange={(value) => patchPricingPayment({ balance_due: value })}
-            />
-            <TermsTextarea
-              label="Card Fee Note"
-              value={props.value.terms_sections.pricing_payment.card_fee_note}
-              rows={2}
-              onChange={(value) => patchPricingPayment({ card_fee_note: value })}
-            />
-          </div>
-
-          <TermsTextarea
-            label="Insurance"
-            value={props.value.terms_sections.insurance}
-            rows={2}
-            onChange={(value) => patchTerms({ insurance: value })}
-          />
-          <TermsTextarea
-            label="Thank You"
-            value={props.value.terms_sections.thank_you}
-            rows={2}
-            onChange={(value) => patchTerms({ thank_you: value })}
+            label="Project Terms"
+            value={props.value.terms_sections.project_terms}
+            rows={10}
+            onChange={(value) => patchTerms({ project_terms: value })}
           />
         </div>
       </CrmSectionCard>

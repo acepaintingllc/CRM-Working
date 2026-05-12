@@ -1,7 +1,5 @@
 export {
   _test,
-  activateRatesFlagsDraft,
-  applyRatesFlagsMutation,
   buildRatesFlagsPayloadFromValues,
   getOrCreateLiveRatesFlagsCatalogOverlay,
   parseRatesFlagsMutationRequest,

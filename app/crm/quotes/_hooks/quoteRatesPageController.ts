@@ -1,11 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCrmBeforeUnloadGuard } from '@/app/crm/_hooks/useCrmBeforeUnloadGuard'
 import {
-  activateQuoteRatesDraftMutation,
-  archiveOrReactivateQuoteRatesMutation,
-  saveQuoteRatesMutation,
+  applyQuoteRatesLocalMutation,
+  publishQuoteRatesBatchMutation,
 } from './quoteRatesPageMutations'
+import { getRatesFlagsDraftAdapter } from '@/lib/quotes/ratesFlagsDraftAdapters'
 import {
   buildQuoteRatesTransitionPlan,
   buildQuoteRatesDerivedState,
@@ -16,6 +18,7 @@ import {
 } from './quoteRatesPageNavigation'
 import {
   createInitialQuoteRatesWorkflowState,
+  getQuoteRatesHasEditorChanges,
   getQuoteRatesHasUnsavedChanges,
   quoteRatesPageReducer,
   transitionNeedsDiscardReset,
@@ -47,14 +50,17 @@ export type QuoteRatesActions = {
   setSelectedId: (selectedId: string) => boolean | Promise<boolean>
   setDraftActive: (nextActive: boolean) => void
   reload: (keepId?: string) => Promise<boolean> | boolean
-  saveCurrent: () => Promise<void>
+  saveBatch: () => Promise<boolean> | boolean
+  discardBatch: () => Promise<boolean> | boolean
   archiveOrReactivate: (nextActive: boolean) => Promise<boolean> | boolean
-  activateDraft: () => Promise<boolean> | boolean
   startCreate: () => boolean | Promise<boolean>
   startDuplicate: () => boolean | Promise<boolean>
   cancelEdit: () => void
   confirmDiscard: () => boolean | Promise<boolean>
   cancelDiscard: () => void
+  saveAndLeave: () => Promise<boolean> | boolean
+  discardAndLeave: () => boolean
+  requestLeavePage: (href: string) => boolean
   updateDraftValue: (fieldKey: string, rawInput: string) => void
   formatDraftValue: (fieldKey: string) => string
 }
@@ -62,7 +68,9 @@ export type QuoteRatesActions = {
 type QuoteRatesTransitionResult = boolean | Promise<boolean>
 
 export function useQuoteRatesPageController() {
+  const router = useRouter()
   const resource = useQuoteRatesData()
+  const cleanResourceRef = useRef(resource.data)
   const orchestrator = useDenseQuoteAdminOrchestrator<
     QuoteRatesWorkflowState,
     QuoteRatesControllerAction,
@@ -73,7 +81,7 @@ export function useQuoteRatesPageController() {
     initialState: createInitialQuoteRatesWorkflowState(),
     resourceData: resource.data,
     getResourceSyncAction: buildQuoteRatesResourceSyncAction,
-    hasUnsavedChanges: getQuoteRatesHasUnsavedChanges,
+    hasUnsavedChanges: getQuoteRatesHasEditorChanges,
     discard: {
       getPendingIntent: (state) => state.pendingTransition,
       queue: (intent) => ({ type: 'discardChanged', status: 'confirming', intent }),
@@ -88,6 +96,14 @@ export function useQuoteRatesPageController() {
     () => buildQuoteRatesDerivedState(resource.data, state),
     [resource.data, state]
   )
+  const dirty = getQuoteRatesHasUnsavedChanges(state)
+  useCrmBeforeUnloadGuard({ loading: resource.loading, dirty })
+
+  useEffect(() => {
+    if (!getQuoteRatesHasUnsavedChanges(stateRef.current)) {
+      cleanResourceRef.current = resource.data
+    }
+  }, [resource.data, state.pendingMutations.length, state.draft, state.draftActive, stateRef])
 
   useEffect(() => {
     if (state.actionStatus !== 'reloading' || resource.loading) return
@@ -182,28 +198,79 @@ export function useQuoteRatesPageController() {
     return result.ok
   }
 
-  async function saveCurrent() {
+  function applyLocalCurrentDraft() {
     const currentState = stateRef.current
-    if (currentState.actionStatus !== 'idle') return
-    if (!derived.editableActiveCategory || !currentState.draft || !derived.validationResult?.ok) {
-      return
+    if (currentState.actionStatus !== 'idle') return false
+    if (!derived.editableActiveCategory || !derived.adapter || !currentState.draft) {
+      return false
     }
+
+    const validation = derived.adapter.validateDraft(
+      derived.editableActiveCategory,
+      currentState.draft
+    )
+    if (!validation.ok) {
+      return false
+    }
+
+    const adapter = getRatesFlagsDraftAdapter(derived.editableActiveCategory.key)
+    const request = adapter.toMutationRequest({
+      action: currentState.editorMode === 'create' ? 'create' : 'update',
+      category: derived.editableActiveCategory,
+      draft: currentState.draft,
+      draftActive: currentState.draftActive,
+      originalId:
+        currentState.editorMode === 'create'
+          ? undefined
+          : currentState.selectedId || derived.selectedRow?.id,
+    })
+    const keepId =
+      typeof currentState.draft.id === 'string' && currentState.draft.id
+        ? currentState.draft.id
+        : derived.selectedRow?.id ?? ''
+    const result = applyQuoteRatesLocalMutation({
+      resource,
+      navigation: currentState.navigation,
+      pendingMutations: currentState.pendingMutations,
+      request,
+      keepId,
+    })
+
+    applyAction({
+      type: 'editorApplied',
+      selectedId: result.selectedId,
+      editor: result.editor,
+    })
+    applyAction({ type: 'pendingMutationsChanged', mutations: result.pendingMutations })
+    applyAction({ type: 'feedbackChanged', notice: null })
+    return true
+  }
+
+  async function saveBatch() {
+    const currentState = stateRef.current
+    if (currentState.actionStatus !== 'idle') return false
+    if (
+      (getQuoteRatesHasEditorChanges(currentState) || currentState.editorMode === 'create') &&
+      !applyLocalCurrentDraft()
+    ) {
+      return false
+    }
+
+    const nextState = stateRef.current
+    if (nextState.pendingMutations.length === 0) return false
 
     applyAction({ type: 'mutationChanged', status: 'saving' })
 
-    const result = await saveQuoteRatesMutation({
+    const result = await publishQuoteRatesBatchMutation({
       resource,
-      navigation: currentState.navigation,
-      activeCategory: derived.editableActiveCategory,
-      draft: currentState.draft,
-      draftActive: currentState.draftActive,
-      editorMode: currentState.editorMode,
-      selectedRowId: derived.selectedRow?.id,
+      navigation: nextState.navigation,
+      pendingMutations: nextState.pendingMutations,
+      selectedRowId: nextState.selectedId,
     })
 
     if (!result.ok) {
       applyAction({ type: 'mutationChanged', status: 'idle', error: result.error })
-      return
+      return false
     }
 
     applyAction({
@@ -216,70 +283,70 @@ export function useQuoteRatesPageController() {
       notice: result.notice,
       tone: result.tone,
     })
+    applyAction({ type: 'pendingMutationsChanged', mutations: [] })
     applyAction({ type: 'mutationChanged', status: 'idle' })
+    return true
+  }
+
+  function discardLocalBatch() {
+    if (stateRef.current.actionStatus !== 'idle') return false
+
+    const cleanPayload = cleanResourceRef.current
+    resource.setData(cleanPayload)
+    const selection = buildQuoteRatesSelectionSnapshot(
+      cleanPayload,
+      stateRef.current.navigation,
+      stateRef.current.selectedId || undefined
+    )
+    applyAction({
+      type: 'editorApplied',
+      selectedId: selection.selectedId,
+      editor: selection.editor,
+    })
+    applyAction({ type: 'pendingMutationsChanged', mutations: [] })
+    applyAction({ type: 'feedbackChanged', notice: null })
+    return true
   }
 
   async function archiveOrReactivate(nextActive: boolean) {
     if (stateRef.current.actionStatus !== 'idle') return false
     if (!derived.editableActiveCategory || !derived.selectedRow) return false
 
-    applyAction({ type: 'mutationChanged', status: 'archiving' })
-
-    const result = await archiveOrReactivateQuoteRatesMutation({
+    const adapter = getRatesFlagsDraftAdapter(derived.editableActiveCategory.key)
+    const request = adapter.toArchiveRequest({
+      action: nextActive ? 'reactivate' : 'archive',
+      rowId: derived.selectedRow.id,
+    })
+    const result = applyQuoteRatesLocalMutation({
       resource,
       navigation: stateRef.current.navigation,
-      categoryKey: derived.editableActiveCategory.key,
-      selectedRowId: derived.selectedRow.id,
-      nextActive,
+      pendingMutations: stateRef.current.pendingMutations,
+      request,
+      keepId: derived.selectedRow.id,
     })
-
-    if (!result.ok) {
-      applyAction({ type: 'mutationChanged', status: 'idle', error: result.error })
-      return false
-    }
 
     applyAction({
       type: 'editorApplied',
       selectedId: result.selectedId,
       editor: result.editor,
     })
-    applyAction({
-      type: 'feedbackChanged',
-      notice: result.notice,
-      tone: result.tone,
-    })
-    applyAction({ type: 'mutationChanged', status: 'idle' })
+    applyAction({ type: 'pendingMutationsChanged', mutations: result.pendingMutations })
+    applyAction({ type: 'feedbackChanged', notice: null })
     return true
   }
 
-  async function activateDraft() {
+  async function discardBatch() {
     if (stateRef.current.actionStatus !== 'idle') return false
-    if (!resource.data.draft_setting_set) return false
 
-    applyAction({ type: 'mutationChanged', status: 'activating' })
+    const discarded = await performReload(stateRef.current.selectedId)
+    if (!discarded) return false
 
-    const result = await activateQuoteRatesDraftMutation({
-      resource,
-      navigation: stateRef.current.navigation,
-      selectedRowId: stateRef.current.selectedId,
-    })
-
-    if (!result.ok) {
-      applyAction({ type: 'mutationChanged', status: 'idle', error: result.error })
-      return false
-    }
-
-    applyAction({
-      type: 'editorApplied',
-      selectedId: result.selectedId,
-      editor: result.editor,
-    })
+    applyAction({ type: 'pendingMutationsChanged', mutations: [] })
     applyAction({
       type: 'feedbackChanged',
-      notice: result.notice,
-      tone: result.tone,
+      notice: 'Discarded unsaved global changes.',
+      tone: 'warning',
     })
-    applyAction({ type: 'mutationChanged', status: 'idle' })
     return true
   }
 
@@ -307,12 +374,21 @@ export function useQuoteRatesPageController() {
       rawInput
     )
     applyAction({ type: 'draftChanged', draft: nextDraft })
+    const validation = derived.adapter.validateDraft(derived.editableActiveCategory, nextDraft)
+    if (validation.ok) {
+      queueMicrotask(() => {
+        applyLocalCurrentDraft()
+      })
+    }
   }
 
   function setDraftActive(nextActive: boolean) {
     if (stateRef.current.actionStatus !== 'idle') return
 
     applyAction({ type: 'draftChanged', draftActive: nextActive })
+    queueMicrotask(() => {
+      applyLocalCurrentDraft()
+    })
   }
 
   const formatDraftValue = useCallback(
@@ -345,8 +421,9 @@ export function useQuoteRatesPageController() {
         return performReload(plan.keepId)
       case 'archiveOrReactivate':
         return archiveOrReactivate(plan.nextActive)
-      case 'activateDraft':
-        return activateDraft()
+      case 'leavePage':
+        router.push(plan.href)
+        return true
       default:
         return false
     }
@@ -361,6 +438,100 @@ export function useQuoteRatesPageController() {
     })
   }
 
+  const requestLeavePage = useCallback((href: string) => {
+    if (stateRef.current.actionStatus !== 'idle') return false
+
+    if (getQuoteRatesHasUnsavedChanges(stateRef.current)) {
+      if (stateRef.current.pendingTransition) return false
+      applyAction({
+        type: 'discardChanged',
+        status: 'confirming',
+        intent: { type: 'leavePage', href },
+      })
+      return false
+    }
+
+    router.push(href)
+    return true
+  }, [applyAction, router, stateRef])
+
+  function getCurrentHref() {
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`
+  }
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!getQuoteRatesHasUnsavedChanges(stateRef.current)) return
+      if (event.defaultPrevented || event.button !== 0) return
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+
+      const target = event.target
+      if (!(target instanceof Element)) return
+
+      const anchor = target.closest('a[href]')
+      if (!(anchor instanceof HTMLAnchorElement)) return
+      if (anchor.target && anchor.target !== '_self') return
+      if (anchor.hasAttribute('download')) return
+
+      const url = new URL(anchor.href, window.location.href)
+      if (url.origin !== window.location.origin) return
+
+      const nextHref = `${url.pathname}${url.search}${url.hash}`
+      if (nextHref === getCurrentHref()) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      requestLeavePage(nextHref)
+    }
+
+    document.addEventListener('click', handleDocumentClick, true)
+    return () => document.removeEventListener('click', handleDocumentClick, true)
+  }, [requestLeavePage, stateRef])
+
+  useEffect(() => {
+    const currentHref = getCurrentHref()
+    const currentHistoryState = window.history.state
+
+    const handlePopState = () => {
+      if (!getQuoteRatesHasUnsavedChanges(stateRef.current)) return
+
+      const nextHref = getCurrentHref()
+      if (nextHref === currentHref) return
+
+      window.history.pushState(currentHistoryState, '', currentHref)
+      requestLeavePage(nextHref)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [requestLeavePage, stateRef])
+
+  async function saveAndLeave() {
+    const pendingIntent = stateRef.current.pendingTransition
+    if (pendingIntent?.type !== 'leavePage') return false
+
+    const href = pendingIntent.href
+    const saved = await saveBatch()
+    if (!saved) return false
+
+    cancelDiscard()
+    router.push(href)
+    return true
+  }
+
+  function discardAndLeave() {
+    const pendingIntent = stateRef.current.pendingTransition
+    if (pendingIntent?.type !== 'leavePage') return false
+
+    const href = pendingIntent.href
+    if (!discardLocalBatch()) return false
+
+    cancelDiscard()
+    router.push(href)
+    return true
+  }
+
   const actions: QuoteRatesActions = {
     setActiveTab: (activeTab) => requestIntent({ type: 'setActiveTab', activeTab }),
     setRateSection: (rateSection) => requestIntent({ type: 'setRateSection', rateSection }),
@@ -373,10 +544,10 @@ export function useQuoteRatesPageController() {
     setSelectedId: (selectedId) => requestIntent({ type: 'setSelectedId', selectedId }),
     setDraftActive,
     reload: (keepId?: string) => requestIntent({ type: 'reload', keepId }),
-    saveCurrent,
+    saveBatch: () => saveBatch(),
+    discardBatch: () => discardBatch(),
     archiveOrReactivate: (nextActive: boolean) =>
       requestIntent({ type: 'archiveOrReactivate', nextActive }),
-    activateDraft: () => requestIntent({ type: 'activateDraft' }),
     startCreate: () => requestIntent({ type: 'startCreate' }),
     startDuplicate: () => requestIntent({ type: 'startDuplicate' }),
     cancelEdit,
@@ -384,6 +555,7 @@ export function useQuoteRatesPageController() {
       if (stateRef.current.actionStatus !== 'idle') return false
 
       return confirmDiscard((intent) => {
+        if (intent.type === 'leavePage') return false
         if (transitionNeedsDiscardReset(intent)) {
           discardCurrentChanges()
         }
@@ -391,6 +563,9 @@ export function useQuoteRatesPageController() {
       })
     },
     cancelDiscard,
+    saveAndLeave,
+    discardAndLeave,
+    requestLeavePage,
     updateDraftValue,
     formatDraftValue,
   }

@@ -4,25 +4,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProductionRateRow, RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 import { useQuoteRatesPage } from '../useQuoteRatesPage'
 
-const { loadRatesFlags, mutateRatesFlags } = vi.hoisted(() => ({
-  loadRatesFlags: vi.fn(),
-  mutateRatesFlags: vi.fn(),
+const { loadRatesFlags, publishRatesFlagsBatch } =
+  vi.hoisted(() => ({
+    loadRatesFlags: vi.fn(),
+    publishRatesFlagsBatch: vi.fn(),
+  }))
+const { push } = vi.hoisted(() => ({
+  push: vi.fn(),
 }))
 
 vi.mock('@/lib/quotes/client', () => ({
   loadRatesFlags,
-  mutateRatesFlags,
+  publishRatesFlagsBatch,
 }))
 
-type RatesPayloadRow = RatesFlagsPayload['categories'][number]['rows'][number]
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push }),
+}))
 
-function getObjectValue(value: object | null, key: string) {
-  if (!value) return undefined
-  const propertyValue: unknown = Reflect.get(value, key)
-  return propertyValue
-}
-
-function buildWallRateRow(overrides: Partial<ProductionRateRow>): ProductionRateRow {
+function buildWallRateRow(overrides: Partial<ProductionRateRow> = {}): ProductionRateRow {
   return {
     id: 'wall-rate-1',
     production_scope: 'walls',
@@ -39,14 +39,24 @@ function buildWallRateRow(overrides: Partial<ProductionRateRow>): ProductionRate
   }
 }
 
-function buildRatesPayload(params?: {
-  rows?: RatesPayloadRow[]
-  templateVersion?: number
-}): RatesFlagsPayload {
+function buildRatesPayload(rows: ProductionRateRow[] = [buildWallRateRow()]): RatesFlagsPayload {
   return {
     source: 'db',
     seeded: true,
-    template_version: params?.templateVersion ?? 2,
+    template_version: 2,
+    active_setting_set: {
+      id: 'active-set-1',
+      status: 'active',
+      version_number: 2,
+      source_set_id: null,
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-01T00:00:00.000Z',
+      activated_at: '2026-05-01T00:00:00.000Z',
+      retired_at: null,
+      notes: '',
+    },
+    draft_setting_set: null,
+    editing_setting_set: null,
     categories: [
       {
         key: 'production_rates_walls',
@@ -72,1575 +82,563 @@ function buildRatesPayload(params?: {
           { key: 'display_name', label: 'Display Name', type: 'text', required: true },
           { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
         ],
-        rows: params?.rows ?? [buildWallRateRow({})],
+        rows,
       },
     ],
   }
 }
 
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
+async function renderLoadedRatesPage(payload: RatesFlagsPayload = buildRatesPayload()) {
+  loadRatesFlags.mockResolvedValue(payload)
+  const hook = renderHook(() => useQuoteRatesPage())
 
-  return { promise, resolve, reject }
+  await waitFor(() => {
+    expect(hook.result.current.resource.loading).toBe(false)
+  })
+  if (payload.categories[0]?.rows.some((row) => row.active)) {
+    await waitFor(() => {
+      expect(hook.result.current.tableVm.selectedRow?.id).toBe('wall-rate-1')
+    })
+  }
+
+  return hook
 }
 
 describe('useQuoteRatesPage', () => {
   beforeEach(() => {
     loadRatesFlags.mockReset()
-    mutateRatesFlags.mockReset()
+    publishRatesFlagsBatch.mockReset()
+    push.mockReset()
+    document.body.replaceChildren()
+    window.history.replaceState({ current: true }, '', '/crm/quotes/rates')
   })
 
-  it('treats a successful empty categories response as no data', async () => {
-    loadRatesFlags.mockResolvedValueOnce({
-      source: 'db',
-      seeded: false,
-      template_version: 2,
-      categories: [],
-    })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    expect(result.current.uiState.hasData).toBe(false)
-    expect(result.current.uiState.loadError).toBeNull()
-  })
-
-  it('exposes a stable draft formatter through actions instead of the editor VM', async () => {
-    loadRatesFlags.mockResolvedValueOnce({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
-        {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [
-            { key: 'display_name', label: 'Name' },
-            { key: 'active', label: 'Status' },
-          ],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
-          ],
-          rows: [
-            {
-              id: 'WALL_RATE_1',
-              display_name: 'Standard walls',
-              notes: '',
-              active: true,
-              sqft_per_hr: '150',
-            },
-          ],
-        },
-      ],
-    })
-
-    const { result, rerender } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    const formatDraftValue = result.current.actions.formatDraftValue
-
-    expect('formatDraftValue' in result.current.editorVm).toBe(false)
-    expect(formatDraftValue('sqft_per_hr')).toBe('150')
-
-    rerender()
-
-    expect(result.current.actions.formatDraftValue).toBe(formatDraftValue)
-  })
-
-  it('loads, filters, duplicates, and saves dense rates rows', async () => {
-    loadRatesFlags
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [
-              { key: 'display_name', label: 'Name' },
-              { key: 'active', label: 'Status' },
-            ],
-            fields: [
-              { key: 'id', label: 'ID', type: 'text', required: true },
-              {
-                key: 'production_scope',
-                label: 'Production Scope',
-                type: 'select',
-                readOnly: true,
-                options: ['walls'],
-                writeDefault: 'walls',
-              },
-              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-              { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
-              { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
-            ],
-            rows: [
-              {
-                id: 'wall-rate-1',
-                display_name: 'Standard walls',
-                notes: '',
-                active: true,
-                sqft_per_hr: '150',
-                helper_allowed: 'Y',
-              },
-            ],
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [
-              { key: 'display_name', label: 'Name' },
-              { key: 'active', label: 'Status' },
-            ],
-            fields: [
-              { key: 'id', label: 'ID', type: 'text', required: true },
-              {
-                key: 'production_scope',
-                label: 'Production Scope',
-                type: 'select',
-                readOnly: true,
-                options: ['walls'],
-                writeDefault: 'walls',
-              },
-              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-              { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
-              { key: 'helper_allowed', label: 'Helper Allowed', type: 'select', options: ['Y', 'N'] },
-            ],
-            rows: [
-              {
-                id: 'wall-rate-1',
-                display_name: 'Standard walls',
-                notes: '',
-                active: true,
-                sqft_per_hr: '150',
-                helper_allowed: 'Y',
-              },
-              {
-                id: 'wall-rate-1_COPY',
-                display_name: 'Duplicated walls',
-                notes: '',
-                active: true,
-                sqft_per_hr: '175.5',
-                helper_allowed: 'N',
-              },
-            ],
-          },
-        ],
-      })
-    mutateRatesFlags.mockResolvedValue({ data: true })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
+  it('loads the active settings payload into local editor state', async () => {
+    const { result } = await renderLoadedRatesPage()
 
     expect(result.current.tableVm.selectedRow?.id).toBe('wall-rate-1')
-
-    act(() => {
-      result.current.actions.setSearch('standard')
-    })
-    expect(result.current.tableVm.filteredRows).toHaveLength(1)
-
-    act(() => {
-      result.current.actions.setSearch('')
-      result.current.actions.startDuplicate()
-    })
-
-    expect(result.current.tableVm.isCreating).toBe(true)
-    const duplicateDraft = result.current.editorVm.draft
-    expect(getObjectValue(duplicateDraft, 'id')).toBe('wall-rate-1_COPY')
-    expect(getObjectValue(duplicateDraft, 'sqft_per_hr')).toBe(150)
-    expect(getObjectValue(duplicateDraft, 'helper_allowed')).toBe(true)
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Duplicated walls')
-      result.current.actions.updateDraftValue('sqft_per_hr', '175.5')
-      result.current.actions.updateDraftValue('helper_allowed', 'N')
-    })
-
-    await act(async () => {
-      await result.current.actions.saveCurrent()
-    })
-
-    expect(mutateRatesFlags).toHaveBeenCalledWith(
-      expect.objectContaining({
-        category: 'production_rates_walls',
-        action: 'create',
-        values: expect.objectContaining({
-          production_scope: 'walls',
-          id: 'wall-rate-1_COPY',
-          display_name: 'Duplicated walls',
-          sqft_per_hr: '175.5',
-          active: 'Y',
-        }),
-      })
-    )
-    expect(result.current.uiState.notice).toBe('Created Wall Production.')
-    expect(result.current.uiState.pageBanner).toEqual({
-      tone: 'success',
-      message: 'Created Wall Production.',
-    })
-    await waitFor(() => {
-      expect(result.current.tableVm.selectedId).toBe('wall-rate-1_COPY')
-    })
-    expect(result.current.tableVm.selectedRow?.id).toBe('wall-rate-1_COPY')
-  })
-
-  it('exposes validation state instead of a generic error for invalid drafts', async () => {
-    loadRatesFlags.mockResolvedValue({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
-        {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [
-            {
-              id: 'wall-rate-1',
-              display_name: 'Standard walls',
-              notes: '',
-              active: true,
-            },
-          ],
-        },
-      ],
-    })
-    mutateRatesFlags.mockResolvedValue({ data: true })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.startDuplicate()
-      result.current.actions.updateDraftValue('display_name', '')
-    })
-
-    await act(async () => {
-      await result.current.actions.saveCurrent()
-    })
-
-    expect(result.current.uiState.actionError).toBeNull()
-    expect(result.current.uiState.validationError).toBe('Display Name is required.')
-    expect(result.current.uiState.inlineValidation).toBe('Display Name is required.')
-    expect(result.current.uiState.canSave).toBe(false)
-    expect(mutateRatesFlags).not.toHaveBeenCalled()
-  })
-
-  it('updates an existing row through the typed adapter mutation path', async () => {
-    loadRatesFlags
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [
-              { key: 'id', label: 'ID', type: 'text', required: true },
-              {
-                key: 'production_scope',
-                label: 'Production Scope',
-                type: 'select',
-                readOnly: true,
-                options: ['walls'],
-                writeDefault: 'walls',
-              },
-              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-              { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
-            ],
-            rows: [
-              {
-                id: 'wall-rate-1',
-                display_name: 'Standard walls',
-                notes: '',
-                active: true,
-                sqft_per_hr: '150',
-              },
-            ],
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 3,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [
-              { key: 'id', label: 'ID', type: 'text', required: true },
-              {
-                key: 'production_scope',
-                label: 'Production Scope',
-                type: 'select',
-                readOnly: true,
-                options: ['walls'],
-                writeDefault: 'walls',
-              },
-              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-              { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
-            ],
-            rows: [
-              {
-                id: 'wall-rate-1',
-                display_name: 'Updated walls',
-                notes: '',
-                active: true,
-                sqft_per_hr: '165',
-              },
-            ],
-          },
-        ],
-      })
-    mutateRatesFlags.mockResolvedValue({ data: true })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Updated walls')
-      result.current.actions.updateDraftValue('sqft_per_hr', '165')
-    })
-
-    await act(async () => {
-      await result.current.actions.saveCurrent()
-    })
-
-    expect(mutateRatesFlags).toHaveBeenCalledWith(
-      expect.objectContaining({
-        category: 'production_rates_walls',
-        action: 'update',
-        original_id: 'wall-rate-1',
-        values: expect.objectContaining({
-          production_scope: 'walls',
-          id: 'wall-rate-1',
-          display_name: 'Updated walls',
-          sqft_per_hr: '165',
-        }),
-      })
-    )
-    expect(result.current.uiState.notice).toBe('Saved Wall Production.')
-    expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
-  })
-
-  it('commits a clean draft snapshot after a successful save', async () => {
-    loadRatesFlags
-      .mockResolvedValueOnce(buildRatesPayload())
-      .mockResolvedValueOnce(
-        buildRatesPayload({
-          rows: [buildWallRateRow({ display_name: 'Clean saved walls', sqft_per_hr: '180' })],
-          templateVersion: 3,
-        })
-      )
-    mutateRatesFlags.mockResolvedValue({ data: true })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Clean saved walls')
-      result.current.actions.updateDraftValue('sqft_per_hr', '180')
-    })
-
-    expect(result.current.editorVm.isDirty).toBe(true)
-
-    await act(async () => {
-      await result.current.actions.saveCurrent()
-    })
-
-    expect(result.current.uiState.notice).toBe('Saved Wall Production.')
-    expect(result.current.editorVm.isDirty).toBe(false)
     expect(result.current.editorVm.draft).toMatchObject({
-      display_name: 'Clean saved walls',
-      sqft_per_hr: 180,
-    })
-    expect(result.current.workflowVm.actionStatus).toBe('idle')
-  })
-
-  it('leaves the current draft editable when save fails', async () => {
-    loadRatesFlags.mockResolvedValue(buildRatesPayload())
-    mutateRatesFlags.mockRejectedValue(new Error('Save failed.'))
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Still editable')
-      result.current.actions.updateDraftValue('sqft_per_hr', '190')
-    })
-
-    await act(async () => {
-      await result.current.actions.saveCurrent()
-    })
-
-    expect(result.current.uiState.actionError).toBe('Save failed.')
-    expect(result.current.workflowVm.actionStatus).toBe('idle')
-    expect(result.current.editorVm.isDirty).toBe(true)
-    expect(result.current.editorVm.canSave).toBe(true)
-    expect(result.current.editorVm.draft).toMatchObject({
-      display_name: 'Still editable',
-      sqft_per_hr: 190,
-    })
-  })
-
-  it('keeps a successful save explicit when refresh verification fails', async () => {
-    loadRatesFlags.mockResolvedValueOnce({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
-        {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            { key: 'sqft_per_hr', label: 'Sq Ft / Hr', type: 'number' },
-          ],
-          rows: [
-            {
-              id: 'wall-rate-1',
-              display_name: 'Standard walls',
-              notes: '',
-              active: true,
-              sqft_per_hr: '150',
-            },
-          ],
-        },
-      ],
-    })
-    loadRatesFlags.mockRejectedValueOnce(new Error('verification failed'))
-    mutateRatesFlags.mockResolvedValue({ data: true })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Updated walls')
-      result.current.actions.updateDraftValue('sqft_per_hr', '165')
-    })
-
-    await act(async () => {
-      await result.current.actions.saveCurrent()
-    })
-
-    expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
-    expect(result.current.resource.data.categories[0]?.rows[0]).toMatchObject({
       id: 'wall-rate-1',
-      display_name: 'Updated walls',
-      sqft_per_hr: '165',
+      display_name: 'Standard walls',
+      sqft_per_hr: 150,
     })
-    expect(result.current.uiState.notice).toBe(
-      'Saved Wall Production, but refresh failed. Showing locally updated data. verification failed'
+    expect(result.current.editorVm.activeSettingSet?.id).toBe('active-set-1')
+  })
+
+  it('applies row edits locally without calling the API immediately', async () => {
+    const { result } = await renderLoadedRatesPage()
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Updated walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '165')
+    })
+
+    await waitFor(() => {
+      expect(result.current.tableVm.selectedRow).toMatchObject({
+        display_name: 'Updated walls',
+        sqft_per_hr: '165',
+      })
+    })
+
+    expect(publishRatesFlagsBatch).not.toHaveBeenCalled()
+    expect(result.current.uiState.canSave).toBe(true)
+    expect(result.current.editorVm.isDirty).toBe(true)
+  })
+
+  it('publishes multiple local edits as one save request', async () => {
+    const savedPayload = buildRatesPayload([
+      buildWallRateRow({ id: 'wall-rate-1', display_name: 'Updated walls', sqft_per_hr: '165' }),
+      buildWallRateRow({
+        id: 'wall-rate-2',
+        scope_id: 'scope-2',
+        display_name: 'Updated tall walls',
+        sqft_per_hr: '190',
+      }),
+    ])
+    publishRatesFlagsBatch.mockResolvedValue({ data: savedPayload, notice: 'Rates and flags published.' })
+
+    const { result } = await renderLoadedRatesPage(
+      buildRatesPayload([
+        buildWallRateRow({ id: 'wall-rate-1', display_name: 'Standard walls' }),
+        buildWallRateRow({
+          id: 'wall-rate-2',
+          scope_id: 'scope-2',
+          display_name: 'Tall walls',
+          sqft_per_hr: '175',
+        }),
+      ])
     )
-    expect(result.current.uiState.pageBanner).toEqual({
-      tone: 'warning',
-      message:
-        'Saved Wall Production, but refresh failed. Showing locally updated data. verification failed',
-    })
-    expect(result.current.uiState.actionError).toBeNull()
-  })
 
-  it('uses load errors as the shell-level status until retry succeeds', async () => {
-    loadRatesFlags
-      .mockRejectedValueOnce(new Error('Rates unavailable.'))
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [],
-            rows: [],
-          },
-        ],
-      })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    expect(result.current.uiState.loadError).toBe('Rates unavailable.')
-    expect(result.current.uiState.pageBanner).toEqual({
-      tone: 'error',
-      message: 'Rates unavailable.',
-    })
-    expect(result.current.uiState.actionError).toBeNull()
-    expect(result.current.uiState.canRetry).toBe(true)
-
-    await act(async () => {
-      await result.current.actions.reload()
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Updated walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '165')
     })
 
     await waitFor(() => {
-      expect(result.current.uiState.loadError).toBeNull()
-    })
-  })
-
-  it('keeps an explicit selection when reload is asked to retain a row id', async () => {
-    loadRatesFlags
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [],
-            rows: [
-              { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
-              { id: 'wall-rate-2', display_name: 'Tall walls', notes: '', active: true },
-            ],
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [],
-            rows: [
-              { id: 'wall-rate-2', display_name: 'Tall walls', notes: '', active: true },
-              { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
-            ],
-          },
-        ],
-      })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
+      expect(result.current.tableVm.selectedRow?.display_name).toBe('Updated walls')
     })
 
     act(() => {
       result.current.actions.setSelectedId('wall-rate-2')
     })
 
-    await act(async () => {
-      await result.current.actions.reload('wall-rate-2')
-    })
-
-    expect(result.current.tableVm.selectedId).toBe('wall-rate-2')
-    expect(result.current.tableVm.selectedRow?.id).toBe('wall-rate-2')
-  })
-
-  it('switches rate sections with an explicit category fallback and selection reset', async () => {
-    loadRatesFlags.mockResolvedValue({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
-        {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
-        },
-        {
-          key: 'unit_rates_doors',
-          tab: 'rates',
-          group: 'unit_rates',
-          label: 'Door Unit Rates',
-          table_title: 'Door Unit Rates',
-          description: 'Door unit rates',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [{ id: 'door-rate-1', display_name: 'Standard door', notes: '', active: true }],
-        },
-      ],
-    })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
     await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
+      expect(result.current.tableVm.selectedId).toBe('wall-rate-2')
     })
-
-    expect(result.current.filtersVm.rateCategory).toBe('production_rates_walls')
-    expect(result.current.tableVm.selectedRow?.id).toBe('wall-rate-1')
 
     act(() => {
-      result.current.actions.setRateSection('unit_rates')
+      result.current.actions.updateDraftValue('display_name', 'Updated tall walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '190')
     })
 
-    expect(result.current.filtersVm.activeTab).toBe('rates')
-    expect(result.current.filtersVm.rateSection).toBe('unit_rates')
-    expect(result.current.filtersVm.rateCategory).toBe('unit_rates_doors')
-    expect(result.current.tableVm.selectedRow?.id).toBe('door-rate-1')
+    await act(async () => {
+      await result.current.actions.saveBatch()
+    })
+
+    expect(publishRatesFlagsBatch).toHaveBeenCalledTimes(1)
+    expect(publishRatesFlagsBatch).toHaveBeenCalledWith({
+      reason: 'Rates, flags, and room defaults saved',
+      mutations: [
+        expect.objectContaining({
+          category: 'production_rates_walls',
+          action: 'update',
+          original_id: 'wall-rate-1',
+          values: expect.objectContaining({ display_name: 'Updated walls', sqft_per_hr: '165' }),
+        }),
+        expect.objectContaining({
+          category: 'production_rates_walls',
+          action: 'update',
+          original_id: 'wall-rate-2',
+          values: expect.objectContaining({
+            display_name: 'Updated tall walls',
+            sqft_per_hr: '190',
+          }),
+        }),
+      ],
+    })
   })
 
-  it('hides stale success notices behind validation and replaces them on mutation failure', async () => {
-    loadRatesFlags
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [
-              { key: 'id', label: 'ID', type: 'text', required: true },
-              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            ],
-            rows: [
-              {
-                id: 'wall-rate-1',
-                display_name: 'Standard walls',
-                notes: '',
-                active: true,
-              },
-            ],
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [
-              { key: 'id', label: 'ID', type: 'text', required: true },
-              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            ],
-            rows: [
-              {
-                id: 'wall-rate-1',
-                display_name: 'Standard walls',
-                notes: '',
-                active: true,
-              },
-            ],
-          },
-        ],
-      })
-    mutateRatesFlags
-      .mockResolvedValueOnce({ data: true })
-      .mockRejectedValueOnce(new Error('Archive failed.'))
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
+  it('queues creates locally and includes them in the page-level save batch', async () => {
+    const savedPayload = buildRatesPayload([
+      buildWallRateRow(),
+      buildWallRateRow({
+        id: 'wall-rate-1_COPY',
+        scope_id: 'scope-copy',
+        display_name: 'Copied walls',
+        sqft_per_hr: '175',
+      }),
+    ])
+    publishRatesFlagsBatch.mockResolvedValue({
+      data: savedPayload,
+      notice: 'Rates and flags published.',
     })
+    const { result } = await renderLoadedRatesPage()
 
     act(() => {
       result.current.actions.startDuplicate()
-      result.current.actions.updateDraftValue('id', 'wall-rate-2')
-      result.current.actions.updateDraftValue('display_name', 'Wall rate 2')
+      result.current.actions.updateDraftValue('display_name', 'Copied walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '175')
+    })
+
+    await waitFor(() => {
+      expect(result.current.tableVm.selectedId).toBe('wall-rate-1_COPY')
+    })
+
+    expect(result.current.tableVm.selectedRow).toMatchObject({
+      id: 'wall-rate-1_COPY',
+      display_name: 'Copied walls',
+      sqft_per_hr: '175',
+    })
+    expect(publishRatesFlagsBatch).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.actions.saveBatch()
+    })
+
+    expect(publishRatesFlagsBatch).toHaveBeenCalledWith({
+      reason: 'Rates, flags, and room defaults saved',
+      mutations: [
+        expect.objectContaining({
+          category: 'production_rates_walls',
+          action: 'create',
+          values: expect.objectContaining({
+            id: 'wall-rate-1_COPY',
+            display_name: 'Copied walls',
+            sqft_per_hr: '175',
+          }),
+        }),
+      ],
+    })
+  })
+
+  it('enables save only while pending changes exist and clears dirty state after save', async () => {
+    const savedPayload = {
+      ...buildRatesPayload([
+        buildWallRateRow({ display_name: 'Saved walls', sqft_per_hr: '180' }),
+      ]),
+      template_version: 3,
+      active_setting_set: {
+        id: 'active-set-2',
+        status: 'active' as const,
+        version_number: 3,
+        source_set_id: 'active-set-1',
+        created_at: '2026-05-02T00:00:00.000Z',
+        updated_at: '2026-05-02T00:00:00.000Z',
+        activated_at: '2026-05-02T00:00:00.000Z',
+        retired_at: null,
+        notes: 'Rates publish',
+      },
+      draft_setting_set: null,
+      editing_setting_set: {
+        id: 'active-set-2',
+        status: 'active' as const,
+        version_number: 3,
+        source_set_id: 'active-set-1',
+        created_at: '2026-05-02T00:00:00.000Z',
+        updated_at: '2026-05-02T00:00:00.000Z',
+        activated_at: '2026-05-02T00:00:00.000Z',
+        retired_at: null,
+        notes: 'Rates publish',
+      },
+    }
+    publishRatesFlagsBatch.mockResolvedValue({ data: savedPayload, notice: 'Rates and flags published.' })
+
+    const { result } = await renderLoadedRatesPage()
+
+    expect(result.current.uiState.canSave).toBe(false)
+
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Saved walls')
+      result.current.actions.updateDraftValue('sqft_per_hr', '180')
+    })
+
+    await waitFor(() => {
+      expect(result.current.uiState.canSave).toBe(true)
     })
 
     await act(async () => {
-      await result.current.actions.saveCurrent()
+      await result.current.actions.saveBatch()
     })
 
-    expect(result.current.uiState.notice).toBe('Created Wall Production.')
-    expect(result.current.uiState.pageBanner?.tone).toBe('success')
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', '')
+    expect(result.current.uiState.canSave).toBe(false)
+    expect(result.current.editorVm.isDirty).toBe(false)
+    expect(result.current.tableVm.selectedRow).toMatchObject({
+      display_name: 'Saved walls',
+      sqft_per_hr: '180',
     })
+    expect(result.current.editorVm.activeSettingSet?.id).toBe('active-set-2')
+    expect(result.current.editorVm.activeSettingSet?.version_number).toBe(3)
+    expect(result.current.resource.data.draft_setting_set).toBeNull()
+    expect(result.current.uiState.notice).toBe('Saved rates, flags, and room defaults.')
+  })
 
-    expect(result.current.uiState.notice).toBe('Created Wall Production.')
-    expect(result.current.uiState.pageBanner).toBeNull()
-    expect(result.current.uiState.inlineValidation).toBe('Display Name is required.')
+  it('archives rows locally before the batch save', async () => {
+    const savedPayload = buildRatesPayload([buildWallRateRow({ active: false })])
+    publishRatesFlagsBatch.mockResolvedValue({ data: savedPayload, notice: 'Rates and flags published.' })
+    const { result } = await renderLoadedRatesPage()
 
     act(() => {
-      result.current.actions.cancelEdit()
+      result.current.actions.setStatusFilter('all')
     })
 
     await act(async () => {
       await result.current.actions.archiveOrReactivate(false)
     })
 
-    expect(mutateRatesFlags).toHaveBeenLastCalledWith({
-      category: 'production_rates_walls',
-      action: 'archive',
-      rowId: 'wall-rate-1',
-    })
-    expect(result.current.uiState.notice).toBeNull()
-    expect(result.current.uiState.actionError).toBe('Archive failed.')
-    expect(result.current.uiState.pageBanner).toEqual({
-      tone: 'error',
-      message: 'Archive failed.',
-    })
-  })
+    expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(false)
+    expect(publishRatesFlagsBatch).not.toHaveBeenCalled()
 
-  it('searches across flags and room-default categories after explicit section switches', async () => {
-    loadRatesFlags.mockResolvedValue({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
+    await act(async () => {
+      await result.current.actions.saveBatch()
+    })
+
+    expect(publishRatesFlagsBatch).toHaveBeenCalledWith({
+      reason: 'Rates, flags, and room defaults saved',
+      mutations: [
         {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
-        },
-        {
-          key: 'condition_modifiers',
-          tab: 'flags',
-          group: 'condition_modifiers',
-          label: 'Condition Modifiers',
-          table_title: 'Condition Modifiers',
-          description: 'Flag rows',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            { key: 'notes', label: 'Notes', type: 'text' },
-            { key: 'wall_factor', label: 'Wall Factor', type: 'number' },
-          ],
-          rows: [
-            {
-              id: 'flag-high-traffic',
-              display_name: 'High traffic',
-              notes: 'Heavy wear',
-              active: true,
-              wall_factor: '1.2',
-              ceil_factor: '1.1',
-              trim_factor: '1.05',
-            },
-          ],
-        },
-        {
-          key: 'room_templates',
-          tab: 'room_defaults',
-          group: 'room_templates',
-          label: 'Room Templates',
-          table_title: 'Room Templates',
-          description: 'Template rows',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            { key: 'notes', label: 'Notes', type: 'text' },
-            { key: 'room_type_id', label: 'Room Type', type: 'text' },
-          ],
-          rows: [
-            {
-              id: 'template-bedroom',
-              display_name: 'Bedroom reset',
-              notes: 'Base template',
-              active: true,
-              room_type_id: 'room-bedroom',
-              default_wall_rate_id: 'wall-rate-1',
-              default_ceil_rate_id: '',
-              default_complexity_id: '',
-              default_wall_mode: 'two_coat',
-              include_walls: 'Y',
-              include_ceilings: 'Y',
-              include_trim: 'N',
-              include_doors: 'Y',
-              include_drywall: 'N',
-            },
-          ],
+          category: 'production_rates_walls',
+          action: 'archive',
+          rowId: 'wall-rate-1',
         },
       ],
     })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.setActiveTab('flags')
-    })
-    act(() => {
-      result.current.actions.setSearch('1.2')
-    })
-
-    expect(result.current.tableVm.filteredRows.map((row) => row.id)).toEqual(['flag-high-traffic'])
-
-    act(() => {
-      result.current.actions.setRoomDefaultsSection('room_templates')
-    })
-    act(() => {
-      result.current.actions.setSearch('room-bedroom')
-    })
-
-    expect(result.current.filtersVm.activeTab).toBe('room_defaults')
-    expect(result.current.tableVm.filteredRows.map((row) => row.id)).toEqual(['template-bedroom'])
+    expect(result.current.editorVm.isDirty).toBe(false)
   })
 
-  it('reactivates an archived row through the typed activation mutation path', async () => {
-    loadRatesFlags
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [],
-            rows: [
-              {
-                id: 'wall-rate-1',
-                display_name: 'Archived walls',
-                notes: '',
-                active: false,
-              },
-            ],
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 3,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [],
-            rows: [
-              {
-                id: 'wall-rate-1',
-                display_name: 'Archived walls',
-                notes: '',
-                active: true,
-              },
-            ],
-          },
-        ],
-      })
-    mutateRatesFlags.mockResolvedValue({ data: true })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
+  it('reactivates rows locally before the batch save', async () => {
+    const savedPayload = buildRatesPayload([buildWallRateRow({ active: true })])
+    publishRatesFlagsBatch.mockResolvedValue({
+      data: savedPayload,
+      notice: 'Rates and flags published.',
     })
+    const { result } = await renderLoadedRatesPage(
+      buildRatesPayload([buildWallRateRow({ active: false })])
+    )
 
     act(() => {
-      result.current.actions.setStatusFilter('archived')
+      result.current.actions.setStatusFilter('all')
     })
 
     await act(async () => {
       await result.current.actions.archiveOrReactivate(true)
     })
 
-    expect(mutateRatesFlags).toHaveBeenCalledWith({
-      category: 'production_rates_walls',
-      action: 'reactivate',
-      rowId: 'wall-rate-1',
-    })
-    expect(result.current.uiState.notice).toBe('Reactivated row.')
     expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(true)
-  })
-
-  it('queues discard before archiving a row with unsaved draft changes', async () => {
-    loadRatesFlags
-      .mockResolvedValueOnce(buildRatesPayload())
-      .mockResolvedValueOnce(
-        buildRatesPayload({
-          rows: [buildWallRateRow({ active: false })],
-          templateVersion: 3,
-        })
-      )
-    mutateRatesFlags.mockResolvedValue({ data: true })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Unsaved before archive')
-    })
-
-    let archiveResult: boolean | Promise<boolean> = true
-    act(() => {
-      archiveResult = result.current.actions.archiveOrReactivate(false)
-    })
-
-    expect(archiveResult).toBe(false)
-    expect(result.current.discardVm.isOpen).toBe(true)
-    expect(result.current.discardVm.transitionType).toBe('archiveOrReactivate')
-    expect(result.current.editorVm.draft).toMatchObject({
-      display_name: 'Unsaved before archive',
-    })
-    expect(mutateRatesFlags).not.toHaveBeenCalled()
+    expect(publishRatesFlagsBatch).not.toHaveBeenCalled()
 
     await act(async () => {
-      await result.current.actions.confirmDiscard()
+      await result.current.actions.saveBatch()
     })
 
-    expect(mutateRatesFlags).toHaveBeenCalledWith({
-      category: 'production_rates_walls',
-      action: 'archive',
-      rowId: 'wall-rate-1',
+    expect(publishRatesFlagsBatch).toHaveBeenCalledWith({
+      reason: 'Rates, flags, and room defaults saved',
+      mutations: [
+        {
+          category: 'production_rates_walls',
+          action: 'reactivate',
+          rowId: 'wall-rate-1',
+        },
+      ],
     })
-    expect(result.current.discardVm.isOpen).toBe(false)
-    expect(result.current.uiState.notice).toBe('Archived row.')
     expect(result.current.editorVm.isDirty).toBe(false)
-    expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(false)
   })
 
-  it('blocks save attempts while an archive mutation is active', async () => {
-    loadRatesFlags.mockResolvedValue(buildRatesPayload())
-    const mutation = createDeferred<{ data: boolean }>()
-    mutateRatesFlags.mockReturnValue(mutation.promise)
+  it('clears a pending archive when the row is reactivated before saving', async () => {
+    const { result } = await renderLoadedRatesPage()
 
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    let archiveResult: boolean | Promise<boolean> = false
     act(() => {
-      archiveResult = result.current.actions.archiveOrReactivate(false)
+      result.current.actions.setStatusFilter('all')
     })
 
-    await waitFor(() => {
-      expect(result.current.workflowVm.actionStatus).toBe('archiving')
+    await act(async () => {
+      await result.current.actions.archiveOrReactivate(false)
     })
 
+    expect(result.current.uiState.canSave).toBe(true)
+    expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(false)
+
+    await act(async () => {
+      await result.current.actions.archiveOrReactivate(true)
+    })
+
+    expect(result.current.resource.data.categories[0]?.rows[0]?.active).toBe(true)
     expect(result.current.uiState.canSave).toBe(false)
 
     await act(async () => {
-      await result.current.actions.saveCurrent()
+      await result.current.actions.saveBatch()
     })
 
-    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
-    expect(mutateRatesFlags).toHaveBeenCalledWith({
-      category: 'production_rates_walls',
-      action: 'archive',
-      rowId: 'wall-rate-1',
+    expect(publishRatesFlagsBatch).not.toHaveBeenCalled()
+  })
+
+  it('keeps pending changes dirty when discard refresh fails', async () => {
+    const initialPayload = buildRatesPayload()
+    loadRatesFlags.mockResolvedValueOnce(initialPayload).mockRejectedValueOnce(new Error('refresh failed'))
+    const hook = renderHook(() => useQuoteRatesPage())
+
+    await waitFor(() => {
+      expect(hook.result.current.resource.loading).toBe(false)
+    })
+
+    act(() => {
+      hook.result.current.actions.updateDraftValue('display_name', 'Unsaved walls')
+    })
+
+    await waitFor(() => {
+      expect(hook.result.current.uiState.canSave).toBe(true)
     })
 
     await act(async () => {
-      mutation.resolve({ data: true })
-      await archiveResult
-    })
-  })
-
-  it('blocks archive attempts while a save mutation is active', async () => {
-    loadRatesFlags.mockResolvedValue(buildRatesPayload())
-    const mutation = createDeferred<{ data: boolean }>()
-    mutateRatesFlags.mockReturnValue(mutation.promise)
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
+      await hook.result.current.actions.discardBatch()
     })
 
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
-    })
-
-    let saveResult: void | Promise<void>
-    act(() => {
-      saveResult = result.current.actions.saveCurrent()
-    })
-
-    await waitFor(() => {
-      expect(result.current.workflowVm.actionStatus).toBe('saving')
-    })
-
-    expect(result.current.tableVm.canArchiveToggle).toBe(false)
-
-    let archiveResult: boolean | Promise<boolean> = true
-    act(() => {
-      archiveResult = result.current.actions.archiveOrReactivate(false)
-    })
-
-    expect(archiveResult).toBe(false)
-    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
-    expect(mutateRatesFlags).toHaveBeenCalledWith(
-      expect.objectContaining({
-        category: 'production_rates_walls',
-        action: 'update',
-      })
+    expect(hook.result.current.editorVm.isDirty).toBe(true)
+    expect(hook.result.current.resource.data.categories[0]?.rows[0]?.display_name).toBe(
+      'Unsaved walls'
     )
-
-    await act(async () => {
-      mutation.resolve({ data: true })
-      await saveResult
-    })
   })
 
-  it('blocks reload attempts while a save mutation is active', async () => {
-    loadRatesFlags.mockResolvedValue(buildRatesPayload())
-    const mutation = createDeferred<{ data: boolean }>()
-    mutateRatesFlags.mockReturnValue(mutation.promise)
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
+  it('keeps invalid row edits local and blocks publishing until fixed', async () => {
+    const { result } = await renderLoadedRatesPage()
 
     act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+      result.current.actions.updateDraftValue('display_name', '')
     })
 
-    let saveResult: void | Promise<void>
-    act(() => {
-      saveResult = result.current.actions.saveCurrent()
-    })
-
-    await waitFor(() => {
-      expect(result.current.workflowVm.actionStatus).toBe('saving')
-    })
-
-    expect(result.current.uiState.canRetry).toBe(false)
-
-    let reloadResult: boolean | Promise<boolean> = true
-    act(() => {
-      reloadResult = result.current.actions.reload('wall-rate-1')
-    })
-
-    expect(reloadResult).toBe(false)
-    expect(loadRatesFlags).toHaveBeenCalledTimes(1)
+    expect(result.current.uiState.canSave).toBe(false)
+    expect(result.current.uiState.validationError).toBe('Display Name is required.')
 
     await act(async () => {
-      mutation.resolve({ data: true })
-      await saveResult
+      await result.current.actions.saveBatch()
     })
+
+    expect(publishRatesFlagsBatch).not.toHaveBeenCalled()
   })
 
-  it('blocks create and duplicate transitions while a mutation is active', async () => {
-    loadRatesFlags.mockResolvedValue(buildRatesPayload())
-    const mutation = createDeferred<{ data: boolean }>()
-    mutateRatesFlags.mockReturnValue(mutation.promise)
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
+  it('does not prompt when leaving with no local changes', async () => {
+    const { result } = await renderLoadedRatesPage()
     act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
+      result.current.actions.requestLeavePage('/crm/jobs')
     })
 
-    let saveResult: void | Promise<void>
-    act(() => {
-      saveResult = result.current.actions.saveCurrent()
-    })
-
-    await waitFor(() => {
-      expect(result.current.workflowVm.actionStatus).toBe('saving')
-    })
-
-    let createResult: boolean | Promise<boolean> = true
-    let duplicateResult: boolean | Promise<boolean> = true
-    act(() => {
-      createResult = result.current.actions.startCreate()
-      duplicateResult = result.current.actions.startDuplicate()
-    })
-
-    expect(createResult).toBe(false)
-    expect(duplicateResult).toBe(false)
-    expect(result.current.workflowVm.editorMode).toBe('selection')
-    expect(result.current.tableVm.isCreating).toBe(false)
-    expect(result.current.tableVm.canDuplicate).toBe(false)
-    expect(mutateRatesFlags).toHaveBeenCalledTimes(1)
-
-    await act(async () => {
-      mutation.resolve({ data: true })
-      await saveResult
-    })
+    expect(result.current.leavePageVm.isOpen).toBe(false)
+    expect(push).toHaveBeenCalledWith('/crm/jobs')
   })
 
-  it('blocks selection, navigation, and draft active changes while a mutation is active', async () => {
-    loadRatesFlags.mockResolvedValue(
-      buildRatesPayload({
-        rows: [
-          buildWallRateRow({ id: 'wall-rate-1', sqft_per_hr: '150' }),
-          buildWallRateRow({
-            id: 'wall-rate-2',
-            display_name: 'Tall walls',
-            scope_id: 'scope-2',
-            sqft_per_hr: '175',
-          }),
-        ],
+  it('prompts when leaving with pending local changes', async () => {
+    const clickHandlers: EventListener[] = []
+    const originalAddEventListener = document.addEventListener.bind(document)
+    const addEventListenerSpy = vi
+      .spyOn(document, 'addEventListener')
+      .mockImplementation((type, listener, options) => {
+        if (type === 'click' && typeof listener === 'function') {
+          clickHandlers.push(listener as EventListener)
+        }
+        return originalAddEventListener(type, listener, options)
       })
-    )
-    const mutation = createDeferred<{ data: boolean }>()
-    mutateRatesFlags.mockReturnValue(mutation.promise)
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
+    const { result } = await renderLoadedRatesPage()
+    addEventListenerSpy.mockRestore()
+    const link = document.createElement('a')
+    link.href = '/crm/jobs'
+    document.body.appendChild(link)
 
     act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Pre-save edit')
-    })
-
-    let saveResult: void | Promise<void>
-    act(() => {
-      saveResult = result.current.actions.saveCurrent()
+      result.current.actions.updateDraftValue('display_name', 'Unsaved walls')
     })
 
     await waitFor(() => {
-      expect(result.current.workflowVm.actionStatus).toBe('saving')
+      expect(result.current.uiState.canSave).toBe(true)
     })
-
-    let selectionResult: boolean | Promise<boolean> = true
-    let searchResult: boolean | Promise<boolean> = true
     act(() => {
-      selectionResult = result.current.actions.setSelectedId('wall-rate-2')
-      searchResult = result.current.actions.setSearch('Tall')
-      result.current.actions.setDraftActive(false)
-      result.current.actions.updateDraftValue('display_name', 'Mutated while saving')
-      result.current.actions.cancelEdit()
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+      Object.defineProperty(event, 'target', { value: link })
+      clickHandlers.forEach((handler) => handler(event))
     })
 
-    expect(selectionResult).toBe(false)
-    expect(searchResult).toBe(false)
-    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
-    expect(result.current.filtersVm.search).toBe('')
-    expect(result.current.editorVm.draftActive).toBe(true)
-    expect(result.current.actions.formatDraftValue('display_name')).toBe('Pre-save edit')
-    expect(result.current.discardVm.isOpen).toBe(false)
-
-    await act(async () => {
-      mutation.resolve({ data: true })
-      await saveResult
-    })
+    expect(result.current.leavePageVm.isOpen).toBe(true)
+    expect(result.current.leavePageVm.href).toBe('/crm/jobs')
+    expect(push).not.toHaveBeenCalled()
   })
 
-  it('exposes discard state and protects row selection changes until confirmed', async () => {
-    loadRatesFlags.mockResolvedValue({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
-        {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [
-            { id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true },
-            { id: 'wall-rate-2', display_name: 'Tall walls', notes: '', active: true },
-          ],
-        },
-      ],
+  it('saves pending navigation changes before continuing', async () => {
+    publishRatesFlagsBatch.mockResolvedValue({
+      data: buildRatesPayload([buildWallRateRow({ display_name: 'Saved walls' })]),
+      notice: 'Rates and flags published.',
     })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
+    const { result } = await renderLoadedRatesPage()
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Saved walls')
+    })
     await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
+      expect(result.current.uiState.canSave).toBe(true)
+    })
+    act(() => {
+      result.current.actions.requestLeavePage('/crm/customers')
     })
 
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Edited walls')
-      result.current.actions.setSelectedId('wall-rate-2')
+    await act(async () => {
+      await result.current.actions.saveAndLeave()
     })
 
-    expect(result.current.discardVm.isOpen).toBe(true)
-    expect(result.current.discardVm.status).toBe('confirming')
-    expect(result.current.discardVm.transitionType).toBe('setSelectedId')
-    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
-    expect(result.current.editorVm.isDirty).toBe(true)
+    expect(publishRatesFlagsBatch).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith('/crm/customers')
+    expect(result.current.leavePageVm.isOpen).toBe(false)
+    expect(result.current.uiState.canSave).toBe(false)
+  })
 
+  it('discards pending navigation changes without publishing before continuing', async () => {
+    const { result } = await renderLoadedRatesPage()
     act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Unsaved walls')
+    })
+    await waitFor(() => {
+      expect(result.current.tableVm.selectedRow?.display_name).toBe('Unsaved walls')
+    })
+    act(() => {
+      result.current.actions.requestLeavePage('/crm/calendar')
+    })
+    act(() => {
+      result.current.actions.discardAndLeave()
+    })
+
+    expect(publishRatesFlagsBatch).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith('/crm/calendar')
+    expect(result.current.tableVm.selectedRow?.display_name).toBe('Standard walls')
+    expect(result.current.uiState.canSave).toBe(false)
+  })
+
+  it('cancels pending navigation and preserves local edits', async () => {
+    const { result } = await renderLoadedRatesPage()
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Unsaved walls')
+    })
+    await waitFor(() => {
+      expect(result.current.tableVm.selectedRow?.display_name).toBe('Unsaved walls')
+    })
+    act(() => {
+      result.current.actions.requestLeavePage('/crm/settings')
       result.current.actions.cancelDiscard()
     })
 
-    expect(result.current.discardVm.isOpen).toBe(false)
-    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
-    expect(result.current.editorVm.draft).toMatchObject({
-      display_name: 'Edited walls',
-    })
-
-    act(() => {
-      result.current.actions.setSelectedId('wall-rate-2')
-    })
-
-    await act(async () => {
-      await result.current.actions.confirmDiscard()
-    })
-
-    expect(result.current.tableVm.selectedId).toBe('wall-rate-2')
-    expect(result.current.editorVm.isDirty).toBe(false)
-    expect(result.current.editorVm.draft).toMatchObject({
-      display_name: 'Tall walls',
-    })
+    expect(push).not.toHaveBeenCalled()
+    expect(result.current.leavePageVm.isOpen).toBe(false)
+    expect(result.current.tableVm.selectedRow?.display_name).toBe('Unsaved walls')
+    expect(result.current.uiState.canSave).toBe(true)
   })
 
-  it('protects category and filter transitions until discard is confirmed', async () => {
-    loadRatesFlags.mockResolvedValue({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
-        {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
-        },
-        {
-          key: 'condition_modifiers',
-          tab: 'flags',
-          group: 'condition_modifiers',
-          label: 'Condition Modifiers',
-          table_title: 'Condition Modifiers',
-          description: 'Flag rows',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [{ id: 'flag-1', display_name: 'High traffic', notes: '', active: true }],
-        },
-      ],
-    })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Dirty walls')
-      result.current.actions.setActiveTab('flags')
-    })
-
-    expect(result.current.discardVm.transitionType).toBe('setActiveTab')
-    expect(result.current.discardVm.status).toBe('confirming')
-    expect(result.current.filtersVm.activeTab).toBe('rates')
-
-    await act(async () => {
-      await result.current.actions.confirmDiscard()
-    })
-
-    expect(result.current.filtersVm.activeTab).toBe('flags')
-    expect(result.current.editorVm.isDirty).toBe(false)
-    expect(result.current.editorVm.selectedRow?.id).toBe('flag-1')
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Dirty flag')
-      result.current.actions.setStatusFilter('archived')
-    })
-
-    expect(result.current.discardVm.transitionType).toBe('setStatusFilter')
-    expect(result.current.discardVm.status).toBe('confirming')
-    expect(result.current.filtersVm.statusFilter).toBe('active')
-
-    act(() => {
-      result.current.actions.cancelDiscard()
-    })
-
-    expect(result.current.filtersVm.statusFilter).toBe('active')
-    expect(result.current.editorVm.draft).toMatchObject({
-      display_name: 'Dirty flag',
-    })
-  })
-
-  it('applies only the first pending rates transition while discard confirmation is open', async () => {
-    loadRatesFlags.mockResolvedValue({
-      source: 'db',
-      seeded: true,
-      template_version: 2,
-      categories: [
-        {
-          key: 'production_rates_walls',
-          tab: 'rates',
-          group: 'production_rates',
-          label: 'Wall Production',
-          table_title: 'Wall Production',
-          description: 'Wall rates',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
-        },
-        {
-          key: 'condition_modifiers',
-          tab: 'flags',
-          group: 'condition_modifiers',
-          label: 'Condition Modifiers',
-          table_title: 'Condition Modifiers',
-          description: 'Flag rows',
-          columns: [],
-          fields: [
-            { key: 'id', label: 'ID', type: 'text', required: true },
-            { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-          ],
-          rows: [{ id: 'flag-1', display_name: 'High traffic', notes: '', active: true }],
-        },
-      ],
-    })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
-
-    act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Dirty walls')
-      result.current.actions.setActiveTab('flags')
-      result.current.actions.setStatusFilter('archived')
-      result.current.actions.setSearch('traffic')
-    })
-
-    expect(result.current.discardVm.transitionType).toBe('setActiveTab')
-    expect(result.current.filtersVm.activeTab).toBe('rates')
-    expect(result.current.filtersVm.statusFilter).toBe('active')
-    expect(result.current.filtersVm.search).toBe('')
-
-    await act(async () => {
-      await result.current.actions.confirmDiscard()
-    })
-
-    expect(result.current.filtersVm.activeTab).toBe('flags')
-    expect(result.current.filtersVm.statusFilter).toBe('active')
-    expect(result.current.filtersVm.search).toBe('')
-    expect(result.current.editorVm.selectedRow?.id).toBe('flag-1')
-    expect(result.current.editorVm.isDirty).toBe(false)
-  })
-
-  it('guards reload behind discard confirmation and rehydrates from refreshed data', async () => {
-    loadRatesFlags
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 2,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [
-              { key: 'id', label: 'ID', type: 'text', required: true },
-              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            ],
-            rows: [{ id: 'wall-rate-1', display_name: 'Standard walls', notes: '', active: true }],
-          },
-        ],
+  it('guards browser back navigation and restores the rates URL while dirty', async () => {
+    const popStateHandlers: EventListener[] = []
+    const originalAddEventListener = window.addEventListener.bind(window)
+    const addEventListenerSpy = vi
+      .spyOn(window, 'addEventListener')
+      .mockImplementation((type, listener, options) => {
+        if (type === 'popstate' && typeof listener === 'function') {
+          popStateHandlers.push(listener as EventListener)
+        }
+        return originalAddEventListener(type, listener, options)
       })
-      .mockResolvedValueOnce({
-        source: 'db',
-        seeded: true,
-        template_version: 3,
-        categories: [
-          {
-            key: 'production_rates_walls',
-            tab: 'rates',
-            group: 'production_rates',
-            label: 'Wall Production',
-            table_title: 'Wall Production',
-            description: 'Wall rates',
-            columns: [],
-            fields: [
-              { key: 'id', label: 'ID', type: 'text', required: true },
-              { key: 'display_name', label: 'Display Name', type: 'text', required: true },
-            ],
-            rows: [{ id: 'wall-rate-1', display_name: 'Reloaded walls', notes: '', active: true }],
-          },
-        ],
-      })
-
-    const { result } = renderHook(() => useQuoteRatesPage())
-
-    await waitFor(() => {
-      expect(result.current.resource.loading).toBe(false)
-    })
+    const { result } = await renderLoadedRatesPage()
+    addEventListenerSpy.mockRestore()
 
     act(() => {
-      result.current.actions.updateDraftValue('display_name', 'Dirty walls')
-      result.current.actions.reload('wall-rate-1')
+      result.current.actions.updateDraftValue('display_name', 'Unsaved walls')
+    })
+    await waitFor(() => {
+      expect(result.current.uiState.canSave).toBe(true)
     })
 
-    expect(result.current.discardVm.isOpen).toBe(true)
-    expect(result.current.discardVm.transitionType).toBe('reload')
-    expect(result.current.editorVm.draft).toMatchObject({
-      display_name: 'Dirty walls',
+    window.history.replaceState({ next: true }, '', '/crm/quotes')
+    act(() => {
+      popStateHandlers.forEach((handler) => handler(new PopStateEvent('popstate')))
+    })
+
+    expect(push).not.toHaveBeenCalled()
+    expect(window.location.pathname).toBe('/crm/quotes/rates')
+    expect(result.current.leavePageVm.isOpen).toBe(true)
+    expect(result.current.leavePageVm.href).toBe('/crm/quotes')
+  })
+
+  it('keeps the user on the page with edits intact when navigation save fails', async () => {
+    publishRatesFlagsBatch.mockRejectedValue(new Error('save failed'))
+    const { result } = await renderLoadedRatesPage()
+    act(() => {
+      result.current.actions.updateDraftValue('display_name', 'Unsaved walls')
+    })
+    await waitFor(() => {
+      expect(result.current.uiState.canSave).toBe(true)
+    })
+    act(() => {
+      result.current.actions.requestLeavePage('/crm/tasks')
     })
 
     await act(async () => {
-      await result.current.actions.confirmDiscard()
+      await result.current.actions.saveAndLeave()
     })
 
-    await waitFor(() => {
-      expect(result.current.resource.data.template_version).toBe(3)
-    })
-
-    expect(result.current.tableVm.selectedId).toBe('wall-rate-1')
-    expect(result.current.editorVm.isDirty).toBe(false)
-    expect(result.current.editorVm.draft).toMatchObject({
-      display_name: 'Reloaded walls',
-    })
+    expect(push).not.toHaveBeenCalled()
+    expect(result.current.leavePageVm.isOpen).toBe(true)
+    expect(result.current.tableVm.selectedRow?.display_name).toBe('Unsaved walls')
+    expect(result.current.uiState.canSave).toBe(true)
+    expect(result.current.uiState.pageBanner?.message).toBe('save failed')
   })
 })

@@ -1,6 +1,7 @@
 import type {
   CustomerEstimateDocument,
   CustomerEstimateQuoteRow,
+  CustomerEstimateTermsPage,
   CustomerEstimateTermsSection,
 } from '@/lib/customer-estimates/types'
 
@@ -156,6 +157,15 @@ function isTermsSection(value: unknown): value is CustomerEstimateTermsSection {
   )
 }
 
+function isTermsPage(value: unknown): value is CustomerEstimateTermsPage {
+  return (
+    isRecord(value) &&
+    typeof value.title === 'string' &&
+    Array.isArray(value.sections) &&
+    value.sections.every(isTermsSection)
+  )
+}
+
 export function readCustomerSendPdfDocument(value: unknown): CustomerEstimateDocument | null {
   if (!isRecord(value)) return null
   if (!isRecord(value.meta) || typeof value.meta.estimate_id !== 'string') return null
@@ -170,7 +180,9 @@ export function readCustomerSendPdfDocument(value: unknown): CustomerEstimateDoc
     !value.pricing_block.rows.every(isQuoteRow) ||
     !isRecord(value.terms_page) ||
     !Array.isArray(value.terms_page.sections) ||
-    !value.terms_page.sections.every(isTermsSection)
+    !value.terms_page.sections.every(isTermsSection) ||
+    (value.terms_pages != null &&
+      (!Array.isArray(value.terms_pages) || !value.terms_pages.every(isTermsPage)))
   ) {
     return null
   }
@@ -272,16 +284,16 @@ function addQuotePage(cursor: PdfCursor, pages: PdfPage[], document: CustomerEst
   addFlowText(cursor, pages, document.pricing_block.footer_note, { size: 10.5 })
 }
 
-function addTermsPage(cursor: PdfCursor, pages: PdfPage[], document: CustomerEstimateDocument) {
+function addTermsPage(cursor: PdfCursor, pages: PdfPage[], termsPage: CustomerEstimateTermsPage) {
   cursor.page = createPage(pages)
   cursor.y = PAGE_HEIGHT - MARGIN
-  addFlowText(cursor, pages, asText(document.terms_page.title) || 'Terms', {
+  addFlowText(cursor, pages, asText(termsPage.title) || 'Terms', {
     size: 17,
     font: 'bold',
     gapAfter: 12,
   })
 
-  for (const section of normalizeTermsSections(document.terms_page.sections)) {
+  for (const section of normalizeTermsSections(termsPage.sections)) {
     addSectionHeading(cursor, pages, section.title, { size: 12.5, gapAfter: 1 })
     for (const paragraph of section.paragraphs) {
       addFlowText(cursor, pages, paragraph, { size: 9.8, gapAfter: 3 })
@@ -395,7 +407,10 @@ export function buildCustomerSendPdfAttachment(document: CustomerEstimateDocumen
   }
 
   addQuotePage(cursor, pages, document)
-  addTermsPage(cursor, pages, document)
+  const termsPages = document.terms_pages?.length ? document.terms_pages : [document.terms_page]
+  for (const termsPage of termsPages) {
+    addTermsPage(cursor, pages, termsPage)
+  }
 
   return {
     filename: buildCustomerSendPdfFilename(document),

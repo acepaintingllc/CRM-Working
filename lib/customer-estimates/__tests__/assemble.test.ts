@@ -65,6 +65,14 @@ function createInput(overrides: Partial<CustomerEstimateInput> = {}): CustomerEs
   }
 }
 
+function findTermsSection(
+  document: ReturnType<typeof assembleCustomerEstimateDocument>,
+  key: string
+) {
+  const pages = document.terms_pages?.length ? document.terms_pages : [document.terms_page]
+  return pages.flatMap((page) => page.sections).find((section) => section.key === key)
+}
+
 test('assembleCustomerEstimateDocument surfaces visible company placeholders when profile fields are missing', () => {
   const document = assembleCustomerEstimateDocument(
     buildCustomerEstimateDocument(
@@ -99,9 +107,7 @@ test('assembleCustomerEstimateDocument surfaces visible company placeholders whe
 test('assembleCustomerEstimateDocument surfaces payment placeholders when no explicit payment copy exists', () => {
   const document = assembleCustomerEstimateDocument(buildCustomerEstimateDocument(createInput()))
 
-  const pricingSection = document.terms_page.sections.find(
-    (section) => section.key === 'pricing_payment'
-  )
+  const pricingSection = findTermsSection(document, 'pricing_payment')
 
   assert.ok(pricingSection)
   assert.match(pricingSection?.paragraphs.join('\n') ?? '', /\[Deposit terms missing\]/)
@@ -124,15 +130,9 @@ test('assembleCustomerEstimateDocument uses explicit terms text as the customer 
     )
   )
 
-  const pricingSection = document.terms_page.sections.find(
-    (section) => section.key === 'pricing_payment'
-  )
-  const insuranceSection = document.terms_page.sections.find(
-    (section) => section.key === 'insurance'
-  )
-  const terms = document.terms_page.sections.find(
-    (section) => section.key === 'terms_and_conditions'
-  )
+  const pricingSection = findTermsSection(document, 'pricing_payment')
+  const insuranceSection = findTermsSection(document, 'insurance')
+  const terms = findTermsSection(document, 'terms_and_conditions')
 
   assert.equal(pricingSection, undefined)
   assert.equal(insuranceSection, undefined)
@@ -141,6 +141,35 @@ test('assembleCustomerEstimateDocument uses explicit terms text as the customer 
   assert.equal(document.assembly_meta.used_placeholder_fallbacks, false)
   assert.equal(document.assembly_meta.used_explicit_terms_text, true)
   assert.deepEqual(terms?.paragraphs, ['Line one.', 'Line two.'])
+})
+
+test('assembleCustomerEstimateDocument renders structured terms as process and project pages', () => {
+  const document = assembleCustomerEstimateDocument(
+    buildCustomerEstimateDocument(
+      createInput({
+        settings: {
+          quote_validity_days: 45,
+          terms_text: '',
+          terms_sections: {
+            our_process: 'Process paragraph one.\n\nProcess paragraph two.',
+            project_terms: 'Terms paragraph.\n\nValid for {quote_validity_days} days.',
+          },
+        },
+      })
+    )
+  )
+
+  assert.equal(document.terms_page.title, 'Our Process & What to Expect')
+  assert.equal(document.terms_pages?.[0]?.title, 'Our Process & What to Expect')
+  assert.equal(document.terms_pages?.[1]?.title, 'Project Terms')
+  assert.deepEqual(document.terms_pages?.[0]?.sections[0]?.paragraphs, [
+    'Process paragraph one.',
+    'Process paragraph two.',
+  ])
+  assert.deepEqual(document.terms_pages?.[1]?.sections[0]?.paragraphs, [
+    'Terms paragraph.',
+    'Valid for 45 days.',
+  ])
 })
 
 test('assembleCustomerEstimateDocument preserves built scope and pricing rows without recomposing policy text', () => {
@@ -196,9 +225,7 @@ test('assembleCustomerEstimateDocument preserves built scope and pricing rows wi
   )
 
   const document = assembleCustomerEstimateDocument(built)
-  const pricingSection = document.terms_page.sections.find(
-    (section) => section.key === 'pricing_payment'
-  )
+  const pricingSection = findTermsSection(document, 'pricing_payment')
 
   assert.equal(document.meta.title, 'Custom Kitchen Quote')
   assert.equal(document.quote_rows[0]?.description, 'Customer-approved custom walls copy.')

@@ -721,6 +721,18 @@ export type RatesFlagsMutationRequest =
   | RatesFlagsCreateOrUpdateMutation
   | RatesFlagsActivationMutation
 
+export type RatesFlagsBatchPublishRequest = {
+  mutations: RatesFlagsMutationRequest[]
+  reason?: string
+}
+
+export type RatesFlagsBatchPublishResult = {
+  payload: RatesFlagsPayload
+  setting_set_id: string
+  version_number: number
+  draft_estimates_updated: number | null
+}
+
 export type RatesFlagsCreateOrUpdateMutationRequest = Extract<
   RatesFlagsMutationRequest,
   { action: 'create' | 'update' }

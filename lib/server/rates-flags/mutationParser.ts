@@ -1,5 +1,6 @@
 import {
   ratesFlagsEditableCategoryKeys,
+  type RatesFlagsBatchPublishRequest,
   type RatesFlagsActivationMutationRequest,
   type RatesFlagsCreateOrUpdateMutationRequest,
   type RatesFlagsEditableCategoryKey,
@@ -307,6 +308,50 @@ export function parseRatesFlagsMutationRequest(input: unknown): ParseResult<Rate
   }
 
   return parseCreateOrUpdateRequest(category.value, action.value, input)
+}
+
+export function parseRatesFlagsBatchPublishRequest(
+  input: unknown
+): ParseResult<RatesFlagsBatchPublishRequest> {
+  if (!isPlainObject(input)) {
+    return { ok: false, error: 'Invalid body.' }
+  }
+
+  const allowedTopLevelKeys = new Set(['mutations', 'reason'])
+  for (const key of Object.keys(input)) {
+    if (!allowedTopLevelKeys.has(key)) {
+      return { ok: false, error: `Body does not support field '${key}'.` }
+    }
+  }
+
+  if (!Array.isArray(input.mutations)) {
+    return { ok: false, error: 'Body must include mutations array.' }
+  }
+  if (input.mutations.length === 0) {
+    return { ok: false, error: 'At least one mutation is required.' }
+  }
+
+  const mutations: RatesFlagsMutationRequest[] = []
+  for (const [index, mutation] of input.mutations.entries()) {
+    const parsed = parseRatesFlagsMutationRequest(mutation)
+    if (!parsed.ok) {
+      return { ok: false, error: `Mutation ${index + 1}: ${parsed.error}` }
+    }
+    mutations.push(parsed.value)
+  }
+
+  const reason =
+    typeof input.reason === 'string' && input.reason.trim()
+      ? input.reason.trim()
+      : undefined
+
+  return {
+    ok: true,
+    value: {
+      mutations,
+      ...(reason ? { reason } : {}),
+    },
+  }
 }
 
 export function getRatesFlagsMutationParserCategoryKeys() {
