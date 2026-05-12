@@ -63,10 +63,12 @@ function PageFrame({
   children,
   label,
   showOverflowWarnings,
+  onOverflowChange,
 }: {
   children: ReactNode
   label: string
   showOverflowWarnings: boolean
+  onOverflowChange?: (overflowPx: number) => void
 }) {
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [overflowPx, setOverflowPx] = useState(0)
@@ -77,7 +79,9 @@ function PageFrame({
 
     const measure = () => {
       const nextOverflow = Math.ceil(element.scrollHeight - element.clientHeight)
-      setOverflowPx(nextOverflow > 2 ? nextOverflow : 0)
+      const normalizedOverflow = nextOverflow > 2 ? nextOverflow : 0
+      setOverflowPx(normalizedOverflow)
+      onOverflowChange?.(normalizedOverflow)
     }
 
     measure()
@@ -90,7 +94,7 @@ function PageFrame({
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [children])
+  }, [children, onOverflowChange])
 
   return (
     <div
@@ -261,37 +265,43 @@ function TotalRow({ total }: { total: number | null }) {
   )
 }
 
-function TermsSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section style={{ display: 'grid', gap: 9 }}>
-      <div style={{ fontSize: 16.5, fontWeight: 900 }}>{title}</div>
-      <div style={{ fontSize: 14.8, lineHeight: 1.6 }}>{children}</div>
-    </section>
-  )
-}
-
 function TermsPage({
   page,
+  pageIndex,
   showOverflowWarnings,
+  termsFontSize,
+  onTermsPageOverflowChange,
 }: {
   page: CustomerEstimateTermsPage
+  pageIndex: number
   showOverflowWarnings: boolean
+  termsFontSize?: number
+  onTermsPageOverflowChange?: (pageTitle: string, pageIndex: number, overflowPx: number) => void
 }) {
   return (
-    <PageFrame label={page.title} showOverflowWarnings={showOverflowWarnings}>
+    <PageFrame
+      label={page.title}
+      showOverflowWarnings={showOverflowWarnings}
+      onOverflowChange={
+        onTermsPageOverflowChange
+          ? (overflowPx) => onTermsPageOverflowChange(page.title, pageIndex, overflowPx)
+          : undefined
+      }
+    >
       <div style={{ display: 'grid', gap: 20 }}>
         <div style={{ fontSize: 23, fontWeight: 900, letterSpacing: '0.04em', marginBottom: 2 }}>
           {page.title}
         </div>
 
         {page.sections.map((section) => (
-          <TermsSection key={section.key} title={section.title}>
-            <div style={{ display: 'grid', gap: 10 }}>
+          <section key={section.key} style={{ display: 'grid', gap: 9 }}>
+            <div style={{ fontSize: 16.5, fontWeight: 900 }}>{section.title}</div>
+            <div style={{ display: 'grid', gap: 10, fontSize: termsFontSize ?? 14.8, lineHeight: 1.6 }}>
               {section.paragraphs.map((paragraph) => (
                 <div key={paragraph}>{paragraph}</div>
               ))}
             </div>
-          </TermsSection>
+          </section>
         ))}
       </div>
     </PageFrame>
@@ -323,10 +333,14 @@ export function CustomerEstimateDocumentView({
   document,
   showShell = true,
   showOverflowWarnings = true,
+  termsFontSize,
+  onTermsPageOverflowChange,
 }: {
   document: CustomerEstimateDocument
   showShell?: boolean
   showOverflowWarnings?: boolean
+  termsFontSize?: number
+  onTermsPageOverflowChange?: (pageTitle: string, pageIndex: number, overflowPx: number) => void
 }) {
   const termsPages = document.terms_pages?.length ? document.terms_pages : [document.terms_page]
   const pages = (
@@ -336,7 +350,10 @@ export function CustomerEstimateDocumentView({
         <TermsPage
           key={`${page.title}:${index}`}
           page={page}
+          pageIndex={index}
           showOverflowWarnings={showOverflowWarnings}
+          termsFontSize={termsFontSize}
+          onTermsPageOverflowChange={onTermsPageOverflowChange}
         />
       ))}
       <style jsx global>{`

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { QuoteSendDefaults } from '@/lib/settings/types'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmField } from '@/app/crm/_components/CrmField'
@@ -143,7 +143,22 @@ function TermsTextarea({
 }
 
 export function QuoteSendDefaultsForm(props: QuoteSendDefaultsFormProps) {
+  const [previewTermsFontSize, setPreviewTermsFontSize] = useState(14.8)
+  const [termsPageOverflow, setTermsPageOverflow] = useState<Record<string, number>>({})
   const previewDocument = useMemo(() => buildPreviewDocument(props.value), [props.value])
+  const termsPages = previewDocument.terms_pages?.length
+    ? previewDocument.terms_pages
+    : [previewDocument.terms_page]
+  const recordTermsPageOverflow = useCallback(
+    (pageTitle: string, pageIndex: number, overflowPx: number) => {
+      setTermsPageOverflow((current) => {
+        const key = `${pageTitle}:${pageIndex}`
+        if (current[key] === overflowPx) return current
+        return { ...current, [key]: overflowPx }
+      })
+    },
+    []
+  )
 
   const patchTerms = (patch: Partial<QuoteTermsSections>) => {
     props.onChange({
@@ -265,14 +280,51 @@ export function QuoteSendDefaultsForm(props: QuoteSendDefaultsFormProps) {
             />
           </div>
           <div className="grid gap-2">
-            <div className="ace-crm-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--crm-ui-muted)]">
-              Customer preview
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="ace-crm-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--crm-ui-muted)]">
+                Customer preview
+              </div>
+              <CrmField label="Preview terms font size">
+                <input
+                  type="number"
+                  min={11}
+                  max={18}
+                  step={0.2}
+                  value={previewTermsFontSize}
+                  onChange={(event) => {
+                    const next = Number(event.target.value)
+                    if (Number.isFinite(next)) {
+                      setPreviewTermsFontSize(Math.min(18, Math.max(11, next)))
+                    }
+                  }}
+                  className="ace-crm-input w-24 text-sm"
+                />
+              </CrmField>
+            </div>
+            <div className="grid gap-2 rounded-lg border border-[color:var(--crm-ui-line)] bg-white/80 p-3">
+              {termsPages.map((page, index) => {
+                const key = `${page.title}:${index}`
+                const overflowPx = termsPageOverflow[key] ?? 0
+                return (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between gap-3 text-xs text-[color:var(--crm-ui-muted)]"
+                  >
+                    <span className="font-semibold text-[color:var(--crm-ui-ink)]">
+                      {page.title}
+                    </span>
+                    <span>{overflowPx ? `Over by ${overflowPx}px` : 'Fits on one page'}</span>
+                  </div>
+                )
+              })}
             </div>
             <div className="max-h-[900px] overflow-auto rounded-lg border border-[color:var(--crm-ui-line)] bg-[#f3f3f3]">
               <CustomerEstimateDocumentView
                 document={previewDocument}
                 showShell={false}
                 showOverflowWarnings
+                termsFontSize={previewTermsFontSize}
+                onTermsPageOverflowChange={recordTermsPageOverflow}
               />
             </div>
           </div>
