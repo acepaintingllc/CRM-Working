@@ -111,32 +111,131 @@ function buildAdditionalTermsSection(document: BuiltCustomerEstimateDocument) {
   } satisfies CustomerEstimateTermsSection
 }
 
+const recognizedStructuredTermHeadings = new Map<string, string>([
+  ['our process', 'Our Process'],
+  ['our process & what to expect', 'Our Process & What to Expect'],
+  ['include preparation', 'Included Preparation'],
+  ['included preparation', 'Included Preparation'],
+  ['include preperation', 'Included Preparation'],
+  ['included preperation', 'Included Preparation'],
+  ['customer responsibilities', 'Customer Responsibilities'],
+  ['customer responsibility', 'Customer Responsibilities'],
+  ['before we start', 'Before We Start'],
+  ['during & after the project', 'During & After the Project'],
+  ['during and after the project', 'During & After the Project'],
+  ['scope of work', 'Scope of Work'],
+  ['exclusions', 'Exclusions'],
+  ['changes to scope', 'Changes to Scope'],
+  ['pricing & payment terms', 'Pricing & Payment Terms'],
+  ['pricing and payment terms', 'Pricing & Payment Terms'],
+  ['pricing & payment', 'Pricing & Payment Terms'],
+  ['pricing and payment', 'Pricing & Payment Terms'],
+  ['payment terms', 'Pricing & Payment Terms'],
+  ['insurance', 'Insurance'],
+  ['thank you', 'Thank You'],
+  ['project terms', 'Project Terms'],
+])
+
+function normalizeStructuredTermHeading(value: string) {
+  return asText(value)
+    .replace(/[“”]/g, '"')
+    .replace(/[’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .replace(/[:.]+$/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function sectionKeyFromTitle(title: string) {
+  return normalizeStructuredTermHeading(title)
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function splitStructuredTermLines(value: string) {
+  return value
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function buildDetectedStructuredTermsSections(params: {
+  keyPrefix: string
+  fallbackTitle: string
+  text: string
+}): CustomerEstimateTermsSection[] {
+  const lines = splitStructuredTermLines(params.text)
+  const sections: CustomerEstimateTermsSection[] = []
+  let current: CustomerEstimateTermsSection | null = null
+
+  const pushCurrent = () => {
+    if (current?.paragraphs.length) sections.push(current)
+    current = null
+  }
+
+  for (const line of lines) {
+    const heading = recognizedStructuredTermHeadings.get(normalizeStructuredTermHeading(line))
+    if (heading) {
+      pushCurrent()
+      current = {
+        key: `${params.keyPrefix}_${sectionKeyFromTitle(heading)}`,
+        title: heading,
+        paragraphs: [],
+      }
+      continue
+    }
+
+    if (!current) {
+      current = {
+        key: params.keyPrefix,
+        title: params.fallbackTitle,
+        paragraphs: [],
+      }
+    }
+    current.paragraphs.push(line)
+  }
+
+  pushCurrent()
+
+  if (sections.length > 0) return sections
+
+  const paragraphs = splitTermsParagraphs(params.text)
+  if (paragraphs.length === 0) return []
+
+  return [
+    {
+      key: params.keyPrefix,
+      title: params.fallbackTitle,
+      paragraphs,
+    },
+  ]
+}
+
 function buildStructuredTermsSections(
   terms: QuoteTermsSections,
   quoteValidityDays: number
 ): CustomerEstimateTermsPage[] {
   const replaceTokens = (value: string) =>
     value.replace(/\{quote_validity_days\}/g, String(quoteValidityDays))
+  const ourProcessText = replaceTokens(terms.our_process)
+  const projectTermsText = replaceTokens(terms.project_terms)
   const pages = [
     {
       title: 'Our Process & What to Expect',
-      sections: [
-        {
-          key: 'our_process',
-          title: 'Our Process & What to Expect',
-          paragraphs: splitTermsParagraphs(replaceTokens(terms.our_process)),
-        },
-      ],
+      sections: buildDetectedStructuredTermsSections({
+        keyPrefix: 'our_process',
+        fallbackTitle: 'Our Process & What to Expect',
+        text: ourProcessText,
+      }),
     },
     {
       title: 'Project Terms',
-      sections: [
-        {
-          key: 'project_terms',
-          title: 'Project Terms',
-          paragraphs: splitTermsParagraphs(replaceTokens(terms.project_terms)),
-        },
-      ],
+      sections: buildDetectedStructuredTermsSections({
+        keyPrefix: 'project_terms',
+        fallbackTitle: 'Project Terms',
+        text: projectTermsText,
+      }),
     },
   ]
 

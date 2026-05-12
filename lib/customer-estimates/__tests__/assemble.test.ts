@@ -172,6 +172,47 @@ test('assembleCustomerEstimateDocument renders structured terms as process and p
   ])
 })
 
+test('assembleCustomerEstimateDocument detects headings inside structured terms text', () => {
+  const document = assembleCustomerEstimateDocument(
+    buildCustomerEstimateDocument(
+      createInput({
+        settings: {
+          quote_validity_days: 45,
+          terms_text: '',
+          terms_sections: {
+            our_process: [
+              'Our Process',
+              'We prepare surfaces before painting.',
+              'Before We Start',
+              'Please remove fragile items before work begins.',
+            ].join('\n'),
+            project_terms: [
+              'Included Preperation',
+              'Walls: Fill minor nail holes as needed.',
+              'Scope of Work',
+              'This proposal includes only the listed areas.',
+              'Pricing & Payment Terms',
+              'Pricing is valid for {quote_validity_days} days.',
+            ].join('\n'),
+          },
+        },
+      })
+    )
+  )
+
+  assert.deepEqual(
+    document.terms_pages?.[0]?.sections.map((section) => section.title),
+    ['Our Process', 'Before We Start']
+  )
+  assert.deepEqual(
+    document.terms_pages?.[1]?.sections.map((section) => section.title),
+    ['Included Preparation', 'Scope of Work', 'Pricing & Payment Terms']
+  )
+  assert.deepEqual(document.terms_pages?.[1]?.sections[2]?.paragraphs, [
+    'Pricing is valid for 45 days.',
+  ])
+})
+
 test('assembleCustomerEstimateDocument preserves built scope and pricing rows without recomposing policy text', () => {
   const built = buildCustomerEstimateDocument(
     createInput({

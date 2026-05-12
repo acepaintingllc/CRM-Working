@@ -263,9 +263,9 @@ function TotalRow({ total }: { total: number | null }) {
 
 function TermsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section style={{ display: 'grid', gap: 4 }}>
-      <div style={{ fontSize: 13.2, fontWeight: 900 }}>{title}</div>
-      <div style={{ fontSize: 12.1, lineHeight: 1.46 }}>{children}</div>
+    <section style={{ display: 'grid', gap: 7 }}>
+      <div style={{ fontSize: 15, fontWeight: 900 }}>{title}</div>
+      <div style={{ fontSize: 13.4, lineHeight: 1.58 }}>{children}</div>
     </section>
   )
 }
@@ -279,14 +279,14 @@ function TermsPage({
 }) {
   return (
     <PageFrame label={page.title} showOverflowWarnings={showOverflowWarnings}>
-      <div style={{ display: 'grid', gap: 10 }}>
-        <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: '0.06em' }}>
+      <div style={{ display: 'grid', gap: 15 }}>
+        <div style={{ fontSize: 21, fontWeight: 900, letterSpacing: '0.04em' }}>
           {page.title}
         </div>
 
         {page.sections.map((section) => (
           <TermsSection key={section.key} title={section.title}>
-            <div style={{ display: 'grid', gap: 3 }}>
+            <div style={{ display: 'grid', gap: 7 }}>
               {section.paragraphs.map((paragraph) => (
                 <div key={paragraph}>{paragraph}</div>
               ))}
