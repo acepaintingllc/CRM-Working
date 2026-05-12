@@ -161,6 +161,7 @@ vi.mock('../../org.ts', () => ({
 }))
 
 import { loadAcceptedEstimateSource } from '../../accepted-estimates/service.ts'
+import type { AcceptedEstimateOperationalSourcePayload } from '../../accepted-estimates/types.ts'
 import { acceptPublicEstimate, loadPublicEstimatePortalSnapshot } from '../../estimatePublicPortal'
 import { buildEstimateSnapshotRows } from '../../estimate-feedback/snapshots.ts'
 import {
@@ -525,9 +526,45 @@ describe('customer artifact end-to-end parity contract', () => {
     expect(acceptedVersion.status).toBe('accepted')
     expect(acceptedVersion.snapshot_json?.document).toEqual(previewDocument)
 
+    const acceptedEstimateResponse = estimateResponse()
+    acceptedEstimateResponse.inputs.access_fees = [
+      {
+        id: 'access-calculated-1',
+        room_id: null,
+        access_fee_id: 'catalog-scaffold',
+        label: 'Calculated scaffold setup',
+        access_group: 'scaffolding',
+        qty: 1,
+        catalog_amount: 300,
+        calculated_total: 300,
+        effective_total: 300,
+        final_total: 300,
+        override_total: null,
+        overridden: false,
+        notes: 'Calculated access row.',
+        position: 0,
+      },
+    ]
+    acceptedEstimateResponse.inputs.prejob = [
+      {
+        id: 'prejob-calculated-1',
+        room_id: 'R001',
+        include: 'Y',
+        trip_name: 'Calculated wallpaper prep',
+        trip_num: 1,
+        trip_rate: 225,
+        manual_adjustment: 25,
+        calculated_total: 225,
+        raw_total: 250,
+        effective_total: 250,
+        final_total: 250,
+        notes: 'Calculated prejob row.',
+      },
+    ]
+
     const acceptedOperationalSnapshot = buildEstimateSnapshotRows({
       orgId: 'org-1',
-      estimateResponse: estimateResponse(),
+      estimateResponse: acceptedEstimateResponse,
       job: { id: 'job-1', customer_id: 'customer-1', linked_estimate_id: 'estimate-1' },
       publicVersion: acceptedVersion as Record<string, unknown>,
       createdBy: 'user-1',
@@ -538,6 +575,30 @@ describe('customer artifact end-to-end parity contract', () => {
     expect(
       acceptedOperationalSnapshot.snapshot.source_payload_json.customer_artifact
     ).toEqual(acceptedVersion.snapshot_json)
+    const acceptedSourcePayload = acceptedOperationalSnapshot.snapshot
+      .source_payload_json as AcceptedEstimateOperationalSourcePayload
+    expect(acceptedSourcePayload).toEqual(
+      expect.objectContaining({
+        artifact_kind: 'accepted_estimate_operational_snapshot_source',
+        artifact_version: 1,
+        customer_visible_source: 'customer_artifact.document',
+      })
+    )
+    expect(
+      (acceptedSourcePayload.accepted_public_version as Record<string, unknown>).snapshot_json
+    ).toEqual(acceptedVersion.snapshot_json)
+    expect(
+      acceptedSourcePayload.internal_operational_estimate.inputs.access_fees
+    ).toEqual(acceptedEstimateResponse.inputs.access_fees)
+    expect(
+      acceptedSourcePayload.internal_operational_estimate.inputs.prejob
+    ).toEqual(acceptedEstimateResponse.inputs.prejob)
+    expect(
+      acceptedSourcePayload.internal_operational_estimate.pricing.final_total
+    ).toBe(999_999)
+    expect(
+      acceptedSourcePayload.internal_operational_estimate.pricing.wall_calculations
+    ).toEqual(acceptedEstimateResponse.wall_calculations)
     expect(
       (
         acceptedOperationalSnapshot.snapshot.totals_json as {

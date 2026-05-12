@@ -42,6 +42,7 @@ export function calculateEstimateV2Preview(params: {
     roomDoorScopes: (params.payload.room_door_scopes ?? []) as never,
     drywallRepairs: (params.payload.drywall_repairs ?? []) as never,
     accessFees: params.payload.access_fees,
+    prejob: params.payload.prejob ?? [],
     other: (params.payload.other ?? []) as never,
     orgDefaults: params.orgDefaults ?? null,
   })

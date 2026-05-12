@@ -4,6 +4,7 @@ import {
   toYN,
   type UnsafeRecord as Unsafe,
 } from '../../estimator/parsing.ts'
+import { calculatePrejobTrips } from '../../estimator/prejobTrips.ts'
 import type { EstimatePrejobPersistenceRow } from './persistenceTypes.ts'
 
 export function buildEstimatePrejobPersistenceRows(params: {
@@ -16,6 +17,7 @@ export function buildEstimatePrejobPersistenceRows(params: {
     .map((row, idx): EstimatePrejobPersistenceRow => {
       const hasTemplateTask = !!asText(row.task_template_id)
       const quantity = asNullableNumber(row.qty ?? row.man_qty)
+      const calculated = calculatePrejobTrips({ rows: [{ ...row, position: idx }] }).scopes[0]
 
       return {
         id: asText(row.id) || undefined,
@@ -25,7 +27,12 @@ export function buildEstimatePrejobPersistenceRows(params: {
         position: idx,
         category: asText(row.category || row.rollup_scope) || null,
         trip_name: asText(row.trip_name || row.manual_task_name || row.man_trip_name) || null,
-        trip_num: asNullableNumber(row.trip_num),
+        room_id: asText(row.room_id ?? row.roomId).toUpperCase() || null,
+        trip_num: asNullableNumber(row.trip_num ?? row.tripCount),
+        trip_rate: asNullableNumber(row.trip_rate ?? row.tripRate),
+        manual_adjustment: asNullableNumber(row.manual_adjustment ?? row.manualAdjustment),
+        calculated_total: calculated?.calculated_total ?? null,
+        effective_total: calculated?.effective_total ?? null,
         rollup_scope: asText(row.rollup_scope || row.category) || null,
         man_trip_name: hasTemplateTask
           ? null
@@ -50,5 +57,5 @@ export function buildEstimatePrejobPersistenceRows(params: {
         active: toYN(row.active, 'Y'),
       }
     })
-    .filter((row) => !!(row.task || row.man_trip_name || row.trip_name))
+    .filter((row) => !!(row.task || row.man_trip_name || row.trip_name || row.trip_num || row.trip_rate || row.manual_adjustment || row.notes))
 }

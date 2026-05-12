@@ -2,6 +2,7 @@ import { calculateCeilings } from './ceilings.ts'
 import { calculateDoors } from './doors.ts'
 import { calculateDrywallRepairs } from './drywall.ts'
 import { calculateOtherItems, type OtherCalculationRow } from './other.ts'
+import { calculatePrejobTrips, type PrejobTripCalculationRow } from './prejobTrips.ts'
 import { calculateTrim } from './trim.ts'
 import { calculateWalls } from './walls.ts'
 import {
@@ -51,6 +52,7 @@ export function calculateCanonicalEstimateV2Artifacts(params: {
   roomDoorScopes?: V2DoorScopeSaveRow[]
   drywallRepairs?: V2DrywallRepairSaveRow[]
   accessFees?: EstimateV2AccessFeeCalculationInputRow[]
+  prejob?: PrejobTripCalculationRow[]
   other?: OtherCalculationRow[]
   orgDefaults: EstimateV2JobSettingsInput | null
   roomModeById?: Map<string, 'RECT' | 'SEG'>
@@ -138,6 +140,10 @@ export function calculateCanonicalEstimateV2Artifacts(params: {
     rows: params.other ?? [],
     settings: { labor_rate_per_hour: effectiveSettings.override_labor_rate },
   })
+  const prejobCalculations = calculatePrejobTrips({
+    rows: params.prejob ?? [],
+    settings: { labor_rate_per_hour: effectiveSettings.override_labor_rate },
+  })
   const accessFeeCalculation = calculateEstimatorV2AccessFees({
     rows: params.accessFees ?? [],
     catalog: (Array.isArray(calculationCatalogs.source.access_fees)
@@ -152,6 +158,7 @@ export function calculateCanonicalEstimateV2Artifacts(params: {
       { kind: 'doors', output: doorCalculations },
       { kind: 'drywall', output: drywallCalculations },
       { kind: 'other', output: otherCalculations },
+      { kind: 'prejob', output: prejobCalculations },
     ],
     settings: effectiveSettings,
     wallCatalogs: calculationCatalogs.wall,
@@ -178,6 +185,7 @@ export function calculateCanonicalEstimateV2Artifacts(params: {
     doorCalculations,
     drywallCalculations,
     otherCalculations,
+    prejobCalculations,
     accessFeeCalculation,
     trimPaintInput,
     pricingSummary,

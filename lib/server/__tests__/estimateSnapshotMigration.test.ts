@@ -8,6 +8,11 @@ const migrationPath = path.resolve(
   'supabase/sql/079_estimate_snapshot_tables.sql'
 )
 const migrationSql = readFileSync(migrationPath, 'utf8')
+const prejobMigrationPath = path.resolve(
+  process.cwd(),
+  'supabase/sql/091_estimate_snapshot_prejob_line_kind.sql'
+)
+const prejobMigrationSql = readFileSync(prejobMigrationPath, 'utf8')
 
 test('estimate snapshot migration creates snapshot and line tables', () => {
   assert.match(migrationSql, /create table if not exists public\.estimate_snapshot/i)
@@ -26,11 +31,19 @@ test('estimate snapshot migration enforces v1 snapshot and line uniqueness', () 
   )
 })
 
-test('estimate snapshot migration constrains snapshot reasons and line kinds', () => {
+test('estimate snapshot base migration constrains snapshot reasons and original line kinds', () => {
   assert.match(migrationSql, /snapshot_created_reason in \('accepted', 'manual_sold', 'backfill'\)/i)
   assert.match(
     migrationSql,
     /line_kind in \('walls', 'ceilings', 'trim', 'doors', 'drywall', 'other', 'access', 'policy', 'summary'\)/i
+  )
+})
+
+test('estimate snapshot follow-up migration adds prejob to the accepted line-kind contract', () => {
+  assert.match(prejobMigrationSql, /drop constraint if exists estimate_snapshot_line_line_kind_check/i)
+  assert.match(
+    prejobMigrationSql,
+    /line_kind in \([\s\S]*'walls'[\s\S]*'ceilings'[\s\S]*'trim'[\s\S]*'doors'[\s\S]*'drywall'[\s\S]*'other'[\s\S]*'access'[\s\S]*'prejob'[\s\S]*'policy'[\s\S]*'summary'[\s\S]*\)/i
   )
 })
 

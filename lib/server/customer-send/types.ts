@@ -15,6 +15,7 @@ export type {
   CustomerSendDraft,
   CustomerSendMode,
   CustomerSendMutationData,
+  CustomerSendOperationalSnapshot,
   CustomerSendPageData,
   CustomerSendPublicMeta,
   CustomerSendScopeKey,
@@ -37,10 +38,15 @@ export type {
   QuoteSendDefaults,
 } from './contextTypes'
 
-export { CUSTOMER_SEND_SCOPE_KEYS } from './contextTypes'
+export {
+  CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND,
+  CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION,
+  CUSTOMER_SEND_SCOPE_KEYS,
+} from './contextTypes'
 
 import type {
   CustomerSendDraft,
+  CustomerSendOperationalSnapshot,
   EstimatePublicVersionRow,
 } from './contextTypes'
 
@@ -177,7 +183,7 @@ export function readCustomerSendStoredSnapshot(
 export function buildCustomerSendPersistedSnapshot(params: {
   document: CustomerEstimateDocument
   draft: CustomerSendDraft
-  operationalSnapshot?: Record<string, unknown>
+  operationalSnapshot?: CustomerSendOperationalSnapshot | Record<string, unknown>
 }): CustomerSendPersistedSnapshot {
   const snapshot = buildEstimatePublicPersistedSnapshot({
     document: params.document,

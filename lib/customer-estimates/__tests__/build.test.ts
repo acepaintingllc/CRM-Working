@@ -90,7 +90,7 @@ test('buildCustomerEstimateDocument cleans scope copy and keeps only included se
   assert.equal(document.meta.flow_version, 'v2')
   assert.equal(document.customer.name, 'Taylor Jones')
   assert.match(document.customer.address, /Newburgh, IN 47630/)
-  assert.equal(document.total, 1191)
+  assert.equal(document.total, 1190.9)
   assert.equal(document.scopes.length, 1)
   assert.equal(document.scopes[0]?.key, 'trim')
   assert.doesNotMatch(document.scopes.find((section) => section.key === 'trim')?.text ?? '', /Trim White/)
@@ -103,7 +103,7 @@ test('buildCustomerEstimateDocument cleans scope copy and keeps only included se
   assert.match(document.quote_rows[0]?.description ?? '', /, using SW Trim Paint/i)
   assert.match(document.quote_rows[0]?.description ?? '', /full prime/i)
   assert.doesNotMatch(document.quote_rows[0]?.description ?? '', /\$\d|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i)
-  assert.equal(document.quote_rows[0]?.price, 1191)
+  assert.equal(document.quote_rows[0]?.price, 1190.9)
   assert.deepEqual(document.terms, ['Terms line one.', 'Terms line two.'])
   assert.equal(document.source_meta.company.business_name, true)
   assert.equal(document.source_meta.company.main_phone, false)
@@ -479,7 +479,7 @@ test('buildCustomerEstimateDocument reconciles visible rows to the internal fina
     },
   })
 
-  assert.equal(document.total, 4361)
+  assert.equal(document.total, 4361.26)
   assert.equal(document.quote_rows.length, 2)
   assert.match(document.quote_rows[0]?.description ?? '', /in Master Bedroom and Spare Bedroom, using SW Emerald Urethane/i)
   assert.match(document.quote_rows[0]?.description ?? '', /full prime/i)
@@ -489,7 +489,177 @@ test('buildCustomerEstimateDocument reconciles visible rows to the internal fina
   assert.doesNotMatch(document.quote_rows[0]?.description ?? '', /\$\d|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i)
   assert.doesNotMatch(document.quote_rows[1]?.description ?? '', /\$\d|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i)
   const quoteRowTotal = document.quote_rows.reduce((sum, row) => sum + row.price, 0)
-  assert.equal(quoteRowTotal, 4361)
+  assert.equal(quoteRowTotal, 4361.26)
+})
+
+test('buildCustomerEstimateDocument rolls hidden prejob cost into visible rows without a separate row', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-PREJOB',
+      version_name: 'Prejob Hidden Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Taylor Jones',
+      customer_address: '123 Main St',
+      estimate_date: '2026-04-20',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Living Room' }],
+      room_wall_scopes: [
+        {
+          id: 'W-PREJOB',
+          room_id: 'R001',
+          include: 'Y',
+          scope_name: 'Walls',
+          effective_total: 1000,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+          prime_mode: 'NONE',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [],
+      prejob: [
+        {
+          id: 'PREJOB-1',
+          room_id: 'R001',
+          trip_name: 'Wallpaper removal prep',
+          trip_num: 2,
+          trip_rate: 75,
+          manual_adjustment: 25,
+          effective_total: 175,
+          notes: 'Complete before paint start',
+        },
+      ],
+      other: [],
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-WALL', display_name: 'SW Emerald', display_id: 'WALL-PAINT' }],
+      trim_items: [],
+    },
+    pricingSummary: {
+      finalTotal: 1175,
+      prepTripCost: 175,
+    },
+  })
+
+  assert.equal(document.total, 1175)
+  assert.equal(document.scopes.find((section) => section.key === 'walls')?.price, 1175)
+  assert.equal(document.quote_rows.length, 1)
+  assert.equal(document.quote_rows[0]?.label, 'Walls')
+  assert.equal(document.quote_rows[0]?.price, 1175)
+  assert.equal(
+    Math.round(document.quote_rows.reduce((sum, row) => sum + row.price, 0) * 100) / 100,
+    document.total
+  )
+  const visibleText = [
+    ...document.quote_rows.map((row) => `${row.label} ${row.description}`),
+    ...document.scopes.map((section) => `${section.key} ${section.text}`),
+  ].join('\n')
+  assert.doesNotMatch(visibleText, /prejob|prep trip|wallpaper removal prep/i)
+})
+
+test('buildCustomerEstimateDocument allocates room prejob cost to drywall repairs first', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-PREJOB-DRYWALL',
+      version_name: 'Prejob Drywall Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-20T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Taylor Jones',
+      customer_address: '123 Main St',
+      estimate_date: '2026-04-20',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Living Room' }],
+      room_wall_scopes: [
+        {
+          id: 'W-PREJOB-DRYWALL',
+          room_id: 'R001',
+          include: 'Y',
+          scope_name: 'Walls',
+          effective_total: 1000,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      drywall_repairs: [
+        {
+          id: 'D-PREJOB',
+          room_id: 'R001',
+          include: 'Y',
+          repair_type: 'patch',
+          surface: 'ceiling',
+          unit: 'EA',
+          quantity: 2,
+          effective_total: 200,
+        },
+      ],
+      trim_items: [],
+      prejob: [
+        {
+          id: 'PREJOB-DRYWALL',
+          room_id: 'R001',
+          trip_name: 'Drywall prep trip',
+          trip_num: 1,
+          trip_rate: 150,
+          effective_total: 150,
+        },
+      ],
+      other: [],
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-WALL', display_name: 'SW Emerald', display_id: 'WALL-PAINT' }],
+      trim_items: [],
+    },
+    pricingSummary: {
+      finalTotal: 1350,
+      prepTripCost: 150,
+    },
+  })
+
+  assert.equal(document.total, 1350)
+  assert.equal(document.scopes.find((section) => section.key === 'walls')?.price, 1000)
+  assert.equal(document.scopes.find((section) => section.key === 'drywall')?.price, 350)
+  assert.equal(document.quote_rows.find((row) => row.key === 'walls')?.price, 1000)
+  assert.equal(document.quote_rows.find((row) => row.key === 'drywall')?.price, 350)
+  assert.equal(
+    Math.round(document.quote_rows.reduce((sum, row) => sum + row.price, 0) * 100) / 100,
+    document.total
+  )
+  assert.doesNotMatch(
+    document.quote_rows.map((row) => `${row.label} ${row.description}`).join('\n'),
+    /prejob|prep trip|drywall prep trip/i
+  )
 })
 
 test('buildCustomerEstimateDocument falls back to jobsettings paint products for walls and ceilings', () => {
@@ -1116,13 +1286,13 @@ test('buildCustomerEstimateDocument preserves mixed-scope output parity across d
   assert.match(document.scopes.find((section) => section.key === 'ceilings')?.text ?? '', /stain/i)
   assert.doesNotMatch(document.scopes.find((section) => section.key === 'trim')?.text ?? '', /Baseboards|Crown|Chair Rail/i)
   assert.match(document.scopes.find((section) => section.key === 'doors')?.text ?? '', /Door and Frame/i)
-  assert.match(document.scopes.find((section) => section.key === 'other')?.text ?? '', /Ladder setup 2 each/)
+  assert.doesNotMatch(document.scopes.find((section) => section.key === 'other')?.text ?? '', /Ladder setup/i)
   assert.match(document.scopes.find((section) => section.key === 'other')?.text ?? '', /Wallpaper removal in upstairs hall in Hall Bath 1 area/)
   assert.equal(document.quote_rows.length, 5)
   assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), 1650)
 })
 
-test('buildCustomerEstimateDocument keeps access fees fixed while reconciling policy-adjusted totals', () => {
+test('buildCustomerEstimateDocument allocates hidden access fees into visible rows', () => {
   const document = buildCustomerEstimateDocument({
     estimate: {
       id: 'EST-7-FIXED-ACCESS',
@@ -1180,13 +1350,189 @@ test('buildCustomerEstimateDocument keeps access fees fixed while reconciling po
   })
 
   assert.equal(document.total, 200)
-  assert.equal(document.quote_rows.length, 2)
-  assert.equal(document.quote_rows.find((row) => row.key === 'walls')?.price, 125)
-  assert.equal(document.quote_rows.find((row) => row.key === 'other')?.price, 75)
+  assert.equal(document.scopes.find((section) => section.key === 'walls')?.price, 200)
+  assert.equal(document.quote_rows.length, 1)
+  assert.equal(document.quote_rows.find((row) => row.key === 'walls')?.price, 200)
+  assert.equal(document.quote_rows.find((row) => row.key === 'other'), undefined)
   assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), document.total)
+  assert.doesNotMatch(
+    document.quote_rows.map((row) => `${row.label} ${row.description}`).join('\n'),
+    /Ladder setup|access fee/i
+  )
 })
 
-test('buildCustomerEstimateDocument keeps fractional mixed-scope rows reconciled to rounded quote total', () => {
+test('buildCustomerEstimateDocument hides mixed access and prejob rows while reconciling scope totals', () => {
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-MIXED-HIDDEN-OPS',
+      version_name: 'Mixed Hidden Ops Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-21T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Morgan Customer',
+      customer_address: '987 Market St',
+      estimate_date: '2026-04-21',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [{ room_id: 'R001', room_name: 'Kitchen' }],
+      room_wall_scopes: [
+        {
+          id: 'W-MIXED-HIDDEN',
+          room_id: 'R001',
+          include: 'Y',
+          scope_name: 'Walls',
+          effective_total: 100,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+        },
+      ],
+      room_ceiling_scopes: [],
+      room_trim_scopes: [],
+      trim_items: [],
+      access_fees: [
+        {
+          id: 'ACCESS-HIDDEN',
+          room_id: 'R001',
+          label: 'Ladder setup',
+          access_fee_id: 'LADDER',
+          qty: 1,
+          catalog_amount: 75,
+          effective_total: 75,
+        },
+      ],
+      prejob: [
+        {
+          id: 'PREJOB-HIDDEN',
+          room_id: 'R001',
+          trip_name: 'Wallpaper removal prep',
+          trip_num: 1,
+          trip_rate: 25,
+          effective_total: 25,
+        },
+      ],
+      other: [],
+    },
+    catalogs: {
+      paint_products: [{ id: 'P-WALL', display_name: 'SW Duration Home', display_id: 'WALL-1' }],
+      trim_items: [],
+    },
+    pricingSummary: {
+      finalTotal: 200,
+      sharedAccessCost: 75,
+      prepTripCost: 25,
+    },
+  })
+
+  assert.equal(document.total, 200)
+  assert.deepEqual(
+    document.quote_rows.map((row) => row.key),
+    ['walls']
+  )
+  assert.equal(document.quote_rows[0]?.price, 200)
+  assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), document.total)
+  assert.doesNotMatch(
+    document.quote_rows.map((row) => `${row.label} ${row.description}`).join('\n'),
+    /Ladder setup|access fee|Wallpaper removal prep|prejob|prep trip/i
+  )
+})
+
+test('buildCustomerEstimateDocument allocates pricing policy adjustments into visible rows only', () => {
+  const pricingSummary = {
+    finalTotal: 600,
+    prePolicyTotal: 400,
+    postLaborPolicyTotal: 450,
+    minimumAdjustmentAmount: 100,
+  }
+  const document = buildCustomerEstimateDocument({
+    estimate: {
+      id: 'EST-POLICY-HIDDEN',
+      version_name: 'Policy Hidden Quote',
+      version_state: 'draft',
+      created_at: '2026-04-20T12:00:00Z',
+      updated_at: '2026-04-21T12:00:00Z',
+    },
+    job: {
+      customer_name: 'Morgan Customer',
+      customer_address: '987 Market St',
+      estimate_date: '2026-04-21',
+    },
+    company: {
+      business_name: 'ACE Painting',
+      timezone: 'America/Chicago',
+      main_phone: '',
+      business_email: '',
+      address: '',
+      website: '',
+      sender_signature: '',
+      logo_url: '',
+    },
+    inputs: {
+      rooms: [
+        { room_id: 'R001', room_name: 'Kitchen' },
+        { room_id: 'R002', room_name: 'Dining Room' },
+      ],
+      room_wall_scopes: [
+        {
+          room_id: 'R001',
+          include: 'Y',
+          effective_total: 100,
+          paint_coats: 2,
+          paint_product_id: 'P-WALL',
+        },
+      ],
+      room_ceiling_scopes: [
+        {
+          room_id: 'R002',
+          include: 'Y',
+          effective_total: 300,
+          paint_coats: 1,
+          paint_product_id: 'P-CEIL',
+        },
+      ],
+      room_trim_scopes: [],
+      trim_items: [],
+      other: [],
+    },
+    catalogs: {
+      paint_products: [
+        { id: 'P-WALL', display_name: 'SW Duration Home', display_id: 'WALL-1' },
+        { id: 'P-CEIL', display_name: 'SW Ceiling Bright White', display_id: 'CEIL-1' },
+      ],
+      trim_items: [],
+    },
+    pricingSummary,
+  })
+
+  assert.equal(document.total, 600)
+  assert.equal(document.scopes.find((section) => section.key === 'walls')?.price, 150)
+  assert.equal(document.scopes.find((section) => section.key === 'ceilings')?.price, 450)
+  assert.equal(document.quote_rows.length, 2)
+  assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), document.total)
+  assert.deepEqual(pricingSummary, {
+    finalTotal: 600,
+    prePolicyTotal: 400,
+    postLaborPolicyTotal: 450,
+    minimumAdjustmentAmount: 100,
+  })
+  assert.doesNotMatch(
+    document.quote_rows.map((row) => `${row.label} ${row.description}`).join('\n'),
+    /minimum|rounding|manual adjustment|policy/i
+  )
+})
+
+test('buildCustomerEstimateDocument keeps fractional mixed-scope rows reconciled to the exact quote total', () => {
   const document = buildCustomerEstimateDocument({
     estimate: {
       id: 'EST-7A',
@@ -1265,12 +1611,12 @@ test('buildCustomerEstimateDocument keeps fractional mixed-scope rows reconciled
     },
   })
 
-  assert.equal(document.total, 1199)
+  assert.equal(document.total, 1199.25)
   assert.equal(document.quote_rows.length, 4)
-  assert.equal(document.quote_rows.reduce((sum, row) => sum + row.price, 0), document.total)
-  for (const row of document.quote_rows) {
-    assert.equal(Number.isInteger(row.price), true)
-  }
+  assert.equal(
+    Math.round(document.quote_rows.reduce((sum, row) => sum + row.price, 0) * 100) / 100,
+    document.total
+  )
 })
 
 test('buildCustomerEstimateDocument degrades missing settings and empty sections without broken output', () => {

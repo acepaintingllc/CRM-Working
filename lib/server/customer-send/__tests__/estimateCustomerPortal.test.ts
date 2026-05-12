@@ -358,6 +358,7 @@ describe('estimate customer portal persisted artifact preview context', () => {
         quoteDoorScopes: [],
         quoteDrywallScopes: [],
         quoteAccessFees: [],
+        quotePrejobRows: [],
         quoteOtherRows: [],
         pricingSummary: { finalTotal: 1200 },
       },
@@ -372,6 +373,66 @@ describe('estimate customer portal persisted artifact preview context', () => {
       operation: 'read',
     })
 
+    expect(mocks.buildPersistedArtifactCustomerSendContext).not.toHaveBeenCalled()
+    expect(mocks.loadEstimateCustomerSendResources).toHaveBeenCalled()
+    expect(mocks.deriveEstimateCustomerSendCalculatedData).toHaveBeenCalled()
+  })
+
+  it('requires full live context when the persisted artifact was generated from an older estimate update', async () => {
+    const staleVersion = {
+      ...buildCanonicalVersion(),
+      snapshot_json: buildCustomerSendPersistedSnapshot({
+        document: assembledDocument,
+        draft: canonicalDraft,
+        operationalSnapshot: {
+          source_estimate_updated_at: '2026-04-22T10:00:00.000Z',
+        },
+      }),
+    }
+    const currentEstimate = {
+      ...buildResources().estimate,
+      updated_at: '2026-04-22T11:00:00.000Z',
+    }
+
+    mocks.loadEstimateCustomerSendEstimate.mockResolvedValue(currentEstimate)
+    mocks.loadEstimateCustomerSendVersionResources.mockResolvedValue({
+      publicVersions: [staleVersion],
+    })
+    mocks.loadEstimateCustomerSendResources.mockResolvedValue(
+      buildResources({
+        estimate: currentEstimate,
+        publicVersions: [staleVersion],
+      })
+    )
+    mocks.deriveEstimateCustomerSendCalculatedData.mockResolvedValue({
+      ok: true,
+      data: {
+        quoteWallScopes: [],
+        quoteCeilingScopes: [],
+        quoteTrimScopes: [],
+        quoteDoorScopes: [],
+        quoteDrywallScopes: [],
+        quoteAccessFees: [],
+        quotePrejobRows: [],
+        quoteOtherRows: [],
+        pricingSummary: { finalTotal: 1300 },
+      },
+    })
+
+    const result = await loadEstimateCustomerSendContext({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      allowPersistedArtifactPreview: true,
+      operation: 'read',
+    })
+
+    expect(result).toEqual({
+      estimate: { id: 'estimate-1' },
+      public_versions: [],
+      pricing_summary: { finalTotal: 1300 },
+    })
     expect(mocks.buildPersistedArtifactCustomerSendContext).not.toHaveBeenCalled()
     expect(mocks.loadEstimateCustomerSendResources).toHaveBeenCalled()
     expect(mocks.deriveEstimateCustomerSendCalculatedData).toHaveBeenCalled()
@@ -451,6 +512,7 @@ describe('estimate customer portal persisted artifact preview context', () => {
         quoteDoorScopes: [],
         quoteDrywallScopes: [],
         quoteAccessFees: [],
+        quotePrejobRows: [],
         quoteOtherRows: [],
         pricingSummary: { finalTotal: 1300 },
       },

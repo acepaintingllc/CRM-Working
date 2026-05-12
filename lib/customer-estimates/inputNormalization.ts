@@ -12,6 +12,10 @@ import {
   humanizeRoomCode,
   labelOrFallback,
 } from './buildShared.ts'
+import type {
+  CustomerVisibleAllocationScopeKey,
+  HiddenCustomerFee,
+} from './hiddenFeeAllocation.ts'
 
 export type CustomerEstimateRow = Unsafe
 export type CustomerEstimateCatalogs = {
@@ -159,6 +163,7 @@ export interface CustomerEstimateInput {
     room_door_scopes?: CustomerEstimateRow[]
     drywall_repairs?: CustomerEstimateRow[]
     access_fees?: CustomerEstimateRow[]
+    prejob?: CustomerEstimateRow[]
     trim_items?: CustomerEstimateRow[]
     other?: CustomerEstimateRow[]
     jobsettings?: CustomerEstimateRow | null
@@ -204,6 +209,7 @@ export type NormalizedCustomerEstimateInput = {
   roomDrywallScopes: NormalizedDrywallScopeRow[]
   trimItems: NormalizedTrimItemRow[]
   otherRows: NormalizedOtherRow[]
+  hiddenFees: HiddenCustomerFee[]
   jobsettings: NormalizedJobSettings
   paintCatalogRows: NormalizedPaintCatalogRow[]
   trimCatalogRows: NormalizedTrimCatalogRow[]
@@ -386,27 +392,78 @@ function normalizeOtherRow(row: CustomerEstimateRow): NormalizedOtherRow {
   }
 }
 
-function normalizeAccessFeeRow(row: CustomerEstimateRow): NormalizedOtherRow {
+function isIncluded(row: CustomerEstimateRow) {
+  return asText(row.active || row.include).toUpperCase() !== 'N'
+}
+
+function normalizeScopeKey(value: unknown): CustomerVisibleAllocationScopeKey | null {
+  const normalized = asText(value).toLowerCase().replace(/[^a-z]/g, '')
+  if (normalized === 'wall' || normalized === 'walls') return 'walls'
+  if (normalized === 'ceiling' || normalized === 'ceilings') return 'ceilings'
+  if (normalized === 'trim' || normalized === 'baseboard' || normalized === 'baseboards') return 'trim'
+  if (normalized === 'door' || normalized === 'doors') return 'doors'
+  if (normalized === 'drywall' || normalized === 'repair' || normalized === 'repairs') return 'drywall'
+  if (normalized === 'cabinet' || normalized === 'cabinets') return 'cabinets'
+  if (normalized === 'other' || normalized === 'additionalwork') return 'other'
+  return null
+}
+
+function accessFeeAmount(row: CustomerEstimateRow) {
   const qty = asNum(row.qty) ?? 1
-  const description =
-    asText(row.label) ||
-    asText(row.display_name) ||
-    humanizeIdentifier(asText(row.access_fee_id)) ||
-    'Access fee'
-  const price =
+  return (
     asNum(row.effective_total) ??
     asNum(row.final_total) ??
     asNum(row.raw_total) ??
     asNum(row.override_total) ??
+    asNum(row.calculated_total) ??
     asNum(row.actual_cost_override) ??
     (asNum(row.catalog_amount) ?? asNum(row.amount) ?? 0) * qty
+  )
+}
 
+function prejobAmount(row: CustomerEstimateRow) {
+  const tripCost = (asNum(row.trip_num) ?? 0) * (asNum(row.trip_rate) ?? 0)
+  return (
+    asNum(row.effective_total) ??
+    asNum(row.final_total) ??
+    asNum(row.raw_total) ??
+    asNum(row.override_total) ??
+    asNum(row.calculated_total) ??
+    tripCost + (asNum(row.manual_adjustment) ?? 0)
+  )
+}
+
+function normalizeAccessFeeHiddenFee(row: CustomerEstimateRow, index: number): HiddenCustomerFee | null {
+  if (!isIncluded(row)) return null
+  const amount = accessFeeAmount(row)
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  const id = asText(row.id) || `access-fee-${index + 1}`
   return {
-    description,
-    location: asText(row.room_id),
-    qty,
-    uom: asText(row.unit) || 'each',
-    price,
+    id,
+    kind: 'access_fee',
+    roomId: asText(row.room_id).toUpperCase() || null,
+    amount,
+    preferredScopeKey:
+      normalizeScopeKey(row.preferred_scope_key) ??
+      normalizeScopeKey(row.scope_key) ??
+      normalizeScopeKey(row.scope) ??
+      normalizeScopeKey(row.access_group),
+    source: { access_fee_id: asText(row.access_fee_id) },
+  }
+}
+
+function normalizePrejobHiddenFee(row: CustomerEstimateRow, index: number): HiddenCustomerFee | null {
+  if (!isIncluded(row)) return null
+  const amount = prejobAmount(row)
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  const id = asText(row.id) || `prejob-trip-${index + 1}`
+  return {
+    id,
+    kind: 'prejob_trip',
+    roomId: asText(row.room_id).toUpperCase() || null,
+    amount,
+    preferredScopeKey: normalizeScopeKey(row.preferred_scope_key) ?? normalizeScopeKey(row.scope_key),
+    source: { trip_name: asText(row.trip_name) },
   }
 }
 
@@ -525,9 +582,14 @@ export function normalizeCustomerEstimateInput(
         primeMode: normalizePrimeMode(row.prime_mode),
       } satisfies NormalizedTrimItemRow
     }),
-    otherRows: [
-      ...rowsOf(input.inputs.access_fees).map(normalizeAccessFeeRow),
-      ...rowsOf(input.inputs.other).map(normalizeOtherRow),
+    otherRows: rowsOf(input.inputs.other).map(normalizeOtherRow),
+    hiddenFees: [
+      ...rowsOf(input.inputs.access_fees)
+        .map(normalizeAccessFeeHiddenFee)
+        .filter((row): row is HiddenCustomerFee => !!row),
+      ...rowsOf(input.inputs.prejob)
+        .map(normalizePrejobHiddenFee)
+        .filter((row): row is HiddenCustomerFee => !!row),
     ],
     jobsettings: {
       wallPaintProductId: asText(

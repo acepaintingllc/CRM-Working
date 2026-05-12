@@ -1,7 +1,16 @@
 import type {
   AcceptedEstimateSnapshotArtifactState,
-  AcceptedEstimateSource,
+  CanonicalAcceptedEstimateSource,
+  AcceptedEstimateOperationalSource,
+  AcceptedEstimateRepairSource,
+  AcceptedEstimateOperationalSourcePayload,
+  AcceptedEstimateSourcePublicVersion,
+  AcceptedEstimateAccessFeeRow,
   AcceptEstimateOperationalInput,
+} from './types.ts'
+import {
+  ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_KIND,
+  ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_VERSION,
 } from './types.ts'
 import {
   errorResult,
@@ -76,6 +85,11 @@ function asNumber(value: unknown) {
   return Number.isFinite(number) ? number : 0
 }
 
+function asFiniteNumber(value: unknown): number | null {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -83,6 +97,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function asNullableRecord(value: unknown) {
   return isRecord(value) ? value : null
 }
+
+function jsonClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value ?? null)) as T
+}
+
+const REQUIRED_OPERATIONAL_INPUT_ARRAYS = [
+  'rooms',
+  'room_wall_scopes',
+  'room_ceiling_scopes',
+  'room_trim_scopes',
+  'room_door_scopes',
+  'drywall_repairs',
+  'access_fees',
+  'prejob',
+] as const
+
+const REQUIRED_OPERATIONAL_PRICING_OBJECTS = [
+  'pricing_summary',
+  'wall_calculations',
+  'ceiling_calculations',
+  'trim_calculations',
+  'door_calculations',
+  'drywall_calculations',
+] as const
 
 type AcceptedEstimateResolutionSource = 'job_link' | 'legacy_job_estimate_fallback'
 
@@ -94,7 +132,7 @@ type OperationalAcceptedEstimateResolution = {
 const acceptedEstimateColumns =
   'id, org_id, job_id, customer_id, version_name, version_state, accepted_at, accepted_public_version_id'
 const acceptedEstimateSnapshotColumns =
-  'id, org_id, job_id, estimate_id, customer_id, accepted_public_version_id, estimate_version_name, estimate_version_state, estimated_labor_hours, estimated_paint_gallons, estimated_supplies_cost, estimated_other_cost, estimated_total, source_payload_json'
+  'id, org_id, job_id, estimate_id, customer_id, accepted_public_version_id, estimate_version_name, estimate_version_state, estimated_labor_hours, estimated_paint_gallons, estimated_supplies_cost, estimated_access_cost, estimated_other_cost, estimated_total, source_payload_json'
 
 function readAcceptedSnapshotPayload(snapshot: Unsafe) {
   return asNullableRecord(snapshot.source_payload_json)
@@ -112,7 +150,9 @@ function readAcceptedSnapshotLegacyEmbeddedCustomerArtifact(snapshot: Unsafe) {
   return asNullableRecord(readAcceptedSnapshotPayload(snapshot)?.customer_send_snapshot_json)
 }
 
-function hasAcceptedSnapshotPublicVersionDetails(publicVersion: Record<string, unknown> | null) {
+function hasAcceptedSnapshotPublicVersionDetails(
+  publicVersion: Record<string, unknown> | null
+): publicVersion is AcceptedEstimateSourcePublicVersion {
   if (!publicVersion) return false
 
   return (
@@ -123,9 +163,179 @@ function hasAcceptedSnapshotPublicVersionDetails(publicVersion: Record<string, u
   )
 }
 
+function normalizeAcceptedEstimateAccessFeeRow(
+  row: Record<string, unknown>
+): AcceptedEstimateAccessFeeRow {
+  const normalized = jsonClone(row) as AcceptedEstimateAccessFeeRow
+
+  if ('id' in row) normalized.id = jsonClone(row.id) as AcceptedEstimateAccessFeeRow['id']
+  if ('room_id' in row) normalized.room_id = jsonClone(row.room_id) as AcceptedEstimateAccessFeeRow['room_id']
+  if ('access_fee_id' in row) {
+    normalized.access_fee_id = jsonClone(
+      row.access_fee_id
+    ) as AcceptedEstimateAccessFeeRow['access_fee_id']
+  }
+  if ('label' in row) normalized.label = jsonClone(row.label) as AcceptedEstimateAccessFeeRow['label']
+  if ('display_name' in row) {
+    normalized.display_name = jsonClone(
+      row.display_name
+    ) as AcceptedEstimateAccessFeeRow['display_name']
+  }
+  if ('access_group' in row) {
+    normalized.access_group = jsonClone(row.access_group) as AcceptedEstimateAccessFeeRow['access_group']
+  }
+  if ('qty' in row) normalized.qty = jsonClone(row.qty) as AcceptedEstimateAccessFeeRow['qty']
+  if ('catalog_amount' in row) {
+    normalized.catalog_amount = jsonClone(
+      row.catalog_amount
+    ) as AcceptedEstimateAccessFeeRow['catalog_amount']
+  }
+  if ('amount' in row) normalized.amount = jsonClone(row.amount) as AcceptedEstimateAccessFeeRow['amount']
+  if ('actual_cost_override' in row) {
+    normalized.actual_cost_override = jsonClone(
+      row.actual_cost_override
+    ) as AcceptedEstimateAccessFeeRow['actual_cost_override']
+  }
+  if ('calculated_total' in row) {
+    normalized.calculated_total = jsonClone(
+      row.calculated_total
+    ) as AcceptedEstimateAccessFeeRow['calculated_total']
+  }
+  if ('effective_total' in row) {
+    normalized.effective_total = jsonClone(
+      row.effective_total
+    ) as AcceptedEstimateAccessFeeRow['effective_total']
+  }
+  if ('final_total' in row) {
+    normalized.final_total = jsonClone(row.final_total) as AcceptedEstimateAccessFeeRow['final_total']
+  }
+  if ('override_total' in row) {
+    normalized.override_total = jsonClone(
+      row.override_total
+    ) as AcceptedEstimateAccessFeeRow['override_total']
+  }
+  if ('overridden' in row) {
+    normalized.overridden = jsonClone(row.overridden) as AcceptedEstimateAccessFeeRow['overridden']
+  }
+  if ('notes' in row) normalized.notes = jsonClone(row.notes) as AcceptedEstimateAccessFeeRow['notes']
+  if ('position' in row) {
+    normalized.position = jsonClone(row.position) as AcceptedEstimateAccessFeeRow['position']
+  }
+
+  return normalized
+}
+
+function readAcceptedEstimateAccessFeeRows(value: unknown): AcceptedEstimateAccessFeeRow[] | null {
+  if (!Array.isArray(value)) return null
+
+  const rows: AcceptedEstimateAccessFeeRow[] = []
+  for (const row of value) {
+    if (!isRecord(row)) return null
+    rows.push(normalizeAcceptedEstimateAccessFeeRow(row))
+  }
+  return rows
+}
+
+function buildOperationalSourceFromInternalEstimate(
+  value: unknown
+): AcceptedEstimateOperationalSource | null {
+  if (!isRecord(value)) return null
+  const inputs = asNullableRecord(value.inputs)
+  const pricing = asNullableRecord(value.pricing)
+  if (!inputs || !pricing) return null
+
+  for (const key of REQUIRED_OPERATIONAL_INPUT_ARRAYS) {
+    if (!Array.isArray(inputs[key])) return null
+  }
+
+  for (const key of REQUIRED_OPERATIONAL_PRICING_OBJECTS) {
+    if (!isRecord(pricing[key])) return null
+  }
+
+  const finalTotal = asFiniteNumber(pricing.final_total)
+  if (finalTotal == null) return null
+  const accessFees = readAcceptedEstimateAccessFeeRows(inputs.access_fees)
+  if (!accessFees) return null
+
+  return {
+    rooms: jsonClone(inputs.rooms as AcceptedEstimateOperationalSource['rooms']),
+    room_wall_scopes: jsonClone(
+      inputs.room_wall_scopes as AcceptedEstimateOperationalSource['room_wall_scopes']
+    ),
+    room_ceiling_scopes: jsonClone(
+      inputs.room_ceiling_scopes as AcceptedEstimateOperationalSource['room_ceiling_scopes']
+    ),
+    room_trim_scopes: jsonClone(
+      inputs.room_trim_scopes as AcceptedEstimateOperationalSource['room_trim_scopes']
+    ),
+    room_door_scopes: jsonClone(
+      inputs.room_door_scopes as AcceptedEstimateOperationalSource['room_door_scopes']
+    ),
+    drywall_repairs: jsonClone(
+      inputs.drywall_repairs as AcceptedEstimateOperationalSource['drywall_repairs']
+    ),
+    access_fees: accessFees,
+    prejob: jsonClone(inputs.prejob as AcceptedEstimateOperationalSource['prejob']),
+    pricing_summary: jsonClone(
+      pricing.pricing_summary as AcceptedEstimateOperationalSource['pricing_summary']
+    ),
+    final_total: finalTotal,
+    wall_calculations: jsonClone(
+      pricing.wall_calculations as AcceptedEstimateOperationalSource['wall_calculations']
+    ),
+    ceiling_calculations: jsonClone(
+      pricing.ceiling_calculations as AcceptedEstimateOperationalSource['ceiling_calculations']
+    ),
+    trim_calculations: jsonClone(
+      pricing.trim_calculations as AcceptedEstimateOperationalSource['trim_calculations']
+    ),
+    door_calculations: jsonClone(
+      pricing.door_calculations as AcceptedEstimateOperationalSource['door_calculations']
+    ),
+    drywall_calculations: jsonClone(
+      pricing.drywall_calculations as AcceptedEstimateOperationalSource['drywall_calculations']
+    ),
+  }
+}
+
+function readAcceptedSnapshotOperationalSourcePayload(
+  sourcePayload: Record<string, unknown> | null,
+  artifact: unknown,
+  acceptedPublicVersion: Record<string, unknown> | null
+): { sourcePayload: AcceptedEstimateOperationalSourcePayload; operationalSource: AcceptedEstimateOperationalSource } | null {
+  if (!sourcePayload) return null
+  const operationalSource = buildOperationalSourceFromInternalEstimate(
+    sourcePayload.internal_operational_estimate
+  )
+  if (
+    asText(sourcePayload.artifact_kind) === ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_KIND &&
+    asNumber(sourcePayload.artifact_version) ===
+      ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_VERSION &&
+    artifact &&
+    hasAcceptedSnapshotPublicVersionDetails(acceptedPublicVersion) &&
+    operationalSource
+  ) {
+    return {
+      sourcePayload: {
+        ...(sourcePayload as Record<string, unknown>),
+        artifact_kind: ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_KIND,
+        artifact_version: ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_VERSION,
+        customer_artifact: artifact as AcceptedEstimateOperationalSourcePayload['customer_artifact'],
+        customer_visible_source: 'customer_artifact.document',
+        accepted_public_version: acceptedPublicVersion,
+        internal_operational_estimate:
+          sourcePayload.internal_operational_estimate as AcceptedEstimateOperationalSourcePayload['internal_operational_estimate'],
+      },
+      operationalSource,
+    }
+  }
+  return null
+}
+
 function readAcceptedEstimateSnapshotArtifactState(
   snapshot: Unsafe
 ): AcceptedEstimateSnapshotArtifactState {
+  const sourcePayload = readAcceptedSnapshotPayload(snapshot)
   const legacyArtifact = readAcceptedSnapshotLegacyEmbeddedCustomerArtifact(snapshot)
   const legacyPublicVersion = readAcceptedSnapshotLegacyEmbeddedPublicVersion(snapshot)
   if (legacyArtifact || legacyPublicVersion) {
@@ -162,6 +372,11 @@ function readAcceptedEstimateSnapshotArtifactState(
   }
 
   const acceptedPublicVersion = readAcceptedSnapshotEmbeddedAcceptedPublicVersion(snapshot)
+  const sourcePayloadState = readAcceptedSnapshotOperationalSourcePayload(
+    sourcePayload,
+    artifactState.snapshot,
+    acceptedPublicVersion
+  )
   if (!hasAcceptedSnapshotPublicVersionDetails(acceptedPublicVersion)) {
     return {
       kind: 'legacy',
@@ -169,11 +384,20 @@ function readAcceptedEstimateSnapshotArtifactState(
         'Accepted estimate snapshot payload is incomplete. Repair the snapshot before loading accepted estimate data.',
     }
   }
+  if (!sourcePayloadState) {
+    return {
+      kind: 'legacy',
+      message:
+        'Accepted estimate snapshot operational source payload is missing or incomplete. Repair the snapshot before loading accepted estimate data.',
+    }
+  }
 
   return {
     kind: 'canonical',
     artifact: artifactState.snapshot,
-    accepted_public_version: acceptedPublicVersion as Record<string, unknown>,
+    source_payload: sourcePayloadState.sourcePayload,
+    operational_source: sourcePayloadState.operationalSource,
+    accepted_public_version: acceptedPublicVersion,
   }
 }
 
@@ -315,7 +539,7 @@ export function buildAcceptedEstimateSource(params: {
   estimate: Unsafe
   publicVersion: Unsafe
   rollup?: Unsafe | null
-}): AcceptedEstimateSource {
+}): AcceptedEstimateRepairSource {
   const snapshotState = readEstimatePublicPersistedSnapshotState(
     params.publicVersion.snapshot_json
   )
@@ -348,9 +572,11 @@ export function buildAcceptedEstimateSource(params: {
     estimated_labor_hours: 0,
     estimated_paint_gallons: 0,
     estimated_supplies_cost: 0,
+    estimated_access_cost: 0,
     estimated_other_cost: 0,
     final_total: customerVisibleTotal,
     snapshot_json: snapshotJson ?? {},
+    source_payload_json: {},
   }
 }
 
@@ -370,9 +596,10 @@ export function buildAcceptedEstimateSourceFromSnapshot(params: {
   estimate: Unsafe
   snapshot: Unsafe
   artifactState: Extract<AcceptedEstimateSnapshotArtifactState, { kind: 'canonical' }>
-}): AcceptedEstimateSource {
+}): CanonicalAcceptedEstimateSource {
   const publicVersion = params.artifactState.accepted_public_version
   const acceptance = normalizeEstimatePublicAcceptanceRecord(publicVersion?.acceptance_json)
+  const sourcePayload = params.artifactState.source_payload
 
   return {
     org_id: asText(params.snapshot.org_id) || asText(params.estimate.org_id),
@@ -403,9 +630,12 @@ export function buildAcceptedEstimateSourceFromSnapshot(params: {
     estimated_labor_hours: asNumber(params.snapshot.estimated_labor_hours),
     estimated_paint_gallons: asNumber(params.snapshot.estimated_paint_gallons),
     estimated_supplies_cost: asNumber(params.snapshot.estimated_supplies_cost),
+    estimated_access_cost: asNumber(params.snapshot.estimated_access_cost),
     estimated_other_cost: asNumber(params.snapshot.estimated_other_cost),
     final_total: readAcceptedCustomerVisibleTotal(params.artifactState),
-    snapshot_json: params.artifactState.artifact as Record<string, unknown>,
+    snapshot_json: jsonClone(params.artifactState.artifact as Record<string, unknown>),
+    source_payload_json: jsonClone(sourcePayload),
+    operational_source: jsonClone(params.artifactState.operational_source),
   }
 }
 
@@ -586,7 +816,7 @@ export async function repairAcceptedEstimateSnapshotForJob(
     jobId: string
   },
   deps?: RepairSnapshotDeps
-): Promise<ServiceResult<AcceptedEstimateSource>> {
+): Promise<ServiceResult<CanonicalAcceptedEstimateSource>> {
   const db =
     deps?.db ??
     ((await import('../org.ts')).supabaseAdmin as unknown as DbReadChain)
@@ -661,7 +891,7 @@ export async function loadAcceptedEstimateSource(
   db: DbReadChain,
   orgId: string,
   jobId: string
-): Promise<ServiceResult<AcceptedEstimateSource>> {
+): Promise<ServiceResult<CanonicalAcceptedEstimateSource>> {
   const operationalRecord = await loadAcceptedEstimateOperationalRecord(
     db,
     orgId,

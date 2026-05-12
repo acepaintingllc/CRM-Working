@@ -196,6 +196,7 @@ export function buildJobAcceptedEstimateRecord(
     estimated_labor_hours: source.estimated_labor_hours,
     estimated_paint_gallons: source.estimated_paint_gallons,
     estimated_supplies_cost: source.estimated_supplies_cost,
+    estimated_access_cost: source.estimated_access_cost,
     estimated_other_cost: source.estimated_other_cost,
     final_total: source.final_total,
   }

@@ -395,6 +395,7 @@ export type EstimateV2SavePayloadPreparationInput = {
     drywallRepairs?: EstimateV2SaveCollections['drywallRepairs']
     rollers?: EstimateV2SaveCollections['rollers']
     accessFees?: EstimateV2SaveCollections['accessFees']
+    prejobTrips?: EstimateV2SaveCollections['prejobTrips']
     otherItems?: EstimateV2SaveCollections['otherItems']
   }
   jobSettingsDraft: EstimateV2SaveMeta['jobSettingsDraft']
@@ -413,6 +414,7 @@ export type EstimateV2SavePayloadPreparationOutput = {
     drywallRepairs: EstimateV2SaveCollections['drywallRepairs']
     rollers: EstimateV2SaveCollections['rollers']
     accessFees: EstimateV2SaveCollections['accessFees']
+    prejobTrips: EstimateV2SaveCollections['prejobTrips']
     otherItems: EstimateV2SaveCollections['otherItems']
   }
   payloadSnapshot: EstimateV2DirtySnapshot
@@ -476,6 +478,7 @@ export function prepareEstimateV2SavePayload(
     drywallRepairs: sourceCollections.drywallRepairs ?? [],
     rollers: sourceCollections.rollers ?? [],
     accessFees: sourceCollections.accessFees ?? [],
+    prejobTrips: sourceCollections.prejobTrips ?? [],
     otherItems: sourceCollections.otherItems ?? [],
   }
 
@@ -496,6 +499,7 @@ export function prepareEstimateV2SavePayload(
       drywallRepairs: collections.drywallRepairs ?? [],
       rollers: collections.rollers,
       accessFees: collections.accessFees,
+      prejobTrips: collections.prejobTrips,
       otherItems: collections.otherItems,
     }),
   }
@@ -650,6 +654,7 @@ export function buildEstimateV2SaveSnapshot(
     drywallRepairs: input.collections.drywallRepairs,
     rollers: input.collections.rollers,
     accessFees: input.collections.accessFees,
+    prejobTrips: input.collections.prejobTrips,
     otherItems: input.collections.otherItems,
   })
 }
@@ -793,6 +798,7 @@ type EstimateV2SaveResponseCurrentInput = {
     roomFlags: EstimateV2SaveCollections['roomFlags']
     rollers: EstimateV2SaveCollections['rollers']
     accessFees?: EstimateV2SaveCollections['accessFees']
+    prejobTrips?: EstimateV2SaveCollections['prejobTrips']
     otherItems?: EstimateV2SaveCollections['otherItems']
   }
   meta: {
@@ -830,6 +836,7 @@ export type EstimateV2SaveResponseReconciliationOutput = {
     drywallRepairs: EstimateV2SaveCollections['drywallRepairs']
     rollers: EstimateV2SaveCollections['rollers']
     accessFees: EstimateV2SaveCollections['accessFees']
+    prejobTrips: EstimateV2SaveCollections['prejobTrips']
     otherItems: EstimateV2SaveCollections['otherItems']
   }
   calculations: {
@@ -938,6 +945,7 @@ export function reconcileEstimateV2SaveResponse(
       drywallRepairs: nextDrywallRepairs,
       rollers: current.collections.rollers,
       accessFees: current.collections.accessFees ?? [],
+      prejobTrips: current.collections.prejobTrips ?? [],
       otherItems: current.collections.otherItems ?? [],
     },
     calculations: {
@@ -965,6 +973,7 @@ export function reconcileEstimateV2SaveResponse(
       drywallRepairs: nextDrywallRepairs,
       rollers: current.collections.rollers,
       accessFees: current.collections.accessFees ?? [],
+      prejobTrips: current.collections.prejobTrips ?? [],
       otherItems: current.collections.otherItems ?? [],
     }),
   }
@@ -1000,6 +1009,7 @@ export function reconcileEstimateV2SaveResponseFromState(params: {
         roomFlags: params.currentState.collections.roomFlags,
         rollers: params.currentState.collections.rollers,
         accessFees: params.currentState.collections.accessFees,
+        prejobTrips: params.currentState.collections.prejobTrips,
         otherItems: params.currentState.collections.otherItems,
       },
       meta: {

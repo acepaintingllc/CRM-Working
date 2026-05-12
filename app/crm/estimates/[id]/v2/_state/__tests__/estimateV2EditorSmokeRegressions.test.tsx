@@ -2,9 +2,18 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
+import {
+  estimateV2FunctionalCompletenessSmokeFixture,
+  estimateV2FunctionalCompletenessSmokeIds as functionalSmokeIds,
+} from '@/lib/estimator/__fixtures__/canonical/index.ts'
 import { calculateDoors } from '@/lib/estimator/doors'
 import type { EstimateV2DoorScopeDraft } from '@/types/estimator/v2'
 import { buildEstimateV2DirtySnapshot } from '../estimateV2DirtySnapshot'
+import { buildEstimateV2EditorLoadState } from '../estimateV2EditorLoadOrchestration'
+import {
+  prepareEstimateV2SaveState,
+  resolveEstimateV2SaveResponseState,
+} from '../estimateV2EditorSaveOrchestration'
 import { shouldGuardEstimateV2Navigation } from '../estimateV2NavigationGuard'
 import { useEstimateV2CeilingActions } from '../useEstimateV2CeilingActions'
 import { useEstimateV2DerivedState } from '../useEstimateV2DerivedState'
@@ -408,4 +417,165 @@ describe('Estimate V2 editor smoke regressions', () => {
     })
     expect(doorCalculations.missing_inputs).toEqual([])
   })
+
+  it('preserves functional-completeness rows through editor save reconciliation and reload', () => {
+    const store = createEstimateV2Store(functionalSmokeFixtureStoreState())
+    const prepared = prepareEstimateV2SaveState(store.getState())
+    const payload = prepared.payloadSnapshot.payload
+
+    expect(payload.rooms).toHaveLength(3)
+    expect(payload.room_wall_scopes.map((row) => row.id).sort()).toEqual([
+      functionalSmokeIds.walls.bedroom,
+      functionalSmokeIds.walls.bedroomExcluded,
+    ].sort())
+    expect(payload.wall_segments.map((row) => row.id).sort()).toEqual([
+      functionalSmokeIds.wallSegments.bedroomManual,
+      functionalSmokeIds.wallSegments.bedroomRectangle,
+    ].sort())
+    expect(payload.room_ceiling_scopes.map((row) => row.id)).toEqual([
+      functionalSmokeIds.ceilings.bathroom,
+    ])
+    expect(payload.ceiling_scope_segments.map((row) => row.id)).toEqual([
+      functionalSmokeIds.ceilingSegments.bathroomManual,
+    ])
+    expect(payload.room_trim_scopes.map((row) => row.id).sort()).toEqual([
+      functionalSmokeIds.trim.bedroom,
+      functionalSmokeIds.trim.hallway,
+    ].sort())
+    expect(payload.room_door_scopes?.map((row) => row.id)).toEqual([
+      functionalSmokeIds.doors.hallway,
+    ])
+    expect(payload.drywall_repairs?.map((row) => row.id)).toEqual([
+      functionalSmokeIds.drywall.bedroom,
+    ])
+    expect(payload.access_fees.map((row) => row.id).sort()).toEqual([
+      functionalSmokeIds.accessFees.bedroom,
+      functionalSmokeIds.accessFees.job,
+    ].sort())
+    expect(payload.prejob?.map((row) => row.id).sort()).toEqual([
+      functionalSmokeIds.prejob.bedroomFurniture,
+      functionalSmokeIds.prejob.bedroomWallpaper,
+    ].sort())
+
+    const reconciled = resolveEstimateV2SaveResponseState({
+      trigger: 'manual',
+      payload: {
+        estimate: { updated_at: '2026-05-05T12:05:00.000Z' },
+        pricing_summary: null,
+      },
+      meta: store.getState().meta,
+      prepared,
+      currentState: store.getState(),
+      effectiveJobProductDefaults: store.getState().meta.orgJobProductDefaults,
+    })
+
+    expect(store.getState().collections.rooms).toHaveLength(3)
+    expect(reconciled.collections.scopes.map((row) => row.id).sort()).toEqual(
+      payload.room_wall_scopes.map((row) => row.id).sort()
+    )
+    expect(reconciled.collections.ceilingScopes.map((row) => row.id)).toEqual(
+      payload.room_ceiling_scopes.map((row) => row.id)
+    )
+    expect(reconciled.collections.trimScopes.map((row) => row.id).sort()).toEqual(
+      payload.room_trim_scopes.map((row) => row.id).sort()
+    )
+    expect((reconciled.collections.doorScopes ?? []).map((row) => row.id)).toEqual(
+      payload.room_door_scopes?.map((row) => row.id)
+    )
+    expect((reconciled.collections.drywallRepairs ?? []).map((row) => row.id)).toEqual(
+      payload.drywall_repairs?.map((row) => row.id)
+    )
+    expect((reconciled.collections.prejobTrips ?? []).map((row) => row.id).sort()).toEqual(
+      payload.prejob?.map((row) => row.id).sort()
+    )
+
+    const fixtureState = functionalSmokeFixtureStoreState()
+    const fixtureEstimate = fixtureState.meta.estimate
+    if (!fixtureEstimate) throw new Error('Functional smoke fixture is missing estimate metadata')
+    const reloadState = buildEstimateV2EditorLoadState({
+      store,
+      estimatePayload: {
+        estimate: {
+          ...fixtureEstimate,
+          updated_at: '2026-05-05T12:05:00.000Z',
+        },
+        inputs: {
+          jobsettings: payload.jobsettings,
+          org_defaults: null,
+          paint_products: fixtureState.meta.catalogs.paint_products,
+          rooms: payload.rooms,
+          room_wall_scopes: payload.room_wall_scopes,
+          wall_segments: payload.wall_segments,
+          room_ceiling_scopes: payload.room_ceiling_scopes,
+          ceiling_scope_segments: payload.ceiling_scope_segments,
+          room_trim_scopes: payload.room_trim_scopes,
+          room_door_scopes: payload.room_door_scopes ?? [],
+          drywall_repairs: payload.drywall_repairs ?? [],
+          rollers: payload.rollers,
+          prejob: payload.prejob ?? [],
+          trim_items: fixtureState.meta.catalogs.trim_items,
+          job_colors: fixtureState.meta.catalogs.color_codes,
+          room_flags: payload.room_flags,
+          access_fees: payload.access_fees,
+          other: payload.other ?? [],
+        },
+        wall_calculations: null,
+        ceiling_calculations: null,
+        trim_calculations: null,
+        door_calculations: null,
+        drywall_calculations: null,
+        trim_paint: null,
+        pricing_summary: null,
+      },
+      catalogsPayload: { catalogs: fixtureState.meta.catalogs },
+      catalogsOk: true,
+      catalogsErrorMessage: null,
+      job: fixtureState.meta.job,
+    })
+    const reloadedStore = createEstimateV2Store({
+      collections: reloadState.collections,
+      meta: {
+        loading: false,
+        saving: false,
+        estimate: reloadState.meta.estimate,
+        job: reloadState.meta.job,
+        catalogs: reloadState.meta.catalogs,
+        wallCalculations: null,
+        ceilingCalculations: null,
+        trimCalculations: null,
+        doorCalculations: null,
+        drywallCalculations: null,
+        pricingSummary: null,
+        selectedRoomId: functionalSmokeIds.rooms.bedroom,
+        catalogsError: null,
+        error: null,
+        validationIssues: reloadState.meta.validationIssues,
+        lastSavedSnapshot: reloadState.meta.lastSavedSnapshot,
+        saveStatus: reloadState.saveStatus,
+        autoSaveHint: null,
+        settingsOpen: false,
+        jobDefaultsOpen: false,
+        jobSettingsDraft: reloadState.meta.jobSettingsDraft,
+        orgJobProductDefaults: reloadState.meta.orgJobProductDefaults,
+        customerDraft: reloadState.meta.customerDraft,
+        debugMeta: reloadState.meta.debugMeta,
+      },
+    })
+    const { result } = renderHook(() => useEstimateV2DerivedState({ store: reloadedStore }))
+
+    expect(result.current.currentPayload.rooms).toHaveLength(3)
+    expect(result.current.currentPayload.room_wall_scopes.map((row) => row.id).sort()).toEqual(
+      payload.room_wall_scopes.map((row) => row.id).sort()
+    )
+    expect(result.current.currentPayload.room_door_scopes?.map((row) => row.id)).toEqual([
+      functionalSmokeIds.doors.hallway,
+    ])
+    expect(result.current.currentPayload.prejob?.map((row) => row.id).sort()).toEqual(
+      payload.prejob?.map((row) => row.id).sort()
+    )
+  })
 })
+
+function functionalSmokeFixtureStoreState() {
+  return structuredClone(estimateV2FunctionalCompletenessSmokeFixture.editorState)
+}

@@ -609,7 +609,7 @@ describe('Estimator V2 customer total save/load/summary chain parity', () => {
       ['preview', expectedTotal, preview.pricingSummary.finalTotal],
       ['load', expectedTotal, loaded.pricing_summary?.finalTotal],
       ['customer-send-context', expectedTotal, customerContext.pricing_summary?.finalTotal],
-      ['customer-document', Math.round(expectedTotal), customerDocument.total],
+      ['customer-document', expectedTotal, customerDocument.total],
     ] as const) {
       recordCustomerTotalAssertion(assertionErrors, {
         scenario: 'full-room-quote drift guard',

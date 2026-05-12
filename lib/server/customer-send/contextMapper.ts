@@ -9,6 +9,7 @@ import type {
   CustomerQuoteDrywallScopeRow,
   CustomerQuoteOtherRow,
   CustomerQuotePaintCatalogRow,
+  CustomerQuotePrejobRow,
   CustomerQuoteRawPaintCatalogRow,
   CustomerQuotePaintScopeRow,
   CustomerQuoteRoomRow,
@@ -257,6 +258,29 @@ function normalizeAccessFeeRow(row: CustomerQuoteAccessFeeRow): CustomerQuoteAcc
   }
 }
 
+export function normalizePrejobRow(row: CustomerQuotePrejobRow): CustomerQuotePrejobRow {
+  const effectiveTotal = asNullableNumber(row.effective_total)
+  const label = asNullableText(row.label)
+  const tripName = asNullableText(row.trip_name) ?? label
+  return {
+    id: asNullableText(row.id),
+    room_id: asNullableText(row.room_id),
+    position: asNullableNumber(row.position),
+    active: asIncludeFlag(row.active),
+    include: asIncludeFlag(row.include),
+    label,
+    trip_name: tripName,
+    trip_num: asNullableNumber(row.trip_num),
+    trip_rate: asNullableNumber(row.trip_rate),
+    manual_adjustment: asNullableNumber(row.manual_adjustment),
+    calculated_total: asNullableNumber(row.calculated_total),
+    raw_total: asNullableNumber(row.raw_total),
+    effective_total: effectiveTotal,
+    final_total: asNullableNumber(row.final_total) ?? effectiveTotal,
+    notes: asNullableText(row.notes),
+  }
+}
+
 function normalizeOtherRow(row: CustomerQuoteOtherRow): CustomerQuoteOtherRow {
   return {
     id: asNullableText(row.id),
@@ -447,6 +471,7 @@ export function mapCustomerQuoteSourceModel(params: {
       room_door_scopes: params.calculated.quoteDoorScopes.map(normalizeDoorScopeRow),
       drywall_repairs: (params.calculated.quoteDrywallScopes ?? []).map(normalizeDrywallScopeRow),
       access_fees: params.calculated.quoteAccessFees.map(normalizeAccessFeeRow),
+      prejob: params.calculated.quotePrejobRows.map(normalizePrejobRow),
       trim_items: params.resources.trimItems.map(normalizeTrimItemRow),
       other: params.calculated.quoteOtherRows.map(normalizeOtherRow),
       jobsettings: params.resources.jobsettings,
@@ -530,6 +555,7 @@ export function buildPersistedArtifactCustomerSendContext(params: {
       room_door_scopes: [],
       drywall_repairs: [],
       access_fees: [],
+      prejob: [],
       trim_items: [],
       other: [],
       jobsettings: {},

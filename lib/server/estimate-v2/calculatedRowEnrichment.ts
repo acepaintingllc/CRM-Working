@@ -10,6 +10,22 @@ type AccessFeeCalculatedRow = {
   overridden?: unknown
 }
 
+type PrejobCalculatedRow = Record<string, unknown> & {
+  id?: unknown
+  label?: unknown
+  trip_name?: unknown
+  trip_count?: unknown
+  trip_num?: unknown
+  trip_rate?: unknown
+  manual_adjustment?: unknown
+  calculated_total?: unknown
+  raw_total?: unknown
+  effective_total?: unknown
+  final_total?: unknown
+  include?: unknown
+  notes?: unknown
+}
+
 export function enrichEstimateV2AccessFeeRows<TRow extends Record<string, unknown>>(params: {
   rawRows: TRow[]
   calculatedRows: AccessFeeCalculatedRow[]
@@ -30,6 +46,53 @@ export function enrichEstimateV2AccessFeeRows<TRow extends Record<string, unknow
       overridden: calculated.overridden,
     }
   })
+}
+
+function readPrejobLabel(row: Record<string, unknown>, calculated?: PrejobCalculatedRow) {
+  return (
+    calculated?.label ??
+    calculated?.trip_name ??
+    row.trip_name ??
+    row.man_trip_name ??
+    row.task
+  )
+}
+
+export function enrichEstimateV2PrejobRows<TRow extends Record<string, unknown>>(params: {
+  rawRows: TRow[]
+  calculatedRows: PrejobCalculatedRow[]
+}): TRow[] {
+  const calculatedById = new Map(params.calculatedRows.map((row) => [asText(row.id), row]))
+  const matchedIds = new Set<string>()
+
+  const mergedRows = params.rawRows.map((row) => {
+    const id = asText(row.id)
+    const calculated = calculatedById.get(id)
+    if (!calculated) return row
+    matchedIds.add(id)
+    const label = readPrejobLabel(row, calculated)
+
+    return {
+      ...row,
+      ...calculated,
+      label,
+      trip_name: calculated.trip_name ?? label,
+      trip_num: calculated.trip_num ?? calculated.trip_count ?? row.trip_num,
+      trip_rate: calculated.trip_rate ?? row.trip_rate,
+      manual_adjustment: calculated.manual_adjustment ?? row.manual_adjustment,
+      calculated_total: calculated.calculated_total,
+      raw_total: calculated.raw_total,
+      effective_total: calculated.effective_total,
+      final_total: calculated.final_total ?? calculated.effective_total,
+      include: calculated.include ?? row.include,
+      notes: calculated.notes ?? row.notes,
+    }
+  })
+
+  const calculatedOnlyRows = params.calculatedRows.filter(
+    (row) => !matchedIds.has(asText(row.id))
+  ) as TRow[]
+  return [...mergedRows, ...calculatedOnlyRows]
 }
 
 export function enrichEstimateV2OtherRows<

@@ -104,6 +104,7 @@ vi.mock('../../org.ts', () => ({
 }))
 
 import { loadAcceptedEstimateSource } from '../../accepted-estimates/service.ts'
+import type { AcceptedEstimateOperationalSourcePayload } from '../../accepted-estimates/types.ts'
 import { loadCustomerSendPageData, submitCustomerSendMutation } from '../service'
 import {
   readCustomerSendVersionDocument,
@@ -184,7 +185,74 @@ function acceptedEstimateRow(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function readCustomerArtifactOperationalPrejobRows(snapshotJson: Record<string, unknown>) {
+  const operational = snapshotJson.operational_snapshot as
+    | {
+        estimate_response?: {
+          inputs?: {
+            prejob?: unknown[]
+          }
+        }
+      }
+    | undefined
+  return operational?.estimate_response?.inputs?.prejob ?? []
+}
+
+function acceptedOperationalInputs(overrides: Record<string, unknown> = {}) {
+  return {
+    rooms: [],
+    room_wall_scopes: [],
+    segments: [],
+    wall_segments: [],
+    ceiling_segments: [],
+    room_ceiling_scopes: [],
+    ceiling_scope_segments: [],
+    room_trim_scopes: [],
+    room_door_scopes: [],
+    drywall_repairs: [],
+    access_fees: [],
+    prejob: [],
+    trim_items: [],
+    other: [],
+    jobsettings: {},
+    org_defaults: {
+      default_template_key: 'default',
+      quote_validity_days: 30,
+      terms_text: 'Standard quote terms.',
+      walls_paint_id: null,
+      walls_primer_id: null,
+      ceiling_paint_id: null,
+      ceiling_primer_id: null,
+      trim_paint_id: null,
+      trim_primer_id: null,
+      labor_day_policy_enabled: true,
+      dayhours: 8,
+      rounding_increment_hours: 4,
+      override_labor_rate: 0,
+      job_minimum_enabled: false,
+      job_minimum_amount: 0,
+      standard_door_deduction_sf: 21,
+      standard_window_deduction_sf: 15,
+      baseboard_opening_deduction_lf: 3,
+    },
+    ...overrides,
+  }
+}
+
+function acceptedOperationalPricing(finalTotal: number) {
+  return {
+    pricing_summary: { finalTotal },
+    final_total: finalTotal,
+    wall_calculations: { scopes: [] },
+    ceiling_calculations: { scopes: [] },
+    trim_calculations: { scopes: [] },
+    door_calculations: { scopes: [] },
+    drywall_calculations: { scopes: [] },
+  }
+}
+
 function acceptedSnapshotRow(snapshotJson: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+  const prejob = readCustomerArtifactOperationalPrejobRows(snapshotJson)
   return {
     id: 'snapshot-1',
     org_id: 'org-1',
@@ -197,9 +265,12 @@ function acceptedSnapshotRow(snapshotJson: Record<string, unknown>, overrides: R
     estimated_labor_hours: 10,
     estimated_paint_gallons: 2,
     estimated_supplies_cost: 25,
+    estimated_access_cost: 250,
     estimated_other_cost: 10,
     estimated_total: 4250,
     source_payload_json: {
+      artifact_kind: 'accepted_estimate_operational_snapshot_source',
+      artifact_version: 1,
       customer_artifact: snapshotJson,
       accepted_public_version: {
         id: 'public-version-1',
@@ -210,6 +281,13 @@ function acceptedSnapshotRow(snapshotJson: Record<string, unknown>, overrides: R
           legal_name: 'Taylor Smith',
           signature_type: 'typed',
         },
+      },
+      internal_operational_estimate: {
+        inputs: acceptedOperationalInputs({
+          rooms: [{ room_id: 'R001', room_name: 'Kitchen' }],
+          prejob,
+        }),
+        pricing: acceptedOperationalPricing(4250),
       },
     },
     ...overrides,
@@ -223,6 +301,22 @@ describe('customer-send persisted artifact reader parity', () => {
 
   it('reads the same persisted sent artifact through storage helpers, the public portal, and the accepted downstream reader', async () => {
     const initialContext = buildCustomerSendContractContext()
+    initialContext.inputs.prejob = [
+      {
+        id: 'prejob-canonical-1',
+        room_id: 'room-1',
+        include: 'Y',
+        trip_name: 'Customer walkthrough prep',
+        trip_num: 1,
+        trip_rate: 225,
+        manual_adjustment: 25,
+        calculated_total: 225,
+        raw_total: 250,
+        effective_total: 250,
+        final_total: 250,
+        notes: 'Use the calculated row for accepted snapshots.',
+      },
+    ]
 
     const preview = await loadCustomerSendPageData({
       origin: 'https://example.test',
@@ -307,6 +401,15 @@ describe('customer-send persisted artifact reader parity', () => {
       })
     )
     expect(acceptedSource.data.snapshot_json).toEqual(sentVersion.snapshot_json)
+    const customerArtifactPrejob = readCustomerArtifactOperationalPrejobRows(
+      sentVersion.snapshot_json as Record<string, unknown>
+    )
+    const acceptedSourcePayload =
+      acceptedSource.data.source_payload_json as AcceptedEstimateOperationalSourcePayload
+    expect(
+      acceptedSourcePayload.internal_operational_estimate.inputs.prejob
+    ).toEqual(customerArtifactPrejob)
+    expect(acceptedSource.data.operational_source.prejob).toEqual(customerArtifactPrejob)
   })
 
   it('keeps downstream accepted readers anchored to the accepted persisted artifact instead of mutable public-version rows', async () => {
@@ -346,6 +449,8 @@ describe('customer-send persisted artifact reader parity', () => {
         estimate_snapshot: {
           data: acceptedSnapshotRow(acceptedArtifact as Record<string, unknown>, {
             source_payload_json: {
+              artifact_kind: 'accepted_estimate_operational_snapshot_source',
+              artifact_version: 1,
               customer_artifact: acceptedArtifact,
               accepted_public_version: {
                 id: 'public-version-1',
@@ -357,6 +462,12 @@ describe('customer-send persisted artifact reader parity', () => {
                   signature_type: 'typed',
                 },
                 snapshot_json: mutatedPublicVersionArtifact,
+              },
+              internal_operational_estimate: {
+                inputs: acceptedOperationalInputs({
+                  rooms: [{ room_id: 'R001', room_name: 'Kitchen' }],
+                }),
+                pricing: acceptedOperationalPricing(4250),
               },
             },
           }),
@@ -404,6 +515,12 @@ describe('customer-send persisted artifact reader parity', () => {
                     title: 'Mutable public version fallback',
                   },
                 },
+              },
+              internal_operational_estimate: {
+                inputs: acceptedOperationalInputs({
+                  rooms: [{ room_id: 'R001', room_name: 'Kitchen' }],
+                }),
+                pricing: acceptedOperationalPricing(4250),
               },
             },
           }),

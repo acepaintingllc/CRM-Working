@@ -688,6 +688,9 @@ describe('customerSendWorkflow', () => {
       await result.current.reload({ hard: true })
     })
 
+    expect(loadCustomerSendPage).toHaveBeenLastCalledWith(
+      '/api/estimates/estimate-1/customer-send?v2=1&refresh=1'
+    )
     expect(result.current.message).toBeNull()
     expect(result.current.error).toBeNull()
     expect(result.current.publicUrl).toBe('https://example.test/quote/reloaded')

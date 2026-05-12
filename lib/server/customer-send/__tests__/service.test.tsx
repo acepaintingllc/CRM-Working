@@ -282,6 +282,7 @@ function buildContext(overrides: Partial<CustomerQuoteSourceModel> = {}): Custom
       room_trim_scopes: [],
       room_door_scopes: [],
       access_fees: [],
+      prejob: [],
       trim_items: [],
       other: [],
       jobsettings: {},

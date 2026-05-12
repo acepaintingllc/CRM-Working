@@ -145,6 +145,12 @@ function readOperationalSnapshotForTest(snapshot: unknown) {
     | {
         artifact_kind?: unknown
         estimate_response?: {
+          inputs?: {
+            prejob?: unknown[]
+          }
+          pricing_summary?: {
+            prepTripCost?: unknown
+          }
           wall_calculations?: {
             scopes?: unknown[]
           }
@@ -158,8 +164,96 @@ describe('customer-send canonical artifact parity', () => {
     state.store = createPublicVersionStore()
   })
 
+  it('persists a non-empty operational snapshot for prejob-only estimates', async () => {
+    const context = buildCustomerSendContractContext({
+      pricing_summary: {
+        finalTotal: 175,
+        prepTripCost: 175,
+      },
+    })
+    const prejobRow = {
+      id: 'prejob-only-1',
+      room_id: null,
+      position: 0,
+      active: 'Y' as const,
+      include: 'Y' as const,
+      trip_name: 'Wallpaper removal prep',
+      trip_num: 2,
+      trip_rate: 75,
+      manual_adjustment: 25,
+      calculated_total: 150,
+      raw_total: 175,
+      effective_total: 175,
+      final_total: 175,
+      notes: 'Calculated prejob-only row',
+    }
+    context.inputs = {
+      ...context.inputs,
+      rooms: [],
+      room_wall_scopes: [],
+      segments: [],
+      wall_segments: [],
+      ceiling_segments: [],
+      room_ceiling_scopes: [],
+      ceiling_scope_segments: [],
+      room_trim_scopes: [],
+      room_door_scopes: [],
+      drywall_repairs: [],
+      access_fees: [],
+      prejob: [prejobRow],
+      trim_items: [],
+      other: [],
+    }
+
+    const preview = await loadCustomerSendPageData({
+      origin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      context,
+    })
+
+    expect(preview.ok).toBe(true)
+    if (!preview.ok) throw new Error(preview.message)
+    const persistedVersion = state.store?.version
+    expect(persistedVersion).toBeTruthy()
+    if (!persistedVersion) throw new Error('prejob-only preview version missing')
+
+    const operationalSnapshot = readOperationalSnapshotForTest(
+      persistedVersion.snapshot_json?.operational_snapshot
+    )
+    expect(operationalSnapshot?.artifact_kind).toBe('customer_send_operational_snapshot')
+    expect(operationalSnapshot?.estimate_response?.pricing_summary?.prepTripCost).toBe(175)
+    expect(operationalSnapshot?.estimate_response?.inputs?.prejob).toEqual([prejobRow])
+    const persistedPrejobRow = operationalSnapshot?.estimate_response?.inputs?.prejob?.[0] as
+      | Record<string, unknown>
+      | undefined
+    for (const key of ['calculated_total', 'raw_total', 'effective_total', 'final_total']) {
+      expect(persistedPrejobRow?.[key]).toEqual(expect.any(Number))
+      expect(persistedPrejobRow?.[key]).toBeGreaterThan(0)
+    }
+  })
+
   it('persists one preview artifact, then reuses it unchanged across preview, send, and public render', async () => {
     const initialContext = buildCustomerSendContractContext()
+    initialContext.inputs.prejob = [
+      {
+        id: 'prejob-1',
+        room_id: 'ROOM-1',
+        position: 0,
+        active: 'Y',
+        include: 'Y',
+        trip_name: 'Wallpaper removal prep',
+        trip_num: 2,
+        trip_rate: 75,
+        manual_adjustment: 25,
+        calculated_total: 150,
+        raw_total: 175,
+        effective_total: 175,
+        final_total: 175,
+        notes: 'Calculated prejob row',
+      },
+    ]
 
     const preview1 = await loadCustomerSendPageData({
       origin: 'https://example.test',
@@ -188,6 +282,15 @@ describe('customer-send canonical artifact parity', () => {
     expect(
       operationalSnapshotA?.estimate_response?.wall_calculations?.scopes
     ).toHaveLength(1)
+    expect(operationalSnapshotA?.estimate_response?.inputs?.prejob).toEqual([
+      expect.objectContaining({
+        id: 'prejob-1',
+        effective_total: 175,
+        calculated_total: 150,
+        raw_total: 175,
+        final_total: 175,
+      }),
+    ])
     expect(artifactA).toEqual(
       expect.objectContaining({
         artifact_kind: 'customer_estimate_artifact',
@@ -615,13 +718,32 @@ describe('customer-send canonical artifact parity', () => {
         operationalSnapshot: {
           artifact_kind: 'customer_send_operational_snapshot',
           artifact_version: 1,
-          source_estimate_updated_at: context.estimate.updated_at,
+          source_estimate_updated_at: context.estimate.updated_at ?? '',
           estimate_response: {
             estimate: context.estimate,
-            inputs: { rooms: [] },
+            inputs: {
+              rooms: [],
+              room_wall_scopes: [],
+              segments: [],
+              wall_segments: [],
+              ceiling_segments: [],
+              room_ceiling_scopes: [],
+              ceiling_scope_segments: [],
+              room_trim_scopes: [],
+              room_door_scopes: [],
+              drywall_repairs: [],
+              access_fees: [],
+              prejob: [],
+              trim_items: [],
+              other: [],
+              jobsettings: {},
+              org_defaults: context.inputs.org_defaults,
+            },
             wall_calculations: { scopes: [] },
             ceiling_calculations: { scopes: [] },
             trim_calculations: { scopes: [] },
+            door_calculations: { scopes: [] },
+            drywall_calculations: { scopes: [] },
             pricing_summary: {
               finalTotal: 4250,
               effectiveLaborHours: 0,

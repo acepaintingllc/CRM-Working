@@ -25,7 +25,9 @@ export type EstimateV2CalculationContextCollections = Pick<
   | 'drywallRepairs'
   | 'accessFees'
   | 'otherItems'
->
+> & {
+  prejobTrips?: EstimateV2EditorCollections['prejobTrips']
+}
 
 export type EstimateV2CalculationContextMeta = Pick<
   EstimateV2EditorMetaState,
@@ -67,6 +69,7 @@ export function useEstimateV2CalculationContext(params: {
         drywallRepairs: collections.drywallRepairs,
         rollers: collections.rollers,
         accessFees: collections.accessFees,
+        prejobTrips: collections.prejobTrips ?? [],
         otherItems: collections.otherItems,
       }),
     [
@@ -78,6 +81,7 @@ export function useEstimateV2CalculationContext(params: {
       collections.rooms,
       collections.rollers,
       collections.accessFees,
+      collections.prejobTrips,
       collections.otherItems,
       collections.scopes,
       collections.segments,

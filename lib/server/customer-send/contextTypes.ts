@@ -22,6 +22,10 @@ export const CUSTOMER_SEND_SCOPE_KEYS = [
 
 export type CustomerSendScopeKey = (typeof CUSTOMER_SEND_SCOPE_KEYS)[number]
 
+export const CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND =
+  'customer_send_operational_snapshot' as const
+export const CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION = 1 as const
+
 export type CustomerQuoteIncludeFlag = 'Y' | 'N'
 
 export type EstimatePublicVersionRow = {
@@ -241,6 +245,25 @@ export type CustomerQuoteAccessFeeRow = {
   [key: string]: unknown
 }
 
+export type CustomerQuotePrejobRow = {
+  id?: string | null
+  room_id?: string | null
+  position?: number | null
+  active?: CustomerQuoteIncludeFlag | null
+  include?: CustomerQuoteIncludeFlag | null
+  label?: string | null
+  trip_name?: string | null
+  trip_num?: number | null
+  trip_rate?: number | null
+  manual_adjustment?: number | null
+  calculated_total?: number | null
+  raw_total?: number | null
+  effective_total?: number | null
+  final_total?: number | null
+  notes?: string | null
+  [key: string]: unknown
+}
+
 export type CustomerQuoteOtherRow = {
   id?: string | null
   active?: CustomerQuoteIncludeFlag | null
@@ -354,6 +377,7 @@ export type EstimateCustomerSendInputs = {
   room_door_scopes: CustomerQuoteDoorScopeRow[]
   drywall_repairs?: CustomerQuoteDrywallScopeRow[]
   access_fees: CustomerQuoteAccessFeeRow[]
+  prejob: CustomerQuotePrejobRow[]
   trim_items: CustomerQuoteTrimItemRow[]
   other: CustomerQuoteOtherRow[]
   jobsettings: EstimateJobSettingsRow
@@ -394,6 +418,36 @@ export type EstimateCustomerSendContextResult =
   | EstimateCustomerSendContextData
   | { error: string }
 
+export type CustomerSendOperationalPricingSummary = CustomerEstimatePricingSummary & {
+  effectiveLaborHours?: number | null
+  rawLaborHours?: number | null
+  supplyCost?: number | null
+  paintMaterialCost?: number | null
+  primerMaterialCost?: number | null
+}
+
+export type CustomerSendOperationalScopeCalculation<TRow> = {
+  scopes: TRow[]
+}
+
+export type CustomerSendOperationalEstimateResponse = {
+  estimate: EstimateCustomerSendEstimateRow
+  inputs: EstimateCustomerSendInputs
+  wall_calculations: CustomerSendOperationalScopeCalculation<CustomerQuotePaintScopeRow>
+  ceiling_calculations: CustomerSendOperationalScopeCalculation<CustomerQuotePaintScopeRow>
+  trim_calculations: CustomerSendOperationalScopeCalculation<CustomerQuoteTrimScopeRow>
+  door_calculations: CustomerSendOperationalScopeCalculation<CustomerQuoteDoorScopeRow>
+  drywall_calculations: CustomerSendOperationalScopeCalculation<CustomerQuoteDrywallScopeRow>
+  pricing_summary: CustomerSendOperationalPricingSummary
+}
+
+export type CustomerSendOperationalSnapshot = {
+  artifact_kind: typeof CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND
+  artifact_version: typeof CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION
+  source_estimate_updated_at: string
+  estimate_response: CustomerSendOperationalEstimateResponse
+}
+
 export type EstimateCustomerSendRawResources = {
   estimate: EstimateCustomerSendEstimateRow
 } & EstimateCustomerSendCoreResources &
@@ -424,6 +478,7 @@ export type EstimateCustomerSendScopeResources = {
   doorScopes: CustomerQuoteDoorScopeRow[]
   drywallRepairs?: CustomerQuoteDrywallScopeRow[]
   accessFees: CustomerQuoteAccessFeeRow[]
+  prejob?: CustomerQuotePrejobRow[]
   trimItems: CustomerQuoteTrimItemRow[]
   other: CustomerQuoteOtherRow[]
 }
@@ -439,6 +494,7 @@ export type EstimateCustomerSendCalculatedData = {
   quoteDoorScopes: CustomerQuoteDoorScopeRow[]
   quoteDrywallScopes?: CustomerQuoteDrywallScopeRow[]
   quoteAccessFees: CustomerQuoteAccessFeeRow[]
+  quotePrejobRows: CustomerQuotePrejobRow[]
   quoteOtherRows: CustomerQuoteOtherRow[]
   pricingSummary: CustomerEstimatePricingSummary | null
 }

@@ -21,6 +21,7 @@ import { EstimateV2DetailsMaterialTable } from './EstimateV2DetailsMaterialTable
 import { EstimateV2DetailsRollerRows } from './EstimateV2DetailsRollerRows'
 import { EstimateV2DetailsSummaryRail } from './EstimateV2DetailsSummaryRail'
 import { EstimateV2DetailsAccessFees } from './EstimateV2DetailsAccessFees'
+import { EstimateV2DetailsPrejobTrips } from './EstimateV2DetailsPrejobTrips'
 import { useEstimateV2DetailsPage } from '../_state/useEstimateV2DetailsPage'
 import { DETAILS_UNSAVED_CHANGES_MESSAGE } from '../_state/useEstimateV2DetailsController'
 import { formatDetailsNumber } from '../_lib/estimateV2DetailsShared'
@@ -145,6 +146,18 @@ export function EstimateV2DetailsPageContent({
               onAdd={actions.addAccessFee}
               onUpdate={actions.updateAccessFee}
               onRemove={actions.removeAccessFee}
+            />
+          </CrmSectionCard>
+
+          <CrmSectionCard
+            title="Prejob Trips"
+            description="Estimate-level prep trips before painting. Costs roll into the customer-visible quote total."
+          >
+            <EstimateV2DetailsPrejobTrips
+              vm={vm.prejobTrips}
+              onAdd={actions.addPrejobTrip}
+              onUpdate={actions.updatePrejobTrip}
+              onRemove={actions.removePrejobTrip}
             />
           </CrmSectionCard>
 

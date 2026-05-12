@@ -22,6 +22,7 @@ export function applyEstimateV2PreparedSaveCollections(
   state.setDoorScopes(prepared.collections.doorScopes ?? [])
   state.setDrywallRepairs(prepared.collections.drywallRepairs ?? [])
   state.setAccessFees(prepared.collections.accessFees ?? [])
+  state.setPrejobTrips(prepared.collections.prejobTrips ?? [])
   state.setOtherItems(prepared.collections.otherItems ?? [])
 }
 

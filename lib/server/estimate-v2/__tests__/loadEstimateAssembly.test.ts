@@ -170,6 +170,7 @@ describe('loadEstimateV2Response', () => {
       drywallRepairs: [{ id: 'drywall-repair-raw' }],
       accessFees: [{ id: 'fee-1' }],
       other: [{ id: 'other-1' }],
+      prejob: [{ id: 'prejob-1' }],
       orgDefaults: null,
     })
     expect(mocks.loadEstimateTemplateSettings).toHaveBeenCalledWith({

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routeHandlerMocks = vi.hoisted(() => ({
@@ -446,6 +446,10 @@ describe('estimate and quote route delegation', () => {
       const contents = readFileSync(routeFile, 'utf8')
       expect(contents).not.toMatch(/from ['"].*repository/)
     }
+  })
+
+  it('keeps estimate initialization in the collection creation flow instead of a seed route', () => {
+    expect(existsSync('app/api/estimates/[id]/seed/route.ts')).toBe(false)
   })
 
   it('delegates estimate and quote public read routes to the shared estimate portal service', async () => {

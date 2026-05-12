@@ -6,6 +6,7 @@ import type {
   EstimateV2DrywallRepairDraft,
   EstimateV2JobSettingsDraft,
   EstimateV2OtherItemDraft,
+  EstimateV2PrejobTripDraft,
   EstimateV2OtherRollupTarget,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
@@ -173,7 +174,8 @@ export function buildEstimateV2SavePayload(
   doorScopes: EstimateV2DoorScopeDraft[] = [],
   drywallRepairs: EstimateV2DrywallRepairDraft[] = [],
   accessFees: EstimateV2AccessFeeDraft[] = [],
-  otherItems: EstimateV2OtherItemDraft[] = []
+  otherItems: EstimateV2OtherItemDraft[] = [],
+  prejobTrips: EstimateV2PrejobTripDraft[] = []
 ): EstimateV2SavePayload {
   // Client save payloads persist the editor's current condition snapshot; server calculation
   // entry points still recompute canonical factors from selections and catalogs before engines run.
@@ -542,6 +544,20 @@ export function buildEstimateV2SavePayload(
     }))
     .filter((row) => row.access_fee_id)
 
+  const orderedPrejob = sortByPosition(prejobTrips)
+    .map((row, index) => ({
+      id: row.id,
+      room_id: toNullableText(row.roomId),
+      position: index,
+      active: row.include,
+      trip_name: toNullableText(row.tripName),
+      trip_num: toNullableTrimmedDraftNumber(row.tripCount),
+      trip_rate: toNullableTrimmedDraftNumber(row.tripRate),
+      manual_adjustment: toNullableTrimmedDraftNumber(row.manualAdjustment),
+      notes: toNullableText(row.notes),
+    }))
+    .filter((row) => row.trip_name || row.trip_num != null || row.trip_rate != null || row.manual_adjustment != null || row.notes)
+
   const legacyRollupScope = (target: EstimateV2OtherRollupTarget) => {
     if (target === 'ceilings') return 'Ceilings'
     if (target === 'trim' || target === 'doors') return 'Trim'
@@ -606,6 +622,7 @@ export function buildEstimateV2SavePayload(
     drywall_repairs: orderedDrywallRepairs,
     rollers: orderedRollers,
     access_fees: orderedAccessFees,
+    prejob: orderedPrejob,
     other: orderedOther,
   }
 }

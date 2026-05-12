@@ -4,6 +4,7 @@ import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2JobDefaultProducts,
   EstimateV2PaintProductOption,
+  EstimateV2PrejobTripDraft,
   EstimateV2PricingSummary,
   EstimateV2RoomDraft,
   EstimateV2RollerDraft,
@@ -22,6 +23,10 @@ import {
   buildEstimateV2DetailsAccessFeesVm,
   type DetailsAccessFeesVm,
 } from './estimateV2DetailsAccessFees'
+import {
+  buildEstimateV2DetailsPrejobTripsVm,
+  type DetailsPrejobTripsVm,
+} from './estimateV2DetailsPrejobTrips'
 import {
   createAggregateRow,
   createWallRows,
@@ -205,6 +210,7 @@ export type EstimateV2DetailsVm = {
   hasTrim: boolean
   conditions: DetailsConditionsVm
   accessFees: DetailsAccessFeesVm
+  prejobTrips: DetailsPrejobTripsVm
 }
 
 export type BuildDetailsVmParams = {
@@ -228,6 +234,7 @@ export type BuildDetailsVmParams = {
   rollerOptionsState?: DetailsRollerOptionsState
   rollers: EstimateV2RollerDraft[]
   accessFees?: EstimateV2AccessFeeDraft[]
+  prejobTrips?: EstimateV2PrejobTripDraft[]
   accessFeeCatalog?: EstimateV2AccessFeeOption[]
   conditionModifiers?: EstimateV2ConditionModifier[]
   conditionSelections?: EstimateV2ConditionSelections
@@ -488,6 +495,10 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     rooms: params.rooms,
     pricingSummary: params.pricingSummary,
   })
+  const prejobTrips = buildEstimateV2DetailsPrejobTripsVm({
+    prejobTrips: params.prejobTrips ?? [],
+    rooms: params.rooms,
+  })
 
   return {
     crewSize: params.crewSize ?? 1,
@@ -497,5 +508,6 @@ export function buildEstimateV2DetailsVm(params: BuildDetailsVmParams): Estimate
     ...totals,
     conditions,
     accessFees,
+    prejobTrips,
   }
 }

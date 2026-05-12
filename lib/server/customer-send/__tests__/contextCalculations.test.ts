@@ -156,6 +156,7 @@ describe('customer send context calculations', () => {
       otherCalculations: {
         scopes: [{ id: 'other-1', effective_total: 85, pricing_mode: 'fixed' }],
       },
+      prejobCalculations: { scopes: [] },
       pricingSummary: { finalTotal: 3200 },
     })
   })
@@ -186,6 +187,7 @@ describe('customer send context calculations', () => {
       drywallRepairs: baseResources.drywallRepairs,
       accessFees: baseResources.accessFees,
       other: baseResources.other,
+      prejob: [],
       orgDefaults: baseResources.settingsRow,
     })
     expect(result.data).toEqual({
@@ -205,6 +207,7 @@ describe('customer send context calculations', () => {
           overridden: false,
         }),
       ],
+      quotePrejobRows: [],
       quoteOtherRows: [
         expect.objectContaining({
           id: 'other-1',
@@ -324,6 +327,7 @@ describe('customer send context calculations', () => {
       drywallCalculations: { scopes: [] },
       accessFeeCalculation: { rows: [] },
       otherCalculations: { scopes: [] },
+      prejobCalculations: { scopes: [] },
       pricingSummary: { finalTotal: 1010 },
     })
 
@@ -374,6 +378,81 @@ describe('customer send context calculations', () => {
     expect(result.data.quoteWallScopes[0]).not.toHaveProperty('paint_prod_rate_sqft_per_hour')
     expect(result.data.quoteTrimScopes[0]).not.toHaveProperty('raw_measurement')
     expect(result.data.pricingSummary?.finalTotal).toBe(1010)
+  })
+
+  it('derives customer-send prejob rows from canonical calculated prejob scopes', async () => {
+    const rawResources: EstimateCustomerSendRawResources = {
+      ...baseResources,
+      prejob: [
+        {
+          id: 'prejob-1',
+          room_id: 'room-1',
+          position: 0,
+          active: 'Y',
+          trip_name: 'Wallpaper prep',
+          trip_num: 2,
+          trip_rate: 75,
+          manual_adjustment: 25,
+          notes: 'Calculated row should survive',
+        },
+      ],
+    }
+    mockLoadCalculatedEstimateV2Artifacts.mockResolvedValue({
+      quoteWallScopes: [],
+      quoteCeilingScopes: [],
+      quoteTrimScopes: [],
+      quoteDoorScopes: [],
+      drywallCalculations: { scopes: [] },
+      accessFeeCalculation: { rows: [] },
+      otherCalculations: { scopes: [] },
+      prejobCalculations: {
+        scopes: [
+          {
+            id: 'prejob-1',
+            room_id: 'ROOM-1',
+            position: 0,
+            include: 'Y',
+            label: 'Wallpaper prep',
+            trip_count: 2,
+            trip_rate: 75,
+            manual_adjustment: 25,
+            calculated_total: 150,
+            raw_total: 175,
+            effective_total: 175,
+          },
+        ],
+      },
+      pricingSummary: { finalTotal: 175 },
+    })
+
+    const result = await deriveEstimateCustomerSendCalculatedData(rawResources, {
+      requestOrigin: 'https://example.test',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.message)
+    expect(mockLoadCalculatedEstimateV2Artifacts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prejob: rawResources.prejob,
+      })
+    )
+    expect(result.data.quotePrejobRows).toHaveLength(1)
+    const row = result.data.quotePrejobRows[0]
+    expect(row?.id).toBe('prejob-1')
+    expect(row?.room_id).toBe('ROOM-1')
+    expect(row?.include).toBe('Y')
+    expect(row?.trip_name ?? row?.label).toBe('Wallpaper prep')
+    expect(row?.trip_num).toBe(2)
+    expect(row?.trip_rate).toBe(75)
+    expect(row?.manual_adjustment).toBe(25)
+    expect(row?.calculated_total).toBe(150)
+    expect(row?.raw_total).toBe(175)
+    expect(row?.effective_total).toBe(175)
+    expect(row?.final_total).toBe(175)
+    expect(row?.notes).toBe('Calculated row should survive')
   })
 
   it('keeps customer-send calculated rows aligned with canonical load calculation totals', async () => {

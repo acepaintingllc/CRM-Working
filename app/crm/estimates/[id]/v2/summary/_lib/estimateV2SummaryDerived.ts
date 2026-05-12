@@ -931,6 +931,14 @@ export function buildPriceBreakdownRows(pricingSummary: EstimateV2PricingSummary
           },
         ]
       : []),
+    ...((pricingSummary?.prepTripCost ?? 0) > 0
+      ? [
+          {
+            label: 'Prejob Trips',
+            value: formatWholeDollar(pricingSummary?.prepTripCost ?? null),
+          },
+        ]
+      : []),
     {
       label: 'Labor Adjustment',
       value: formatWholeDollar(priceAdjustment),

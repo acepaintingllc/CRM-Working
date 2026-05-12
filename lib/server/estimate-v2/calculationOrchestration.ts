@@ -23,6 +23,7 @@ import {
   type V2WallSegmentSaveRow,
 } from '@/types/estimator/v2Boundary'
 import type { OtherCalculationRow } from '@/lib/estimator/other'
+import type { PrejobTripCalculationRow } from '@/lib/estimator/prejobTrips'
 import type { EstimateTemplateSettingsRow } from '../estimateTemplateSettings.ts'
 
 export type EstimateV2CalculationCatalogBundle = Awaited<ReturnType<typeof loadEstimateV2CalculationCatalogs>>
@@ -44,6 +45,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
   roomDoorScopes?: EstimateV2RawCalculationRows['roomDoorScopes']
   drywallRepairs?: EstimateV2RawCalculationRows['drywallRepairs']
   accessFees?: EstimateV2RawCalculationRows['accessFees']
+  prejob?: EstimateV2RawCalculationRows['prejob']
   other?: EstimateV2RawCalculationRows['other']
   orgDefaults: EstimateTemplateSettingsRow | null
 }) {
@@ -64,6 +66,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
     roomDoorScopes: params.roomDoorScopes,
     drywallRepairs: params.drywallRepairs,
     accessFees: params.accessFees,
+    prejob: params.prejob,
     other: params.other,
   })
 
@@ -79,6 +82,7 @@ export async function loadCalculatedEstimateV2Artifacts(params: {
     roomDoorScopes: calculationRows.roomDoorScopes,
     drywallRepairs: calculationRows.drywallRepairs,
     accessFees: calculationRows.accessFees,
+    prejob: calculationRows.prejob,
     other: calculationRows.other,
     orgDefaults: params.orgDefaults,
   })
@@ -101,6 +105,7 @@ export function calculateEstimateV2ArtifactsFromPayload(params: {
     roomDoorScopes: params.payload.room_door_scopes ?? [],
     drywallRepairs: params.payload.drywall_repairs ?? [],
     accessFees: params.payload.access_fees ?? [],
+    prejob: params.payload.prejob ?? [],
     other: params.payload.other ?? [],
     orgDefaults: params.orgDefaults,
   })
@@ -118,6 +123,7 @@ export function calculateEstimateV2ArtifactsWithCatalogs(params: {
   roomDoorScopes?: V2DoorScopeSaveRow[]
   drywallRepairs?: V2DrywallRepairSaveRow[]
   accessFees?: EstimateV2AccessFeeCalculationInputRow[]
+  prejob?: PrejobTripCalculationRow[]
   other?: OtherCalculationRow[]
   orgDefaults: EstimateTemplateSettingsRow | null
   roomModeById?: Map<string, 'RECT' | 'SEG'>
@@ -134,6 +140,7 @@ export function calculateEstimateV2ArtifactsWithCatalogs(params: {
     roomDoorScopes: params.roomDoorScopes,
     drywallRepairs: params.drywallRepairs,
     accessFees: params.accessFees,
+    prejob: params.prejob,
     other: params.other,
     orgDefaults: params.orgDefaults,
     roomModeById: params.roomModeById,
@@ -200,6 +207,7 @@ export async function calculateEstimateV2ArtifactsForSave(params: {
   doorScopeRows: V2DoorScopeSaveRow[]
   drywallRepairRows: V2DrywallRepairSaveRow[]
   accessFeeRows?: EstimateV2AccessFeeCalculationInputRow[]
+  prejobRows?: PrejobTripCalculationRow[]
   otherRows?: OtherCalculationRow[]
   jobsettings: EstimateV2CalculationJobSettingsInput | undefined
   orgDefaults: EstimateTemplateSettingsRow | null
@@ -232,6 +240,7 @@ export async function calculateEstimateV2ArtifactsForSave(params: {
     roomDoorScopes: params.doorScopeRows,
     drywallRepairs: params.drywallRepairRows,
     accessFees: params.accessFeeRows ?? [],
+    prejob: params.prejobRows ?? [],
     other: params.otherRows ?? [],
     orgDefaults: params.orgDefaults,
     roomModeById,
