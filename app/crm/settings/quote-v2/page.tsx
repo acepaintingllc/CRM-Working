@@ -35,7 +35,7 @@ export default function QuoteV2SettingsPage() {
   const canSave = resource.hasLoaded && resource.dirty && !resource.saving && !validationError
 
   return (
-    <CrmPageShell className="max-w-5xl">
+    <CrmPageShell className="max-w-7xl">
       <CrmPageHeader
         eyebrow="Quote V2"
         title="Quote V2 Settings"
