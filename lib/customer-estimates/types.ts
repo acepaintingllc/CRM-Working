@@ -71,6 +71,11 @@ export type CustomerEstimateQuoteRow = {
 
 export type CustomerEstimatePricingSummary = {
   finalTotal: number | null
+  sharedAccessCost?: number | null
+  prepTripCost?: number | null
+  prePolicyTotal?: number | null
+  postLaborPolicyTotal?: number | null
+  minimumAdjustmentAmount?: number | null
 }
 
 export type CustomerEstimateDocumentSourceMeta = {

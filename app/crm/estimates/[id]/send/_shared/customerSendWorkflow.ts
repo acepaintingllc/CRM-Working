@@ -131,6 +131,17 @@ export function customerSendUrl(
   return routeFamily.customerSendApiHref(estimateId, { catalogSource })
 }
 
+function customerSendReloadUrl(
+  estimateId: string,
+  catalogSource: CustomerSendRouteCatalogSource | undefined,
+  routeFamily: EstimateRouteFamily,
+  hard?: boolean
+) {
+  const url = customerSendUrl(estimateId, catalogSource, routeFamily)
+  if (!hard) return url
+  return `${url}${url.includes('?') ? '&' : '?'}refresh=1`
+}
+
 export function sectionDraftText(
   draft: Record<string, unknown> | null | undefined,
   key: CustomerEstimateSectionKey
@@ -364,7 +375,7 @@ export function useCustomerSendWorkflow<TForm extends CustomerSendFormBase>({
       let payload: CustomerSendPageData
       try {
         payload = await loadCustomerSendPage<CustomerSendPageData>(
-          customerSendUrl(estimateId, catalogSource, routeFamily)
+          customerSendReloadUrl(estimateId, catalogSource, routeFamily, options?.hard)
         )
       } catch (loadError) {
         if (!mountedRef.current) return false

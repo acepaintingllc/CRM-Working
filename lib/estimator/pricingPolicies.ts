@@ -33,7 +33,7 @@ export type EngineOutput = {
   }
 }
 
-export type EstimatePricingEngineKind = 'walls' | 'ceilings' | 'trim' | 'drywall' | 'doors' | 'other'
+export type EstimatePricingEngineKind = 'walls' | 'ceilings' | 'trim' | 'drywall' | 'doors' | 'other' | 'prejob'
 
 export type EstimatePricingEngineInput = {
   kind: EstimatePricingEngineKind
@@ -112,6 +112,7 @@ export type EstimatePricingSummary = {
   primerMaterialCost: number
   supplyCost: number
   sharedAccessCost: number
+  prepTripCost: number
   access_fee_total: number
   accessFeeAllocation: AccessFeePricingAllocation
   prePolicyTotal: number
@@ -410,6 +411,17 @@ export function buildEstimatePricingSummaryFromEngines(
   }
   const supplyCost = round2(areaSupplyCost + perColorSupplyCost + extraSupplyCost)
   const sharedAccessCost = round2(Math.max(0, accessFees?.total ?? 0))
+  const prepTripCost = round2(
+    engineInputs
+      .filter((engine) => engine.kind === 'prejob')
+      .reduce(
+        (sum, engine) =>
+          sum +
+          engine.output.room_totals.reduce((roomSum, row) => roomSum + row.effective_total, 0) +
+          Math.max(0, engine.output.job_level_total ?? 0),
+        0
+      )
+  )
   const accessAllocationResult = allocateAccessFeesByEligibleScope({
     accessFeeTotal: sharedAccessCost,
     scopes: accessFees?.scopes ?? [],
@@ -444,7 +456,7 @@ export function buildEstimatePricingSummaryFromEngines(
   }))
   const jobLevelTotal = round2(
     engineInputs.reduce((sum, engine) => {
-      if (engine.kind !== 'other') return sum
+      if (engine.kind !== 'other' && engine.kind !== 'prejob') return sum
       return sum + Math.max(0, engine.output.job_level_total ?? 0)
     }, 0)
   )
@@ -471,6 +483,7 @@ export function buildEstimatePricingSummaryFromEngines(
     primerMaterialCost: round2(primerMaterialCost),
     supplyCost,
     sharedAccessCost,
+    prepTripCost,
     access_fee_total: sharedAccessCost,
     accessFeeAllocation,
     prePolicyTotal,

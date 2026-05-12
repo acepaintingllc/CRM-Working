@@ -6,6 +6,7 @@ import type {
   ConditionLevel,
   EstimateV2AccessFeeDraft,
   EstimateV2ConditionModifier,
+  EstimateV2PrejobTripDraft,
 } from '@/types/estimator/v2'
 import {
   applyCeilingGallonOverride,
@@ -28,6 +29,11 @@ import {
   removeAccessFeeDraft,
   updateAccessFeeDraft,
 } from '../_lib/estimateV2DetailsAccessFees'
+import {
+  addPrejobTripDraft,
+  removePrejobTripDraft,
+  updatePrejobTripDraft,
+} from '../_lib/estimateV2DetailsPrejobTrips'
 
 type DetailsCollectionSetter<TItem> = (value: TItem[] | ((prev: TItem[]) => TItem[])) => void
 
@@ -77,6 +83,12 @@ export function useEstimateV2DetailsMutations(params: {
     params.store
       .getState()
       .setDebugMeta((prev) => ({ ...prev, dirtySource: 'access-fees' }))
+  }, [params.store])
+
+  const recordPrejobDirtySource = useCallback(() => {
+    params.store
+      .getState()
+      .setDebugMeta((prev) => ({ ...prev, dirtySource: 'prejob-trips' }))
   }, [params.store])
 
   const setRollerRow = useCallback(
@@ -223,6 +235,27 @@ export function useEstimateV2DetailsMutations(params: {
     [params.store, recordAccessFeeDirtySource]
   )
 
+  const addPrejobTrip = useCallback(() => {
+    params.store.getState().setPrejobTrips((prev) => addPrejobTripDraft(prev))
+    recordPrejobDirtySource()
+  }, [params.store, recordPrejobDirtySource])
+
+  const updatePrejobTrip = useCallback(
+    (rowId: string, patch: Partial<EstimateV2PrejobTripDraft>) => {
+      params.store.getState().setPrejobTrips((prev) => updatePrejobTripDraft(prev, rowId, patch))
+      recordPrejobDirtySource()
+    },
+    [params.store, recordPrejobDirtySource]
+  )
+
+  const removePrejobTrip = useCallback(
+    (rowId: string) => {
+      params.store.getState().setPrejobTrips((prev) => removePrejobTripDraft(prev, rowId))
+      recordPrejobDirtySource()
+    },
+    [params.store, recordPrejobDirtySource]
+  )
+
   return {
     setCrewSize,
     setRollerRow,
@@ -236,6 +269,9 @@ export function useEstimateV2DetailsMutations(params: {
     addAccessFee,
     updateAccessFee,
     removeAccessFee,
+    addPrejobTrip,
+    updatePrejobTrip,
+    removePrejobTrip,
   }
 }
 

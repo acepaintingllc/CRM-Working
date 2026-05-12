@@ -8,6 +8,7 @@ import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import { asText } from './document'
 import type {
   CustomerSendDraft,
+  CustomerSendOperationalSnapshot,
   CustomerSendPersistedPdf,
   CustomerSendStoredSnapshot,
   EstimatePublicVersionRow,
@@ -83,7 +84,7 @@ export async function saveCustomerSendDraftVersion(params: {
   userId: string
   draft: CustomerSendDraft
   document: CustomerEstimateDocument
-  operationalSnapshot?: Record<string, unknown>
+  operationalSnapshot?: CustomerSendOperationalSnapshot
   latestDraft: EstimatePublicVersionRow | null
   latestVersion: EstimatePublicVersionRow | null
 }): Promise<ServiceResult<EstimatePublicVersionRow>> {

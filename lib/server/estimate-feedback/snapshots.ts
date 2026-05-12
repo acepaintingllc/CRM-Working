@@ -1,4 +1,5 @@
 import { asText, type UnsafeRecord as Unsafe } from '../../estimator/parsing.ts'
+import { calculatePrejobTrips } from '../../estimator/prejobTrips.ts'
 import {
   readEstimatePublicPersistedSnapshotState,
   type EstimatePublicPersistedSnapshot,
@@ -6,6 +7,14 @@ import {
 import { supabaseAdmin } from '../org.ts'
 import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
 import type { EstimateV2GetResponse } from '../../../types/estimator/v2.ts'
+import type {
+  AcceptedEstimateOperationalSourcePayload,
+  AcceptedEstimateSourcePublicVersion,
+} from '../accepted-estimates/types.ts'
+import {
+  ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_KIND,
+  ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_VERSION,
+} from '../accepted-estimates/types.ts'
 
 type SnapshotReason = 'accepted' | 'manual_sold' | 'backfill'
 
@@ -41,7 +50,7 @@ type SnapshotLineRow = {
   job_id: string
   estimate_id: string
   line_key: string
-  line_kind: 'walls' | 'ceilings' | 'trim' | 'doors' | 'drywall' | 'other' | 'access' | 'policy' | 'summary'
+  line_kind: 'walls' | 'ceilings' | 'trim' | 'doors' | 'drywall' | 'other' | 'access' | 'prejob' | 'policy' | 'summary'
   room_id: string | null
   source_table: string | null
   source_row_id: string | null
@@ -90,6 +99,30 @@ function hasAcceptedSnapshotPublicVersionDetails(publicVersion: Unsafe | null) {
     'public_token' in publicVersion &&
     Boolean(asText(publicVersion.accepted_at)) &&
     'acceptance_json' in publicVersion
+  )
+}
+
+function hasAcceptedInternalOperationalEstimate(value: unknown) {
+  if (!isRecord(value)) return false
+  const inputs = isRecord(value.inputs) ? value.inputs : null
+  const pricing = isRecord(value.pricing) ? value.pricing : null
+  return (
+    !!inputs &&
+    Array.isArray(inputs.rooms) &&
+    Array.isArray(inputs.room_wall_scopes) &&
+    Array.isArray(inputs.room_ceiling_scopes) &&
+    Array.isArray(inputs.room_trim_scopes) &&
+    Array.isArray(inputs.room_door_scopes) &&
+    Array.isArray(inputs.access_fees) &&
+    Array.isArray(inputs.prejob) &&
+    !!pricing &&
+    isRecord(pricing.pricing_summary) &&
+    typeof pricing.final_total !== 'undefined' &&
+    isRecord(pricing.wall_calculations) &&
+    isRecord(pricing.ceiling_calculations) &&
+    isRecord(pricing.trim_calculations) &&
+    isRecord(pricing.door_calculations) &&
+    isRecord(pricing.drywall_calculations)
   )
 }
 
@@ -160,6 +193,7 @@ function hasOperationalEstimateContent(estimateResponse: EstimateV2GetResponse |
     asArray(estimateResponse.drywall_calculations?.scopes).length > 0 ||
     asArray(inputs.other).length > 0 ||
     asArray(inputs.access_fees).length > 0 ||
+    asArray(inputs.prejob).length > 0 ||
     asNumber(pricing.effectiveLaborHours) > 0 ||
     asNumber(pricing.rawLaborHours) > 0 ||
     asNumber(pricing.paintMaterialCost) > 0 ||
@@ -190,6 +224,12 @@ function sumRows(rows: Unsafe[], key: string) {
   return rows.reduce((sum, row) => sum + asNumber(row[key]), 0)
 }
 
+function asNullableNumber(value: unknown) {
+  if (value == null || value === '') return null
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
 function rowLabel(row: Unsafe, fallback: string) {
   return (
     asText(row.scope_name) ||
@@ -203,6 +243,39 @@ function rowLabel(row: Unsafe, fallback: string) {
 
 function sourceId(row: Unsafe) {
   return asText(row.id) || null
+}
+
+function isIncludedRow(row: Unsafe) {
+  const include = asText(row.include || row.active).toUpperCase()
+  return include !== 'N' && include !== 'FALSE' && include !== '0'
+}
+
+function canCalculateLegacyPrejobSnapshotRow(row: Unsafe) {
+  return asNullableNumber(row.trip_num) != null && asNullableNumber(row.trip_rate) != null
+}
+
+function enrichLegacyPrejobSnapshotRows(rows: Unsafe[]) {
+  return rows.map((row, index) => {
+    if (asNullableNumber(row.effective_total) != null || asNullableNumber(row.total) != null) {
+      return row
+    }
+    if (!canCalculateLegacyPrejobSnapshotRow(row)) return row
+
+    // Compatibility guard for already-persisted accepted artifacts. Canonical
+    // prejob pricing remains owned by lib/estimator/prejobTrips.ts.
+    const calculated = calculatePrejobTrips({
+      rows: [{ ...row, active: isIncludedRow(row) ? 'Y' : 'N', position: index }],
+    }).scopes[0]
+    if (!calculated) return row
+
+    return {
+      ...row,
+      calculated_total: row.calculated_total ?? calculated.calculated_total,
+      raw_total: row.raw_total ?? calculated.raw_total,
+      effective_total: row.effective_total ?? calculated.effective_total,
+      final_total: row.final_total ?? calculated.effective_total,
+    } satisfies Unsafe
+  })
 }
 
 function scopeLine(params: {
@@ -271,6 +344,39 @@ function accessLine(params: {
   } satisfies SnapshotLineRow
 }
 
+function prejobLine(params: {
+  orgId: string
+  jobId: string
+  estimateId: string
+  row: Unsafe
+  index: number
+}) {
+  return {
+    org_id: params.orgId,
+    job_id: params.jobId,
+    estimate_id: params.estimateId,
+    line_key: `prejob:${sourceId(params.row) ?? params.index}`,
+    line_kind: 'prejob',
+    room_id: asText(params.row.room_id) || null,
+    source_table: 'estimate_prejob',
+    source_row_id: sourceId(params.row),
+    label:
+      asText(params.row.trip_name) ||
+      asText(params.row.template_label) ||
+      asText(params.row.label) ||
+      `Pre-job trip ${params.index + 1}`,
+    position: params.index,
+    estimated_labor_hours: asNumber(params.row.trip_hours),
+    estimated_paint_gallons: 0,
+    estimated_primer_gallons: 0,
+    estimated_material_cost: 0,
+    estimated_supply_cost: 0,
+    estimated_total: asNumber(params.row.effective_total ?? params.row.total),
+    assumptions_json: {},
+    output_json: jsonClone(params.row),
+  } satisfies SnapshotLineRow
+}
+
 function summaryLine(params: {
   orgId: string
   jobId: string
@@ -318,6 +424,13 @@ export function buildEstimateSnapshotRows(params: {
   const drywall = asArray(params.estimateResponse.drywall_calculations?.scopes)
   const other = asArray((params.estimateResponse.inputs as Unsafe).other)
   const accessFees = asArray((params.estimateResponse.inputs as Unsafe).access_fees)
+  const prejob = enrichLegacyPrejobSnapshotRows(
+    asArray((params.estimateResponse.inputs as Unsafe).prejob)
+  )
+  const snapshotInputs = {
+    ...(inputs as Unsafe),
+    prejob,
+  }
   const allScopeRows = [...walls, ...ceilings, ...trim, ...doors, ...drywall, ...other]
   const jobId = asText(estimate.job_id)
   const estimateId = asText(estimate.id)
@@ -334,23 +447,34 @@ export function buildEstimateSnapshotRows(params: {
   const internalOperationalPricing = {
     pricing_summary: pricing,
     final_total: asNumber(pricing.finalTotal),
+    wall_calculations: params.estimateResponse.wall_calculations ?? {},
+    ceiling_calculations: params.estimateResponse.ceiling_calculations ?? {},
+    trim_calculations: params.estimateResponse.trim_calculations ?? {},
+    door_calculations: params.estimateResponse.door_calculations ?? {},
+    drywall_calculations: params.estimateResponse.drywall_calculations ?? {},
+    trim_paint: params.estimateResponse.trim_paint ?? null,
   }
+  const acceptedPublicVersion = {
+    ...(params.publicVersion ?? {}),
+    version_number: params.publicVersion?.version_number,
+    public_token: params.publicVersion?.public_token,
+    accepted_at: params.publicVersion?.accepted_at,
+    acceptance_json: params.publicVersion?.acceptance_json,
+    snapshot_json: acceptedCustomerArtifact,
+  } satisfies AcceptedEstimateSourcePublicVersion
   const sourcePayload = {
+    artifact_kind: ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_KIND,
+    artifact_version: ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_VERSION,
     estimate,
     job: params.job,
-    accepted_public_version: params.publicVersion
-      ? {
-          ...params.publicVersion,
-          snapshot_json: acceptedCustomerArtifact,
-        }
-      : null,
+    accepted_public_version: acceptedPublicVersion,
     customer_artifact: acceptedCustomerArtifact,
     customer_visible_source: 'customer_artifact.document',
     internal_operational_estimate: {
-      inputs,
+      inputs: snapshotInputs as AcceptedEstimateOperationalSourcePayload['internal_operational_estimate']['inputs'],
       pricing: internalOperationalPricing,
     },
-  }
+  } satisfies AcceptedEstimateOperationalSourcePayload
   const snapshot: SnapshotRow = {
     org_id: params.orgId,
     job_id: jobId,
@@ -467,6 +591,15 @@ export function buildEstimateSnapshotRows(params: {
         index: 6_000 + index,
       })
     ),
+    ...prejob.map((row, index) =>
+      prejobLine({
+        orgId: params.orgId,
+        jobId,
+        estimateId,
+        row,
+        index: 7_000 + index,
+      })
+    ),
   ]
 
   return {
@@ -528,6 +661,9 @@ function hasCanonicalAcceptedSnapshotPayload(snapshot: Unsafe) {
     : null
 
   return (
+    asText(sourcePayload?.artifact_kind) === ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_KIND &&
+    asNumber(sourcePayload?.artifact_version) === ACCEPTED_ESTIMATE_OPERATIONAL_SOURCE_VERSION &&
+    hasAcceptedInternalOperationalEstimate(sourcePayload?.internal_operational_estimate) &&
     artifactState.kind === 'canonical' &&
     hasAcceptedSnapshotPublicVersionDetails(publicVersion) &&
     asNumber(snapshot.estimated_total) === asNumber(artifactState.snapshot.document.total)

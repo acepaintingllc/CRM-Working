@@ -33,6 +33,7 @@ export type JobAcceptedEstimateDetail = {
   estimated_labor_hours: number
   estimated_paint_gallons: number
   estimated_supplies_cost: number
+  estimated_access_cost: number
   estimated_other_cost: number
   final_total: number
 }

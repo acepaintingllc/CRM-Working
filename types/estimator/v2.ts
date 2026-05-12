@@ -207,6 +207,18 @@ export type EstimateV2WallCalculationsPayload = {
   scope_traces?: EstimateV2WallScopeTrace[]
 }
 
+export type EstimateV2PrejobTripDraft = {
+  id: string
+  roomId: string
+  tripName: string
+  tripCount: string
+  tripRate: string
+  manualAdjustment: string
+  notes: string
+  position: number
+  include: YN
+}
+
 export type EstimateV2TrimPaint = {
   paint_product_id: string | null
   paint_product_label: string | null
@@ -229,6 +241,7 @@ export type EstimateV2PricingSummary = {
   primerMaterialCost: number
   supplyCost: number
   sharedAccessCost?: number
+  prepTripCost?: number
   access_fee_total?: number
   accessFeeAllocation?: {
     walls: number
@@ -766,6 +779,17 @@ export type EstimateV2SavePayload = {
     notes: string | null
     position: number
     active: 'Y'
+  }>
+  prejob?: Array<{
+    id: string
+    room_id: string | null
+    position: number
+    active: 'Y' | 'N'
+    trip_name: string | null
+    trip_num: number | null
+    trip_rate: number | null
+    manual_adjustment: number | null
+    notes: string | null
   }>
   room_ceiling_scopes: EstimateV2CeilingScopeSaveRow[]
   ceiling_scope_segments: EstimateV2CeilingSegmentSaveRow[]

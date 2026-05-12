@@ -316,6 +316,11 @@ export function EstimateV2SummaryPageContent({
                 Access: {fmtUSD(data.pricing_summary?.sharedAccessCost ?? 0)}
               </CrmChip>
             ) : null}
+            {(data.pricing_summary?.prepTripCost ?? 0) > 0 ? (
+              <CrmChip tone="accent">
+                Prejob: {fmtUSD(data.pricing_summary?.prepTripCost ?? 0)}
+              </CrmChip>
+            ) : null}
             {data.estimate.updated_at ? (
               <CrmChip>
                 Updated{' '}

@@ -1,0 +1,275 @@
+/*
+Theme Name: Painting Business Starter
+Theme URI: https://example.com/
+Author: Codex
+Author URI: https://example.com/
+Description: A clean, responsive WordPress theme for painting businesses with services, portfolio, and quote CTA sections.
+Version: 1.0.0
+Requires at least: 6.0
+Tested up to: 6.7
+Requires PHP: 8.0
+License: GNU General Public License v2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: painting-business-starter
+*/
+
+:root {
+  --bg: #0f172a;
+  --bg-soft: #0b1224;
+  --panel: rgba(255, 255, 255, 0.05);
+  --text: #f8fafc;
+  --muted: #cbd5f5;
+  --accent: #fb923c;
+  --accent-dark: #ea580c;
+  --card: #111827;
+  --line: rgba(148, 163, 184, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Poppins", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(251, 146, 60, 0.17), transparent 38%),
+    radial-gradient(circle at 92% 5%, rgba(56, 189, 248, 0.1), transparent 32%),
+    linear-gradient(180deg, var(--bg), #050b1a 40%, #050811 100%);
+  min-height: 100vh;
+}
+
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; display: block; }
+
+.site-wrap { max-width: 1120px; margin: 0 auto; padding: 0 1.25rem; }
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+  background: rgba(11, 18, 36, 0.75);
+  border-bottom: 1px solid var(--line);
+}
+
+.nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 78px;
+}
+
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.brand-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), #fde68a);
+  display: inline-block;
+}
+
+.main-nav ul {
+  list-style: none;
+  display: flex;
+  margin: 0;
+  gap: 1.15rem;
+  padding: 0;
+}
+
+.main-nav a {
+  color: var(--text);
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid transparent;
+}
+
+.main-nav a:hover { border-color: var(--accent); color: #fde68a; }
+
+.menu-toggle {
+  display: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.hero {
+  padding: 7.5rem 0 4rem;
+  position: relative;
+}
+
+.hero-card {
+  background: linear-gradient(160deg, rgba(17, 24, 39, 0.85), rgba(17, 24, 39, 0.65));
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: clamp(1.4rem, 3vw, 2.6rem);
+  overflow: hidden;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: 1.1fr 0.9fr;
+}
+
+.hero h1 {
+  margin: 0;
+  line-height: 1.1;
+  font-size: clamp(2rem, 6vw, 3.4rem);
+}
+
+.hero p { color: var(--muted); max-width: 52ch; }
+
+.btn {
+  display: inline-block;
+  padding: 0.7rem 1.1rem;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #f97316);
+  color: #111827;
+}
+
+.btn-secondary {
+  border: 1px solid var(--line);
+  margin-left: 0.5rem;
+}
+
+.hero-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 1.2rem; }
+
+.hero-points { list-style: none; margin: 1.2rem 0 0; padding: 0; display: grid; gap: 0.5rem; color: #dbeafe; }
+
+.hero-badge {
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 0.4rem;
+}
+
+.hero-badge strong { font-size: 1.4rem; display: block; color: #fde68a; }
+
+.section {
+  margin-top: 3rem;
+  padding: 2.6rem 0;
+}
+
+.section-title {
+  margin: 0 0 1.1rem;
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+}
+
+.section-subtitle {
+  margin-top: 0;
+  color: var(--muted);
+  max-width: 65ch;
+}
+
+.cards-grid {
+  margin-top: 1.4rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.2rem;
+}
+
+.card h3 { margin-top: 0; }
+
+.card p { color: var(--muted); }
+
+.list { color: #dbeafe; }
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.tile {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #0a1228;
+}
+
+.tile img {
+  aspect-ratio: 16/11;
+  object-fit: cover;
+}
+
+.tile-caption {
+  padding: 0.75rem 1rem 1rem;
+  font-size: 0.95rem;
+  color: #e2e8f0;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 1rem;
+}
+
+form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+label { font-size: 0.95rem; color: #cbd5e1; }
+
+input, textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #0c162f;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+}
+
+textarea { min-height: 130px; resize: vertical; }
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  margin-top: 3.5rem;
+  padding: 1.5rem 0;
+  color: #9ca3af;
+}
+
+@media (max-width: 940px) {
+  .cards-grid,
+  .gallery,
+  .contact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-card { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .main-nav {
+    display: none;
+  }
+
+  .menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+  }
+}

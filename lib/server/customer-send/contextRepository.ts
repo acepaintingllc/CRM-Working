@@ -13,6 +13,7 @@ import type {
   CustomerQuoteDoorScopeRow,
   CustomerQuoteDrywallScopeRow,
   CustomerQuoteOtherRow,
+  CustomerQuotePrejobRow,
   CustomerQuotePaintScopeRow,
   CustomerQuoteRoomRow,
   CustomerQuoteSegmentRow,
@@ -228,6 +229,7 @@ export async function loadEstimateCustomerSendScopeResources(params: {
     doorScopesRes,
     drywallRepairsRes,
     accessFeesRes,
+    prejobRes,
     trimItemsRes,
     otherRes,
   ] = await Promise.all([
@@ -317,6 +319,13 @@ export async function loadEstimateCustomerSendScopeResources(params: {
       .eq('active', 'Y')
       .order('position', { ascending: true }),
     supabaseAdmin
+      .from('estimate_prejob')
+      .select('*')
+      .eq('org_id', params.orgId)
+      .eq('estimate_id', params.estimateId)
+      .eq('active', 'Y')
+      .order('position', { ascending: true }),
+    supabaseAdmin
       .from('estimate_trim_items')
       .select('*')
       .eq('org_id', params.orgId)
@@ -374,6 +383,8 @@ export async function loadEstimateCustomerSendScopeResources(params: {
     accessFeesRes as QueryResult<CustomerQuoteAccessFeeRow[]>
   )
   if ('error' in accessFees) return accessFees
+  const prejob = readCollectionQueryResult(prejobRes as QueryResult<CustomerQuotePrejobRow[]>)
+  if ('error' in prejob) return prejob
   const trimItems = readCollectionQueryResult(
     trimItemsRes as QueryResult<CustomerQuoteTrimItemRow[]>
   )
@@ -393,6 +404,7 @@ export async function loadEstimateCustomerSendScopeResources(params: {
     doorScopes,
     drywallRepairs,
     accessFees,
+    prejob,
     trimItems,
     other,
   }

@@ -30,6 +30,7 @@ import {
 import type {
   CustomerQuoteSourceModel,
   CustomerSendDraft,
+  CustomerSendOperationalSnapshot,
   CustomerSendScopeKey,
   CustomerSendCopy,
   CustomerSendMutationData,
@@ -38,6 +39,10 @@ import type {
   CustomerSendVersionArtifactState,
   EstimatePublicVersionRow,
 } from './types'
+import {
+  CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND,
+  CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION,
+} from './contextTypes'
 import {
   readCustomerSendVersionArtifactState,
   readCustomerSendVersionDraftInput,
@@ -50,22 +55,17 @@ type ResolvedCustomerSendPreview = {
   version: EstimatePublicVersionRow | null
 }
 
-const CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND = 'customer_send_operational_snapshot'
-const CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION = 1
-
 function readOperationalSnapshotEstimateUpdatedAt(snapshot: Record<string, unknown> | null | undefined) {
   const operational = snapshot?.operational_snapshot
-  if (!operational || typeof operational !== 'object' || Array.isArray(operational)) return ''
-  return asText((operational as Record<string, unknown>).source_estimate_updated_at)
+  if (!isCustomerSendOperationalSnapshot(operational)) return ''
+  return asText(operational.source_estimate_updated_at)
 }
 
 function readOperationalSnapshot(
   snapshot: Record<string, unknown> | null | undefined
-): Record<string, unknown> | undefined {
+): CustomerSendOperationalSnapshot | undefined {
   const operational = snapshot?.operational_snapshot
-  return operational && typeof operational === 'object' && !Array.isArray(operational)
-    ? (operational as Record<string, unknown>)
-    : undefined
+  return isCustomerSendOperationalSnapshot(operational) ? operational : undefined
 }
 
 function asNumber(value: unknown) {
@@ -77,6 +77,31 @@ function rowsOf(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value)
     ? value.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
     : []
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isCustomerSendOperationalSnapshot(
+  value: unknown
+): value is CustomerSendOperationalSnapshot {
+  if (!isRecord(value)) return false
+  const estimateResponse = value.estimate_response
+  if (!isRecord(estimateResponse)) return false
+  return (
+    value.artifact_kind === CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND &&
+    value.artifact_version === CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION &&
+    typeof value.source_estimate_updated_at === 'string' &&
+    isRecord(estimateResponse.estimate) &&
+    isRecord(estimateResponse.inputs) &&
+    isRecord(estimateResponse.wall_calculations) &&
+    isRecord(estimateResponse.ceiling_calculations) &&
+    isRecord(estimateResponse.trim_calculations) &&
+    isRecord(estimateResponse.door_calculations) &&
+    isRecord(estimateResponse.drywall_calculations) &&
+    isRecord(estimateResponse.pricing_summary)
+  )
 }
 
 function sumRows(rows: Record<string, unknown>[], key: string) {
@@ -93,34 +118,27 @@ function paintMaterialCost(rows: Record<string, unknown>[]) {
   )
 }
 
-function countOperationalSnapshotRooms(snapshot: Record<string, unknown>) {
-  const response = snapshot.estimate_response
-  if (!response || typeof response !== 'object' || Array.isArray(response)) return 0
-  const inputs = (response as Record<string, unknown>).inputs
-  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) return 0
-  return rowsOf((inputs as Record<string, unknown>).rooms).length
+function countOperationalSnapshotRooms(snapshot: CustomerSendOperationalSnapshot) {
+  return rowsOf(snapshot.estimate_response.inputs.rooms).length
 }
 
-function countOperationalSnapshotScopes(snapshot: Record<string, unknown>) {
-  const response = snapshot.estimate_response
-  if (!response || typeof response !== 'object' || Array.isArray(response)) return 0
-  const estimateResponse = response as Record<string, unknown>
+function countOperationalSnapshotPrejobRows(snapshot: CustomerSendOperationalSnapshot) {
+  return rowsOf(snapshot.estimate_response.inputs.prejob).length
+}
+
+function countOperationalSnapshotScopes(snapshot: CustomerSendOperationalSnapshot) {
+  const estimateResponse = snapshot.estimate_response
   return (
-    rowsOf((estimateResponse.wall_calculations as Record<string, unknown> | undefined)?.scopes).length +
-    rowsOf((estimateResponse.ceiling_calculations as Record<string, unknown> | undefined)?.scopes).length +
-    rowsOf((estimateResponse.trim_calculations as Record<string, unknown> | undefined)?.scopes).length +
-    rowsOf((estimateResponse.door_calculations as Record<string, unknown> | undefined)?.scopes).length +
-    rowsOf((estimateResponse.drywall_calculations as Record<string, unknown> | undefined)?.scopes).length
+    rowsOf(estimateResponse.wall_calculations.scopes).length +
+    rowsOf(estimateResponse.ceiling_calculations.scopes).length +
+    rowsOf(estimateResponse.trim_calculations.scopes).length +
+    rowsOf(estimateResponse.door_calculations.scopes).length +
+    rowsOf(estimateResponse.drywall_calculations.scopes).length
   )
 }
 
-function readOperationalSnapshotPricing(snapshot: Record<string, unknown>) {
-  const response = snapshot.estimate_response
-  if (!response || typeof response !== 'object' || Array.isArray(response)) return {}
-  const pricing = (response as Record<string, unknown>).pricing_summary
-  return pricing && typeof pricing === 'object' && !Array.isArray(pricing)
-    ? (pricing as Record<string, unknown>)
-    : {}
+function readOperationalSnapshotPricing(snapshot: CustomerSendOperationalSnapshot) {
+  return snapshot.estimate_response.pricing_summary
 }
 
 function countContextPersistedOperationalRows(context: CustomerQuoteSourceModel) {
@@ -133,15 +151,16 @@ function countContextPersistedOperationalRows(context: CustomerQuoteSourceModel)
     rowsOf(inputs.room_door_scopes).length +
     rowsOf(inputs.drywall_repairs).length +
     rowsOf(inputs.other).length +
-    rowsOf(inputs.access_fees).length
+    rowsOf(inputs.access_fees).length +
+    rowsOf(inputs.prejob).length
   )
 }
 
 function validateCustomerSendOperationalSnapshot(params: {
   context: CustomerQuoteSourceModel
   document: CustomerEstimateDocument
-  operationalSnapshot: Record<string, unknown>
-}): ServiceResult<Record<string, unknown>> {
+  operationalSnapshot: CustomerSendOperationalSnapshot
+}): ServiceResult<CustomerSendOperationalSnapshot> {
   const total = asNumber(params.document.total ?? params.context.pricing_summary?.finalTotal)
   if (total <= 0) return okResult(params.operationalSnapshot)
 
@@ -152,11 +171,13 @@ function validateCustomerSendOperationalSnapshot(params: {
     asNumber(pricing.paintMaterialCost) > 0 ||
     asNumber(pricing.primerMaterialCost) > 0 ||
     asNumber(pricing.supplyCost) > 0 ||
-    asNumber(pricing.sharedAccessCost) > 0
+    asNumber(pricing.sharedAccessCost) > 0 ||
+    asNumber(pricing.prepTripCost) > 0
 
   if (
     hasOperationalValue ||
     countOperationalSnapshotRooms(params.operationalSnapshot) > 0 ||
+    countOperationalSnapshotPrejobRows(params.operationalSnapshot) > 0 ||
     countOperationalSnapshotScopes(params.operationalSnapshot) > 0
   ) {
     return okResult(params.operationalSnapshot)
@@ -188,7 +209,7 @@ async function buildCustomerSendOperationalSnapshot(params: {
   userId: string
   estimateId: string
   context: CustomerQuoteSourceModel
-}): Promise<ServiceResult<Record<string, unknown>>> {
+}): Promise<ServiceResult<CustomerSendOperationalSnapshot>> {
   const inputs = params.context.inputs
   const wallRows = rowsOf(inputs.room_wall_scopes)
   const ceilingRows = rowsOf(inputs.room_ceiling_scopes)
@@ -204,7 +225,7 @@ async function buildCustomerSendOperationalSnapshot(params: {
     sumRows(allScopeRows, 'effective_primer_hours')
   const supplyCost = sumRows(allScopeRows, 'effective_supply_cost')
 
-  return okResult({
+  const operationalSnapshot: CustomerSendOperationalSnapshot = {
     artifact_kind: CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND,
     artifact_version: CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION,
     source_estimate_updated_at: asText(params.context.estimate.updated_at),
@@ -227,7 +248,9 @@ async function buildCustomerSendOperationalSnapshot(params: {
         sharedAccessCost: sumRows(accessRows, 'effective_total'),
       },
     },
-  })
+  }
+
+  return okResult(operationalSnapshot)
 }
 
 async function saveCustomerSendDraftVersionForCurrentContext(params: {
@@ -241,7 +264,7 @@ async function saveCustomerSendDraftVersionForCurrentContext(params: {
   latestDraft: EstimatePublicVersionRow | null
   latestVersion: EstimatePublicVersionRow | null
   context: CustomerQuoteSourceModel
-  existingOperationalSnapshot?: Record<string, unknown>
+  existingOperationalSnapshot?: CustomerSendOperationalSnapshot
 }) {
   const operationalSnapshot = params.existingOperationalSnapshot
     ? okResult(params.existingOperationalSnapshot)

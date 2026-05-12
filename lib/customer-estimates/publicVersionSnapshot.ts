@@ -2,6 +2,7 @@ import { ensureAssembledCustomerEstimateDocument } from './assemble.ts'
 import { asText } from './buildShared.ts'
 import { normalizeEstimatePublicAcceptanceRecord } from './publicAcceptance.ts'
 import type { CustomerEstimateDocument, EstimatePublicSnapshot, Unsafe } from './types'
+import type { CustomerSendOperationalSnapshot } from '@/lib/server/customer-send/contextTypes'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -14,7 +15,7 @@ export type EstimatePublicPersistedSnapshot = {
   document: CustomerEstimateDocument
   draft?: Record<string, unknown>
   pdf?: Record<string, unknown>
-  operational_snapshot?: Record<string, unknown>
+  operational_snapshot?: CustomerSendOperationalSnapshot | Record<string, unknown>
 }
 
 export type EstimatePublicPersistedSnapshotState =
@@ -139,7 +140,7 @@ function readPersistedSnapshotParts(snapshot: unknown): {
   documentRecord: UnknownRecord | null
   draft?: Record<string, unknown>
   pdf?: Record<string, unknown>
-  operationalSnapshot?: Record<string, unknown>
+  operationalSnapshot?: CustomerSendOperationalSnapshot | Record<string, unknown>
 } | null {
   const record = isRecord(snapshot) ? snapshot : null
   if (isCanonicalEstimatePublicPersistedSnapshotRecord(record)) {
@@ -325,7 +326,7 @@ export function buildEstimatePublicPersistedSnapshot(params: {
   document: CustomerEstimateDocument
   draft?: Record<string, unknown>
   pdf?: Record<string, unknown>
-  operationalSnapshot?: Record<string, unknown>
+  operationalSnapshot?: CustomerSendOperationalSnapshot | Record<string, unknown>
 }): EstimatePublicPersistedSnapshot {
   return {
     artifact_kind: ESTIMATE_PUBLIC_PERSISTED_SNAPSHOT_KIND,
@@ -391,7 +392,7 @@ export function buildEstimatePublicSnapshot(params: {
   document: CustomerEstimateDocument
   draft?: Record<string, unknown>
   pdf?: Record<string, unknown>
-  operationalSnapshot?: Record<string, unknown>
+  operationalSnapshot?: CustomerSendOperationalSnapshot | Record<string, unknown>
   publicUrl: string | null
 }): EstimatePublicSnapshot {
   return {

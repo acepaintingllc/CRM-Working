@@ -16,7 +16,7 @@ import {
 import {
   calculateEstimateV2ArtifactsFromPayload,
   type EstimateV2CalculationCatalogBundle,
-} from '../calculationOrchestration'
+} from '../calculationOrchestration.ts'
 import type { EstimateTemplateSettingsRow } from '../../estimateTemplateSettings'
 import type { EstimateV2Catalogs, EstimateV2PricingSummary, EstimateV2SavePayload } from '@/types/estimator/v2'
 
@@ -64,10 +64,15 @@ export type EstimateChainParityDbRows = {
   estimate_room_door_scopes: DbLikeRow[]
   estimate_drywall_repairs: DbLikeRow[]
   estimate_access_fees: DbLikeRow[]
+  estimate_prejob: DbLikeRow[]
   estimate_trim_items: DbLikeRow[]
   estimate_other: DbLikeRow[]
   estimate_public_versions: DbLikeRow[]
   estimate_version_rollups: DbLikeRow
+}
+
+type EstimateChainParityDbRowsOptions = {
+  rawPrejobRowIds?: string[]
 }
 
 type QueryChain = {
@@ -134,6 +139,7 @@ export function buildEstimateChainParityPayload(fixture: EstimateV2CanonicalFixt
     drywallRepairs: collections.drywallRepairs,
     rollers: collections.rollers,
     accessFees: collections.accessFees,
+    prejobTrips: collections.prejobTrips,
     otherItems: collections.otherItems,
   }).payload
 }
@@ -156,6 +162,30 @@ export function buildEstimateChainParityArtifacts(
 
   return {
     scenario,
+    fixture,
+    payload,
+    calculationArtifacts,
+  }
+}
+
+export function buildEstimateChainParityArtifactsFromFixture(
+  scenario: string,
+  fixture: EstimateV2CanonicalFixture,
+  overrides: {
+    payload?: EstimateV2SavePayload
+    catalogs?: EstimateV2Catalogs
+    orgDefaults?: EstimateTemplateSettingsRow | null
+  } = {}
+): EstimateChainParityFixtureArtifacts {
+  const payload = overrides.payload ?? buildEstimateChainParityPayload(fixture)
+  const calculationArtifacts = calculateEstimateV2ArtifactsFromPayload({
+    payload,
+    calculationCatalogs: toServerCatalogBundle(overrides.catalogs ?? fixture.editorState.meta.catalogs),
+    orgDefaults: overrides.orgDefaults ?? null,
+  })
+
+  return {
+    scenario: scenario as EstimateChainParityScenario,
     fixture,
     payload,
     calculationArtifacts,
@@ -277,6 +307,8 @@ function buildAccessFeeRows(params: {
         catalog_amount: row.catalogAmount,
         calculated_total: row.calculatedTotal,
         effective_total: row.total,
+        final_total: row.total,
+        override_total: row.overridden ? row.total : null,
         notes: row.notes || null,
         position: row.position,
         active: 'Y',
@@ -286,8 +318,51 @@ function buildAccessFeeRows(params: {
   )
 }
 
+function buildPrejobRows(params: {
+  rows: EstimateV2CalculationArtifacts['prejobCalculations']['scopes']
+  meta: DbLikeRow
+  rawRowIds?: string[]
+}): DbLikeRow[] {
+  const rawRowIds = new Set(params.rawRowIds ?? [])
+  return params.rows.map((row) =>
+    withRowMeta(
+      rawRowIds.has(row.id)
+        ? {
+            id: row.id,
+            room_id: row.room_id,
+            position: row.position,
+            active: row.include,
+            include: row.include,
+            trip_name: row.trip_name ?? row.label,
+            trip_num: row.trip_count,
+            trip_rate: row.trip_rate,
+            manual_adjustment: row.manual_adjustment,
+            notes: row.notes ?? null,
+          }
+        : {
+            id: row.id,
+            room_id: row.room_id,
+            position: row.position,
+            active: row.include,
+            include: row.include,
+            trip_name: row.trip_name ?? row.label,
+            trip_num: row.trip_count,
+            trip_rate: row.trip_rate,
+            manual_adjustment: row.manual_adjustment,
+            calculated_total: row.calculated_total,
+            raw_total: row.raw_total,
+            effective_total: row.effective_total,
+            final_total: row.effective_total,
+            notes: row.notes ?? null,
+          },
+      params.meta
+    )
+  )
+}
+
 export function buildEstimateChainParityDbRows(
-  artifacts: EstimateChainParityFixtureArtifacts
+  artifacts: EstimateChainParityFixtureArtifacts,
+  options: EstimateChainParityDbRowsOptions = {}
 ): EstimateChainParityDbRows {
   const estimate = requireFixtureMeta(artifacts.fixture.editorState.meta.estimate, 'estimate metadata')
   const job = requireFixtureMeta(artifacts.fixture.editorState.meta.job, 'job metadata')
@@ -353,6 +428,11 @@ export function buildEstimateChainParityDbRows(
     estimate_access_fees: buildAccessFeeRows({
       rows: artifacts.calculationArtifacts.accessFeeCalculation.rows,
       meta,
+    }),
+    estimate_prejob: buildPrejobRows({
+      rows: artifacts.calculationArtifacts.prejobCalculations.scopes,
+      meta,
+      rawRowIds: options.rawPrejobRowIds,
     }),
     estimate_trim_items: [],
     estimate_other: withRowsMeta(artifacts.calculationArtifacts.otherCalculations.scopes, meta),
@@ -443,6 +523,7 @@ export function buildEstimateChainParityTablePlan(rows: EstimateChainParityDbRow
   pushTablePlan(plan, 'estimate_room_door_scopes', queryResult(rows.estimate_room_door_scopes))
   pushTablePlan(plan, 'estimate_drywall_repairs', queryResult(rows.estimate_drywall_repairs))
   pushTablePlan(plan, 'estimate_access_fees', queryResult(rows.estimate_access_fees))
+  pushTablePlan(plan, 'estimate_prejob', queryResult(rows.estimate_prejob))
   pushTablePlan(plan, 'estimate_trim_items', queryResult(rows.estimate_trim_items))
   pushTablePlan(plan, 'estimate_other', queryResult(rows.estimate_other))
   pushTablePlan(plan, 'estimate_public_versions', queryResult(rows.estimate_public_versions))

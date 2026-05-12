@@ -22,6 +22,7 @@ import type {
   EstimateV2JobSettingsDraft,
   EstimateV2OtherItemDraft,
   EstimateV2PaintProductOption,
+  EstimateV2PrejobTripDraft,
   EstimateV2PricingSummary,
   EstimateV2ProductionRateOption,
   EstimateV2RoomDraft,
@@ -56,6 +57,7 @@ export type DirtySource =
   | 'doors'
   | 'drywall'
   | 'access-fees'
+  | 'prejob-trips'
   | 'other'
   | 'details-overrides'
   | 'job-settings'
@@ -94,6 +96,8 @@ export type EstimateV2EditorCollections = {
   setRollers: EstimateV2StateSetter<EstimateV2RollerDraft[]>
   accessFees: EstimateV2AccessFeeDraft[]
   setAccessFees: EstimateV2StateSetter<EstimateV2AccessFeeDraft[]>
+  prejobTrips: EstimateV2PrejobTripDraft[]
+  setPrejobTrips: EstimateV2StateSetter<EstimateV2PrejobTripDraft[]>
   otherItems: EstimateV2OtherItemDraft[]
   setOtherItems: EstimateV2StateSetter<EstimateV2OtherItemDraft[]>
 }

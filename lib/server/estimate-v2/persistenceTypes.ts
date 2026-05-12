@@ -156,7 +156,12 @@ export type EstimatePrejobPersistenceRow = EstimatePersistenceIdentity & {
   position: number
   category: string | null
   trip_name: string | null
+  room_id: string | null
   trip_num: number | null
+  trip_rate: number | null
+  manual_adjustment: number | null
+  calculated_total: number | null
+  effective_total: number | null
   rollup_scope: string | null
   man_trip_name: string | null
   man_qty: number | null

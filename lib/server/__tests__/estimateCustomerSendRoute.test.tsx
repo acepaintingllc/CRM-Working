@@ -119,6 +119,23 @@ describe('estimateCustomerSendRoute', () => {
     })
   })
 
+  it('bypasses persisted artifact preview for forced GET refreshes', async () => {
+    const response = await handleEstimateCustomerSendRouteGet(
+      new Request('http://localhost/api/estimates/estimate-1/customer-send?refresh=1'),
+      context
+    )
+
+    expect(mocks.loadEstimateCustomerSendContext).toHaveBeenCalledWith({
+      origin: 'http://localhost',
+      orgId: 'org-1',
+      userId: 'user-1',
+      estimateId: 'estimate-1',
+      operation: 'read',
+      allowPersistedArtifactPreview: false,
+    })
+    expect(response.status).toBe(200)
+  })
+
   it('returns { data, notice } for PUT success', async () => {
     const response = await handleEstimateCustomerSendRoutePut(
       new Request('http://localhost/api/estimates/estimate-1/customer-send', {

@@ -60,13 +60,14 @@ export async function handleEstimateCustomerSendRouteGet(
   if (!estimateId.ok) return estimateId.response
 
   const origin = new URL(request.url).origin
+  const forceLiveRefresh = new URL(request.url).searchParams.get('refresh') === '1'
   const contextResult = await loadCustomerSendContextResult({
     origin,
     orgId: auth.session.orgId,
     userId: auth.session.userId,
     estimateId: estimateId.value,
     operation: 'read',
-    allowPersistedArtifactPreview: true,
+    allowPersistedArtifactPreview: !forceLiveRefresh,
   })
   if (!contextResult.ok) return serviceResultDataResponse(contextResult)
 

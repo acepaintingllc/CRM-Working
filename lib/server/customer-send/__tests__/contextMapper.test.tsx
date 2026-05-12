@@ -89,6 +89,7 @@ const baseResources: EstimateCustomerSendRawResources = {
   trimScopes: [{ room_id: 'room-1' }],
   doorScopes: [{ room_id: 'room-1', door_type_id: 'DOOR_PANEL' }],
   accessFees: [{ id: 'fee-1' }],
+  prejob: [{ id: 'prejob-1', room_id: 'room-1', trip_name: 'Wallpaper prep', effective_total: 125 }],
   trimItems: [{ id: 'trim-1' }],
   other: [{ id: 'other-1' }],
   publicVersions: [],
@@ -102,6 +103,7 @@ const baseCalculated: EstimateCustomerSendCalculatedData = {
   quoteDoorScopes: [],
   quoteDrywallScopes: [],
   quoteAccessFees: [],
+  quotePrejobRows: [],
   quoteOtherRows: [],
   pricingSummary: { finalTotal: 2500 },
 }
@@ -225,6 +227,14 @@ describe('customer send context mapper', () => {
         quoteTrimScopes: [{ id: 'trim-calculated' }],
         quoteDoorScopes: [{ id: 'door-calculated' }],
         quoteAccessFees: [{ id: 'fee-calculated' }],
+        quotePrejobRows: [
+          {
+            id: 'prejob-calculated',
+            room_id: 'room-1',
+            trip_name: 'Wallpaper prep',
+            effective_total: 125,
+          },
+        ],
         quoteOtherRows: [{ id: 'other-calculated' }],
         pricingSummary: { finalTotal: 2500 },
       },
@@ -260,6 +270,14 @@ describe('customer send context mapper', () => {
     expect(context.inputs.access_fees).toEqual([
       expect.objectContaining({ id: 'fee-calculated' }),
     ])
+    expect(context.inputs.prejob).toEqual([
+      expect.objectContaining({
+        id: 'prejob-calculated',
+        room_id: 'room-1',
+        trip_name: 'Wallpaper prep',
+        effective_total: 125,
+      }),
+    ])
     expect(context.inputs.other).toEqual([
       expect.objectContaining({ id: 'other-calculated' }),
     ])
@@ -268,6 +286,68 @@ describe('customer send context mapper', () => {
     expect(context.latest_sent_version?.id).toBe('version-1')
     expect(context.latest_public_version?.id).toBe('version-2')
     expect(context.public_url).toBe('https://example.test/quote/token-1')
+  })
+
+  it('maps prejob inputs from calculated rows instead of raw resources', () => {
+    const context = buildSourceModel({
+      resources: {
+        prejob: [
+          {
+            id: 'prejob-raw',
+            room_id: 'room-1',
+            position: 0,
+            active: 'Y',
+            trip_name: 'Raw wallpaper prep',
+            trip_num: 2,
+            trip_rate: 75,
+            manual_adjustment: 25,
+            calculated_total: null,
+            effective_total: undefined,
+            notes: 'Raw note',
+          },
+        ],
+      },
+      calculated: {
+        quotePrejobRows: [
+          {
+            id: 'prejob-raw',
+            room_id: 'ROOM-1',
+            position: 0,
+            active: 'Y',
+            include: 'Y',
+            trip_name: 'Calculated wallpaper prep',
+            trip_num: 2,
+            trip_rate: 75,
+            manual_adjustment: 25,
+            calculated_total: 150,
+            raw_total: 175,
+            effective_total: 175,
+            notes: 'Calculated note',
+          },
+        ],
+      },
+    })
+
+    expect(context.inputs.prejob).toEqual([
+      expect.objectContaining({
+        id: 'prejob-raw',
+        room_id: 'ROOM-1',
+        position: 0,
+        active: 'Y',
+        include: 'Y',
+        trip_name: 'Calculated wallpaper prep',
+        trip_num: 2,
+        trip_rate: 75,
+        manual_adjustment: 25,
+        calculated_total: 150,
+        raw_total: 175,
+        effective_total: 175,
+        final_total: 175,
+        notes: 'Calculated note',
+      }),
+    ])
+    expect(context.inputs.prejob?.[0]?.effective_total).not.toBeNull()
+    expect(context.inputs.prejob?.[0]?.effective_total).not.toBe(0)
   })
 
   it('falls back to the rollup final total when recalculation cannot produce pricing', () => {
@@ -280,6 +360,7 @@ describe('customer send context mapper', () => {
         quoteTrimScopes: [],
         quoteDoorScopes: [],
         quoteAccessFees: [],
+        quotePrejobRows: [],
         quoteOtherRows: [],
         pricingSummary: null,
       },

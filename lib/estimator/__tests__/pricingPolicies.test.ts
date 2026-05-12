@@ -1059,6 +1059,38 @@ test('buildEstimatePricingSummary: no minimum adjustment when disabled', () => {
   assert.equal(result.finalTotal, result.postLaborPolicyTotal)
 })
 
+test('buildEstimatePricingSummaryFromEngines: includes prejob trips in canonical totals', () => {
+  const prejobOutput = {
+    scopes: [
+      {
+        include: 'Y' as const,
+        effective_paint_hours: 0,
+        effective_primer_hours: 0,
+        effective_paint_gallons: 0,
+        effective_primer_gallons: 0,
+        effective_supply_cost: 0,
+        effective_total: 175,
+      },
+    ],
+    room_totals: [{ room_id: 'R001', effective_total: 175 }],
+    job_level_total: 40,
+    per_color_supply_groups: [],
+    assumptions: mockAssumptions,
+  }
+  const result = buildEstimatePricingSummaryFromEngines(
+    [
+      { kind: 'walls', output: mockOutput },
+      { kind: 'prejob', output: prejobOutput },
+    ],
+    POLICY_DISABLED,
+    MIN_DISABLED
+  )
+
+  assert.equal(result.prepTripCost, 215)
+  assert.equal(result.prePolicyTotal, 717.5)
+  assert.equal(result.finalTotal, 717.5)
+})
+
 test('buildEstimatePricingSummary: minimum applied and allocated to rooms', () => {
   const min: JobMinimumSettings = { enabled: true, amount: 10000 }
   const result = buildEstimatePricingSummary([mockOutput], POLICY_DISABLED, min)

@@ -41,4 +41,13 @@
   - intended for direct navigation callers that need the browser redirected to the Drive `webViewLink`
   - on success it returns an HTTP redirect instead of a `{ data }` envelope
   - service/client data reads must use the normal envelope endpoints and shared jobs route helpers, not redirect navigation
+- `GET /api/jobs/[id]/work-order` returns `{ data: { current: JobWorkOrderRow | null } }`
+- `POST /api/jobs/[id]/work-order/generate` returns `{ data: JobWorkOrderRow, notice? }`
+- `POST /api/jobs/[id]/work-order/lock` returns `{ data: JobWorkOrderRow, notice? }`
+- `POST /api/jobs/[id]/work-order/void` returns `{ data: JobWorkOrderRow, notice? }`
+- `GET /api/jobs/[id]/invoice` returns `{ data: { current: JobInvoiceRow | null } }`
+- `POST /api/jobs/[id]/invoice/generate` returns `{ data: JobInvoiceRow, notice? }`
+- `PATCH /api/jobs/[id]/invoice` returns `{ data: JobInvoiceRow, notice? }`
+- `POST /api/jobs/[id]/invoice/send` returns `{ data: JobInvoiceRow, notice? }`
+- `POST /api/jobs/[id]/invoice/void` returns `{ data: JobInvoiceRow, notice? }`
 - Route handlers should not return bespoke `jobs`, `job`, or `ok` payloads for the jobs CRUD surface.

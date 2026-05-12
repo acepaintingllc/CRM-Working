@@ -25,6 +25,7 @@ import type {
   EstimateV2OtherCustomerVisibility,
   EstimateV2OtherPricingMode,
   EstimateV2OtherRollupTarget,
+  EstimateV2PrejobTripDraft,
   EstimateV2RollerDraft,
   EstimateV2RollerScope,
   EstimateV2RoomFlagDraft as RoomFlagDraft,
@@ -70,6 +71,7 @@ export type EstimateV2SanitizedLoadResult = {
     roomFlags: RoomFlagDraft[]
     rollers: EstimateV2RollerDraft[]
     accessFees: EstimateV2AccessFeeDraft[]
+    prejobTrips: EstimateV2PrejobTripDraft[]
     ceilingScopes: ReturnType<typeof normalizeCeilingScope>[]
     ceilingSegments: ReturnType<typeof normalizeCeilingSegment>[]
     trimScopes: ReturnType<typeof normalizeTrimScope>[]
@@ -251,6 +253,20 @@ function normalizeAccessFee(row: Unsafe, index: number): EstimateV2AccessFeeDraf
   }
 }
 
+function normalizePrejobTrip(row: Unsafe, index: number): EstimateV2PrejobTripDraft {
+  return {
+    id: asText(row.id) || `prejob-${index + 1}`,
+    roomId: asText(row.roomId ?? row.room_id).toUpperCase(),
+    tripName: asText(row.tripName ?? row.trip_name ?? row.man_trip_name ?? row.task),
+    tripCount: asText(row.tripCount ?? row.trip_num),
+    tripRate: asText(row.tripRate ?? row.trip_rate),
+    manualAdjustment: asText(row.manualAdjustment ?? row.manual_adjustment),
+    notes: asText(row.notes),
+    position: Number(row.position ?? index),
+    include: asText(row.include ?? row.active).toUpperCase() === 'N' ? 'N' : 'Y',
+  }
+}
+
 function normalizeOtherPricingMode(value: unknown): EstimateV2OtherPricingMode {
   const raw = asText(value).toLowerCase()
   if (raw === 'quantity_rate' || raw === 'labor' || raw === 'material_supply') return raw
@@ -395,6 +411,9 @@ export function sanitizeEstimateV2EditorLoad(params: {
       .map(normalizeAccessFee)
       .filter((row) => row.accessFeeId)
   )
+  const normalizedPrejobTrips = sortByPosition(
+    (estimatePayload.inputs.prejob ?? []).map(normalizePrejobTrip)
+  )
 
   const normalizedCeilingScopes = sortByPosition(
     (estimatePayload.inputs.room_ceiling_scopes ?? []).map((row, index) => {
@@ -492,6 +511,7 @@ export function sanitizeEstimateV2EditorLoad(params: {
     drywallRepairs: normalizedDrywallRepairs,
     rollers: normalizedRollers,
     accessFees: normalizedAccessFees,
+    prejobTrips: normalizedPrejobTrips,
     otherItems: normalizedOtherItems,
   })
 
@@ -511,6 +531,7 @@ export function sanitizeEstimateV2EditorLoad(params: {
       drywallRepairs: normalizedDrywallRepairs,
       rollers: normalizedRollers,
       accessFees: normalizedAccessFees,
+      prejobTrips: normalizedPrejobTrips,
       otherItems: normalizedOtherItems,
     },
     meta: {

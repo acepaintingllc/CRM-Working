@@ -124,6 +124,7 @@ export function buildCustomerSendContractContext(
           effective_total: 80,
         },
       ],
+      prejob: [],
       trim_items: [],
       other: [],
       jobsettings: {},

@@ -1281,18 +1281,21 @@ begin
       and active = 'Y';
 
     insert into public.estimate_prejob (
-      id, org_id, estimate_id, job_id, position, category, trip_name, trip_num, rollup_scope,
+      id, org_id, estimate_id, job_id, position, category, trip_name, room_id, trip_num,
+      trip_rate, manual_adjustment, calculated_total, effective_total, rollup_scope,
       man_trip_name, man_qty, man_hours_each, task, qty, hours_each, laborrate, markup,
       extra_supplies, notes, active
     )
     select
       coalesce(row.id, gen_random_uuid()), p_org_id, p_estimate_id, p_job_id, row.position,
-      row.category, row.trip_name, row.trip_num, row.rollup_scope, row.man_trip_name, row.man_qty,
-      row.man_hours_each, row.task, row.qty, row.hours_each, row.laborrate, row.markup,
-      row.extra_supplies, row.notes, coalesce(row.active, 'Y')
+      row.category, row.trip_name, row.room_id, row.trip_num, row.trip_rate,
+      row.manual_adjustment, row.calculated_total, row.effective_total, row.rollup_scope,
+      row.man_trip_name, row.man_qty, row.man_hours_each, row.task, row.qty, row.hours_each,
+      row.laborrate, row.markup, row.extra_supplies, row.notes, coalesce(row.active, 'Y')
     from jsonb_to_recordset(p_payload->'prejob') as row(
-      id uuid, position int, category text, trip_name text, trip_num numeric, rollup_scope text,
-      man_trip_name text, man_qty numeric, man_hours_each numeric, task text, qty numeric,
+      id uuid, position int, category text, trip_name text, room_id text, trip_num numeric,
+      trip_rate numeric, manual_adjustment numeric, calculated_total numeric, effective_total numeric,
+      rollup_scope text, man_trip_name text, man_qty numeric, man_hours_each numeric, task text, qty numeric,
       hours_each numeric, laborrate numeric, markup numeric, extra_supplies numeric, notes text,
       active text
     )
@@ -1304,7 +1307,12 @@ begin
       position = excluded.position,
       category = excluded.category,
       trip_name = excluded.trip_name,
+      room_id = excluded.room_id,
       trip_num = excluded.trip_num,
+      trip_rate = excluded.trip_rate,
+      manual_adjustment = excluded.manual_adjustment,
+      calculated_total = excluded.calculated_total,
+      effective_total = excluded.effective_total,
       rollup_scope = excluded.rollup_scope,
       man_trip_name = excluded.man_trip_name,
       man_qty = excluded.man_qty,

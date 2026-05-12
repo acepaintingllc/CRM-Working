@@ -11,6 +11,7 @@ import type { WallCalculationScopeRow, WallCalculationSegmentRow } from '../../l
 import type { DoorCalculationScopeRow } from '@/types/estimator/doors'
 import type { DrywallRepairCalculationRow } from '@/types/estimator/drywall'
 import type { OtherCalculationRow } from '../../lib/estimator/other.ts'
+import type { PrejobTripCalculationRow } from '../../lib/estimator/prejobTrips.ts'
 import {
   normalizeConditionSelections,
   type EstimateV2ConditionSelections as CalculationConditionSelections,
@@ -78,6 +79,7 @@ export type EstimateV2NormalizedCalculationRows = {
   roomDoorScopes: EstimateV2DoorScopeSaveRow[]
   drywallRepairs: EstimateV2DrywallRepairSaveRow[]
   accessFees: EstimateV2AccessFeeCalculationInputRow[]
+  prejob: PrejobTripCalculationRow[]
   other: OtherCalculationRow[]
 }
 
@@ -91,6 +93,7 @@ export type EstimateV2RawCalculationRows = {
   roomDoorScopes?: UnsafeRecord[]
   drywallRepairs?: UnsafeRecord[]
   accessFees?: UnsafeRecord[]
+  prejob?: UnsafeRecord[]
   other?: UnsafeRecord[]
 }
 
@@ -527,6 +530,22 @@ function normalizeOtherRow(row: UnsafeRecord, index: number): OtherCalculationRo
   }
 }
 
+function normalizePrejobRow(row: UnsafeRecord, index: number): PrejobTripCalculationRow {
+  return {
+    id: asText(row.id) || `prejob-${index}`,
+    room_id: asText(row.room_id).toUpperCase() || null,
+    position: asNullableNumber(row.position) ?? index,
+    active: toYN(row.active ?? row.include, 'Y'),
+    trip_name: asText(row.trip_name ?? row.tripName ?? row.man_trip_name ?? row.task) || null,
+    man_trip_name: asText(row.man_trip_name) || null,
+    task: asText(row.task) || null,
+    trip_num: asNullableNumber(row.trip_num ?? row.tripCount),
+    trip_rate: asNullableNumber(row.trip_rate ?? row.tripRate),
+    manual_adjustment: asNullableNumber(row.manual_adjustment ?? row.manualAdjustment),
+    notes: asText(row.notes) || null,
+  }
+}
+
 export function normalizeEstimateV2JobSettingsInput(
   row: UnsafeRecord | null | undefined
 ): EstimateV2CalculationJobSettingsInput | null {
@@ -577,6 +596,7 @@ export function normalizeEstimateV2CalculationRows(
     roomDoorScopes: (rows.roomDoorScopes ?? []).map(normalizeEstimateV2DoorScopeRow),
     drywallRepairs: (rows.drywallRepairs ?? []).map(normalizeEstimateV2DrywallRepairRow),
     accessFees: (rows.accessFees ?? []).map(normalizeAccessFeeRow),
+    prejob: (rows.prejob ?? []).map(normalizePrejobRow),
     other: (rows.other ?? []).map(normalizeOtherRow),
   }
 }

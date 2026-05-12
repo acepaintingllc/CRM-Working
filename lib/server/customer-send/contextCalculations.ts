@@ -2,6 +2,7 @@ import { loadCalculatedEstimateV2Artifacts } from '@/lib/server/estimate-v2/calc
 import {
   enrichEstimateV2AccessFeeRows,
   enrichEstimateV2OtherRows,
+  enrichEstimateV2PrejobRows,
 } from '@/lib/server/estimate-v2/calculatedRowEnrichment'
 import {
   errorResult,
@@ -12,6 +13,7 @@ import {
   normalizeDoorScopeRow as normalizeCustomerSendCalculatedDoorScopeRow,
   normalizeDrywallScopeRow as normalizeCustomerSendCalculatedDrywallScopeRow,
   normalizePaintScopeRow as normalizeCustomerSendCalculatedPaintScopeRow,
+  normalizePrejobRow as normalizeCustomerSendCalculatedPrejobRow,
   normalizeTrimScopeRow as normalizeCustomerSendCalculatedTrimScopeRow,
 } from './contextMapper'
 import type {
@@ -20,12 +22,31 @@ import type {
   CustomerQuoteDrywallScopeRow,
   EstimateJobSettingsRow,
   CustomerQuoteOtherRow,
+  CustomerQuotePrejobRow,
   EstimateCustomerSendCalculatedData,
   EstimateCustomerSendRawResources,
 } from './contextTypes'
 
+type CustomerSendPricingSummary = NonNullable<EstimateCustomerSendCalculatedData['pricingSummary']>
+
 export function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
+}
+
+function buildCustomerSendPricingSummary(
+  pricingSummary: CustomerSendPricingSummary
+): CustomerSendPricingSummary {
+  return {
+    finalTotal: pricingSummary.finalTotal ?? null,
+    ...(pricingSummary.prepTripCost != null ? { prepTripCost: pricingSummary.prepTripCost } : {}),
+    ...(pricingSummary.prePolicyTotal != null ? { prePolicyTotal: pricingSummary.prePolicyTotal } : {}),
+    ...(pricingSummary.postLaborPolicyTotal != null
+      ? { postLaborPolicyTotal: pricingSummary.postLaborPolicyTotal }
+      : {}),
+    ...(pricingSummary.minimumAdjustmentAmount != null
+      ? { minimumAdjustmentAmount: pricingSummary.minimumAdjustmentAmount }
+      : {}),
+  }
 }
 
 function asCalculationInputRecord(value: EstimateJobSettingsRow): Record<string, unknown> {
@@ -57,6 +78,7 @@ export async function deriveEstimateCustomerSendCalculatedData(
       roomDoorScopes: resources.doorScopes,
       drywallRepairs: resources.drywallRepairs ?? [],
       accessFees: resources.accessFees,
+      prejob: resources.prejob ?? [],
       other: resources.other,
       orgDefaults: resources.settingsRow,
     })
@@ -81,11 +103,17 @@ export async function deriveEstimateCustomerSendCalculatedData(
         rawRows: resources.accessFees,
         calculatedRows: calculated.accessFeeCalculation.rows as Array<Record<string, unknown>>,
       }) as CustomerQuoteAccessFeeRow[],
+      quotePrejobRows: enrichEstimateV2PrejobRows({
+        rawRows: resources.prejob ?? [],
+        calculatedRows: calculated.prejobCalculations?.scopes ?? [],
+      }).map((row) =>
+        normalizeCustomerSendCalculatedPrejobRow(row as unknown as CustomerQuotePrejobRow)
+      ),
       quoteOtherRows: enrichEstimateV2OtherRows({
         rawRows: resources.other,
         calculatedRows: calculated.otherCalculations.scopes as Array<Record<string, unknown>>,
       }) as CustomerQuoteOtherRow[],
-      pricingSummary: { finalTotal: calculated.pricingSummary.finalTotal ?? null },
+      pricingSummary: buildCustomerSendPricingSummary(calculated.pricingSummary),
     })
   } catch (error) {
     return errorResult(

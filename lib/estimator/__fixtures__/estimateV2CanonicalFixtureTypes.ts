@@ -6,6 +6,8 @@ import type {
   EstimateV2DoorScopeDraft,
   EstimateV2DrywallRepairDraft,
   EstimateV2JobSettingsDraft,
+  EstimateV2OtherItemDraft,
+  EstimateV2PrejobTripDraft,
   EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
@@ -159,6 +161,8 @@ export function buildCanonicalEditorState(params: {
   doorScopes?: EstimateV2DoorScopeDraft[]
   drywallRepairs?: EstimateV2DrywallRepairDraft[]
   accessFees?: EstimateV2AccessFeeDraft[]
+  prejobTrips?: EstimateV2PrejobTripDraft[]
+  otherItems?: EstimateV2OtherItemDraft[]
   jobSettingsDraft?: EstimateV2JobSettingsDraft
 }): EstimateV2EditorStoreState {
   return {
@@ -174,7 +178,8 @@ export function buildCanonicalEditorState(params: {
       drywallRepairs: params.drywallRepairs ?? [],
       rollers: [],
       accessFees: params.accessFees ?? [],
-      otherItems: [],
+      prejobTrips: params.prejobTrips ?? [],
+      otherItems: params.otherItems ?? [],
     },
     meta: {
       loading: false,
@@ -640,6 +645,44 @@ export function accessFee(overrides: Partial<EstimateV2AccessFeeDraft>): Estimat
     actualCostOverride: '',
     notes: '',
     position: 0,
+    ...overrides,
+  }
+}
+
+export function prejobTrip(overrides: Partial<EstimateV2PrejobTripDraft>): EstimateV2PrejobTripDraft {
+  return {
+    id: 'prejob-trip',
+    roomId: CANONICAL_IDS.rooms.livingRoom,
+    tripName: 'Pre-job trip',
+    tripCount: '1',
+    tripRate: '100',
+    manualAdjustment: '',
+    notes: '',
+    position: 0,
+    include: 'Y',
+    ...overrides,
+  }
+}
+
+export function otherItem(overrides: Partial<EstimateV2OtherItemDraft>): EstimateV2OtherItemDraft {
+  return {
+    id: 'other-item',
+    roomId: CANONICAL_IDS.rooms.livingRoom,
+    position: 0,
+    include: 'Y',
+    description: 'Other work',
+    customerLabel: 'Other work',
+    pricingMode: 'fixed',
+    quantity: '',
+    unitRate: '',
+    laborHours: '',
+    laborRate: '',
+    materialCost: '',
+    supplyCost: '',
+    fixedAmount: '100',
+    rollupTarget: 'other',
+    customerVisibility: 'standalone',
+    internalNotes: '',
     ...overrides,
   }
 }

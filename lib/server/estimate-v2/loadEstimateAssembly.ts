@@ -129,6 +129,7 @@ export async function loadEstimateV2Response(params: {
     roomDoorScopes: roomDoorScopeRows,
     drywallRepairs: drywallRepairRows,
     accessFees: (accessFees.data ?? []) as Unsafe[],
+    prejob: (prejob.data ?? []) as Unsafe[],
     other: (other.data ?? []) as Unsafe[],
     orgDefaults,
   })

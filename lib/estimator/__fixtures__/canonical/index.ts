@@ -1,6 +1,7 @@
 import { allMajorPolicyFlagsFixture } from './allMajorPolicyFlags.ts'
 import { allScopeTypesFixture } from './allScopeTypes.ts'
 import { exteriorTrimFixture } from './exteriorTrim.ts'
+import { estimateV2FunctionalCompletenessSmokeFixture } from './estimateV2FunctionalCompletenessSmoke.ts'
 import { fullMasterBedroomFixture } from './fullMasterBedroom.ts'
 import { manualOverridesDisabledScopesFixture } from './manualOverridesDisabledScopes.ts'
 import { multiRoomGeometryVariationFixture } from './multiRoomGeometryVariation.ts'
@@ -24,12 +25,15 @@ export {
   allMajorPolicyFlagsFixture,
   allScopeTypesFixture,
   exteriorTrimFixture,
+  estimateV2FunctionalCompletenessSmokeFixture,
   fullMasterBedroomFixture,
   manualOverridesDisabledScopesFixture,
   multiRoomGeometryVariationFixture,
   simpleNoOverridesFixture,
   simpleHallwayRepaintFixture,
 }
+
+export { estimateV2FunctionalCompletenessSmokeIds } from './estimateV2FunctionalCompletenessSmoke.ts'
 
 export const CANONICAL_FIXTURES = [
   simpleNoOverridesFixture,

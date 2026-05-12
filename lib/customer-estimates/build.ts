@@ -31,6 +31,7 @@ export interface CustomerEstimateTypedInput {
     room_door_scopes?: CustomerEstimateInputRow[]
     drywall_repairs?: CustomerEstimateInputRow[]
     access_fees?: CustomerEstimateInputRow[]
+    prejob?: CustomerEstimateInputRow[]
     trim_items?: CustomerEstimateInputRow[]
     other?: CustomerEstimateInputRow[]
     jobsettings?: CustomerEstimateInputRow | null

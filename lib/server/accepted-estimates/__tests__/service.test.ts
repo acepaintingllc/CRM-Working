@@ -8,9 +8,18 @@ import {
   loadAcceptedEstimateSource,
   repairAcceptedEstimateSnapshotForJob,
 } from '../service.ts'
-import { buildCustomerSendPersistedSnapshot } from '@/lib/server/customer-send/types'
+import {
+  buildCustomerSendPersistedSnapshot,
+  CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND,
+  CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION,
+  type CustomerSendOperationalSnapshot,
+} from '@/lib/server/customer-send/types'
 import { buildCustomerDocumentFromSendContext } from '@/lib/server/customer-send/document'
 import { buildCustomerSendContractContext } from '@/lib/server/customer-send/__tests__/customerSendContractHarness'
+import type {
+  AcceptedEstimateAccessFeeRow,
+  AcceptedEstimateOperationalSourcePayload,
+} from '../types.ts'
 
 type MockQueryResponse = {
   data: Record<string, unknown> | null
@@ -260,11 +269,62 @@ function acceptedSnapshotRow(overrides: Record<string, unknown> = {}) {
     estimated_labor_hours: 42,
     estimated_paint_gallons: 8.5,
     estimated_supplies_cost: 125,
+    estimated_access_cost: 425,
     estimated_other_cost: 30,
     estimated_total: 5100,
     source_payload_json: {
+      artifact_kind: 'accepted_estimate_operational_snapshot_source',
+      artifact_version: 1,
       customer_artifact: clone(publicVersion.snapshot_json),
+      customer_visible_source: 'customer_artifact.document',
       accepted_public_version: clone(publicVersion),
+      internal_operational_estimate: {
+        inputs: acceptedOperationalInputs({
+          rooms: [{ id: 'room-row-1', room_id: 'R001', room_name: 'Kitchen' }],
+          access_fees: [
+            {
+              id: 'access-job-1',
+              room_id: null,
+              access_fee_id: 'catalog-scaffold',
+              label: 'Job-level scaffold setup',
+              display_name: 'Scaffold setup',
+              access_group: 'scaffolding',
+              qty: 1,
+              amount: 300,
+              catalog_amount: 300,
+              actual_cost_override: null,
+              calculated_total: 300,
+              effective_total: 300,
+              final_total: 300,
+              override_total: null,
+              overridden: false,
+              notes: 'Shared job access.',
+              position: 1,
+            },
+            {
+              id: 'access-room-1',
+              room_id: 'R001',
+              access_fee_id: 'catalog-ladder',
+              label: 'Kitchen ladder work',
+              display_name: 'Kitchen ladder work',
+              access_group: 'ladders',
+              qty: 2,
+              amount: 75,
+              catalog_amount: 75,
+              actual_cost_override: 125,
+              calculated_total: 150,
+              effective_total: 125,
+              final_total: 125,
+              override_total: 125,
+              overridden: true,
+              notes: 'Room-specific access.',
+              position: 2,
+            },
+          ],
+          prejob: [{ id: 'prejob-1', trip_name: 'Wallpaper removal prep' }],
+        }),
+        pricing: acceptedOperationalPricing(artifactTotal(publicVersion.snapshot_json)),
+      },
     },
     ...overrides,
   }
@@ -272,6 +332,123 @@ function acceptedSnapshotRow(overrides: Record<string, unknown> = {}) {
 
 function artifactTotal(snapshot: unknown) {
   return (snapshot as { document: { total: number } }).document.total
+}
+
+function acceptedOperationalInputs(overrides: Record<string, unknown> = {}) {
+  return {
+    rooms: [],
+    room_wall_scopes: [],
+    segments: [],
+    wall_segments: [],
+    ceiling_segments: [],
+    room_ceiling_scopes: [],
+    ceiling_scope_segments: [],
+    room_trim_scopes: [],
+    room_door_scopes: [],
+    drywall_repairs: [],
+    access_fees: [],
+    prejob: [],
+    trim_items: [],
+    other: [],
+    jobsettings: {},
+    org_defaults: {
+      default_template_key: 'default',
+      quote_validity_days: 30,
+      terms_text: 'Standard quote terms.',
+      walls_paint_id: null,
+      walls_primer_id: null,
+      ceiling_paint_id: null,
+      ceiling_primer_id: null,
+      trim_paint_id: null,
+      trim_primer_id: null,
+      labor_day_policy_enabled: true,
+      dayhours: 8,
+      rounding_increment_hours: 4,
+      override_labor_rate: 0,
+      job_minimum_enabled: false,
+      job_minimum_amount: 0,
+      standard_door_deduction_sf: 21,
+      standard_window_deduction_sf: 15,
+      baseboard_opening_deduction_lf: 3,
+    },
+    ...overrides,
+  }
+}
+
+function acceptedOperationalPricing(finalTotal: number) {
+  return {
+    pricing_summary: { finalTotal },
+    final_total: finalTotal,
+    wall_calculations: { scopes: [] },
+    ceiling_calculations: { scopes: [] },
+    trim_calculations: { scopes: [] },
+    door_calculations: { scopes: [] },
+    drywall_calculations: { scopes: [] },
+  }
+}
+
+function fullOperationalInputs() {
+  return acceptedOperationalInputs({
+    rooms: [{ id: 'room-row-1', room_id: 'R001', room_name: 'Kitchen' }],
+    room_wall_scopes: [{ id: 'wall-1', room_id: 'R001', scope_name: 'Kitchen walls', final_total: 900 }],
+    room_ceiling_scopes: [{ id: 'ceiling-1', room_id: 'R001', scope_name: 'Kitchen ceiling', final_total: 300 }],
+    room_trim_scopes: [{ id: 'trim-1', room_id: 'R001', scope_name: 'Kitchen trim', final_total: 425 }],
+    room_door_scopes: [{ id: 'door-1', room_id: 'R001', scope_name: 'Kitchen door', final_total: 175 }],
+    drywall_repairs: [{ id: 'drywall-1', room_id: 'R001', repair_type: 'patch', final_total: 125 }],
+    access_fees: [
+      {
+        id: 'access-job-1',
+        room_id: null,
+        access_fee_id: 'catalog-scaffold',
+        label: 'Job-level scaffold setup',
+        display_name: 'Scaffold setup',
+        access_group: 'scaffolding',
+        qty: 1,
+        amount: 300,
+        catalog_amount: 300,
+        actual_cost_override: null,
+        calculated_total: 300,
+        effective_total: 300,
+        final_total: 300,
+        override_total: null,
+        overridden: false,
+        notes: 'Shared job access.',
+        position: 1,
+      },
+      {
+        id: 'access-room-1',
+        room_id: 'R001',
+        access_fee_id: 'catalog-ladder',
+        label: 'Kitchen ladder work',
+        display_name: 'Kitchen ladder work',
+        access_group: 'ladders',
+        qty: 2,
+        amount: 75,
+        catalog_amount: 75,
+        actual_cost_override: 125,
+        calculated_total: 150,
+        effective_total: 125,
+        final_total: 125,
+        override_total: 125,
+        overridden: true,
+        notes: 'Room-specific access.',
+        position: 2,
+      },
+    ],
+    prejob: [{ id: 'prejob-1', room_id: 'R001', trip_name: 'Wallpaper removal prep', final_total: 250 }],
+  })
+}
+
+function fullOperationalPricing(finalTotal: number) {
+  return {
+    pricing_summary: { finalTotal, effectiveLaborHours: 24, prepTripCost: 250 },
+    final_total: finalTotal,
+    wall_calculations: { scopes: [{ id: 'wall-1', effective_total: 900 }] },
+    ceiling_calculations: { scopes: [{ id: 'ceiling-1', effective_total: 300 }] },
+    trim_calculations: { scopes: [{ id: 'trim-1', effective_total: 425 }] },
+    door_calculations: { scopes: [{ id: 'door-1', effective_total: 175 }] },
+    drywall_calculations: { scopes: [{ id: 'drywall-1', effective_total: 125 }] },
+  }
 }
 
 test('buildAcceptedEstimateUpdatePlan links the accepted estimate to its job', () => {
@@ -305,25 +482,52 @@ test('buildAcceptedEstimateSource still normalizes live accepted version records
 
   assert.equal(source.final_total, artifactTotal(publicVersion.snapshot_json))
   assert.equal(source.estimate_snapshot_id, null)
+  assert.equal(source.estimated_access_cost, 0)
   assert.deepEqual(source.snapshot_json, publicVersion.snapshot_json)
+  assert.deepEqual(source.source_payload_json, {})
 })
 
 test('buildAcceptedEstimateSourceFromSnapshot uses the canonical embedded accepted artifact', () => {
+  const sourcePayload = {
+    artifact_kind: 'accepted_estimate_operational_snapshot_source' as const,
+    artifact_version: 1 as const,
+    customer_artifact: clone(persistedAcceptedArtifact('Accepted snapshot title')),
+    accepted_public_version: clone(
+      acceptedPublicVersionRow({
+        snapshot_json: clone(persistedAcceptedArtifact('Mutated public version title')),
+      })
+    ),
+    internal_operational_estimate: {
+      inputs: acceptedOperationalInputs({ rooms: [{ room_id: 'R001' }] }),
+      pricing: acceptedOperationalPricing(5100),
+    },
+  }
   const source = buildAcceptedEstimateSourceFromSnapshot({
     estimate: acceptedEstimateRow({ version_name: 'Mutable live version name' }),
     snapshot: acceptedSnapshotRow({
-      source_payload_json: {
-        customer_artifact: clone(persistedAcceptedArtifact('Accepted snapshot title')),
-        accepted_public_version: clone(
-          acceptedPublicVersionRow({
-            snapshot_json: clone(persistedAcceptedArtifact('Mutated public version title')),
-          })
-        ),
-      },
+      source_payload_json: sourcePayload,
     }),
     artifactState: {
       kind: 'canonical',
       artifact: clone(persistedAcceptedArtifact('Accepted snapshot title')),
+      source_payload: sourcePayload,
+      operational_source: {
+        rooms: [{ room_id: 'R001' }],
+        room_wall_scopes: [],
+        room_ceiling_scopes: [],
+        room_trim_scopes: [],
+        room_door_scopes: [],
+        drywall_repairs: [],
+        access_fees: [],
+        prejob: [],
+        pricing_summary: { finalTotal: 5100 },
+        final_total: 5100,
+        wall_calculations: { scopes: [] },
+        ceiling_calculations: { scopes: [] },
+        trim_calculations: { scopes: [] },
+        door_calculations: { scopes: [] },
+        drywall_calculations: { scopes: [] },
+      },
       accepted_public_version: clone(
         acceptedPublicVersionRow({
           snapshot_json: clone(persistedAcceptedArtifact('Mutated public version title')),
@@ -334,8 +538,13 @@ test('buildAcceptedEstimateSourceFromSnapshot uses the canonical embedded accept
 
   assert.equal(source.public_version_number, 3)
   assert.equal(source.public_token, 'public-token-1')
+  assert.equal(source.estimated_access_cost, 425)
   assert.equal(source.final_total, persistedAcceptedArtifact('Accepted snapshot title').document.total)
   assert.deepEqual(source.snapshot_json, persistedAcceptedArtifact('Accepted snapshot title'))
+  assert.equal(
+    source.source_payload_json.artifact_kind,
+    'accepted_estimate_operational_snapshot_source'
+  )
 })
 
 test('applyAcceptedEstimateSideEffects updates estimates first, then links the accepted estimate to its job', async () => {
@@ -371,7 +580,7 @@ test('applyAcceptedEstimateSideEffects updates estimates first, then links the a
 })
 
 test('loadAcceptedEstimateSource reads the canonical embedded accepted artifact', async () => {
-  const { db } = createReadDb({
+  const { db, calls } = createReadDb({
     jobs: {
       data: {
         id: 'job-1',
@@ -394,8 +603,364 @@ test('loadAcceptedEstimateSource reads the canonical embedded accepted artifact'
   assert.equal(result.ok, true)
   if (result.ok) {
     assert.equal(result.data.estimate_snapshot_id, 'snapshot-1')
+    assert.equal(result.data.estimated_access_cost, 425)
     assert.equal(result.data.final_total, artifactTotal(acceptedPublicVersionRow().snapshot_json))
     assert.deepEqual(result.data.snapshot_json, acceptedPublicVersionRow().snapshot_json)
+    assert.deepEqual(
+      result.data.source_payload_json,
+      acceptedSnapshotRow().source_payload_json
+    )
+    assert.deepEqual(
+      result.data.operational_source.access_fees,
+      (
+        acceptedSnapshotRow().source_payload_json as AcceptedEstimateOperationalSourcePayload
+      ).internal_operational_estimate.inputs.access_fees
+    )
+  }
+  const snapshotCall = calls.find((call) => call.table === 'estimate_snapshot')
+  assert.ok(snapshotCall?.columns.includes('estimated_access_cost'))
+})
+
+test('loadAcceptedEstimateSource exposes every invoice and work-order operational row through typed source', async () => {
+  const acceptedArtifact = persistedAcceptedArtifact('Accepted full operational source')
+  const sourcePayload = {
+    artifact_kind: 'accepted_estimate_operational_snapshot_source',
+    artifact_version: 1,
+    customer_artifact: clone(acceptedArtifact),
+    accepted_public_version: clone(
+      acceptedPublicVersionRow({
+        snapshot_json: clone(acceptedArtifact),
+      })
+    ),
+    internal_operational_estimate: {
+      inputs: fullOperationalInputs(),
+      pricing: fullOperationalPricing(artifactTotal(acceptedArtifact)),
+    },
+  } satisfies AcceptedEstimateOperationalSourcePayload
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        source_payload_json: sourcePayload,
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+
+  const source = result.data.operational_source
+  const inputs = sourcePayload.internal_operational_estimate.inputs
+  const pricing = sourcePayload.internal_operational_estimate.pricing
+  assert.deepEqual(source.rooms, inputs.rooms)
+  assert.deepEqual(source.room_wall_scopes, inputs.room_wall_scopes)
+  assert.deepEqual(source.room_ceiling_scopes, inputs.room_ceiling_scopes)
+  assert.deepEqual(source.room_trim_scopes, inputs.room_trim_scopes)
+  assert.deepEqual(source.room_door_scopes, inputs.room_door_scopes)
+  assert.deepEqual(source.drywall_repairs, inputs.drywall_repairs)
+  assert.deepEqual(source.access_fees, inputs.access_fees)
+  assert.deepEqual(source.prejob, inputs.prejob)
+  assert.deepEqual(source.pricing_summary, pricing.pricing_summary)
+  assert.deepEqual(source.wall_calculations, pricing.wall_calculations)
+  assert.deepEqual(source.ceiling_calculations, pricing.ceiling_calculations)
+  assert.deepEqual(source.trim_calculations, pricing.trim_calculations)
+  assert.deepEqual(source.door_calculations, pricing.door_calculations)
+  assert.deepEqual(source.drywall_calculations, pricing.drywall_calculations)
+  const acceptedAccessRows: AcceptedEstimateAccessFeeRow[] = source.access_fees
+  assert.equal(acceptedAccessRows[0]?.room_id, null)
+  assert.equal(acceptedAccessRows[1]?.room_id, 'R001')
+  assert.equal(acceptedAccessRows[0]?.display_name, 'Scaffold setup')
+  assert.equal(acceptedAccessRows[1]?.access_fee_id, 'catalog-ladder')
+  assert.equal(acceptedAccessRows[1]?.amount, 75)
+  assert.equal(acceptedAccessRows[1]?.actual_cost_override, 125)
+  assert.equal(acceptedAccessRows[1]?.calculated_total, 150)
+  assert.equal(acceptedAccessRows[1]?.effective_total, 125)
+  assert.equal(acceptedAccessRows[1]?.final_total, 125)
+  assert.equal(acceptedAccessRows[1]?.override_total, 125)
+  assert.equal(acceptedAccessRows[1]?.overridden, true)
+  assert.deepEqual(source.access_fees, [
+    {
+      id: 'access-job-1',
+      room_id: null,
+      access_fee_id: 'catalog-scaffold',
+      label: 'Job-level scaffold setup',
+      display_name: 'Scaffold setup',
+      access_group: 'scaffolding',
+      qty: 1,
+      amount: 300,
+      catalog_amount: 300,
+      actual_cost_override: null,
+      calculated_total: 300,
+      effective_total: 300,
+      final_total: 300,
+      override_total: null,
+      overridden: false,
+      notes: 'Shared job access.',
+      position: 1,
+    },
+    {
+      id: 'access-room-1',
+      room_id: 'R001',
+      access_fee_id: 'catalog-ladder',
+      label: 'Kitchen ladder work',
+      display_name: 'Kitchen ladder work',
+      access_group: 'ladders',
+      qty: 2,
+      amount: 75,
+      catalog_amount: 75,
+      actual_cost_override: 125,
+      calculated_total: 150,
+      effective_total: 125,
+      final_total: 125,
+      override_total: 125,
+      overridden: true,
+      notes: 'Room-specific access.',
+      position: 2,
+    },
+  ])
+})
+
+test('loadAcceptedEstimateSource exposes typed access fees and prejob from immutable snapshot source', async () => {
+  const acceptedArtifact = clone(persistedAcceptedArtifact('Accepted typed operational rows'))
+  acceptedArtifact.document.total = 600
+  acceptedArtifact.document.pricing_block.total = 600
+  const accessFees = [
+    {
+      id: 'access-job-1',
+      room_id: null,
+      access_fee_id: 'catalog-scaffold',
+      label: 'Job-level scaffold setup',
+      display_name: 'Scaffold setup',
+      access_group: 'scaffolding',
+      qty: 1,
+      amount: 300,
+      catalog_amount: 300,
+      actual_cost_override: null,
+      calculated_total: 300,
+      effective_total: 300,
+      final_total: 300,
+      override_total: null,
+      overridden: false,
+      notes: 'Shared job access.',
+      position: 1,
+    },
+    {
+      id: 'access-room-1',
+      room_id: 'R001',
+      access_fee_id: 'catalog-ladder',
+      label: 'Kitchen ladder work',
+      display_name: 'Kitchen ladder work',
+      access_group: 'ladders',
+      qty: 2,
+      amount: 75,
+      catalog_amount: 75,
+      actual_cost_override: 125,
+      calculated_total: 150,
+      effective_total: 125,
+      final_total: 125,
+      override_total: 125,
+      overridden: true,
+      notes: 'Room-specific access.',
+      position: 2,
+    },
+  ]
+  const prejob = [
+    {
+      id: 'prejob-1',
+      room_id: 'R001',
+      trip_name: 'Wallpaper removal prep',
+      trip_num: 2,
+      trip_rate: 75,
+      calculated_total: 150,
+      raw_total: 175,
+      effective_total: 175,
+      final_total: 175,
+    },
+  ]
+  const sourcePayload = {
+    artifact_kind: 'accepted_estimate_operational_snapshot_source',
+    artifact_version: 1,
+    customer_artifact: clone(acceptedArtifact),
+    accepted_public_version: clone(
+      acceptedPublicVersionRow({
+        snapshot_json: clone(acceptedArtifact),
+      })
+    ),
+    internal_operational_estimate: {
+      inputs: acceptedOperationalInputs({
+        rooms: [{ room_id: 'R001', room_name: 'Kitchen' }],
+        access_fees: accessFees,
+        prejob,
+      }),
+      pricing: {
+        pricing_summary: {
+          finalTotal: 600,
+          sharedAccessCost: 425,
+          prepTripCost: 175,
+        },
+        final_total: 600,
+        wall_calculations: { scopes: [] },
+        ceiling_calculations: { scopes: [] },
+        trim_calculations: { scopes: [] },
+        door_calculations: { scopes: [] },
+        drywall_calculations: { scopes: [] },
+      },
+    },
+  } satisfies AcceptedEstimateOperationalSourcePayload
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        source_payload_json: sourcePayload,
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.deepEqual(result.data.operational_source.access_fees, accessFees)
+  assert.equal(result.data.operational_source.access_fees[0]?.room_id, null)
+  assert.equal(result.data.operational_source.access_fees[1]?.overridden, true)
+  assert.deepEqual(result.data.operational_source.prejob, prejob)
+  assert.equal(result.data.operational_source.pricing_summary.finalTotal, 600)
+  assert.equal(result.data.operational_source.final_total, 600)
+})
+
+test('loadAcceptedEstimateSource preserves operational prejob rows from the customer artifact source payload', async () => {
+  const context = buildCustomerSendContractContext()
+  context.inputs.prejob = [
+    {
+      id: 'prejob-canonical-1',
+      room_id: 'room-1',
+      include: 'Y',
+      trip_name: 'Customer walkthrough prep',
+      trip_num: 1,
+      trip_rate: 225,
+      manual_adjustment: 25,
+      calculated_total: 225,
+      raw_total: 225,
+      effective_total: 250,
+      final_total: 250,
+      notes: 'Accepted source should preserve this canonical calculated row.',
+    },
+  ]
+
+  const draft = customerDraft()
+  const document = buildCustomerDocumentFromSendContext({
+    context,
+    overrides: {
+      title: draft.title,
+      intro_paragraph: draft.intro_paragraph,
+      closing_paragraph: draft.closing_paragraph,
+      quote_validity_days: draft.quote_validity_days,
+      deposit_language: draft.deposit_language,
+      card_fee_note: draft.card_fee_note,
+    },
+  })
+  const operationalSnapshot = {
+    artifact_kind: CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_KIND,
+    artifact_version: CUSTOMER_SEND_OPERATIONAL_SNAPSHOT_VERSION,
+    source_estimate_updated_at: context.estimate.updated_at ?? '',
+    estimate_response: {
+      estimate: context.estimate,
+      inputs: context.inputs,
+      wall_calculations: { scopes: [] },
+      ceiling_calculations: { scopes: [] },
+      trim_calculations: { scopes: [] },
+      door_calculations: { scopes: [] },
+      drywall_calculations: { scopes: [] },
+      pricing_summary: { finalTotal: 250, prepTripCost: 250 },
+    },
+  } satisfies CustomerSendOperationalSnapshot
+  const customerArtifact = buildCustomerSendPersistedSnapshot({
+    document,
+    draft,
+    operationalSnapshot,
+  })
+  const acceptedPublicVersion = acceptedPublicVersionRow({
+    snapshot_json: clone(customerArtifact),
+  })
+  const sourcePayload = {
+    artifact_kind: 'accepted_estimate_operational_snapshot_source',
+    artifact_version: 1,
+    customer_artifact: clone(customerArtifact),
+    accepted_public_version: clone(acceptedPublicVersion),
+    internal_operational_estimate: {
+      inputs: clone(operationalSnapshot.estimate_response.inputs),
+      pricing: {
+        pricing_summary: clone(operationalSnapshot.estimate_response.pricing_summary),
+        final_total: 250,
+        wall_calculations: { scopes: [] },
+        ceiling_calculations: { scopes: [] },
+        trim_calculations: { scopes: [] },
+        door_calculations: { scopes: [] },
+        drywall_calculations: { scopes: [] },
+      },
+    },
+  } satisfies AcceptedEstimateOperationalSourcePayload
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        estimated_total: 250,
+        source_payload_json: sourcePayload,
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    const resultSource =
+      result.data.source_payload_json as AcceptedEstimateOperationalSourcePayload
+    const artifactOperational =
+      customerArtifact.operational_snapshot as CustomerSendOperationalSnapshot
+    assert.deepEqual(
+      resultSource.internal_operational_estimate.inputs.prejob,
+      artifactOperational.estimate_response.inputs.prejob
+    )
+    assert.deepEqual(
+      result.data.operational_source.prejob,
+      artifactOperational.estimate_response.inputs.prejob
+    )
   }
 })
 
@@ -417,12 +982,18 @@ test('loadAcceptedEstimateSource exposes artifact total even when snapshot estim
       data: acceptedSnapshotRow({
         estimated_total: 99_999,
         source_payload_json: {
+          artifact_kind: 'accepted_estimate_operational_snapshot_source',
+          artifact_version: 1,
           customer_artifact: clone(acceptedArtifact),
           accepted_public_version: clone(
             acceptedPublicVersionRow({
               snapshot_json: clone(persistedAcceptedArtifact('Mutated public version title')),
             })
           ),
+          internal_operational_estimate: {
+            inputs: acceptedOperationalInputs({ rooms: [{ room_id: 'R001' }] }),
+            pricing: acceptedOperationalPricing(artifactTotal(acceptedArtifact)),
+          },
         },
       }),
       error: null,
@@ -435,6 +1006,58 @@ test('loadAcceptedEstimateSource exposes artifact total even when snapshot estim
   if (result.ok) {
     assert.equal(result.data.final_total, acceptedArtifact.document.total)
     assert.deepEqual(result.data.snapshot_json, acceptedArtifact)
+  }
+})
+
+test('loadAcceptedEstimateSource returns an immutable operational source clone', async () => {
+  const snapshot = acceptedSnapshotRow()
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: snapshot,
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    ;(
+      snapshot.source_payload_json.internal_operational_estimate as {
+        inputs: {
+          rooms: Array<{ room_name: string }>
+          access_fees: Array<{ effective_total: number }>
+        }
+      }
+    ).inputs.rooms[0].room_name = 'Live mutation'
+    ;(
+      snapshot.source_payload_json.internal_operational_estimate as {
+        inputs: {
+          rooms: Array<{ room_name: string }>
+          access_fees: Array<{ effective_total: number }>
+        }
+      }
+    ).inputs.access_fees[1].effective_total = 999
+    assert.equal(
+      (
+        result.data.source_payload_json.internal_operational_estimate as {
+          inputs: { rooms: Array<{ room_name: string }> }
+        }
+      ).inputs.rooms[0].room_name,
+      'Kitchen'
+    )
+    assert.equal(result.data.operational_source.access_fees[1]?.effective_total, 125)
   }
 })
 
@@ -564,6 +1187,114 @@ test('loadAcceptedEstimateSource fails closed when the embedded accepted snapsho
     kind: 'invalid_input',
     message:
       'Accepted estimate snapshot payload is legacy. Repair the snapshot before loading accepted estimate data.',
+  })
+})
+
+test('loadAcceptedEstimateSource fails closed when the operational source contract is missing', async () => {
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        source_payload_json: {
+          customer_artifact: clone(persistedAcceptedArtifact('Accepted snapshot title')),
+          accepted_public_version: clone(acceptedPublicVersionRow()),
+        },
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message:
+      'Accepted estimate snapshot operational source payload is missing or incomplete. Repair the snapshot before loading accepted estimate data.',
+  })
+})
+
+test('loadAcceptedEstimateSource fails closed when a required operational array is missing', async () => {
+  const sourcePayload = clone(
+    acceptedSnapshotRow().source_payload_json
+  ) as AcceptedEstimateOperationalSourcePayload
+  delete (
+    sourcePayload.internal_operational_estimate.inputs as Record<string, unknown>
+  ).access_fees
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        source_payload_json: sourcePayload,
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message:
+      'Accepted estimate snapshot operational source payload is missing or incomplete. Repair the snapshot before loading accepted estimate data.',
+  })
+})
+
+test('loadAcceptedEstimateSource fails closed when a required operational pricing object is missing', async () => {
+  const sourcePayload = clone(
+    acceptedSnapshotRow().source_payload_json
+  ) as AcceptedEstimateOperationalSourcePayload
+  delete (
+    sourcePayload.internal_operational_estimate.pricing as Record<string, unknown>
+  ).wall_calculations
+  const { db } = createReadDb({
+    jobs: {
+      data: {
+        id: 'job-1',
+        linked_estimate_id: 'estimate-1',
+      },
+      error: null,
+    },
+    estimates: {
+      data: acceptedEstimateRow(),
+      error: null,
+    },
+    estimate_snapshot: {
+      data: acceptedSnapshotRow({
+        source_payload_json: sourcePayload,
+      }),
+      error: null,
+    },
+  })
+
+  const result = await loadAcceptedEstimateSource(db as never, 'org-1', 'job-1')
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: 'invalid_input',
+    message:
+      'Accepted estimate snapshot operational source payload is missing or incomplete. Repair the snapshot before loading accepted estimate data.',
   })
 })
 

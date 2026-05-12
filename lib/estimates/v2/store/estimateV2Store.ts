@@ -16,6 +16,7 @@ import type {
   EstimateV2CustomerDraft,
   EstimateV2JobDefaultProducts,
   EstimateV2JobSettingsDraft,
+  EstimateV2PrejobTripDraft,
 } from '@/types/estimator/v2'
 import type {
   EstimateV2EditorCollections,
@@ -28,6 +29,7 @@ type EstimateV2CollectionsState = Omit<
   EstimateV2EditorCollections,
   | 'rollers'
   | 'accessFees'
+  | 'prejobTrips'
   | 'otherItems'
   | 'setRooms'
   | 'setScopes'
@@ -42,10 +44,12 @@ type EstimateV2CollectionsState = Omit<
   | 'setDrywallRepairs'
   | 'setRollers'
   | 'setAccessFees'
+  | 'setPrejobTrips'
   | 'setOtherItems'
 > & {
   rollers?: EstimateV2EditorCollections['rollers']
   accessFees?: EstimateV2EditorCollections['accessFees']
+  prejobTrips?: EstimateV2PrejobTripDraft[]
   otherItems?: EstimateV2EditorCollections['otherItems']
   doorScopes?: EstimateV2EditorCollections['doorScopes']
   drywallRepairs?: EstimateV2EditorCollections['drywallRepairs']
@@ -96,6 +100,7 @@ export type EstimateV2EditorStoreState = {
 const EMPTY_DOOR_SCOPES: NonNullable<EstimateV2CollectionsState['doorScopes']> = []
 const EMPTY_DRYWALL_REPAIRS: NonNullable<EstimateV2CollectionsState['drywallRepairs']> = []
 const EMPTY_ACCESS_FEES: NonNullable<EstimateV2CollectionsState['accessFees']> = []
+const EMPTY_PREJOB_TRIPS: NonNullable<EstimateV2CollectionsState['prejobTrips']> = []
 const EMPTY_OTHER_ITEMS: NonNullable<EstimateV2CollectionsState['otherItems']> = []
 
 export type EstimateV2EditorViewState = EstimateV2CollectionsState &
@@ -135,6 +140,7 @@ type EstimateV2CollectionSetters = Pick<
   | 'setDrywallRepairs'
   | 'setRollers'
   | 'setAccessFees'
+  | 'setPrejobTrips'
   | 'setOtherItems'
 >
 
@@ -253,6 +259,7 @@ export function createEstimateV2EditorInitialState(): EstimateV2EditorStoreState
       drywallRepairs: [],
       rollers: [],
       accessFees: [],
+      prejobTrips: [],
       otherItems: [],
     },
     meta: {
@@ -385,6 +392,13 @@ export function createEstimateV2Store(initialState?: Partial<EstimateV2EditorSto
         collections: {
           ...state.collections,
           accessFees: resolveUpdater(state.collections.accessFees ?? [], value),
+        },
+      })),
+    setPrejobTrips: (value) =>
+      set((state) => ({
+        collections: {
+          ...state.collections,
+          prejobTrips: resolveUpdater(state.collections.prejobTrips ?? [], value),
         },
       })),
     setOtherItems: (value) =>
@@ -598,6 +612,8 @@ function selectCollectionsWithSetters(state: EstimateV2EditorStore): EstimateV2E
     setRollers: state.setRollers,
     accessFees: state.collections.accessFees ?? EMPTY_ACCESS_FEES,
     setAccessFees: state.setAccessFees,
+    prejobTrips: state.collections.prejobTrips ?? EMPTY_PREJOB_TRIPS,
+    setPrejobTrips: state.setPrejobTrips,
     otherItems: state.collections.otherItems ?? EMPTY_OTHER_ITEMS,
     setOtherItems: state.setOtherItems,
   }

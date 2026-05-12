@@ -28,11 +28,33 @@ import type {
   EstimateCustomerSendContextResult,
   EstimateCustomerSendEstimateRow,
   EstimatePublicVersionRow,
+  CustomerSendVersionArtifactState,
 } from '@/lib/server/customer-send/types'
 import { selectCurrentEstimatePublicVersionRows } from '@/lib/customer-estimates/publicSnapshot'
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
+}
+
+function readPersistedArtifactEstimateUpdatedAt(
+  artifactState: Extract<CustomerSendVersionArtifactState, { kind: 'canonical' }>
+) {
+  const operational = artifactState.snapshot.operational_snapshot
+  if (!operational || typeof operational !== 'object' || Array.isArray(operational)) {
+    return ''
+  }
+  return asText((operational as Record<string, unknown>).source_estimate_updated_at)
+}
+
+function hasPersistedArtifactEstimateDrift(params: {
+  estimate: EstimateCustomerSendEstimateRow
+  artifactState: Extract<CustomerSendVersionArtifactState, { kind: 'canonical' }>
+}) {
+  const currentUpdatedAt = asText(params.estimate.updated_at)
+  if (!currentUpdatedAt) return false
+
+  const persistedUpdatedAt = readPersistedArtifactEstimateUpdatedAt(params.artifactState)
+  return !persistedUpdatedAt || persistedUpdatedAt !== currentUpdatedAt
 }
 
 export async function loadEstimateCustomerSendContext(params: {
@@ -96,6 +118,14 @@ async function loadPersistedArtifactOnlyCustomerSendContext(params: {
   )
   const artifactState = readCustomerSendVersionArtifactState(latestVersion)
   if (artifactState.kind !== 'canonical' || !latestVersion) return null
+  if (
+    hasPersistedArtifactEstimateDrift({
+      estimate: estimate as EstimateCustomerSendEstimateRow,
+      artifactState,
+    })
+  ) {
+    return null
+  }
 
   const companyProfile = await loadCompanyProfileSettings(params.orgId).catch(() => null)
   if (companyProfile && !asText(latestVersion.public_token)) {

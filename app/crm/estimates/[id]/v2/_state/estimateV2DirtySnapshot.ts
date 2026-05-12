@@ -9,6 +9,7 @@ import type {
   EstimateV2DrywallRepairDraft,
   EstimateV2JobSettingsDraft,
   EstimateV2OtherItemDraft,
+  EstimateV2PrejobTripDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
   EstimateV2RollerDraft,
@@ -45,6 +46,7 @@ export function buildEstimateV2DirtySnapshot(params: {
   drywallRepairs?: EstimateV2DrywallRepairDraft[]
   rollers?: EstimateV2RollerDraft[]
   accessFees?: EstimateV2AccessFeeDraft[]
+  prejobTrips?: EstimateV2PrejobTripDraft[]
   otherItems?: EstimateV2OtherItemDraft[]
 }): EstimateV2DirtySnapshot {
   const payload = buildEstimateV2SavePayload(
@@ -60,7 +62,8 @@ export function buildEstimateV2DirtySnapshot(params: {
     params.doorScopes ?? [],
     params.drywallRepairs ?? [],
     params.accessFees ?? [],
-    params.otherItems ?? []
+    params.otherItems ?? [],
+    params.prejobTrips ?? []
   )
 
   return createEstimateV2DirtySnapshot(payload)

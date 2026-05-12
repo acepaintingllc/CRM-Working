@@ -48,6 +48,7 @@ import type {
   EstimateAccessFeePersistenceRow,
   EstimateJobSettingsPersistenceRow,
   EstimateOtherPersistenceRow,
+  EstimatePrejobPersistenceRow,
 } from './persistenceTypes.ts'
 import {
   type EstimateFullPersistencePayload,
@@ -181,10 +182,12 @@ export async function saveEstimateV2Inputs(params: {
     const useV2DoorsSave = Array.isArray(body.room_door_scopes)
     const useV2DrywallSave = Array.isArray(body.drywall_repairs)
     const useV2OtherSave = Array.isArray(body.other)
+    const useV2PrejobSave = Array.isArray(body.prejob)
     const hasScopeCalculationPayload =
       useV2WallsSave || useV2CeilingsSave || useV2TrimSave || useV2DoorsSave || useV2DrywallSave
     const hasCalculationPayload =
       hasScopeCalculationPayload || Array.isArray(body.access_fees) || useV2OtherSave
+      || useV2PrejobSave
     const shouldReturnCanonicalPostSave = hasCalculationPayload
     const jobId = asText(estimate.job_id)
     const canUseTransactionalRpc = uuid.test(jobId)
@@ -199,6 +202,7 @@ export async function saveEstimateV2Inputs(params: {
     let v2DrywallRepairRows: V2DrywallRepairSaveRow[] | null = null
     let accessFeeRows: EstimateAccessFeePersistenceRow[] | null = null
     let otherRows: EstimateOtherPersistenceRow[] | null = null
+    let prejobRows: EstimatePrejobPersistenceRow[] | null = null
     let jobSettingsRow: EstimateJobSettingsPersistenceRow | null = null
     const ensureCatalogs = createCalculationCatalogsLoader({
       requestOrigin: params.requestOrigin,
@@ -289,6 +293,15 @@ export async function saveEstimateV2Inputs(params: {
       })
     }
 
+    if (Array.isArray(body.prejob)) {
+      prejobRows = buildEstimatePrejobPersistenceRows({
+        orgId: params.orgId,
+        estimateId: params.estimateId,
+        jobId,
+        rows: body.prejob as Unsafe[],
+      })
+    }
+
     if (!params.autosaveOnly && hasCalculationPayload) {
       if (hasScopeCalculationPayload && !v2RoomRows) throw new Error('V2 scope save requires rooms')
       const calculated = await calculateEstimateV2ArtifactsForSave({
@@ -313,6 +326,7 @@ export async function saveEstimateV2Inputs(params: {
           active: row.active,
         })),
         otherRows: otherRows ?? [],
+        prejobRows: prejobRows ?? [],
         jobsettings: body.jobsettings as Unsafe | undefined,
         orgDefaults: await ensureOrgDefaults(),
         ensureCatalogs,
@@ -469,12 +483,7 @@ export async function saveEstimateV2Inputs(params: {
     }
 
     if (Array.isArray(body.prejob)) {
-      fullPersistencePayload.prejob = buildEstimatePrejobPersistenceRows({
-        orgId: params.orgId,
-        estimateId: params.estimateId,
-        jobId,
-        rows: body.prejob as Unsafe[],
-      })
+      fullPersistencePayload.prejob = prejobRows ?? []
     }
 
     if (Array.isArray(body.trim_items)) {

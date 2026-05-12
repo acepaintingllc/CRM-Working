@@ -168,6 +168,10 @@ function buildTableMap(overrides?: Record<string, unknown>) {
       data: [{ id: 'fee-1' }],
       error: null,
     }),
+    estimate_prejob: createOrderedCollectionChain({
+      data: [{ id: 'prejob-1' }],
+      error: null,
+    }),
     estimate_trim_items: createOrderedCollectionChain({
       data: [{ id: 'trim-1' }],
       error: null,
@@ -356,6 +360,7 @@ describe('customer send context loader', () => {
       doorScopes: [{ room_id: 'room-1', door_type_id: 'DOOR_PANEL' }],
       drywallRepairs: [{ id: 'drywall-1' }],
       accessFees: [{ id: 'fee-1' }],
+      prejob: [{ id: 'prejob-1' }],
       trimItems: [{ id: 'trim-1' }],
       other: [{ id: 'other-1' }],
       publicVersions: [
