@@ -49,17 +49,22 @@ export type QuoteRatesEditorVm = {
   isCreating: boolean
   inlineValidation: string | null
   canSave: boolean
+  pendingChangesCount: number
   activeSettingSet: import('@/types/estimator/ratesFlags').RatesFlagsSettingSetMetadata | null
-  draftSettingSet: import('@/types/estimator/ratesFlags').RatesFlagsSettingSetMetadata | null
-  editingSettingSet: import('@/types/estimator/ratesFlags').RatesFlagsSettingSetMetadata | null
-  canActivateDraft: boolean
-  activating: boolean
 }
 
 export type QuoteRatesDiscardVm = {
   status: 'idle' | 'confirming' | 'applying'
   isOpen: boolean
   transitionType: QuoteRatesPendingTransition['type'] | null
+}
+
+export type QuoteRatesLeavePageVm = {
+  status: 'idle' | 'confirming' | 'applying'
+  isOpen: boolean
+  href: string | null
+  saving: boolean
+  canSave: boolean
 }
 
 export function formatRatesDraftValue<TKey extends RatesFlagsEditableCategoryKey>(
@@ -89,6 +94,7 @@ export function buildQuoteRatesPageVm(params: {
     !canEditCategory &&
     !isCreating &&
     workflowState.draft === null
+  const editorHasValidationIssue = Boolean(workflowState.draft && derived.validationError)
   const uiState = buildDenseQuotePageUiState({
     loading: resource.loading,
     hasData,
@@ -99,10 +105,10 @@ export function buildQuoteRatesPageVm(params: {
     noticeTone: workflowState.noticeTone,
     canRetry: !resource.loading && actionIsIdle,
     canSave:
-      Boolean(derived.activeCategory) &&
+      workflowState.pendingMutations.length > 0 &&
       actionIsIdle &&
       !resource.error &&
-      Boolean(derived.validationResult?.ok),
+      !editorHasValidationIssue,
     canArchiveToggle:
       Boolean(derived.selectedRow) &&
       workflowState.editorMode !== 'create' &&
@@ -161,22 +167,28 @@ export function buildQuoteRatesPageVm(params: {
       isCreating,
       inlineValidation: uiState.inlineValidation,
       canSave: uiState.canSave,
+      pendingChangesCount: workflowState.pendingMutations.length,
       activeSettingSet: resource.data.active_setting_set ?? null,
-      draftSettingSet: resource.data.draft_setting_set ?? null,
-      editingSettingSet: resource.data.editing_setting_set ?? null,
-      canActivateDraft:
-        Boolean(resource.data.draft_setting_set) &&
-        actionIsIdle &&
-        !resource.loading &&
-        !resource.error &&
-        !derived.isDirty,
-      activating: workflowState.actionStatus === 'activating',
     } satisfies QuoteRatesEditorVm,
     discardVm: {
       isOpen:
-        workflowState.discardStatus === 'confirming' && Boolean(workflowState.pendingTransition),
+        workflowState.discardStatus === 'confirming' &&
+        Boolean(workflowState.pendingTransition) &&
+        workflowState.pendingTransition?.type !== 'leavePage',
       status: workflowState.discardStatus,
       transitionType: workflowState.pendingTransition?.type ?? null,
     } satisfies QuoteRatesDiscardVm,
+    leavePageVm: {
+      isOpen:
+        workflowState.discardStatus === 'confirming' &&
+        workflowState.pendingTransition?.type === 'leavePage',
+      status: workflowState.discardStatus,
+      href:
+        workflowState.pendingTransition?.type === 'leavePage'
+          ? workflowState.pendingTransition.href
+          : null,
+      saving: workflowState.actionStatus === 'saving',
+      canSave: uiState.canSave,
+    } satisfies QuoteRatesLeavePageVm,
   }
 }

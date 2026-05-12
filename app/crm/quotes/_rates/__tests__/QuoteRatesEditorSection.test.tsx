@@ -52,22 +52,18 @@ const legacyCategory = {
 } satisfies RatesFlagsCategory
 
 const actions = {
-  saveCurrent: vi.fn(async () => undefined),
   cancelEdit: vi.fn(),
   setDraftActive: vi.fn(),
   updateDraftValue: vi.fn(),
-  activateDraft: vi.fn(),
   formatDraftValue: vi.fn((fieldKey: string) =>
     fieldKey === 'display_name' ? 'Standard walls' : 'wall-rate-1'
   ),
 } satisfies Pick<
   QuoteRatesActions,
-  | 'saveCurrent'
   | 'cancelEdit'
   | 'setDraftActive'
   | 'updateDraftValue'
   | 'formatDraftValue'
-  | 'activateDraft'
 >
 
 function buildEditorVm(overrides: Partial<QuoteRatesEditorVm> = {}): QuoteRatesEditorVm {
@@ -84,11 +80,8 @@ function buildEditorVm(overrides: Partial<QuoteRatesEditorVm> = {}): QuoteRatesE
     isCreating: false,
     inlineValidation: null,
     canSave: true,
+    pendingChangesCount: 0,
     activeSettingSet: null,
-    draftSettingSet: null,
-    editingSettingSet: null,
-    canActivateDraft: false,
-    activating: false,
     ...overrides,
   }
 }
@@ -108,7 +101,6 @@ describe('QuoteRatesEditorSection', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
     expect(screen.getByLabelText('Display Name *')).toHaveValue('Standard walls')
     expect(
@@ -133,7 +125,7 @@ describe('QuoteRatesEditorSection', () => {
     expect(
       screen.getByText('This category is a legacy data type and cannot be edited here.')
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Display Name *')).not.toBeInTheDocument()
   })
 
@@ -152,7 +144,7 @@ describe('QuoteRatesEditorSection', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: 'Create row' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
     expect(screen.getByLabelText('Display Name *')).toHaveValue('Standard walls')
     expect(
       screen.queryByText('This category is a legacy data type and cannot be edited here.')

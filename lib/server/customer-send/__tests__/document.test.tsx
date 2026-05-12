@@ -318,6 +318,28 @@ describe('customer send document builder', () => {
           },
         ],
       },
+      terms_pages: [
+        {
+          title: 'Our Process & What to Expect',
+          sections: [
+            {
+              key: 'our_process',
+              title: 'Our Process & What to Expect',
+              paragraphs: ['Process copy.'],
+            },
+          ],
+        },
+        {
+          title: 'Project Terms',
+          sections: [
+            {
+              key: 'project_terms',
+              title: 'Project Terms',
+              paragraphs: ['Project terms copy.'],
+            },
+          ],
+        },
+      ],
       assembly_meta: {
         missing_company_fields: [],
         missing_payment_fields: [],

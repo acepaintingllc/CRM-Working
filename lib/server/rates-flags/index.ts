@@ -1,11 +1,11 @@
 export {
   _test,
-  activateRatesFlagsDraft,
-  applyRatesFlagsMutation,
   buildRatesFlagsPayloadFromValues,
   getOrCreateLiveRatesFlagsCatalogOverlay,
+  parseRatesFlagsBatchPublishRequest,
   parseRatesFlagsMutationRequest,
   parseConstantsTablesDetailed,
+  publishRatesFlagsBatch,
   readLiveRatesFlagsCatalogOverlay,
   readRatesFlagsPayload,
   type RatesFlagsCatalogOverlay,

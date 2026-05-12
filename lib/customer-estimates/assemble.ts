@@ -3,6 +3,7 @@ import type {
   CompanyProfile,
   CustomerEstimateDocument,
   CustomerEstimateDocumentSourceMeta,
+  CustomerEstimateTermsPage,
   CustomerEstimateTermsSection,
 } from './types'
 import {
@@ -113,54 +114,38 @@ function buildAdditionalTermsSection(document: BuiltCustomerEstimateDocument) {
 function buildStructuredTermsSections(
   terms: QuoteTermsSections,
   quoteValidityDays: number
-): CustomerEstimateTermsSection[] {
-  return [
+): CustomerEstimateTermsPage[] {
+  const replaceTokens = (value: string) =>
+    value.replace(/\{quote_validity_days\}/g, String(quoteValidityDays))
+  const pages = [
     {
-      key: 'included_preparation',
-      title: 'Included Preparation',
-      paragraphs: [
-        `Walls: ${terms.included_preparation.walls}`,
-        `Ceilings: ${terms.included_preparation.ceilings}`,
-        `Trim: ${terms.included_preparation.trim}`,
-      ].filter((value) => !!asText(value.replace(/^[^:]+:\s*/, ''))),
+      title: 'Our Process & What to Expect',
+      sections: [
+        {
+          key: 'our_process',
+          title: 'Our Process & What to Expect',
+          paragraphs: splitTermsParagraphs(replaceTokens(terms.our_process)),
+        },
+      ],
     },
     {
-      key: 'customer_responsibilities',
-      title: 'Customer Responsibilities',
-      paragraphs: splitTermsParagraphs(terms.customer_responsibilities),
+      title: 'Project Terms',
+      sections: [
+        {
+          key: 'project_terms',
+          title: 'Project Terms',
+          paragraphs: splitTermsParagraphs(replaceTokens(terms.project_terms)),
+        },
+      ],
     },
-    {
-      key: 'exclusions',
-      title: 'Exclusions',
-      paragraphs: splitTermsParagraphs(terms.exclusions),
-    },
-    {
-      key: 'changes_to_scope',
-      title: 'Changes to Scope',
-      paragraphs: splitTermsParagraphs(terms.scope_changes),
-    },
-    {
-      key: 'pricing_payment',
-      title: 'Pricing & Payment Terms',
-      paragraphs: [
-        terms.pricing_payment.payment_instructions,
-        `Pricing is valid for ${quoteValidityDays} days from the date of this quote.`,
-        terms.pricing_payment.deposit_terms,
-        terms.pricing_payment.balance_due,
-        terms.pricing_payment.card_fee_note,
-      ].map(asText).filter(Boolean),
-    },
-    {
-      key: 'insurance',
-      title: 'Insurance',
-      paragraphs: splitTermsParagraphs(terms.insurance),
-    },
-    {
-      key: 'thank_you',
-      title: 'Thank you',
-      paragraphs: splitTermsParagraphs(terms.thank_you),
-    },
-  ].filter((section) => section.paragraphs.length > 0)
+  ]
+
+  return pages
+    .map((page) => ({
+      ...page,
+      sections: page.sections.filter((section) => section.paragraphs.length > 0),
+    }))
+    .filter((page) => page.sections.length > 0)
 }
 
 export function assembleCustomerEstimateDocument(
@@ -196,53 +181,72 @@ export function assembleCustomerEstimateDocument(
     ? normalizeQuoteTermsSections(document.terms_sections)
     : null
 
-  const termsSections: CustomerEstimateTermsSection[] = structuredTerms
+  const termsPages: CustomerEstimateTermsPage[] = structuredTerms
     ? buildStructuredTermsSections(structuredTerms, document.quote_validity_days)
     : document.source_meta.settings.terms_text
     ? [
-        ...(additionalTerms ? [additionalTerms] : []),
         {
-          key: 'thank_you',
-          title: 'Thank you',
-          paragraphs: DEFAULT_THANK_YOU,
+          title: 'Project Terms',
+          sections: [
+            ...(additionalTerms ? [additionalTerms] : []),
+            {
+              key: 'thank_you',
+              title: 'Thank you',
+              paragraphs: DEFAULT_THANK_YOU,
+            },
+          ],
         },
       ]
     : [
         {
-          key: 'included_preparation',
-          title: 'Included Preparation',
-          paragraphs: DEFAULT_INCLUDED_PREPARATION.map(
-            (item) => `${item.title}: ${item.text}`
-          ),
+          title: 'Our Process & What to Expect',
+          sections: [
+            {
+              key: 'included_preparation',
+              title: 'Included Preparation',
+              paragraphs: DEFAULT_INCLUDED_PREPARATION.map(
+                (item) => `${item.title}: ${item.text}`
+              ),
+            },
+            {
+              key: 'customer_responsibilities',
+              title: 'Customer Responsibilities',
+              paragraphs: DEFAULT_CUSTOMER_RESPONSIBILITIES,
+            },
+            {
+              key: 'changes_to_scope',
+              title: 'Changes to Scope',
+              paragraphs: DEFAULT_SCOPE_CHANGE_TERMS,
+            },
+          ],
         },
         {
-          key: 'customer_responsibilities',
-          title: 'Customer Responsibilities',
-          paragraphs: DEFAULT_CUSTOMER_RESPONSIBILITIES,
-        },
-        {
-          key: 'exclusions',
-          title: 'Exclusions',
-          paragraphs: DEFAULT_EXCLUSIONS,
-        },
-        {
-          key: 'changes_to_scope',
-          title: 'Changes to Scope',
-          paragraphs: DEFAULT_SCOPE_CHANGE_TERMS,
-        },
-        pricingTerms.section,
-        {
-          key: 'insurance',
-          title: 'Insurance',
-          paragraphs: [insuranceStatement],
-        },
-        ...(additionalTerms ? [additionalTerms] : []),
-        {
-          key: 'thank_you',
-          title: 'Thank you',
-          paragraphs: DEFAULT_THANK_YOU,
+          title: 'Project Terms',
+          sections: [
+            {
+              key: 'exclusions',
+              title: 'Exclusions',
+              paragraphs: DEFAULT_EXCLUSIONS,
+            },
+            pricingTerms.section,
+            {
+              key: 'insurance',
+              title: 'Insurance',
+              paragraphs: [insuranceStatement],
+            },
+            ...(additionalTerms ? [additionalTerms] : []),
+            {
+              key: 'thank_you',
+              title: 'Thank you',
+              paragraphs: DEFAULT_THANK_YOU,
+            },
+          ],
         },
       ]
+  const primaryTermsPage = termsPages[0] ?? {
+    title: 'Project Terms',
+    sections: [] satisfies CustomerEstimateTermsSection[],
+  }
 
   return {
     ...document,
@@ -261,10 +265,8 @@ export function assembleCustomerEstimateDocument(
       total: document.total,
       footer_note: DEFAULT_QUOTE_FOOTER_NOTE,
     },
-    terms_page: {
-      title: 'QUOTE TERMS',
-      sections: termsSections,
-    },
+    terms_page: primaryTermsPage,
+    terms_pages: termsPages,
     assembly_meta: {
       missing_company_fields: missingCompanyFields,
       missing_payment_fields: structuredTerms || document.source_meta.settings.terms_text

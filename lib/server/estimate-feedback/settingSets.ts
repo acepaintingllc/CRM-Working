@@ -14,7 +14,10 @@ import type {
   TemplateConstantRowRecord,
   TemplateConstantsRecord,
 } from '../rates-flags/categoryTypes.ts'
-import type { RatesFlagsEditableCategoryKey } from '../../../types/estimator/ratesFlags.ts'
+import type {
+  RatesFlagsEditableCategoryKey,
+  RatesFlagsMutationRequest,
+} from '../../../types/estimator/ratesFlags.ts'
 
 type SupabaseAdminClient = typeof supabaseAdmin
 type Unsafe = Record<string, unknown>
@@ -502,6 +505,35 @@ export async function activateDraftSettingSet(params: {
   return loadSettingSetById({ orgId: params.orgId, settingSetId: params.settingSetId })
 }
 
+export async function publishRatesFlagsSettingSetBatch(params: {
+  orgId: string
+  userId: string
+  mutations: RatesFlagsMutationRequest[]
+  reason?: string
+  source?: string
+}) {
+  const client = await getSupabaseAdmin()
+  const result = await client.rpc('publish_estimator_rates_flags_batch', {
+    p_org_id: params.orgId,
+    p_actor_id: params.userId,
+    p_mutations: params.mutations,
+    p_reason: params.reason ?? '',
+    p_source: params.source ?? 'rates_flags_batch_publish',
+  })
+  if (result.error) throw new Error(result.error.message)
+
+  const data = (result.data ?? {}) as Unsafe
+  const settingSetId =
+    asText(data.setting_set_id) ||
+    asText(((data.setting_set as Unsafe | undefined) ?? {}).id)
+  if (!settingSetId) throw new Error('Published setting set id was not returned.')
+
+  return {
+    settingSet: await loadSettingSetById({ orgId: params.orgId, settingSetId }),
+    draftEstimatesUpdated: asMaybeNumber(data.draft_estimates_updated),
+  }
+}
+
 export function settingValuesToTemplateRows(
   snapshot: EstimatorSettingSetSnapshot
 ): TemplateConstantRowRecord[] {
@@ -569,6 +601,7 @@ export function settingValuesToEstimateTemplateSettings(
 }
 
 export const _test = {
+  publishRatesFlagsSettingSetBatch,
   setSettingSetsSupabaseAdminProvider,
   settingSetMetadata,
   settingSetToTemplateRecord,

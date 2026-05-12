@@ -15,7 +15,7 @@ export const DOCUMENT_PLACEHOLDERS = {
 
 export const DEFAULT_DOCUMENT_LABEL = 'QUOTE'
 export const DEFAULT_QUOTE_FOOTER_NOTE =
-  'This quote is subject to the terms and conditions on page 2.'
+  'This quote is subject to the process and project terms on pages 2 and 3.'
 
 export const DEFAULT_INCLUDED_PREPARATION = [
   {

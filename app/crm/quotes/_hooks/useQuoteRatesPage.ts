@@ -7,6 +7,7 @@ import {
   type QuoteRatesDiscardVm,
   type QuoteRatesEditorVm,
   type QuoteRatesFiltersVm,
+  type QuoteRatesLeavePageVm,
   type QuoteRatesTableVm,
 } from './quoteRatesPageVm'
 
@@ -26,6 +27,7 @@ export type {
   QuoteRatesDiscardVm,
   QuoteRatesEditorVm,
   QuoteRatesFiltersVm,
+  QuoteRatesLeavePageVm,
   QuoteRatesTableVm,
 }
 export type { QuoteRatesActions } from './quoteRatesPageController'
@@ -47,6 +49,7 @@ export function useQuoteRatesPage() {
     tableVm: pageVm.tableVm,
     editorVm: pageVm.editorVm,
     discardVm: pageVm.discardVm,
+    leavePageVm: pageVm.leavePageVm,
     actions: controller.actions,
   }
 }

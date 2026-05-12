@@ -83,14 +83,15 @@ describe('QuoteV2SettingsPage', () => {
     render(<QuoteV2SettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue(defaultQuoteTermsSections.insurance)).toBeTruthy()
+      expect(screen.getByLabelText('Project Terms')).toBeTruthy()
     })
+    const projectTermsInput = screen.getByLabelText('Project Terms') as HTMLTextAreaElement
 
     const saveButton = screen.getByRole('button', { name: 'Save defaults' }) as HTMLButtonElement
     expect(saveButton.disabled).toBe(true)
 
-    fireEvent.change(screen.getByDisplayValue(defaultQuoteTermsSections.insurance), {
-      target: { value: 'Updated insurance terms' },
+    fireEvent.change(projectTermsInput, {
+      target: { value: 'Updated project terms' },
     })
 
     expect(saveButton.disabled).toBe(false)

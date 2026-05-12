@@ -38,6 +38,7 @@ export type QuoteRatesTransitionPlan =
   | { kind: 'reload'; keepId?: string }
   | { kind: 'archiveOrReactivate'; nextActive: boolean }
   | { kind: 'activateDraft' }
+  | { kind: 'leavePage'; href: string }
   | { kind: 'noop' }
 
 export function resolveActiveCategoryKey(navigation: QuoteRatesNavigationState) {
@@ -239,6 +240,8 @@ export function getQuoteRatesIntentChanged(
       return true
     case 'activateDraft':
       return true
+    case 'leavePage':
+      return true
     default:
       return false
   }
@@ -278,6 +281,8 @@ export function buildQuoteRatesTransitionPlan(
       return { kind: 'archiveOrReactivate', nextActive: intent.nextActive }
     case 'activateDraft':
       return { kind: 'activateDraft' }
+    case 'leavePage':
+      return { kind: 'leavePage', href: intent.href }
     default:
       return { kind: 'noop' }
   }

@@ -1,47 +1,41 @@
 import type {
-  RatesFlagsCreateOrUpdateMutationRequest,
+  RatesFlagsBatchPublishResult,
   RatesFlagsMutationRequest,
   RatesFlagsPayload,
 } from '../../../types/estimator/ratesFlags'
-import { CATEGORY_CONFIGS, getCategoryConfig } from './categories.ts'
+import { CATEGORY_CONFIGS } from './categories.ts'
 import { buildCategory, buildCategoryFromStoredRows, buildMutationPlan } from './categoryHelpers.ts'
 import {
   getRatesFlagsMutationParserCategoryKeys,
   getRatesFlagsMutationParserFieldKeys,
   getRatesFlagsMutationParserRequiredFieldKeys,
+  parseRatesFlagsBatchPublishRequest,
   parseRatesFlagsMutationRequest,
 } from './mutationParser.ts'
 import { type RatesFlagsCatalogOverlay, isAreaBasedUnit } from './shared.ts'
 import { buildOverlayFromRows } from './overlay.ts'
 import { findCategoryTablesDetailed, findTableDetailed, getHeaderIndex, parseConstantsTablesDetailed, parseSchemaVersion } from './tableParsing.ts'
 import { ensureTemplateState, setSupabaseAdminProvider } from './templateState.ts'
-import { asText, normalizeId, toYN } from './shared.ts'
+import { normalizeId } from './shared.ts'
 import {
-  activateDraftSettingSet,
-  cloneActiveSettingSetAsDraft,
   loadActiveSettingSet,
-  loadLatestDraftSettingSet,
-  loadSettingSetById,
+  publishRatesFlagsSettingSetBatch,
   settingSetMetadata,
   settingSetToTemplateRecord,
   settingValuesToTemplateRows,
-  updateDraftSettingRowValue,
+  _test as settingSetsTest,
   type EstimatorSettingSetSnapshot,
 } from '../estimate-feedback/settingSets.ts'
 
 export { parseConstantsTablesDetailed, type RatesFlagsCatalogOverlay }
-export { parseRatesFlagsMutationRequest }
+export { parseRatesFlagsBatchPublishRequest, parseRatesFlagsMutationRequest }
 
-export async function readRatesFlagsPayload(params: {
-  origin: string
-  orgId: string
-  userId: string
-}): Promise<RatesFlagsPayload> {
-  void params.origin
-  void params.userId
-  const active = await loadActiveSettingSet({ orgId: params.orgId })
-  const draft = await loadLatestDraftSettingSet({ orgId: params.orgId })
-  const editing = draft ?? active
+function buildRatesFlagsPayloadFromSettingSetSnapshots(params: {
+  active: EstimatorSettingSetSnapshot | null
+  draft: EstimatorSettingSetSnapshot | null
+  editing: EstimatorSettingSetSnapshot | null
+}): RatesFlagsPayload {
+  const editing = params.editing
   if (!editing) {
     return {
       source: 'db',
@@ -77,12 +71,38 @@ export async function readRatesFlagsPayload(params: {
     source: 'db',
     seeded: true,
     template_version: template.version,
-    active_setting_set: settingSetMetadata(active),
-    draft_setting_set: settingSetMetadata(draft),
+    active_setting_set: settingSetMetadata(params.active),
+    draft_setting_set: settingSetMetadata(params.draft),
     editing_setting_set: settingSetMetadata(editing),
     categories,
     condition_modifier_catalog: overlay.condition_modifiers,
   }
+}
+
+export async function readRatesFlagsPayload(params: {
+  origin: string
+  orgId: string
+  userId: string
+}): Promise<RatesFlagsPayload> {
+  void params.origin
+  void params.userId
+  const active = await loadActiveSettingSet({ orgId: params.orgId })
+  return buildRatesFlagsPayloadFromSettingSetSnapshots({
+    active,
+    draft: null,
+    editing: active,
+  })
+}
+
+async function readActiveRatesFlagsPayload(params: {
+  orgId: string
+}): Promise<RatesFlagsPayload> {
+  const active = await loadActiveSettingSet({ orgId: params.orgId })
+  return buildRatesFlagsPayloadFromSettingSetSnapshots({
+    active,
+    draft: null,
+    editing: active,
+  })
 }
 
 export function buildRatesFlagsPayloadFromValues(
@@ -107,169 +127,115 @@ export function buildRatesFlagsPayloadFromValues(
   }
 }
 
-async function getOrCreateRatesFlagsDraft(params: {
-  orgId: string
-  userId: string
-}): Promise<EstimatorSettingSetSnapshot> {
-  const existingDraft = await loadLatestDraftSettingSet({ orgId: params.orgId })
-  if (existingDraft) return existingDraft
-  const draft = await cloneActiveSettingSetAsDraft({
-    orgId: params.orgId,
-    userId: params.userId,
-    notes: 'Rates/Flags draft',
-  })
-  if (!draft) throw new Error('Failed to create rates and flags draft.')
-  return draft
-}
-
-function getDraftRowValueJson(values: Record<string, unknown>) {
-  const { active, ...valuesJson } = values
-  void active
-  return valuesJson
-}
-
-export async function applyRatesFlagsMutation(params: {
-  origin: string
-  orgId: string
-  userId: string
-  request: RatesFlagsMutationRequest
+function validateRatesFlagsBatchAgainstSnapshot(params: {
+  active: EstimatorSettingSetSnapshot
+  mutations: RatesFlagsMutationRequest[]
 }) {
-  void params.origin
-  const config = getCategoryConfig(params.request.category)
-  if (!config) {
-    return { ok: false as const, error: 'Unknown category.', status: 400 }
+  const rowIdsByCategory = new Map<string, Set<string>>()
+  for (const value of params.active.values) {
+    if (!value.row_id) continue
+    const set = rowIdsByCategory.get(value.category_key) ?? new Set<string>()
+    set.add(value.row_id)
+    rowIdsByCategory.set(value.category_key, set)
   }
 
-  try {
-    const draft = await getOrCreateRatesFlagsDraft({
-      orgId: params.orgId,
-      userId: params.userId,
-    })
-    const request = params.request
-    if (request.action === 'archive' || request.action === 'reactivate') {
-      const existing = draft.values.find(
-        (value) => value.category_key === config.key && value.row_id === request.rowId
-      )
-      if (!existing) return { ok: false as const, error: 'Row not found.', status: 404 }
-      await updateDraftSettingRowValue({
-        orgId: params.orgId,
-        settingSetId: draft.set.id,
-        categoryKey: config.key,
-        originalRowId: request.rowId,
-        rowId: request.rowId,
-        displayName: existing.display_name,
-        active: request.action === 'reactivate',
-        sortOrder: existing.sort_order,
-        valueJson: existing.value_json ?? {},
-      })
-      return { ok: true as const }
+  for (const mutation of params.mutations) {
+    const categoryRows = rowIdsByCategory.get(mutation.category) ?? new Set<string>()
+    rowIdsByCategory.set(mutation.category, categoryRows)
+
+    if (mutation.action === 'archive' || mutation.action === 'reactivate') {
+      if (!categoryRows.has(mutation.rowId)) {
+        return { ok: false as const, error: 'Row not found.', status: 404 }
+      }
+      continue
     }
-    const mutation = request as RatesFlagsCreateOrUpdateMutationRequest
+
     const originalId = normalizeId(
       mutation.action === 'update' ? mutation.original_id : mutation.values.id
     ) || normalizeId(mutation.values.id)
-    if (!originalId) {
+    const nextId = normalizeId(mutation.values.id)
+    if (!originalId || !nextId) {
       return { ok: false as const, error: 'Missing row id.', status: 400 }
     }
-    const nextId = normalizeId(mutation.values.id)
-    const nextDisplayName =
-      asText(mutation.values.display_name) || asText(mutation.values.id)
-    const nextActive = toYN(
-      mutation.values.active,
-      mutation.action === 'create' ? 'Y' : 'N'
-    ) as 'Y' | 'N'
-    const valuesJson = getDraftRowValueJson(mutation.values)
 
     if (mutation.action === 'create') {
-      const collision = draft.values.find(
-        (value) => value.category_key === config.key && value.row_id === nextId
-      )
-      if (collision) {
+      if (categoryRows.has(nextId)) {
         return { ok: false as const, error: `Row '${nextId}' already exists.`, status: 409 }
       }
-
-      await updateDraftSettingRowValue({
-        orgId: params.orgId,
-        settingSetId: draft.set.id,
-        categoryKey: config.key,
-        rowId: nextId,
-        displayName: nextDisplayName,
-        active: nextActive === 'Y',
-        valueJson: valuesJson,
-      })
-      return { ok: true as const }
+      categoryRows.add(nextId)
+      continue
     }
 
-    if (mutation.action === 'update') {
-      const existing = draft.values.find(
-        (value) => value.category_key === config.key && value.row_id === originalId
-      )
-      if (!existing) return { ok: false as const, error: 'Row not found.', status: 404 }
-
-      if (nextId !== originalId) {
-        const collision = draft.values.find(
-          (value) => value.category_key === config.key && value.row_id === nextId
-        )
-        if (collision) {
-          return { ok: false as const, error: `Row '${nextId}' already exists.`, status: 409 }
-        }
-      }
-
-      await updateDraftSettingRowValue({
-        orgId: params.orgId,
-        settingSetId: draft.set.id,
-        categoryKey: config.key,
-        originalRowId: originalId,
-        rowId: nextId,
-        displayName: nextDisplayName,
-        active: nextActive === 'Y',
-        sortOrder: existing.sort_order,
-        valueJson: valuesJson,
-      })
-      return { ok: true as const }
+    if (!categoryRows.has(originalId)) {
+      return { ok: false as const, error: 'Row not found.', status: 404 }
     }
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof Error ? error.message : 'Failed to apply mutation.',
-      status: 400,
+    if (nextId !== originalId && categoryRows.has(nextId)) {
+      return { ok: false as const, error: `Row '${nextId}' already exists.`, status: 409 }
     }
+    categoryRows.delete(originalId)
+    categoryRows.add(nextId)
   }
 
-  return { ok: false as const, error: 'Unsupported mutation action.', status: 400 }
+  return { ok: true as const }
 }
 
-export async function activateRatesFlagsDraft(params: {
+export async function publishRatesFlagsBatch(params: {
   origin: string
   orgId: string
   userId: string
-  settingSetId?: string | null
+  mutations: RatesFlagsMutationRequest[]
   reason?: string
-}) {
+}): Promise<
+  | { ok: true; data: RatesFlagsBatchPublishResult }
+  | { ok: false; error: string; status: number }
+> {
   void params.origin
-  const draft = params.settingSetId
-    ? await loadSettingSetById({
-        orgId: params.orgId,
-        settingSetId: params.settingSetId,
-      })
-    : await loadLatestDraftSettingSet({ orgId: params.orgId })
-  if (!draft) {
-    return { ok: false as const, error: 'No draft setting set to activate.', status: 404 }
-  }
   try {
-    await activateDraftSettingSet({
-      orgId: params.orgId,
-      settingSetId: draft.set.id,
-      userId: params.userId,
-      reason: params.reason ?? 'Rates/Flags draft activated',
-      source: 'rates_flags_admin',
+    const active = await loadActiveSettingSet({ orgId: params.orgId })
+    if (!active) {
+      return { ok: false, error: 'No active estimator setting set found.', status: 404 }
+    }
+
+    const validation = validateRatesFlagsBatchAgainstSnapshot({
+      active,
+      mutations: params.mutations,
     })
-    return { ok: true as const }
-  } catch (error) {
+    if (!validation.ok) return validation
+
+    const published = await publishRatesFlagsSettingSetBatch({
+      orgId: params.orgId,
+      userId: params.userId,
+      mutations: params.mutations,
+      reason: params.reason ?? 'Rates/Flags batch published',
+      source: 'rates_flags_batch_publish',
+    })
+    const activePayload = await readActiveRatesFlagsPayload({ orgId: params.orgId })
+    const settingSet = published.settingSet
+
     return {
-      ok: false as const,
-      error: error instanceof Error ? error.message : 'Failed to activate draft.',
-      status: 400,
+      ok: true,
+      data: {
+        payload: activePayload,
+        setting_set_id:
+          settingSet?.set.id ?? activePayload.active_setting_set?.id ?? active.set.id,
+        version_number:
+          settingSet?.set.version_number ??
+          activePayload.active_setting_set?.version_number ??
+          active.set.version_number,
+        draft_estimates_updated: published.draftEstimatesUpdated,
+      },
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to publish rates and flags.'
+    const status = /already exists|unique/i.test(message)
+      ? 409
+      : /not found|No active estimator setting set/i.test(message)
+        ? 404
+        : 400
+    return {
+      ok: false,
+      error: message,
+      status,
     }
   }
 }
@@ -308,5 +274,6 @@ export const _test = {
   getRatesFlagsMutationParserRequiredFieldKeys,
   isAreaBasedUnit,
   parseRatesFlagsMutationRequest,
+  setSettingSetsSupabaseAdminProvider: settingSetsTest.setSettingSetsSupabaseAdminProvider,
   setSupabaseAdminProvider,
 }

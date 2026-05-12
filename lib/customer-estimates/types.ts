@@ -140,6 +140,11 @@ export type CustomerEstimateTermsSection = {
   paragraphs: string[]
 }
 
+export type CustomerEstimateTermsPage = {
+  title: string
+  sections: CustomerEstimateTermsSection[]
+}
+
 export type CustomerEstimateDocument = CustomerEstimateDocumentBase & {
   header: {
     company_name: string
@@ -156,10 +161,8 @@ export type CustomerEstimateDocument = CustomerEstimateDocumentBase & {
     total: number | null
     footer_note: string
   }
-  terms_page: {
-    title: string
-    sections: CustomerEstimateTermsSection[]
-  }
+  terms_page: CustomerEstimateTermsPage
+  terms_pages?: CustomerEstimateTermsPage[]
   assembly_meta: {
     missing_company_fields: Array<keyof CompanyProfile>
     missing_payment_fields: string[]

@@ -12,6 +12,7 @@ import type {
   RatesFlagsDraftValidationResult,
   RatesFlagsEditableCategoryKey,
   RatesFlagsEditableCategory,
+  RatesFlagsMutationRequest,
   RatesFlagsRow,
 } from '@/types/estimator/ratesFlags'
 import type {
@@ -47,8 +48,9 @@ export type QuoteRatesPendingTransition =
   | { type: 'reload'; keepId?: string }
   | { type: 'archiveOrReactivate'; nextActive: boolean }
   | { type: 'activateDraft' }
+  | { type: 'leavePage'; href: string }
 
-export type QuoteRatesActionStatus = 'idle' | 'saving' | 'reloading' | 'archiving' | 'activating'
+export type QuoteRatesActionStatus = 'idle' | 'saving' | 'reloading' | 'archiving'
 export type QuoteRatesEditorMode = 'selection' | 'create'
 export type QuoteRatesDiscardStatus = 'idle' | 'confirming' | 'applying'
 export type QuoteRatesDraftSnapshot = ReturnType<typeof createRatesFlagsDraftSnapshot>
@@ -78,6 +80,7 @@ export type QuoteRatesWorkflowState = {
   actionError: string | null
   refreshSelectionId: string | null
   forceRefreshRehydrate: boolean
+  pendingMutations: RatesFlagsMutationRequest[]
 }
 
 export type QuoteRatesControllerAction =
@@ -97,6 +100,7 @@ export type QuoteRatesControllerAction =
   | { type: 'mutationChanged'; status: QuoteRatesActionStatus; error?: string | null }
   | { type: 'feedbackChanged'; notice: string | null; tone?: 'success' | 'warning' | null }
   | { type: 'refreshRehydrateChanged'; selectedId: string | null; force: boolean }
+  | { type: 'pendingMutationsChanged'; mutations: RatesFlagsMutationRequest[] }
   | {
       type: 'resourceReconciled'
       editor: QuoteRatesEditorSnapshot
@@ -147,10 +151,20 @@ export function createInitialQuoteRatesWorkflowState(): QuoteRatesWorkflowState 
     actionError: null,
     refreshSelectionId: null,
     forceRefreshRehydrate: false,
+    pendingMutations: [],
   }
 }
 
 export function getQuoteRatesHasUnsavedChanges(state: QuoteRatesWorkflowState) {
+  const draftSnapshot = createRatesFlagsDraftSnapshot(state.draft)
+  return (
+    state.pendingMutations.length > 0 ||
+    !areRatesFlagsDraftSnapshotsEqual(draftSnapshot, state.cleanSnapshot) ||
+    state.draftActive !== state.cleanDraftActive
+  )
+}
+
+export function getQuoteRatesHasEditorChanges(state: QuoteRatesWorkflowState) {
   const draftSnapshot = createRatesFlagsDraftSnapshot(state.draft)
   return (
     !areRatesFlagsDraftSnapshotsEqual(draftSnapshot, state.cleanSnapshot) ||
@@ -238,6 +252,11 @@ export function quoteRatesPageReducer(
         refreshSelectionId: action.selectedId,
         forceRefreshRehydrate: action.force,
       }
+    case 'pendingMutationsChanged':
+      return {
+        ...state,
+        pendingMutations: action.mutations,
+      }
     case 'resourceReconciled':
       if (action.preserveCreateDraft) {
         return {
@@ -257,7 +276,11 @@ export function quoteRatesPageReducer(
 }
 
 export function transitionNeedsDiscardReset(intent: QuoteRatesPendingTransition) {
-  return intent.type === 'reload' || intent.type === 'archiveOrReactivate' || intent.type === 'activateDraft'
+  return (
+    intent.type === 'reload' ||
+    intent.type === 'archiveOrReactivate' ||
+    intent.type === 'activateDraft'
+  )
 }
 
 export type QuoteRatesDerivedState = {

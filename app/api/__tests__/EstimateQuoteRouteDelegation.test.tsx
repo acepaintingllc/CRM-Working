@@ -21,7 +21,7 @@ const routeHandlerMocks = vi.hoisted(() => ({
   handleEstimateProductRoutePatch: vi.fn(),
   handleEstimateProductRouteDelete: vi.fn(),
   handleRatesFlagsRouteGet: vi.fn(),
-  handleRatesFlagsRouteMutation: vi.fn(),
+  handleRatesFlagsRouteBatchPublish: vi.fn(),
   loadPublicEstimatePortalSnapshot: vi.fn(),
 }))
 
@@ -74,8 +74,8 @@ vi.mock('@/lib/server/estimateProductRoutes', () => ({
 }))
 
 vi.mock('@/lib/server/ratesFlagsRoute', () => ({
+  handleRatesFlagsRouteBatchPublish: routeHandlerMocks.handleRatesFlagsRouteBatchPublish,
   handleRatesFlagsRouteGet: routeHandlerMocks.handleRatesFlagsRouteGet,
-  handleRatesFlagsRouteMutation: routeHandlerMocks.handleRatesFlagsRouteMutation,
 }))
 
 vi.mock('@/lib/server/estimatePublicPortal', () => ({
@@ -112,7 +112,6 @@ import * as quoteProductDetailRoute from '../quotes/products/[id]/route'
 import { GET as getQuoteProducts, POST as postQuoteProducts } from '../quotes/products/route'
 import {
   GET as getQuoteRatesFlags,
-  PATCH as patchQuoteRatesFlags,
   PUT as putQuoteRatesFlags,
 } from '../quotes/rates-flags/route'
 import { GET as getQuoteVersion, POST as postQuoteVersion } from '../quotes/route'
@@ -138,7 +137,7 @@ describe('estimate and quote route delegation', () => {
     routeHandlerMocks.handleEstimateProductRoutePatch.mockReset()
     routeHandlerMocks.handleEstimateProductRouteDelete.mockReset()
     routeHandlerMocks.handleRatesFlagsRouteGet.mockReset()
-    routeHandlerMocks.handleRatesFlagsRouteMutation.mockReset()
+    routeHandlerMocks.handleRatesFlagsRouteBatchPublish.mockReset()
     routeHandlerMocks.loadPublicEstimatePortalSnapshot.mockReset()
   })
 
@@ -186,7 +185,7 @@ describe('estimate and quote route delegation', () => {
     routeHandlerMocks.handleEstimateProductsRoutePost.mockImplementation(authError)
     routeHandlerMocks.handleEstimateProductRoutePatch.mockImplementation(authError)
     routeHandlerMocks.handleRatesFlagsRouteGet.mockImplementation(authError)
-    routeHandlerMocks.handleRatesFlagsRouteMutation.mockImplementation(authError)
+    routeHandlerMocks.handleRatesFlagsRouteBatchPublish.mockImplementation(authError)
 
     const responses = await Promise.all([
       getQuoteVersion(),
@@ -208,10 +207,9 @@ describe('estimate and quote route delegation', () => {
       quoteProductDetailRoute.PATCH(request, estimateContext),
       getQuoteRatesFlags(request),
       putQuoteRatesFlags(request),
-      patchQuoteRatesFlags(request),
     ])
 
-    expect(responses.map((response) => response.status)).toEqual(Array(20).fill(401))
+    expect(responses.map((response) => response.status)).toEqual(Array(19).fill(401))
     for (const response of responses) {
       await expect(response.json()).resolves.toEqual({ error: 'Not authenticated' })
     }
@@ -373,15 +371,13 @@ describe('estimate and quote route delegation', () => {
   })
 
   it('delegates quote rates-flags routes to the shared rates and flags handlers', async () => {
-    const request = new Request('http://localhost/api/quotes/rates-flags', { method: 'PATCH' })
+    const request = new Request('http://localhost/api/quotes/rates-flags', { method: 'PUT' })
 
     await getQuoteRatesFlags(request)
     await putQuoteRatesFlags(request)
-    await patchQuoteRatesFlags(request)
 
     expect(routeHandlerMocks.handleRatesFlagsRouteGet).toHaveBeenCalledWith(request)
-    expect(routeHandlerMocks.handleRatesFlagsRouteMutation).toHaveBeenNthCalledWith(1, request)
-    expect(routeHandlerMocks.handleRatesFlagsRouteMutation).toHaveBeenNthCalledWith(2, request)
+    expect(routeHandlerMocks.handleRatesFlagsRouteBatchPublish).toHaveBeenCalledWith(request)
   })
 
   it('preserves canonical quote alias response envelopes, including auth errors', async () => {
