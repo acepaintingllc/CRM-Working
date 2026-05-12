@@ -51,7 +51,7 @@ function pageContentStyle(): CSSProperties {
     color: C.text,
     border: `1px solid ${C.rule}`,
     boxShadow: '0 1px 0 rgba(0,0,0,0.03)',
-    padding: '34px 40px',
+    padding: '44px 40px 34px',
     overflow: 'visible',
     display: 'flex',
     flexDirection: 'column',
@@ -263,9 +263,9 @@ function TotalRow({ total }: { total: number | null }) {
 
 function TermsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section style={{ display: 'grid', gap: 7 }}>
-      <div style={{ fontSize: 15, fontWeight: 900 }}>{title}</div>
-      <div style={{ fontSize: 13.4, lineHeight: 1.58 }}>{children}</div>
+    <section style={{ display: 'grid', gap: 9 }}>
+      <div style={{ fontSize: 16.5, fontWeight: 900 }}>{title}</div>
+      <div style={{ fontSize: 14.8, lineHeight: 1.6 }}>{children}</div>
     </section>
   )
 }
@@ -279,14 +279,14 @@ function TermsPage({
 }) {
   return (
     <PageFrame label={page.title} showOverflowWarnings={showOverflowWarnings}>
-      <div style={{ display: 'grid', gap: 15 }}>
-        <div style={{ fontSize: 21, fontWeight: 900, letterSpacing: '0.04em' }}>
+      <div style={{ display: 'grid', gap: 20 }}>
+        <div style={{ fontSize: 23, fontWeight: 900, letterSpacing: '0.04em', marginBottom: 2 }}>
           {page.title}
         </div>
 
         {page.sections.map((section) => (
           <TermsSection key={section.key} title={section.title}>
-            <div style={{ display: 'grid', gap: 7 }}>
+            <div style={{ display: 'grid', gap: 10 }}>
               {section.paragraphs.map((paragraph) => (
                 <div key={paragraph}>{paragraph}</div>
               ))}
