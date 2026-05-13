@@ -163,6 +163,10 @@ function isWallProductionRate(row: EstimatorV2ProductionRateRow) {
   return scope === 'WALLS' || scope === 'WALL'
 }
 
+function resolveDefaultWallProductionRate(ratesById: Map<string, EstimatorV2ProductionRateRow>) {
+  return ratesById.get('WALL_REPAINT_STD') ?? ratesById.get('WALL_STD') ?? null
+}
+
 export function applySelectedWallProductionRates<TScope extends WallCalculationScopeRow>(params: {
   rooms: Array<{ room_id?: unknown; wall_complexity_id?: unknown; wall_complexity_type_id?: unknown }>
   scopes: TScope[]
@@ -171,15 +175,16 @@ export function applySelectedWallProductionRates<TScope extends WallCalculationS
   const ratesById = new Map<string, EstimatorV2ProductionRateRow>()
   for (const row of params.productionRates) {
     const id = normalizeId(row.id)
-    if (id && isWallProductionRate(row)) ratesById.set(id, row)
+    if (id && isActive(row) && isWallProductionRate(row)) ratesById.set(id, row)
   }
   if (ratesById.size === 0) return params.scopes
+  const defaultRate = resolveDefaultWallProductionRate(ratesById)
 
   const selectedRateByRoomId = new Map<string, EstimatorV2ProductionRateRow>()
   for (const room of params.rooms) {
     const roomId = normalizeId(room.room_id)
     const rateId = normalizeId(room.wall_complexity_id || room.wall_complexity_type_id)
-    const rate = ratesById.get(rateId)
+    const rate = ratesById.get(rateId) ?? (rateId ? null : defaultRate)
     if (roomId && rate) selectedRateByRoomId.set(roomId, rate)
   }
   if (selectedRateByRoomId.size === 0) return params.scopes

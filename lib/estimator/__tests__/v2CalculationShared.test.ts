@@ -82,6 +82,51 @@ test('applySelectedWallProductionRates uses selected room wall complexity rates'
   assert.equal(scope.primer_prod_rate_sqft_per_hour, 180)
 })
 
+test('applySelectedWallProductionRates uses standard repaint wall rate when room has no explicit wall rate', () => {
+  const [scope] = applySelectedWallProductionRates({
+    rooms: [{ room_id: 'R001', wall_complexity_id: '' }],
+    scopes: [{ id: 'wall-1', room_id: 'r001' } as WallCalculationScopeRow],
+    productionRates: [
+      {
+        id: 'WALL_REPAINT_STD',
+        scope_id: 'WALLS',
+        sqft_per_hr: 130,
+        primer_sqft_per_hr: 150,
+        active: 'Y',
+      },
+    ],
+  })
+
+  assert.equal(scope.paint_prod_rate_sqft_per_hour, 130)
+  assert.equal(scope.primer_prod_rate_sqft_per_hour, 150)
+})
+
+test('applySelectedWallProductionRates falls back to legacy WALL_STD and ignores inactive defaults', () => {
+  const [scope] = applySelectedWallProductionRates({
+    rooms: [{ room_id: 'R001', wall_complexity_id: null }],
+    scopes: [{ id: 'wall-1', room_id: 'r001' } as WallCalculationScopeRow],
+    productionRates: [
+      {
+        id: 'WALL_REPAINT_STD',
+        scope_id: 'WALLS',
+        sqft_per_hr: 130,
+        primer_sqft_per_hr: 150,
+        active: 'N',
+      },
+      {
+        id: 'WALL_STD',
+        scope_id: 'WALLS',
+        sqft_per_hr: 120,
+        primer_sqft_per_hr: 140,
+        active: 'Y',
+      },
+    ],
+  })
+
+  assert.equal(scope.paint_prod_rate_sqft_per_hour, 120)
+  assert.equal(scope.primer_prod_rate_sqft_per_hour, 140)
+})
+
 test('applySelectedWallProductionRates keeps explicit wall scope production overrides', () => {
   const [scope] = applySelectedWallProductionRates({
     rooms: [{ room_id: 'R001', wall_complexity_id: 'WALL_REPAINT_LIGHT' }],
