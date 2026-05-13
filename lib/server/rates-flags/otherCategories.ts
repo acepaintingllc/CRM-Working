@@ -8,6 +8,17 @@ import {
   normalizeId,
 } from './shared.ts'
 
+function conditionLevelFactor(
+  values: Record<string, unknown>,
+  level: 'active' | 'minor' | 'moderate' | 'major'
+) {
+  const direct = asText(values[`${level}_factor`])
+  if (direct) return direct
+  const levels = values.levels
+  if (!levels || typeof levels !== 'object' || Array.isArray(levels)) return ''
+  return asText((levels as Record<string, unknown>)[level])
+}
+
 export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
   {
     key: 'access_fees_ladders',
@@ -342,10 +353,10 @@ export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
         display_name: asDisplayName(values),
         scope: asText(values.scope),
         modifier_type: asText(values.modifier_type) || 'severity',
-        active_factor: asText(values.active_factor),
-        minor_factor: asText(values.minor_factor),
-        moderate_factor: asText(values.moderate_factor),
-        major_factor: asText(values.major_factor),
+        active_factor: conditionLevelFactor(values, 'active'),
+        minor_factor: conditionLevelFactor(values, 'minor'),
+        moderate_factor: conditionLevelFactor(values, 'moderate'),
+        major_factor: conditionLevelFactor(values, 'major'),
         factor_field: asText(values.factor_field),
         notes: asText(values.notes),
         active,

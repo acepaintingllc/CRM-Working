@@ -10,7 +10,9 @@ import {
 import {
   ratesFlagsEditableCategoryKeys as sharedRatesFlagsEditableCategoryKeys,
   type RatesFlagsEditableCategory,
+  type ConditionModifierDraft,
   type HeightFactorDraft,
+  type RatesFlagsRow,
   type ScopeDefaultDraft,
   type SupplyRateDraft,
 } from '@/types/estimator/ratesFlags'
@@ -367,6 +369,56 @@ describe('ratesFlagsDraftAdapters', () => {
       error: 'Applies To must only include: room, wall, ceiling, trim.',
       fieldKey: 'scope',
     })
+  })
+
+  it('hydrates condition modifier factor fields from levels objects', () => {
+    const category = {
+      ...baseCategory,
+      key: 'condition_modifiers',
+      tab: 'flags',
+      group: 'condition_modifiers',
+      fields: [
+        { key: 'id', label: 'ID', type: 'text', required: true },
+        { key: 'display_name', label: 'Display Name', type: 'text', required: true },
+        { key: 'scope', label: 'Applies To', type: 'checkbox_group', required: true, options: ['room', 'wall', 'ceiling', 'trim'] },
+        { key: 'modifier_type', label: 'Modifier Type', type: 'select', options: ['severity', 'binary'] },
+        { key: 'active_factor', label: 'Active Factor', type: 'number' },
+        { key: 'minor_factor', label: 'Minor Factor', type: 'number' },
+        { key: 'moderate_factor', label: 'Moderate Factor', type: 'number' },
+        { key: 'major_factor', label: 'Major Factor', type: 'number' },
+      ],
+    } as RatesFlagsEditableCategory<'condition_modifiers'>
+    const adapter = getRatesFlagsDraftAdapter(category.key)
+    const draft = adapter.rowToDraft(category, {
+      id: 'ROOM_FURNISHED',
+      display_name: 'Room is furnished',
+      scope: 'room',
+      modifier_type: 'binary',
+      active: true,
+      levels: { active: 1.15, minor: 1.05, moderate: 1.1, major: 1.2 },
+    } as unknown as RatesFlagsRow) as ConditionModifierDraft
+
+    expect(draft.active_factor).toBe(1.15)
+    expect(draft.minor_factor).toBe(1.05)
+    expect(draft.moderate_factor).toBe(1.1)
+    expect(draft.major_factor).toBe(1.2)
+  })
+
+  it('preserves in-progress decimal input for numeric fields', () => {
+    const adapter = getRatesFlagsDraftAdapter(baseCategory.key)
+    const draft = adapter.updateDraftField(
+      baseCategory,
+      {
+        ...adapter.createEmptyDraft(baseCategory),
+        id: 'ROOM_A',
+        display_name: 'Room A',
+      },
+      'typical_height_ft',
+      '1.0'
+    )
+
+    expect(adapter.formatDraftValue(baseCategory, draft, 'typical_height_ft')).toBe('1.0')
+    expect(adapter.validateDraft(baseCategory, draft)).toEqual({ ok: true })
   })
 
   it('validates read-only literal fields when a loaded draft contains an invalid value', () => {
