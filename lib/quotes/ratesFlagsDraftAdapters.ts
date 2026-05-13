@@ -70,6 +70,9 @@ function parseNumberValue(value: unknown): number | null | string {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   if (!trimmed) return null
+  // Preserve in-progress decimal input so typing `1.08` does not collapse
+  // through `1.0` -> `1` and move the cursor/delete the visible zero.
+  if (/^-?\d+\.$/.test(trimmed) || /^-?\d+\.\d*0$/.test(trimmed)) return trimmed
   const normalized = trimmed.replace(/[$,%\s,]/g, '')
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : value
@@ -134,6 +137,20 @@ function rowToTypedDraft<TDraft extends RatesFlagsDraft>(
   row: RatesFlagsRow
 ) {
   const rowValues = new Map<string, unknown>(Object.entries(row))
+  const levels = (row as Record<string, unknown>).levels
+  if (levels && typeof levels === 'object' && !Array.isArray(levels)) {
+    const levelRecord = levels as Record<string, unknown>
+    for (const [level, fieldKey] of [
+      ['active', 'active_factor'],
+      ['minor', 'minor_factor'],
+      ['moderate', 'moderate_factor'],
+      ['major', 'major_factor'],
+    ] as const) {
+      if (!rowValues.has(fieldKey) || rowValues.get(fieldKey) == null || rowValues.get(fieldKey) === '') {
+        rowValues.set(fieldKey, levelRecord[level])
+      }
+    }
+  }
   const draft = buildFieldDraft<TDraft>(category, rowValues)
   if (!('id' in draft) || draft.id == null || draft.id === '') draft.id = String(row.id ?? '')
   if (!('display_name' in draft) || draft.display_name == null || draft.display_name === '') {
@@ -189,7 +206,10 @@ function validateTypedDraft<TDraft extends RatesFlagsDraft>(
     }
 
     if (field.type === 'number') {
-      const hasInvalidNumber = !empty && typeof value !== 'number'
+      const hasInvalidNumber =
+        !empty &&
+        typeof value !== 'number' &&
+        (typeof value !== 'string' || !Number.isFinite(Number(value.replace(/[$,%\s,]/g, ''))))
       if (hasInvalidNumber) {
         return {
           ok: false,
