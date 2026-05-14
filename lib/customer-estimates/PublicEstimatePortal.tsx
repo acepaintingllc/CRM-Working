@@ -111,6 +111,12 @@ function formatPortalCurrency(value: number | null | undefined) {
   }).format(value)
 }
 
+function uploadedPdfDownloadUrl(snapshot: EstimatePublicSnapshot) {
+  const pdf = (snapshot.snapshot_json?.pdf as Record<string, unknown> | null | undefined) ?? null
+  if (!pdf || !asText(pdf.drive_file_id) || !asText(snapshot.public_token)) return null
+  return `/api/quote-public/${encodeURIComponent(asText(snapshot.public_token))}/pdf`
+}
+
 function lockedMessage(copy: PublicEstimatePortalCopy, status: EstimatePublicSnapshot['status']) {
   if (status === 'accepted') {
     return (
@@ -666,6 +672,7 @@ export function PublicEstimatePortal({
     presentationState === 'locked-declined' ||
     presentationState === 'locked-superseded'
   const currentSnapshot = workflow.snapshot
+  const pdfDownloadUrl = uploadedPdfDownloadUrl(currentSnapshot)
   const signerName = asText(currentSnapshot.acceptance_json?.legal_name)
   const acceptedAt = formatPortalTimestamp(
     currentSnapshot.acceptance_json?.accepted_at || currentSnapshot.accepted_at || currentSnapshot.locked_at,
@@ -684,9 +691,16 @@ export function PublicEstimatePortal({
               {expiresLabel ? <>Valid through {expiresLabel}</> : null}
             </div>
           </div>
-          <button type="button" onClick={() => window.print()} className={styles.secondaryButton}>
-            {copy.downloadLabel}
-          </button>
+          <div className={styles.totalActions}>
+            {pdfDownloadUrl ? (
+              <a href={pdfDownloadUrl} className={styles.secondaryButton}>
+                View Quote PDF
+              </a>
+            ) : null}
+            <button type="button" onClick={() => window.print()} className={styles.secondaryButton}>
+              {copy.downloadLabel}
+            </button>
+          </div>
         </div>
 
         <div className={styles.documentWrap}>

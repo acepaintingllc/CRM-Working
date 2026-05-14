@@ -5,6 +5,7 @@ import {
   buildRatesFlagsPayloadFromValues,
   parseConstantsTablesDetailed,
 } from '../rates-flags/index.ts'
+import { buildCategoryFromStoredRows } from '../rates-flags/categoryHelpers.ts'
 import { CATEGORY_CONFIGS } from '../rates-flags/categories.ts'
 import {
   buildClientRatesFlagsMutationRequests,
@@ -240,6 +241,114 @@ test('payload category grouping returns rates, flags, and room defaults tabs', (
   assert.ok(first)
   assert.equal(getRowString(first, 'scope'), 'wall,ceiling,trim')
   assert.equal(getRowString(first, 'moderate_factor'), '1.1')
+})
+
+test('stored condition modifier rows display nested level factors', () => {
+  const config = CATEGORY_CONFIGS.find((entry) => entry.key === 'condition_modifiers')
+  assert.ok(config)
+  assert.deepEqual(
+    config.columns
+      .filter((column) => column.key.endsWith('_factor'))
+      .map((column) => column.key),
+    ['active_factor', 'minor_factor', 'moderate_factor', 'major_factor']
+  )
+  const category = buildCategoryFromStoredRows(config, [
+    {
+      id: 'row-condition',
+      org_id: 'org-1',
+      template_id: 'tmpl-1',
+      category_key: 'condition_modifiers',
+      row_id: 'CEIL_MATCH_WALLS',
+      display_name: 'Ceiling matches wall color',
+      active: 'Y',
+      sort_order: 0,
+      values_json: {
+        id: 'CEIL_MATCH_WALLS',
+        display_name: 'Ceiling matches wall color',
+        scope: 'ceiling',
+        modifier_type: 'severity',
+        levels: { moderate: 1.08 },
+      },
+    },
+  ])
+
+  const row = category.rows[0]
+  assert.ok(row)
+  assert.equal(getRowString(row, 'moderate_factor'), '1.08')
+})
+
+test('stored condition modifier rows show effective default no-op factors', () => {
+  const config = CATEGORY_CONFIGS.find((entry) => entry.key === 'condition_modifiers')
+  assert.ok(config)
+  const category = buildCategoryFromStoredRows(config, [
+    {
+      id: 'row-severity',
+      org_id: 'org-1',
+      template_id: 'tmpl-1',
+      category_key: 'condition_modifiers',
+      row_id: 'CEIL_MATCH_WALLS',
+      display_name: 'Ceiling matches wall color',
+      active: 'Y',
+      sort_order: 0,
+      values_json: {
+        id: 'CEIL_MATCH_WALLS',
+        display_name: 'Ceiling matches wall color',
+        scope: 'ceiling',
+        modifier_type: 'severity',
+        active_factor: '',
+        minor_factor: '',
+        moderate_factor: '',
+        major_factor: '',
+      },
+    },
+    {
+      id: 'row-binary',
+      org_id: 'org-1',
+      template_id: 'tmpl-1',
+      category_key: 'condition_modifiers',
+      row_id: 'ROOM_FURNISHED',
+      display_name: 'Room is furnished',
+      active: 'Y',
+      sort_order: 1,
+      values_json: {
+        id: 'ROOM_FURNISHED',
+        display_name: 'Room is furnished',
+        scope: 'room',
+        modifier_type: 'binary',
+        active_factor: '',
+      },
+    },
+    {
+      id: 'row-legacy',
+      org_id: 'org-1',
+      template_id: 'tmpl-1',
+      category_key: 'condition_modifiers',
+      row_id: 'OVER_WALLPAPER',
+      display_name: 'Painting over wallpaper',
+      active: 'Y',
+      sort_order: 2,
+      values_json: {
+        id: 'OVER_WALLPAPER',
+        display_name: 'Painting over wallpaper',
+        wall_factor: '1.2',
+      },
+    },
+  ])
+
+  const severity = category.rows[0]
+  const binary = category.rows[1]
+  const legacy = category.rows[2]
+  assert.ok(severity)
+  assert.ok(binary)
+  assert.ok(legacy)
+  assert.equal(getRowString(severity, 'active_factor'), '')
+  assert.equal(getRowString(severity, 'minor_factor'), '1')
+  assert.equal(getRowString(severity, 'moderate_factor'), '1')
+  assert.equal(getRowString(severity, 'major_factor'), '1')
+  assert.equal(getRowString(binary, 'active_factor'), '1')
+  assert.equal(getRowString(binary, 'minor_factor'), '')
+  assert.equal(getRowString(legacy, 'active_factor'), '')
+  assert.equal(getRowString(legacy, 'moderate_factor'), '')
 })
 
 test('mutation plan create/update/archive/reactivate and validation', () => {
@@ -807,6 +916,30 @@ test('height factors parse min/max and render multiplier/range fields', () => {
   assert.equal(getRowString(h0, 'secondary_value'), '0 - 10')
   assert.equal(getRowString(h16, 'primary_value'), '1.50')
   assert.equal(getRowString(h16, 'secondary_value'), '16')
+})
+
+test('trim type settings show metadata instead of unused zero rate fields', () => {
+  const config = CATEGORY_CONFIGS.find((entry) => entry.key === 'unit_rates_trim')
+  assert.ok(config)
+  assert.deepEqual(
+    config.columns.map((column) => column.key),
+    [
+      'id',
+      'display_name',
+      'unit_rate_type',
+      'unit',
+      'helper_allowed',
+      'default_production_rate_id',
+      'active',
+      'trim_category',
+      'measurement_class',
+      'picker_group',
+    ]
+  )
+  assert.equal(config.fields.some((field) => field.key === 'amount'), false)
+  assert.equal(config.fields.some((field) => field.key === 'labor_rate'), false)
+  assert.equal(config.fields.some((field) => field.key === 'material_rate'), false)
+  assert.equal(config.fields.some((field) => field.key === 'default_qty'), false)
 })
 
 test('buildOverlayFromRows maps trim items and room types from DB rows', () => {

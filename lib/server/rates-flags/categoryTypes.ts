@@ -11,7 +11,7 @@ import type {
 } from '../../../types/estimator/ratesFlags'
 
 export type StringRecord = Record<string, string>
-export type PersistedValuesRecord = Record<string, string>
+export type PersistedValuesRecord = Record<string, unknown>
 
 export type FieldConfig = RatesFlagsFieldDef & {
   headers: string[]

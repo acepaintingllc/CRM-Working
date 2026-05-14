@@ -329,11 +329,13 @@ export default function SendEstimateClient({
   catalogSource,
   routeFamily,
   routeFamilyKey = 'estimate',
+  emailOnly = false,
 }: {
   estimateId: string
   catalogSource?: 'estimate' | 'v2'
   routeFamily?: EstimateRouteFamily
   routeFamilyKey?: EstimateRouteFamilyKey
+  emailOnly?: boolean
 }) {
   const resolvedRouteFamily = routeFamily ?? resolveEstimateRouteFamily(routeFamilyKey)
   const {
@@ -605,18 +607,21 @@ export default function SendEstimateClient({
               >
                 Back to review
               </Link>
-              <button type="button" onClick={downloadPdf} className="send-buttons" style={secondaryButton}>
-                Download PDF
-              </button>
+              {!emailOnly ? (
+                <button type="button" onClick={downloadPdf} className="send-buttons" style={secondaryButton}>
+                  Download PDF
+                </button>
+              ) : null}
             </div>
           </div>
 
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(360px, 430px) minmax(0, 1fr)',
+              gridTemplateColumns: emailOnly ? 'minmax(0, 720px)' : 'minmax(360px, 430px) minmax(0, 1fr)',
               gap: 18,
               alignItems: 'start',
+              justifyContent: emailOnly ? 'center' : undefined,
             }}
           >
             <aside
@@ -626,9 +631,9 @@ export default function SendEstimateClient({
                 padding: 18,
                 display: 'grid',
                 gap: 16,
-                position: 'sticky',
+                position: emailOnly ? 'static' : 'sticky',
                 top: 18,
-                maxHeight: 'calc(100vh - 56px)',
+                maxHeight: emailOnly ? undefined : 'calc(100vh - 56px)',
                 overflow: 'auto',
               }}
             >
@@ -660,13 +665,17 @@ export default function SendEstimateClient({
                   {error}
                 </div>
               ) : null}
-              <ServerStateCard
-                documentLower={labels.documentLower}
-                savedAtLabel={savedAtLabel}
-                hasUnsavedChanges={hasUnsavedChanges}
-                isSavingDraft={isSavingDraft}
-              />
-              <ReadinessCard blockers={readinessBlockers} warnings={readinessWarnings} />
+              {!emailOnly ? (
+                <>
+                  <ServerStateCard
+                    documentLower={labels.documentLower}
+                    savedAtLabel={savedAtLabel}
+                    hasUnsavedChanges={hasUnsavedChanges}
+                    isSavingDraft={isSavingDraft}
+                  />
+                  <ReadinessCard blockers={readinessBlockers} warnings={readinessWarnings} />
+                </>
+              ) : null}
 
               <SectionTitle
                 title="Delivery"
@@ -674,29 +683,33 @@ export default function SendEstimateClient({
               />
 
               <div style={{ display: 'grid', gap: 12 }}>
-                <div>
-                  <FieldLabel>Quote Name</FieldLabel>
-                  <input
-                    value={form.title}
-                    onChange={(event) => setDraftField('title', event.target.value)}
-                    style={inputBase}
-                  />
-                </div>
+                {!emailOnly ? (
+                  <>
+                    <div>
+                      <FieldLabel>Quote Name</FieldLabel>
+                      <input
+                        value={form.title}
+                        onChange={(event) => setDraftField('title', event.target.value)}
+                        style={inputBase}
+                      />
+                    </div>
 
-                <div>
-                  <FieldLabel>Validity (days)</FieldLabel>
-                  <input
-                    value={form.quote_validity_days}
-                    onChange={(event) => setDraftField('quote_validity_days', event.target.value)}
-                    type="number"
-                    min={1}
-                    step={1}
-                    style={inputBase}
-                  />
-                  {validityError ? (
-                    <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{validityError}</div>
-                  ) : null}
-                </div>
+                    <div>
+                      <FieldLabel>Validity (days)</FieldLabel>
+                      <input
+                        value={form.quote_validity_days}
+                        onChange={(event) => setDraftField('quote_validity_days', event.target.value)}
+                        type="number"
+                        min={1}
+                        step={1}
+                        style={inputBase}
+                      />
+                      {validityError ? (
+                        <div style={{ marginTop: 6, color: '#fecaca', fontSize: 12 }}>{validityError}</div>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
 
                 <div>
                   <FieldLabel>Template</FieldLabel>
@@ -770,15 +783,17 @@ export default function SendEstimateClient({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((current) => !current)}
-                style={secondaryButton}
-              >
-                {showAdvanced ? 'Hide scope wording edits' : 'Edit scope wording'}
-              </button>
+              {!emailOnly ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((current) => !current)}
+                  style={secondaryButton}
+                >
+                  {showAdvanced ? 'Hide scope wording edits' : 'Edit scope wording'}
+                </button>
+              ) : null}
 
-              {showAdvanced ? (
+              {showAdvanced && !emailOnly ? (
                 <div style={{ display: 'grid', gap: 10 }}>
                   {(
                     ['walls', 'ceilings', 'trim', 'doors', 'cabinets', 'other'] as const
@@ -833,53 +848,55 @@ export default function SendEstimateClient({
               </div>
             </aside>
 
-            <main
-              className="send-preview"
-              style={{
-                ...shellCard,
-                padding: 18,
-                position: 'sticky',
-                top: 18,
-                maxHeight: 'calc(100vh - 56px)',
-                overflow: 'auto',
-              }}
-            >
-              <div style={{ display: 'grid', gap: 12 }}>
-                <div
-                  className="send-preview-header"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                    alignItems: 'baseline',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        letterSpacing: '0.16em',
-                        textTransform: 'uppercase',
-                        color: C.ink3,
-                        fontWeight: 700,
-                      }}
-                    >
-                      Customer Preview
+            {!emailOnly ? (
+              <main
+                className="send-preview"
+                style={{
+                  ...shellCard,
+                  padding: 18,
+                  position: 'sticky',
+                  top: 18,
+                  maxHeight: 'calc(100vh - 56px)',
+                  overflow: 'auto',
+                }}
+              >
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <div
+                    className="send-preview-header"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      alignItems: 'baseline',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          letterSpacing: '0.16em',
+                          textTransform: 'uppercase',
+                          color: C.ink3,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Customer Preview
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 18, fontWeight: 900 }}>
+                        Exact document the customer will see
+                      </div>
                     </div>
-                    <div style={{ marginTop: 4, fontSize: 18, fontWeight: 900 }}>
-                      Exact document the customer will see
+                    <div style={{ fontSize: 12, color: C.ink3, fontWeight: 800 }}>
+                      {currentTemplate.label} template
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: C.ink3, fontWeight: 800 }}>
-                    {currentTemplate.label} template
+                  <div className="send-print-document" style={{ borderRadius: 18, background: '#f2f0eb', padding: 18 }}>
+                    <CustomerEstimateDocumentView document={liveDocument} showShell={false} />
                   </div>
                 </div>
-                <div className="send-print-document" style={{ borderRadius: 18, background: '#f2f0eb', padding: 18 }}>
-                  <CustomerEstimateDocumentView document={liveDocument} showShell={false} />
-                </div>
-              </div>
-            </main>
+              </main>
+            ) : null}
           </div>
         </div>
       </div>

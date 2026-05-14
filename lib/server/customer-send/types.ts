@@ -158,6 +158,14 @@ export function readCustomerSendPersistedDocument(
   return readEstimatePublicPersistedDocument(snapshot)
 }
 
+export function readCustomerSendPersistedPdf(
+  snapshot: unknown
+): CustomerSendPersistedPdf | null {
+  const state = readEstimatePublicPersistedSnapshotState(snapshot)
+  if (state.kind !== 'canonical' && state.kind !== 'legacy') return null
+  return isCustomerSendPersistedPdf(state.snapshot.pdf) ? state.snapshot.pdf : null
+}
+
 export function readCustomerSendStoredSnapshot(
   snapshot: unknown
 ): CustomerSendStoredSnapshot | null {
@@ -183,11 +191,13 @@ export function readCustomerSendStoredSnapshot(
 export function buildCustomerSendPersistedSnapshot(params: {
   document: CustomerEstimateDocument
   draft: CustomerSendDraft
+  pdf?: CustomerSendPersistedPdf | Record<string, unknown> | null
   operationalSnapshot?: CustomerSendOperationalSnapshot | Record<string, unknown>
 }): CustomerSendPersistedSnapshot {
   const snapshot = buildEstimatePublicPersistedSnapshot({
     document: params.document,
     draft: params.draft,
+    pdf: params.pdf ?? undefined,
     operationalSnapshot: params.operationalSnapshot,
   })
   return {

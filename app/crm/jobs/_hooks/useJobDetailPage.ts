@@ -13,6 +13,7 @@ import {
   listPaintLogs,
   patchJobDateFields,
   patchJobStatus,
+  uploadManualQuotePdf,
 } from '@/lib/jobs/client'
 import type { EstimateDriveFile, JobDetail } from '@/types/jobs/api'
 import {
@@ -51,6 +52,7 @@ export function useJobDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [emailStage, setEmailStage] = useState<StageEmailStage | null>(null)
   const [closeoutOpen, setCloseoutOpen] = useState(false)
+  const [manualQuoteUploading, setManualQuoteUploading] = useState(false)
   const [timelineOpen, setTimelineOpen] = useState(true)
   const [resourceError, setResourceError] = useState<string | null>(null)
   const [estimateFile, setEstimateFile] = useState<EstimateDriveFile | null>(null)
@@ -340,6 +342,26 @@ export function useJobDetailPage() {
     await patchJob({ status: nextStatus })
   }
 
+  const uploadManualQuote = async (file: File | null) => {
+    if (!id || typeof id !== 'string' || !file || manualQuoteUploading) return
+    const form = new FormData()
+    form.append('pdf', file)
+    setManualQuoteUploading(true)
+    resource.setError(null)
+    try {
+      const result = await uploadManualQuotePdf(id, form)
+      if (result?.send_url) {
+        router.push(result.send_url)
+        return
+      }
+      resource.setError('Manual PDF quote upload did not return a send page.')
+    } catch (uploadError) {
+      resource.setError(uploadError instanceof Error ? uploadError.message : 'Failed to upload manual PDF quote.')
+    } finally {
+      setManualQuoteUploading(false)
+    }
+  }
+
   const updateEstimateDate = async (estimateDateLocalValue: string) => {
     const estimateDateIso = jobTimelineDateTimeLocalToIso(estimateDateLocalValue)
     if (!estimateDateIso) return
@@ -420,6 +442,7 @@ export function useJobDetailPage() {
     paintLogs: resource.data.paintLogs,
     photosFolderUrl,
     photosLoading: false,
+    manualQuoteUploading,
     timelineItems,
     closeoutReferenceVm,
     workflowActions,
@@ -434,6 +457,7 @@ export function useJobDetailPage() {
     handleStageEmailSent,
     handleCloseoutSaved,
     handleStatusChange,
+    uploadManualQuote,
     markCompletedAndPrompt,
     runWorkflowAction,
     formatDate: formatJobTimelineDate,

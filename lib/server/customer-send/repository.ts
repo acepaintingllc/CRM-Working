@@ -17,6 +17,7 @@ import {
   appendCustomerSendPersistedPdf,
   buildCustomerSendPersistedSnapshot,
   normalizeCustomerSendStoredSnapshot,
+  readCustomerSendPersistedPdf,
   readCustomerSendVersionDocument,
 } from './types'
 
@@ -84,6 +85,7 @@ export async function saveCustomerSendDraftVersion(params: {
   userId: string
   draft: CustomerSendDraft
   document: CustomerEstimateDocument
+  pdf?: CustomerSendPersistedPdf | null
   operationalSnapshot?: CustomerSendOperationalSnapshot
   latestDraft: EstimatePublicVersionRow | null
   latestVersion: EstimatePublicVersionRow | null
@@ -92,6 +94,7 @@ export async function saveCustomerSendDraftVersion(params: {
   const nextVersionNumber =
     Number(params.latestVersion?.version_number ?? 0) + (latestDraft ? 0 : 1)
   const publicMeta = latestDraft ?? null
+  const persistedPdf = params.pdf ?? readCustomerSendPersistedPdf(latestDraft?.snapshot_json)
   const resolveNullableText = (value: string) => (value === '' ? null : value)
   const payload = {
     org_id: params.orgId,
@@ -111,6 +114,7 @@ export async function saveCustomerSendDraftVersion(params: {
     snapshot_json: buildCustomerSendPersistedSnapshot({
       document: params.document,
       draft: params.draft,
+      pdf: persistedPdf,
       operationalSnapshot: params.operationalSnapshot,
     }),
     draft_json: params.draft,

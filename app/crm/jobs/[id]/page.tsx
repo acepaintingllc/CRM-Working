@@ -1,6 +1,7 @@
 'use client'
 
-import { Camera } from 'lucide-react'
+import { useRef } from 'react'
+import { Camera, Upload } from 'lucide-react'
 
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmDetailLayout } from '@/app/crm/_components/CrmDetailLayout'
@@ -21,6 +22,7 @@ import { JOB_STATUS_OPTIONS } from '@/lib/jobs/types'
 
 export default function JobDetailPage() {
   const controller = useJobDetailPage()
+  const manualQuoteInputRef = useRef<HTMLInputElement | null>(null)
 
   return (
     <CrmPageShell className="crm-job-detail-shell max-w-6xl">
@@ -80,6 +82,27 @@ export default function JobDetailPage() {
                     >
                       <Camera size={14} aria-hidden="true" />
                       <span>Job Photos</span>
+                    </CrmButton>
+                    <input
+                      ref={manualQuoteInputRef}
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      className="sr-only"
+                      disabled={controller.manualQuoteUploading}
+                      onChange={(event) => {
+                        const file = event.currentTarget.files?.[0] ?? null
+                        event.currentTarget.value = ''
+                        void controller.uploadManualQuote(file)
+                      }}
+                    />
+                    <CrmButton
+                      tone="secondary"
+                      className="min-h-9 px-3 text-xs"
+                      disabled={controller.manualQuoteUploading}
+                      onClick={() => manualQuoteInputRef.current?.click()}
+                    >
+                      <Upload size={14} aria-hidden="true" />
+                      <span>{controller.manualQuoteUploading ? 'Uploading PDF...' : 'Upload Quote PDF'}</span>
                     </CrmButton>
                     {controller.photosFolderUrl ? (
                       <CrmButton href={controller.photosFolderUrl} target="_blank" rel="noreferrer">

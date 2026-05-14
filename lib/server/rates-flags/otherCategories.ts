@@ -15,8 +15,14 @@ function conditionLevelFactor(
   const direct = asText(values[`${level}_factor`])
   if (direct) return direct
   const levels = values.levels
-  if (!levels || typeof levels !== 'object' || Array.isArray(levels)) return ''
-  return asText((levels as Record<string, unknown>)[level])
+  if (levels && typeof levels === 'object' && !Array.isArray(levels)) {
+    const nested = asText((levels as Record<string, unknown>)[level])
+    if (nested) return nested
+  }
+  if (!asText(values.scope)) return ''
+  const modifierType = asText(values.modifier_type).toLowerCase() === 'binary' ? 'binary' : 'severity'
+  if (modifierType === 'binary') return level === 'active' ? '1' : ''
+  return level === 'active' ? '' : '1'
 }
 
 export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
@@ -324,7 +330,9 @@ export const OTHER_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: 'scope', label: 'Applies To' },
       { key: 'modifier_type', label: 'Type' },
       { key: 'active_factor', label: 'Active', align: 'right' },
+      { key: 'minor_factor', label: 'Minor', align: 'right' },
       { key: 'moderate_factor', label: 'Moderate', align: 'right' },
+      { key: 'major_factor', label: 'Major', align: 'right' },
       { key: 'active', label: 'Status', align: 'center' },
     ],
     fields: [
