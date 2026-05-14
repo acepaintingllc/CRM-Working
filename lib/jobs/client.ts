@@ -158,6 +158,28 @@ export async function uploadJobSitePhotos(jobId: string, form: FormData) {
     }
   )
 }
+
+export type UploadManualQuotePdfResponse = {
+  estimate_id: string
+  send_url: string
+  drive_file: {
+    id: string
+    name: string
+    webViewLink: string | null
+  }
+}
+
+export async function uploadManualQuotePdf(jobId: string, form: FormData) {
+  const result = await requestApi<ApiMutationEnvelope<UploadManualQuotePdfResponse>>(
+    `/api/jobs/${jobId}/manual-quote`,
+    {
+      method: 'POST',
+      body: form,
+    }
+  )
+
+  return result.data ?? null
+}
 export async function loadJobRecord(jobId: string) {
   const payload = await requestApi<ApiDataEnvelope<JobDetail>>(`/api/jobs/${jobId}`, {
     cache: 'no-store',

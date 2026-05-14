@@ -463,10 +463,6 @@ export type TrimUnitRateMutationValues = {
   unit: string
   helper_allowed: 'Y' | 'N'
   default_production_rate_id: string
-  default_qty: string
-  labor_rate: string
-  material_rate: string
-  amount: string
   notes: string
   active: 'Y' | 'N'
   trim_category?: string
@@ -771,9 +767,14 @@ export type DoorUnitRateDraft = {
   notes: string
 }
 
-export type TrimUnitRateDraft = DoorUnitRateDraft & {
+export type TrimUnitRateDraft = {
+  id: string
+  display_name: string
+  unit_rate_type: string
+  unit: string
   helper_allowed: RatesFlagsYnDraftValue
   default_production_rate_id: string
+  notes: string
   trim_category?: string
   measurement_class?: string
   picker_group?: string

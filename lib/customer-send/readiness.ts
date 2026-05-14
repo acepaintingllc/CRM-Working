@@ -9,7 +9,13 @@ function asText(value: unknown) {
 }
 
 function documentLabel(document: CustomerEstimateDocument) {
-  return document.meta.flow_version === 'v2' ? 'Quote' : 'Estimate'
+  return document.meta.flow_version === 'v2' || document.meta.flow_version === 'manual_pdf'
+    ? 'Quote'
+    : 'Estimate'
+}
+
+function isManualPdfQuote(document: CustomerEstimateDocument) {
+  return document.meta.flow_version === 'manual_pdf'
 }
 
 export type CustomerSendReadinessIssueCode =
@@ -111,7 +117,7 @@ export function validateCustomerSendReadiness(
     })
   }
 
-  if (total <= 0) {
+  if (total <= 0 && !isManualPdfQuote(input.document)) {
     blockers.push({
       code: 'document_total_non_positive',
       message:

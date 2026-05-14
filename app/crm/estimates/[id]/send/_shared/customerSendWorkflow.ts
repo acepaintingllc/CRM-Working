@@ -186,7 +186,9 @@ export function normalizeCustomerSendVersion(
 export function deriveCustomerSendLabels(
   data: Pick<CustomerSendPageData, 'document'> | null | undefined
 ): CustomerSendLabels {
-  const isV2Quote = data?.document.meta.flow_version === 'v2'
+  const isV2Quote =
+    data?.document.meta.flow_version === 'v2' ||
+    data?.document.meta.flow_version === 'manual_pdf'
   return isV2Quote
     ? {
         document: 'Quote',

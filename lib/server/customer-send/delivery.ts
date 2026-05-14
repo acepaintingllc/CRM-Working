@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { uploadDriveFile } from '@/lib/server/googleDrive'
+import { downloadDriveFile, uploadDriveFile } from '@/lib/server/googleDrive'
 import { sendGmailMessage } from '@/lib/server/googleMail'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
 import {
@@ -29,7 +29,7 @@ import type {
   CustomerSendPersistedPdf,
   EstimatePublicVersionRow,
 } from './types'
-import { readCustomerSendVersionDocument } from './types'
+import { readCustomerSendPersistedPdf, readCustomerSendVersionDocument } from './types'
 
 type CustomerSendDeliveryContext = Pick<
   CustomerQuoteSourceModel,
@@ -140,6 +140,52 @@ function buildDefaultEmailBodyHtml(params: {
   return `<div style="white-space: pre-wrap; font-family: Arial, sans-serif;">${linkedText}</div>`
 }
 
+async function buildPersistedPdfAttachment(params: {
+  origin: string
+  orgId: string
+  userId: string
+  version: EstimatePublicVersionRow
+}): Promise<
+  ServiceResult<{
+    attachment: {
+      filename: string
+      contentType: string
+      data: Buffer
+    } | null
+    hasPersistedPdf: boolean
+  }>
+> {
+  const persistedPdf = readCustomerSendPersistedPdf(params.version.snapshot_json)
+  if (!persistedPdf?.drive_file_id) {
+    return okResult({
+      attachment: null,
+      hasPersistedPdf: false,
+    })
+  }
+
+  const download = await downloadDriveFile({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+    fileId: persistedPdf.drive_file_id,
+  })
+  if ('error' in download) {
+    return errorResult(
+      'server_error',
+      download.error || 'Unable to attach the uploaded quote PDF.'
+    )
+  }
+
+  return okResult({
+    attachment: {
+      filename: persistedPdf.filename || persistedPdf.drive_file_name || 'Quote.pdf',
+      contentType: persistedPdf.mime_type || 'application/pdf',
+      data: download.buffer,
+    },
+    hasPersistedPdf: true,
+  })
+}
+
 export async function submitCustomerSendMessage(params: {
   mode: CustomerSendMode
   origin: string
@@ -191,11 +237,22 @@ export async function submitCustomerSendMessage(params: {
     mode: params.mode,
   })
   const document = readCustomerSendVersionDocument(publicVersion)
-  const pdfDocument = readCustomerSendPdfDocument(document)
-  const pdfAttachment = pdfDocument ? buildCustomerSendPdfAttachment(pdfDocument) : null
+  const persistedPdfAttachment = await buildPersistedPdfAttachment({
+    origin: params.origin,
+    orgId: params.orgId,
+    userId: params.userId,
+    version: publicVersion,
+  })
+  if (!persistedPdfAttachment.ok) return persistedPdfAttachment
+  const pdfDocument = persistedPdfAttachment.data.hasPersistedPdf
+    ? null
+    : readCustomerSendPdfDocument(document)
+  const pdfAttachment =
+    persistedPdfAttachment.data.attachment ??
+    (pdfDocument ? buildCustomerSendPdfAttachment(pdfDocument) : null)
   let sentAt = ''
 
-  if (pdfAttachment) {
+  if (pdfAttachment && !persistedPdfAttachment.data.hasPersistedPdf) {
     const folderId = readDriveEstimatesFolderId()
     if (folderId) {
       const upload = await uploadDriveFile({

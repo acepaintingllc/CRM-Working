@@ -192,8 +192,8 @@ export function buildMutationPlan<TKey extends RatesFlagsEditableCategoryKey>(
   return { ok: true, updates }
 }
 
-export function toStringRecord(value: PersistedValuesRecord | null | undefined) {
-  const out: PersistedValuesRecord = {}
+export function toStringRecord(value: PersistedValuesRecord | null | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
   if (!value || typeof value !== 'object') return out
   for (const [key, raw] of Object.entries(value)) {
     out[key] = asText(raw)
@@ -209,11 +209,23 @@ export function buildCategoryFromStoredRows<TKey extends RatesFlagsEditableCateg
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order || a.row_id.localeCompare(b.row_id))
     .map((row) => {
+      const rawValues =
+        row.values_json && typeof row.values_json === 'object'
+          ? (row.values_json as Record<string, unknown>)
+          : {}
       const values = toStringRecord(row.values_json)
       if (!values.id) values.id = row.row_id
       if (!values.display_name) values.display_name = row.display_name
       if (config.key === 'supply_rates_area_based' && !values.unit) {
         values.unit = '$/sqft'
+      }
+      if (
+        config.key === 'condition_modifiers' &&
+        rawValues.levels &&
+        typeof rawValues.levels === 'object' &&
+        !Array.isArray(rawValues.levels)
+      ) {
+        ;(values as Record<string, unknown>).levels = rawValues.levels
       }
       return {
         values,

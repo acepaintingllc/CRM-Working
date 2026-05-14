@@ -34,6 +34,7 @@ import type {
   CustomerSendScopeKey,
   CustomerSendCopy,
   CustomerSendMutationData,
+  CustomerSendPersistedPdf,
   CustomerSendPageData,
   CustomerSendSubmissionData,
   CustomerSendVersionArtifactState,
@@ -53,6 +54,30 @@ type ResolvedCustomerSendPreview = {
   draft: CustomerSendPageData['draft']
   readiness: CustomerSendReadinessResult
   version: EstimatePublicVersionRow | null
+}
+
+export async function createCustomerSendUploadedPdfDraft(params: {
+  orgId: string
+  estimateId: string
+  customerId: string
+  userId: string
+  draft: CustomerSendDraft
+  document: CustomerEstimateDocument
+  pdf: CustomerSendPersistedPdf
+  operationalSnapshot?: CustomerSendOperationalSnapshot
+}): Promise<ServiceResult<EstimatePublicVersionRow>> {
+  return saveCustomerSendDraftVersion({
+    orgId: params.orgId,
+    estimateId: params.estimateId,
+    customerId: params.customerId,
+    userId: params.userId,
+    draft: params.draft,
+    document: params.document,
+    pdf: params.pdf,
+    operationalSnapshot: params.operationalSnapshot,
+    latestDraft: null,
+    latestVersion: null,
+  })
 }
 
 function readOperationalSnapshotEstimateUpdatedAt(snapshot: Record<string, unknown> | null | undefined) {

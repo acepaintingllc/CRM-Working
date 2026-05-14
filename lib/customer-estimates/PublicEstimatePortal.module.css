@@ -83,7 +83,17 @@
   color: #17362b;
 }
 
+.totalActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid #cfd8d2;
   background: #fff;
   color: #050b08;
@@ -93,6 +103,7 @@
   font-weight: 800;
   cursor: pointer;
   box-shadow: 0 1px 1px rgba(15, 31, 26, 0.04);
+  text-decoration: none;
 }
 
 .secondaryButton:hover {
