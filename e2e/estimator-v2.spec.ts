@@ -38,6 +38,11 @@ async function expectEstimateBelongsToTestOrg() {
   return { supabase, estimate: estimate! }
 }
 
+function parseCurrencyText(value: string) {
+  const parsed = Number(value.replace(/[^0-9.-]/g, ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 async function createFreshTestEstimate() {
   const supabase = createE2EClient()
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
@@ -249,7 +254,7 @@ test.describe('Estimator V2', () => {
     expect(Number(jobSettings?.override_labor_rate)).toBe(laborRate)
   })
 
-  test('creates a fresh TEST estimate room through Add Room and persists it', async ({ page }) => {
+  test('creates a fresh TEST estimate room through Add Room and produces priced summary output', async ({ page }) => {
     const { supabase, estimate } = await createFreshTestEstimate()
     const roomName = `E2E Added Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
     const pageErrors: string[] = []
@@ -290,6 +295,13 @@ test.describe('Estimator V2', () => {
     await page.reload()
     await expect(page.getByLabel('Room Name')).toHaveValue(roomName, { timeout: 15_000 })
 
+    await page.goto(`/crm/estimates/${estimate.id}/v2/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText(roomName).first()).toBeVisible()
+
+    const summaryCurrencyTexts = await page.locator('main').getByText(/\$[\d,]+(?:\.\d{2})?/).allTextContents()
+    expect(summaryCurrencyTexts.some((value) => parseCurrencyText(value) > 0)).toBeTruthy()
+
     const { data: rooms, error: roomError } = await supabase
       .from('estimate_rooms')
       .select('org_id, estimate_id, job_id, room_name, length_in, width_in, wallheight_in')
@@ -305,5 +317,22 @@ test.describe('Estimator V2', () => {
     expect(Number(rooms?.[0]?.length_in)).toBe(168)
     expect(Number(rooms?.[0]?.width_in)).toBe(132)
     expect(Number(rooms?.[0]?.wallheight_in)).toBe(96)
+
+    const { data: wallScopes, error: wallScopeError } = await supabase
+      .from('estimate_room_wall_scopes')
+      .select('org_id, estimate_id, job_id, room_id, include, effective_area_sf, effective_total')
+      .eq('org_id', testOrgId!)
+      .eq('estimate_id', estimate.id)
+      .eq('active', 'Y')
+
+    if (wallScopeError) throw wallScopeError
+    expect(wallScopes).toHaveLength(1)
+    expect(wallScopes?.[0]?.org_id).toBe(testOrgId)
+    expect(wallScopes?.[0]?.estimate_id).toBe(estimate.id)
+    expect(wallScopes?.[0]?.job_id).toBe(estimate.job_id)
+    expect(wallScopes?.[0]?.room_id).toBe('R001')
+    expect(wallScopes?.[0]?.include).toBe('Y')
+    expect(Number(wallScopes?.[0]?.effective_area_sf)).toBeGreaterThan(0)
+    expect(Number(wallScopes?.[0]?.effective_total)).toBeGreaterThan(0)
   })
 })
