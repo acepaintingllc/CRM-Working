@@ -13,6 +13,9 @@
     "test:estimating-confidence:components": "vitest run app/crm/estimates/[id]/v2/summary/_components/__tests__/EstimateV2SummaryPageContent.test.tsx app/crm/estimates/[id]/v2/summary/_lib/__tests__/EstimateV2SummaryDerived.test.tsx app/crm/estimates/[id]/v2/summary/_lib/__tests__/EstimateV2SummaryEditorParity.test.tsx app/crm/estimates/[id]/v2/_components/__tests__/EstimateV2SummaryControls.test.tsx app/crm/estimates/[id]/v2/_state/__tests__/useEstimateV2SummaryData.test.tsx app/crm/estimates/[id]/v2/_state/__tests__/useEstimateV2DerivedState.test.tsx app/crm/estimates/[id]/v2/_state/__tests__/useEstimateV2SaveController.test.tsx app/crm/estimates/[id]/v2/_state/__tests__/useEstimateV2SummarySaveControllers.test.tsx app/crm/estimates/[id]/v2/_state/__tests__/estimateV2BrowserAcceptanceRegression.test.tsx app/crm/estimates/[id]/v2/_state/__tests__/estimateV2EditorSmokeRegressions.test.tsx app/crm/estimates/[id]/v2/details/_components/__tests__/EstimateV2DetailsPageContent.test.tsx app/crm/estimates/[id]/v2/_components/__tests__/EstimateV2CeilingsSectionBody.test.tsx app/crm/estimates/[id]/v2/_components/__tests__/EstimateV2TrimSectionBody.test.tsx",
     "test:node": "set NEXT_PUBLIC_SUPABASE_URL=http://localhost&& set SUPABASE_SERVICE_ROLE_KEY=dev-key&& set NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key&& node --experimental-specifier-resolution=node --loader ./scripts/nodeTestTsLoader.mjs --test \"lib/{client,crm,customer-estimates,customers,estimator,jobs,quotes,server}/__tests__/*.test.ts\" \"lib/server/estimate-v2/__tests__/saveLoadContract.test.ts\"&& vitest run --config vitest.node.config.ts lib/server/estimate-collection/__tests__/repository.test.ts lib/server/estimate-collection/__tests__/service.test.ts lib/server/customer-send/__tests__/contextCalculations.test.ts lib/server/estimate-v2/__tests__/saveEstimateOrchestration.test.ts lib/server/estimate-v2/__tests__/saveEstimateOrchestrationIntegration.test.ts lib/server/estimate-v2/__tests__/loadEstimateAssembly.test.ts lib/server/estimate-v2/__tests__/calculationOrchestration.test.ts lib/server/estimate-v2/__tests__/canonicalClientServerParity.test.ts lib/server/estimate-v2/__tests__/estimateV2CustomerTotalChainParity.test.ts lib/server/estimate-v2/__tests__/estimateV2FunctionalCompletenessSmoke.test.ts lib/server/customer-send/__tests__/estimateCustomerSendChainParity.test.ts",
     "test:components": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
     "test:customer-send": "vitest run --config vitest.customer-send.config.ts",
     "demo:quote": "node scripts/create-sample-public-quote.mjs",
     "seed:estimator-org": "node scripts/seed-estimator-org.mjs",
@@ -33,6 +36,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
