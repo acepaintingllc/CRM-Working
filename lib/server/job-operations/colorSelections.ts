@@ -170,11 +170,6 @@ function normalizeUuid(value: unknown, label: string): ServiceResult<string | nu
   return okResult(value)
 }
 
-function normalizeRequiredUuid(value: unknown, label: string): ServiceResult<string> {
-  if (!isUuid(value)) return errorResult('invalid_input', `Invalid ${label}.`)
-  return okResult(value)
-}
-
 function normalizeOptionalText(value: unknown, label: string, maxLength = 500): ServiceResult<string | null> {
   if (value == null) return okResult(null)
   if (typeof value !== 'string') return errorResult('invalid_input', `${label} must be text.`)

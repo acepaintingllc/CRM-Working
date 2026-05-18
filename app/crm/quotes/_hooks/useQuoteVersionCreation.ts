@@ -25,7 +25,9 @@ export function useQuoteVersionCreation(
   const createInFlightRef = useRef(false)
   const resetKeyRef = useRef(resetKey)
 
-  resetKeyRef.current = resetKey
+  useEffect(() => {
+    resetKeyRef.current = resetKey
+  }, [resetKey])
 
   useEffect(() => {
     setVersionName('')

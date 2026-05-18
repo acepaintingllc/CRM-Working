@@ -380,22 +380,22 @@ export function useJobDetailPage() {
   )
 
   const workflowActions = useMemo(
-    () => (resource.data.job ? getJobWorkflowActions('detail', resource.data.job) : []),
-    [resource.data.job]
+    () => (job ? getJobWorkflowActions('detail', job) : []),
+    [job]
   )
 
   const timelineItems = useMemo(
-    () => (resource.data.job ? buildJobTimelineItems(resource.data.job) : []),
-    [resource.data.job]
+    () => (job ? buildJobTimelineItems(job) : []),
+    [job]
   )
 
   const closeoutReferenceVm = useMemo(
     () =>
       buildJobCloseoutReferenceVm({
-        job: resource.data.job,
-        paintLogs: resource.data.paintLogs,
+        job: job,
+        paintLogs,
       }),
-    [resource.data.job, resource.data.paintLogs]
+    [job, paintLogs]
   )
 
   const runWorkflowAction = async (action: JobWorkflowResolvedAction) => {
