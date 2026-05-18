@@ -333,7 +333,7 @@ export function CustomerEstimateDocumentView({
   document,
   showShell = true,
   showOverflowWarnings = true,
-  termsFontSize,
+  termsFontSize = document.terms_font_size ?? undefined,
   onTermsPageOverflowChange,
 }: {
   document: CustomerEstimateDocument

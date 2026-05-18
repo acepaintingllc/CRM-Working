@@ -710,6 +710,45 @@ describe('estimateV2SummaryDerived helpers', () => {
     })
   })
 
+  it('does not count trim paint gallons as a manual override alert', () => {
+    const roomScopeRows = buildRoomScopeRows({
+      wallScopes: [],
+      ceilingScopes: [],
+      trimScopes: normalizeSummaryScopeRows([
+        {
+          id: 'trim-1',
+          room_id: 'room-1',
+          scope_name: 'Baseboards',
+          effective_measurement: 20,
+          raw_paint_gallons: 0,
+          override_gallons: 1,
+        },
+      ]),
+    })
+    const trimRow = roomScopeRows.get('room-1')?.find((scope) => scope.id === 'trim-1')
+    const roomAlertsByRoom = buildRoomAlertsByRoom({
+      rooms,
+      roomFlagCountMap: new Map(),
+      roomScopeRows,
+    })
+    const alerts = buildSummaryAlerts({
+      pricingSummary,
+      hasJobSettings: true,
+      roomScopeRows,
+      roomFlags: [],
+      rooms,
+    })
+
+    expect(trimRow).toMatchObject({
+      hasOverride: false,
+      overrideSummary: null,
+    })
+    expect(roomAlertsByRoom.get('room-1')?.overrides).toBe(0)
+    expect(alerts).toEqual([
+      { kind: 'info', title: 'No active alerts', detail: 'Estimate is currently clean' },
+    ])
+  })
+
   it('generates missing-product, override, and clean summary alerts', () => {
     const missingProductRows = buildRoomScopeRows({
       wallScopes: normalizeSummaryScopeRows([

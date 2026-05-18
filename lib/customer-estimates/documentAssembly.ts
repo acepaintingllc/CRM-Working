@@ -73,6 +73,7 @@ export function assembleCustomerEstimateBuild(params: {
     normalized.overrides?.quote_validity_days,
     normalized.settings?.quote_validity_days
   )
+  const termsFontSize = resolveTermsFontSize(normalized.settings?.terms_font_size)
   const depositLanguage =
     normalized.overrides?.deposit_language?.trim() ||
     'A deposit may be required for scheduling or special-order materials.'
@@ -154,6 +155,7 @@ export function assembleCustomerEstimateBuild(params: {
     scopes: sections,
     total: computedTotal,
     terms,
+    terms_font_size: termsFontSize,
     terms_sections: termsSections,
     source_meta: {
       company: {
@@ -451,4 +453,9 @@ function resolveQuoteValidityDays(
     }
   }
   return 90
+}
+
+function resolveTermsFontSize(settingsValue: number | null | undefined) {
+  const candidate = Number(settingsValue)
+  return Number.isFinite(candidate) && candidate >= 11 && candidate <= 18 ? candidate : null
 }

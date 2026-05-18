@@ -172,6 +172,7 @@ export interface CustomerEstimateInput {
   catalogs?: CustomerEstimateCatalogs | null
   settings?: {
     quote_validity_days?: number | null
+    terms_font_size?: number | null
     terms_text?: string | null
     terms_sections?: QuoteTermsSections | null
     default_template_key?: string | null

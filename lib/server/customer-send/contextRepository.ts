@@ -45,6 +45,7 @@ const DEFAULT_COMPANY: CompanyProfile = {
 const DEFAULT_QUOTE_SEND_DEFAULTS: QuoteSendDefaults = {
   default_template_key: 'default',
   quote_validity_days: 90,
+  terms_font_size: 14.8,
   terms_text: '',
   terms_sections: defaultQuoteTermsSections,
   template_presets: templatePresets,

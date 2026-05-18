@@ -57,6 +57,18 @@ describe('settings domain parsers', () => {
 
   it('normalizes and validates quote send defaults', () => {
     expect(normalizeQuoteSendDefaults(null)).toEqual(emptyQuoteSendDefaults)
+    expect(
+      normalizeQuoteSendDefaults({
+        default_template_key: emptyQuoteSendDefaults.default_template_key,
+        quote_validity_days: 90,
+        terms_font_size: '13.6',
+        terms_text: 'Terms',
+      })
+    ).toEqual({
+      ...emptyQuoteSendDefaults,
+      terms_font_size: 13.6,
+      terms_text: 'Terms',
+    })
 
     expect(
       parseQuoteSendDefaults({
@@ -78,6 +90,16 @@ describe('settings domain parsers', () => {
     ).toEqual({
       ok: false,
       error: 'Quote validity days must be an integer between 1 and 365.',
+    })
+
+    expect(
+      parseQuoteSendDefaults({
+        ...emptyQuoteSendDefaults,
+        terms_font_size: 10.8,
+      })
+    ).toEqual({
+      ok: false,
+      error: 'Terms font size must be between 11 and 18.',
     })
   })
 

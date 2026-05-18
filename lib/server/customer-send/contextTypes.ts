@@ -100,6 +100,7 @@ export type EstimateJobSettingsRow = {
 export type QuoteSendDefaults = {
   default_template_key: string
   quote_validity_days: number
+  terms_font_size?: number
   terms_text: string
   terms_sections?: QuoteTermsSections
   template_presets?: TemplatePreset[]
@@ -108,6 +109,7 @@ export type QuoteSendDefaults = {
 export type EstimateCustomerSendSettings = {
   default_template_key?: string | null
   quote_validity_days?: number | null
+  terms_font_size?: number | null
   terms_text?: string | null
   terms_sections?: QuoteTermsSections | null
   template_presets?: TemplatePreset[] | null
