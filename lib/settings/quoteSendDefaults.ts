@@ -19,6 +19,7 @@ type ParseResult<T> =
 export const emptyQuoteSendDefaults: QuoteSendDefaults = {
   default_template_key: DEFAULT_ESTIMATE_TEMPLATE_KEY,
   quote_validity_days: DEFAULT_QUOTE_VALIDITY_DAYS,
+  terms_font_size: 14.8,
   terms_text: DEFAULT_TERMS_TEXT,
   terms_sections: defaultQuoteTermsSections,
   template_presets: templatePresets,
@@ -39,6 +40,12 @@ function asInteger(value: unknown) {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return null
   return Math.trunc(parsed)
+}
+
+function asFiniteNumber(value: unknown) {
+  if (value == null || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function normalizeTemplatePresets(value: unknown): TemplatePreset[] {
@@ -66,6 +73,7 @@ export function normalizeQuoteSendDefaults(row: Unsafe | null | undefined): Quot
   return {
     default_template_key: asText(row?.default_template_key) || emptyQuoteSendDefaults.default_template_key,
     quote_validity_days: asInteger(row?.quote_validity_days) ?? emptyQuoteSendDefaults.quote_validity_days,
+    terms_font_size: asFiniteNumber(row?.terms_font_size) ?? emptyQuoteSendDefaults.terms_font_size,
     terms_text: asNormalizedTerms(row?.terms_text) || emptyQuoteSendDefaults.terms_text,
     terms_sections: normalizeQuoteTermsSections(row?.terms_sections),
     template_presets: normalizedTemplatePresets,
@@ -86,6 +94,9 @@ export function parseQuoteSendDefaults(input: unknown): ParseResult<QuoteSendDef
   }
   if (!Number.isInteger(data.quote_validity_days) || data.quote_validity_days < 1 || data.quote_validity_days > 365) {
     return { ok: false, error: 'Quote validity days must be an integer between 1 and 365.' }
+  }
+  if (data.terms_font_size < 11 || data.terms_font_size > 18) {
+    return { ok: false, error: 'Terms font size must be between 11 and 18.' }
   }
   if (data.terms_text.length > 8000) {
     return { ok: false, error: 'Terms and conditions must be 8000 characters or fewer.' }

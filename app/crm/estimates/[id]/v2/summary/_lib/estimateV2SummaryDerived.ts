@@ -186,7 +186,6 @@ const SCOPE_MAPPING_CONFIG: Record<ScopeKind, ScopeMappingConfig> = {
     hasOverride: (scope) =>
       hasActiveOverrideValue(scope.override_measurement, scope.raw_measurement) ||
       hasActiveOverrideValue(scope.override_hours, scope.raw_paint_hours) ||
-      hasActiveOverrideValue(scope.override_gallons, scope.raw_paint_gallons) ||
       hasActiveOverrideValue(scope.override_supply_cost, scope.raw_supply_cost) ||
       hasActiveOverrideValue(scope.override_total, scope.raw_total) ||
       !!scope.override_description?.trim(),
@@ -264,7 +263,6 @@ function buildOverrideSummary(kind: ScopeKind, scope: SummaryScopeSourceRow) {
       ? [
           activeOverride('Measurement', scope.override_measurement, 'lf', scope.raw_measurement),
           activeOverride('Labor hours', scope.override_hours, 'h', scope.raw_paint_hours),
-          activeOverride('Gallons', scope.override_gallons, 'gal', scope.raw_paint_gallons),
           activeCurrencyOverride('Supply cost', scope.override_supply_cost, scope.raw_supply_cost),
           activeCurrencyOverride('Total', scope.override_total, scope.raw_total),
           scope.override_description?.trim()

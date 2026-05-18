@@ -335,4 +335,635 @@ test.describe('Estimator V2', () => {
     expect(Number(wallScopes?.[0]?.effective_area_sf)).toBeGreaterThan(0)
     expect(Number(wallScopes?.[0]?.effective_total)).toBeGreaterThan(0)
   })
+
+  test('prices a fresh TEST estimate ceiling scope and persists calculated ceiling totals', async ({ page }) => {
+    const { supabase, estimate } = await createFreshTestEstimate()
+    const roomName = `E2E Ceiling Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    const pageErrors: string[] = []
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+
+    await loginToEstimate(page, `/crm/estimates/${estimate.id}/v2`)
+
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText('No rooms yet - add the first one.')).toBeVisible()
+    const addRoomButton = page.getByRole('button', { name: '+ Add room' })
+    await expect(addRoomButton).toBeEnabled()
+    await page.waitForLoadState('networkidle')
+    await addRoomButton.click()
+
+    const roomNameInput = page.getByLabel('Room Name')
+    await expect
+      .poll(
+        async () => page.getByLabel('Room Name').count(),
+        { message: `Room editor did not open. Page errors: ${pageErrors.join(' | ') || 'none'}` }
+      )
+      .toBe(1)
+    await expect(roomNameInput).toBeVisible()
+    await roomNameInput.fill(roomName)
+    await page.getByLabel('Length (in)').fill('168')
+    await page.getByLabel('Width (in)').fill('132')
+    await page.getByLabel('Height (in)').fill('96')
+
+    const ceilingsToggle = page.getByRole('button', { name: 'Ceilings excluded' })
+    await expect(ceilingsToggle).toBeEnabled()
+    await ceilingsToggle.click()
+    await expect(page.getByRole('button', { name: 'Ceilings included' })).toBeVisible()
+    await expect(page.getByText('Ceiling Sq Ft')).toBeVisible()
+    await expect(page.getByLabel('Ceiling Type')).toBeVisible()
+    await expect(page.locator('main').getByText('154').first()).toBeVisible()
+
+    const saveDraft = page.getByRole('button', { name: 'Save draft' })
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT'
+    )
+    await saveDraft.click()
+    const saveResponse = await saveResponsePromise
+    expect(saveResponse.ok()).toBeTruthy()
+
+    await page.reload()
+    await expect(page.getByLabel('Room Name')).toHaveValue(roomName, { timeout: 15_000 })
+    await expect(page.getByText('Ceiling Sq Ft')).toBeVisible()
+
+    await page.goto(`/crm/estimates/${estimate.id}/v2/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText(roomName).first()).toBeVisible()
+    await expect(page.locator('main').getByText('Ceilings').first()).toBeVisible()
+
+    const summaryCurrencyTexts = await page.locator('main').getByText(/\$[\d,]+(?:\.\d{2})?/).allTextContents()
+    expect(summaryCurrencyTexts.some((value) => parseCurrencyText(value) > 0)).toBeTruthy()
+
+    const { data: ceilingScopes, error: ceilingScopeError } = await supabase
+      .from('estimate_room_ceiling_scopes')
+      .select(
+        'org_id, estimate_id, job_id, room_id, include, raw_area_sf, effective_area_sf, raw_paint_hours, effective_paint_hours, raw_paint_gallons, effective_paint_gallons, effective_total'
+      )
+      .eq('org_id', testOrgId!)
+      .eq('estimate_id', estimate.id)
+      .eq('active', 'Y')
+
+    if (ceilingScopeError) throw ceilingScopeError
+    expect(ceilingScopes).toHaveLength(1)
+    expect(ceilingScopes?.[0]?.org_id).toBe(testOrgId)
+    expect(ceilingScopes?.[0]?.estimate_id).toBe(estimate.id)
+    expect(ceilingScopes?.[0]?.job_id).toBe(estimate.job_id)
+    expect(ceilingScopes?.[0]?.room_id).toBe('R001')
+    expect(ceilingScopes?.[0]?.include).toBe('Y')
+    expect(Number(ceilingScopes?.[0]?.raw_area_sf)).toBeCloseTo(154, 1)
+    expect(Number(ceilingScopes?.[0]?.effective_area_sf)).toBeGreaterThan(0)
+    expect(Number(ceilingScopes?.[0]?.raw_paint_hours)).toBeGreaterThan(0)
+    expect(Number(ceilingScopes?.[0]?.effective_paint_hours)).toBeGreaterThan(0)
+    expect(Number(ceilingScopes?.[0]?.raw_paint_gallons)).toBeGreaterThan(0)
+    expect(Number(ceilingScopes?.[0]?.effective_paint_gallons)).toBeGreaterThan(0)
+    expect(Number(ceilingScopes?.[0]?.effective_total)).toBeGreaterThan(0)
+  })
+
+  test('prices a fresh TEST estimate trim scope and persists calculated trim totals', async ({ page }) => {
+    const { supabase, estimate } = await createFreshTestEstimate()
+    const roomName = `E2E Trim Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    const pageErrors: string[] = []
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+
+    await loginToEstimate(page, `/crm/estimates/${estimate.id}/v2`)
+
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText('No rooms yet - add the first one.')).toBeVisible()
+    const addRoomButton = page.getByRole('button', { name: '+ Add room' })
+    await expect(addRoomButton).toBeEnabled()
+    await page.waitForLoadState('networkidle')
+    await addRoomButton.click()
+
+    const roomNameInput = page.getByLabel('Room Name')
+    await expect
+      .poll(
+        async () => page.getByLabel('Room Name').count(),
+        { message: `Room editor did not open. Page errors: ${pageErrors.join(' | ') || 'none'}` }
+      )
+      .toBe(1)
+    await expect(roomNameInput).toBeVisible()
+    await roomNameInput.fill(roomName)
+    await page.getByLabel('Length (in)').fill('168')
+    await page.getByLabel('Width (in)').fill('132')
+    await page.getByLabel('Height (in)').fill('96')
+
+    const trimToggle = page.getByRole('button', { name: 'Trim excluded' })
+    await expect(trimToggle).toBeEnabled()
+    await trimToggle.click()
+    await expect(page.getByRole('button', { name: 'Trim included' })).toBeVisible()
+
+    await expect(page.getByText('Trim Setup').first()).toBeVisible()
+    await expect(page.getByLabel('Measurement Mode').first()).toBeVisible()
+    await expect(page.getByText('Final Measurement')).toBeVisible()
+
+    const saveDraft = page.getByRole('button', { name: 'Save draft' })
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT'
+    )
+    await saveDraft.click()
+    const saveResponse = await saveResponsePromise
+    expect(saveResponse.ok()).toBeTruthy()
+
+    await page.reload()
+    await expect(page.getByLabel('Room Name')).toHaveValue(roomName, { timeout: 15_000 })
+    await expect(page.getByText('Trim Setup').first()).toBeVisible()
+
+    await page.goto(`/crm/estimates/${estimate.id}/v2/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText(roomName).first()).toBeVisible()
+    await expect(page.locator('main').getByText('Trim').first()).toBeVisible()
+
+    const summaryCurrencyTexts = await page.locator('main').getByText(/\$[\d,]+(?:\.\d{2})?/).allTextContents()
+    expect(summaryCurrencyTexts.some((value) => parseCurrencyText(value) > 0)).toBeTruthy()
+
+    const { data: trimScopes, error: trimScopeError } = await supabase
+      .from('estimate_room_trim_scopes')
+      .select(
+        'org_id, estimate_id, job_id, room_id, include, trim_type_id, unit_type, measurement_mode, helper_value, raw_measurement, effective_measurement, raw_paint_hours, effective_paint_gallons, effective_total'
+      )
+      .eq('org_id', testOrgId!)
+      .eq('estimate_id', estimate.id)
+      .eq('active', 'Y')
+
+    if (trimScopeError) throw trimScopeError
+    expect(trimScopes).toHaveLength(1)
+    expect(trimScopes?.[0]?.org_id).toBe(testOrgId)
+    expect(trimScopes?.[0]?.estimate_id).toBe(estimate.id)
+    expect(trimScopes?.[0]?.job_id).toBe(estimate.job_id)
+    expect(trimScopes?.[0]?.room_id).toBe('R001')
+    expect(trimScopes?.[0]?.include).toBe('Y')
+    expect(trimScopes?.[0]?.trim_type_id).toBeTruthy()
+    expect(trimScopes?.[0]?.unit_type).toBe('LF')
+    expect(trimScopes?.[0]?.measurement_mode).toBe('ROOM_HELPER')
+    expect(Number(trimScopes?.[0]?.helper_value)).toBeCloseTo(50, 1)
+    expect(Number(trimScopes?.[0]?.raw_measurement)).toBeGreaterThan(0)
+    expect(Number(trimScopes?.[0]?.effective_measurement)).toBeGreaterThan(0)
+    expect(Number(trimScopes?.[0]?.effective_measurement)).toBeCloseTo(50, 1)
+    expect(Number(trimScopes?.[0]?.raw_paint_hours)).toBeGreaterThan(0)
+    expect(Number(trimScopes?.[0]?.effective_paint_gallons)).toBeGreaterThan(0)
+    expect(Number(trimScopes?.[0]?.effective_total)).toBeGreaterThan(0)
+  })
+
+  test('prices a fresh TEST estimate door scope and persists calculated door totals', async ({ page }) => {
+    const { supabase, estimate } = await createFreshTestEstimate()
+    const roomName = `E2E Door Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    const pageErrors: string[] = []
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+
+    await loginToEstimate(page, `/crm/estimates/${estimate.id}/v2`)
+
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText('No rooms yet - add the first one.')).toBeVisible()
+    const addRoomButton = page.getByRole('button', { name: '+ Add room' })
+    await expect(addRoomButton).toBeEnabled()
+    await page.waitForLoadState('networkidle')
+    await addRoomButton.click()
+
+    const roomNameInput = page.getByLabel('Room Name')
+    await expect
+      .poll(
+        async () => page.getByLabel('Room Name').count(),
+        { message: `Room editor did not open. Page errors: ${pageErrors.join(' | ') || 'none'}` }
+      )
+      .toBe(1)
+    await expect(roomNameInput).toBeVisible()
+    await roomNameInput.fill(roomName)
+    await page.getByLabel('Length (in)').fill('168')
+    await page.getByLabel('Width (in)').fill('132')
+    await page.getByLabel('Height (in)').fill('96')
+
+    const doorsToggle = page.getByRole('button', { name: 'Doors excluded' })
+    await expect(doorsToggle).toBeEnabled()
+    await doorsToggle.click()
+    await expect(page.getByRole('button', { name: 'Doors included' })).toBeVisible()
+
+    const doorTypeSelect = page.getByLabel('Door Type').first()
+    if ((await doorTypeSelect.count()) === 0) {
+      const addDoorButton = page.getByRole('button', { name: '+ Add Door' })
+      await expect(addDoorButton).toBeEnabled()
+      await addDoorButton.click()
+    }
+
+    await expect(page.getByLabel('Door Type').first()).toBeVisible()
+    await page.getByLabel('Door Type').first().selectOption({ index: 1 })
+    const selectedDoorTypeId = await page.getByLabel('Door Type').first().inputValue()
+    await page.getByLabel('Quantity').first().fill('2')
+    await page.getByLabel('Sides').first().selectOption('2')
+    await expect(page.getByText('Final Units').first()).toBeVisible()
+
+    const saveDraft = page.getByRole('button', { name: 'Save draft' })
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT'
+    )
+    await saveDraft.click()
+    const saveResponse = await saveResponsePromise
+    expect(saveResponse.ok()).toBeTruthy()
+
+    await page.reload()
+    await expect(page.getByLabel('Room Name')).toHaveValue(roomName, { timeout: 15_000 })
+    await expect(page.getByLabel('Door Type').first()).toBeVisible()
+    await expect(page.getByLabel('Quantity').first()).toHaveValue('2')
+    await expect(page.getByLabel('Sides').first()).toHaveValue('2')
+
+    await page.goto(`/crm/estimates/${estimate.id}/v2/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText(roomName).first()).toBeVisible()
+    await expect(page.locator('main').getByText('Doors').first()).toBeVisible()
+
+    const summaryCurrencyTexts = await page.locator('main').getByText(/\$[\d,]+(?:\.\d{2})?/).allTextContents()
+    expect(summaryCurrencyTexts.some((value) => parseCurrencyText(value) > 0)).toBeTruthy()
+
+    const { data: doorScopes, error: doorScopeError } = await supabase
+      .from('estimate_room_door_scopes')
+      .select(
+        'org_id, estimate_id, job_id, room_id, include, door_type_id, quantity, sides, raw_units, effective_units, raw_paint_hours, effective_material_cost, effective_total'
+      )
+      .eq('org_id', testOrgId!)
+      .eq('estimate_id', estimate.id)
+      .eq('active', 'Y')
+
+    if (doorScopeError) throw doorScopeError
+    expect(doorScopes).toHaveLength(1)
+    expect(doorScopes?.[0]?.org_id).toBe(testOrgId)
+    expect(doorScopes?.[0]?.estimate_id).toBe(estimate.id)
+    expect(doorScopes?.[0]?.job_id).toBe(estimate.job_id)
+    expect(doorScopes?.[0]?.room_id).toBe('R001')
+    expect(doorScopes?.[0]?.include).toBe('Y')
+    expect(doorScopes?.[0]?.door_type_id).toBe(selectedDoorTypeId)
+    expect(Number(doorScopes?.[0]?.quantity)).toBe(2)
+    expect(Number(doorScopes?.[0]?.sides)).toBe(2)
+    expect(Number(doorScopes?.[0]?.raw_units)).toBe(4)
+    expect(Number(doorScopes?.[0]?.effective_units)).toBeGreaterThan(0)
+    expect(Number(doorScopes?.[0]?.effective_units)).toBe(4)
+    expect(Number(doorScopes?.[0]?.raw_paint_hours)).toBeGreaterThan(0)
+    expect(Number(doorScopes?.[0]?.effective_material_cost)).toBeGreaterThanOrEqual(0)
+    expect(Number(doorScopes?.[0]?.effective_total)).toBeGreaterThan(0)
+  })
+
+  test('prices a fresh TEST estimate drywall repair and persists calculated repair totals', async ({ page }) => {
+    const { supabase, estimate } = await createFreshTestEstimate()
+    const roomName = `E2E Drywall Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    const pageErrors: string[] = []
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+
+    await loginToEstimate(page, `/crm/estimates/${estimate.id}/v2`)
+
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText('No rooms yet - add the first one.')).toBeVisible()
+    const addRoomButton = page.getByRole('button', { name: '+ Add room' })
+    await expect(addRoomButton).toBeEnabled()
+    await page.waitForLoadState('networkidle')
+    await addRoomButton.click()
+
+    const roomNameInput = page.getByLabel('Room Name')
+    await expect
+      .poll(
+        async () => page.getByLabel('Room Name').count(),
+        { message: `Room editor did not open. Page errors: ${pageErrors.join(' | ') || 'none'}` }
+      )
+      .toBe(1)
+    await expect(roomNameInput).toBeVisible()
+    await roomNameInput.fill(roomName)
+    await page.getByLabel('Length (in)').fill('168')
+    await page.getByLabel('Width (in)').fill('132')
+    await page.getByLabel('Height (in)').fill('96')
+
+    await expect(page.getByRole('button', { name: 'Wall Drywall Repairs ^' })).toBeVisible()
+    const addRepairButton = page.getByRole('button', { name: '+ Add repair' }).first()
+    await expect(addRepairButton).toBeEnabled()
+    await addRepairButton.click()
+
+    await expect(page.getByLabel('Repair Type').first()).toBeVisible()
+    const selectedRepairType = await page.getByLabel('Repair Type').first().inputValue()
+    await page.getByLabel(/Quantity \((LF|SQFT)\)/).first().fill('4')
+
+    const saveDraft = page.getByRole('button', { name: 'Save draft' })
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT'
+    )
+    await saveDraft.click()
+    const saveResponse = await saveResponsePromise
+    expect(saveResponse.ok()).toBeTruthy()
+
+    await page.reload()
+    await expect(page.getByLabel('Room Name')).toHaveValue(roomName, { timeout: 15_000 })
+    await expect(page.getByLabel('Repair Type').first()).toBeVisible()
+    await expect(page.getByLabel(/Quantity \((LF|SQFT)\)/).first()).toHaveValue('4')
+
+    await page.goto(`/crm/estimates/${estimate.id}/v2/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText(roomName).first()).toBeVisible()
+    await expect(page.locator('main').getByText('Drywall').first()).toBeVisible()
+
+    const summaryCurrencyTexts = await page.locator('main').getByText(/\$[\d,]+(?:\.\d{2})?/).allTextContents()
+    expect(summaryCurrencyTexts.some((value) => parseCurrencyText(value) > 0)).toBeTruthy()
+
+    const { data: drywallRepairs, error: drywallRepairError } = await supabase
+      .from('estimate_drywall_repairs')
+      .select(
+        'org_id, estimate_id, job_id, room_id, surface, repair_type, unit, quantity, raw_quantity, effective_quantity, base_unit_rate, calculated_total, effective_total'
+      )
+      .eq('org_id', testOrgId!)
+      .eq('estimate_id', estimate.id)
+      .eq('active', 'Y')
+
+    if (drywallRepairError) throw drywallRepairError
+    expect(drywallRepairs).toHaveLength(1)
+    expect(drywallRepairs?.[0]?.org_id).toBe(testOrgId)
+    expect(drywallRepairs?.[0]?.estimate_id).toBe(estimate.id)
+    expect(drywallRepairs?.[0]?.job_id).toBe(estimate.job_id)
+    expect(drywallRepairs?.[0]?.room_id).toBe('R001')
+    expect(drywallRepairs?.[0]?.surface).toBe('wall')
+    expect(drywallRepairs?.[0]?.repair_type).toBe(selectedRepairType)
+    expect(drywallRepairs?.[0]?.unit).toBeTruthy()
+    expect(Number(drywallRepairs?.[0]?.quantity)).toBe(4)
+    expect(Number(drywallRepairs?.[0]?.raw_quantity)).toBe(4)
+    expect(Number(drywallRepairs?.[0]?.effective_quantity)).toBeGreaterThan(0)
+    expect(Number(drywallRepairs?.[0]?.effective_quantity)).toBe(4)
+    expect(Number(drywallRepairs?.[0]?.base_unit_rate)).toBeGreaterThan(0)
+    expect(Number(drywallRepairs?.[0]?.calculated_total)).toBeGreaterThan(0)
+    expect(Number(drywallRepairs?.[0]?.effective_total)).toBeGreaterThan(0)
+  })
+  test('persists details page material overrides for a fresh priced TEST estimate', async ({ page }) => {
+    const { estimate } = await createFreshTestEstimate()
+    await loginToEstimate(page, `/crm/estimates/${estimate.id}/v2`)
+
+    await expect(page.getByText('No rooms yet - add the first one.')).toBeVisible()
+    const detailsAddRoomButton = page.getByRole('button', { name: '+ Add room' })
+    await expect(detailsAddRoomButton).toBeEnabled()
+    await page.waitForLoadState('networkidle')
+    await detailsAddRoomButton.click()
+    await expect(page.getByLabel('Room Name')).toBeVisible()
+    await page.getByLabel('Room Name').fill('Details Materials Room')
+    await page.getByLabel('Length (in)').fill('180')
+    await page.getByLabel('Width (in)').fill('144')
+    await page.getByLabel('Height (in)').fill('96')
+
+    await Promise.all([
+      page.waitForResponse((response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT' &&
+        response.ok(),
+      ),
+      page.getByRole('button', { name: /Save draft/i }).click(),
+    ])
+
+    await page.goto(`/crm/estimates/${estimate.id}/v2/details`)
+    await expect(page.getByRole('heading', { name: 'Details & Overrides' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Material Overview' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Paint Planning' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Product' }).first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Override' }).first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Final' }).first()).toBeVisible()
+
+    const overrideInput = page.getByLabel(/override gallons/i).first()
+    await overrideInput.fill('6.25')
+
+    await Promise.all([
+      page.waitForResponse((response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT' &&
+        response.ok(),
+      ),
+      page.getByRole('button', { name: 'Save Draft' }).click(),
+    ])
+
+    await page.reload()
+    await expect(page.getByLabel(/override gallons/i).first()).toHaveValue('6.25')
+
+    const e2e = createE2EClient()
+    const { data: wallScope, error } = await e2e
+      .from('estimate_room_wall_scopes')
+      .select('override_paint_gallons')
+      .eq('estimate_id', estimate.id)
+      .eq('active', 'Y')
+      .not('override_paint_gallons', 'is', null)
+      .limit(1)
+      .maybeSingle()
+
+    expect(error).toBeNull()
+    expect(Number(wallScope?.override_paint_gallons ?? 0)).toBeCloseTo(6.25, 2)
+  })
+
+  test('blocks editor navigation with unsaved changes until the user confirms', async ({ page }) => {
+    const { estimate } = await createFreshTestEstimate()
+    await loginToEstimate(page, `/crm/estimates/${estimate.id}/v2`)
+
+    await expect(page.getByText('No rooms yet - add the first one.')).toBeVisible()
+    const guardAddRoomButton = page.getByRole('button', { name: '+ Add room' })
+    await expect(guardAddRoomButton).toBeEnabled()
+    await page.waitForLoadState('networkidle')
+    await guardAddRoomButton.click()
+    await expect(page.getByLabel('Room Name')).toBeVisible()
+    await page.getByLabel('Room Name').fill('Unsaved Navigation Room')
+
+    await page.getByRole('button', { name: /Back/i }).first().click()
+    await expect(page.getByRole('heading', { name: 'Leave with unsaved changes?' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page).toHaveURL(new RegExp(`/crm/estimates/${estimate.id}/v2$`))
+    await expect(page.getByRole('heading', { name: 'Leave with unsaved changes?' })).toBeHidden()
+
+    await page.getByRole('button', { name: /Back/i }).first().click()
+    await expect(page.getByRole('heading', { name: 'Leave with unsaved changes?' })).toBeVisible()
+    await page.getByRole('button', { name: 'Discard changes and leave quote editor' }).click()
+    await expect(page).not.toHaveURL(new RegExp(`/crm/estimates/${estimate.id}/v2$`))
+  })
+
+  test('blocks invalid included wall scope values and saves after correction', async ({ page }) => {
+    const { estimate } = await createFreshTestEstimate()
+    await loginToEstimate(page, `/crm/estimates/${estimate.id}/v2`)
+
+    await expect(page.getByText('No rooms yet - add the first one.')).toBeVisible()
+    const validationAddRoomButton = page.getByRole('button', { name: '+ Add room' })
+    await expect(validationAddRoomButton).toBeEnabled()
+    await page.waitForLoadState('networkidle')
+    await validationAddRoomButton.click()
+    await expect(page.getByLabel('Room Name')).toBeVisible()
+    await page.getByLabel('Room Name').fill('Validation Room')
+    await page.getByLabel('Length (in)').fill('168')
+    await page.getByLabel('Width (in)').fill('132')
+    await page.getByLabel('Height (in)').fill('')
+
+    await expect(page.getByText('Validation Room: height is required for RECT wall mode', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Save draft/i })).toBeDisabled()
+
+    await page.getByLabel('Height (in)').fill('96')
+    await expect(page.getByText('Validation Room: height is required for RECT wall mode', { exact: true })).toBeHidden()
+    await expect(page.getByRole('button', { name: /Save draft/i })).toBeEnabled()
+
+    await Promise.all([
+      page.waitForResponse((response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT' &&
+        response.ok(),
+      ),
+      page.getByRole('button', { name: /Save draft/i }).click(),
+    ])
+  })
+  async function createFreshPricedEstimateThroughEditor(page: Page, roomName: string) {
+    const { supabase, estimate } = await createFreshTestEstimate()
+    await loginToEstimate(page, `/crm/estimates/${estimate.id}/v2`)
+    await expect(page.getByText('No rooms yet - add the first one.')).toBeVisible()
+    const addRoomButton = page.getByRole('button', { name: '+ Add room' })
+    await expect(addRoomButton).toBeEnabled()
+    await page.waitForLoadState('networkidle')
+    await addRoomButton.click()
+    await expect(page.getByLabel('Room Name')).toBeVisible()
+    await page.getByLabel('Room Name').fill(roomName)
+    await page.getByLabel('Length (in)').fill('168')
+    await page.getByLabel('Width (in)').fill('132')
+    await page.getByLabel('Height (in)').fill('96')
+
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT'
+    )
+    await page.getByRole('button', { name: /Save draft/i }).click()
+    const saveResponse = await saveResponsePromise
+    expect(saveResponse.ok()).toBeTruthy()
+
+    return { supabase, estimate, roomName }
+  }
+
+  async function readVisibleLargestCurrency(page: Page) {
+    const currencyTexts = await page.locator('main').getByText(/\$[\d,]+(?:\.\d{2})?/).allTextContents()
+    const values = currencyTexts.map(parseCurrencyText).filter((value) => value > 0)
+    expect(values.length).toBeGreaterThan(0)
+    return Math.max(...values)
+  }
+
+  function roundedCurrencyText(value: number) {
+    return `$${Math.round(value).toLocaleString('en-US')}`
+  }
+
+  test('loads customer send review for a fresh priced TEST estimate without sending email', async ({ page }) => {
+    const { estimate, roomName } = await createFreshPricedEstimateThroughEditor(
+      page,
+      `Send Readiness Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    )
+
+    await page.goto(`/crm/estimates/${estimate.id}/v2/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText(roomName).first()).toBeVisible()
+    const summaryTotal = await readVisibleLargestCurrency(page)
+    const summaryTotalText = roundedCurrencyText(summaryTotal)
+
+    await page.getByRole('link', { name: /Send to client/i }).click()
+    await expect(page.getByText('Customer Quote')).toBeVisible()
+    await expect(page.getByText('Customer Preview')).toBeVisible()
+    await expect(page.getByText(summaryTotalText).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Send Test' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Send Quote|Resolve blockers before sending|Save draft to refresh preview before sending/i })).toBeVisible()
+  })
+
+  test('opens a TEST-only public quote preview and matches the internal summary total', async ({ page }) => {
+    const { supabase, estimate, roomName } = await createFreshPricedEstimateThroughEditor(
+      page,
+      `Public Preview Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    )
+
+    await page.goto(`/crm/estimates/${estimate.id}/v2/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    const summaryTotal = await readVisibleLargestCurrency(page)
+    const summaryTotalText = roundedCurrencyText(summaryTotal)
+
+    await page.goto(`/crm/estimates/${estimate.id}/send`)
+    await expect(page.getByText('Customer Preview')).toBeVisible()
+
+    const publicToken = `codex_e2e_${randomUUID().replace(/-/g, '')}`
+    const { data: draftVersion, error: draftLookupError } = await supabase
+      .from('estimate_public_versions')
+      .select('id, org_id, estimate_id, status, snapshot_json')
+      .eq('org_id', testOrgId!)
+      .eq('estimate_id', estimate.id)
+      .eq('status', 'draft')
+      .order('version_number', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    expect(draftLookupError).toBeNull()
+    expect(draftVersion?.id).toBeTruthy()
+    expect(draftVersion?.snapshot_json).toBeTruthy()
+
+    const { error: publishError } = await supabase
+      .from('estimate_public_versions')
+      .update({
+        status: 'sent',
+        public_token: publicToken,
+        sent_at: new Date().toISOString(),
+      })
+      .eq('org_id', testOrgId!)
+      .eq('id', draftVersion!.id)
+
+    expect(publishError).toBeNull()
+
+    await page.goto(`/quote/${publicToken}`)
+    await expect(page.getByText('Your quote total')).toBeVisible()
+    await expect(page.getByText(summaryTotalText).first()).toBeVisible()
+    await expect(page.getByText(roomName).first()).toBeVisible()
+    await expect(page.getByText(/Walls|wall/i).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Accept Quote/i })).toBeVisible()
+  })
+
+  test('loads the quote route aliases for editor summary and send review', async ({ page }) => {
+    const roomName = `Quote Alias Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    const { estimate } = await createFreshPricedEstimateThroughEditor(page, roomName)
+
+    await page.goto(`/crm/quotes/${estimate.id}`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByLabel('Room Name')).toHaveValue(roomName, { timeout: 15_000 })
+
+    await page.goto(`/crm/quotes/${estimate.id}/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText(roomName).first()).toBeVisible()
+    await expect(page.getByText('Final Total').first()).toBeVisible()
+
+    const sendLink = page.getByRole('link', { name: /Send to client/i })
+    await expect(sendLink).toHaveAttribute('href', `/crm/quotes/${estimate.id}/send`)
+    await sendLink.click()
+    await expect(page).toHaveURL(new RegExp(`/crm/quotes/${estimate.id}/send$`))
+    await expect(page.getByText('Customer Quote')).toBeVisible()
+    await expect(page.getByText('Customer Preview')).toBeVisible()
+  })
+
+  test('runs the estimator editor and summary flow in a mobile viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    const roomName = `Mobile Smoke Room ${new Date().toISOString().replace(/[:.]/g, '-')}`
+    const { estimate } = await createFreshPricedEstimateThroughEditor(page, roomName)
+
+    await page.reload()
+    await expect(page.getByLabel('Room Name')).toHaveValue(roomName, { timeout: 15_000 })
+    await page.getByLabel('Room Name').fill(`${roomName} Edited`)
+
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/estimates/${estimate.id}`) &&
+        response.request().method() === 'PUT'
+    )
+    await expect(page.getByRole('button', { name: /Save draft/i })).toBeVisible()
+    await page.getByRole('button', { name: /Save draft/i }).click()
+    const saveResponse = await saveResponsePromise
+    expect(saveResponse.ok()).toBeTruthy()
+
+    await page.reload()
+    await expect(page.getByLabel('Room Name')).toHaveValue(`${roomName} Edited`, { timeout: 15_000 })
+    await page.goto(`/crm/estimates/${estimate.id}/v2/summary`)
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.getByText(`${roomName} Edited`).first()).toBeVisible()
+    await expect(page.getByText('Final Total').first()).toBeVisible()
+    await expect(page.getByRole('link', { name: /Send to client/i })).toBeVisible()
+  })
 })
+
+
+
+

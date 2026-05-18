@@ -475,6 +475,10 @@ export function ensureAssembledCustomerEstimateDocument(
         ? document.total
         : null,
     terms: (document.terms as string[] | undefined) ?? [],
+    terms_font_size:
+      typeof document.terms_font_size === 'number' && Number.isFinite(document.terms_font_size)
+        ? document.terms_font_size
+        : null,
     terms_sections:
       ((document as Record<string, unknown>).terms_sections as BuiltCustomerEstimateDocument['terms_sections'] | undefined) ??
       null,

@@ -15,6 +15,7 @@ export type CompanyProfileSettings = {
 export type QuoteSendDefaults = {
   default_template_key: string
   quote_validity_days: number
+  terms_font_size: number
   terms_text: string
   terms_sections: QuoteTermsSections
   template_presets: TemplatePreset[]

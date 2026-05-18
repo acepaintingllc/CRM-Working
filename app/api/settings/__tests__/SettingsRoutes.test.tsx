@@ -133,6 +133,7 @@ describe('settings routes', () => {
     mockSaveQuoteSendDefaults.mockResolvedValue({
       default_template_key: 'default',
       quote_validity_days: 30,
+      terms_font_size: 13.6,
       terms_text: 'Terms',
     })
     mockSaveQuoteDefaults.mockResolvedValue({
@@ -164,6 +165,7 @@ describe('settings routes', () => {
         data: {
           default_template_key: 'default',
           quote_validity_days: 30,
+          terms_font_size: 13.6,
           terms_text: 'Terms',
         },
       })
@@ -187,9 +189,13 @@ describe('settings routes', () => {
       notice: 'Company profile saved.',
     })
     await expect(quoteResponse.json()).resolves.toEqual({
-      data: expect.objectContaining({ quote_validity_days: 30 }),
+      data: expect.objectContaining({ quote_validity_days: 30, terms_font_size: 13.6 }),
       notice: 'Quote send defaults saved.',
     })
+    expect(mockSaveQuoteSendDefaults).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ terms_font_size: 13.6 })
+    )
     await expect(quoteDefaultsResponse.json()).resolves.toEqual({
       data: expect.objectContaining({ walls_paint_id: 'paint-1' }),
       notice: 'Quote defaults saved.',

@@ -143,6 +143,22 @@ test('assembleCustomerEstimateDocument uses explicit terms text as the customer 
   assert.deepEqual(terms?.paragraphs, ['Line one.', 'Line two.'])
 })
 
+test('buildCustomerEstimateDocument carries the configured terms font size', () => {
+  const document = buildCustomerEstimateDocument(
+    createInput({
+      settings: {
+        quote_validity_days: 30,
+        terms_font_size: 13.6,
+        terms_text: 'Project terms copy.',
+      },
+    })
+  )
+  const assembled = assembleCustomerEstimateDocument(document)
+
+  assert.equal(document.terms_font_size, 13.6)
+  assert.equal(assembled.terms_font_size, 13.6)
+})
+
 test('assembleCustomerEstimateDocument renders structured terms as process and project pages', () => {
   const document = assembleCustomerEstimateDocument(
     buildCustomerEstimateDocument(

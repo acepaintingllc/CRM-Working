@@ -382,6 +382,38 @@ function buildArtifactFallbackTemplateSettings(quoteValidityDays: number) {
   }
 }
 
+function hasOwnKey<T extends Record<string, unknown>>(obj: T, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key)
+}
+
+function buildCustomerSendSettings(params: {
+  quoteDefaults: {
+    default_template_key: string
+    quote_validity_days: number
+    terms_text: string
+    terms_font_size?: number
+    terms_sections?: unknown
+    template_presets?: unknown
+  }
+}) {
+  const settings: { [key: string]: unknown } = {
+    default_template_key: params.quoteDefaults.default_template_key,
+    quote_validity_days: params.quoteDefaults.quote_validity_days,
+    terms_text: params.quoteDefaults.terms_text,
+    updated_at: null,
+  }
+  if (hasOwnKey(params.quoteDefaults, 'terms_font_size')) {
+    settings.terms_font_size = asNullableNumber(params.quoteDefaults.terms_font_size)
+  }
+  if (hasOwnKey(params.quoteDefaults, 'terms_sections')) {
+    settings.terms_sections = params.quoteDefaults.terms_sections
+  }
+  if (hasOwnKey(params.quoteDefaults, 'template_presets')) {
+    settings.template_presets = params.quoteDefaults.template_presets
+  }
+  return settings
+}
+
 export function selectEstimateCustomerSendVersions(
   publicVersions: EstimatePublicVersionRow[]
 ): {
@@ -452,12 +484,7 @@ export function mapCustomerQuoteSourceModel(params: {
     },
     company: params.resources.company,
     settings: {
-      default_template_key: params.resources.quoteDefaults.default_template_key,
-      quote_validity_days: params.resources.quoteDefaults.quote_validity_days,
-      terms_text: params.resources.quoteDefaults.terms_text,
-      terms_sections: params.resources.quoteDefaults.terms_sections,
-      template_presets: params.resources.quoteDefaults.template_presets,
-      updated_at: null,
+      ...buildCustomerSendSettings({ quoteDefaults: params.resources.quoteDefaults }),
     },
     inputs: {
       rooms: params.resources.rooms.map(normalizeRoomRow),

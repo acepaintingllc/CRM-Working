@@ -64,6 +64,7 @@ function buildPreviewDocument(value: QuoteSendDefaults) {
     intro_paragraph: '',
     closing_paragraph: '',
     quote_validity_days: value.quote_validity_days,
+    terms_font_size: value.terms_font_size ?? 14.8,
     deposit_language: '',
     card_fee_note: '',
     quote_rows: [
@@ -143,8 +144,8 @@ function TermsTextarea({
 }
 
 export function QuoteSendDefaultsForm(props: QuoteSendDefaultsFormProps) {
-  const [previewTermsFontSize, setPreviewTermsFontSize] = useState(14.8)
   const [termsPageOverflow, setTermsPageOverflow] = useState<Record<string, number>>({})
+  const termsFontSize = props.value.terms_font_size ?? 14.8
   const previewDocument = useMemo(() => buildPreviewDocument(props.value), [props.value])
   const termsPages = previewDocument.terms_pages?.length
     ? previewDocument.terms_pages
@@ -284,17 +285,17 @@ export function QuoteSendDefaultsForm(props: QuoteSendDefaultsFormProps) {
               <div className="ace-crm-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--crm-ui-muted)]">
                 Customer preview
               </div>
-              <CrmField label="Preview terms font size">
+              <CrmField label="Terms font size">
                 <input
                   type="number"
                   min={11}
                   max={18}
                   step={0.2}
-                  value={previewTermsFontSize}
+                  value={termsFontSize}
                   onChange={(event) => {
                     const next = Number(event.target.value)
                     if (Number.isFinite(next)) {
-                      setPreviewTermsFontSize(Math.min(18, Math.max(11, next)))
+                      props.onChange({ terms_font_size: Math.min(18, Math.max(11, next)) })
                     }
                   }}
                   className="ace-crm-input w-24 text-sm"
@@ -323,7 +324,6 @@ export function QuoteSendDefaultsForm(props: QuoteSendDefaultsFormProps) {
                 document={previewDocument}
                 showShell={false}
                 showOverflowWarnings
-                termsFontSize={previewTermsFontSize}
                 onTermsPageOverflowChange={recordTermsPageOverflow}
               />
             </div>

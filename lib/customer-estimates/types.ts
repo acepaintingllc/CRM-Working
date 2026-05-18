@@ -128,6 +128,7 @@ type CustomerEstimateDocumentBase = {
   scopes: CustomerEstimateSection[]
   total: number | null
   terms: string[]
+  terms_font_size?: number | null
   terms_sections?: QuoteTermsSections | null
   source_meta: CustomerEstimateDocumentSourceMeta
 }
