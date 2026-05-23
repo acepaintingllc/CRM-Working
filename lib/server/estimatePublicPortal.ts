@@ -634,6 +634,12 @@ export async function declinePublicEstimate(
   if (!canTransitionToTerminalState(currentStatus, 'declined')) {
     return errorResult('conflict', transitionConflictMessage(currentStatus, 'declined'))
   }
+  if (currentStatus !== 'declined' && isPublicQuoteExpired(loaded.snapshot)) {
+    return errorResult(
+      'conflict',
+      'This quote has expired. Please contact us for an updated quote.'
+    )
+  }
   if (currentStatus === 'declined') {
     const eventResult = await ensureEstimatePublicEvent({
       orgId,

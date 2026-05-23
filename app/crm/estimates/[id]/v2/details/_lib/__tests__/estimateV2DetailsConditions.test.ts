@@ -9,7 +9,10 @@ import {
   emptyConditionSelections,
 } from '../estimateV2DetailsConditions'
 import type { ConditionModifierCatalogRow, RatesFlagsPayload } from '@/types/estimator/ratesFlags'
-import type { EstimateV2ConditionModifier, EstimateV2ConditionSelections } from '@/types/estimator/v2'
+import type {
+  EstimateV2ConditionModifier,
+  EstimateV2ConditionSelections,
+} from '@/types/estimator/v2Conditions'
 
 function makePayload(rows: ConditionModifierCatalogRow[]): RatesFlagsPayload {
   return {

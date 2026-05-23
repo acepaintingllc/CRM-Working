@@ -10,7 +10,8 @@ import { parseConditionModifierRow } from './conditionModifiers.ts'
 import type { CeilingCalculationScopeRow } from './ceilingTypes.ts'
 import type { TrimUnitType } from './trimTypes.ts'
 import type { WallCalculationCatalogs, WallCalculationScopeRow } from './wallsTypes.ts'
-import type { EstimateV2AccessFeeOption, EstimateV2JobSettingsInput } from '@/types/estimator/v2'
+import type { EstimateV2AccessFeeOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2JobSettingsInput } from '@/types/estimator/v2Settings'
 import type {
   EstimateV2AccessFeeCalculationInputRow,
   EstimateV2CalculationJobSettingsInput,

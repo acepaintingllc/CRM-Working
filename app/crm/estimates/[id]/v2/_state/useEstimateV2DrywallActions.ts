@@ -2,7 +2,8 @@
 
 import { useCallback } from 'react'
 import type { EstimateV2EditorStoreApi } from '@/lib/estimates/v2/store/estimateV2Store'
-import type { EstimateV2DrywallRateOption, EstimateV2DrywallRepairDraft } from '@/types/estimator/v2'
+import type { EstimateV2DrywallRateOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2DrywallRepairDraft } from '@/types/estimator/v2Scopes'
 import {
   addDrywallRepairMutation,
   deleteDrywallRepairMutation,

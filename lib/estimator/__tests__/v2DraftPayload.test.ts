@@ -6,16 +6,16 @@ import {
   deriveEstimateV2Segment,
   sortByPosition,
 } from '../v2DraftPayload.ts'
+import type { EstimateV2ConditionSelections } from '@/types/estimator/v2Conditions'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2AccessFeeDraft,
   EstimateV2CeilingScopeDraft,
-  EstimateV2ConditionSelections,
-  EstimateV2JobSettingsDraft,
   EstimateV2OtherItemDraft,
-  EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
-} from '../../../types/estimator/v2.ts'
+} from '@/types/estimator/v2Scopes'
+import type { EstimateV2JobSettingsDraft } from '@/types/estimator/v2Settings'
 
 test('sortByPosition returns rows ordered by ascending position', () => {
   const rows = sortByPosition([

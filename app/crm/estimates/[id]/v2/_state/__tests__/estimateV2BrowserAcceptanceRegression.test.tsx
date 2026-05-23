@@ -15,16 +15,16 @@ import type {
   WallCalculationSegmentRow,
   WallCalculationSettings,
 } from '@/lib/estimator/wallsTypes'
+import type { EstimateV2Catalogs } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
-  EstimateV2Catalogs,
-  EstimateV2JobSettingsDraft,
-  EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
   EstimateV2WallSegmentDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
+import type { EstimateV2JobSettingsDraft } from '@/types/estimator/v2Settings'
 import { buildEstimateV2EditorLoadState } from '../estimateV2EditorLoadOrchestration'
 import {
   deriveEstimateV2PreparedSaveValidation,

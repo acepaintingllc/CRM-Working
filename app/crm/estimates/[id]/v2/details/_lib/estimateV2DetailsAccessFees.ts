@@ -1,9 +1,7 @@
 import { calculateAccessFeeRows } from '@/lib/estimator/accessFees'
-import type {
-  EstimateV2AccessFeeDraft,
-  EstimateV2AccessFeeOption,
-  EstimateV2RoomDraft,
-} from '@/types/estimator/v2'
+import type { EstimateV2AccessFeeOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
+import type { EstimateV2AccessFeeDraft } from '@/types/estimator/v2Scopes'
 
 export type DetailsAccessFeeAllocation = {
   walls: number

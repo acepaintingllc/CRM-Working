@@ -29,12 +29,12 @@ import {
   createValidationSummary,
   getBlockingValidationIssues,
 } from '../estimateV2DetailsValidation'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2CeilingScopeDraft,
-  EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
 
 type DetailsVm = ReturnType<typeof buildEstimateV2DetailsVm>
 

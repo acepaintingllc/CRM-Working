@@ -2,7 +2,7 @@ import type {
   EstimateV2DoorTypeOption,
   EstimateV2DrywallRateOption,
   EstimateV2TrimTypeOption,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Catalogs'
 
 type DeferredRun = () => void
 

@@ -2,7 +2,7 @@ import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
 import type { DetailsValidationIssue } from './estimateV2DetailsVm'
 import { isActive } from './estimateV2DetailsShared'
 import { createMaterialGroupedOverrideConflictIssue } from './estimateV2DetailsValidation'

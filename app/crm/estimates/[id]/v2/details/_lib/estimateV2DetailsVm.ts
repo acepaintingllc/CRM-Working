@@ -1,19 +1,22 @@
 import type {
-  EstimateV2AccessFeeDraft,
-  EstimateV2AccessFeeOption,
-  EstimateV2CeilingScopeDraft,
-  EstimateV2JobDefaultProducts,
-  EstimateV2PaintProductOption,
-  EstimateV2PrejobTripDraft,
-  EstimateV2PricingSummary,
-  EstimateV2RoomDraft,
-  EstimateV2RollerDraft,
-  EstimateV2TrimScopeDraft,
-  EstimateV2WallScopeDraft,
+  ConditionScopeFactors,
   EstimateV2ConditionModifier,
   EstimateV2ConditionSelections,
-  ConditionScopeFactors,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Conditions'
+import type {
+  EstimateV2AccessFeeOption,
+  EstimateV2PaintProductOption,
+} from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RollerDraft, EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
+import type {
+  EstimateV2AccessFeeDraft,
+  EstimateV2CeilingScopeDraft,
+  EstimateV2PrejobTripDraft,
+  EstimateV2TrimScopeDraft,
+  EstimateV2WallScopeDraft,
+} from '@/types/estimator/v2Scopes'
+import type { EstimateV2JobDefaultProducts } from '@/types/estimator/v2Settings'
+import type { EstimateV2PricingSummary } from '@/types/estimator/v2Summary'
 import {
   resolveAllConditionFactors,
   countActiveConditions,

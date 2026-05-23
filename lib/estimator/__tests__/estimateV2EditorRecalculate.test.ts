@@ -404,7 +404,7 @@ test('recalculateEditorDraftFactors is stable across save, load, and save again'
       primeMode: 'SPOT' as const,
       spotPrimePercent: '25',
       ceilingTypeId: 'FLAT',
-      ceilingGeometryMode: 'FLAT',
+      ceilingGeometryMode: 'FLAT' as const,
       vaultedAreaFactor: '',
       vaultedRidgeLengthIn: '',
       vaultedSlopeLengthIn: '',

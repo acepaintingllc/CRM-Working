@@ -16,7 +16,8 @@ import type {
   EstimateV2CanonicalScopeFamily,
   EstimateV2HistoricalScenarioAdapter,
 } from '../__fixtures__/canonical/index.ts'
-import type { EstimateV2Catalogs, EstimateV2SavePayload } from '../../../types/estimator/v2.ts'
+import type { EstimateV2Catalogs } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 type EstimateV2HistoricalComparisonTarget =
   | { metric: 'final_total' }

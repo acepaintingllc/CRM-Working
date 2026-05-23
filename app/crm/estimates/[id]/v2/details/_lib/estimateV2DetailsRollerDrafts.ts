@@ -1,4 +1,4 @@
-import type { EstimateV2RollerDraft } from '@/types/estimator/v2'
+import type { EstimateV2RollerDraft } from '@/types/estimator/v2Rooms'
 import { normalizeRollerApplicatorQuantity } from '@/lib/estimator/rollerQuantities'
 import type { DetailsRollerCoverOption, DetailsRollerState } from './estimateV2DetailsVm'
 import {

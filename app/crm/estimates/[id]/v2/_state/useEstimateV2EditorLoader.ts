@@ -11,11 +11,9 @@ import {
 import type { EstimateV2EditorStoreApi } from '@/lib/estimates/v2/store/estimateV2Store'
 import { createEstimateV2Error } from '@/lib/estimator/errors'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
-import type {
-  EstimateV2CatalogsPayload as CatalogsPayload,
-  EstimateV2GetResponse as EstimateResponse,
-  EstimateV2JobMeta,
-} from '@/types/estimator/v2'
+import type { EstimateV2JobMeta } from '@/types/estimator/v2Meta'
+import type { EstimateV2CatalogsPayload as CatalogsPayload } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2GetResponse as EstimateResponse } from '@/types/estimator/v2Summary'
 import {
   buildEstimateV2EditorApiFailureDiagnostic,
   formatEstimateV2EditorApiFailureLog,

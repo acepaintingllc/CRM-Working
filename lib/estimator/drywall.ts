@@ -4,15 +4,16 @@ import {
   round4,
 } from './wallsHelpers.ts'
 import { calculateDrywallEffectiveQuantity } from './calculationPrimitives.ts'
-import type { MissingInput, WallRoomTotal } from './wallsTypes.ts'
+import type { MissingInput } from './wallsTypes.ts'
 import type {
   DrywallCalculationInput,
   DrywallCalculationOutput,
   DrywallRepairCalculationResult,
-  DrywallRepairCalculationRow,
+  DrywallRepairInputRow,
   DrywallRepairSurface,
   DrywallRepairType,
   DrywallRepairUnit,
+  DrywallRoomTotal,
   DrywallUnitRateCatalogRow,
 } from '@/types/estimator/drywall'
 
@@ -36,25 +37,11 @@ const REPAIR_UNIT_BY_TYPE: Record<DrywallRepairType, DrywallRepairUnit> = {
   patch_opening_repair: 'SQFT',
 }
 
-function emptyRoomTotal(roomId: string): WallRoomTotal {
+function emptyRoomTotal(roomId: string): DrywallRoomTotal {
   return {
     room_id: roomId,
     scope_count: 0,
     included_scope_count: 0,
-    raw_area_sf: 0,
-    effective_area_sf: 0,
-    raw_paint_hours: 0,
-    effective_paint_hours: 0,
-    raw_primer_hours: 0,
-    effective_primer_hours: 0,
-    raw_paint_gallons: 0,
-    effective_paint_gallons: 0,
-    raw_paint_material_cost: 0,
-    effective_paint_material_cost: 0,
-    raw_primer_gallons: 0,
-    effective_primer_gallons: 0,
-    raw_supply_cost: 0,
-    effective_supply_cost: 0,
     raw_total: 0,
     effective_total: 0,
   }
@@ -99,12 +86,12 @@ function isRepairValidForSurface(repairType: DrywallRepairType, surface: Drywall
     : WALL_REPAIR_TYPES.has(repairType)
 }
 
-function scopeKey(row: DrywallRepairCalculationRow) {
-  return row.id ?? `${row.room_id}::${row.position ?? 0}`
+function scopeKey(row: DrywallRepairInputRow, index: number) {
+  return row.id ?? `${row.room_id}::${row.position ?? index}`
 }
 
 function buildRoomTotals(scopes: DrywallRepairCalculationResult[]) {
-  const totals = new Map<string, WallRoomTotal>()
+  const totals = new Map<string, DrywallRoomTotal>()
   for (const scope of scopes) {
     if (scope.include !== 'Y') continue
     const total = totals.get(scope.room_id) ?? emptyRoomTotal(scope.room_id)
@@ -121,7 +108,7 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
   const rateMap = buildRateMap(input.catalogs?.drywall_unit_rates)
   const missingInputs: MissingInput[] = []
 
-  const scopes = input.repairs.map((repair): DrywallRepairCalculationResult => {
+  const scopes = input.repairs.map((repair, index): DrywallRepairCalculationResult => {
     const include = normalizeInclude(repair.include ?? repair.active)
     const surface = normalizeSurface(repair.surface)
     const repairType = normalizeRepairType(repair.repair_type)
@@ -142,7 +129,7 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
       effectiveQuantity > 0
         ? round4(overrideTotal ?? calculatedTotal)
         : 0
-    const key = scopeKey(repair)
+    const key = scopeKey(repair, index)
 
     if (include === 'Y' && !repairType) {
       missingInputs.push({
@@ -218,5 +205,7 @@ export function calculateDrywallRepairs(input: DrywallCalculationInput): Drywall
 export type {
   DrywallCalculationInput,
   DrywallCalculationOutput,
+  DrywallRepairInputRow,
   DrywallRepairCalculationRow,
+  DrywallRoomTotal,
 } from '@/types/estimator/drywall'

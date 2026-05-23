@@ -2,12 +2,11 @@
 
 import { useCallback } from 'react'
 import type { EstimateV2EditorStoreApi } from '@/lib/estimates/v2/store/estimateV2Store'
+import type { ConditionLevel, EstimateV2ConditionModifier } from '@/types/estimator/v2Conditions'
 import type {
-  ConditionLevel,
   EstimateV2AccessFeeDraft,
-  EstimateV2ConditionModifier,
   EstimateV2PrejobTripDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
 import {
   applyCeilingGallonOverride,
   applyTrimGallonOverride,

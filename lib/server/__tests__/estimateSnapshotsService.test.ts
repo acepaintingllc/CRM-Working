@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { EstimateV2GetResponse } from '../../../types/estimator/v2.ts'
+import type { EstimateV2GetResponse } from '@/types/estimator/v2Summary'
 import { buildEstimatePublicPersistedSnapshot } from '../../customer-estimates/publicVersionSnapshot.ts'
 
 process.env.NEXT_PUBLIC_SUPABASE_URL ??= 'https://example.supabase.co'

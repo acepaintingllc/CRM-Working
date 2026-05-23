@@ -16,9 +16,9 @@ import type {
   EstimateV2CatalogOption,
   EstimateV2DoorTypeOption,
   EstimateV2DrywallRateOption,
-  EstimateV2RoomDraft,
   EstimateV2TrimTypeOption as TrimTypeOption,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import { asText } from '@/lib/estimator/parsing'
 
 const FALLBACK_COLOR_CODES = Array.from({ length: 6 }, (_, index) => ({

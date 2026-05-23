@@ -18,7 +18,8 @@ import {
   type EstimateV2CalculationCatalogBundle,
 } from '../calculationOrchestration.ts'
 import type { EstimateTemplateSettingsRow } from '../../estimateTemplateSettings'
-import type { EstimateV2Catalogs, EstimateV2PricingSummary, EstimateV2SavePayload } from '@/types/estimator/v2'
+import type { EstimateV2Catalogs } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2PricingSummary, EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 export const ESTIMATE_CHAIN_PARITY_SCENARIOS = {
   'simple-interior-repaint': simpleNoOverridesFixture,

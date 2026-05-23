@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createEstimateV2Store } from '@/lib/estimates/v2/store/estimateV2Store'
 import { useEstimateV2EditorViewModels } from '../useEstimateV2EditorViewModels'
 import { createMixedEstimateV2Fixture } from '../../../../../../../lib/estimator/__tests__/estimateV2Fixtures.ts'
-import type { EstimateV2PaintProductOption } from '@/types/estimator/v2'
+import type { EstimateV2PaintProductOption } from '@/types/estimator/v2Catalogs'
 
 function createViewModelParams() {
   const fixture = createMixedEstimateV2Fixture()

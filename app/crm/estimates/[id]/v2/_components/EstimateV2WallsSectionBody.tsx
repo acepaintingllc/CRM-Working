@@ -20,12 +20,12 @@ import {
 } from './EstimateV2EditorPrimitives'
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import { EstimateV2DrywallRepairsBlock } from './EstimateV2DrywallRepairsBlock'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
-  EstimateV2RoomDraft,
   EstimateV2WallScopeDraft,
   EstimateV2WallSegmentDraft,
   EstimateV2WallSegmentShape as WallSegmentShape,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
 
 type EditorStyles = Record<string, CSSProperties>
 const OPENING_STEP = 0.5

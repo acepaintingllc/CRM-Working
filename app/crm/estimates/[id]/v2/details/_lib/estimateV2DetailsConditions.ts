@@ -3,7 +3,7 @@ import type {
   ConditionScopeFactors,
   EstimateV2ConditionModifier,
   EstimateV2ConditionSelections,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Conditions'
 import type { ConditionModifierCatalogRow, RatesFlagsPayload } from '@/types/estimator/ratesFlags'
 
 export function emptyConditionSelections(): EstimateV2ConditionSelections {

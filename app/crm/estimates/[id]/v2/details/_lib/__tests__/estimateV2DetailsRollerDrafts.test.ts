@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { EstimateV2RollerDraft } from '@/types/estimator/v2'
+import type { EstimateV2RollerDraft } from '@/types/estimator/v2Rooms'
 import { applyDetailsRollerRowPatch } from '../estimateV2DetailsRollerDrafts'
 import {
   createAggregateDetailsRollerRowTarget,

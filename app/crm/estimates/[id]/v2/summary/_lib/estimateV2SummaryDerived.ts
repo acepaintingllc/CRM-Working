@@ -8,13 +8,12 @@ import {
   type ScopeKind,
 } from '@/lib/estimator/scopeKinds'
 import type {
-  EstimateV2JobSettingsInput,
   EstimateV2PaintProductRow,
-  EstimateV2PricingSummary,
   EstimateV2RoomFlagRow,
   EstimateV2RoomInputRow,
-  EstimateV2TrimPaint,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Rooms'
+import type { EstimateV2JobSettingsInput } from '@/types/estimator/v2Settings'
+import type { EstimateV2PricingSummary, EstimateV2TrimPaint } from '@/types/estimator/v2Summary'
 import {
   normalizeConditionSelections,
   type EstimateV2ConditionSelections,

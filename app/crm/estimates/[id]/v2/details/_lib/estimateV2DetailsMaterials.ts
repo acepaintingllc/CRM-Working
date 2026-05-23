@@ -1,10 +1,10 @@
+import type { EstimateV2PaintProductOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2CeilingScopeDraft,
-  EstimateV2PaintProductOption,
-  EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
 import type {
   BuildDetailsVmParams,
   DetailsScopeLineVm,

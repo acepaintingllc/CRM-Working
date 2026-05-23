@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
-import type { EstimateV2GetResponse } from '@/types/estimator/v2'
+import type { EstimateV2GetResponse } from '@/types/estimator/v2Summary'
 import { buildEstimateSnapshotRows } from '../snapshots.ts'
 
 function customerDocument(total: number): CustomerEstimateDocument {

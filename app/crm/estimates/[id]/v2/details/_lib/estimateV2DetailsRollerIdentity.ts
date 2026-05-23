@@ -2,7 +2,7 @@ import {
   normalizeWallRollerTargetId,
   wallRollerTargetIdsMatch,
 } from '@/lib/estimator/rollerIdentity'
-import type { EstimateV2RollerDraft, EstimateV2RollerScope } from '@/types/estimator/v2'
+import type { EstimateV2RollerDraft, EstimateV2RollerScope } from '@/types/estimator/v2Rooms'
 
 export type DetailsRollerRowTarget = {
   scope: EstimateV2RollerScope

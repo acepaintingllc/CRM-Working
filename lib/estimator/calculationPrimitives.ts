@@ -4,7 +4,7 @@ import type { YN } from './wallsTypes.ts'
 export type NumericLike = number | string | null | undefined
 
 export type CeilingSegmentShape = 'RECTANGLE' | 'TRIANGLE' | 'MANUAL'
-export type CeilingGeometryMode = 'FLAT' | 'VAULTED' | 'TRAY' | 'COFFERED' | 'MANUAL' | string
+export type CeilingGeometryMode = 'FLAT' | 'VAULTED' | 'TRAY' | 'COFFERED' | 'MANUAL'
 
 export function numeric(value: NumericLike) {
   return n(value)
@@ -100,6 +100,7 @@ export function calculateCeilingHelperExtraArea(params: {
   cofferFaceHeightIn: NumericLike
   cofferBottomWidthIn: NumericLike
   missingVaultedFactorResult?: number | null
+  onUnknownMode?: () => void
 }) {
   const base = nonNegative(params.baseArea) ?? 0
   if (base <= 0) return 0
@@ -122,6 +123,20 @@ export function calculateCeilingHelperExtraArea(params: {
     })
   }
 
+  if (
+    params.geometryMode === 'FLAT' ||
+    params.geometryMode === 'TRAY' ||
+    params.geometryMode === 'MANUAL' ||
+    params.geometryMode == null
+  ) {
+    return 0
+  }
+
+  // TypeScript ensures this is unreachable with well-typed callers; guards against
+  // runtime data cast through `as` from untyped DB sources.
+  const _exhaustive: never = params.geometryMode
+  void _exhaustive
+  params.onUnknownMode?.()
   return 0
 }
 

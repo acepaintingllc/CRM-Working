@@ -11,7 +11,8 @@ import {
   toggleRoomDoorIncludeMutation,
   updateDoorScopeMutation,
 } from '../_lib/estimateV2EditorMutations'
-import type { EstimateV2DoorScopeDraft, EstimateV2DoorTypeOption } from '@/types/estimator/v2'
+import type { EstimateV2DoorTypeOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2DoorScopeDraft } from '@/types/estimator/v2Scopes'
 import {
   formatEstimateV2DoorLabel,
   formatEstimateV2RoomLabel,

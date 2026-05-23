@@ -11,13 +11,13 @@ import { buildOverrideDrivenTotalById } from './estimateV2OverrideDrivenTotals'
 import { selectDisplayedMap } from './useEstimateV2CalculationContext'
 import type { EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 import type { calculateEstimateV2Preview } from '@/lib/estimator/v2PreviewCalculations'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2CeilingScopeDraft,
-  EstimateV2RoomDraft,
-  EstimateV2SavePayload,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 function sumIncludedTrimMeasurement<T extends { id: string; include: 'Y' | 'N' }>(
   rows: T[],

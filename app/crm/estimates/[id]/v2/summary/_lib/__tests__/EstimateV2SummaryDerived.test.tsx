@@ -23,7 +23,8 @@ import {
 } from '@/lib/estimator/__fixtures__/canonical/index.ts'
 import { buildEstimateV2DirtySnapshot } from '@/app/crm/estimates/[id]/v2/_state/estimateV2DirtySnapshot'
 import { SCOPE_KIND_LABELS, SCOPE_KIND_ORDER } from '@/lib/estimator/scopeKinds'
-import type { EstimateV2PricingSummary, EstimateV2RoomInputRow, EstimateV2TrimPaint } from '@/types/estimator/v2'
+import type { EstimateV2RoomInputRow } from '@/types/estimator/v2Rooms'
+import type { EstimateV2PricingSummary, EstimateV2TrimPaint } from '@/types/estimator/v2Summary'
 import {
   buildLocalCeilingScopeEffectiveAreaById,
   buildLocalDoorScopeEffectiveUnitsById,

@@ -4,7 +4,7 @@ import {
   loadEstimateV2CalculationCatalogs,
   loadEstimateV2RoomModesForTrimFromDb,
 } from '../estimateV2Catalogs.ts'
-import type { EstimateV2SavePayload } from '@/types/estimator/v2'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 import {
   normalizeEstimateV2CalculationRows,
   normalizeEstimateV2JobSettingsInput,

@@ -11,13 +11,13 @@ import {
   DEFAULT_LABOR_RATE,
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from '@/lib/estimator/defaults'
+import type { EstimateV2CatalogsPayload } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2PrejobTripDraft } from '@/types/estimator/v2Scopes'
 import type {
-  EstimateV2CatalogsPayload,
   EstimateV2CustomerDraft,
   EstimateV2JobDefaultProducts,
   EstimateV2JobSettingsDraft,
-  EstimateV2PrejobTripDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Settings'
 import type {
   EstimateV2EditorCollections,
   EstimateV2EditorDebugMeta,

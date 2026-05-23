@@ -10,11 +10,9 @@ import { validateV2TrimBeforeSave } from '@/lib/estimator/v2TrimValidation'
 import { validateV2DoorsBeforeSave } from '@/lib/estimator/v2DoorsValidation'
 import { validateV2DrywallBeforeSave } from '@/lib/estimator/v2DrywallValidation'
 import type { EstimateV2EditorStoreState } from '@/lib/estimates/v2/store/estimateV2Store'
-import type {
-  EstimateV2EstimateMeta,
-  EstimateV2PricingSummary,
-  EstimateV2WallCalculationsPayload,
-} from '@/types/estimator/v2'
+import type { EstimateV2EstimateMeta } from '@/types/estimator/v2Meta'
+import type { EstimateV2WallCalculationsPayload } from '@/types/estimator/v2Scopes'
+import type { EstimateV2PricingSummary } from '@/types/estimator/v2Summary'
 import {
   createUuid,
   normalizeDoorScope,

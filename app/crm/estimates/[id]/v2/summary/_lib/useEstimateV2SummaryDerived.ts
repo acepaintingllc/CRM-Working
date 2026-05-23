@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { EstimateV2SummaryPageData, EstimateV2TrimPaint } from '@/types/estimator/v2'
+import type { EstimateV2SummaryPageData, EstimateV2TrimPaint } from '@/types/estimator/v2Summary'
 import {
   buildPaintSupplyRows,
   buildPaintSupplyProductLabels,

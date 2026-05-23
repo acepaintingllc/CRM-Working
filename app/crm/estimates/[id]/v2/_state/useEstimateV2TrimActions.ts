@@ -13,7 +13,7 @@ import {
   toggleRoomTrimIncludeMutation,
   updateTrimScopeMutation,
 } from '../_lib/estimateV2EditorMutations'
-import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2'
+import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2Catalogs'
 import {
   formatEstimateV2RoomLabel,
   formatEstimateV2TrimLabel,

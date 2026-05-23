@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CustomerEstimateDocument } from '@/lib/customer-estimates/types'
-import type { EstimateV2GetResponse } from '@/types/estimator/v2'
+import type { EstimateV2GetResponse } from '@/types/estimator/v2Summary'
 import { buildEstimatePublicSnapshotFromVersion } from '@/lib/customer-estimates/publicSnapshot'
 import { appendCustomerSendPersistedPdf } from '../types'
 

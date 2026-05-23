@@ -8,12 +8,12 @@ import {
   normalizeEstimateTemplateMutationBody,
   type EstimateTemplateCollections,
 } from '../v2Templates.ts'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
-  EstimateV2JobSettingsDraft,
-  EstimateV2RoomDraft,
   EstimateV2WallScopeDraft,
   EstimateV2WallSegmentDraft,
-} from '../../../types/estimator/v2.ts'
+} from '@/types/estimator/v2Scopes'
+import type { EstimateV2JobSettingsDraft } from '@/types/estimator/v2Settings'
 
 function ids(...values: string[]) {
   let index = 0

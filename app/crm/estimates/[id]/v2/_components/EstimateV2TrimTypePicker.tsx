@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2'
+import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2Catalogs'
 import { inferTrimTypeMetadata } from '@/lib/estimator/trimTypeMetadata'
 
 export type TrimTypePickerProps = {

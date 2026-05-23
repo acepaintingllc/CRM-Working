@@ -68,6 +68,7 @@ import {
 
 const {
   acceptPublicEstimate,
+  declinePublicEstimate,
   loadPublicEstimatePortalSnapshot,
 } = await import('../estimatePublicPortal')
 
@@ -523,6 +524,65 @@ describe('estimatePublicPortal canonical artifact enforcement', () => {
       userId: 'staff-user-1',
       estimateId: 'estimate-1',
       publicVersionId: 'version-1',
+    })
+  })
+
+  it('rejects acceptance of an expired quote', async () => {
+    vi.setSystemTime(new Date('2026-06-01T00:00:00.000Z'))
+
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createSelectChain({
+              data: buildVersion(),
+              error: null,
+            })
+          ),
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await acceptPublicEstimate({
+      token: 'token-1',
+      legalName: 'Taylor Smith',
+      acceptedTerms: true,
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'conflict',
+      message: 'This quote has expired. Please contact us for an updated quote.',
+    })
+    expect(mocks.applyAcceptedEstimateSideEffects).not.toHaveBeenCalled()
+  })
+
+  it('rejects decline of an expired quote', async () => {
+    vi.setSystemTime(new Date('2026-06-01T00:00:00.000Z'))
+
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'estimate_public_versions') {
+        return {
+          select: vi.fn(() =>
+            createSelectChain({
+              data: buildVersion(),
+              error: null,
+            })
+          ),
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    })
+
+    const result = await declinePublicEstimate({
+      token: 'token-1',
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'conflict',
+      message: 'This quote has expired. Please contact us for an updated quote.',
     })
   })
 

@@ -3,7 +3,7 @@ import {
   normalizeRollerApplicatorQuantity,
   type RollerApplicatorQuantityReason,
 } from '@/lib/estimator/rollerQuantities'
-import type { EstimateV2RollerDraft, EstimateV2RollerScope } from '@/types/estimator/v2'
+import type { EstimateV2RollerDraft, EstimateV2RollerScope } from '@/types/estimator/v2Rooms'
 import type {
   DetailsRollerCoverOption,
   DetailsRollerOptionsState,

@@ -15,7 +15,8 @@ import {
   type EstimateV2CalculationCatalogBundle,
 } from '@/lib/server/estimate-v2/calculationOrchestration'
 import type { EstimateTemplateSettingsRow } from '@/lib/server/estimateTemplateSettings'
-import type { EstimateV2Catalogs, EstimateV2SavePayload } from '@/types/estimator/v2'
+import type { EstimateV2Catalogs } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 vi.mock('@/lib/server/org', () => ({
   supabaseAdmin: {

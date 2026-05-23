@@ -17,11 +17,11 @@ import {
   createDefaultDoorScope,
   createDefaultTrimScope,
 } from '../../../app/crm/estimates/[id]/v2/_lib/estimateV2EditorNormalize.ts'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2CeilingScopeDraft,
-  EstimateV2RoomDraft,
   EstimateV2WallScopeDraft,
-} from '../../../types/estimator/v2.ts'
+} from '@/types/estimator/v2Scopes'
 
 function makeRoom(overrides: Partial<EstimateV2RoomDraft> = {}): EstimateV2RoomDraft {
   return {

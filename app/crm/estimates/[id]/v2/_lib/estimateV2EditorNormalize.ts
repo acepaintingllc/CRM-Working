@@ -2,6 +2,14 @@ import { asNullableNumber, asText } from '../../../../../../lib/estimator/parsin
 import { normalizeWallRollerTargetId } from '../../../../../../lib/estimator/rollerIdentity.ts'
 import { HIDDEN_CEILING_COLOR_ID } from '../../../../../../lib/estimator/scopeRules.ts'
 import { normalizeConditionSelections } from '../../../../../../lib/estimator/conditionModifiers.ts'
+import type { UnsafeRecord } from '@/types/estimator/v2Meta'
+import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2Catalogs'
+import type {
+  EstimateV2RollerDraft,
+  EstimateV2RollerScope,
+  EstimateV2RoomDraft,
+  EstimateV2RoomFlagDraft,
+} from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2CeilingPrimeMode,
   EstimateV2CeilingScopeDraft,
@@ -10,21 +18,16 @@ import type {
   EstimateV2CeilingSegmentShape,
   EstimateV2DoorScopeDraft,
   EstimateV2DrywallRepairDraft,
-  EstimateV2RoomDraft,
-  EstimateV2RoomFlagDraft,
-  EstimateV2RollerDraft,
-  EstimateV2RollerScope,
   EstimateV2TrimMeasurementMode,
   EstimateV2TrimScopeDraft,
-  EstimateV2TrimTypeOption,
   EstimateV2TrimUnitType,
   EstimateV2WallPrimeMode,
   EstimateV2WallScopeDraft,
   EstimateV2WallScopeMode,
+  EstimateV2CeilingGeometryMode,
   EstimateV2WallSegmentDraft,
   EstimateV2WallSegmentShape,
-  UnsafeRecord,
-} from '../../../../../../types/estimator/v2.ts'
+} from '@/types/estimator/v2Scopes'
 
 const DEFAULT_COLOR_CODE_ID = 'COLOR1'
 
@@ -410,7 +413,7 @@ function parseCeilingSegmentShape(value: unknown): EstimateV2CeilingSegmentShape
   return 'RECTANGLE'
 }
 
-function parseCeilingGeometryMode(value: unknown): string {
+function parseCeilingGeometryMode(value: unknown): EstimateV2CeilingGeometryMode {
   const raw = asText(value).toUpperCase()
   if (raw === 'VAULTED' || raw === 'TRAY' || raw === 'COFFERED' || raw === 'MANUAL') return raw
   return 'FLAT'

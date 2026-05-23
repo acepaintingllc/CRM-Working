@@ -1,5 +1,5 @@
 import type { QuoteHomeJobVersionItemReadModel } from './quoteHomeTypes'
-import type { EstimateV2EstimateMeta, EstimateV2JobMeta } from '@/types/estimator/v2'
+import type { EstimateV2EstimateMeta, EstimateV2JobMeta } from '@/types/estimator/v2Meta'
 
 export const lastOpenedQuoteStorageKey = 'acecrm.quotes.lastOpened'
 

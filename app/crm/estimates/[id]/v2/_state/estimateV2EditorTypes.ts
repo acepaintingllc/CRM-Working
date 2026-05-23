@@ -6,36 +6,44 @@ import type {
   EstimateV2ConditionSelections,
 } from '@/lib/estimator/conditionModifiers'
 import type {
+  EstimateV2EstimateMeta,
+  EstimateV2JobMeta,
+  UnsafeRecord,
+} from '@/types/estimator/v2Meta'
+import type {
   EstimateV2CatalogOption,
   EstimateV2CatalogsPayload,
+  EstimateV2DoorTypeOption,
+  EstimateV2DrywallRateOption,
+  EstimateV2PaintProductOption,
+  EstimateV2ProductionRateOption,
+  EstimateV2RoomFlagOption,
+  EstimateV2TrimTypeOption,
+} from '@/types/estimator/v2Catalogs'
+import type {
+  EstimateV2RollerDraft,
+  EstimateV2RoomDraft,
+  EstimateV2RoomFlagDraft,
+} from '@/types/estimator/v2Rooms'
+import type {
   EstimateV2AccessFeeDraft,
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
-  EstimateV2CustomerDraft,
   EstimateV2DoorScopeDraft,
-  EstimateV2DoorTypeOption,
-  EstimateV2DrywallRateOption,
   EstimateV2DrywallRepairDraft,
-  EstimateV2EstimateMeta,
-  EstimateV2JobDefaultProducts,
-  EstimateV2JobMeta,
-  EstimateV2JobSettingsDraft,
   EstimateV2OtherItemDraft,
-  EstimateV2PaintProductOption,
   EstimateV2PrejobTripDraft,
-  EstimateV2PricingSummary,
-  EstimateV2ProductionRateOption,
-  EstimateV2RoomDraft,
-  EstimateV2RoomFlagDraft,
-  EstimateV2RoomFlagOption,
-  EstimateV2RollerDraft,
   EstimateV2TrimScopeDraft,
-  EstimateV2TrimTypeOption,
   EstimateV2WallCalculationsPayload,
   EstimateV2WallScopeDraft,
   EstimateV2WallSegmentDraft,
-  UnsafeRecord,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
+import type {
+  EstimateV2CustomerDraft,
+  EstimateV2JobDefaultProducts,
+  EstimateV2JobSettingsDraft,
+} from '@/types/estimator/v2Settings'
+import type { EstimateV2PricingSummary } from '@/types/estimator/v2Summary'
 import type { SaveStatus } from '@/lib/estimator/v2WallsAutosave'
 import type { EstimateV2DirtySnapshot } from './estimateV2DirtySnapshot'
 import type { EstimateV2CeilingScopePreviewMetrics } from '../_lib/estimateV2EditorDerived'

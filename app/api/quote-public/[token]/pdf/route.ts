@@ -2,6 +2,7 @@ import { resolveParams, jsonError } from '@/lib/server/apiRoute'
 import { readCustomerSendPersistedPdf } from '@/lib/server/customer-send/types'
 import { loadPublicEstimateByToken } from '@/lib/server/estimatePublicPortal'
 import { downloadDriveFile } from '@/lib/server/googleDrive'
+import { checkLocalRateLimit } from '@/lib/server/rateLimit'
 
 function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
@@ -19,6 +20,15 @@ export async function GET(
   const params = await resolveParams(context)
   const token = asText((params as { token?: string } | null | undefined)?.token)
   if (!token) return jsonError('Invalid token', 400)
+
+  // In-memory rate limit — best-effort on serverless (resets per instance)
+  const rate = checkLocalRateLimit({ key: `quote-public:pdf:${token}`, max: 20, windowMs: 60_000 })
+  if (!rate.ok) {
+    return Response.json(
+      { error: 'Too many requests. Please wait and retry.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil((rate.resetAt - Date.now()) / 1000)) } }
+    )
+  }
 
   const loaded = await loadPublicEstimateByToken(token, new URL(request.url).origin)
   if (!('version' in loaded) || !loaded.version) {

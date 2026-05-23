@@ -19,23 +19,24 @@ import {
   toPositiveFactorString,
   unknownNumberOrNull,
 } from './estimateV2EditorNormalize.ts'
+import type { UnsafeRecord as Unsafe } from '@/types/estimator/v2Meta'
+import type {
+  EstimateV2HeightFactorOption,
+  EstimateV2PaintProductOption,
+  EstimateV2ProductionRateOption,
+  EstimateV2RoomFlagOption,
+} from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RoomDraft, EstimateV2RoomFlagDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
   EstimateV2DoorScopeDraft,
   EstimateV2DrywallRepairDraft,
-  EstimateV2HeightFactorOption,
-  EstimateV2PaintProductOption,
-  EstimateV2ProductionRateOption,
-  EstimateV2RoomDraft,
-  EstimateV2RoomFlagDraft,
-  EstimateV2RoomFlagOption,
   EstimateV2TrimScopeDraft,
   EstimateV2WallCalculationsPayload,
   EstimateV2WallScopeDraft,
   EstimateV2WallSegmentDraft,
-  UnsafeRecord as Unsafe,
-} from '../../../../../../types/estimator/v2.ts'
+} from '@/types/estimator/v2Scopes'
 
 export type EstimateV2CeilingScopePreviewMetrics = {
   baseAreaSqFt: number | null

@@ -1,5 +1,5 @@
 import { asMaybeNumber } from '@/lib/estimator/parsing'
-import type { UnsafeRecord } from '@/types/estimator/v2'
+import type { UnsafeRecord } from '@/types/estimator/v2Meta'
 
 export type EstimateV2DetailsWallCalculationRow = {
   id: string

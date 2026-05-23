@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EstimateV2TrimTypePicker } from '../EstimateV2TrimTypePicker'
-import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2'
+import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2Catalogs'
 
 const baseStyles = {
   input: { border: '1px solid #333', background: '#111', color: '#fff', padding: 8, borderRadius: 6 },

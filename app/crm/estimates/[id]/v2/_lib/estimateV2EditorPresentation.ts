@@ -1,4 +1,5 @@
-import type { EstimateV2RoomFlagDraft, EstimateV2RoomFlagOption } from '@/types/estimator/v2'
+import type { EstimateV2RoomFlagOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RoomFlagDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2EditorSectionChipVm,
   EstimateV2EditorSectionSummaryVm,

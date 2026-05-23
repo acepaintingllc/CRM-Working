@@ -1,7 +1,7 @@
 'use client'
 
 import type { RawApiResponse } from '../../client/api.ts'
-import type { EstimateV2SavePayload } from '../../../types/estimator/v2.ts'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 export {
   loadEstimateV2RatesFlagsPayload,

@@ -16,7 +16,8 @@ import {
   normalizeConditionSelections,
   type EstimateV2ConditionSelections as CalculationConditionSelections,
 } from '../../lib/estimator/conditionModifiers.ts'
-import type { EstimateV2JobSettingsInput, EstimateV2SavePayload } from './v2'
+import type { EstimateV2JobSettingsInput } from './v2Settings'
+import type { EstimateV2SavePayload } from './v2Summary'
 
 export type EstimateV2WallScopeSaveRow = WallCalculationScopeRow
 export type EstimateV2WallSegmentSaveRow = WallCalculationSegmentRow

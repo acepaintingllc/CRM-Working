@@ -1,7 +1,7 @@
 import type {
   EstimateV2TrimCategory,
   EstimateV2TrimMeasurementClass,
-} from '../../types/estimator/v2.ts'
+} from '@/types/estimator/v2Catalogs'
 
 const TRIM_CATEGORIES: EstimateV2TrimCategory[] = [
   'base',

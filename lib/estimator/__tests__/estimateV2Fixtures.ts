@@ -1,27 +1,32 @@
 import { buildEstimateV2SavePayload } from '../v2DraftPayload.ts'
 import { createEstimateV2DirtySnapshot, type EstimateV2DirtySnapshot } from '../../../app/crm/estimates/[id]/v2/_state/estimateV2DirtySnapshot'
+import type { EstimateV2EstimateMeta, EstimateV2JobMeta } from '@/types/estimator/v2Meta'
+import type { EstimateV2Catalogs } from '@/types/estimator/v2Catalogs'
 import type {
-  EstimateV2Catalogs,
-  EstimateV2AccessFeeDraft,
-  EstimateV2EstimateMeta,
-  EstimateV2JobDefaultProducts,
-  EstimateV2JobMeta,
-  EstimateV2JobSettingsDraft,
-  EstimateV2PricingSummary,
   EstimateV2RollerDraft,
   EstimateV2RoomDraft,
   EstimateV2RoomFlagDraft,
-  EstimateV2SummaryPageData,
-  EstimateV2TrimPaint,
-  EstimateV2TrimScopeDraft,
-  EstimateV2WallCalculationsPayload,
-  EstimateV2WallScopeDraft,
-  EstimateV2WallSegmentDraft,
+} from '@/types/estimator/v2Rooms'
+import type {
+  EstimateV2AccessFeeDraft,
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
   EstimateV2DoorScopeDraft,
   EstimateV2DrywallRepairDraft,
-} from '../../../types/estimator/v2.ts'
+  EstimateV2TrimScopeDraft,
+  EstimateV2WallCalculationsPayload,
+  EstimateV2WallScopeDraft,
+  EstimateV2WallSegmentDraft,
+} from '@/types/estimator/v2Scopes'
+import type {
+  EstimateV2JobDefaultProducts,
+  EstimateV2JobSettingsDraft,
+} from '@/types/estimator/v2Settings'
+import type {
+  EstimateV2PricingSummary,
+  EstimateV2SummaryPageData,
+  EstimateV2TrimPaint,
+} from '@/types/estimator/v2Summary'
 
 type MixedEstimateFixture = {
   estimate: EstimateV2EstimateMeta

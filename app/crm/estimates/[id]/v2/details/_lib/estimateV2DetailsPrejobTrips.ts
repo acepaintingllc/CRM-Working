@@ -1,5 +1,6 @@
 import { calculatePrejobTrips } from '@/lib/estimator/prejobTrips'
-import type { EstimateV2PrejobTripDraft, EstimateV2RoomDraft } from '@/types/estimator/v2'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
+import type { EstimateV2PrejobTripDraft } from '@/types/estimator/v2Scopes'
 
 export type DetailsPrejobTripsVm = {
   rows: Array<EstimateV2PrejobTripDraft & {

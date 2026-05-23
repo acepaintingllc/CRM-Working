@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, type CSSProperties } from 'react'
-import type {
-  EstimateV2DrywallRateOption,
-  EstimateV2DrywallRepairDraft,
-} from '@/types/estimator/v2'
+import type { EstimateV2DrywallRateOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2DrywallRepairDraft } from '@/types/estimator/v2Scopes'
 import {
   Advanced,
   AdvancedPanelToggle,

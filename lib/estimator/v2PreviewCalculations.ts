@@ -7,11 +7,9 @@ import {
   toWallCalculationCatalogs,
 } from './v2CalculationShared.ts'
 import { calculateCanonicalEstimateV2Artifacts } from './v2CanonicalArtifacts.ts'
-import type {
-  EstimateV2Catalogs,
-  EstimateV2JobSettingsInput,
-  EstimateV2SavePayload,
-} from '@/types/estimator/v2'
+import type { EstimateV2Catalogs } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2JobSettingsInput } from '@/types/estimator/v2Settings'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 type PreviewCatalogs = EstimateV2Catalogs & {
   supplies_rates?: Unsafe[]

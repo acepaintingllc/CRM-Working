@@ -2,7 +2,7 @@
 
 import { Plus, Trash2 } from 'lucide-react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
-import type { EstimateV2PrejobTripDraft } from '@/types/estimator/v2'
+import type { EstimateV2PrejobTripDraft } from '@/types/estimator/v2Scopes'
 import type { DetailsPrejobTripsVm } from '../_lib/estimateV2DetailsPrejobTrips'
 
 const inputClassName =

@@ -1,4 +1,4 @@
-import type { EstimateV2GetResponse, EstimateV2ResponseInputs } from '@/types/estimator/v2'
+import type { EstimateV2GetResponse, EstimateV2ResponseInputs } from '@/types/estimator/v2Summary'
 
 export type EstimateGetResponseParams = {
   estimate: EstimateV2GetResponse['estimate'] | Record<string, unknown>

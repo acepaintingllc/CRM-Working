@@ -19,14 +19,15 @@ import {
   V2_TRIM_ROOM_HELPER_SOURCE,
 } from '../../../../../../lib/estimator/v2TrimActivation.ts'
 import type {
-  EstimateV2CeilingScopeDraft,
   EstimateV2CatalogsPayload,
-  EstimateV2RoomDraft,
-  EstimateV2RoomFlagDraft,
-  EstimateV2TrimScopeDraft,
   EstimateV2TrimTypeOption,
+} from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RoomDraft, EstimateV2RoomFlagDraft } from '@/types/estimator/v2Rooms'
+import type {
+  EstimateV2CeilingScopeDraft,
+  EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
 
 type RecalculateDraftFactorsParams = {
   rooms: EstimateV2RoomDraft[]

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { ConditionLevel, EstimateV2ConditionModifier } from '@/types/estimator/v2'
+import type { ConditionLevel, EstimateV2ConditionModifier } from '@/types/estimator/v2Conditions'
 import { countActiveConditions } from '../_lib/estimateV2DetailsConditions'
 
 const SEVERITY_LEVELS: ConditionLevel[] = ['minor', 'moderate', 'major']

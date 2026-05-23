@@ -1,9 +1,6 @@
 import { asNullableNumber } from './parsing.ts'
-import type {
-  EstimateV2AccessFeeDraft,
-  EstimateV2AccessFeeOption,
-  EstimateV2TrimScopeDraft,
-} from '../../types/estimator/v2.ts'
+import type { EstimateV2AccessFeeOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2AccessFeeDraft, EstimateV2TrimScopeDraft } from '@/types/estimator/v2Scopes'
 
 export type AccessFeeCalculationRow = {
   id: string

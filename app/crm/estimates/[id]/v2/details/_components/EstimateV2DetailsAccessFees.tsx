@@ -3,7 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { CrmButton } from '@/app/crm/_components/CrmButton'
 import { CrmNotice } from '@/app/crm/_components/CrmNotice'
-import type { EstimateV2AccessFeeDraft } from '@/types/estimator/v2'
+import type { EstimateV2AccessFeeDraft } from '@/types/estimator/v2Scopes'
 import type { DetailsAccessFeesVm } from '../_lib/estimateV2DetailsAccessFees'
 
 const inputClassName =

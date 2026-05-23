@@ -62,6 +62,54 @@ The job sends:
 - task reminder emails when `notes_tasks.reminder_at` is due
 - one daily summary email only when there is at least one active overdue or due-today task
 
+## Rate Limiting
+
+Public API routes (`/api/quote-public/*`, `/api/estimate-public/*`) and the
+customer-send endpoint use `checkLocalRateLimit` from `lib/server/rateLimit.ts`.
+
+**Current behaviour (default):** in-memory `Map` — fast, zero-config, but
+*best-effort only*. Limits reset on every Vercel cold start and are not shared
+across concurrent function instances, so a burst of traffic split across
+instances can exceed the configured limit.
+
+A warning is logged once per instance startup when running in `production` without
+a persistent backend so the gap shows up in your logs.
+
+### Upgrading to Upstash Redis (persistent, cross-instance)
+
+Upstash offers a free tier and is the recommended upgrade path.
+
+1. Create a free Redis database at [console.upstash.com](https://console.upstash.com).
+
+2. Install the Upstash packages:
+   ```bash
+   npm install @upstash/ratelimit @upstash/redis
+   ```
+
+3. Set the environment variables (Vercel dashboard or `.env.local`):
+   ```
+   RATE_LIMIT_BACKEND=upstash
+   UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
+   UPSTASH_REDIS_REST_TOKEN=your-token
+   ```
+
+4. Replace the body of `checkLocalRateLimit` in `lib/server/rateLimit.ts` with the
+   async Upstash implementation. Because `@upstash/ratelimit` calls are async, the
+   function signature must change from synchronous to `async`, and every call site
+   must add `await`. The parameter shape `{ key, max, windowMs }` and return shape
+   `{ ok, remaining, resetAt }` stay the same. Call sites to update:
+
+   - `app/api/estimate-public/[token]/route.ts`
+   - `app/api/quote-public/[token]/route.ts`
+   - `app/api/quote-public/[token]/accept/route.ts`
+   - `app/api/quote-public/[token]/decline/route.ts`
+   - `app/api/quote-public/[token]/pdf/route.ts`
+   - `lib/server/estimateCustomerSendRoute.ts`
+
+   The Vitest mock in `lib/server/__tests__/estimateCustomerSendRoute.test.tsx`
+   must switch from `mockReturnValue` / `mockReturnValueOnce` to
+   `mockResolvedValue` / `mockResolvedValueOnce`.
+
 ## Site Photos Canonical Endpoint
 
 Use the site photos API as the canonical photo path:

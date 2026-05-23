@@ -14,24 +14,30 @@ import { sortByPosition } from '@/lib/estimator/v2DraftPayload'
 import { sanitizeV2CeilingsDrafts } from '@/lib/estimator/v2CeilingsSanitize'
 import { sanitizeV2TrimDrafts } from '@/lib/estimator/v2TrimSanitize'
 import { sanitizeV2WallsDrafts } from '@/lib/estimator/v2WallsSanitize'
+import type { EstimateV2JobMeta } from '@/types/estimator/v2Meta'
 import type {
   EstimateV2CatalogsPayload as CatalogsPayload,
-  EstimateV2AccessFeeDraft,
-  EstimateV2GetResponse as EstimateResponse,
-  EstimateV2JobDefaultProducts,
-  EstimateV2JobMeta,
-  EstimateV2JobSettingsDraft as JobSettingsDraft,
-  EstimateV2OtherItemDraft,
-  EstimateV2OtherCustomerVisibility,
-  EstimateV2OtherPricingMode,
-  EstimateV2OtherRollupTarget,
-  EstimateV2PrejobTripDraft,
+  EstimateV2DoorTypeOption,
+  EstimateV2TrimTypeOption,
+} from '@/types/estimator/v2Catalogs'
+import type {
   EstimateV2RollerDraft,
   EstimateV2RollerScope,
   EstimateV2RoomFlagDraft as RoomFlagDraft,
-  EstimateV2DoorTypeOption,
-  EstimateV2TrimTypeOption,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Rooms'
+import type {
+  EstimateV2AccessFeeDraft,
+  EstimateV2OtherCustomerVisibility,
+  EstimateV2OtherItemDraft,
+  EstimateV2OtherPricingMode,
+  EstimateV2OtherRollupTarget,
+  EstimateV2PrejobTripDraft,
+} from '@/types/estimator/v2Scopes'
+import type {
+  EstimateV2JobDefaultProducts,
+  EstimateV2JobSettingsDraft as JobSettingsDraft,
+} from '@/types/estimator/v2Settings'
+import type { EstimateV2GetResponse as EstimateResponse } from '@/types/estimator/v2Summary'
 import { recalculateEditorDraftFactors } from '../_lib/estimateV2EditorRecalculate'
 import {
   hydrateConditionSelections,

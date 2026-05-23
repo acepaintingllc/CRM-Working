@@ -6,21 +6,20 @@ import {
   normalizeV2TrimHelperMode,
   V2_TRIM_ROOM_HELPER_SOURCE,
 } from '../../../../../../lib/estimator/v2TrimActivation.ts'
+import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2RoomDraft, EstimateV2RoomFlagDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingScopeMode,
   EstimateV2CeilingSegmentDraft,
   EstimateV2DoorScopeDraft,
   EstimateV2DrywallRepairDraft,
-  EstimateV2RoomDraft,
-  EstimateV2RoomFlagDraft,
   EstimateV2TrimScopeDraft,
-  EstimateV2TrimTypeOption,
   EstimateV2TrimUnitType,
   EstimateV2WallScopeDraft,
   EstimateV2WallScopeMode,
   EstimateV2WallSegmentDraft,
-} from '../../../../../../types/estimator/v2.ts'
+} from '@/types/estimator/v2Scopes'
 import {
   createDefaultCeilingScope,
   createDefaultCeilingSegment,

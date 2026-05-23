@@ -4,7 +4,8 @@ import type {
   RatesFlagsMutationRequestByCategory,
   RatesFlagsUpdateRequest,
 } from '@/types/estimator/ratesFlags'
-import type { EstimateV2AccessFeeDraft, EstimateV2AccessFeeOption } from './v2'
+import type { EstimateV2AccessFeeOption } from './v2Catalogs'
+import type { EstimateV2AccessFeeDraft } from './v2Scopes'
 
 const validCreateRequest: RatesFlagsCreateRequest<'access_fees_ladders'> = {
   category: 'access_fees_ladders',

@@ -5,7 +5,7 @@ import {
   calculateAccessFeeRows,
   hasCrownTrimAccessEligibility,
 } from '../accessFees.ts'
-import type { EstimateV2AccessFeeOption } from '../../../types/estimator/v2.ts'
+import type { EstimateV2AccessFeeOption } from '@/types/estimator/v2Catalogs'
 
 const ladderAccessFee: EstimateV2AccessFeeOption = {
   id: 'LADDER',

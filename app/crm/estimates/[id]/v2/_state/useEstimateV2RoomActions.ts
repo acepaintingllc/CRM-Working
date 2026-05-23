@@ -16,7 +16,8 @@ import {
 } from '../_lib/estimateV2EditorMutations'
 import { recalculateEditorDraftFactors } from '../_lib/estimateV2EditorRecalculate'
 import type { DirtySource } from './estimateV2EditorTypes'
-import type { EstimateV2TrimTypeOption, EstimateV2WallScopeMode } from '@/types/estimator/v2'
+import type { EstimateV2TrimTypeOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2WallScopeMode } from '@/types/estimator/v2Scopes'
 import {
   formatEstimateV2RoomLabel,
   type EstimateV2DestructiveIntent,

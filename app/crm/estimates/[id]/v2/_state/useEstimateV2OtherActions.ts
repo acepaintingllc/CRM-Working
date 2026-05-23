@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react'
 import type { EstimateV2EditorStoreApi } from '@/lib/estimates/v2/store/estimateV2Store'
-import type { EstimateV2OtherItemDraft } from '@/types/estimator/v2'
+import type { EstimateV2OtherItemDraft } from '@/types/estimator/v2Scopes'
 
 function createOtherId() {
   return `other-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`

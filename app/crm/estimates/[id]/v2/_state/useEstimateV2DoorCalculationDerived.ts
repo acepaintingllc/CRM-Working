@@ -11,7 +11,8 @@ import { buildOverrideDrivenTotalById } from './estimateV2OverrideDrivenTotals'
 import { selectDisplayedMap } from './useEstimateV2CalculationContext'
 import type { EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 import type { calculateEstimateV2Preview } from '@/lib/estimator/v2PreviewCalculations'
-import type { EstimateV2DoorScopeDraft, EstimateV2SavePayload } from '@/types/estimator/v2'
+import type { EstimateV2DoorScopeDraft } from '@/types/estimator/v2Scopes'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 export function useEstimateV2DoorCalculationDerived(params: {
   doorScopes: EstimateV2DoorScopeDraft[]

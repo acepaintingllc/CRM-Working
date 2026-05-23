@@ -9,7 +9,8 @@ import { buildOverrideDrivenTotalById } from './estimateV2OverrideDrivenTotals'
 import { selectDisplayedMap } from './useEstimateV2CalculationContext'
 import type { EstimateV2EditorMetaState } from './estimateV2EditorTypes'
 import type { calculateEstimateV2Preview } from '@/lib/estimator/v2PreviewCalculations'
-import type { EstimateV2DrywallRepairDraft, EstimateV2SavePayload } from '@/types/estimator/v2'
+import type { EstimateV2DrywallRepairDraft } from '@/types/estimator/v2Scopes'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 function sumRowsById<T extends { id: string }>(rows: T[], valueById: Map<string, number | null>) {
   let total = 0

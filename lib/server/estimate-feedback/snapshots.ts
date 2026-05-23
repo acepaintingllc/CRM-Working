@@ -6,7 +6,7 @@ import {
 } from '../../customer-estimates/publicVersionSnapshot.ts'
 import { supabaseAdmin } from '../org.ts'
 import { errorResult, okResult, type ServiceResult } from '../serviceResult.ts'
-import type { EstimateV2GetResponse } from '../../../types/estimator/v2.ts'
+import type { EstimateV2GetResponse } from '@/types/estimator/v2Summary'
 import type {
   AcceptedEstimateOperationalSourcePayload,
   AcceptedEstimateSourcePublicVersion,

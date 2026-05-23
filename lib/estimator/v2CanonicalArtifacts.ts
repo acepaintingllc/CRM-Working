@@ -19,7 +19,8 @@ import {
   type EstimateV2CalculationPreparationCatalogs,
 } from './v2CalculationPreparation.ts'
 import type { DrywallCalculationInput } from '@/types/estimator/drywall'
-import type { EstimateV2AccessFeeOption, EstimateV2JobSettingsInput } from '@/types/estimator/v2'
+import type { EstimateV2AccessFeeOption } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2JobSettingsInput } from '@/types/estimator/v2Settings'
 import type {
   EstimateV2AccessFeeCalculationInputRow,
   EstimateV2CalculationJobSettingsInput,

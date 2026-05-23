@@ -14,7 +14,8 @@ import { buildCustomerDocumentFromSendContext } from '@/lib/server/customer-send
 import { deriveEstimateCustomerSendCalculatedData } from '@/lib/server/customer-send/contextCalculations'
 import { mapCustomerQuoteSourceModel } from '@/lib/server/customer-send/contextMapper'
 import type { EstimateCustomerSendRawResources } from '@/lib/server/customer-send/contextTypes'
-import type { EstimateV2Catalogs, EstimateV2GetResponse, EstimateV2SavePayload } from '@/types/estimator/v2'
+import type { EstimateV2Catalogs } from '@/types/estimator/v2Catalogs'
+import type { EstimateV2GetResponse, EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 import type { EstimateTemplateSettingsRow } from '../../estimateTemplateSettings'
 
 const mocks = vi.hoisted(() => ({

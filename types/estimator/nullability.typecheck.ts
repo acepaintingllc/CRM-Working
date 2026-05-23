@@ -1,8 +1,5 @@
-import type {
-  EstimateV2ProductionRateOption,
-  EstimateV2SavePayload,
-  EstimateV2SupplyRateOption,
-} from '@/types/estimator/v2'
+import type { EstimateV2ProductionRateOption, EstimateV2SupplyRateOption } from './v2Catalogs'
+import type { EstimateV2SavePayload } from './v2Summary'
 
 function requiresNumber(value: number): number {
   return value

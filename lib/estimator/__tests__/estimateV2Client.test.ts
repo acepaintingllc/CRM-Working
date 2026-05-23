@@ -6,7 +6,7 @@ import {
   saveEstimateV2Inputs,
   type EstimateV2SaveRequester,
 } from '../../estimates/v2/client.ts'
-import type { EstimateV2SavePayload } from '../../../types/estimator/v2.ts'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 
 function createResponse(
   payload: unknown,

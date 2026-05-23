@@ -19,7 +19,9 @@ import {
 import { EstimateV2ConditionsPanel } from './EstimateV2ConditionsPanel'
 import { EstimateV2TrimTypePicker } from './EstimateV2TrimTypePicker'
 import { isBaseTrimType } from '@/lib/estimator/trimTypeMetadata'
-import type { EstimateV2TrimMeasurementMode as TrimMeasurementMode } from '@/types/estimator/v2'
+import type {
+  EstimateV2TrimMeasurementMode as TrimMeasurementMode,
+} from '@/types/estimator/v2Scopes'
 
 type EditorStyles = Record<string, CSSProperties>
 

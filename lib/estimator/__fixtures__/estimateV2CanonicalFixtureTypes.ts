@@ -1,18 +1,18 @@
 import type { EstimateV2EditorStoreState } from '@/lib/estimates/v2/store/estimateV2Store'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
 import type {
   EstimateV2AccessFeeDraft,
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
   EstimateV2DoorScopeDraft,
   EstimateV2DrywallRepairDraft,
-  EstimateV2JobSettingsDraft,
   EstimateV2OtherItemDraft,
   EstimateV2PrejobTripDraft,
-  EstimateV2RoomDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDraft,
   EstimateV2WallSegmentDraft,
-} from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
+import type { EstimateV2JobSettingsDraft } from '@/types/estimator/v2Settings'
 
 export type EstimateV2CanonicalFixture = {
   scenarioName: string

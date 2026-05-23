@@ -3,7 +3,7 @@ import { CrmEmptyState } from '@/app/crm/_components/CrmEmptyState'
 import { formatDetailsNumber } from '../_lib/estimateV2DetailsShared'
 import type { DetailsConditionsVm, DetailsScopeLineVm } from '../_lib/estimateV2DetailsVm'
 import { useEstimateV2DetailsMaterialTableInputState } from '../_state/useEstimateV2DetailsMaterialTableInputState'
-import type { ConditionLevel } from '@/types/estimator/v2'
+import type { ConditionLevel } from '@/types/estimator/v2Conditions'
 import { EstimateV2DetailsConditionsPanel } from './EstimateV2DetailsConditionsPanel'
 
 const labelClassName =

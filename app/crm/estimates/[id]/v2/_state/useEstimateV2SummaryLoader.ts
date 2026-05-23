@@ -21,11 +21,9 @@ import {
   DEFAULT_ROUNDING_INCREMENT_HOURS,
 } from '@/lib/estimator/defaults'
 import type { EstimateRouteFamily } from '../../estimateRouteFamily'
-import type {
-  EstimateV2JobMeta,
-  EstimateV2JobSettingsInput,
-  EstimateV2SummaryPageData,
-} from '@/types/estimator/v2'
+import type { EstimateV2JobMeta } from '@/types/estimator/v2Meta'
+import type { EstimateV2JobSettingsInput } from '@/types/estimator/v2Settings'
+import type { EstimateV2SummaryPageData } from '@/types/estimator/v2Summary'
 
 type SummaryLoaderState = {
   setLoading: (value: boolean) => void

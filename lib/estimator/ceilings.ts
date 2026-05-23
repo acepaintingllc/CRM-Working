@@ -190,6 +190,7 @@ function resolveCeilingHelperArea(
     cofferFaceHeightIn: scope.coffer_face_height_in,
     cofferBottomWidthIn: scope.coffer_bottom_width_in,
     missingVaultedFactorResult: 0,
+    onUnknownMode: () => pushMissingRequiredAssumption(missing, scope, 'ceiling_geometry_mode'),
   })
 }
 

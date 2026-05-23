@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from 'react'
 import { fmtGallons, fmtUSD } from '../summary/_lib/estimateV2SummaryFormat'
-import type { EstimateV2TrimPaint } from '@/types/estimator/v2'
+import type { EstimateV2TrimPaint } from '@/types/estimator/v2Summary'
 
 type TrimPaintVm = {
   draft: {

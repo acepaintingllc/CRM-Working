@@ -30,7 +30,7 @@ export type CeilingPreviewScopeInput = {
   widthIn: NumericInput
   areaSf: NumericInput
   ceilingTypeId?: string | null
-  ceilingGeometryMode?: string | null
+  ceilingGeometryMode?: 'FLAT' | 'VAULTED' | 'TRAY' | 'COFFERED' | 'MANUAL' | null
   vaultedAreaFactor?: NumericInput
   vaultedRidgeLengthIn?: NumericInput
   vaultedSlopeLengthIn?: NumericInput

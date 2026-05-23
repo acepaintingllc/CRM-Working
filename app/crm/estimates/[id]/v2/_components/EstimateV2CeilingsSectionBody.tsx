@@ -21,8 +21,8 @@ import { EstimateV2DrywallRepairsBlock } from './EstimateV2DrywallRepairsBlock'
 import type {
   EstimateV2CeilingGeometryMode,
   EstimateV2CeilingSegmentShape as CeilingSegmentShape,
-} from '@/types/estimator/v2'
-import type { EstimateV2CeilingScopeDraft } from '@/types/estimator/v2'
+} from '@/types/estimator/v2Scopes'
+import type { EstimateV2CeilingScopeDraft } from '@/types/estimator/v2Scopes'
 import type { EstimateV2CeilingScopePreviewMetrics } from '../_lib/estimateV2EditorDerived'
 
 type EditorStyles = Record<string, CSSProperties>
@@ -67,7 +67,7 @@ function ceilingTypeShapeOptions(catalogs: EstimateV2EditorCeilingsVm['catalogs'
     return catalogOptions
   }
   return [
-    { value: 'FLAT', label: 'Flat', ceilingTypeId: 'FLAT', ceilingGeometryMode: 'FLAT' },
+    { value: 'FLAT', label: 'Flat', ceilingTypeId: 'FLAT', ceilingGeometryMode: 'FLAT' as const },
     ...catalogOptions,
   ]
 }

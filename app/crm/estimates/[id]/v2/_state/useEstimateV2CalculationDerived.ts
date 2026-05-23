@@ -12,7 +12,8 @@ import { useEstimateV2DrywallCalculationDerived } from './useEstimateV2DrywallCa
 import { useEstimateV2TrimCalculationDerived } from './useEstimateV2TrimCalculationDerived'
 import { useEstimateV2WallCalculationDerived } from './useEstimateV2WallCalculationDerived'
 import type { EstimateV2EditorMetaState } from './estimateV2EditorTypes'
-import type { EstimateV2DrywallRepairDraft, EstimateV2RoomDraft } from '@/types/estimator/v2'
+import type { EstimateV2RoomDraft } from '@/types/estimator/v2Rooms'
+import type { EstimateV2DrywallRepairDraft } from '@/types/estimator/v2Scopes'
 
 function sumIncludedRowsById<T extends { id: string; include: 'Y' | 'N' }>(
   rows: T[],

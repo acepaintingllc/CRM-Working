@@ -7,10 +7,8 @@ import {
   createEstimateV2Error,
   type EstimateV2Error,
 } from '@/lib/estimator/errors'
-import type {
-  EstimateV2JobMeta,
-  EstimateV2SummaryPageData,
-} from '@/types/estimator/v2'
+import type { EstimateV2JobMeta } from '@/types/estimator/v2Meta'
+import type { EstimateV2SummaryPageData } from '@/types/estimator/v2Summary'
 import {
   SummaryPolicyDraft,
   useEstimateV2SummaryPolicyController,

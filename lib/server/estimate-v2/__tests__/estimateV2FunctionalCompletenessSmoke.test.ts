@@ -5,7 +5,7 @@ import {
   estimateV2FunctionalCompletenessSmokeIds as ids,
 } from '@/lib/estimator/__fixtures__/canonical/index.ts'
 import type { EstimateCustomerSendRawResources } from '@/lib/server/customer-send/contextTypes'
-import type { EstimateV2GetResponse } from '@/types/estimator/v2'
+import type { EstimateV2GetResponse } from '@/types/estimator/v2Summary'
 import type { EstimateChainParityDbRows } from './estimateChainParityHelpers'
 import type { EstimateV2CalculationCatalogBundle } from '../calculationOrchestration'
 

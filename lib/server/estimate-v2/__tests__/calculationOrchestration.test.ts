@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EstimateV2SavePayload } from '@/types/estimator/v2'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 import { applyEffectiveProductDefaults } from '@/lib/estimator/v2CalculationPreparation'
 import type { EstimateTemplateSettingsRow } from '../../estimateTemplateSettings.ts'
 

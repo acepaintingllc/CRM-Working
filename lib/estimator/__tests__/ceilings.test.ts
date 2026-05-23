@@ -1016,3 +1016,23 @@ test('falls back to wall area supply rate when no ceiling-scoped rate exists', (
   // 144 sf * 0.08 = 11.52
   approx(result.scopes[0].raw_supply_cost, 11.52)
 })
+
+test('unknown geometry mode produces a missing_input entry, not a silent 0', () => {
+  const result = calculateCeilings({
+    settings: BASE_SETTINGS,
+    scopes: [
+      makeScope({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ceiling_geometry_mode: 'CUSTOM_GEOMETRY' as any,
+        prime_mode: 'NONE',
+      }),
+    ],
+    segments: [],
+  })
+
+  assert.ok(
+    result.missing_inputs.some((m) => m.field === 'ceiling_geometry_mode'),
+    'expected missing_input for unknown geometry mode'
+  )
+  approx(result.scopes[0].helper_extra_area_sf ?? null, 0)
+})

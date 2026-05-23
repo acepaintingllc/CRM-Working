@@ -7,7 +7,7 @@ import {
   estimateV2FunctionalCompletenessSmokeIds as functionalSmokeIds,
 } from '@/lib/estimator/__fixtures__/canonical/index.ts'
 import { calculateDoors } from '@/lib/estimator/doors'
-import type { EstimateV2DoorScopeDraft } from '@/types/estimator/v2'
+import type { EstimateV2DoorScopeDraft } from '@/types/estimator/v2Scopes'
 import { buildEstimateV2DirtySnapshot } from '../estimateV2DirtySnapshot'
 import { buildEstimateV2EditorLoadState } from '../estimateV2EditorLoadOrchestration'
 import {

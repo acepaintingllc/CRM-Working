@@ -1,23 +1,25 @@
 import type {
+  EstimateV2RollerDraft,
+  EstimateV2RoomDraft,
+  EstimateV2RoomFlagDraft,
+} from '@/types/estimator/v2Rooms'
+import type {
   EstimateV2AccessFeeDraft,
   EstimateV2CeilingScopeDraft,
   EstimateV2CeilingSegmentDraft,
   EstimateV2DoorScopeDraft,
   EstimateV2DrywallRepairDraft,
-  EstimateV2JobSettingsDraft,
   EstimateV2OtherItemDraft,
-  EstimateV2PrejobTripDraft,
   EstimateV2OtherRollupTarget,
-  EstimateV2RoomDraft,
-  EstimateV2RoomFlagDraft,
-  EstimateV2RollerDraft,
-  EstimateV2SavePayload,
+  EstimateV2PrejobTripDraft,
   EstimateV2TrimScopeDraft,
   EstimateV2WallScopeDerived,
   EstimateV2WallScopeDraft,
   EstimateV2WallSegmentDerived,
   EstimateV2WallSegmentDraft,
-} from '../../types/estimator/v2.ts'
+} from '@/types/estimator/v2Scopes'
+import type { EstimateV2JobSettingsDraft } from '@/types/estimator/v2Settings'
+import type { EstimateV2SavePayload } from '@/types/estimator/v2Summary'
 import { asNullableNumber } from './parsing.ts'
 import { normalizeRollerApplicatorQuantity } from './rollerQuantities.ts'
 import { normalizeWallRollerTargetId } from './rollerIdentity.ts'
